@@ -5,94 +5,136 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>JobHackAI - Land Your Dream Job</title>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
-  <style>
-    html {
-      scroll-behavior: smooth;
-    }  
-    body {
-      margin: 0;
-      font-family: 'Inter', sans-serif;
-      background-color: #F9FAFB;
-      color: #1F2937;
-    }
-    header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      gap: 2rem;
-      padding: 1rem 2rem;
-      background-color: #FFFFFF;
-      border-bottom: 1px solid #E5E7EB;
-    }
-    .main-nav a {
-      margin-left: 1.5rem;
-      text-decoration: none;
-      color: #1F2937;
-      font-weight: 500;
-      transition: color 0.3s ease;
-    }
-    .logo {
-      display: flex;
-      align-items: center;
-      font-weight: 800;
-      font-size: 1.2rem;
-      color: #1F2937;
-    }
-    .logo-icon {
-      height: 28px;
-      width: 28px;
-      margin-right: 0.5rem;
-    }
-    /* ... (include all other styles exactly as in the canvas snippet) ... */
-    @media (max-width: 768px) {
-      .main-nav {
-        display: none;
-        flex-direction: column;
-        align-items: flex-start;
-        background-color: #fff;
-        width: 100%;
-        padding: 1rem 2rem;
-        position: absolute;
-        top: 70px;
-        left: 0;
-        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-      }
-      .main-nav.active {
-        display: flex;
-      }
-      .main-nav a {
-        margin: 0.5rem 0;
-      }
-      .menu-toggle {
-        display: block;
-      }
-    }
-  </style>
   <link rel="stylesheet" href="css/header.css" />
+  <link rel="stylesheet" href="css/main.css" />
   <link rel="stylesheet" href="css/footer.css" />
 </head>
 <body>
-  <header class="site-header">
-    <nav class="header-nav">
-      <div class="header-brand">
-        <svg class="header-logo" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <rect x="3" y="7" width="18" height="13" rx="2" stroke="#1F2937" stroke-width="2"/>
-          <path d="M8 7V5a2 2 0 012-2h4a2 2 0 012 2v2" stroke="#1F2937" stroke-width="2"/>
-        </svg>
-        <span class="header-name">JOBHACKAI</span>
+  <!-- Header -->
+  <header>
+  <a href="index.html" class="nav-logo" aria-label="Go to homepage">
+    <svg width="24" height="24" fill="none" stroke="#1F2937" stroke-width="2" xmlns="http://www.w3.org/2000/svg">
+      <rect x="3" y="7" width="18" height="13" rx="2"/>
+      <path d="M8 7V5a2 2 0 012-2h4a2 2 0 012 2v2"/>
+    </svg>
+    <span>JOBHACKAI</span>
+  </a>
+
+  <input type="checkbox" id="nav-toggle" aria-expanded="false"
+         onclick="this.setAttribute('aria-expanded', this.checked)">
+  <label for="nav-toggle" class="burger" aria-label="Toggle navigation">
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none"
+         stroke="#1F2937" stroke-width="2" stroke-linecap="round"
+         stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg">
+      <line x1="3" y1="6"  x2="21" y2="6"/>
+      <line x1="3" y1="12" x2="21" y2="12"/>
+      <line x1="3" y1="18" x2="21" y2="18"/>
+    </svg>
+  </label>
+
+  <nav class="nav-links" role="navigation">
+    <a href="index.html">Home</a>
+    <a href="#what-you-get">What You Get</a>
+    <a href="pricing-a.html">Pricing</a>
+    <a href="blog.html">Blog</a>
+    <a href="login.html">Login</a>
+    <a href="pricing-a.html" class="cta-button">Start Free Trial</a>
+  </nav>
+</header>
+
+  <!-- Main Content -->
+  <main>
+    <section class="hero" id="what-you-get">
+      <h1>Land Your Dream Job with<br>AI-Powered Coaching</h1>
+      <p>Optimize your resume and ace interviews with AI-driven insights.</p>
+      <div class="buttons">
+        <a class="btn-primary" href="pricing-a.html">Start Free Trial</a>
+        <a class="btn-secondary" href="#how-it-works">See How It Works</a>
       </div>
-      <ul class="nav-links">
-        <li><a href="index.html">Home</a></li>
-        <li><a href="#what-you-get">What You Get</a></li>
-        <li><a href="pricing-a.html">Pricing</a></li>
-        <li><a href="blog.html">Blog</a></li>
-        <li><a href="login.html">Login</a></li>
-      </ul>
-      <a class="btn-primary" href="pricing-a.html">Start Free Trial</a>
-      <button class="mobile-toggle">☰</button>
-    </nav>
-  </header>
-  
-  <!-- Hero and other sections go here, exactly as in the Canvas snippet -->
+      <p class="subtext">💡 Try JobHackAI free and get your first resume scored instantly – no strings attached.</p>
+    </section>
+
+    <!-- Testimonials -->
+    <section class="testimonials">
+      <div style="text-align: center; padding: 3rem 2rem; background-color: #F9FAFB;">
+        <h2>Trusted by Job Seekers Worldwide</h2>
+        <p style="max-width: 600px; margin: 0 auto; color: #4B5563;">
+          “JobHackAI helped me land interviews at Amazon and Salesforce within a week! The resume feedback was spot on.”<br>
+          <strong>– Alex R., Data Analyst</strong>
+        </p>
+      </div>
+    </section>
+
+    <!-- Urgency Notice -->
+    <section class="urgency" style="text-align: center; background-color: #FFF8E1; padding: 1.5rem 2rem;">
+      <p style="color: #D97706; font-weight: 600; font-size: 1.1rem;">
+        🚀 Only 250 free trials available per month – spots fill up fast.<br>
+        <span style="font-weight: 400;">
+          We limit trial access to ensure platform quality and performance.
+        </span>
+      </p>
+    </section>
+
+    <!-- Features -->
+    <section id="features" class="features">
+      <div class="feature">
+        <svg class="feature-icon" viewBox="0 0 24 24" fill="none">
+          <rect x="3" y="4" width="18" height="16" rx="2" stroke="#007BFF" stroke-width="2"/>
+          <path d="M7 8h10M7 12h10M7 16h6" stroke="#007BFF" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+        <h3>Resume Scoring & Rewrite</h3>
+        <p>Get your resume graded instantly and see exactly how to improve your chances of landing interviews.</p>
+      </div>
+      <div class="feature">
+        <svg class="feature-icon" viewBox="0 0 24 24" fill="none">
+          <circle cx="12" cy="12" r="10" stroke="#007BFF" stroke-width="2"/>
+          <path d="M8 10h8M8 14h4" stroke="#007BFF" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+        <h3>Mock Interviews</h3>
+        <p>Practice real interview questions from companies like Google and Meta with instant feedback.</p>
+      </div>
+      <div class="feature">
+        <svg class="feature-icon" viewBox="0 0 24 24" fill="none">
+          <path d="M5 4h14a2 2 0 012 2v12a2 2 0 01-2 2H5a2 2 0 01-2-2V6a2 2 0 012-2z" stroke="#007BFF" stroke-width="2"/>
+          <path d="M8 10h8M8 14h6" stroke="#007BFF" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+        <h3>Interview Question Generator</h3>
+        <p>Generate tailored interview questions for any job title or position.</p>
+      </div>
+    </section>
+
+    <!-- Callout -->
+    <section class="callout">
+      <h2>Get Results Fast – Risk-Free</h2>
+      <p>Join 5,000+ job seekers who landed interviews in 7 days or less.</p>
+      <a class="btn-primary" href="pricing-a.html">Start Free Trial Now</a>
+    </section>
+  </main>
+
+  <!-- Footer -->
+  <footer class="site-footer">
+  <div class="footer-container">
+    <div class="footer-brand">
+      <svg class="footer-logo" viewBox="0 0 24 24" fill="none"
+           xmlns="http://www.w3.org/2000/svg">
+        <rect x="3" y="7" width="18" height="13" rx="2"
+              stroke="#1F2937" stroke-width="2"/>
+        <path d="M8 7V5a2 2 0 012-2h4a2 2 0 012 2v2"
+              stroke="#1F2937" stroke-width="2"/>
+      </svg>
+      <span class="footer-name">JOBHACKAI</span>
+    </div>
+
+    <div class="footer-legal">
+      <p>© 2025 JobHackAI. All rights reserved.</p>
+    </div>
+
+    <div class="footer-links">
+      <a href="index.html">Home</a>
+      <a href="support.html">Support</a>
+      <a href="privacy.html">Privacy</a>
+    </div>
+  </div>
+</footer>
 </body>
 </html>
