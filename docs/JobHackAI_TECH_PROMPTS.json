@@ -1,0 +1,57 @@
+[
+  {"category": "ATS_ROLE_ML", "prompt": "Add missing ML-specific tools (e.g., TensorFlow, PyTorch, sklearn, OpenAI, LangChain) to résumé."},
+  {"category": " "ATS_ROLE_ML", "prompt": "Optimize résumé for MLOps pipeline experience — including MLFlow, model versioning, and feature stores."},
+  {"category": "ATS_ROLE_ML", "prompt": "Tailor résumé for a role deploying LLMs into production using vector databases and RAG techniques."},
+  {"category": "ATS_ROLE_ML", "prompt": "Rewrite résumé to emphasize experience with supervised, unsupervised, and reinforcement learning."},
+  {"category": "ATS_ROLE_ML", "prompt": "Ask: “Describe a time you had to debug a model that performed well offline but poorly in production.”"},
+
+  {"category": "ATS_ROLE_SEC", "prompt": "Improve keyword coverage: SOC2, SIEM, firewalls, zero trust, OWASP Top 10, endpoint protection, MFA."},
+  {"category": "ATS_ROLE_SEC", "prompt": "Tailor résumé for a security engineer at a fintech company — focus on encryption, compliance, and threat detection."},
+  {"category": "ATS_ROLE_SEC", "prompt": "Rewrite résumé to emphasize SOC analysis, incident response, and cloud security audits."},
+  {"category": "ATS_ROLE_SEC", "prompt": "Ask: “Walk through how you’d secure a multi-cloud environment and respond to a zero-day exploit.”"},
+
+  {"category": "ATS_ROLE_SRE", "prompt": "Add keywords: SLAs, SLIs, SLOs, on-call, Chaos Engineering, observability, alerting, incident response."},
+  {"category": "ATS_ROLE_SRE", "prompt": "Rewrite résumé for a role focused on reliability engineering in a distributed, high-scale environment."},
+  {"category": "ATS_ROLE_SRE", "prompt": "Emphasize on-call management, root cause analysis, and tooling to reduce MTTR."},
+  {"category": "ATS_ROLE_SRE", "prompt": "Ask: “How do you prioritize alerts and measure the effectiveness of your observability stack?”"},
+
+  {"category": "ATS_ROLE_PLATFORM", "prompt": "Ensure terms like Backstage, developer portal, self-service infra, GitOps, and abstraction layers are included."},
+  {"category": "ATS_ROLE_PLATFORM", "prompt": "Rewrite résumé to reflect building an internal developer platform (IDP) focused on DX (developer experience)."},
+  {"category": "ATS_ROLE_PLATFORM", "prompt": "Tailor résumé to a role focused on automating developer onboarding and CI/CD pipelines as products."},
+  {"category": "ATS_ROLE_PLATFORM", "prompt": "Ask: “How do you measure success for platform adoption across engineering teams?”"},
+
+  {"category": "ATS_ROLE_PROMPTENG", "prompt": "Add keywords like few-shot prompting, RAG, embeddings, token limits, OpenAI, LangChain, vector stores."},
+  {"category": "ATS_ROLE_PROMPTENG", "prompt": "Optimize résumé for a Prompt Engineer designing a custom GPT-like chatbot for internal use."},
+  {"category": "ATS_ROLE_PROMPTENG", "prompt": "Emphasize testing frameworks, latency reduction, and hallucination mitigation in LLM apps."},
+  {"category": "ATS_ROLE_PROMPTENG", "prompt": "Ask: “How would you debug a retrieval-augmented LLM system returning irrelevant answers?”"},
+
+  {"category": "ATS_ROLE_WEB3", "prompt": "Improve résumé with Solidity, Ethereum, smart contracts, DeFi, gas optimization, EVM tooling."},
+  {"category": "ATS_ROLE_WEB3", "prompt": "Rewrite résumé for a Web3 dev focused on smart contract security and audit readiness."},
+  {"category": "ATS_ROLE_WEB3", "prompt": "Tailor résumé for experience launching token projects or DAOs."},
+  {"category": "ATS_ROLE_WEB3", "prompt": "Ask: “How do you prevent reentrancy attacks in Solidity contracts?”"},
+
+  {"category": "ATS_ROLE_EMBEDDED", "prompt": "Add RTOS, SPI, I2C, UART, C++, firmware, bare-metal, assembly, interrupt handling."},
+  {"category": "ATS_ROLE_EMBEDDED", "prompt": "Tailor résumé for real-time embedded development for medical or automotive devices."},
+  {"category": "ATS_ROLE_EMBEDDED", "prompt": "Rewrite experience to reflect performance tuning in low-power microcontrollers."},
+  {"category": "ATS_ROLE_EMBEDDED", "prompt": "Ask: “How would you debug inconsistent sensor readings in an embedded system?”"},
+
+  {"category": "ATS_ROLE_TPM", "prompt": "Emphasize roadmap delivery, stakeholder management, Jira, backlog grooming, KPIs, API-first thinking."},
+  {"category": "ATS_ROLE_TPM", "prompt": "Rewrite résumé for a TPM leading cross-functional delivery between data and platform teams."},
+  {"category": "ATS_ROLE_TPM", "prompt": "Tailor for a role where TPM is expected to own OKRs and coordinate engineering/deployment cycles."},
+  {"category": "ATS_ROLE_TPM", "prompt": "Ask: “How do you handle prioritization conflict between engineering and sales?”"},
+
+  {"category": "ATS_ROLE_PRIVACY", "prompt": "Add: GDPR, CCPA, HIPAA, ISO27001, audit trail, PII masking, data retention policies, privacy-by-design."},
+  {"category": "ATS_ROLE_PRIVACY", "prompt": "Optimize résumé for a privacy engineer ensuring data compliance in a SaaS platform with global users."},
+  {"category": "ATS_ROLE_PRIVACY", "prompt": "Rewrite résumé to reflect experience automating compliance checks and reporting for audits."},
+  {"category": "ATS_ROLE_PRIVACY", "prompt": "Ask: “How would you design a system to ensure ‘right to be forgotten’ compliance?”"},
+
+  {"category": "ATS_ROLE_QA", "prompt": "Add: Selenium, Cypress, Playwright, TestNG, Puppeteer, load testing, CI test coverage, BDD, TDD."},
+  {"category": "ATS_ROLE_QA", "prompt": "Rewrite résumé for an engineer automating test coverage in a fast-moving CI/CD pipeline."},
+  {"category": "ATS_ROLE_QA", "prompt": "Tailor résumé for QA engineer with performance testing focus for high-load APIs."},
+  {"category": "ATS_ROLE_QA", "prompt": "Ask: “How do you balance fast release cycles with test coverage reliability?”"},
+
+  {"category": "ATS_SHARED_PRO", "prompt": "Rewrite résumé bullets to quantify impact (e.g., “Reduced model inference latency by 45%”)."},
+  {"category": "ATS_SHARED_PRO", "prompt": "Optimize summary section for recruiter + ATS readability."},
+  {"category": "ATS_SHARED_PRO", "prompt": "Suggest 3 certifications or projects that increase ATS visibility and recruiter attention."},
+  {"category": "ATS_SHARED_PRO", "prompt": "Format résumé for clean, ATS-compliant layout — no tables, no headers/footers, consistent fonts."}
+]

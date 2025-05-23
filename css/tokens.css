@@ -1,0 +1,21 @@
+:root {
+    /* brand colours */
+    --color-primary-green:#00E676;
+    --color-primary-blue:#007BFF;
+    --color-bg-light:#F9FAFB;
+    --color-text-main:#1F2937;
+    --color-white:#FFFFFF;
+  
+    /* spacing */
+    --spacing-4:1rem;          /* 16 px */
+    --spacing-8:2rem;          /* 32 px */
+  
+    /* radii & shadows */
+    --radius-button:8px;
+    --radius-card:16px;
+    --shadow-light:0 1px 4px rgba(0,0,0,.05);
+  
+    /* typography */
+    --font-family-base:'Inter',sans-serif;
+  }
+  

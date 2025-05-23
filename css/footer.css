@@ -1,0 +1,42 @@
+/* footer.css */
+.site-footer {
+    background-color: var(--color-white);
+    border-top: 1px solid var(--color-divider);
+    padding: 2rem;
+    font-size: 0.9rem;
+    color: var(--color-text-muted);
+  }
+  .footer-container {
+    max-width: 1200px;
+    margin: 0 auto;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1rem;
+  }
+  .footer-brand {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-weight: 800;
+    color: var(--color-text-main);
+  }
+  .footer-logo {
+    height: 24px;
+    width: 24px;
+  }
+  .footer-links a {
+    margin-right: 1rem;
+    text-decoration: none;
+    color: var(--color-text-secondary);
+  }
+  .footer-links a:hover {
+    color: var(--color-text-main);
+  }
+  .footer-legal {
+    flex-basis: 100%;
+    margin-top: 1rem;
+    text-align: center;
+  }
+  

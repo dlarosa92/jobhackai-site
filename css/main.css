@@ -1,0 +1,114 @@
+/* remove every list’s bullets by default */
+ul, ol {
+    list-style: none;
+  }
+  
+
+/* CSS Reset */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+  }
+  body {
+    font-family: Inter, sans-serif;
+    background: #F9FAFB;
+    color: #1F2937;
+  }
+  
+
+/* main.css */
+/* Base reset and typography */
+*, *::before, *::after {
+    box-sizing: border-box;
+  }
+  html {
+    font-family: var(--font-family-base);
+    background-color: var(--color-bg-light);
+    color: var(--color-text-main);
+    line-height: 1.6;
+  }
+  body {
+    margin: 0;
+  }
+  a {
+    text-decoration: none;
+    color: inherit;
+  }
+  
+  /* Layout utilities */
+  .container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0 1rem;
+  }
+  .site-wrapper {
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+  }
+  main {
+    flex: 1;
+  }
+  
+  /* Buttons & forms */
+  button,
+  .button {
+    border: none;
+    border-radius: var(--radius-button);
+    cursor: pointer;
+    padding: 0.75rem 1.5rem;
+    font-weight: 600;
+  }
+  .button-primary {
+    background-color: var(--color-primary-green);
+    color: var(--color-white);
+  }
+  .btn-secondary {
+    background-color: transparent;
+    color: var(--color-primary-blue, #007BFF);
+    border: 2px solid var(--color-primary-blue, #007BFF);
+    border-radius: var(--radius-button, 8px);
+    padding: 0.75rem 1.5rem;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  
+  
+  /* Cards */
+  .card {
+    background-color: var(--color-white);
+    border-radius: var(--radius-card);
+    box-shadow: var(--shadow-light);
+    padding: 1.5rem;
+  }
+
+  /* ----- shared layout wrapper ----- */
+.container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0 var(--spacing-4);
+  }
+  
+  
+  /* Forms */
+  input[type="text"],
+  textarea {
+    width: 100%;
+    border: 1px solid var(--color-divider);
+    border-radius: var(--radius-button);
+    padding: 0.75rem;
+    font-size: 1rem;
+  }
+  input[type="text"]:focus,
+  textarea:focus {
+    outline: none;
+    border-color: var(--color-primary-blue);
+  }
+  
+  /* Utility classes */
+  .mt-1 { margin-top: 0.25rem; }
+  .mt-2 { margin-top: 0.5rem; }
+  .mt-4 { margin-top: 1rem; }
+  .mb-2 { margin-bottom: 0.5rem; }
+  .text-center { text-align: center; }

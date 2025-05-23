@@ -1,0 +1,70 @@
+/* Header component styles */
+.site-header {
+  background-color: #FFFFFF;
+  border-bottom: 1px solid #E5E7EB;
+}
+.header-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem 2rem;
+}
+.header-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.header-logo {
+  width: 32px;
+  height: 32px;
+}
+.header-name {
+  font-family: 'Inter', sans-serif;
+  font-weight: 800;
+  font-size: 1.25rem;
+  color: #1F2937;
+}
+.nav-links {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  gap: 2rem;
+}
+.nav-links a {
+  font-family: 'Inter', sans-serif;
+  font-weight: 500;
+  color: #1F2937;
+  text-decoration: none;
+}
+.nav-links a:hover {
+  color: #007BFF;
+}
+.btn-primary {
+  background-color: #00E676;
+  color: #FFFFFF;
+  padding: 0.75rem 1.5rem;
+  border-radius: 8px;
+  font-family: 'Inter', sans-serif;
+  font-weight: 600;
+  text-decoration: none;
+}
+.mobile-toggle {
+  display: none;
+  background: none;
+  border: none;
+  font-size: 1.5rem;
+  cursor: pointer;
+}
+@media (max-width: 768px) {
+  .nav-links {
+    display: none;
+  }
+  .nav-links.active {
+    display: flex;
+    flex-direction: column;
+  }
+  .mobile-toggle {
+    display: block;
+  }
+}
