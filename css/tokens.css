@@ -1,21 +1,30 @@
 :root {
-    /* brand colours */
-    --color-primary-green:#00E676;
-    --color-primary-blue:#007BFF;
-    --color-bg-light:#F9FAFB;
-    --color-text-main:#1F2937;
-    --color-white:#FFFFFF;
-  
-    /* spacing */
-    --spacing-4:1rem;          /* 16 px */
-    --spacing-8:2rem;          /* 32 px */
-  
-    /* radii & shadows */
-    --radius-button:8px;
-    --radius-card:16px;
-    --shadow-light:0 1px 4px rgba(0,0,0,.05);
-  
-    /* typography */
-    --font-family-base:'Inter',sans-serif;
-  }
-  
+  /* --- Color Palette --- */
+  --color-bg-light: #F9FAFB;           /* Site background */
+  --color-text-main: #1F2937;          /* Main text (slate) */
+  --color-text-secondary: #4B5563;     /* Secondary text (gray) */
+  --color-text-muted: #6B7280;         /* Muted text */
+  --color-card-bg: #FFFFFF;            /* Cards, nav, footer */
+  --color-cta-green: #00E676;          /* Primary CTA (button green) */
+  --color-accent-blue: #007BFF;        /* Accent blue (links, outlines) */
+  --color-divider: #E5E7EB;            /* Dividers, borders */
+
+  /* --- Typography --- */
+  --font-family-base: 'Inter', sans-serif;
+  --font-weight-regular: 400;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 800;
+
+  /* --- Border Radius --- */
+  --radius-card: 16px;
+  --radius-button: 8px;
+
+  /* --- Shadows --- */
+  --shadow-card: 0 2px 8px rgba(0,0,0,0.05);
+
+  /* --- Spacing --- */
+  --space-xs: 0.5rem;
+  --space-sm: 1rem;
+  --space-md: 2rem;
+  --space-lg: 4rem;
+}
