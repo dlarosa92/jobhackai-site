@@ -74,3 +74,53 @@ nav.nav-links a.cta-button:hover,
     cursor: pointer;
   }
 }
+
+header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem 2rem;
+  background-color: #FFFFFF;
+  border-bottom: 1px solid #E5E7EB;
+}
+
+.nav-logo {
+  display: flex;
+  align-items: center;
+  font-weight: 800;
+  font-size: 1.25rem;
+  gap: 0.5rem;
+  text-decoration: none;
+  color: #1F2937;
+}
+
+.nav-logo svg {
+  height: 24px;
+  width: 24px;
+}
+
+.nav-links {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+}
+
+.nav-links a {
+  text-decoration: none;
+  color: #1F2937;
+  font-weight: 500;
+}
+
+.cta-button {
+  background-color: #00E676;
+  color: #FFFFFF !important;
+  padding: 0.5rem 1rem;
+  border-radius: 8px;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.cta-button:hover {
+  background-color: #00c765;
+  text-decoration: none;
+}
