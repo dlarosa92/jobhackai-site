@@ -1,4 +1,4 @@
-<!-- dashboard-trial.html -->
+<!-- DO NOT EDIT HEADER OR FOOTER PER-PAGE. Use canonical snippet from docs/snippets.md. -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -15,38 +15,84 @@
   <link rel="stylesheet" href="css/footer.css">
 </head>
 <body>
-  <!-- header -->
+  <!-- Header -->
   <header class="site-header">
-    <nav class="header-nav">
-      <ul class="nav-links">
-        <li><a href="index.html">Home</a></li>
-        <li><a href="index.html#what-you-get">What You Get</a></li>
-        <li><a href="pricing-a.html">Pricing</a></li>
-        <li><a href="login.html">Login</a></li>
-      </ul>
-      <a class="btn-primary" href="pricing-a.html">Start Free Trial</a>
-      <button class="mobile-toggle">☰</button>
-    </nav>
+    <div class="container">
+      <a href="index.html" class="nav-logo" aria-label="Go to homepage">
+        <svg width="24" height="24" fill="none" stroke="#1F2937" stroke-width="2" xmlns="http://www.w3.org/2000/svg">
+          <rect x="3" y="7" width="18" height="13" rx="2"/>
+          <path d="M8 7V5a2 2 0 012-2h4a2 2 0 012 2v2"/>
+        </svg>
+        <span>JOBHACKAI</span>
+      </a>
+      <div class="nav-group">
+        <nav class="nav-links" role="navigation">
+          <a href="index.html">Home</a>
+          <a href="#what-you-get">What You Get</a>
+          <a href="pricing-a.html">Pricing</a>
+          <a href="#blog">Blog</a>
+          <a href="login.html">Login</a>
+          <a href="pricing-a.html" class="cta-button">Start Free Trial</a>
+        </nav>
+      </div>
+      <button class="mobile-toggle" aria-label="Open navigation menu" aria-expanded="false" aria-controls="mobileNav">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="3" y1="12" x2="21" y2="12"></line>
+          <line x1="3" y1="6" x2="21" y2="6"></line>
+          <line x1="3" y1="18" x2="21" y2="18"></line>
+        </svg>
+      </button>
+    </div>
   </header>
+  <nav class="mobile-nav" id="mobileNav">
+    <a href="index.html">Home</a>
+    <a href="#what-you-get">What You Get</a>
+    <a href="pricing-a.html">Pricing</a>
+    <a href="blog.html">Blog</a>
+    <a href="login.html">Login</a>
+    <a href="pricing-a.html" class="cta-button">Start Free Trial</a>
+  </nav>
+  <script>
+    // Hamburger menu toggle
+    const mobileToggle = document.querySelector('.mobile-toggle');
+    const mobileNav = document.getElementById('mobileNav');
+    if (mobileToggle && mobileNav) {
+      mobileToggle.addEventListener('click', () => {
+        const isOpen = mobileNav.classList.toggle('open');
+        mobileToggle.setAttribute('aria-expanded', isOpen);
+      });
+      // Close mobile nav on link click
+      document.querySelectorAll('.mobile-nav a').forEach(link => {
+        link.addEventListener('click', () => {
+          mobileNav.classList.remove('open');
+          mobileToggle.setAttribute('aria-expanded', 'false');
+        });
+      });
+    }
+  </script>
 
   <!-- page content -->
   <main>
     <!-- Dashboard Trial: Trial dashboard UI, usage meter, progress bars -->
   </main>
 
-  <!-- footer -->
+  <!-- Footer -->
   <footer class="site-footer">
     <div class="footer-container">
       <div class="footer-brand">
+        <svg class="footer-logo" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect x="3" y="7" width="18" height="13" rx="2" stroke="#1F2937" stroke-width="2"/>
+          <path d="M8 7V5a2 2 0 012-2h4a2 2 0 012 2v2" stroke="#1F2937" stroke-width="2"/>
+        </svg>
         <span class="footer-name">JOBHACKAI</span>
-      </div>
-      <div class="footer-links">
-        <a href="index.html">Home</a>
-        <a href="account-settings.html">Support</a>
-        <a href="privacy.html">Privacy</a>
       </div>
       <div class="footer-legal">
         <p>© 2025 JobHackAI. All rights reserved.</p>
+      </div>
+      <div class="footer-links">
+        <a href="index.html">Home</a>
+        <a href="support.html">Support</a>
+        <a href="privacy.html">Privacy</a>
       </div>
     </div>
   </footer>

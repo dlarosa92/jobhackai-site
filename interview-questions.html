@@ -1,4 +1,4 @@
-<!-- interview-questions.html -->
+<!-- DO NOT EDIT HEADER OR FOOTER PER-PAGE. Use canonical snippet from docs/snippets.md. -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -15,7 +15,7 @@
   <link rel="stylesheet" href="css/footer.css">
 </head>
 <body>
-  <!-- header -->
+  <!-- Header -->
   <header class="site-header">
     <nav class="header-nav">
       <ul class="nav-links">
@@ -28,13 +28,37 @@
       <button class="mobile-toggle">☰</button>
     </nav>
   </header>
-
+  <nav class="mobile-nav" id="mobileNav">
+    <a href="index.html">Home</a>
+    <a href="#what-you-get">What You Get</a>
+    <a href="pricing-a.html">Pricing</a>
+    <a href="blog.html">Blog</a>
+    <a href="login.html">Login</a>
+    <a href="pricing-a.html" class="cta-button">Start Free Trial</a>
+  </nav>
+  <script>
+    // Hamburger menu toggle
+    const mobileToggle = document.querySelector('.mobile-toggle');
+    const mobileNav = document.getElementById('mobileNav');
+    if (mobileToggle && mobileNav) {
+      mobileToggle.addEventListener('click', () => {
+        const isOpen = mobileNav.classList.toggle('open');
+        mobileToggle.setAttribute('aria-expanded', isOpen);
+      });
+      // Close mobile nav on link click
+      document.querySelectorAll('.mobile-nav a').forEach(link => {
+        link.addEventListener('click', () => {
+          mobileNav.classList.remove('open');
+          mobileToggle.setAttribute('aria-expanded', 'false');
+        });
+      });
+    }
+  </script>
   <!-- page content -->
   <main>
-    <!-- Interview Questions: Role combo-box, question list, “Generate” button -->
+    <!-- Interview Questions: Role combo-box, question list, "Generate" button -->
   </main>
-
-  <!-- footer -->
+  <!-- Footer -->
   <footer class="site-footer">
     <div class="footer-container">
       <div class="footer-brand">
@@ -50,7 +74,6 @@
       </div>
     </div>
   </footer>
-
   <!-- scripts -->
   <script src="js/main.js"></script>
   <script src="js/analytics.js"></script>
