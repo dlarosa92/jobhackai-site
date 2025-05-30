@@ -34,55 +34,6 @@ header {
   gap: var(--space-xs);
 }
 
-nav.nav-links {
-  display: flex;
-  align-items: center;
-  gap: var(--space-md);
-}
-
-nav.nav-links a {
-  color: var(--color-text-main);
-  font-weight: var(--font-weight-semibold);
-  padding: 0.5rem 1rem;
-  border-radius: var(--radius-button);
-  text-decoration: none;
-  transition: background 0.2s, color 0.2s;
-  position: relative;
-}
-
-nav.nav-links a::after {
-  content: '';
-  position: absolute;
-  left: 0;
-  bottom: 0;
-  width: 0;
-  height: 2px;
-  background: var(--color-accent-blue);
-  transition: width 0.2s;
-}
-
-nav.nav-links a:hover::after {
-  width: 100%;
-}
-
-nav.nav-links a.cta-button,
-.cta-button {
-  background: var(--color-cta-green);
-  color: var(--color-card-bg) !important;
-  font-weight: var(--font-weight-bold);
-  border-radius: var(--radius-button);
-  padding: 0.6rem 1.3rem;
-  box-shadow: var(--shadow-card);
-  border: none;
-  margin-left: var(--space-xs);
-  transition: background 0.15s;
-}
-
-nav.nav-links a.cta-button:hover,
-.cta-button:hover {
-  background: var(--color-cta-green-hover);
-}
-
 /* --- HERO SECTION --- */
 .hero {
   position: relative;
@@ -274,63 +225,4 @@ section {
   margin-top: var(--space-xs);
   text-align: center;
   color: var(--color-text-muted);
-}
-
-/* --- RESPONSIVE DESIGN --- */
-@media (max-width: 900px) {
-  header {
-    flex-direction: column;
-    align-items: flex-start;
-    padding: 0 var(--space-md);
-    min-height: 56px;
-  }
-  .nav-logo {
-    padding-left: 0;
-  }
-  nav.nav-links {
-    gap: var(--space-xs);
-    padding-right: 0;
-    margin-left: 0;
-  }
-  .hero {
-    max-width: 95vw;
-    padding: var(--space-md) var(--space-xs);
-    min-height: 35vh;
-  }
-  section, .callout, .testimonials, .urgency {
-    padding: var(--space-md) var(--space-xs);
-    max-width: 98vw;
-  }
-  .features {
-    flex-direction: column;
-    gap: var(--space-sm);
-    align-items: stretch;
-    max-width: 98vw;
-  }
-  .feature {
-    margin-bottom: var(--space-xs);
-    max-width: 99vw;
-  }
-  .site-footer {
-    padding: var(--space-md) var(--space-xs);
-  }
-  .footer-container {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: var(--space-xs);
-  }
-  .footer-links {
-    margin-top: var(--space-xs);
-  }
-}
-
-@media (max-width: 600px) {
-  .hero {
-    padding: var(--space-sm);
-    min-height: 28vh;
-  }
-  .callout, section, .urgency, .testimonials {
-    padding: var(--space-sm) var(--space-xs);
-    max-width: 100vw;
-  }
 }
