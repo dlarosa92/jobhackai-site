@@ -172,13 +172,13 @@ section {
 
 /* --- FOOTER --- */
 .site-footer {
-  background: var(--color-card-bg);
-  border-top: 1px solid var(--color-divider);
-  padding: var(--space-md) var(--space-lg);
-  font-size: 0.95rem;
-  color: var(--color-text-muted);
-  margin-top: var(--space-lg);
-  width: 100%;
+  border-top: 1px solid #E5E7EB;
+  background-color: #FFFFFF;
+  padding: 0.5rem 0;
+  margin-top: 4rem;
+  font-size: 0.9rem;
+  color: #6B7280;
+  font-family: 'Inter', sans-serif;
 }
 
 .footer-container {

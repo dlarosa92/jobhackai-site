@@ -163,63 +163,6 @@
 }
 
 /* Footer styles */
-.site-footer {
-  border-top: 1px solid #E5E7EB;
-  background-color: #FFFFFF;
-  padding: 2rem;
-  margin-top: 4rem;
-  font-size: 0.9rem;
-  color: #6B7280;
-  font-family: 'Inter', sans-serif;
-}
-
-.footer-container {
-  max-width: 1200px;
-  margin: 0 auto;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 1rem;
-}
-
-.footer-brand {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  font-weight: 800;
-  color: #1F2937;
-}
-
-.footer-logo {
-  height: 24px;
-  width: 24px;
-}
-
-.footer-legal {
-  font-size: 1.0rem;
-  color: #6B7280;
-  margin: 0 auto;
-  padding-left: 12rem;
-  white-space: nowrap;
-  margin-bottom: -0.25rem;
-}
-
-.footer-links {
-  padding-top: 0.5rem;
-  display: flex;
-  gap: 1.5rem;
-  margin-left: auto;
-}
-
-.footer-links a {
-  text-decoration: none;
-  color: #4B5563;
-  font-weight: 500;
-}
-
-.footer-links a:hover {
-  color: #1F2937;
-}
 
 .btn-primary {
   background: #00E676;
@@ -288,4 +231,83 @@
   border-radius: 16px;
   max-width: 900px;
   box-sizing: border-box;
+}
+
+.blog-section {
+  max-width: 1200px;
+  margin: 2.5rem auto 0 auto;
+  padding: 0;
+  text-align: left;
+}
+
+.blog-section h2 {
+  font-size: 2rem;
+  font-weight: 800;
+  margin-bottom: 1.5rem;
+  color: #1F2937;
+  text-align: center;
+  padding-left: 0;
+}
+
+.blog-cards {
+  display: flex;
+  gap: 2rem;
+  justify-content: flex-start;
+  flex-wrap: wrap;
+  padding: 0 1.5rem 1.5rem 1.5rem;
+}
+
+.blog-card {
+  background: #fff;
+  border-radius: 18px;
+  box-shadow: 0 4px 24px rgba(31,41,55,0.07);
+  padding: 2rem 1.5rem 1.5rem 1.5rem;
+  min-width: 280px;
+  max-width: 340px;
+  flex: 1 1 300px;
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 0.5rem;
+}
+
+.blog-card h3 {
+  font-size: 1.15rem;
+  font-weight: 700;
+  margin-bottom: 0.5rem;
+  color: #1F2937;
+}
+
+.blog-date {
+  color: #6B7280;
+  font-size: 0.98rem;
+  margin-bottom: 0.5rem;
+}
+
+@media (max-width: 900px) {
+  .blog-cards {
+    flex-direction: column;
+    gap: 1.2rem;
+    padding: 0 0.5rem 1.5rem 0.5rem;
+  }
+  .blog-section h2 {
+    padding-left: 0.5rem;
+  }
+  .footer-container {
+    grid-template-columns: 1fr;
+    text-align: center;
+    padding: 0 1rem;
+    row-gap: 1.2rem;
+    min-height: unset;
+  }
+  .footer-brand,
+  .footer-legal,
+  .footer-links {
+    justify-self: center;
+    margin: 0 auto;
+  }
+  .footer-links {
+    justify-content: center;
+    width: 100%;
+    white-space: normal;
+  }
 }
