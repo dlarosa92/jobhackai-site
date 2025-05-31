@@ -226,3 +226,122 @@ section {
   text-align: center;
   color: var(--color-text-muted);
 }
+
+/* --- PRICING TABLE --- */
+.pricing-section {
+  max-width: 1200px;
+  margin: 2.5rem auto 0 auto;
+  padding: 0 1.5rem 3rem 1.5rem;
+}
+
+.pricing-table-wrapper {
+  background: #fff;
+  border-radius: 18px;
+  box-shadow: 0 4px 24px rgba(31,41,55,0.07);
+  padding: 2.5rem 2rem 2rem 2rem;
+  margin: 0 auto;
+  max-width: 100%;
+}
+
+.pricing-title {
+  text-align: center;
+  font-size: 2.2rem;
+  font-weight: 800;
+  margin-bottom: 2.2rem;
+  color: #1F2937;
+}
+
+.pricing-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  background: none;
+  font-size: 1.08rem;
+  color: #1F2937;
+}
+
+.pricing-table th,
+.pricing-table td {
+  text-align: center;
+  padding: 1.1rem 0.7rem;
+  border-bottom: 1px solid #F1F3F6;
+}
+
+.pricing-table th {
+  font-size: 1.08rem;
+  font-weight: 700;
+  color: #374151;
+  background: none;
+  border-bottom: 2px solid #E5E7EB;
+}
+
+.pricing-table td {
+  font-size: 1.08rem;
+  font-weight: 500;
+  background: none;
+}
+
+.pricing-table .yes {
+  color: #00C853;
+  font-size: 1.25rem;
+  font-weight: 700;
+}
+
+.pricing-table .no {
+  color: #FF3B30;
+  font-size: 1.25rem;
+  font-weight: 700;
+}
+
+.pricing-table .lock {
+  color: #BDBDBD;
+  font-size: 1.25rem;
+}
+
+.pricing-table .plan-price {
+  display: block;
+  font-size: 1rem;
+  font-weight: 600;
+  color: #00C853;
+  margin-top: 0.2rem;
+}
+
+.pricing-signup-row td {
+  border-bottom: none;
+  padding-top: 1.5rem;
+  padding-bottom: 0.5rem;
+}
+
+.pricing-signup-row .btn-primary {
+  width: 100%;
+  min-width: 120px;
+  font-size: 1.08rem;
+  font-weight: 700;
+  border-radius: 12px;
+  padding: 0.7rem 0;
+  margin: 0 auto;
+  box-shadow: 0 2px 8px rgba(0,230,118,0.08);
+}
+
+@media (max-width: 900px) {
+  .pricing-section {
+    padding: 0 0.5rem 2rem 0.5rem;
+  }
+  .pricing-table-wrapper {
+    padding: 1.2rem 0.2rem 1.2rem 0.2rem;
+  }
+  .pricing-title {
+    font-size: 1.3rem;
+    margin-bottom: 1.2rem;
+  }
+  .pricing-table th,
+  .pricing-table td {
+    padding: 0.7rem 0.2rem;
+    font-size: 0.98rem;
+  }
+  .pricing-signup-row .btn-primary {
+    min-width: 90px;
+    font-size: 0.98rem;
+    padding: 0.6rem 0;
+  }
+}
