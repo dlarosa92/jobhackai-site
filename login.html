@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Login – JobHackAI</title>
+  <title>Login or Sign Up – JobHackAI</title>
 
   <!-- Design tokens & global styles -->
   <link rel="stylesheet" href="css/tokens.css">
@@ -13,6 +13,177 @@
   <!-- Component overrides -->
   <link rel="stylesheet" href="css/header.css">
   <link rel="stylesheet" href="css/footer.css">
+  <style>
+    .auth-container {
+      max-width: 400px;
+      margin: 3.5rem auto 2.5rem auto;
+      background: #fff;
+      border-radius: 20px;
+      box-shadow: 0 4px 24px rgba(31,41,55,0.07);
+      padding: 2.5rem 2rem 2rem 2rem;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    .auth-logo {
+      font-weight: 800;
+      font-size: 1.2rem;
+      margin-bottom: 0.5rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .auth-title {
+      font-size: 1.3rem;
+      font-weight: 700;
+      margin-bottom: 1.2rem;
+      color: #232B36;
+      text-align: center;
+    }
+    .auth-social-btn {
+      width: 100%;
+      margin-bottom: 0.7rem;
+      font-size: 1.08rem;
+      font-weight: 700;
+      border-radius: 8px;
+      border: none;
+      padding: 0.85rem 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.7rem;
+      cursor: pointer;
+      transition: background 0.18s;
+      text-decoration: none;
+    }
+    .auth-social-btn.google { background: #fff; color: #232B36; border: 1.5px solid #E5E7EB; }
+    .auth-social-btn.google:hover { background: #F5F5F5; }
+    .auth-social-btn.linkedin { background: #0077B5; color: #fff; }
+    .auth-social-btn.linkedin:hover { background: #005983; }
+    .auth-separator {
+      display: flex;
+      align-items: center;
+      width: 100%;
+      margin: 1.2rem 0 1.2rem 0;
+      color: #BDBDBD;
+      font-size: 1rem;
+    }
+    .auth-separator span { margin: 0 0.7rem; }
+    .auth-separator:before, .auth-separator:after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: #E5E7EB;
+    }
+    .auth-form {
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      gap: 0.8rem;
+      align-items: flex-start;
+    }
+    .auth-input {
+      width: 100%;
+      padding: 0.8rem 0.9rem 0.8rem 0.9rem;
+      border: 1.5px solid #E5E7EB;
+      border-radius: 8px;
+      font-size: 1rem;
+      font-family: inherit;
+      color: #232B36;
+      background: #F9FAFB;
+      transition: border 0.18s;
+      box-sizing: border-box;
+      margin: 0;
+    }
+    .auth-input:focus {
+      border-color: #00E676;
+      outline: none;
+    }
+    .auth-error {
+      color: #FF3B30;
+      font-size: 0.98rem;
+      margin-bottom: 0.5rem;
+      text-align: left;
+      width: 100%;
+      display: none; /* Show via JS if error */
+    }
+    .auth-actions {
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      gap: 0.7rem;
+      margin-top: 0.5rem;
+    }
+    .auth-continue-btn {
+      width: 100%;
+      background: #00E676;
+      color: #fff;
+      font-weight: 700;
+      border: none;
+      border-radius: 8px;
+      padding: 0.85rem 0;
+      font-size: 1.08rem;
+      cursor: pointer;
+      transition: background 0.18s, box-shadow 0.18s;
+      text-decoration: none;
+    }
+    .auth-continue-btn:hover,
+    .auth-continue-btn:focus {
+      background: #00c965;
+      box-shadow: 0 4px 16px rgba(0,230,118,0.10);
+      outline: none;
+    }
+    .auth-continue-btn:disabled {
+      background: #BDBDBD;
+      cursor: not-allowed;
+    }
+    .auth-links {
+      width: 100%;
+      text-align: center;
+      margin-top: 1.2rem;
+      font-size: 1rem;
+      color: #4B5563;
+    }
+    .auth-links a {
+      color: #0077B5;
+      text-decoration: none;
+      font-weight: 600;
+      margin-left: 0.2rem;
+      transition: color 0.18s;
+    }
+    .auth-links a:hover, .auth-links a:focus {
+      color: #005983;
+      text-decoration: underline;
+      outline: none;
+    }
+    .auth-footer {
+      margin-top: 2.2rem;
+      font-size: 0.95rem;
+      color: #6B7280;
+      text-align: center;
+    }
+    .auth-footer a {
+      color: #0077B5;
+      text-decoration: none;
+      margin: 0 0.3rem;
+      transition: color 0.18s;
+    }
+    .auth-footer a:hover {
+      color: #005983;
+      text-decoration: underline;
+    }
+    .auth-card-step {
+      margin-top: 1.5rem;
+      width: 100%;
+      display: none; /* Show via JS after signup */
+    }
+    @media (max-width: 600px) {
+      .auth-container {
+        padding: 1.2rem 0.5rem 1.2rem 0.5rem;
+        max-width: 98vw;
+      }
+    }
+  </style>
 </head>
 <body>
   <!-- Header -->
@@ -72,7 +243,48 @@
   </script>
   <!-- page content -->
   <main>
-    <!-- Login: Email/password fields, social login buttons (Google) -->
+    <div class="auth-container" role="main" aria-labelledby="auth-title">
+      <a href="index.html" class="btn-secondary" style="margin-bottom:1.2rem; font-size:1rem; padding:0.4rem 1.1rem; border-radius:6px; display:inline-block; text-decoration:none;">&larr; Back to homepage</a>
+      <div class="auth-logo" style="margin-bottom:0.2rem;">
+        <span aria-hidden="true" style="font-size:1.3rem;">&#128274;</span>
+        <span style="font-weight:800; letter-spacing:0.5px;">JOBHACKAI</span>
+      </div>
+      <div class="auth-title" id="auth-title">Log in or sign up</div>
+      <a class="auth-social-btn google" id="googleSignIn" aria-label="Continue with Google" href="#">
+        <svg width="22" height="22" viewBox="0 0 48 48" aria-hidden="true" style="vertical-align:middle;"><g><path fill="#4285F4" d="M24 9.5c3.54 0 6.7 1.22 9.19 3.23l6.85-6.85C35.93 2.68 30.34 0 24 0 14.82 0 6.73 5.48 2.69 13.44l7.98 6.2C12.13 13.13 17.62 9.5 24 9.5z"/><path fill="#34A853" d="M46.1 24.55c0-1.64-.15-3.22-.42-4.74H24v9.01h12.42c-.54 2.9-2.18 5.36-4.65 7.02l7.19 5.6C43.93 37.13 46.1 31.3 46.1 24.55z"/><path fill="#FBBC05" d="M9.67 28.09a14.5 14.5 0 010-8.18l-7.98-6.2A23.94 23.94 0 000 24c0 3.77.9 7.34 2.69 10.56l7.98-6.47z"/><path fill="#EA4335" d="M24 48c6.34 0 11.66-2.1 15.54-5.73l-7.19-5.6c-2.01 1.35-4.6 2.15-8.35 2.15-6.38 0-11.87-3.63-14.33-8.89l-7.98 6.47C6.73 42.52 14.82 48 24 48z"/></g></svg>
+        Continue with Google
+      </a>
+      <a class="auth-social-btn linkedin" id="linkedinSignIn" aria-label="Continue with LinkedIn" href="#">
+        <svg width="22" height="22" viewBox="0 0 32 32" aria-hidden="true" style="vertical-align:middle;"><path d="M29 0H3C1.3 0 0 1.3 0 3v26c0 1.7 1.3 3 3 3h26c1.7 0 3-1.3 3-3V3c0-1.7-1.3-3-3-3zM9.4 27.1H5.2V12h4.2v15.1zM7.3 10.4c-1.3 0-2.3-1-2.3-2.3s1-2.3 2.3-2.3c1.3 0 2.3 1 2.3 2.3s-1 2.3-2.3 2.3zM27.1 27.1h-4.2v-7.3c0-1.7 0-3.8-2.3-3.8-2.3 0-2.7 1.8-2.7 3.7v7.4h-4.2V12h4v2.1h.1c.6-1.1 2-2.3 4.1-2.3 4.4 0 5.2 2.9 5.2 6.7v8.6z" fill="#fff"/></svg>
+        Continue with LinkedIn
+      </a>
+      <div class="auth-separator"><span>or</span></div>
+      <form class="auth-form" id="emailAuthForm" autocomplete="on" aria-label="Email sign up form">
+        <div class="auth-error" id="authError" aria-live="polite"></div>
+        <label for="email" class="sr-only">Email address</label>
+        <input type="email" id="email" class="auth-input" name="email" placeholder="Email address" required autocomplete="email" />
+        <label for="password" class="sr-only">Password</label>
+        <input type="password" id="password" class="auth-input" name="password" placeholder="Password" required autocomplete="current-password" minlength="8" />
+        <button type="submit" class="auth-continue-btn" id="emailContinueBtn">Continue</button>
+      </form>
+      <div class="auth-links">
+        Don't have an account?
+        <a href="#" id="signUpLink">Sign up</a>
+        <br />
+        <a href="#" id="forgotPasswordLink">Forgot your password?</a>
+      </div>
+      <!-- Stripe Card Modal Placeholder -->
+      <div class="auth-card-step" id="cardStep">
+        <h3 style="font-size:1.1rem; font-weight:700; margin-bottom:0.7rem;">Add a credit card to activate your account</h3>
+        <div id="stripeCardElement"><!-- Stripe.js injects card field here --></div>
+        <button class="auth-continue-btn" id="cardSubmitBtn">Add Card &amp; Start Free Trial</button>
+        <div class="auth-error" id="cardError" aria-live="polite"></div>
+      </div>
+      <div class="auth-footer">
+        © 2025 JobHackAI. All rights reserved.<br />
+        <a href="terms.html">Terms</a> · <a href="privacy.html">Privacy</a>
+      </div>
+    </div>
   </main>
   <!-- Footer -->
   <footer class="site-footer">
