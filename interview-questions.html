@@ -13,20 +13,144 @@
   <!-- Component overrides -->
   <link rel="stylesheet" href="css/header.css">
   <link rel="stylesheet" href="css/footer.css">
+  <style>
+    .iq-main {
+      max-width: 600px;
+      margin: 2.5rem auto 4rem auto;
+      padding: 0 1rem;
+    }
+    .iq-title {
+      font-size: 2.3rem;
+      font-weight: 800;
+      margin-bottom: 0.5rem;
+      color: #232B36;
+    }
+    .iq-sub {
+      color: #4B5563;
+      margin-bottom: 1.5rem;
+      font-size: 1.13rem;
+    }
+    .iq-role-input {
+      width: 100%;
+      padding: 0.85rem 1.1rem;
+      border: 2px solid #E5E7EB;
+      border-radius: 10px;
+      font-size: 1.08rem;
+      margin-bottom: 0.2rem;
+      transition: border 0.18s;
+      background: #fff;
+      color: #232B36;
+    }
+    .iq-role-input:focus {
+      border-color: #1976D2;
+      outline: none;
+    }
+    .iq-role-dropdown {
+      position: absolute;
+      left: 0; right: 0;
+      background: #fff;
+      border: 1.5px solid #E5E7EB;
+      border-top: none;
+      border-radius: 0 0 10px 10px;
+      box-shadow: 0 2px 8px rgba(31,41,55,0.07);
+      z-index: 10;
+      max-height: 220px;
+      overflow-y: auto;
+      margin-top: -2px;
+    }
+    .iq-role-item {
+      padding: 0.85rem 1.1rem;
+      cursor: pointer;
+      font-size: 1.08rem;
+      color: #232B36;
+      transition: background 0.15s;
+    }
+    .iq-role-item:hover, .iq-role-item.active {
+      background: #F3F4F6;
+    }
+    .iq-questions {
+      margin-bottom: 1.5rem;
+    }
+    .iq-question-card {
+      background: #fff;
+      border-radius: 16px;
+      box-shadow: 0 2px 6px rgba(31,41,55,0.07);
+      padding: 1.1rem 1.3rem;
+      margin-bottom: 1rem;
+      font-size: 1.08rem;
+      color: #232B36;
+      line-height: 1.45;
+    }
+    .iq-lock {
+      background: #fff;
+      border: 1.5px solid #E5E7EB;
+      border-radius: 16px;
+      padding: 1rem 1.25rem;
+      display: flex;
+      align-items: center;
+      gap: 0.8rem;
+      margin-top: 1.2rem;
+      font-size: 1.04rem;
+      color: #232B36;
+      box-shadow: 0 1px 4px rgba(31,41,55,0.04);
+    }
+    .iq-upgrade-btn {
+      display: block;
+      width: 100%;
+      margin: 1.7rem 0 0 0;
+      background: #00E676;
+      color: #fff;
+      border: none;
+      border-radius: 12px;
+      font-size: 1.13rem;
+      padding: 1rem 0;
+      font-weight: 700;
+      cursor: pointer;
+      transition: background 0.18s;
+      text-align: center;
+      box-shadow: 0 2px 8px rgba(31,41,55,0.07);
+    }
+    .iq-upgrade-btn:hover,
+    .iq-upgrade-btn:focus {
+      background: #00c965;
+    }
+    @media (max-width: 600px) {
+      .iq-main { padding: 0 0.3rem; }
+      .iq-title { font-size: 1.5rem; }
+      .iq-question-card { font-size: 1rem; padding: 1rem 0.7rem; }
+      .iq-upgrade-btn { font-size: 1.01rem; padding: 0.8rem 0; }
+    }
+  </style>
 </head>
 <body>
-  <!-- Header -->
+  <!-- Header (canonical) -->
   <header class="site-header">
-    <nav class="header-nav">
-      <ul class="nav-links">
-        <li><a href="index.html">Home</a></li>
-        <li><a href="index.html#what-you-get">What You Get</a></li>
-        <li><a href="pricing-a.html">Pricing</a></li>
-        <li><a href="login.html">Login</a></li>
-      </ul>
-      <a class="btn-primary" href="pricing-a.html">Start Free Trial</a>
-      <button class="mobile-toggle">☰</button>
-    </nav>
+    <div class="container">
+      <a href="index.html" class="nav-logo" aria-label="Go to homepage">
+        <svg width="24" height="24" fill="none" stroke="#1F2937" stroke-width="2" xmlns="http://www.w3.org/2000/svg">
+          <rect x="3" y="7" width="18" height="13" rx="2"/>
+          <path d="M8 7V5a2 2 0 012-2h4a2 2 0 012 2v2"/>
+        </svg>
+        <span>JOBHACKAI</span>
+      </a>
+      <div class="nav-group">
+        <nav class="nav-links" role="navigation">
+          <a href="index.html">Home</a>
+          <a href="#what-you-get">What You Get</a>
+          <a href="pricing-a.html">Pricing</a>
+          <a href="#blog">Blog</a>
+          <a href="login.html">Login</a>
+          <a href="pricing-a.html" class="cta-button">Start Free Trial</a>
+        </nav>
+      </div>
+      <button class="mobile-toggle" aria-label="Open navigation menu" aria-expanded="false" aria-controls="mobileNav">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="3" y1="12" x2="21" y2="12"></line>
+          <line x1="3" y1="6" x2="21" y2="6"></line>
+          <line x1="3" y1="18" x2="21" y2="18"></line>
+        </svg>
+      </button>
+    </div>
   </header>
   <nav class="mobile-nav" id="mobileNav">
     <a href="index.html">Home</a>
@@ -36,47 +160,140 @@
     <a href="login.html">Login</a>
     <a href="pricing-a.html" class="cta-button">Start Free Trial</a>
   </nav>
-  <script>
-    // Hamburger menu toggle
-    const mobileToggle = document.querySelector('.mobile-toggle');
-    const mobileNav = document.getElementById('mobileNav');
-    if (mobileToggle && mobileNav) {
-      mobileToggle.addEventListener('click', () => {
-        const isOpen = mobileNav.classList.toggle('open');
-        mobileToggle.setAttribute('aria-expanded', isOpen);
-      });
-      // Close mobile nav on link click
-      document.querySelectorAll('.mobile-nav a').forEach(link => {
-        link.addEventListener('click', () => {
-          mobileNav.classList.remove('open');
-          mobileToggle.setAttribute('aria-expanded', 'false');
-        });
-      });
-    }
-  </script>
-  <!-- page content -->
-  <main>
-    <!-- Interview Questions: Role combo-box, question list, "Generate" button -->
+  <main class="iq-main">
+    <h1 class="iq-title">Interview Questions</h1>
+    <p class="iq-sub">Practice your answers with AI-generated questions tailored to your job title.</p>
+    <div style="position:relative; margin-bottom:1.5rem;">
+      <input id="iq-role" class="iq-role-input" type="text" placeholder="e.g. Software Engineer" autocomplete="off" aria-autocomplete="list" aria-haspopup="listbox" aria-expanded="false">
+      <div id="iq-role-dropdown" class="iq-role-dropdown" style="display:none;"></div>
+    </div>
+    <div id="iq-questions" class="iq-questions"></div>
+    <div id="iq-lock" class="iq-lock" style="display:none;">
+      <svg width="20" height="20" fill="none" stroke="#1F2937" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><path d="M4 9V7a6 6 0 1112 0v2"/><rect x="4" y="9" width="12" height="9" rx="2"/></svg>
+      <span>Mock Interviews are only available on the <strong>Pro</strong> plan and above</span>
+    </div>
+    <button id="iq-upgrade" class="iq-upgrade-btn" style="display:none;">Upgrade to Pro</button>
   </main>
-  <!-- Footer -->
+  <!-- Footer (canonical) -->
   <footer class="site-footer">
     <div class="footer-container">
       <div class="footer-brand">
+        <svg class="footer-logo" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect x="3" y="7" width="18" height="13" rx="2" stroke="#1F2937" stroke-width="2"/>
+          <path d="M8 7V5a2 2 0 012-2h4a2 2 0 012 2v2" stroke="#1F2937" stroke-width="2"/>
+        </svg>
         <span class="footer-name">JOBHACKAI</span>
-      </div>
-      <div class="footer-links">
-        <a href="index.html">Home</a>
-        <a href="account-settings.html">Support</a>
-        <a href="privacy.html">Privacy</a>
       </div>
       <div class="footer-legal">
         <p>© 2025 JobHackAI. All rights reserved.</p>
       </div>
+      <div class="footer-links">
+        <a href="index.html">Home</a>
+        <a href="support.html">Support</a>
+        <a href="privacy.html">Privacy</a>
+      </div>
     </div>
   </footer>
-  <!-- scripts -->
-  <script src="js/main.js"></script>
-  <script src="js/analytics.js"></script>
-  <script src="js/interviewQuestions.js"></script>
+  <script>
+    // --- USER PLAN LOGIC (replace with real user data) ---
+    const user = {
+      plan: 'trial' // 'trial', 'essential', 'pro', 'premium'
+    };
+    // --- ROLES DATA ---
+    const roles = [
+      'Software Engineer', 'Data Analyst', 'Product Manager', 'Marketing Specialist',
+      'Sales Associate', 'Operations Manager', 'Financial Analyst', 'Project Coordinator',
+      'UX Designer', 'Customer Success Manager', 'Business Analyst', 'HR Specialist',
+      'Account Executive', 'QA Engineer', 'DevOps Engineer', 'Content Strategist'
+    ];
+    // --- QUESTIONS DATA ---
+    const questions = [
+      'What strengths make you the best candidate?',
+      'Describe a time you learned something quickly.',
+      'How do you handle competing priorities?',
+      'Tell us about using data to drive a decision.',
+      'How do you ensure clear team communication?',
+      'Describe a challenging project you overcame.',
+      'How do you measure success?',
+      'Explain leading a cross-functional team.'
+    ];
+    // --- ROLE INPUT & DROPDOWN LOGIC ---
+    const roleInput = document.getElementById('iq-role');
+    const roleDropdown = document.getElementById('iq-role-dropdown');
+    const qWrap = document.getElementById('iq-questions');
+    const lockNotice = document.getElementById('iq-lock');
+    const upgradeBtn = document.getElementById('iq-upgrade');
+    let selectedRole = '';
+    let dropdownOpen = false;
+    let activeIndex = -1;
+    function showDropdown(matches) {
+      if (!matches.length) { roleDropdown.style.display = 'none'; dropdownOpen = false; return; }
+      roleDropdown.innerHTML = matches.map((r, i) => `<div class="iq-role-item${i===activeIndex?' active':''}" data-role="${r}">${r}</div>`).join('');
+      roleDropdown.style.display = '';
+      dropdownOpen = true;
+      roleInput.setAttribute('aria-expanded', 'true');
+    }
+    function hideDropdown() {
+      roleDropdown.style.display = 'none';
+      dropdownOpen = false;
+      activeIndex = -1;
+      roleInput.setAttribute('aria-expanded', 'false');
+    }
+    roleInput.addEventListener('input', e => {
+      const val = e.target.value.trim().toLowerCase();
+      if (!val) { hideDropdown(); qWrap.innerHTML = ''; lockNotice.style.display = 'none'; upgradeBtn.style.display = 'none'; selectedRole = ''; return; }
+      const matches = roles.filter(r => r.toLowerCase().includes(val)).slice(0, 8);
+      showDropdown(matches);
+      qWrap.innerHTML = '';
+      lockNotice.style.display = 'none';
+      upgradeBtn.style.display = 'none';
+      selectedRole = '';
+    });
+    roleInput.addEventListener('keydown', e => {
+      if (!dropdownOpen) return;
+      const items = Array.from(roleDropdown.querySelectorAll('.iq-role-item'));
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        activeIndex = (activeIndex + 1) % items.length;
+        showDropdown(items.map(i => i.textContent));
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        activeIndex = (activeIndex - 1 + items.length) % items.length;
+        showDropdown(items.map(i => i.textContent));
+      } else if (e.key === 'Enter' && activeIndex >= 0) {
+        e.preventDefault();
+        items[activeIndex].click();
+      }
+    });
+    roleDropdown.addEventListener('mousedown', e => {
+      if (e.target.classList.contains('iq-role-item')) {
+        roleInput.value = e.target.dataset.role;
+        selectedRole = e.target.dataset.role;
+        hideDropdown();
+        renderQuestions();
+      }
+    });
+    document.addEventListener('click', e => {
+      if (!e.target.closest('.iq-role-input') && !e.target.closest('.iq-role-dropdown')) {
+        hideDropdown();
+      }
+    });
+    function renderQuestions() {
+      if (!selectedRole) {
+        qWrap.innerHTML = '';
+        lockNotice.style.display = 'none';
+        upgradeBtn.style.display = 'none';
+        return;
+      }
+      qWrap.innerHTML = questions.slice(0, 5).map(q => `<div class='iq-question-card'>${q}</div>`).join('');
+      if (user.plan === 'trial' || user.plan === 'essential') {
+        lockNotice.style.display = '';
+        upgradeBtn.style.display = '';
+      } else {
+        lockNotice.style.display = 'none';
+        upgradeBtn.style.display = 'none';
+      }
+    }
+  </script>
 </body>
 </html>
