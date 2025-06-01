@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Account Settings – JobHackAI</title>
+  <link rel="stylesheet" href="css/tokens.css">
+  <link rel="stylesheet" href="css/main.css">
+  <link rel="stylesheet" href="css/header.css">
+  <link rel="stylesheet" href="css/footer.css">
+  <style>
+    .account-settings-card {
+      background: #fff;
+      border-radius: 20px;
+      box-shadow: 0 2px 12px rgba(31,41,55,0.07);
+      max-width: 700px;
+      margin: 2.5rem auto;
+      padding: 2.2rem 2rem 2rem 2rem;
+    }
+    .account-settings-card h1 {
+      font-size: 2rem;
+      font-weight: 800;
+      margin-bottom: 1.2rem;
+      color: #232B36;
+    }
+    .settings-section {
+      margin-bottom: 1.5rem;
+    }
+    .settings-label {
+      font-weight: 700;
+      color: #232B36;
+      font-size: 1.08rem;
+      margin-bottom: 0.2rem;
+      display: block;
+    }
+    .settings-readonly {
+      background: #F3F4F6;
+      border: none;
+      border-radius: 8px;
+      padding: 0.7rem 1rem;
+      font-size: 1.05rem;
+      color: #4B5563;
+      width: 100%;
+      margin-bottom: 0.2rem;
+      outline: none;
+    }
+    .settings-support-link {
+      font-size: 0.98rem;
+      color: #1976D2;
+      text-decoration: underline;
+      margin-left: 0.2rem;
+      cursor: pointer;
+    }
+    .settings-support-link:hover {
+      color: #125bb5;
+    }
+    .settings-note {
+      font-size: 0.97rem;
+      color: #6B7280;
+      margin-bottom: 0.2rem;
+    }
+    .settings-btn-row {
+      display: flex;
+      gap: 1rem;
+      margin-bottom: 1.2rem;
+    }
+    .btn-green {
+      background: #00E676;
+      color: #fff;
+      font-weight: 700;
+      border: none;
+      border-radius: 8px;
+      padding: 0.6rem 1.3rem;
+      font-size: 1.01rem;
+      cursor: pointer;
+      transition: background 0.18s;
+      text-decoration: none;
+      display: inline-block;
+    }
+    .btn-green:hover,
+    .btn-green:focus {
+      background: #00c965;
+    }
+    .btn-blue {
+      background: #1976D2;
+      color: #fff;
+      font-weight: 700;
+      border: none;
+      border-radius: 8px;
+      padding: 0.6rem 1.3rem;
+      font-size: 1.01rem;
+      cursor: pointer;
+      transition: background 0.18s;
+      text-decoration: none;
+      display: inline-block;
+    }
+    .btn-blue:hover,
+    .btn-blue:focus {
+      background: #125bb5;
+    }
+    .btn-grey {
+      background: #232B36;
+      color: #fff;
+      font-weight: 700;
+      border: none;
+      border-radius: 8px;
+      padding: 0.6rem 1.3rem;
+      font-size: 1.01rem;
+      cursor: pointer;
+      transition: background 0.18s;
+      text-decoration: none;
+      display: inline-block;
+    }
+    .btn-grey:hover,
+    .btn-grey:focus {
+      background: #111827;
+    }
+    .settings-link-row {
+      margin: 1.2rem 0 1.5rem 0;
+      font-size: 1.01rem;
+    }
+    .settings-link-row a {
+      color: #1976D2;
+      text-decoration: underline;
+      margin-left: 0.2rem;
+    }
+    .settings-link-row a:hover {
+      color: #125bb5;
+    }
+    .settings-divider {
+      border: none;
+      border-top: 1px solid #E5E7EB;
+      margin: 2rem 0 1.5rem 0;
+    }
+    .btn-outline {
+      background: #fff;
+      color: #1976D2;
+      border: 1.5px solid #1976D2;
+      font-weight: 600;
+      border-radius: 8px;
+      padding: 0.6rem 1.3rem;
+      font-size: 1.01rem;
+      cursor: pointer;
+      transition: background 0.18s, color 0.18s, border-color 0.18s;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .btn-outline:hover,
+    .btn-outline:focus {
+      background: #1976D2;
+      color: #fff;
+      border-color: #1976D2;
+    }
+    .btn-outline-grey {
+      background: #fff;
+      color: #232B36;
+      border: 1.5px solid #B0B3B8;
+      font-weight: 600;
+      border-radius: 8px;
+      padding: 0.6rem 1.3rem;
+      font-size: 1.01rem;
+      cursor: pointer;
+      transition: background 0.18s, color 0.18s, border-color 0.18s;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .btn-outline-grey:hover,
+    .btn-outline-grey:focus {
+      background: #232B36;
+      color: #fff;
+      border-color: #232B36;
+    }
+    .btn-link {
+      background: none;
+      color: #1976D2;
+      border: none;
+      font-weight: 600;
+      font-size: 1.01rem;
+      text-decoration: underline;
+      cursor: pointer;
+      padding: 0.6rem 0.7rem;
+      border-radius: 6px;
+      transition: background 0.18s, color 0.18s;
+      display: inline-flex;
+      align-items: center;
+    }
+    .btn-link:hover,
+    .btn-link:focus {
+      background: #F3F4F6;
+      color: #125bb5;
+    }
+  </style>
+</head>
+<body>
+  <!-- Header (canonical) -->
+  <header class="site-header">
+    <div class="container">
+      <a href="index.html" class="nav-logo" aria-label="Go to homepage">
+        <svg width="24" height="24" fill="none" stroke="#1F2937" stroke-width="2" xmlns="http://www.w3.org/2000/svg">
+          <rect x="3" y="7" width="18" height="13" rx="2"/>
+          <path d="M8 7V5a2 2 0 012-2h4a2 2 0 012 2v2"/>
+        </svg>
+        <span>JOBHACKAI</span>
+      </a>
+      <div class="nav-group">
+        <nav class="nav-links" role="navigation">
+          <a href="index.html">Home</a>
+          <a href="#what-you-get">What You Get</a>
+          <a href="pricing-a.html">Pricing</a>
+          <a href="#blog">Blog</a>
+          <a href="login.html">Login</a>
+          <a href="pricing-a.html" class="cta-button">Start Free Trial</a>
+        </nav>
+      </div>
+      <button class="mobile-toggle" aria-label="Open navigation menu" aria-expanded="false" aria-controls="mobileNav">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="3" y1="12" x2="21" y2="12"></line>
+          <line x1="3" y1="6" x2="21" y2="6"></line>
+          <line x1="3" y1="18" x2="21" y2="18"></line>
+        </svg>
+      </button>
+    </div>
+  </header>
+  <nav class="mobile-nav" id="mobileNav">
+    <a href="index.html">Home</a>
+    <a href="#what-you-get">What You Get</a>
+    <a href="pricing-a.html">Pricing</a>
+    <a href="blog.html">Blog</a>
+    <a href="login.html">Login</a>
+    <a href="pricing-a.html" class="cta-button">Start Free Trial</a>
+  </nav>
+  <main>
+    <div class="account-settings-card" style="padding-bottom:1.5rem;">
+      <h1>Account Settings</h1>
+      <!-- Profile Info Card -->
+      <div class="settings-block" style="margin-bottom:2.2rem;">
+        <div class="settings-label" style="margin-bottom:0.5rem;">Profile Information</div>
+        <div class="profile-info-row" style="display:flex; flex-direction:row; gap:2.5rem; flex-wrap:wrap;">
+          <div style="flex:1 1 260px; max-width:340px;">
+            <span class="settings-label" style="font-weight:600; font-size:1.01rem; margin-bottom:0.1rem;">Full Name</span>
+            <div class="settings-readonly" style="background:#F3F4F6; font-size:1.04rem; padding:0.6rem 1rem;">Amanda Lewis</div>
+          </div>
+          <div style="flex:1 1 260px; max-width:340px;">
+            <span class="settings-label" style="font-weight:600; font-size:1.01rem; margin-bottom:0.1rem;">Email</span>
+            <div class="settings-readonly" style="background:#F3F4F6; font-size:1.04rem; padding:0.6rem 1rem;">amanda.lewis@example.com</div>
+          </div>
+        </div>
+        <div class="settings-note" style="margin-top:0.5rem;">Need to update your name or email? <a class="settings-support-link" href="#">Contact Support</a></div>
+      </div>
+      <!-- Security Card -->
+      <div class="settings-block" style="margin-bottom:2.2rem;">
+        <div class="settings-label" style="margin-bottom:0.5rem;">Security</div>
+        <button class="btn-outline" type="button" style="margin-bottom:0.2rem;">Reset My Password</button>
+      </div>
+      <!-- Billing Card -->
+      <div class="settings-block" style="margin-bottom:2.2rem;">
+        <div class="settings-label" style="margin-bottom:0.5rem;">Billing</div>
+        <button class="btn-outline" type="button">Manage Billing</button>
+      </div>
+      <!-- Actions Row -->
+      <div class="settings-actions-row" style="display:flex; gap:1rem; margin-bottom:2.2rem; flex-wrap:wrap;">
+        <a href="#" class="btn-link">Compare Plans</a>
+        <a href="#" class="btn-link">Contact Support</a>
+        <button class="btn-outline-grey" type="button">Log Out</button>
+      </div>
+    </div>
+    <div style="max-width:700px; margin:0 auto 2.5rem auto; display:flex; justify-content:flex-start;">
+      <a href="dashboard.html" class="btn-outline">&larr; Back to Dashboard</a>
+    </div>
+  </main>
+  <!-- Footer (canonical) -->
+  <footer class="site-footer">
+    <div class="footer-container">
+      <div class="footer-brand">
+        <svg class="footer-logo" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect x="3" y="7" width="18" height="13" rx="2" stroke="#1F2937" stroke-width="2"/>
+          <path d="M8 7V5a2 2 0 012-2h4a2 2 0 012 2v2" stroke="#1F2937" stroke-width="2"/>
+        </svg>
+        <span class="footer-name">JOBHACKAI</span>
+      </div>
+      <div class="footer-legal">
+        <p>© 2025 JobHackAI. All rights reserved.</p>
+      </div>
+      <div class="footer-links">
+        <a href="index.html">Home</a>
+        <a href="support.html">Support</a>
+        <a href="privacy.html">Privacy</a>
+      </div>
+    </div>
+  </footer>
+</body>
+</html> 
