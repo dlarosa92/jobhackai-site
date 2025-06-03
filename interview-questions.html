@@ -5,12 +5,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Interview Questions – JobHackAI</title>
-
-  <!-- Design tokens & global styles -->
   <link rel="stylesheet" href="css/tokens.css">
   <link rel="stylesheet" href="css/main.css">
-
-  <!-- Component overrides -->
   <link rel="stylesheet" href="css/header.css">
   <link rel="stylesheet" href="css/footer.css">
   <style>
@@ -36,7 +32,7 @@
       border: 2px solid #E5E7EB;
       border-radius: 10px;
       font-size: 1.08rem;
-      margin-bottom: 0.2rem;
+      margin-bottom: 1.5rem;
       transition: border 0.18s;
       background: #fff;
       color: #232B36;
@@ -217,9 +213,8 @@
       'How do you measure success?',
       'Explain leading a cross-functional team.'
     ];
-    // --- ROLE INPUT & DROPDOWN LOGIC ---
+    // --- ROLE INPUT & QUESTIONS RENDER ---
     const roleInput = document.getElementById('iq-role');
-    const roleDropdown = document.getElementById('iq-role-dropdown');
     const qWrap = document.getElementById('iq-questions');
     const lockNotice = document.getElementById('iq-lock');
     const upgradeBtn = document.getElementById('iq-upgrade');
@@ -228,7 +223,7 @@
     let activeIndex = -1;
     function showDropdown(matches) {
       if (!matches.length) { roleDropdown.style.display = 'none'; dropdownOpen = false; return; }
-      roleDropdown.innerHTML = matches.map((r, i) => `<div class="iq-role-item${i===activeIndex?' active':''}" data-role="${r}">${r}</div>`).join('');
+      roleDropdown.innerHTML = matches.map((r, i) => `<div class=\"iq-role-item${i===activeIndex?' active':''}\" data-role=\"${r}\">${r}</div>`).join('');
       roleDropdown.style.display = '';
       dropdownOpen = true;
       roleInput.setAttribute('aria-expanded', 'true');
@@ -270,29 +265,15 @@
         roleInput.value = e.target.dataset.role;
         selectedRole = e.target.dataset.role;
         hideDropdown();
-        renderQuestions();
+        generateQuestions();
       }
     });
     document.addEventListener('click', e => {
-      if (!e.target.closest('.iq-role-input') && !e.target.closest('.iq-role-dropdown')) {
-        hideDropdown();
-      }
+      if (!e.target.closest('.combo')) hideDropdown();
     });
-    function renderQuestions() {
-      if (!selectedRole) {
-        qWrap.innerHTML = '';
-        lockNotice.style.display = 'none';
-        upgradeBtn.style.display = 'none';
-        return;
-      }
-      qWrap.innerHTML = questions.slice(0, 5).map(q => `<div class='iq-question-card'>${q}</div>`).join('');
-      if (user.plan === 'trial' || user.plan === 'essential') {
-        lockNotice.style.display = '';
-        upgradeBtn.style.display = '';
-      } else {
-        lockNotice.style.display = 'none';
-        upgradeBtn.style.display = 'none';
-      }
+    function generateQuestions(){
+      const wrap=document.getElementById('qwrap');
+      wrap.innerHTML=questions.slice(0,5).map(q=>`<div class="card">${q}</div>`).join('');
     }
   </script>
 </body>
