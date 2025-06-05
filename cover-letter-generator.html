@@ -13,8 +13,200 @@
   <!-- Component overrides -->
   <link rel="stylesheet" href="css/header.css">
   <link rel="stylesheet" href="css/footer.css">
+  <style>
+    .clg-main {
+      max-width: 700px;
+      margin: 2.5rem auto 4rem auto;
+      padding: 0 1rem;
+    }
+    .clg-card {
+      background: var(--color-card-bg);
+      border-radius: var(--radius-card);
+      box-shadow: var(--shadow-card);
+      padding: 2.5rem 2rem 2rem 2rem;
+      margin-bottom: 2.5rem;
+      box-sizing: border-box;
+      overflow: hidden;
+    }
+    .clg-title {
+      font-size: 2rem;
+      font-weight: 800;
+      margin-bottom: 0.5rem;
+      color: var(--color-text-main);
+    }
+    .clg-desc {
+      color: var(--color-text-secondary);
+      margin-bottom: 2rem;
+      font-size: 1.08rem;
+    }
+    .clg-label {
+      font-weight: 700;
+      color: var(--color-text-main);
+      font-size: 1.05rem;
+      margin-bottom: 0.3rem;
+      display: block;
+    }
+    .clg-input, .clg-textarea {
+      width: 100%;
+      font-size: 1.05rem;
+      border: 2px solid var(--color-divider);
+      border-radius: var(--radius-button);
+      padding: 0.7rem 1rem;
+      margin-bottom: 1.3rem;
+      background: var(--color-bg-light);
+      color: var(--color-text-main);
+      transition: border 0.18s;
+      resize: none;
+      box-sizing: border-box;
+    }
+    .clg-input:focus, .clg-textarea:focus {
+      border-color: var(--color-accent-blue);
+      outline: none;
+    }
+    .clg-btn {
+      background: var(--color-cta-green);
+      color: #fff;
+      font-weight: 700;
+      border: none;
+      border-radius: var(--radius-button);
+      padding: 0.7rem 1.5rem;
+      font-size: 1.05rem;
+      cursor: pointer;
+      transition: background 0.18s;
+      margin-bottom: 1.5rem;
+      display: inline-block;
+    }
+    .clg-btn:disabled {
+      background: #B0B3B8;
+      cursor: not-allowed;
+    }
+    .clg-btn:hover:not(:disabled), .clg-btn:focus:not(:disabled) {
+      background: #00c965;
+    }
+    .clg-spinner {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      margin: 2.5rem 0 2rem 0;
+    }
+    .clg-spinner-circle {
+      width: 36px;
+      height: 36px;
+      border: 4px solid #E5E7EB;
+      border-top: 4px solid var(--color-accent-blue);
+      border-radius: 50%;
+      animation: clg-spin 1s linear infinite;
+    }
+    @keyframes clg-spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+    .clg-preview-label {
+      font-weight: 800;
+      font-size: 1.18rem;
+      margin-bottom: 0.7rem;
+      color: var(--color-text-main);
+    }
+    .clg-preview-box {
+      width: 100%;
+      min-height: 120px;
+      background: var(--color-bg-light);
+      border: 2px solid var(--color-divider);
+      border-radius: var(--radius-button);
+      padding: 1rem;
+      font-size: 1.05rem;
+      color: var(--color-text-main);
+      margin-bottom: 1.2rem;
+      resize: none;
+      box-sizing: border-box;
+    }
+    .clg-preview-actions {
+      display: flex;
+      justify-content: flex-end;
+      margin-bottom: 0.5rem;
+    }
+    .clg-copy-btn {
+      float: none;
+      margin: 0;
+      background: var(--color-accent-blue);
+      color: #fff;
+      border: none;
+      border-radius: var(--radius-button);
+      padding: 0.5rem 1.1rem;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.18s;
+    }
+    .clg-copy-btn:hover, .clg-copy-btn:focus {
+      background: #005bb5;
+    }
+    .clg-locked {
+      background: #fffbe6;
+      border: 1.5px solid #ffe066;
+      border-radius: var(--radius-button);
+      padding: 1.2rem 1.2rem 1.2rem 1.2rem;
+      margin-bottom: 1.5rem;
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      color: #b59f00;
+      font-size: 1.05rem;
+    }
+    .clg-upgrade-btn {
+      background: var(--color-accent-blue);
+      color: #fff;
+      border: none;
+      border-radius: var(--radius-button);
+      padding: 0.7rem 1.5rem;
+      font-size: 1.05rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: background 0.18s;
+      margin-left: 1.5rem;
+    }
+    .clg-upgrade-btn:hover, .clg-upgrade-btn:focus {
+      background: #005bb5;
+    }
+    @media (max-width: 700px) {
+      .clg-main { padding: 0 0.3rem; }
+      .clg-card { padding: 1.2rem 0.7rem; }
+    }
+    .clg-job-dropdown {
+      font-size: 1.05rem;
+      border-radius: 0 0 8px 8px;
+      box-shadow: 0 2px 8px rgba(31,41,55,0.07);
+      background: #fff;
+      border: 1.5px solid #E5E7EB;
+      border-top: none;
+      z-index: 10;
+      max-height: 220px;
+      overflow-y: auto;
+    }
+    .clg-job-item {
+      padding: 0.85rem 1.1rem;
+      cursor: pointer;
+      color: var(--color-text-main);
+      transition: background 0.15s;
+    }
+    .clg-job-item:hover, .clg-job-item.active {
+      background: var(--color-bg-light);
+    }
+  </style>
 </head>
 <body>
+  <!-- DEV-ONLY PLAN TOGGLE -->
+  <div id="dev-plan-toggle" style="position:fixed;top:16px;right:16px;z-index:9999;background:#fff;border:1.5px solid #E5E7EB;border-radius:8px;padding:0.5rem 1rem;box-shadow:0 2px 8px rgba(31,41,55,0.07);font-size:0.98rem;display:flex;align-items:center;gap:0.5rem;">
+    <span style="font-weight:700;color:#1976D2;">DEV ONLY</span>
+    <label for="dev-plan" style="font-weight:600;color:#4B5563;">Plan:</label>
+    <select id="dev-plan" style="font-size:1rem;padding:0.2rem 0.7rem;border-radius:6px;border:1px solid #E5E7EB;">
+      <option value="trial">Trial</option>
+      <option value="essential">Essential</option>
+      <option value="pro">Pro</option>
+      <option value="premium">Premium</option>
+    </select>
+  </div>
+
   <!-- Header -->
   <header class="site-header">
     <div class="container">
@@ -72,8 +264,34 @@
   </script>
 
   <!-- page content -->
-  <main>
-    <!-- Cover Letter Generator: Job description input, "Generate Cover Letter" CTA -->
+  <main class="clg-main">
+    <div class="clg-card">
+      <div class="clg-title">Cover Letter Generator</div>
+      <div class="clg-desc">Describe the job target and optionally provide your résumé.</div>
+      <div id="clg-locked" class="clg-locked" style="display:none;">
+        <svg width="22" height="22" fill="none" stroke="#b59f00" stroke-width="2" style="flex-shrink:0;"><path d="M6 10V7a5 5 0 1110 0v3"/><rect x="5" y="10" width="12" height="8" rx="2"/></svg>
+        <span>This feature is only available on <strong>Pro</strong> and <strong>Premium</strong> plans.</span>
+        <button class="clg-upgrade-btn" onclick="window.location.href='pricing.html'">Upgrade</button>
+      </div>
+      <form id="clg-form" autocomplete="off">
+        <label class="clg-label" for="clg-job">Job Title or Role</label>
+        <div style="position:relative;">
+          <input class="clg-input" id="clg-job" name="job" type="text" placeholder="e.g., Product Manager" autocomplete="off" aria-autocomplete="list" aria-haspopup="listbox" aria-expanded="false">
+          <div id="clg-job-dropdown" class="clg-job-dropdown" style="display:none;position:absolute;left:0;right:0;top:100%;background:#fff;border:1.5px solid #E5E7EB;border-top:none;border-radius:0 0 8px 8px;box-shadow:0 2px 8px rgba(31,41,55,0.07);z-index:10;max-height:220px;overflow-y:auto;"></div>
+        </div>
+        <label class="clg-label" for="clg-desc">Job Description</label>
+        <textarea class="clg-textarea" id="clg-desc" name="desc" rows="5" placeholder="Paste job details here" required></textarea>
+        <button class="clg-btn" id="clg-generate" type="submit">Generate Cover Letter</button>
+      </form>
+      <div id="clg-spinner" class="clg-spinner" style="display:none;">
+        <div class="clg-spinner-circle"></div>
+      </div>
+      <div class="clg-preview-label">Cover Letter Preview</div>
+      <textarea id="clg-preview" class="clg-preview-box" readonly></textarea>
+      <div class="clg-preview-actions">
+        <button id="clg-copy" class="clg-copy-btn" type="button">Copy Cover Letter</button>
+      </div>
+    </div>
   </main>
 
   <!-- Footer -->
@@ -101,5 +319,117 @@
   <script src="js/main.js"></script>
   <script src="js/analytics.js"></script>
   <script src="js/coverLetterGenerator.js"></script>
+  <script>
+    // DEV-ONLY PLAN TOGGLE LOGIC
+    let user = { plan: 'trial' };
+    const devPlan = document.getElementById('dev-plan');
+    devPlan.value = user.plan;
+    devPlan.addEventListener('change', function() {
+      user.plan = this.value;
+      renderCLGByPlan();
+    });
+
+    // --- Cover Letter Generator logic ---
+    function renderCLGByPlan() {
+      const locked = (user.plan === 'trial' || user.plan === 'essential' || user.plan === 'free');
+      const form = document.getElementById('clg-form');
+      const lockedDiv = document.getElementById('clg-locked');
+      const spinner = document.getElementById('clg-spinner');
+      const preview = document.getElementById('clg-preview');
+      const copyBtn = document.getElementById('clg-copy');
+      if (locked) {
+        lockedDiv.style.display = 'flex';
+        form.style.display = 'none';
+        spinner.style.display = 'none';
+        preview.style.display = 'none';
+        copyBtn.style.display = 'none';
+      } else {
+        lockedDiv.style.display = 'none';
+        form.style.display = '';
+        spinner.style.display = 'none';
+        preview.style.display = '';
+        copyBtn.style.display = '';
+      }
+    }
+    renderCLGByPlan();
+
+    const form = document.getElementById('clg-form');
+    const generateBtn = document.getElementById('clg-generate');
+    const spinner = document.getElementById('clg-spinner');
+    const preview = document.getElementById('clg-preview');
+    const copyBtn = document.getElementById('clg-copy');
+
+    form.addEventListener('submit', function(e) {
+      e.preventDefault();
+      generateBtn.disabled = true;
+      spinner.style.display = 'flex';
+      preview.value = '';
+      setTimeout(() => {
+        spinner.style.display = 'none';
+        preview.value = 'Dear Hiring Manager,\n\nI am excited to apply for the ' + document.getElementById('clg-job').value + ' position. I believe my skills and experience make me a strong fit for this role. [AI-generated content here...]';
+        generateBtn.disabled = false;
+      }, 1800);
+    });
+
+    copyBtn.addEventListener('click', function() {
+      preview.select();
+      document.execCommand('copy');
+      copyBtn.textContent = 'Copied!';
+      setTimeout(() => { copyBtn.textContent = 'Copy Cover Letter'; }, 1200);
+    });
+
+    // --- Autocomplete for Job Title or Role ---
+    const jobRoles = [
+      'Software Engineer', 'Data Analyst', 'Product Manager', 'Marketing Specialist',
+      'Sales Associate', 'Operations Manager', 'Financial Analyst', 'Project Coordinator',
+      'UX Designer', 'Customer Success Manager', 'Business Analyst', 'HR Specialist',
+      'Account Executive', 'QA Engineer', 'DevOps Engineer', 'Content Strategist'
+    ];
+    const jobInput = document.getElementById('clg-job');
+    const jobDropdown = document.getElementById('clg-job-dropdown');
+    let jobDropdownOpen = false;
+    let jobActiveIndex = -1;
+    jobInput.addEventListener('input', e => {
+      const val = e.target.value.trim().toLowerCase();
+      if (!val) { jobDropdown.style.display = 'none'; jobDropdownOpen = false; return; }
+      const matches = jobRoles.filter(r => r.toLowerCase().includes(val)).slice(0, 8);
+      if (!matches.length) { jobDropdown.style.display = 'none'; jobDropdownOpen = false; return; }
+      jobDropdown.innerHTML = matches.map((r, i) => `<div class="clg-job-item${i===jobActiveIndex?' active':''}" data-role="${r}">${r}</div>`).join('');
+      jobDropdown.style.display = '';
+      jobDropdownOpen = true;
+      jobInput.setAttribute('aria-expanded', 'true');
+    });
+    jobInput.addEventListener('keydown', e => {
+      if (!jobDropdownOpen) return;
+      const items = Array.from(jobDropdown.querySelectorAll('.clg-job-item'));
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        jobActiveIndex = (jobActiveIndex + 1) % items.length;
+        jobDropdown.innerHTML = items.map((i, idx) => `<div class=\"clg-job-item${idx===jobActiveIndex?' active':''}\" data-role=\"${i.textContent}\">${i.textContent}</div>`).join('');
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        jobActiveIndex = (jobActiveIndex - 1 + items.length) % items.length;
+        jobDropdown.innerHTML = items.map((i, idx) => `<div class=\"clg-job-item${idx===jobActiveIndex?' active':''}\" data-role=\"${i.textContent}\">${i.textContent}</div>`).join('');
+      } else if (e.key === 'Enter' && jobActiveIndex >= 0) {
+        e.preventDefault();
+        items[jobActiveIndex].click();
+      }
+    });
+    jobDropdown.addEventListener('mousedown', e => {
+      if (e.target.classList.contains('clg-job-item')) {
+        jobInput.value = e.target.dataset.role;
+        jobDropdown.style.display = 'none';
+        jobDropdownOpen = false;
+        jobInput.setAttribute('aria-expanded', 'false');
+      }
+    });
+    document.addEventListener('click', e => {
+      if (!e.target.closest('#clg-job') && !e.target.closest('#clg-job-dropdown')) {
+        jobDropdown.style.display = 'none';
+        jobDropdownOpen = false;
+        jobInput.setAttribute('aria-expanded', 'false');
+      }
+    });
+  </script>
 </body>
 </html>
