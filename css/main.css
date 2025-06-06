@@ -381,7 +381,7 @@ section {
   max-width: 340px;
   flex: 1 1 260px;
   display: flex;
-  flex-direction: column;
+    flex-direction: column;
   align-items: center;
 }
 

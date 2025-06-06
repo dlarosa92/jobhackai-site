@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Mock Interview – JobHackAI</title>
+  <title>Mock Interview Simulator – JobHackAI</title>
 
   <!-- Design tokens & global styles -->
   <link rel="stylesheet" href="css/tokens.css">
@@ -13,8 +13,522 @@
   <!-- Component overrides -->
   <link rel="stylesheet" href="css/header.css">
   <link rel="stylesheet" href="css/footer.css">
+  <style>
+    /* General layout and card polish */
+    html, body { height: 100%; margin: 0; padding: 0; }
+    body { min-height: 100vh; display: flex; flex-direction: column; }
+    main.mi-main { flex: 1 0 auto; }
+    .site-footer { flex-shrink: 0; position: static !important; bottom: unset !important; width: 100%; }
+    .mi-main { max-width: 900px; margin: 2.5rem auto 4rem auto; padding: 0 1rem; }
+    .mi-card { background: var(--color-card-bg); border-radius: var(--radius-card); box-shadow: var(--shadow-card); padding: 2.2rem 2rem 2rem 2rem; margin-bottom: 2.5rem; box-sizing: border-box; }
+    .mi-title { font-size: 2rem; font-weight: 800; margin-bottom: 0.5rem; color: var(--color-text-main); }
+    .mi-desc { color: var(--color-text-secondary); margin-bottom: 1.2rem; font-size: 1.08rem; }
+    .clg-label { font-weight: 700; color: var(--color-text-main); font-size: 1.05rem; margin-bottom: 0.3rem; display: block; }
+    .clg-input { width: 100%; font-size: 1.05rem; border: 2px solid var(--color-divider); border-radius: var(--radius-button); padding: 0.7rem 1rem; background: var(--color-bg-light); color: var(--color-text-main); transition: border 0.18s; margin-bottom: 0.5rem; box-sizing: border-box; }
+    .clg-input:focus { border-color: var(--color-accent-blue); outline: none; }
+    .clg-job-dropdown { font-size: 1.05rem; border-radius: 0 0 8px 8px; box-shadow: 0 2px 8px rgba(31,41,55,0.07); background: #fff; border: 1.5px solid #E5E7EB; border-top: none; z-index: 10; max-height: 220px; overflow-y: auto; position: absolute; left: 0; right: 0; top: 100%; display: none; }
+    .clg-job-item { padding: 0.85rem 1.1rem; cursor: pointer; color: var(--color-text-main); transition: background 0.15s; }
+    .clg-job-item:hover, .clg-job-item.active { background: var(--color-bg-light); }
+    .clg-btn { background: var(--color-cta-green); color: #fff; font-weight: 700; border: none; border-radius: var(--radius-button); padding: 0.7rem 1.5rem; font-size: 1.05rem; cursor: pointer; transition: background 0.18s; margin-bottom: 0.5rem; display: inline-block; }
+    .clg-btn:disabled { background: #B0B3B8; cursor: not-allowed; }
+    .clg-btn:hover:not(:disabled), .clg-btn:focus:not(:disabled) { background: #00c965; }
+    .mi-card:focus-within, .mi-card:hover { box-shadow: var(--shadow-card); transform: none; }
+    .mi-locked { background: #fffbe6; border: 1.5px solid #ffe066; border-radius: var(--radius-button); padding: 1.2rem; margin-bottom: 1.5rem; display: flex; align-items: center; gap: 1rem; color: #b59f00; font-size: 1.05rem; }
+    .mi-upgrade-btn { background: var(--color-accent-blue); color: #fff; border: none; border-radius: var(--radius-button); padding: 0.7rem 1.5rem; font-size: 1.05rem; font-weight: 700; cursor: pointer; transition: background 0.18s; margin-left: 1.5rem; }
+    .mi-upgrade-btn:hover, .mi-upgrade-btn:focus { background: #005bb5; }
+    .mi-progress-bar-bg { width: 100%; height: 8px; background: #F3F4F6; border-radius: 4px; margin-top: 0.3rem; }
+    .mi-progress-bar { height: 8px; background: #1976D2; border-radius: 4px; width: 0%; transition: width 0.3s; }
+    .mi-usage-meter { margin-top: 1.5rem; padding: 1rem; background: var(--color-bg-light); border-radius: var(--radius-button); display: none; }
+    .mi-usage-text { font-size: 0.9rem; color: var(--color-text-secondary); margin-bottom: 0.5rem; }
+    .mi-usage-bar { height: 8px; background: #e5e7eb; border-radius: 4px; overflow: hidden; }
+    .mi-usage-progress { height: 100%; background: var(--color-accent-blue); transition: width 0.3s ease; }
+    .mi-history-sidebar { position: fixed; right: 0; top: 80px; width: 320px; max-width: 90vw; background: #fff; border-left: 1.5px solid #E5E7EB; box-shadow: -2px 0 12px rgba(31,41,55,0.04); padding: 2rem 1.2rem 1.2rem 1.2rem; z-index: 9000; border-radius: 12px 0 0 12px; display: none; }
+    .mi-history-sidebar h3 { font-size: 1.1rem; font-weight: 700; margin-bottom: 1.2rem; }
+    .mi-history-list { list-style: none; padding: 0; margin: 0; }
+    .mi-history-empty { color: #9CA3AF; font-size: 1rem; }
+    @media (max-width: 1100px) { .mi-history-sidebar { display: none; } }
+    .mi-interview-container {
+      display: none; /* Hidden by default until plan check */
+    }
+    .mi-question {
+      font-size: 1.2rem;
+      font-weight: 600;
+      margin-bottom: 1.5rem;
+      color: var(--color-text-main);
+    }
+    .mi-answer-input {
+      width: 100%;
+      min-height: 150px;
+      padding: 1rem;
+      border: 2px solid var(--color-divider);
+      border-radius: var(--radius-button);
+      font-size: 1.05rem;
+      margin-bottom: 1.5rem;
+      resize: vertical;
+      box-sizing: border-box;
+    }
+    .mi-answer-input:focus {
+      border-color: var(--color-accent-blue);
+      outline: none;
+    }
+    .mi-submit-btn {
+      background: var(--color-accent-green);
+      color: #fff;
+      border: none;
+      border-radius: var(--radius-button);
+      padding: 0.8rem 1.5rem;
+      font-size: 1.05rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: background 0.18s;
+    }
+    .mi-submit-btn:hover {
+      background: #2e7d32;
+    }
+    .mi-submit-btn:disabled {
+      background: #ccc;
+      cursor: not-allowed;
+    }
+    .mi-feedback {
+      margin-top: 2rem;
+      padding: 1.5rem;
+      border-radius: var(--radius-card);
+      background: var(--color-bg-light);
+      display: none;
+    }
+    .mi-score-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+    }
+    .mi-score-item {
+      padding: 1rem;
+      border-radius: var(--radius-button);
+      background: #fff;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+    .mi-score-label {
+      font-size: 0.9rem;
+      color: var(--color-text-secondary);
+      margin-bottom: 0.3rem;
+    }
+    .mi-score-value {
+      font-size: 1.2rem;
+      font-weight: 700;
+      color: var(--color-text-main);
+    }
+    .mi-total-score {
+      font-size: 2rem;
+      font-weight: 800;
+      text-align: center;
+      margin: 1.5rem 0;
+      color: var(--color-text-main);
+    }
+    .mi-feedback-text {
+      font-size: 1.05rem;
+      line-height: 1.6;
+      color: var(--color-text-main);
+    }
+    .user-nav-profile {
+      margin-left: 2.2rem;
+      display: flex;
+      align-items: center;
+      height: 100%;
+    }
+    .nav-dropdown {
+      position: relative;
+      display: flex;
+      align-items: center;
+      height: 100%;
+    }
+    .nav-dropdown-trigger {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      background: none;
+      border: none;
+      color: #1F2937;
+      font-weight: 600;
+      font-size: 1rem;
+      cursor: pointer;
+      padding: 0.25rem 0.7rem 0.25rem 0.5rem;
+      border-radius: 8px;
+      transition: background 0.15s;
+      height: 40px;
+    }
+    .nav-dropdown-trigger:focus,
+    .nav-dropdown-trigger:hover {
+      background: #F3F4F6;
+      outline: none;
+    }
+    .user-avatar {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      object-fit: cover;
+      background: #E5E7EB;
+    }
+    .user-name {
+      color: #1F2937;
+      font-weight: 600;
+      font-size: 1rem;
+      margin-left: 0.2rem;
+      margin-right: 0.2rem;
+    }
+    .nav-dropdown-menu {
+      position: absolute;
+      top: 110%;
+      right: 0;
+      background: #fff;
+      border: 1px solid #E5E7EB;
+      border-radius: 10px;
+      box-shadow: 0 2px 8px rgba(31,41,55,0.07);
+      min-width: 180px;
+      padding: 0.5rem 0;
+      z-index: 100;
+      display: none;
+    }
+    .nav-dropdown.open .nav-dropdown-menu,
+    .nav-dropdown-trigger[aria-expanded="true"] + .nav-dropdown-menu {
+      display: block;
+    }
+    .nav-dropdown-menu a {
+      display: block;
+      padding: 0.7rem 1.2rem;
+      color: #1F2937;
+      text-decoration: none;
+      font-size: 1rem;
+      font-weight: 500;
+      transition: background 0.15s, color 0.15s;
+      border: none;
+      background: none;
+    }
+    .nav-dropdown-menu a:hover {
+      background: #F3F4F6;
+      color: #007BFF;
+    }
+    .nav-divider {
+      height: 1px;
+      background: #E5E7EB;
+      margin: 0.3rem 0;
+      width: 90%;
+      margin-left: 5%;
+    }
+    .nav-logout {
+      color: #DC2626 !important;
+    }
+    .mi-role-row {
+      display: flex;
+      align-items: flex-end;
+      gap: 1.2rem;
+      margin-bottom: 1.5rem;
+      flex-wrap: wrap;
+    }
+    .mi-role-label {
+      font-weight: 700;
+      color: var(--color-text-main);
+      font-size: 1.05rem;
+      margin-bottom: 0.3rem;
+      display: block;
+    }
+    .mi-role-autocomplete {
+      flex: 1 1 260px;
+      min-width: 220px;
+      position: relative;
+    }
+    .mi-role-input {
+      width: 100%;
+      font-size: 1.05rem;
+      border: 2px solid var(--color-divider);
+      border-radius: var(--radius-button);
+      padding: 0.7rem 1rem;
+      background: var(--color-bg-light);
+      color: var(--color-text-main);
+      transition: border 0.18s;
+      margin-bottom: 0;
+      box-sizing: border-box;
+    }
+    .mi-role-input:focus {
+      border-color: var(--color-accent-blue);
+      outline: none;
+    }
+    .mi-role-dropdown {
+      font-size: 1.05rem;
+      border-radius: 0 0 8px 8px;
+      box-shadow: 0 2px 8px rgba(31,41,55,0.07);
+      background: #fff;
+      border: 1.5px solid #E5E7EB;
+      border-top: none;
+      z-index: 10;
+      max-height: 220px;
+      overflow-y: auto;
+      position: absolute;
+      left: 0; right: 0; top: 100%;
+      display: none;
+    }
+    .mi-role-item {
+      padding: 0.85rem 1.1rem;
+      cursor: pointer;
+      color: var(--color-text-main);
+      transition: background 0.15s;
+    }
+    .mi-role-item:hover, .mi-role-item.active {
+      background: var(--color-bg-light);
+    }
+    .mi-start-btn {
+      background: var(--color-accent-blue);
+      color: #fff;
+      border: none;
+      border-radius: var(--radius-button);
+      padding: 0.7rem 1.5rem;
+      font-size: 1.05rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: background 0.18s;
+      margin-bottom: 0.2rem;
+    }
+    .mi-start-btn:disabled {
+      background: #B0B3B8;
+      cursor: not-allowed;
+    }
+    .mi-start-btn:hover:not(:disabled) {
+      background: #005bb5;
+    }
+    .mi-session-history {
+      margin-top: 2.5rem;
+      background: #fff;
+      border-radius: var(--radius-card);
+      box-shadow: var(--shadow-card);
+      padding: 1.5rem 1.5rem 1.2rem 1.5rem;
+      max-width: 800px;
+      margin-left: auto;
+      margin-right: auto;
+    }
+    .mi-session-history-title {
+      font-size: 1.18rem;
+      font-weight: 700;
+      color: var(--color-text-main);
+      margin-bottom: 1rem;
+    }
+    .mi-session-list {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+    }
+    .mi-session-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0.7rem 0;
+      border-bottom: 1px solid #E5E7EB;
+      font-size: 1.03rem;
+    }
+    .mi-session-item:last-child {
+      border-bottom: none;
+    }
+    .mi-session-date {
+      color: #6B7280;
+      font-size: 0.98rem;
+      margin-right: 1.2rem;
+    }
+    .mi-session-role {
+      font-weight: 600;
+      color: #1976D2;
+      margin-right: 1.2rem;
+    }
+    .mi-session-score {
+      font-weight: 700;
+      color: #00C853;
+    }
+  </style>
 </head>
 <body>
+  <!-- DEV-ONLY PLAN TOGGLE (fixed, canonical style) -->
+  <div id="dev-plan-toggle" style="position:fixed;top:16px;right:16px;z-index:9999;background:#fff;border:1.5px solid #E5E7EB;border-radius:8px;padding:0.5rem 1rem;box-shadow:0 2px 8px rgba(31,41,55,0.07);font-size:0.98rem;display:flex;align-items:center;gap:0.5rem;">
+    <span style="font-weight:700;color:#1976D2;">DEV ONLY</span>
+    <label for="dev-plan" style="font-weight:600;color:#4B5563;">Plan:</label>
+    <select id="dev-plan" style="font-size:1rem;padding:0.2rem 0.7rem;border-radius:6px;border:1px solid #E5E7EB;">
+      <option value="trial">Trial</option>
+      <option value="essential">Essential</option>
+      <option value="pro">Pro</option>
+      <option value="premium">Premium</option>
+    </select>
+  </div>
+  <script>
+    // --- USER PLAN LOGIC (must be defined before any script uses it) ---
+    const user = {
+      plan: 'trial', // 'trial', 'essential', 'pro', 'premium'
+      sessionsUsed: 0,
+      lastSessionTime: null
+    };
+
+    // DEV-ONLY PLAN TOGGLE LOGIC
+    const devPlan = document.getElementById('dev-plan');
+    if (devPlan) {
+      devPlan.value = user.plan;
+      devPlan.addEventListener('change', function() {
+        user.plan = this.value;
+        checkPlanAccess();
+        user.sessionsUsed = 0;
+        user.lastSessionTime = null;
+      });
+    }
+
+    // --- PLAN-BASED ACCESS CONTROL ---
+    function checkPlanAccess() {
+      const lockedDiv = document.getElementById('mi-locked');
+      const setupDiv = document.getElementById('mi-setup');
+      const sessionDiv = document.getElementById('mi-session');
+      const historySidebar = document.getElementById('mi-history-sidebar');
+      const usageMeter = document.getElementById('mi-usage-meter');
+      if (!lockedDiv || !setupDiv || !sessionDiv) return;
+      const locked = (user.plan === 'trial' || user.plan === 'essential' || user.plan === 'free');
+      lockedDiv.style.display = locked ? 'flex' : 'none';
+      setupDiv.style.display = locked ? 'none' : '';
+      sessionDiv.style.display = 'none';
+      if (historySidebar) historySidebar.style.display = (user.plan === 'pro' || user.plan === 'premium') ? 'block' : 'none';
+      if (usageMeter) usageMeter.style.display = (user.plan === 'pro' || user.plan === 'premium') ? '' : 'none';
+    }
+
+    // --- Autocomplete for Target Role (canonical) ---
+    const jobRoles = [
+      'Software Engineer',
+      'Full‑stack Developer',
+      'Platform Engineer',
+      'DevOps Engineer',
+      'Data Engineer',
+      'Data Scientist',
+      'AI Engineer',
+      'LLM Engineer',
+      'Product Manager',
+      'Product Owner',
+      'Epic Owner',
+      'Business Owner',
+      'Scrum Master',
+      'Release Train Engineer (RTE)',
+      'Agile Coach',
+      'Solution Architect',
+      'System Architect',
+      'Data Architect',
+      'UX Designer',
+      'UX/UI Developer',
+      'UX Researcher',
+      'QA Engineer',
+      'Threat Analyst',
+      'Security Engineer',
+      'Data Management',
+      'IT Governance'
+    ];
+    const miRoleInput = document.getElementById('mi-role');
+    const miRoleDropdown = document.getElementById('mi-role-dropdown');
+    let miRoleDropdownOpen = false;
+    let miRoleActiveIndex = -1;
+    if (miRoleInput && miRoleDropdown) {
+      miRoleInput.addEventListener('input', e => {
+        const val = e.target.value.trim().toLowerCase();
+        if (!val) { miRoleDropdown.style.display = 'none'; miRoleDropdownOpen = false; return; }
+        const matches = jobRoles.filter(r => r.toLowerCase().includes(val)).slice(0, 8);
+        if (!matches.length) { miRoleDropdown.style.display = 'none'; miRoleDropdownOpen = false; return; }
+        miRoleDropdown.innerHTML = matches.map((r, i) => `<div class=\"clg-job-item${i===miRoleActiveIndex?' active':''}\" data-role=\"${r}\">${r}</div>`).join('');
+        miRoleDropdown.style.display = 'block';
+        miRoleDropdownOpen = true;
+        miRoleInput.setAttribute('aria-expanded', 'true');
+      });
+      miRoleInput.addEventListener('keydown', e => {
+        if (!miRoleDropdownOpen) return;
+        const items = Array.from(miRoleDropdown.querySelectorAll('.clg-job-item'));
+        if (e.key === 'ArrowDown') {
+          e.preventDefault();
+          miRoleActiveIndex = (miRoleActiveIndex + 1) % items.length;
+          miRoleDropdown.innerHTML = items.map((i, idx) => `<div class=\"clg-job-item${idx===miRoleActiveIndex?' active':''}\" data-role=\"${i.textContent}\">${i.textContent}</div>`).join('');
+        } else if (e.key === 'ArrowUp') {
+          e.preventDefault();
+          miRoleActiveIndex = (miRoleActiveIndex - 1 + items.length) % items.length;
+          miRoleDropdown.innerHTML = items.map((i, idx) => `<div class=\"clg-job-item${idx===miRoleActiveIndex?' active':''}\" data-role=\"${i.textContent}\">${i.textContent}</div>`).join('');
+        } else if (e.key === 'Enter' && miRoleActiveIndex >= 0) {
+          e.preventDefault();
+          items[miRoleActiveIndex].click();
+        }
+      });
+      miRoleDropdown.addEventListener('mousedown', e => {
+        if (e.target.classList.contains('clg-job-item')) {
+          miRoleInput.value = e.target.dataset.role;
+          miRoleDropdown.style.display = 'none';
+          miRoleDropdownOpen = false;
+          miRoleInput.setAttribute('aria-expanded', 'false');
+        }
+      });
+      document.addEventListener('click', e => {
+        if (!e.target.closest('#mi-role') && !e.target.closest('#mi-role-dropdown')) {
+          miRoleDropdown.style.display = 'none';
+          miRoleDropdownOpen = false;
+          miRoleInput.setAttribute('aria-expanded', 'false');
+        }
+      });
+    }
+
+    // --- Interview Session Start Button ---
+    const miStartBtn = document.getElementById('mi-begin');
+    if (miStartBtn) {
+      miStartBtn.addEventListener('click', () => {
+        const setupDiv = document.getElementById('mi-setup');
+        const sessionDiv = document.getElementById('mi-session');
+        if (setupDiv && sessionDiv) {
+          setupDiv.style.display = 'none';
+          sessionDiv.style.display = '';
+          const progressBar = document.getElementById('mi-progress-bar');
+          const answer = document.getElementById('mi-answer');
+          if (progressBar) progressBar.style.width = '0%';
+          if (answer) answer.value = '';
+        }
+      });
+    }
+
+    // --- Progress Bar & Usage Meter ---
+    let sessionCount = 0;
+    function updateUsageMeter() {
+      const usageMeter = document.getElementById('mi-usage-meter');
+      const sessionsUsed = document.getElementById('mi-sessions-used');
+      const usageProgress = document.getElementById('mi-usage-progress');
+      if (!usageMeter || !sessionsUsed || !usageProgress) return;
+      if (user.plan === 'pro') {
+        usageMeter.style.display = '';
+        sessionsUsed.textContent = sessionCount;
+        usageProgress.style.width = `${Math.min(100, (sessionCount/20)*100)}%`;
+      } else if (user.plan === 'premium') {
+        usageMeter.style.display = '';
+        sessionsUsed.textContent = '∞';
+        usageProgress.style.width = '100%';
+      } else {
+        usageMeter.style.display = 'none';
+      }
+    }
+    updateUsageMeter();
+
+    // --- Session History ---
+    const miSessionList = document.getElementById('mi-history-list');
+    let sessionHistory = [];
+    function renderSessionHistory() {
+      if (!miSessionList) return;
+      if (!sessionHistory.length) {
+        miSessionList.innerHTML = '<li style="color:#9CA3AF;">No previous sessions yet.</li>';
+        return;
+      }
+      miSessionList.innerHTML = sessionHistory.map(s =>
+        `<li class="mi-session-item">
+          <span class="mi-session-date">${s.date}</span>
+          <span class="mi-session-role">${s.role}</span>
+          <span class="mi-session-score">${s.score}</span>
+        </li>`
+      ).join('');
+    }
+    renderSessionHistory();
+
+    // --- Initialize plan gating on load ---
+    window.addEventListener('DOMContentLoaded', checkPlanAccess);
+  </script>
+
   <!-- Header -->
   <header class="site-header">
     <div class="container">
@@ -71,13 +585,45 @@
     }
   </script>
 
-  <!-- page content -->
-  <main>
-    <!-- Mock-interview: Microphone control, question playback, answer transcript -->
+  <!-- Main Content -->
+  <main class="mi-main">
+    <div class="mi-card" id="mi-locked" style="display:none;">
+      <svg width="22" height="22" fill="none" stroke="#b59f00" stroke-width="2" style="flex-shrink:0;"><path d="M6 10V7a5 5 0 1110 0v3"/><rect x="5" y="10" width="12" height="8" rx="2"/></svg>
+      <span>Mock Interviews are only available on <strong>Pro</strong> and <strong>Premium</strong> plans.</span>
+      <button class="mi-upgrade-btn" onclick="window.location.href='pricing.html'">Upgrade</button>
+    </div>
+    <div class="mi-card" id="mi-setup">
+      <div class="clg-label" style="margin-bottom:0.5rem;">Target Role</div>
+      <div style="position:relative;margin-bottom:1.5rem;">
+        <input class="clg-input" id="mi-role" name="role" type="text" placeholder="e.g., Software Engineer" autocomplete="off" aria-autocomplete="list" aria-haspopup="listbox" aria-expanded="false">
+        <div id="mi-role-dropdown" class="clg-job-dropdown" style="display:none;"></div>
+      </div>
+      <button class="clg-btn" id="mi-begin" type="button">Begin Interview</button>
+    </div>
+    <div class="mi-card" id="mi-session" style="display:none;">
+      <div class="mi-title">Mock Interview Simulator</div>
+      <div class="mi-desc">Practice your interview skills with AI-powered feedback and scoring.</div>
+      <div class="mi-progress-bar-bg" style="margin:1.2rem 0 1.5rem 0;">
+        <div id="mi-progress-bar" class="mi-progress-bar" style="width:0%;"></div>
+      </div>
+      <div class="mi-question" id="mi-question">Tell me about yourself and your experience.</div>
+      <textarea class="mi-answer-input" id="mi-answer" placeholder="Type your answer here..."></textarea>
+      <button class="clg-btn" id="mi-submit" type="button">Submit Answer</button>
+      <div class="mi-usage-meter" id="mi-usage-meter" style="display:none;">
+        <div class="mi-usage-text">Sessions used this month: <span id="mi-sessions-used">0</span>/20</div>
+        <div class="mi-usage-bar"><div class="mi-usage-progress" id="mi-usage-progress" style="width:0%"></div></div>
+      </div>
+    </div>
+    <aside id="mi-history-sidebar" class="mi-history-sidebar">
+      <h3>Session History</h3>
+      <ul id="mi-history-list" class="mi-history-list">
+        <li class="mi-history-empty">No previous sessions yet.</li>
+      </ul>
+    </aside>
   </main>
 
   <!-- Footer -->
-  <footer class="site-footer">
+  <footer class="site-footer" style="position:sticky;bottom:0;width:100%;background:var(--color-card-bg);">
     <div class="footer-container">
       <div class="footer-brand">
         <svg class="footer-logo" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -96,10 +642,5 @@
       </div>
     </div>
   </footer>
-
-  <!-- scripts -->
-  <script src="js/main.js"></script>
-  <script src="js/analytics.js"></script>
-  <script src="js/mockInterview.js"></script>
 </body>
 </html>
