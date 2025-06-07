@@ -33,20 +33,172 @@
     .clg-btn:disabled { background: #B0B3B8; cursor: not-allowed; }
     .clg-btn:hover:not(:disabled), .clg-btn:focus:not(:disabled) { background: #00c965; }
     .mi-card:focus-within, .mi-card:hover { box-shadow: var(--shadow-card); transform: none; }
-    .mi-locked { background: #fffbe6; border: 1.5px solid #ffe066; border-radius: var(--radius-button); padding: 1.2rem; margin-bottom: 1.5rem; display: flex; align-items: center; gap: 1rem; color: #b59f00; font-size: 1.05rem; }
-    .mi-upgrade-btn { background: var(--color-accent-blue); color: #fff; border: none; border-radius: var(--radius-button); padding: 0.7rem 1.5rem; font-size: 1.05rem; font-weight: 700; cursor: pointer; transition: background 0.18s; margin-left: 1.5rem; }
-    .mi-upgrade-btn:hover, .mi-upgrade-btn:focus { background: #005bb5; }
+    .mi-locked {
+      background: #fffbe6;
+      border: 1.5px solid #ffe066;
+      border-radius: var(--radius-button);
+      padding: 19.2px;
+      margin: 0 0 24px 0;
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      color: #b59f00;
+      font-size: 1.05rem;
+      font-family: 'Inter', sans-serif;
+      font-weight: 600;
+      box-sizing: border-box;
+    }
+    .mi-locked svg {
+      flex-shrink: 0;
+      color: #b59f00;
+      margin-right: 0.5rem;
+      width: 24px;
+      height: 24px;
+      display: block;
+    }
+    .mi-locked-message {
+      color: #b59f00;
+      font-weight: 600;
+      font-size: 1.05rem;
+      font-family: 'Inter', sans-serif;
+      flex: 1;
+      line-height: 1.3;
+    }
+    .mi-upgrade-btn {
+      background: #1976D2;
+      color: #fff;
+      border: none;
+      border-radius: var(--radius-button);
+      padding: 0.7rem 1.5rem;
+      font-size: 1.05rem;
+      font-family: 'Inter', sans-serif;
+      font-weight: 700;
+      cursor: pointer;
+      transition: background 0.18s;
+      margin-left: 1.5rem;
+      box-shadow: 0 2px 8px rgba(31,41,55,0.07);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 40px;
+    }
+    .mi-upgrade-btn:hover, .mi-upgrade-btn:focus {
+      background: #005bb5;
+    }
     .mi-progress-bar-bg { width: 100%; height: 8px; background: #F3F4F6; border-radius: 4px; margin-top: 0.3rem; }
     .mi-progress-bar { height: 8px; background: #1976D2; border-radius: 4px; width: 0%; transition: width 0.3s; }
     .mi-usage-meter { margin-top: 1.5rem; padding: 1rem; background: var(--color-bg-light); border-radius: var(--radius-button); display: none; }
     .mi-usage-text { font-size: 0.9rem; color: var(--color-text-secondary); margin-bottom: 0.5rem; }
     .mi-usage-bar { height: 8px; background: #e5e7eb; border-radius: 4px; overflow: hidden; }
     .mi-usage-progress { height: 100%; background: var(--color-accent-blue); transition: width 0.3s ease; }
-    .mi-history-sidebar { position: fixed; right: 0; top: 80px; width: 320px; max-width: 90vw; background: #fff; border-left: 1.5px solid #E5E7EB; box-shadow: -2px 0 12px rgba(31,41,55,0.04); padding: 2rem 1.2rem 1.2rem 1.2rem; z-index: 9000; border-radius: 12px 0 0 12px; display: none; }
-    .mi-history-sidebar h3 { font-size: 1.1rem; font-weight: 700; margin-bottom: 1.2rem; }
-    .mi-history-list { list-style: none; padding: 0; margin: 0; }
-    .mi-history-empty { color: #9CA3AF; font-size: 1rem; }
-    @media (max-width: 1100px) { .mi-history-sidebar { display: none; } }
+    .mi-history-sidebar {
+      position: fixed;
+      right: 0;
+      top: 80px;
+      width: 320px;
+      max-width: 90vw;
+      background: #fff;
+      border-left: 1.5px solid #E5E7EB;
+      box-shadow: -2px 0 12px rgba(31,41,55,0.04);
+      padding: 2rem 1.2rem 1.2rem 1.2rem;
+      z-index: 9000;
+      border-radius: 12px 0 0 12px;
+      display: none;
+    }
+    .mi-history-sidebar h3 {
+      font-size: 1.1rem;
+      font-weight: 700;
+      margin-bottom: 1.2rem;
+    }
+    .mi-history-list {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+    }
+    .mi-history-empty {
+      color: #9CA3AF;
+      font-size: 1rem;
+    }
+    .mi-session-item {
+      display: flex;
+      align-items: center;
+      gap: 0.7rem;
+      padding: 0.7rem 0.5rem;
+      border-bottom: 1px solid #F3F4F6;
+      cursor: pointer;
+      transition: background 0.13s;
+    }
+    .mi-session-item:hover {
+      background: #F9FAFB;
+    }
+    .mi-session-date {
+      color: #6B7280;
+      font-size: 0.95rem;
+      min-width: 80px;
+    }
+    .mi-session-role {
+      color: #1F2937;
+      font-weight: 600;
+      flex: 1;
+      font-size: 1.05rem;
+    }
+    .mi-session-score {
+      display: inline-block;
+      min-width: 36px;
+      text-align: center;
+      border-radius: 999px;
+      font-weight: 700;
+      font-size: 1.05rem;
+      padding: 0.2em 0.7em;
+      background: #F3F4F6;
+      color: #1F2937;
+    }
+    .mi-session-score.green { background: #E6F9ED; color: #00B86B; }
+    .mi-session-score.yellow { background: #FFF9E3; color: #B59F00; }
+    .mi-session-score.red { background: #FDE8E8; color: #D32F2F; }
+    .mi-usage-meter {
+      margin-top: 1.5rem;
+      padding: 1rem;
+      background: var(--color-bg-light);
+      border-radius: var(--radius-button);
+      display: none;
+    }
+    .mi-usage-text {
+      font-size: 0.97rem;
+      color: var(--color-text-secondary);
+      margin-bottom: 0.5rem;
+    }
+    .mi-usage-bar {
+      height: 8px;
+      background: #e5e7eb;
+      border-radius: 4px;
+      overflow: hidden;
+    }
+    .mi-usage-progress {
+      height: 100%;
+      background: var(--color-accent-blue);
+      transition: width 0.3s ease;
+    }
+    .mi-usage-warning {
+      color: #B59F00;
+      font-size: 0.97rem;
+      margin-top: 0.7rem;
+      font-weight: 600;
+    }
+    .mi-usage-upsell {
+      background: #fffbe6;
+      border: 1.5px solid #ffe066;
+      border-radius: var(--radius-button);
+      color: #b59f00;
+      font-size: 1.01rem;
+      font-weight: 600;
+      margin-top: 1rem;
+      padding: 0.7rem 1rem;
+      text-align: center;
+    }
+    @media (max-width: 1100px) {
+      .mi-history-sidebar { display: none !important; }
+    }
     .mi-interview-container {
       display: none; /* Hidden by default until plan check */
     }
@@ -233,9 +385,10 @@
       display: block;
     }
     .mi-role-autocomplete {
-      flex: 1 1 260px;
-      min-width: 220px;
       position: relative;
+      width: 100%;
+      max-width: 400px;
+      margin-bottom: 1.5rem;
     }
     .mi-role-input {
       width: 100%;
@@ -246,7 +399,7 @@
       background: var(--color-bg-light);
       color: var(--color-text-main);
       transition: border 0.18s;
-      margin-bottom: 0;
+      margin-bottom: 0.5rem;
       box-sizing: border-box;
     }
     .mi-role-input:focus {
@@ -260,11 +413,13 @@
       background: #fff;
       border: 1.5px solid #E5E7EB;
       border-top: none;
-      z-index: 10;
+      z-index: 100;
       max-height: 220px;
       overflow-y: auto;
       position: absolute;
-      left: 0; right: 0; top: 100%;
+      left: 0;
+      right: 0;
+      top: 100%;
       display: none;
     }
     .mi-role-item {
@@ -275,6 +430,11 @@
     }
     .mi-role-item:hover, .mi-role-item.active {
       background: var(--color-bg-light);
+    }
+    .mi-role-input[disabled] {
+      background: #F3F4F6;
+      color: #9CA3AF;
+      cursor: not-allowed;
     }
     .mi-start-btn {
       background: var(--color-accent-blue);
@@ -391,79 +551,78 @@
       if (usageMeter) usageMeter.style.display = (user.plan === 'pro' || user.plan === 'premium') ? '' : 'none';
     }
 
-    // --- Autocomplete for Target Role (canonical) ---
-    const jobRoles = [
-      'Software Engineer',
-      'Full‑stack Developer',
-      'Platform Engineer',
-      'DevOps Engineer',
-      'Data Engineer',
-      'Data Scientist',
-      'AI Engineer',
-      'LLM Engineer',
-      'Product Manager',
-      'Product Owner',
-      'Epic Owner',
-      'Business Owner',
-      'Scrum Master',
-      'Release Train Engineer (RTE)',
-      'Agile Coach',
-      'Solution Architect',
-      'System Architect',
-      'Data Architect',
-      'UX Designer',
-      'UX/UI Developer',
-      'UX Researcher',
-      'QA Engineer',
-      'Threat Analyst',
-      'Security Engineer',
-      'Data Management',
-      'IT Governance'
+    // --- Role Autocomplete Logic (always present, only enabled for Pro/Premium) ---
+    const roleInput = document.getElementById('mi-role-input');
+    const roleDropdown = document.getElementById('mi-role-dropdown');
+    const roles = [
+      'Software Engineer','Full‑stack Developer','Platform Engineer','DevOps Engineer','Data Engineer','Data Scientist','AI Engineer','LLM Engineer','Product Manager','Product Owner','Epic Owner','Business Owner','Scrum Master','Release Train Engineer (RTE)','Agile Coach','Solution Architect','System Architect','Data Architect','UX Designer','UX/UI Developer','UX Researcher','QA Engineer','Threat Analyst','Security Engineer','Data Management','IT Governance'
     ];
-    const miRoleInput = document.getElementById('mi-role');
-    const miRoleDropdown = document.getElementById('mi-role-dropdown');
-    let miRoleDropdownOpen = false;
-    let miRoleActiveIndex = -1;
-    if (miRoleInput && miRoleDropdown) {
-      miRoleInput.addEventListener('input', e => {
+    let roleDropdownOpen = false;
+    let roleActiveIndex = -1;
+    function updateRoleInputState() {
+      if (!roleInput) return;
+      if (user.plan === 'pro' || user.plan === 'premium') {
+        roleInput.disabled = false;
+        roleInput.placeholder = 'e.g., Software Engineer';
+      } else {
+        roleInput.disabled = true;
+        roleInput.placeholder = 'Upgrade to unlock roles';
+      }
+    }
+    updateRoleInputState();
+    if (devPlan) {
+      devPlan.addEventListener('change', updateRoleInputState);
+    }
+    if (roleInput && roleDropdown) {
+      roleInput.addEventListener('input', e => {
+        if (roleInput.disabled) return;
         const val = e.target.value.trim().toLowerCase();
-        if (!val) { miRoleDropdown.style.display = 'none'; miRoleDropdownOpen = false; return; }
-        const matches = jobRoles.filter(r => r.toLowerCase().includes(val)).slice(0, 8);
-        if (!matches.length) { miRoleDropdown.style.display = 'none'; miRoleDropdownOpen = false; return; }
-        miRoleDropdown.innerHTML = matches.map((r, i) => `<div class=\"clg-job-item${i===miRoleActiveIndex?' active':''}\" data-role=\"${r}\">${r}</div>`).join('');
-        miRoleDropdown.style.display = 'block';
-        miRoleDropdownOpen = true;
-        miRoleInput.setAttribute('aria-expanded', 'true');
+        console.log('Input event fired:', val);
+        if (!val) { roleDropdown.style.display = 'none'; roleDropdownOpen = false; return; }
+        const matches = roles.filter(r => r.toLowerCase().includes(val)).slice(0, 8);
+        if (!matches.length) { roleDropdown.style.display = 'none'; roleDropdownOpen = false; return; }
+        roleActiveIndex = -1;
+        roleDropdown.innerHTML = matches.map((r, i) => `<div class='mi-role-item' data-role='${r}'>${r}</div>`).join('');
+        roleDropdown.style.display = 'block';
+        roleDropdownOpen = true;
+        roleInput.setAttribute('aria-expanded', 'true');
+        console.log('Dropdown populated:', matches);
       });
-      miRoleInput.addEventListener('keydown', e => {
-        if (!miRoleDropdownOpen) return;
-        const items = Array.from(miRoleDropdown.querySelectorAll('.clg-job-item'));
+      roleInput.addEventListener('keydown', e => {
+        if (!roleDropdownOpen) return;
+        const items = Array.from(roleDropdown.querySelectorAll('.mi-role-item'));
         if (e.key === 'ArrowDown') {
           e.preventDefault();
-          miRoleActiveIndex = (miRoleActiveIndex + 1) % items.length;
-          miRoleDropdown.innerHTML = items.map((i, idx) => `<div class=\"clg-job-item${idx===miRoleActiveIndex?' active':''}\" data-role=\"${i.textContent}\">${i.textContent}</div>`).join('');
+          roleActiveIndex = (roleActiveIndex + 1) % items.length;
+          items.forEach((el, i) => el.classList.toggle('active', i === roleActiveIndex));
+          items[roleActiveIndex].scrollIntoView({block:'nearest'});
         } else if (e.key === 'ArrowUp') {
           e.preventDefault();
-          miRoleActiveIndex = (miRoleActiveIndex - 1 + items.length) % items.length;
-          miRoleDropdown.innerHTML = items.map((i, idx) => `<div class=\"clg-job-item${idx===miRoleActiveIndex?' active':''}\" data-role=\"${i.textContent}\">${i.textContent}</div>`).join('');
-        } else if (e.key === 'Enter' && miRoleActiveIndex >= 0) {
-          e.preventDefault();
-          items[miRoleActiveIndex].click();
+          roleActiveIndex = (roleActiveIndex - 1 + items.length) % items.length;
+          items.forEach((el, i) => el.classList.toggle('active', i === roleActiveIndex));
+          items[roleActiveIndex].scrollIntoView({block:'nearest'});
+        } else if (e.key === 'Enter') {
+          if (roleActiveIndex >= 0 && items[roleActiveIndex]) {
+            roleInput.value = items[roleActiveIndex].textContent;
+            roleDropdown.style.display = 'none';
+            roleInput.setAttribute('aria-expanded', 'false');
+          }
+        } else if (e.key === 'Escape') {
+          roleDropdown.style.display = 'none';
+          roleInput.setAttribute('aria-expanded', 'false');
         }
       });
-      miRoleDropdown.addEventListener('mousedown', e => {
-        if (e.target.classList.contains('clg-job-item')) {
-          miRoleInput.value = e.target.dataset.role;
-          miRoleDropdown.style.display = 'none';
-          miRoleDropdownOpen = false;
-          miRoleInput.setAttribute('aria-expanded', 'false');
+      roleDropdown.addEventListener('mousedown', e => {
+        if (e.target.classList.contains('mi-role-item')) {
+          roleInput.value = e.target.dataset.role;
+          roleDropdown.style.display = 'none';
+          roleInput.setAttribute('aria-expanded', 'false');
         }
       });
       document.addEventListener('click', e => {
-        if (!e.target.closest('#mi-role') && !e.target.closest('#mi-role-dropdown')) {
-          miRoleDropdown.style.display = 'none';
-          miRoleDropdownOpen = false;
-          miRoleInput.setAttribute('aria-expanded', 'false');
+        if (!e.target.closest('#mi-role-input') && !e.target.closest('#mi-role-dropdown')) {
+          roleDropdown.style.display = 'none';
+          roleInput.setAttribute('aria-expanded', 'false');
         }
       });
     }
@@ -587,16 +746,16 @@
 
   <!-- Main Content -->
   <main class="mi-main">
-    <div class="mi-card" id="mi-locked" style="display:none;">
-      <svg width="22" height="22" fill="none" stroke="#b59f00" stroke-width="2" style="flex-shrink:0;"><path d="M6 10V7a5 5 0 1110 0v3"/><rect x="5" y="10" width="12" height="8" rx="2"/></svg>
-      <span>Mock Interviews are only available on <strong>Pro</strong> and <strong>Premium</strong> plans.</span>
+    <div class="mi-card mi-locked" id="mi-locked" style="display:none;">
+      <svg width="22" height="22" fill="none" stroke="#b59f00" stroke-width="2" style="flex-shrink:0;" viewBox="0 0 24 24"><path d="M6 10V7a5 5 0 1110 0v3"/><rect x="5" y="10" width="12" height="8" rx="2"/></svg>
+      <span class="mi-locked-message">This feature is only available on <strong>Pro</strong> and <strong>Premium</strong> plans.</span>
       <button class="mi-upgrade-btn" onclick="window.location.href='pricing.html'">Upgrade</button>
     </div>
     <div class="mi-card" id="mi-setup">
-      <div class="clg-label" style="margin-bottom:0.5rem;">Target Role</div>
-      <div style="position:relative;margin-bottom:1.5rem;">
-        <input class="clg-input" id="mi-role" name="role" type="text" placeholder="e.g., Software Engineer" autocomplete="off" aria-autocomplete="list" aria-haspopup="listbox" aria-expanded="false">
-        <div id="mi-role-dropdown" class="clg-job-dropdown" style="display:none;"></div>
+      <div class="mi-role-autocomplete" id="mi-role-autocomplete">
+        <label for="mi-role-input" class="mi-role-label">Target Role</label>
+        <input id="mi-role-input" class="mi-role-input" type="text" placeholder="e.g., Software Engineer" autocomplete="off" aria-autocomplete="list" aria-haspopup="listbox" aria-expanded="false" />
+        <div id="mi-role-dropdown" class="mi-role-dropdown" role="listbox"></div>
       </div>
       <button class="clg-btn" id="mi-begin" type="button">Begin Interview</button>
     </div>
@@ -619,6 +778,12 @@
       <ul id="mi-history-list" class="mi-history-list">
         <li class="mi-history-empty">No previous sessions yet.</li>
       </ul>
+      <div id="mi-usage-meter" class="mi-usage-meter" style="display:none;">
+        <div class="mi-usage-text">Sessions used this month: <span id="mi-sessions-used">0</span>/20</div>
+        <div class="mi-usage-bar"><div class="mi-usage-progress" id="mi-usage-progress" style="width:0%"></div></div>
+        <div id="mi-usage-warning" class="mi-usage-warning" style="display:none;">You've used over half your monthly interviews.</div>
+        <div id="mi-usage-upsell" class="mi-usage-upsell" style="display:none;">Almost out! <b>Upgrade to Premium</b> for unlimited interviews.</div>
+      </div>
     </aside>
   </main>
 
