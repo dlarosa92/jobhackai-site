@@ -20,18 +20,58 @@
     main.mi-main { flex: 1 0 auto; }
     .site-footer { flex-shrink: 0; position: static !important; bottom: unset !important; width: 100%; }
     .mi-main { max-width: 900px; margin: 2.5rem auto 4rem auto; padding: 0 1rem; }
-    .mi-card { background: var(--color-card-bg); border-radius: var(--radius-card); box-shadow: var(--shadow-card); padding: 2.2rem 2rem 2rem 2rem; margin-bottom: 2.5rem; box-sizing: border-box; }
-    .mi-title { font-size: 2rem; font-weight: 800; margin-bottom: 0.5rem; color: var(--color-text-main); }
-    .mi-desc { color: var(--color-text-secondary); margin-bottom: 1.2rem; font-size: 1.08rem; }
-    .clg-label { font-weight: 700; color: var(--color-text-main); font-size: 1.05rem; margin-bottom: 0.3rem; display: block; }
-    .clg-input { width: 100%; font-size: 1.05rem; border: 2px solid var(--color-divider); border-radius: var(--radius-button); padding: 0.7rem 1rem; background: var(--color-bg-light); color: var(--color-text-main); transition: border 0.18s; margin-bottom: 0.5rem; box-sizing: border-box; }
-    .clg-input:focus { border-color: var(--color-accent-blue); outline: none; }
+    .mi-card { background: var(--color-card-bg); border-radius: var(--radius-xl); box-shadow: var(--shadow-md); padding: var(--space-lg) var(--space-lg) var(--space-lg) var(--space-lg); margin-bottom: var(--space-lg); box-sizing: border-box; }
+    .mi-title { font-size: var(--font-size-3xl); font-weight: var(--font-weight-extrabold); margin-bottom: var(--space-xs); color: var(--color-text-main); }
+    .mi-desc { color: var(--color-text-secondary); margin-bottom: var(--space-md); font-size: var(--font-size-lg); }
+    .clg-label { font-weight: var(--font-weight-bold); color: var(--color-text-main); font-size: var(--font-size-lg); margin-bottom: var(--space-2xs); display: block; }
+    .clg-input { width: 100%; font-size: var(--font-size-lg); border: 2px solid var(--color-divider); border-radius: var(--radius-md); padding: 0.7rem 1rem; background: var(--color-bg-light); color: var(--color-text-main); transition: border var(--transition-normal); margin-bottom: var(--space-xs); box-sizing: border-box; }
+    .clg-input:focus { border-color: var(--color-accent-blue); outline: none; box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.1); }
+    .clg-input:disabled {
+      background: var(--color-bg-light);
+      color: var(--color-text-muted);
+      cursor: not-allowed;
+    }
+    .clg-input.error {
+      border-color: var(--color-error);
+    }
+    .clg-input.success {
+      border-color: var(--color-success);
+    }
+    .error-message {
+      color: var(--color-error);
+      font-size: var(--font-size-sm);
+      margin-top: var(--space-2xs);
+      display: none;
+    }
+    .error-message.visible {
+      display: block;
+    }
     .clg-job-dropdown { font-size: 1.05rem; border-radius: 0 0 8px 8px; box-shadow: 0 2px 8px rgba(31,41,55,0.07); background: #fff; border: 1.5px solid #E5E7EB; border-top: none; z-index: 10; max-height: 220px; overflow-y: auto; position: absolute; left: 0; right: 0; top: 100%; display: none; }
     .clg-job-item { padding: 0.85rem 1.1rem; cursor: pointer; color: var(--color-text-main); transition: background 0.15s; }
     .clg-job-item:hover, .clg-job-item.active { background: var(--color-bg-light); }
-    .clg-btn { background: var(--color-cta-green); color: #fff; font-weight: 700; border: none; border-radius: var(--radius-button); padding: 0.7rem 1.5rem; font-size: 1.05rem; cursor: pointer; transition: background 0.18s; margin-bottom: 0.5rem; display: inline-block; }
-    .clg-btn:disabled { background: #B0B3B8; cursor: not-allowed; }
-    .clg-btn:hover:not(:disabled), .clg-btn:focus:not(:disabled) { background: #00c965; }
+    .clg-btn {
+      background: var(--color-cta-green);
+      color: #fff;
+      font-weight: var(--font-weight-bold);
+      border: none;
+      border-radius: var(--radius-md);
+      padding: 0.7rem 1.5rem;
+      font-size: var(--font-size-lg);
+      cursor: pointer;
+      transition: background var(--transition-normal);
+      margin-bottom: 0.5rem;
+      display: inline-block;
+    }
+    .clg-btn:disabled { 
+      background: var(--color-disabled); 
+      cursor: not-allowed; 
+    }
+    .clg-btn:hover:not(:disabled), 
+    .clg-btn:focus:not(:disabled) { 
+      background: #00c965; 
+      outline: 2px solid var(--color-accent-blue);
+      outline-offset: 2px;
+    }
     .mi-card:focus-within, .mi-card:hover { box-shadow: var(--shadow-card); transform: none; }
     .mi-locked {
       background: #fffbe6;
@@ -65,18 +105,18 @@
       line-height: 1.3;
     }
     .mi-upgrade-btn {
-      background: #1976D2;
+      background: var(--color-accent-blue);
       color: #fff;
       border: none;
       border-radius: var(--radius-button);
       padding: 0.7rem 1.5rem;
       font-size: 1.05rem;
-      font-family: 'Inter', sans-serif;
-      font-weight: 700;
+      font-family: var(--font-family-base);
+      font-weight: var(--font-weight-bold);
       cursor: pointer;
       transition: background 0.18s;
       margin-left: 1.5rem;
-      box-shadow: 0 2px 8px rgba(31,41,55,0.07);
+      box-shadow: var(--shadow-card);
       display: flex;
       align-items: center;
       justify-content: center;
@@ -85,30 +125,62 @@
     .mi-upgrade-btn:hover, .mi-upgrade-btn:focus {
       background: #005bb5;
     }
-    .mi-progress-bar-bg { width: 100%; height: 8px; background: #F3F4F6; border-radius: 4px; margin-top: 0.3rem; }
-    .mi-progress-bar { height: 8px; background: #1976D2; border-radius: 4px; width: 0%; transition: width 0.3s; }
-    .mi-usage-meter { margin-top: 1.5rem; padding: 1rem; background: var(--color-bg-light); border-radius: var(--radius-button); display: none; }
-    .mi-usage-text { font-size: 0.9rem; color: var(--color-text-secondary); margin-bottom: 0.5rem; }
-    .mi-usage-bar { height: 8px; background: #e5e7eb; border-radius: 4px; overflow: hidden; }
-    .mi-usage-progress { height: 100%; background: var(--color-accent-blue); transition: width 0.3s ease; }
+    .mi-progress-bar-bg { 
+      width: 100%; 
+      height: 8px; 
+      background: var(--color-bg-light); 
+      border-radius: 4px; 
+      margin-top: 0.3rem; 
+    }
+    .mi-progress-bar { 
+      height: 8px; 
+      background: var(--color-accent-blue); 
+      border-radius: 4px; 
+      width: 0%; 
+      transition: width 0.3s; 
+    }
+    .mi-usage-meter { 
+      margin-top: 1.5rem; 
+      padding: 1rem; 
+      background: var(--color-bg-light); 
+      border-radius: var(--radius-button); 
+      display: none; 
+    }
+    .mi-usage-text { 
+      font-size: 0.9rem; 
+      color: var(--color-text-secondary); 
+      margin-bottom: 0.5rem; 
+    }
+    .mi-usage-bar { 
+      height: 8px; 
+      background: var(--color-divider); 
+      border-radius: 4px; 
+      overflow: hidden; 
+    }
+    .mi-usage-progress { 
+      height: 100%; 
+      background: var(--color-accent-blue); 
+      transition: width 0.3s ease; 
+    }
     .mi-history-sidebar {
       position: fixed;
       right: 0;
       top: 80px;
       width: 320px;
       max-width: 90vw;
-      background: #fff;
-      border-left: 1.5px solid #E5E7EB;
-      box-shadow: -2px 0 12px rgba(31,41,55,0.04);
-      padding: 2rem 1.2rem 1.2rem 1.2rem;
+      background: var(--color-card-bg);
+      border-left: 1.5px solid var(--color-divider);
+      box-shadow: var(--shadow-card);
+      padding: var(--space-md) var(--space-sm) var(--space-sm) var(--space-sm);
       z-index: 9000;
-      border-radius: 12px 0 0 12px;
+      border-radius: var(--radius-card) 0 0 var(--radius-card);
       display: none;
     }
     .mi-history-sidebar h3 {
       font-size: 1.1rem;
-      font-weight: 700;
+      font-weight: var(--font-weight-bold);
       margin-bottom: 1.2rem;
+      color: var(--color-text-main);
     }
     .mi-history-list {
       list-style: none;
@@ -116,7 +188,7 @@
       margin: 0;
     }
     .mi-history-empty {
-      color: #9CA3AF;
+      color: var(--color-text-muted);
       font-size: 1rem;
     }
     .mi-session-item {
@@ -124,21 +196,21 @@
       align-items: center;
       gap: 0.7rem;
       padding: 0.7rem 0.5rem;
-      border-bottom: 1px solid #F3F4F6;
+      border-bottom: 1px solid var(--color-divider);
       cursor: pointer;
       transition: background 0.13s;
     }
     .mi-session-item:hover {
-      background: #F9FAFB;
+      background: var(--color-bg-light);
     }
     .mi-session-date {
-      color: #6B7280;
+      color: var(--color-text-muted);
       font-size: 0.95rem;
       min-width: 80px;
     }
     .mi-session-role {
-      color: #1F2937;
-      font-weight: 600;
+      color: var(--color-text-main);
+      font-weight: var(--font-weight-semibold);
       flex: 1;
       font-size: 1.05rem;
     }
@@ -147,38 +219,15 @@
       min-width: 36px;
       text-align: center;
       border-radius: 999px;
-      font-weight: 700;
+      font-weight: var(--font-weight-bold);
       font-size: 1.05rem;
       padding: 0.2em 0.7em;
-      background: #F3F4F6;
-      color: #1F2937;
+      background: var(--color-bg-light);
+      color: var(--color-text-main);
     }
     .mi-session-score.green { background: #E6F9ED; color: #00B86B; }
     .mi-session-score.yellow { background: #FFF9E3; color: #B59F00; }
     .mi-session-score.red { background: #FDE8E8; color: #D32F2F; }
-    .mi-usage-meter {
-      margin-top: 1.5rem;
-      padding: 1rem;
-      background: var(--color-bg-light);
-      border-radius: var(--radius-button);
-      display: none;
-    }
-    .mi-usage-text {
-      font-size: 0.97rem;
-      color: var(--color-text-secondary);
-      margin-bottom: 0.5rem;
-    }
-    .mi-usage-bar {
-      height: 8px;
-      background: #e5e7eb;
-      border-radius: 4px;
-      overflow: hidden;
-    }
-    .mi-usage-progress {
-      height: 100%;
-      background: var(--color-accent-blue);
-      transition: width 0.3s ease;
-    }
     .mi-usage-warning {
       color: #B59F00;
       font-size: 0.97rem;
