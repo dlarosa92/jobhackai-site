@@ -600,139 +600,6 @@
       if (usageMeter) usageMeter.style.display = (user.plan === 'pro' || user.plan === 'premium') ? '' : 'none';
     }
 
-    // --- Role Autocomplete Logic (always present, only enabled for Pro/Premium) ---
-    const roleInput = document.getElementById('mi-role-input');
-    const roleDropdown = document.getElementById('mi-role-dropdown');
-    const roles = [
-      'Software Engineer','Full‑stack Developer','Platform Engineer','DevOps Engineer','Data Engineer','Data Scientist','AI Engineer','LLM Engineer','Product Manager','Product Owner','Epic Owner','Business Owner','Scrum Master','Release Train Engineer (RTE)','Agile Coach','Solution Architect','System Architect','Data Architect','UX Designer','UX/UI Developer','UX Researcher','QA Engineer','Threat Analyst','Security Engineer','Data Management','IT Governance'
-    ];
-    let roleDropdownOpen = false;
-    let roleActiveIndex = -1;
-    function updateRoleInputState() {
-      if (!roleInput) return;
-      if (user.plan === 'pro' || user.plan === 'premium') {
-        roleInput.disabled = false;
-        roleInput.placeholder = 'e.g., Software Engineer';
-      } else {
-        roleInput.disabled = true;
-        roleInput.placeholder = 'Upgrade to unlock roles';
-      }
-    }
-    updateRoleInputState();
-    if (devPlan) {
-      devPlan.addEventListener('change', updateRoleInputState);
-    }
-    if (roleInput && roleDropdown) {
-      roleInput.addEventListener('input', e => {
-        if (roleInput.disabled) return;
-        const val = e.target.value.trim().toLowerCase();
-        console.log('Input event fired:', val);
-        if (!val) { roleDropdown.style.display = 'none'; roleDropdownOpen = false; return; }
-        const matches = roles.filter(r => r.toLowerCase().includes(val)).slice(0, 8);
-        if (!matches.length) { roleDropdown.style.display = 'none'; roleDropdownOpen = false; return; }
-        roleActiveIndex = -1;
-        roleDropdown.innerHTML = matches.map((r, i) => `<div class='mi-role-item' data-role='${r}'>${r}</div>`).join('');
-        roleDropdown.style.display = 'block';
-        roleDropdownOpen = true;
-        roleInput.setAttribute('aria-expanded', 'true');
-        console.log('Dropdown populated:', matches);
-      });
-      roleInput.addEventListener('keydown', e => {
-        if (!roleDropdownOpen) return;
-        const items = Array.from(roleDropdown.querySelectorAll('.mi-role-item'));
-        if (e.key === 'ArrowDown') {
-          e.preventDefault();
-          roleActiveIndex = (roleActiveIndex + 1) % items.length;
-          items.forEach((el, i) => el.classList.toggle('active', i === roleActiveIndex));
-          items[roleActiveIndex].scrollIntoView({block:'nearest'});
-        } else if (e.key === 'ArrowUp') {
-          e.preventDefault();
-          roleActiveIndex = (roleActiveIndex - 1 + items.length) % items.length;
-          items.forEach((el, i) => el.classList.toggle('active', i === roleActiveIndex));
-          items[roleActiveIndex].scrollIntoView({block:'nearest'});
-        } else if (e.key === 'Enter') {
-          if (roleActiveIndex >= 0 && items[roleActiveIndex]) {
-            roleInput.value = items[roleActiveIndex].textContent;
-            roleDropdown.style.display = 'none';
-            roleInput.setAttribute('aria-expanded', 'false');
-          }
-        } else if (e.key === 'Escape') {
-          roleDropdown.style.display = 'none';
-          roleInput.setAttribute('aria-expanded', 'false');
-        }
-      });
-      roleDropdown.addEventListener('mousedown', e => {
-        if (e.target.classList.contains('mi-role-item')) {
-          roleInput.value = e.target.dataset.role;
-          roleDropdown.style.display = 'none';
-          roleInput.setAttribute('aria-expanded', 'false');
-        }
-      });
-      document.addEventListener('click', e => {
-        if (!e.target.closest('#mi-role-input') && !e.target.closest('#mi-role-dropdown')) {
-          roleDropdown.style.display = 'none';
-          roleInput.setAttribute('aria-expanded', 'false');
-        }
-      });
-    }
-
-    // --- Interview Session Start Button ---
-    const miStartBtn = document.getElementById('mi-begin');
-    if (miStartBtn) {
-      miStartBtn.addEventListener('click', () => {
-        const setupDiv = document.getElementById('mi-setup');
-        const sessionDiv = document.getElementById('mi-session');
-        if (setupDiv && sessionDiv) {
-          setupDiv.style.display = 'none';
-          sessionDiv.style.display = '';
-          const progressBar = document.getElementById('mi-progress-bar');
-          const answer = document.getElementById('mi-answer');
-          if (progressBar) progressBar.style.width = '0%';
-          if (answer) answer.value = '';
-        }
-      });
-    }
-
-    // --- Progress Bar & Usage Meter ---
-    let sessionCount = 0;
-    function updateUsageMeter() {
-      const usageMeter = document.getElementById('mi-usage-meter');
-      const sessionsUsed = document.getElementById('mi-sessions-used');
-      const usageProgress = document.getElementById('mi-usage-progress');
-      if (!usageMeter || !sessionsUsed || !usageProgress) return;
-      if (user.plan === 'pro') {
-        usageMeter.style.display = '';
-        sessionsUsed.textContent = sessionCount;
-        usageProgress.style.width = `${Math.min(100, (sessionCount/20)*100)}%`;
-      } else if (user.plan === 'premium') {
-        usageMeter.style.display = '';
-        sessionsUsed.textContent = '∞';
-        usageProgress.style.width = '100%';
-      } else {
-        usageMeter.style.display = 'none';
-      }
-    }
-    updateUsageMeter();
-
-    // --- Session History ---
-    const miSessionList = document.getElementById('mi-history-list');
-    let sessionHistory = [];
-    function renderSessionHistory() {
-      if (!miSessionList) return;
-      if (!sessionHistory.length) {
-        miSessionList.innerHTML = '<li style="color:#9CA3AF;">No previous sessions yet.</li>';
-        return;
-      }
-      miSessionList.innerHTML = sessionHistory.map(s =>
-        `<li class="mi-session-item">
-          <span class="mi-session-date">${s.date}</span>
-          <span class="mi-session-role">${s.role}</span>
-          <span class="mi-session-score">${s.score}</span>
-        </li>`
-      ).join('');
-    }
-    renderSessionHistory();
-
     // --- Initialize plan gating on load ---
     window.addEventListener('DOMContentLoaded', checkPlanAccess);
   </script>
@@ -856,5 +723,265 @@
       </div>
     </div>
   </footer>
+
+  <script type="module">
+    import { InterviewService } from './js/api-service.js';
+
+    // Initialize interview state
+    let currentQuestion = '';
+    let currentRole = '';
+    let questions = [];
+    let currentQuestionIndex = 0;
+    let roleDropdownOpen = false;
+    let roleActiveIndex = -1;
+    let sessionCount = 0;
+
+    // Available roles
+    const roles = [
+      'Software Engineer','Full‑stack Developer','Platform Engineer','DevOps Engineer','Data Engineer',
+      'Data Scientist','AI Engineer','LLM Engineer','Product Manager','Product Owner','Epic Owner',
+      'Business Owner','Scrum Master','Release Train Engineer (RTE)','Agile Coach','Solution Architect',
+      'System Architect','Data Architect','UX Designer','UX/UI Developer','UX Researcher','QA Engineer',
+      'Threat Analyst','Security Engineer','Data Management','IT Governance'
+    ];
+
+    // Get DOM elements
+    const roleInput = document.getElementById('mi-role-input');
+    const roleDropdown = document.getElementById('mi-role-dropdown');
+    const beginBtn = document.getElementById('mi-begin');
+    const questionEl = document.getElementById('mi-question');
+    const answerInput = document.getElementById('mi-answer');
+    const submitBtn = document.getElementById('mi-submit');
+    const progressBar = document.getElementById('mi-progress-bar');
+    const feedbackEl = document.getElementById('mi-feedback');
+    const usageMeter = document.getElementById('mi-usage-meter');
+    const sessionsUsed = document.getElementById('mi-sessions-used');
+    const usageProgress = document.getElementById('mi-usage-progress');
+
+    // Update role input state based on plan
+    function updateRoleInputState() {
+      if (!roleInput) return;
+      if (user.plan === 'pro' || user.plan === 'premium') {
+        roleInput.disabled = false;
+        roleInput.placeholder = 'e.g., Software Engineer';
+      } else {
+        roleInput.disabled = true;
+        roleInput.placeholder = 'Upgrade to unlock roles';
+      }
+    }
+
+    // Update usage meter
+    function updateUsageMeter() {
+      if (!usageMeter || !sessionsUsed || !usageProgress) return;
+      if (user.plan === 'pro') {
+        usageMeter.style.display = '';
+        sessionsUsed.textContent = sessionCount;
+        usageProgress.style.width = `${Math.min(100, (sessionCount/20)*100)}%`;
+      } else if (user.plan === 'premium') {
+        usageMeter.style.display = '';
+        sessionsUsed.textContent = '∞';
+        usageProgress.style.width = '100%';
+      } else {
+        usageMeter.style.display = 'none';
+      }
+    }
+
+    // Initialize state
+    updateRoleInputState();
+    updateUsageMeter();
+
+    // Update state when plan changes
+    if (devPlan) {
+      devPlan.addEventListener('change', () => {
+        updateRoleInputState();
+        updateUsageMeter();
+      });
+    }
+
+    // Role input handling
+    roleInput.addEventListener('input', e => {
+      if (roleInput.disabled) return;
+      const val = e.target.value.trim().toLowerCase();
+      if (!val) { 
+        roleDropdown.style.display = 'none'; 
+        roleDropdownOpen = false; 
+        return; 
+      }
+      const matches = roles.filter(r => r.toLowerCase().includes(val)).slice(0, 8);
+      if (!matches.length) { 
+        roleDropdown.style.display = 'none'; 
+        roleDropdownOpen = false; 
+        return; 
+      }
+      roleActiveIndex = -1;
+      roleDropdown.innerHTML = matches.map((r, i) => 
+        `<div class='mi-role-item' data-role='${r}'>${r}</div>`
+      ).join('');
+      roleDropdown.style.display = 'block';
+      roleDropdownOpen = true;
+      roleInput.setAttribute('aria-expanded', 'true');
+    });
+
+    // Role dropdown keyboard navigation
+    roleInput.addEventListener('keydown', e => {
+      if (!roleDropdownOpen) return;
+      const items = Array.from(roleDropdown.querySelectorAll('.mi-role-item'));
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        roleActiveIndex = (roleActiveIndex + 1) % items.length;
+        items.forEach((el, i) => el.classList.toggle('active', i === roleActiveIndex));
+        items[roleActiveIndex].scrollIntoView({block:'nearest'});
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        roleActiveIndex = (roleActiveIndex - 1 + items.length) % items.length;
+        items.forEach((el, i) => el.classList.toggle('active', i === roleActiveIndex));
+        items[roleActiveIndex].scrollIntoView({block:'nearest'});
+      } else if (e.key === 'Enter') {
+        if (roleActiveIndex >= 0 && items[roleActiveIndex]) {
+          roleInput.value = items[roleActiveIndex].textContent;
+          roleDropdown.style.display = 'none';
+          roleInput.setAttribute('aria-expanded', 'false');
+        }
+      } else if (e.key === 'Escape') {
+        roleDropdown.style.display = 'none';
+        roleInput.setAttribute('aria-expanded', 'false');
+      }
+    });
+
+    // Role dropdown click handling
+    roleDropdown.addEventListener('mousedown', e => {
+      if (e.target.classList.contains('mi-role-item')) {
+        roleInput.value = e.target.dataset.role;
+        roleDropdown.style.display = 'none';
+        roleInput.setAttribute('aria-expanded', 'false');
+      }
+    });
+
+    // Close dropdown when clicking outside
+    document.addEventListener('click', e => {
+      if (!e.target.closest('#mi-role-input') && !e.target.closest('#mi-role-dropdown')) {
+        roleDropdown.style.display = 'none';
+        roleInput.setAttribute('aria-expanded', 'false');
+      }
+    });
+
+    // Start interview
+    beginBtn.addEventListener('click', async () => {
+      try {
+        currentRole = roleInput.value;
+        if (!currentRole) {
+          alert('Please select a target role');
+          return;
+        }
+
+        // Show loading state
+        beginBtn.disabled = true;
+        beginBtn.textContent = 'Loading...';
+
+        // Generate questions
+        const response = await InterviewService.generateQuestions(currentRole, 'mid-level', 5);
+        questions = JSON.parse(response);
+        
+        // Start first question
+        currentQuestionIndex = 0;
+        showQuestion();
+        
+        // Show interview container
+        document.getElementById('mi-setup').style.display = 'none';
+        document.getElementById('mi-session').style.display = '';
+        
+        // Update session count
+        sessionCount++;
+        updateUsageMeter();
+        
+      } catch (error) {
+        console.error('Error starting interview:', error);
+        alert('Error starting interview. Please try again.');
+      } finally {
+        beginBtn.disabled = false;
+        beginBtn.textContent = 'Begin Interview';
+      }
+    });
+
+    // Show current question
+    function showQuestion() {
+      currentQuestion = questions[currentQuestionIndex];
+      questionEl.textContent = currentQuestion;
+      answerInput.value = '';
+      progressBar.style.width = `${(currentQuestionIndex / questions.length) * 100}%`;
+    }
+
+    // Submit answer
+    submitBtn.addEventListener('click', async () => {
+      try {
+        const answer = answerInput.value.trim();
+        if (!answer) {
+          alert('Please provide an answer');
+          return;
+        }
+
+        // Show loading state
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Analyzing...';
+
+        // Get feedback
+        const response = await InterviewService.scoreAnswer(currentQuestion, answer, currentRole);
+        const feedback = JSON.parse(response);
+
+        // Show feedback
+        showFeedback(feedback);
+
+        // Move to next question or end
+        currentQuestionIndex++;
+        if (currentQuestionIndex < questions.length) {
+          showQuestion();
+        } else {
+          endInterview();
+        }
+
+      } catch (error) {
+        console.error('Error submitting answer:', error);
+        alert('Error analyzing answer. Please try again.');
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Submit Answer';
+      }
+    });
+
+    // Show feedback
+    function showFeedback(feedback) {
+      feedbackEl.style.display = '';
+      feedbackEl.innerHTML = `
+        <div class="mi-score-grid">
+          <div class="mi-score-item">
+            <div class="mi-score-label">Score</div>
+            <div class="mi-score-value">${feedback.score}/100</div>
+          </div>
+          <div class="mi-score-item">
+            <div class="mi-score-label">Strengths</div>
+            <div class="mi-score-value">${feedback.strengths.length}</div>
+          </div>
+          <div class="mi-score-item">
+            <div class="mi-score-label">Areas to Improve</div>
+            <div class="mi-score-value">${feedback.weaknesses.length}</div>
+          </div>
+        </div>
+        <div class="mi-feedback-text">
+          <h4>Detailed Feedback:</h4>
+          <p>${feedback.improvementSuggestions.join('<br>')}</p>
+          <h4>Sample Answer:</h4>
+          <p>${feedback.sampleAnswer}</p>
+        </div>
+      `;
+    }
+
+    // End interview
+    function endInterview() {
+      questionEl.textContent = 'Interview Complete!';
+      answerInput.style.display = 'none';
+      submitBtn.style.display = 'none';
+      progressBar.style.width = '100%';
+    }
+  </script>
 </body>
 </html>
