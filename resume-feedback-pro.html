@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Resume Feedback Pro – JobHackAI</title>
+  <title>Resume Feedback – JobHackAI</title>
 
   <!-- Design tokens & global styles -->
   <link rel="stylesheet" href="css/tokens.css">
@@ -13,6 +13,28 @@
   <!-- Component overrides -->
   <link rel="stylesheet" href="css/header.css">
   <link rel="stylesheet" href="css/footer.css">
+  <style>
+    .rf-card { background: var(--color-card-bg); border-radius: var(--radius-xl); box-shadow: var(--shadow-md); padding: var(--space-lg); margin-bottom: var(--space-lg); }
+    .rf-title { font-size: var(--font-size-2xl); font-weight: var(--font-weight-extrabold); margin-bottom: var(--space-xs); color: var(--color-text-main); }
+    .rf-section-title { font-size: var(--font-size-xl); font-weight: var(--font-weight-bold); margin-bottom: var(--space-xs); color: var(--color-text-main); }
+    .rf-progress-ring { width: 80px; height: 80px; display: inline-block; vertical-align: middle; margin-right: 1.5rem; }
+    .rf-score-badge { display: inline-block; background: #00E676; color: #fff; font-weight: 700; border-radius: 999px; padding: 0.3em 1em; font-size: 1.2rem; margin-left: 0.7rem; }
+    .rf-rubric-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1.2rem; margin-top: 1.5rem; }
+    .rf-rubric-item { background: #F8FAFC; border-radius: var(--radius-lg); padding: 1rem 1.2rem; }
+    .rf-rubric-label { font-weight: 600; color: var(--color-text-main); margin-bottom: 0.2rem; }
+    .rf-rubric-score { font-size: 1.1rem; font-weight: 700; color: #1976D2; }
+    .rf-feedback-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 1.2rem; margin-top: 1.5rem; }
+    .rf-feedback-card { background: #fff; border-radius: var(--radius-lg); box-shadow: 0 1px 3px rgba(0,0,0,0.07); padding: 1.2rem 1.2rem 1rem 1.2rem; }
+    .rf-feedback-label { font-weight: 700; color: var(--color-text-main); margin-bottom: 0.2rem; }
+    .rf-feedback-score { display: inline-block; background: #00E676; color: #fff; font-weight: 700; border-radius: 999px; padding: 0.2em 0.8em; font-size: 1rem; margin-left: 0.5rem; }
+    .rf-feedback-tip { color: var(--color-text-secondary); font-size: 1.01rem; margin-top: 0.3rem; }
+    .rf-btn-primary { background: var(--color-accent-blue); color: #fff; font-weight: 700; border: none; border-radius: var(--radius-md); padding: 0.7rem 1.5rem; font-size: 1.05rem; cursor: pointer; transition: background 0.18s; margin-top: 1.2rem; }
+    .rf-btn-primary:hover { background: #005bb5; }
+    .rf-btn-green { background: #00E676; color: #fff; font-weight: 700; border: none; border-radius: var(--radius-md); padding: 0.7rem 1.5rem; font-size: 1.05rem; cursor: pointer; transition: background 0.18s; margin-top: 1.2rem; margin-right: 0.7rem; }
+    .rf-btn-green:hover { background: #00c965; }
+    .rf-snippet-box { width: 100%; min-height: 120px; border: 2px solid var(--color-divider); border-radius: var(--radius-lg); padding: 1rem; font-size: 1.05rem; margin-bottom: 1.2rem; background: #F9FAFB; color: var(--color-text-main); resize: vertical; }
+    @media (max-width: 700px) { .rf-rubric-grid, .rf-feedback-grid { grid-template-columns: 1fr; } }
+  </style>
 </head>
 <body>
   <!-- Header -->
@@ -33,7 +55,7 @@
           <a href="#blog">Blog</a>
           <a href="login.html">Login</a>
           <a href="pricing-a.html" class="cta-button">Start Free Trial</a>
-    </nav>
+        </nav>
       </div>
       <button class="mobile-toggle" aria-label="Open navigation menu" aria-expanded="false" aria-controls="mobileNav">
         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -72,12 +94,84 @@
   </script>
 
   <!-- page content -->
-  <main>
-    <!-- Resume Feedback Pro: Feedback tiles, score meter, usage counter -->
+  <main style="max-width:900px;margin:2.5rem auto 4rem auto;padding:0 1rem;">
+    <!-- ATS Resume Scoring -->
+    <section class="rf-card">
+      <div style="display:flex;align-items:center;gap:2.5rem;flex-wrap:wrap;">
+        <div class="rf-progress-ring">
+          <!-- Placeholder SVG progress ring, replace with dynamic in future -->
+          <svg viewBox="0 0 80 80">
+            <circle cx="40" cy="40" r="36" stroke="#E5E7EB" stroke-width="8" fill="none"/>
+            <circle cx="40" cy="40" r="36" stroke="#00E676" stroke-width="8" fill="none" stroke-dasharray="226.2" stroke-dashoffset="49" stroke-linecap="round"/>
+            <text x="40" y="48" text-anchor="middle" font-size="1.6rem" font-weight="700" fill="#1F2937">78%</text>
+          </svg>
+        </div>
+        <div style="flex:1;min-width:220px;">
+          <div class="rf-title" style="margin-bottom:0.2rem;">Resume Score <span class="rf-score-badge">78 / 100</span></div>
+          <div style="color:var(--color-text-secondary);margin-bottom:0.7rem;">Your resume meets many <b>ATS</b> criteria and is likely to be noticed.</div>
+          <form id="rf-upload-form" style="margin-bottom:0.7rem;">
+            <label for="rf-upload" style="font-weight:600;">Upload your resume (PDF, max 2 MB):</label><br>
+            <input id="rf-upload" type="file" accept="application/pdf" style="margin-top:0.5rem;">
+          </form>
+          <div style="color:var(--color-text-muted);font-size:0.98rem;">You get one free upload for an instant ATS score.</div>
+        </div>
+      </div>
+      <div class="rf-rubric-grid">
+        <div class="rf-rubric-item"><div class="rf-rubric-label">Keyword Match</div><div class="rf-rubric-score">27 / 35</div><div style="color:var(--color-text-secondary);font-size:0.98rem;">Add more industry keywords for your target job.</div></div>
+        <div class="rf-rubric-item"><div class="rf-rubric-label">ATS Formatting</div><div class="rf-rubric-score">20 / 25</div><div style="color:var(--color-text-secondary);font-size:0.98rem;">Avoid tables, graphics, and use standard headings.</div></div>
+        <div class="rf-rubric-item"><div class="rf-rubric-label">Structure & Organization</div><div class="rf-rubric-score">16 / 20</div><div style="color:var(--color-text-secondary);font-size:0.98rem;">Order sections: Contact, Experience, Education, Skills.</div></div>
+        <div class="rf-rubric-item"><div class="rf-rubric-label">Tone & Clarity</div><div class="rf-rubric-score">8 / 10</div><div style="color:var(--color-text-secondary);font-size:0.98rem;">Use action verbs and concise bullet points.</div></div>
+        <div class="rf-rubric-item"><div class="rf-rubric-label">Grammar & Spelling</div><div class="rf-rubric-score">7 / 10</div><div style="color:var(--color-text-secondary);font-size:0.98rem;">No major errors detected.</div></div>
+      </div>
+    </section>
+
+    <!-- Resume Feedback -->
+    <section class="rf-card">
+      <div class="rf-title">Résumé Feedback</div>
+      <div style="color:var(--color-text-secondary);margin-bottom:1.2rem;">Below is a section-by-section analysis of your résumé. We scored each part out of 10 and included actionable tips so you can level-up fast.</div>
+      <div class="rf-feedback-grid">
+        <div class="rf-feedback-card">
+          <div class="rf-feedback-label">Header & Contact <span class="rf-feedback-score">8/10</span></div>
+          <div class="rf-feedback-tip">Clear and concise. Consider adding a custom résumé URL for extra polish.</div>
+        </div>
+        <div class="rf-feedback-card">
+          <div class="rf-feedback-label">Professional Summary <span class="rf-feedback-score">6/10</span></div>
+          <div class="rf-feedback-tip">Strong opening but lacks keywords for your target role (e.g. "Kubernetes", "ETL").</div>
+        </div>
+        <div class="rf-feedback-card">
+          <div class="rf-feedback-label">Experience <span class="rf-feedback-score">7/10</span></div>
+          <div class="rf-feedback-tip">Great STAR structure. Quantify impact with metrics ("improved uptime by 15%").</div>
+        </div>
+        <div class="rf-feedback-card">
+          <div class="rf-feedback-label">Skills <span class="rf-feedback-score">9/10</span></div>
+          <div class="rf-feedback-tip">Relevant and up-to-date. Group under sub-headings (Cloud, Data, Languages).</div>
+        </div>
+        <div class="rf-feedback-card">
+          <div class="rf-feedback-label">Education <span class="rf-feedback-score">10/10</span></div>
+          <div class="rf-feedback-tip">Well-formatted. No changes needed.</div>
+        </div>
+      </div>
+      <button class="rf-btn-primary" style="margin-top:1.7rem;">Regenerate Feedback</button>
+    </section>
+
+    <!-- Resume Rewriting -->
+    <section class="rf-card">
+      <div class="rf-title">Résumé Rewriting</div>
+      <div style="color:var(--color-text-secondary);margin-bottom:1.2rem;">Below is your fully optimized resume draft. We used ATS best-practice language, injected relevant keywords, and tightened formatting so it's ready to paste into your next application.</div>
+      <div style="font-weight:600;margin-bottom:0.5rem;">Your Original Snippet</div>
+      <textarea class="rf-snippet-box" readonly>Original résumé excerpt will appear here after upload.</textarea>
+      <div style="font-weight:600;margin-bottom:0.5rem;">Rewritten Snippet</div>
+      <textarea class="rf-snippet-box" readonly>AI-optimized résumé excerpt.</textarea>
+      <div style="margin-top:1.2rem;">
+        <button class="rf-btn-green">Copy Rewritten Résumé</button>
+        <button class="rf-btn-primary">Regenerate Rewrite</button>
+      </div>
+    </section>
+    <!-- End main content -->
   </main>
 
   <!-- Footer -->
-  <footer class="site-footer">
+  <footer class="site-footer" style="position:sticky;bottom:0;width:100%;background:var(--color-card-bg);">
     <div class="footer-container">
       <div class="footer-brand">
         <svg class="footer-logo" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -96,10 +190,10 @@
       </div>
     </div>
   </footer>
-
-  <!-- scripts -->
-  <script src="js/main.js"></script>
-  <script src="js/analytics.js"></script>
-  <script src="js/resumeFeedbackPro.js"></script>
+  <!-- Placeholder JS for future AI logic and extensibility -->
+  <script>
+    // TODO: Replace with real AI scoring, feedback, and rewriting logic
+    // All values are static for now to match the mockups
+  </script>
 </body>
 </html>
