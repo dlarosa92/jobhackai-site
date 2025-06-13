@@ -1,0 +1,9 @@
+{
+  "agentCanUpdateSnapshot": true,
+  "files": [
+    "**/*.html",
+    "**/*.css",
+    "**/*.js",
+    "docs/**/*.md"
+  ]
+}
