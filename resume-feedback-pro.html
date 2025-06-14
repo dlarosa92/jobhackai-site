@@ -14,6 +14,24 @@
   <link rel="stylesheet" href="css/header.css">
   <link rel="stylesheet" href="css/footer.css">
   <style>
+    html, body {
+      height: 100%;
+    }
+    body {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+    main {
+      flex: 1 0 auto;
+    }
+    .site-footer {
+      flex-shrink: 0;
+      position: relative;
+      bottom: 0;
+      width: 100%;
+      background: var(--color-card-bg);
+    }
     .rf-card { background: var(--color-card-bg); border-radius: var(--radius-xl); box-shadow: var(--shadow-md); padding: var(--space-lg); margin-bottom: var(--space-lg); }
     .rf-title { font-size: var(--font-size-2xl); font-weight: var(--font-weight-extrabold); margin-bottom: var(--space-xs); color: var(--color-text-main); }
     .rf-section-title { font-size: var(--font-size-xl); font-weight: var(--font-weight-bold); margin-bottom: var(--space-xs); color: var(--color-text-main); }
@@ -34,9 +52,505 @@
     .rf-btn-green:hover { background: #00c965; }
     .rf-snippet-box { width: 100%; min-height: 120px; border: 2px solid var(--color-divider); border-radius: var(--radius-lg); padding: 1rem; font-size: 1.05rem; margin-bottom: 1.2rem; background: #F9FAFB; color: var(--color-text-main); resize: vertical; }
     @media (max-width: 700px) { .rf-rubric-grid, .rf-feedback-grid { grid-template-columns: 1fr; } }
+    .rf-plan-badge {
+      display: inline-block;
+      background: var(--color-accent-blue);
+      color: #fff;
+      font-weight: 600;
+      border-radius: 999px;
+      padding: 0.2em 0.8em;
+      font-size: 0.9rem;
+      margin-left: 0.7rem;
+    }
+    .rf-plan-limit {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      color: var(--color-text-secondary);
+      font-size: 0.95rem;
+      margin-top: 0.5rem;
+    }
+    .rf-plan-limit svg {
+      width: 16px;
+      height: 16px;
+      color: var(--color-text-muted);
+    }
+    .rf-upgrade-prompt {
+      background: #F0F7FF;
+      border-radius: var(--radius-lg);
+      padding: 1rem;
+      margin-top: 1rem;
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+    .rf-upgrade-prompt svg {
+      width: 24px;
+      height: 24px;
+      color: var(--color-accent-blue);
+      flex-shrink: 0;
+    }
+    .rf-upgrade-text {
+      flex: 1;
+      color: var(--color-text-main);
+      font-size: 0.95rem;
+    }
+    .rf-upgrade-text strong {
+      color: var(--color-accent-blue);
+    }
+    .rf-btn-secondary {
+      background: transparent;
+      color: var(--color-accent-blue);
+      font-weight: 600;
+      border: 1px solid var(--color-accent-blue);
+      border-radius: var(--radius-md);
+      padding: 0.5rem 1rem;
+      font-size: 0.95rem;
+      cursor: pointer;
+      transition: all 0.18s;
+    }
+    .rf-btn-secondary:hover {
+      background: rgba(25, 118, 210, 0.05);
+    }
+    .priority-review-cta {
+      background: #F0F7FF;
+      border-radius: var(--radius-lg);
+      padding: 1rem 1.2rem;
+      margin: 1.2rem 0 0.5rem 0;
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      font-size: 1.05rem;
+      color: var(--color-text-main);
+    }
+    .priority-review-cta .priority-btn {
+      background: var(--color-accent-blue);
+      color: #fff;
+      font-weight: 700;
+      border: none;
+      border-radius: var(--radius-md);
+      padding: 0.6rem 1.3rem;
+      font-size: 1rem;
+      cursor: pointer;
+      transition: background 0.18s;
+      margin-left: 1.2rem;
+    }
+    .priority-review-cta .priority-btn:hover {
+      background: #005bb5;
+    }
+    .priority-review-tooltip {
+      position: relative;
+      display: inline-block;
+      cursor: pointer;
+    }
+    .priority-review-tooltip .tooltip-text {
+      visibility: hidden;
+      width: 260px;
+      background: #222;
+      color: #fff;
+      text-align: left;
+      border-radius: 6px;
+      padding: 0.7rem 1rem;
+      position: absolute;
+      z-index: 10;
+      bottom: 125%;
+      left: 50%;
+      transform: translateX(-50%);
+      opacity: 0;
+      transition: opacity 0.2s;
+      font-size: 0.98rem;
+      pointer-events: none;
+    }
+    .priority-review-tooltip:hover .tooltip-text {
+      visibility: visible;
+      opacity: 1;
+      pointer-events: auto;
+    }
   </style>
 </head>
 <body>
+  <!-- DEV-ONLY PLAN TOGGLE (fixed, canonical style) -->
+  <div id="dev-plan-toggle" style="position:fixed;top:16px;right:16px;z-index:9999;background:#fff;border:1.5px solid #E5E7EB;border-radius:8px;padding:0.5rem 1rem;box-shadow:0 2px 8px rgba(31,41,55,0.07);font-size:0.98rem;display:flex;align-items:center;gap:0.5rem;">
+    <span style="font-weight:700;color:#1976D2;">DEV ONLY</span>
+    <label for="dev-plan" style="font-weight:600;color:#4B5563;">Plan:</label>
+    <select id="dev-plan" style="font-size:1rem;padding:0.2rem 0.7rem;border-radius:6px;border:1px solid #E5E7EB;">
+      <option value="free">Free</option>
+      <option value="trial">Trial</option>
+      <option value="essential">Essential</option>
+      <option value="pro">Pro</option>
+      <option value="premium">Premium</option>
+    </select>
+  </div>
+  <script>
+    // --- USER PLAN LOGIC (must be defined before any script uses it) ---
+    const user = {
+      plan: 'free', // 'free', 'trial', 'essential', 'pro', 'premium'
+      atsChecksUsed: 0,
+      lastAtsCheckTime: null
+    };
+    // DEV-ONLY PLAN TOGGLE LOGIC
+    document.addEventListener('DOMContentLoaded', function() {
+      const devPlan = document.getElementById('dev-plan');
+      if (devPlan) {
+        devPlan.value = user.plan;
+        devPlan.addEventListener('change', function() {
+          user.plan = this.value;
+          updateRfTileForPlan();
+        });
+      }
+      updateRfTileForPlan();
+      // ATS Resume Upload Logic
+      const uploadInput = document.getElementById('rf-upload');
+      if (uploadInput) {
+        uploadInput.addEventListener('change', function(e) {
+          const file = e.target.files[0];
+          if (!file) return;
+          // [AI INTEGRATION POINT] Resume Upload: Send PDF to backend/AI for ATS scoring, rubric, and feedback.
+          // Send: file (PDF)
+          // Receive: { score, rubric[], feedback[] }
+          // Replace simulateAtsScoring with real API call and update UI with response.
+          simulateAtsScoring(file, true);
+        });
+      }
+      // Regenerate Feedback Button
+      const regenBtn = document.getElementById('rf-regenerate-btn');
+      if (regenBtn) {
+        regenBtn.addEventListener('click', function() {
+          // [AI INTEGRATION POINT] Regenerate Feedback: Request new ATS score, rubric, and feedback for current resume.
+          // Send: last uploaded file or resume text
+          // Receive: { score, rubric[], feedback[] }
+          // Replace simulateAtsScoring with real API call and update UI with response.
+          simulateAtsScoring(null, false);
+        });
+      }
+      // Resume Rewriting Buttons
+      const copyBtn = document.querySelector('#rf-rewrite-content .rf-btn-green');
+      const regenRewriteBtn = document.querySelector('#rf-rewrite-content .rf-btn-primary');
+      if (copyBtn) {
+        copyBtn.addEventListener('click', function() {
+          const rewritten = document.querySelectorAll('#rf-rewrite-content .rf-snippet-box')[1];
+          if (rewritten) {
+            navigator.clipboard.writeText(rewritten.value || rewritten.textContent);
+            copyBtn.textContent = 'Copied!';
+            setTimeout(() => { copyBtn.textContent = 'Copy Rewritten Resume'; }, 1200);
+            // [AI INTEGRATION POINT] (Optional) Log copy event or trigger analytics/Zapier webhook.
+          }
+        });
+      }
+      if (regenRewriteBtn) {
+        regenRewriteBtn.addEventListener('click', function() {
+          // [AI INTEGRATION POINT] Regenerate Rewrite: Request new AI-optimized resume snippet.
+          // Send: original resume snippet or full resume
+          // Receive: rewritten resume snippet (string)
+          // Replace simulateRewrite with real API call and update UI with response.
+          simulateRewrite();
+        });
+      }
+      // Initial simulated content
+      simulateAtsScoring(null, true);
+      simulateRewrite();
+    });
+
+    // Simulate ATS scoring and update UI
+    function simulateAtsScoring(file, isUpload) {
+      // [AI INTEGRATION POINT] This function simulates the response from the backend/AI. Replace with real API response handler.
+      // Simulate a random score and rubric for demo
+      const score = Math.floor(Math.random() * 31) + 60; // 60-90%
+      const rubric = [
+        { label: 'Keyword Match', score: Math.floor(Math.random()*8)+27, max: 35, tip: 'Add more industry keywords for your target job.' },
+        { label: 'ATS Formatting', score: Math.floor(Math.random()*6)+20, max: 25, tip: 'Avoid tables, graphics, and use standard headings.' },
+        { label: 'Structure & Organization', score: Math.floor(Math.random()*5)+16, max: 20, tip: 'Order sections: Contact, Experience, Education, Skills.' },
+        { label: 'Tone & Clarity', score: Math.floor(Math.random()*3)+8, max: 10, tip: 'Use action verbs and concise bullet points.' },
+        { label: 'Grammar & Spelling', score: Math.floor(Math.random()*4)+7, max: 10, tip: 'No major errors detected.' }
+      ];
+      // Update progress ring
+      updateProgressRing(score);
+      // Update rubric grid
+      updateRubricGrid(rubric);
+      // Update feedback grid (simulate)
+      updateFeedbackGrid();
+      // Optionally update other UI elements
+      document.getElementById('rf-score-desc').textContent = isUpload ? 'Your resume was analyzed. See your ATS score and feedback below.' : 'Feedback regenerated!';
+      // Simulate original snippet update on upload
+      if (isUpload) {
+        const orig = document.querySelectorAll('#rf-rewrite-content .rf-snippet-box')[0];
+        if (orig) orig.value = 'Sample original resume excerpt from uploaded file.';
+        simulateRewrite();
+      }
+    }
+
+    function updateProgressRing(score) {
+      // Update SVG ring and text
+      const svg = document.querySelector('#rf-ats-score-tile .rf-progress-ring svg');
+      if (!svg) return;
+      const circle = svg.querySelectorAll('circle')[1];
+      const percent = Math.max(0, Math.min(100, score));
+      const radius = 36;
+      const circumference = 2 * Math.PI * radius;
+      const offset = circumference - (percent / 100) * circumference;
+      circle.setAttribute('stroke-dashoffset', offset);
+      // Update text
+      let text = svg.querySelector('text');
+      if (!text) {
+        text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        text.setAttribute('x', '40');
+        text.setAttribute('y', '48');
+        text.setAttribute('text-anchor', 'middle');
+        text.setAttribute('font-size', '1.6rem');
+        text.setAttribute('font-weight', '700');
+        text.setAttribute('fill', '#1F2937');
+        svg.appendChild(text);
+      }
+      text.textContent = percent + '%';
+    }
+
+    function updateRubricGrid(rubric) {
+      const grid = document.getElementById('rf-rubric-grid');
+      if (!grid) return;
+      grid.innerHTML = '';
+      rubric.forEach(item => {
+        const div = document.createElement('div');
+        div.className = 'rf-rubric-item';
+        div.innerHTML = `
+          <div class="rf-rubric-label">${item.label}</div>
+          <div class="rf-rubric-score">${item.score} / ${item.max}</div>
+          <div style="color:var(--color-text-secondary);font-size:0.98rem;">${item.tip}</div>
+        `;
+        grid.appendChild(div);
+      });
+    }
+
+    function updateFeedbackGrid() {
+      // For demo, just shuffle the tips
+      const feedbacks = [
+        { label: 'Header & Contact', score: '8/10', tip: 'Clear and concise. Consider adding a custom resume URL for extra polish.' },
+        { label: 'Professional Summary', score: '6/10', tip: 'Strong opening but lacks keywords for your target role (e.g. "Kubernetes", "ETL").' },
+        { label: 'Experience', score: '7/10', tip: 'Great STAR structure. Quantify impact with metrics ("improved uptime by 15%").' },
+        { label: 'Skills', score: '9/10', tip: 'Relevant and up-to-date. Group under sub-headings (Cloud, Data, Languages).' },
+        { label: 'Education', score: '10/10', tip: 'Well-formatted. No changes needed.' }
+      ];
+      // Shuffle for demo
+      for (let i = feedbacks.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [feedbacks[i], feedbacks[j]] = [feedbacks[j], feedbacks[i]];
+      }
+      const grid = document.getElementById('rf-feedback-grid');
+      if (!grid) return;
+      grid.innerHTML = '';
+      feedbacks.forEach(item => {
+        const div = document.createElement('div');
+        div.className = 'rf-feedback-card';
+        div.innerHTML = `
+          <div class="rf-feedback-label">${item.label} <span class="rf-feedback-score">${item.score}</span></div>
+          <div class="rf-feedback-tip">${item.tip}</div>
+        `;
+        grid.appendChild(div);
+      });
+    }
+
+    // Simulate resume rewrite
+    function simulateRewrite() {
+      // [AI INTEGRATION POINT] This function simulates the rewritten resume. Replace with real API response handler.
+      const rewritten = document.querySelectorAll('#rf-rewrite-content .rf-snippet-box')[1];
+      if (rewritten) {
+        const samples = [
+          'Optimized resume: Led cross-functional teams to deliver projects on time and under budget, increasing efficiency by 20%.',
+          'AI rewrite: Developed scalable cloud solutions, improving system reliability and reducing costs by 15%.',
+          'Enhanced resume: Implemented data-driven strategies, resulting in a 30% boost in customer satisfaction.',
+          'Rewritten: Streamlined workflows and automated reporting, saving 10+ hours per week for the team.',
+          'AI-optimized: Collaborated with stakeholders to define KPIs, driving measurable business outcomes.'
+        ];
+        rewritten.value = samples[Math.floor(Math.random() * samples.length)];
+      }
+    }
+
+    // --- Priority Review Tooltip (modular) ---
+    function createPriorityReviewTooltip(text = 'Priority Review') {
+      const wrapper = document.createElement('span');
+      wrapper.className = 'priority-review-tooltip';
+      wrapper.innerHTML = `${text} <span class="tooltip-text">Premium users get their résumé analyzed first—faster results, prioritized AI review, and VIP support.</span>`;
+      return wrapper;
+    }
+
+    // --- Priority Review CTA (modular) ---
+    function renderPriorityReviewCTA() {
+      const cta = document.createElement('div');
+      cta.className = 'priority-review-cta';
+      cta.innerHTML = `Want your résumé reviewed first? <span id="priority-review-inline"></span> <button class="priority-btn" onclick="window.location.href='pricing-a.html'">Upgrade to Premium</button>`;
+      // Insert tooltip
+      setTimeout(() => {
+        const inline = cta.querySelector('#priority-review-inline');
+        if (inline) inline.appendChild(createPriorityReviewTooltip('<strong>Upgrade to Premium for Priority Review</strong>'));
+      }, 0);
+      return cta;
+    }
+
+    // --- Insert Priority Review CTA below ATS Score & Feedback for Essential/Pro ---
+    function updatePriorityReviewCTA() {
+      // Remove any existing CTA
+      const oldCta = document.getElementById('priority-review-cta-main');
+      if (oldCta) oldCta.remove();
+      if (user.plan === 'essential' || user.plan === 'pro') {
+        const feedbackTile = document.getElementById('rf-feedback-tile');
+        if (feedbackTile && feedbackTile.parentNode) {
+          const cta = renderPriorityReviewCTA();
+          cta.id = 'priority-review-cta-main';
+          feedbackTile.parentNode.insertBefore(cta, feedbackTile.nextSibling);
+        }
+      }
+    }
+
+    // Hide details for Free plan
+    function updateRfTileForPlan() {
+      const atsScoreTile = document.getElementById('rf-ats-score-tile');
+      const feedbackTile = document.getElementById('rf-feedback-tile');
+      const rewriteTile = document.getElementById('rf-rewrite-tile');
+      const feedbackContent = document.getElementById('rf-feedback-content');
+      const rewriteContent = document.getElementById('rf-rewrite-content');
+      const plan = user.plan;
+
+      // Reset all tiles to default state
+      const resetTiles = () => {
+        if (atsScoreTile) atsScoreTile.style.display = 'block';
+        if (feedbackTile) feedbackTile.style.display = 'block';
+        if (rewriteTile) rewriteTile.style.display = 'block';
+        if (feedbackContent) feedbackContent.style.display = 'none';
+        if (rewriteContent) rewriteContent.style.display = 'none';
+      };
+
+      resetTiles();
+
+      // Free Plan Logic
+      if (plan === 'free') {
+        if (atsScoreTile) {
+          atsScoreTile.querySelector('#rf-plan-badge').textContent = 'Free Plan';
+          atsScoreTile.querySelector('#rf-score-desc').textContent = 'Get your basic ATS compatibility score.';
+          atsScoreTile.querySelector('#rf-ats-checks').textContent = '2 ATS checks remaining this month';
+        }
+        if (feedbackTile) {
+          feedbackTile.querySelector('.rf-title .rf-plan-badge').textContent = 'Locked';
+          feedbackTile.querySelector('.rf-upgrade-text strong').textContent = 'Upgrade to Essential or Pro';
+          feedbackTile.querySelector('.rf-upgrade-text').innerHTML = '<strong>Upgrade to Essential or Pro</strong> to unlock detailed ATS and role-specific feedback.';
+        }
+        if (rewriteTile) {
+          rewriteTile.querySelector('.rf-title .rf-plan-badge').textContent = 'Pro Only';
+          rewriteTile.querySelector('.rf-upgrade-text strong').textContent = 'Upgrade to Pro';
+          rewriteTile.querySelector('.rf-upgrade-text').innerHTML = '<strong>Upgrade to Pro</strong> to unlock AI-powered resume rewriting with unlimited revisions';
+        }
+      }
+
+      // Trial Plan Logic
+      else if (plan === 'trial') {
+        if (atsScoreTile) {
+          atsScoreTile.querySelector('#rf-plan-badge').textContent = 'Trial Plan';
+          atsScoreTile.querySelector('#rf-plan-badge').style.background = 'var(--color-accent-blue)';
+          atsScoreTile.querySelector('#rf-score-desc').textContent = 'Get your basic ATS compatibility score.';
+          atsScoreTile.querySelector('#rf-ats-checks').textContent = '2 ATS checks remaining in trial';
+        }
+        const feedbackCount = user.atsChecksUsed || 0;
+        if (feedbackTile) {
+          if (feedbackCount >= 3) {
+            feedbackTile.querySelector('.rf-title .rf-plan-badge').textContent = 'Trial Limit Reached';
+            feedbackTile.querySelector('.rf-title .rf-plan-badge').style.background = '#6B7280';
+            feedbackTile.querySelector('.rf-upgrade-text strong').textContent = 'Upgrade to Pro';
+            feedbackTile.querySelector('.rf-upgrade-text').innerHTML = '<strong>Upgrade to Pro</strong> to unlock unlimited ATS feedback';
+            feedbackTile.querySelector('.rf-upgrade-text').style.display = 'block';
+            if (feedbackContent) feedbackContent.style.display = 'none';
+            // Remove any existing upgrade banner at the bottom
+            const oldBanner = document.getElementById('rf-feedback-upgrade-banner');
+            if (oldBanner) oldBanner.remove();
+          } else {
+            feedbackTile.querySelector('.rf-title .rf-plan-badge').textContent = 'Trial Plan';
+            feedbackTile.querySelector('.rf-title .rf-plan-badge').style.background = 'var(--color-accent-blue)';
+            feedbackTile.querySelector('.rf-upgrade-text').style.display = 'none';
+            if (feedbackContent) {
+              feedbackContent.style.display = 'block';
+              // Remove any existing upgrade banner at the bottom
+              const oldBanner = document.getElementById('rf-feedback-upgrade-banner');
+              if (oldBanner) oldBanner.remove();
+              // Add upgrade banner at the bottom (same as resume rewrite)
+              const upgradeBanner = document.createElement('div');
+              upgradeBanner.className = 'rf-upgrade-prompt';
+              upgradeBanner.id = 'rf-feedback-upgrade-banner';
+              upgradeBanner.style.marginTop = '1.7rem';
+              upgradeBanner.innerHTML = `
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M12 5v14M5 12h14"/>
+                </svg>
+                <div class="rf-upgrade-text">
+                  <strong>Upgrade to Pro</strong> to unlock unlimited ATS feedback
+                </div>
+                <button class="rf-btn-secondary">Upgrade Now</button>
+              `;
+              feedbackTile.appendChild(upgradeBanner);
+            }
+          }
+        }
+        if (rewriteTile) {
+          rewriteTile.querySelector('.rf-title .rf-plan-badge').textContent = 'Pro Only';
+          rewriteTile.querySelector('.rf-title .rf-plan-badge').style.background = '#6B7280';
+          rewriteTile.querySelector('.rf-upgrade-text strong').textContent = 'Upgrade to Pro';
+          rewriteTile.querySelector('.rf-upgrade-text').innerHTML = '<strong>Upgrade to Pro</strong> to unlock AI-powered resume rewriting with unlimited revisions';
+        }
+      }
+
+      // Essential Plan Logic
+      else if (plan === 'essential') {
+        if (atsScoreTile) {
+          atsScoreTile.querySelector('#rf-plan-badge').textContent = 'Essential Plan';
+          atsScoreTile.querySelector('#rf-plan-badge').style.background = 'var(--color-accent-blue)';
+          atsScoreTile.querySelector('#rf-score-desc').textContent = 'Your resume meets many ATS criteria and is likely to be noticed.';
+          atsScoreTile.querySelector('#rf-ats-checks').textContent = '2 ATS checks remaining this month';
+        }
+        const feedbackCount = user.atsChecksUsed || 0;
+        if (feedbackTile) {
+          if (feedbackCount >= 3) {
+            feedbackTile.querySelector('.rf-title .rf-plan-badge').textContent = 'Monthly Limit Reached';
+            feedbackTile.querySelector('.rf-title .rf-plan-badge').style.background = '#6B7280';
+            feedbackTile.querySelector('.rf-upgrade-text strong').textContent = 'Upgrade to Premium';
+            feedbackTile.querySelector('.rf-upgrade-text').innerHTML = '<strong>Upgrade to Premium for front-of-the-line résumé analysis with Priority Review.</strong>';
+          } else {
+            feedbackTile.querySelector('.rf-title .rf-plan-badge').textContent = 'Essential Plan';
+            feedbackTile.querySelector('.rf-title .rf-plan-badge').style.background = 'var(--color-accent-blue)';
+            feedbackTile.querySelector('.rf-upgrade-text').style.display = 'none';
+            if (feedbackContent) feedbackContent.style.display = 'block';
+          }
+        }
+        if (rewriteTile) {
+          rewriteTile.querySelector('.rf-title .rf-plan-badge').textContent = 'Pro Only';
+          rewriteTile.querySelector('.rf-title .rf-plan-badge').style.background = '#6B7280';
+          rewriteTile.querySelector('.rf-upgrade-text strong').textContent = 'Upgrade to Premium';
+          rewriteTile.querySelector('.rf-upgrade-text').innerHTML = '<strong>Upgrade to Premium for front-of-the-line résumé analysis with Priority Review.</strong>';
+        }
+      }
+
+      // Pro & Premium Plan Logic
+      else if (plan === 'pro' || plan === 'premium') {
+        if (atsScoreTile) {
+          atsScoreTile.querySelector('#rf-plan-badge').textContent = plan.charAt(0).toUpperCase() + plan.slice(1) + ' Plan';
+          atsScoreTile.querySelector('#rf-plan-badge').style.background = 'var(--color-accent-blue)';
+          atsScoreTile.querySelector('#rf-score-desc').textContent = 'Your resume meets many ATS criteria and is likely to be noticed.';
+          atsScoreTile.querySelector('#rf-ats-checks').textContent = 'Unlimited ATS scoring';
+        }
+        if (feedbackTile) {
+          feedbackTile.querySelector('.rf-title .rf-plan-badge').textContent = plan.charAt(0).toUpperCase() + plan.slice(1) + ' Plan';
+          feedbackTile.querySelector('.rf-title .rf-plan-badge').style.background = 'var(--color-accent-blue)';
+          feedbackTile.querySelector('.rf-upgrade-text').style.display = 'none';
+          if (feedbackContent) feedbackContent.style.display = 'block';
+        }
+        if (rewriteTile) {
+          rewriteTile.querySelector('.rf-title .rf-plan-badge').textContent = plan.charAt(0).toUpperCase() + plan.slice(1) + ' Plan';
+          rewriteTile.querySelector('.rf-title .rf-plan-badge').style.background = 'var(--color-accent-blue)';
+          // Hide upgrade prompt and show content
+          const upgradePrompt = rewriteTile.querySelector('.rf-upgrade-prompt');
+          if (upgradePrompt) upgradePrompt.style.display = 'none';
+          if (rewriteContent) rewriteContent.style.display = 'block';
+        }
+      }
+      // Always update Priority Review CTA
+      updatePriorityReviewCTA();
+    }
+  </script>
   <!-- Header -->
   <header class="site-header">
     <div class="container">
@@ -95,11 +609,10 @@
 
   <!-- page content -->
   <main style="max-width:900px;margin:2.5rem auto 4rem auto;padding:0 1rem;">
-    <!-- ATS Resume Scoring -->
-    <section class="rf-card">
+    <!-- ATS Score Tile -->
+    <section class="rf-card" id="rf-ats-score-tile">
       <div style="display:flex;align-items:center;gap:2.5rem;flex-wrap:wrap;">
         <div class="rf-progress-ring">
-          <!-- Placeholder SVG progress ring, replace with dynamic in future -->
           <svg viewBox="0 0 80 80">
             <circle cx="40" cy="40" r="36" stroke="#E5E7EB" stroke-width="8" fill="none"/>
             <circle cx="40" cy="40" r="36" stroke="#00E676" stroke-width="8" fill="none" stroke-dasharray="226.2" stroke-dashoffset="49" stroke-linecap="round"/>
@@ -107,67 +620,139 @@
           </svg>
         </div>
         <div style="flex:1;min-width:220px;">
-          <div class="rf-title" style="margin-bottom:0.2rem;">Resume Score <span class="rf-score-badge">78 / 100</span></div>
-          <div style="color:var(--color-text-secondary);margin-bottom:0.7rem;">Your resume meets many <b>ATS</b> criteria and is likely to be noticed.</div>
-          <form id="rf-upload-form" style="margin-bottom:0.7rem;">
+          <div class="rf-title" id="rf-title" style="margin-bottom:0.2rem;">
+            ATS Resume Score
+            <span class="rf-plan-badge" id="rf-plan-badge">Free Plan</span>
+          </div>
+          <div style="color:var(--color-text-secondary);margin-bottom:0.7rem;" id="rf-score-desc">
+            Get your basic ATS compatibility score.
+          </div>
+          <div class="rf-plan-limit" id="rf-plan-limit">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+            </svg>
+            <span id="rf-ats-checks">2 ATS checks remaining this month</span>
+          </div>
+          <form id="rf-upload-form" style="margin:1rem 0 0.7rem 0;">
             <label for="rf-upload" style="font-weight:600;">Upload your resume (PDF, max 2 MB):</label><br>
             <input id="rf-upload" type="file" accept="application/pdf" style="margin-top:0.5rem;">
           </form>
-          <div style="color:var(--color-text-muted);font-size:0.98rem;">You get one free upload for an instant ATS score.</div>
         </div>
-      </div>
-      <div class="rf-rubric-grid">
-        <div class="rf-rubric-item"><div class="rf-rubric-label">Keyword Match</div><div class="rf-rubric-score">27 / 35</div><div style="color:var(--color-text-secondary);font-size:0.98rem;">Add more industry keywords for your target job.</div></div>
-        <div class="rf-rubric-item"><div class="rf-rubric-label">ATS Formatting</div><div class="rf-rubric-score">20 / 25</div><div style="color:var(--color-text-secondary);font-size:0.98rem;">Avoid tables, graphics, and use standard headings.</div></div>
-        <div class="rf-rubric-item"><div class="rf-rubric-label">Structure & Organization</div><div class="rf-rubric-score">16 / 20</div><div style="color:var(--color-text-secondary);font-size:0.98rem;">Order sections: Contact, Experience, Education, Skills.</div></div>
-        <div class="rf-rubric-item"><div class="rf-rubric-label">Tone & Clarity</div><div class="rf-rubric-score">8 / 10</div><div style="color:var(--color-text-secondary);font-size:0.98rem;">Use action verbs and concise bullet points.</div></div>
-        <div class="rf-rubric-item"><div class="rf-rubric-label">Grammar & Spelling</div><div class="rf-rubric-score">7 / 10</div><div style="color:var(--color-text-secondary);font-size:0.98rem;">No major errors detected.</div></div>
       </div>
     </section>
 
-    <!-- Resume Feedback -->
-    <section class="rf-card">
-      <div class="rf-title">Résumé Feedback</div>
-      <div style="color:var(--color-text-secondary);margin-bottom:1.2rem;">Below is a section-by-section analysis of your résumé. We scored each part out of 10 and included actionable tips so you can level-up fast.</div>
-      <div class="rf-feedback-grid">
-        <div class="rf-feedback-card">
-          <div class="rf-feedback-label">Header & Contact <span class="rf-feedback-score">8/10</span></div>
-          <div class="rf-feedback-tip">Clear and concise. Consider adding a custom résumé URL for extra polish.</div>
-        </div>
-        <div class="rf-feedback-card">
-          <div class="rf-feedback-label">Professional Summary <span class="rf-feedback-score">6/10</span></div>
-          <div class="rf-feedback-tip">Strong opening but lacks keywords for your target role (e.g. "Kubernetes", "ETL").</div>
-        </div>
-        <div class="rf-feedback-card">
-          <div class="rf-feedback-label">Experience <span class="rf-feedback-score">7/10</span></div>
-          <div class="rf-feedback-tip">Great STAR structure. Quantify impact with metrics ("improved uptime by 15%").</div>
-        </div>
-        <div class="rf-feedback-card">
-          <div class="rf-feedback-label">Skills <span class="rf-feedback-score">9/10</span></div>
-          <div class="rf-feedback-tip">Relevant and up-to-date. Group under sub-headings (Cloud, Data, Languages).</div>
-        </div>
-        <div class="rf-feedback-card">
-          <div class="rf-feedback-label">Education <span class="rf-feedback-score">10/10</span></div>
-          <div class="rf-feedback-tip">Well-formatted. No changes needed.</div>
-        </div>
+    <!-- ATS Score & Feedback Tile -->
+    <section class="rf-card" id="rf-feedback-tile">
+      <div class="rf-title">
+        ATS Score & Feedback
+        <span class="rf-plan-badge" style="background:#6B7280;">Locked</span>
       </div>
-      <button class="rf-btn-primary" style="margin-top:1.7rem;">Regenerate Feedback</button>
+      <div style="color:var(--color-text-secondary);margin-bottom:1.2rem;">
+        Get detailed ATS feedback and role-specific insights.
+      </div>
+      <div class="rf-upgrade-prompt" style="display:none;">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M12 5v14M5 12h14"/>
+        </svg>
+        <div class="rf-upgrade-text">
+          <strong>Upgrade to Essential or Pro</strong> to unlock detailed ATS and role-specific feedback.
+        </div>
+        <button class="rf-btn-secondary">Upgrade Now</button>
+      </div>
+      <!-- Hidden content that will be shown for unlocked plans -->
+      <div id="rf-feedback-content" style="display:none;">
+        <!-- ATS Rubric -->
+        <div class="rf-rubric-grid" id="rf-rubric-grid">
+          <div class="rf-rubric-item">
+            <div class="rf-rubric-label">Keyword Match</div>
+            <div class="rf-rubric-score">27 / 35</div>
+            <div style="color:var(--color-text-secondary);font-size:0.98rem;">Add more industry keywords for your target job.</div>
+          </div>
+          <div class="rf-rubric-item">
+            <div class="rf-rubric-label">ATS Formatting</div>
+            <div class="rf-rubric-score">20 / 25</div>
+            <div style="color:var(--color-text-secondary);font-size:0.98rem;">Avoid tables, graphics, and use standard headings.</div>
+          </div>
+          <div class="rf-rubric-item">
+            <div class="rf-rubric-label">Structure & Organization</div>
+            <div class="rf-rubric-score">16 / 20</div>
+            <div style="color:var(--color-text-secondary);font-size:0.98rem;">Order sections: Contact, Experience, Education, Skills.</div>
+          </div>
+          <div class="rf-rubric-item">
+            <div class="rf-rubric-label">Tone & Clarity</div>
+            <div class="rf-rubric-score">8 / 10</div>
+            <div style="color:var(--color-text-secondary);font-size:0.98rem;">Use action verbs and concise bullet points.</div>
+          </div>
+          <div class="rf-rubric-item">
+            <div class="rf-rubric-label">Grammar & Spelling</div>
+            <div class="rf-rubric-score">7 / 10</div>
+            <div style="color:var(--color-text-secondary);font-size:0.98rem;">No major errors detected.</div>
+          </div>
+        </div>
+        <!-- Role-Specific Feedback -->
+        <div class="rf-section-title" id="rf-role-title" style="margin-top:2rem;">Role-Specific Feedback</div>
+        <div style="color:var(--color-text-secondary);margin-bottom:1.2rem;" id="rf-role-desc">
+          Basic feedback on your resume's content and presentation for your target role. Upgrade to Pro for comprehensive analysis and unlimited suggestions.
+        </div>
+        <div class="rf-feedback-grid" id="rf-feedback-grid">
+          <div class="rf-feedback-card">
+            <div class="rf-feedback-label">Header & Contact <span class="rf-feedback-score">8/10</span></div>
+            <div class="rf-feedback-tip">Clear and concise. Consider adding a custom resume URL for extra polish.</div>
+          </div>
+          <div class="rf-feedback-card">
+            <div class="rf-feedback-label">Professional Summary <span class="rf-feedback-score">6/10</span></div>
+            <div class="rf-feedback-tip">Strong opening but lacks keywords for your target role (e.g. "Kubernetes", "ETL").</div>
+          </div>
+          <div class="rf-feedback-card">
+            <div class="rf-feedback-label">Experience <span class="rf-feedback-score">7/10</span></div>
+            <div class="rf-feedback-tip">Great STAR structure. Quantify impact with metrics ("improved uptime by 15%").</div>
+          </div>
+          <div class="rf-feedback-card">
+            <div class="rf-feedback-label">Skills <span class="rf-feedback-score">9/10</span></div>
+            <div class="rf-feedback-tip">Relevant and up-to-date. Group under sub-headings (Cloud, Data, Languages).</div>
+          </div>
+          <div class="rf-feedback-card">
+            <div class="rf-feedback-label">Education <span class="rf-feedback-score">10/10</span></div>
+            <div class="rf-feedback-tip">Well-formatted. No changes needed.</div>
+          </div>
+        </div>
+        <button class="rf-btn-primary" id="rf-regenerate-btn" style="margin-top:1.7rem;">Regenerate Feedback</button>
+      </div>
     </section>
 
-    <!-- Resume Rewriting -->
-    <section class="rf-card">
-      <div class="rf-title">Résumé Rewriting</div>
-      <div style="color:var(--color-text-secondary);margin-bottom:1.2rem;">Below is your fully optimized resume draft. We used ATS best-practice language, injected relevant keywords, and tightened formatting so it's ready to paste into your next application.</div>
-      <div style="font-weight:600;margin-bottom:0.5rem;">Your Original Snippet</div>
-      <textarea class="rf-snippet-box" readonly>Original résumé excerpt will appear here after upload.</textarea>
-      <div style="font-weight:600;margin-bottom:0.5rem;">Rewritten Snippet</div>
-      <textarea class="rf-snippet-box" readonly>AI-optimized résumé excerpt.</textarea>
-      <div style="margin-top:1.2rem;">
-        <button class="rf-btn-green">Copy Rewritten Résumé</button>
-        <button class="rf-btn-primary">Regenerate Rewrite</button>
+    <!-- Resume Rewriting Tile -->
+    <section class="rf-card" id="rf-rewrite-tile">
+      <div class="rf-title">
+        Resume Rewriting
+        <span class="rf-plan-badge" style="background:#6B7280;">Pro Only</span>
+      </div>
+      <div style="color:var(--color-text-secondary);margin-bottom:1.2rem;">
+        Upgrade to Pro to unlock AI-powered resume rewriting with ATS optimization and role-specific enhancements.
+      </div>
+      <div class="rf-upgrade-prompt">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M12 5v14M5 12h14"/>
+        </svg>
+        <div class="rf-upgrade-text">
+          <strong>Upgrade to Pro</strong> to unlock AI-powered resume rewriting with unlimited revisions
+        </div>
+        <button class="rf-btn-secondary">Upgrade Now</button>
+      </div>
+      <!-- Hidden content that will be shown for Pro/Premium plans -->
+      <div id="rf-rewrite-content" style="display:none;">
+        <div style="color:var(--color-text-secondary);margin-bottom:1.2rem;">
+          Below is your fully optimized resume draft. We used ATS best-practice language, injected relevant keywords, and tightened formatting so it's ready to paste into your next application.
+        </div>
+        <div style="font-weight:600;margin-bottom:0.5rem;">Your Original Snippet</div>
+        <textarea class="rf-snippet-box" readonly>Original resume excerpt will appear here after upload.</textarea>
+        <div style="font-weight:600;margin-bottom:0.5rem;">Rewritten Snippet</div>
+        <textarea class="rf-snippet-box" readonly>AI-optimized resume excerpt.</textarea>
+        <div style="margin-top:1.2rem;">
+          <button class="rf-btn-green">Copy Rewritten Resume</button>
+          <button class="rf-btn-primary">Regenerate Rewrite</button>
+        </div>
       </div>
     </section>
-    <!-- End main content -->
   </main>
 
   <!-- Footer -->
@@ -190,10 +775,5 @@
       </div>
     </div>
   </footer>
-  <!-- Placeholder JS for future AI logic and extensibility -->
-  <script>
-    // TODO: Replace with real AI scoring, feedback, and rewriting logic
-    // All values are static for now to match the mockups
-  </script>
 </body>
 </html>
