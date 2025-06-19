@@ -102,6 +102,26 @@ _Update this file when a snippet is improved or the design system changes._
 
 ---
 
+## <!-- INFO ICON TOOLTIP (CANONICAL) -->
+
+```html
+<!--
+  JobHackAI INFO ICON TOOLTIP (canonical)
+  Use this everywhere a tooltip is needed for explanations, scores, or feature locks.
+  The SVG inherits color and is accessible.
+-->
+<span class="jh-tooltip-trigger" tabindex="0" aria-label="More info">
+  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false" style="vertical-align:middle">
+    <circle cx="12" cy="12" r="10"/>
+    <line x1="12" y1="8" x2="12" y2="8"/>
+    <line x1="12" y1="12" x2="12" y2="16"/>
+  </svg>
+  <span class="jh-tooltip-text">Your tooltip text here.</span>
+</span>
+```
+
+---
+
 <!-- PRIMARY CTA BUTTON -->
 
 <a class="btn-primary" href="#">

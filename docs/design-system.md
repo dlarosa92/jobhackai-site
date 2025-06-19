@@ -72,108 +72,28 @@
 - Label: `--color-text-main`
 - Placeholder: `--color-text-muted`
 
+### Tooltip (Info Icon)
+
+- Use the canonical SVG info icon as the trigger for all tooltips.
+- Always wrap the icon in a span with class `jh-tooltip-trigger` and include a sibling span with class `jh-tooltip-text` for the tooltip content.
+- Example:
+
+```html
+<span class="jh-tooltip-trigger" tabindex="0" aria-label="More info">
+  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false" style="vertical-align:middle">
+    <circle cx="12" cy="12" r="10"/>
+    <line x1="12" y1="8" x2="12" y2="8"/>
+    <line x1="12" y1="12" x2="12" y2="16"/>
+  </svg>
+  <span class="jh-tooltip-text">Your tooltip text here.</span>
+</span>
+```
+
+- Tooltip text appears on hover or focus.
+- Ensure `aria-label` is present for accessibility.
+- The icon inherits color and matches the icon system (24x24, 2px stroke).
+
 ## 3. Navigation Structure
 
 ### Main Navigation
 ```
-Home
-├── Features
-│   ├── Resume Builder
-│   ├── Interview Prep
-│   └── Job Search
-├── Pricing
-├── Blog
-└── Support
-```
-
-### User Navigation (Logged In)
-```
-Dashboard
-├── Resume Builder
-├── Interview Prep
-│   ├── Mock Interviews
-│   └── Question Bank
-├── Job Search
-│   ├── Saved Jobs
-│   └── Applications
-├── Account
-│   ├── Profile
-│   ├── Settings
-│   └── Billing
-└── Help
-```
-
-### Footer Navigation
-```
-Company
-├── About
-├── Careers
-└── Contact
-
-Product
-├── Features
-├── Pricing
-└── Roadmap
-
-Resources
-├── Blog
-├── Help Center
-└── Documentation
-
-Legal
-├── Privacy
-├── Terms
-└── Security
-```
-
-## 4. Responsive Breakpoints
-
-- Mobile: < 640px
-- Tablet: 641px - 1024px
-- Desktop: > 1024px
-
-## 5. Accessibility Standards
-
-- WCAG 2.1 AA compliance
-- Minimum contrast ratio: 4.5:1
-- Focus states for all interactive elements
-- ARIA labels where necessary
-- Keyboard navigation support
-
-## 6. Animation Guidelines
-
-- Duration: 150ms - 300ms
-- Easing: ease-in-out
-- Hover transitions: 150ms
-- Page transitions: 300ms
-- Loading states: 600ms
-
-## 7. Icon System
-
-- Stroke width: 2px
-- Size: 24px (default)
-- Color: Inherits from parent
-- Consistent style across all icons
-
-## 8. Error States
-
-- Error text: Red (#DC2626)
-- Error border: 2px solid #DC2626
-- Success text: Green (#059669)
-- Success border: 2px solid #059669
-
-## 9. Loading States
-
-- Skeleton loading for cards
-- Spinner for buttons
-- Progress indicators for forms
-- Consistent loading animations
-
-## 10. Implementation Guidelines
-
-1. Use CSS variables for all design tokens
-2. Maintain consistent spacing using the spacing scale
-3. Follow the component hierarchy
-4. Ensure responsive design at all breakpoints
-5. Test accessibility compliance
-6. Document any deviations from the system 

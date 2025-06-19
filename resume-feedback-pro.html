@@ -368,7 +368,7 @@
     function createPriorityReviewTooltip(text = 'Priority Review') {
       const wrapper = document.createElement('span');
       wrapper.className = 'priority-review-tooltip';
-      wrapper.innerHTML = `${text} <span class="tooltip-text">Premium users get their résumé analyzed first—faster results, prioritized AI review, and VIP support.</span>`;
+      wrapper.innerHTML = `${text} <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;margin-left:4px;vertical-align:middle;color:var(--color-text-muted);"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg> <span class="tooltip-text">Premium users get their résumé analyzed first—faster results, prioritized AI review, and VIP support.</span>`;
       return wrapper;
     }
 
