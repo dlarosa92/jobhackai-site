@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LinkedIn Profile Optimizer – JobHackAI</title>
+  <!-- Design tokens & global styles -->
+  <link rel="stylesheet" href="css/tokens.css">
+  <link rel="stylesheet" href="css/main.css">
+  <!-- Component overrides -->
+  <link rel="stylesheet" href="css/header.css">
+  <link rel="stylesheet" href="css/footer.css">
+</head>
+<body>
+<!-- DEV-ONLY PLAN TOGGLE (fixed, canonical style) -->
+<div id="dev-plan-toggle" style="position:fixed;top:16px;right:16px;z-index:9999;background:#fff;border:1.5px solid #E5E7EB;border-radius:8px;padding:0.5rem 1rem;box-shadow:0 2px 8px rgba(31,41,55,0.07);font-size:0.98rem;display:flex;align-items:center;gap:0.5rem;">
+  <span style="font-weight:700;color:#1976D2;">DEV ONLY</span>
+  <label for="dev-plan" style="font-weight:600;color:#4B5563;">Plan:</label>
+  <select id="dev-plan" style="font-size:1rem;padding:0.2rem 0.7rem;border-radius:6px;border:1px solid #E5E7EB;">
+    <option value="trial">Trial</option>
+    <option value="essential">Essential</option>
+    <option value="pro">Pro</option>
+    <option value="premium">Premium</option>
+  </select>
+</div>
+
+<!-- HEADER (canonical) -->
+<header class="site-header">
+  <div class="container">
+    <a href="index.html" class="nav-logo" aria-label="Go to homepage">
+      <svg width="24" height="24" fill="none" stroke="#1F2937" stroke-width="2" xmlns="http://www.w3.org/2000/svg">
+        <rect x="3" y="7" width="18" height="13" rx="2"/>
+        <path d="M8 7V5a2 2 0 012-2h4a2 2 0 012 2v2"/>
+      </svg>
+      <span>JOBHACKAI</span>
+    </a>
+    <div class="nav-group">
+      <nav class="nav-links" role="navigation">
+        <a href="index.html">Home</a>
+        <a href="#what-you-get">What You Get</a>
+        <a href="pricing-a.html">Pricing</a>
+        <a href="#blog">Blog</a>
+        <a href="login.html">Login</a>
+        <a href="pricing-a.html" class="cta-button">Start Free Trial</a>
+      </nav>
+    </div>
+    <button class="mobile-toggle" aria-label="Open navigation menu" aria-expanded="false" aria-controls="mobileNav">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="3" y1="12" x2="21" y2="12"></line>
+        <line x1="3" y1="6" x2="21" y2="6"></line>
+        <line x1="3" y1="18" x2="21" y2="18"></line>
+      </svg>
+    </button>
+  </div>
+</header>
+<nav class="mobile-nav" id="mobileNav">
+  <a href="index.html">Home</a>
+  <a href="#what-you-get">What You Get</a>
+  <a href="pricing-a.html">Pricing</a>
+  <a href="blog.html">Blog</a>
+  <a href="login.html">Login</a>
+  <a href="pricing-a.html" class="cta-button">Start Free Trial</a>
+</nav>
+<script>
+  // Hamburger menu toggle
+  const mobileToggle = document.querySelector('.mobile-toggle');
+  const mobileNav = document.getElementById('mobileNav');
+  if (mobileToggle && mobileNav) {
+    mobileToggle.addEventListener('click', () => {
+      const isOpen = mobileNav.classList.toggle('open');
+      mobileToggle.setAttribute('aria-expanded', isOpen);
+    });
+    document.querySelectorAll('.mobile-nav a').forEach(link => {
+      link.addEventListener('click', () => {
+        mobileNav.classList.remove('open');
+        mobileToggle.setAttribute('aria-expanded', 'false');
+      });
+    });
+  }
+</script>
+
+<main style="max-width:900px;margin:2.5rem auto 4rem auto;padding:0 1rem;">
+  <h1 style="font-size:2.1rem;font-weight:800;margin-bottom:1.2rem;">LinkedIn Profile Optimizer <span class="priority-review-tooltip" style="font-size:1.1rem;vertical-align:middle;cursor:pointer;">&#9432;<span class="tooltip-text">Section-by-section LinkedIn review, scoring, and AI-powered rewrite. <strong>Premium</strong> unlocks all features.</span></span></h1>
+  <section class="card" style="margin-bottom:2.2rem;">
+    <label for="lo-profile-input" style="font-weight:600;font-size:1.08rem;">Paste Your LinkedIn Profile Content</label>
+    <textarea id="lo-profile-input" rows="6" style="width:100%;margin:0.7rem 0 1.2rem 0;padding:1rem;font-size:1.05rem;border-radius:8px;border:1.5px solid #E5E7EB;resize:vertical;" placeholder="Headline, Summary, Experience, Skills..."></textarea>
+    <button id="lo-analyze" class="btn-primary" style="min-width:180px;">Analyze Profile</button>
+  </section>
+  <section class="card" style="margin-bottom:2.2rem;display:flex;align-items:center;gap:2.5rem;flex-wrap:wrap;">
+    <div class="ats-donut" style="width:80px;height:80px;">
+      <svg viewBox="0 0 80 80">
+        <circle cx="40" cy="40" r="36" stroke="#E5E7EB" stroke-width="8" fill="none"/>
+        <circle cx="40" cy="40" r="36" stroke="#00E676" stroke-width="8" fill="none" stroke-dasharray="226.2" stroke-dashoffset="49" stroke-linecap="round"/>
+        <text x="40" y="48" text-anchor="middle" font-size="1.6rem" font-weight="700" fill="#1F2937">85</text>
+      </svg>
+    </div>
+    <div style="flex:1;min-width:220px;">
+      <div style="font-weight:700;font-size:1.15rem;margin-bottom:0.2rem;">Overall LinkedIn Score <span class="priority-review-tooltip" style="font-size:1.05rem;vertical-align:middle;cursor:pointer;">&#9432;<span class="tooltip-text">Score is out of 100. Each section is scored and weighted for recruiter impact.</span></span></div>
+      <div style="color:var(--color-text-secondary);margin-bottom:0.7rem;">See how your profile stacks up and where to improve.</div>
+    </div>
+  </section>
+  <section style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:1.3rem;margin-bottom:2.2rem;">
+    <div class="card">
+      <div style="font-weight:700;">Headline & Tagline <span class="priority-review-tooltip">&#9432;<span class="tooltip-text">Max 20 pts. Strong branding and keyword alignment.</span></span></div>
+      <div style="font-size:1.1rem;font-weight:700;color:#00E676;">18/20</div>
+      <div style="color:var(--color-text-secondary);">Strong branding and keyword alignment.</div>
+    </div>
+    <div class="card">
+      <div style="font-weight:700;">Summary Section <span class="priority-review-tooltip">&#9432;<span class="tooltip-text">Max 20 pts. Clear storytelling, metrics, and focus.</span></span></div>
+      <div style="font-size:1.1rem;font-weight:700;color:#00E676;">16/20</div>
+      <div style="color:var(--color-text-secondary);">Clear storytelling, could add metrics.</div>
+    </div>
+    <div class="card">
+      <div style="font-weight:700;">Experience Section <span class="priority-review-tooltip">&#9432;<span class="tooltip-text">Max 20 pts. Results-focused, action verbs, quantified impact.</span></span></div>
+      <div style="font-size:1.1rem;font-weight:700;color:#00E676;">15/20</div>
+      <div style="color:var(--color-text-secondary);">Results-focused but needs more action verbs.</div>
+    </div>
+    <div class="card">
+      <div style="font-weight:700;">Skills Section <span class="priority-review-tooltip">&#9432;<span class="tooltip-text">Max 15 pts. Relevant tech keywords, endorsements.</span></span></div>
+      <div style="font-size:1.1rem;font-weight:700;color:#00E676;">12/15</div>
+      <div style="color:var(--color-text-secondary);">Add in relevant tech keywords.</div>
+    </div>
+    <div class="card">
+      <div style="font-weight:700;">Recommendations <span class="priority-review-tooltip">&#9432;<span class="tooltip-text">Max 10 pts. Endorsements and recommendations.</span></span></div>
+      <div style="font-size:1.1rem;font-weight:700;color:#00E676;">7/10</div>
+      <div style="color:var(--color-text-secondary);">Include two more endorsements.</div>
+    </div>
+    <div class="card">
+      <div style="font-weight:700;">Profile Image & URL <span class="priority-review-tooltip">&#9432;<span class="tooltip-text">Max 5 pts. Custom URL, professional photo.</span></span></div>
+      <div style="font-size:1.1rem;font-weight:700;color:#00E676;">5/5</div>
+      <div style="color:var(--color-text-secondary);">Custom URL set, professional photo.</div>
+    </div>
+  </section>
+  <section class="card" style="margin-bottom:2.2rem;">
+    <div style="font-weight:700;font-size:1.08rem;margin-bottom:0.7rem;">Your Optimized Profile Content</div>
+    <div id="lo-locked" class="feature-card locked" style="display:none;align-items:center;gap:1rem;">
+      <svg width="22" height="22" fill="none" stroke="#b59f00" stroke-width="2" style="flex-shrink:0;"><path d="M6 10V7a5 5 0 1110 0v3"/><rect x="5" y="10" width="12" height="8" rx="2"/></svg>
+      <span>Upgrade to Premium to unlock LinkedIn Optimizer.</span>
+      <button class="btn-locked" onclick="window.location.href='pricing-a.html'">Upgrade</button>
+    </div>
+    <textarea id="lo-optimized" rows="7" style="width:100%;margin-bottom:1.1rem;padding:1rem;font-size:1.05rem;border-radius:8px;border:1.5px solid #E5E7EB;resize:vertical;" readonly>Headline: Senior Product Manager | AI & FinTech Enthusiast
+Summary: Results-driven product leader with 6+ years at top-tier financial institutions...
+Experience:
+• Led cross-functional teams...
+• Increased user engagement by 30%...</textarea>
+    <button id="lo-download" class="btn-primary" style="min-width:200px;">Download Optimized Profile</button>
+  </section>
+</main>
+
+<!-- FOOTER (canonical) -->
+<footer class="site-footer">
+  <div class="footer-container">
+    <div class="footer-brand">
+      <svg class="footer-logo" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect x="3" y="7" width="18" height="13" rx="2" stroke="#1F2937" stroke-width="2"/>
+        <path d="M8 7V5a2 2 0 012-2h4a2 2 0 012 2v2" stroke="#1F2937" stroke-width="2"/>
+      </svg>
+      <span class="footer-name">JOBHACKAI</span>
+    </div>
+    <div class="footer-legal">
+      <p>© 2025 JobHackAI. All rights reserved.</p>
+    </div>
+    <div class="footer-links">
+      <a href="index.html">Home</a>
+      <a href="support.html">Support</a>
+      <a href="privacy.html">Privacy</a>
+    </div>
+  </div>
+</footer>
+
+<script>
+// --- USER PLAN LOGIC ---
+let user = { plan: 'trial' };
+const devPlan = document.getElementById('dev-plan');
+if (devPlan) {
+  devPlan.value = user.plan;
+  devPlan.addEventListener('change', function() {
+    user.plan = this.value;
+    renderLOByPlan();
+  });
+}
+function renderLOByPlan() {
+  const locked = (user.plan !== 'premium');
+  const lockedDiv = document.getElementById('lo-locked');
+  const optimized = document.getElementById('lo-optimized');
+  const downloadBtn = document.getElementById('lo-download');
+  if (locked) {
+    lockedDiv.style.display = 'flex';
+    optimized.style.display = 'none';
+    downloadBtn.style.display = 'none';
+  } else {
+    lockedDiv.style.display = 'none';
+    optimized.style.display = '';
+    downloadBtn.style.display = '';
+  }
+}
+renderLOByPlan();
+// Tooltip logic (from resume-feedback-pro)
+document.querySelectorAll('.priority-review-tooltip').forEach(function(el) {
+  el.addEventListener('mouseenter', function() {
+    var tip = el.querySelector('.tooltip-text');
+    if (tip) tip.style.visibility = 'visible';
+  });
+  el.addEventListener('mouseleave', function() {
+    var tip = el.querySelector('.tooltip-text');
+    if (tip) tip.style.visibility = 'hidden';
+  });
+});
+// Download button logic
+const downloadBtn = document.getElementById('lo-download');
+if (downloadBtn) {
+  downloadBtn.addEventListener('click', function() {
+    const text = document.getElementById('lo-optimized').value;
+    const blob = new Blob([text], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'Optimized-LinkedIn-Profile.txt';
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 100);
+  });
+}
+</script>
+<style>
+.priority-review-tooltip { position:relative; cursor:pointer; display:inline-block; }
+.priority-review-tooltip .tooltip-text {
+  visibility:hidden; opacity:0; pointer-events:none; position:absolute; left:110%; top:50%; transform:translateY(-50%); background:#232B36; color:#fff; padding:0.5em 1em; border-radius:8px; font-size:0.98rem; min-width:180px; z-index:10; transition:opacity 0.2s; font-weight:400; box-shadow:0 2px 8px rgba(31,41,55,0.13); white-space:normal; }
+.priority-review-tooltip:hover .tooltip-text { visibility:visible; opacity:1; pointer-events:auto; }
+@media (max-width:700px) {
+  main[style] { padding:0 0.2rem !important; }
+  section.card { padding:1.1rem 0.7rem !important; }
+  .ats-donut { width:60px !important; height:60px !important; }
+  .ats-donut svg { width:60px !important; height:60px !important; }
+}
+</style> 
+</body>
+</html> 
