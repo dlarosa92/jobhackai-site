@@ -46,7 +46,7 @@ const NAVIGATION_CONFIG = {
   visitor: {
     navItems: [
       { text: 'Home', href: 'index.html' },
-      { text: 'What You Get', href: '#what-you-get' },
+      { text: 'Features', href: 'features.html' },
       { text: 'Pricing', href: 'pricing-a.html' },
       { text: 'Blog', href: '#blog' },
       { text: 'Login', href: 'login.html' },
