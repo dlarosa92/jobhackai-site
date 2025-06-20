@@ -131,13 +131,8 @@
       </a>
       <div class="nav-group">
         <nav class="nav-links" role="navigation">
-          <a href="index.html">Home</a>
-          <a href="#what-you-get">What You Get</a>
-          <a href="pricing-a.html">Pricing</a>
-          <a href="#blog">Blog</a>
-          <a href="login.html">Login</a>
-          <a href="pricing-a.html" class="cta-button">Start Free Trial</a>
-    </nav>
+          <!-- Navigation will be dynamically populated by navigation.js -->
+        </nav>
       </div>
       <button class="mobile-toggle" aria-label="Open navigation menu" aria-expanded="false" aria-controls="mobileNav">
         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -149,13 +144,26 @@
     </div>
   </header>
   <nav class="mobile-nav" id="mobileNav">
-    <a href="index.html">Home</a>
-    <a href="#what-you-get">What You Get</a>
-    <a href="pricing-a.html">Pricing</a>
-    <a href="blog.html">Blog</a>
-    <a href="login.html">Login</a>
-    <a href="pricing-a.html" class="cta-button">Start Free Trial</a>
+    <!-- Mobile navigation will be dynamically populated by navigation.js -->
   </nav>
+  <script>
+    // Hamburger menu toggle
+    const mobileToggle = document.querySelector('.mobile-toggle');
+    const mobileNav = document.getElementById('mobileNav');
+    if (mobileToggle && mobileNav) {
+      mobileToggle.addEventListener('click', () => {
+        const isOpen = mobileNav.classList.toggle('open');
+        mobileToggle.setAttribute('aria-expanded', isOpen);
+      });
+      // Close mobile nav on link click
+      document.querySelectorAll('.mobile-nav a').forEach(link => {
+        link.addEventListener('click', () => {
+          mobileNav.classList.remove('open');
+          mobileToggle.setAttribute('aria-expanded', 'false');
+        });
+      });
+    }
+  </script>
   <main class="iq-main">
     <h1 class="iq-title">Interview Questions</h1>
     <p class="iq-sub">Practice your answers with AI-generated questions tailored to your job title.</p>
@@ -198,83 +206,111 @@
     // --- ROLES DATA ---
     const roles = [
       'Software Engineer', 'Data Analyst', 'Product Manager', 'Marketing Specialist',
-      'Sales Associate', 'Operations Manager', 'Financial Analyst', 'Project Coordinator',
-      'UX Designer', 'Customer Success Manager', 'Business Analyst', 'HR Specialist',
-      'Account Executive', 'QA Engineer', 'DevOps Engineer', 'Content Strategist'
+      'Sales Representative', 'Customer Success Manager', 'UX Designer', 'DevOps Engineer',
+      'Data Scientist', 'Business Analyst', 'Project Manager', 'Content Writer',
+      'Graphic Designer', 'HR Specialist', 'Financial Analyst', 'Operations Manager'
     ];
     // --- QUESTIONS DATA ---
-    const questions = [
-      'What strengths make you the best candidate?',
-      'Describe a time you learned something quickly.',
-      'How do you handle competing priorities?',
-      'Tell us about using data to drive a decision.',
-      'How do you ensure clear team communication?',
-      'Describe a challenging project you overcame.',
-      'How do you measure success?',
-      'Explain leading a cross-functional team.'
-    ];
-    // --- ROLE INPUT & QUESTIONS RENDER ---
+    const questionsByRole = {
+      'Software Engineer': [
+        'Tell me about a challenging technical problem you solved recently.',
+        'How do you handle code reviews and feedback from peers?',
+        'Describe your experience with testing and quality assurance.',
+        'How do you stay updated with the latest technologies and best practices?',
+        'Tell me about a time when you had to refactor legacy code.'
+      ],
+      'Data Analyst': [
+        'Walk me through your data analysis process from start to finish.',
+        'How do you ensure data quality and accuracy in your analyses?',
+        'Tell me about a time when you discovered an unexpected insight in the data.',
+        'How do you communicate complex findings to non-technical stakeholders?',
+        'What tools and technologies are you most comfortable with for data analysis?'
+      ],
+      'Product Manager': [
+        'How do you prioritize features in a product roadmap?',
+        'Tell me about a product you launched and the impact it had.',
+        'How do you gather and incorporate user feedback into product decisions?',
+        'Describe a time when you had to make a difficult trade-off decision.',
+        'How do you measure the success of a product feature?'
+      ],
+      'Marketing Specialist': [
+        'Tell me about a successful marketing campaign you ran.',
+        'How do you measure the ROI of marketing activities?',
+        'Describe your experience with different marketing channels.',
+        'How do you stay updated with marketing trends and best practices?',
+        'Tell me about a time when you had to pivot a marketing strategy.'
+      ]
+    };
+    // --- DOM ELEMENTS ---
     const roleInput = document.getElementById('iq-role');
-    const qWrap = document.getElementById('iq-questions');
-    const lockNotice = document.getElementById('iq-lock');
+    const roleDropdown = document.getElementById('iq-role-dropdown');
+    const questionsContainer = document.getElementById('iq-questions');
+    const lockDiv = document.getElementById('iq-lock');
     const upgradeBtn = document.getElementById('iq-upgrade');
-    let selectedRole = '';
-    let dropdownOpen = false;
-    let activeIndex = -1;
-    function showDropdown(matches) {
-      if (!matches.length) { roleDropdown.style.display = 'none'; dropdownOpen = false; return; }
-      roleDropdown.innerHTML = matches.map((r, i) => `<div class=\"iq-role-item${i===activeIndex?' active':''}\" data-role=\"${r}\">${r}</div>`).join('');
-      roleDropdown.style.display = '';
-      dropdownOpen = true;
-      roleInput.setAttribute('aria-expanded', 'true');
-    }
-    function hideDropdown() {
-      roleDropdown.style.display = 'none';
-      dropdownOpen = false;
-      activeIndex = -1;
-      roleInput.setAttribute('aria-expanded', 'false');
-    }
-    roleInput.addEventListener('input', e => {
-      const val = e.target.value.trim().toLowerCase();
-      if (!val) { hideDropdown(); qWrap.innerHTML = ''; lockNotice.style.display = 'none'; upgradeBtn.style.display = 'none'; selectedRole = ''; return; }
-      const matches = roles.filter(r => r.toLowerCase().includes(val)).slice(0, 8);
-      showDropdown(matches);
-      qWrap.innerHTML = '';
-      lockNotice.style.display = 'none';
-      upgradeBtn.style.display = 'none';
-      selectedRole = '';
-    });
-    roleInput.addEventListener('keydown', e => {
-      if (!dropdownOpen) return;
-      const items = Array.from(roleDropdown.querySelectorAll('.iq-role-item'));
-      if (e.key === 'ArrowDown') {
-        e.preventDefault();
-        activeIndex = (activeIndex + 1) % items.length;
-        showDropdown(items.map(i => i.textContent));
-      } else if (e.key === 'ArrowUp') {
-        e.preventDefault();
-        activeIndex = (activeIndex - 1 + items.length) % items.length;
-        showDropdown(items.map(i => i.textContent));
-      } else if (e.key === 'Enter' && activeIndex >= 0) {
-        e.preventDefault();
-        items[activeIndex].click();
+    // --- EVENT LISTENERS ---
+    roleInput.addEventListener('input', function() {
+      const value = this.value.toLowerCase();
+      if (value.length < 2) {
+        roleDropdown.style.display = 'none';
+        return;
+      }
+      const filteredRoles = roles.filter(role => 
+        role.toLowerCase().includes(value)
+      );
+      if (filteredRoles.length > 0) {
+        roleDropdown.innerHTML = filteredRoles.map(role => 
+          `<div class="iq-role-item" data-role="${role}">${role}</div>`
+        ).join('');
+        roleDropdown.style.display = 'block';
+      } else {
+        roleDropdown.style.display = 'none';
       }
     });
-    roleDropdown.addEventListener('mousedown', e => {
+    roleDropdown.addEventListener('click', function(e) {
       if (e.target.classList.contains('iq-role-item')) {
-        roleInput.value = e.target.dataset.role;
-        selectedRole = e.target.dataset.role;
-        hideDropdown();
-        generateQuestions();
+        const role = e.target.dataset.role;
+        roleInput.value = role;
+        roleDropdown.style.display = 'none';
+        generateQuestions(role);
       }
     });
-    document.addEventListener('click', e => {
-      if (!e.target.closest('.combo')) hideDropdown();
+    document.addEventListener('click', function(e) {
+      if (!roleInput.contains(e.target) && !roleDropdown.contains(e.target)) {
+        roleDropdown.style.display = 'none';
+      }
     });
-    function generateQuestions(){
-      const wrap=document.getElementById('qwrap');
-      wrap.innerHTML=questions.slice(0,5).map(q=>`<div class="card">${q}</div>`).join('');
+    upgradeBtn.addEventListener('click', function() {
+      window.location.href = 'pricing-a.html';
+    });
+    // --- FUNCTIONS ---
+    function generateQuestions(role) {
+      const questions = questionsByRole[role] || [
+        'Tell me about your experience in this role.',
+        'What are your biggest strengths and weaknesses?',
+        'Where do you see yourself in 5 years?',
+        'Why are you interested in this position?',
+        'Tell me about a challenging situation you faced at work.'
+      ];
+      questionsContainer.innerHTML = questions.map((q, i) => 
+        `<div class="iq-question-card">${i + 1}. ${q}</div>`
+      ).join('');
+      // Show/hide upgrade elements based on user plan
+      if (user.plan === 'free') {
+        lockDiv.style.display = 'flex';
+        upgradeBtn.style.display = 'block';
+      } else {
+        lockDiv.style.display = 'none';
+        upgradeBtn.style.display = 'none';
+      }
+    }
+    // Initialize with default role if needed
+    if (roleInput.value) {
+      generateQuestions(roleInput.value);
     }
   </script>
+  <!-- Load navigation system -->
+  <script src="js/navigation.js"></script>
+  <script src="js/main.js" type="module"></script>
+  <script src="js/analytics.js" type="module"></script>
 </body>
 </html>

@@ -437,12 +437,7 @@
       </a>
       <div class="nav-group">
         <nav class="nav-links" role="navigation">
-          <a href="index.html">Home</a>
-          <a href="#what-you-get">What You Get</a>
-          <a href="pricing-a.html">Pricing</a>
-          <a href="#blog">Blog</a>
-          <a href="login.html">Login</a>
-          <a href="pricing-a.html" class="cta-button">Start Free Trial</a>
+          <!-- Navigation will be dynamically populated by navigation.js -->
         </nav>
       </div>
       <button class="mobile-toggle" aria-label="Open navigation menu" aria-expanded="false" aria-controls="mobileNav">
@@ -455,12 +450,7 @@
     </div>
   </header>
   <nav class="mobile-nav" id="mobileNav">
-    <a href="index.html">Home</a>
-    <a href="#what-you-get">What You Get</a>
-    <a href="pricing-a.html">Pricing</a>
-    <a href="blog.html">Blog</a>
-    <a href="login.html">Login</a>
-    <a href="pricing-a.html" class="cta-button">Start Free Trial</a>
+    <!-- Mobile navigation will be dynamically populated by navigation.js -->
   </nav>
   <script>
     // Hamburger menu toggle
@@ -674,7 +664,9 @@
     }
     renderDashboard(user);
   </script>
-  <script src="js/main.js"></script>
-  <script src="js/analytics.js"></script>
+  <!-- Load navigation system -->
+  <script src="js/navigation.js"></script>
+  <script src="js/main.js" type="module"></script>
+  <script src="js/analytics.js" type="module"></script>
 </body>
 </html> 

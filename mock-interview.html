@@ -4,606 +4,237 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Mock Interview Simulator – JobHackAI</title>
-
-  <!-- Design tokens & global styles -->
+  <title>Mock Interviews – JobHackAI</title>
   <link rel="stylesheet" href="css/tokens.css">
   <link rel="stylesheet" href="css/main.css">
-
-  <!-- Component overrides -->
   <link rel="stylesheet" href="css/header.css">
   <link rel="stylesheet" href="css/footer.css">
   <style>
-    /* General layout and card polish */
-    html, body { height: 100%; margin: 0; padding: 0; }
-    body { min-height: 100vh; display: flex; flex-direction: column; }
-    main.mi-main { flex: 1 0 auto; }
-    .site-footer { flex-shrink: 0; position: static !important; bottom: unset !important; width: 100%; }
-    .mi-main { max-width: 900px; margin: 2.5rem auto 4rem auto; padding: 0 1rem; }
-    .mi-card { background: var(--color-card-bg); border-radius: var(--radius-xl); box-shadow: var(--shadow-md); padding: var(--space-lg) var(--space-lg) var(--space-lg) var(--space-lg); margin-bottom: var(--space-lg); box-sizing: border-box; }
-    .mi-title { font-size: var(--font-size-3xl); font-weight: var(--font-weight-extrabold); margin-bottom: var(--space-xs); color: var(--color-text-main); }
-    .mi-desc { color: var(--color-text-secondary); margin-bottom: var(--space-md); font-size: var(--font-size-lg); }
-    .clg-label { font-weight: var(--font-weight-bold); color: var(--color-text-main); font-size: var(--font-size-lg); margin-bottom: var(--space-2xs); display: block; }
-    .clg-input { width: 100%; font-size: var(--font-size-lg); border: 2px solid var(--color-divider); border-radius: var(--radius-md); padding: 0.7rem 1rem; background: var(--color-bg-light); color: var(--color-text-main); transition: border var(--transition-normal); margin-bottom: var(--space-xs); box-sizing: border-box; }
-    .clg-input:focus { border-color: var(--color-accent-blue); outline: none; box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.1); }
-    .clg-input:disabled {
-      background: var(--color-bg-light);
-      color: var(--color-text-muted);
-      cursor: not-allowed;
+    .mi-main {
+      max-width: 900px;
+      margin: 2.5rem auto 4rem auto;
+      padding: 0 1rem;
     }
-    .clg-input.error {
-      border-color: var(--color-error);
+    .mi-card {
+      background: #fff;
+      border-radius: 16px;
+      box-shadow: 0 2px 12px rgba(31,41,55,0.07);
+      padding: 2rem;
+      margin-bottom: 2rem;
     }
-    .clg-input.success {
-      border-color: var(--color-success);
-    }
-    .error-message {
-      color: var(--color-error);
-      font-size: var(--font-size-sm);
-      margin-top: var(--space-2xs);
-      display: none;
-    }
-    .error-message.visible {
-      display: block;
-    }
-    .clg-job-dropdown { font-size: 1.05rem; border-radius: 0 0 8px 8px; box-shadow: 0 2px 8px rgba(31,41,55,0.07); background: #fff; border: 1.5px solid #E5E7EB; border-top: none; z-index: 10; max-height: 220px; overflow-y: auto; position: absolute; left: 0; right: 0; top: 100%; display: none; }
-    .clg-job-item { padding: 0.85rem 1.1rem; cursor: pointer; color: var(--color-text-main); transition: background 0.15s; }
-    .clg-job-item:hover, .clg-job-item.active { background: var(--color-bg-light); }
-    .clg-btn {
-      background: var(--color-cta-green);
-      color: #fff;
-      font-weight: var(--font-weight-bold);
-      border: none;
-      border-radius: var(--radius-md);
-      padding: 0.7rem 1.5rem;
-      font-size: var(--font-size-lg);
-      cursor: pointer;
-      transition: background var(--transition-normal);
-      margin-bottom: 0.5rem;
-      display: inline-block;
-    }
-    .clg-btn:disabled { 
-      background: var(--color-disabled); 
-      cursor: not-allowed; 
-    }
-    .clg-btn:hover:not(:disabled), 
-    .clg-btn:focus:not(:disabled) { 
-      background: #00c965; 
-      outline: 2px solid var(--color-accent-blue);
-      outline-offset: 2px;
-    }
-    .mi-card:focus-within, .mi-card:hover { box-shadow: var(--shadow-card); transform: none; }
     .mi-locked {
-      background: #fffbe6;
-      border: 1.5px solid #ffe066;
-      border-radius: var(--radius-button);
-      padding: 19.2px;
-      margin: 0 0 24px 0;
       display: flex;
       align-items: center;
-      gap: 1rem;
-      color: #b59f00;
-      font-size: 1.05rem;
-      font-family: 'Inter', sans-serif;
-      font-weight: 600;
-      box-sizing: border-box;
-    }
-    .mi-locked svg {
-      flex-shrink: 0;
-      color: #b59f00;
-      margin-right: 0.5rem;
-      width: 24px;
-      height: 24px;
-      display: block;
+      gap: 0.8rem;
+      background: #FFF7E6;
+      border: 1px solid #F59E0B;
+      border-radius: 12px;
+      padding: 1rem 1.25rem;
+      font-size: 1.04rem;
+      color: #92400E;
     }
     .mi-locked-message {
-      color: #b59f00;
-      font-weight: 600;
-      font-size: 1.05rem;
-      font-family: 'Inter', sans-serif;
       flex: 1;
-      line-height: 1.3;
     }
     .mi-upgrade-btn {
-      background: var(--color-accent-blue);
+      background: #F59E0B;
       color: #fff;
       border: none;
-      border-radius: var(--radius-button);
-      padding: 0.7rem 1.5rem;
-      font-size: 1.05rem;
-      font-family: var(--font-family-base);
-      font-weight: var(--font-weight-bold);
+      border-radius: 8px;
+      padding: 0.5rem 1rem;
+      font-size: 0.9rem;
+      font-weight: 600;
       cursor: pointer;
       transition: background 0.18s;
-      margin-left: 1.5rem;
-      box-shadow: var(--shadow-card);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      height: 40px;
     }
-    .mi-upgrade-btn:hover, .mi-upgrade-btn:focus {
-      background: #005bb5;
+    .mi-upgrade-btn:hover,
+    .mi-upgrade-btn:focus {
+      background: #D97706;
     }
-    .mi-progress-bar-bg { 
-      width: 100%; 
-      height: 8px; 
-      background: var(--color-bg-light); 
-      border-radius: 4px; 
-      margin-top: 0.3rem; 
+    .mi-role-autocomplete {
+      position: relative;
+      width: 100%;
+      max-width: 300px;
+      margin-bottom: 1.5rem;
     }
-    .mi-progress-bar { 
-      height: 8px; 
-      background: var(--color-accent-blue); 
-      border-radius: 4px; 
-      width: 0%; 
-      transition: width 0.3s; 
+    .mi-role-label {
+      display: block;
+      font-weight: 600;
+      margin-bottom: 0.5rem;
+      color: #232B36;
     }
-    .mi-usage-meter { 
-      margin-top: 1.5rem; 
-      padding: 1rem; 
-      background: var(--color-bg-light); 
-      border-radius: var(--radius-button); 
-      display: none; 
+    .mi-role-input {
+      width: 100%;
+      padding: 0.85rem 1.1rem;
+      border: 2px solid #E5E7EB;
+      border-radius: 10px;
+      font-size: 1.08rem;
+      transition: border 0.18s;
+      background: #fff;
+      color: #232B36;
+      box-sizing: border-box;
     }
-    .mi-usage-text { 
-      font-size: 0.9rem; 
-      color: var(--color-text-secondary); 
-      margin-bottom: 0.5rem; 
+    .mi-role-input:focus {
+      border-color: #1976D2;
+      outline: none;
     }
-    .mi-usage-bar { 
-      height: 8px; 
-      background: var(--color-divider); 
-      border-radius: 4px; 
-      overflow: hidden; 
-    }
-    .mi-usage-progress { 
-      height: 100%; 
-      background: var(--color-accent-blue); 
-      transition: width 0.3s ease; 
-    }
-    .mi-history-sidebar {
-      position: fixed;
+    .mi-role-dropdown {
+      position: absolute;
+      left: 0;
       right: 0;
-      top: 80px;
-      width: 320px;
-      max-width: 90vw;
-      background: var(--color-card-bg);
-      border-left: 1.5px solid var(--color-divider);
-      box-shadow: var(--shadow-card);
-      padding: var(--space-md) var(--space-sm) var(--space-sm) var(--space-sm);
-      z-index: 9000;
-      border-radius: var(--radius-card) 0 0 var(--radius-card);
+      top: 100%;
+      background: #fff;
+      border: 1.5px solid #E5E7EB;
+      border-top: none;
+      border-radius: 0 0 10px 10px;
+      box-shadow: 0 2px 8px rgba(31,41,55,0.07);
+      z-index: 10;
+      max-height: 220px;
+      overflow-y: auto;
       display: none;
     }
-    .mi-history-sidebar h3 {
-      font-size: 1.1rem;
-      font-weight: var(--font-weight-bold);
-      margin-bottom: 1.2rem;
-      color: var(--color-text-main);
+    .mi-role-item {
+      padding: 0.85rem 1.1rem;
+      cursor: pointer;
+      font-size: 1.08rem;
+      color: #232B36;
+      transition: background 0.15s;
+    }
+    .mi-role-item:hover,
+    .mi-role-item.active {
+      background: #F3F4F6;
+    }
+    .mi-question {
+      font-size: 1.2rem;
+      font-weight: 600;
+      color: #232B36;
+      line-height: 1.4;
+    }
+    .mi-answer-input {
+      width: 100%;
+      min-height: 120px;
+      padding: 1rem;
+      border: 2px solid #E5E7EB;
+      border-radius: 10px;
+      font-size: 1rem;
+      background: #fff;
+      color: #232B36;
+      resize: vertical;
+      box-sizing: border-box;
+      font-family: inherit;
+      line-height: 1.5;
+    }
+    .mi-answer-input:focus {
+      border-color: #1976D2;
+      outline: none;
     }
     .mi-history-list {
       list-style: none;
       padding: 0;
       margin: 0;
     }
-    .mi-history-empty {
-      color: var(--color-text-muted);
-      font-size: 1rem;
-    }
-    .mi-session-item {
-      display: flex;
-      align-items: center;
-      gap: 0.7rem;
-      padding: 0.7rem 0.5rem;
-      border-bottom: 1px solid var(--color-divider);
+    .mi-history-item {
+      padding: 0.75rem;
+      border-radius: 8px;
+      margin-bottom: 0.5rem;
+      background: #fff;
+      border: 1px solid #E5E7EB;
       cursor: pointer;
-      transition: background 0.13s;
+      transition: background 0.15s;
     }
-    .mi-session-item:hover {
-      background: var(--color-bg-light);
+    .mi-history-item:hover {
+      background: #F9FAFB;
     }
-    .mi-session-date {
-      color: var(--color-text-muted);
-      font-size: 0.95rem;
-      min-width: 80px;
-    }
-    .mi-session-role {
-      color: var(--color-text-main);
-      font-weight: var(--font-weight-semibold);
-      flex: 1;
-      font-size: 1.05rem;
-    }
-    .mi-session-score {
-      display: inline-block;
-      min-width: 36px;
+    .mi-history-empty {
+      color: #6B7280;
+      font-style: italic;
       text-align: center;
-      border-radius: 999px;
-      font-weight: var(--font-weight-bold);
-      font-size: 1.05rem;
-      padding: 0.2em 0.7em;
-      background: var(--color-bg-light);
-      color: var(--color-text-main);
+      padding: 1rem;
     }
-    .mi-session-score.green { background: #E6F9ED; color: #00B86B; }
-    .mi-session-score.yellow { background: #FFF9E3; color: #B59F00; }
-    .mi-session-score.red { background: #FDE8E8; color: #D32F2F; }
+    .mi-usage-meter {
+      background: #F8FAFC;
+      border-radius: 8px;
+      padding: 1rem;
+      border: 1px solid #E5E7EB;
+    }
+    .mi-usage-text {
+      font-size: 0.9rem;
+      color: #6B7280;
+      margin-bottom: 0.5rem;
+    }
+    .mi-usage-bar {
+      width: 100%;
+      height: 8px;
+      background: #E5E7EB;
+      border-radius: 4px;
+      overflow: hidden;
+      margin-bottom: 0.5rem;
+    }
+    .mi-usage-progress {
+      height: 100%;
+      background: #00E676;
+      transition: width 0.3s ease;
+    }
     .mi-usage-warning {
-      color: #B59F00;
-      font-size: 0.97rem;
-      margin-top: 0.7rem;
+      font-size: 0.85rem;
+      color: #F59E0B;
       font-weight: 600;
     }
     .mi-usage-upsell {
-      background: #fffbe6;
-      border: 1.5px solid #ffe066;
-      border-radius: var(--radius-button);
-      color: #b59f00;
-      font-size: 1.01rem;
+      font-size: 0.85rem;
+      color: #DC2626;
       font-weight: 600;
-      margin-top: 1rem;
-      padding: 0.7rem 1rem;
-      text-align: center;
-    }
-    @media (max-width: 1100px) {
-      .mi-history-sidebar { display: none !important; }
-    }
-    .mi-interview-container {
-      display: none; /* Hidden by default until plan check */
-    }
-    .mi-question {
-      font-size: 1.2rem;
-      font-weight: 600;
-      margin-bottom: 1.5rem;
-      color: var(--color-text-main);
-    }
-    .mi-answer-input {
-      width: 100%;
-      min-height: 150px;
-      padding: 1rem;
-      border: 2px solid var(--color-divider);
-      border-radius: var(--radius-button);
-      font-size: 1.05rem;
-      margin-bottom: 1.5rem;
-      resize: vertical;
-      box-sizing: border-box;
-    }
-    .mi-answer-input:focus {
-      border-color: var(--color-accent-blue);
-      outline: none;
-    }
-    .mi-submit-btn {
-      background: var(--color-accent-green);
-      color: #fff;
-      border: none;
-      border-radius: var(--radius-button);
-      padding: 0.8rem 1.5rem;
-      font-size: 1.05rem;
-      font-weight: 700;
-      cursor: pointer;
-      transition: background 0.18s;
-    }
-    .mi-submit-btn:hover {
-      background: #2e7d32;
-    }
-    .mi-submit-btn:disabled {
-      background: #ccc;
-      cursor: not-allowed;
-    }
-    .mi-feedback {
-      margin-top: 2rem;
-      padding: 1.5rem;
-      border-radius: var(--radius-card);
-      background: var(--color-bg-light);
-      display: none;
     }
     .mi-score-grid {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
       gap: 1rem;
-      margin-bottom: 1.5rem;
+      margin-bottom: 1rem;
     }
     .mi-score-item {
+      background: #F8FAFC;
+      border-radius: 8px;
       padding: 1rem;
-      border-radius: var(--radius-button);
-      background: #fff;
-      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+      text-align: center;
     }
     .mi-score-label {
       font-size: 0.9rem;
-      color: var(--color-text-secondary);
-      margin-bottom: 0.3rem;
+      color: #6B7280;
+      margin-bottom: 0.5rem;
     }
     .mi-score-value {
-      font-size: 1.2rem;
+      font-size: 1.5rem;
       font-weight: 700;
-      color: var(--color-text-main);
+      color: #1976D2;
     }
     .mi-total-score {
-      font-size: 2rem;
-      font-weight: 800;
       text-align: center;
-      margin: 1.5rem 0;
-      color: var(--color-text-main);
-    }
-    .mi-feedback-text {
-      font-size: 1.05rem;
-      line-height: 1.6;
-      color: var(--color-text-main);
-    }
-    .user-nav-profile {
-      margin-left: 2.2rem;
-      display: flex;
-      align-items: center;
-      height: 100%;
-    }
-    .nav-dropdown {
-      position: relative;
-      display: flex;
-      align-items: center;
-      height: 100%;
-    }
-    .nav-dropdown-trigger {
-      display: flex;
-      align-items: center;
-      gap: 0.5rem;
-      background: none;
-      border: none;
-      color: #1F2937;
-      font-weight: 600;
-      font-size: 1rem;
-      cursor: pointer;
-      padding: 0.25rem 0.7rem 0.25rem 0.5rem;
-      border-radius: 8px;
-      transition: background 0.15s;
-      height: 40px;
-    }
-    .nav-dropdown-trigger:focus,
-    .nav-dropdown-trigger:hover {
-      background: #F3F4F6;
-      outline: none;
-    }
-    .user-avatar {
-      width: 32px;
-      height: 32px;
-      border-radius: 50%;
-      object-fit: cover;
-      background: #E5E7EB;
-    }
-    .user-name {
-      color: #1F2937;
-      font-weight: 600;
-      font-size: 1rem;
-      margin-left: 0.2rem;
-      margin-right: 0.2rem;
-    }
-    .nav-dropdown-menu {
-      position: absolute;
-      top: 110%;
-      right: 0;
-      background: #fff;
-      border: 1px solid #E5E7EB;
-      border-radius: 10px;
-      box-shadow: 0 2px 8px rgba(31,41,55,0.07);
-      min-width: 180px;
-      padding: 0.5rem 0;
-      z-index: 100;
-      display: none;
-    }
-    .nav-dropdown.open .nav-dropdown-menu,
-    .nav-dropdown-trigger[aria-expanded="true"] + .nav-dropdown-menu {
-      display: block;
-    }
-    .nav-dropdown-menu a {
-      display: block;
-      padding: 0.7rem 1.2rem;
-      color: #1F2937;
-      text-decoration: none;
-      font-size: 1rem;
-      font-weight: 500;
-      transition: background 0.15s, color 0.15s;
-      border: none;
-      background: none;
-    }
-    .nav-dropdown-menu a:hover {
-      background: #F3F4F6;
-      color: #007BFF;
-    }
-    .nav-divider {
-      height: 1px;
-      background: #E5E7EB;
-      margin: 0.3rem 0;
-      width: 90%;
-      margin-left: 5%;
-    }
-    .nav-logout {
-      color: #DC2626 !important;
-    }
-    .mi-role-row {
-      display: flex;
-      align-items: flex-end;
-      gap: 1.2rem;
-      margin-bottom: 1.5rem;
-      flex-wrap: wrap;
-    }
-    .mi-role-label {
+      font-size: 1.2rem;
       font-weight: 700;
-      color: var(--color-text-main);
-      font-size: 1.05rem;
-      margin-bottom: 0.3rem;
-      display: block;
+      color: #232B36;
     }
-    .mi-role-autocomplete {
-      position: relative;
-      width: 100%;
-      max-width: 400px;
-      margin-bottom: 1.5rem;
-    }
-    .mi-role-input {
-      width: 100%;
-      font-size: 1.05rem;
-      border: 2px solid var(--color-divider);
-      border-radius: var(--radius-button);
-      padding: 0.7rem 1rem;
-      background: var(--color-bg-light);
-      color: var(--color-text-main);
-      transition: border 0.18s;
-      margin-bottom: 0.5rem;
-      box-sizing: border-box;
-    }
-    .mi-role-input:focus {
-      border-color: var(--color-accent-blue);
-      outline: none;
-    }
-    .mi-role-dropdown {
-      font-size: 1.05rem;
-      border-radius: 0 0 8px 8px;
-      box-shadow: 0 2px 8px rgba(31,41,55,0.07);
-      background: #fff;
-      border: 1.5px solid #E5E7EB;
-      border-top: none;
-      z-index: 100;
-      max-height: 220px;
-      overflow-y: auto;
-      position: absolute;
-      left: 0;
-      right: 0;
-      top: 100%;
-      display: none;
-    }
-    .mi-role-item {
-      padding: 0.85rem 1.1rem;
-      cursor: pointer;
-      color: var(--color-text-main);
-      transition: background 0.15s;
-    }
-    .mi-role-item:hover, .mi-role-item.active {
-      background: var(--color-bg-light);
-    }
-    .mi-role-input[disabled] {
-      background: #F3F4F6;
-      color: #9CA3AF;
-      cursor: not-allowed;
-    }
-    .mi-start-btn {
-      background: var(--color-accent-blue);
+    .clg-btn {
+      background: #00E676;
       color: #fff;
       border: none;
-      border-radius: var(--radius-button);
-      padding: 0.7rem 1.5rem;
-      font-size: 1.05rem;
+      border-radius: 12px;
+      font-size: 1.13rem;
+      padding: 1rem 2rem;
       font-weight: 700;
       cursor: pointer;
       transition: background 0.18s;
-      margin-bottom: 0.2rem;
     }
-    .mi-start-btn:disabled {
-      background: #B0B3B8;
+    .clg-btn:hover,
+    .clg-btn:focus {
+      background: #00c965;
+    }
+    .clg-btn:disabled {
+      background: #9CA3AF;
       cursor: not-allowed;
-    }
-    .mi-start-btn:hover:not(:disabled) {
-      background: #005bb5;
-    }
-    .mi-session-history {
-      margin-top: 2.5rem;
-      background: #fff;
-      border-radius: var(--radius-card);
-      box-shadow: var(--shadow-card);
-      padding: 1.5rem 1.5rem 1.2rem 1.5rem;
-      max-width: 800px;
-      margin-left: auto;
-      margin-right: auto;
-    }
-    .mi-session-history-title {
-      font-size: 1.18rem;
-      font-weight: 700;
-      color: var(--color-text-main);
-      margin-bottom: 1rem;
-    }
-    .mi-session-list {
-      list-style: none;
-      padding: 0;
-      margin: 0;
-    }
-    .mi-session-item {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 0.7rem 0;
-      border-bottom: 1px solid #E5E7EB;
-      font-size: 1.03rem;
-    }
-    .mi-session-item:last-child {
-      border-bottom: none;
-    }
-    .mi-session-date {
-      color: #6B7280;
-      font-size: 0.98rem;
-      margin-right: 1.2rem;
-    }
-    .mi-session-role {
-      font-weight: 600;
-      color: #1976D2;
-      margin-right: 1.2rem;
-    }
-    .mi-session-score {
-      font-weight: 700;
-      color: #00C853;
     }
   </style>
 </head>
 <body>
-  <!-- DEV-ONLY PLAN TOGGLE (fixed, canonical style) -->
-  <div id="dev-plan-toggle" style="position:fixed;top:16px;right:16px;z-index:9999;background:#fff;border:1.5px solid #E5E7EB;border-radius:8px;padding:0.5rem 1rem;box-shadow:0 2px 8px rgba(31,41,55,0.07);font-size:0.98rem;display:flex;align-items:center;gap:0.5rem;">
-    <span style="font-weight:700;color:#1976D2;">DEV ONLY</span>
-    <label for="dev-plan" style="font-weight:600;color:#4B5563;">Plan:</label>
-    <select id="dev-plan" style="font-size:1rem;padding:0.2rem 0.7rem;border-radius:6px;border:1px solid #E5E7EB;">
-      <option value="trial">Trial</option>
-      <option value="essential">Essential</option>
-      <option value="pro">Pro</option>
-      <option value="premium">Premium</option>
-    </select>
-  </div>
-  <script>
-    // --- USER PLAN LOGIC (must be defined before any script uses it) ---
-    const user = {
-      plan: 'trial', // 'trial', 'essential', 'pro', 'premium'
-      sessionsUsed: 0,
-      lastSessionTime: null
-    };
-
-    // DEV-ONLY PLAN TOGGLE LOGIC
-    const devPlan = document.getElementById('dev-plan');
-    if (devPlan) {
-      devPlan.value = user.plan;
-      devPlan.addEventListener('change', function() {
-        user.plan = this.value;
-        checkPlanAccess();
-        user.sessionsUsed = 0;
-        user.lastSessionTime = null;
-      });
-    }
-
-    // --- PLAN-BASED ACCESS CONTROL ---
-    function checkPlanAccess() {
-      const lockedDiv = document.getElementById('mi-locked');
-      const setupDiv = document.getElementById('mi-setup');
-      const sessionDiv = document.getElementById('mi-session');
-      const historySidebar = document.getElementById('mi-history-sidebar');
-      const usageMeter = document.getElementById('mi-usage-meter');
-      if (!lockedDiv || !setupDiv || !sessionDiv) return;
-      const locked = (user.plan === 'trial' || user.plan === 'essential' || user.plan === 'free');
-      lockedDiv.style.display = locked ? 'flex' : 'none';
-      setupDiv.style.display = locked ? 'none' : '';
-      sessionDiv.style.display = 'none';
-      if (historySidebar) historySidebar.style.display = (user.plan === 'pro' || user.plan === 'premium') ? 'block' : 'none';
-      if (usageMeter) usageMeter.style.display = (user.plan === 'pro' || user.plan === 'premium') ? '' : 'none';
-    }
-
-    // --- Initialize plan gating on load ---
-    window.addEventListener('DOMContentLoaded', checkPlanAccess);
-  </script>
-
   <!-- Header -->
   <header class="site-header">
     <div class="container">
@@ -616,12 +247,7 @@
       </a>
       <div class="nav-group">
         <nav class="nav-links" role="navigation">
-          <a href="index.html">Home</a>
-          <a href="#what-you-get">What You Get</a>
-          <a href="pricing-a.html">Pricing</a>
-          <a href="#blog">Blog</a>
-          <a href="login.html">Login</a>
-          <a href="pricing-a.html" class="cta-button">Start Free Trial</a>
+          <!-- Navigation will be dynamically populated by navigation.js -->
         </nav>
       </div>
       <button class="mobile-toggle" aria-label="Open navigation menu" aria-expanded="false" aria-controls="mobileNav">
@@ -634,12 +260,7 @@
     </div>
   </header>
   <nav class="mobile-nav" id="mobileNav">
-    <a href="index.html">Home</a>
-    <a href="#what-you-get">What You Get</a>
-    <a href="pricing-a.html">Pricing</a>
-    <a href="blog.html">Blog</a>
-    <a href="login.html">Login</a>
-    <a href="pricing-a.html" class="cta-button">Start Free Trial</a>
+    <!-- Mobile navigation will be dynamically populated by navigation.js -->
   </nav>
   <script>
     // Hamburger menu toggle
@@ -755,344 +376,132 @@
     </div>
   </footer>
 
-  <!-- PRO PLAN INTERVIEW LOGIC -->
   <script>
+    // --- PLAN-BASED ACCESS CONTROL ---
+    function checkPlanAccess() {
+      const currentPlan = window.JobHackAINavigation ? window.JobHackAINavigation.getCurrentPlan() : 'trial';
+      const lockedDiv = document.getElementById('mi-locked');
+      const setupDiv = document.getElementById('mi-setup');
+      const sessionDiv = document.getElementById('mi-session');
+      const historySidebar = document.getElementById('mi-history-sidebar');
+      const usageMeter = document.getElementById('mi-usage-meter');
+      
+      if (!lockedDiv || !setupDiv || !sessionDiv) return;
+      
+      const locked = (currentPlan === 'trial' || currentPlan === 'essential' || currentPlan === 'free');
+      lockedDiv.style.display = locked ? 'flex' : 'none';
+      setupDiv.style.display = locked ? 'none' : '';
+      sessionDiv.style.display = 'none';
+      
+      if (historySidebar) historySidebar.style.display = (currentPlan === 'pro' || currentPlan === 'premium') ? 'block' : 'none';
+      if (usageMeter) usageMeter.style.display = (currentPlan === 'pro' || currentPlan === 'premium') ? '' : 'none';
+    }
+
+    // --- Initialize plan gating on load ---
     document.addEventListener('DOMContentLoaded', function() {
-      // DOM elements
-      const roleInput = document.getElementById('mi-role-input');
-      const roleDropdown = document.getElementById('mi-role-dropdown');
-      const miBegin = document.getElementById('mi-begin');
-      const miSession = document.getElementById('mi-session');
-      const miSetup = document.getElementById('mi-setup');
-      const miNext = document.getElementById('mi-next');
-      const miAnswer = document.getElementById('mi-answer');
-      const miQuestion = document.getElementById('mi-question');
-      const miRoleLabel = document.getElementById('mi-role-label');
-      const miQNum = document.getElementById('mi-qnum');
-      const miScoreBreakdown = document.getElementById('mi-score-breakdown');
-      const miHistoryList = document.getElementById('mi-history-list');
-      const miHistoryListSession = document.getElementById('mi-history-list-session');
-      const miUsageMeter = document.getElementById('mi-usage-meter');
-      const miUsageWarning = document.getElementById('mi-usage-warning');
-      const miUsageUpsell = document.getElementById('mi-usage-upsell');
-      const miSessionsUsed = document.getElementById('mi-sessions-used');
-      const miUsageProgress = document.getElementById('mi-usage-progress');
+      // Wait for navigation system to be ready
+      setTimeout(checkPlanAccess, 100);
+    });
 
-      // Autocomplete logic
-      const roles = [
-        'Software Engineer','Full‑stack Developer','Platform Engineer','DevOps Engineer','Data Engineer','Data Scientist','AI Engineer','LLM Engineer','Product Manager','Product Owner','Epic Owner','Business Owner','Scrum Master','Release Train Engineer (RTE)','Agile Coach','Solution Architect','System Architect','Data Architect','UX Designer','UX/UI Developer','UX Researcher','QA Engineer','Threat Analyst','Security Engineer','Data Management','IT Governance'
-      ];
-      let roleDropdownOpen = false;
-      let roleActiveIndex = -1;
-      if (roleInput && roleDropdown) {
-        roleInput.addEventListener('input', e => {
-          if (roleInput.disabled) return;
-          const val = e.target.value.trim().toLowerCase();
-          if (!val) { roleDropdown.style.display = 'none'; roleDropdownOpen = false; return; }
-          const matches = roles.filter(r => r.toLowerCase().includes(val)).slice(0, 8);
-          if (!matches.length) { roleDropdown.style.display = 'none'; roleDropdownOpen = false; return; }
-          roleActiveIndex = -1;
-          roleDropdown.innerHTML = matches.map((r, i) => `<div class='mi-role-item' data-role='${r}'>${r}</div>`).join('');
-          roleDropdown.style.display = 'block';
-          roleDropdownOpen = true;
-          roleInput.setAttribute('aria-expanded', 'true');
-        });
-        roleInput.addEventListener('keydown', e => {
-          if (!roleDropdownOpen) return;
-          const items = Array.from(roleDropdown.querySelectorAll('.mi-role-item'));
-          if (e.key === 'ArrowDown') {
-            e.preventDefault();
-            roleActiveIndex = (roleActiveIndex + 1) % items.length;
-            items.forEach((el, i) => el.classList.toggle('active', i === roleActiveIndex));
-            items[roleActiveIndex].scrollIntoView({block:'nearest'});
-          } else if (e.key === 'ArrowUp') {
-            e.preventDefault();
-            roleActiveIndex = (roleActiveIndex - 1 + items.length) % items.length;
-            items.forEach((el, i) => el.classList.toggle('active', i === roleActiveIndex));
-            items[roleActiveIndex].scrollIntoView({block:'nearest'});
-          } else if (e.key === 'Enter') {
-            if (roleActiveIndex >= 0 && items[roleActiveIndex]) {
-              roleInput.value = items[roleActiveIndex].textContent;
-              roleDropdown.style.display = 'none';
-              roleInput.setAttribute('aria-expanded', 'false');
-            }
-          } else if (e.key === 'Escape') {
-            roleDropdown.style.display = 'none';
-            roleInput.setAttribute('aria-expanded', 'false');
-          }
-        });
-        roleDropdown.addEventListener('mousedown', e => {
-          if (e.target.classList.contains('mi-role-item')) {
-            roleInput.value = e.target.dataset.role;
-            roleDropdown.style.display = 'none';
-            roleInput.setAttribute('aria-expanded', 'false');
-          }
-        });
-        document.addEventListener('click', e => {
-          if (!e.target.closest('#mi-role-input') && !e.target.closest('#mi-role-dropdown')) {
-            roleDropdown.style.display = 'none';
-            roleInput.setAttribute('aria-expanded', 'false');
-          }
-        });
-      }
+    // --- Mock Interview Logic ---
+    const roles = [
+      'Software Engineer', 'Data Analyst', 'Product Manager', 'Marketing Specialist',
+      'Sales Representative', 'Customer Success Manager', 'UX Designer', 'DevOps Engineer',
+      'Data Scientist', 'Business Analyst', 'Project Manager', 'Content Writer',
+      'Graphic Designer', 'HR Specialist', 'Financial Analyst', 'Operations Manager'
+    ];
 
-      // --- Session/interview logic ---
-      const QUESTIONS_PER_SESSION = 10;
-      const PRO_SESSIONS_PER_MONTH = 20;
-      const USAGE_UPSELL_THRESHOLD = 18;
-      const COOLDOWN_HOURS = 1;
-      const MAX_SESSIONS_PER_DAY = 5;
-      const defaultQuestions = [
-        'Tell me about a time you used user feedback to improve a product?',
-        'Describe a challenging project and how you handled it.',
-        'How do you prioritize tasks when working on multiple projects?',
-        'Give an example of how you solved a technical problem.',
-        'How do you handle tight deadlines?',
-        'Describe a time you worked in a team.',
-        'How do you stay current with industry trends?',
-        'Tell me about a time you failed and what you learned.',
-        'How do you communicate complex ideas to non-technical stakeholders?',
-        'What motivates you in your work?'
-      ];
-      let currentSession = null;
-      let sessionHistory = [];
-      let sessionCount = 0;
+    const roleInput = document.getElementById('mi-role-input');
+    const roleDropdown = document.getElementById('mi-role-dropdown');
+    const beginBtn = document.getElementById('mi-begin');
+    const setupDiv = document.getElementById('mi-setup');
+    const sessionDiv = document.getElementById('mi-session');
 
-      function loadSessionHistory() {
-        try {
-          const data = localStorage.getItem('jh_mock_sessions');
-          sessionHistory = data ? JSON.parse(data) : [];
-        } catch (e) { sessionHistory = []; }
-        sessionCount = sessionHistory.filter(s => isThisMonth(s.date)).length;
+    // Role autocomplete
+    roleInput.addEventListener('input', function() {
+      const value = this.value.toLowerCase();
+      if (value.length < 2) {
+        roleDropdown.style.display = 'none';
+        return;
       }
-      function saveSessionHistory() {
-        localStorage.setItem('jh_mock_sessions', JSON.stringify(sessionHistory));
+      const filteredRoles = roles.filter(role => 
+        role.toLowerCase().includes(value)
+      );
+      if (filteredRoles.length > 0) {
+        roleDropdown.innerHTML = filteredRoles.map(role => 
+          `<div class="mi-role-item" data-role="${role}">${role}</div>`
+        ).join('');
+        roleDropdown.style.display = 'block';
+      } else {
+        roleDropdown.style.display = 'none';
       }
-      function isThisMonth(dateStr) {
-        const d = new Date(dateStr);
-        const now = new Date();
-        return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
+    });
+
+    roleDropdown.addEventListener('click', function(e) {
+      if (e.target.classList.contains('mi-role-item')) {
+        const role = e.target.dataset.role;
+        roleInput.value = role;
+        roleDropdown.style.display = 'none';
       }
-      function isToday(dateStr) {
-        const d = new Date(dateStr);
-        const now = new Date();
-        return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate();
+    });
+
+    document.addEventListener('click', function(e) {
+      if (!roleInput.contains(e.target) && !roleDropdown.contains(e.target)) {
+        roleDropdown.style.display = 'none';
       }
-      function updateUsageMeter() {
-        if (!miUsageMeter || !miSessionsUsed || !miUsageProgress) return;
-        miUsageMeter.style.display = sessionCount >= 10 ? '' : 'none';
-        miSessionsUsed.textContent = sessionCount;
-        miUsageProgress.style.width = `${Math.min(100, (sessionCount/PRO_SESSIONS_PER_MONTH)*100)}%`;
-        if (sessionCount >= USAGE_UPSELL_THRESHOLD) {
-          miUsageUpsell.style.display = '';
-        } else {
-          miUsageUpsell.style.display = 'none';
+    });
+
+    // Start interview
+    beginBtn.addEventListener('click', function() {
+      if (roleInput.value.trim()) {
+        setupDiv.style.display = 'none';
+        sessionDiv.style.display = 'block';
+        document.getElementById('mi-role-label').textContent = roleInput.value;
+      }
+    });
+
+    // Mock interview questions
+    const questions = [
+      'Tell me about yourself and your experience.',
+      'What are your biggest strengths and weaknesses?',
+      'Why are you interested in this position?',
+      'Where do you see yourself in 5 years?',
+      'Tell me about a challenging project you worked on.',
+      'How do you handle stress and pressure?',
+      'Describe a time when you had to learn something quickly.',
+      'What is your leadership style?',
+      'How do you stay organized and prioritize tasks?',
+      'Do you have any questions for me?'
+    ];
+
+    let currentQuestion = 0;
+    const questionEl = document.getElementById('mi-question');
+    const qnumEl = document.getElementById('mi-qnum');
+    const nextBtn = document.getElementById('mi-next');
+
+    nextBtn.addEventListener('click', function() {
+      if (currentQuestion < questions.length - 1) {
+        currentQuestion++;
+        questionEl.textContent = questions[currentQuestion];
+        qnumEl.textContent = currentQuestion + 1;
+        
+        // Clear answer input
+        document.getElementById('mi-answer').value = '';
+        
+        // Show score breakdown on last question
+        if (currentQuestion === questions.length - 1) {
+          document.getElementById('mi-score-breakdown').style.display = 'block';
+          nextBtn.textContent = 'Finish';
         }
-        if (sessionCount >= PRO_SESSIONS_PER_MONTH/2) {
-          miUsageWarning.style.display = '';
-        } else {
-          miUsageWarning.style.display = 'none';
-        }
+      } else {
+        // Interview complete
+        alert('Interview completed! Check your scores above.');
       }
-      function renderSessionHistoryLists() {
-        const render = (el) => {
-          if (!el) return;
-          if (!sessionHistory.length) {
-            el.innerHTML = '<li class="mi-history-empty">No previous sessions yet.</li>';
-            return;
-          }
-          el.innerHTML = sessionHistory.slice().reverse().map((s, idx) =>
-            `<li class="mi-session-item" data-idx="${sessionHistory.length-1-idx}">
-              <span class="mi-session-date">${formatDate(s.date)}</span>
-              <span class="mi-session-role">${s.role}</span>
-              <span class="mi-session-score" style="color:${scoreColor(s.total)};">${s.total}</span>
-            </li>`
-          ).join('');
-        };
-        render(miHistoryList);
-        render(miHistoryListSession);
-      }
-      function formatDate(dateStr) {
-        const d = new Date(dateStr);
-        return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
-      }
-      function scoreColor(score) {
-        if (score >= 80) return '#00B86B';
-        if (score >= 60) return '#B59F00';
-        return '#D32F2F';
-      }
-
-      // Add this after DOM elements are defined:
-      function isPremium() {
-        return (typeof user !== 'undefined' && user.plan === 'premium');
-      }
-
-      // Hide usage meter and upsell for Premium
-      if (isPremium()) {
-        if (miUsageMeter) miUsageMeter.style.display = 'none';
-        if (miUsageUpsell) miUsageUpsell.style.display = 'none';
-        if (miUsageWarning) miUsageWarning.style.display = 'none';
-      }
-
-      // Update Start Interview logic for Premium
-      if (miBegin && roleInput) {
-        miBegin.addEventListener('click', function() {
-          const role = roleInput.value.trim();
-          if (!role) return;
-          loadSessionHistory();
-          const now = new Date();
-          const todaySessions = sessionHistory.filter(s => isToday(s.date));
-          // --- Premium plan: unlimited sessions, but soft cooldown ---
-          if (isPremium()) {
-            if (todaySessions.length >= 5) {
-              alert("You've reached your daily limit (5 sessions). Try again tomorrow!");
-              return;
-            }
-            if (sessionHistory.length && (now - new Date(sessionHistory[sessionHistory.length-1].date)) < 60*60*1000) {
-              // 1 per hour
-              const last = new Date(sessionHistory[sessionHistory.length-1].date);
-              const mins = Math.ceil((60*60*1000 - (now - last)) / 60000);
-              alert(`You can start a new session in ${mins} minute${mins === 1 ? '' : 's'}.`);
-              return;
-            }
-          } else {
-            // Pro plan logic (existing)
-            if (sessionCount >= PRO_SESSIONS_PER_MONTH) {
-              alert('You have reached your monthly session limit. Upgrade to Premium for unlimited practice.');
-              return;
-            }
-            if (todaySessions.length >= MAX_SESSIONS_PER_DAY) {
-              alert('You have reached your daily session limit. Try again tomorrow.');
-              return;
-            }
-            if (sessionHistory.length && (now - new Date(sessionHistory[sessionHistory.length-1].date)) < COOLDOWN_HOURS*60*60*1000) {
-              alert('You can only start a new session once per hour.');
-              return;
-            }
-          }
-          // Start session (same for both plans)
-          if (miSetup) miSetup.style.display = 'none';
-          if (miSession) miSession.style.display = '';
-          if (miAnswer) miAnswer.value = '';
-          if (miScoreBreakdown) miScoreBreakdown.style.display = 'none';
-          if (miNext) miNext.disabled = false;
-          if (miAnswer) miAnswer.disabled = false;
-          if (miRoleLabel) miRoleLabel.textContent = role;
-          if (miQNum) miQNum.textContent = '1';
-          currentSession = {
-            date: now.toISOString(),
-            role,
-            questions: defaultQuestions.slice(0, QUESTIONS_PER_SESSION),
-            answers: [],
-            scores: {},
-            total: 0
-          };
-          if (miQuestion) miQuestion.textContent = currentSession.questions[0];
-          updateUsageMeter();
-          renderSessionHistoryLists();
-        });
-      }
-
-      // Next Button Logic
-      if (miNext) {
-        miNext.addEventListener('click', () => {
-          if (!currentSession) return;
-          const answer = miAnswer.value.trim();
-          if (!answer) {
-            miAnswer.focus();
-            return;
-          }
-          currentSession.answers.push(answer);
-          const qIdx = currentSession.answers.length;
-          if (qIdx < QUESTIONS_PER_SESSION) {
-            miAnswer.value = '';
-            miQNum.textContent = (qIdx+1).toString();
-            miQuestion.textContent = currentSession.questions[qIdx];
-          } else {
-            miNext.disabled = true;
-            miAnswer.disabled = true;
-            // --- SCORING IS RANDOMIZED FOR MVP/DEMO PURPOSES ---
-            // Replace this with real AI scoring logic in the future.
-            const scores = {
-              relevance: randScore(30),
-              structure: randScore(25),
-              confidence: randScore(20),
-              depth: randScore(15),
-              grammar: randScore(10)
-            };
-            const total = scores.relevance + scores.structure + scores.confidence + scores.depth + scores.grammar;
-            currentSession.scores = scores;
-            currentSession.total = total;
-            document.getElementById('score-relevance').textContent = scores.relevance;
-            document.getElementById('score-structure').textContent = scores.structure;
-            document.getElementById('score-confidence').textContent = scores.confidence;
-            document.getElementById('score-depth').textContent = scores.depth;
-            document.getElementById('score-grammar').textContent = scores.grammar;
-            document.getElementById('score-total').textContent = total;
-            miScoreBreakdown.style.display = '';
-            // Save session
-            loadSessionHistory();
-            sessionHistory.push(currentSession);
-            saveSessionHistory();
-            sessionCount = sessionHistory.filter(s => isThisMonth(s.date)).length;
-            updateUsageMeter();
-            renderSessionHistoryLists();
-          }
-        });
-      }
-      function randScore(max) {
-        return Math.floor(Math.random() * (max-5+1)) + 5; // 5 to max
-      }
-
-      // Session History Click to Review
-      function handleHistoryClick(e) {
-        const li = e.target.closest('.mi-session-item');
-        if (!li) return;
-        const idx = parseInt(li.getAttribute('data-idx'), 10);
-        if (isNaN(idx) || !sessionHistory[idx]) return;
-        const s = sessionHistory[idx];
-        miSetup.style.display = 'none';
-        miSession.style.display = '';
-        miRoleLabel.textContent = s.role;
-        miQNum.textContent = '1';
-        miScoreBreakdown.style.display = '';
-        document.getElementById('score-relevance').textContent = s.scores.relevance;
-        document.getElementById('score-structure').textContent = s.scores.structure;
-        document.getElementById('score-confidence').textContent = s.scores.confidence;
-        document.getElementById('score-depth').textContent = s.scores.depth;
-        document.getElementById('score-grammar').textContent = s.scores.grammar;
-        document.getElementById('score-total').textContent = s.total;
-        miAnswer.value = '';
-        miAnswer.disabled = true;
-        miNext.disabled = true;
-        let reviewIdx = 0;
-        function showQA(idx) {
-          miQNum.textContent = (idx+1).toString();
-          miQuestion.textContent = s.questions[idx];
-          miAnswer.value = s.answers[idx] || '';
-        }
-        showQA(reviewIdx);
-        miNext.disabled = false;
-        miNext.textContent = 'Next';
-        miNext.onclick = function() {
-          if (reviewIdx < s.questions.length-1) {
-            reviewIdx++;
-            showQA(reviewIdx);
-            if (reviewIdx === s.questions.length-1) miNext.textContent = 'Done';
-          } else {
-            miNext.disabled = true;
-            miNext.textContent = 'Next';
-          }
-        };
-      }
-      miHistoryList.addEventListener('click', handleHistoryClick);
-      miHistoryListSession.addEventListener('click', handleHistoryClick);
-
-      // On Load: Populate history, usage, etc.
-      loadSessionHistory();
-      updateUsageMeter();
-      renderSessionHistoryLists();
     });
   </script>
+  <!-- Load navigation system -->
+  <script src="js/navigation.js"></script>
+  <script src="js/main.js" type="module"></script>
+  <script src="js/analytics.js" type="module"></script>
 </body>
 </html>

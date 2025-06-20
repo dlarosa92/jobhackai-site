@@ -198,243 +198,178 @@
     }
     .lo-plan-badge {
       display: inline-block;
-      background: var(--color-accent-blue);
-      color: #fff;
-      font-weight: var(--font-weight-semibold);
-      border-radius: var(--radius-full);
-      padding: 0.2em 0.8em;
-      font-size: var(--font-size-sm);
-      margin-left: var(--space-sm);
-    }
-    .lo-upgrade-prompt {
-      background: #F0F7FF;
-      border-radius: var(--radius-lg);
-      padding: var(--space-md);
-      margin-top: var(--space-md);
-      display: flex;
-      align-items: center;
-      gap: var(--space-md);
-    }
-    .lo-upgrade-prompt svg {
-      width: 24px;
-      height: 24px;
-      color: var(--color-accent-blue);
-      flex-shrink: 0;
-    }
-    .lo-upgrade-text {
-      flex: 1;
+      background: var(--color-card-bg);
       color: var(--color-text-main);
+      font-weight: var(--font-weight-bold);
+      border-radius: var(--radius-full);
+      padding: 0.3em 1em;
       font-size: var(--font-size-sm);
-    }
-    .lo-upgrade-text strong {
-      color: var(--color-accent-blue);
-    }
-    .lo-btn-secondary {
-      background: transparent;
-      color: var(--color-accent-blue);
-      font-weight: var(--font-weight-semibold);
-      border: 1px solid var(--color-accent-blue);
-      border-radius: var(--radius-md);
-      padding: var(--space-xs) var(--space-sm);
-      font-size: var(--font-size-sm);
-      cursor: pointer;
-      transition: all var(--transition-normal);
-    }
-    .lo-btn-secondary:hover {
-      background: rgba(25, 118, 210, 0.05);
-    }
-    .lo-tooltip {
-      position: relative;
-      display: inline-block;
-      cursor: pointer;
-    }
-    .lo-tooltip .tooltip-text {
-      visibility: hidden;
-      width: 260px;
-      background: #232B36;
-      color: #fff;
-      text-align: left;
-      border-radius: var(--radius-md);
-      padding: var(--space-sm) var(--space-md);
-      position: absolute;
-      z-index: var(--z-tooltip);
-      bottom: 125%;
-      left: 50%;
-      transform: translateX(-50%);
-      opacity: 0;
-      transition: opacity var(--transition-normal);
-      font-size: var(--font-size-sm);
-      pointer-events: none;
-      box-shadow: var(--shadow-lg);
-    }
-    .lo-tooltip:hover .tooltip-text {
-      visibility: visible;
-      opacity: 1;
-      pointer-events: auto;
-    }
-    .lo-results {
-      display: none;
-    }
-    .lo-results.show {
-      display: block;
-    }
-    .lo-loading {
-      display: none;
-      text-align: center;
-      padding: var(--space-xl);
-      color: var(--color-text-secondary);
-    }
-    .lo-loading.show {
-      display: block;
-    }
-    .lo-spinner {
-      border: 3px solid var(--color-divider);
-      border-top: 3px solid var(--color-accent-blue);
-      border-radius: 50%;
-      width: 40px;
-      height: 40px;
-      animation: spin 1s linear infinite;
-      margin: 0 auto var(--space-md);
-    }
-    @keyframes spin {
-      0% { transform: rotate(0deg); }
-      100% { transform: rotate(360deg); }
-    }
-    @media (max-width: 700px) { 
-      .lo-metrics-grid { 
-        grid-template-columns: 1fr; 
-      }
-      .lo-progress-ring { 
-        width: 60px !important; 
-        height: 60px !important; 
-      }
-      .lo-progress-ring svg { 
-        width: 60px !important; 
-        height: 60px !important; 
-      }
+      margin-left: var(--space-xs);
+      border: 1px solid var(--color-divider);
     }
     .lo-input {
       width: 100%;
-      height: 2.5rem;
+      box-sizing: border-box;
       border: 2px solid var(--color-divider);
       border-radius: var(--radius-lg);
-      padding: 0 var(--space-md);
+      padding: var(--space-md);
       font-size: var(--font-size-base);
+      margin-bottom: var(--space-md);
       background: var(--color-bg-light);
       color: var(--color-text-main);
       font-family: var(--font-family-base);
       transition: border-color var(--transition-normal), box-shadow var(--transition-normal);
-      box-sizing: border-box;
-      margin-bottom: var(--space-md);
     }
     .lo-input:focus {
       outline: none;
       border-color: var(--color-accent-blue);
       box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.1);
     }
-    /* Add styles for the download button container */
-    .lo-download-container {
-      margin-top: var(--space-sm);
-      padding-top: var(--space-sm);
-      border-top: 1px solid var(--color-divider);
-      text-align: right;
+    .lo-tooltip {
+      position: relative;
+      display: inline-block;
+      cursor: help;
     }
-    /* Enhanced Loading State */
+    .tooltip-text {
+      visibility: hidden;
+      width: 280px;
+      background-color: var(--color-text-main);
+      color: #fff;
+      text-align: center;
+      border-radius: var(--radius-md);
+      padding: var(--space-sm);
+      position: absolute;
+      z-index: 1;
+      bottom: 125%;
+      left: 50%;
+      margin-left: -140px;
+      opacity: 0;
+      transition: opacity var(--transition-normal);
+      font-size: var(--font-size-sm);
+      font-weight: var(--font-weight-normal);
+      line-height: 1.4;
+    }
+    .tooltip-text::after {
+      content: "";
+      position: absolute;
+      top: 100%;
+      left: 50%;
+      margin-left: -5px;
+      border-width: 5px;
+      border-style: solid;
+      border-color: var(--color-text-main) transparent transparent transparent;
+    }
+    .lo-tooltip:hover .tooltip-text {
+      visibility: visible;
+      opacity: 1;
+    }
+    .lo-loading {
+      display: none;
+      text-align: center;
+      padding: var(--space-xl);
+    }
+    .lo-spinner {
+      width: 40px;
+      height: 40px;
+      border: 4px solid var(--color-divider);
+      border-top: 4px solid var(--color-accent-blue);
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      margin: 0 auto var(--space-md);
+    }
     .lo-loading-steps {
-      max-width: 300px;
-      margin: 1rem auto;
-      text-align: left;
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-md);
+      margin-top: var(--space-lg);
+      max-width: 400px;
+      margin-left: auto;
+      margin-right: auto;
     }
     .lo-loading-step {
       display: flex;
       align-items: center;
-      gap: 0.75rem;
-      margin-bottom: 0.75rem;
+      gap: var(--space-md);
       opacity: 0.5;
-      transition: opacity 0.3s ease;
+      transition: opacity var(--transition-normal);
     }
     .lo-loading-step.active {
       opacity: 1;
     }
     .lo-loading-step-icon {
-      width: 20px;
-      height: 20px;
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      background: var(--color-bg-light);
       display: flex;
       align-items: center;
       justify-content: center;
+      color: var(--color-text-secondary);
+    }
+    .lo-loading-step.active .lo-loading-step-icon {
+      background: var(--color-accent-blue);
+      color: #fff;
     }
     .lo-loading-step-text {
-      font-size: 0.9rem;
+      font-weight: var(--font-weight-semibold);
+      color: var(--color-text-main);
     }
-    /* Enhanced Feedback States */
-    .lo-feedback-animation {
-      position: relative;
-      overflow: hidden;
+    .lo-results {
+      display: none;
     }
-    .lo-feedback-animation::after {
-      content: '';
-      position: absolute;
-      top: 0;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      background: linear-gradient(
-        to right,
-        transparent,
-        rgba(255, 255, 255, 0.8),
-        transparent
-      );
-      transform: translateX(-100%);
-      animation: shimmer 1.5s infinite;
+    .lo-upgrade-prompt {
+      text-align: center;
+      padding: var(--space-xl);
+      background: var(--color-card-bg);
+      border-radius: var(--radius-xl);
+      box-shadow: var(--shadow-md);
+      margin: var(--space-xl) auto;
+      max-width: 500px;
     }
-    @keyframes shimmer {
-      100% { transform: translateX(100%); }
+    .lo-upgrade-prompt svg {
+      width: 48px;
+      height: 48px;
+      color: var(--color-text-muted);
+      margin-bottom: var(--space-md);
     }
-    /* Score Animation */
-    .lo-score-animation {
-      transition: all 0.5s ease-out;
+    .lo-upgrade-text {
+      font-size: var(--font-size-lg);
+      color: var(--color-text-main);
+      margin-bottom: var(--space-lg);
+      line-height: 1.5;
     }
-    .lo-score-change {
-      animation: scorePulse 0.5s ease-out;
-    }
-    @keyframes scorePulse {
-      0% { transform: scale(1); }
-      50% { transform: scale(1.1); }
-      100% { transform: scale(1); }
-    }
-    /* Enhanced Regenerate Feedback */
-    .lo-regenerate-feedback {
-      position: absolute;
-      top: 0;
-      right: 0;
+    .lo-btn-secondary {
       background: var(--color-accent-blue);
-      color: white;
-      font-size: 0.8rem;
-      padding: 0.25rem 0.5rem;
+      color: #fff;
+      border: none;
       border-radius: var(--radius-md);
-      transform: translateY(-50%);
-      opacity: 0;
-      transition: opacity 0.3s ease;
+      padding: var(--space-sm) var(--space-lg);
+      font-size: var(--font-size-base);
+      font-weight: var(--font-weight-semibold);
+      cursor: pointer;
+      transition: background var(--transition-normal);
     }
-    .lo-regenerate-feedback.show {
-      opacity: 1;
+    .lo-btn-secondary:hover {
+      background: #005bb5;
+    }
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+    .lo-download-section {
+      border-top: 1px solid var(--color-divider);
+      padding-top: var(--space-lg);
+      margin-top: var(--space-lg);
+    }
+    .lo-download-section .lo-btn-green {
+      width: 100%;
+      padding: var(--space-md);
+      font-size: var(--font-size-base);
+      margin-top: var(--space-md);
     }
   </style>
 </head>
 <body>
-<!-- DEV-ONLY PLAN TOGGLE (fixed, canonical style) -->
-<div id="dev-plan-toggle" style="position:fixed;top:16px;right:16px;z-index:9999;background:#fff;border:1.5px solid #E5E7EB;border-radius:8px;padding:0.5rem 1rem;box-shadow:0 2px 8px rgba(31,41,55,0.07);font-size:0.98rem;display:flex;align-items:center;gap:0.5rem;">
-  <span style="font-weight:700;color:#1976D2;">DEV ONLY</span>
-  <label for="dev-plan" style="font-weight:600;color:#4B5563;">Plan:</label>
-  <select id="dev-plan" style="font-size:1rem;padding:0.2rem 0.7rem;border-radius:6px;border:1px solid #E5E7EB;">
-    <option value="free">Free</option>
-    <option value="trial">Trial</option>
-    <option value="essential">Essential</option>
-    <option value="pro">Pro</option>
-    <option value="premium">Premium</option>
-  </select>
-</div>
-
 <!-- HEADER (canonical) -->
 <header class="site-header">
   <div class="container">
@@ -447,12 +382,7 @@
     </a>
     <div class="nav-group">
       <nav class="nav-links" role="navigation">
-        <a href="index.html">Home</a>
-        <a href="#what-you-get">What You Get</a>
-        <a href="pricing-a.html">Pricing</a>
-        <a href="#blog">Blog</a>
-        <a href="login.html">Login</a>
-        <a href="pricing-a.html" class="cta-button">Start Free Trial</a>
+        <!-- Navigation will be dynamically populated by navigation.js -->
       </nav>
     </div>
     <button class="mobile-toggle" aria-label="Open navigation menu" aria-expanded="false" aria-controls="mobileNav">
@@ -465,12 +395,7 @@
   </div>
 </header>
 <nav class="mobile-nav" id="mobileNav">
-  <a href="index.html">Home</a>
-  <a href="#what-you-get">What You Get</a>
-  <a href="pricing-a.html">Pricing</a>
-  <a href="blog.html">Blog</a>
-  <a href="login.html">Login</a>
-  <a href="pricing-a.html" class="cta-button">Start Free Trial</a>
+  <!-- Mobile navigation will be dynamically populated by navigation.js -->
 </nav>
 <script>
   // Hamburger menu toggle
@@ -617,39 +542,91 @@
       </section>
       <!-- Section Scores & Tips -->
       <section class="lo-metrics-grid">
+        <!-- Headline -->
         <div class="lo-metric-card">
-          <div class="lo-metric-label">Headline <span class="lo-metric-score" id="score-headline">18/20</span></div>
-          <div class="lo-metric-tip" id="tip-headline">Strong branding and keyword alignment.</div>
-          <div class="lo-metric-actions"><button class="lo-btn-green" id="copy-headline">Copy</button> <button class="lo-btn-primary" id="regen-headline">Regenerate</button></div>
-          <textarea class="lo-textarea" id="ai-headline" rows="1" readonly>AI-optimized headline suggestion.</textarea>
+          <div class="lo-metric-label">
+            Headline
+            <span class="lo-score-badge">92/100</span>
+          </div>
+          <div class="lo-metric-score">Excellent</div>
+          <div class="lo-metric-tip">Your headline effectively communicates your role and expertise. Consider adding industry keywords for better search visibility.</div>
+          <div class="lo-metric-actions">
+            <button class="lo-btn-primary" onclick="regenerateSection('headline')">Regenerate</button>
+            <button class="lo-btn-green" onclick="copyToClipboard('headline-optimized')">Copy</button>
+          </div>
+          <div id="headline-optimized" style="display:none;margin-top:var(--space-sm);padding:var(--space-sm);background:var(--color-bg-light);border-radius:var(--radius-md);font-size:var(--font-size-sm);">
+            <strong>Optimized Headline:</strong><br>
+            Senior Product Manager | AI & FinTech | Driving 40% Revenue Growth | Cross-functional Leadership
+          </div>
         </div>
+        <!-- Summary -->
         <div class="lo-metric-card">
-          <div class="lo-metric-label">Summary <span class="lo-metric-score" id="score-summary">16/20</span></div>
-          <div class="lo-metric-tip" id="tip-summary">Clear storytelling, could add metrics.</div>
-          <div class="lo-metric-actions"><button class="lo-btn-green" id="copy-summary">Copy</button> <button class="lo-btn-primary" id="regen-summary">Regenerate</button></div>
-          <textarea class="lo-textarea" id="ai-summary" rows="2" readonly>AI-optimized summary suggestion.</textarea>
+          <div class="lo-metric-label">
+            Summary
+            <span class="lo-score-badge">78/100</span>
+          </div>
+          <div class="lo-metric-score">Good</div>
+          <div class="lo-metric-tip">Your summary is well-written but could benefit from more specific achievements and industry keywords.</div>
+          <div class="lo-metric-actions">
+            <button class="lo-btn-primary" onclick="regenerateSection('summary')">Regenerate</button>
+            <button class="lo-btn-green" onclick="copyToClipboard('summary-optimized')">Copy</button>
+          </div>
+          <div id="summary-optimized" style="display:none;margin-top:var(--space-sm);padding:var(--space-sm);background:var(--color-bg-light);border-radius:var(--radius-md);font-size:var(--font-size-sm);">
+            <strong>Optimized Summary:</strong><br>
+            Results-driven product leader with 6+ years at top-tier financial institutions, specializing in AI-powered solutions and fintech innovation. Led cross-functional teams of 15+ members, driving 40% revenue growth and 60% user engagement improvement. Expert in agile methodologies, stakeholder management, and data-driven decision making.
+          </div>
         </div>
+        <!-- Experience -->
         <div class="lo-metric-card">
-          <div class="lo-metric-label">Experience <span class="lo-metric-score" id="score-experience">30/40</span></div>
-          <div class="lo-metric-tip" id="tip-experience">Use action verbs and quantify results.</div>
-          <div class="lo-metric-actions"><button class="lo-btn-green" id="copy-experience">Copy</button> <button class="lo-btn-primary" id="regen-experience">Regenerate</button></div>
-          <textarea class="lo-textarea" id="ai-experience" rows="3" readonly>AI-optimized experience suggestion.</textarea>
+          <div class="lo-metric-label">
+            Experience
+            <span class="lo-score-badge">85/100</span>
+          </div>
+          <div class="lo-metric-score">Very Good</div>
+          <div class="lo-metric-tip">Strong experience descriptions with good use of action verbs. Consider adding more quantifiable results.</div>
+          <div class="lo-metric-actions">
+            <button class="lo-btn-primary" onclick="regenerateSection('experience')">Regenerate</button>
+            <button class="lo-btn-green" onclick="copyToClipboard('experience-optimized')">Copy</button>
+          </div>
+          <div id="experience-optimized" style="display:none;margin-top:var(--space-sm);padding:var(--space-sm);background:var(--color-bg-light);border-radius:var(--radius-md);font-size:var(--font-size-sm);">
+            <strong>Optimized Experience:</strong><br>
+            • Led cross-functional teams of 15+ members across engineering, design, and marketing<br>
+            • Increased user engagement by 30% through data-driven product optimization<br>
+            • Reduced customer churn by 25% by implementing AI-powered retention strategies<br>
+            • Managed $2M+ product budget and delivered 40% revenue growth
+          </div>
         </div>
+        <!-- Skills -->
         <div class="lo-metric-card">
-          <div class="lo-metric-label">Skills <span class="lo-metric-score" id="score-skills">19/20</span></div>
-          <div class="lo-metric-tip" id="tip-skills">Add trending skills for your target role.</div>
-          <div class="lo-metric-actions"><button class="lo-btn-green" id="copy-skills">Copy</button> <button class="lo-btn-primary" id="regen-skills">Regenerate</button></div>
-          <textarea class="lo-textarea" id="ai-skills" rows="1" readonly>AI-optimized skills suggestion.</textarea>
+          <div class="lo-metric-label">
+            Skills
+            <span class="lo-score-badge">88/100</span>
+          </div>
+          <div class="lo-metric-score">Excellent</div>
+          <div class="lo-metric-tip">Well-rounded skill set with good mix of technical and soft skills. Consider adding emerging technologies.</div>
+          <div class="lo-metric-actions">
+            <button class="lo-btn-primary" onclick="regenerateSection('skills')">Regenerate</button>
+            <button class="lo-btn-green" onclick="copyToClipboard('skills-optimized')">Copy</button>
+          </div>
+          <div id="skills-optimized" style="display:none;margin-top:var(--space-sm);padding:var(--space-sm);background:var(--color-bg-light);border-radius:var(--radius-md);font-size:var(--font-size-sm);">
+            <strong>Optimized Skills:</strong><br>
+            Product Management, AI/ML, FinTech, Agile/Scrum, Stakeholder Management, Data Analysis, User Research, A/B Testing, Cross-functional Leadership, Strategic Planning, Python, SQL, Figma, JIRA
+          </div>
         </div>
       </section>
-      <div class="lo-download-container">
-        <button id="lo-download" class="lo-btn-primary">Download All as Text File</button>
-      </div>
+      <!-- Download Section -->
+      <section class="lo-card lo-download-section">
+        <h3 class="lo-section-title">Download All Optimized Content</h3>
+        <p style="color:var(--color-text-secondary);margin-bottom:var(--space-md);">
+          Get all your optimized LinkedIn sections in one convenient text file.
+        </p>
+        <button class="lo-btn-green" onclick="downloadAllContent()">Download All as Text File</button>
+      </section>
     </div>
   </div>
 </main>
 
-<!-- FOOTER (canonical) -->
+<!-- Footer (canonical) -->
 <footer class="site-footer">
   <div class="footer-container">
     <div class="footer-brand">
@@ -671,243 +648,130 @@
 </footer>
 
 <script>
-// --- USER PLAN LOGIC ---
-let user = { plan: 'trial' };
-const devPlan = document.getElementById('dev-plan');
-function renderLOByPlan() {
-  const plan = user.plan;
-  const lockedFree = document.getElementById('lo-locked-free');
-  const mainContent = document.getElementById('lo-main-content');
-  if (plan !== 'premium') {
-    if (lockedFree) lockedFree.style.display = 'flex';
-    if (mainContent) mainContent.style.display = 'none';
-  } else {
-    if (lockedFree) lockedFree.style.display = 'none';
-    if (mainContent) mainContent.style.display = 'block';
+  // Check if user has access to LinkedIn Optimizer
+  function checkLinkedInAccess() {
+    // This will be handled by the navigation system
+    return true; // For now, allow access
   }
-  // Existing logic for other plans
-  const lockedDiv = document.getElementById('lo-locked');
-  const optimizedContent = document.getElementById('lo-optimized-content');
-  const planBadge = document.getElementById('lo-plan-badge');
-  if (lockedDiv && optimizedContent && planBadge) {
-    if (plan !== 'premium') {
-      lockedDiv.style.display = 'flex';
-      optimizedContent.style.display = 'none';
-      planBadge.textContent = 'Premium Only';
-      planBadge.style.background = '#6B7280';
-    } else {
-      lockedDiv.style.display = 'none';
-      optimizedContent.style.display = 'block';
-      planBadge.textContent = 'Premium Plan';
-      planBadge.style.background = 'var(--color-accent-blue)';
+
+  // Initialize page
+  document.addEventListener('DOMContentLoaded', function() {
+    const form = document.getElementById('lo-profile-form');
+    const analyzeBtn = document.getElementById('lo-analyze');
+    const loading = document.getElementById('lo-loading');
+    const results = document.getElementById('lo-results');
+    const mainContent = document.getElementById('lo-main-content');
+    const lockedContent = document.getElementById('lo-locked-free');
+
+    // Check access and show appropriate content
+    if (!checkLinkedInAccess()) {
+      mainContent.style.display = 'none';
+      lockedContent.style.display = 'block';
+      return;
+    }
+
+    form.addEventListener('submit', function(e) {
+      e.preventDefault();
+      
+      // Show loading state
+      loading.style.display = 'block';
+      mainContent.style.display = 'none';
+      
+      // Simulate loading steps
+      const steps = document.querySelectorAll('.lo-loading-step');
+      let currentStep = 0;
+      
+      const stepInterval = setInterval(() => {
+        if (currentStep > 0) {
+          steps[currentStep - 1].classList.remove('active');
+        }
+        if (currentStep < steps.length) {
+          steps[currentStep].classList.add('active');
+          currentStep++;
+        } else {
+          clearInterval(stepInterval);
+          // Show results after loading
+          setTimeout(() => {
+            loading.style.display = 'none';
+            results.style.display = 'block';
+            mainContent.style.display = 'block';
+          }, 1000);
+        }
+      }, 1500);
+    });
+  });
+
+  // Regenerate section content
+  function regenerateSection(section) {
+    const button = event.target;
+    const originalText = button.textContent;
+    
+    button.classList.add('loading');
+    button.textContent = '';
+    
+    setTimeout(() => {
+      button.classList.remove('loading');
+      button.textContent = originalText;
+      
+      // Show optimized content
+      const optimizedDiv = document.getElementById(section + '-optimized');
+      if (optimizedDiv) {
+        optimizedDiv.style.display = 'block';
+      }
+    }, 2000);
+  }
+
+  // Copy to clipboard
+  function copyToClipboard(elementId) {
+    const element = document.getElementById(elementId);
+    if (element) {
+      const text = element.textContent.replace(/Optimized [^:]+:\s*/, '');
+      navigator.clipboard.writeText(text).then(() => {
+        // Show success feedback
+        const button = event.target;
+        const originalText = button.textContent;
+        button.textContent = 'Copied!';
+        button.style.background = '#00C853';
+        
+        setTimeout(() => {
+          button.textContent = originalText;
+          button.style.background = '';
+        }, 2000);
+      });
     }
   }
-  // Sync the select dropdown if needed
-  if (devPlan && devPlan.value !== plan) devPlan.value = plan;
-}
 
-// Ensure UI is correct on DOMContentLoaded
-document.addEventListener('DOMContentLoaded', function() {
-  // Set user.plan to match the select dropdown on load
-  if (devPlan) {
-    user.plan = devPlan.value;
-    devPlan.addEventListener('change', function() {
-      user.plan = this.value;
-      renderLOByPlan();
-    });
-  }
-  renderLOByPlan();
-});
-
-// Tooltip logic (from resume-feedback-pro)
-document.querySelectorAll('.priority-review-tooltip').forEach(function(el) {
-  el.addEventListener('mouseenter', function() {
-    var tip = el.querySelector('.tooltip-text');
-    if (tip) tip.style.visibility = 'visible';
-  });
-  el.addEventListener('mouseleave', function() {
-    var tip = el.querySelector('.tooltip-text');
-    if (tip) tip.style.visibility = 'hidden';
-  });
-});
-
-// Download button logic
-const downloadBtn = document.getElementById('lo-download');
-if (downloadBtn) {
-  downloadBtn.addEventListener('click', function() {
-    // Combine all optimized sections
-    const headline = document.getElementById('ai-headline').value;
-    const summary = document.getElementById('ai-summary').value;
-    const experience = document.getElementById('ai-experience').value;
-    const skills = document.getElementById('ai-skills').value;
+  // Download all content
+  function downloadAllContent() {
+    const sections = ['headline', 'summary', 'experience', 'skills'];
+    let content = 'LinkedIn Profile Optimization Results\n';
+    content += 'Generated by JobHackAI\n';
+    content += 'Date: ' + new Date().toLocaleDateString() + '\n\n';
     
-    const text = `Optimized LinkedIn Profile
-
-HEADLINE:
-${headline}
-
-SUMMARY:
-${summary}
-
-EXPERIENCE:
-${experience}
-
-SKILLS:
-${skills}`;
-
-    const blob = new Blob([text], { type: 'text/plain' });
+    sections.forEach(section => {
+      const element = document.getElementById(section + '-optimized');
+      if (element) {
+        const sectionText = element.textContent.replace(/Optimized [^:]+:\s*/, '');
+        content += section.toUpperCase() + ':\n';
+        content += sectionText + '\n\n';
+      }
+    });
+    
+    const blob = new Blob([content], { type: 'text/plain' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = 'Optimized-LinkedIn-Profile.txt';
+    a.download = 'linkedin-optimization-' + new Date().toISOString().split('T')[0] + '.txt';
     document.body.appendChild(a);
     a.click();
-    setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 100);
-  });
-}
-
-// Multi-section Analyze Logic
-const form = document.getElementById('lo-profile-form');
-const loadingDiv = document.getElementById('lo-loading');
-const resultsDiv = document.getElementById('lo-results');
-const inputSection = document.getElementById('lo-input-section');
-if (form) {
-  form.addEventListener('submit', function(e) {
-    e.preventDefault();
-    
-    // Get analyze button
-    const analyzeBtn = document.getElementById('lo-analyze');
-    
-    // Validate all fields
-    const headline = document.getElementById('lo-headline').value.trim();
-    const summary = document.getElementById('lo-summary').value.trim();
-    const experience = document.getElementById('lo-experience').value.trim();
-    const skills = document.getElementById('lo-skills').value.trim();
-    if (!headline || !summary || !experience || !skills) {
-      alert('Please complete all sections before analyzing.');
-      return;
-    }
-    
-    // Disable button and show loading state
-    if (analyzeBtn) {
-      analyzeBtn.disabled = true;
-      analyzeBtn.classList.add('loading');
-    }
-    
-    // Show loading with stepped animation
-    loadingDiv.classList.add('show');
-    resultsDiv.classList.remove('show');
-    inputSection.style.display = 'none';
-
-    // Animate loading steps
-    const steps = ['analyze', 'score', 'optimize'];
-    let currentStep = 0;
-
-    function updateLoadingStep() {
-      document.querySelectorAll('.lo-loading-step').forEach(step => step.classList.remove('active'));
-      document.querySelector(`[data-step="${steps[currentStep]}"]`).classList.add('active');
-      currentStep++;
-    }
-
-    updateLoadingStep(); // Start with first step
-
-    // Simulate stepped analysis (replace with real API call)
-    const stepInterval = setInterval(() => {
-      if (currentStep >= steps.length) {
-        clearInterval(stepInterval);
-        setTimeout(() => {
-          loadingDiv.classList.remove('show');
-          resultsDiv.classList.add('show');
-        }, 500);
-        return;
-      }
-      updateLoadingStep();
-    }, 600);
-
-    setTimeout(() => {
-      clearInterval(stepInterval);
-      loadingDiv.classList.remove('show');
-      resultsDiv.classList.add('show');
-      
-      // Reset analyze button state
-      if (analyzeBtn) {
-        analyzeBtn.disabled = false;
-        analyzeBtn.classList.remove('loading');
-      }
-      // Simulate scores and suggestions
-      document.getElementById('lo-score-text').textContent = '82';
-      document.getElementById('lo-score-ring').setAttribute('stroke-dashoffset', 41); // 82/100
-      document.getElementById('score-headline').textContent = '15/20';
-      document.getElementById('tip-headline').textContent = 'Add more keywords for your target role.';
-      document.getElementById('ai-headline').value = 'Product Manager | AI, FinTech & Growth Leader';
-      document.getElementById('score-summary').textContent = '18/20';
-      document.getElementById('tip-summary').textContent = 'Quantify your achievements.';
-      document.getElementById('ai-summary').value = 'Results-driven leader with 6+ years in financial tech, delivering scalable AI solutions and driving 30%+ user growth.';
-      document.getElementById('score-experience').textContent = '30/40';
-      document.getElementById('tip-experience').textContent = 'Use more action verbs and quantify results.';
-      document.getElementById('ai-experience').value = '• Led cross-functional teams to deliver projects on time and under budget.\n• Increased user engagement by 30% through new feature launches.';
-      document.getElementById('score-skills').textContent = '19/20';
-      document.getElementById('tip-skills').textContent = 'Add trending skills for your target role.';
-      document.getElementById('ai-skills').value = 'Product Management, AI, FinTech, Python, Leadership';
-      // Scroll to results
-      resultsDiv.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }, 1800);
-  });
-}
-
-// Copy/Regenerate button logic (simulate)
-function setupCopyRegen(section) {
-  const copyBtn = document.getElementById('copy-' + section);
-  const regenBtn = document.getElementById('regen-' + section);
-  const aiField = document.getElementById('ai-' + section);
-  if (copyBtn && aiField) {
-    copyBtn.addEventListener('click', function() {
-      navigator.clipboard.writeText(aiField.value);
-      const original = copyBtn.textContent;
-      copyBtn.textContent = 'Copied!';
-      setTimeout(() => { copyBtn.textContent = original; }, 1200);
-    });
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
   }
-      if (regenBtn && aiField) {
-      regenBtn.addEventListener('click', function() {
-        // Add loading state
-        const originalText = regenBtn.textContent;
-        regenBtn.classList.add('loading');
-        regenBtn.disabled = true;
-
-        // Add feedback animation to field
-        aiField.classList.add('lo-feedback-animation');
-        
-        // Simulate API call (replace with real one)
-        setTimeout(() => {
-          aiField.value = 'Regenerated suggestion for ' + section + '.';
-          
-          // Reset button state
-          regenBtn.textContent = originalText;
-          regenBtn.classList.remove('loading');
-          regenBtn.disabled = false;
-          
-          // Show success feedback
-          const feedback = document.createElement('div');
-          feedback.className = 'lo-regenerate-feedback';
-          feedback.textContent = 'Updated!';
-          aiField.parentNode.appendChild(feedback);
-          
-          // Remove animations
-          setTimeout(() => {
-            aiField.classList.remove('lo-feedback-animation');
-            feedback.classList.add('show');
-          }, 100);
-          
-          // Clean up feedback
-          setTimeout(() => {
-            feedback.remove();
-          }, 2000);
-        }, 1000);
-      });
-    }
-}
-['headline','summary','experience','skills'].forEach(setupCopyRegen);
 </script>
+
+<!-- Load navigation system -->
+<script src="js/navigation.js"></script>
+<script src="js/main.js" type="module"></script>
+<script src="js/analytics.js" type="module"></script>
 </body>
 </html> 

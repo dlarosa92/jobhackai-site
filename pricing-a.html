@@ -27,13 +27,8 @@
       </a>
       <div class="nav-group">
         <nav class="nav-links" role="navigation">
-          <a href="index.html">Home</a>
-          <a href="#what-you-get">What You Get</a>
-          <a href="pricing-a.html">Pricing</a>
-          <a href="#blog">Blog</a>
-          <a href="login.html">Login</a>
-          <a href="pricing-a.html" class="cta-button">Start Free Trial</a>
-    </nav>
+          <!-- Navigation will be dynamically populated by navigation.js -->
+        </nav>
       </div>
       <button class="mobile-toggle" aria-label="Open navigation menu" aria-expanded="false" aria-controls="mobileNav">
         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -45,12 +40,7 @@
     </div>
   </header>
   <nav class="mobile-nav" id="mobileNav">
-    <a href="index.html">Home</a>
-    <a href="#what-you-get">What You Get</a>
-    <a href="pricing-a.html">Pricing</a>
-    <a href="blog.html">Blog</a>
-    <a href="login.html">Login</a>
-    <a href="pricing-a.html" class="cta-button">Start Free Trial</a>
+    <!-- Mobile navigation will be dynamically populated by navigation.js -->
   </nav>
   <script>
     // Hamburger menu toggle
@@ -184,8 +174,10 @@
       </div>
     </div>
   </footer>
+  <!-- Load navigation system -->
+  <script src="js/navigation.js"></script>
   <!-- scripts -->
-  <script src="js/main.js"></script>
-  <script src="js/analytics.js"></script>
+  <script src="js/main.js" type="module"></script>
+  <script src="js/analytics.js" type="module"></script>
 </body>
 </html>

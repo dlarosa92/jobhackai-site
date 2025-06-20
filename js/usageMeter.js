@@ -28,7 +28,7 @@ export function initUsageMeter({ interviewSelector, feedbackSelector }) {
   
     function updateMeter() {
       if (!feedback) return;
-      feedback.textContent = `Mock Interviews used: ${used} of ${maxAllowed}`}  
+      feedback.textContent = `Mock Interviews used: ${used} of ${maxAllowed}`
     }
   }
   
