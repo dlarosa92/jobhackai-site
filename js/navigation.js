@@ -91,7 +91,6 @@ const NAVIGATION_CONFIG = {
   free: {
     navItems: [
       { text: 'Dashboard', href: 'dashboard.html' },
-      { text: 'ATS Scoring', href: 'dashboard.html#ats' },
       { text: 'Resume Feedback', href: 'resume-feedback-pro.html', locked: true },
       { text: 'Interview Questions', href: 'interview-questions.html', locked: true },
     ],
@@ -107,7 +106,6 @@ const NAVIGATION_CONFIG = {
   trial: {
     navItems: [
       { text: 'Dashboard', href: 'dashboard.html' },
-      { text: 'ATS Scoring', href: 'dashboard.html#ats' },
       { text: 'Resume Feedback', href: 'resume-feedback-pro.html' },
       { text: 'Interview Questions', href: 'interview-questions.html' },
     ],
@@ -123,7 +121,6 @@ const NAVIGATION_CONFIG = {
   essential: {
     navItems: [
       { text: 'Dashboard', href: 'dashboard.html' },
-      { text: 'ATS Scoring', href: 'dashboard.html#ats' },
       { text: 'Resume Feedback', href: 'resume-feedback-pro.html' },
       { text: 'Interview Questions', href: 'interview-questions.html' },
     ],
@@ -143,7 +140,6 @@ const NAVIGATION_CONFIG = {
         text: 'Resume Tools',
         isDropdown: true,
         items: [
-          { text: 'ATS Scoring', href: 'dashboard.html#ats' },
           { text: 'Resume Feedback', href: 'resume-feedback-pro.html' },
           { text: 'Resume Rewrite', href: 'resume-feedback-pro.html#rewrite' },
           { text: 'Cover Letter', href: 'cover-letter-generator.html' },
@@ -174,7 +170,6 @@ const NAVIGATION_CONFIG = {
         text: 'Resume Tools',
         isDropdown: true,
         items: [
-          { text: 'ATS Scoring', href: 'dashboard.html#ats' },
           { text: 'Resume Feedback', href: 'resume-feedback-pro.html' },
           { text: 'Resume Rewrite', href: 'resume-feedback-pro.html#rewrite' },
           { text: 'Cover Letter', href: 'cover-letter-generator.html' },

@@ -438,6 +438,24 @@
       
       // Wait for navigation system to be ready
       setTimeout(checkPlanAccess, 100);
+
+      // Add Pro plan mock interview usage indicator
+      const main = document.querySelector('main');
+      const userPlan = localStorage.getItem('user-plan') || 'free';
+      if (userPlan === 'pro' && main) {
+        // For demo, assume 20 left (replace with dynamic count if available)
+        const usageDiv = document.createElement('div');
+        usageDiv.className = 'mi-plan-limit';
+        usageDiv.innerHTML = `
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false" style="vertical-align:middle"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="8"/><line x1="12" y1="12" x2="12" y2="16"/></svg>
+          <span style="margin-left:0.4em;vertical-align:middle;">20 mock interviews left this month.</span>
+          <span class="jh-tooltip-trigger" tabindex="0" aria-label="More info" style="margin-left:0.4em;vertical-align:middle;">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false" style="vertical-align:middle"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="8"/><line x1="12" y1="12" x2="12" y2="16"/></svg>
+            <span class="jh-tooltip-text">Upgrade to Premium for unlimited mock interviews.</span>
+          </span>
+        `;
+        main.prepend(usageDiv);
+      }
     });
 
     // --- Mock Interview Logic ---

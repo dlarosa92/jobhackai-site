@@ -346,13 +346,13 @@ section {
   }
 }
 
-.btn-primary {
+.btn-primary, a.btn-primary {
   background: #00E676;
   color: #fff !important;
   font-weight: 700;
   border: none;
   border-radius: 12px;
-  padding: 0.7rem 2rem;
+  padding: 0.7rem 1.5rem;
   font-size: 1rem;
   cursor: pointer;
   box-shadow: 0 2px 8px rgba(0,0,0,0.04);
@@ -421,12 +421,6 @@ textarea:focus {
   border-radius: var(--radius-md);
   text-decoration: none !important; /* Overriding default link styles */
   transition: var(--transition-normal);
-}
-
-.btn-primary {
-  color: var(--color-card-bg);
-  background-color: var(--color-cta-green);
-  border-color: var(--color-cta-green);
 }
 
 .btn-primary:hover {
