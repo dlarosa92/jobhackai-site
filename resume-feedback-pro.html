@@ -4,7 +4,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Resume Feedback – JobHackAI</title>
+  <title>Resume Feedback Pro – JobHackAI</title>
+  <link rel="icon" type="image/png" href="assets/JobHackAI_Logo_favicon-32x32.png">
 
   <!-- Design tokens & global styles -->
   <link rel="stylesheet" href="css/tokens.css">
@@ -46,10 +47,6 @@
     .rf-feedback-label { font-weight: 700; color: var(--color-text-main); margin-bottom: 0.2rem; }
     .rf-feedback-score { display: inline-block; background: #00E676; color: #fff; font-weight: 700; border-radius: 999px; padding: 0.2em 0.8em; font-size: 1rem; margin-left: 0.5rem; }
     .rf-feedback-tip { color: var(--color-text-secondary); font-size: 1.01rem; margin-top: 0.3rem; }
-    .rf-btn-primary { background: var(--color-accent-blue); color: #fff; font-weight: 700; border: none; border-radius: var(--radius-md); padding: 0.7rem 1.5rem; font-size: 1.05rem; cursor: pointer; transition: background 0.18s; margin-top: 1.2rem; }
-    .rf-btn-primary:hover { background: #005bb5; }
-    .rf-btn-green { background: #00E676; color: #fff; font-weight: 700; border: none; border-radius: var(--radius-md); padding: 0.7rem 1.5rem; font-size: 1.05rem; cursor: pointer; transition: background 0.18s; margin-top: 1.2rem; margin-right: 0.7rem; }
-    .rf-btn-green:hover { background: #00c965; }
     .rf-snippet-box { width: 100%; min-height: 120px; border: 2px solid var(--color-divider); border-radius: var(--radius-lg); padding: 1rem; font-size: 1.05rem; margin-bottom: 1.2rem; background: #F9FAFB; color: var(--color-text-main); resize: vertical; }
     @media (max-width: 700px) { .rf-rubric-grid, .rf-feedback-grid { grid-template-columns: 1fr; } }
     .rf-plan-badge {
@@ -182,6 +179,64 @@
     </select>
   </div>
   <script>
+    // --- AUTHENTICATION CHECK ---
+    function checkAuthentication() {
+      const isAuthenticated = localStorage.getItem('user-authenticated') === 'true';
+      const mainContent = document.querySelector('main');
+      
+      if (!isAuthenticated) {
+        mainContent.innerHTML = `
+          <div style="max-width: 600px; margin: 4rem auto; text-align: center; padding: 2rem;">
+            <div style="font-size: 4rem; margin-bottom: 1rem;">🔒</div>
+            <h1 style="font-size: 2rem; font-weight: 700; color: var(--color-text-main); margin-bottom: 1rem;">
+              Login Required
+            </h1>
+            <p style="font-size: 1.1rem; color: var(--color-text-secondary); margin-bottom: 2rem; line-height: 1.6;">
+              Resume Feedback Pro requires you to be logged in to access this tool. 
+              Please sign in to get started.
+            </p>
+            <div style="display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap;">
+              <a href="login.html" class="btn-primary" style="text-decoration: none;">
+                Sign In
+              </a>
+              <a href="pricing-a.html" class="btn-outline" style="text-decoration: none;">
+                View Pricing
+              </a>
+            </div>
+          </div>
+        `;
+        return false;
+      }
+      return true;
+    }
+
+    // --- PLAN-BASED ACCESS CONTROL ---
+    function checkPlanAccess() {
+      const currentPlan = window.JobHackAINavigation ? window.JobHackAINavigation.getEffectivePlan() : 'free';
+      const lockedDiv = document.getElementById('rfp-locked');
+      const formDiv = document.getElementById('rfp-form');
+      const resultsDiv = document.getElementById('rfp-results');
+      
+      if (!lockedDiv || !formDiv || !resultsDiv) return;
+      
+      // Resume Feedback Pro is available for Trial, Essential, Pro, and Premium
+      const locked = (currentPlan === 'free');
+      lockedDiv.style.display = locked ? 'flex' : 'none';
+      formDiv.style.display = locked ? 'none' : '';
+      resultsDiv.style.display = 'none';
+    }
+
+    // --- Initialize on load ---
+    document.addEventListener('DOMContentLoaded', function() {
+      // Check authentication first
+      if (!checkAuthentication()) {
+        return; // Stop here if not authenticated
+      }
+      
+      // Wait for navigation system to be ready
+      setTimeout(checkPlanAccess, 100);
+    });
+
     // --- USER PLAN LOGIC (must be defined before any script uses it) ---
     const user = {
       plan: 'free', // 'free', 'trial', 'essential', 'pro', 'premium'
@@ -480,7 +535,7 @@
                 <div class="rf-upgrade-text">
                   <strong>Upgrade to Pro</strong> to unlock unlimited ATS feedback
                 </div>
-                <button class="rf-btn-secondary">Upgrade Now</button>
+                <a href="pricing-a.html" class="btn btn-secondary">Upgrade Now</a>
               `;
               feedbackTile.appendChild(upgradeBanner);
             }
@@ -657,7 +712,7 @@
         <div class="rf-upgrade-text">
           <strong>Upgrade to Essential or Pro</strong> to unlock detailed ATS and role-specific feedback.
         </div>
-        <button class="rf-btn-secondary">Upgrade Now</button>
+        <a href="pricing-a.html" class="btn btn-secondary">Upgrade Now</a>
       </div>
       <!-- Hidden content that will be shown for unlocked plans -->
       <div id="rf-feedback-content" style="display:none;">
@@ -716,7 +771,7 @@
             <div class="rf-feedback-tip">Well-formatted. No changes needed.</div>
           </div>
         </div>
-        <button class="rf-btn-primary" id="rf-regenerate-btn" style="margin-top:1.7rem;">Regenerate Feedback</button>
+        <button class="btn btn-primary" id="rf-regenerate-btn" style="margin-top:1.7rem;">Regenerate Feedback</button>
       </div>
     </section>
 
@@ -736,7 +791,7 @@
         <div class="rf-upgrade-text">
           <strong>Upgrade to Pro</strong> to unlock AI-powered resume rewriting with unlimited revisions
         </div>
-        <button class="rf-btn-secondary">Upgrade Now</button>
+        <a href="pricing-a.html" class="btn btn-secondary">Upgrade Now</a>
       </div>
       <!-- Hidden content that will be shown for Pro/Premium plans -->
       <div id="rf-rewrite-content" style="display:none;">
@@ -748,8 +803,8 @@
         <div style="font-weight:600;margin-bottom:0.5rem;">Rewritten Snippet</div>
         <textarea class="rf-snippet-box" readonly>AI-optimized resume excerpt.</textarea>
         <div style="margin-top:1.2rem;">
-          <button class="rf-btn-green">Copy Rewritten Resume</button>
-          <button class="rf-btn-primary">Regenerate Rewrite</button>
+          <button class="btn btn-primary">Copy Rewritten Resume</button>
+          <button class="btn btn-secondary">Regenerate Rewrite</button>
         </div>
       </div>
     </section>

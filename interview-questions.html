@@ -5,6 +5,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Interview Questions – JobHackAI</title>
+  <link rel="icon" type="image/png" href="assets/JobHackAI_Logo_favicon-32x32.png">
   <link rel="stylesheet" href="css/tokens.css">
   <link rel="stylesheet" href="css/main.css">
   <link rel="stylesheet" href="css/header.css">
@@ -146,24 +147,6 @@
   <nav class="mobile-nav" id="mobileNav">
     <!-- Mobile navigation will be dynamically populated by navigation.js -->
   </nav>
-  <script>
-    // Hamburger menu toggle
-    const mobileToggle = document.querySelector('.mobile-toggle');
-    const mobileNav = document.getElementById('mobileNav');
-    if (mobileToggle && mobileNav) {
-      mobileToggle.addEventListener('click', () => {
-        const isOpen = mobileNav.classList.toggle('open');
-        mobileToggle.setAttribute('aria-expanded', isOpen);
-      });
-      // Close mobile nav on link click
-      document.querySelectorAll('.mobile-nav a').forEach(link => {
-        link.addEventListener('click', () => {
-          mobileNav.classList.remove('open');
-          mobileToggle.setAttribute('aria-expanded', 'false');
-        });
-      });
-    }
-  </script>
   <main class="iq-main">
     <h1 class="iq-title">Interview Questions</h1>
     <p class="iq-sub">Practice your answers with AI-generated questions tailored to your job title.</p>
@@ -199,6 +182,65 @@
     </div>
   </footer>
   <script>
+    // Hamburger menu toggle
+    const mobileToggle = document.querySelector('.mobile-toggle');
+    const mobileNav = document.getElementById('mobileNav');
+    if (mobileToggle && mobileNav) {
+      mobileToggle.addEventListener('click', () => {
+        const isOpen = mobileNav.classList.toggle('open');
+        mobileToggle.setAttribute('aria-expanded', isOpen);
+      });
+      // Close mobile nav on link click
+      document.querySelectorAll('.mobile-nav a').forEach(link => {
+        link.addEventListener('click', () => {
+          mobileNav.classList.remove('open');
+          mobileToggle.setAttribute('aria-expanded', 'false');
+        });
+      });
+    }
+
+    // --- AUTHENTICATION CHECK ---
+    function checkAuthentication() {
+      const isAuthenticated = localStorage.getItem('user-authenticated') === 'true';
+      const mainContent = document.querySelector('main');
+      
+      if (!isAuthenticated) {
+        mainContent.innerHTML = `
+          <div style="max-width: 600px; margin: 4rem auto; text-align: center; padding: 2rem;">
+            <div style="font-size: 4rem; margin-bottom: 1rem;">🔒</div>
+            <h1 style="font-size: 2rem; font-weight: 700; color: var(--color-text-main); margin-bottom: 1rem;">
+              Login Required
+            </h1>
+            <p style="font-size: 1.1rem; color: var(--color-text-secondary); margin-bottom: 2rem; line-height: 1.6;">
+              Interview Questions requires you to be logged in to access this tool. 
+              Please sign in to get started.
+            </p>
+            <div style="display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap;">
+              <a href="login.html" class="btn-primary" style="text-decoration: none;">
+                Sign In
+              </a>
+              <a href="pricing-a.html" class="btn-outline" style="text-decoration: none;">
+                View Pricing
+              </a>
+            </div>
+          </div>
+        `;
+        return false;
+      }
+      return true;
+    }
+
+    // --- Initialize on load ---
+    document.addEventListener('DOMContentLoaded', function() {
+      // Check authentication first
+      if (!checkAuthentication()) {
+        return; // Stop here if not authenticated
+      }
+      
+      // Continue with existing interview questions logic
+      // Note: The existing logic will run automatically since it's already in the DOMContentLoaded
+    });
+
     // --- USER PLAN LOGIC (replace with real user data) ---
     const user = {
       plan: 'trial' // 'trial', 'essential', 'pro', 'premium'

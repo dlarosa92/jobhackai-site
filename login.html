@@ -5,6 +5,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Login or Sign Up – JobHackAI</title>
+  <link rel="icon" type="image/png" href="assets/JobHackAI_Logo_favicon-32x32.png">
 
   <!-- Design tokens & global styles -->
   <link rel="stylesheet" href="css/tokens.css">
@@ -240,6 +241,81 @@
         });
       });
     }
+
+    // --- BASIC AUTHENTICATION FOR TESTING ---
+    document.addEventListener('DOMContentLoaded', function() {
+      const emailForm = document.getElementById('emailAuthForm');
+      const emailInput = document.getElementById('email');
+      const passwordInput = document.getElementById('password');
+      const continueBtn = document.getElementById('emailContinueBtn');
+      const authError = document.getElementById('authError');
+
+      // Simple login simulation
+      emailForm.addEventListener('submit', function(e) {
+        e.preventDefault();
+        
+        const email = emailInput.value.trim();
+        const password = passwordInput.value.trim();
+        
+        if (!email || !password) {
+          showError('Please enter both email and password');
+          return;
+        }
+        
+        if (password.length < 8) {
+          showError('Password must be at least 8 characters');
+          return;
+        }
+        
+        // Simulate successful login
+        showLoading();
+        
+        setTimeout(() => {
+          // Set authentication state
+          localStorage.setItem('user-authenticated', 'true');
+          localStorage.setItem('user-plan', 'free'); // Default to free plan
+          
+          // Redirect to dashboard
+          window.location.href = 'dashboard.html';
+        }, 1000);
+      });
+
+      function showError(message) {
+        authError.textContent = message;
+        authError.style.display = 'block';
+        continueBtn.disabled = false;
+        continueBtn.textContent = 'Continue';
+      }
+
+      function showLoading() {
+        authError.style.display = 'none';
+        continueBtn.disabled = true;
+        continueBtn.textContent = 'Signing in...';
+      }
+
+      // Social login simulation
+      document.getElementById('googleSignIn').addEventListener('click', function(e) {
+        e.preventDefault();
+        showLoading();
+        
+        setTimeout(() => {
+          localStorage.setItem('user-authenticated', 'true');
+          localStorage.setItem('user-plan', 'trial'); // Social login gets trial
+          window.location.href = 'dashboard.html';
+        }, 1000);
+      });
+
+      document.getElementById('linkedinSignIn').addEventListener('click', function(e) {
+        e.preventDefault();
+        showLoading();
+        
+        setTimeout(() => {
+          localStorage.setItem('user-authenticated', 'true');
+          localStorage.setItem('user-plan', 'trial'); // Social login gets trial
+          window.location.href = 'dashboard.html';
+        }, 1000);
+      });
+    });
   </script>
   <!-- page content -->
   <main>

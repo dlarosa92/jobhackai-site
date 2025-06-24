@@ -5,6 +5,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Dashboard – JobHackAI</title>
+  <link rel="icon" type="image/png" href="assets/JobHackAI_Logo_favicon-32x32.png">
   <link rel="stylesheet" href="css/tokens.css">
   <link rel="stylesheet" href="css/main.css">
   <link rel="stylesheet" href="css/header.css">
@@ -495,15 +496,78 @@
     </div>
   </footer>
   <script>
+    // --- AUTHENTICATION CHECK ---
+    function checkAuthentication() {
+      const isAuthenticated = localStorage.getItem('user-authenticated') === 'true';
+      const mainContent = document.querySelector('main');
+      
+      if (!isAuthenticated) {
+        mainContent.innerHTML = `
+          <div style="max-width: 600px; margin: 4rem auto; text-align: center; padding: 2rem;">
+            <div style="font-size: 4rem; margin-bottom: 1rem;">🔒</div>
+            <h1 style="font-size: 2rem; font-weight: 700; color: var(--color-text-main); margin-bottom: 1rem;">
+              Login Required
+            </h1>
+            <p style="font-size: 1.1rem; color: var(--color-text-secondary); margin-bottom: 2rem; line-height: 1.6;">
+              You need to be logged in to access your dashboard. 
+              Please sign in to view your account and tools.
+            </p>
+            <div style="display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap;">
+              <a href="login.html" class="btn-primary" style="text-decoration: none;">
+                Sign In
+              </a>
+              <a href="pricing-a.html" class="btn-outline" style="text-decoration: none;">
+                View Pricing
+              </a>
+            </div>
+          </div>
+        `;
+        return false;
+      }
+      return true;
+    }
+
+    // --- AUTHENTICATION STATE MANAGEMENT ---
+    function getAuthState() {
+      // Check for actual authentication (this would integrate with Firebase Auth)
+      // For now, we'll use localStorage as a placeholder
+      const isAuthenticated = localStorage.getItem('user-authenticated') === 'true';
+      const userPlan = localStorage.getItem('user-plan') || 'free';
+      
+      return {
+        isAuthenticated,
+        userPlan: isAuthenticated ? userPlan : null
+      };
+    }
+
+    // --- Initialize on load ---
+    document.addEventListener('DOMContentLoaded', function() {
+      // Check authentication first
+      if (!checkAuthentication()) {
+        return; // Stop here if not authenticated
+      }
+      
+      // Get user data from authentication system
+      const authState = getAuthState();
+      const currentPlan = window.JobHackAINavigation ? window.JobHackAINavigation.getEffectivePlan() : 'free';
+      
+      // Create user object from authentication data
+      const user = {
+        name: "User", // This would come from the auth system
+        email: "user@example.com", // This would come from the auth system
+        plan: currentPlan,
+        trialEndsAt: "2024-06-10T00:00:00Z",
+        hasUsedFreeTrial: true,
+        hasUsedFreeATS: true
+      };
+      
+      // Continue with existing dashboard logic
+      renderDashboard(user);
+    });
+
     // --- USER DATA INJECTION (replace with your data source, e.g. from Google Sheets or Wix Data) ---
-    const user = {
-      name: "Amanda",
-      email: "amanda.lewis@example.com",
-      plan: "trial", // "trial" | "essential" | "pro" | "premium" | "cancelled"
-      trialEndsAt: "2024-06-10T00:00:00Z",
-      hasUsedFreeTrial: true,
-      hasUsedFreeATS: true
-    };
+    // Note: This is now handled in the DOMContentLoaded function above
+
     // --- FEATURE MATRIX ---
     const featureMatrix = {
       trial:    ["ats", "feedback", "interview"],
@@ -662,7 +726,6 @@
       featuresHtml += '</div>';
       root.innerHTML = banner + featuresHtml;
     }
-    renderDashboard(user);
   </script>
   <!-- Load navigation system -->
   <script src="js/navigation.js"></script>

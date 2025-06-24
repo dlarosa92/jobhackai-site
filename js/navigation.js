@@ -1,8 +1,42 @@
 // JobHackAI Navigation System
-// Handles dynamic navigation based on user plan and Dev Only Plan toggle
+// Handles dynamic navigation based on authentication state and user plan
+
+// --- AUTHENTICATION STATE MANAGEMENT ---
+function getAuthState() {
+  // Check for actual authentication (this would integrate with Firebase Auth)
+  // For now, we'll use localStorage as a placeholder
+  const isAuthenticated = localStorage.getItem('user-authenticated') === 'true';
+  const userPlan = localStorage.getItem('user-plan') || 'free';
+  
+  return {
+    isAuthenticated,
+    userPlan: isAuthenticated ? userPlan : null
+  };
+}
+
+function setAuthState(isAuthenticated, plan = null) {
+  localStorage.setItem('user-authenticated', isAuthenticated.toString());
+  if (plan) {
+    localStorage.setItem('user-plan', plan);
+  }
+}
+
+function logout() {
+  localStorage.removeItem('user-authenticated');
+  localStorage.removeItem('user-plan');
+  localStorage.removeItem('dev-plan'); // Clear dev toggle too
+  window.location.href = 'index.html';
+}
 
 // --- PLAN CONFIGURATION ---
 const PLANS = {
+  visitor: {
+    name: 'Visitor',
+    color: '#6B7280',
+    bgColor: '#F3F4F6',
+    icon: '👤',
+    features: []
+  },
   free: {
     name: 'Free',
     color: '#6B7280',
@@ -65,7 +99,7 @@ const NAVIGATION_CONFIG = {
       cta: { text: 'Pricing/Upgrade', href: 'pricing-a.html', isCTA: true },
       menuItems: [
         { text: 'Account', href: 'account-setting.html' },
-        { text: 'Logout', href: 'login.html' }
+        { text: 'Logout', href: '#', action: 'logout' }
       ]
     }
   },
@@ -81,7 +115,7 @@ const NAVIGATION_CONFIG = {
       cta: { text: 'Pricing/Upgrade', href: 'pricing-a.html', isCTA: true },
       menuItems: [
         { text: 'Account', href: 'account-setting.html' },
-        { text: 'Logout', href: 'login.html' }
+        { text: 'Logout', href: '#', action: 'logout' }
       ]
     }
   },
@@ -97,7 +131,7 @@ const NAVIGATION_CONFIG = {
       cta: { text: 'Upgrade', href: 'pricing-a.html', isCTA: true },
       menuItems: [
         { text: 'Account', href: 'account-setting.html' },
-        { text: 'Logout', href: 'login.html' }
+        { text: 'Logout', href: '#', action: 'logout' }
       ]
     }
   },
@@ -128,7 +162,7 @@ const NAVIGATION_CONFIG = {
       cta: { text: 'Upgrade', href: 'pricing-a.html', isCTA: true },
       menuItems: [
         { text: 'Account', href: 'account-setting.html' },
-        { text: 'Logout', href: 'login.html' }
+        { text: 'Logout', href: '#', action: 'logout' }
       ]
     }
   },
@@ -159,7 +193,7 @@ const NAVIGATION_CONFIG = {
     userNav: {
       menuItems: [
         { text: 'Account', href: 'account-setting.html' },
-        { text: 'Logout', href: 'login.html' }
+        { text: 'Logout', href: '#', action: 'logout' }
       ]
     }
   }
@@ -167,34 +201,56 @@ const NAVIGATION_CONFIG = {
 
 // --- UTILITY FUNCTIONS ---
 function getCurrentPlan() {
+  const authState = getAuthState();
+  
+  // If user is not authenticated, they are a visitor
+  if (!authState.isAuthenticated) {
+    return 'visitor';
+  }
+  
+  // If user is authenticated, use their plan
+  if (authState.userPlan && PLANS[authState.userPlan]) {
+    return authState.userPlan;
+  }
+  
+  // Fallback to free plan for authenticated users
+  return 'free';
+}
+
+// Dev toggle override (for development/testing only)
+function getDevPlanOverride() {
   const urlParams = new URLSearchParams(window.location.search);
   const planParam = urlParams.get('plan');
-
-  // If a plan is explicitly in the URL, it has the highest priority.
-  // We make it sticky for subsequent navigation.
+  
   if (planParam && PLANS[planParam]) {
     localStorage.setItem('dev-plan', planParam);
     return planParam;
   }
-
-  // Determine if we are on the homepage.
-  const isHomePage = window.location.pathname.endsWith('/') || window.location.pathname.endsWith('/index.html') || window.location.pathname.endsWith('/jobhackai-site/');
-
-  // If on the homepage and no plan is specified in the URL,
-  // we reset to the default 'visitor' state and clear any sticky plan.
-  if (isHomePage) {
-    localStorage.removeItem('dev-plan');
-    return 'visitor';
-  }
-
-  // For any other page, we check for a sticky plan from previous sessions.
+  
   const devPlan = localStorage.getItem('dev-plan');
-  if (devPlan) {
+  if (devPlan && PLANS[devPlan]) {
     return devPlan;
   }
+  
+  return null;
+}
 
-  // If no other rules match, default to visitor.
-  return 'visitor';
+function getEffectivePlan() {
+  const authState = getAuthState();
+  const devOverride = getDevPlanOverride();
+  
+  // If user is not authenticated, they can only be visitor
+  if (!authState.isAuthenticated) {
+    return devOverride || 'visitor';
+  }
+  
+  // If user is authenticated, dev override takes precedence for testing
+  if (devOverride) {
+    return devOverride;
+  }
+  
+  // Otherwise use their actual plan
+  return authState.userPlan || 'free';
 }
 
 function setPlan(plan) {
@@ -205,12 +261,18 @@ function setPlan(plan) {
     url.searchParams.set('plan', plan);
     window.history.replaceState({}, '', url);
     updateNavigation();
+    updateDevPlanToggle();
   }
 }
 
 function isFeatureUnlocked(featureKey) {
-  const currentPlan = getCurrentPlan();
-  if (currentPlan === 'visitor') return false;
+  const authState = getAuthState();
+  const currentPlan = getEffectivePlan();
+  
+  // Visitors can't access any features
+  if (!authState.isAuthenticated && currentPlan === 'visitor') {
+    return false;
+  }
   
   const planConfig = PLANS[currentPlan];
   return planConfig && planConfig.features.includes(featureKey);
@@ -283,20 +345,33 @@ function showUpgradeModal(targetPlan = 'premium') {
 
 // --- NAVIGATION RENDERING ---
 function updateNavigation() {
-  const currentPlan = getCurrentPlan();
+  const devOverride = getDevPlanOverride();
+  const currentPlan = getEffectivePlan();
+  const authState = getAuthState();
   const navConfig = NAVIGATION_CONFIG[currentPlan] || NAVIGATION_CONFIG.visitor;
   const navGroup = document.querySelector('.nav-group');
+
+  // Determine if we should show an authenticated-style header
+  const isAuthView = authState.isAuthenticated || (devOverride && devOverride !== 'visitor');
 
   const updateLink = (linkElement, href) => {
     if (href.startsWith('#') || href.startsWith('mailto:') || href.startsWith('http')) {
       linkElement.href = href;
     } else {
       const url = new URL(href, window.location.href);
-      if (currentPlan !== 'visitor') {
-        url.searchParams.set('plan', currentPlan);
+      const devPlan = getDevPlanOverride();
+
+      if (devPlan) {
+        url.searchParams.set('plan', devPlan);
       } else {
         url.searchParams.delete('plan');
       }
+      
+      // If on the homepage, remove plan to reset to visitor state
+      if (window.location.pathname.endsWith('/') || window.location.pathname.endsWith('index.html')) {
+          if (!devPlan) url.searchParams.delete('plan');
+      }
+
       linkElement.href = url.href;
     }
   };
@@ -311,161 +386,127 @@ function updateNavigation() {
   const navLinks = document.querySelector('.nav-links');
   if (navLinks && navConfig.navItems) {
     navConfig.navItems.forEach(item => {
+      // For visitor view, the CTA is inside navItems, so handle it here
+      if (item.isCTA && !isAuthView) {
+          const navActions = document.querySelector('.nav-actions') || document.createElement('div');
+          navActions.className = 'nav-actions';
+          const ctaLink = document.createElement('a');
+          updateLink(ctaLink, item.href);
+          ctaLink.textContent = item.text;
+          ctaLink.className = 'btn btn-primary';
+          navActions.appendChild(ctaLink);
+          if(!document.querySelector('.nav-actions')) navGroup.appendChild(navActions);
+      } else if (!item.isCTA) {
+        if (item.isDropdown) {
+          const dropdownContainer = document.createElement('div');
+          dropdownContainer.className = 'nav-dropdown';
 
-      if (item.isDropdown) {
-        const dropdownContainer = document.createElement('div');
-        dropdownContainer.className = 'nav-dropdown';
+          const toggle = document.createElement('a');
+          toggle.href = '#';
+          toggle.className = 'nav-dropdown-toggle';
+          toggle.innerHTML = `${item.text} <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="dropdown-arrow"><path d="m6 9 6 6 6-6"/></svg>`;
+          
+          const dropdownMenu = document.createElement('div');
+          dropdownMenu.className = 'nav-dropdown-menu';
 
-        const toggle = document.createElement('a');
-        toggle.href = '#';
-        toggle.className = 'nav-dropdown-toggle';
-        toggle.innerHTML = `${item.text} <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="dropdown-arrow"><path d="m6 9 6 6 6-6"/></svg>`;
-        
-        const dropdownMenu = document.createElement('div');
-        dropdownMenu.className = 'nav-dropdown-menu';
-
-        item.items.forEach(dropdownItem => {
-          const link = document.createElement('a');
-          updateLink(link, dropdownItem.href);
-          link.textContent = dropdownItem.text;
-          dropdownMenu.appendChild(link);
-        });
-
-        dropdownContainer.appendChild(toggle);
-        dropdownContainer.appendChild(dropdownMenu);
-        navLinks.appendChild(dropdownContainer);
-        
-        toggle.addEventListener('click', (e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          // Close other dropdowns
-          document.querySelectorAll('.nav-dropdown.open').forEach(d => {
-            if (d !== dropdownContainer) d.classList.remove('open');
+          item.items.forEach(dropdownItem => {
+            const link = document.createElement('a');
+            updateLink(link, dropdownItem.href);
+            link.textContent = dropdownItem.text;
+            dropdownMenu.appendChild(link);
           });
-          dropdownContainer.classList.toggle('open');
-        });
 
-      } else {
-        const link = document.createElement('a');
-        updateLink(link, item.href);
-        link.textContent = item.text;
-
-        if (item.locked) {
-          link.innerHTML += ' 🔒';
-          link.style.opacity = '0.6';
-          link.addEventListener('click', (e) => {
+          dropdownContainer.appendChild(toggle);
+          dropdownContainer.appendChild(dropdownMenu);
+          navLinks.appendChild(dropdownContainer);
+          
+          toggle.addEventListener('click', (e) => {
             e.preventDefault();
-            showUpgradeModal();
+            e.stopPropagation();
+            document.querySelectorAll('.nav-dropdown.open').forEach(d => {
+              if (d !== dropdownContainer) d.classList.remove('open');
+            });
+            dropdownContainer.classList.toggle('open');
           });
+        } else {
+          const link = document.createElement('a');
+          updateLink(link, item.href);
+          link.textContent = item.text;
+          if (item.locked) {
+            link.style.opacity = '0.5';
+            link.style.pointerEvents = 'none';
+          }
+          navLinks.appendChild(link);
         }
-        if (item.isCTA) {
-          link.classList.add('cta-button');
-        }
-        navLinks.appendChild(link);
       }
     });
   }
 
-  // --- Build User Navigation ---
-  if (navGroup && navConfig.userNav) {
-    let navActions = document.createElement('div');
+  // --- Build User Navigation (if authenticated view) ---
+  if (isAuthView && navConfig.userNav) {
+    const navActions = document.querySelector('.nav-actions') || document.createElement('div');
     navActions.className = 'nav-actions';
 
-    // Build CTA
+    // CTA Button (if exists)
     if (navConfig.userNav.cta) {
       const ctaLink = document.createElement('a');
       updateLink(ctaLink, navConfig.userNav.cta.href);
       ctaLink.textContent = navConfig.userNav.cta.text;
-      ctaLink.classList.add('cta-button');
+      ctaLink.className = 'btn btn-primary';
       navActions.appendChild(ctaLink);
     }
 
-    // Build User Menu
-    if (navConfig.userNav.menuItems) {
-      const userMenuContainer = document.createElement('div');
-      userMenuContainer.className = 'user-menu';
+    // User Menu
+    const userMenu = document.createElement('div');
+    userMenu.className = 'nav-user-menu';
 
-      const toggle = document.createElement('button');
-      toggle.className = 'user-menu-toggle';
-      toggle.setAttribute('aria-label', 'Open user menu');
-      toggle.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="user-menu-icon"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>`;
-      
-      const dropdownMenu = document.createElement('div');
-      dropdownMenu.className = 'user-menu-dropdown';
+    const userToggle = document.createElement('button');
+    userToggle.className = 'nav-user-toggle';
+    userToggle.innerHTML = `
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+        <circle cx="12" cy="7" r="4"/>
+      </svg>
+    `;
 
-      navConfig.userNav.menuItems.forEach(item => {
-        const link = document.createElement('a');
-        updateLink(link, item.href);
-        link.textContent = item.text;
-        dropdownMenu.appendChild(link);
-      });
+    const userDropdown = document.createElement('div');
+    userDropdown.className = 'nav-user-dropdown';
 
-      userMenuContainer.appendChild(toggle);
-      userMenuContainer.appendChild(dropdownMenu);
-      navActions.appendChild(userMenuContainer);
-      
-      toggle.addEventListener('click', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        userMenuContainer.classList.toggle('open');
-      });
-    }
-    
-    if (navGroup.parentElement.contains(navGroup)) {
-      navGroup.appendChild(navActions);
-    }
-  }
-
-  // --- Build Mobile Navigation ---
-  const mobileNav = document.getElementById('mobileNav');
-  if (mobileNav) {
-    mobileNav.innerHTML = '';
-    let mobileNavItems = [];
-
-    if (navConfig.navItems) {
-      mobileNavItems.push(...navConfig.navItems);
-    }
-    if (navConfig.userNav && navConfig.userNav.menuItems) {
-      mobileNavItems.push(...navConfig.userNav.menuItems);
-    }
-    if (navConfig.userNav && navConfig.userNav.cta) {
-      // Add the CTA button last on mobile
-      mobileNavItems.push(navConfig.userNav.cta);
-    }
-
-    mobileNavItems.forEach(item => {
-      const link = document.createElement('a');
-      updateLink(link, item.href);
-      link.textContent = item.text;
-      
-      if (item.locked) {
-        link.innerHTML += ' 🔒';
-        link.style.opacity = '0.6';
-        link.addEventListener('click', (e) => {
+    navConfig.userNav.menuItems.forEach(menuItem => {
+      const menuLink = document.createElement('a');
+      if (menuItem.action === 'logout') {
+        menuLink.href = '#';
+        menuLink.addEventListener('click', (e) => {
           e.preventDefault();
-          showUpgradeModal();
+          logout();
         });
+      } else {
+        updateLink(menuLink, menuItem.href);
       }
-      
-      if (item.isCTA) {
-        link.classList.add('cta-button');
-      }
-      
-      mobileNav.appendChild(link);
+      menuLink.textContent = menuItem.text;
+      userDropdown.appendChild(menuLink);
     });
+
+    userMenu.appendChild(userToggle);
+    userMenu.appendChild(userDropdown);
+    navActions.appendChild(userMenu);
+
+    userToggle.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      userMenu.classList.toggle('open');
+    });
+
+    if(!document.querySelector('.nav-actions')) navGroup.appendChild(navActions);
   }
 
-  // Close dropdown when clicking outside
   document.addEventListener('click', (e) => {
-    document.querySelectorAll('.nav-dropdown.open, .user-menu.open').forEach(openDropdown => {
-      if (!openDropdown.contains(e.target)) {
-        openDropdown.classList.remove('open');
-      }
-    });
+    if (!e.target.closest('.nav-dropdown') && !e.target.closest('.nav-user-menu')) {
+      document.querySelectorAll('.nav-dropdown.open, .nav-user-menu.open').forEach(d => {
+        d.classList.remove('open');
+      });
+    }
   });
-  
-  // Update Dev Only Plan toggle
-  updateDevPlanToggle();
 }
 
 function updateDevPlanToggle() {
@@ -473,7 +514,7 @@ function updateDevPlanToggle() {
   if (devPlanToggle) {
     const select = devPlanToggle.querySelector('#dev-plan');
     if (select) {
-      select.value = getCurrentPlan();
+      select.value = getEffectivePlan();
     }
   }
 }
@@ -531,29 +572,32 @@ function checkFeatureAccess(featureKey, targetPlan = 'premium') {
 
 // --- INITIALIZATION ---
 function initializeNavigation() {
-  // Add Dev Only Plan toggle if not already present
-  if (!document.getElementById('dev-plan-toggle')) {
-    const toggle = createDevPlanToggle();
-    document.body.appendChild(toggle);
-  }
+  // Create dev plan toggle and append to document
+  const toggle = createDevPlanToggle();
+  document.body.appendChild(toggle);
   
-  // Update navigation based on current plan
+  // Update navigation
   updateNavigation();
   
-  // Add event listeners for locked features
-  document.addEventListener('click', (e) => {
-    const link = e.target.closest('a');
-    if (link && link.href.includes('linkedin-optimizer.html') && !isFeatureUnlocked('linkedin')) {
-      e.preventDefault();
-      showUpgradeModal('premium');
+  // Update dev toggle state
+  updateDevPlanToggle();
+  
+  // Listen for plan changes
+  window.addEventListener('storage', (e) => {
+    if (e.key === 'dev-plan') {
+      updateNavigation();
+      updateDevPlanToggle();
     }
   });
 }
 
-// --- EXPORT FOR GLOBAL USE ---
+// --- GLOBAL EXPORTS ---
 window.JobHackAINavigation = {
   getCurrentPlan,
-  setPlan,
+  getEffectivePlan,
+  getAuthState,
+  setAuthState,
+  logout,
   isFeatureUnlocked,
   checkFeatureAccess,
   showUpgradeModal,

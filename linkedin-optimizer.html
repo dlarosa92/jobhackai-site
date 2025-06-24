@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>LinkedIn Profile Optimizer – JobHackAI</title>
+  <link rel="icon" type="image/png" href="assets/JobHackAI_Logo_favicon-32x32.png">
   <!-- Design tokens & global styles -->
   <link rel="stylesheet" href="css/tokens.css">
   <link rel="stylesheet" href="css/main.css">
@@ -648,57 +649,62 @@
 </footer>
 
 <script>
-  // Check if user has access to LinkedIn Optimizer
-  function checkLinkedInAccess() {
-    // This will be handled by the navigation system
-    return true; // For now, allow access
+  // --- AUTHENTICATION CHECK ---
+  function checkAuthentication() {
+    const isAuthenticated = localStorage.getItem('user-authenticated') === 'true';
+    const mainContent = document.querySelector('main');
+    
+    if (!isAuthenticated) {
+      mainContent.innerHTML = `
+        <div style="max-width: 600px; margin: 4rem auto; text-align: center; padding: 2rem;">
+          <div style="font-size: 4rem; margin-bottom: 1rem;">🔒</div>
+          <h1 style="font-size: 2rem; font-weight: 700; color: var(--color-text-main); margin-bottom: 1rem;">
+            Login Required
+          </h1>
+          <p style="font-size: 1.1rem; color: var(--color-text-secondary); margin-bottom: 2rem; line-height: 1.6;">
+            The LinkedIn Optimizer is a premium feature that requires you to be logged in. 
+            Please sign in to access this tool.
+          </p>
+          <div style="display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap;">
+            <a href="login.html" class="btn-primary" style="text-decoration: none;">
+              Sign In
+            </a>
+            <a href="pricing-a.html" class="btn-outline" style="text-decoration: none;">
+              View Pricing
+            </a>
+          </div>
+        </div>
+      `;
+      return false;
+    }
+    return true;
   }
 
-  // Initialize page
+  // --- PLAN-BASED ACCESS CONTROL ---
+  function checkPlanAccess() {
+    const currentPlan = window.JobHackAINavigation ? window.JobHackAINavigation.getEffectivePlan() : 'free';
+    const lockedDiv = document.getElementById('lo-locked');
+    const formDiv = document.getElementById('lo-form');
+    const resultsDiv = document.getElementById('lo-results');
+    
+    if (!lockedDiv || !formDiv || !resultsDiv) return;
+    
+    // LinkedIn Optimizer is Premium-only
+    const locked = (currentPlan !== 'premium');
+    lockedDiv.style.display = locked ? 'flex' : 'none';
+    formDiv.style.display = locked ? 'none' : '';
+    resultsDiv.style.display = 'none';
+  }
+
+  // --- Initialize on load ---
   document.addEventListener('DOMContentLoaded', function() {
-    const form = document.getElementById('lo-profile-form');
-    const analyzeBtn = document.getElementById('lo-analyze');
-    const loading = document.getElementById('lo-loading');
-    const results = document.getElementById('lo-results');
-    const mainContent = document.getElementById('lo-main-content');
-    const lockedContent = document.getElementById('lo-locked-free');
-
-    // Check access and show appropriate content
-    if (!checkLinkedInAccess()) {
-      mainContent.style.display = 'none';
-      lockedContent.style.display = 'block';
-      return;
+    // Check authentication first
+    if (!checkAuthentication()) {
+      return; // Stop here if not authenticated
     }
-
-    form.addEventListener('submit', function(e) {
-      e.preventDefault();
-      
-      // Show loading state
-      loading.style.display = 'block';
-      mainContent.style.display = 'none';
-      
-      // Simulate loading steps
-      const steps = document.querySelectorAll('.lo-loading-step');
-      let currentStep = 0;
-      
-      const stepInterval = setInterval(() => {
-        if (currentStep > 0) {
-          steps[currentStep - 1].classList.remove('active');
-        }
-        if (currentStep < steps.length) {
-          steps[currentStep].classList.add('active');
-          currentStep++;
-        } else {
-          clearInterval(stepInterval);
-          // Show results after loading
-          setTimeout(() => {
-            loading.style.display = 'none';
-            results.style.display = 'block';
-            mainContent.style.display = 'block';
-          }, 1000);
-        }
-      }, 1500);
-    });
+    
+    // Wait for navigation system to be ready
+    setTimeout(checkPlanAccess, 100);
   });
 
   // Regenerate section content

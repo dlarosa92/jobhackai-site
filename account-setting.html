@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Account Settings – JobHackAI</title>
+  <link rel="icon" type="image/png" href="assets/JobHackAI_Logo_favicon-32x32.png">
   <link rel="stylesheet" href="css/tokens.css">
   <link rel="stylesheet" href="css/main.css">
   <link rel="stylesheet" href="css/header.css">
@@ -292,5 +293,47 @@
       </div>
     </div>
   </footer>
+  <script>
+    // --- AUTHENTICATION CHECK ---
+    function checkAuthentication() {
+      const isAuthenticated = localStorage.getItem('user-authenticated') === 'true';
+      const mainContent = document.querySelector('main');
+      
+      if (!isAuthenticated) {
+        mainContent.innerHTML = `
+          <div style="max-width: 600px; margin: 4rem auto; text-align: center; padding: 2rem;">
+            <div style="font-size: 4rem; margin-bottom: 1rem;">🔒</div>
+            <h1 style="font-size: 2rem; font-weight: 700; color: var(--color-text-main); margin-bottom: 1rem;">
+              Login Required
+            </h1>
+            <p style="font-size: 1.1rem; color: var(--color-text-secondary); margin-bottom: 2rem; line-height: 1.6;">
+              You need to be logged in to access your account settings. 
+              Please sign in to manage your account.
+            </p>
+            <div style="display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap;">
+              <a href="login.html" class="btn-primary" style="text-decoration: none;">
+                Sign In
+              </a>
+              <a href="pricing-a.html" class="btn-outline" style="text-decoration: none;">
+                View Pricing
+              </a>
+            </div>
+          </div>
+        `;
+        return false;
+      }
+      return true;
+    }
+
+    // --- Initialize on load ---
+    document.addEventListener('DOMContentLoaded', function() {
+      // Check authentication first
+      if (!checkAuthentication()) {
+        return; // Stop here if not authenticated
+      }
+      
+      // Continue with existing account settings logic
+    });
+  </script>
 </body>
 </html> 
