@@ -1,0 +1,95 @@
+./.cursor/environment.json
+./.DS_Store
+./.git/COMMIT_EDITMSG
+./.git/config
+./.git/description
+./.git/FETCH_HEAD
+./.git/HEAD
+./.git/hooks/applypatch-msg.sample
+./.git/hooks/commit-msg.sample
+./.git/hooks/fsmonitor-watchman.sample
+./.git/hooks/post-update.sample
+./.git/hooks/pre-applypatch.sample
+./.git/hooks/pre-commit.sample
+./.git/hooks/pre-merge-commit.sample
+./.git/hooks/pre-push.sample
+./.git/hooks/pre-rebase.sample
+./.git/hooks/pre-receive.sample
+./.git/hooks/prepare-commit-msg.sample
+./.git/hooks/push-to-checkout.sample
+./.git/hooks/update.sample
+./.git/index
+./.git/info/exclude
+./.git/logs/HEAD
+./.git/ORIG_HEAD
+./.git/packed-refs
+./.gitignore
+./about.html
+./account-setting.html
+./assets/.DS_Store
+./assets/Account-Settings-Icon.svg
+./assets/JobHackAI_Logo_favicon-32x32.png
+./assets/JobHackAI_Logo_favicon-512x512.png
+./assets/JobHackAI_Logo_monochrome.png
+./assets/JobHackAI_Logo_transparent.png
+./assets/JobHackAI_Logo.jpg
+./assets/JobHackAI_Logo.webp
+./assets/LOGObrowserbarFavicon.png
+./assets/Offical-JobHackAI-Logo.png
+./assets/Offical-JobHackAI-Logo.svg
+./components/button.html
+./components/card.html
+./components/footer.html
+./components/header.html
+./components/navigation.html
+./cover-letter-generator.html
+./css/footer.css
+./css/header.css
+./css/main.css
+./css/reset.css
+./css/tokens.css
+./dashboard-trial.html
+./dashboard.html
+./docs/.DS_Store
+./docs/business-models-archive/.DS_Store
+./docs/business-models-archive/AI_Job_Prep_Business_Model_Breakdown.pdf
+./docs/business-models-archive/NEW-JobHackAI Business Model-6-6-2025.pdf.pdf
+./docs/business-models-archive/OLD-JobHackAI Business Model Tax Filing Benefits Included.pdf
+./docs/business-models-archive/OLD-JobHackAI Business Model-3-16-2025.pdf
+./docs/business-models-archive/OLD-JobHackAI Business Model-4-15-2025.pdf
+./docs/business-models-archive/OLD-JobHackAI Business Model-4-20-2025.pdf
+./docs/business-models-archive/OLD-JobHackAI Business Model-4-23-2025.pdf
+./docs/business-models-archive/OLD-JobHackAI Business Model-4-26-2025.pdf
+./docs/business-models-archive/OLD-JobHackAI Business Model-4-27-2025.pdf
+./docs/business-models-archive/OLD-JobHackAI Business Model-4-4-2025.pdf
+./docs/business-models-archive/OLD-JobHackAI Business Model-5-2-2025.pdf
+./docs/business-models-archive/OLD-JobHackAI Business Model-5-3-2025.pdf
+./docs/business-models-archive/OLD-JobHackAI Business Model-6-2-2025.pdf
+./docs/business-models-archive/OLD-True_Updated_3-28-25_JobHackAI_Business_Model_Capped_Trials.pdf
+./docs/design-system.md
+./docs/JobHackAI_TECH_PROMPTS.json
+./docs/jobhackai_ux_flowcharts.md
+./docs/navigation-implementation-summary.md
+./docs/project-notes.md
+./docs/README.md
+./docs/snippets.md
+./docs/wix-migration-guide.md
+./features.html
+./index.html
+./interview-questions.html
+./js/analytics.js
+./js/dashboard-trial.html
+./js/main.js
+./js/navigation.js
+./js/test-navigation.js
+./js/usageMeter.js
+./js/wix-migration.js
+./js/zapier-integration.js
+./linkedin-optimizer.html
+./login.html
+./manifest.txt
+./mock-interview.html
+./pricing-a.html
+./pricing-b.html
+./resume-feedback-pro.html
+./Things that I you want to create now.ini
