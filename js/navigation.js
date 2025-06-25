@@ -84,7 +84,7 @@ const NAVIGATION_CONFIG = {
       { text: 'Pricing', href: 'pricing-a.html' },
       { text: 'Blog', href: '#blog' },
       { text: 'Login', href: 'login.html' },
-      { text: 'Start Free Trial', href: 'pricing-a.html', isCTA: true }
+      { text: 'Start Free Trial', href: 'signup.html', isCTA: true }
     ]
   },
   // Free Account (no plan)
@@ -338,37 +338,36 @@ function showUpgradeModal(targetPlan = 'premium') {
   });
 }
 
+// Add logging utility
+function navLog(...args) {
+  console.log('[NAV LOG]', ...args);
+}
+
 // --- NAVIGATION RENDERING ---
 function updateNavigation() {
+  navLog('--- updateNavigation called ---');
   const devOverride = getDevPlanOverride();
   const currentPlan = getEffectivePlan();
   const authState = getAuthState();
+  navLog('Plan detection', { devOverride, currentPlan, authState });
   const navConfig = NAVIGATION_CONFIG[currentPlan] || NAVIGATION_CONFIG.visitor;
+  navLog('Using nav config for plan:', currentPlan, navConfig);
   const navGroup = document.querySelector('.nav-group');
 
   // Determine if we should show an authenticated-style header
   const isAuthView = authState.isAuthenticated || (devOverride && devOverride !== 'visitor');
+  navLog('isAuthView:', isAuthView);
 
+  // --- Link helper: always use relative paths for internal links ---
   const updateLink = (linkElement, href) => {
+    navLog('Creating link', { text: linkElement.textContent, href });
     if (href.startsWith('#') || href.startsWith('mailto:') || href.startsWith('http')) {
       linkElement.href = href;
     } else {
-      const url = new URL(href, window.location.href);
-      const devPlan = getDevPlanOverride();
-
-      if (devPlan) {
-        url.searchParams.set('plan', devPlan);
-      } else {
-        url.searchParams.delete('plan');
-      }
-      
-      // If on the homepage, remove plan to reset to visitor state
-      if (window.location.pathname.endsWith('/') || window.location.pathname.endsWith('index.html')) {
-          if (!devPlan) url.searchParams.delete('plan');
-      }
-
-      linkElement.href = url.href;
+      // Always use relative path for internal navigation
+      linkElement.href = href;
     }
+    navLog('Link set', linkElement.href);
   };
 
   // --- Clear old elements ---
@@ -376,23 +375,29 @@ function updateNavigation() {
   if (oldNavLinks) oldNavLinks.innerHTML = '';
   const oldNavActions = document.querySelector('.nav-actions');
   if (oldNavActions) oldNavActions.remove();
+  const mobileNav = document.getElementById('mobileNav');
+  if (mobileNav) mobileNav.innerHTML = '';
 
-  // --- Build Nav Links ---
+  // --- Build Nav Links (Desktop) ---
   const navLinks = document.querySelector('.nav-links');
   if (navLinks && navConfig.navItems) {
+    navLog('Building nav links for plan:', currentPlan);
     navConfig.navItems.forEach(item => {
+      navLog('Processing nav item:', item);
       // For visitor view, the CTA is inside navItems, so handle it here
       if (item.isCTA && !isAuthView) {
-          const navActions = document.querySelector('.nav-actions') || document.createElement('div');
-          navActions.className = 'nav-actions';
-          const ctaLink = document.createElement('a');
-          updateLink(ctaLink, item.href);
-          ctaLink.textContent = item.text;
-          ctaLink.className = 'btn btn-primary';
-          navActions.appendChild(ctaLink);
-          if(!document.querySelector('.nav-actions')) navGroup.appendChild(navActions);
+        const navActions = document.querySelector('.nav-actions') || document.createElement('div');
+        navActions.className = 'nav-actions';
+        const ctaLink = document.createElement('a');
+        updateLink(ctaLink, item.href);
+        ctaLink.textContent = item.text;
+        ctaLink.className = 'btn btn-primary';
+        navActions.appendChild(ctaLink);
+        if(!document.querySelector('.nav-actions')) navGroup.appendChild(navActions);
+        navLog('Added CTA link:', ctaLink.textContent, ctaLink.href);
       } else if (!item.isCTA) {
         if (item.isDropdown) {
+          navLog('Creating dropdown:', item.text);
           const dropdownContainer = document.createElement('div');
           dropdownContainer.className = 'nav-dropdown';
 
@@ -409,6 +414,7 @@ function updateNavigation() {
             updateLink(link, dropdownItem.href);
             link.textContent = dropdownItem.text;
             dropdownMenu.appendChild(link);
+            navLog('Dropdown link:', link.textContent, link.href);
           });
 
           dropdownContainer.appendChild(toggle);
@@ -422,6 +428,7 @@ function updateNavigation() {
               if (d !== dropdownContainer) d.classList.remove('open');
             });
             dropdownContainer.classList.toggle('open');
+            navLog('Dropdown toggled:', item.text, dropdownContainer.classList.contains('open'));
           });
         } else {
           const link = document.createElement('a');
@@ -429,9 +436,65 @@ function updateNavigation() {
           link.textContent = item.text;
           if (item.locked) {
             link.style.opacity = '0.5';
-            link.style.pointerEvents = 'none';
+            link.style.pointerEvents = 'auto';
+            link.classList.add('locked-link');
+            link.addEventListener('click', function(e) {
+              e.preventDefault();
+              navLog('Locked link clicked:', item.text);
+              showUpgradeModal('essential'); // or appropriate plan
+            });
+            link.title = 'Upgrade your plan to unlock this feature.';
           }
           navLinks.appendChild(link);
+          navLog('Nav link:', link.textContent, link.href);
+        }
+      }
+    });
+  }
+
+  // --- Build Mobile Nav ---
+  if (mobileNav && navConfig.navItems) {
+    navLog('Building mobile nav links for plan:', currentPlan);
+    navConfig.navItems.forEach(item => {
+      if (item.isCTA && !isAuthView) {
+        const ctaLink = document.createElement('a');
+        updateLink(ctaLink, item.href);
+        ctaLink.textContent = item.text;
+        ctaLink.className = 'btn btn-primary';
+        mobileNav.appendChild(ctaLink);
+      } else if (!item.isCTA) {
+        if (item.isDropdown) {
+          const group = document.createElement('div');
+          group.className = 'mobile-nav-group';
+          const trigger = document.createElement('button');
+          trigger.className = 'mobile-nav-trigger';
+          trigger.textContent = item.text;
+          group.appendChild(trigger);
+          const submenu = document.createElement('div');
+          submenu.className = 'mobile-nav-submenu';
+          item.items.forEach(dropdownItem => {
+            const link = document.createElement('a');
+            updateLink(link, dropdownItem.href);
+            link.textContent = dropdownItem.text;
+            submenu.appendChild(link);
+          });
+          group.appendChild(submenu);
+          mobileNav.appendChild(group);
+        } else {
+          const link = document.createElement('a');
+          updateLink(link, item.href);
+          link.textContent = item.text;
+          if (item.locked) {
+            link.style.opacity = '0.5';
+            link.style.pointerEvents = 'auto';
+            link.classList.add('locked-link');
+            link.addEventListener('click', function(e) {
+              e.preventDefault();
+              showUpgradeModal('essential');
+            });
+            link.title = 'Upgrade your plan to unlock this feature.';
+          }
+          mobileNav.appendChild(link);
         }
       }
     });
@@ -439,6 +502,7 @@ function updateNavigation() {
 
   // --- Build User Navigation (if authenticated view) ---
   if (isAuthView && navConfig.userNav) {
+    navLog('Building user nav actions');
     const navActions = document.querySelector('.nav-actions') || document.createElement('div');
     navActions.className = 'nav-actions';
 
@@ -449,6 +513,7 @@ function updateNavigation() {
       ctaLink.textContent = navConfig.userNav.cta.text;
       ctaLink.className = 'btn btn-primary';
       navActions.appendChild(ctaLink);
+      navLog('User nav CTA:', ctaLink.textContent, ctaLink.href);
     }
 
     // User Menu
@@ -473,6 +538,7 @@ function updateNavigation() {
         menuLink.href = '#';
         menuLink.addEventListener('click', (e) => {
           e.preventDefault();
+          navLog('Logout clicked');
           logout();
         });
       } else {
@@ -480,6 +546,7 @@ function updateNavigation() {
       }
       menuLink.textContent = menuItem.text;
       userDropdown.appendChild(menuLink);
+      navLog('User menu item:', menuItem.text, menuLink.href);
     });
 
     userMenu.appendChild(userToggle);
@@ -490,6 +557,7 @@ function updateNavigation() {
       e.preventDefault();
       e.stopPropagation();
       userMenu.classList.toggle('open');
+      navLog('User menu toggled:', userMenu.classList.contains('open'));
     });
 
     if(!document.querySelector('.nav-actions')) navGroup.appendChild(navActions);
@@ -500,6 +568,7 @@ function updateNavigation() {
       document.querySelectorAll('.nav-dropdown.open, .nav-user-menu.open').forEach(d => {
         d.classList.remove('open');
       });
+      navLog('Closed all dropdowns/menus');
     }
   });
 }
@@ -534,11 +603,12 @@ function createDevPlanToggle() {
     gap: 0.5rem;
   `;
   
+  // Visitor is the first option and selected by default
   toggle.innerHTML = `
     <span style="font-weight: 700; color: #1976D2;">DEV ONLY</span>
     <label for="dev-plan" style="font-weight: 600; color: #4B5563;">Plan:</label>
     <select id="dev-plan" style="font-size: 1rem; padding: 0.2rem 0.7rem; border-radius: 6px; border: 1px solid #E5E7EB;">
-      <option value="visitor">Visitor</option>
+      <option value="visitor" selected>Visitor</option>
       <option value="free">Free</option>
       <option value="trial">Trial</option>
       <option value="essential">Essential</option>
@@ -553,6 +623,12 @@ function createDevPlanToggle() {
     setPlan(e.target.value);
   });
   
+  // On first load, set to visitor if not already set
+  if (!localStorage.getItem('dev-plan')) {
+    setPlan('visitor');
+    select.value = 'visitor';
+  }
+
   return toggle;
 }
 
