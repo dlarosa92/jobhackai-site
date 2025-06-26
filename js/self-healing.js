@@ -220,42 +220,39 @@ window.selfHealing = {
     }, 1000);
   },
   
-  // Show user-friendly error
-  showUserError: (error) => {
-    const message = selfHealing.getUserFriendlyMessage(error);
-    selfHealing.showNotification(message, 'error');
-  },
-  
-  // Show user alert for issues
-  showUserAlert: (issues) => {
-    const message = `We detected some issues with the site. ${selfHealing.config.autoFix ? 'We\'re trying to fix them automatically.' : ''}`;
-    selfHealing.showNotification(message, 'warning', issues);
-  },
-  
-  // Get user-friendly error message
-  getUserFriendlyMessage: (error) => {
-    const messages = {
-      'navigation-update': 'There was an issue updating the navigation. Please refresh the page.',
-      'unhandled': 'Something unexpected happened. Please refresh the page and try again.',
-      'unhandled-promise': 'A background process failed. Please refresh the page.',
-      'default': 'Something went wrong. Please refresh the page and try again.'
-    };
-    
-    return messages[error.type] || messages.default;
-  },
-  
   // Show notification to user
-  showNotification: (message, type = 'info', details = null) => {
+  showNotification: (message, type = 'info', details = null, buttons = null) => {
     // Create notification element
     const notification = document.createElement('div');
     notification.className = `self-healing-notification ${type}`;
+    
+    // Determine which buttons to show
+    let actionsHtml = '';
+    if (buttons) {
+      if (buttons.includes('fix')) {
+        actionsHtml += '<button class="btn-fix-now">Fix Now</button>';
+      }
+      if (buttons.includes('reload')) {
+        actionsHtml += '<button class="btn-reload">Reload</button>';
+      }
+      if (buttons.includes('dismiss')) {
+        actionsHtml += '<button class="btn-dismiss">Dismiss</button>';
+      }
+    } else {
+      // Default: show Fix Now and Dismiss for errors, only Dismiss for info/success
+      if (type === 'error' || type === 'warning') {
+        actionsHtml = '<button class="btn-fix-now">Fix Now</button><button class="btn-dismiss">Dismiss</button>';
+      } else {
+        actionsHtml = '<button class="btn-dismiss">Dismiss</button>';
+      }
+    }
+    
     notification.innerHTML = `
       <div class="notification-content">
         <div class="notification-message">${message}</div>
         ${details ? `<div class="notification-details">${details.join(', ')}</div>` : ''}
         <div class="notification-actions">
-          <button class="btn-fix-now">Fix Now</button>
-          <button class="btn-dismiss">Dismiss</button>
+          ${actionsHtml}
         </div>
       </div>
     `;
@@ -319,6 +316,10 @@ window.selfHealing = {
           background: #007bff;
           color: white;
         }
+        .btn-reload {
+          background: #28a745;
+          color: white;
+        }
         .btn-dismiss {
           background: #6c757d;
           color: white;
@@ -328,14 +329,22 @@ window.selfHealing = {
     }
     
     // Add event listeners
-    notification.querySelector('.btn-fix-now').addEventListener('click', () => {
-      selfHealing.manualFix();
-      notification.remove();
-    });
-    
-    notification.querySelector('.btn-dismiss').addEventListener('click', () => {
-      notification.remove();
-    });
+    if (notification.querySelector('.btn-fix-now')) {
+      notification.querySelector('.btn-fix-now').addEventListener('click', () => {
+        selfHealing.manualFix();
+        notification.remove();
+      });
+    }
+    if (notification.querySelector('.btn-reload')) {
+      notification.querySelector('.btn-reload').addEventListener('click', () => {
+        location.reload();
+      });
+    }
+    if (notification.querySelector('.btn-dismiss')) {
+      notification.querySelector('.btn-dismiss').addEventListener('click', () => {
+        notification.remove();
+      });
+    }
     
     // Add to page
     document.body.appendChild(notification);
@@ -360,7 +369,7 @@ window.selfHealing = {
     
     // Show success message
     setTimeout(() => {
-      selfHealing.showNotification('Fix applied! Please refresh the page if issues persist.', 'info');
+      selfHealing.showFixApplied();
     }, 2000);
   },
   
