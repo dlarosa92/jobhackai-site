@@ -264,6 +264,14 @@ const PLANS = {
 // Make PLANS available globally for smoke tests and other modules
 window.PLANS = PLANS;
 
+// --- ENSURE LOCALSTORAGE KEYS ARE ALWAYS SET ---
+if (!localStorage.getItem('user-authenticated')) {
+  localStorage.setItem('user-authenticated', 'false');
+}
+if (!localStorage.getItem('user-plan')) {
+  localStorage.setItem('user-plan', 'free');
+}
+
 // --- NAVIGATION CONFIGURATION ---
 const NAVIGATION_CONFIG = {
   // Logged-out / Visitor
@@ -281,6 +289,7 @@ const NAVIGATION_CONFIG = {
   // Free Account (no plan)
   free: {
     navItems: [
+      { text: 'Home', href: 'index.html' },
       { text: 'Dashboard', href: 'dashboard.html' },
       { text: 'Blog', href: 'index.html#blog' },
       { text: 'Resume Feedback', href: 'resume-feedback-pro.html', locked: true },
@@ -297,6 +306,7 @@ const NAVIGATION_CONFIG = {
   // 3-Day Trial
   trial: {
     navItems: [
+      { text: 'Home', href: 'index.html' },
       { text: 'Dashboard', href: 'dashboard.html' },
       { text: 'Blog', href: 'index.html#blog' },
       { text: 'Resume Feedback', href: 'resume-feedback-pro.html' },
@@ -313,6 +323,7 @@ const NAVIGATION_CONFIG = {
   // Basic $29
   essential: {
     navItems: [
+      { text: 'Home', href: 'index.html' },
       { text: 'Dashboard', href: 'dashboard.html' },
       { text: 'Blog', href: 'index.html#blog' },
       { text: 'Resume Feedback', href: 'resume-feedback-pro.html' },
@@ -329,6 +340,7 @@ const NAVIGATION_CONFIG = {
   // Pro $59
   pro: {
     navItems: [
+      { text: 'Home', href: 'index.html' },
       { text: 'Dashboard', href: 'dashboard.html' },
       { text: 'Blog', href: 'index.html#blog' },
       { 
@@ -360,6 +372,7 @@ const NAVIGATION_CONFIG = {
   // Premium $99
   premium: {
     navItems: [
+      { text: 'Home', href: 'index.html' },
       { text: 'Dashboard', href: 'dashboard.html' },
       { text: 'Blog', href: 'index.html#blog' },
       { 
@@ -415,19 +428,17 @@ function getCurrentPlan() {
 function getDevPlanOverride() {
   const urlParams = new URLSearchParams(window.location.search);
   const planParam = urlParams.get('plan');
-  
   if (planParam && PLANS[planParam]) {
     navLog('info', 'getDevPlanOverride: Plan found in URL params', planParam);
     localStorage.setItem('dev-plan', planParam);
     return planParam;
   }
-  
   const devPlan = localStorage.getItem('dev-plan');
-  if (devPlan && PLANS[devPlan]) {
+  // Only allow dev-plan override if explicitly set and not visitor
+  if (devPlan && devPlan !== 'visitor' && PLANS[devPlan]) {
     navLog('debug', 'getDevPlanOverride: Plan found in localStorage', devPlan);
     return devPlan;
   }
-  
   navLog('debug', 'getDevPlanOverride: No dev override found');
   return null;
 }
@@ -435,22 +446,17 @@ function getDevPlanOverride() {
 function getEffectivePlan() {
   const authState = getAuthState();
   const devOverride = getDevPlanOverride();
-  
   navLog('debug', 'getEffectivePlan: Starting plan detection', { authState, devOverride });
-  
-  // If user is not authenticated, they can only be visitor
   if (!authState.isAuthenticated) {
     const effectivePlan = devOverride || 'visitor';
     navLog('info', 'getEffectivePlan: User not authenticated, effective plan', effectivePlan);
     return effectivePlan;
   }
-  
-  // If user is authenticated, dev override takes precedence for testing
-  if (devOverride) {
+  // If authenticated, only use devOverride if it is not visitor and not null
+  if (devOverride && devOverride !== 'visitor') {
     navLog('info', 'getEffectivePlan: Dev override active for authenticated user', devOverride);
     return devOverride;
   }
-  
   // Otherwise use their actual plan
   const effectivePlan = authState.userPlan || 'free';
   navLog('info', 'getEffectivePlan: Using user plan', effectivePlan);
@@ -1006,22 +1012,29 @@ function initializeNavigation() {
     localStorage.setItem('user-plan', 'free');
     navLog('debug', 'Initialized user-plan to free');
   }
-  
+
+  // --- Plan persistence fix ---
+  const authState = getAuthState();
+  let devPlan = localStorage.getItem('dev-plan');
+  if (authState.isAuthenticated) {
+    // If dev-plan is not set or matches visitor, always set to user-plan
+    if (!devPlan || devPlan === 'visitor') {
+      localStorage.setItem('dev-plan', authState.userPlan || 'free');
+      devPlan = authState.userPlan || 'free';
+      navLog('info', 'Auto-set dev-plan to user plan for authenticated user', devPlan);
+    }
+  } else {
+    // If not authenticated, always set dev-plan to visitor
+    localStorage.setItem('dev-plan', 'visitor');
+    devPlan = 'visitor';
+    navLog('info', 'Auto-set dev-plan to visitor for unauthenticated user');
+  }
+
   // Create dev plan toggle and append to document
   navLog('debug', 'Creating dev plan toggle');
   const toggle = createDevPlanToggle();
   document.body.appendChild(toggle);
   navLog('debug', 'Dev plan toggle appended to body');
-
-  // --- FIX: If authenticated and dev-plan is visitor, set to free ---
-  const authState = getAuthState();
-  const devPlanSelect = document.querySelector('#dev-plan');
-  if (authState.isAuthenticated && localStorage.getItem('dev-plan') === 'visitor') {
-    localStorage.setItem('dev-plan', 'free');
-    if (devPlanSelect) devPlanSelect.value = 'free';
-    if (typeof window.setPlan === 'function') window.setPlan('free');
-    navLog('info', 'Auto-switched dev plan to free for authenticated user');
-  }
 
   // Update navigation
   navLog('debug', 'Calling updateNavigation()');

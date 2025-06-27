@@ -4,29 +4,9 @@
 // Ensure global selfHealing object exists
 if (!window.selfHealing) window.selfHealing = {};
 if (typeof window.selfHealing.showUserAlert !== 'function') {
-  window.selfHealing.showUserAlert = function(errors) { 
-    // Only show alerts for critical issues, not minor warnings
-    console.warn('🔧 Self-healing detected issues:', errors);
-    
-    // Don't show alerts for minor issues or during development
-    if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
-      console.log('🔧 Development mode: Suppressing user alerts for minor issues');
-      return;
-    }
-    
-    // Only show alerts for critical errors, not warnings
-    if (typeof errors === 'string') {
-      if (errors.includes('critical') || errors.includes('error')) {
-        alert('Site issue detected: ' + errors);
-      }
-    } else if (Array.isArray(errors)) {
-      const criticalIssues = errors.filter(issue => 
-        issue.includes('critical') || issue.includes('error')
-      );
-      if (criticalIssues.length > 0) {
-        alert('Critical site issues detected:\n' + criticalIssues.join('\n'));
-      }
-    }
+  window.selfHealing.showUserAlert = function(errors) {
+    // Fallback: log to console, no popup
+    console.warn('🔧 [Fallback] selfHealing.showUserAlert called:', errors);
   };
 }
 

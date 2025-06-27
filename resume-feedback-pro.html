@@ -191,6 +191,18 @@
     }
   </script>
   <script>
+    // --- PAGE ACCESS CONTROL ---
+    function enforceAccess() {
+      const isAuthenticated = localStorage.getItem('user-authenticated') === 'true';
+      const plan = localStorage.getItem('user-plan') || 'free';
+      const allowedPlans = ['trial', 'essential', 'pro', 'premium'];
+      if (!isAuthenticated || !allowedPlans.includes(plan)) {
+        window.location.href = 'login.html';
+      }
+    }
+    enforceAccess();
+  </script>
+  <script>
     // --- AUTHENTICATION CHECK ---
     function checkAuthentication() {
       const isAuthenticated = localStorage.getItem('user-authenticated') === 'true';
