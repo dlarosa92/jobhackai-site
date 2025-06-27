@@ -275,7 +275,8 @@ const NAVIGATION_CONFIG = {
       { text: 'Pricing', href: 'pricing-a.html' },
       { text: 'Login', href: 'login.html' },
       { text: 'Start Free Trial', href: 'pricing-a.html', isCTA: true }
-    ]
+    ],
+    cta: { text: 'Start Free Trial', href: 'pricing-a.html', isCTA: true }
   },
   // Free Account (no plan)
   free: {
@@ -652,85 +653,84 @@ function updateNavigation() {
     });
     
     navConfig.navItems.forEach((item, index) => {
+      if (item.isCTA) return; // Skip CTA in navItems for visitors
       // Removed verbose logging to prevent console spam
       
-      // For visitor view, the CTA is inside navItems, so handle it here
-      if (item.isCTA && !isAuthView) {
-        navLog('debug', 'Creating CTA link for visitor view', item);
-        let navActions = document.querySelector('.nav-actions');
-        if (!navActions) {
-          navActions = document.createElement('div');
-          navActions.className = 'nav-actions';
-          navGroup.appendChild(navActions);
-        }
-        const ctaLink = document.createElement('a');
-        updateLink(ctaLink, item.href);
-        ctaLink.textContent = item.text;
-        ctaLink.className = 'btn btn-primary';
-        navActions.appendChild(ctaLink);
-        navLog('info', 'CTA link created', { text: ctaLink.textContent, href: ctaLink.href });
-      } else if (!item.isCTA) {
-        if (item.isDropdown) {
-          navLog('info', 'Creating dropdown navigation', item);
-          const dropdownContainer = document.createElement('div');
-          dropdownContainer.className = 'nav-dropdown';
+      if (item.isDropdown) {
+        navLog('info', 'Creating dropdown navigation', item);
+        const dropdownContainer = document.createElement('div');
+        dropdownContainer.className = 'nav-dropdown';
 
-          const toggle = document.createElement('a');
-          toggle.href = '#';
-          toggle.className = 'nav-dropdown-toggle';
-          toggle.innerHTML = `${item.text} <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="dropdown-arrow"><path d="m6 9 6 6 6-6"/></svg>`;
-          
-          const dropdownMenu = document.createElement('div');
-          dropdownMenu.className = 'nav-dropdown-menu';
+        const toggle = document.createElement('a');
+        toggle.href = '#';
+        toggle.className = 'nav-dropdown-toggle';
+        toggle.innerHTML = `${item.text} <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="dropdown-arrow"><path d="m6 9 6 6 6-6"/></svg>`;
+        
+        const dropdownMenu = document.createElement('div');
+        dropdownMenu.className = 'nav-dropdown-menu';
 
-          item.items.forEach((dropdownItem, dropdownIndex) => {
-            // Removed verbose logging to prevent console spam
-            const link = document.createElement('a');
-            updateLink(link, dropdownItem.href);
-            link.textContent = dropdownItem.text;
-            dropdownMenu.appendChild(link);
-          });
-
-          dropdownContainer.appendChild(toggle);
-          dropdownContainer.appendChild(dropdownMenu);
-          navLinks.appendChild(dropdownContainer);
-          
-          toggle.addEventListener('click', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            document.querySelectorAll('.nav-dropdown.open').forEach(d => {
-              if (d !== dropdownContainer) d.classList.remove('open');
-            });
-            dropdownContainer.classList.toggle('open');
-            // Removed verbose logging to prevent console spam
-          });
-          
-          navLog('info', 'Dropdown created', { 
-            text: item.text, 
-            itemsCount: item.items.length 
-          });
-        } else {
+        item.items.forEach((dropdownItem, dropdownIndex) => {
           // Removed verbose logging to prevent console spam
           const link = document.createElement('a');
-          updateLink(link, item.href);
-          link.textContent = item.text;
-          if (item.locked) {
-            navLog('info', 'Creating locked link', item);
-            link.style.opacity = '0.5';
-            link.style.pointerEvents = 'auto';
-            link.classList.add('locked-link');
-            link.addEventListener('click', function(e) {
-              e.preventDefault();
-              navLog('info', 'Locked link clicked', { text: item.text, href: item.href });
-              showUpgradeModal('essential'); // or appropriate plan
-            });
-            link.title = 'Upgrade your plan to unlock this feature.';
-          }
-          navLinks.appendChild(link);
+          updateLink(link, dropdownItem.href);
+          link.textContent = dropdownItem.text;
+          dropdownMenu.appendChild(link);
+        });
+
+        dropdownContainer.appendChild(toggle);
+        dropdownContainer.appendChild(dropdownMenu);
+        navLinks.appendChild(dropdownContainer);
+        
+        toggle.addEventListener('click', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          document.querySelectorAll('.nav-dropdown.open').forEach(d => {
+            if (d !== dropdownContainer) d.classList.remove('open');
+          });
+          dropdownContainer.classList.toggle('open');
           // Removed verbose logging to prevent console spam
+        });
+        
+        navLog('info', 'Dropdown created', { 
+          text: item.text, 
+          itemsCount: item.items.length 
+        });
+      } else {
+        // Removed verbose logging to prevent console spam
+        const link = document.createElement('a');
+        updateLink(link, item.href);
+        link.textContent = item.text;
+        if (item.locked) {
+          navLog('info', 'Creating locked link', item);
+          link.style.opacity = '0.5';
+          link.style.pointerEvents = 'auto';
+          link.classList.add('locked-link');
+          link.addEventListener('click', function(e) {
+            e.preventDefault();
+            navLog('info', 'Locked link clicked', { text: item.text, href: item.href });
+            showUpgradeModal('essential'); // or appropriate plan
+          });
+          link.title = 'Upgrade your plan to unlock this feature.';
         }
+        navLinks.appendChild(link);
+        // Removed verbose logging to prevent console spam
       }
     });
+    // --- Always append CTA for visitors (only once, after nav links) ---
+    if (!isAuthView && navConfig.cta) {
+      let navActions = document.querySelector('.nav-actions');
+      if (!navActions) {
+        navActions = document.createElement('div');
+        navActions.className = 'nav-actions';
+        navGroup.appendChild(navActions);
+      }
+      const ctaLink = document.createElement('a');
+      updateLink(ctaLink, navConfig.cta.href);
+      ctaLink.textContent = navConfig.cta.text;
+      ctaLink.className = 'btn btn-primary';
+      navActions.appendChild(ctaLink);
+      navLog('info', 'Visitor CTA link created', { text: ctaLink.textContent, href: ctaLink.href });
+    }
     // --- Always append CTA for authenticated plans (only once, after nav links) ---
     if (isAuthView && navConfig.userNav && navConfig.userNav.cta) {
       let navActions = document.querySelector('.nav-actions');
@@ -763,55 +763,56 @@ function updateNavigation() {
     navLog('info', 'Building mobile navigation', { itemsCount: navConfig.navItems.length });
     
     navConfig.navItems.forEach((item, index) => {
+      if (item.isCTA) return; // Skip CTA in navItems for visitors
       // Removed verbose logging to prevent console spam
       
-      if (item.isCTA && !isAuthView) {
-        const ctaLink = document.createElement('a');
-        updateLink(ctaLink, item.href);
-        ctaLink.textContent = item.text;
-        ctaLink.className = 'btn btn-primary';
-        mobileNav.appendChild(ctaLink);
+      if (item.isDropdown) {
         // Removed verbose logging to prevent console spam
-      } else if (!item.isCTA) {
-        if (item.isDropdown) {
-          // Removed verbose logging to prevent console spam
-          const group = document.createElement('div');
-          group.className = 'mobile-nav-group';
-          const trigger = document.createElement('button');
-          trigger.className = 'mobile-nav-trigger';
-          trigger.textContent = item.text;
-          group.appendChild(trigger);
-          const submenu = document.createElement('div');
-          submenu.className = 'mobile-nav-submenu';
-          item.items.forEach(dropdownItem => {
-            const link = document.createElement('a');
-            updateLink(link, dropdownItem.href);
-            link.textContent = dropdownItem.text;
-            submenu.appendChild(link);
-          });
-          group.appendChild(submenu);
-          mobileNav.appendChild(group);
-          // Removed verbose logging to prevent console spam
-        } else {
+        const group = document.createElement('div');
+        group.className = 'mobile-nav-group';
+        const trigger = document.createElement('button');
+        trigger.className = 'mobile-nav-trigger';
+        trigger.textContent = item.text;
+        group.appendChild(trigger);
+        const submenu = document.createElement('div');
+        submenu.className = 'mobile-nav-submenu';
+        item.items.forEach(dropdownItem => {
           const link = document.createElement('a');
-          updateLink(link, item.href);
-          link.textContent = item.text;
-          if (item.locked) {
-            link.style.opacity = '0.5';
-            link.style.pointerEvents = 'auto';
-            link.classList.add('locked-link');
-            link.addEventListener('click', function(e) {
-              e.preventDefault();
-              navLog('info', 'Mobile locked link clicked', { text: item.text, href: item.href });
-              showUpgradeModal('essential');
-            });
-            link.title = 'Upgrade your plan to unlock this feature.';
-          }
-          mobileNav.appendChild(link);
-          // Removed verbose logging to prevent console spam
+          updateLink(link, dropdownItem.href);
+          link.textContent = dropdownItem.text;
+          submenu.appendChild(link);
+        });
+        group.appendChild(submenu);
+        mobileNav.appendChild(group);
+        // Removed verbose logging to prevent console spam
+      } else {
+        const link = document.createElement('a');
+        updateLink(link, item.href);
+        link.textContent = item.text;
+        if (item.locked) {
+          link.style.opacity = '0.5';
+          link.style.pointerEvents = 'auto';
+          link.classList.add('locked-link');
+          link.addEventListener('click', function(e) {
+            e.preventDefault();
+            navLog('info', 'Mobile locked link clicked', { text: item.text, href: item.href });
+            showUpgradeModal('essential');
+          });
+          link.title = 'Upgrade your plan to unlock this feature.';
         }
+        mobileNav.appendChild(link);
+        // Removed verbose logging to prevent console spam
       }
     });
+    // --- Always append CTA for visitors in mobile nav ---
+    if (!isAuthView && navConfig.cta) {
+      const cta = document.createElement('a');
+      updateLink(cta, navConfig.cta.href);
+      cta.textContent = navConfig.cta.text;
+      cta.className = 'btn btn-primary';
+      cta.setAttribute('role', 'button');
+      mobileNav.appendChild(cta);
+    }
     // --- Always append CTA for authenticated plans in mobile nav (only once, after nav links) ---
     if (isAuthView && navConfig.userNav && navConfig.userNav.cta) {
       const cta = document.createElement('a');
@@ -1011,7 +1012,17 @@ function initializeNavigation() {
   const toggle = createDevPlanToggle();
   document.body.appendChild(toggle);
   navLog('debug', 'Dev plan toggle appended to body');
-  
+
+  // --- FIX: If authenticated and dev-plan is visitor, set to free ---
+  const authState = getAuthState();
+  const devPlanSelect = document.querySelector('#dev-plan');
+  if (authState.isAuthenticated && localStorage.getItem('dev-plan') === 'visitor') {
+    localStorage.setItem('dev-plan', 'free');
+    if (devPlanSelect) devPlanSelect.value = 'free';
+    if (typeof window.setPlan === 'function') window.setPlan('free');
+    navLog('info', 'Auto-switched dev plan to free for authenticated user');
+  }
+
   // Update navigation
   navLog('debug', 'Calling updateNavigation()');
   updateNavigation();
@@ -1135,29 +1146,4 @@ window.navDebug = {
     DEBUG.enabled = !DEBUG.enabled;
     console.log(`🔧 Debug logging ${DEBUG.enabled ? 'ENABLED' : 'DISABLED'}`);
   },
-  
-  // NEW: Auto-debug controls
-  autoDebug: {
-    // Enable/disable auto-debug
-    toggle: () => {
-      DEBUG.autoDebug.enabled = !DEBUG.autoDebug.enabled;
-      console.log(`🔧 Auto-debug ${DEBUG.autoDebug.enabled ? 'ENABLED' : 'DISABLED'}`);
-    },
-    
-    // Set auto-debug thresholds
-    setThresholds: (errors = 3, warnings = 5) => {
-      DEBUG.autoDebug.maxErrors = errors;
-      DEBUG.autoDebug.maxWarnings = warnings;
-      console.log(`🔧 Auto-debug thresholds set to: ${errors} errors, ${warnings} warnings`);
-    },
-    
-    // Get auto-debug state
-    getState: () => {
-      return {
-        enabled: DEBUG.autoDebug.enabled,
-        errorCount: DEBUG.autoDebug.errorCount,
-        warningCount: DEBUG.autoDebug.warningCount
-      };
-    }
-  }
 };

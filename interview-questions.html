@@ -120,7 +120,7 @@
   </style>
 </head>
 <body>
-  <!-- Header (canonical) -->
+  <!-- Header -->
   <header class="site-header">
     <div class="container">
       <a href="index.html" class="nav-logo" aria-label="Go to homepage">
@@ -144,6 +144,7 @@
       </button>
     </div>
   </header>
+
   <nav class="mobile-nav" id="mobileNav">
     <!-- Mobile navigation will be dynamically populated by navigation.js -->
   </nav>
@@ -349,6 +350,24 @@
     if (roleInput.value) {
       generateQuestions(roleInput.value);
     }
+
+    // --- PLAN LOGIC ---
+    function updateInterviewUIForPlan() {
+      const userPlan = localStorage.getItem('user-plan') || 'free';
+      // Show/hide upgrade and lock based on plan
+      if (['trial', 'essential', 'pro', 'premium'].includes(userPlan)) {
+        // Show input and enable question generation
+        roleInput.disabled = false;
+        upgradeBtn.style.display = 'none';
+        lockDiv.style.display = 'none';
+      } else {
+        // Lock input and show upgrade prompt
+        roleInput.disabled = true;
+        upgradeBtn.style.display = 'block';
+        lockDiv.style.display = 'block';
+      }
+    }
+    document.addEventListener('DOMContentLoaded', updateInterviewUIForPlan);
   </script>
   <!-- Load navigation system -->
   <script src="js/navigation.js"></script>

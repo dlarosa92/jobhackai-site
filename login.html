@@ -270,7 +270,12 @@
           // Set authentication state
           localStorage.setItem('user-authenticated', 'true');
           localStorage.setItem('user-plan', 'free'); // Default to free plan
-          
+          localStorage.setItem('dev-plan', 'free'); // Set dev plan to free after login
+          // Update dev plan toggle UI if present
+          const devPlanSelect = document.querySelector('#dev-plan');
+          if (devPlanSelect) devPlanSelect.value = 'free';
+          // Call setPlan('free') if available
+          if (typeof window.setPlan === 'function') window.setPlan('free');
           // Redirect to dashboard
           window.location.href = 'dashboard.html';
         }, 1000);

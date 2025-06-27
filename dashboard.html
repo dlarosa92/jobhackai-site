@@ -726,6 +726,7 @@
         </a>
         <div class="welcome-row">
           <h2>Welcome back, ${user.name || 'User'}!</h2>
+          ${user.plan === 'trial' || user.plan === 'essential' || user.plan === 'pro' || user.plan === 'premium' ? `<div class="plan-transition-message" style="background:#E6F7FF;color:#1976D2;padding:0.7em 1em;border-radius:8px;margin-bottom:0.7em;font-size:1.01rem;">Your previous ATS resume score has been carried over from your free account. You now have access to more features and unlimited scoring!</div>` : ''}
           ${user.plan === 'trial' ? `<div class="trial-countdown">You have ${daysLeft(user.trialEndsAt)} day${daysLeft(user.trialEndsAt) !== 1 ? 's' : ''} left in your trial!</div>` : ''}
           <div class="user-email">${user.email}</div>
         </div>
@@ -741,6 +742,14 @@
           ${(user.plan === 'cancelled') ? `<a href="pricing-a.html" class="upgrade-btn">Reactivate</a>` : ''}
         </div>
       </div>`;
+      // Always load last ATS score/result from localStorage if present
+      let lastScore = localStorage.getItem('lastATSScore');
+      let lastSummary = localStorage.getItem('lastATSSummary');
+      if (lastScore && lastSummary) {
+        atsScore.value = parseInt(lastScore, 10);
+        atsScore.percent = parseInt(lastScore, 10);
+        atsScore.summary = lastSummary;
+      }
       // Features
       let featuresHtml = '<div class="dashboard-features">';
       // Always render ATS Scoring first

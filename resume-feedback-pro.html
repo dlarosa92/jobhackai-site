@@ -638,6 +638,21 @@
         main.insertBefore(usageDiv, main.firstChild);
       }
     });
+
+    // --- PLAN LOGIC ---
+    const userPlan = localStorage.getItem('user-plan') || 'free';
+    // Update plan badge and ATS scoring section to reflect userPlan
+    document.addEventListener('DOMContentLoaded', function() {
+      const planBadge = document.querySelector('.rf-plan-badge');
+      if (planBadge) {
+        planBadge.textContent = userPlan.charAt(0).toUpperCase() + userPlan.slice(1) + ' Plan';
+      }
+      // Unlock ATS scoring for trial and above
+      if (['trial', 'essential', 'pro', 'premium'].includes(userPlan)) {
+        const atsSection = document.getElementById('ats-section');
+        if (atsSection) atsSection.classList.remove('locked');
+      }
+    });
   </script>
   <script src="js/main.js" type="module"></script>
   <!-- Header -->
@@ -652,12 +667,7 @@
       </a>
       <div class="nav-group">
         <nav class="nav-links" role="navigation">
-          <a href="index.html">Home</a>
-          <a href="#what-you-get">What You Get</a>
-          <a href="pricing-a.html">Pricing</a>
-          <a href="index.html#blog">Blog</a>
-          <a href="login.html">Login</a>
-          <a href="pricing-a.html" class="cta-button">Start Free Trial</a>
+          <!-- Navigation will be dynamically populated by navigation.js -->
         </nav>
       </div>
       <button class="mobile-toggle" aria-label="Open navigation menu" aria-expanded="false" aria-controls="mobileNav">
@@ -670,12 +680,7 @@
     </div>
   </header>
   <nav class="mobile-nav" id="mobileNav">
-    <a href="index.html">Home</a>
-    <a href="#what-you-get">What You Get</a>
-    <a href="pricing-a.html">Pricing</a>
-    <a href="index.html#blog">Blog</a>
-    <a href="login.html">Login</a>
-    <a href="pricing-a.html" class="cta-button">Start Free Trial</a>
+    <!-- Mobile navigation will be dynamically populated by navigation.js -->
   </nav>
   <script>
     // Hamburger menu toggle
