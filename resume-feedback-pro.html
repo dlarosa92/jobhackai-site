@@ -178,6 +178,18 @@
       <option value="premium">Premium</option>
     </select>
   </div>
+  <script src="js/navigation.js"></script>
+  <script>
+    if (window.JobHackAINavigation && typeof window.JobHackAINavigation.initializeNavigation === 'function') {
+      window.JobHackAINavigation.initializeNavigation();
+    } else {
+      window.addEventListener('DOMContentLoaded', function() {
+        if (window.JobHackAINavigation && typeof window.JobHackAINavigation.initializeNavigation === 'function') {
+          window.JobHackAINavigation.initializeNavigation();
+        }
+      });
+    }
+  </script>
   <script>
     // --- AUTHENTICATION CHECK ---
     function checkAuthentication() {
@@ -627,6 +639,7 @@
       }
     });
   </script>
+  <script src="js/main.js" type="module"></script>
   <!-- Header -->
   <header class="site-header">
     <div class="container">
@@ -642,7 +655,7 @@
           <a href="index.html">Home</a>
           <a href="#what-you-get">What You Get</a>
           <a href="pricing-a.html">Pricing</a>
-          <a href="#blog">Blog</a>
+          <a href="index.html#blog">Blog</a>
           <a href="login.html">Login</a>
           <a href="pricing-a.html" class="cta-button">Start Free Trial</a>
         </nav>
@@ -660,7 +673,7 @@
     <a href="index.html">Home</a>
     <a href="#what-you-get">What You Get</a>
     <a href="pricing-a.html">Pricing</a>
-    <a href="blog.html">Blog</a>
+    <a href="index.html#blog">Blog</a>
     <a href="login.html">Login</a>
     <a href="pricing-a.html" class="cta-button">Start Free Trial</a>
   </nav>

@@ -475,6 +475,7 @@
       <div class="nav-group">
         <nav class="nav-links" role="navigation">
           <!-- Navigation will be dynamically populated by navigation.js -->
+          <a href="index.html#blog">Blog</a>
         </nav>
       </div>
       <button class="mobile-toggle" aria-label="Open navigation menu" aria-expanded="false" aria-controls="mobileNav">
@@ -625,7 +626,7 @@
         key: "feedback",
         title: "Resume Feedback",
         desc: "Get a detailed analysis of what's working and what could be improved across every section of your resume.",
-        action: "Upload PDF",
+        action: "Upgrade to Unlock",
         included: true
       },
       {
@@ -737,7 +738,6 @@
         </div>
         <div class="status-action-row">
           <span class="user-plan-badge ${user.plan}">${planIcon(user.plan)}${user.plan.charAt(0).toUpperCase() + user.plan.slice(1)}</span>
-          ${(user.plan === 'trial' || user.plan === 'essential' || user.plan === 'pro') ? `<a href="pricing-a.html" class="upgrade-btn">Upgrade</a>` : ''}
           ${(user.plan === 'cancelled') ? `<a href="pricing-a.html" class="upgrade-btn">Reactivate</a>` : ''}
         </div>
       </div>`;
@@ -899,6 +899,17 @@
   </script>
   <!-- Load navigation system -->
   <script src="js/navigation.js"></script>
+  <script>
+    if (window.JobHackAINavigation && typeof window.JobHackAINavigation.initializeNavigation === 'function') {
+      window.JobHackAINavigation.initializeNavigation();
+    } else {
+      window.addEventListener('DOMContentLoaded', function() {
+        if (window.JobHackAINavigation && typeof window.JobHackAINavigation.initializeNavigation === 'function') {
+          window.JobHackAINavigation.initializeNavigation();
+        }
+      });
+    }
+  </script>
   <script src="js/main.js" type="module"></script>
   <script src="js/analytics.js" type="module"></script>
 </body>

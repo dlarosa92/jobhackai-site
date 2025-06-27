@@ -362,7 +362,29 @@ section {
   }
 }
 
-.btn-primary, a.btn-primary {
+.btn-outline, .btn-secondary {
+  background: #fff;
+  color: #1976D2 !important;
+  border: 1.5px solid #1976D2;
+  font-weight: 600;
+  border-radius: 8px;
+  padding: 0.7rem 1.3rem;
+  font-size: 1.01rem;
+  cursor: pointer;
+  transition: background 0.18s, color 0.18s, border-color 0.18s;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.btn-outline:hover, .btn-secondary:hover {
+  background: #F0F8FF;
+  color: #125bb5 !important;
+  border-color: #125bb5;
+}
+
+.cta-button {
   background: #00E676;
   color: #fff !important;
   font-weight: 700;
@@ -376,6 +398,10 @@ section {
   display: inline-block;
   text-align: center;
   text-decoration: none;
+}
+
+.cta-button:hover {
+  background: #00c965;
 }
 
 /* --- PRICING B CARDS (A/B TEST) --- */
@@ -443,12 +469,6 @@ textarea:focus {
   background-color: #006335; /* Darker shade of cta-green */
   border-color: #006335;
   color: var(--color-card-bg);
-}
-
-.btn-secondary {
-  color: var(--color-accent-blue);
-  background-color: transparent;
-  border: 1px solid var(--color-accent-blue);
 }
 
 .btn-secondary:hover {

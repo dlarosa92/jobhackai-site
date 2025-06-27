@@ -206,6 +206,17 @@
 
   <!-- Load navigation system -->
   <script src="js/navigation.js"></script>
+  <script>
+    if (window.JobHackAINavigation && typeof window.JobHackAINavigation.initializeNavigation === 'function') {
+      window.JobHackAINavigation.initializeNavigation();
+    } else {
+      window.addEventListener('DOMContentLoaded', function() {
+        if (window.JobHackAINavigation && typeof window.JobHackAINavigation.initializeNavigation === 'function') {
+          window.JobHackAINavigation.initializeNavigation();
+        }
+      });
+    }
+  </script>
   <script src="js/error-reporting.js"></script>
   <script src="js/self-healing.js"></script>
   <script src="js/audit-trail.js"></script>

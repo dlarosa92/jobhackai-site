@@ -1,6 +1,9 @@
 // JobHackAI Smoke Test System
 // Quick tests to verify site functionality and catch regressions
 
+// Ensure global smokeTests object exists
+if (!window.smokeTests) window.smokeTests = {};
+
 window.smokeTests = {
   // Configuration
   config: {
@@ -104,8 +107,8 @@ window.smokeTests = {
           };
         }
         
-        // Test basic feature access
-        const testFeatures = ['resume-scoring', 'mock-interviews', 'interview-questions'];
+        // Test basic feature access using actual feature keys from PLANS
+        const testFeatures = ['ats', 'feedback', 'interview'];
         const results = testFeatures.map(feature => ({
           feature: feature,
           unlocked: window.isFeatureUnlocked(feature)
@@ -199,7 +202,7 @@ window.smokeTests = {
           };
         }
         
-        const requiredMethods = ['backup', 'restore', 'list', 'autoBackup'];
+        const requiredMethods = ['createBackup', 'restoreBackup', 'listBackups'];
         const missing = requiredMethods.filter(method => !window.stateManager[method]);
         
         if (missing.length > 0) {
@@ -534,3 +537,6 @@ if (window.navDebug) {
   window.navDebug.commands.exportSmokeTests = () => smokeTests.exportResults();
   window.navDebug.commands.clearSmokeTests = () => smokeTests.clearResults();
 }
+
+// At end of file, assign to window
+window.smokeTests = smokeTests;

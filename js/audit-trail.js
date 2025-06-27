@@ -1,6 +1,9 @@
 // JobHackAI Audit Trail System
 // Logs all agent actions, plan/auth changes, and restores for debugging
 
+// Ensure global auditTrail object exists
+if (!window.auditTrail) window.auditTrail = {};
+
 window.auditTrail = {
   // Configuration
   config: {
@@ -374,4 +377,7 @@ if (window.navDebug) {
   window.navDebug.commands.exportAudit = () => auditTrail.exportEntries();
   window.navDebug.commands.clearAudit = () => auditTrail.clearEntries();
   window.navDebug.commands.auditTimeline = () => auditTrail.getTimeline();
-} 
+}
+
+// At end of file, assign to window
+window.auditTrail = auditTrail; 

@@ -1,6 +1,9 @@
 // JobHackAI Error Reporting System
 // Captures errors, health issues, and user context for debugging
 
+// Ensure global errorReports array exists
+if (!window.errorReports) window.errorReports = [];
+
 window.errorReporter = {
   // Configuration
   config: {
