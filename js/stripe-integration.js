@@ -361,6 +361,27 @@ class JobHackAIStripe {
     
     localStorage.setItem('payment-intent-id', paymentIntent?.id || 'demo-payment-id');
 
+    // Save payment method for future use (demo mode)
+    if (this.isDemoMode) {
+      this.savePaymentMethodToLocalStorage();
+    }
+
+    // TODO: In production, send trial expiry reminder email here
+    // This would typically be handled by your backend or Zapier integration
+    if (selectedPlan === 'trial' || !selectedPlan) {
+      console.log('TODO: Send trial expiry reminder email to user');
+      // Example Zapier webhook call:
+      // fetch('https://hooks.zapier.com/hooks/catch/your-webhook-url', {
+      //   method: 'POST',
+      //   headers: { 'Content-Type': 'application/json' },
+      //   body: JSON.stringify({
+      //     email: 'user@example.com',
+      //     trial_end_date: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+      //     reminder_type: 'trial_expiry'
+      //   })
+      // });
+    }
+
     // Show success message
     this.showSuccessMessage(selectedPlan);
 
@@ -368,6 +389,57 @@ class JobHackAIStripe {
     setTimeout(() => {
       window.location.href = 'dashboard.html';
     }, 2000);
+  }
+
+  // Save payment method to localStorage (demo mode)
+  savePaymentMethodToLocalStorage() {
+    try {
+      // Get existing saved cards
+      const savedCards = JSON.parse(localStorage.getItem('saved-cards') || '[]');
+      
+      // Create demo card data (in production, this would come from Stripe)
+      const demoCard = {
+        id: 'pm_demo_' + Date.now(),
+        brand: 'Visa',
+        last4: '4242',
+        expiry: '12/25',
+        isDefault: savedCards.length === 0 // First card becomes default
+      };
+      
+      // Add to saved cards if not already present
+      const cardExists = savedCards.some(card => card.last4 === demoCard.last4);
+      if (!cardExists) {
+        savedCards.push(demoCard);
+        localStorage.setItem('saved-cards', JSON.stringify(savedCards));
+        console.log('Payment method saved for future use (demo mode)');
+      }
+    } catch (error) {
+      console.error('Failed to save payment method:', error);
+    }
+  }
+
+  // Get saved payment methods (demo mode)
+  getSavedPaymentMethods() {
+    try {
+      return JSON.parse(localStorage.getItem('saved-cards') || '[]');
+    } catch (error) {
+      console.error('Failed to get saved payment methods:', error);
+      return [];
+    }
+  }
+
+  // Remove saved payment method (demo mode)
+  removeSavedPaymentMethod(paymentMethodId) {
+    try {
+      const savedCards = JSON.parse(localStorage.getItem('saved-cards') || '[]');
+      const updatedCards = savedCards.filter(card => card.id !== paymentMethodId);
+      localStorage.setItem('saved-cards', JSON.stringify(updatedCards));
+      console.log('Payment method removed (demo mode)');
+      return true;
+    } catch (error) {
+      console.error('Failed to remove payment method:', error);
+      return false;
+    }
   }
 
   handlePaymentError(errorMessage, isCheckout = false) {

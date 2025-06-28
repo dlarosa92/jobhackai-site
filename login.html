@@ -298,34 +298,44 @@
       document.getElementById('googleSignIn').addEventListener('click', function(e) {
         e.preventDefault();
         showLoading();
-        
         setTimeout(() => {
+          // TODO: In production, check with backend if user already exists and has used a trial (by email/social ID)
+          // If user is new, proceed. If not, redirect to dashboard or show message.
+          const isFirstTime = !localStorage.getItem('trial-activated'); // DEV ONLY: replace with backend check
           localStorage.setItem('user-authenticated', 'true');
-          localStorage.setItem('user-plan', 'trial'); // Social login gets trial
-          localStorage.setItem('dev-plan', 'trial'); // Set dev plan to trial after social login
-          // Update dev plan toggle UI if present
-          const devPlanSelect = document.querySelector('#dev-plan');
-          if (devPlanSelect) devPlanSelect.value = 'trial';
-          // Call setPlan('trial') if available
-          if (typeof window.setPlan === 'function') window.setPlan('trial');
-          window.location.href = 'dashboard.html';
+          if (isFirstTime) {
+            // Prompt for credit card before starting trial
+            localStorage.setItem('user-plan', 'trial');
+            localStorage.setItem('dev-plan', 'trial');
+            // Set trial-activated flag after card is added (see add-card.html logic)
+            // Redirect to add-card page
+            window.location.href = 'add-card.html';
+          } else {
+            // User already had a trial, go to dashboard
+            window.location.href = 'dashboard.html';
+          }
         }, 1000);
       });
 
       document.getElementById('linkedinSignIn').addEventListener('click', function(e) {
         e.preventDefault();
         showLoading();
-        
         setTimeout(() => {
+          // TODO: In production, check with backend if user already exists and has used a trial (by email/social ID)
+          // If user is new, proceed. If not, redirect to dashboard or show message.
+          const isFirstTime = !localStorage.getItem('trial-activated'); // DEV ONLY: replace with backend check
           localStorage.setItem('user-authenticated', 'true');
-          localStorage.setItem('user-plan', 'trial'); // Social login gets trial
-          localStorage.setItem('dev-plan', 'trial'); // Set dev plan to trial after social login
-          // Update dev plan toggle UI if present
-          const devPlanSelect = document.querySelector('#dev-plan');
-          if (devPlanSelect) devPlanSelect.value = 'trial';
-          // Call setPlan('trial') if available
-          if (typeof window.setPlan === 'function') window.setPlan('trial');
-          window.location.href = 'dashboard.html';
+          if (isFirstTime) {
+            // Prompt for credit card before starting trial
+            localStorage.setItem('user-plan', 'trial');
+            localStorage.setItem('dev-plan', 'trial');
+            // Set trial-activated flag after card is added (see add-card.html logic)
+            // Redirect to add-card page
+            window.location.href = 'add-card.html';
+          } else {
+            // User already had a trial, go to dashboard
+            window.location.href = 'dashboard.html';
+          }
         }, 1000);
       });
     });

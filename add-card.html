@@ -83,8 +83,157 @@
       margin-top: 1.1rem;
       text-align: center;
     }
+    
+    /* Trust & Compliance Styles */
+    .trust-compliance {
+      margin-top: 1.5rem;
+      padding: 1rem;
+      background: #F8FAFC;
+      border-radius: 12px;
+      border: 1px solid #E2E8F0;
+      width: 100%;
+    }
+    .trust-compliance h4 {
+      font-size: 0.95rem;
+      font-weight: 700;
+      color: #232B36;
+      margin-bottom: 0.5rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .trust-compliance p {
+      font-size: 0.88rem;
+      color: #64748B;
+      margin-bottom: 0.8rem;
+      line-height: 1.4;
+    }
+    .compliance-links {
+      display: flex;
+      gap: 1rem;
+      flex-wrap: wrap;
+      margin-top: 0.8rem;
+    }
+    .compliance-links a {
+      font-size: 0.85rem;
+      color: #1976D2;
+      text-decoration: underline;
+      transition: color 0.18s;
+    }
+    .compliance-links a:hover {
+      color: #125bb5;
+    }
+    .stripe-badge {
+      display: flex;
+      align-items: center;
+      gap: 0.3rem;
+      font-size: 0.8rem;
+      color: #64748B;
+      margin-top: 0.5rem;
+    }
+    
+    /* Saved Payment Methods Styles */
+    .saved-payment-section {
+      width: 100%;
+      margin-bottom: 1.5rem;
+      display: none;
+    }
+    .saved-payment-section.show {
+      display: block;
+    }
+    .saved-card {
+      background: #F8FAFC;
+      border: 2px solid #E2E8F0;
+      border-radius: 12px;
+      padding: 1rem;
+      margin-bottom: 1rem;
+      cursor: pointer;
+      transition: border-color 0.18s, background 0.18s;
+    }
+    .saved-card:hover {
+      border-color: #1976D2;
+      background: #F0F7FF;
+    }
+    .saved-card.selected {
+      border-color: #00E676;
+      background: #F0FFF4;
+    }
+    .saved-card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 0.5rem;
+    }
+    .saved-card-number {
+      font-weight: 600;
+      color: #232B36;
+      font-size: 0.95rem;
+    }
+    .saved-card-expiry {
+      font-size: 0.85rem;
+      color: #64748B;
+    }
+    .saved-card-type {
+      font-size: 0.8rem;
+      color: #1976D2;
+      background: #E0F2FE;
+      padding: 0.2rem 0.5rem;
+      border-radius: 4px;
+    }
+    .add-new-card-btn {
+      background: none;
+      border: 2px dashed #CBD5E1;
+      border-radius: 12px;
+      padding: 1rem;
+      width: 100%;
+      color: #64748B;
+      font-size: 0.9rem;
+      cursor: pointer;
+      transition: border-color 0.18s, color 0.18s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+    }
+    .add-new-card-btn:hover {
+      border-color: #1976D2;
+      color: #1976D2;
+    }
+    
+    /* Trial Reminder Styles */
+    .trial-reminder {
+      background: #FFF7ED;
+      border: 1px solid #FED7AA;
+      border-radius: 8px;
+      padding: 0.8rem;
+      margin-bottom: 1rem;
+      display: flex;
+      align-items: flex-start;
+      gap: 0.5rem;
+    }
+    .trial-reminder-icon {
+      color: #F97316;
+      font-size: 1.1rem;
+      margin-top: 0.1rem;
+    }
+    .trial-reminder-content {
+      flex: 1;
+    }
+    .trial-reminder-title {
+      font-weight: 600;
+      color: #C2410C;
+      font-size: 0.9rem;
+      margin-bottom: 0.2rem;
+    }
+    .trial-reminder-text {
+      font-size: 0.85rem;
+      color: #9A3412;
+      line-height: 1.4;
+    }
+    
     @media (max-width: 600px) {
       .card-container { padding: 1.2rem 0.5rem 1.2rem 0.5rem; max-width: 98vw; }
+      .compliance-links { flex-direction: column; gap: 0.5rem; }
     }
   </style>
 </head>
@@ -105,6 +254,28 @@
     <div class="card-container" role="main" aria-labelledby="card-title">
       <div class="card-title" id="card-title">Add a Card to Start Your Free Trial</div>
       <div class="card-sub" id="cardSub">To unlock your free trial, please add a credit card. <br><strong>You won't be charged until your trial ends.</strong></div>
+      
+      <!-- Trial Expiry Reminder -->
+      <div class="trial-reminder" id="trialReminder" style="display:none;">
+        <div class="trial-reminder-icon">⏰</div>
+        <div class="trial-reminder-content">
+          <div class="trial-reminder-title">Trial Reminder</div>
+          <div class="trial-reminder-text">We'll send you a reminder email on the last day of your trial.</div>
+        </div>
+      </div>
+      
+      <!-- Saved Payment Methods Section -->
+      <div class="saved-payment-section" id="savedPaymentSection">
+        <div class="settings-label" style="font-weight:600; font-size:1.01rem; margin-bottom:0.8rem; color:#232B36;">Saved Payment Methods</div>
+        <div id="savedCardsList"></div>
+        <button type="button" class="add-new-card-btn" id="addNewCardBtn">
+          <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 5v7m0 0v7m0-7h7m-7 0H5"/>
+          </svg>
+          Add New Card
+        </button>
+      </div>
+      
       <form id="cardForm" autocomplete="off" style="width:100%;">
         <div class="card-error" id="cardError" aria-live="polite"></div>
         <button type="button" class="apple-google-pay-btn" id="appleGooglePayBtn" style="width:100%;background:#232B36;color:#fff;font-weight:700;border:none;border-radius:8px;padding:0.95rem 0;font-size:1.13rem;cursor:pointer;margin-bottom:0.5rem;display:flex;align-items:center;justify-content:center;gap:0.5rem;position:relative;">
@@ -124,11 +295,34 @@
           <span class="btn-spinner" id="btnSpinner" style="display:none;vertical-align:middle;margin-right:0.5rem;"><svg width="20" height="20" viewBox="0 0 50 50"><circle cx="25" cy="25" r="20" fill="none" stroke="#fff" stroke-width="4" stroke-linecap="round" stroke-dasharray="31.4 31.4" transform="rotate(-90 25 25)"><animateTransform attributeName="transform" type="rotate" from="0 25 25" to="360 25 25" dur="1s" repeatCount="indefinite"/></circle></svg></span>
           <span id="btnText">Start Free Trial</span>
         </button>
-        <div class="legal-links" style="margin-top:1rem;text-align:center;font-size:0.93rem;">
-          <a href="privacy.html" style="color:#1976D2;text-decoration:underline;margin-right:1.2rem;">Privacy Policy</a>
-          <a href="terms.html" style="color:#1976D2;text-decoration:underline;">Terms of Service</a>
-        </div>
       </form>
+      
+      <!-- Trust & Compliance Section -->
+      <div class="trust-compliance">
+        <h4>
+          <svg width="16" height="16" fill="none" stroke="#1976D2" stroke-width="2" role="img" aria-label="Secure">
+            <title>Secure</title>
+            <rect x="3" y="7" width="10" height="7" rx="2"/>
+            <path d="M8 7V5a3 3 0 1 1 6 0v2"/>
+            <circle cx="8" cy="11" r="1"/>
+          </svg>
+          Secure Payment Processing
+        </h4>
+        <p>Your payment information is encrypted and securely processed. We never store your full card details on our servers.</p>
+        <div class="compliance-links">
+          <a href="privacy.html">Privacy Policy</a>
+          <a href="terms.html">Terms of Service</a>
+          <a href="support.html">Payment Support</a>
+        </div>
+        <div class="stripe-badge">
+          <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="2" y="2" width="10" height="10" rx="2"/>
+            <path d="M6 6h2v2H6z"/>
+          </svg>
+          Secured by Stripe • PCI DSS Compliant • GDPR Compliant
+        </div>
+      </div>
+      
       <div class="card-reassure">
         <svg width="18" height="18" fill="none" stroke="#1976D2" stroke-width="2" style="vertical-align:middle;margin-right:0.3rem;"><circle cx="9" cy="9" r="8"/><path d="M6 9l2 2 4-4"/></svg>
         100% secure. Cancel anytime during your trial.
@@ -159,6 +353,9 @@
   <script src="js/stripe-integration.js"></script>
   <script>
     document.addEventListener('DOMContentLoaded', () => {
+      // Initialize saved payment methods functionality
+      initializeSavedPaymentMethods();
+      
       // Apple Pay / Google Pay demo button logic with spinner
       var appleGooglePayBtn = document.getElementById('appleGooglePayBtn');
       var paySpinner = document.getElementById('paySpinner');
@@ -185,6 +382,7 @@
           }, 1200);
         });
       }
+      
       // ...existing plan logic...
       const selectedPlan = localStorage.getItem('selected-plan');
       const planAmount = localStorage.getItem('plan-amount');
@@ -192,18 +390,22 @@
       const title = document.getElementById('card-title');
       const sub = document.getElementById('cardSub');
       const button = document.getElementById('cardSubmitBtn');
+      const trialReminder = document.getElementById('trialReminder');
       const isTrial = !selectedPlan || selectedPlan === 'trial';
       if (isTrial) {
         if (title) title.textContent = 'Start Your Free Trial';
-        if (sub) sub.innerHTML = 'To unlock your free trial, please add a credit card.<br><strong>You won't be charged until your trial ends.</strong>';
+        if (sub) sub.innerHTML = 'To unlock your free trial, please add a credit card.<br><strong>You won\'t be charged until your trial ends.</strong>';
         if (button) button.textContent = 'Start Free Trial';
-        if (reassure) reassure.innerHTML = `<svg width="18" height="18" fill="none" stroke="#1976D2" stroke-width="2" style="vertical-align:middle;margin-right:0.3rem;"><circle cx="9" cy="9" r="8"/><path d="M6 9l2 2 4-4"/></svg> You won't be charged until your trial ends. We'll send you a reminder before billing.`;
+        if (reassure) reassure.innerHTML = '<svg width="18" height="18" fill="none" stroke="#1976D2" stroke-width="2" style="vertical-align:middle;margin-right:0.3rem;"><circle cx="9" cy="9" r="8"/><path d="M6 9l2 2 4-4"/></svg> You won\'t be charged until your trial ends. We\'ll send you a reminder before billing.';
+        if (trialReminder) trialReminder.style.display = 'flex';
       } else {
         if (title) title.textContent = `Add a Card to Subscribe to ${selectedPlan.charAt(0).toUpperCase() + selectedPlan.slice(1)}`;
         if (sub) sub.innerHTML = `To start your ${selectedPlan} subscription, please add a credit card.<br><strong>You'll be charged $${(planAmount/100).toFixed(2)}/month.</strong>`;
         if (button) button.textContent = `Subscribe to ${selectedPlan.charAt(0).toUpperCase() + selectedPlan.slice(1)}`;
-        if (reassure) reassure.innerHTML = `<svg width="18" height="18" fill="none" stroke="#1976D2" stroke-width="2" style="vertical-align:middle;margin-right:0.3rem;"><circle cx="9" cy="9" r="8"/><path d="M6 9l2 2 4-4"/></svg> Cancel anytime. No long-term commitment.`;
+        if (reassure) reassure.innerHTML = '<svg width="18" height="18" fill="none" stroke="#1976D2" stroke-width="2" style="vertical-align:middle;margin-right:0.3rem;"><circle cx="9" cy="9" r="8"/><path d="M6 9l2 2 4-4"/></svg> Cancel anytime. No long-term commitment.';
+        if (trialReminder) trialReminder.style.display = 'none';
       }
+      
       // Spinner logic for card submit button
       var cardForm = document.getElementById('cardForm');
       var cardBtn = document.getElementById('cardSubmitBtn');
@@ -216,6 +418,107 @@
         });
       }
     });
+    
+    // Saved Payment Methods Functionality
+    function initializeSavedPaymentMethods() {
+      const savedPaymentSection = document.getElementById('savedPaymentSection');
+      const savedCardsList = document.getElementById('savedCardsList');
+      const addNewCardBtn = document.getElementById('addNewCardBtn');
+      const cardForm = document.getElementById('cardForm');
+      
+      // Check if user has saved cards
+      const savedCards = JSON.parse(localStorage.getItem('saved-cards') || '[]');
+      
+      if (savedCards.length > 0) {
+        savedPaymentSection.classList.add('show');
+        cardForm.style.display = 'none';
+        
+        // Display saved cards
+        savedCardsList.innerHTML = savedCards.map((card, index) => `
+          <div class="saved-card" data-card-index="${index}">
+            <div class="saved-card-header">
+              <div>
+                <div class="saved-card-number">•••• •••• •••• ${card.last4}</div>
+                <div class="saved-card-expiry">Expires ${card.expiry}</div>
+              </div>
+              <div class="saved-card-type">${card.brand}</div>
+            </div>
+          </div>
+        `).join('');
+        
+        // Handle saved card selection
+        savedCardsList.addEventListener('click', (e) => {
+          const savedCard = e.target.closest('.saved-card');
+          if (savedCard) {
+            // Remove selection from all cards
+            document.querySelectorAll('.saved-card').forEach(card => {
+              card.classList.remove('selected');
+            });
+            
+            // Select clicked card
+            savedCard.classList.add('selected');
+            
+            // TODO: In production, this would use the saved payment method ID
+            // For demo, we'll simulate using the saved card
+            setTimeout(() => {
+              simulateSavedCardPayment(savedCard.dataset.cardIndex);
+            }, 500);
+          }
+        });
+      }
+      
+      // Handle "Add New Card" button
+      if (addNewCardBtn) {
+        addNewCardBtn.addEventListener('click', () => {
+          savedPaymentSection.classList.remove('show');
+          cardForm.style.display = 'block';
+        });
+      }
+    }
+    
+    function simulateSavedCardPayment(cardIndex) {
+      const savedCards = JSON.parse(localStorage.getItem('saved-cards') || '[]');
+      const selectedCard = savedCards[cardIndex];
+      
+      if (!selectedCard) return;
+      
+      // Show processing state
+      const container = document.querySelector('.card-container');
+      container.innerHTML = `
+        <div style="text-align: center; padding: 2rem;">
+          <div style="color: #1976D2; font-size: 2rem; margin-bottom: 1rem;">
+            <svg width="40" height="40" viewBox="0 0 50 50">
+              <circle cx="25" cy="25" r="20" fill="none" stroke="#1976D2" stroke-width="4" stroke-linecap="round" stroke-dasharray="31.4 31.4" transform="rotate(-90 25 25)">
+                <animateTransform attributeName="transform" type="rotate" from="0 25 25" to="360 25 25" dur="1s" repeatCount="indefinite"/>
+              </circle>
+            </svg>
+          </div>
+          <h2 style="color: #232B36; margin-bottom: 1rem;">Processing Payment...</h2>
+          <p style="color: #4B5563;">Using your saved ${selectedCard.brand} card ending in ${selectedCard.last4}</p>
+        </div>
+      `;
+      
+      // Simulate payment processing
+      setTimeout(() => {
+        // TODO: In production, this would call Stripe's confirmCardPayment with the saved payment method
+        // For demo, we'll simulate success
+        container.innerHTML = `
+          <div style="text-align: center; padding: 2rem;">
+            <div style="color: #00E676; font-size: 3rem; margin-bottom: 1rem;">✓</div>
+            <h2 style="color: #232B36; margin-bottom: 1rem;">Payment Successful!</h2>
+            <p style="color: #4B5563;">Your payment with your saved ${selectedCard.brand} card was successful. Redirecting to dashboard...</p>
+          </div>
+        `;
+        
+        // TODO: In production, send trial expiry reminder email here
+        // For demo, we'll just log it
+        console.log('TODO: Send trial expiry reminder email to user');
+        
+        setTimeout(() => {
+          window.location.href = 'dashboard.html';
+        }, 2000);
+      }, 1500);
+    }
   </script>
 </body>
 </html> 
