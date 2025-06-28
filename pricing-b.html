@@ -132,7 +132,53 @@
   </footer>
   <!-- Load navigation system -->
   <script src="js/navigation.js"></script>
+  <!-- Load Stripe integration -->
+  <script src="js/stripe-integration.js"></script>
   <script src="js/main.js" type="module"></script>
   <script src="js/analytics.js" type="module"></script>
+  <script>
+    // Initialize pricing page Stripe functionality
+    document.addEventListener('DOMContentLoaded', () => {
+      // Update free trial button
+      const freeTrialBtn = document.querySelector('.pricing-b-hero .btn-primary');
+      if (freeTrialBtn) {
+        freeTrialBtn.addEventListener('click', (e) => {
+          e.preventDefault();
+          window.location.href = 'add-card.html';
+        });
+      }
+
+      // Update pricing card buttons
+      const pricingCards = document.querySelectorAll('.pricing-b-card');
+      const plans = ['essential', 'pro', 'premium'];
+      const amounts = [2900, 5900, 9900];
+
+      pricingCards.forEach((card, index) => {
+        const button = card.querySelector('.btn-primary');
+        if (button && plans[index]) {
+          button.addEventListener('click', (e) => {
+            e.preventDefault();
+            const plan = plans[index];
+            const amount = amounts[index];
+            handlePaidSubscription(plan, amount);
+          });
+        }
+      });
+    });
+
+    function handlePaidSubscription(plan, amount) {
+      // Store plan info for checkout
+      localStorage.setItem('selected-plan', plan);
+      localStorage.setItem('plan-amount', amount);
+      
+      // Redirect to checkout page or open Stripe checkout
+      if (window.jobHackAIStripe) {
+        window.jobHackAIStripe.openCheckout(plan, amount);
+      } else {
+        // Fallback to add-card page
+        window.location.href = 'add-card.html';
+      }
+    }
+  </script>
 </body>
 </html> 

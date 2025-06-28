@@ -144,11 +144,11 @@
             </tr>
             <tr class="pricing-signup-row">
               <td></td>
-              <td><a href="#" class="btn-primary">Sign Up</a></td>
-              <td><a href="#" class="btn-primary">Sign Up</a></td>
-              <td><a href="#" class="btn-primary">Sign Up</a></td>
-              <td><a href="#" class="btn-primary">Sign Up</a></td>
-              <td><a href="#" class="btn-primary">Sign Up</a></td>
+              <td><button class="btn-primary stripe-checkout-btn" data-plan="create-account" data-amount="0">Sign Up</button></td>
+              <td><button class="btn-primary stripe-checkout-btn" data-plan="trial" data-amount="0">Start Free Trial</button></td>
+              <td><button class="btn-primary stripe-checkout-btn" data-plan="essential" data-amount="2900">Subscribe $29/mo</button></td>
+              <td><button class="btn-primary stripe-checkout-btn" data-plan="pro" data-amount="5900">Subscribe $59/mo</button></td>
+              <td><button class="btn-primary stripe-checkout-btn" data-plan="premium" data-amount="9900">Subscribe $99/mo</button></td>
             </tr>
           </tbody>
         </table>
@@ -177,8 +177,36 @@
   </footer>
   <!-- Load navigation system -->
   <script src="js/navigation.js"></script>
+  <!-- Load Stripe integration -->
+  <script src="js/stripe-integration.js"></script>
   <!-- scripts -->
   <script src="js/main.js" type="module"></script>
   <script src="js/analytics.js" type="module"></script>
+  <script>
+    // Initialize pricing page Stripe functionality
+    document.addEventListener('DOMContentLoaded', () => {
+      const checkoutButtons = document.querySelectorAll('.stripe-checkout-btn');
+      
+      checkoutButtons.forEach(button => {
+        button.addEventListener('click', (e) => {
+          e.preventDefault();
+          const plan = button.dataset.plan;
+          const amount = parseInt(button.dataset.amount);
+          
+          if (plan === 'create-account') {
+            window.location.href = 'login.html';
+          } else if (plan === 'trial') {
+            localStorage.setItem('selected-plan', 'trial');
+            localStorage.setItem('plan-amount', 0);
+            window.location.href = 'add-card.html';
+          } else {
+            localStorage.setItem('selected-plan', plan);
+            localStorage.setItem('plan-amount', amount);
+            window.location.href = 'add-card.html';
+          }
+        });
+      });
+    });
+  </script>
 </body>
 </html>
