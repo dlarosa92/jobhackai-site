@@ -811,22 +811,26 @@ function updateNavigation() {
       }
     });
     // --- Always append CTA for visitors in mobile nav ---
-    if (!isAuthView && navConfig.cta) {
+    if (!isAuthView && navConfig.cta && mobileNav) {
       const cta = document.createElement('a');
       updateLink(cta, navConfig.cta.href);
       cta.textContent = navConfig.cta.text;
       cta.className = 'btn btn-primary';
       cta.setAttribute('role', 'button');
       mobileNav.appendChild(cta);
+    } else if (!mobileNav) {
+      navLog('warn', 'mobileNav is null, cannot append CTA for visitors');
     }
     // --- Always append CTA for authenticated plans in mobile nav (only once, after nav links) ---
-    if (isAuthView && navConfig.userNav && navConfig.userNav.cta) {
+    if (isAuthView && navConfig.userNav && navConfig.userNav.cta && mobileNav) {
       const cta = document.createElement('a');
       updateLink(cta, navConfig.userNav.cta.href);
       cta.textContent = navConfig.userNav.cta.text;
       cta.className = navConfig.userNav.cta.class || 'btn-primary';
       cta.setAttribute('role', 'button');
       mobileNav.appendChild(cta);
+    } else if (isAuthView && navConfig.userNav && navConfig.userNav.cta && !mobileNav) {
+      navLog('warn', 'mobileNav is null, cannot append CTA for authenticated plans');
     }
   } else {
     navLog('warn', 'Cannot build mobile nav', { 
@@ -843,7 +847,11 @@ function updateNavigation() {
     if (!navActions) {
       navActions = document.createElement('div');
       navActions.className = 'nav-actions';
-      navGroup.appendChild(navActions);
+      if (navGroup) {
+        navGroup.appendChild(navActions);
+      } else {
+        navLog('warn', 'navGroup is null, cannot append navActions');
+      }
     }
     // Only create and append the user menu
     navLog('debug', 'Creating user menu');
@@ -964,6 +972,9 @@ function createDevPlanToggle() {
   select.addEventListener('change', (e) => {
     navLog('info', 'Dev plan toggle changed', { newPlan: e.target.value });
     setPlan(e.target.value);
+    if (typeof loadCurrentPlan === 'function') {
+      loadCurrentPlan();
+    }
   });
   
   // On first load, set to visitor if not already set

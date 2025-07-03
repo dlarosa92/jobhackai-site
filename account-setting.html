@@ -260,7 +260,7 @@
       <!-- Billing Card -->
       <div class="settings-block" style="margin-bottom:2.2rem;">
         <div class="settings-label" style="margin-bottom:0.5rem;">Billing</div>
-        <button class="btn-outline" type="button">Manage Billing</button>
+        <a href="billing-management.html" class="btn-outline">Manage Billing</a>
       </div>
       <!-- Actions Row -->
       <div class="settings-actions-row" style="display:flex; gap:1rem; margin-bottom:2.2rem; flex-wrap:wrap;">
@@ -335,5 +335,20 @@
       // Continue with existing account settings logic
     });
   </script>
+  <!-- Load navigation system -->
+  <script src="js/navigation.js"></script>
+  <script>
+    if (window.JobHackAINavigation && typeof window.JobHackAINavigation.initializeNavigation === 'function') {
+      window.JobHackAINavigation.initializeNavigation();
+    } else {
+      window.addEventListener('DOMContentLoaded', function() {
+        if (window.JobHackAINavigation && typeof window.JobHackAINavigation.initializeNavigation === 'function') {
+          window.JobHackAINavigation.initializeNavigation();
+        }
+      });
+    }
+  </script>
+  <!-- Billing Integration Tests -->
+  <script src="js/billing-integration-test.js"></script>
 </body>
 </html> 

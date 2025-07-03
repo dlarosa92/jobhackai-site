@@ -202,7 +202,7 @@ window.smokeTests = {
           };
         }
         
-        const requiredMethods = ['createBackup', 'restoreBackup', 'listBackups'];
+        const requiredMethods = ['get', 'set', 'watch', 'unwatch'];
         const missing = requiredMethods.filter(method => !window.stateManager[method]);
         
         if (missing.length > 0) {
@@ -214,7 +214,54 @@ window.smokeTests = {
         
         return {
           passed: true,
-          details: 'State management system working'
+          details: 'State management working correctly'
+        };
+      }
+    },
+    
+    // Billing integration tests
+    billingIntegration: {
+      name: 'Billing Integration',
+      test: () => {
+        // Test 1: Check if billing management link exists in account settings
+        const billingLink = document.querySelector('a[href="billing-management.html"]');
+        if (!billingLink) {
+          return {
+            passed: false,
+            details: 'Billing management link not found in account settings'
+          };
+        }
+        
+        // Test 2: Check if navigation system is available
+        if (!window.JobHackAINavigation) {
+          return {
+            passed: false,
+            details: 'Navigation system not available for billing integration'
+          };
+        }
+        
+        // Test 3: Check if plan detection works
+        const currentPlan = window.JobHackAINavigation.getEffectivePlan();
+        if (!currentPlan) {
+          return {
+            passed: false,
+            details: 'Plan detection not working'
+          };
+        }
+        
+        // Test 4: Check if billing management functions are available (if on billing page)
+        if (window.location.pathname.includes('billing-management.html')) {
+          if (typeof loadCurrentPlan !== 'function') {
+            return {
+              passed: false,
+              details: 'Billing management functions not available'
+            };
+          }
+        }
+        
+        return {
+          passed: true,
+          details: `Billing integration working, current plan: ${currentPlan}`
         };
       }
     },

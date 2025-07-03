@@ -220,8 +220,10 @@
     <a href="pricing-a.html">Pricing</a>
     <a href="index.html#blog">Blog</a>
   </nav>
+  <!-- INTEGRATION: ZAPIER - On login, lookup user in Google Sheets via Zapier -->
+  <!-- INTEGRATION: GOOGLE SHEETS - Store and retrieve user data for authentication and plan management -->
   <script>
-    // Hamburger menu toggle
+    // Hamburger menu toggle (leave outside DOMContentLoaded for header)
     const mobileToggle = document.querySelector('.mobile-toggle');
     const mobileNav = document.getElementById('mobileNav');
     if (mobileToggle && mobileNav) {
@@ -229,7 +231,6 @@
         const isOpen = mobileNav.classList.toggle('open');
         mobileToggle.setAttribute('aria-expanded', isOpen);
       });
-      // Close mobile nav on link click
       document.querySelectorAll('.mobile-nav a').forEach(link => {
         link.addEventListener('click', () => {
           mobileNav.classList.remove('open');
@@ -238,106 +239,195 @@
       });
     }
 
-    // --- BASIC AUTHENTICATION FOR TESTING ---
+    // --- MAIN AUTH LOGIC ---
     document.addEventListener('DOMContentLoaded', function() {
-      const emailForm = document.getElementById('emailAuthForm');
-      const emailInput = document.getElementById('email');
-      const passwordInput = document.getElementById('password');
-      const continueBtn = document.getElementById('emailContinueBtn');
-      const authError = document.getElementById('authError');
+      // --- FORM TOGGLING LOGIC ---
+      const loginForm = document.getElementById('loginForm');
+      const signupForm = document.getElementById('signupForm');
+      const loginLinks = document.getElementById('loginLinks');
+      const signupLinks = document.getElementById('signupLinks');
+      const showSignUpLink = document.getElementById('showSignUpLink');
+      const showLoginLink = document.getElementById('showLoginLink');
+      if (showSignUpLink && showLoginLink) {
+        showSignUpLink.addEventListener('click', function(e) {
+          e.preventDefault();
+          loginForm.style.display = 'none';
+          loginLinks.style.display = 'none';
+          signupForm.style.display = 'flex';
+          signupLinks.style.display = 'block';
+        });
+        showLoginLink.addEventListener('click', function(e) {
+          e.preventDefault();
+          signupForm.style.display = 'none';
+          signupLinks.style.display = 'none';
+          loginForm.style.display = 'flex';
+          loginLinks.style.display = 'block';
+        });
+      }
 
-      // Simple login simulation
-      emailForm.addEventListener('submit', function(e) {
+      // --- LOGIN LOGIC ---
+      loginForm.addEventListener('submit', function(e) {
         e.preventDefault();
-        
-        const email = emailInput.value.trim();
-        const password = passwordInput.value.trim();
-        
+        const email = document.getElementById('loginEmail').value.trim();
+        const password = document.getElementById('loginPassword').value.trim();
+        const loginError = document.getElementById('loginError');
+        loginError.style.display = 'none';
         if (!email || !password) {
-          showError('Please enter both email and password');
+          loginError.textContent = 'Please enter both email and password';
+          loginError.style.display = 'block';
           return;
         }
-        
+        // INTEGRATION: ZAPIER/GOOGLE SHEETS - Authenticate user
+        const db = getUserDB();
+        if (!db[email]) {
+          loginError.textContent = 'No account found with that email. Please sign up.';
+          loginError.style.display = 'block';
+          return;
+        }
+        // For demo, password is not checked. Add real check here.
+        // INTEGRATION: AUTHENTICATION PROVIDER (e.g., Firebase, Cloudflare Access)
+        localStorage.setItem('user-authenticated', 'true');
+        localStorage.setItem('user-plan', db[email].plan || 'free');
+        localStorage.setItem('dev-plan', db[email].plan || 'free');
+        window.location.href = 'dashboard.html';
+      });
+
+      // --- SIGNUP LOGIC ---
+      signupForm.addEventListener('submit', function(e) {
+        e.preventDefault();
+        const firstName = document.getElementById('firstName').value.trim();
+        const lastName = document.getElementById('lastName').value.trim();
+        const email = document.getElementById('signupEmail').value.trim();
+        const password = document.getElementById('signupPassword').value.trim();
+        const confirmPassword = document.getElementById('confirmPassword').value.trim();
+        const signupError = document.getElementById('signupError');
+        signupError.style.display = 'none';
+        if (!firstName || !lastName || !email || !password || !confirmPassword) {
+          signupError.textContent = 'Please fill in all fields';
+          signupError.style.display = 'block';
+          return;
+        }
         if (password.length < 8) {
-          showError('Password must be at least 8 characters');
+          signupError.textContent = 'Password must be at least 8 characters';
+          signupError.style.display = 'block';
           return;
         }
-        
-        // Simulate successful login
-        showLoading();
-        
-        setTimeout(() => {
-          // Set authentication state
+        if (password !== confirmPassword) {
+          signupError.textContent = 'Passwords do not match';
+          signupError.style.display = 'block';
+          return;
+        }
+        // INTEGRATION: ZAPIER/GOOGLE SHEETS - Check if email already exists
+        const db = getUserDB();
+        if (db[email]) {
+          signupError.textContent = 'An account with this email already exists. Please log in.';
+          signupError.style.display = 'block';
+          return;
+        }
+        // Store user info for card step
+        localStorage.setItem('pending-signup-email', email);
+        localStorage.setItem('pending-signup-firstName', firstName);
+        localStorage.setItem('pending-signup-lastName', lastName);
+        // Only show card step if plan requires payment
+        const selectedPlan = localStorage.getItem('selected-plan') || 'free';
+        if (planRequiresCard(selectedPlan)) {
+          loginForm.style.display = 'none';
+          loginLinks.style.display = 'none';
+          signupForm.style.display = 'none';
+          signupLinks.style.display = 'none';
+          showCardStep();
+        } else {
+          // Save user to mock DB
+          db[email] = { plan: selectedPlan, firstName, lastName };
+          setUserDB(db);
           localStorage.setItem('user-authenticated', 'true');
-          localStorage.setItem('user-plan', 'free'); // Default to free plan
-          localStorage.setItem('dev-plan', 'free'); // Set dev plan to free after login
-          // Update dev plan toggle UI if present
-          const devPlanSelect = document.querySelector('#dev-plan');
-          if (devPlanSelect) devPlanSelect.value = 'free';
-          // Call setPlan('free') if available
-          if (typeof window.setPlan === 'function') window.setPlan('free');
-          // Redirect to dashboard
+          localStorage.setItem('user-plan', selectedPlan);
+          localStorage.setItem('dev-plan', selectedPlan);
           window.location.href = 'dashboard.html';
-        }, 1000);
+        }
       });
 
-      function showError(message) {
-        authError.textContent = message;
-        authError.style.display = 'block';
-        continueBtn.disabled = false;
-        continueBtn.textContent = 'Continue';
+      // --- DEV PLAN TOGGLE LOGIC ---
+      function syncDevPlanWithUserPlan() {
+        const plan = localStorage.getItem('user-plan') || 'free';
+        localStorage.setItem('dev-plan', plan);
       }
+      window.addEventListener('storage', syncDevPlanWithUserPlan);
 
-      function showLoading() {
-        authError.style.display = 'none';
-        continueBtn.disabled = true;
-        continueBtn.textContent = 'Signing in...';
+      // --- CARD STEP LOGIC ---
+      document.getElementById('cardSubmitBtn').addEventListener('click', function(e) {
+        e.preventDefault();
+        // INTEGRATION: STRIPE - Tokenize and submit card info here
+        // For demo, just save user info
+        const selectedPlan = localStorage.getItem('selected-plan') || 'trial';
+        const email = localStorage.getItem('pending-signup-email') || '';
+        const firstName = localStorage.getItem('pending-signup-firstName') || '';
+        const lastName = localStorage.getItem('pending-signup-lastName') || '';
+        const db = getUserDB();
+        db[email] = { plan: selectedPlan, firstName, lastName };
+        setUserDB(db);
+        localStorage.setItem('user-authenticated', 'true');
+        localStorage.setItem('user-plan', selectedPlan);
+        localStorage.setItem('dev-plan', selectedPlan);
+        window.location.href = 'dashboard.html';
+      });
+
+      // --- ERROR HANDLING FOR TROUBLESHOOTING ---
+      window.addEventListener('error', function(event) {
+        // INTEGRATION: ERROR REPORTING (e.g., Sentry, Cloudflare Workers Logpush)
+        console.error('Global error captured:', event.message, event.error);
+      });
+
+      // --- UTILS (Mock DB, Plan, Card Step, etc.) ---
+      function getUserDB() {
+        return JSON.parse(localStorage.getItem('user-db') || '{}');
       }
-
-      // Social login simulation
-      document.getElementById('googleSignIn').addEventListener('click', function(e) {
-        e.preventDefault();
-        showLoading();
-        setTimeout(() => {
-          // TODO: In production, check with backend if user already exists and has used a trial (by email/social ID)
-          // If user is new, proceed. If not, redirect to dashboard or show message.
-          const isFirstTime = !localStorage.getItem('trial-activated'); // DEV ONLY: replace with backend check
-          localStorage.setItem('user-authenticated', 'true');
-          if (isFirstTime) {
-            // Prompt for credit card before starting trial
-            localStorage.setItem('user-plan', 'trial');
-            localStorage.setItem('dev-plan', 'trial');
-            // Set trial-activated flag after card is added (see add-card.html logic)
-            // Redirect to add-card page
-            window.location.href = 'add-card.html';
-          } else {
-            // User already had a trial, go to dashboard
-            window.location.href = 'dashboard.html';
-          }
-        }, 1000);
-      });
-
-      document.getElementById('linkedinSignIn').addEventListener('click', function(e) {
-        e.preventDefault();
-        showLoading();
-        setTimeout(() => {
-          // TODO: In production, check with backend if user already exists and has used a trial (by email/social ID)
-          // If user is new, proceed. If not, redirect to dashboard or show message.
-          const isFirstTime = !localStorage.getItem('trial-activated'); // DEV ONLY: replace with backend check
-          localStorage.setItem('user-authenticated', 'true');
-          if (isFirstTime) {
-            // Prompt for credit card before starting trial
-            localStorage.setItem('user-plan', 'trial');
-            localStorage.setItem('dev-plan', 'trial');
-            // Set trial-activated flag after card is added (see add-card.html logic)
-            // Redirect to add-card page
-            window.location.href = 'add-card.html';
-          } else {
-            // User already had a trial, go to dashboard
-            window.location.href = 'dashboard.html';
-          }
-        }, 1000);
-      });
+      function setUserDB(db) {
+        localStorage.setItem('user-db', JSON.stringify(db));
+      }
+      function planRequiresCard(plan) {
+        return plan === 'essential' || plan === 'pro' || plan === 'premium' || plan === 'trial';
+      }
+      const planNames = {
+        'trial': 'Free Trial',
+        'essential': 'Essential',
+        'pro': 'Pro',
+        'premium': 'Premium',
+        'free': 'Free'
+      };
+      const planPrices = {
+        'trial': '$0 for 3 days',
+        'essential': '$29/mo',
+        'pro': '$59/mo',
+        'premium': '$99/mo',
+        'free': '$0/mo'
+      };
+      function updateCardStepUI() {
+        const selectedPlan = localStorage.getItem('selected-plan') || 'trial';
+        const planName = planNames[selectedPlan] || 'Selected';
+        const planPrice = planPrices[selectedPlan] || '';
+        document.getElementById('cardStepTitle').textContent = `Add a credit card to activate your ${planName}`;
+        document.getElementById('cardStepSub').textContent = planPrice ? `You will be charged ${planPrice} after your trial.` : '';
+        const btn = document.getElementById('cardSubmitBtn');
+        if (selectedPlan === 'trial') {
+          btn.textContent = 'Add Card & Start Free Trial';
+        } else if (selectedPlan === 'essential' || selectedPlan === 'pro' || selectedPlan === 'premium') {
+          btn.textContent = `Add Card & Subscribe to ${planName}`;
+        } else {
+          btn.textContent = 'Create Account';
+        }
+      }
+      function showCardStep() {
+        document.getElementById('loginForm').style.display = 'none';
+        document.getElementById('loginLinks').style.display = 'none';
+        document.getElementById('signupForm').style.display = 'none';
+        document.getElementById('signupLinks').style.display = 'none';
+        document.getElementById('googleSignIn').style.display = 'none';
+        document.getElementById('linkedinSignIn').style.display = 'none';
+        document.querySelector('.auth-separator').style.display = 'none';
+        document.getElementById('cardStep').style.display = 'block';
+        updateCardStepUI();
+      }
     });
   </script>
   <!-- page content -->
@@ -358,26 +448,53 @@
         Continue with LinkedIn
       </a>
       <div class="auth-separator"><span>or</span></div>
-      <form class="auth-form" id="emailAuthForm" autocomplete="on" aria-label="Email sign up form">
-        <div class="auth-error" id="authError" aria-live="polite"></div>
-        <label for="email" class="sr-only">Email address</label>
-        <input type="email" id="email" class="auth-input" name="email" placeholder="Email address" required autocomplete="email" />
-        <label for="password" class="sr-only">Password</label>
-        <input type="password" id="password" class="auth-input" name="password" placeholder="Password" required autocomplete="current-password" minlength="8" />
-        <button type="submit" class="auth-continue-btn" id="emailContinueBtn">Continue</button>
+      <!-- Login Form -->
+      <form class="auth-form" id="loginForm" autocomplete="on" aria-label="Login form">
+        <div class="auth-error" id="loginError" aria-live="polite"></div>
+        <label for="loginEmail" class="sr-only">Email address</label>
+        <input type="email" id="loginEmail" class="auth-input" name="loginEmail" placeholder="Email address" required autocomplete="email" />
+        <label for="loginPassword" class="sr-only">Password</label>
+        <input type="password" id="loginPassword" class="auth-input" name="loginPassword" placeholder="Password" required autocomplete="current-password" minlength="8" />
+        <button type="submit" class="auth-continue-btn" id="loginContinueBtn">Log In</button>
       </form>
-      <div class="auth-links">
+      <div class="auth-links" id="loginLinks">
         Don't have an account?
-        <a href="#" id="signUpLink">Sign up</a>
+        <a href="#" id="showSignUpLink">Sign up</a>
         <br />
         <a href="#" id="forgotPasswordLink">Forgot your password?</a>
       </div>
+      <!-- Signup Form (hidden by default) -->
+      <form class="auth-form" id="signupForm" autocomplete="on" aria-label="Sign up form" style="display:none;">
+        <div class="auth-error" id="signupError" aria-live="polite"></div>
+        <label for="firstName" class="sr-only">First Name</label>
+        <input type="text" id="firstName" class="auth-input" name="firstName" placeholder="First Name" required autocomplete="given-name" />
+        <label for="lastName" class="sr-only">Last Name</label>
+        <input type="text" id="lastName" class="auth-input" name="lastName" placeholder="Last Name" required autocomplete="family-name" />
+        <label for="signupEmail" class="sr-only">Email address</label>
+        <input type="email" id="signupEmail" class="auth-input" name="signupEmail" placeholder="Email address" required autocomplete="email" />
+        <label for="signupPassword" class="sr-only">Password</label>
+        <input type="password" id="signupPassword" class="auth-input" name="signupPassword" placeholder="Password" required autocomplete="new-password" minlength="8" />
+        <label for="confirmPassword" class="sr-only">Confirm Password</label>
+        <input type="password" id="confirmPassword" class="auth-input" name="confirmPassword" placeholder="Confirm Password" required autocomplete="new-password" minlength="8" />
+        <button type="submit" class="auth-continue-btn" id="signupContinueBtn">Sign Up</button>
+      </form>
+      <div class="auth-links" id="signupLinks" style="display:none;">
+        Already have an account?
+        <a href="#" id="showLoginLink">Back to Login</a>
+      </div>
       <!-- Stripe Card Modal Placeholder -->
       <div class="auth-card-step" id="cardStep">
-        <h3 style="font-size:1.1rem; font-weight:700; margin-bottom:0.7rem;">Add a credit card to activate your account</h3>
-        <div id="stripeCardElement"><!-- Stripe.js injects card field here --></div>
+        <h3 id="cardStepTitle" style="font-size:1.1rem; font-weight:700; margin-bottom:0.7rem;">Add a credit card to activate your account</h3>
+        <div id="cardStepSub" style="font-size:0.98rem; color:#4B5563; margin-bottom:0.7rem;"></div>
+        <div id="stripeCardElement" style="margin-bottom:1rem;">
+          <!-- Stripe.js or payment provider will inject card field here -->
+          <input type="text" class="auth-input" placeholder="Card Number (mock)" autocomplete="cc-number" />
+        </div>
         <button class="auth-continue-btn" id="cardSubmitBtn">Add Card &amp; Start Free Trial</button>
         <div class="auth-error" id="cardError" aria-live="polite"></div>
+        <div style="margin-top:1rem; text-align:center;">
+          <a href="pricing-a.html" id="changePlanLink" style="color:#1976D2; text-decoration:underline; font-size:0.97rem;">&larr; Change Plan</a>
+        </div>
       </div>
       <div class="auth-footer">
         © 2025 JobHackAI. All rights reserved.<br />

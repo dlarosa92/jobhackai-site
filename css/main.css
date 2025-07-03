@@ -362,7 +362,7 @@ section {
   }
 }
 
-.btn-outline, .btn-secondary {
+.btn-outline {
   background: #fff;
   color: #1976D2 !important;
   border: 1.5px solid #1976D2;
@@ -378,10 +378,29 @@ section {
   justify-content: center;
 }
 
-.btn-outline:hover, .btn-secondary:hover {
-  background: #F0F8FF;
-  color: #125bb5 !important;
-  border-color: #125bb5;
+.btn-secondary,
+.btn-secondary * {
+  color: #fff !important;
+  fill: #fff !important;
+  stroke: #fff !important;
+}
+
+.btn-secondary {
+  background: #1976D2;
+  border: none;
+  border-radius: 8px;
+  padding: 0.8rem 1.5rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.18s;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.btn-secondary:hover {
+  background: #125bb5;
 }
 
 .cta-button {
@@ -484,4 +503,8 @@ textarea:focus {
 .btn-block {
     display: block;
     width: 100%;
+}
+
+.btn-secondary-text {
+  color: #fff !important;
 }

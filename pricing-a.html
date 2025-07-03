@@ -195,14 +195,10 @@
           
           if (plan === 'create-account') {
             window.location.href = 'login.html';
-          } else if (plan === 'trial') {
-            localStorage.setItem('selected-plan', 'trial');
-            localStorage.setItem('plan-amount', 0);
-            window.location.href = 'add-card.html';
           } else {
             localStorage.setItem('selected-plan', plan);
             localStorage.setItem('plan-amount', amount);
-            window.location.href = 'add-card.html';
+            window.location.href = 'login.html';
           }
         });
       });

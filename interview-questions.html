@@ -231,17 +231,6 @@
       return true;
     }
 
-    // --- Initialize on load ---
-    document.addEventListener('DOMContentLoaded', function() {
-      // Check authentication first
-      if (!checkAuthentication()) {
-        return; // Stop here if not authenticated
-      }
-      
-      // Continue with existing interview questions logic
-      // Note: The existing logic will run automatically since it's already in the DOMContentLoaded
-    });
-
     // --- USER PLAN LOGIC (replace with real user data) ---
     const user = {
       plan: 'trial' // 'trial', 'essential', 'pro', 'premium'
@@ -353,7 +342,14 @@
 
     // --- PLAN LOGIC ---
     function updateInterviewUIForPlan() {
-      const userPlan = localStorage.getItem('user-plan') || 'free';
+      // Use navigation system's plan detection for consistency
+      let userPlan = 'free';
+      if (window.JobHackAINavigation) {
+        userPlan = window.JobHackAINavigation.getEffectivePlan();
+      } else {
+        userPlan = localStorage.getItem('user-plan') || 'free';
+      }
+      
       // Show/hide upgrade and lock based on plan
       if (['trial', 'essential', 'pro', 'premium'].includes(userPlan)) {
         // Show input and enable question generation
@@ -367,18 +363,40 @@
         lockDiv.style.display = 'block';
       }
     }
-    document.addEventListener('DOMContentLoaded', updateInterviewUIForPlan);
+    
+    // Wait for navigation system to be ready before checking plan
+    document.addEventListener('DOMContentLoaded', function() {
+      // Check authentication first
+      if (!checkAuthentication()) {
+        return; // Stop here if not authenticated
+      }
+      
+      // Wait for navigation system to be ready
+      setTimeout(updateInterviewUIForPlan, 100);
+    });
 
     // --- PAGE ACCESS CONTROL ---
     function enforceAccess() {
       const isAuthenticated = localStorage.getItem('user-authenticated') === 'true';
-      const plan = localStorage.getItem('user-plan') || 'free';
+      
+      // Use navigation system's plan detection for consistency
+      let plan = 'free';
+      if (window.JobHackAINavigation) {
+        plan = window.JobHackAINavigation.getEffectivePlan();
+      } else {
+        plan = localStorage.getItem('user-plan') || 'free';
+      }
+      
       const allowedPlans = ['trial', 'essential', 'pro', 'premium'];
       if (!isAuthenticated || !allowedPlans.includes(plan)) {
         window.location.href = 'login.html';
       }
     }
-    enforceAccess();
+    
+    // Wait for navigation system to be ready before enforcing access
+    document.addEventListener('DOMContentLoaded', function() {
+      setTimeout(enforceAccess, 100);
+    });
   </script>
   <!-- Load navigation system -->
   <script src="js/navigation.js"></script>
