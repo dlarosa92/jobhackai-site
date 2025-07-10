@@ -5,8 +5,38 @@
 if (!window.selfHealing) window.selfHealing = {};
 if (typeof window.selfHealing.showUserAlert !== 'function') {
   window.selfHealing.showUserAlert = function(errors) {
-    // Fallback: log to console, no popup
-    console.warn('🔧 [Fallback] selfHealing.showUserAlert called:', errors);
+    // Show a modal alert to the user
+    let modal = document.getElementById('selfHealingUserAlert');
+    if (!modal) {
+      modal = document.createElement('div');
+      modal.id = 'selfHealingUserAlert';
+      modal.style.position = 'fixed';
+      modal.style.top = '0';
+      modal.style.left = '0';
+      modal.style.width = '100vw';
+      modal.style.height = '100vh';
+      modal.style.background = 'rgba(0,0,0,0.35)';
+      modal.style.display = 'flex';
+      modal.style.alignItems = 'center';
+      modal.style.justifyContent = 'center';
+      modal.style.zIndex = '9999';
+      modal.innerHTML = `
+        <div style="background:#fff; padding:2rem 2.5rem; border-radius:16px; box-shadow:0 4px 32px rgba(0,0,0,0.13); max-width:400px; text-align:center;">
+          <h2 style="color:#232B36; font-size:1.2rem; margin-bottom:0.7rem;">Something went wrong</h2>
+          <div id="selfHealingUserAlertMsg" style="color:#4B5563; font-size:1rem; margin-bottom:1.2rem;"></div>
+          <button id="closeSelfHealingUserAlert" style="background:#00E676; color:#fff; border:none; border-radius:8px; padding:0.8rem 1.5rem; font-size:1.05rem; font-weight:700; cursor:pointer;">Close</button>
+        </div>
+      `;
+      document.body.appendChild(modal);
+      document.getElementById('closeSelfHealingUserAlert').onclick = function() {
+        modal.style.display = 'none';
+      };
+    } else {
+      modal.style.display = 'flex';
+    }
+    // Show error messages
+    const msgDiv = document.getElementById('selfHealingUserAlertMsg');
+    msgDiv.innerHTML = Array.isArray(errors) ? errors.map(e => `<div>${typeof e === 'string' ? e : (e.message || JSON.stringify(e))}</div>`).join('') : (errors.message || JSON.stringify(errors));
   };
 }
 

@@ -577,7 +577,7 @@
       }
       
       // Initialize billing management
-      initializeBillingManagement();
+      loadCurrentPlan();
     });
     
     function checkAuthentication() {
@@ -618,12 +618,14 @@
     }
     
     function loadCurrentPlan() {
-      // Use navigation system's plan detection for consistency
-      let userPlan = 'trial';
-      if (window.JobHackAINavigation) {
-        userPlan = window.JobHackAINavigation.getEffectivePlan();
-      } else {
-        userPlan = localStorage.getItem('user-plan') || 'trial';
+      const el = document.getElementById('currentPlanName');
+      if (el) {
+        el.textContent = localStorage.getItem('user-plan') || 'free';
+      }
+      // Also sync dev plan toggle
+      const devToggle = document.getElementById('devPlanToggle');
+      if (devToggle) {
+        devToggle.value = localStorage.getItem('dev-plan') || 'free';
       }
       
       const planAmount = localStorage.getItem('plan-amount') || '0';
@@ -642,35 +644,37 @@
         'premium': '$99.00/month'
       };
       
-      document.getElementById('currentPlanName').textContent = planNames[userPlan] || 'Free Trial';
-      document.getElementById('currentPlanPrice').textContent = planPrices[userPlan] || '$0/month';
+      document.getElementById('currentPlanName').textContent = planNames[localStorage.getItem('user-plan')] || 'Free Trial';
+      document.getElementById('currentPlanPrice').textContent = planPrices[localStorage.getItem('user-plan')] || '$0/month';
       
-      const isActive = localStorage.getItem('subscription-active') === 'true' || userPlan === 'trial';
+      const isActive = localStorage.getItem('subscription-active') === 'true' || localStorage.getItem('user-plan') === 'trial';
       document.getElementById('planStatus').textContent = isActive ? 'Active' : 'Inactive';
       
       // Log for debugging
-      console.log('Billing Management - Current Plan:', userPlan);
+      console.log('Billing Management - Current Plan:', localStorage.getItem('user-plan'));
+    }
+    
+    function getUserCards() {
+      const userEmail = localStorage.getItem('user-email');
+      const db = JSON.parse(localStorage.getItem('user-db') || '{}');
+      if (userEmail && db[userEmail] && Array.isArray(db[userEmail].cards)) {
+        return db[userEmail].cards;
+      }
+      return [];
     }
     
     function loadSavedPaymentMethods() {
-      const savedCards = JSON.parse(localStorage.getItem('saved-cards') || '[]');
+      const savedCards = getUserCards();
+      console.log('getUserCards:', savedCards); // Extra logging
+      document.getElementById('savedCardsArrayLog').textContent = JSON.stringify(savedCards, null, 2);
       const savedCardsGrid = document.getElementById('savedCardsGrid');
-      
+      if (!savedCardsGrid) return;
       if (savedCards.length === 0) {
-        savedCardsGrid.innerHTML = `
-          <div style="text-align: center; padding: 2rem; color: #64748B;">
-            <div style="font-size: 2rem; margin-bottom: 1rem;">💳</div>
-            <p>No saved payment methods</p>
-            <button class="btn-outline" onclick="addNewPaymentMethod()" style="margin-top: 1rem;">
-              Add Your First Card
-            </button>
-          </div>
-        `;
+        savedCardsGrid.innerHTML = '<div style="color:#888; padding:1rem;">No cards found. Add a card to get started.</div>';
         return;
       }
-      
       savedCardsGrid.innerHTML = savedCards.map((card, index) => `
-        <div class="saved-card ${card.isDefault ? 'default' : ''}">
+        <div class="saved-card${card.isDefault ? ' default' : ''}">
           <div class="card-info">
             <div class="card-icon">${card.brand.toUpperCase().substring(0, 2)}</div>
             <div class="card-details">
@@ -679,7 +683,7 @@
             </div>
           </div>
           <div class="card-actions">
-            ${!card.isDefault ? `<button class="btn-small btn-outline-small" onclick="setDefaultCard('${card.id}')">Set Default</button>` : ''}
+            ${!card.isDefault ? `<button class=\"btn-small btn-outline-small\" onclick=\"setDefaultCard('${card.id}')\">Set Default</button>` : ''}
             <button class="btn-small btn-danger-small" onclick="removeCard('${card.id}')">Remove</button>
           </div>
         </div>
@@ -844,13 +848,18 @@
     
     function setDefaultCard(cardId) {
       // TODO: In production, this would call Stripe API to set default payment method
-      const savedCards = JSON.parse(localStorage.getItem('saved-cards') || '[]');
+      const savedCards = getUserCards();
       const updatedCards = savedCards.map(card => ({
         ...card,
         isDefault: card.id === cardId
       }));
       
-      localStorage.setItem('saved-cards', JSON.stringify(updatedCards));
+      localStorage.setItem('user-db', JSON.stringify({
+        ...JSON.parse(localStorage.getItem('user-db') || '{}'),
+        [localStorage.getItem('user-email')]: {
+          cards: updatedCards
+        }
+      }));
       loadSavedPaymentMethods();
       
       // Show success message
@@ -860,10 +869,15 @@
     function removeCard(cardId) {
       if (confirm('Are you sure you want to remove this payment method?')) {
         // TODO: In production, this would call Stripe API to detach payment method
-        const savedCards = JSON.parse(localStorage.getItem('saved-cards') || '[]');
+        const savedCards = getUserCards();
         const updatedCards = savedCards.filter(card => card.id !== cardId);
         
-        localStorage.setItem('saved-cards', JSON.stringify(updatedCards));
+        localStorage.setItem('user-db', JSON.stringify({
+          ...JSON.parse(localStorage.getItem('user-db') || '{}'),
+          [localStorage.getItem('user-email')]: {
+            cards: updatedCards
+          }
+        }));
         loadSavedPaymentMethods();
         
         alert('Payment method removed successfully!');

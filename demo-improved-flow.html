@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Improved User Flow Demo – JobHackAI</title>
+  <style>
+    body { font-family: Arial, sans-serif; max-width: 900px; margin: 0 auto; padding: 2rem; }
+    .demo-section { margin: 2rem 0; padding: 1.5rem; border: 2px solid #00E676; border-radius: 12px; }
+    .demo-section h2 { color: #00E676; margin-top: 0; }
+    .flow-step { background: #f8f9fa; padding: 1rem; margin: 0.5rem 0; border-radius: 8px; border-left: 4px solid #00E676; }
+    .flow-step strong { color: #232B36; }
+    .btn { padding: 0.8rem 1.5rem; margin: 0.5rem; border: none; border-radius: 6px; cursor: pointer; font-weight: 600; }
+    .btn-primary { background: #00E676; color: white; }
+    .btn-secondary { background: #0077B5; color: white; }
+    .btn-outline { background: white; color: #00E676; border: 2px solid #00E676; }
+    .current-state { background: #e8f5e9; padding: 1rem; border-radius: 8px; margin: 1rem 0; border: 1px solid #00E676; }
+    .improvement { background: #fff3cd; padding: 0.5rem; margin: 0.5rem 0; border-radius: 4px; border-left: 4px solid #ffc107; }
+  </style>
+</head>
+<body>
+  <h1>🎯 Improved JobHackAI User Flow</h1>
+  
+  <div class="current-state">
+    <h3>Current State</h3>
+    <div id="currentState">Loading...</div>
+  </div>
+
+  <div class="demo-section">
+    <h2>✅ NEW USER FLOW (Improved)</h2>
+    <div class="flow-step">
+      <strong>1.</strong> User visits pricing page
+    </div>
+    <div class="flow-step">
+      <strong>2.</strong> User selects a plan (e.g., "Get Pro Plan")
+    </div>
+    <div class="flow-step">
+      <strong>3.</strong> Redirected to login page with <span style="background: #00E676; color: white; padding: 0.2rem 0.5rem; border-radius: 4px;">plan banner</span>
+    </div>
+    <div class="flow-step">
+      <strong>4.</strong> <span style="color: #00E676; font-weight: bold;">AUTOMATICALLY</span> shows signup form (not login!)
+    </div>
+    <div class="flow-step">
+      <strong>5.</strong> Button says "Create Pro Account" (clear intent)
+    </div>
+    <div class="flow-step">
+      <strong>6.</strong> After signup → card step (if needed) → dashboard
+    </div>
+    
+    <div class="improvement">
+      <strong>🎉 IMPROVEMENT:</strong> No more confusing "click Sign Up" step!
+    </div>
+    
+    <button class="btn btn-primary" onclick="testNewUserFlow()">Test New User Flow</button>
+  </div>
+
+  <div class="demo-section">
+    <h2>✅ EXISTING USER FLOW (Fixed!)</h2>
+    <div class="flow-step">
+      <strong>1.</strong> User is logged in to dashboard
+    </div>
+    <div class="flow-step">
+      <strong>2.</strong> User clicks "Upgrade" → goes to pricing page
+    </div>
+    <div class="flow-step">
+      <strong>3.</strong> <span style="color: #00E676; font-weight: bold;">NO LOGIN REDIRECT!</span> Pricing page detects authenticated user
+    </div>
+    <div class="flow-step">
+      <strong>4.</strong> Buttons show "Upgrade to Pro Plan" (not "Subscribe")
+    </div>
+    <div class="flow-step">
+      <strong>5.</strong> Current plan shows as "Current Plan" (disabled)
+    </div>
+    <div class="flow-step">
+      <strong>6.</strong> Click upgrade → confirmation → direct upgrade → dashboard
+    </div>
+    
+    <div class="improvement">
+      <strong>🎉 IMPROVEMENT:</strong> No more re-authentication for upgrades!
+    </div>
+    
+    <button class="btn btn-secondary" onclick="testExistingUserFlow()">Test Existing User Flow</button>
+  </div>
+
+  <div class="demo-section">
+    <h2>🔧 Test Different Scenarios</h2>
+    <button class="btn btn-outline" onclick="setupNewUser()">Setup New User</button>
+    <button class="btn btn-outline" onclick="setupFreeUser()">Setup Free User</button>
+    <button class="btn btn-outline" onclick="setupProUser()">Setup Pro User</button>
+    <button class="btn btn-outline" onclick="resetAll()">Reset All Data</button>
+    <br><br>
+    <button class="btn btn-primary" onclick="goToPricing()">Go to Pricing Page</button>
+    <button class="btn btn-primary" onclick="goToLogin()">Go to Login Page</button>
+  </div>
+
+  <script>
+    function updateCurrentState() {
+      const selectedPlan = localStorage.getItem('selected-plan');
+      const isAuthenticated = localStorage.getItem('user-authenticated');
+      const userEmail = localStorage.getItem('user-email');
+      const userPlan = localStorage.getItem('user-plan');
+      
+      const stateDiv = document.getElementById('currentState');
+      stateDiv.innerHTML = `
+        <strong>Selected Plan:</strong> ${selectedPlan || 'None'}<br>
+        <strong>Authenticated:</strong> ${isAuthenticated || 'false'}<br>
+        <strong>User Email:</strong> ${userEmail || 'None'}<br>
+        <strong>Current Plan:</strong> ${userPlan || 'None'}<br>
+        <strong>User Type:</strong> ${!isAuthenticated && !userEmail ? 'New User' : 'Existing User'}
+      `;
+    }
+
+    function testNewUserFlow() {
+      // Clear all data to simulate new user
+      localStorage.clear();
+      localStorage.setItem('selected-plan', 'pro');
+      
+      updateCurrentState();
+      alert('New user selected Pro plan. They should be redirected to login page with signup form automatically shown.');
+    }
+
+    function testExistingUserFlow() {
+      // Setup existing user
+      localStorage.setItem('user-authenticated', 'true');
+      localStorage.setItem('user-email', 'user@example.com');
+      localStorage.setItem('user-plan', 'essential');
+      localStorage.setItem('dev-plan', 'essential');
+      
+      updateCurrentState();
+      alert('Existing Essential user trying to upgrade. They should go directly to pricing page and see upgrade buttons.');
+    }
+
+    function setupNewUser() {
+      localStorage.clear();
+      updateCurrentState();
+      alert('Setup as new user - no authentication data');
+    }
+
+    function setupFreeUser() {
+      localStorage.setItem('user-authenticated', 'true');
+      localStorage.setItem('user-email', 'user@example.com');
+      localStorage.setItem('user-plan', 'free');
+      localStorage.setItem('dev-plan', 'free');
+      updateCurrentState();
+      alert('Setup as free user - can upgrade to any plan');
+    }
+
+    function setupProUser() {
+      localStorage.setItem('user-authenticated', 'true');
+      localStorage.setItem('user-email', 'user@example.com');
+      localStorage.setItem('user-plan', 'pro');
+      localStorage.setItem('dev-plan', 'pro');
+      updateCurrentState();
+      alert('Setup as pro user - can only upgrade to premium');
+    }
+
+    function resetAll() {
+      localStorage.clear();
+      updateCurrentState();
+      alert('All data cleared!');
+    }
+
+    function goToPricing() {
+      window.open('pricing-a.html', '_blank');
+    }
+
+    function goToLogin() {
+      window.open('login.html', '_blank');
+    }
+
+    // Update state on page load
+    updateCurrentState();
+  </script>
+</body>
+</html> 

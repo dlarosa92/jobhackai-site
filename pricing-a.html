@@ -144,11 +144,11 @@
             </tr>
             <tr class="pricing-signup-row">
               <td></td>
-              <td><button class="btn-primary stripe-checkout-btn" data-plan="create-account" data-amount="0">Sign Up</button></td>
+              <td><button class="btn-primary stripe-checkout-btn" data-plan="create-account" data-amount="0">Create Free Account</button></td>
               <td><button class="btn-primary stripe-checkout-btn" data-plan="trial" data-amount="0">Start Free Trial</button></td>
-              <td><button class="btn-primary stripe-checkout-btn" data-plan="essential" data-amount="2900">Subscribe $29/mo</button></td>
-              <td><button class="btn-primary stripe-checkout-btn" data-plan="pro" data-amount="5900">Subscribe $59/mo</button></td>
-              <td><button class="btn-primary stripe-checkout-btn" data-plan="premium" data-amount="9900">Subscribe $99/mo</button></td>
+              <td><button class="btn-primary stripe-checkout-btn" data-plan="essential" data-amount="2900">Get Essential Plan</button></td>
+              <td><button class="btn-primary stripe-checkout-btn" data-plan="pro" data-amount="5900">Get Pro Plan</button></td>
+              <td><button class="btn-primary stripe-checkout-btn" data-plan="premium" data-amount="9900">Get Premium Plan</button></td>
             </tr>
           </tbody>
         </table>
@@ -187,6 +187,11 @@
     document.addEventListener('DOMContentLoaded', () => {
       const checkoutButtons = document.querySelectorAll('.stripe-checkout-btn');
       
+      // Check if user is already authenticated
+      const isAuthenticated = localStorage.getItem('user-authenticated') === 'true';
+      const userEmail = localStorage.getItem('user-email');
+      const currentPlan = localStorage.getItem('user-plan') || 'free';
+      
       checkoutButtons.forEach(button => {
         button.addEventListener('click', (e) => {
           e.preventDefault();
@@ -195,14 +200,143 @@
           
           if (plan === 'create-account') {
             window.location.href = 'login.html';
+            return;
+          }
+          
+          // If user is authenticated, handle upgrade directly
+          if (isAuthenticated && userEmail) {
+            handleAuthenticatedUserUpgrade(plan, amount, currentPlan);
           } else {
+            // New user - redirect to login with plan selected
             localStorage.setItem('selected-plan', plan);
             localStorage.setItem('plan-amount', amount);
             window.location.href = 'login.html';
           }
         });
       });
+      
+      // Update button text for authenticated users
+      if (isAuthenticated) {
+        updateButtonsForAuthenticatedUser(currentPlan);
+      }
     });
+    
+    function userHasCard(userEmail) {
+      const db = JSON.parse(localStorage.getItem('user-db') || '{}');
+      if (!db[userEmail]) return false;
+      return Array.isArray(db[userEmail].cards) && db[userEmail].cards.length > 0;
+    }
+    
+    function handleAuthenticatedUserUpgrade(newPlan, amount, currentPlan) {
+      // Don't allow downgrading to same or lower plan
+      const planHierarchy = ['free', 'trial', 'essential', 'pro', 'premium'];
+      const currentIndex = planHierarchy.indexOf(currentPlan);
+      const newIndex = planHierarchy.indexOf(newPlan);
+      
+      if (newIndex <= currentIndex) {
+        alert(`You're already on the ${currentPlan} plan. Please select a higher tier to upgrade.`);
+        return;
+      }
+      
+      // Only require card for paid plans or trial
+      const paidPlans = ['trial', 'essential', 'pro', 'premium'];
+      const userEmail = localStorage.getItem('user-email');
+      if (paidPlans.includes(newPlan) && !userHasCard(userEmail)) {
+        showAddCardModal();
+        return;
+      }
+      
+      // Show confirmation dialog
+      const planNames = {
+        'trial': '3-Day Free Trial',
+        'essential': 'Essential Plan ($29/mo)',
+        'pro': 'Pro Plan ($59/mo)',
+        'premium': 'Premium Plan ($99/mo)'
+      };
+      
+      const confirmMessage = `Upgrade from ${currentPlan} to ${planNames[newPlan]}?\n\nThis will start your new plan immediately.`;
+      
+      if (confirm(confirmMessage)) {
+        // INTEGRATION: STRIPE - Handle subscription upgrade here
+        // For demo, just update the user's plan
+        const db = JSON.parse(localStorage.getItem('user-db') || '{}');
+        if (db[userEmail]) {
+          // Only update the plan property, preserve all other user data (including cards)
+          db[userEmail].plan = newPlan;
+          localStorage.setItem('user-db', JSON.stringify(db));
+          localStorage.setItem('user-plan', newPlan);
+          localStorage.setItem('dev-plan', newPlan);
+          localStorage.removeItem('selected-plan');
+          localStorage.removeItem('plan-amount');
+          alert(`Successfully upgraded to ${planNames[newPlan]}! Redirecting to dashboard...`);
+          window.location.href = 'dashboard.html';
+        } else {
+          alert('Error: User data not found. Please try logging in again.');
+          window.location.href = 'login.html';
+        }
+      }
+    }
+    
+    function updateButtonsForAuthenticatedUser(currentPlan) {
+      const buttons = document.querySelectorAll('.stripe-checkout-btn');
+      const planNames = {
+        'trial': '3-Day Free Trial',
+        'essential': 'Essential Plan',
+        'pro': 'Pro Plan',
+        'premium': 'Premium Plan'
+      };
+      
+      buttons.forEach(button => {
+        const plan = button.dataset.plan;
+        if (plan === 'create-account') {
+          button.textContent = 'Dashboard';
+          button.onclick = () => window.location.href = 'dashboard.html';
+        } else if (plan === currentPlan) {
+          button.textContent = `Current Plan`;
+          button.disabled = true;
+          button.style.opacity = '0.6';
+          button.style.cursor = 'not-allowed';
+        } else {
+          button.textContent = `Upgrade to ${planNames[plan]}`;
+        }
+      });
+    }
+    
+    // Modal for adding card
+    function showAddCardModal() {
+      let modal = document.getElementById('addCardModal');
+      if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'addCardModal';
+        modal.style.position = 'fixed';
+        modal.style.top = '0';
+        modal.style.left = '0';
+        modal.style.width = '100vw';
+        modal.style.height = '100vh';
+        modal.style.background = 'rgba(0,0,0,0.35)';
+        modal.style.display = 'flex';
+        modal.style.alignItems = 'center';
+        modal.style.justifyContent = 'center';
+        modal.style.zIndex = '9999';
+        modal.innerHTML = `
+          <div style="background:#fff; padding:2rem 2.5rem; border-radius:16px; box-shadow:0 4px 32px rgba(0,0,0,0.13); max-width:350px; text-align:center;">
+            <h2 style="color:#232B36; font-size:1.2rem; margin-bottom:0.7rem;">Add a Payment Method</h2>
+            <p style="color:#4B5563; font-size:1rem; margin-bottom:1.2rem;">You must add a payment method to upgrade your plan.</p>
+            <button id="goToBillingBtn" style="background:#00E676; color:#fff; border:none; border-radius:8px; padding:0.8rem 1.5rem; font-size:1.05rem; font-weight:700; cursor:pointer; margin-bottom:0.7rem;">Go to Billing</button><br>
+            <button id="closeAddCardModal" style="background:#f0f0f0; color:#232B36; border:none; border-radius:8px; padding:0.7rem 1.2rem; font-size:1rem; font-weight:600; cursor:pointer;">Cancel</button>
+          </div>
+        `;
+        document.body.appendChild(modal);
+        document.getElementById('goToBillingBtn').onclick = function() {
+          window.location.href = 'billing-management.html';
+        };
+        document.getElementById('closeAddCardModal').onclick = function() {
+          modal.style.display = 'none';
+        };
+      } else {
+        modal.style.display = 'flex';
+      }
+    }
   </script>
 </body>
 </html>

@@ -41,6 +41,31 @@
       color: #232B36;
       text-align: center;
     }
+    /* NEW: Selected plan indicator */
+    .selected-plan-banner {
+      width: 100%;
+      background: linear-gradient(135deg, #00E676 0%, #00c965 100%);
+      color: white;
+      padding: 1rem;
+      border-radius: 12px;
+      margin-bottom: 1.5rem;
+      text-align: center;
+      display: none; /* Show via JS when plan is selected */
+    }
+    .selected-plan-banner h3 {
+      margin: 0 0 0.3rem 0;
+      font-size: 1.1rem;
+      font-weight: 700;
+    }
+    .selected-plan-banner p {
+      margin: 0;
+      font-size: 0.95rem;
+      opacity: 0.95;
+    }
+    .selected-plan-banner .plan-price {
+      font-weight: 700;
+      font-size: 1.05rem;
+    }
     .auth-social-btn {
       width: 100%;
       margin-bottom: 0.7rem;
@@ -241,6 +266,26 @@
 
     // --- MAIN AUTH LOGIC ---
     document.addEventListener('DOMContentLoaded', function() {
+      // --- SMART USER FLOW DETECTION ---
+      const selectedPlan = localStorage.getItem('selected-plan');
+      const isAuthenticated = localStorage.getItem('user-authenticated') === 'true';
+      const userEmail = localStorage.getItem('user-email'); // Track if user exists
+      
+      // Show selected plan banner if coming from pricing
+      if (selectedPlan && selectedPlan !== 'create-account') {
+        showSelectedPlanBanner(selectedPlan);
+      }
+      
+      // Determine if this is a new user or existing user
+      const isNewUser = !isAuthenticated && !userEmail;
+      
+      // Smart flow: If new user with plan selected, show signup form directly
+      if (isNewUser && selectedPlan && selectedPlan !== 'create-account') {
+        showSignupForm();
+        updateSignupButtonText(selectedPlan);
+      }
+      // Note: Authenticated users should handle upgrades directly on pricing page
+      
       // --- FORM TOGGLING LOGIC ---
       const loginForm = document.getElementById('loginForm');
       const signupForm = document.getElementById('signupForm');
@@ -248,20 +293,15 @@
       const signupLinks = document.getElementById('signupLinks');
       const showSignUpLink = document.getElementById('showSignUpLink');
       const showLoginLink = document.getElementById('showLoginLink');
+      
       if (showSignUpLink && showLoginLink) {
         showSignUpLink.addEventListener('click', function(e) {
           e.preventDefault();
-          loginForm.style.display = 'none';
-          loginLinks.style.display = 'none';
-          signupForm.style.display = 'flex';
-          signupLinks.style.display = 'block';
+          showSignupForm();
         });
         showLoginLink.addEventListener('click', function(e) {
           e.preventDefault();
-          signupForm.style.display = 'none';
-          signupLinks.style.display = 'none';
-          loginForm.style.display = 'flex';
-          loginLinks.style.display = 'block';
+          showLoginForm();
         });
       }
 
@@ -272,11 +312,13 @@
         const password = document.getElementById('loginPassword').value.trim();
         const loginError = document.getElementById('loginError');
         loginError.style.display = 'none';
+        
         if (!email || !password) {
           loginError.textContent = 'Please enter both email and password';
           loginError.style.display = 'block';
           return;
         }
+        
         // INTEGRATION: ZAPIER/GOOGLE SHEETS - Authenticate user
         const db = getUserDB();
         if (!db[email]) {
@@ -284,11 +326,14 @@
           loginError.style.display = 'block';
           return;
         }
-        // For demo, password is not checked. Add real check here.
-        // INTEGRATION: AUTHENTICATION PROVIDER (e.g., Firebase, Cloudflare Access)
+        
+        // Store user email for future reference
+        localStorage.setItem('user-email', email);
         localStorage.setItem('user-authenticated', 'true');
         localStorage.setItem('user-plan', db[email].plan || 'free');
         localStorage.setItem('dev-plan', db[email].plan || 'free');
+        
+        // Redirect to dashboard (no upgrade logic here)
         window.location.href = 'dashboard.html';
       });
 
@@ -302,6 +347,7 @@
         const confirmPassword = document.getElementById('confirmPassword').value.trim();
         const signupError = document.getElementById('signupError');
         signupError.style.display = 'none';
+        
         if (!firstName || !lastName || !email || !password || !confirmPassword) {
           signupError.textContent = 'Please fill in all fields';
           signupError.style.display = 'block';
@@ -317,6 +363,7 @@
           signupError.style.display = 'block';
           return;
         }
+        
         // INTEGRATION: ZAPIER/GOOGLE SHEETS - Check if email already exists
         const db = getUserDB();
         if (db[email]) {
@@ -324,28 +371,88 @@
           signupError.style.display = 'block';
           return;
         }
+        
         // Store user info for card step
         localStorage.setItem('pending-signup-email', email);
         localStorage.setItem('pending-signup-firstName', firstName);
         localStorage.setItem('pending-signup-lastName', lastName);
+        localStorage.setItem('user-email', email);
+        
         // Only show card step if plan requires payment
-        const selectedPlan = localStorage.getItem('selected-plan') || 'free';
-        if (planRequiresCard(selectedPlan)) {
-          loginForm.style.display = 'none';
-          loginLinks.style.display = 'none';
-          signupForm.style.display = 'none';
-          signupLinks.style.display = 'none';
-          showCardStep();
+        const planToUse = selectedPlan || 'free';
+        if (planRequiresCard(planToUse)) {
+          // Redirect to real add-card.html UI
+          window.location.href = 'add-card.html';
         } else {
           // Save user to mock DB
-          db[email] = { plan: selectedPlan, firstName, lastName };
+          db[email] = { plan: planToUse, firstName, lastName };
           setUserDB(db);
           localStorage.setItem('user-authenticated', 'true');
-          localStorage.setItem('user-plan', selectedPlan);
-          localStorage.setItem('dev-plan', selectedPlan);
+          localStorage.setItem('user-plan', planToUse);
+          localStorage.setItem('dev-plan', planToUse);
           window.location.href = 'dashboard.html';
         }
       });
+
+      // --- REMOVE CARD STEP LOGIC ---
+      // (No longer needed, all card entry uses add-card.html)
+
+      // --- HELPER FUNCTIONS ---
+      function showSelectedPlanBanner(plan) {
+        const banner = document.getElementById('selectedPlanBanner');
+        const planName = document.getElementById('selectedPlanName');
+        const planPrice = document.getElementById('selectedPlanPrice');
+        
+        const planNames = {
+          'trial': '3-Day Free Trial',
+          'essential': 'Essential Plan',
+          'pro': 'Pro Plan',
+          'premium': 'Premium Plan',
+          'free': 'Free Account'
+        };
+        
+        const planPrices = {
+          'trial': '$0 for 3 days',
+          'essential': '$29/mo',
+          'pro': '$59/mo',
+          'premium': '$99/mo',
+          'free': '$0/mo'
+        };
+        
+        planName.textContent = planNames[plan] || 'Selected Plan';
+        planPrice.textContent = planPrices[plan] || '$0/mo';
+        banner.style.display = 'block';
+      }
+      
+      function showSignupForm() {
+        document.getElementById('loginForm').style.display = 'none';
+        document.getElementById('loginLinks').style.display = 'none';
+        document.getElementById('signupForm').style.display = 'flex';
+        document.getElementById('signupLinks').style.display = 'block';
+        document.getElementById('auth-title').textContent = 'Create your account';
+      }
+      
+      function showLoginForm() {
+        document.getElementById('signupForm').style.display = 'none';
+        document.getElementById('signupLinks').style.display = 'none';
+        document.getElementById('loginForm').style.display = 'flex';
+        document.getElementById('loginLinks').style.display = 'block';
+        document.getElementById('auth-title').textContent = 'Log in to continue';
+      }
+      
+      function updateSignupButtonText(plan) {
+        const btn = document.getElementById('signupContinueBtn');
+        const planNames = {
+          'trial': 'Start Free Trial',
+          'essential': 'Create Essential Account',
+          'pro': 'Create Pro Account',
+          'premium': 'Create Premium Account',
+          'free': 'Create Free Account'
+        };
+        btn.textContent = planNames[plan] || 'Create Account';
+      }
+      
+      // Note: Upgrade logic moved to pricing page for authenticated users
 
       // --- DEV PLAN TOGGLE LOGIC ---
       function syncDevPlanWithUserPlan() {
@@ -353,24 +460,6 @@
         localStorage.setItem('dev-plan', plan);
       }
       window.addEventListener('storage', syncDevPlanWithUserPlan);
-
-      // --- CARD STEP LOGIC ---
-      document.getElementById('cardSubmitBtn').addEventListener('click', function(e) {
-        e.preventDefault();
-        // INTEGRATION: STRIPE - Tokenize and submit card info here
-        // For demo, just save user info
-        const selectedPlan = localStorage.getItem('selected-plan') || 'trial';
-        const email = localStorage.getItem('pending-signup-email') || '';
-        const firstName = localStorage.getItem('pending-signup-firstName') || '';
-        const lastName = localStorage.getItem('pending-signup-lastName') || '';
-        const db = getUserDB();
-        db[email] = { plan: selectedPlan, firstName, lastName };
-        setUserDB(db);
-        localStorage.setItem('user-authenticated', 'true');
-        localStorage.setItem('user-plan', selectedPlan);
-        localStorage.setItem('dev-plan', selectedPlan);
-        window.location.href = 'dashboard.html';
-      });
 
       // --- ERROR HANDLING FOR TROUBLESHOOTING ---
       window.addEventListener('error', function(event) {
@@ -388,46 +477,6 @@
       function planRequiresCard(plan) {
         return plan === 'essential' || plan === 'pro' || plan === 'premium' || plan === 'trial';
       }
-      const planNames = {
-        'trial': 'Free Trial',
-        'essential': 'Essential',
-        'pro': 'Pro',
-        'premium': 'Premium',
-        'free': 'Free'
-      };
-      const planPrices = {
-        'trial': '$0 for 3 days',
-        'essential': '$29/mo',
-        'pro': '$59/mo',
-        'premium': '$99/mo',
-        'free': '$0/mo'
-      };
-      function updateCardStepUI() {
-        const selectedPlan = localStorage.getItem('selected-plan') || 'trial';
-        const planName = planNames[selectedPlan] || 'Selected';
-        const planPrice = planPrices[selectedPlan] || '';
-        document.getElementById('cardStepTitle').textContent = `Add a credit card to activate your ${planName}`;
-        document.getElementById('cardStepSub').textContent = planPrice ? `You will be charged ${planPrice} after your trial.` : '';
-        const btn = document.getElementById('cardSubmitBtn');
-        if (selectedPlan === 'trial') {
-          btn.textContent = 'Add Card & Start Free Trial';
-        } else if (selectedPlan === 'essential' || selectedPlan === 'pro' || selectedPlan === 'premium') {
-          btn.textContent = `Add Card & Subscribe to ${planName}`;
-        } else {
-          btn.textContent = 'Create Account';
-        }
-      }
-      function showCardStep() {
-        document.getElementById('loginForm').style.display = 'none';
-        document.getElementById('loginLinks').style.display = 'none';
-        document.getElementById('signupForm').style.display = 'none';
-        document.getElementById('signupLinks').style.display = 'none';
-        document.getElementById('googleSignIn').style.display = 'none';
-        document.getElementById('linkedinSignIn').style.display = 'none';
-        document.querySelector('.auth-separator').style.display = 'none';
-        document.getElementById('cardStep').style.display = 'block';
-        updateCardStepUI();
-      }
     });
   </script>
   <!-- page content -->
@@ -439,6 +488,11 @@
         <span style="font-weight:800; letter-spacing:0.5px;">JOBHACKAI</span>
       </div>
       <div class="auth-title" id="auth-title">Log in or sign up</div>
+      <!-- NEW: Selected plan banner -->
+      <div class="selected-plan-banner" id="selectedPlanBanner">
+        <h3 id="selectedPlanName">Selected Plan</h3>
+        <p>You're signing up for: <span class="plan-price" id="selectedPlanPrice">$0/mo</span></p>
+      </div>
       <a class="auth-social-btn google" id="googleSignIn" aria-label="Continue with Google" href="#">
         <svg width="22" height="22" viewBox="0 0 48 48" aria-hidden="true" style="vertical-align:middle;"><g><path fill="#4285F4" d="M24 9.5c3.54 0 6.7 1.22 9.19 3.23l6.85-6.85C35.93 2.68 30.34 0 24 0 14.82 0 6.73 5.48 2.69 13.44l7.98 6.2C12.13 13.13 17.62 9.5 24 9.5z"/><path fill="#34A853" d="M46.1 24.55c0-1.64-.15-3.22-.42-4.74H24v9.01h12.42c-.54 2.9-2.18 5.36-4.65 7.02l7.19 5.6C43.93 37.13 46.1 31.3 46.1 24.55z"/><path fill="#FBBC05" d="M9.67 28.09a14.5 14.5 0 010-8.18l-7.98-6.2A23.94 23.94 0 000 24c0 3.77.9 7.34 2.69 10.56l7.98-6.47z"/><path fill="#EA4335" d="M24 48c6.34 0 11.66-2.1 15.54-5.73l-7.19-5.6c-2.01 1.35-4.6 2.15-8.35 2.15-6.38 0-11.87-3.63-14.33-8.89l-7.98 6.47C6.73 42.52 14.82 48 24 48z"/></g></svg>
         Continue with Google
@@ -481,20 +535,6 @@
       <div class="auth-links" id="signupLinks" style="display:none;">
         Already have an account?
         <a href="#" id="showLoginLink">Back to Login</a>
-      </div>
-      <!-- Stripe Card Modal Placeholder -->
-      <div class="auth-card-step" id="cardStep">
-        <h3 id="cardStepTitle" style="font-size:1.1rem; font-weight:700; margin-bottom:0.7rem;">Add a credit card to activate your account</h3>
-        <div id="cardStepSub" style="font-size:0.98rem; color:#4B5563; margin-bottom:0.7rem;"></div>
-        <div id="stripeCardElement" style="margin-bottom:1rem;">
-          <!-- Stripe.js or payment provider will inject card field here -->
-          <input type="text" class="auth-input" placeholder="Card Number (mock)" autocomplete="cc-number" />
-        </div>
-        <button class="auth-continue-btn" id="cardSubmitBtn">Add Card &amp; Start Free Trial</button>
-        <div class="auth-error" id="cardError" aria-live="polite"></div>
-        <div style="margin-top:1rem; text-align:center;">
-          <a href="pricing-a.html" id="changePlanLink" style="color:#1976D2; text-decoration:underline; font-size:0.97rem;">&larr; Change Plan</a>
-        </div>
       </div>
       <div class="auth-footer">
         © 2025 JobHackAI. All rights reserved.<br />

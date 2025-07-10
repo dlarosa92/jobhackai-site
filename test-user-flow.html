@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>User Flow Test – JobHackAI</title>
+  <style>
+    body { font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 2rem; }
+    .test-section { margin: 2rem 0; padding: 1rem; border: 1px solid #ddd; border-radius: 8px; }
+    .btn { padding: 0.5rem 1rem; margin: 0.5rem; border: none; border-radius: 4px; cursor: pointer; }
+    .btn-primary { background: #00E676; color: white; }
+    .btn-secondary { background: #f0f0f0; color: #333; }
+    .btn-danger { background: #ff4444; color: white; }
+    .current-state { background: #f8f9fa; padding: 1rem; border-radius: 4px; margin: 1rem 0; }
+  </style>
+</head>
+<body>
+  <h1>JobHackAI User Flow Test</h1>
+  
+  <div class="test-section">
+    <h2>Current State</h2>
+    <div class="current-state" id="currentState">
+      Loading...
+    </div>
+  </div>
+
+  <div class="test-section">
+    <h2>Test New User Flows</h2>
+    <p>These simulate a completely new user selecting different plans:</p>
+    <button class="btn btn-primary" onclick="testNewUser('trial')">New User → Free Trial</button>
+    <button class="btn btn-primary" onclick="testNewUser('essential')">New User → Essential</button>
+    <button class="btn btn-primary" onclick="testNewUser('pro')">New User → Pro</button>
+    <button class="btn btn-primary" onclick="testNewUser('premium')">New User → Premium</button>
+    <button class="btn btn-secondary" onclick="testNewUser('create-account')">New User → Free Account</button>
+  </div>
+
+  <div class="test-section">
+    <h2>Test Existing User Flows</h2>
+    <p>These simulate an existing user trying to upgrade (should go directly to pricing):</p>
+    <button class="btn btn-primary" onclick="testExistingUser('free', 'trial')">Free User → Trial</button>
+    <button class="btn btn-primary" onclick="testExistingUser('free', 'essential')">Free User → Essential</button>
+    <button class="btn btn-primary" onclick="testExistingUser('essential', 'pro')">Essential → Pro</button>
+    <button class="btn btn-primary" onclick="testExistingUser('pro', 'premium')">Pro → Premium</button>
+  </div>
+
+  <div class="test-section">
+    <h2>Reset & Navigation</h2>
+    <button class="btn btn-danger" onclick="resetAll()">Reset All Data</button>
+    <button class="btn btn-secondary" onclick="goToPricing()">Go to Pricing Page</button>
+    <button class="btn btn-secondary" onclick="goToLogin()">Go to Login Page</button>
+  </div>
+
+  <script>
+    function updateCurrentState() {
+      const selectedPlan = localStorage.getItem('selected-plan');
+      const isAuthenticated = localStorage.getItem('user-authenticated');
+      const userEmail = localStorage.getItem('user-email');
+      const userPlan = localStorage.getItem('user-plan');
+      
+      const stateDiv = document.getElementById('currentState');
+      stateDiv.innerHTML = `
+        <strong>Selected Plan:</strong> ${selectedPlan || 'None'}<br>
+        <strong>Authenticated:</strong> ${isAuthenticated || 'false'}<br>
+        <strong>User Email:</strong> ${userEmail || 'None'}<br>
+        <strong>Current Plan:</strong> ${userPlan || 'None'}<br>
+        <strong>User Type:</strong> ${!isAuthenticated && !userEmail ? 'New User' : 'Existing User'}
+      `;
+    }
+
+    function testNewUser(plan) {
+      // Clear all user data to simulate new user
+      localStorage.removeItem('user-authenticated');
+      localStorage.removeItem('user-email');
+      localStorage.removeItem('user-plan');
+      localStorage.removeItem('dev-plan');
+      
+      // Set selected plan
+      localStorage.setItem('selected-plan', plan);
+      
+      updateCurrentState();
+      console.log(`Testing new user flow for plan: ${plan}`);
+      
+      // Simulate going to login page
+      setTimeout(() => {
+        alert(`New user selected ${plan}. They should be directed to signup form with plan banner visible.`);
+      }, 100);
+    }
+
+    function testExistingUser(currentPlan, newPlan) {
+      // Set up existing user
+      localStorage.setItem('user-authenticated', 'true');
+      localStorage.setItem('user-email', 'test@example.com');
+      localStorage.setItem('user-plan', currentPlan);
+      localStorage.setItem('dev-plan', currentPlan);
+      
+      // Set selected plan for upgrade
+      localStorage.setItem('selected-plan', newPlan);
+      
+      updateCurrentState();
+      console.log(`Testing existing user upgrade from ${currentPlan} to ${newPlan}`);
+      
+      // Simulate going to pricing page
+      setTimeout(() => {
+        alert(`Existing user (${currentPlan}) trying to upgrade to ${newPlan}. They should go directly to pricing page and see upgrade buttons.`);
+      }, 100);
+    }
+
+    function resetAll() {
+      localStorage.clear();
+      updateCurrentState();
+      alert('All data cleared!');
+    }
+
+    function goToPricing() {
+      window.open('pricing-a.html', '_blank');
+    }
+
+    function goToLogin() {
+      window.open('login.html', '_blank');
+    }
+
+    // Update state on page load
+    updateCurrentState();
+  </script>
+</body>
+</html> 

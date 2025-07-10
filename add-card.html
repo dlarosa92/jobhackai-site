@@ -441,10 +441,30 @@
           savedCards.push(card);
           localStorage.setItem('saved-cards', JSON.stringify(savedCards));
 
+          // PATCH: After card is added, finalize authentication and plan
+          const planToUse = localStorage.getItem('selected-plan') || 'trial';
+          const userEmail = localStorage.getItem('pending-signup-email') || localStorage.getItem('user-email');
+          const firstName = localStorage.getItem('pending-signup-firstName') || '';
+          const lastName = localStorage.getItem('pending-signup-lastName') || '';
+          if (userEmail) {
+            let db = JSON.parse(localStorage.getItem('user-db') || '{}');
+            if (!db[userEmail]) db[userEmail] = {};
+            db[userEmail].plan = planToUse;
+            db[userEmail].firstName = firstName;
+            db[userEmail].lastName = lastName;
+            if (!Array.isArray(db[userEmail].cards)) db[userEmail].cards = [];
+            db[userEmail].cards = db[userEmail].cards.map(c => ({...c, isDefault: false}));
+            db[userEmail].cards.push(card);
+            localStorage.setItem('user-db', JSON.stringify(db));
+            localStorage.setItem('user-authenticated', 'true');
+            localStorage.setItem('user-plan', planToUse);
+            localStorage.setItem('dev-plan', planToUse);
+            localStorage.setItem('user-email', userEmail);
+          }
           // Simulate processing delay
           setTimeout(function() {
-            // Redirect to billing management page
-            window.location.href = 'billing-management.html';
+            // Redirect to dashboard
+            window.location.href = 'dashboard.html';
           }, 1200);
         });
       }
@@ -537,7 +557,7 @@
           <div style="text-align: center; padding: 2rem;">
             <div style="color: #00E676; font-size: 3rem; margin-bottom: 1rem;">✓</div>
             <h2 style="color: #232B36; margin-bottom: 1rem;">Payment Successful!</h2>
-            <p style="color: #4B5563;">Your payment with your saved ${selectedCard.brand} card was successful. Redirecting to dashboard...</p>
+            <p style="color: #4B5563;">Your payment with Apple Pay / Google Pay (Demo) was successful. Redirecting to dashboard...</p>
           </div>
         `;
         
@@ -552,4 +572,4 @@
     }
   </script>
 </body>
-</html> 
+</html>
