@@ -166,6 +166,35 @@
   </style>
 </head>
 <body>
+  <!-- Header -->
+  <header class="site-header">
+    <div class="container">
+      <a href="index.html" class="nav-logo" aria-label="Go to homepage">
+        <svg width="24" height="24" fill="none" stroke="#1F2937" stroke-width="2" xmlns="http://www.w3.org/2000/svg">
+          <rect x="3" y="7" width="18" height="13" rx="2"/>
+          <path d="M8 7V5a2 2 0 012-2h4a2 2 0 012 2v2"/>
+        </svg>
+        <span>JOBHACKAI</span>
+      </a>
+      <div class="nav-group">
+        <nav class="nav-links" role="navigation">
+          <!-- Navigation will be dynamically populated by navigation.js -->
+        </nav>
+      </div>
+      <button class="mobile-toggle" aria-label="Open navigation menu" aria-expanded="false" aria-controls="mobileNav">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="3" y1="12" x2="21" y2="12"></line>
+          <line x1="3" y1="6" x2="21" y2="6"></line>
+          <line x1="3" y1="18" x2="21" y2="18"></line>
+        </svg>
+      </button>
+    </div>
+  </header>
+  
+  <nav class="mobile-nav" id="mobileNav">
+    <!-- Mobile navigation will be dynamically populated by navigation.js -->
+  </nav>
+  
   <!-- DEV-ONLY PLAN TOGGLE will be added by navigation.js -->
   <script src="js/navigation.js"></script>
   <script>
@@ -331,25 +360,56 @@
 
     // --- DEV-ONLY PLAN TOGGLE LOGIC ---
     document.addEventListener('DOMContentLoaded', function() {
-      // Use navigation system's plan instead of hardcoded value
-      user.plan = getCurrentUserPlan();
+      // Wait for navigation system to be ready before initializing
+      function waitForNavigationAndInit() {
+        if (window.JobHackAINavigation && typeof window.JobHackAINavigation.getEffectivePlan === 'function') {
+          console.log('Navigation system ready, initializing resume feedback page');
+          // Use navigation system's plan instead of hardcoded value
+          user.plan = getCurrentUserPlan();
+          
+          // Listen for plan changes from navigation system
+          window.addEventListener('storage', function(e) {
+            if (e.key === 'dev-plan' || e.key === 'user-plan' || e.key === 'user-authenticated') {
+              console.log('Plan change detected via storage:', e.key, e.newValue);
+              updateRfTileForPlan();
+            }
+          });
+          
+          // Listen for custom plan change events
+          window.addEventListener('planChanged', function(e) {
+            console.log('Plan changed from', e.detail.oldPlan, 'to', e.detail.newPlan);
+            updateRfTileForPlan();
+            // Re-attach button listeners after plan change
+            setTimeout(attachRewriteButtonListeners, 100);
+          });
+          
+          // Listen for navigation ready event
+          window.addEventListener('navigationReady', function() {
+            console.log('Navigation ready event received, updating resume feedback');
+            updateRfTileForPlan();
+          });
+          
+          // Initial update
+          updateRfTileForPlan();
+          
+          // Set up periodic plan checking to catch any missed updates
+          let lastKnownPlan = null;
+          setInterval(function() {
+            const currentPlan = getCurrentUserPlan();
+            if (currentPlan !== lastKnownPlan) {
+              console.log('Plan change detected via periodic check:', lastKnownPlan, '->', currentPlan);
+              lastKnownPlan = currentPlan;
+              updateRfTileForPlan();
+            }
+          }, 1000); // Check every second
+        } else {
+          console.log('Navigation system not ready, retrying in 100ms');
+          setTimeout(waitForNavigationAndInit, 100);
+        }
+      }
       
-                    // Listen for plan changes from navigation system
-       window.addEventListener('storage', function(e) {
-         if (e.key === 'dev-plan' || e.key === 'user-plan') {
-           updateRfTileForPlan();
-         }
-       });
-       
-       // Listen for custom plan change events
-       window.addEventListener('planChanged', function(e) {
-         console.log('Plan changed from', e.detail.oldPlan, 'to', e.detail.newPlan);
-         updateRfTileForPlan();
-         // Re-attach button listeners after plan change
-         setTimeout(attachRewriteButtonListeners, 100);
-       });
-       
-       updateRfTileForPlan();
+      // Start waiting for navigation system
+      waitForNavigationAndInit();
       // ATS Resume Upload Logic
       const uploadInput = document.getElementById('rf-upload');
       if (uploadInput) {
@@ -861,51 +921,6 @@
     });
   </script>
   <script src="js/main.js" type="module"></script>
-  <!-- Header -->
-  <header class="site-header">
-    <div class="container">
-      <a href="index.html" class="nav-logo" aria-label="Go to homepage">
-        <svg width="24" height="24" fill="none" stroke="#1F2937" stroke-width="2" xmlns="http://www.w3.org/2000/svg">
-          <rect x="3" y="7" width="18" height="13" rx="2"/>
-          <path d="M8 7V5a2 2 0 012-2h4a2 2 0 012 2v2"/>
-        </svg>
-        <span>JOBHACKAI</span>
-      </a>
-      <div class="nav-group">
-        <nav class="nav-links" role="navigation">
-          <!-- Navigation will be dynamically populated by navigation.js -->
-        </nav>
-      </div>
-      <button class="mobile-toggle" aria-label="Open navigation menu" aria-expanded="false" aria-controls="mobileNav">
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <line x1="3" y1="12" x2="21" y2="12"></line>
-          <line x1="3" y1="6" x2="21" y2="6"></line>
-          <line x1="3" y1="18" x2="21" y2="18"></line>
-        </svg>
-      </button>
-    </div>
-  </header>
-  <nav class="mobile-nav" id="mobileNav">
-    <!-- Mobile navigation will be dynamically populated by navigation.js -->
-  </nav>
-  <script>
-    // Hamburger menu toggle
-    const mobileToggle = document.querySelector('.mobile-toggle');
-    const mobileNav = document.getElementById('mobileNav');
-    if (mobileToggle && mobileNav) {
-      mobileToggle.addEventListener('click', () => {
-        const isOpen = mobileNav.classList.toggle('open');
-        mobileToggle.setAttribute('aria-expanded', isOpen);
-      });
-      // Close mobile nav on link click
-      document.querySelectorAll('.mobile-nav a').forEach(link => {
-        link.addEventListener('click', () => {
-          mobileNav.classList.remove('open');
-          mobileToggle.setAttribute('aria-expanded', 'false');
-        });
-      });
-    }
-  </script>
 
   <!-- page content -->
   <main style="max-width:900px;margin:2.5rem auto 4rem auto;padding:0 1rem;">
