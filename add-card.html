@@ -447,19 +447,58 @@
           const firstName = localStorage.getItem('pending-signup-firstName') || '';
           const lastName = localStorage.getItem('pending-signup-lastName') || '';
           if (userEmail) {
-            let db = JSON.parse(localStorage.getItem('user-db') || '{}');
-            if (!db[userEmail]) db[userEmail] = {};
-            db[userEmail].plan = planToUse;
-            db[userEmail].firstName = firstName;
-            db[userEmail].lastName = lastName;
+            // Use improved user persistence
+            const getUserDB = () => {
+              try {
+                return JSON.parse(localStorage.getItem('user-db') || '{}');
+              } catch (error) {
+                console.error('Error loading user database:', error);
+                return {};
+              }
+            };
+            
+            const setUserDB = (db) => {
+              try {
+                localStorage.setItem('user-db', JSON.stringify(db));
+                localStorage.setItem('user-db-backup', JSON.stringify(db));
+              } catch (error) {
+                console.error('Error saving user database:', error);
+              }
+            };
+            
+            let db = getUserDB();
+            if (!db[userEmail]) {
+              db[userEmail] = {
+                plan: planToUse,
+                firstName: firstName,
+                lastName: lastName,
+                cards: [],
+                created: new Date().toISOString()
+              };
+            } else {
+              db[userEmail].plan = planToUse;
+              db[userEmail].firstName = firstName;
+              db[userEmail].lastName = lastName;
+            }
+            
             if (!Array.isArray(db[userEmail].cards)) db[userEmail].cards = [];
             db[userEmail].cards = db[userEmail].cards.map(c => ({...c, isDefault: false}));
             db[userEmail].cards.push(card);
-            localStorage.setItem('user-db', JSON.stringify(db));
+            
+            setUserDB(db);
             localStorage.setItem('user-authenticated', 'true');
             localStorage.setItem('user-plan', planToUse);
             localStorage.setItem('dev-plan', planToUse);
             localStorage.setItem('user-email', userEmail);
+            
+            // Sync with navigation system
+            if (window.JobHackAINavigation) {
+              window.JobHackAINavigation.setAuthState(true, planToUse);
+            }
+            
+            // Clear selected plan after successful signup
+            localStorage.removeItem('selected-plan');
+            localStorage.removeItem('plan-amount');
           }
           // Simulate processing delay
           setTimeout(function() {

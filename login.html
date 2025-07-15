@@ -327,11 +327,19 @@
           return;
         }
         
-        // Store user email for future reference
+        // Update user login timestamp and ensure user exists
+        const userData = ensureUserExists(email);
+        
+        // Store user authentication state
         localStorage.setItem('user-email', email);
         localStorage.setItem('user-authenticated', 'true');
-        localStorage.setItem('user-plan', db[email].plan || 'free');
-        localStorage.setItem('dev-plan', db[email].plan || 'free');
+        localStorage.setItem('user-plan', userData.plan || 'free');
+        localStorage.setItem('dev-plan', userData.plan || 'free');
+        
+        // Sync with navigation system
+        if (window.JobHackAINavigation) {
+          window.JobHackAINavigation.setAuthState(true, userData.plan);
+        }
         
         // Redirect to dashboard (no upgrade logic here)
         window.location.href = 'dashboard.html';
@@ -384,12 +392,27 @@
           // Redirect to real add-card.html UI
           window.location.href = 'add-card.html';
         } else {
-          // Save user to mock DB
-          db[email] = { plan: planToUse, firstName, lastName };
-          setUserDB(db);
+          // Create user account with improved persistence
+          const userData = ensureUserExists(email, {
+            plan: planToUse,
+            firstName: firstName,
+            lastName: lastName
+          });
+          
+          // Set authentication state
           localStorage.setItem('user-authenticated', 'true');
           localStorage.setItem('user-plan', planToUse);
           localStorage.setItem('dev-plan', planToUse);
+          
+          // Sync with navigation system
+          if (window.JobHackAINavigation) {
+            window.JobHackAINavigation.setAuthState(true, planToUse);
+          }
+          
+          // Clear selected plan after successful signup
+          localStorage.removeItem('selected-plan');
+          localStorage.removeItem('plan-amount');
+          
           window.location.href = 'dashboard.html';
         }
       });
@@ -469,13 +492,62 @@
 
       // --- UTILS (Mock DB, Plan, Card Step, etc.) ---
       function getUserDB() {
-        return JSON.parse(localStorage.getItem('user-db') || '{}');
+        try {
+          const db = JSON.parse(localStorage.getItem('user-db') || '{}');
+          // Initialize with demo user if empty
+          if (Object.keys(db).length === 0) {
+            const demoUser = {
+              'demo@jobhackai.com': {
+                plan: 'free',
+                firstName: 'Demo',
+                lastName: 'User',
+                cards: [],
+                created: new Date().toISOString()
+              }
+            };
+            setUserDB(demoUser);
+            return demoUser;
+          }
+          return db;
+        } catch (error) {
+          console.error('Error loading user database:', error);
+          return {};
+        }
       }
+      
       function setUserDB(db) {
-        localStorage.setItem('user-db', JSON.stringify(db));
+        try {
+          localStorage.setItem('user-db', JSON.stringify(db));
+          // Also store a backup
+          localStorage.setItem('user-db-backup', JSON.stringify(db));
+        } catch (error) {
+          console.error('Error saving user database:', error);
+        }
       }
+      
       function planRequiresCard(plan) {
         return plan === 'essential' || plan === 'pro' || plan === 'premium' || plan === 'trial';
+      }
+      
+      // --- IMPROVED USER PERSISTENCE ---
+      function ensureUserExists(email, userData = {}) {
+        const db = getUserDB();
+        if (!db[email]) {
+          db[email] = {
+            plan: userData.plan || 'free',
+            firstName: userData.firstName || 'User',
+            lastName: userData.lastName || '',
+            cards: userData.cards || [],
+            created: new Date().toISOString(),
+            lastLogin: new Date().toISOString()
+          };
+          setUserDB(db);
+        } else {
+          // Update last login
+          db[email].lastLogin = new Date().toISOString();
+          setUserDB(db);
+        }
+        return db[email];
       }
     });
   </script>

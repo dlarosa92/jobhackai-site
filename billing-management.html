@@ -494,6 +494,10 @@
             <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true" focusable="false" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4v7"/><path d="M5 10l4 4 4-4"/><rect x="3" y="15" width="12" height="2" rx="1" fill="currentColor" stroke="none"/></svg>
             Download Invoices
           </button>
+          <!-- Debug button for testing -->
+          <button class="btn-outline" onclick="refreshBillingData()" style="background: #f0f0f0; color: #666;">
+            🔄 Refresh Data
+          </button>
         </div>
         
         <!-- Trust & Compliance Section -->
@@ -576,8 +580,44 @@
         return;
       }
       
-      // Initialize billing management
-      loadCurrentPlan();
+      // Wait for navigation system to be fully initialized
+      function waitForNavigationSystem() {
+        if (window.JobHackAINavigation && typeof window.JobHackAINavigation.getEffectivePlan === 'function') {
+          console.log('Navigation system ready, loading billing data');
+          loadCurrentPlan();
+          loadBillingHistory();
+        } else {
+          console.log('Navigation system not ready, retrying in 100ms');
+          setTimeout(waitForNavigationSystem, 100);
+        }
+      }
+      
+      // Start waiting for navigation system
+      waitForNavigationSystem();
+      
+      // Also initialize with current plan immediately as fallback
+      const initialPlan = getCurrentPlanStandalone();
+      console.log('Initial plan detection:', initialPlan);
+      lastKnownPlan = initialPlan;
+      
+      // Also listen for navigation ready event
+      window.addEventListener('navigationReady', function() {
+        console.log('Navigation ready event received, loading billing data');
+        loadCurrentPlan();
+        loadBillingHistory();
+      });
+      
+      // Set up periodic plan checking to catch any missed updates
+      let lastKnownPlan = null;
+      setInterval(function() {
+        const currentPlan = getCurrentPlanStandalone();
+        if (currentPlan !== lastKnownPlan) {
+          console.log('Plan change detected via periodic check:', lastKnownPlan, '->', currentPlan);
+          lastKnownPlan = currentPlan;
+          loadCurrentPlan();
+          loadBillingHistory();
+        }
+      }, 1000); // Check every second
     });
     
     function checkAuthentication() {
@@ -617,42 +657,84 @@
       checkTrialStatus();
     }
     
-    function loadCurrentPlan() {
-      const el = document.getElementById('currentPlanName');
-      if (el) {
-        el.textContent = localStorage.getItem('user-plan') || 'free';
-      }
-      // Also sync dev plan toggle
-      const devToggle = document.getElementById('devPlanToggle');
-      if (devToggle) {
-        devToggle.value = localStorage.getItem('dev-plan') || 'free';
-      }
+    // Standalone plan detection function that doesn't rely on navigation system
+    function getCurrentPlanStandalone() {
+      const devPlan = localStorage.getItem('dev-plan');
+      const userPlanStored = localStorage.getItem('user-plan');
+      const isAuthenticated = localStorage.getItem('user-authenticated') === 'true';
       
-      const planAmount = localStorage.getItem('plan-amount') || '0';
+      if (!isAuthenticated) {
+        return devPlan || 'visitor';
+      } else if (devPlan && devPlan !== 'visitor') {
+        return devPlan;
+      } else {
+        return userPlanStored || 'free';
+      }
+    }
+    
+    function loadCurrentPlan() {
+      // Use navigation system's plan detection for consistency, with robust fallback
+      let userPlan = 'free';
+      
+      try {
+        if (window.JobHackAINavigation && typeof window.JobHackAINavigation.getEffectivePlan === 'function') {
+          userPlan = window.JobHackAINavigation.getEffectivePlan();
+          console.log('Using navigation system plan:', userPlan);
+        } else {
+          userPlan = getCurrentPlanStandalone();
+          console.log('Using standalone plan detection:', userPlan);
+        }
+      } catch (error) {
+        console.error('Error getting plan from navigation system:', error);
+        userPlan = getCurrentPlanStandalone();
+        console.log('Fallback to standalone plan detection:', userPlan);
+      }
       
       const planNames = {
+        'free': 'Free Plan',
         'trial': 'Free Trial',
         'essential': 'Essential Plan',
         'pro': 'Pro Plan',
-        'premium': 'Premium Plan'
+        'premium': 'Premium Plan',
+        'visitor': 'Visitor'
       };
       
       const planPrices = {
+        'free': '$0/month',
         'trial': '$0/month',
         'essential': '$29.00/month',
         'pro': '$59.00/month',
-        'premium': '$99.00/month'
+        'premium': '$99.00/month',
+        'visitor': '$0/month'
       };
       
-      document.getElementById('currentPlanName').textContent = planNames[localStorage.getItem('user-plan')] || 'Free Trial';
-      document.getElementById('currentPlanPrice').textContent = planPrices[localStorage.getItem('user-plan')] || '$0/month';
+      document.getElementById('currentPlanName').textContent = planNames[userPlan] || 'Free Plan';
+      document.getElementById('currentPlanPrice').textContent = planPrices[userPlan] || '$0/month';
       
-      const isActive = localStorage.getItem('subscription-active') === 'true' || localStorage.getItem('user-plan') === 'trial';
+      const isActive = localStorage.getItem('subscription-active') === 'true' || userPlan === 'trial' || userPlan === 'free';
       document.getElementById('planStatus').textContent = isActive ? 'Active' : 'Inactive';
       
       // Log for debugging
-      console.log('Billing Management - Current Plan:', localStorage.getItem('user-plan'));
+      console.log('Billing Management - Current Plan:', userPlan);
+      console.log('Navigation System Plan:', window.JobHackAINavigation ? window.JobHackAINavigation.getEffectivePlan() : 'Navigation not available');
+      console.log('localStorage dev-plan:', localStorage.getItem('dev-plan'));
+      console.log('localStorage user-plan:', localStorage.getItem('user-plan'));
     }
+    
+    // Add a global function to manually refresh billing data
+    window.refreshBillingData = function() {
+      console.log('Manual billing data refresh triggered');
+      // Wait for navigation system to be ready before updating
+      function waitAndUpdate() {
+        if (window.JobHackAINavigation && typeof window.JobHackAINavigation.getEffectivePlan === 'function') {
+          loadCurrentPlan();
+          loadBillingHistory();
+        } else {
+          setTimeout(waitAndUpdate, 50);
+        }
+      }
+      waitAndUpdate();
+    };
     
     function getUserCards() {
       const userEmail = localStorage.getItem('user-email');
@@ -721,10 +803,16 @@
       // INTEGRATION: GOOGLE SHEETS - Retrieve billing history for user from Sheets
       // Get current plan from navigation system
       let userPlan = 'trial';
-      if (window.JobHackAINavigation) {
-        userPlan = window.JobHackAINavigation.getEffectivePlan();
-      } else {
-        userPlan = localStorage.getItem('user-plan') || 'trial';
+      
+      try {
+        if (window.JobHackAINavigation && typeof window.JobHackAINavigation.getEffectivePlan === 'function') {
+          userPlan = window.JobHackAINavigation.getEffectivePlan();
+        } else {
+          userPlan = getCurrentPlanStandalone();
+        }
+      } catch (error) {
+        console.error('Error getting plan for billing history:', error);
+        userPlan = getCurrentPlanStandalone();
       }
       const demoHistory = getDemoBillingHistory(userPlan);
       const billingTable = document.getElementById('billingHistoryTable');
@@ -748,10 +836,16 @@
     // INTEGRATION: GOOGLE SHEETS - Download invoices from Sheets if stored there
     window.downloadInvoice = function(invoiceId) {
       let userPlan = 'trial';
-      if (window.JobHackAINavigation) {
-        userPlan = window.JobHackAINavigation.getEffectivePlan();
-      } else {
-        userPlan = localStorage.getItem('user-plan') || 'trial';
+      
+      try {
+        if (window.JobHackAINavigation && typeof window.JobHackAINavigation.getEffectivePlan === 'function') {
+          userPlan = window.JobHackAINavigation.getEffectivePlan();
+        } else {
+          userPlan = getCurrentPlanStandalone();
+        }
+      } catch (error) {
+        console.error('Error getting plan for invoice download:', error);
+        userPlan = getCurrentPlanStandalone();
       }
       const demoHistory = getDemoBillingHistory(userPlan);
       const invoice = demoHistory.find(i => i.invoice === invoiceId);
@@ -773,10 +867,16 @@
     // INTEGRATION: GOOGLE SHEETS - Download invoices from Sheets if stored there
     window.downloadInvoices = function() {
       let userPlan = 'trial';
-      if (window.JobHackAINavigation) {
-        userPlan = window.JobHackAINavigation.getEffectivePlan();
-      } else {
-        userPlan = localStorage.getItem('user-plan') || 'trial';
+      
+      try {
+        if (window.JobHackAINavigation && typeof window.JobHackAINavigation.getEffectivePlan === 'function') {
+          userPlan = window.JobHackAINavigation.getEffectivePlan();
+        } else {
+          userPlan = getCurrentPlanStandalone();
+        }
+      } catch (error) {
+        console.error('Error getting plan for invoices download:', error);
+        userPlan = getCurrentPlanStandalone();
       }
       const demoHistory = getDemoBillingHistory(userPlan);
       if (!demoHistory.length) return alert('No invoices to download.');
@@ -803,11 +903,52 @@
 
     // Call loadBillingHistory on page load and whenever plan changes
     document.addEventListener('DOMContentLoaded', function() {
-      loadBillingHistory();
-      // Optionally, listen for plan changes (DEV ONLY toggle)
+      // Listen for plan changes from Quick Plan Switcher
       window.addEventListener('storage', function(e) {
-        if (e.key === 'dev-plan' || e.key === 'user-plan') {
-          loadBillingHistory();
+        if (e.key === 'dev-plan' || e.key === 'user-plan' || e.key === 'user-authenticated') {
+          console.log('Plan change detected:', e.key, e.newValue);
+          // Wait for navigation system to be ready before updating
+          function waitAndUpdate() {
+            if (window.JobHackAINavigation && typeof window.JobHackAINavigation.getEffectivePlan === 'function') {
+              loadCurrentPlan();
+              loadBillingHistory();
+            } else {
+              setTimeout(waitAndUpdate, 50);
+            }
+          }
+          waitAndUpdate();
+        }
+      });
+      
+      // Also listen for custom plan change events
+      window.addEventListener('planChanged', function(e) {
+        console.log('Custom plan change event:', e.detail);
+        // Wait for navigation system to be ready before updating
+        function waitAndUpdate() {
+          if (window.JobHackAINavigation && typeof window.JobHackAINavigation.getEffectivePlan === 'function') {
+            loadCurrentPlan();
+            loadBillingHistory();
+          } else {
+            setTimeout(waitAndUpdate, 50);
+          }
+        }
+        waitAndUpdate();
+      });
+      
+      // Listen for page visibility changes (when user returns to tab)
+      document.addEventListener('visibilitychange', function() {
+        if (!document.hidden) {
+          console.log('Page became visible, refreshing billing data');
+          // Wait for navigation system to be ready before updating
+          function waitAndUpdate() {
+            if (window.JobHackAINavigation && typeof window.JobHackAINavigation.getEffectivePlan === 'function') {
+              loadCurrentPlan();
+              loadBillingHistory();
+            } else {
+              setTimeout(waitAndUpdate, 50);
+            }
+          }
+          waitAndUpdate();
         }
       });
     });
@@ -815,10 +956,16 @@
     function checkTrialStatus() {
       // Use navigation system's plan detection for consistency
       let userPlan = 'trial';
-      if (window.JobHackAINavigation) {
-        userPlan = window.JobHackAINavigation.getEffectivePlan();
-      } else {
-        userPlan = localStorage.getItem('user-plan');
+      
+      try {
+        if (window.JobHackAINavigation && typeof window.JobHackAINavigation.getEffectivePlan === 'function') {
+          userPlan = window.JobHackAINavigation.getEffectivePlan();
+        } else {
+          userPlan = getCurrentPlanStandalone();
+        }
+      } catch (error) {
+        console.error('Error getting plan for trial status:', error);
+        userPlan = getCurrentPlanStandalone();
       }
       
       const trialActivated = localStorage.getItem('trial-activated');
@@ -909,15 +1056,23 @@
   <!-- Load navigation system -->
   <script src="js/navigation.js"></script>
   <script>
-    if (window.JobHackAINavigation && typeof window.JobHackAINavigation.initializeNavigation === 'function') {
-      window.JobHackAINavigation.initializeNavigation();
-    } else {
-      window.addEventListener('DOMContentLoaded', function() {
-        if (window.JobHackAINavigation && typeof window.JobHackAINavigation.initializeNavigation === 'function') {
-          window.JobHackAINavigation.initializeNavigation();
-        }
-      });
+    // Ensure navigation system is properly initialized
+    function initializeNavigationSystem() {
+      if (window.JobHackAINavigation && typeof window.JobHackAINavigation.initializeNavigation === 'function') {
+        console.log('Initializing navigation system');
+        window.JobHackAINavigation.initializeNavigation();
+        
+        // Signal that navigation is ready
+        window.navigationReady = true;
+        window.dispatchEvent(new CustomEvent('navigationReady'));
+      } else {
+        console.log('Navigation system not available, retrying in 100ms');
+        setTimeout(initializeNavigationSystem, 100);
+      }
     }
+    
+    // Start initialization
+    initializeNavigationSystem();
   </script>
   <!-- Billing Integration Tests -->
   <script src="js/billing-integration-test.js"></script>

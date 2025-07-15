@@ -189,13 +189,21 @@ function setAuthState(isAuthenticated, plan = null) {
   localStorage.setItem('user-authenticated', isAuthenticated.toString());
   if (plan) {
     localStorage.setItem('user-plan', plan);
+    localStorage.setItem('dev-plan', plan);
   }
   
   // Only log on debug level to reduce spam
   navLog('debug', 'Auth state updated in localStorage', {
     'user-authenticated': localStorage.getItem('user-authenticated'),
-    'user-plan': localStorage.getItem('user-plan')
+    'user-plan': localStorage.getItem('user-plan'),
+    'dev-plan': localStorage.getItem('dev-plan')
   });
+  
+  // Trigger navigation update after state change
+  setTimeout(() => {
+    updateNavigation();
+    updateDevPlanToggle();
+  }, 100);
 }
 
 function logout() {
@@ -467,7 +475,9 @@ function setPlan(plan) {
   navLog('info', 'setPlan() called', { plan, validPlan: !!PLANS[plan] });
   
   if (PLANS[plan]) {
+    const oldPlan = localStorage.getItem('dev-plan');
     localStorage.setItem('dev-plan', plan);
+    
     // Update URL without page reload
     const url = new URL(window.location);
     url.searchParams.set('plan', plan);
@@ -477,6 +487,12 @@ function setPlan(plan) {
       'dev-plan': localStorage.getItem('dev-plan'),
       newUrl: url.toString()
     });
+    
+    // Trigger plan change event
+    const planChangeEvent = new CustomEvent('planChanged', {
+      detail: { oldPlan, newPlan: plan }
+    });
+    window.dispatchEvent(planChangeEvent);
     
     updateNavigation();
     updateDevPlanToggle();
@@ -916,79 +932,218 @@ function updateNavigation() {
   navLog('info', '=== updateNavigation() COMPLETE ===');
 }
 
-function updateDevPlanToggle() {
-  // Removed verbose logging to prevent console spam
-  const devPlanToggle = document.getElementById('dev-plan-toggle');
-  if (devPlanToggle) {
-    const select = devPlanToggle.querySelector('#dev-plan');
-    if (select) {
-      const currentPlan = getEffectivePlan();
-      select.value = currentPlan;
-    } else {
-      navLog('warn', 'Dev plan toggle select element not found');
-    }
-  } else {
-    navLog('debug', 'Dev plan toggle element not found');
-  }
+function updateQuickPlanSwitcher() {
+  // Update the quick plan switcher display
+  updateQuickStateDisplay();
 }
 
-// --- DEV ONLY PLAN TOGGLE ---
-function createDevPlanToggle() {
-  navLog('info', 'createDevPlanToggle() called');
-  const toggle = document.createElement('div');
-  toggle.id = 'dev-plan-toggle';
-  toggle.style.cssText = `
+// --- QUICK PLAN SWITCHER (REPLACES DEV PLAN TOGGLE) ---
+function createQuickPlanSwitcher() {
+  navLog('info', 'createQuickPlanSwitcher() called');
+  
+  const switcher = document.createElement('div');
+  switcher.id = 'quick-plan-switcher';
+  switcher.style.cssText = `
     position: fixed;
     bottom: 1rem;
     left: 1rem;
     z-index: 9999;
-    background: #fff;
-    border: 1.5px solid #E5E7EB;
+    background: #1a1a1a;
+    color: white;
     border-radius: 8px;
-    padding: 0.5rem 1rem;
-    box-shadow: 0 2px 8px rgba(31,41,55,0.07);
-    font-size: 0.98rem;
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
+    padding: 12px;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-size: 12px;
+    max-width: 280px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    border: 1px solid #333;
   `;
   
-  // Visitor is the first option and selected by default
-  toggle.innerHTML = `
-    <span style="font-weight: 700; color: #1976D2;">DEV ONLY</span>
-    <label for="dev-plan" style="font-weight: 600; color: #4B5563;">Plan:</label>
-    <select id="dev-plan" style="font-size: 1rem; padding: 0.2rem 0.7rem; border-radius: 6px; border: 1px solid #E5E7EB;">
-      <option value="visitor" selected>Visitor</option>
-      <option value="free">Free</option>
-      <option value="trial">Trial</option>
-      <option value="essential">Essential</option>
-      <option value="pro">Pro</option>
-      <option value="premium">Premium</option>
-    </select>
+  switcher.innerHTML = `
+    <div style="margin-bottom: 8px; font-weight: bold; border-bottom: 1px solid #333; padding-bottom: 4px; display: flex; align-items: center; gap: 6px;">
+      <span style="color: #00ff88;">🧪</span>
+      <span>Quick Plan Switcher</span>
+    </div>
+    
+    <div style="margin-bottom: 8px;">
+      <label style="display: block; margin-bottom: 3px; font-size: 11px; color: #ccc;">User State:</label>
+      <select id="quick-user-state" style="width: 100%; padding: 4px; background: #333; color: white; border: 1px solid #555; border-radius: 4px; font-size: 11px;">
+        <option value="logged-out">🔴 Logged Out</option>
+        <option value="free">🟢 Free User</option>
+        <option value="trial">🟡 Trial User</option>
+        <option value="essential">🔵 Essential User</option>
+        <option value="pro">🟣 Pro User</option>
+        <option value="premium">🟠 Premium User</option>
+      </select>
+    </div>
+
+    <div style="margin-bottom: 8px;">
+      <label style="display: block; margin-bottom: 3px; font-size: 11px; color: #ccc;">Email:</label>
+      <input type="email" id="quick-user-email" value="test@example.com" style="width: 100%; padding: 4px; background: #333; color: white; border: 1px solid #555; border-radius: 4px; font-size: 11px;">
+    </div>
+
+    <div style="margin-bottom: 8px;">
+      <label style="display: block; margin-bottom: 3px; font-size: 11px; color: #ccc;">Payment Method:</label>
+      <select id="quick-user-card" style="width: 100%; padding: 4px; background: #333; color: white; border: 1px solid #555; border-radius: 4px; font-size: 11px;">
+        <option value="true">💳 Has Card (Required for Trial+)</option>
+        <option value="false">❌ No Card (Free only)</option>
+      </select>
+    </div>
+
+    <button id="apply-quick-state" style="width: 100%; padding: 6px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; margin-bottom: 4px; font-size: 11px; font-weight: 600;">
+      Apply State
+    </button>
+    
+    <button id="reset-quick-state" style="width: 100%; padding: 6px; background: #dc3545; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 11px; font-weight: 600;">
+      Reset All
+    </button>
+
+    <div style="margin-top: 8px; font-size: 10px; color: #ccc; border-top: 1px solid #333; padding-top: 4px;">
+      Current: <span id="current-quick-state">Loading...</span>
+    </div>
   `;
   
-  // Add event listener
-  const select = toggle.querySelector('#dev-plan');
-  select.addEventListener('change', (e) => {
-    navLog('info', 'Dev plan toggle changed', { newPlan: e.target.value });
-    setPlan(e.target.value);
-    if (typeof loadCurrentPlan === 'function') {
-      loadCurrentPlan();
+  // Add event listeners
+  const userStateSelect = switcher.querySelector('#quick-user-state');
+  const applyButton = switcher.querySelector('#apply-quick-state');
+  const resetButton = switcher.querySelector('#reset-quick-state');
+  
+  // Auto-apply when selection changes
+  userStateSelect.addEventListener('change', () => {
+    // Auto-set card requirement based on plan
+    const selectedPlan = userStateSelect.value;
+    const cardSelect = document.getElementById('quick-user-card');
+    if (cardSelect) {
+      if (selectedPlan === 'free') {
+        cardSelect.value = 'false'; // Free plan doesn't need card
+      } else {
+        cardSelect.value = 'true'; // All other plans need card
+      }
     }
+    applyQuickState();
   });
   
-  // On first load, set to visitor if not already set
-  if (!localStorage.getItem('dev-plan')) {
-    navLog('info', 'Setting default dev plan to visitor');
-    setPlan('visitor');
-    select.value = 'visitor';
-  } else {
-    const currentDevPlan = localStorage.getItem('dev-plan');
-    navLog('debug', 'Dev plan already set', { currentDevPlan });
-  }
+  applyButton.addEventListener('click', () => {
+    applyQuickState();
+  });
+  
+  resetButton.addEventListener('click', () => {
+    resetQuickState();
+  });
+  
+  // Initialize current state display
+  updateQuickStateDisplay();
+  
+  navLog('info', 'Quick plan switcher created');
+  return switcher;
+}
 
-  navLog('info', 'Dev plan toggle created');
-  return toggle;
+function applyQuickState() {
+  const state = document.getElementById('quick-user-state').value;
+  const email = document.getElementById('quick-user-email').value;
+  const hasCard = document.getElementById('quick-user-card').value === 'true';
+  
+  navLog('info', 'Applying quick state', { state, email, hasCard });
+  
+  if (state === 'logged-out') {
+    logout();
+  } else {
+    loginAsQuickUser(email, state, hasCard);
+  }
+  
+  updateQuickStateDisplay();
+  
+  // Trigger plan change event for other components
+  const planChangeEvent = new CustomEvent('planChanged', {
+    detail: { newPlan: state }
+  });
+  window.dispatchEvent(planChangeEvent);
+  
+  // Force update navigation immediately
+  updateNavigation();
+  
+  // Log the current state for debugging
+  console.log('Quick Plan Switcher - Applied state:', {
+    state,
+    email,
+    hasCard,
+    'localStorage dev-plan': localStorage.getItem('dev-plan'),
+    'localStorage user-plan': localStorage.getItem('user-plan'),
+    'localStorage user-authenticated': localStorage.getItem('user-authenticated'),
+    'getEffectivePlan()': getEffectivePlan()
+  });
+  
+  // Try to refresh billing page if we're on it
+  if (window.refreshBillingData && typeof window.refreshBillingData === 'function') {
+    console.log('Refreshing billing data on current page');
+    window.refreshBillingData();
+  }
+  
+  // Refresh page to apply changes
+  setTimeout(() => {
+    window.location.reload();
+  }, 300);
+}
+
+function loginAsQuickUser(email, plan, hasCard) {
+  // Set authentication state
+  localStorage.setItem('user-authenticated', 'true');
+  localStorage.setItem('user-email', email);
+  localStorage.setItem('user-plan', plan);
+  localStorage.setItem('dev-plan', plan); // This is the key - set dev-plan for override
+  
+  // Create or update user in database
+  const db = JSON.parse(localStorage.getItem('user-db') || '{}');
+  db[email] = {
+    email: email,
+    plan: plan,
+    created: new Date().toISOString(),
+    lastLogin: new Date().toISOString(),
+    cards: hasCard ? [{
+      id: 'test-card-1',
+      last4: '4242',
+      brand: 'visa',
+      expMonth: 12,
+      expYear: 2025
+    }] : []
+  };
+  localStorage.setItem('user-db', JSON.stringify(db));
+  localStorage.setItem('user-db-backup', JSON.stringify(db));
+  
+  // Update navigation if available
+  if (window.JobHackAINavigation) {
+    window.JobHackAINavigation.setAuthState(true, plan);
+  }
+  
+  navLog('info', 'Quick user login applied', { email, plan, hasCard });
+}
+
+function resetQuickState() {
+  localStorage.clear();
+  updateQuickStateDisplay();
+  navLog('info', 'Quick state reset');
+  
+  setTimeout(() => {
+    window.location.reload();
+  }, 300);
+}
+
+function updateQuickStateDisplay() {
+  const isAuth = localStorage.getItem('user-authenticated') === 'true';
+  const plan = localStorage.getItem('user-plan') || 'free';
+  const email = localStorage.getItem('user-email') || 'Not logged in';
+  
+  const stateText = isAuth ? `${email} (${plan})` : 'Logged out';
+  const stateElement = document.getElementById('current-quick-state');
+  if (stateElement) {
+    stateElement.textContent = stateText;
+  }
+  
+  // Update dropdown to match current state
+  const stateSelect = document.getElementById('quick-user-state');
+  if (stateSelect) {
+    stateSelect.value = isAuth ? plan : 'logged-out';
+  }
 }
 
 // --- FEATURE ACCESS CONTROL ---
@@ -1041,27 +1196,27 @@ function initializeNavigation() {
     navLog('info', 'Auto-set dev-plan to visitor for unauthenticated user');
   }
 
-  // Create dev plan toggle and append to document
-  navLog('debug', 'Creating dev plan toggle');
-  const toggle = createDevPlanToggle();
-  document.body.appendChild(toggle);
-  navLog('debug', 'Dev plan toggle appended to body');
+  // Create quick plan switcher and append to document
+  navLog('debug', 'Creating quick plan switcher');
+  const switcher = createQuickPlanSwitcher();
+  document.body.appendChild(switcher);
+  navLog('debug', 'Quick plan switcher appended to body');
 
   // Update navigation
   navLog('debug', 'Calling updateNavigation()');
   updateNavigation();
   
-  // Update dev toggle state
-  navLog('debug', 'Updating dev toggle state');
-  updateDevPlanToggle();
+  // Update quick plan switcher state
+  navLog('debug', 'Updating quick plan switcher state');
+  updateQuickPlanSwitcher();
   
   // Listen for plan changes
   navLog('debug', 'Setting up storage event listener');
   window.addEventListener('storage', (e) => {
-    if (e.key === 'dev-plan') {
+    if (e.key === 'dev-plan' || e.key === 'user-plan' || e.key === 'user-authenticated') {
       navLog('info', 'Storage event detected', { key: e.key, newValue: e.newValue, oldValue: e.oldValue });
       updateNavigation();
-      updateDevPlanToggle();
+      updateQuickPlanSwitcher();
     }
   });
   

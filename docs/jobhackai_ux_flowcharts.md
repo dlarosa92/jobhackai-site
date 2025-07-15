@@ -177,3 +177,4 @@ flowchart TD
 ---
 
 _© 2025 JobHackAI — internal UX architecture draft_
+

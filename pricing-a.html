@@ -238,10 +238,10 @@
         return;
       }
       
-      // Only require card for paid plans or trial
-      const paidPlans = ['trial', 'essential', 'pro', 'premium'];
+      // Only free plan doesn't require a card - all others (including trial) need a card
+      const plansRequiringCard = ['trial', 'essential', 'pro', 'premium'];
       const userEmail = localStorage.getItem('user-email');
-      if (paidPlans.includes(newPlan) && !userHasCard(userEmail)) {
+      if (plansRequiringCard.includes(newPlan) && !userHasCard(userEmail)) {
         showAddCardModal();
         return;
       }
@@ -259,15 +259,42 @@
       if (confirm(confirmMessage)) {
         // INTEGRATION: STRIPE - Handle subscription upgrade here
         // For demo, just update the user's plan
-        const db = JSON.parse(localStorage.getItem('user-db') || '{}');
+        const getUserDB = () => {
+          try {
+            return JSON.parse(localStorage.getItem('user-db') || '{}');
+          } catch (error) {
+            console.error('Error loading user database:', error);
+            return {};
+          }
+        };
+        
+        const setUserDB = (db) => {
+          try {
+            localStorage.setItem('user-db', JSON.stringify(db));
+            localStorage.setItem('user-db-backup', JSON.stringify(db));
+          } catch (error) {
+            console.error('Error saving user database:', error);
+          }
+        };
+        
+        const db = getUserDB();
         if (db[userEmail]) {
           // Only update the plan property, preserve all other user data (including cards)
           db[userEmail].plan = newPlan;
-          localStorage.setItem('user-db', JSON.stringify(db));
+          db[userEmail].lastUpgrade = new Date().toISOString();
+          setUserDB(db);
+          
+          // Update local storage
           localStorage.setItem('user-plan', newPlan);
           localStorage.setItem('dev-plan', newPlan);
           localStorage.removeItem('selected-plan');
           localStorage.removeItem('plan-amount');
+          
+          // Sync with navigation system
+          if (window.JobHackAINavigation) {
+            window.JobHackAINavigation.setAuthState(true, newPlan);
+          }
+          
           alert(`Successfully upgraded to ${planNames[newPlan]}! Redirecting to dashboard...`);
           window.location.href = 'dashboard.html';
         } else {
@@ -338,5 +365,7 @@
       }
     }
   </script>
+  <!-- Load test helper for development -->
+  <script src="js/test-helper.js"></script>
 </body>
 </html>

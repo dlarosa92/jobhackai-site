@@ -166,18 +166,7 @@
   </style>
 </head>
 <body>
-  <!-- DEV-ONLY PLAN TOGGLE (fixed, canonical style) -->
-  <div id="dev-plan-toggle" style="position:fixed;bottom:1rem;left:1rem;z-index:9999;background:#fff;border:1.5px solid #E5E7EB;border-radius:8px;padding:0.5rem 1rem;box-shadow:0 2px 8px rgba(31,41,55,0.07);font-size:0.98rem;display:flex;align-items:center;gap:0.5rem;">
-    <span style="font-weight:700;color:#1976D2;">DEV ONLY</span>
-    <label for="dev-plan" style="font-weight:600;color:#4B5563;">Plan:</label>
-    <select id="dev-plan" style="font-size:1rem;padding:0.2rem 0.7rem;border-radius:6px;border:1px solid #E5E7EB;">
-      <option value="free">Free</option>
-      <option value="trial">Trial</option>
-      <option value="essential">Essential</option>
-      <option value="pro">Pro</option>
-      <option value="premium">Premium</option>
-    </select>
-  </div>
+  <!-- DEV-ONLY PLAN TOGGLE will be added by navigation.js -->
   <script src="js/navigation.js"></script>
   <script>
     if (window.JobHackAINavigation && typeof window.JobHackAINavigation.initializeNavigation === 'function') {
@@ -257,27 +246,110 @@
         return; // Stop here if not authenticated
       }
       
+      // Create demo user if needed for development
+      const createDemoUserIfNeeded = () => {
+        const userEmail = localStorage.getItem('user-email');
+        if (!userEmail && localStorage.getItem('user-authenticated') === 'true') {
+          // Create demo user
+          localStorage.setItem('user-email', 'demo@jobhackai.com');
+          const db = JSON.parse(localStorage.getItem('user-db') || '{}');
+          if (!db['demo@jobhackai.com']) {
+            db['demo@jobhackai.com'] = {
+              plan: 'free',
+              firstName: 'Demo',
+              lastName: 'User',
+              cards: [],
+              created: new Date().toISOString()
+            };
+            localStorage.setItem('user-db', JSON.stringify(db));
+          }
+        }
+      };
+      
+      createDemoUserIfNeeded();
+      
       // Wait for navigation system to be ready
       setTimeout(checkPlanAccess, 100);
     });
 
-    // --- USER PLAN LOGIC (must be defined before any script uses it) ---
-    const user = {
-      plan: 'free', // 'free', 'trial', 'essential', 'pro', 'premium'
+    // --- UPDATED USER PLAN LOGIC ---
+    function getCurrentUserPlan() {
+      // Use navigation system's plan detection for consistency
+      if (window.JobHackAINavigation) {
+        return window.JobHackAINavigation.getEffectivePlan();
+      }
+      return localStorage.getItem('user-plan') || 'free';
+    }
+
+    // --- UPDATED USER OBJECT ---
+    let user = {
+      get plan() {
+        return getCurrentUserPlan();
+      },
       atsChecksUsed: 0,
       lastAtsCheckTime: null
     };
-    // DEV-ONLY PLAN TOGGLE LOGIC
-    document.addEventListener('DOMContentLoaded', function() {
-      const devPlan = document.getElementById('dev-plan');
-      if (devPlan) {
-        devPlan.value = user.plan;
-        devPlan.addEventListener('change', function() {
-          user.plan = this.value;
-          updateRfTileForPlan();
-        });
+
+    // --- GLOBAL BUTTON LISTENER FUNCTIONS ---
+    // Copy resume handler function
+    const copyResumeHandler = function() {
+      const rewritten = document.querySelectorAll('#rf-rewrite-content .rf-snippet-box')[1];
+      if (rewritten) {
+        navigator.clipboard.writeText(rewritten.value || rewritten.textContent);
+        this.textContent = 'Copied!';
+        setTimeout(() => { this.textContent = 'Copy Rewritten Resume'; }, 1200);
+        // [AI INTEGRATION POINT] (Optional) Log copy event or trigger analytics/Zapier webhook.
       }
-      updateRfTileForPlan();
+    };
+    
+    // Regenerate rewrite handler function
+    const regenerateRewriteHandler = function() {
+      // [AI INTEGRATION POINT] Regenerate Rewrite: Request new AI-optimized resume snippet.
+      // Send: original resume snippet or full resume
+      // Receive: rewritten resume snippet (string)
+      // Replace simulateRewrite with real API call and update UI with response.
+      simulateRewrite();
+    };
+    
+    // Resume Rewriting Buttons - Fixed selectors to match actual HTML
+    const attachRewriteButtonListeners = () => {
+      const copyBtn = document.querySelector('#rf-rewrite-content .btn.btn-primary');
+      const regenRewriteBtn = document.querySelector('#rf-rewrite-content .btn.btn-secondary');
+      
+      if (copyBtn) {
+        // Remove any existing listeners
+        copyBtn.removeEventListener('click', copyResumeHandler);
+        copyBtn.addEventListener('click', copyResumeHandler);
+      }
+      
+      if (regenRewriteBtn) {
+        // Remove any existing listeners
+        regenRewriteBtn.removeEventListener('click', regenerateRewriteHandler);
+        regenRewriteBtn.addEventListener('click', regenerateRewriteHandler);
+      }
+    };
+
+    // --- DEV-ONLY PLAN TOGGLE LOGIC ---
+    document.addEventListener('DOMContentLoaded', function() {
+      // Use navigation system's plan instead of hardcoded value
+      user.plan = getCurrentUserPlan();
+      
+                    // Listen for plan changes from navigation system
+       window.addEventListener('storage', function(e) {
+         if (e.key === 'dev-plan' || e.key === 'user-plan') {
+           updateRfTileForPlan();
+         }
+       });
+       
+       // Listen for custom plan change events
+       window.addEventListener('planChanged', function(e) {
+         console.log('Plan changed from', e.detail.oldPlan, 'to', e.detail.newPlan);
+         updateRfTileForPlan();
+         // Re-attach button listeners after plan change
+         setTimeout(attachRewriteButtonListeners, 100);
+       });
+       
+       updateRfTileForPlan();
       // ATS Resume Upload Logic
       const uploadInput = document.getElementById('rf-upload');
       if (uploadInput) {
@@ -302,29 +374,8 @@
           simulateAtsScoring(null, false);
         });
       }
-      // Resume Rewriting Buttons
-      const copyBtn = document.querySelector('#rf-rewrite-content .rf-btn-green');
-      const regenRewriteBtn = document.querySelector('#rf-rewrite-content .rf-btn-primary');
-      if (copyBtn) {
-        copyBtn.addEventListener('click', function() {
-          const rewritten = document.querySelectorAll('#rf-rewrite-content .rf-snippet-box')[1];
-          if (rewritten) {
-            navigator.clipboard.writeText(rewritten.value || rewritten.textContent);
-            copyBtn.textContent = 'Copied!';
-            setTimeout(() => { copyBtn.textContent = 'Copy Rewritten Resume'; }, 1200);
-            // [AI INTEGRATION POINT] (Optional) Log copy event or trigger analytics/Zapier webhook.
-          }
-        });
-      }
-      if (regenRewriteBtn) {
-        regenRewriteBtn.addEventListener('click', function() {
-          // [AI INTEGRATION POINT] Regenerate Rewrite: Request new AI-optimized resume snippet.
-          // Send: original resume snippet or full resume
-          // Receive: rewritten resume snippet (string)
-          // Replace simulateRewrite with real API call and update UI with response.
-          simulateRewrite();
-        });
-      }
+             // Initial attachment of button listeners
+       attachRewriteButtonListeners();
       // Initial simulated content
       simulateAtsScoring(null, true);
       simulateRewrite();
@@ -486,7 +537,13 @@
       const rewriteTile = document.getElementById('rf-rewrite-tile');
       const feedbackContent = document.getElementById('rf-feedback-content');
       const rewriteContent = document.getElementById('rf-rewrite-content');
-      const plan = user.plan;
+      const plan = getCurrentUserPlan();
+
+      // Clean up old upgrade banners
+      const cleanupOldBanners = () => {
+        const oldBanners = document.querySelectorAll('#rf-feedback-upgrade-banner, #rf-rewrite-upgrade-banner');
+        oldBanners.forEach(banner => banner.remove());
+      };
 
       // Reset all tiles to default state
       const resetTiles = () => {
@@ -495,6 +552,7 @@
         if (rewriteTile) rewriteTile.style.display = 'block';
         if (feedbackContent) feedbackContent.style.display = 'none';
         if (rewriteContent) rewriteContent.style.display = 'none';
+        cleanupOldBanners();
       };
 
       resetTiles();
@@ -508,11 +566,20 @@
         }
         if (feedbackTile) {
           feedbackTile.querySelector('.rf-title .rf-plan-badge').textContent = 'Locked';
-          feedbackTile.querySelector('.rf-upgrade-text strong').textContent = 'Upgrade to Essential or Pro';
-          feedbackTile.querySelector('.rf-upgrade-text').innerHTML = '<strong>Upgrade to Essential or Pro</strong> to unlock detailed ATS and role-specific feedback.';
+          feedbackTile.querySelector('.rf-title .rf-plan-badge').style.background = '#E11D48';
+          feedbackTile.querySelector('.rf-upgrade-text strong').textContent = 'Start Free Trial';
+          feedbackTile.querySelector('.rf-upgrade-text').innerHTML = '<strong>Start Free Trial</strong> to unlock detailed ATS and role-specific feedback instantly.';
+          // Add trial CTA button
+          const upgradeButton = feedbackTile.querySelector('.rf-upgrade-prompt a');
+          if (upgradeButton) {
+            upgradeButton.textContent = 'Start Free Trial';
+            upgradeButton.style.background = 'var(--color-accent-blue)';
+            upgradeButton.style.color = '#fff';
+          }
         }
         if (rewriteTile) {
-          rewriteTile.querySelector('.rf-title .rf-plan-badge').textContent = 'Pro Only';
+          rewriteTile.querySelector('.rf-title .rf-plan-badge').textContent = 'Pro Feature';
+          rewriteTile.querySelector('.rf-title .rf-plan-badge').style.background = '#6B7280';
           rewriteTile.querySelector('.rf-upgrade-text strong').textContent = 'Upgrade to Pro';
           rewriteTile.querySelector('.rf-upgrade-text').innerHTML = '<strong>Upgrade to Pro</strong> to unlock AI-powered resume rewriting with unlimited revisions';
         }
@@ -522,17 +589,17 @@
       else if (plan === 'trial') {
         if (atsScoreTile) {
           atsScoreTile.querySelector('#rf-plan-badge').textContent = 'Trial Plan';
-          atsScoreTile.querySelector('#rf-plan-badge').style.background = 'var(--color-accent-blue)';
-          atsScoreTile.querySelector('#rf-score-desc').textContent = 'Get your basic ATS compatibility score.';
-          atsScoreTile.querySelector('#rf-ats-checks').textContent = '2 ATS checks remaining in trial';
+          atsScoreTile.querySelector('#rf-plan-badge').style.background = '#FF9100';
+          atsScoreTile.querySelector('#rf-score-desc').textContent = 'Enjoy unlimited ATS scoring during your trial!';
+          atsScoreTile.querySelector('#rf-ats-checks').textContent = 'Unlimited ATS checks in trial';
         }
         const feedbackCount = user.atsChecksUsed || 0;
         if (feedbackTile) {
           if (feedbackCount >= 3) {
             feedbackTile.querySelector('.rf-title .rf-plan-badge').textContent = 'Trial Limit Reached';
             feedbackTile.querySelector('.rf-title .rf-plan-badge').style.background = '#6B7280';
-            feedbackTile.querySelector('.rf-upgrade-text strong').textContent = 'Upgrade to Pro';
-            feedbackTile.querySelector('.rf-upgrade-text').innerHTML = '<strong>Upgrade to Pro</strong> to unlock unlimited ATS feedback';
+            feedbackTile.querySelector('.rf-upgrade-text strong').textContent = 'Upgrade to Essential';
+            feedbackTile.querySelector('.rf-upgrade-text').innerHTML = '<strong>Upgrade to Essential</strong> for unlimited ATS feedback and keep your progress';
             feedbackTile.querySelector('.rf-upgrade-text').style.display = 'block';
             if (feedbackContent) feedbackContent.style.display = 'none';
             // Remove any existing upgrade banner at the bottom
@@ -540,14 +607,14 @@
             if (oldBanner) oldBanner.remove();
           } else {
             feedbackTile.querySelector('.rf-title .rf-plan-badge').textContent = 'Trial Plan';
-            feedbackTile.querySelector('.rf-title .rf-plan-badge').style.background = 'var(--color-accent-blue)';
+            feedbackTile.querySelector('.rf-title .rf-plan-badge').style.background = '#FF9100';
             feedbackTile.querySelector('.rf-upgrade-text').style.display = 'none';
             if (feedbackContent) {
               feedbackContent.style.display = 'block';
               // Remove any existing upgrade banner at the bottom
               const oldBanner = document.getElementById('rf-feedback-upgrade-banner');
               if (oldBanner) oldBanner.remove();
-              // Add upgrade banner at the bottom (same as resume rewrite)
+              // Add upgrade banner at the bottom
               const upgradeBanner = document.createElement('div');
               upgradeBanner.className = 'rf-upgrade-prompt';
               upgradeBanner.id = 'rf-feedback-upgrade-banner';
@@ -557,19 +624,40 @@
                   <path d="M12 5v14M5 12h14"/>
                 </svg>
                 <div class="rf-upgrade-text">
-                  <strong>Upgrade to Pro</strong> to unlock unlimited ATS feedback
+                  <strong>Loving the trial? Upgrade to Essential</strong> to keep unlimited feedback and unlock more features
                 </div>
-                <a href="pricing-a.html" class="btn btn-secondary">Upgrade Now</a>
+                <a href="pricing-a.html" class="btn btn-secondary">Upgrade to Essential</a>
               `;
               feedbackTile.appendChild(upgradeBanner);
             }
           }
         }
         if (rewriteTile) {
-          rewriteTile.querySelector('.rf-title .rf-plan-badge').textContent = 'Pro Only';
+          rewriteTile.querySelector('.rf-title .rf-plan-badge').textContent = 'Pro Feature';
           rewriteTile.querySelector('.rf-title .rf-plan-badge').style.background = '#6B7280';
           rewriteTile.querySelector('.rf-upgrade-text strong').textContent = 'Upgrade to Pro';
-          rewriteTile.querySelector('.rf-upgrade-text').innerHTML = '<strong>Upgrade to Pro</strong> to unlock AI-powered resume rewriting with unlimited revisions';
+          rewriteTile.querySelector('.rf-upgrade-text').innerHTML = '<strong>Upgrade to Pro</strong> to unlock AI-powered resume rewriting. Essential users get 50% off Pro!';
+          // Add special upgrade CTA for trial users
+          const upgradeButton = rewriteTile.querySelector('.rf-upgrade-prompt a');
+          if (upgradeButton) {
+            upgradeButton.textContent = 'Upgrade to Pro';
+            // Use standard btn-secondary styling - ensure proper class and remove conflicting styles
+            upgradeButton.className = 'btn btn-secondary';
+            // Remove any inline styles and ensure proper styling
+            upgradeButton.removeAttribute('style');
+            // Force the correct colors to override any conflicting CSS
+            upgradeButton.style.setProperty('background', '#1976D2', 'important');
+            upgradeButton.style.setProperty('color', '#fff', 'important');
+            upgradeButton.style.setProperty('border', 'none', 'important');
+            
+            // Add hover effect to match other buttons
+            upgradeButton.addEventListener('mouseenter', function() {
+              this.style.setProperty('background', '#125bb5', 'important');
+            });
+            upgradeButton.addEventListener('mouseleave', function() {
+              this.style.setProperty('background', '#1976D2', 'important');
+            });
+          }
         }
       }
 
@@ -577,53 +665,142 @@
       else if (plan === 'essential') {
         if (atsScoreTile) {
           atsScoreTile.querySelector('#rf-plan-badge').textContent = 'Essential Plan';
-          atsScoreTile.querySelector('#rf-plan-badge').style.background = 'var(--color-accent-blue)';
-          atsScoreTile.querySelector('#rf-score-desc').textContent = 'Your resume meets many ATS criteria and is likely to be noticed.';
-          atsScoreTile.querySelector('#rf-ats-checks').textContent = '2 ATS checks remaining this month';
+          atsScoreTile.querySelector('#rf-plan-badge').style.background = '#0077B5';
+          atsScoreTile.querySelector('#rf-score-desc').textContent = 'Unlimited ATS scoring - your resume is getting noticed!';
+          atsScoreTile.querySelector('#rf-ats-checks').textContent = 'Unlimited ATS checks';
         }
         const feedbackCount = user.atsChecksUsed || 0;
         if (feedbackTile) {
           if (feedbackCount >= 3) {
             feedbackTile.querySelector('.rf-title .rf-plan-badge').textContent = 'Monthly Limit Reached';
             feedbackTile.querySelector('.rf-title .rf-plan-badge').style.background = '#6B7280';
-            feedbackTile.querySelector('.rf-upgrade-text strong').textContent = 'Upgrade to Premium';
-            feedbackTile.querySelector('.rf-upgrade-text').innerHTML = '<strong>Upgrade to Premium for front-of-the-line résumé analysis with Priority Review.</strong>';
+            feedbackTile.querySelector('.rf-upgrade-text strong').textContent = 'Upgrade to Pro';
+            feedbackTile.querySelector('.rf-upgrade-text').innerHTML = '<strong>Upgrade to Pro</strong> for unlimited feedback and AI resume rewriting';
           } else {
             feedbackTile.querySelector('.rf-title .rf-plan-badge').textContent = 'Essential Plan';
-            feedbackTile.querySelector('.rf-title .rf-plan-badge').style.background = 'var(--color-accent-blue)';
+            feedbackTile.querySelector('.rf-title .rf-plan-badge').style.background = '#0077B5';
             feedbackTile.querySelector('.rf-upgrade-text').style.display = 'none';
-            if (feedbackContent) feedbackContent.style.display = 'block';
+            if (feedbackContent) {
+              feedbackContent.style.display = 'block';
+              // Add upgrade banner at the bottom
+              const oldBanner = document.getElementById('rf-feedback-upgrade-banner');
+              if (oldBanner) oldBanner.remove();
+              const upgradeBanner = document.createElement('div');
+              upgradeBanner.className = 'rf-upgrade-prompt';
+              upgradeBanner.id = 'rf-feedback-upgrade-banner';
+              upgradeBanner.style.marginTop = '1.7rem';
+              upgradeBanner.innerHTML = `
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M12 5v14M5 12h14"/>
+                </svg>
+                <div class="rf-upgrade-text">
+                  <strong>Ready for the next level?</strong> Upgrade to Pro for AI resume rewriting and unlimited everything
+                </div>
+                <a href="pricing-a.html" class="btn btn-secondary">Upgrade to Pro</a>
+              `;
+              feedbackTile.appendChild(upgradeBanner);
+            }
           }
         }
         if (rewriteTile) {
-          rewriteTile.querySelector('.rf-title .rf-plan-badge').textContent = 'Pro Only';
+          rewriteTile.querySelector('.rf-title .rf-plan-badge').textContent = 'Pro Feature';
           rewriteTile.querySelector('.rf-title .rf-plan-badge').style.background = '#6B7280';
-          rewriteTile.querySelector('.rf-upgrade-text strong').textContent = 'Upgrade to Premium';
-          rewriteTile.querySelector('.rf-upgrade-text').innerHTML = '<strong>Upgrade to Premium for front-of-the-line résumé analysis with Priority Review.</strong>';
+          rewriteTile.querySelector('.rf-upgrade-text strong').textContent = 'Upgrade to Pro';
+          rewriteTile.querySelector('.rf-upgrade-text').innerHTML = '<strong>Upgrade to Pro</strong> to unlock AI-powered resume rewriting. Perfect next step from Essential!';
+          // Add special upgrade CTA for essential users
+          const upgradeButton = rewriteTile.querySelector('.rf-upgrade-prompt a');
+          if (upgradeButton) {
+            upgradeButton.textContent = 'Upgrade to Pro';
+            // Use standard btn-secondary styling - ensure proper class and remove conflicting styles
+            upgradeButton.className = 'btn btn-secondary';
+            // Remove any inline styles and ensure proper styling
+            upgradeButton.removeAttribute('style');
+            // Force the correct colors to override any conflicting CSS
+            upgradeButton.style.setProperty('background', '#1976D2', 'important');
+            upgradeButton.style.setProperty('color', '#fff', 'important');
+            upgradeButton.style.setProperty('border', 'none', 'important');
+            
+            // Add hover effect to match other buttons
+            upgradeButton.addEventListener('mouseenter', function() {
+              this.style.setProperty('background', '#125bb5', 'important');
+            });
+            upgradeButton.addEventListener('mouseleave', function() {
+              this.style.setProperty('background', '#1976D2', 'important');
+            });
+          }
         }
       }
 
       // Pro & Premium Plan Logic
       else if (plan === 'pro' || plan === 'premium') {
+        const isProPlan = plan === 'pro';
+        const isPremiumPlan = plan === 'premium';
+        
         if (atsScoreTile) {
           atsScoreTile.querySelector('#rf-plan-badge').textContent = plan.charAt(0).toUpperCase() + plan.slice(1) + ' Plan';
-          atsScoreTile.querySelector('#rf-plan-badge').style.background = 'var(--color-accent-blue)';
-          atsScoreTile.querySelector('#rf-score-desc').textContent = 'Your resume meets many ATS criteria and is likely to be noticed.';
+          atsScoreTile.querySelector('#rf-plan-badge').style.background = isProPlan ? '#388E3C' : '#C62828';
+          atsScoreTile.querySelector('#rf-score-desc').textContent = 'Unlimited ATS scoring - you\'re getting maximum visibility!';
           atsScoreTile.querySelector('#rf-ats-checks').textContent = 'Unlimited ATS scoring';
         }
         if (feedbackTile) {
           feedbackTile.querySelector('.rf-title .rf-plan-badge').textContent = plan.charAt(0).toUpperCase() + plan.slice(1) + ' Plan';
-          feedbackTile.querySelector('.rf-title .rf-plan-badge').style.background = 'var(--color-accent-blue)';
+          feedbackTile.querySelector('.rf-title .rf-plan-badge').style.background = isProPlan ? '#388E3C' : '#C62828';
           feedbackTile.querySelector('.rf-upgrade-text').style.display = 'none';
-          if (feedbackContent) feedbackContent.style.display = 'block';
+          if (feedbackContent) {
+            feedbackContent.style.display = 'block';
+            // Add premium upsell for Pro users
+            if (isProPlan) {
+              const oldBanner = document.getElementById('rf-feedback-upgrade-banner');
+              if (oldBanner) oldBanner.remove();
+              const upgradeBanner = document.createElement('div');
+              upgradeBanner.className = 'rf-upgrade-prompt';
+              upgradeBanner.id = 'rf-feedback-upgrade-banner';
+              upgradeBanner.style.marginTop = '1.7rem';
+              upgradeBanner.style.background = '#FEF3C7';
+              upgradeBanner.innerHTML = `
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+                </svg>
+                <div class="rf-upgrade-text">
+                  <strong>Want priority review?</strong> Upgrade to Premium for front-of-the-line analysis and VIP support
+                </div>
+                <a href="pricing-a.html" class="btn btn-secondary">Upgrade to Premium</a>
+              `;
+              feedbackTile.appendChild(upgradeBanner);
+            }
+          }
         }
         if (rewriteTile) {
           rewriteTile.querySelector('.rf-title .rf-plan-badge').textContent = plan.charAt(0).toUpperCase() + plan.slice(1) + ' Plan';
-          rewriteTile.querySelector('.rf-title .rf-plan-badge').style.background = 'var(--color-accent-blue)';
+          rewriteTile.querySelector('.rf-title .rf-plan-badge').style.background = isProPlan ? '#388E3C' : '#C62828';
           // Hide upgrade prompt and show content
           const upgradePrompt = rewriteTile.querySelector('.rf-upgrade-prompt');
           if (upgradePrompt) upgradePrompt.style.display = 'none';
-          if (rewriteContent) rewriteContent.style.display = 'block';
+          if (rewriteContent) {
+            rewriteContent.style.display = 'block';
+            // Re-attach button listeners when content is shown
+            setTimeout(attachRewriteButtonListeners, 100);
+            // Add premium upsell for Pro users
+            if (isProPlan) {
+              const oldBanner = document.getElementById('rf-rewrite-upgrade-banner');
+              if (oldBanner) oldBanner.remove();
+              const upgradeBanner = document.createElement('div');
+              upgradeBanner.className = 'rf-upgrade-prompt';
+              upgradeBanner.id = 'rf-rewrite-upgrade-banner';
+              upgradeBanner.style.marginTop = '1.7rem';
+              upgradeBanner.style.background = '#FEF3C7';
+              upgradeBanner.innerHTML = `
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+                </svg>
+                <div class="rf-upgrade-text">
+                  <strong>Perfect! You have everything.</strong> Consider Premium for priority support and fastest processing
+                </div>
+                <a href="pricing-a.html" class="btn btn-secondary">Upgrade to Premium</a>
+              `;
+              rewriteTile.appendChild(upgradeBanner);
+            }
+          }
         }
       }
       // Always update Priority Review CTA
@@ -652,18 +829,35 @@
     });
 
     // --- PLAN LOGIC ---
-    const userPlan = localStorage.getItem('user-plan') || 'free';
     // Update plan badge and ATS scoring section to reflect userPlan
     document.addEventListener('DOMContentLoaded', function() {
-      const planBadge = document.querySelector('.rf-plan-badge');
-      if (planBadge) {
-        planBadge.textContent = userPlan.charAt(0).toUpperCase() + userPlan.slice(1) + ' Plan';
-      }
-      // Unlock ATS scoring for trial and above
-      if (['trial', 'essential', 'pro', 'premium'].includes(userPlan)) {
-        const atsSection = document.getElementById('ats-section');
-        if (atsSection) atsSection.classList.remove('locked');
-      }
+      const updatePlanBadge = () => {
+        const userPlan = getCurrentUserPlan();
+        const planBadge = document.querySelector('.rf-plan-badge');
+        if (planBadge) {
+          planBadge.textContent = userPlan.charAt(0).toUpperCase() + userPlan.slice(1) + ' Plan';
+        }
+        // Unlock ATS scoring for trial and above
+        if (['trial', 'essential', 'pro', 'premium'].includes(userPlan)) {
+          const atsSection = document.getElementById('ats-section');
+          if (atsSection) atsSection.classList.remove('locked');
+        }
+      };
+      
+      // Update on load
+      updatePlanBadge();
+      
+             // Listen for plan changes
+       window.addEventListener('storage', function(e) {
+         if (e.key === 'dev-plan' || e.key === 'user-plan') {
+           updatePlanBadge();
+         }
+       });
+       
+       // Listen for custom plan change events
+       window.addEventListener('planChanged', function(e) {
+         updatePlanBadge();
+       });
     });
   </script>
   <script src="js/main.js" type="module"></script>
