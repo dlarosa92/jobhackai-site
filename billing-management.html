@@ -595,6 +595,9 @@
       // Start waiting for navigation system
       waitForNavigationSystem();
       
+      // Set up periodic plan checking to catch any missed updates
+      let lastKnownPlan = null;
+      
       // Also initialize with current plan immediately as fallback
       const initialPlan = getCurrentPlanStandalone();
       console.log('Initial plan detection:', initialPlan);
@@ -607,8 +610,58 @@
         loadBillingHistory();
       });
       
+      // Force immediate update when navigation system becomes available
+      function checkNavigationAndUpdate() {
+        if (window.JobHackAINavigation && typeof window.JobHackAINavigation.getEffectivePlan === 'function') {
+          const currentPlan = window.JobHackAINavigation.getEffectivePlan();
+          if (currentPlan !== lastKnownPlan) {
+            console.log('Navigation system became available, updating plan:', lastKnownPlan, '->', currentPlan);
+            lastKnownPlan = currentPlan;
+            loadCurrentPlan();
+            loadBillingHistory();
+          }
+        } else {
+          // Keep checking until navigation system is ready
+          setTimeout(checkNavigationAndUpdate, 100);
+        }
+      }
+      checkNavigationAndUpdate();
+      
+      // Set up immediate event listeners for plan changes
+      function setupPlanChangeListeners() {
+        console.log('Setting up plan change listeners');
+        
+        // Listen for plan change events from Quick Plan Switcher
+        window.addEventListener('planChanged', function(event) {
+          console.log('Plan change event received on window:', event.detail);
+          const newPlan = event.detail.newPlan;
+          if (newPlan && newPlan !== lastKnownPlan) {
+            console.log('Plan change event triggered update:', lastKnownPlan, '->', newPlan);
+            lastKnownPlan = newPlan;
+            loadCurrentPlan();
+            loadBillingHistory();
+          }
+        });
+        
+        // Also listen for the event on document for better capture
+        document.addEventListener('planChanged', function(event) {
+          console.log('Document plan change event received:', event.detail);
+          const newPlan = event.detail.newPlan;
+          if (newPlan && newPlan !== lastKnownPlan) {
+            console.log('Document plan change event triggered update:', lastKnownPlan, '->', newPlan);
+            lastKnownPlan = newPlan;
+            loadCurrentPlan();
+            loadBillingHistory();
+          }
+        });
+        
+        console.log('Plan change listeners set up successfully');
+      }
+      
+      // Set up listeners immediately
+      setupPlanChangeListeners();
+      
       // Set up periodic plan checking to catch any missed updates
-      let lastKnownPlan = null;
       setInterval(function() {
         const currentPlan = getCurrentPlanStandalone();
         if (currentPlan !== lastKnownPlan) {
@@ -618,6 +671,46 @@
           loadBillingHistory();
         }
       }, 1000); // Check every second
+      
+      // Listen for plan change events from Quick Plan Switcher
+      window.addEventListener('planChanged', function(event) {
+        console.log('Plan change event received:', event.detail);
+        const newPlan = event.detail.newPlan;
+        if (newPlan && newPlan !== lastKnownPlan) {
+          console.log('Plan change event triggered update:', lastKnownPlan, '->', newPlan);
+          lastKnownPlan = newPlan;
+          loadCurrentPlan();
+          loadBillingHistory();
+        }
+      });
+      
+      // Also listen for the event on document for better capture
+      document.addEventListener('planChanged', function(event) {
+        console.log('Document plan change event received:', event.detail);
+        const newPlan = event.detail.newPlan;
+        if (newPlan && newPlan !== lastKnownPlan) {
+          console.log('Document plan change event triggered update:', lastKnownPlan, '->', newPlan);
+          lastKnownPlan = newPlan;
+          loadCurrentPlan();
+          loadBillingHistory();
+        }
+      });
+      
+      // Listen for storage changes (when Quick Plan Switcher updates localStorage)
+      window.addEventListener('storage', function(event) {
+        if (event.key === 'dev-plan' || event.key === 'user-plan' || event.key === 'user-authenticated') {
+          console.log('Storage change detected:', event.key, '=', event.newValue);
+          setTimeout(() => {
+            const currentPlan = getCurrentPlanStandalone();
+            if (currentPlan !== lastKnownPlan) {
+              console.log('Storage change triggered update:', lastKnownPlan, '->', currentPlan);
+              lastKnownPlan = currentPlan;
+              loadCurrentPlan();
+              loadBillingHistory();
+            }
+          }, 100); // Small delay to ensure localStorage is updated
+        }
+      });
     });
     
     function checkAuthentication() {

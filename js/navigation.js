@@ -937,6 +937,14 @@ function updateQuickPlanSwitcher() {
   updateQuickStateDisplay();
 }
 
+function updateDevPlanToggle() {
+  // This function was referenced but not implemented
+  // Since we're using the Quick Plan Switcher instead of the old dev toggle,
+  // we can either remove the calls or implement a no-op function
+  navLog('debug', 'updateDevPlanToggle called (no-op for Quick Plan Switcher)');
+  // No action needed - Quick Plan Switcher handles all plan updates
+}
+
 // --- QUICK PLAN SWITCHER (REPLACES DEV PLAN TOGGLE) ---
 function createQuickPlanSwitcher() {
   navLog('info', 'createQuickPlanSwitcher() called');
@@ -959,12 +967,46 @@ function createQuickPlanSwitcher() {
     border: 1px solid #333;
   `;
   
+  // --- DUMMY ACCOUNTS ---
+  const dummyAccounts = [
+    { email: 'demo@jobhackai.com', password: 'password123', plan: 'free', label: 'Demo Free' },
+    { email: 'trial@jobhackai.com', password: 'password123', plan: 'trial', label: 'Trial User' },
+    { email: 'essential@jobhackai.com', password: 'password123', plan: 'essential', label: 'Essential User' },
+    { email: 'pro@jobhackai.com', password: 'password123', plan: 'pro', label: 'Pro User' },
+    { email: 'premium@jobhackai.com', password: 'password123', plan: 'premium', label: 'Premium User' }
+  ];
+  // Ensure these exist in the DB
+  try {
+    const db = JSON.parse(localStorage.getItem('user-db') || '{}');
+    dummyAccounts.forEach(acc => {
+      if (!db[acc.email]) {
+        db[acc.email] = {
+          plan: acc.plan,
+          firstName: acc.label.split(' ')[0],
+          lastName: acc.label.split(' ')[1] || '',
+          cards: acc.plan === 'free' ? [] : [{ id: 'test-card-1', last4: '4242', brand: 'visa', expMonth: 12, expYear: 2025 }],
+          created: new Date().toISOString(),
+          password: acc.password
+        };
+      }
+    });
+    localStorage.setItem('user-db', JSON.stringify(db));
+  } catch (e) { /* ignore */ }
+
   switcher.innerHTML = `
     <div style="margin-bottom: 8px; font-weight: bold; border-bottom: 1px solid #333; padding-bottom: 4px; display: flex; align-items: center; gap: 6px;">
       <span style="color: #00ff88;">🧪</span>
       <span>Quick Plan Switcher</span>
     </div>
-    
+    <!-- Quick Login Section -->
+    <div style="margin-bottom: 8px;">
+      <label style="display: block; margin-bottom: 3px; font-size: 11px; color: #ccc;">Quick Login (Dummy):</label>
+      <select id="quick-login-account" style="width: 100%; padding: 4px; background: #333; color: white; border: 1px solid #555; border-radius: 4px; font-size: 11px;">
+        <option value="">-- Select Dummy Account --</option>
+        ${dummyAccounts.map(acc => `<option value="${acc.email}">${acc.label} (${acc.email})</option>`).join('')}
+      </select>
+      <button id="quick-login-btn" style="width: 100%; margin-top: 4px; padding: 6px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 11px; font-weight: 600;">Login as Selected</button>
+    </div>
     <div style="margin-bottom: 8px;">
       <label style="display: block; margin-bottom: 3px; font-size: 11px; color: #ccc;">User State:</label>
       <select id="quick-user-state" style="width: 100%; padding: 4px; background: #333; color: white; border: 1px solid #555; border-radius: 4px; font-size: 11px;">
@@ -976,12 +1018,10 @@ function createQuickPlanSwitcher() {
         <option value="premium">🟠 Premium User</option>
       </select>
     </div>
-
     <div style="margin-bottom: 8px;">
       <label style="display: block; margin-bottom: 3px; font-size: 11px; color: #ccc;">Email:</label>
       <input type="email" id="quick-user-email" value="test@example.com" style="width: 100%; padding: 4px; background: #333; color: white; border: 1px solid #555; border-radius: 4px; font-size: 11px;">
     </div>
-
     <div style="margin-bottom: 8px;">
       <label style="display: block; margin-bottom: 3px; font-size: 11px; color: #ccc;">Payment Method:</label>
       <select id="quick-user-card" style="width: 100%; padding: 4px; background: #333; color: white; border: 1px solid #555; border-radius: 4px; font-size: 11px;">
@@ -989,15 +1029,12 @@ function createQuickPlanSwitcher() {
         <option value="false">❌ No Card (Free only)</option>
       </select>
     </div>
-
     <button id="apply-quick-state" style="width: 100%; padding: 6px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; margin-bottom: 4px; font-size: 11px; font-weight: 600;">
       Apply State
     </button>
-    
     <button id="reset-quick-state" style="width: 100%; padding: 6px; background: #dc3545; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 11px; font-weight: 600;">
       Reset All
     </button>
-
     <div style="margin-top: 8px; font-size: 10px; color: #ccc; border-top: 1px solid #333; padding-top: 4px;">
       Current: <span id="current-quick-state">Loading...</span>
     </div>
@@ -1030,6 +1067,37 @@ function createQuickPlanSwitcher() {
   resetButton.addEventListener('click', () => {
     resetQuickState();
   });
+  
+  // Add event listeners for quick login
+  const quickLoginSelect = switcher.querySelector('#quick-login-account');
+  const quickLoginBtn = switcher.querySelector('#quick-login-btn');
+  if (quickLoginBtn && quickLoginSelect) {
+    quickLoginBtn.addEventListener('click', () => {
+      const email = quickLoginSelect.value;
+      if (!email) return;
+      const db = JSON.parse(localStorage.getItem('user-db') || '{}');
+      const user = db[email];
+      if (user) {
+        localStorage.setItem('user-email', email);
+        localStorage.setItem('user-authenticated', 'true');
+        localStorage.setItem('user-plan', user.plan || 'free');
+        localStorage.setItem('dev-plan', user.plan || 'free');
+        if (window.JobHackAINavigation) {
+          window.JobHackAINavigation.setAuthState(true, user.plan);
+        }
+        // Trigger plan change event
+        const planChangeEvent = new CustomEvent('planChanged', {
+          detail: { newPlan: user.plan }
+        });
+        window.dispatchEvent(planChangeEvent);
+        updateQuickStateDisplay();
+        updateNavigation();
+        setTimeout(() => { window.location.reload(); }, 300);
+      }
+    });
+  }
+  
+
   
   // Initialize current state display
   updateQuickStateDisplay();
@@ -1079,10 +1147,71 @@ function applyQuickState() {
     window.refreshBillingData();
   }
   
-  // Refresh page to apply changes
+  // Force immediate UI update for billing page
   setTimeout(() => {
-    window.location.reload();
-  }, 300);
+    // Try multiple approaches to force UI update
+    console.log('Forcing immediate UI update for plan change to:', state);
+    
+    // 1. Dispatch events to both window and document
+    const planChangeEvent = new CustomEvent('planChanged', {
+      detail: { newPlan: state }
+    });
+    window.dispatchEvent(planChangeEvent);
+    document.dispatchEvent(planChangeEvent);
+    
+    // 2. Directly call billing refresh if available
+    if (window.refreshBillingData && typeof window.refreshBillingData === 'function') {
+      console.log('Directly calling refreshBillingData()');
+      window.refreshBillingData();
+    }
+    
+    // 3. Force update specific billing elements if they exist
+    if (document.getElementById('currentPlanName') && document.getElementById('currentPlanPrice')) {
+      console.log('Directly updating billing UI elements');
+      const planNames = {
+        'free': 'Free Plan',
+        'trial': 'Free Trial', 
+        'essential': 'Essential Plan',
+        'pro': 'Pro Plan',
+        'premium': 'Premium Plan'
+      };
+      const planPrices = {
+        'free': '$0/month',
+        'trial': '$0/month',
+        'essential': '$29.00/month',
+        'pro': '$59.00/month',
+        'premium': '$99.00/month'
+      };
+      
+      document.getElementById('currentPlanName').textContent = planNames[state] || 'Free Plan';
+      document.getElementById('currentPlanPrice').textContent = planPrices[state] || '$0/month';
+      
+      const isActive = state === 'trial' || state === 'free';
+      const statusElement = document.getElementById('planStatus');
+      if (statusElement) {
+        statusElement.textContent = isActive ? 'Active' : 'Inactive';
+      }
+      
+      console.log('Directly updated billing UI to:', state);
+    }
+    
+    console.log('Completed forced UI update for plan:', state);
+  }, 100);
+  
+  // Force immediate updates without page reload
+  setTimeout(() => {
+    // Update navigation system
+    updateNavigation();
+    updateQuickStateDisplay();
+    
+    // Force billing page update if we're on it
+    if (window.location.pathname.includes('billing-management.html')) {
+      console.log('On billing page, forcing complete update');
+      if (window.refreshBillingData && typeof window.refreshBillingData === 'function') {
+        window.refreshBillingData();
+      }
+    }
+  }, 200);
 }
 
 function loginAsQuickUser(email, plan, hasCard) {
@@ -1209,6 +1338,11 @@ function initializeNavigation() {
   // Update quick plan switcher state
   navLog('debug', 'Updating quick plan switcher state');
   updateQuickPlanSwitcher();
+  
+  // Signal that navigation system is ready
+  navLog('info', 'Navigation system initialization complete, dispatching ready event');
+  const readyEvent = new CustomEvent('navigationReady');
+  window.dispatchEvent(readyEvent);
   
   // Listen for plan changes
   navLog('debug', 'Setting up storage event listener');
