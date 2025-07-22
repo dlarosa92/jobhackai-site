@@ -185,6 +185,11 @@
   <script>
     // Initialize pricing page Stripe functionality
     document.addEventListener('DOMContentLoaded', () => {
+      // Initialize navigation system
+      if (window.JobHackAINavigation && window.JobHackAINavigation.initializeNavigation) {
+        window.JobHackAINavigation.initializeNavigation();
+      }
+      
       const checkoutButtons = document.querySelectorAll('.stripe-checkout-btn');
       
       // Check if user is already authenticated
