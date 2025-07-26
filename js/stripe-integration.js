@@ -22,15 +22,26 @@ class JobHackAIStripe {
   }
 
   loadStripeScript() {
+    // In demo mode, don't load Stripe at all to prevent errors
+    if (this.isDemoMode) {
+      console.log('Demo mode: Skipping Stripe.js load to prevent errors');
+      this.initializeDemoMode();
+      return;
+    }
+
     // Check if Stripe is already loaded
     if (window.Stripe) {
       this.initializeStripe();
       return;
     }
 
-    // Load Stripe.js script
+    // Load Stripe.js script with proper attributes to avoid sandbox errors
     const script = document.createElement('script');
     script.src = 'https://js.stripe.com/v3/';
+    script.async = true;
+    script.defer = true;
+    script.crossOrigin = 'anonymous';
+    
     script.onload = () => {
       this.initializeStripe();
     };
@@ -56,6 +67,38 @@ class JobHackAIStripe {
   initializeDemoMode() {
     console.log('Running in demo mode - no real payments will be processed');
     this.createDemoElements();
+    
+    // Set a flag to indicate demo mode is active
+    window.stripeDemoMode = true;
+    
+    // Completely disable Stripe to prevent errors
+    if (window.Stripe) {
+      // Override Stripe to prevent any real API calls
+      window.Stripe = function(key) {
+        console.log('Stripe disabled in demo mode');
+        return {
+          elements: () => ({
+            create: () => ({
+              mount: () => console.log('Demo card element mounted'),
+              unmount: () => console.log('Demo card element unmounted'),
+              on: () => console.log('Demo card event listener added'),
+              off: () => console.log('Demo card event listener removed'),
+              clear: () => console.log('Demo card element cleared')
+            })
+          }),
+          confirmCardPayment: () => Promise.resolve({ paymentIntent: { status: 'succeeded' } }),
+          confirmPayment: () => Promise.resolve({ paymentIntent: { status: 'succeeded' } }),
+          createPaymentMethod: () => Promise.resolve({ paymentMethod: { id: 'demo_pm_' + Date.now() } }),
+          retrievePaymentIntent: () => Promise.resolve({ paymentIntent: { status: 'succeeded' } })
+        };
+      };
+    }
+    
+    // Prevent Stripe.js from loading if not already loaded
+    const stripeScript = document.querySelector('script[src*="stripe.com"]');
+    if (stripeScript) {
+      stripeScript.remove();
+    }
   }
 
   setupElements() {
@@ -92,15 +135,15 @@ class JobHackAIStripe {
   }
 
   createDemoElements() {
-    // Create demo card input for testing
+    // Create simple demo card input for testing
     const cardContainer = document.getElementById('stripeElement');
     if (cardContainer) {
       cardContainer.innerHTML = `
         <div class="demo-card-input">
-          <input type="text" placeholder="1234 5678 9012 3456" class="demo-card-number" maxlength="19" aria-label="Card number">
+          <input type="text" placeholder="1234 5678 9012 3456" class="demo-card-number" maxlength="19" aria-label="Card number" value="4242 4242 4242 4242">
           <div class="demo-card-row">
-            <input type="text" placeholder="MM/YY" class="demo-card-expiry" maxlength="5" aria-label="Expiry date">
-            <input type="text" placeholder="CVC" class="demo-card-cvc" maxlength="4" aria-label="CVC">
+            <input type="text" placeholder="MM/YY" class="demo-card-expiry" maxlength="5" aria-label="Expiry date" value="02/29">
+            <input type="text" placeholder="CVC" class="demo-card-cvc" maxlength="4" aria-label="CVC" value="123">
           </div>
         </div>
       `;

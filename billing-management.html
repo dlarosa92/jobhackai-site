@@ -822,12 +822,45 @@
         if (window.JobHackAINavigation && typeof window.JobHackAINavigation.getEffectivePlan === 'function') {
           loadCurrentPlan();
           loadBillingHistory();
+          loadSavedPaymentMethods(); // Also refresh payment methods
         } else {
           setTimeout(waitAndUpdate, 50);
         }
       }
       waitAndUpdate();
     };
+    
+    // Function to sync cards from old storage format to new format
+    function syncCardsFromOldStorage() {
+      const userEmail = localStorage.getItem('user-email');
+      if (!userEmail) return;
+      
+      // Check if there are cards in the old format
+      const oldCards = JSON.parse(localStorage.getItem('saved-cards') || '[]');
+      if (oldCards.length > 0) {
+        console.log('Found cards in old storage format, migrating...');
+        
+        // Get current cards from user database
+        const currentCards = getUserCards();
+        
+        // Merge cards, avoiding duplicates
+        const mergedCards = [...currentCards];
+        oldCards.forEach(oldCard => {
+          const exists = mergedCards.some(card => card.id === oldCard.id);
+          if (!exists) {
+            mergedCards.push(oldCard);
+          }
+        });
+        
+        // Save to user database
+        saveUserCards(mergedCards);
+        
+        // Clear old storage
+        localStorage.removeItem('saved-cards');
+        
+        console.log('Card migration completed');
+      }
+    }
     
     function getUserCards() {
       const userEmail = localStorage.getItem('user-email');
@@ -836,6 +869,19 @@
         return db[userEmail].cards;
       }
       return [];
+    }
+    
+    function saveUserCards(cards) {
+      const userEmail = localStorage.getItem('user-email');
+      if (!userEmail) return;
+      
+      const db = JSON.parse(localStorage.getItem('user-db') || '{}');
+      if (!db[userEmail]) {
+        db[userEmail] = {};
+      }
+      db[userEmail].cards = cards;
+      localStorage.setItem('user-db', JSON.stringify(db));
+      localStorage.setItem('user-db-backup', JSON.stringify(db));
     }
     
     function loadSavedPaymentMethods() {
@@ -996,6 +1042,9 @@
 
     // Call loadBillingHistory on page load and whenever plan changes
     document.addEventListener('DOMContentLoaded', function() {
+      // Sync cards from old storage format first
+      syncCardsFromOldStorage();
+      
       // Listen for plan changes from Quick Plan Switcher
       window.addEventListener('storage', function(e) {
         if (e.key === 'dev-plan' || e.key === 'user-plan' || e.key === 'user-authenticated') {
@@ -1005,6 +1054,7 @@
             if (window.JobHackAINavigation && typeof window.JobHackAINavigation.getEffectivePlan === 'function') {
               loadCurrentPlan();
               loadBillingHistory();
+              loadSavedPaymentMethods();
             } else {
               setTimeout(waitAndUpdate, 50);
             }
@@ -1021,6 +1071,7 @@
           if (window.JobHackAINavigation && typeof window.JobHackAINavigation.getEffectivePlan === 'function') {
             loadCurrentPlan();
             loadBillingHistory();
+            loadSavedPaymentMethods();
           } else {
             setTimeout(waitAndUpdate, 50);
           }
@@ -1037,6 +1088,7 @@
             if (window.JobHackAINavigation && typeof window.JobHackAINavigation.getEffectivePlan === 'function') {
               loadCurrentPlan();
               loadBillingHistory();
+              loadSavedPaymentMethods();
             } else {
               setTimeout(waitAndUpdate, 50);
             }
@@ -1044,6 +1096,11 @@
           waitAndUpdate();
         }
       });
+      
+      // Initial load
+      loadCurrentPlan();
+      loadBillingHistory();
+      loadSavedPaymentMethods();
     });
     
     function checkTrialStatus() {
@@ -1094,12 +1151,7 @@
         isDefault: card.id === cardId
       }));
       
-      localStorage.setItem('user-db', JSON.stringify({
-        ...JSON.parse(localStorage.getItem('user-db') || '{}'),
-        [localStorage.getItem('user-email')]: {
-          cards: updatedCards
-        }
-      }));
+      saveUserCards(updatedCards);
       loadSavedPaymentMethods();
       
       // Show success message
@@ -1112,12 +1164,7 @@
         const savedCards = getUserCards();
         const updatedCards = savedCards.filter(card => card.id !== cardId);
         
-        localStorage.setItem('user-db', JSON.stringify({
-          ...JSON.parse(localStorage.getItem('user-db') || '{}'),
-          [localStorage.getItem('user-email')]: {
-            cards: updatedCards
-          }
-        }));
+        saveUserCards(updatedCards);
         loadSavedPaymentMethods();
         
         alert('Payment method removed successfully!');
