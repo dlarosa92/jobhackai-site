@@ -651,38 +651,78 @@
 <script>
   // --- AUTHENTICATION CHECK ---
   function checkAuthentication() {
-    const isAuthenticated = localStorage.getItem('user-authenticated') === 'true';
-    const mainContent = document.querySelector('main');
-    
-    if (!isAuthenticated) {
-      mainContent.innerHTML = `
-        <div style="max-width: 600px; margin: 4rem auto; text-align: center; padding: 2rem;">
-          <div style="font-size: 4rem; margin-bottom: 1rem;">🔒</div>
-          <h1 style="font-size: 2rem; font-weight: 700; color: var(--color-text-main); margin-bottom: 1rem;">
-            Login Required
-          </h1>
-          <p style="font-size: 1.1rem; color: var(--color-text-secondary); margin-bottom: 2rem; line-height: 1.6;">
-            The LinkedIn Optimizer is a premium feature that requires you to be logged in. 
-            Please sign in to access this tool.
-          </p>
-          <div style="display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap;">
-            <a href="login.html" class="btn-primary" style="text-decoration: none;">
-              Sign In
-            </a>
-            <a href="pricing-a.html" class="btn-outline" style="text-decoration: none;">
-              View Pricing
-            </a>
+    // Use navigation system's authentication check for consistency
+    if (window.JobHackAINavigation) {
+      const authState = window.JobHackAINavigation.getAuthState();
+      if (!authState.isAuthenticated) {
+        const mainContent = document.querySelector('main');
+        mainContent.innerHTML = `
+          <div style="max-width: 600px; margin: 4rem auto; text-align: center; padding: 2rem;">
+            <div style="font-size: 4rem; margin-bottom: 1rem;">🔒</div>
+            <h1 style="font-size: 2rem; font-weight: 700; color: var(--color-text-main); margin-bottom: 1rem;">
+              Login Required
+            </h1>
+            <p style="font-size: 1.1rem; color: var(--color-text-secondary); margin-bottom: 2rem; line-height: 1.6;">
+              LinkedIn Profile Optimizer requires you to be logged in to access this tool. 
+              Please sign in to get started.
+            </p>
+            <div style="display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap;">
+              <a href="login.html" class="btn-primary" style="text-decoration: none;">
+                Sign In
+              </a>
+              <a href="pricing-a.html" class="btn-outline" style="text-decoration: none;">
+                View Pricing
+              </a>
+            </div>
           </div>
-        </div>
-      `;
-      return false;
+        `;
+        return false;
+      }
+      return true;
+    } else {
+      // Fallback to localStorage check if navigation system not available
+      const isAuthenticated = localStorage.getItem('user-authenticated') === 'true';
+      if (!isAuthenticated) {
+        const mainContent = document.querySelector('main');
+        mainContent.innerHTML = `
+          <div style="max-width: 600px; margin: 4rem auto; text-align: center; padding: 2rem;">
+            <div style="font-size: 4rem; margin-bottom: 1rem;">🔒</div>
+            <h1 style="font-size: 2rem; font-weight: 700; color: var(--color-text-main); margin-bottom: 1rem;">
+              Login Required
+            </h1>
+            <p style="font-size: 1.1rem; color: var(--color-text-secondary); margin-bottom: 2rem; line-height: 1.6;">
+              LinkedIn Profile Optimizer requires you to be logged in to access this tool. 
+              Please sign in to get started.
+            </p>
+            <div style="display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap;">
+              <a href="login.html" class="btn-primary" style="text-decoration: none;">
+                Sign In
+              </a>
+              <a href="pricing-a.html" class="btn-outline" style="text-decoration: none;">
+                View Pricing
+              </a>
+            </div>
+          </div>
+        `;
+        return false;
+      }
+      return true;
     }
-    return true;
+  }
+
+  // --- USER PLAN LOGIC ---
+  function getUserPlan() {
+    // Use navigation system's plan detection for consistency
+    if (window.JobHackAINavigation) {
+      return window.JobHackAINavigation.getEffectivePlan();
+    } else {
+      return localStorage.getItem('user-plan') || 'free';
+    }
   }
 
   // --- PLAN-BASED ACCESS CONTROL ---
   function checkPlanAccess() {
-    const currentPlan = window.JobHackAINavigation ? window.JobHackAINavigation.getEffectivePlan() : 'free';
+    const currentPlan = getUserPlan();
     const lockedDiv = document.getElementById('lo-locked');
     const formDiv = document.getElementById('lo-form');
     const resultsDiv = document.getElementById('lo-results');
@@ -696,15 +736,44 @@
     resultsDiv.style.display = 'none';
   }
 
+  // --- PAGE ACCESS CONTROL ---
+  function enforceAccess() {
+    const authState = window.JobHackAINavigation ? 
+      window.JobHackAINavigation.getAuthState() : 
+      { isAuthenticated: localStorage.getItem('user-authenticated') === 'true' };
+    
+    const userPlan = getUserPlan();
+    const allowedPlans = ['premium'];
+    
+    if (!authState.isAuthenticated || !allowedPlans.includes(userPlan)) {
+      window.location.href = 'login.html';
+    }
+  }
+
   // --- Initialize on load ---
   document.addEventListener('DOMContentLoaded', function() {
-    // Check authentication first
-    if (!checkAuthentication()) {
-      return; // Stop here if not authenticated
-    }
-    
     // Wait for navigation system to be ready
-    setTimeout(checkPlanAccess, 100);
+    const initPage = () => {
+      // Check authentication first
+      if (!checkAuthentication()) {
+        return; // Stop here if not authenticated
+      }
+      
+      // Update UI based on plan
+      checkPlanAccess();
+      
+      // Enforce access control
+      enforceAccess();
+    };
+    
+    // Try to initialize immediately, then retry after a short delay
+    initPage();
+    setTimeout(initPage, 100);
+    
+    // Listen for plan changes from navigation system
+    window.addEventListener('planChanged', function(event) {
+      checkPlanAccess();
+    });
   });
 
   // Regenerate section content
@@ -777,6 +846,14 @@
 
 <!-- Load navigation system -->
 <script src="js/navigation.js"></script>
+<script>
+  // Initialize navigation system when DOM is ready
+  document.addEventListener('DOMContentLoaded', function() {
+    if (window.JobHackAINavigation && window.JobHackAINavigation.initializeNavigation) {
+      window.JobHackAINavigation.initializeNavigation();
+    }
+  });
+</script>
 <script src="js/main.js" type="module"></script>
 <script src="js/analytics.js" type="module"></script>
 </body>

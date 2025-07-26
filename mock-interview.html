@@ -280,6 +280,135 @@
         });
       });
     }
+
+    // --- AUTHENTICATION CHECK ---
+    function checkAuthentication() {
+      // Use navigation system's authentication check for consistency
+      if (window.JobHackAINavigation) {
+        const authState = window.JobHackAINavigation.getAuthState();
+        if (!authState.isAuthenticated) {
+          const mainContent = document.querySelector('main');
+          mainContent.innerHTML = `
+            <div style="max-width: 600px; margin: 4rem auto; text-align: center; padding: 2rem;">
+              <div style="font-size: 4rem; margin-bottom: 1rem;">🔒</div>
+              <h1 style="font-size: 2rem; font-weight: 700; color: var(--color-text-main); margin-bottom: 1rem;">
+                Login Required
+              </h1>
+              <p style="font-size: 1.1rem; color: var(--color-text-secondary); margin-bottom: 2rem; line-height: 1.6;">
+                Mock Interviews requires you to be logged in to access this tool. 
+                Please sign in to get started.
+              </p>
+              <div style="display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap;">
+                <a href="login.html" class="btn-primary" style="text-decoration: none;">
+                  Sign In
+                </a>
+                <a href="pricing-a.html" class="btn-outline" style="text-decoration: none;">
+                  View Pricing
+                </a>
+              </div>
+            </div>
+          `;
+          return false;
+        }
+        return true;
+      } else {
+        // Fallback to localStorage check if navigation system not available
+        const isAuthenticated = localStorage.getItem('user-authenticated') === 'true';
+        if (!isAuthenticated) {
+          const mainContent = document.querySelector('main');
+          mainContent.innerHTML = `
+            <div style="max-width: 600px; margin: 4rem auto; text-align: center; padding: 2rem;">
+              <div style="font-size: 4rem; margin-bottom: 1rem;">🔒</div>
+              <h1 style="font-size: 2rem; font-weight: 700; color: var(--color-text-main); margin-bottom: 1rem;">
+                Login Required
+              </h1>
+              <p style="font-size: 1.1rem; color: var(--color-text-secondary); margin-bottom: 2rem; line-height: 1.6;">
+                Mock Interviews requires you to be logged in to access this tool. 
+                Please sign in to get started.
+              </p>
+              <div style="display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap;">
+                <a href="login.html" class="btn-primary" style="text-decoration: none;">
+                  Sign In
+                </a>
+                <a href="pricing-a.html" class="btn-outline" style="text-decoration: none;">
+                  View Pricing
+                </a>
+              </div>
+            </div>
+          `;
+          return false;
+        }
+        return true;
+      }
+    }
+
+    // --- USER PLAN LOGIC ---
+    function getUserPlan() {
+      // Use navigation system's plan detection for consistency
+      if (window.JobHackAINavigation) {
+        return window.JobHackAINavigation.getEffectivePlan();
+      } else {
+        return localStorage.getItem('user-plan') || 'free';
+      }
+    }
+
+    // --- PLAN LOGIC ---
+    function updateMockInterviewUIForPlan() {
+      const userPlan = getUserPlan();
+      
+      // Show/hide locked content based on plan
+      if (['pro', 'premium'].includes(userPlan)) {
+        // Show mock interview functionality
+        document.getElementById('mi-locked').style.display = 'none';
+        document.getElementById('mi-setup').style.display = 'block';
+      } else {
+        // Show locked message
+        document.getElementById('mi-locked').style.display = 'flex';
+        document.getElementById('mi-setup').style.display = 'none';
+      }
+    }
+    
+    // --- PAGE ACCESS CONTROL ---
+    function enforceAccess() {
+      const authState = window.JobHackAINavigation ? 
+        window.JobHackAINavigation.getAuthState() : 
+        { isAuthenticated: localStorage.getItem('user-authenticated') === 'true' };
+      
+      const userPlan = getUserPlan();
+      const allowedPlans = ['pro', 'premium'];
+      
+      if (!authState.isAuthenticated || !allowedPlans.includes(userPlan)) {
+        window.location.href = 'login.html';
+      }
+    }
+    
+    // Initialize page when DOM is ready
+    document.addEventListener('DOMContentLoaded', function() {
+      // Wait for navigation system to be ready
+      const initPage = () => {
+        // Check authentication first
+        if (!checkAuthentication()) {
+          return; // Stop here if not authenticated
+        }
+        
+        // Update UI based on plan
+        updateMockInterviewUIForPlan();
+        checkPlanAccess();
+        
+        // Enforce access control
+        enforceAccess();
+      };
+      
+      // Try to initialize immediately, then retry after a short delay
+      initPage();
+      setTimeout(initPage, 100);
+      
+      // Listen for plan changes from navigation system
+      window.addEventListener('planChanged', function(event) {
+        updateMockInterviewUIForPlan();
+        checkPlanAccess();
+      });
+    });
   </script>
 
   <!-- Main Content -->
@@ -287,7 +416,7 @@
     <div class="mi-card mi-locked" id="mi-locked" style="display:none;">
       <svg width="22" height="22" fill="none" stroke="#b59f00" stroke-width="2" style="flex-shrink:0;" viewBox="0 0 24 24"><path d="M6 10V7a5 5 0 1110 0v3"/><rect x="5" y="10" width="12" height="8" rx="2"/></svg>
       <span class="mi-locked-message">This feature is only available on <strong>Pro</strong> and <strong>Premium</strong> plans.</span>
-      <button class="mi-upgrade-btn" onclick="window.location.href='pricing.html'">Upgrade</button>
+      <button class="mi-upgrade-btn" onclick="window.location.href='pricing-a.html'">Upgrade</button>
     </div>
     <div class="mi-card" id="mi-setup">
       <div style="display:flex;align-items:flex-start;gap:2.5rem;">
@@ -411,7 +540,7 @@
 
     // --- PLAN-BASED ACCESS CONTROL ---
     function checkPlanAccess() {
-      const currentPlan = window.JobHackAINavigation ? window.JobHackAINavigation.getEffectivePlan() : 'free';
+      const currentPlan = getUserPlan();
       const lockedDiv = document.getElementById('mi-locked');
       const setupDiv = document.getElementById('mi-setup');
       const sessionDiv = document.getElementById('mi-session');
@@ -441,7 +570,7 @@
 
       // Add Pro plan mock interview usage indicator
       const main = document.querySelector('main');
-      const userPlan = localStorage.getItem('user-plan') || 'free';
+      const userPlan = getUserPlan();
       if (userPlan === 'pro' && main) {
         // For demo, assume 20 left (replace with dynamic count if available)
         const usageDiv = document.createElement('div');
@@ -556,6 +685,14 @@
   </script>
   <!-- Load navigation system -->
   <script src="js/navigation.js"></script>
+  <script>
+    // Initialize navigation system when DOM is ready
+    document.addEventListener('DOMContentLoaded', function() {
+      if (window.JobHackAINavigation && window.JobHackAINavigation.initializeNavigation) {
+        window.JobHackAINavigation.initializeNavigation();
+      }
+    });
+  </script>
   <script src="js/main.js" type="module"></script>
   <script src="js/analytics.js" type="module"></script>
 </body>

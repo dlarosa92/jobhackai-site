@@ -202,38 +202,77 @@
 
     // --- AUTHENTICATION CHECK ---
     function checkAuthentication() {
-      const isAuthenticated = localStorage.getItem('user-authenticated') === 'true';
-      const mainContent = document.querySelector('main');
-      
-      if (!isAuthenticated) {
-        mainContent.innerHTML = `
-          <div style="max-width: 600px; margin: 4rem auto; text-align: center; padding: 2rem;">
-            <div style="font-size: 4rem; margin-bottom: 1rem;">🔒</div>
-            <h1 style="font-size: 2rem; font-weight: 700; color: var(--color-text-main); margin-bottom: 1rem;">
-              Login Required
-            </h1>
-            <p style="font-size: 1.1rem; color: var(--color-text-secondary); margin-bottom: 2rem; line-height: 1.6;">
-              Interview Questions requires you to be logged in to access this tool. 
-              Please sign in to get started.
-            </p>
-            <div style="display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap;">
-              <a href="login.html" class="btn-primary" style="text-decoration: none;">
-                Sign In
-              </a>
-              <a href="pricing-a.html" class="btn-outline" style="text-decoration: none;">
-                View Pricing
-              </a>
+      // Use navigation system's authentication check for consistency
+      if (window.JobHackAINavigation) {
+        const authState = window.JobHackAINavigation.getAuthState();
+        if (!authState.isAuthenticated) {
+          const mainContent = document.querySelector('main');
+          mainContent.innerHTML = `
+            <div style="max-width: 600px; margin: 4rem auto; text-align: center; padding: 2rem;">
+              <div style="font-size: 4rem; margin-bottom: 1rem;">🔒</div>
+              <h1 style="font-size: 2rem; font-weight: 700; color: var(--color-text-main); margin-bottom: 1rem;">
+                Login Required
+              </h1>
+              <p style="font-size: 1.1rem; color: var(--color-text-secondary); margin-bottom: 2rem; line-height: 1.6;">
+                Interview Questions requires you to be logged in to access this tool. 
+                Please sign in to get started.
+              </p>
+              <div style="display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap;">
+                <a href="login.html" class="btn-primary" style="text-decoration: none;">
+                  Sign In
+                </a>
+                <a href="pricing-a.html" class="btn-outline" style="text-decoration: none;">
+                  View Pricing
+                </a>
+              </div>
             </div>
-          </div>
-        `;
-        return false;
+          `;
+          return false;
+        }
+        return true;
+      } else {
+        // Fallback to localStorage check if navigation system not available
+        const isAuthenticated = localStorage.getItem('user-authenticated') === 'true';
+        if (!isAuthenticated) {
+          const mainContent = document.querySelector('main');
+          mainContent.innerHTML = `
+            <div style="max-width: 600px; margin: 4rem auto; text-align: center; padding: 2rem;">
+              <div style="font-size: 4rem; margin-bottom: 1rem;">🔒</div>
+              <h1 style="font-size: 2rem; font-weight: 700; color: var(--color-text-main); margin-bottom: 1rem;">
+                Login Required
+              </h1>
+              <p style="font-size: 1.1rem; color: var(--color-text-secondary); margin-bottom: 2rem; line-height: 1.6;">
+                Interview Questions requires you to be logged in to access this tool. 
+                Please sign in to get started.
+              </p>
+              <div style="display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap;">
+                <a href="login.html" class="btn-primary" style="text-decoration: none;">
+                  Sign In
+                </a>
+                <a href="pricing-a.html" class="btn-outline" style="text-decoration: none;">
+                  View Pricing
+                </a>
+              </div>
+            </div>
+          `;
+          return false;
+        }
+        return true;
       }
-      return true;
     }
 
-    // --- USER PLAN LOGIC (replace with real user data) ---
+    // --- USER PLAN LOGIC ---
+    function getUserPlan() {
+      // Use navigation system's plan detection for consistency
+      if (window.JobHackAINavigation) {
+        return window.JobHackAINavigation.getEffectivePlan();
+      } else {
+        return localStorage.getItem('user-plan') || 'free';
+      }
+    }
+    
     const user = {
-      plan: 'trial' // 'trial', 'essential', 'pro', 'premium'
+      plan: getUserPlan()
     };
     // --- ROLES DATA ---
     const roles = [
@@ -326,7 +365,9 @@
       questionsContainer.innerHTML = questions.map((q, i) => 
         `<div class="iq-question-card">${i + 1}. ${q}</div>`
       ).join('');
-      // Show/hide upgrade elements based on user plan
+      
+      // Update user plan and show/hide upgrade elements
+      user.plan = getUserPlan();
       if (user.plan === 'free') {
         lockDiv.style.display = 'flex';
         upgradeBtn.style.display = 'block';
@@ -342,13 +383,7 @@
 
     // --- PLAN LOGIC ---
     function updateInterviewUIForPlan() {
-      // Use navigation system's plan detection for consistency
-      let userPlan = 'free';
-      if (window.JobHackAINavigation) {
-        userPlan = window.JobHackAINavigation.getEffectivePlan();
-      } else {
-        userPlan = localStorage.getItem('user-plan') || 'free';
-      }
+      const userPlan = getUserPlan();
       
       // Show/hide upgrade and lock based on plan
       if (['trial', 'essential', 'pro', 'premium'].includes(userPlan)) {
@@ -364,42 +399,60 @@
       }
     }
     
-    // Wait for navigation system to be ready before checking plan
-    document.addEventListener('DOMContentLoaded', function() {
-      // Check authentication first
-      if (!checkAuthentication()) {
-        return; // Stop here if not authenticated
-      }
-      
-      // Wait for navigation system to be ready
-      setTimeout(updateInterviewUIForPlan, 100);
-    });
-
     // --- PAGE ACCESS CONTROL ---
     function enforceAccess() {
-      const isAuthenticated = localStorage.getItem('user-authenticated') === 'true';
+      const authState = window.JobHackAINavigation ? 
+        window.JobHackAINavigation.getAuthState() : 
+        { isAuthenticated: localStorage.getItem('user-authenticated') === 'true' };
       
-      // Use navigation system's plan detection for consistency
-      let plan = 'free';
-      if (window.JobHackAINavigation) {
-        plan = window.JobHackAINavigation.getEffectivePlan();
-      } else {
-        plan = localStorage.getItem('user-plan') || 'free';
-      }
-      
+      const userPlan = getUserPlan();
       const allowedPlans = ['trial', 'essential', 'pro', 'premium'];
-      if (!isAuthenticated || !allowedPlans.includes(plan)) {
+      
+      if (!authState.isAuthenticated || !allowedPlans.includes(userPlan)) {
         window.location.href = 'login.html';
       }
     }
     
-    // Wait for navigation system to be ready before enforcing access
+    // Initialize page when DOM is ready
     document.addEventListener('DOMContentLoaded', function() {
-      setTimeout(enforceAccess, 100);
+      // Wait for navigation system to be ready
+      const initPage = () => {
+        // Check authentication first
+        if (!checkAuthentication()) {
+          return; // Stop here if not authenticated
+        }
+        
+        // Update UI based on plan
+        updateInterviewUIForPlan();
+        
+        // Enforce access control
+        enforceAccess();
+      };
+      
+      // Try to initialize immediately, then retry after a short delay
+      initPage();
+      setTimeout(initPage, 100);
+      
+      // Listen for plan changes from navigation system
+      window.addEventListener('planChanged', function(event) {
+        updateInterviewUIForPlan();
+        // Regenerate questions if there's a current role to update the lock state
+        if (roleInput.value) {
+          generateQuestions(roleInput.value);
+        }
+      });
     });
   </script>
   <!-- Load navigation system -->
   <script src="js/navigation.js"></script>
+  <script>
+    // Initialize navigation system when DOM is ready
+    document.addEventListener('DOMContentLoaded', function() {
+      if (window.JobHackAINavigation && window.JobHackAINavigation.initializeNavigation) {
+        window.JobHackAINavigation.initializeNavigation();
+      }
+    });
+  </script>
   <script src="js/main.js" type="module"></script>
   <script src="js/analytics.js" type="module"></script>
 </body>
