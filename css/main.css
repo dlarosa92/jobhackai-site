@@ -508,3 +508,11 @@ textarea:focus {
 .btn-secondary-text {
   color: #fff !important;
 }
+
+/* ==== SEO-homepage additions ==== */
+.hero{padding:6rem 0 4rem;text-align:center}
+.hero-sub{max-width:40rem;margin:1rem auto 2rem;font-size:1.25rem}
+.trust-stats{display:flex;justify-content:center;gap:2rem;margin:3rem 0;font-weight:600;text-align:center}
+.feature-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(16rem,1fr));gap:2rem;margin-top:2rem}
+.how-it-works ol{max-width:32rem;margin:2rem auto;line-height:1.6}
+.pricing-teaser{text-align:center;margin:4rem 0}
