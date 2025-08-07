@@ -2,11 +2,9 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
+  <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>AI Resume Optimization for Tech Professionals | JobHackAI</title>
-  <meta name="description"
-        content="JobHackAI rewrites, scores, and optimizes your tech résumé with AI so it sails through ATS filters and lands on recruiters' desks." />
+  <title>JobHackAI - Land Your Dream Job</title>
   <link rel="icon" type="image/png" href="assets/JobHackAI_Logo_favicon-32x32.png">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/tokens.css" />
@@ -14,28 +12,38 @@
   <link rel="stylesheet" href="css/main.css" />
   <link rel="stylesheet" href="css/header.css" />
   <link rel="stylesheet" href="css/footer.css" />
-  <link rel="canonical" href="https://jobhackai.com/" />
-  <!-- Open Graph -->
-  <meta property="og:title" content="JobHackAI – ATS-Proof AI Resume Optimization" />
-  <meta property="og:description" content="Beat the bots. Get hired faster." />
-  <meta property="og:type" content="website" />
-  <meta property="og:url" content="https://jobhackai.com/" />
-  <meta property="og:image" content="assets/og-thumbnail.webp" />
-  <!-- Twitter -->
-  <meta name="twitter:card" content="summary_large_image" />
-  <!-- Font preload -->
-  <link rel="preload" as="font"
-        href="https://fonts.gstatic.com/s/inter/v12/Inter-VariableFont_slnt,wght.woff2"
-        type="font/woff2" crossorigin />
-  <!-- Org schema -->
   <script type="application/ld+json">
   {
     "@context": "https://schema.org",
-    "@type": "Organization",
-    "name": "JobHackAI",
-    "url": "https://jobhackai.com",
-    "logo": "https://jobhackai.com/assets/logo.svg",
-    "sameAs": ["https://www.linkedin.com/company/jobhackai"]
+    "@type": "Blog",
+    "name": "JobHackAI Blog",
+    "url": "https://yourdomain.com/#blog",
+    "blogPost": [
+      {
+        "@type": "BlogPosting",
+        "headline": "10 Common Interview Questions & Answers",
+        "datePublished": "2024-04-19",
+        "author": { "@type": "Organization", "name": "JobHackAI" },
+        "description": "Prepare for your next interview with these frequently asked questions and expert answers.",
+        "url": "https://yourdomain.com/blog/interview-questions-answers"
+      },
+      {
+        "@type": "BlogPosting",
+        "headline": "How to Optimize Your Resume for ATS",
+        "datePublished": "2024-04-10",
+        "author": { "@type": "Organization", "name": "JobHackAI" },
+        "description": "Learn the best-practices for creating resumes that pass automated screening systems.",
+        "url": "https://yourdomain.com/blog/optimize-resume-ats"
+      },
+      {
+        "@type": "BlogPosting",
+        "headline": "Networking Tips for Job Seekers",
+        "datePublished": "2024-03-23",
+        "author": { "@type": "Organization", "name": "JobHackAI" },
+        "description": "Discover strategies for expanding your professional network and landing more interviews.",
+        "url": "https://yourdomain.com/blog/networking-tips"
+      }
+    ]
   }
   </script>
 </head>
@@ -90,76 +98,108 @@
 
   <!-- Main Content -->
   <main>
-    <section class="hero container">
+    <section class="hero" id="what-you-get">
       <h1>AI-Powered Tech Résumé Optimization That Beats ATS Filters</h1>
-      <p class="hero-sub">Generate an ATS-compliant résumé in 60 seconds and increase recruiter visibility by 3×.</p>
-      <a href="signup.html" class="btn btn-primary">Try JobHackAI Free</a>
+      <p>Generate an ATS-compliant résumé in 60 seconds and increase recruiter visibility by 3×.</p>
+      <div class="buttons">
+        <a class="btn-primary" href="signup.html">Try JobHackAI Free</a>
+      </div>
     </section>
 
-    <!-- Quick Plan Switcher will be dynamically inserted here by navigation.js -->
-    <div id="quick-plan-switcher"></div>
-
-    <section class="trust container">
-      <ul class="trust-stats">
-        <li><strong>12,000+</strong><br>tech résumés optimized</li>
-        <li><strong>89%</strong><br>reach interview stage</li>
-        <li><strong>4.9&nbsp;/&nbsp;5</strong><br>average satisfaction</li>
-      </ul>
+    <!-- Testimonials -->
+    <section class="testimonials">
+      <h2>Trusted by Job Seekers Worldwide</h2>
+      <p style="max-width: 600px; margin: 0 auto; color: #4B5563;">
+        "JobHackAI helped me land interviews at Amazon and Salesforce within a week! The resume feedback was spot on."<br>
+        <strong>– Alex R., Data Analyst</strong>
+      </p>
     </section>
 
-    <section class="features container">
-      <h2>Why JobHackAI?</h2>
-      <div class="feature-grid">
-        <article>
-          <h3>Instant ATS Score</h3>
-          <p>Find and fix 30+ ATS red flags in a single click.</p>
+    <!-- Urgency Notice -->
+    <section class="urgency">
+      <p>
+        🚀 <strong>Only 250 free trials available per month – spots fill up fast.</strong><br>
+        We limit trial access to ensure platform quality and performance.
+      </p>
+    </section>
+
+    <!-- Features -->
+    <section id="features" class="features">
+      <div class="feature">
+        <svg class="feature-icon" viewBox="0 0 24 24" fill="none">
+          <rect x="3" y="4" width="18" height="16" rx="2" stroke="#007BFF" stroke-width="2"/>
+          <path d="M7 8h10M7 12h10M7 16h6" stroke="#007BFF" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+        <h3>AI-Powered Résumé Optimization</h3>
+        <p>Our advanced AI analyzes your résumé against ATS systems and provides instant optimization recommendations to increase your visibility by 3×.</p>
+      </div>
+      <div class="feature">
+        <svg class="feature-icon" viewBox="0 0 24 24" fill="none">
+          <circle cx="12" cy="12" r="10" stroke="#007BFF" stroke-width="2"/>
+          <path d="M8 10h8M8 14h4" stroke="#007BFF" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+        <h3>60-Second Résumé Generation</h3>
+        <p>Create a professional, ATS-compliant résumé in under a minute with our intelligent template system and industry-specific keyword optimization.</p>
+      </div>
+      <div class="feature">
+        <svg class="feature-icon" viewBox="0 0 24 24" fill="none">
+          <path d="M5 4h14a2 2 0 012 2v12a2 2 0 01-2 2H5a2 2 0 01-2-2V6a2 2 0 012-2z" stroke="#007BFF" stroke-width="2"/>
+          <path d="M8 10h8M8 14h6" stroke="#007BFF" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+        <h3>Real-Time ATS Scoring</h3>
+        <p>Get instant feedback on how well your résumé will perform in Applicant Tracking Systems with our proprietary scoring algorithm.</p>
+      </div>
+    </section>
+
+    <!-- Blog Section -->
+    <section class="blog-section" id="blog">
+      <h2>Blog</h2>
+      <div class="blog-cards">
+        <article class="blog-card">
+          <h3>10 Common Interview Questions & Answers</h3>
+          <p class="blog-date">April 19, 2024</p>
+          <p>Prepare for your next interview with these frequently asked questions and expert answers.</p>
         </article>
-        <article>
-          <h3>Keyword Intelligence</h3>
-          <p>Auto-inject role-specific keywords recruiters actually search.</p>
+        <article class="blog-card">
+          <h3>How to Optimize Your Resume for ATS</h3>
+          <p class="blog-date">April 10, 2024</p>
+          <p>Learn the best-practices for creating resumes that pass automated screening systems.</p>
         </article>
-        <article>
-          <h3>Proven Tech Résumé Format</h3>
-          <p>Built from recruiter eye-tracking data for maximum clarity.</p>
+        <article class="blog-card">
+          <h3>Networking Tips for Job Seekers</h3>
+          <p class="blog-date">March 23, 2024</p>
+          <p>Discover strategies for expanding your professional network and landing more interviews.</p>
         </article>
       </div>
     </section>
 
-    <section class="how-it-works container">
-      <h2>How It Works</h2>
-      <ol>
-        <li>Upload your current résumé (PDF or DOCX).</li>
-        <li>Select your target tech role.</li>
-        <li>JobHackAI rewrites &amp; scores it in 60 s.</li>
-        <li>Download and apply—no formatting headaches.</li>
-      </ol>
+    <!-- Callout -->
+    <section class="callout">
+      <h2>Get Results Fast – Risk-Free</h2>
+      <p>Join 5,000+ job seekers who landed interviews in 7 days or less.</p>
+      <a class="btn-primary" href="pricing-a.html">Start Free Trial Now</a>
     </section>
 
-    <section class="pricing-teaser container">
-      <h2>Plans That Scale With Your Job Search</h2>
-      <p>Unlimited scans start at <strong>$29/month</strong>. <a href="pricing.html">See all features →</a></p>
-    </section>
-
+    <!-- FAQ Section -->
     <section class="faq container">
-      <h2>FAQ</h2>
-      <details><summary>What is an ATS?</summary><p>An Applicant Tracking System screens résumés…</p></details>
-      <details><summary>How does JobHackAI improve my résumé?</summary><p>Our AI rewrites content…</p></details>
-      <details><summary>What file formats do you support?</summary><p>We accept PDF and DOCX files…</p></details>
-      <details><summary>How accurate is the ATS scoring?</summary><p>Our scoring algorithm is based on…</p></details>
-      <details><summary>Can I use JobHackAI for multiple job applications?</summary><p>Yes, you can optimize your résumé…</p></details>
-      <details><summary>What if I'm not satisfied with the results?</summary><p>We offer a 30-day money-back guarantee…</p></details>
+      <h2>Frequently Asked Questions</h2>
+      <div class="faq-item">
+        <h3>How does JobHackAI improve my résumé's ATS performance?</h3>
+        <p>JobHackAI uses advanced AI to analyze your résumé against industry-specific ATS systems, identifying missing keywords, formatting issues, and optimization opportunities. Our proprietary algorithm increases your visibility by 3× on average.</p>
+      </div>
+      <div class="faq-item">
+        <h3>Can I really create a professional résumé in 60 seconds?</h3>
+        <p>Yes! Our AI-powered system guides you through a simple process where you input your basic information, and our intelligent templates automatically generate an ATS-optimized résumé with proper formatting and industry-relevant keywords.</p>
+      </div>
+      <div class="faq-item">
+        <h3>What makes JobHackAI different from other résumé builders?</h3>
+        <p>Unlike generic résumé builders, JobHackAI specifically focuses on ATS optimization with real-time scoring, industry-specific keyword analysis, and proven results. We've helped 5,000+ job seekers land interviews within 7 days.</p>
+      </div>
+      <div class="faq-item">
+        <h3>Is there a free trial available?</h3>
+        <p>Yes! We offer a completely free trial that lets you create and optimize your first résumé with full access to our AI scoring system. No credit card required, and you can see results immediately.</p>
+      </div>
     </section>
-
-    <script type="application/ld+json">
-    { "@context":"https://schema.org", "@type":"FAQPage",
-      "mainEntity":[
-        { "@type":"Question","name":"What is an ATS?",
-          "acceptedAnswer":{"@type":"Answer","text":"An Applicant Tracking System (ATS) is software…"} },
-        { "@type":"Question","name":"How does JobHackAI improve my résumé?",
-          "acceptedAnswer":{"@type":"Answer","text":"JobHackAI analyzes…"} }
-      ]
-    }
-    </script>
   </main>
 
   <!-- Footer -->
@@ -182,6 +222,48 @@
       </div>
     </div>
   </footer>
+
+  <!-- FAQ Schema -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    "mainEntity": [
+      {
+        "@type": "Question",
+        "name": "How does JobHackAI improve my résumé's ATS performance?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "JobHackAI uses advanced AI to analyze your résumé against industry-specific ATS systems, identifying missing keywords, formatting issues, and optimization opportunities. Our proprietary algorithm increases your visibility by 3× on average."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Can I really create a professional résumé in 60 seconds?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Yes! Our AI-powered system guides you through a simple process where you input your basic information, and our intelligent templates automatically generate an ATS-optimized résumé with proper formatting and industry-relevant keywords."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "What makes JobHackAI different from other résumé builders?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Unlike generic résumé builders, JobHackAI specifically focuses on ATS optimization with real-time scoring, industry-specific keyword analysis, and proven results. We've helped 5,000+ job seekers land interviews within 7 days."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Is there a free trial available?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Yes! We offer a completely free trial that lets you create and optimize your first résumé with full access to our AI scoring system. No credit card required, and you can see results immediately."
+        }
+      }
+    ]
+  }
+  </script>
 
   <!-- Load navigation system -->
   <script src="js/navigation.js"></script>
