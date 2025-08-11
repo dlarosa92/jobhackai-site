@@ -520,6 +520,23 @@ textarea:focus {
   transition: var(--transition-normal);
 }
 
+/* Base .btn-primary definition to ensure consistent styling */
+.btn-primary {
+  background: #00E676;
+  color: #fff !important;
+  font-weight: 700;
+  border: none;
+  border-radius: 12px;
+  padding: 0.7rem 2rem;
+  font-size: 1rem;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+  transition: background 0.18s, box-shadow 0.18s;
+  display: inline-block;
+  text-align: center;
+  text-decoration: none;
+}
+
 .btn-primary:hover {
   background-color: #006335; /* Darker shade of cta-green */
   border-color: #006335;

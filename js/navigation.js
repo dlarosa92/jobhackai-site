@@ -289,8 +289,7 @@ const NAVIGATION_CONFIG = {
       { text: 'Blog', href: 'index.html#blog' },
       { text: 'Features', href: 'features.html' },
       { text: 'Pricing', href: 'pricing-a.html' },
-      { text: 'Login', href: 'login.html' },
-      { text: 'Start Free Trial', href: 'pricing-a.html', isCTA: true }
+      { text: 'Login', href: 'login.html' }
     ],
     cta: { text: 'Start Free Trial', href: 'pricing-a.html', isCTA: true }
   },
@@ -610,6 +609,18 @@ function updateNavigation() {
   const currentPlan = getEffectivePlan();
   const authState = getAuthState();
   
+  // Additional debugging for visitor state issues
+  if (currentPlan !== 'visitor' && !authState.isAuthenticated) {
+    navLog('warn', 'POTENTIAL ISSUE: User not authenticated but plan is not visitor', {
+      currentPlan,
+      authState,
+      devOverride,
+      'localStorage dev-plan': localStorage.getItem('dev-plan'),
+      'localStorage user-plan': localStorage.getItem('user-plan'),
+      'localStorage user-authenticated': localStorage.getItem('user-authenticated')
+    });
+  }
+  
   navLog('info', 'Navigation state detected', { 
     devOverride, 
     currentPlan, 
@@ -750,8 +761,9 @@ function updateNavigation() {
       updateLink(ctaLink, navConfig.cta.href);
       ctaLink.textContent = navConfig.cta.text;
       ctaLink.className = 'btn btn-primary';
+      ctaLink.style.cssText = 'background: #00E676; color: white !important; padding: 0.5rem 1rem; border-radius: 8px; text-decoration: none; font-weight: 600; display: inline-block;';
       navActions.appendChild(ctaLink);
-      navLog('info', 'Visitor CTA link created', { text: ctaLink.textContent, href: ctaLink.href });
+      navLog('info', 'Visitor CTA link created', { text: ctaLink.textContent, href: ctaLink.href, className: ctaLink.className });
     }
     // --- Always append CTA for authenticated plans (only once, after nav links) ---
     if (isAuthView && navConfig.userNav && navConfig.userNav.cta) {
@@ -832,8 +844,10 @@ function updateNavigation() {
       updateLink(cta, navConfig.cta.href);
       cta.textContent = navConfig.cta.text;
       cta.className = 'btn btn-primary';
+      cta.style.cssText = 'background: #00E676; color: white !important; padding: 0.75rem 0; border-radius: 8px; text-decoration: none; font-weight: 600; display: block; text-align: center; margin-top: 1.5rem;';
       cta.setAttribute('role', 'button');
       mobileNav.appendChild(cta);
+      navLog('info', 'Mobile visitor CTA created', { text: cta.textContent, href: cta.href });
     } else if (!mobileNav) {
       navLog('warn', 'mobileNav is null, cannot append CTA for visitors');
     }
@@ -1311,18 +1325,29 @@ function initializeNavigation() {
   // --- Plan persistence fix ---
   const authState = getAuthState();
   let devPlan = localStorage.getItem('dev-plan');
-  if (authState.isAuthenticated) {
+  
+  // Force clean visitor state for unauthenticated users
+  if (!authState.isAuthenticated) {
+    // Clear any residual plan data and force visitor state
+    localStorage.removeItem('user-plan');
+    localStorage.setItem('dev-plan', 'visitor');
+    devPlan = 'visitor';
+    
+    // Clear any URL parameters that might interfere with visitor state
+    if (window.location.search.includes('plan=')) {
+      const cleanUrl = window.location.pathname;
+      window.history.replaceState({}, '', cleanUrl);
+      navLog('info', 'Cleared URL plan parameter for visitor state');
+    }
+    
+    navLog('info', 'Force-cleared plan data and set dev-plan to visitor for unauthenticated user');
+  } else {
     // If dev-plan is not set or matches visitor, always set to user-plan
     if (!devPlan || devPlan === 'visitor') {
       localStorage.setItem('dev-plan', authState.userPlan || 'free');
       devPlan = authState.userPlan || 'free';
       navLog('info', 'Auto-set dev-plan to user plan for authenticated user', devPlan);
     }
-  } else {
-    // If not authenticated, always set dev-plan to visitor
-    localStorage.setItem('dev-plan', 'visitor');
-    devPlan = 'visitor';
-    navLog('info', 'Auto-set dev-plan to visitor for unauthenticated user');
   }
 
   // Create quick plan switcher and append to document
