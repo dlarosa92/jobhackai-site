@@ -88,6 +88,50 @@
   </div>
 </header>
 <nav class="mobile-nav" id="mobileNav"></nav>
+<script>
+  // Hamburger menu toggle (match index.html behavior)
+  const mobileToggle = document.querySelector('.mobile-toggle');
+  const mobileNav = document.getElementById('mobileNav');
+  if (mobileToggle && mobileNav) {
+    mobileToggle.addEventListener('click', () => {
+      const isOpen = mobileNav.classList.toggle('open');
+      mobileToggle.setAttribute('aria-expanded', isOpen);
+    });
+    // Close mobile nav on link click
+    document.querySelectorAll('.mobile-nav a').forEach(link => {
+      link.addEventListener('click', () => {
+        mobileNav.classList.remove('open');
+        mobileToggle.setAttribute('aria-expanded', 'false');
+      });
+    });
+  }
+  // Close dropdowns when clicking outside
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('.nav-dropdown')) {
+      document.querySelectorAll('.nav-dropdown.open').forEach(d => d.classList.remove('open'));
+      document.querySelectorAll('.nav-user-menu.open').forEach(d => d.classList.remove('open'));
+    }
+  });
+  // Prevent nav dropdown toggles default link behavior
+  document.addEventListener('click', (e) => {
+    const toggle = e.target.closest('.nav-dropdown-toggle');
+    if (toggle) {
+      e.preventDefault();
+    }
+  });
+  // Initialize navigation when available
+  (function initNavWhenReady() {
+    if (window.JobHackAINavigation && typeof window.JobHackAINavigation.initializeNavigation === 'function') {
+      window.JobHackAINavigation.initializeNavigation();
+    } else {
+      window.addEventListener('DOMContentLoaded', function() {
+        if (window.JobHackAINavigation && typeof window.JobHackAINavigation.initializeNavigation === 'function') {
+          window.JobHackAINavigation.initializeNavigation();
+        }
+      });
+    }
+  })();
+  </script>
 
 <main>
   <section class="features-hero">
@@ -141,7 +185,7 @@
     </div>
 </footer>
 
-<script src="js/navigation.js" type="module"></script>
+<script src="js/navigation.js"></script>
 <script src="js/main.js" type="module"></script>
 <script src="js/analytics.js" type="module"></script>
 </body>
