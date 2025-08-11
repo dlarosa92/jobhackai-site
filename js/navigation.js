@@ -651,13 +651,22 @@ function updateNavigation() {
 
   // --- Link helper: always use relative paths for internal links ---
   const updateLink = (linkElement, href) => {
-    // Removed verbose logging to prevent console spam
-    if (href.startsWith('#') || href.startsWith('mailto:') || href.startsWith('http')) {
-      linkElement.href = href;
-    } else {
-      // Always use relative path for internal navigation
-      linkElement.href = href;
+    const onHome = location.pathname.endsWith('index.html') || location.pathname === '/' || location.pathname === '';
+    let finalHref = href;
+
+    // Normalize Blog link to use same-page hash on home, and absolute file path off home
+    if (onHome && href === 'index.html#blog') {
+      finalHref = '#blog';
+    } else if (!onHome && href === '#blog') {
+      finalHref = 'index.html#blog';
     }
+
+    // Also normalize any explicit index.html hash when on home
+    if (onHome && href.startsWith('index.html#')) {
+      finalHref = '#' + href.split('#')[1];
+    }
+
+    linkElement.href = finalHref;
   };
 
   // --- Clear old elements ---

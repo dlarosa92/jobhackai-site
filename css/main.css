@@ -11,6 +11,17 @@ html, body {
   min-height: 100%;
 }
 
+/* Smooth scrolling for in-page anchors */
+html { scroll-behavior: smooth; }
+
+/* Respect users who prefer reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+}
+
+/* Prevent anchors from hiding under fixed header */
+[id] { scroll-margin-top: var(--header-height); }
+
 body {
   display: flex;
   flex-direction: column;
