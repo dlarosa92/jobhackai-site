@@ -361,6 +361,14 @@ section {
   font-size: 1.25rem;
 }
 
+/* Shared icon styling for pricing table inline SVGs */
+.pricing-table .pricing-icon {
+  width: 20px;
+  height: 20px;
+  vertical-align: middle;
+  display: inline-block;
+}
+
 .pricing-table .plan-price {
   display: block;
   font-size: 1rem;
