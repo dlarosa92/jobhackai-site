@@ -433,6 +433,13 @@ function getCurrentPlan() {
 
 // Dev toggle override (for development/testing only)
 function getDevPlanOverride() {
+  // Never allow plan overrides for logged-out users
+  const authState = getAuthState();
+  if (!authState.isAuthenticated) {
+    navLog('debug', 'getDevPlanOverride: Ignoring overrides while logged out');
+    return null;
+  }
+
   const urlParams = new URLSearchParams(window.location.search);
   const planParam = urlParams.get('plan');
   if (planParam && PLANS[planParam]) {
@@ -455,7 +462,8 @@ function getEffectivePlan() {
   const devOverride = getDevPlanOverride();
   navLog('debug', 'getEffectivePlan: Starting plan detection', { authState, devOverride });
   if (!authState.isAuthenticated) {
-    const effectivePlan = devOverride || 'visitor';
+    // Force true visitor when logged out; ignore any overrides
+    const effectivePlan = 'visitor';
     navLog('info', 'getEffectivePlan: User not authenticated, effective plan', effectivePlan);
     return effectivePlan;
   }
@@ -1339,8 +1347,8 @@ function initializeNavigation() {
   if (!authState.isAuthenticated) {
     // Clear any residual plan data and force visitor state
     localStorage.removeItem('user-plan');
-    localStorage.setItem('dev-plan', 'visitor');
-    devPlan = 'visitor';
+    localStorage.removeItem('dev-plan');
+    devPlan = null;
     
     // Clear any URL parameters that might interfere with visitor state
     if (window.location.search.includes('plan=')) {
@@ -1349,7 +1357,7 @@ function initializeNavigation() {
       navLog('info', 'Cleared URL plan parameter for visitor state');
     }
     
-    navLog('info', 'Force-cleared plan data and set dev-plan to visitor for unauthenticated user');
+    navLog('info', 'Force-cleared plan data for unauthenticated user');
   } else {
     // If dev-plan is not set or matches visitor, always set to user-plan
     if (!devPlan || devPlan === 'visitor') {
