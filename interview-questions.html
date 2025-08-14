@@ -12,9 +12,10 @@
   <link rel="stylesheet" href="css/footer.css">
   <style>
     .iq-main {
-      max-width: 600px;
+      max-width: 1100px;
       margin: 2.5rem auto 4rem auto;
       padding: 0 1rem;
+      width: 100%;
     }
     .iq-title {
       font-size: 2.3rem;
@@ -117,6 +118,64 @@
       .iq-question-card { font-size: 1rem; padding: 1rem 0.7rem; }
       .iq-upgrade-btn { font-size: 1.01rem; padding: 0.8rem 0; }
     }
+    /* ---- IQ MVP+ additions (append only) ---- */
+    .card { background:#fff; border-radius:16px; box-shadow:0 2px 6px rgba(31,41,55,.07); padding:1rem; margin-bottom:1rem; }
+    .iq-toolbar .iq-row { display:flex; gap:.75rem; flex-wrap:wrap; align-items:center; }
+    .iq-select, .chip, textarea#iq-jd { border:1.5px solid #E5E7EB; border-radius:10px; padding:.6rem .8rem; background:#fff; }
+    .chip { cursor:pointer; user-select:none; }
+    .chip.is-on { box-shadow:0 0 0 3px rgba(0,123,255,.15); }
+    .iq-actions { display:flex; gap:.5rem; flex-wrap:wrap; align-items:center; margin-top:.75rem; }
+    .cooldown-badge { padding:.3rem .5rem; border-radius:8px; border:1px solid #E5E7EB; font-size:.9rem; color:#4B5563; }
+    .skeleton { height:56px; border-radius:16px; background:linear-gradient(90deg,#f3f4f6 25%,#eceff3 37%,#f3f4f6 63%); background-size:400% 100%; animation:sheen 1.2s ease-in-out infinite; }
+    @keyframes sheen { 0%{background-position:100% 0} 100%{background-position:0 0} }
+    .iq-qactions { display:flex; gap:.4rem; visibility:hidden; }
+    .iq-question-card:hover .iq-qactions,
+    .iq-question-card:focus-within .iq-qactions { visibility:visible; }
+    .icon-btn { border:1px solid #E5E7EB; background:#fff; border-radius:8px; padding:.3rem .45rem; cursor:pointer; }
+    .link-btn { background:none; border:none; color:#007BFF; cursor:pointer; text-decoration:underline; padding:0 .25rem; }
+    .iq-example { margin:.5rem 0 0 0; color:#4B5563; }
+    .iq-types { display:flex; gap:.4rem; flex-wrap:wrap; }
+    .recent-item { width:100%; text-align:left; padding:.6rem .7rem; border:1.5px solid #E5E7EB; border-radius:10px; background:#fff; }
+    .ri-role { font-weight:600; }
+    .ri-meta { color:#6B7280; font-size:.9rem; }
+
+    /* Fixed question count display (hardcoded 10) */
+    .iq-count-display { padding:.6rem .8rem; color:#4B5563; font-size:.9rem; background:#F9FAFB; border:1px solid #E5E7EB; border-radius:10px; }
+
+    /* --- Visual polish & overrides --- */
+    .iq-main { padding-bottom: 220px; }
+    .site-footer { position: static; }
+    .card { border-radius:16px; padding:1.25rem; }
+    .iq-select, .chip, textarea#iq-jd { border-radius:12px; }
+    .chip { border:1px solid #E5E7EB; padding:.5rem .75rem; line-height:1; background:#fff; min-height:36px; }
+    .chip:hover { box-shadow:0 0 0 2px rgba(25,118,210,.10); }
+    .chip:focus-visible { outline:none; box-shadow:0 0 0 2px rgba(25,118,210,.12); }
+    .chip.is-on { border-color:#E5E7EB; box-shadow:0 0 0 2px rgba(25,118,210,.12); background:#fff; }
+    .iq-toolbar .iq-row { gap:.75rem; }
+    .iq-advanced { margin:.75rem 0 1rem 0; }
+    .iq-advanced summary { cursor:pointer; padding:.25rem 0; }
+    .iq-advanced[open] #iq-jd { margin-top:.5rem; }
+    #iq-jd { width:100%; border:1.5px solid #E5E7EB; border-radius:12px; padding:.75rem .9rem; }
+    .iq-toolbar .iq-field .iq-role-input { margin-bottom:0; }
+    .btn-outline { border:1px solid #E5E7EB; background:#fff; box-shadow:none; }
+    .btn-outline:hover, .btn-outline:focus-visible { box-shadow:0 0 0 2px rgba(25,118,210,.22); }
+    .btn-outline.is-pressed { background:#F3F4F6; }
+    .btn-primary[disabled], .btn-outline[disabled] { opacity:.5; cursor:not-allowed; pointer-events:none; }
+    .iq-question-card { border:1px solid #E5E7EB; box-shadow:0 1px 4px rgba(31,41,55,.05); border-radius:16px; padding:1.1rem 1.2rem; }
+    .lock { vertical-align:baseline; position:relative; top:.02em; }
+
+    /* Two-column responsive layout */
+    .iq-two-col { display:grid; grid-template-columns: minmax(0,1fr) minmax(260px,320px); gap:1.25rem; align-items:start; margin-bottom:160px; }
+    .iq-two-col aside.card { position:sticky; top:8px; max-height:70vh; overflow:auto; }
+    @media (max-width: 900px) { .iq-two-col { grid-template-columns: 1fr; } .iq-two-col aside.card { position:static; max-height:70vh; } }
+    @media (max-width: 600px) { .iq-main { padding: 0 .75rem 120px .75rem; } .iq-types { gap:.6rem .6rem; } .iq-qactions { visibility:visible; } .iq-actions .btn-primary, .iq-actions .btn-outline { min-height:44px; width:auto; } }
+
+    /* Combobox active item */
+    .iq-role-item.active { background:#EEF2FF; }
+    /* Ensure last card clears footer */
+    #iq-questions { padding-bottom: 240px; }
+    /* Extra spacer to ensure nothing hides under footer */
+    .iq-main::after { content:""; display:block; height:64px; }
   </style>
 </head>
 <body>
@@ -151,11 +210,61 @@
   <main class="iq-main">
     <h1 class="iq-title">Interview Questions</h1>
     <p class="iq-sub">Practice your answers with AI-generated questions tailored to your job title.</p>
-    <div style="position:relative; margin-bottom:1.5rem;">
-      <input id="iq-role" class="iq-role-input" type="text" placeholder="e.g. Software Engineer" autocomplete="off" aria-autocomplete="list" aria-haspopup="listbox" aria-expanded="false">
-      <div id="iq-role-dropdown" class="iq-role-dropdown" style="display:none;"></div>
+
+    <div class="iq-toolbar card">
+      <div class="iq-row">
+        <div class="iq-field" style="flex:1; min-width:220px; position:relative;">
+          <label for="iq-role" class="sr-only">Role</label>
+          <input id="iq-role" class="iq-role-input" type="text" placeholder="e.g. Software Engineer"
+            role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="iq-role-list" autocomplete="off">
+          <div id="iq-role-list" class="iq-role-dropdown" role="listbox" style="display:none;"></div>
+        </div>
+
+        <select id="iq-seniority" class="iq-select" aria-label="Seniority">
+          <option value="">Seniority</option>
+          <option>Intern</option><option>Junior</option><option>Mid</option>
+          <option>Senior</option><option>Lead</option><option>Director</option>
+        </select>
+
+        <div class="iq-types" aria-label="Question Types">
+          <button type="button" class="chip is-on" data-type="behavioral">Behavioral</button>
+          <button type="button" class="chip is-on" data-type="technical">Technical</button>
+          <button type="button" class="chip" data-type="system">System Design</button>
+          <button type="button" class="chip" data-type="leadership">Leadership</button>
+          <button type="button" class="chip" data-type="culture">Culture</button>
+        </div>
+
+        <!-- Fixed count indicator → hardcoded to 10 -->
+        <span class="iq-count-display" aria-label="Question count">10 Q</span>
+      </div>
+
+      <details class="iq-advanced" style="margin-top:.5rem;">
+        <summary>Advanced: Paste Job Description (optional)</summary>
+        <textarea id="iq-jd" rows="4" placeholder="Paste the job description to tailor your questions..."></textarea>
+      </details>
+
+      <div class="iq-actions">
+        <button id="btn-generate" class="btn-primary">Generate Questions</button>
+        <button id="btn-regenerate" class="btn-outline">Regenerate</button>
+        <button id="btn-copy" class="btn-outline">Copy All</button>
+        <button id="btn-download" class="btn-outline">Download PDF</button>
+        <button id="btn-save" class="btn-outline">Save Set</button>
+        <button id="btn-mock" class="btn-outline">Start Mock Interview <span class="lock" aria-hidden="true" style="margin-left:.4rem;">🔒</span></button>
+        <button id="toggle-guidance" class="btn-outline" aria-pressed="false">Show Answer Guidance</button>
+        <span id="cooldown" class="cooldown-badge" hidden>0:59</span>
+      </div>
     </div>
+
+<div class="iq-two-col">
+      <div>
     <div id="iq-questions" class="iq-questions"></div>
+      </div>
+      <aside class="card" style="align-self:start;">
+        <h3 style="margin:0 0 .5rem 0;">Recent Sets</h3>
+        <div id="iq-recents"></div>
+      </aside>
+    </div>
+
     <div id="iq-lock" class="iq-lock" style="display:none;">
       <svg width="20" height="20" fill="none" stroke="#1F2937" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><path d="M4 9V7a6 6 0 1112 0v2"/><rect x="4" y="9" width="12" height="9" rx="2"/></svg>
       <span>Mock Interviews are only available on the <strong>Pro</strong> plan and above</span>
@@ -274,112 +383,140 @@
     const user = {
       plan: getUserPlan()
     };
-    // --- ROLES DATA ---
-    const roles = [
-      'Software Engineer', 'Data Analyst', 'Product Manager', 'Marketing Specialist',
-      'Sales Representative', 'Customer Success Manager', 'UX Designer', 'DevOps Engineer',
-      'Data Scientist', 'Business Analyst', 'Project Manager', 'Content Writer',
-      'Graphic Designer', 'HR Specialist', 'Financial Analyst', 'Operations Manager'
+    /* ==== Interview Questions MVP+ module (in-file) ==== */
+    /* OpenAI usage:
+       - apiGenerate: batched questions + hint + example per question
+       - apiReplace: single question swap + hint + example
+       All calls go through a server proxy or Zapier hook. Falls back to stub data. */
+
+    // ---------- CONFIG (fill these later) ----------
+    const IQ_API = { PROXY_BASE: '', ZAPIER_GENERATE_HOOK: '' };
+    const IQ_ANALYTICS_HOOK = '';
+
+    // Limits
+    const IQ_GLOBAL_COOLDOWN = 60;          // seconds
+    const IQ_MAX_REPLACES = 3;              // hard cap per set
+    const IQ_PER_Q_REPLACE_COOLDOWN = 5;    // seconds
+    const IQ_RECENT_LIMIT = 5;
+
+    // Roles for ARIA combobox
+    const IQ_ROLES = [
+      'Software Engineer','Data Analyst','Product Manager','Marketing Specialist',
+      'Sales Representative','Customer Success Manager','UX Designer','DevOps Engineer',
+      'Data Scientist','Business Analyst','Project Manager','Content Writer',
+      'Graphic Designer','HR Specialist','Financial Analyst','Operations Manager'
     ];
-    // --- QUESTIONS DATA ---
-    const questionsByRole = {
-      'Software Engineer': [
-        'Tell me about a challenging technical problem you solved recently.',
-        'How do you handle code reviews and feedback from peers?',
-        'Describe your experience with testing and quality assurance.',
-        'How do you stay updated with the latest technologies and best practices?',
-        'Tell me about a time when you had to refactor legacy code.'
-      ],
-      'Data Analyst': [
-        'Walk me through your data analysis process from start to finish.',
-        'How do you ensure data quality and accuracy in your analyses?',
-        'Tell me about a time when you discovered an unexpected insight in the data.',
-        'How do you communicate complex findings to non-technical stakeholders?',
-        'What tools and technologies are you most comfortable with for data analysis?'
-      ],
-      'Product Manager': [
-        'How do you prioritize features in a product roadmap?',
-        'Tell me about a product you launched and the impact it had.',
-        'How do you gather and incorporate user feedback into product decisions?',
-        'Describe a time when you had to make a difficult trade-off decision.',
-        'How do you measure the success of a product feature?'
-      ],
-      'Marketing Specialist': [
-        'Tell me about a successful marketing campaign you ran.',
-        'How do you measure the ROI of marketing activities?',
-        'Describe your experience with different marketing channels.',
-        'How do you stay updated with marketing trends and best practices?',
-        'Tell me about a time when you had to pivot a marketing strategy.'
-      ]
+
+    const $IQ = (s, r=document)=>r.querySelector(s);
+    const $$IQ = (s, r=document)=>[...r.querySelectorAll(s)];
+
+    // State
+    const iqState = {
+      prefs: { seniority:'', count:10, types:new Set(['behavioral','technical']), showGuidance:false },
+      set: null,
+      cooldown: 0,
+      timers: { global:null, perQ:{} },
+      notes: {},
+      recents: []
     };
-    // --- DOM ELEMENTS ---
+
+    // Utils & persistence
+    const iqNow = ()=> new Date().toISOString();
+    const iqSetId = (role, seed)=> `${role}:${seed}`;
+    function iqToast(msg){ console.log('[iq-toast]', msg); }
+    function iqEsc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
+    function iqTrack(event, data={}){
+      const payload = { event, ts: iqNow(), role: iqState?.set?.role || $IQ('#iq-role')?.value || '', seniority: iqState.prefs.seniority, types: [...iqState.prefs.types], count: iqState.prefs.count, used_jd: !!$IQ('#iq-jd')?.value?.trim(), ...data };
+      console.log('[iq-analytics]', payload);
+      if (!IQ_ANALYTICS_HOOK) return;
+      fetch(IQ_ANALYTICS_HOOK, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) }).catch(()=>{});
+    }
+    function iqSavePrefs(){ localStorage.setItem('iq_prefs', JSON.stringify({ seniority: iqState.prefs.seniority, count: iqState.prefs.count, types: [...iqState.prefs.types], showGuidance: iqState.prefs.showGuidance })); }
+    function iqLoadPrefs(){ try{ const p=JSON.parse(localStorage.getItem('iq_prefs')||'{}'); if(p.seniority) iqState.prefs.seniority=p.seniority; if(p.count) iqState.prefs.count=p.count; if(Array.isArray(p.types)) iqState.prefs.types=new Set(p.types); if(typeof p.showGuidance==='boolean') iqState.prefs.showGuidance=p.showGuidance; }catch{} }
+    function iqSaveNotes(){ if (!iqState.set) return; localStorage.setItem(`iq_notes_${iqSetId(iqState.set.role, iqState.set.seed)}`, JSON.stringify(iqState.notes)); }
+    function iqLoadNotes(){ if (!iqState.set) return; try{ iqState.notes=JSON.parse(localStorage.getItem(`iq_notes_${iqSetId(iqState.set.role, iqState.set.seed)}`)||'{}'); }catch{ iqState.notes={}; } }
+    function iqAddRecent(meta){ iqState.recents = JSON.parse(localStorage.getItem('iq_recent_sets')||'[]'); iqState.recents.unshift(meta); iqState.recents = iqState.recents.slice(0, IQ_RECENT_LIMIT); localStorage.setItem('iq_recent_sets', JSON.stringify(iqState.recents)); }
+
+    // Cooldowns
+    function iqStartGlobalCooldown(sec=IQ_GLOBAL_COOLDOWN){
+      iqState.cooldown = sec;
+      const badge = $IQ('#cooldown'); const g = $IQ('#btn-generate'); const r = $IQ('#btn-regenerate');
+      if (badge) { badge.hidden = false; }
+      if (g) { g.disabled = true; g.setAttribute('aria-disabled','true'); g.classList.add('is-disabled'); }
+      if (r) { r.disabled = true; r.setAttribute('aria-disabled','true'); r.classList.add('is-disabled'); }
+      clearInterval(iqState.timers.global);
+      iqState.timers.global = setInterval(()=>{
+        iqState.cooldown--;
+        const mm = Math.floor(iqState.cooldown/60);
+        const ss = String(iqState.cooldown%60).padStart(2,'0');
+        if (badge) badge.textContent = `${mm}:${ss}`;
+        if (iqState.cooldown<=0) { clearInterval(iqState.timers.global); if (badge) badge.hidden=true; if (g) { g.disabled=false; g.removeAttribute('aria-disabled'); g.classList.remove('is-disabled'); } if (r) { r.disabled=false; r.removeAttribute('aria-disabled'); r.classList.remove('is-disabled'); } }
+      }, 1000);
+    }
+    function iqStartPerQCooldown(i){
+      const k = `q${i}`, btn = $IQ(`.btn-replace[data-idx="${i}"]`);
+      if (!btn) return; btn.disabled = true;
+      clearTimeout(iqState.timers.perQ[k]);
+      iqState.timers.perQ[k] = setTimeout(()=>{ btn.disabled=false; }, IQ_PER_Q_REPLACE_COOLDOWN*1000);
+    }
+
+    // Rendering
+    function iqRenderQuestions(){
+      const list=$IQ('#iq-questions'); const show=iqState.prefs.showGuidance; if(!iqState.set){ if(list) list.innerHTML=''; return; }
+      if (!list) return;
+      list.innerHTML=iqState.set.questions.map((q,i)=>{
+        const qText = iqEsc(q.q);
+        const qHint = q.hint ? `Hint: ${iqEsc(q.hint)}` : '';
+        const qExample = q.example ? iqEsc(q.example) : '';
+        return `<div class="iq-question-card" data-idx="${i}">
+  <div class="iq-qtext">${i+1}. ${qText}</div>
+  <div class="iq-qactions" aria-label="Question actions">
+    <button class=\"icon-btn btn-copy\" data-idx=\"${i}\" title=\"Copy\" aria-label=\"Copy question\">📋</button>
+    <button class=\"icon-btn btn-replace\" data-idx=\"${i}\" title=\"Replace\" aria-label=\"Replace question\">↻</button>
+    <button class=\"icon-btn btn-save\" data-idx=\"${i}\" title=\"Save\" aria-label=\"Save question\">⭐</button>
+    <button class=\"icon-btn btn-notes\" data-idx=\"${i}\" aria-expanded=\"false\" aria-controls=\"iq-notes-${i}\" title=\"Notes\">📝</button>
+  </div>
+  <div class=\"iq-hint\" ${show?'':'hidden'}>${qHint} ${q.example?`<button class=\\"link-btn btn-example\\" data-idx=\\"${i}\\">Example</button>`:''}</div>
+  <div id=\"iq-example-${i}\" class=\"iq-example\" hidden>${qExample}</div>
+  <div id=\"iq-notes-${i}\" class=\"iq-notes\" hidden>
+    <label class=\"sr-only\" for=\"iq-notes-ta-${i}\">Notes for question ${i+1}</label>
+    <textarea id=\"iq-notes-ta-${i}\" rows=\"3\" placeholder=\"S: …&#10;T: …&#10;A: …&#10;R: …\">${iqState.notes[i]||''}</textarea>
+  </div>
+</div>`;
+      }).join('');
+    }
+    function iqRenderRecents(){ const box=$IQ('#iq-recents'); if(!box) return; const recents=JSON.parse(localStorage.getItem('iq_recent_sets')||'[]'); if(recents.length===0){ box.innerHTML='<div class="empty">No recent sets yet.</div>'; return; } box.innerHTML=recents.map(r=>`<button class=\"recent-item\" data-id=\"${r.id}\"><div class=\"ri-role\">${r.role}</div><div class=\"ri-meta\">${r.count} Q • ${new Date(r.time).toLocaleString()}</div></button>`).join(''); }
+    function iqUpdateGuidanceUI(){ const t=$IQ('#toggle-guidance'); if(t){ t.setAttribute('aria-pressed', String(iqState.prefs.showGuidance)); t.textContent = iqState.prefs.showGuidance ? 'Hide Answer Guidance' : 'Show Answer Guidance'; if(iqState.prefs.showGuidance){ t.classList.add('is-pressed'); } else { t.classList.remove('is-pressed'); } } iqRenderQuestions(); }
+
+    // ARIA combobox
+    function iqInitRoleCombobox(){ const input=$IQ('#iq-role'); const list=$IQ('#iq-role-list'); if(!input||!list) return; let active=-1; function close(){ list.style.display='none'; input.setAttribute('aria-expanded','false'); active=-1;} function open(){ list.style.display='block'; input.setAttribute('aria-expanded','true'); } function render(items){ list.innerHTML=items.map((r,i)=>`<div role=\"option\" id=\"iq-opt-${i}\" class=\"iq-role-item\" data-role=\"${r}\">${r}</div>`).join(''); list.setAttribute('role','listbox'); input.setAttribute('aria-controls','iq-role-list'); } input.addEventListener('input',()=>{ const v=input.value.toLowerCase(); if(v.length<2){ close(); return; } const items=IQ_ROLES.filter(r=>r.toLowerCase().includes(v)); if(items.length===0){ close(); return; } render(items); open(); }); input.addEventListener('keydown',(e)=>{ const opts=$$IQ('.iq-role-item',list); if(list.style.display!=='block'||opts.length===0) return; if(e.key==='ArrowDown'){ e.preventDefault(); active=Math.min(active+1,opts.length-1); opts.forEach(o=>o.classList.remove('active')); opts[active].classList.add('active'); input.setAttribute('aria-activedescendant',opts[active].id);} if(e.key==='ArrowUp'){ e.preventDefault(); active=Math.max(active-1,0); opts.forEach(o=>o.classList.remove('active')); opts[active].classList.add('active'); input.setAttribute('aria-activedescendant',opts[active].id);} if(e.key==='Enter'){ e.preventDefault(); opts[active]?.click(); } if(e.key==='Escape'){ close(); } }); list.addEventListener('click',(e)=>{ const it=e.target.closest('.iq-role-item'); if(!it) return; input.value=it.dataset.role; close(); }); document.addEventListener('click',(e)=>{ if(!input.contains(e.target)&&!list.contains(e.target)) close(); }); }
+
+    // API
+    const IQ_FIXED_COUNT = 10;
+    async function iqApiGenerate({ role, seniority, types, count, jd }){ iqTrack('iq_generate_clicked',{count: IQ_FIXED_COUNT,types}); try{ if(IQ_API.PROXY_BASE){ const r=await fetch(`${IQ_API.PROXY_BASE}/interview/generate`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({role,seniority,types,count: IQ_FIXED_COUNT,jd})}); if(!r.ok) throw new Error('proxy'); return await r.json(); } if(IQ_API.ZAPIER_GENERATE_HOOK){ const r=await fetch(IQ_API.ZAPIER_GENERATE_HOOK,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({role,seniority,types,count: IQ_FIXED_COUNT,jd})}); if(!r.ok) throw new Error('zap'); return await r.json(); } }catch(e){ console.warn('iqApiGenerate failed, using stub',e);} const mk=q=>({q, hint:'Use STAR; quantify; <90s.', example:'S: context… T: goal… A: actions… R: impact…'}); const bank=[mk('Tell me about a challenging problem you solved recently.'),mk('How do you ensure code quality on fast-moving teams?'),mk('Describe a time you improved a process.'),mk('How do you prioritize tasks under pressure?'),mk('Explain a decision you made with incomplete data.')]; const arr=Array.from({length: IQ_FIXED_COUNT},(_,i)=>bank[i%bank.length]); return { role, seniority, types, count: IQ_FIXED_COUNT, jd, seed: Math.floor(Math.random()*1e6), questions: arr }; }
+    async function iqApiReplace({ role, seniority, types, jd, avoid, index }){ iqTrack('iq_replace_clicked',{index}); try{ if(IQ_API.PROXY_BASE){ const r=await fetch(`${IQ_API.PROXY_BASE}/interview/replace`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({role,seniority,types,jd,avoid,index})}); if(!r.ok) throw new Error('proxy'); return await r.json(); } if(IQ_API.ZAPIER_GENERATE_HOOK){ const r=await fetch(IQ_API.ZAPIER_GENERATE_HOOK,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({intent:'replace_one',role,seniority,types,jd,avoid,index})}); if(!r.ok) throw new Error('zap'); return await r.json(); } }catch(e){ console.warn('iqApiReplace failed, using stub',e);} return { q:'Describe a time you simplified a complex system.', hint:'Focus on trade-offs and impact.', example:'S: legacy… T: simplify… A: removed X, added Y… R: fewer incidents, faster dev.' } }
+
+    // Actions
+    async function iqGenerate(){ if(iqState.cooldown>0){ iqToast('Please wait for cooldown'); return; } const role=$IQ('#iq-role')?.value?.trim()||''; if(!role){ iqToast('Select a role first'); return; } const seniority=$IQ('#iq-seniority')?.value||''; const count=IQ_FIXED_COUNT; const types=[...$$IQ('.iq-types .chip.is-on')].map(b=>b.dataset.type); const jd=$IQ('#iq-jd')?.value?.trim()||''; const holder=$IQ('#iq-questions'); if(holder) holder.innerHTML=Array.from({length:5}).map(()=>'<div class="iq-question-card skeleton"></div>').join(''); const res=await iqApiGenerate({role,seniority,types,count,jd}); iqState.set={...res,replacesUsed:0}; iqState.prefs={...iqState.prefs,seniority,count: IQ_FIXED_COUNT,types:new Set(types)}; iqSavePrefs(); iqLoadNotes(); iqRenderQuestions(); iqAddRecent({ id: iqSetId(res.role,res.seed), role: res.role, count: res.count, time: iqNow() }); iqRenderRecents(); iqStartGlobalCooldown(IQ_GLOBAL_COOLDOWN); }
+    async function iqRegenerate(){ if(iqState.cooldown>0){ iqToast('Please wait for cooldown'); return; } await iqGenerate(); iqTrack('iq_regenerate_clicked'); }
+    async function iqReplaceOne(i){ if(!iqState.set) return; const cap=IQ_MAX_REPLACES; if((iqState.set.replacesUsed||0)>=cap){ iqToast('Replace limit reached. Please regenerate the set.'); return; } iqStartPerQCooldown(i); const avoid=iqState.set.questions.map(x=>x.q); const r=await iqApiReplace({ role:iqState.set.role, seniority:iqState.set.seniority, types:iqState.set.types, jd:iqState.set.jd, avoid, index:i }); iqState.set.questions[i]={ q:r.q, hint:r.hint, example:r.example }; iqState.set.replacesUsed=(iqState.set.replacesUsed||0)+1; iqRenderQuestions(); }
+
+    // Wire up toolbar and list
+    function iqWireToolbar(){ $IQ('#btn-generate')?.addEventListener('click', iqGenerate); $IQ('#btn-regenerate')?.addEventListener('click', iqRegenerate); $IQ('#btn-copy')?.addEventListener('click', async ()=>{ await navigator.clipboard.writeText((iqState.set?.questions||[]).map(x=>x.q).join('\n')); iqToast('Copied all questions'); iqTrack('iq_copy_all'); }); $IQ('#btn-download')?.addEventListener('click', ()=>{ window.print(); iqTrack('iq_download'); }); $IQ('#btn-save')?.addEventListener('click', ()=>{ iqToast('Saved set (local)'); iqTrack('iq_saved_set'); }); $IQ('#btn-mock')?.addEventListener('click', ()=>{ const plan=(window.JobHackAINavigation?.getEffectivePlan?.()||localStorage.getItem('user-plan')||'free'); if(!['pro','premium'].includes(plan)) window.location.href='pricing-a.html'; else window.location.href='mock-interview.html?role='+encodeURIComponent($IQ('#iq-role')?.value?.trim()||''); }); $IQ('#toggle-guidance')?.addEventListener('click', (e)=>{ iqState.prefs.showGuidance=!iqState.prefs.showGuidance; iqSavePrefs(); iqUpdateGuidanceUI(); }); $IQ('#iq-seniority')?.addEventListener('change', ()=>{ iqState.prefs.seniority=$IQ('#iq-seniority').value; iqSavePrefs(); }); $$IQ('.iq-types .chip').forEach(b=> b.addEventListener('click', (ev)=>{ b.classList.toggle('is-on'); b.setAttribute('aria-pressed', b.classList.contains('is-on') ? 'true' : 'false'); iqSavePrefs(); })); $$IQ('.iq-types .chip').forEach(b=>{ b.setAttribute('role','button'); b.setAttribute('aria-pressed', b.classList.contains('is-on') ? 'true' : 'false'); b.addEventListener('keydown', (ke)=>{ if(ke.key==='Enter'||ke.key===' '){ ke.preventDefault(); b.click(); } }); }); }
+    function iqWireQuestionList(){ const box=$IQ('#iq-questions'); if(!box) return; box.addEventListener('click',(e)=>{ const i=parseInt(e.target?.dataset?.idx||e.target?.closest('[data-idx]')?.dataset?.idx||-1,10); if(i<0) return; if(e.target.classList.contains('btn-copy')){ navigator.clipboard.writeText(iqState.set.questions[i].q); iqToast('Copied'); return; } if(e.target.classList.contains('btn-replace')){ iqReplaceOne(i); return; } if(e.target.classList.contains('btn-save')){ iqTrack('iq_saved_question',{i}); iqToast('Saved'); return; } if(e.target.classList.contains('btn-example')){ const ex=$IQ(`#iq-example-${i}`); if(ex) ex.hidden=!ex.hidden; return; } if(e.target.classList.contains('btn-notes')){ const panel=$IQ(`#iq-notes-${i}`); const ta=$IQ(`#iq-notes-ta-${i}`); const exp=panel.hidden; panel.hidden=!panel.hidden; e.target.setAttribute('aria-expanded', String(exp)); ta?.focus(); return; } }); box.addEventListener('input',(e)=>{ const m=e.target.id?.match(/^iq-notes-ta-(\d+)$/); if(!m) return; const idx=parseInt(m[1],10); iqState.notes[idx]=e.target.value; iqSaveNotes(); }); }
+
+    function initIQPage(){ iqLoadPrefs(); iqState.prefs.count = IQ_FIXED_COUNT; iqRenderRecents(); iqInitRoleCombobox(); iqWireToolbar(); iqWireQuestionList(); iqUpdateGuidanceUI(); if($IQ('#iq-seniority')) $IQ('#iq-seniority').value=iqState.prefs.seniority||''; }
+    window.__IQ__ = { iqState, iqGenerate, iqRegenerate, iqReplaceOne };
+
+    // Expose DOM handles for plan UI
     const roleInput = document.getElementById('iq-role');
-    const roleDropdown = document.getElementById('iq-role-dropdown');
-    const questionsContainer = document.getElementById('iq-questions');
     const lockDiv = document.getElementById('iq-lock');
     const upgradeBtn = document.getElementById('iq-upgrade');
-    // --- EVENT LISTENERS ---
-    roleInput.addEventListener('input', function() {
-      const value = this.value.toLowerCase();
-      if (value.length < 2) {
-        roleDropdown.style.display = 'none';
-        return;
-      }
-      const filteredRoles = roles.filter(role => 
-        role.toLowerCase().includes(value)
-      );
-      if (filteredRoles.length > 0) {
-        roleDropdown.innerHTML = filteredRoles.map(role => 
-          `<div class="iq-role-item" data-role="${role}">${role}</div>`
-        ).join('');
-        roleDropdown.style.display = 'block';
-      } else {
-        roleDropdown.style.display = 'none';
-      }
-    });
-    roleDropdown.addEventListener('click', function(e) {
-      if (e.target.classList.contains('iq-role-item')) {
-        const role = e.target.dataset.role;
-        roleInput.value = role;
-        roleDropdown.style.display = 'none';
-        generateQuestions(role);
-      }
-    });
-    document.addEventListener('click', function(e) {
-      if (!roleInput.contains(e.target) && !roleDropdown.contains(e.target)) {
-        roleDropdown.style.display = 'none';
-      }
-    });
-    upgradeBtn.addEventListener('click', function() {
-      window.location.href = 'pricing-a.html';
-    });
-    // --- FUNCTIONS ---
-    function generateQuestions(role) {
-      const questions = questionsByRole[role] || [
-        'Tell me about your experience in this role.',
-        'What are your biggest strengths and weaknesses?',
-        'Where do you see yourself in 5 years?',
-        'Why are you interested in this position?',
-        'Tell me about a challenging situation you faced at work.'
-      ];
-      questionsContainer.innerHTML = questions.map((q, i) => 
-        `<div class="iq-question-card">${i + 1}. ${q}</div>`
-      ).join('');
-      
-      // Update user plan and show/hide upgrade elements
-      user.plan = getUserPlan();
-      if (user.plan === 'free') {
-        lockDiv.style.display = 'flex';
-        upgradeBtn.style.display = 'block';
-      } else {
-        lockDiv.style.display = 'none';
-        upgradeBtn.style.display = 'none';
-      }
-    }
-    // Initialize with default role if needed
-    if (roleInput.value) {
-      generateQuestions(roleInput.value);
-    }
+
+    // Self-tests
+    async function runIQSelfTests(){ const res=[]; const ok=(n,c)=>res.push({n,pass:!!c}); ok('Role input exists', !!document.getElementById('iq-role')); ok('Generate button exists', !!document.getElementById('btn-generate')); iqStartGlobalCooldown(1); ok('Cooldown badge shows', !$IQ('#cooldown').hidden); const gen=await iqApiGenerate({ role:'Tester', seniority:'', types:['behavioral'], count:3, jd:'' }); ok('apiGenerate returns questions', Array.isArray(gen.questions)&&gen.questions.length>0); console.log('%cInterview Questions Self-Tests','font-weight:700'); res.forEach(r=>console.log(`${r.pass?'✅':'❌'} ${r.n}`)); }
+    document.addEventListener('DOMContentLoaded', ()=>{ initIQPage(); setTimeout(runIQSelfTests,200); });
+    /* ==== End MVP+ module ==== */
 
     // --- PLAN LOGIC ---
     function updateInterviewUIForPlan() {
@@ -436,9 +573,9 @@
       // Listen for plan changes from navigation system
       window.addEventListener('planChanged', function(event) {
         updateInterviewUIForPlan();
-        // Regenerate questions if there's a current role to update the lock state
-        if (roleInput.value) {
-          generateQuestions(roleInput.value);
+        // Regenerate if a role is present using new IQ module
+        if (roleInput.value && window.__IQ__ && typeof window.__IQ__.iqGenerate === 'function') {
+          window.__IQ__.iqGenerate();
         }
       });
     });

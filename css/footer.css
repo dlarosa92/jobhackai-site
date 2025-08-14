@@ -6,6 +6,8 @@
   color: var(--color-text-muted);
   margin-top: var(--space-md);
   font-family: 'Inter', sans-serif;
+  position: relative; /* ensure stacking context above main content */
+  z-index: 1;
 }
 
 .footer-container {
