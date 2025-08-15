@@ -212,15 +212,19 @@
     .iq-question-card { border:1px solid #E5E7EB; box-shadow:0 1px 4px rgba(31,41,55,.05); border-radius:16px; padding:1.1rem 1.2rem; }
     .lock { vertical-align:baseline; position:relative; top:.02em; }
 
-    /* Position cooldown badge at the far right of the actions toolbar */
-    .iq-actions { display:flex; }
-    .iq-actions #cooldown { margin-left: auto; }
+    /* Actions layout and cooldown badge text */
+    .iq-actions { display:flex; align-items:center; gap:.5rem; flex-wrap:wrap; }
+    .iq-actions-sec { display:flex; align-items:center; gap:.5rem; flex-wrap:wrap; margin-top:.5rem; }
     /* Add explanatory text before the countdown when visible */
     #cooldown:not([hidden])::before {
       content: 'Next set in ';
       color: #4B5563;
       margin-right: .35rem;
     }
+
+    /* Consistent icon styling for per-question actions */
+    .icon-btn svg { width:20px; height:20px; stroke:#374151; stroke-width:1.75; stroke-linecap:round; stroke-linejoin:round; }
+    .icon-btn { display:inline-flex; align-items:center; justify-content:center; }
 
     /* Two-column responsive layout */
     .iq-two-col { display:grid; grid-template-columns: minmax(0,1fr) minmax(260px,320px); gap:1.25rem; align-items:start; margin-bottom:160px; }
@@ -235,6 +239,8 @@
       .iq-qactions { visibility:visible; } 
       .iq-actions .btn-primary, .iq-actions .btn-outline { min-height:44px; width:auto; } 
     }
+
+    /* (Reverted) No overflow menu styles */
 
     /* Combobox active item */
     .iq-role-item.active { background:#EEF2FF; }
@@ -284,6 +290,7 @@
           <input id="iq-role" class="iq-role-input" type="text" placeholder="e.g. Software Engineer"
             role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="iq-role-list" autocomplete="off">
           <div id="iq-role-list" class="iq-role-dropdown" role="listbox" style="display:none;"></div>
+          <div id="iq-live" class="sr-only" aria-live="polite"></div>
         </div>
 
         <div style="display:flex; flex-direction:column; min-width:140px;">
@@ -295,13 +302,16 @@
           </select>
         </div>
 
-        <div class="iq-types" aria-label="Question Types" style="min-width:400px;">
-          <div style="margin-bottom:0.5rem; font-weight:600; color:#374151; font-size:0.9rem;">Question Types</div>
+        <div class="iq-types" aria-label="Question Types" style="min-width:400px;" aria-labelledby="iq-types-label">
+          <div id="iq-types-label" style="margin-bottom:0.5rem; font-weight:600; color:#374151; font-size:0.9rem;">Question Types</div>
           <button type="button" class="chip is-on" data-type="behavioral">Behavioral</button>
           <button type="button" class="chip is-on" data-type="technical">Technical</button>
-          <button type="button" class="chip" data-type="system">System Design</button>
-          <button type="button" class="chip" data-type="leadership">Leadership</button>
-          <button type="button" class="chip" data-type="culture">Culture</button>
+          <button type="button" id="types-more" class="link-btn" aria-expanded="false" aria-controls="types-advanced" style="margin-left:.25rem;">More types</button>
+          <span id="types-advanced" hidden>
+            <button type="button" class="chip" data-type="system" data-adv="1">System Design</button>
+            <button type="button" class="chip" data-type="leadership" data-adv="1">Leadership</button>
+            <button type="button" class="chip" data-type="culture" data-adv="1">Culture</button>
+          </span>
         </div>
 
         
@@ -313,14 +323,16 @@
       </details>
 
       <div class="iq-actions">
-        <button id="btn-generate" class="btn-primary">Generate Questions</button>
-        <button id="btn-regenerate" class="btn-outline">Regenerate</button>
+        <button id="btn-generate" class="btn-primary" aria-label="Generate Questions">Generate Questions</button>
+        <button id="btn-regenerate" class="btn-outline" aria-label="New Set" hidden style="display:none;">New Set</button>
+        <span id="cooldown" class="cooldown-badge" aria-live="polite" hidden>0:59</span>
+      </div>
+      <div class="iq-actions-sec" id="iq-actions-sec" hidden style="display:none;">
         <button id="btn-copy" class="btn-outline">Copy All</button>
         <button id="btn-download" class="btn-outline">Download PDF</button>
         <button id="btn-save" class="btn-outline">Save Set</button>
-        <button id="btn-mock" class="btn-outline">Start Mock Interview <span class="lock" aria-hidden="true" style="margin-left:.4rem;">🔒</span></button>
+        <button id="btn-mock" class="btn-outline">Start Mock Interview <span class="lock" aria-hidden="true" style="margin-left:.4rem; display:inline-flex; vertical-align:baseline; position:relative; top:.02em;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M4 9V7a6 6 0 1 1 12 0v2" stroke="#374151" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/><rect x="4" y="9" width="12" height="9" rx="2" stroke="#374151" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/></svg></span></button>
         <button id="toggle-guidance" class="btn-outline" aria-pressed="false">Show Answer Guidance</button>
-        <span id="cooldown" class="cooldown-badge" aria-live="polite" hidden>0:59</span>
       </div>
     </div>
 
@@ -509,17 +521,18 @@
     // Cooldowns
     function iqStartGlobalCooldown(sec=IQ_GLOBAL_COOLDOWN){
       iqState.cooldown = sec;
-      const badge = $IQ('#cooldown'); const g = $IQ('#btn-generate'); const r = $IQ('#btn-regenerate');
+      const badge = $IQ('#cooldown'); const g = $IQ('#btn-generate'); const r = $IQ('#btn-regenerate'); const mi=$IQ('#mi-new-set');
       if (badge) { badge.hidden = false; }
       if (g) { g.disabled = true; g.setAttribute('aria-disabled','true'); g.classList.add('is-disabled'); }
       if (r) { r.disabled = true; r.setAttribute('aria-disabled','true'); r.classList.add('is-disabled'); }
+      if (mi) { mi.disabled = true; mi.setAttribute('aria-disabled','true'); }
       clearInterval(iqState.timers.global);
       iqState.timers.global = setInterval(()=>{
         iqState.cooldown--;
         const mm = Math.floor(iqState.cooldown/60);
         const ss = String(iqState.cooldown%60).padStart(2,'0');
         if (badge) badge.textContent = `${mm}:${ss}`;
-        if (iqState.cooldown<=0) { clearInterval(iqState.timers.global); if (badge) badge.hidden=true; if (g) { g.disabled=false; g.removeAttribute('aria-disabled'); g.classList.remove('is-disabled'); } if (r) { r.disabled=false; r.removeAttribute('aria-disabled'); r.classList.remove('is-disabled'); } }
+        if (iqState.cooldown<=0) { clearInterval(iqState.timers.global); if (badge) badge.hidden=true; if (g) { g.disabled=false; g.removeAttribute('aria-disabled'); g.classList.remove('is-disabled'); } if (r) { r.disabled=false; r.removeAttribute('aria-disabled'); r.classList.remove('is-disabled'); } if(mi){ mi.disabled=false; mi.removeAttribute('aria-disabled'); } }
       }, 1000);
     }
     function iqStartPerQCooldown(i){
@@ -540,10 +553,18 @@
         return `<div class="iq-question-card" data-idx="${i}">
   <div class="iq-qtext">${i+1}. ${qText}</div>
   <div class="iq-qactions" aria-label="Question actions">
-    <button class=\"icon-btn btn-copy\" data-idx=\"${i}\" title=\"Copy\" aria-label=\"Copy question\">📋</button>
-    <button class=\"icon-btn btn-replace\" data-idx=\"${i}\" title=\"Replace\" aria-label=\"Replace question\">↻</button>
-    <button class=\"icon-btn btn-save\" data-idx=\"${i}\" title=\"Save\" aria-label=\"Save question\">⭐</button>
-    <button class=\"icon-btn btn-notes\" data-idx=\"${i}\" aria-expanded=\"false\" aria-controls=\"iq-notes-${i}\" title=\"Notes\">📝</button>
+    <button class=\"icon-btn btn-copy\" data-idx=\"${i}\" title=\"Copy\" aria-label=\"Copy question\">
+      <svg viewBox=\"0 0 24 24\" fill=\"none\" xmlns=\"http://www.w3.org/2000/svg\"><rect x=\"9\" y=\"9\" width=\"13\" height=\"13\" rx=\"2\"/><rect x=\"3\" y=\"3\" width=\"13\" height=\"13\" rx=\"2\"/></svg>
+    </button>
+    <button class=\"icon-btn btn-replace\" data-idx=\"${i}\" title=\"Replace\" aria-label=\"Replace question\">
+      <svg viewBox=\"0 0 24 24\" fill=\"none\" xmlns=\"http://www.w3.org/2000/svg\"><path d=\"M21 12a9 9 0 1 1-9-9\"/><path d=\"M21 3v9h-9\"/></svg>
+    </button>
+    <button class=\"icon-btn btn-save\" data-idx=\"${i}\" title=\"Save\" aria-label=\"Save question\">
+      <svg viewBox=\"0 0 24 24\" fill=\"none\" xmlns=\"http://www.w3.org/2000/svg\"><path d=\"M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 0 0 .95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 0 0-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 0 0-1.176 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 0 0-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 0 0 .951-.69l1.07-3.292Z\"/></svg>
+    </button>
+    <button class=\"icon-btn btn-notes\" data-idx=\"${i}\" aria-expanded=\"false\" aria-controls=\"iq-notes-${i}\" title=\"Notes\" aria-label=\"Add notes\">
+      <svg viewBox=\"0 0 24 24\" fill=\"none\" xmlns=\"http://www.w3.org/2000/svg\"><path d=\"M8 4h8a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Z\"/><path d=\"M8 8h8\"/><path d=\"M8 12h8\"/></svg>
+    </button>
   </div>
   <div class=\"iq-hint\" ${show?'':'hidden'}>${qHint} ${q.example?`<button class=\\"link-btn btn-example\\" data-idx=\\"${i}\\">Example</button>`:''}</div>
   <div id=\"iq-example-${i}\" class=\"iq-example\" hidden>${qExample}</div>
@@ -558,7 +579,7 @@
     function iqUpdateGuidanceUI(){ const t=$IQ('#toggle-guidance'); if(t){ t.setAttribute('aria-pressed', String(iqState.prefs.showGuidance)); t.textContent = iqState.prefs.showGuidance ? 'Hide Answer Guidance' : 'Show Answer Guidance'; if(iqState.prefs.showGuidance){ t.classList.add('is-pressed'); } else { t.classList.remove('is-pressed'); } } iqRenderQuestions(); }
 
     // ARIA combobox
-    function iqInitRoleCombobox(){ const input=$IQ('#iq-role'); const list=$IQ('#iq-role-list'); if(!input||!list) return; let active=-1; function close(){ list.style.display='none'; input.setAttribute('aria-expanded','false'); active=-1;} function open(){ list.style.display='block'; input.setAttribute('aria-expanded','true'); } function render(items){ list.innerHTML=items.map((r,i)=>`<div role=\"option\" id=\"iq-opt-${i}\" class=\"iq-role-item\" data-role=\"${r}\">${r}</div>`).join(''); list.setAttribute('role','listbox'); input.setAttribute('aria-controls','iq-role-list'); } input.addEventListener('input',()=>{ const v=input.value.toLowerCase(); if(v.length<2){ close(); return; } const items=IQ_ROLES.filter(r=>r.toLowerCase().includes(v)); if(items.length===0){ close(); return; } render(items); open(); }); input.addEventListener('keydown',(e)=>{ const opts=$$IQ('.iq-role-item',list); if(list.style.display!=='block'||opts.length===0) return; if(e.key==='ArrowDown'){ e.preventDefault(); active=Math.min(active+1,opts.length-1); opts.forEach(o=>o.classList.remove('active')); opts[active].classList.add('active'); input.setAttribute('aria-activedescendant',opts[active].id);} if(e.key==='ArrowUp'){ e.preventDefault(); active=Math.max(active-1,0); opts.forEach(o=>o.classList.remove('active')); opts[active].classList.add('active'); input.setAttribute('aria-activedescendant',opts[active].id);} if(e.key==='Enter'){ e.preventDefault(); opts[active]?.click(); } if(e.key==='Escape'){ close(); } }); list.addEventListener('click',(e)=>{ const it=e.target.closest('.iq-role-item'); if(!it) return; input.value=it.dataset.role; close(); }); document.addEventListener('click',(e)=>{ if(!input.contains(e.target)&&!list.contains(e.target)) close(); }); }
+    function iqInitRoleCombobox(){ const input=$IQ('#iq-role'); const list=$IQ('#iq-role-list'); const live=$IQ('#iq-live'); if(!input||!list) return; let active=-1; function announce(msg){ if(live){ live.textContent=msg; } } function close(){ list.style.display='none'; input.setAttribute('aria-expanded','false'); active=-1;} function open(){ list.style.display='block'; input.setAttribute('aria-expanded','true'); } function render(items){ list.innerHTML=items.map((r,i)=>`<div role=\"option\" id=\"iq-opt-${i}\" class=\"iq-role-item\" data-role=\"${r}\">${r}</div>`).join(''); list.setAttribute('role','listbox'); input.setAttribute('aria-controls','iq-role-list'); } input.addEventListener('input',()=>{ const v=input.value.toLowerCase(); if(v.length<2){ close(); return; } const items=IQ_ROLES.filter(r=>r.toLowerCase().includes(v)); if(items.length===0){ announce('No results'); close(); return; } render(items); open(); announce(items.length+ ' results'); }); input.addEventListener('keydown',(e)=>{ const opts=$$IQ('.iq-role-item',list); if(list.style.display!=='block'||opts.length===0) return; if(e.key==='ArrowDown'){ e.preventDefault(); active=Math.min(active+1,opts.length-1); opts.forEach(o=>o.classList.remove('active')); opts[active].classList.add('active'); input.setAttribute('aria-activedescendant',opts[active].id);} if(e.key==='ArrowUp'){ e.preventDefault(); active=Math.max(active-1,0); opts.forEach(o=>o.classList.remove('active')); opts[active].classList.add('active'); input.setAttribute('aria-activedescendant',opts[active].id);} if(e.key==='Enter'){ e.preventDefault(); opts[active]?.click(); } if(e.key==='Escape'){ close(); } }); list.addEventListener('click',(e)=>{ const it=e.target.closest('.iq-role-item'); if(!it) return; input.value=it.dataset.role; close(); }); document.addEventListener('click',(e)=>{ if(!input.contains(e.target)&&!list.contains(e.target)) close(); }); }
 
     // API
     const IQ_FIXED_COUNT = 10;
@@ -566,15 +587,55 @@
     async function iqApiReplace({ role, seniority, types, jd, avoid, index }){ iqTrack('iq_replace_clicked',{index}); try{ if(IQ_API.PROXY_BASE){ const r=await fetch(`${IQ_API.PROXY_BASE}/interview/replace`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({role,seniority,types,jd,avoid,index})}); if(!r.ok) throw new Error('proxy'); return await r.json(); } if(IQ_API.ZAPIER_GENERATE_HOOK){ const r=await fetch(IQ_API.ZAPIER_GENERATE_HOOK,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({intent:'replace_one',role,seniority,types,jd,avoid,index})}); if(!r.ok) throw new Error('zap'); return await r.json(); } }catch(e){ console.warn('iqApiReplace failed, using stub',e);} return { q:'Describe a time you simplified a complex system.', hint:'Focus on trade-offs and impact.', example:'S: legacy… T: simplify… A: removed X, added Y… R: fewer incidents, faster dev.' } }
 
     // Actions
-    async function iqGenerate(){ if(iqState.cooldown>0){ iqToast('Please wait for cooldown'); return; } const role=$IQ('#iq-role')?.value?.trim()||''; if(!role){ iqToast('Select a role first'); return; } const seniority=$IQ('#iq-seniority')?.value||''; const count=IQ_FIXED_COUNT; const types=[...$$IQ('.iq-types .chip.is-on')].map(b=>b.dataset.type); const jd=$IQ('#iq-jd')?.value?.trim()||''; const holder=$IQ('#iq-questions'); if(holder) holder.innerHTML=Array.from({length:5}).map(()=>'<div class="iq-question-card skeleton"></div>').join(''); const res=await iqApiGenerate({role,seniority,types,count,jd}); iqState.set={...res,replacesUsed:0}; iqState.prefs={...iqState.prefs,seniority,count: IQ_FIXED_COUNT,types:new Set(types)}; iqSavePrefs(); iqLoadNotes(); iqRenderQuestions(); iqAddRecent({ id: iqSetId(res.role,res.seed), role: res.role, count: res.count, time: iqNow() }); iqRenderRecents(); iqStartGlobalCooldown(IQ_GLOBAL_COOLDOWN); }
-    async function iqRegenerate(){ if(iqState.cooldown>0){ iqToast('Please wait for cooldown'); return; } await iqGenerate(); iqTrack('iq_regenerate_clicked'); }
+    async function iqGenerate(){ if(iqState.cooldown>0){ iqToast('Please wait for cooldown'); return; } const role=$IQ('#iq-role')?.value?.trim()||''; if(!role){ iqToast('Select a role first'); return; } const seniority=$IQ('#iq-seniority')?.value||''; const count=IQ_FIXED_COUNT; const types=[...$$IQ('.iq-types .chip.is-on')].map(b=>b.dataset.type); const jd=$IQ('#iq-jd')?.value?.trim()||''; const holder=$IQ('#iq-questions'); if(holder) holder.innerHTML=Array.from({length:5}).map(()=>'<div class="iq-question-card skeleton"></div>').join(''); const res=await iqApiGenerate({role,seniority,types,count,jd}); iqState.set={...res,replacesUsed:0}; iqState.prefs={...iqState.prefs,seniority,count: IQ_FIXED_COUNT,types:new Set(types)}; iqSavePrefs(); iqLoadNotes(); iqRenderQuestions(); iqAddRecent({ id: iqSetId(res.role,res.seed), role: res.role, count: res.count, time: iqNow() }); iqRenderRecents();
+      // Reveal secondary "New Set" after first set exists
+      const r=$IQ('#btn-regenerate'); if(r){ r.hidden=false; r.style.display=''; r.textContent='New Set'; r.setAttribute('aria-label','New Set'); }
+      const sec=$IQ('#iq-actions-sec'); if(sec){ sec.hidden=false; sec.style.display=''; }
+      iqUpdateActionsLayout();
+      iqStartGlobalCooldown(IQ_GLOBAL_COOLDOWN);
+    }
+    async function iqRegenerate(){ if(iqState.cooldown>0){ iqToast('Please wait for cooldown'); return; } await iqGenerate(); iqTrack('iq_new_set_clicked'); }
     async function iqReplaceOne(i){ if(!iqState.set) return; const cap=IQ_MAX_REPLACES; if((iqState.set.replacesUsed||0)>=cap){ iqToast('Replace limit reached. Please regenerate the set.'); return; } iqStartPerQCooldown(i); const avoid=iqState.set.questions.map(x=>x.q); const r=await iqApiReplace({ role:iqState.set.role, seniority:iqState.set.seniority, types:iqState.set.types, jd:iqState.set.jd, avoid, index:i }); iqState.set.questions[i]={ q:r.q, hint:r.hint, example:r.example }; iqState.set.replacesUsed=(iqState.set.replacesUsed||0)+1; iqRenderQuestions(); }
 
     // Wire up toolbar and list
-    function iqWireToolbar(){ $IQ('#btn-generate')?.addEventListener('click', iqGenerate); $IQ('#btn-regenerate')?.addEventListener('click', iqRegenerate); $IQ('#btn-copy')?.addEventListener('click', async ()=>{ await navigator.clipboard.writeText((iqState.set?.questions||[]).map(x=>x.q).join('\n')); iqToast('Copied all questions'); iqTrack('iq_copy_all'); }); $IQ('#btn-download')?.addEventListener('click', ()=>{ window.print(); iqTrack('iq_download'); }); $IQ('#btn-save')?.addEventListener('click', ()=>{ iqToast('Saved set (local)'); iqTrack('iq_saved_set'); }); $IQ('#btn-mock')?.addEventListener('click', ()=>{ const plan=(window.JobHackAINavigation?.getEffectivePlan?.()||localStorage.getItem('user-plan')||'free'); if(!['pro','premium'].includes(plan)) window.location.href='pricing-a.html'; else window.location.href='mock-interview.html?role='+encodeURIComponent($IQ('#iq-role')?.value?.trim()||''); }); $IQ('#toggle-guidance')?.addEventListener('click', (e)=>{ iqState.prefs.showGuidance=!iqState.prefs.showGuidance; iqSavePrefs(); iqUpdateGuidanceUI(); }); $IQ('#iq-seniority')?.addEventListener('change', ()=>{ iqState.prefs.seniority=$IQ('#iq-seniority').value; iqSavePrefs(); }); $$IQ('.iq-types .chip').forEach(b=> b.addEventListener('click', (ev)=>{ b.classList.toggle('is-on'); b.setAttribute('aria-pressed', b.classList.contains('is-on') ? 'true' : 'false'); iqSavePrefs(); })); $$IQ('.iq-types .chip').forEach(b=>{ b.setAttribute('role','button'); b.setAttribute('aria-pressed', b.classList.contains('is-on') ? 'true' : 'false'); b.addEventListener('keydown', (ke)=>{ if(ke.key==='Enter'||ke.key===' '){ ke.preventDefault(); b.click(); } }); }); }
+    function iqWireToolbar(){ $IQ('#btn-generate')?.addEventListener('click', iqGenerate); $IQ('#btn-regenerate')?.addEventListener('click', iqRegenerate); $IQ('#btn-copy')?.addEventListener('click', async ()=>{ await navigator.clipboard.writeText((iqState.set?.questions||[]).map(x=>x.q).join('\n')); iqToast('Copied all questions'); iqTrack('iq_copy_all'); }); $IQ('#btn-download')?.addEventListener('click', ()=>{ window.print(); iqTrack('iq_download'); }); $IQ('#btn-save')?.addEventListener('click', ()=>{ iqToast('Saved set (local)'); iqTrack('iq_saved_set'); }); $IQ('#btn-mock')?.addEventListener('click', ()=>{ const plan=(window.JobHackAINavigation?.getEffectivePlan?.()||localStorage.getItem('user-plan')||'free'); if(!['pro','premium'].includes(plan)) window.location.href='pricing-a.html'; else window.location.href='mock-interview.html?role='+encodeURIComponent($IQ('#iq-role')?.value?.trim()||''); }); $IQ('#toggle-guidance')?.addEventListener('click', (e)=>{ iqState.prefs.showGuidance=!iqState.prefs.showGuidance; iqSavePrefs(); iqUpdateGuidanceUI(); }); $IQ('#iq-seniority')?.addEventListener('change', ()=>{ iqState.prefs.seniority=$IQ('#iq-seniority').value; iqSavePrefs(); }); const more=$IQ('#types-more'); if(more){ const adv=$IQ('#types-advanced'); more.addEventListener('click', ()=>{ const expanded=more.getAttribute('aria-expanded')==='true'; more.setAttribute('aria-expanded', String(!expanded)); if(adv) adv.hidden=expanded; }); }
+      // Overflow menu wiring (mobile)
+      $IQ('#btn-more')?.addEventListener('click', ()=>{ const menu=$IQ('#more-menu'); const btn=$IQ('#btn-more'); if(!menu) return; const expanded=btn.getAttribute('aria-expanded')==='true'; btn.setAttribute('aria-expanded', String(!expanded)); menu.hidden=expanded; });
+      $IQ('#mi-new-set')?.addEventListener('click', ()=>{ if(iqState.cooldown>0) return; iqRegenerate(); const btn=$IQ('#btn-more'); const menu=$IQ('#more-menu'); if(btn&&menu){ btn.setAttribute('aria-expanded','false'); menu.hidden=true; } });
+      $IQ('#mi-guidance')?.addEventListener('click', ()=>{ $IQ('#toggle-guidance')?.click(); });
+      $IQ('#mi-save')?.addEventListener('click', ()=>{ $IQ('#btn-save')?.click(); });
+      $IQ('#mi-copy')?.addEventListener('click', ()=>{ $IQ('#btn-copy')?.click(); });
+      $IQ('#mi-download')?.addEventListener('click', ()=>{ $IQ('#btn-download')?.click(); });
+      $IQ('#mi-mock')?.addEventListener('click', ()=>{ $IQ('#btn-mock')?.click(); });
+      // Chips a11y
+      $$IQ('.iq-types .chip').forEach(b=> b.addEventListener('click', (ev)=>{ b.classList.toggle('is-on'); b.setAttribute('aria-pressed', b.classList.contains('is-on') ? 'true' : 'false'); iqSavePrefs(); })); $$IQ('.iq-types .chip').forEach(b=>{ b.setAttribute('role','button'); b.setAttribute('aria-pressed', b.classList.contains('is-on') ? 'true' : 'false'); b.addEventListener('keydown', (ke)=>{ if(ke.key==='Enter'||ke.key===' '){ ke.preventDefault(); b.click(); } }); }); }
+
+    function iqRevealSecondaryActions(){
+      $$IQ('[data-sec]').forEach(el=>{ el.hidden=false; el.setAttribute('aria-hidden','false'); el.removeAttribute('tabindex'); });
+    }
+
+    function iqUpdateActionsLayout(){
+      const r=$IQ('#btn-regenerate');
+      const sec=$IQ('#iq-actions-sec');
+      const hasSet = !!iqState.set;
+      const mw=$IQ('#more-wrap');
+      const isNarrow = window.matchMedia('(max-width: 600px)').matches;
+      if(!hasSet){ if(r) r.hidden=true; if(sec){ sec.hidden=true; sec.style.display='none'; } return; }
+      if(r){ r.hidden=false; }
+      if(sec){ sec.hidden=false; sec.style.display=''; }
+      if(isNarrow){
+        // Hide inline secondaries, show More
+        $$IQ('[data-sec]').forEach(el=>{ el.hidden=true; el.setAttribute('aria-hidden','true'); el.setAttribute('tabindex','-1'); });
+        if(mw) mw.hidden=false;
+      } else {
+        // Show inline secondaries, hide More
+        $$IQ('[data-sec]').forEach(el=>{ el.hidden=false; el.setAttribute('aria-hidden','false'); el.removeAttribute('tabindex'); });
+        if(mw) mw.hidden=true; const menu=$IQ('#more-menu'); const btn=$IQ('#btn-more'); if(menu&&btn){ menu.hidden=true; btn.setAttribute('aria-expanded','false'); }
+      }
+    }
     function iqWireQuestionList(){ const box=$IQ('#iq-questions'); if(!box) return; box.addEventListener('click',(e)=>{ const i=parseInt(e.target?.dataset?.idx||e.target?.closest('[data-idx]')?.dataset?.idx||-1,10); if(i<0) return; if(e.target.classList.contains('btn-copy')){ navigator.clipboard.writeText(iqState.set.questions[i].q); iqToast('Copied'); return; } if(e.target.classList.contains('btn-replace')){ iqReplaceOne(i); return; } if(e.target.classList.contains('btn-save')){ iqTrack('iq_saved_question',{i}); iqToast('Saved'); return; } if(e.target.classList.contains('btn-example')){ const ex=$IQ(`#iq-example-${i}`); if(ex) ex.hidden=!ex.hidden; return; } if(e.target.classList.contains('btn-notes')){ const panel=$IQ(`#iq-notes-${i}`); const ta=$IQ(`#iq-notes-ta-${i}`); const exp=panel.hidden; panel.hidden=!panel.hidden; e.target.setAttribute('aria-expanded', String(exp)); ta?.focus(); return; } }); box.addEventListener('input',(e)=>{ const m=e.target.id?.match(/^iq-notes-ta-(\d+)$/); if(!m) return; const idx=parseInt(m[1],10); iqState.notes[idx]=e.target.value; iqSaveNotes(); }); }
 
-    function initIQPage(){ iqLoadPrefs(); iqState.prefs.count = IQ_FIXED_COUNT; iqRenderRecents(); iqInitRoleCombobox(); iqWireToolbar(); iqWireQuestionList(); iqUpdateGuidanceUI(); if($IQ('#iq-seniority')) $IQ('#iq-seniority').value=iqState.prefs.seniority||''; }
+    function initIQPage(){ iqLoadPrefs(); iqState.prefs.count = IQ_FIXED_COUNT; iqRenderRecents(); iqInitRoleCombobox(); iqWireToolbar(); iqWireQuestionList(); iqUpdateGuidanceUI(); if($IQ('#iq-seniority')) $IQ('#iq-seniority').value=iqState.prefs.seniority||''; const r=$IQ('#btn-regenerate'); if(r){ r.hidden = !iqState.set; } iqUpdateActionsLayout(); window.addEventListener('resize', iqUpdateActionsLayout); }
     window.__IQ__ = { iqState, iqGenerate, iqRegenerate, iqReplaceOne };
 
     // Expose DOM handles for plan UI
