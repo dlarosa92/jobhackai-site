@@ -455,7 +455,7 @@
           </div>
           <textarea class="mi-answer-input" id="mi-answer" placeholder="Type your response..."></textarea>
           <div style="display:flex;align-items:center;justify-content:space-between;margin-top:0.5rem;">
-            <div id="mi-role-qcount" style="color:var(--color-text-secondary);font-size:1.01rem;font-weight:500;">Role: <span id="mi-role-label">Software Engineer</span> | Question <span id="mi-qnum">1</span> of 10</div>
+            <div id="mi-role-qcount" style="color:var(--color-text-secondary);font-size:1.01rem;font-weight:500;">Role: <span id="mi-role-label">Software Engineer</span> | Question <span id="mi-qnum">1</span> of <span id="mi-qtotal">10</span></div>
             <button class="clg-btn" id="mi-next" type="button" style="min-width:120px;">Next</button>
           </div>
           <div class="mi-usage-meter" id="mi-usage-meter" style="display:none;margin-top:1.2rem;">
@@ -588,6 +588,11 @@
     });
 
     // --- Mock Interview Logic ---
+    // Read context from Interview Questions page
+    const url = new URL(window.location.href);
+    const mode = url.searchParams.get('mode') || 'current';
+    const setId = url.searchParams.get('set') || '';
+    const roleParam = url.searchParams.get('role') || '';
     const roles = [
       'Software Engineer', 'Data Analyst', 'Product Manager', 'Marketing Specialist',
       'Sales Representative', 'Customer Success Manager', 'UX Designer', 'DevOps Engineer',
@@ -635,28 +640,64 @@
       }
     });
 
+    // Pre-populate role from query
+    if (roleParam) { roleInput.value = roleParam; }
+
+    // Build questions from context (saved or set) with fallbacks
+    function buildQuestionsFromContext(){
+      // Default bank
+      const fallback = [
+        'Tell me about yourself and your experience.',
+        'What are your biggest strengths and weaknesses?',
+        'Why are you interested in this position?',
+        'Where do you see yourself in 5 years?',
+        'Tell me about a challenging project you worked on.',
+        'How do you handle stress and pressure?',
+        'Describe a time when you had to learn something quickly.',
+        'What is your leadership style?',
+        'How do you stay organized and prioritize tasks?',
+        'Do you have any questions for me?'
+      ];
+      let dyn = [];
+      if (mode === 'saved') {
+        try {
+          const p = JSON.parse(localStorage.getItem('mi_payload')||'null');
+          if (p && Array.isArray(p.questions) && p.questions.length) {
+            dyn = p.questions.filter(q=>typeof q==='string' && q.trim());
+          }
+        } catch {}
+        try { localStorage.removeItem('mi_payload'); } catch {}
+      } else if (setId) {
+        try {
+          const raw = localStorage.getItem(`iq_set_${setId}`);
+          if (raw) {
+            const s = JSON.parse(raw);
+            if (Array.isArray(s.questions)) {
+              dyn = s.questions.map(q=> typeof q==='string'? q : (q?.q||'')).filter(Boolean);
+            }
+          }
+        } catch {}
+      }
+      return (dyn && dyn.length) ? dyn : fallback;
+    }
+
+    let questions = buildQuestionsFromContext();
+
     // Start interview
     beginBtn.addEventListener('click', function() {
       if (roleInput.value.trim()) {
         setupDiv.style.display = 'none';
         sessionDiv.style.display = 'block';
         document.getElementById('mi-role-label').textContent = roleInput.value;
+        document.getElementById('mi-qtotal').textContent = String(questions.length);
+        // Initialize first question explicitly
+        currentQuestion = 0;
+        questionEl.textContent = questions[currentQuestion];
+        qnumEl.textContent = currentQuestion + 1;
       }
     });
 
-    // Mock interview questions
-    const questions = [
-      'Tell me about yourself and your experience.',
-      'What are your biggest strengths and weaknesses?',
-      'Why are you interested in this position?',
-      'Where do you see yourself in 5 years?',
-      'Tell me about a challenging project you worked on.',
-      'How do you handle stress and pressure?',
-      'Describe a time when you had to learn something quickly.',
-      'What is your leadership style?',
-      'How do you stay organized and prioritize tasks?',
-      'Do you have any questions for me?'
-    ];
+    // Question navigation uses `questions` built from context
 
     let currentQuestion = 0;
     const questionEl = document.getElementById('mi-question');
