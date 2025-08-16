@@ -129,15 +129,20 @@
       background:#fff; 
       box-sizing: border-box;
     }
-    .chip { cursor:pointer; user-select:none; }
-    .chip.is-on { box-shadow:0 0 0 3px rgba(0,123,255,.15); }
+    .chip { cursor:pointer; user-select:none; transition: all 0.2s ease; }
+    .chip.is-on { box-shadow:0 0 0 3px rgba(0,123,255,.15); background:#EBF4FF; border-color:#60A5FA; }
+    .chip:hover { border-color:#94A3B8; }
+    .chip.is-on:hover { border-color:#3B82F6; }
+    .chip-expand { background:#F8FAFC; border-color:#CBD5E1; color:#64748B; font-weight:500; }
+    .chip-expand:hover { background:#F1F5F9; border-color:#94A3B8; }
     .iq-actions { display:flex; gap:.5rem; flex-wrap:wrap; align-items:center; margin-top:.75rem; }
     .cooldown-badge { padding:.3rem .5rem; border-radius:8px; border:1px solid #E5E7EB; font-size:.9rem; color:#4B5563; }
     .skeleton { height:56px; border-radius:16px; background:linear-gradient(90deg,#f3f4f6 25%,#eceff3 37%,#f3f4f6 63%); background-size:400% 100%; animation:sheen 1.2s ease-in-out infinite; }
     @keyframes sheen { 0%{background-position:100% 0} 100%{background-position:0 0} }
-    .iq-qactions { display:flex; gap:.4rem; visibility:hidden; }
+    .iq-qactions { display:flex; gap:.4rem; visibility:hidden; pointer-events:auto; }
     .iq-question-card:hover .iq-qactions,
     .iq-question-card:focus-within .iq-qactions { visibility:visible; }
+    .iq-qactions .icon-btn { pointer-events:auto; position:relative; z-index:1; }
     .icon-btn { border:1px solid #E5E7EB; background:#fff; border-radius:8px; padding:.3rem .45rem; cursor:pointer; }
     .link-btn { background:none; border:none; color:#007BFF; cursor:pointer; text-decoration:underline; padding:0 .25rem; }
     .iq-example { margin:.5rem 0 0 0; color:#4B5563; }
@@ -145,6 +150,13 @@
     .recent-item { width:100%; text-align:left; padding:.6rem .7rem; border:1.5px solid #E5E7EB; border-radius:10px; background:#fff; }
     .ri-role { font-weight:600; }
     .ri-meta { color:#6B7280; font-size:.9rem; }
+    #iq-toast { position:fixed; bottom:20px; left:50%; transform:translateX(-50%); background:#1F2937; color:#fff; padding:.75rem 1rem; border-radius:8px; font-size:.9rem; z-index:9999; opacity:0; pointer-events:none; transition:opacity 0.3s ease; }
+    #iq-toast.show { opacity:1; }
+    .btn-save svg { fill:none; stroke:#6B7280; stroke-width:1.5; }
+    /* Stronger selectors to beat any theme overrides */
+    .iq-qactions .btn-save[aria-pressed="true"] svg,
+    .iq-qactions .btn-save.is-saved svg { fill:#2563EB; stroke:#2563EB; }
+    .saved-remove { padding:.2rem .5rem; font-size:.8rem; }
 
     /* Fixed question count display (hardcoded 10) */
     .iq-count-display { padding:.6rem .8rem; color:#4B5563; font-size:.9rem; background:#F9FAFB; border:1px solid #E5E7EB; border-radius:10px; }
@@ -253,6 +265,10 @@
     #iq-questions { padding-bottom: 240px; }
     /* Extra spacer to ensure nothing hides under footer */
     .iq-main::after { content:""; display:block; height:64px; }
+
+    /* Lightweight snackbar toast */
+    #iq-toast { position:fixed; bottom:18px; right:18px; background:#111827; color:#fff; padding:.55rem .75rem; border-radius:10px; box-shadow:0 6px 18px rgba(0,0,0,.18); font-size:.95rem; z-index:10000; opacity:0; transform:translateY(8px); transition:opacity .18s ease, transform .18s ease; }
+    #iq-toast.show { opacity:1; transform:translateY(0); }
   </style>
 </head>
 <body>
@@ -311,7 +327,7 @@
           <div id="iq-types-label" style="margin-bottom:0.5rem; font-weight:600; color:#374151; font-size:0.9rem;">Question Types</div>
           <button type="button" class="chip is-on" data-type="behavioral">Behavioral</button>
           <button type="button" class="chip is-on" data-type="technical">Technical</button>
-          <button type="button" id="types-more" class="link-btn" aria-expanded="false" aria-controls="types-advanced" style="margin-left:.25rem;">More types</button>
+          <button type="button" id="types-more" class="chip chip-expand" aria-expanded="false" aria-controls="types-advanced" style="margin-left:.25rem;">More types</button>
           <span id="types-advanced" hidden>
             <button type="button" class="chip" data-type="system" data-adv="1">System Design</button>
             <button type="button" class="chip" data-type="leadership" data-adv="1">Leadership</button>
@@ -333,11 +349,12 @@
         <span id="cooldown" class="cooldown-badge" aria-live="polite" hidden>0:59</span>
       </div>
       <div class="iq-actions-sec" id="iq-actions-sec" hidden style="display:none;">
-        <button id="btn-copy" class="btn-outline">Copy All</button>
+        <button id="btn-copy-all" class="btn-outline">Copy All</button>
         <button id="btn-download" class="btn-outline">Download PDF</button>
-        <button id="btn-save" class="btn-outline">Save Set</button>
+        <button id="btn-save-set" class="btn-outline">Saved Set</button>
         <button id="toggle-guidance" class="btn-outline" aria-pressed="false">Show Answer Guidance</button>
         <button id="btn-mock" class="btn-outline">Start Mock Interview <span class="lock" aria-hidden="true" style="margin-left:.4rem; display:inline-flex; vertical-align:baseline; position:relative; top:.02em;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#1F2937" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" aria-label="Locked" role="img" title="Locked"><rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V8a4 4 0 0 1 8 0v2"/><circle cx="12" cy="15" r="1.75"/></svg></span></button>
+        <button id="chip-saved" class="chip" hidden aria-hidden="true" style="margin-left:.5rem;">Saved (0)</button>
       </div>
     </div>
 
@@ -356,7 +373,25 @@
       <span>Mock Interviews are only available on the <strong>Pro</strong> plan and above</span>
     </div>
     <button id="iq-upgrade" class="iq-upgrade-btn" style="display:none;">Upgrade to Pro</button>
-  </main>
+
+    <!-- Saved Set Panel -->
+    <div id="iq-saved-panel" class="card" hidden style="position:fixed; top:20%; left:50%; transform:translateX(-50%); width:90%; max-width:600px; z-index:1000; box-shadow:0 8px 28px rgba(0,0,0,.15);">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
+        <h3 style="margin:0;">Saved Questions</h3>
+        <button id="saved-close" class="icon-btn" style="padding:.4rem;">
+          <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div id="iq-saved-list" style="max-height:300px; overflow-y:auto; margin-bottom:1rem;"></div>
+      <div style="display:flex; gap:.5rem; flex-wrap:wrap;">
+        <button id="saved-copy-all" class="btn-outline">Copy All</button>
+        <button id="saved-download" class="btn-outline">Download PDF</button>
+        <button id="saved-mock" class="btn-primary">Start Mock Interview (Saved)</button>
+      </div>
+    </div>
+
+    <!-- Toast container -->
+    <div id="iq-toast" role="status" aria-live="polite" aria-atomic="true"></div>
   <!-- Footer (canonical) -->
   <footer class="site-footer">
     <div class="footer-container">
@@ -368,7 +403,7 @@
         <span class="footer-name">JOBHACKAI</span>
       </div>
       <div class="footer-legal">
-        <p>© 2025 JobHackAI. All rights reserved.</p>
+        <p> 2025 JobHackAI. All rights reserved.</p>
       </div>
       <div class="footer-links">
         <a href="index.html">Home</a>
@@ -501,7 +536,7 @@
       prefs: { seniority:'', count:10, types:new Set(['behavioral','technical']), showGuidance:false },
       set: null,
       cooldown: 0,
-      timers: { global:null, perQ:{} },
+      timers: { global:null, perQ:{}, notes:{}, toast:null },
       notes: {},
       recents: []
     };
@@ -509,7 +544,13 @@
     // Utils & persistence
     const iqNow = ()=> new Date().toISOString();
     const iqSetId = (role, seed)=> `${role}:${seed}`;
-    function iqToast(msg){ console.log('[iq-toast]', msg); }
+    function iqToast(msg){
+      console.log('[iq-toast]', msg);
+      const el = document.getElementById('iq-toast');
+      if(!el) return; el.textContent = msg; el.classList.add('show');
+      clearTimeout(iqState.timers.toast);
+      iqState.timers.toast = setTimeout(()=> el.classList.remove('show'), 1600);
+    }
     function iqEsc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
     function iqTrack(event, data={}){
       const payload = { event, ts: iqNow(), role: iqState?.set?.role || $IQ('#iq-role')?.value || '', seniority: iqState.prefs.seniority, types: [...iqState.prefs.types], count: iqState.prefs.count, used_jd: !!$IQ('#iq-jd')?.value?.trim(), ...data };
@@ -543,8 +584,11 @@
     function iqStartPerQCooldown(i){
       const k = `q${i}`, btn = $IQ(`.btn-replace[data-idx="${i}"]`);
       if (!btn) return; btn.disabled = true;
-      clearTimeout(iqState.timers.perQ[k]);
-      iqState.timers.perQ[k] = setTimeout(()=>{ btn.disabled=false; }, IQ_PER_Q_REPLACE_COOLDOWN*1000);
+      clearInterval(iqState.timers.perQ[k]);
+      let t = IQ_PER_Q_REPLACE_COOLDOWN;
+      const tick = ()=>{ if(!btn) return; btn.setAttribute('data-timer', String(t)); t--; if(t<0){ btn.removeAttribute('data-timer'); btn.disabled=false; clearInterval(iqState.timers.perQ[k]); } };
+      tick();
+      iqState.timers.perQ[k] = setInterval(tick, 1000);
     }
 
     // Rendering
@@ -555,37 +599,38 @@
         const qText = iqEsc(q.q);
         const qHint = q.hint ? `Hint: ${iqEsc(q.hint)}` : '';
         const qExample = q.example ? iqEsc(q.example) : '';
+        const savedPressed = (typeof iqIsSaved === 'function' ? (iqIsSaved(i) ? 'true' : 'false') : 'false');
         return `<div class="iq-question-card" data-idx="${i}">
   <div class="iq-qtext">${i+1}. ${qText}</div>
   <div class="iq-qactions" aria-label="Question actions">
-    <button class=\"icon-btn btn-copy\" data-idx=\"${i}\" title=\"Copy\" aria-label=\"Copy\">
-      <svg viewBox=\"0 0 24 24\" xmlns=\"http://www.w3.org/2000/svg\"><rect x=\"8\" y=\"8\" width=\"12\" height=\"12\" rx=\"2\"/><rect x=\"4\" y=\"4\" width=\"12\" height=\"12\" rx=\"2\"/></svg>
+    <button type="button" class="icon-btn btn-copy" data-idx="${i}" title="Copy" aria-label="Copy">
+      <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><rect x="8" y="8" width="12" height="12" rx="2"/><rect x="4" y="4" width="12" height="12" rx="2"/></svg>
     </button>
-    <button class=\"icon-btn btn-replace\" data-idx=\"${i}\" title=\"New Question\" aria-label=\"New Question\">
-      <svg viewBox=\"0 0 24 24\" xmlns=\"http://www.w3.org/2000/svg\">
-        <path d=\"M3 12a9 9 0 0 1 14.9-6.9\"/>
-        <path d=\"M18 5v4h-4\"/>
-        <path d=\"M21 12a9 9 0 0 1-14.9 6.9\"/>
-        <path d=\"M6 19v-4h4\"/>
+    <button type="button" class="icon-btn btn-replace" data-idx="${i}" title="New Question" aria-label="New Question">
+      <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+        <path d="M3 12a9 9 0 0 1 14.9-6.9"/>
+        <path d="M18 5v4h-4"/>
+        <path d="M21 12a9 9 0 0 1-14.9 6.9"/>
+        <path d="M6 19v-4h4"/>
       </svg>
     </button>
-    <button class=\"icon-btn btn-save\" data-idx=\"${i}\" title=\"Save\" aria-label=\"Save\">
-      <svg viewBox=\"0 0 24 24\" xmlns=\"http://www.w3.org/2000/svg\"><path d=\"M7 4h10a2 2 0 0 1 2 2v14l-7-4-7 4V6a2 2 0 0 1 2-2Z\"/></svg>
+    <button type="button" class="icon-btn btn-save" data-idx="${i}" title="Save" aria-label="Save" aria-pressed="${savedPressed}">
+      <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><polygon points="12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26"/></svg>
     </button>
-    <button class=\"icon-btn btn-notes\" data-idx=\"${i}\" aria-expanded=\"false\" aria-controls=\"iq-notes-${i}\" title=\"Notes\" aria-label=\"Notes\">
-      <svg viewBox=\"0 0 24 24\" xmlns=\"http://www.w3.org/2000/svg\">
-        <path d=\"M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9Z\"/>
-        <path d=\"M14 3v6h6\"/>
-        <path d=\"M8 13h8\"/>
-        <path d=\"M8 17h8\"/>
+    <button type="button" class="icon-btn btn-notes" data-idx="${i}" aria-expanded="false" aria-controls="iq-notes-${i}" title="Notes" aria-label="Notes">
+      <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+        <path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9Z"/>
+        <path d="M14 3v6h6"/>
+        <path d="M8 13h8"/>
+        <path d="M8 17h8"/>
       </svg>
     </button>
   </div>
-  <div class=\"iq-hint\" ${show?'':'hidden'}>${qHint} ${q.example?`<button class=\\"link-btn btn-example\\" data-idx=\\"${i}\\">Example</button>`:''}</div>
-  <div id=\"iq-example-${i}\" class=\"iq-example\" hidden>${qExample}</div>
-  <div id=\"iq-notes-${i}\" class=\"iq-notes\" hidden>
-    <label class=\"sr-only\" for=\"iq-notes-ta-${i}\">Notes for question ${i+1}</label>
-    <textarea id=\"iq-notes-ta-${i}\" rows=\"3\" placeholder=\"S: …&#10;T: …&#10;A: …&#10;R: …\">${iqState.notes[i]||''}</textarea>
+  <div class="iq-hint" ${show?'':'hidden'}>${qHint} ${q.example?`<button class="link-btn btn-example" data-idx="${i}">Example</button>`:''}</div>
+  <div id="iq-example-${i}" class="iq-example" hidden>${qExample}</div>
+  <div id="iq-notes-${i}" class="iq-notes" hidden>
+    <label class="sr-only" for="iq-notes-ta-${i}">Notes for question ${i+1}</label>
+    <textarea id="iq-notes-ta-${i}" rows="3" placeholder="S: …&#10;T: …&#10;A: …&#10;R: …">${iqState.notes[i]||''}</textarea>
   </div>
 </div>`;
       }).join('');
@@ -602,7 +647,7 @@
     async function iqApiReplace({ role, seniority, types, jd, avoid, index }){ iqTrack('iq_replace_clicked',{index}); try{ if(IQ_API.PROXY_BASE){ const r=await fetch(`${IQ_API.PROXY_BASE}/interview/replace`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({role,seniority,types,jd,avoid,index})}); if(!r.ok) throw new Error('proxy'); return await r.json(); } if(IQ_API.ZAPIER_GENERATE_HOOK){ const r=await fetch(IQ_API.ZAPIER_GENERATE_HOOK,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({intent:'replace_one',role,seniority,types,jd,avoid,index})}); if(!r.ok) throw new Error('zap'); return await r.json(); } }catch(e){ console.warn('iqApiReplace failed, using stub',e);} return { q:'Describe a time you simplified a complex system.', hint:'Focus on trade-offs and impact.', example:'S: legacy… T: simplify… A: removed X, added Y… R: fewer incidents, faster dev.' } }
 
     // Actions
-    async function iqGenerate(){ if(iqState.cooldown>0){ iqToast('Please wait for cooldown'); return; } const role=$IQ('#iq-role')?.value?.trim()||''; if(!role){ iqToast('Select a role first'); return; } const seniority=$IQ('#iq-seniority')?.value||''; const count=IQ_FIXED_COUNT; const types=[...$$IQ('.iq-types .chip.is-on')].map(b=>b.dataset.type); const jd=$IQ('#iq-jd')?.value?.trim()||''; const holder=$IQ('#iq-questions'); if(holder) holder.innerHTML=Array.from({length:5}).map(()=>'<div class="iq-question-card skeleton"></div>').join(''); const res=await iqApiGenerate({role,seniority,types,count,jd}); iqState.set={...res,replacesUsed:0}; iqState.prefs={...iqState.prefs,seniority,count: IQ_FIXED_COUNT,types:new Set(types)}; iqSavePrefs(); iqLoadNotes(); iqRenderQuestions(); iqAddRecent({ id: iqSetId(res.role,res.seed), role: res.role, count: res.count, time: iqNow() }); iqRenderRecents();
+    async function iqGenerate(){ if(iqState.cooldown>0){ iqToast('Please wait for cooldown'); return; } const role=$IQ('#iq-role')?.value?.trim()||''; if(!role){ iqToast('Select a role first'); return; } const seniority=$IQ('#iq-seniority')?.value||''; const count=IQ_FIXED_COUNT; const types=[...$$IQ('.iq-types .chip.is-on')].map(b=>b.dataset.type); const jd=$IQ('#iq-jd')?.value?.trim()||''; const holder=$IQ('#iq-questions'); if(holder) holder.innerHTML=Array.from({length:5}).map(()=>'<div class="iq-question-card skeleton"></div>').join(''); const res=await iqApiGenerate({role,seniority,types,count,jd}); iqState.set={...res,replacesUsed:0, types:new Set(types), seniority, jd}; iqState.prefs={...iqState.prefs,seniority,count: IQ_FIXED_COUNT,types:new Set(types)}; iqSavePrefs(); iqLoadNotes(); iqRenderQuestions(); iqUpdateSavedChip(); iqAddRecent({ id: iqSetId(res.role,res.seed), role: res.role, count: res.count, time: iqNow() }); iqRenderRecents();
       // Reveal secondary "New Set" after first set exists
       const r=$IQ('#btn-regenerate'); if(r){ r.hidden=false; r.style.display=''; r.textContent='New Set'; r.setAttribute('aria-label','New Set'); }
       const sec=$IQ('#iq-actions-sec'); if(sec){ sec.hidden=false; sec.style.display=''; }
@@ -610,23 +655,181 @@
       iqStartGlobalCooldown(IQ_GLOBAL_COOLDOWN);
     }
     async function iqRegenerate(){ if(iqState.cooldown>0){ iqToast('Please wait for cooldown'); return; } await iqGenerate(); iqTrack('iq_new_set_clicked'); }
-    async function iqReplaceOne(i){ if(!iqState.set) return; const cap=IQ_MAX_REPLACES; if((iqState.set.replacesUsed||0)>=cap){ iqToast('Replace limit reached. Please regenerate the set.'); return; } iqStartPerQCooldown(i); const avoid=iqState.set.questions.map(x=>x.q); const r=await iqApiReplace({ role:iqState.set.role, seniority:iqState.set.seniority, types:iqState.set.types, jd:iqState.set.jd, avoid, index:i }); iqState.set.questions[i]={ q:r.q, hint:r.hint, example:r.example }; iqState.set.replacesUsed=(iqState.set.replacesUsed||0)+1; iqRenderQuestions(); }
+    async function iqReplaceOne(i){
+      if(!iqState.set || !Array.isArray(iqState.set.questions)) return;
+      const set = iqState.set;
+      const currentQs = set.questions.map(x=>x?.q || '').filter(Boolean);
+      const role = set.role || ($IQ('#iq-role')?.value?.trim()||'');
+      const seniority = set.seniority || iqState.prefs.seniority || '';
+      const types = Array.from(set.types || iqState.prefs.types || []);
+      const jd = set.jd || $IQ('#iq-jd')?.value || '';
+
+      iqStartPerQCooldown(i);
+
+      const stubPool = [
+        'Describe a time you simplified a complex system.',
+        'Tell me about a decision you made with incomplete data. What happened?',
+        'How do you balance speed and quality when under tight deadlines?',
+        'Share a time you influenced stakeholders without authority.',
+        'Walk me through the most impactful bug you fixed and how you found it.'
+      ];
+      const pickStub = ()=>{
+        const candidates = stubPool.filter(t=>!currentQs.includes(t));
+        return (candidates.length? candidates: stubPool)[Math.floor(Math.random()*stubPool.length)];
+      };
+
+      const payload = { role, seniority, types, jd, replaceIndex: i, avoid: currentQs };
+      const tryApi = async()=>{
+        try{
+          const res = await fetch('/questions/replace', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+          if(!res.ok) throw new Error('bad status');
+          const data = await res.json();
+          const q = data?.question || data?.q || data?.questions?.[0]?.q;
+          return typeof q === 'string' && q.trim() ? q.trim() : null;
+        }catch{return null}
+      };
+
+      let nextQ = await tryApi();
+      if(!nextQ || currentQs.includes(nextQ)){
+        // one more attempt (retry) using API, then fallback
+        nextQ = await tryApi();
+        if(!nextQ || currentQs.includes(nextQ)) nextQ = pickStub();
+      }
+
+      set.questions[i] = { q: nextQ, hint: set.questions[i]?.hint || '', example: set.questions[i]?.example || '' };
+      iqRenderQuestions();
+      iqToast('Replaced');
+    }
 
     // Wire up toolbar and list
-    function iqWireToolbar(){ $IQ('#btn-generate')?.addEventListener('click', iqGenerate); $IQ('#btn-regenerate')?.addEventListener('click', iqRegenerate); $IQ('#btn-copy')?.addEventListener('click', async ()=>{ await navigator.clipboard.writeText((iqState.set?.questions||[]).map(x=>x.q).join('\n')); iqToast('Copied all questions'); iqTrack('iq_copy_all'); }); $IQ('#btn-download')?.addEventListener('click', ()=>{ window.print(); iqTrack('iq_download'); }); $IQ('#btn-save')?.addEventListener('click', ()=>{ iqToast('Saved set (local)'); iqTrack('iq_saved_set'); }); $IQ('#btn-mock')?.addEventListener('click', ()=>{ const plan=(window.JobHackAINavigation?.getEffectivePlan?.()||localStorage.getItem('user-plan')||'free'); if(!['pro','premium'].includes(plan)) window.location.href='pricing-a.html'; else window.location.href='mock-interview.html?role='+encodeURIComponent($IQ('#iq-role')?.value?.trim()||''); }); $IQ('#toggle-guidance')?.addEventListener('click', (e)=>{ iqState.prefs.showGuidance=!iqState.prefs.showGuidance; iqSavePrefs(); iqUpdateGuidanceUI(); }); $IQ('#iq-seniority')?.addEventListener('change', ()=>{ iqState.prefs.seniority=$IQ('#iq-seniority').value; iqSavePrefs(); }); const more=$IQ('#types-more'); if(more){ const adv=$IQ('#types-advanced'); more.addEventListener('click', ()=>{ if(adv){ adv.hidden=false; } more.setAttribute('aria-expanded','true'); // one-time reveal
-        // Remove the link to avoid toggling back
-        more.remove();
-      }, { once:true }); }
-      // Overflow menu wiring (mobile)
-      $IQ('#btn-more')?.addEventListener('click', ()=>{ const menu=$IQ('#more-menu'); const btn=$IQ('#btn-more'); if(!menu) return; const expanded=btn.getAttribute('aria-expanded')==='true'; btn.setAttribute('aria-expanded', String(!expanded)); menu.hidden=expanded; });
-      $IQ('#mi-new-set')?.addEventListener('click', ()=>{ if(iqState.cooldown>0) return; iqRegenerate(); const btn=$IQ('#btn-more'); const menu=$IQ('#more-menu'); if(btn&&menu){ btn.setAttribute('aria-expanded','false'); menu.hidden=true; } });
-      $IQ('#mi-guidance')?.addEventListener('click', ()=>{ $IQ('#toggle-guidance')?.click(); });
-      $IQ('#mi-save')?.addEventListener('click', ()=>{ $IQ('#btn-save')?.click(); });
-      $IQ('#mi-copy')?.addEventListener('click', ()=>{ $IQ('#btn-copy')?.click(); });
-      $IQ('#mi-download')?.addEventListener('click', ()=>{ $IQ('#btn-download')?.click(); });
-      $IQ('#mi-mock')?.addEventListener('click', ()=>{ $IQ('#btn-mock')?.click(); });
-      // Chips a11y
-      $$IQ('.iq-types .chip').forEach(b=> b.addEventListener('click', (ev)=>{ b.classList.toggle('is-on'); b.setAttribute('aria-pressed', b.classList.contains('is-on') ? 'true' : 'false'); iqSavePrefs(); })); $$IQ('.iq-types .chip').forEach(b=>{ b.setAttribute('role','button'); b.setAttribute('aria-pressed', b.classList.contains('is-on') ? 'true' : 'false'); b.addEventListener('keydown', (ke)=>{ if(ke.key==='Enter'||ke.key===' '){ ke.preventDefault(); b.click(); } }); }); }
+    function iqWireToolbar(){
+      // Map legacy/new IDs
+      const btnNewSet = $IQ('#btn-newset') || $IQ('#btn-regenerate');
+      $IQ('#btn-generate')?.addEventListener('click', iqGenerate);
+      btnNewSet?.addEventListener('click', iqRegenerate);
+      // Copy All (current or saved panel view)
+      $IQ('#btn-copy-all')?.addEventListener('click', async ()=>{
+        try{
+          const useSaved = !$IQ('#iq-saved-panel')?.hidden;
+          const questions = useSaved ? iqGetSavedItems().map(it=>it.q) : (iqState.set?.questions||[]).map(x=>x.q);
+          const text = questions.map((t,i)=>`${i+1}. ${t}`).join('\n');
+          await navigator.clipboard.writeText(text);
+          iqToast('Copied');
+          iqTrack('iq_copy_all',{ count: questions.length });
+        }catch{ iqToast('Clipboard blocked'); }
+      });
+      $IQ('#btn-download')?.addEventListener('click', ()=>{ window.print(); iqTrack('iq_download'); });
+      // Saved panel open
+      const openSaved = ()=>{ iqRenderSavedPanel(true); iqTrack('iq_saved_opened'); };
+      $IQ('#btn-save-set')?.addEventListener('click', openSaved);
+      $IQ('#chip-saved')?.addEventListener('click', openSaved);
+      // Guidance toggle
+      $IQ('#toggle-guidance')?.addEventListener('click', ()=>{ iqState.prefs.showGuidance=!iqState.prefs.showGuidance; iqSavePrefs(); iqUpdateGuidanceUI(); iqTrack(iqState.prefs.showGuidance?'iq_guidance_toggle_true':'iq_guidance_toggle_false'); });
+      // Seniority persist
+      $IQ('#iq-seniority')?.addEventListener('change', ()=>{ iqState.prefs.seniority=$IQ('#iq-seniority').value; iqSavePrefs(); });
+      // Saved panel actions
+      $IQ('#saved-copy-all')?.addEventListener('click', async ()=>{ try{ const arr=iqGetSavedItems().map(it=>it.q); await navigator.clipboard.writeText(arr.map((t,i)=>`${i+1}. ${t}`).join('\n')); iqToast('Copied'); }catch{ iqToast('Clipboard blocked'); } });
+      $IQ('#saved-download')?.addEventListener('click', ()=>{ window.print(); });
+      $IQ('#saved-mock')?.addEventListener('click', ()=>{ iqHandleMock(true); });
+      $IQ('#saved-close')?.addEventListener('click', ()=>{ const p=$IQ('#iq-saved-panel'); if(p){ p.hidden=true; }});
+      // Mock
+      $IQ('#btn-mock')?.addEventListener('click', ()=> iqHandleMock(false));
+      // Upsell modal close
+      $IQ('#upsell-cancel')?.addEventListener('click', (ev)=>{ ev.preventDefault(); ev.stopPropagation(); const m=$IQ('#iq-upsell'); if(m){ m.hidden=true; }});
+      const overlay=$IQ('#iq-upsell'); const dialogEl=$IQ('#iq-upsell > div[role="dialog"]'); dialogEl?.addEventListener('click', (e)=> e.stopPropagation()); overlay?.addEventListener('click', (e)=>{ if(e.target===overlay){ overlay.hidden=true; }}); document.addEventListener('keydown', (e)=>{ if(e.key==='Escape' && overlay && !overlay.hidden){ overlay.hidden=true; }});
+      
+      // More types one-time reveal
+      const more=$IQ('#types-more'); if(more){ const adv=$IQ('#types-advanced'); more.addEventListener('click', ()=>{ if(adv){ adv.hidden=false; } more.setAttribute('aria-expanded','true'); more.remove(); }, { once:true }); }
+      
+      // Chips a11y (only for selectable chips with data-type, not "More types")
+      $$IQ('.iq-types .chip[data-type]').forEach(b=> b.addEventListener('click', ()=>{ b.classList.toggle('is-on'); b.setAttribute('aria-pressed', b.classList.contains('is-on') ? 'true' : 'false'); iqSavePrefs(); }));
+      $$IQ('.iq-types .chip[data-type]').forEach(b=>{ b.setAttribute('role','button'); b.setAttribute('aria-pressed', b.classList.contains('is-on') ? 'true' : 'false'); b.addEventListener('keydown', (ke)=>{ if(ke.key==='Enter'||ke.key===' '){ ke.preventDefault(); b.click(); } }); });
+    }
+    function iqHandleMock(useSaved){ const plan=(window.JobHackAINavigation?.getEffectivePlan?.()||localStorage.getItem('user-plan')||'free'); const role=$IQ('#iq-role')?.value?.trim()||''; if(['pro','premium'].includes(plan)){ const mode=useSaved?'saved':'current'; window.location.href = `mock-interview.html?role=${encodeURIComponent(role)}&mode=${mode}`; iqTrack('iq_mock_clicked_unlocked',{ mode }); } else { const m=$IQ('#iq-upsell'); if(m){ m.hidden=false; setTimeout(()=>{ $IQ('#upsell-cancel')?.focus(); },0); } iqTrack('iq_mock_clicked_locked'); } }
+
+    // ----- REPLACE ONE (with retry + fallback) -----
+    async function iqReplaceOne(i){
+      if(!iqState.set || !Array.isArray(iqState.set.questions)) return;
+      const set = iqState.set;
+      const currentQs = set.questions.map(x=>x?.q || '').filter(Boolean);
+      const role = set.role || ($IQ('#iq-role')?.value?.trim()||'');
+      const seniority = set.seniority || iqState.prefs.seniority || '';
+      const types = Array.from(set.types || iqState.prefs.types || []);
+      const jd = set.jd || $IQ('#iq-jd')?.value || '';
+
+      iqStartPerQCooldown(i);
+
+      const stubPool = [
+        'Describe a time you simplified a complex system.',
+        'Tell me about a decision you made with incomplete data. What happened?',
+        'How do you balance speed and quality when under tight deadlines?',
+        'Share a time you influenced stakeholders without authority.',
+        'Walk me through the most impactful bug you fixed and how you found it.'
+      ];
+      const pickStub = ()=>{
+        const candidates = stubPool.filter(t=>!currentQs.includes(t));
+        return (candidates.length? candidates: stubPool)[Math.floor(Math.random()*stubPool.length)];
+      };
+
+      const payload = { role, seniority, types, jd, replaceIndex: i, avoid: currentQs };
+      const tryApi = async()=>{
+        try{
+          const res = await fetch('/questions/replace', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+          if(!res.ok) throw new Error('bad status');
+          const data = await res.json();
+          const q = data?.question || data?.q || data?.questions?.[0]?.q;
+          return typeof q === 'string' && q.trim() ? q.trim() : null;
+        }catch{return null}
+      };
+
+      let nextQ = await tryApi();
+      if(!nextQ || currentQs.includes(nextQ)){
+        // one more attempt (retry) using API, then fallback
+        nextQ = await tryApi();
+        if(!nextQ || currentQs.includes(nextQ)) nextQ = pickStub();
+      }
+
+      set.questions[i] = { q: nextQ, hint: set.questions[i]?.hint || '', example: set.questions[i]?.example || '' };
+      iqRenderQuestions();
+      iqToast('Replaced');
+    }
+
+    // ----- SAVED SET HELPERS -----
+    function iqSavedKey(){ return iqState.set ? `iq_saved_${iqSetId(iqState.set.role, iqState.set.seed)}` : ''; }
+    function iqGetSavedIndexes(){ if(!iqState.set) return []; try{ return JSON.parse(localStorage.getItem(iqSavedKey())||'[]'); }catch{return []} }
+    function iqSetSavedIndexes(arr){ try{ localStorage.setItem(iqSavedKey(), JSON.stringify(arr)); }catch{} }
+    function iqIsSaved(i){ return iqGetSavedIndexes().includes(i); }
+    function iqToggleSaved(i){ let arr=iqGetSavedIndexes(); if(arr.includes(i)){ arr=arr.filter(x=>x!==i); }else{ arr.push(i); } iqSetSavedIndexes(arr); iqUpdateSavedChip(); iqRenderSavedPanel(false); iqTrack('iq_saved_toggle',{ index:i, saved:arr.includes(i) }); }
+    function iqGetSavedItems(){ if(!iqState.set) return []; const idxs=iqGetSavedIndexes(); return idxs.map(i=>iqState.set.questions[i]).filter(Boolean); }
+    function iqUpdateSavedChip(){ const chip=$IQ('#chip-saved'); if(!chip) return; const n=iqGetSavedIndexes().length; chip.textContent=`Saved (${n})`; chip.hidden=n===0; chip.setAttribute('aria-hidden', n===0 ? 'true':'false'); }
+    function iqRenderSavedPanel(forceOpen){ 
+      const panel=$IQ('#iq-saved-panel'); 
+      if(!panel) return; 
+      const list=$IQ('#iq-saved-list'); 
+      const idxs=iqGetSavedIndexes(); 
+      const items=iqGetSavedItems(); 
+      if(forceOpen) panel.hidden=false; 
+      if(list){ 
+        list.innerHTML = items.length? 
+          items.map((it,idx)=>`<div class="iq-question-card"><div style="display:flex; align-items:center; justify-content:space-between; gap:.5rem;"><span>${idx+1}. ${iqEsc(it.q)}</span><button class="btn-outline saved-remove" data-original-index="${idxs[idx]}">Remove</button></div></div>`).join('') 
+          : '<div class="empty">No saved items yet.</div>'; 
+      }
+      // Wire remove button events (re-wire on each render)
+      list?.addEventListener('click', (ev)=>{ 
+        const btn=ev.target.closest('.saved-remove'); 
+        if(!btn) return; 
+        const oi=parseInt(btn.getAttribute('data-original-index'),10); 
+        let arr=iqGetSavedIndexes().filter(x=>x!==oi); 
+        iqSetSavedIndexes(arr); 
+        iqUpdateSavedChip(); 
+        iqRenderSavedPanel(false); 
+        // Update the visual state of the original question button
+        const origBtn = $IQ(`.btn-save[data-idx="${oi}"]`);
+        if(origBtn) origBtn.setAttribute('aria-pressed', 'false');
+        iqToast('Removed from Saved');
+        iqTrack('iq_saved_removed',{ index: oi }); 
+      });
+    }
 
     function iqRevealSecondaryActions(){
       $$IQ('[data-sec]').forEach(el=>{ el.hidden=false; el.setAttribute('aria-hidden','false'); el.removeAttribute('tabindex'); });
@@ -651,9 +854,55 @@
         if(mw) mw.hidden=true; const menu=$IQ('#more-menu'); const btn=$IQ('#btn-more'); if(menu&&btn){ menu.hidden=true; btn.setAttribute('aria-expanded','false'); }
       }
     }
-    function iqWireQuestionList(){ const box=$IQ('#iq-questions'); if(!box) return; box.addEventListener('click',(e)=>{ const i=parseInt(e.target?.dataset?.idx||e.target?.closest('[data-idx]')?.dataset?.idx||-1,10); if(i<0) return; if(e.target.classList.contains('btn-copy')){ navigator.clipboard.writeText(iqState.set.questions[i].q); iqToast('Copied'); return; } if(e.target.classList.contains('btn-replace')){ iqReplaceOne(i); return; } if(e.target.classList.contains('btn-save')){ iqTrack('iq_saved_question',{i}); iqToast('Saved'); return; } if(e.target.classList.contains('btn-example')){ const ex=$IQ(`#iq-example-${i}`); if(ex) ex.hidden=!ex.hidden; return; } if(e.target.classList.contains('btn-notes')){ const panel=$IQ(`#iq-notes-${i}`); const ta=$IQ(`#iq-notes-ta-${i}`); const exp=panel.hidden; panel.hidden=!panel.hidden; e.target.setAttribute('aria-expanded', String(exp)); ta?.focus(); return; } }); box.addEventListener('input',(e)=>{ const m=e.target.id?.match(/^iq-notes-ta-(\d+)$/); if(!m) return; const idx=parseInt(m[1],10); iqState.notes[idx]=e.target.value; iqSaveNotes(); }); }
+    function iqWireQuestionList(){
+      const box=$IQ('#iq-questions'); if(!box) return;
+      box.addEventListener('click',(e)=>{
+        const actionBtn = e.target.closest('.btn-copy, .btn-replace, .btn-save, .btn-example, .btn-notes');
+        if(!actionBtn) return;
+        const i=parseInt(actionBtn.dataset.idx || actionBtn.closest('[data-idx]')?.dataset?.idx || -1, 10);
+        if(i<0) return;
+        if(actionBtn.classList.contains('btn-copy')){
+          navigator.clipboard.writeText(iqState.set.questions[i].q).then(()=>{ iqToast('Copied'); iqTrack('iq_copy_one',{ index:i }); }).catch(()=> iqToast('Clipboard blocked'));
+          return;
+        }
+        if(actionBtn.classList.contains('btn-replace')){ iqReplaceOne(i); iqTrack('iq_replace_one',{ index:i }); return; }
+        if(actionBtn.classList.contains('btn-save')){ iqToggleSaved(i); const nowSaved=iqIsSaved(i); actionBtn.setAttribute('aria-pressed', String(nowSaved)); iqToast(nowSaved ? 'Added to Saved' : 'Removed from Saved'); return; }
+        if(actionBtn.classList.contains('btn-example')){ const ex=$IQ(`#iq-example-${i}`); if(ex) ex.hidden=!ex.hidden; return; }
+        if(actionBtn.classList.contains('btn-notes')){ const panel=$IQ(`#iq-notes-${i}`); const ta=$IQ(`#iq-notes-ta-${i}`); const wasHidden=panel.hidden; if(wasHidden && ta && !ta.value){ ta.value='S:\nT:\nA:\nR:'; } panel.hidden = !panel.hidden; actionBtn.setAttribute('aria-expanded', String(!panel.hidden)); if(!panel.hidden) ta?.focus(); if(wasHidden) iqTrack('iq_notes_opened',{ index:i }); return; }
+      });
+      box.addEventListener('input',(e)=>{
+        const m=e.target.id?.match(/^iq-notes-ta-(\d+)$/); if(!m) return; const idx=parseInt(m[1],10);
+        clearTimeout(iqState.timers.notes[idx]);
+        iqState.timers.notes[idx]=setTimeout(()=>{ iqState.notes[idx]=e.target.value; iqSaveNotes(); },300);
+      });
+      // Keyboard activation for action buttons
+      box.addEventListener('keydown', (e)=>{
+        if(e.key!=='Enter' && e.key!==' ') return; const b=e.target.closest('.btn-copy, .btn-replace, .btn-save, .btn-example, .btn-notes'); if(!b) return; e.preventDefault(); b.click();
+      });
+    }
 
-    function initIQPage(){ iqLoadPrefs(); iqState.prefs.count = IQ_FIXED_COUNT; iqRenderRecents(); iqInitRoleCombobox(); iqWireToolbar(); iqWireQuestionList(); iqUpdateGuidanceUI(); if($IQ('#iq-seniority')) $IQ('#iq-seniority').value=iqState.prefs.seniority||''; const r=$IQ('#btn-regenerate'); if(r){ r.hidden = !iqState.set; } iqUpdateActionsLayout(); window.addEventListener('resize', iqUpdateActionsLayout); }
+    // Global fallback delegation (capture phase) in case widget-level wiring fails
+    (function(){
+      let wired=false; if(wired) return; wired=true;
+      document.addEventListener('click', (e)=>{
+        // If the click occurred inside the questions list, let the local delegate handle it (avoid double toggles)
+        if(e.target.closest('#iq-questions')) return;
+        const actionBtn = e.target.closest('.btn-copy, .btn-replace, .btn-save, .btn-example, .btn-notes');
+        if(!actionBtn) return;
+        const card = actionBtn.closest('[data-idx]');
+        const i=parseInt(actionBtn.dataset.idx || card?.dataset?.idx || -1, 10);
+        if(i<0 || !iqState.set) return;
+        if(actionBtn.classList.contains('btn-copy')){
+          navigator.clipboard.writeText(iqState.set.questions[i].q).then(()=>{ iqToast('Copied'); iqTrack('iq_copy_one',{ index:i }); }).catch(()=> iqToast('Clipboard blocked'));
+          return;
+        }
+        if(actionBtn.classList.contains('btn-replace')){ iqReplaceOne(i); iqTrack('iq_replace_one',{ index:i }); return; }
+        if(actionBtn.classList.contains('btn-save')){ iqToggleSaved(i); const nowSaved=iqIsSaved(i); actionBtn.setAttribute('aria-pressed', String(nowSaved)); return; }
+        if(actionBtn.classList.contains('btn-example')){ const ex=$IQ(`#iq-example-${i}`); if(ex) ex.hidden=!ex.hidden; return; }
+        if(actionBtn.classList.contains('btn-notes')){ const panel=$IQ(`#iq-notes-${i}`); const ta=$IQ(`#iq-notes-ta-${i}`); const exp=panel.hidden; if(exp && !ta?.value){ if(ta) ta.value='S:\nT:\nA:\nR:'; } panel.hidden=!panel.hidden; actionBtn.setAttribute('aria-expanded', String(!panel.hidden)); if(!panel.hidden) ta?.focus(); if(exp) iqTrack('iq_notes_opened',{ index:i }); return; }
+      }, true);
+    })();
+function initIQPage(){ iqLoadPrefs(); iqState.prefs.count = IQ_FIXED_COUNT; iqRenderRecents(); iqInitRoleCombobox(); iqWireToolbar(); iqWireQuestionList(); iqUpdateGuidanceUI(); if($IQ('#iq-seniority')) $IQ('#iq-seniority').value=iqState.prefs.seniority||''; const r=$IQ('#btn-regenerate'); if(r){ r.hidden = !iqState.set; } iqUpdateActionsLayout(); window.addEventListener('resize', iqUpdateActionsLayout); }
     window.__IQ__ = { iqState, iqGenerate, iqRegenerate, iqReplaceOne };
 
     // Expose DOM handles for plan UI
