@@ -1,17 +1,17 @@
 .site-footer {
   background: var(--color-card-bg);
   border-top: 1px solid var(--color-divider);
-  padding: 0;
+  padding: 12px 0;
   font-size: 0.95rem;
   color: var(--color-text-muted);
   margin-top: var(--space-md);
   font-family: 'Inter', sans-serif;
-  position: relative; /* ensure stacking context above main content */
+  position: relative;
   z-index: 1;
 }
 
 .footer-container {
-  max-width: 1200px;
+  max-width: 1100px;
   margin: 0 auto;
   display: grid;
   grid-template-columns: auto 1fr auto;
@@ -43,6 +43,9 @@
   font-size: 1rem;
   color: #6B7280;
 }
+
+/* Normalize paragraph margin inside legal */
+.footer-legal p { margin: 0; }
 
 .footer-links {
   justify-self: end;

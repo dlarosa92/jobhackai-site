@@ -683,6 +683,31 @@
 
     let questions = buildQuestionsFromContext();
 
+    // --- QA: Integration verification ---
+    function miRunIntegrationQA(){
+      const qa = new URL(window.location.href).searchParams.get('qa');
+      if(!qa) return;
+      try { localStorage.setItem('qa_flag','1'); } catch {}
+      const expectMode = sessionStorage.getItem('qa_expect_mode') || '';
+      const expectCount = Number(sessionStorage.getItem('qa_expect_count') || '0');
+      const expectRole = sessionStorage.getItem('qa_expect_role') || '';
+      const actualMode = (mode || '');
+      const actualCount = Array.isArray(questions)? questions.length : 0;
+      const actualRole = roleParam || (roleInput?.value || '');
+      const results = {
+        mode: expectMode ? (expectMode === actualMode ? 'pass' : 'fail') : 'n/a',
+        count: expectCount ? (expectCount === actualCount ? 'pass' : 'fail') : 'n/a',
+        role: expectRole ? (expectRole === actualRole ? 'pass' : 'fail') : 'n/a',
+        payloadCleared: (actualMode === 'saved') ? (localStorage.getItem('mi_payload') ? 'fail' : 'pass') : 'n/a'
+      };
+      try {
+        Object.entries(results).forEach(([k,v])=> sessionStorage.setItem(`qa_mi_${k}`, String(v)));
+      } catch {}
+      console.log('[QA] Mock Interview integration', { expectMode, expectCount, expectRole, actualMode, actualCount, actualRole, results });
+    }
+    // Run shortly after load so DOM is ready
+    setTimeout(miRunIntegrationQA, 50);
+
     // Start interview
     beginBtn.addEventListener('click', function() {
       if (roleInput.value.trim()) {

@@ -1,0 +1,354 @@
+🚀 JobHackAI Business Model (Updated as 7/15/2025)
+📌 Overview
+JobHackAI is an AI-powered job preparation platform that helps job seekers optimize resumes, prepare for AI-driven interviews, and improve LinkedIn profiles. The business is fully passive, automated, and scalable, requiring no 1-on-1 coaching or high-ticket offerings.
+📌 Pricing Structure
+
+Unlimited mock‑interview sessions in Premium are subject to a soft cooldown: max 1 session per hour, up to 5 per day to prevent abuse.
+📌 Trial Details:
+Full 3-Day Trial (Credit Card Required, Auto-Renews Unless Canceled).
+No reminder email before billing.
+Only Resume Scoring, Feedback, and Interview Questions are available in trial.
+Other features remain locked.
+📌 Additional Options:
+Annual Discount – Users get 2 months free when paying yearly.
+1 Free AI Resume Score – Hook for new users to sign up.
+Upsell Page for Cancelling Users – Offers a discount or downgrade option to retain them.
+Free Tier Cap – Max 250 free trial users per month (creates urgency).
+A/B Pricing Page Tests – Two versions tested for sign-up optimization.
+📌 AI-Powered Features
+✅ ATS Resume Optimization – Score & improve resumes with ATS insights. ✅ Resume Feedback – Structured feedback with detailed suggestions. ✅ Resume Rewriting – Available in Pro and Premium plans. ✅ Cover Letter Generator – 250-word job-specific AI cover letter. ✅ Interview Questions & Mock Interviews – Tailored to the user's job target.
+🔄 Interview Questions Autosuggest Role List (Combo‑box):
+Software Engineer
+Full‑stack Developer
+Platform Engineer
+DevOps Engineer
+Data Engineer
+Data Scientist
+AI Engineer
+LLM Engineer
+Product Manager
+Product Owner
+Epic Owner
+Business Owner
+Scrum Master
+Release Train Engineer (RTE)
+Agile Coach
+Solution Architect
+System Architect
+Data Architect
+UX Designer
+UX/UI Developer
+UX Researcher
+QA Engineer
+Threat Analyst
+Security Engineer
+Data Management
+IT Governance
+The combo‑box filters this list in real time and shows up to 8 matches. ✅ LinkedIn Optimizer – Scored + rewritten profile content (Premium only). ✅ Priority Review – Premium users get faster and more detailed analysis. ✅ AI Market Trends – V2 only, removed from MVP UI (fully hidden frontend).
+📌 Marketing & Traffic Strategy
+Four-channel acquisition strategy: 1️⃣ SEO & Blog Content – 2-4 AI blog posts/month using Wix SEO tools. 2️⃣ Social Media – LinkedIn, Twitter, YouTube channels with job prep tips. 3️⃣ Paid Ads – Google Ads + retargeting (limited use in early stages). 4️⃣ Affiliate Marketing – Partnered with coaches/influencers.
+✅ Blog hosted on Wix. ✅ Initial marketing is organic-first (target ~$300/mo total operating costs). ✅ Upsell triggers: exit intent offers + feature locks + trial countdown. ✅ SEO targets ATS compliance, AI job prep, and LinkedIn profile tips. ✅ All content branded as JobHackAI – no personal branding used.
+📌 Go‑to‑Market Launch Strategy (First 14 Days)
+
+Success Benchmarks
+Landing‑page conversion ≥ 5 % (trial sign‑ups / visitors)
+Trial → Paid conversion ≥ 20 %
+Blended CAC ≤ $50 in first 25 paid users
+
+📌 Platform, Banking & Tech Stack
+
+
+📌 User Login & Subscription Management Flow
+This flow describes how JobHackAI users authenticate, access their subscription data, and manage billing through the integrated payment system. It involves multiple components working together to provide a seamless and secure user experience.
+Flow Steps:
+User Login The user logs into the JobHackAI site using email and password. The frontend captures credentials and initiates the login process.
+User Lookup in Google Sheets via Zapier The frontend sends a request to Zapier to look up the user’s record in Google Sheets, which serves as the lightweight database storing user plan info and Stripe Customer IDs.
+User Data Returned Zapier queries Google Sheets, finds the user’s row, and returns the user information (subscription plan, Stripe Customer ID) back to the frontend.
+Manage Subscription Request When the user clicks “Manage Subscription,” the frontend requests a Stripe Customer Portal session from Zapier, providing the Stripe Customer ID.
+Stripe Portal Session Creation Zapier calls Stripe’s API to create a Customer Portal session for the user.
+Portal URL Returned Stripe returns a URL for the Customer Portal session to Zapier, which then forwards it to the frontend.
+Redirect to Stripe Customer Portal The frontend redirects the user’s browser to the Stripe Customer Portal, where the user can update payment methods, view invoices, or cancel their subscription.
+Quick Login (Dummy) demo@jobhackai.com / password123 (Free) trial@jobhackai.com / password123 (Trial) essential@jobhackai.com / password123 (Essential) pro@jobhackai.com / password123 (Pro) premium@jobhackai.com / password123 (Premium)
+Why this architecture?
+Lightweight user data store: Google Sheets enables easy, cost-effective storage of user metadata and plan status without a complex database.
+Zapier integration: Acts as a secure middleware, connecting the frontend with Google Sheets and Stripe APIs without exposing secrets client-side.
+Stripe Customer Portal: Provides a secure, PCI-compliant way for users to self-manage billing without requiring custom billing UI development.
+Seamless UX: The flow is designed so users experience minimal friction when logging in and managing their subscriptions.
+📌 Design System & UI
+✅ Color Palette (HEX)
+
+✅ Typography
+
+✅ UI Components & Design Notes
+🎯 Layout
+Centered, modern SaaS layout
+Max width container: 1200px
+Section spacing: At least 4rem top/bottom
+Cards: White background, border-radius: 16px, box-shadow: rgba(0, 0, 0, 0.05)
+🟢 Buttons
+
+✅ Navigation Bar
+
+✅ Footer (Global)
+<footer class="site-footer">
+  <div class="footer-container">
+    <div class="footer-brand">
+      <!-- Inline SVG Logo -->
+      <svg class="footer-logo" viewBox="0 0 24 24" ... />
+      <span class="footer-name">JOBHACKAI</span>
+    </div>
+
+    <div class="footer-links">
+      <a href="#">Home</a>
+      <a href="#">What You Get</a>
+      <a href="#">Blog</a>
+      <a href="#">Support</a>
+      <a href="#">Privacy</a>
+    </div>
+
+    <div class="footer-legal">
+      <p>© 2025 JobHackAI. All rights reserved.</p>
+    </div>
+  </div>
+</footer>
+CSS Snippet:
+.site-footer {
+  background-color: #FFFFFF;
+  border-top: 1px solid #E5E7EB;
+  padding: 2rem;
+  font-size: 0.9rem;
+  color: #6B7280;
+}
+.footer-container {
+  max-width: 1200px;
+  margin: 0 auto;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+}
+.footer-links a {
+  margin-right: 1rem;
+  text-decoration: none;
+  color: #4B5563;
+}
+.footer-links a:hover {
+  color: #1F2937;
+}
+.footer-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 800;
+  color: #1F2937;
+}
+.footer-legal {
+  flex-basis: 100%;
+  margin-top: 1rem;
+  text-align: center;
+}
+✅ Resume Feedback Usage Logic (UX Feature Control)
+Essential Plan Users: Can submit up to 3 resume feedbacks per month.
+Display usage counter: “You’ve used 2 of 3 resume feedback sessions this month.”
+When the limit is reached: show alert or modal: ⚠️ You’ve reached your resume feedback limit this month. Upgrade to Pro for unlimited feedback.
+Pro & Premium Users: Unlimited résumé feedback – no cap or warnings displayed.
+Free Tier: Locked with CTA overlay.
+
+✅ Mock Interview Feature Access & Usage Logic
+Access Control:
+Only Pro and Premium users can access Mock Interviews. Essential and Free tiers remain locked.
+Pro Plan Quota:
+20 sessions per month.
+Usage meter appears after 10 sessions: e.g., “Mock Interviews: 14 / 20 used • Resets on May 31”.
+Soft upsell banner at 18+ sessions: “Need more? Upgrade to Premium for unlimited practice.”
+Premium Plan:
+Unlimited sessions subject to soft cooldowns (max 1 session/hour, 5/day) to prevent abuse.
+✅ Feature Locks (Visual Style)
+Gray lock icon 🔒 next to locked features
+Tooltip or overlay saying: “Upgrade to unlock”
+Slight opacity or desaturation on locked features
+📌 Business Structure & Tax Benefits
+✅ S-Corp registered in Kentucky (user is sole employee/owner) ✅ Monthly salary: $2,000 ✅ Distributions taxed at 24% (CPA calculates quarterly) ✅ Quarterly estimated taxes due: Apr 15, Jun 15, Sep 15, Jan 15 ✅ CPA-managed filings for payroll + distributions ✅ No business insurance needed (user covered by employer) ✅ Maximize profit retention + liability protection
+
+📌 ROI, Market Research & Growth Potential
+✅ Market Size: Online career services = $43B by 2028 ✅ Trend: 82% of recruiters use AI to screen resumes ✅ Niche: High demand for AI-powered job prep platforms
+
+📌 Monthly Cost Breakdown:
+
+✅ Less than 1% of revenue at scale → extremely profitable.
+📌 Business Model Summary
+✅ Fully passive, automated SaaS for job seekers ✅ Built on no-code tools + Zapier + OpenAI API ✅ No coaching or high-ticket offers – 100% AI-powered ✅ Pricing built for conversions with trial → upgrade funnel ✅ Minimal operating cost (<$300/mo lean) with high margin ✅ Real-time KPIs + full automation = scalable & low effort
+
+📌 Overall ATS Readiness Scoring Rubric
+JobHackAI will provide users with a composite ATS Readiness Score (1–100) based on three scorable features: Résumé, LinkedIn Profile, and Mock Interview Performance.
+✅ Resume ATS Score (Max: 100 pts)
+
+✅ LinkedIn Optimizer Score (Max: 100 pts)
+
+✅ Mock Interview Score (Max: 100 pts)
+
+📊 Composite Score Weights (Displayed in Dashboard)
+
+Your final ATS Readiness Score = Weighted Average across the three categories, giving users a clear metric of their job-readiness performance.
+📌 Feature Set & Functionality Details
+1.ATS Resume Scoring
+What it is: An advanced AI-driven resume scanner that analyzes uploaded resumes for ATS (Applicant Tracking System) compatibility and job relevance. The system produces a numeric ATS Score (1–100) using a proprietary rubric, delivering a full breakdown and targeted recommendations.
+Scoring Rubric:
+Keyword Match (35 pts): Relevance to the user’s target job via skills/industry keywords.
+ATS Formatting (25 pts): Headings, layout, font usage, and ATS compliance (no tables or graphics).
+Structure & Organization (20 pts): Section order, job titles, dates, education clarity.
+Tone & Clarity (10 pts): Action-oriented language and concise bullet points.
+Grammar & Spelling (10 pts): No typos, correct tense.
+Plan Access:
+Free: 1-time use; one resume scan with full score and high-level feedback.
+3-Day Trial: Unlimited scans, unlimited resumes, full breakdowns, and recommendations.
+Essential/Pro/Premium: Unlimited scans, detailed breakdowns, and improvement suggestions at any time.
+Dashboard Experience:
+Score displayed as progress bar with color badge (red/yellow/green), section-by-section rubric, and improvement suggestions.
+2.Resume Feedback
+What it is: Structured, AI-powered feedback that evaluates resumes section-by-section for clarity, alignment, keyword density, and formatting issues. Provides actionable guidance to increase job search effectiveness.
+Plan Access:
+Free: Locked, with visible upgrade CTA.
+3-Day Trial: Up to 3 feedback sessions (soft cap). Usage meter and upsell banners appear at 2/3. Locks at 3/3 until upgrade.
+Essential: 3 feedbacks per month. Meter shown; locks at 3/3, upgrade CTA displayed.
+Pro/Premium: Unlimited resume feedback.
+3.Resume Rewriting
+What it is: AI-powered resume rewriting that completely rewords and optimizes the user’s resume for ATS compliance, clarity, and readability, section-by-section. (No numeric score—uses the same rubric for AI improvement.)
+Plan Access:
+Free/Trial/Essential: Locked, upgrade CTA visible.
+Pro/Premium: Unlimited rewrites.
+4.Cover Letter Generator
+What it is: Automated, AI-generated cover letters tailored to specific jobs (250 words), using resume data and job descriptions for maximum ATS compatibility and impact. (No scoring in MVP—cover letter scoring on V2 backlog.)
+Plan Access:
+Free/Trial/Essential: Locked.
+Pro/Premium: Unlimited cover letter generation.
+5.Interview Questions
+What it is: Generates customized lists of technical and behavioral interview questions based on role, industry, and seniority. Pulls from a robust 25-role autosuggest library. (No scoring.)
+Plan Access:
+Free: Locked.
+3-Day Trial/Essential/Pro/Premium: Unlimited question set generation.
+All plans: 1-minute cooldown between requests to prevent abuse.
+6.Mock Interviews
+What it is: A fully simulated, AI‑powered interview experience. The user answers 10 role‑specific questions per session (typed input for MVP), and the AI scores each response using a standardized rubric, plus provides session summaries and improvement advice.
+Scoring Rubric:
+Relevance of Answer (30 pts)
+Structure & Delivery (25 pts)
+Confidence & Clarity (20 pts)
+Depth & Insight (15 pts)
+Grammar & Pace (10 pts)
+Session results: Numeric badge, progress tracking, color coding.
+
+Voice input for mock interviews: V2 backlog (not MVP).
+7.LinkedIn Optimizer
+What it is: Section-by-section LinkedIn profile review and scoring (1–100) with actionable feedback and AI-powered rewrite suggestions for every section.
+Scoring Rubric:
+Headline & Tagline (20 pts)
+Summary/About (20 pts)
+Experience (20 pts)
+Skills (15 pts)
+Recommendations (10 pts)
+Profile Image & URL (5 pts)
+Engagement (optional, 10 pts, future)
+Plan Access:
+Premium: Unlimited scoring and rewrite access.
+All lower tiers: Locked, with CTA/feature lock.
+8.Priority Review
+What it is: Premium users’ resume and interview requests are automatically prioritized in the AI queue for faster, more detailed analysis—no action required.
+Plan Access:
+Premium: Auto-enabled.
+Others: Locked.
+Feature Lock & Usage Meter Logic
+Locked Features: Gray lock icon with tooltip “Upgrade to unlock.” Premium-only features display gold badge in lower tiers.
+Usage Meter:
+Resume Feedback: Usage shown, upsell at 2/3 (trial) or 3/3 (Essential).
+Mock Interviews (Pro): Meter after 10, upsell at 18/20.
+Cooldowns:
+Interview Questions: 1/min
+Mock Interviews: 1/hr, 5/day
+Composite ATS Readiness Score (Dashboard)
+Weighted average of:
+Resume Score (40%)
+LinkedIn Score (30%)
+Mock Interview Score (30%)
+Presented as a dashboard gauge to indicate job market readiness
+Backlog / V2 Features
+Mock Interview Voice Input (planned for V2)
+Cover Letter Scoring (V2)
+AI Job-Market Trends dashboard (V2+)
+Rationale for Unlimited ATS Scoring in Trial
+Increases perceived value and conversion, in line with industry competitors.
+Minimal cost impact per scan.
+Ensures the upgrade push comes from other feature caps (feedback, rewrites, LinkedIn, etc.).
+📌 Additional Implementation Decisions (Committed)
+Cover‑Letter Scoring (V2 Backlog) – Separate feature allowing users to upload/paste their own cover letter for an AI score & feedback (Pro/Premium in V2).
+Interview Questions Soft‑Cooldown – Abuse prevention: max 1 question‑set request per minute for all plans.
+Relay Sub‑Account Structure – Create Operating, Tax, Marketing, and Reserve buckets to silo cash inside Relay Bank.
+Token‑Cost Strategy – Run résumé & LinkedIn scoring on GPT‑3.5‑turbo‑1106; reserve GPT‑4o for mock‑interview feedback to control OpenAI spend.
+Social‑Proof Automation – Zapier workflow: Stripe trial ➜ Sheets ➜ LinkedIn DM request ➜ live testimonial carousel update on homepage.
+Design Token Expansion – Add spacing (--space-1…--space-6), typography scale (--fs-h1…--fs-small), shadow (--elev-1, --elev-2), breakpoint (--bp-sm…--bp-xl), and motion (--trans-fast) tokens to the Design System.
+Canonical Snippet Library – Create Snippets.md containing the authoritative HTML/CSS for Button, Input, and Card components.
+Prompt Contract Update – Future prompts must reference tokens and snippets explicitly: “Insert <!-- Button --> snippet verbatim; use var(--space-3) for padding.” ** – Zapier workflow: Stripe trial ➜ Sheets ➜ LinkedIn DM request ➜ live testimonial carousel update on homepage.
+🚀 Next Steps
+
+These tasks are committed decisions as of 2025‑04‑27 and must be completed before public launch.
+Query Bar (above the list) Fields: Role (combobox) Seniority (Select: Intern/Junior/Mid/Senior/Lead/Director) Question Type (Toggle chips: Behavioral / Technical / System Design / Leadership / Culture) Count (10) Advanced (accordion): “Paste Job Description (optional)” textarea to tailor the set.  On each question card:  Copy, Replace (swap just this one), Save ⭐, Notes (open a small textarea).  Cooldown & statuses (your 1/min rule) After Generate/Regenerate, show a non-blocking toast: “New Set ready.” Disable Generate/Regenerate with a countdown badge “0:58”  Session history (lightweight) Right side on desktop / collapsible on mobile: “Recent Sets” (role, timestamp, 10 questions). Click to restore.      Access & plan logic (aligned with pricing matrix) Free: page locked → CTA card “Upgrade to try Interview Questions.” Trial/Essential/Pro/Premium: unlimited generation with 1/min cooldown. Mock Interview CTA: visible but locked for Trial/Essential; clickable for Pro/Premium.
+Control without re-rolling the whole set If 1–2 questions miss, “Replace” swaps just those. You avoid burning a full regeneration and keep momentum.
+Faster practice → better retention “Copy” and “Save ⭐” let users build a tight, personal set in seconds. That’s how people actually prep—curate, repeat, refine.
+Answer quality jumps “Notes” + “Show Answer Guidance” (STAR hints) push users to structure answers. That’s the difference between rambling and concise.
+Clean upsell path “Start Mock Interview with saved set” becomes a natural Pro/Premium funnel. Trial/Essential see a lock + tooltip instead of a dead end.
+Great telemetry Clicks on Replace/Save/Copy tell us what topics are weak, which roles need more coverage, and who’s ready to upgrade.
+How it works (concrete examples)
+A) Replace (surgical swap)
+User sees Q3: “Describe a time you disagreed with a teammate.”
+It’s not relevant. They hit Replace → we call POST /questions/replace with { role, seniority, types, jd, replaceIndex: 3 }.
+New Q3 appears with a 5-second micro-cooldown badge on the Replace button only. Generate/Regenerate cooldown stays intact.
+B) Save ⭐ (curate a study set)
+User stars Q1, Q4, Q7.
+A “Saved (3)” chip appears in the toolbar.
+They can open “Saved Set” → Copy All / Download PDF / “Start Mock Interview with saved set”.
+Trial/Essential click the Mock Interview action → feature-lock modal explains Pro benefits and links to pricing.
+C) Notes (capture the story beats)
+On Q2: “Tell me about a time you improved a process.”
+User taps Notes, a small textarea drops under the card.
+We pre-fill a STAR scaffold:
+	S:
+	T:
+	A:
+	R:
+They jot: “Cut CI build time 22% by caching deps, parallelizing tests.”
+Auto-save to localStorage (or user profile later). On revisit, it’s there.
+D) Show Answer Guidance (lightweight coaching)
+Toggle at the top: Show Answer Guidance.
+Each card reveals a one-liner hint (no walls of text):
+Hint: “Quantify outcome; mention tools; keep it under 90 seconds.”
+Users can click “Example” to expand a 3-sentence STAR sample (optional).
+E) Copy (snackable export)
+Copy on a single card copies just that question.
+Copy All in the toolbar collects the current list (or the Saved Set) for pasting into Notes/Google Docs. Instant value.
+
+———   [Mode: UltraDeep Thinking]
+
+Before answering, silently run multiple reasoning passes (at least 3), aiming for the most robust solution. If the answer isn’t optimal after those passes, continue iterating until it is.
+
+Process to follow (internally):
+1) Frame: Restate the objective and constraints in one line.
+2) Decompose: Break the task into minimal subtasks.
+3) Explore: For each subtask, consider multiple approaches (incl. unlikely angles) and their trade-offs.
+4) Falsify: Challenge your own assumptions; try to disprove your preferred approach.
+5) Verify x3: Check facts, names, dates, units, and any math digit-by-digit; run consistency and sanity checks across steps.
+6) Risk & Unknowns: Identify uncertainties, edge cases, and what could change the answer.
+7) Optimize: Select the best approach and tighten it for clarity and utility.
+
+Output format (show only this):
+- **Answer:** (final, concise, directly solves the user’s request)
+- **Why this works (brief):** 3–5 bullets summarizing the key reasoning and trade-offs (no step-by-step chain of thought).
+- **Assumptions & Uncertainties:** bullets
+- **Quality checks passed:** facts verified, calculations checked, contradictions resolved
+- **Next step (if any):** one actionable suggestion
+
+Rules:
+- Be rigorous, precise, and practical. No filler, no hedging.
+- If critical data is missing, state what’s missing and proceed with the best defensible default.
+- Prefer explicit structure, crisp language, and verifiable claims over verbosity.
+  Inline add-on (if you just want a one-liner to append to any prompt):  Use UltraDeep Thinking: run ≥3 internal reasoning passes with decomposition, adversarial self-check, triple verification, and multi-angle analysis; then return only a concise final answer + brief rationale, assumptions, checks passed, and next step.   git add . && git commit -m "<commit-message>" && git checkout main && git fetch origin && git pull origin main && git merge <branch-name> && git push origin main && git branch -d <branch-name> && git push origin --delete <branch-name>

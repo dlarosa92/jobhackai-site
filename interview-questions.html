@@ -139,7 +139,7 @@
     .cooldown-badge { padding:.3rem .5rem; border-radius:8px; border:1px solid #E5E7EB; font-size:.9rem; color:#4B5563; }
     .skeleton { height:56px; border-radius:16px; background:linear-gradient(90deg,#f3f4f6 25%,#eceff3 37%,#f3f4f6 63%); background-size:400% 100%; animation:sheen 1.2s ease-in-out infinite; }
     @keyframes sheen { 0%{background-position:100% 0} 100%{background-position:0 0} }
-    .iq-qactions { display:flex; gap:.4rem; visibility:hidden; pointer-events:auto; }
+    .iq-qactions { display:flex; gap:.4rem; visibility:hidden; pointer-events:auto; margin-bottom:.6rem; }
     .iq-question-card:hover .iq-qactions,
     .iq-question-card:focus-within .iq-qactions { visibility:visible; }
     .iq-qactions .icon-btn { pointer-events:auto; position:relative; z-index:1; }
@@ -147,9 +147,10 @@
     .link-btn { background:none; border:none; color:#007BFF; cursor:pointer; text-decoration:underline; padding:0 .25rem; }
     .iq-example { margin:.5rem 0 0 0; color:#4B5563; }
     .iq-types { display:flex; gap:.4rem; flex-wrap:wrap; }
-    .recent-item { width:100%; text-align:left; padding:.6rem .7rem; border:1.5px solid #E5E7EB; border-radius:10px; background:#fff; }
+    .recent-item { width:100%; text-align:left; padding:.6rem .7rem; border:1.5px solid #E5E7EB; border-radius:10px; background:#fff; cursor:pointer; }
     .ri-role { font-weight:600; }
     .ri-meta { color:#6B7280; font-size:.9rem; }
+    .cta-hint { flex-basis:100%; font-size:.9rem; color:#6B7280; margin-top:.25rem; }
     #iq-toast { position:fixed; bottom:20px; left:50%; transform:translateX(-50%); background:#1F2937; color:#fff; padding:.75rem 1rem; border-radius:8px; font-size:.9rem; z-index:9999; opacity:0; pointer-events:none; transition:opacity 0.3s ease; }
     #iq-toast.show { opacity:1; }
     .btn-save svg { fill:none; stroke:#6B7280; stroke-width:1.5; }
@@ -166,8 +167,7 @@
     .sr-only { position:absolute !important; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0; }
 
     /* --- Visual polish & overrides --- */
-    .iq-main { padding-bottom: 220px; }
-    .site-footer { position: static; }
+    .iq-main { padding-bottom: 16px; }
     .card { border-radius:16px; padding:1.25rem; }
     .iq-select, .chip, textarea#iq-jd { border-radius:12px; }
     .chip { border:1px solid #E5E7EB; padding:.5rem .75rem; line-height:1; background:#fff; min-height:36px; }
@@ -262,16 +262,57 @@
 
     /* Combobox active item */
     .iq-role-item.active { background:#EEF2FF; }
-    /* Ensure last card clears footer */
-    #iq-questions { padding-bottom: 240px; }
+    /* Ensure last card clears footer (reduced to match footer standards) */
+    #iq-questions { padding-bottom: 24px; }
     /* Extra spacer to ensure nothing hides under footer */
-    .iq-main::after { content:""; display:block; height:64px; }
+    .iq-main::after { content:""; display:block; height:0; }
 
     /* Lightweight snackbar toast */
     #iq-toast { position:fixed; bottom:18px; right:18px; background:#111827; color:#fff; padding:.55rem .75rem; border-radius:10px; box-shadow:0 6px 18px rgba(0,0,0,.18); font-size:.95rem; z-index:10000; opacity:0; transform:translateY(8px); transition:opacity .18s ease, transform .18s ease; }
     #iq-toast.show { opacity:1; transform:translateY(0); }
     /* Ensure overlay respects hidden state regardless of inline display */
     #iq-upsell[hidden] { display: none !important; }
+
+    /* Accessible, consistent tooltips for action buttons */
+    .icon-btn[data-tip] { position: relative; }
+    .icon-btn[data-tip]::after {
+      content: attr(data-tip);
+      position: absolute;
+      left: 50%;
+      transform: translateX(-50%);
+      bottom: calc(100% + 8px);
+      background: #111827;
+      color: #fff;
+      padding: .25rem .5rem;
+      border-radius: 6px;
+      font-size: .85rem;
+      line-height: 1;
+      white-space: nowrap;
+      box-shadow: 0 4px 12px rgba(0,0,0,.18);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity .12s ease;
+      z-index: 50;
+    }
+    .icon-btn[data-tip]::before {
+      content: '';
+      position: absolute;
+      left: 50%;
+      transform: translateX(-50%);
+      bottom: calc(100% + 2px);
+      border: 6px solid transparent;
+      border-top-color: #111827;
+      opacity: 0;
+      transition: opacity .12s ease;
+      pointer-events: none;
+      z-index: 50;
+    }
+    .icon-btn[data-tip]:hover::after,
+    .icon-btn[data-tip]:focus-visible::after,
+    .icon-btn[data-tip]:hover::before,
+    .icon-btn[data-tip]:focus-visible::before { opacity: 1; }
+    /* Notes section spacing */
+    .iq-notes { margin-top: .8rem; }
   </style>
 </head>
 <body>
@@ -378,7 +419,7 @@
         <button id="btn-download" class="btn-outline">Download PDF</button>
         <button id="btn-save-set" class="btn-outline">Saved Set</button>
         <button id="toggle-guidance" class="btn-outline" aria-pressed="false">Show Answer Guidance</button>
-        <button id="btn-mock" class="btn-outline">Start Mock Interview <span class="lock" aria-hidden="true" style="margin-left:.4rem; display:inline-flex; vertical-align:baseline; position:relative; top:.02em;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#1F2937" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" aria-label="Locked" role="img" title="Locked"><rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V8a4 4 0 0 1 8 0v2"/><circle cx="12" cy="15" r="1.75"/></svg></span></button>
+        <button id="btn-mock" class="btn-outline">Start Mock Interview (Current) <span class="lock" aria-hidden="true" style="margin-left:.4rem; display:inline-flex; vertical-align:baseline; position:relative; top:.02em;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#1F2937" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" aria-label="Locked" role="img" title="Locked"><rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V8a4 4 0 0 1 8 0v2"/><circle cx="12" cy="15" r="1.75"/></svg></span></button>
         <button id="chip-saved" class="chip" hidden aria-hidden="true" style="margin-left:.5rem;">Saved (0)</button>
       </div>
     </div>
@@ -411,12 +452,13 @@
       <div style="display:flex; gap:.5rem; flex-wrap:wrap;">
         <button id="saved-copy-all" class="btn-outline">Copy All</button>
         <button id="saved-download" class="btn-outline">Download PDF</button>
-        <button id="saved-mock" class="btn-primary">Start Mock Interview (Saved)</button>
+        <button id="saved-mock" class="btn-primary">Start with This Saved Set</button>
       </div>
     </div>
 
     <!-- Toast container -->
     <div id="iq-toast" role="status" aria-live="polite" aria-atomic="true"></div>
+  </main>
   <!-- Footer (canonical) -->
   <footer class="site-footer">
     <div class="footer-container">
@@ -630,10 +672,10 @@
         return `<div class="iq-question-card" data-idx="${i}">
   <div class="iq-qtext">${i+1}. ${qText}</div>
   <div class="iq-qactions" aria-label="Question actions">
-    <button type="button" class="icon-btn btn-copy" data-idx="${i}" title="Copy" aria-label="Copy">
+    <button type="button" class="icon-btn btn-copy" data-idx="${i}" data-tip="Copy" aria-label="Copy">
       <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><rect x="8" y="8" width="12" height="12" rx="2"/><rect x="4" y="4" width="12" height="12" rx="2"/></svg>
     </button>
-    <button type="button" class="icon-btn btn-replace" data-idx="${i}" title="New Question" aria-label="New Question">
+    <button type="button" class="icon-btn btn-replace" data-idx="${i}" data-tip="New Question" aria-label="New Question">
       <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
         <path d="M3 12a9 9 0 0 1 14.9-6.9"/>
         <path d="M18 5v4h-4"/>
@@ -641,10 +683,10 @@
         <path d="M6 19v-4h4"/>
       </svg>
     </button>
-    <button type="button" class="icon-btn btn-save" data-idx="${i}" title="Save" aria-label="Save" aria-pressed="${savedPressed}">
+    <button type="button" class="icon-btn btn-save" data-idx="${i}" data-tip="Save" aria-label="Save" aria-pressed="${savedPressed}">
       <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><polygon points="12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26"/></svg>
     </button>
-    <button type="button" class="icon-btn btn-notes" data-idx="${i}" aria-expanded="false" aria-controls="iq-notes-${i}" title="Notes" aria-label="Notes">
+    <button type="button" class="icon-btn btn-notes" data-idx="${i}" aria-expanded="false" aria-controls="iq-notes-${i}" data-tip="Notes" aria-label="Notes">
       <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
         <path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9Z"/>
         <path d="M14 3v6h6"/>
@@ -783,7 +825,8 @@
         const mode=useSaved?'saved':'current';
         const id = iqState.set ? iqSetId(iqState.set.role, iqState.set.seed) : '';
         if(useSaved){ try{ localStorage.setItem('mi_payload', JSON.stringify({ id, role, questions: iqGetSavedItems().map(it=>it.q) })); }catch{} }
-        const url = `mock-interview.html?role=${encodeURIComponent(role)}&mode=${mode}${id?`&set=${encodeURIComponent(id)}`:''}`;
+        const qaMode = (new URL(window.location.href).searchParams.get('qa') || localStorage.getItem('qa_flag')) ? true : false;
+        const url = `mock-interview.html?role=${encodeURIComponent(role)}&mode=${mode}${id?`&set=${encodeURIComponent(id)}`:''}${qaMode?'&qa=1':''}`;
         iqTrack('iq_mock_clicked_unlocked',{ mode, savedCount: useSaved? iqGetSavedItems().length : 0 });
         window.location.href = url;
       } else {
@@ -859,8 +902,15 @@
           items.map((it,idx)=>`<div class="iq-question-card"><div style="display:flex; align-items:center; justify-content:space-between; gap:.5rem;"><span>${idx+1}. ${iqEsc(it.q)}</span><button class="btn-outline saved-remove" data-original-index="${idxs[idx]}">Remove</button></div></div>`).join('') 
           : '<div class="empty">No saved items yet.</div>'; 
       }
-      // Enable/disable Start Mock button based on whether there are saved items
-      const sm=$IQ('#saved-mock'); if(sm){ sm.disabled = items.length===0; sm.setAttribute('aria-disabled', items.length===0 ? 'true' : 'false'); }
+      // Show/hide Saved CTA based on whether there are saved items
+      const sm=$IQ('#saved-mock');
+      if(sm){
+        const has = items.length>0;
+        sm.hidden = !has;
+        sm.setAttribute('aria-hidden', has ? 'false' : 'true');
+        sm.disabled = !has;
+        sm.setAttribute('aria-disabled', !has ? 'true' : 'false');
+      }
       // Wire remove button events (re-wire on each render)
       list?.addEventListener('click', (ev)=>{ 
         const btn=ev.target.closest('.saved-remove'); 
@@ -959,12 +1009,56 @@ function initIQPage(){ iqLoadPrefs(); iqState.prefs.count = IQ_FIXED_COUNT; iqRe
 
     // Self-tests
     async function runIQSelfTests(){ const res=[]; const ok=(n,c)=>res.push({n,pass:!!c}); ok('Role input exists', !!document.getElementById('iq-role')); ok('Generate button exists', !!document.getElementById('btn-generate')); iqStartGlobalCooldown(1); ok('Cooldown badge shows', !$IQ('#cooldown').hidden); const gen=await iqApiGenerate({ role:'Tester', seniority:'', types:['behavioral'], count:3, jd:'' }); ok('apiGenerate returns questions', Array.isArray(gen.questions)&&gen.questions.length>0); console.log('%cInterview Questions Self-Tests','font-weight:700'); res.forEach(r=>console.log(`${r.pass?'✅':'❌'} ${r.n}`)); }
-    document.addEventListener('DOMContentLoaded', ()=>{ initIQPage(); setTimeout(runIQSelfTests,200); });
+    
+    // --- QA: Integration harness ---
+    function runIQIntegrationQA(){
+      const qa = new URL(window.location.href).searchParams.get('qa');
+      if(!qa) return;
+      try { localStorage.setItem('qa_flag','1'); localStorage.setItem('user-authenticated','true'); } catch {}
+      const ensureSet = ()=>{
+        if(iqState.set && Array.isArray(iqState.set.questions) && iqState.set.questions.length) return;
+        const role='QA Engineer';
+        const seed=String(Date.now());
+        const questions = Array.from({length: IQ_FIXED_COUNT}, (_,i)=>({ q:`QA auto Q${i+1}` }));
+        iqState.set = { role, seed, seniority:'', types:['behavioral'], jd:'', questions };
+        iqState.notes = {};
+        iqSaveSetFull(iqState.set);
+        iqRenderQuestions();
+        iqWireQuestionList();
+        const r=$IQ('#btn-regenerate'); if(r){ r.hidden=false; r.style.display=''; }
+      };
+      if(qa==='trial-lock'){
+        try { localStorage.setItem('user-plan','trial'); } catch {}
+        updateInterviewUIForPlan?.();
+        iqHandleMock(false);
+        setTimeout(()=>{ const m=$IQ('#iq-upsell'); const ok = !!m && m.hidden===false; try { localStorage.setItem('qa_result_trial_lock', ok?'pass':'fail'); } catch {} }, 250);
+        return;
+      }
+      if(qa==='pro-current'){
+        try { localStorage.setItem('user-plan','pro'); } catch {}
+        ensureSet();
+        const role = iqState.set.role;
+        try { sessionStorage.setItem('qa_expect_mode','current'); sessionStorage.setItem('qa_expect_count', String(iqState.set.questions.length)); sessionStorage.setItem('qa_expect_role', role); } catch {}
+        iqHandleMock(false);
+        return;
+      }
+      if(qa==='pro-saved'){
+        try { localStorage.setItem('user-plan','pro'); } catch {}
+        ensureSet();
+        iqSetSavedIndexes([0,1,2]);
+        try { sessionStorage.setItem('qa_expect_mode','saved'); sessionStorage.setItem('qa_expect_count','3'); sessionStorage.setItem('qa_expect_role', iqState.set.role); } catch {}
+        iqHandleMock(true);
+        return;
+      }
+    }
+    document.addEventListener('DOMContentLoaded', ()=>{ initIQPage(); setTimeout(runIQSelfTests,200); setTimeout(runIQIntegrationQA,300); });
     /* ==== End MVP+ module ==== */
 
     // --- PLAN LOGIC ---
     function updateInterviewUIForPlan() {
       const userPlan = getUserPlan();
+      const mockBtn = document.getElementById('btn-mock');
+      const mockLock = mockBtn ? mockBtn.querySelector('.lock') : null;
       
       // Show/hide upgrade and lock based on plan
       if (['trial', 'essential', 'pro', 'premium'].includes(userPlan)) {
@@ -972,11 +1066,21 @@ function initIQPage(){ iqLoadPrefs(); iqState.prefs.count = IQ_FIXED_COUNT; iqRe
         roleInput.disabled = false;
         upgradeBtn.style.display = 'none';
         lockDiv.style.display = 'none';
+        // For eligible plans, hide lock icon on Start Mock
+        if (['pro','premium'].includes(userPlan)) {
+          if (mockLock) mockLock.style.display = 'none';
+          mockBtn?.removeAttribute('data-locked');
+        } else {
+          if (mockLock) mockLock.style.display = 'inline-flex';
+          mockBtn?.setAttribute('data-locked','true');
+        }
       } else {
         // Lock input and show upgrade prompt
         roleInput.disabled = true;
         upgradeBtn.style.display = 'block';
         lockDiv.style.display = 'block';
+        if (mockLock) mockLock.style.display = 'inline-flex';
+        mockBtn?.setAttribute('data-locked','true');
       }
     }
     
