@@ -352,3 +352,7 @@ Rules:
 - If critical data is missing, state what’s missing and proceed with the best defensible default.
 - Prefer explicit structure, crisp language, and verifiable claims over verbosity.
   Inline add-on (if you just want a one-liner to append to any prompt):  Use UltraDeep Thinking: run ≥3 internal reasoning passes with decomposition, adversarial self-check, triple verification, and multi-angle analysis; then return only a concise final answer + brief rationale, assumptions, checks passed, and next step.   git add . && git commit -m "<commit-message>" && git checkout main && git fetch origin && git pull origin main && git merge <branch-name> && git push origin main && git branch -d <branch-name> && git push origin --delete <branch-name>
+
+
+
+
