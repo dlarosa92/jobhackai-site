@@ -1,4 +1,4 @@
-# JobHackAI - Technical Context Brief for Manus AI
+# JobHackAI - Technical Context Brief
 
 ## 📁 1. Directory & Page Inventory
 
