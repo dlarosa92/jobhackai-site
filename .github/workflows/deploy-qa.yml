@@ -1,0 +1,55 @@
+name: Deploy to QA Environment
+
+on:
+  push:
+    branches: [ feature/*, develop ]
+  pull_request:
+    branches: [ develop ]
+
+jobs:
+  deploy-qa:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+        cache-dependency-path: app/package-lock.json
+        
+    - name: Install dependencies
+      run: |
+        cd app
+        npm ci
+        
+    - name: Run tests
+      run: |
+        cd app
+        npm run test --if-present
+        
+    - name: Build Next.js app
+      run: |
+        cd app
+        npm run build
+        
+    - name: Deploy to Cloudflare Pages (QA)
+      uses: cloudflare/pages-action@v1
+      with:
+        apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        projectName: jobhackai-app-qa
+        directory: app/out
+        gitHubToken: ${{ secrets.GITHUB_TOKEN }}
+        
+    - name: Deploy Cloudflare Workers (QA)
+      run: |
+        cd app
+        npm install -g wrangler
+        wrangler deploy --env qa
+      env:
+        CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}

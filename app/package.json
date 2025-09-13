@@ -1,0 +1,29 @@
+{
+  "name": "jobhackai-app",
+  "version": "1.0.0",
+  "description": "JobHackAI Cloudflare Application",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "export": "next build && next export",
+    "deploy": "wrangler pages deploy out",
+    "deploy:qa": "wrangler pages deploy out --env qa",
+    "deploy:prod": "wrangler pages deploy out --env production"
+  },
+  "dependencies": {
+    "next": "^14.0.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "firebase": "^10.7.0",
+    "stripe": "^14.0.0"
+  },
+  "devDependencies": {
+    "@cloudflare/wrangler": "^3.0.0",
+    "@types/node": "^20.0.0",
+    "@types/react": "^18.2.0",
+    "@types/react-dom": "^18.2.0",
+    "typescript": "^5.0.0"
+  }
+}
