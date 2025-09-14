@@ -12,14 +12,14 @@ route = "app.jobhackai.io/*"
 # KV Storage for QA
 [[env.qa.kv_namespaces]]
 binding = "JOBHACKAI_KV"
-id = "your-qa-kv-namespace-id"
-preview_id = "your-qa-kv-preview-id"
+id = "REPLACE_WITH_QA_KV_ID"
+preview_id = "REPLACE_WITH_QA_KV_PREVIEW_ID"
 
 # KV Storage for Production
 [[env.production.kv_namespaces]]
 binding = "JOBHACKAI_KV"
-id = "your-prod-kv-namespace-id"
-preview_id = "your-prod-kv-preview-id"
+id = "REPLACE_WITH_PROD_KV_ID"
+preview_id = "REPLACE_WITH_PROD_KV_PREVIEW_ID"
 
 # Environment variables
 [vars]
