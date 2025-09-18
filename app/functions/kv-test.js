@@ -1,4 +1,4 @@
-export const onRequestGet: PagesFunction = async ({ env }) => {
+export const onRequestGet = async ({ env }) => {
   const key = "hello";
   await env.KV.put(key, "world", { expirationTtl: 60 });
   const value = await env.KV.get(key);
