@@ -23,8 +23,8 @@ export default function StripeTest() {
         'Interview Question Generator',
         'Email Support'
       ],
-      priceId: 'prod_T0Nempar2BWTfg', // Essential Plan
-      stripePriceId: 'prod_T0Nempar2BWTfg'
+      priceId: 'price_1S4MsxApMPhcB1Y6sC4oQzNL', // Essential Plan
+      stripePriceId: 'price_1S4MsxApMPhcB1Y6sC4oQzNL'
     },
     {
       id: 'pro',
@@ -39,8 +39,8 @@ export default function StripeTest() {
         'Mock Interview Practice',
         'Priority Support'
       ],
-      priceId: 'prod_T0Ni7b3qqsH9ca', // Pro Plan
-      stripePriceId: 'prod_T0Ni7b3qqsH9ca'
+      priceId: 'price_1S4MwlApMPhcB1Y6ejrHX2g9', // Pro Plan
+      stripePriceId: 'price_1S4MwlApMPhcB1Y6ejrHX2g9'
     },
     {
       id: 'premium',
@@ -55,8 +55,8 @@ export default function StripeTest() {
         'Career Coaching Session',
         'Phone Support'
       ],
-      priceId: 'prod_T0NkBDSDoW38ko', // Premium Plan
-      stripePriceId: 'prod_T0NkBDSDoW38ko'
+      priceId: 'price_1S4MykApMPhcB1Y6g4OStoSy', // Premium Plan
+      stripePriceId: 'price_1S4MykApMPhcB1Y6g4OStoSy'
     }
   ];
 
