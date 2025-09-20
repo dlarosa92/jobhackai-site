@@ -15,7 +15,7 @@ export async function onRequest(context: any) {
 
     // Verify Firebase ID token
     const firebaseResponse = await fetch(
-      `https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${env.FIREBASE_API_KEY}`,
+      `https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${env.NEXT_PUBLIC_FIREBASE_API_KEY}`,
       {
         method: 'POST',
         headers: {
