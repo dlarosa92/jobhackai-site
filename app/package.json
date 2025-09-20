@@ -6,7 +6,6 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "postbuild": "cp -f public/_redirects out/_redirects",
     "start": "next start",
     "export": "next build && next export",
     "deploy": "wrangler pages deploy out",
