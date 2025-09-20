@@ -1,0 +1,4 @@
+
+# Next.js/Pages build artifacts
+app/out
+app/.next
