@@ -1,14 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import Head from 'next/head';
-import { 
-  signInWithPopup, 
-  GoogleAuthProvider, 
-  signOut, 
-  onAuthStateChanged,
-  User
-} from 'firebase/auth';
-import { auth } from '../lib/firebase';
 
 interface SubscriptionData {
   status: string;
@@ -19,9 +11,9 @@ interface SubscriptionData {
 
 export default function Dashboard() {
   const router = useRouter();
-  const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [subscription, setSubscription] = useState<SubscriptionData | null>(null);
+  const [user, setUser] = useState<any>({ uid: 'test-user', displayName: 'Test User', email: 'test@example.com' });
+  const [loading, setLoading] = useState(false);
+  const [subscription, setSubscription] = useState<SubscriptionData | null>({ status: 'active', plan: 'free' });
   const [usageStats, setUsageStats] = useState({
     resumeScans: 0,
     coverLetters: 0,
@@ -30,17 +22,8 @@ export default function Dashboard() {
   });
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      setUser(user);
-      setLoading(false);
-      
-      if (user) {
-        fetchSubscriptionData(user.uid);
-        fetchUsageStats(user.uid);
-      }
-    });
-
-    return () => unsubscribe();
+    // Mock user data for testing
+    setLoading(false);
   }, []);
 
   const fetchSubscriptionData = async (userId: string) => {
@@ -82,21 +65,12 @@ export default function Dashboard() {
   };
 
   const handleSignIn = async () => {
-    try {
-      const provider = new GoogleAuthProvider();
-      await signInWithPopup(auth, provider);
-    } catch (error) {
-      console.error('Sign in error:', error);
-    }
+    console.log('Sign in clicked');
   };
 
   const handleSignOut = async () => {
-    try {
-      await signOut(auth);
-      router.push('/');
-    } catch (error) {
-      console.error('Sign out error:', error);
-    }
+    console.log('Sign out clicked');
+    router.push('/');
   };
 
   const handleManageSubscription = async () => {
