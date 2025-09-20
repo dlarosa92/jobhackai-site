@@ -10,6 +10,11 @@ export const firebaseConfig = {
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID || '',
 };
 
-const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
-export const auth = getAuth(app);
+// Avoid initializing Firebase Auth during SSR/static build to prevent build-time errors
+const isBrowser = typeof window !== 'undefined';
+const app = isBrowser ? (getApps().length ? getApp() : initializeApp(firebaseConfig)) : undefined;
+
+// Export auth only on client; on server it will be a benign null (typed as any)
+export const auth: any = isBrowser && app ? getAuth(app) : null;
+
 export default app;
