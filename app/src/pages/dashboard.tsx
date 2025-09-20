@@ -28,7 +28,6 @@ export default function Dashboard() {
 
   const fetchSubscriptionData = async (userId: string) => {
     try {
-      // This would fetch from your Cloudflare Worker
       const response = await fetch('/api/subscription', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -41,14 +40,12 @@ export default function Dashboard() {
       }
     } catch (error) {
       console.error('Error fetching subscription:', error);
-      // Default to free plan if no subscription found
       setSubscription({ status: 'active', plan: 'free' });
     }
   };
 
   const fetchUsageStats = async (userId: string) => {
     try {
-      // This would fetch from your KV storage
       const response = await fetch('/api/usage', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -154,13 +151,17 @@ export default function Dashboard() {
       <Head>
         <title>Dashboard - JobHackAI</title>
         <meta name="description" content="Manage your JobHackAI subscription and access all features" />
+        <link rel="stylesheet" href="/css/tokens.css" />
+        <link rel="stylesheet" href="/css/main.css" />
       </Head>
 
       <div className="dashboard">
         {/* Header */}
         <header className="dashboard-header">
           <div className="header-content">
-            <h1>JobHackAI Dashboard</h1>
+            <div className="nav-logo">
+              <span>JobHackAI</span>
+            </div>
             <div className="user-info">
               <div className="user-details">
                 <img src={user.photoURL || '/default-avatar.png'} alt="Profile" className="avatar" />
@@ -169,7 +170,7 @@ export default function Dashboard() {
                   <p className="user-email">{user.email}</p>
                 </div>
               </div>
-              <button onClick={handleSignOut} className="btn-secondary">
+              <button onClick={handleSignOut} className="btn-outline">
                 Sign Out
               </button>
             </div>
@@ -178,9 +179,15 @@ export default function Dashboard() {
 
         {/* Main Content */}
         <main className="dashboard-content">
+          {/* Hero Section */}
+          <section className="hero">
+            <h1>Welcome back, {user.displayName}!</h1>
+            <p>Manage your JobHackAI subscription and access all features</p>
+          </section>
+
           {/* Subscription Status */}
           <section className="subscription-section">
-            <div className="subscription-card">
+            <div className="feature">
               <div className="subscription-header">
                 <h2>Current Plan</h2>
                 <span className={`plan-badge ${subscription?.plan || 'free'}`}>
@@ -216,16 +223,16 @@ export default function Dashboard() {
           {/* Usage Statistics */}
           <section className="usage-section">
             <h2>Usage Statistics</h2>
-            <div className="stats-grid">
-              <div className="stat-card">
+            <div className="features">
+              <div className="feature">
                 <div className="stat-number">{usageStats.resumeScans}</div>
                 <div className="stat-label">Resume Scans</div>
               </div>
-              <div className="stat-card">
+              <div className="feature">
                 <div className="stat-number">{usageStats.coverLetters}</div>
                 <div className="stat-label">Cover Letters</div>
               </div>
-              <div className="stat-card">
+              <div className="feature">
                 <div className="stat-number">{usageStats.interviewQuestions}</div>
                 <div className="stat-label">Interview Questions</div>
               </div>
@@ -235,8 +242,8 @@ export default function Dashboard() {
           {/* Feature Access */}
           <section className="features-section">
             <h2>Available Features</h2>
-            <div className="features-grid">
-              <div className="feature-card">
+            <div className="features">
+              <div className="feature">
                 <div className="feature-icon">📄</div>
                 <h3>ATS Resume Scoring</h3>
                 <p>Get your resume scored for ATS compatibility and receive detailed feedback.</p>
@@ -248,7 +255,7 @@ export default function Dashboard() {
                 </button>
               </div>
 
-              <div className="feature-card">
+              <div className="feature">
                 <div className="feature-icon">✍️</div>
                 <h3>Resume Feedback</h3>
                 <p>Get AI-powered feedback on how to improve your resume.</p>
@@ -261,7 +268,7 @@ export default function Dashboard() {
                 </button>
               </div>
 
-              <div className="feature-card">
+              <div className="feature">
                 <div className="feature-icon">📝</div>
                 <h3>Cover Letter Generator</h3>
                 <p>Generate personalized cover letters for any job posting.</p>
@@ -274,7 +281,7 @@ export default function Dashboard() {
                 </button>
               </div>
 
-              <div className="feature-card">
+              <div className="feature">
                 <div className="feature-icon">❓</div>
                 <h3>Interview Questions</h3>
                 <p>Practice with AI-generated interview questions for your target role.</p>
@@ -287,7 +294,7 @@ export default function Dashboard() {
               </div>
 
               {subscription?.plan === 'pro' && (
-                <div className="feature-card">
+                <div className="feature">
                   <div className="feature-icon">🎭</div>
                   <h3>Mock Interviews</h3>
                   <p>Practice interviews with AI-powered mock interview sessions.</p>
@@ -301,7 +308,7 @@ export default function Dashboard() {
               )}
 
               {subscription?.plan === 'premium' && (
-                <div className="feature-card">
+                <div className="feature">
                   <div className="feature-icon">💼</div>
                   <h3>LinkedIn Optimizer</h3>
                   <p>Optimize your LinkedIn profile for better visibility to recruiters.</p>
@@ -319,11 +326,11 @@ export default function Dashboard() {
           {/* Upgrade Section for Free Users */}
           {subscription?.plan === 'free' && (
             <section className="upgrade-section">
-              <div className="upgrade-card">
+              <div className="callout">
                 <h2>Unlock More Features</h2>
                 <p>Upgrade to Essential, Pro, or Premium to access advanced features and unlimited usage.</p>
                 <button 
-                  className="btn-primary btn-large"
+                  className="btn-primary btn-lg"
                   onClick={() => router.push('/pricing')}
                 >
                   View Pricing Plans
@@ -333,6 +340,249 @@ export default function Dashboard() {
           )}
         </main>
       </div>
+
+      <style jsx>{`
+        .dashboard {
+          min-height: 100vh;
+          background: var(--color-bg-light);
+        }
+
+        .dashboard-header {
+          background: var(--color-card-bg);
+          border-bottom: 1px solid var(--color-divider);
+          padding: var(--space-md) var(--space-lg);
+          position: sticky;
+          top: 0;
+          z-index: var(--z-sticky);
+        }
+
+        .header-content {
+          max-width: 1200px;
+          margin: 0 auto;
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+        }
+
+        .user-info {
+          display: flex;
+          align-items: center;
+          gap: var(--space-md);
+        }
+
+        .user-details {
+          display: flex;
+          align-items: center;
+          gap: var(--space-sm);
+        }
+
+        .avatar {
+          width: 40px;
+          height: 40px;
+          border-radius: var(--radius-full);
+          object-fit: cover;
+        }
+
+        .user-name {
+          font-weight: var(--font-weight-semibold);
+          color: var(--color-text-main);
+          margin: 0;
+          font-size: var(--font-size-sm);
+        }
+
+        .user-email {
+          color: var(--color-text-secondary);
+          margin: 0;
+          font-size: var(--font-size-xs);
+        }
+
+        .dashboard-content {
+          max-width: 1200px;
+          margin: 0 auto;
+          padding: var(--space-lg);
+        }
+
+        .subscription-section {
+          margin-bottom: var(--space-xl);
+        }
+
+        .subscription-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          margin-bottom: var(--space-md);
+        }
+
+        .plan-badge {
+          background: var(--color-cta-green);
+          color: white;
+          padding: var(--space-xs) var(--space-sm);
+          border-radius: var(--radius-button);
+          font-weight: var(--font-weight-bold);
+          font-size: var(--font-size-xs);
+        }
+
+        .plan-badge.free {
+          background: var(--color-text-muted);
+        }
+
+        .plan-status {
+          color: var(--color-text-secondary);
+          margin-bottom: var(--space-md);
+        }
+
+        .plan-features h3 {
+          font-size: var(--font-size-lg);
+          font-weight: var(--font-weight-semibold);
+          color: var(--color-text-main);
+          margin-bottom: var(--space-sm);
+        }
+
+        .plan-features ul {
+          list-style: none;
+          padding: 0;
+          margin: 0;
+        }
+
+        .plan-features li {
+          color: var(--color-text-secondary);
+          margin-bottom: var(--space-xs);
+          font-size: var(--font-size-sm);
+        }
+
+        .usage-section {
+          margin-bottom: var(--space-xl);
+        }
+
+        .usage-section h2 {
+          font-size: var(--font-size-2xl);
+          font-weight: var(--font-weight-bold);
+          color: var(--color-text-main);
+          margin-bottom: var(--space-lg);
+          text-align: center;
+        }
+
+        .stat-number {
+          font-size: var(--font-size-3xl);
+          font-weight: var(--font-weight-bold);
+          color: var(--color-accent-blue);
+          margin-bottom: var(--space-xs);
+        }
+
+        .stat-label {
+          color: var(--color-text-secondary);
+          font-size: var(--font-size-sm);
+          font-weight: var(--font-weight-medium);
+        }
+
+        .features-section {
+          margin-bottom: var(--space-xl);
+        }
+
+        .features-section h2 {
+          font-size: var(--font-size-2xl);
+          font-weight: var(--font-weight-bold);
+          color: var(--color-text-main);
+          margin-bottom: var(--space-lg);
+          text-align: center;
+        }
+
+        .feature h3 {
+          font-size: var(--font-size-lg);
+          font-weight: var(--font-weight-semibold);
+          color: var(--color-text-main);
+          margin-bottom: var(--space-sm);
+        }
+
+        .feature p {
+          color: var(--color-text-secondary);
+          line-height: 1.6;
+          margin-bottom: var(--space-md);
+          font-size: var(--font-size-sm);
+        }
+
+        .feature button:disabled {
+          background: var(--color-disabled);
+          cursor: not-allowed;
+        }
+
+        .upgrade-section {
+          margin-top: var(--space-xl);
+        }
+
+        .loading-container {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          min-height: 50vh;
+          gap: var(--space-md);
+        }
+
+        .loading-spinner {
+          width: 40px;
+          height: 40px;
+          border: 4px solid var(--color-divider);
+          border-top: 4px solid var(--color-accent-blue);
+          border-radius: 50%;
+          animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+          0% { transform: rotate(0deg); }
+          100% { transform: rotate(360deg); }
+        }
+
+        .auth-container {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          min-height: 100vh;
+          padding: var(--space-lg);
+        }
+
+        .auth-card {
+          background: var(--color-card-bg);
+          border-radius: var(--radius-card);
+          box-shadow: var(--shadow-card);
+          padding: var(--space-xl);
+          text-align: center;
+          max-width: 400px;
+          width: 100%;
+        }
+
+        .auth-card h1 {
+          font-size: var(--font-size-2xl);
+          font-weight: var(--font-weight-bold);
+          color: var(--color-text-main);
+          margin-bottom: var(--space-sm);
+        }
+
+        .auth-card p {
+          color: var(--color-text-secondary);
+          margin-bottom: var(--space-lg);
+        }
+
+        @media (max-width: 768px) {
+          .header-content {
+            flex-direction: column;
+            gap: var(--space-md);
+          }
+
+          .user-info {
+            flex-direction: column;
+            gap: var(--space-sm);
+          }
+
+          .dashboard-content {
+            padding: var(--space-md);
+          }
+
+          .features {
+            flex-direction: column;
+          }
+        }
+      `}</style>
     </>
   );
 }
