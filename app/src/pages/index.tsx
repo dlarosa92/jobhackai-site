@@ -1,19 +1,23 @@
-import { useState, useEffect } from 'react'
+import { useEffect } from 'react'
+import { useRouter } from 'next/router'
 import Head from 'next/head'
+import { onAuthStateChanged } from 'firebase/auth'
+import { auth } from '../lib/firebase'
 
 export default function Home() {
-  const [isAuthenticated, setIsAuthenticated] = useState(false)
-  const [userPlan, setUserPlan] = useState('free')
+  const router = useRouter()
 
   useEffect(() => {
-    // Check authentication status
-    const checkAuth = async () => {
-      // This will be implemented with Firebase Auth
-      console.log('Checking authentication...')
-    }
-    
-    checkAuth()
-  }, [])
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      if (user) {
+        // User is signed in, redirect to dashboard
+        router.push('/dashboard')
+      }
+      // If user is not signed in, stay on landing page
+    })
+
+    return () => unsubscribe()
+  }, [router])
 
   return (
     <>
@@ -29,31 +33,39 @@ export default function Home() {
           <h1>Welcome to JobHackAI</h1>
           <p>Your ATS-optimized resume starts here</p>
           
-          {!isAuthenticated ? (
-            <div className="auth-section">
-              <button className="btn-primary">Start Free Trial</button>
-              <button className="btn-secondary">Login</button>
+          <div className="auth-section">
+            <button 
+              className="btn-primary"
+              onClick={() => router.push('/dashboard')}
+            >
+              Get Started
+            </button>
+            <button 
+              className="btn-secondary"
+              onClick={() => router.push('/dashboard')}
+            >
+              Sign In
+            </button>
+          </div>
+
+          <div className="features">
+            <div className="feature-card">
+              <h3>ATS Resume Scoring</h3>
+              <p>Get your resume scored for ATS compatibility and receive detailed feedback on how to improve.</p>
             </div>
-          ) : (
-            <div className="dashboard-preview">
-              <h2>Dashboard</h2>
-              <p>Current Plan: {userPlan}</p>
-              <div className="features">
-                <div className="feature-card">
-                  <h3>ATS Resume Scoring</h3>
-                  <p>Get your resume scored for ATS compatibility</p>
-                </div>
-                <div className="feature-card">
-                  <h3>Resume Feedback</h3>
-                  <p>Detailed feedback on how to improve your resume</p>
-                </div>
-                <div className="feature-card">
-                  <h3>Interview Questions</h3>
-                  <p>Practice with AI-generated interview questions</p>
-                </div>
-              </div>
+            <div className="feature-card">
+              <h3>Resume Feedback</h3>
+              <p>AI-powered feedback system that helps you optimize your resume for maximum impact.</p>
             </div>
-          )}
+            <div className="feature-card">
+              <h3>Cover Letter Generator</h3>
+              <p>Create personalized cover letters for any job posting with our AI-powered generator.</p>
+            </div>
+            <div className="feature-card">
+              <h3>Interview Questions</h3>
+              <p>Practice with AI-generated interview questions tailored to your target role.</p>
+            </div>
+          </div>
         </div>
       </main>
     </>

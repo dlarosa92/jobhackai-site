@@ -141,6 +141,9 @@ a {
   line-height: 1.6;
 }
 
+/* Import dashboard styles */
+@import './dashboard.css';
+
 @media (max-width: 768px) {
   .hero h1 {
     font-size: 2rem;

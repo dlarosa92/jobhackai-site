@@ -13,6 +13,7 @@ yarn-error.log*
 *.log
 *.lock
 .DS_Store
+<<<<<<< HEAD
 *.cache
 .cache/
 coverage/
@@ -42,3 +43,8 @@ worker/
 # OS/system files
 Thumbs.db
 Desktop.ini
+=======
+
+.next/
+out/
+>>>>>>> feature/core-jobhackai-features

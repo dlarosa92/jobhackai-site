@@ -1,0 +1,12 @@
+
+# Next.js/Pages build artifacts
+app/out
+app/.next
+
+# Ignore Next.js build outputs
+app/out
+app/.next
+
+# Build outputs
+app/out
+app/.next
