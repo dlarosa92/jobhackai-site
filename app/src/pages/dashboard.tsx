@@ -53,26 +53,26 @@ export default function Dashboard() {
       key: "rewriting",
       title: "Resume Rewriting",
       desc: "See a rewritten version of your resume tailored to your target job – ready to copy and paste.",
-      action: "Start Rewriting", 
-      included: false
+      action: "Start Rewriting",
+      included: true
     },
     {
       key: "coverLetter",
       title: "Cover Letter Generator",
       desc: "Generate an ATS-optimized, job-specific cover letter in a confident, professional tone.",
       action: "Generate Cover Letter",
-      included: false
+      included: true
     },
     {
       key: "mockInterview",
       title: "Mock Interviews",
       desc: "Practice real-time mock interviews with AI feedback to refine your answers and delivery.",
       action: "Start Mock Interview",
-      included: false
+      included: true
     },
     {
       key: "linkedin",
-      title: "LinkedIn Optimizer", 
+      title: "LinkedIn Optimizer",
       desc: "Optimize your LinkedIn profile section-by-section for maximum recruiter visibility.",
       action: "Optimize LinkedIn",
       included: false
@@ -147,11 +147,34 @@ export default function Dashboard() {
     );
   };
 
+  useEffect(() => {
+    // Mobile menu toggle functionality
+    const mobileToggle = document.querySelector('.mobile-toggle');
+    const mobileNav = document.getElementById('mobileNav');
+    if (mobileToggle && mobileNav) {
+      mobileToggle.addEventListener('click', () => {
+        const isOpen = mobileNav.classList.toggle('open');
+        mobileToggle.setAttribute('aria-expanded', isOpen.toString());
+      });
+      // Close mobile nav on link click
+      document.querySelectorAll('.mobile-nav a').forEach(link => {
+        link.addEventListener('click', () => {
+          mobileNav.classList.remove('open');
+          mobileToggle.setAttribute('aria-expanded', 'false');
+        });
+      });
+    }
+  }, []);
+
   return (
     <>
       <Head>
         <title>Dashboard – JobHackAI</title>
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <link rel="stylesheet" href="/css/tokens.css" />
+        <link rel="stylesheet" href="/css/main.css" />
+        <link rel="stylesheet" href="/css/header.css" />
+        <link rel="stylesheet" href="/css/footer.css" />
       </Head>
 
       <style jsx>{`
@@ -302,7 +325,7 @@ export default function Dashboard() {
           border-radius: 12px;
           font-size: 1.02rem;
           min-width: 160px;
-          font-family: 'Inter', Arial, sans-serif;
+          font-family: "Inter", Arial, sans-serif;
           text-align: center;
           text-decoration: none;
           transition: background 0.18s, color 0.18s, border-color 0.18s;
@@ -360,7 +383,8 @@ export default function Dashboard() {
           vertical-align: middle;
         }
         @media (max-width: 700px) {
-          .dashboard-banner, .dashboard-features {
+          .dashboard-banner,
+          .dashboard-features {
             padding-left: 0.5rem;
             padding-right: 0.5rem;
           }
@@ -561,26 +585,57 @@ export default function Dashboard() {
         }
       `}</style>
 
+      {/* JobHackAI Header */}
+      <header className="site-header">
+        <div className="container">
+          <a href="/" className="nav-logo" aria-label="Go to homepage">
+            <svg width="24" height="24" fill="none" stroke="#1F2937" strokeWidth="2" xmlns="http://www.w3.org/2000/svg">
+              <rect x="3" y="7" width="18" height="13" rx="2"/>
+              <path d="M8 7V5a2 2 0 012-2h4a2 2 0 012 2v2"/>
+            </svg>
+            <span>JOBHACKAI</span>
+          </a>
+          <div className="nav-group">
+            <nav className="nav-links" role="navigation">
+              <a href="/">Home</a>
+              <a href="#what-you-get">What You Get</a>
+              <a href="/pricing">Pricing</a>
+              <a href="#blog">Blog</a>
+              <a href="/login">Login</a>
+              <a href="/pricing" className="cta-button">Start Free Trial</a>
+            </nav>
+          </div>
+          <button className="mobile-toggle" aria-label="Open navigation menu" aria-expanded="false" aria-controls="mobileNav">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="3" y1="12" x2="21" y2="12"></line>
+              <line x1="3" y1="6" x2="21" y2="6"></line>
+              <line x1="3" y1="18" x2="21" y2="18"></line>
+            </svg>
+          </button>
+        </div>
+      </header>
+      <nav className="mobile-nav" id="mobileNav">
+        <a href="/">Home</a>
+        <a href="#what-you-get">What You Get</a>
+        <a href="/pricing">Pricing</a>
+        <a href="/blog">Blog</a>
+        <a href="/login">Login</a>
+        <a href="/pricing" className="cta-button">Start Free Trial</a>
+      </nav>
+
       <main>
         <div className="dashboard-banner">
-          <a href="#" className="settings-link" aria-label="Account Settings">
+          <a href="#" aria-label="Account Settings" className="settings-link">
             <svg width="20" height="20" fill="none" stroke="#6B7280" strokeWidth="2" viewBox="0 0 24 24">
               <circle cx="12" cy="12" r="3.2"/>
               <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06A1.65 1.65 0 0015 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 008.6 15a1.65 1.65 0 00-1.82-.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.6 8.6a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 008.6 4.6a1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0015 4.6a1.65 1.65 0 001.82.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 8.6a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06A1.65 1.65 0 0015 15a1.65 1.65 0 001.82.33z"/>
             </svg>
           </a>
           <div className="welcome-row">
-            <h2>Welcome back, {user.name || 'User'}!</h2>
-            {(user.plan === 'trial' || user.plan === 'essential' || user.plan === 'pro' || user.plan === 'premium') && (
-              <div className="plan-transition-message">
-                Your previous ATS resume score has been carried over from your free account. You now have access to more features and unlimited scoring!
-              </div>
-            )}
-            {user.plan === 'trial' && (
-              <div className="trial-countdown">
-                You have {daysLeft(user.trialEndsAt)} day{daysLeft(user.trialEndsAt) !== 1 ? 's' : ''} left in your trial!
-              </div>
-            )}
+            <h2>Welcome back, {user.name}!</h2>
+            <div className="plan-transition-message">
+              Your previous ATS resume score has been carried over from your free account. You now have access to more features and unlimited scoring!
+            </div>
             <div className="user-email">{user.email}</div>
           </div>
           <div className="ats-score-row">
@@ -595,54 +650,29 @@ export default function Dashboard() {
               {planIcon(user.plan)}
               {user.plan.charAt(0).toUpperCase() + user.plan.slice(1)}
             </span>
-            {user.plan === 'cancelled' && (
-              <a href="pricing-a.html" className="upgrade-btn">Reactivate</a>
-            )}
           </div>
         </div>
 
         <div className="dashboard-features">
           {features.map((feature) => {
             const isUnlocked = unlocked.includes(feature.key);
+            const isIncluded = feature.included && isUnlocked;
+            
             return (
-              <div key={feature.key} className={`feature-card${isUnlocked ? '' : ' locked'}`}>
+              <div key={feature.key} className={`feature-card ${!isUnlocked ? 'locked' : ''}`}>
                 <div className="feature-title">{feature.title}</div>
                 <div className="feature-desc">{feature.desc}</div>
                 <div className="feature-action">
-                  {isUnlocked && feature.key === 'ats' && (
-                    <>
-                      <input type="file" id="ats-upload-input" accept="application/pdf" style={{display: 'none'}} />
-                      <button className="btn-primary" id="ats-upload-btn">{feature.action}</button>
-                    </>
-                  )}
-                  {isUnlocked && feature.key === 'feedback' && (
-                    <a href="resume-feedback-pro.html" className="btn-primary">{feature.action}</a>
-                  )}
-                  {isUnlocked && feature.key === 'interview' && (
-                    <a href="interview-questions.html" className="btn-primary">{feature.action}</a>
-                  )}
-                  {isUnlocked && feature.key === 'rewriting' && (
-                    <a href="resume-feedback-pro.html#rewrite" className="btn-primary">{feature.action}</a>
-                  )}
-                  {isUnlocked && feature.key === 'coverLetter' && (
-                    <a href="cover-letter-generator.html" className="btn-primary">{feature.action}</a>
-                  )}
-                  {isUnlocked && feature.key === 'mockInterview' && (
-                    <a href="mock-interview.html" className="btn-primary">{feature.action}</a>
-                  )}
-                  {isUnlocked && feature.key === 'linkedin' && (
-                    <a href="linkedin-optimizer.html" className="btn-primary">{feature.action}</a>
-                  )}
-                  {isUnlocked && feature.key === 'priorityReview' && (
-                    <div style={{display: 'flex', alignItems: 'center', gap: '0.6rem', margin: '0.7rem 0 0.2rem 0'}}>
-                      <svg width="22" height="22" fill="none" stroke="#00E676" strokeWidth="2" viewBox="0 0 24 24">
-                        <circle cx="12" cy="12" r="10"/>
-                        <path d="M12 8v4l2.5 2.5"/>
-                      </svg>
-                      <span style={{fontWeight: '600', color: '#00C853'}}>All your AI-generated content will get priority review.</span>
-                    </div>
-                  )}
-                  {!isUnlocked && (
+                  {isUnlocked ? (
+                    feature.key === 'ats' ? (
+                      <>
+                        <input type="file" id="ats-upload-input" accept="application/pdf" style={{display: 'none'}} />
+                        <button id="ats-upload-btn" className="btn-primary">{feature.action}</button>
+                      </>
+                    ) : (
+                      <a href={`${feature.key}.html`} className="btn-primary">{feature.action}</a>
+                    )
+                  ) : (
                     <button className="btn-locked">
                       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2">
                         <rect x="3" y="11" width="18" height="8" rx="2"/>
@@ -652,12 +682,12 @@ export default function Dashboard() {
                     </button>
                   )}
                 </div>
-                {isUnlocked && (user.plan === 'trial' || user.plan === 'essential' || user.plan === 'pro' || user.plan === 'premium') && (
+                {isIncluded && (
                   <div className="included-badge">
                     <svg width="16" height="16" fill="#00C853" viewBox="0 0 24 24">
                       <path d="M20.285 6.709a1 1 0 00-1.414-1.418l-9.192 9.192-4.242-4.242a1 1 0 00-1.414 1.414l4.949 4.95a1 1 0 001.414 0l9.899-9.896z"/>
                     </svg>
-                    Included in {user.plan === 'trial' ? 'Trial' : user.plan.charAt(0).toUpperCase() + user.plan.slice(1)}
+                    Included in {user.plan.charAt(0).toUpperCase() + user.plan.slice(1)}
                   </div>
                 )}
               </div>
@@ -665,6 +695,27 @@ export default function Dashboard() {
           })}
         </div>
       </main>
+
+      {/* JobHackAI Footer */}
+      <footer className="site-footer">
+        <div className="footer-container">
+          <div className="footer-brand">
+            <svg className="footer-logo" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <rect x="3" y="7" width="18" height="13" rx="2" stroke="#1F2937" strokeWidth="2"/>
+              <path d="M8 7V5a2 2 0 012-2h4a2 2 0 012 2v2" stroke="#1F2937" strokeWidth="2"/>
+            </svg>
+            <span className="footer-name">JOBHACKAI</span>
+          </div>
+          <div className="footer-legal">
+            <p>© 2025 JobHackAI. All rights reserved.</p>
+          </div>
+          <div className="footer-links">
+            <a href="/">Home</a>
+            <a href="/support">Support</a>
+            <a href="/privacy">Privacy</a>
+          </div>
+        </div>
+      </footer>
     </>
   );
 }

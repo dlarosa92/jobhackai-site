@@ -1,0 +1,82 @@
+:root {
+  /* --- Color Palette --- */
+  --color-bg-light: #F9FAFB;           /* Site background */
+  --color-text-main: #1F2937;          /* Main text (slate) */
+  --color-text-secondary: #4B5563;     /* Secondary text (gray) */
+  --color-text-muted: #6B7280;         /* Muted text */
+  --color-card-bg: #FFFFFF;            /* Cards, nav, footer */
+  --color-cta-green: #007A43;          /* Primary CTA (button green), WCAG AA compliant */
+  --color-accent-blue: #007BFF;        /* Accent blue (links, outlines) */
+  --color-divider: #E5E7EB;            /* Dividers, borders */
+  --color-error: #DC2626;              /* Error states */
+  --color-success: #059669;            /* Success states */
+  --color-warning: #D97706;            /* Warning states */
+  --color-disabled: #B0B3B8;           /* Disabled states */
+
+  /* --- Typography --- */
+  --font-family-base: 'Inter', sans-serif;
+  --font-weight-regular: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+  --font-weight-extrabold: 800;
+
+  /* Font Sizes */
+  --font-size-xs: 0.875rem;    /* 14px */
+  --font-size-sm: 0.95rem;     /* 15px */
+  --font-size-base: 1rem;      /* 16px */
+  --font-size-lg: 1.05rem;     /* 17px */
+  --font-size-xl: 1.2rem;      /* 19px */
+  --font-size-2xl: 1.5rem;     /* 24px */
+  --font-size-3xl: 2rem;       /* 32px */
+
+  /* --- Border Radius --- */
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-full: 9999px;
+  /* Semantic radii used across components */
+  --radius-button: 12px;
+  --radius-card: 18px;
+
+  /* --- Shadows --- */
+  --shadow-sm: 0 1px 2px rgba(0,0,0,0.05);
+  --shadow-md: 0 2px 8px rgba(0,0,0,0.05);
+  --shadow-lg: 0 4px 12px rgba(0,0,0,0.07);
+  --shadow-xl: 0 8px 24px rgba(0,0,0,0.1);
+  /* Semantic shadows used across components */
+  --shadow-card: 0 4px 24px rgba(31,41,55,0.07);
+  --shadow-button: 0 2px 8px rgba(0,0,0,0.04);
+  --shadow-button-hover: 0 4px 16px rgba(0,230,118,0.10);
+  --shadow-dropdown: 0 4px 12px rgba(0,0,0,0.1);
+
+  /* --- Spacing --- */
+  --space-2xs: 0.25rem;  /* 4px */
+  --space-xs: 0.5rem;    /* 8px */
+  --space-sm: 1rem;      /* 16px */
+  --space-md: 1.5rem;    /* 24px */
+  --space-lg: 2rem;      /* 32px */
+  --space-xl: 3rem;      /* 48px */
+  --space-2xl: 4rem;     /* 64px */
+
+  /* --- Transitions --- */
+  --transition-fast: 150ms ease-in-out;
+  --transition-normal: 200ms ease-in-out;
+  --transition-slow: 300ms ease-in-out;
+
+  /* --- Z-index --- */
+  --z-dropdown: 1000;
+  --z-sticky: 1020;
+  --z-fixed: 1030;
+  --z-modal-backdrop: 1040;
+  --z-modal: 1050;
+  --z-popover: 1060;
+  --z-tooltip: 1070;
+
+  /* --- Layout Tokens --- */
+  --header-height: 64px; /* Adjust if header changes height */
+
+  /* --- Misc Colors --- */
+  --color-bg-light-hover: #F9FAFB;
+}
