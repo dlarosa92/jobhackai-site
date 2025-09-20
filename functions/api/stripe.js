@@ -39,8 +39,8 @@ async function createCheckoutSession(data, env) {
         'line_items[0][price]': priceId,
         'line_items[0][quantity]': '1',
         mode: 'subscription',
-        success_url: `${env.FRONTEND_URL}/payment-success?session_id={CHECKOUT_SESSION_ID}`,
-        cancel_url: `${env.FRONTEND_URL}/payment-cancelled`,
+        success_url: `${env.FRONTEND_URL || 'https://qa.jobhackai.io'}/payment-success?session_id={CHECKOUT_SESSION_ID}`,
+        cancel_url: `${env.FRONTEND_URL || 'https://qa.jobhackai.io'}/payment-cancelled`,
         customer_email: userEmail,
         'metadata[userId]': userId,
       }),
@@ -78,7 +78,7 @@ async function createCustomerPortal(data, env) {
       },
       body: new URLSearchParams({
         customer: customerId,
-        return_url: `${env.FRONTEND_URL}/dashboard`,
+        return_url: `${env.FRONTEND_URL || 'https://qa.jobhackai.io'}/dashboard`,
       }),
     });
 
