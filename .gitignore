@@ -48,3 +48,7 @@ Desktop.ini
 .next/
 out/
 >>>>>>> feature/core-jobhackai-features
+
+# local helper scripts (not committed)
+harden_cf.sh
+harden_cf_v2.sh
