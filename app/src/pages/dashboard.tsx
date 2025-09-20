@@ -1,602 +1,670 @@
-import { useState, useEffect } from 'react';
-import { useRouter } from 'next/router';
+import React, { useEffect, useState } from 'react';
 import Head from 'next/head';
 
-interface SubscriptionData {
-  status: string;
-  plan: string;
-  currentPeriodEnd?: number;
-  cancelAtPeriodEnd?: boolean;
-}
-
 export default function Dashboard() {
-  const router = useRouter();
-  const [user, setUser] = useState<any>({ uid: 'test-user', displayName: 'Test User', email: 'test@example.com' });
-  const [loading, setLoading] = useState(false);
-  const [subscription, setSubscription] = useState<SubscriptionData | null>({ status: 'active', plan: 'free' });
-  const [usageStats, setUsageStats] = useState({
-    resumeScans: 0,
-    coverLetters: 0,
-    interviewQuestions: 0,
-    lastActivity: null as string | null
+  const [user, setUser] = useState({
+    name: "User",
+    email: "user@example.com", 
+    plan: "pro",
+    trialEndsAt: "2024-06-10T00:00:00Z",
+    hasUsedFreeTrial: true,
+    hasUsedFreeATS: true
   });
 
-  useEffect(() => {
-    setLoading(false);
-  }, []);
+  const [atsScore, setAtsScore] = useState({
+    percent: 78,
+    value: 78,
+    max: 100,
+    summary: "Your resume meets many ATS criteria and is likely to be noticed."
+  });
 
-  const fetchSubscriptionData = async (userId: string) => {
-    try {
-      const response = await fetch('/api/subscription', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId })
-      });
-      
-      if (response.ok) {
-        const data = await response.json();
-        setSubscription(data);
-      }
-    } catch (error) {
-      console.error('Error fetching subscription:', error);
-      setSubscription({ status: 'active', plan: 'free' });
+  // Feature matrix based on plan
+  const featureMatrix = {
+    free: ["ats"],
+    trial: ["ats", "feedback", "interview"],
+    essential: ["ats", "feedback", "interview"],
+    pro: ["ats", "feedback", "interview", "rewriting", "coverLetter", "mockInterview"],
+    premium: ["ats", "feedback", "interview", "rewriting", "coverLetter", "mockInterview", "linkedin", "priorityReview"]
+  };
+
+  const features = [
+    {
+      key: "ats",
+      title: "ATS Resume Score",
+      desc: "Receive an overall ATS compliance score for your resume, highlighting key areas to improve.",
+      action: "Upload PDF",
+      included: true
+    },
+    {
+      key: "feedback", 
+      title: "Resume Feedback",
+      desc: "Get a detailed analysis of what's working and what could be improved across every section of your resume.",
+      action: "Get Detailed Feedback",
+      included: true
+    },
+    {
+      key: "interview",
+      title: "Interview Questions", 
+      desc: "Receive a curated set of practice interview questions tailored to your target role.",
+      action: "Start Practice",
+      included: true
+    },
+    {
+      key: "rewriting",
+      title: "Resume Rewriting",
+      desc: "See a rewritten version of your resume tailored to your target job – ready to copy and paste.",
+      action: "Start Rewriting", 
+      included: false
+    },
+    {
+      key: "coverLetter",
+      title: "Cover Letter Generator",
+      desc: "Generate an ATS-optimized, job-specific cover letter in a confident, professional tone.",
+      action: "Generate Cover Letter",
+      included: false
+    },
+    {
+      key: "mockInterview",
+      title: "Mock Interviews",
+      desc: "Practice real-time mock interviews with AI feedback to refine your answers and delivery.",
+      action: "Start Mock Interview",
+      included: false
+    },
+    {
+      key: "linkedin",
+      title: "LinkedIn Optimizer", 
+      desc: "Optimize your LinkedIn profile section-by-section for maximum recruiter visibility.",
+      action: "Optimize LinkedIn",
+      included: false
+    },
+    {
+      key: "priorityReview",
+      title: "Priority Review",
+      desc: "Get your documents reviewed by our AI with expedited turnaround.",
+      action: "Priority Review",
+      included: false
     }
+  ];
+
+  const unlocked = featureMatrix[user.plan] || [];
+
+  const daysLeft = (trialEndsAt: string) => {
+    const now = new Date();
+    const end = new Date(trialEndsAt);
+    const diff = Math.ceil((end.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+    return diff > 0 ? diff : 0;
   };
 
-  const fetchUsageStats = async (userId: string) => {
-    try {
-      const response = await fetch('/api/usage', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId })
-      });
-      
-      if (response.ok) {
-        const data = await response.json();
-        setUsageStats(data);
-      }
-    } catch (error) {
-      console.error('Error fetching usage stats:', error);
-    }
-  };
-
-  const handleSignIn = async () => {
-    console.log('Sign in clicked');
-  };
-
-  const handleSignOut = async () => {
-    console.log('Sign out clicked');
-    router.push('/');
-  };
-
-  const handleManageSubscription = async () => {
-    try {
-      const response = await fetch('/api/stripe', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          action: 'create-customer-portal',
-          data: { customerId: user?.uid }
-        })
-      });
-      
-      if (response.ok) {
-        const data = await response.json();
-        window.open(data.url, '_blank');
-      }
-    } catch (error) {
-      console.error('Error opening customer portal:', error);
-    }
-  };
-
-  const getPlanFeatures = (plan: string) => {
+  const planIcon = (plan: string) => {
     switch (plan) {
+      case 'trial':
+        return (
+          <svg className="user-plan-icon" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="10" cy="10" r="10" fill="#FF9100" opacity="0.12"/>
+            <path d="M10 4v7l4 2" stroke="#FF9100" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+        );
       case 'essential':
-        return [
-          'Unlimited ATS Resume Scoring',
-          'Resume Feedback & Optimization',
-          'Interview Question Generator',
-          'Email Support'
-        ];
+        return (
+          <svg className="user-plan-icon" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="10" cy="10" r="10" fill="#0077B5" opacity="0.12"/>
+            <path d="M10 5v10M5 10h10" stroke="#0077B5" strokeWidth="1.5" strokeLinecap="round"/>
+          </svg>
+        );
       case 'pro':
-        return [
-          'Everything in Essential',
-          'Resume Rewrite Service',
-          'Cover Letter Generator',
-          'Mock Interview Practice',
-          'Priority Support'
-        ];
+        return (
+          <svg className="user-plan-icon" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="10" cy="10" r="10" fill="#388E3C" opacity="0.12"/>
+            <path d="M6 10l3 3 5-5" stroke="#388E3C" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+        );
       case 'premium':
-        return [
-          'Everything in Pro',
-          'LinkedIn Profile Optimizer',
-          'Priority Review (24hrs)',
-          'Career Coaching Session',
-          'Phone Support'
-        ];
+        return (
+          <svg className="user-plan-icon" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="10" cy="10" r="10" fill="#C62828" opacity="0.12"/>
+            <path d="M10 5l2.09 4.26L17 9.27l-3.45 3.36L14.18 17 10 14.27 5.82 17l0.63-4.37L3 9.27l4.91-0.01L10 5z" stroke="#C62828" strokeWidth="1.2" fill="none"/>
+          </svg>
+        );
       default:
-        return [
-          '1-time ATS Resume Score',
-          'Basic feedback'
-        ];
+        return '';
     }
   };
 
-  if (loading) {
+  const atsDonut = (percent) => {
+    const radius = 23;
+    const stroke = 3;
+    const norm = 2 * Math.PI * radius;
+    const progress = (percent / 100) * norm;
     return (
-      <div className="loading-container">
-        <div className="loading-spinner"></div>
-        <p>Loading dashboard...</p>
+      <div className="ats-donut" aria-label="ATS Score">
+        <svg viewBox="0 0 54 54">
+          <circle cx="27" cy="27" r={radius} stroke="#E5E7EB" strokeWidth={stroke} fill="none"/>
+          <circle cx="27" cy="27" r={radius} stroke="#00E676" strokeWidth={stroke} fill="none" 
+                  strokeDasharray={norm} strokeDashoffset={norm - progress} strokeLinecap="round"/>
+        </svg>
+        <span className="ats-score-text">{percent}%</span>
       </div>
     );
-  }
-
-  if (!user) {
-    return (
-      <div className="auth-container">
-        <div className="card">
-          <h1>Welcome to JobHackAI</h1>
-          <p>Sign in to access your dashboard</p>
-          <a href="#" className="btn-primary" onClick={handleSignIn}>
-            Sign in with Google
-          </a>
-        </div>
-      </div>
-    );
-  }
+  };
 
   return (
     <>
       <Head>
-        <title>Dashboard - JobHackAI</title>
-        <meta name="description" content="Manage your JobHackAI subscription and access all features" />
-        <link rel="stylesheet" href="/css/reset.css" />
-        <link rel="stylesheet" href="/css/tokens.css" />
-        <link rel="stylesheet" href="/css/main.css" />
-        <link rel="stylesheet" href="/css/header.css" />
-        <link rel="stylesheet" href="/css/footer.css" />
+        <title>Dashboard – JobHackAI</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
       </Head>
 
-      {/* JobHackAI HEADER (canonical) */}
-      <header className="site-header">
-        <div className="container">
-          <a href="/" className="nav-logo" aria-label="Go to homepage">
-            <svg width="24" height="24" fill="none" stroke="#1F2937" strokeWidth="2" xmlns="http://www.w3.org/2000/svg">
-              <rect x="3" y="7" width="18" height="13" rx="2"/>
-              <path d="M8 7V5a2 2 0 012-2h4a2 2 0 012 2v2"/>
-            </svg>
-            <span>JOBHACKAI</span>
-          </a>
-          <div className="nav-group">
-            <nav className="nav-links" role="navigation">
-              <a href="/">Home</a>
-              <a href="#features">Features</a>
-              <a href="/pricing">Pricing</a>
-              <a href="#blog">Blog</a>
-              <div className="nav-user-menu">
-                <button className="nav-user-toggle" aria-label="User menu">
-                  <img src={user.photoURL || '/default-avatar.png'} alt="Profile" className="avatar" />
-                </button>
-                <div className="nav-user-dropdown">
-                  <a href="/dashboard">Dashboard</a>
-                  <a href="/account-settings">Settings</a>
-                  <a href="#" onClick={handleSignOut}>Sign Out</a>
-                </div>
-              </div>
-            </nav>
-          </div>
-        </div>
-      </header>
-
-      {/* Main Content */}
-      <main>
-        {/* Hero Section */}
-        <section className="hero">
-          <h1>Welcome back, {user.displayName}!</h1>
-          <p>Manage your JobHackAI subscription and access all features</p>
-        </section>
-
-        {/* Subscription Status */}
-        <section>
-          <div className="card">
-            <div className="subscription-header">
-              <h2>Current Plan</h2>
-              <span className={`plan-badge ${subscription?.plan || 'free'}`}>
-                {subscription?.plan?.toUpperCase() || 'FREE'}
-              </span>
-            </div>
-            
-            <div className="subscription-details">
-              <p className="plan-status">
-                Status: <span className={subscription?.status || 'active'}>{subscription?.status || 'Active'}</span>
-              </p>
-              
-              {subscription?.plan !== 'free' && (
-                <div className="subscription-actions">
-                  <a href="#" className="btn-secondary" onClick={handleManageSubscription}>
-                    Manage Subscription
-                  </a>
-                </div>
-              )}
-            </div>
-
-            <div className="plan-features">
-              <h3>Your Plan Includes:</h3>
-              <ul>
-                {getPlanFeatures(subscription?.plan || 'free').map((feature, index) => (
-                  <li key={index}>✓ {feature}</li>
-                ))}
-              </ul>
-            </div>
-          </div>
-        </section>
-
-        {/* Usage Statistics */}
-        <section>
-          <h2>Usage Statistics</h2>
-          <div className="features">
-            <div className="feature">
-              <div className="stat-number">{usageStats.resumeScans}</div>
-              <div className="stat-label">Resume Scans</div>
-            </div>
-            <div className="feature">
-              <div className="stat-number">{usageStats.coverLetters}</div>
-              <div className="stat-label">Cover Letters</div>
-            </div>
-            <div className="feature">
-              <div className="stat-number">{usageStats.interviewQuestions}</div>
-              <div className="stat-label">Interview Questions</div>
-            </div>
-          </div>
-        </section>
-
-        {/* Feature Access */}
-        <section>
-          <h2>Available Features</h2>
-          <div className="features">
-            <div className="feature">
-              <div className="feature-icon">📄</div>
-              <h3>ATS Resume Scoring</h3>
-              <p>Get your resume scored for ATS compatibility and receive detailed feedback.</p>
-              <a 
-                href="#" 
-                className="btn-primary"
-                onClick={() => router.push('/resume-scoring')}
-              >
-                Score Resume
-              </a>
-            </div>
-
-            <div className="feature">
-              <div className="feature-icon">✍️</div>
-              <h3>Resume Feedback</h3>
-              <p>Get AI-powered feedback on how to improve your resume.</p>
-              <a 
-                href="#" 
-                className={`btn-primary ${subscription?.plan === 'free' ? 'disabled' : ''}`}
-                onClick={() => subscription?.plan !== 'free' ? router.push('/resume-feedback') : null}
-              >
-                {subscription?.plan === 'free' ? 'Upgrade Required' : 'Get Feedback'}
-              </a>
-            </div>
-
-            <div className="feature">
-              <div className="feature-icon">📝</div>
-              <h3>Cover Letter Generator</h3>
-              <p>Generate personalized cover letters for any job posting.</p>
-              <a 
-                href="#" 
-                className={`btn-primary ${!['pro', 'premium'].includes(subscription?.plan || '') ? 'disabled' : ''}`}
-                onClick={() => ['pro', 'premium'].includes(subscription?.plan || '') ? router.push('/cover-letter') : null}
-              >
-                {!['pro', 'premium'].includes(subscription?.plan || '') ? 'Upgrade Required' : 'Generate Letter'}
-              </a>
-            </div>
-
-            <div className="feature">
-              <div className="feature-icon">❓</div>
-              <h3>Interview Questions</h3>
-              <p>Practice with AI-generated interview questions for your target role.</p>
-              <a 
-                href="#" 
-                className="btn-primary"
-                onClick={() => router.push('/interview-questions')}
-              >
-                Generate Questions
-              </a>
-            </div>
-
-            {subscription?.plan === 'pro' && (
-              <div className="feature">
-                <div className="feature-icon">🎭</div>
-                <h3>Mock Interviews</h3>
-                <p>Practice interviews with AI-powered mock interview sessions.</p>
-                <a 
-                  href="#" 
-                  className="btn-primary"
-                  onClick={() => router.push('/mock-interview')}
-                >
-                  Start Mock Interview
-                </a>
-              </div>
-            )}
-
-            {subscription?.plan === 'premium' && (
-              <div className="feature">
-                <div className="feature-icon">💼</div>
-                <h3>LinkedIn Optimizer</h3>
-                <p>Optimize your LinkedIn profile for better visibility to recruiters.</p>
-                <a 
-                  href="#" 
-                  className="btn-primary"
-                  onClick={() => router.push('/linkedin-optimizer')}
-                >
-                  Optimize Profile
-                </a>
-              </div>
-            )}
-          </div>
-        </section>
-
-        {/* Upgrade Section for Free Users */}
-        {subscription?.plan === 'free' && (
-          <section>
-            <div className="callout">
-              <h2>Unlock More Features</h2>
-              <p>Upgrade to Essential, Pro, or Premium to access advanced features and unlimited usage.</p>
-              <a 
-                href="/pricing" 
-                className="btn-primary btn-lg"
-                onClick={() => router.push('/pricing')}
-              >
-                View Pricing Plans
-              </a>
-            </div>
-          </section>
-        )}
-      </main>
-
-      {/* JobHackAI FOOTER (canonical) */}
-      <footer className="site-footer">
-        <div className="footer-container">
-          <div className="footer-brand">
-            <svg className="footer-logo" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <rect x="3" y="7" width="18" height="13" rx="2" stroke="#1F2937" strokeWidth="2"/>
-              <path d="M8 7V5a2 2 0 012-2h4a2 2 0 012 2v2" stroke="#1F2937" strokeWidth="2"/>
-            </svg>
-            <span className="footer-name">JOBHACKAI</span>
-          </div>
-          <div className="footer-legal">
-            <p>© 2025 JobHackAI. All rights reserved.</p>
-          </div>
-          <div className="footer-links">
-            <a href="/">Home</a>
-            <a href="/support">Support</a>
-            <a href="/privacy">Privacy</a>
-          </div>
-        </div>
-      </footer>
-
       <style jsx>{`
-        .loading-container {
+        .dashboard-banner {
+          background: #fff;
+          border-radius: 16px;
+          box-shadow: 0 2px 12px rgba(31,41,55,0.07);
+          padding: 1.2rem 2rem 1.2rem 2rem;
+          margin: 2rem auto 2.2rem auto;
+          max-width: 540px;
+          display: flex;
+          flex-direction: column;
+          gap: 0.5rem;
+          position: relative;
+          align-items: flex-start;
+        }
+        .dashboard-banner .settings-link {
+          position: absolute;
+          top: 1.1rem;
+          right: 1.2rem;
+          color: #6B7280;
+          font-size: 1.1rem;
+          text-decoration: none;
+          display: flex;
+          align-items: center;
+          gap: 0.2rem;
+          transition: color 0.18s;
+          opacity: 0.7;
+        }
+        .dashboard-banner .settings-link:hover {
+          color: #232B36;
+          text-decoration: underline;
+          opacity: 1;
+        }
+        .dashboard-banner .welcome-row {
+          display: flex;
+          flex-direction: column;
+          align-items: flex-start;
+          gap: 0.08rem;
+          margin-bottom: 0.1rem;
+        }
+        .dashboard-banner .welcome-row h2 {
+          font-size: 1.32rem;
+          font-weight: 800;
+          color: #232B36;
+          margin: 0 0 0.08rem 0;
+          padding: 0;
+        }
+        .dashboard-banner .trial-countdown {
+          color: #D97706;
+          font-weight: 600;
+          font-size: 1.01rem;
+          margin: 0.05rem 0 0.05rem 0;
+          padding: 0;
+          line-height: 1.2;
+        }
+        .dashboard-banner .user-email {
+          font-size: 0.98rem;
+          color: #6B7280;
+          margin-bottom: 0.1rem;
+          font-weight: 400;
+          letter-spacing: 0.01em;
+        }
+        .dashboard-banner .plan-badge {
+          display: inline-block;
+          background: #F3F4F6;
+          color: #0077B5;
+          font-weight: 700;
+          border-radius: 8px;
+          padding: 0.18rem 0.7rem;
+          font-size: 0.98rem;
+          margin-left: 0;
+          margin-top: 0.2rem;
+        }
+        .dashboard-banner .upgrade-btn {
+          background: #00E676;
+          color: #fff;
+          font-weight: 700;
+          border: none;
+          border-radius: 8px;
+          padding: 0.6rem 1.5rem;
+          font-size: 1.01rem;
+          cursor: pointer;
+          margin-top: 0.5rem;
+          align-self: flex-start;
+          transition: background 0.18s;
+          text-decoration: none;
+          display: inline-block;
+        }
+        .dashboard-banner .upgrade-btn:hover,
+        .dashboard-banner .upgrade-btn:focus {
+          background: #00c965;
+          text-decoration: none;
+          outline: none;
+        }
+        .dashboard-features {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(270px, 1fr));
+          gap: 1.5rem;
+          max-width: 1100px;
+          margin: 0 auto 2.5rem auto;
+        }
+        .feature-card {
+          background: #fff;
+          border-radius: 16px;
+          box-shadow: 0 2px 8px rgba(31,41,55,0.07);
+          padding: 1.5rem 1.2rem 1.2rem 1.2rem;
+          display: flex;
+          flex-direction: column;
+          gap: 0.7rem;
+          align-items: flex-start;
+          min-height: 210px;
+          position: relative;
+        }
+        .feature-card.locked {
+          opacity: 0.7;
+        }
+        .feature-card .feature-title {
+          font-size: 1.13rem;
+          font-weight: 700;
+          margin-bottom: 0.2rem;
+          color: #232B36;
+        }
+        .feature-card .feature-desc {
+          font-size: 1rem;
+          color: #4B5563;
+          margin-bottom: 0.7rem;
+        }
+        .feature-card .feature-action {
+          margin-top: auto;
+          width: 100%;
+          display: flex;
+          align-items: center;
+          gap: 0.5rem;
+        }
+        .feature-card .feature-action .btn-primary,
+        .feature-card .feature-action a.btn-primary {
+          padding: 0.7rem 1.5rem;
+        }
+        .feature-card .feature-action .btn-primary {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          background: #fff !important;
+          color: #1976D2 !important;
+          border: 1.5px solid #1976D2;
+          font-weight: 600;
+          border-radius: 12px;
+          font-size: 1.02rem;
+          min-width: 160px;
+          font-family: 'Inter', Arial, sans-serif;
+          text-align: center;
+          text-decoration: none;
+          transition: background 0.18s, color 0.18s, border-color 0.18s;
+          cursor: pointer;
+        }
+        .feature-card .feature-action .btn-primary:hover,
+        .feature-card .feature-action .btn-primary:focus {
+          background: #1976D2 !important;
+          color: #fff !important;
+          border-color: #1976D2;
+          text-decoration: none;
+          outline: none;
+        }
+        .feature-card .feature-action .btn-secondary {
+          width: 100%;
+          min-width: 0;
+          font-size: 1.02rem;
+          padding: 0.7rem 0;
+          border-radius: 8px;
+          text-align: center;
+          font-weight: 700;
+          text-decoration: none;
+        }
+        .feature-card .feature-action .btn-locked {
+          background: #00E676;
+          color: #fff;
+          border: none;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 0.5rem;
+          cursor: pointer;
+          font-weight: 700;
+          border-radius: 8px;
+          width: 100%;
+          font-size: 1.02rem;
+          padding: 0.7rem 0;
+          transition: background 0.18s;
+        }
+        .feature-card .feature-action .btn-locked:hover,
+        .feature-card .feature-action .btn-locked:focus {
+          background: #00c965;
+          outline: none;
+        }
+        .feature-card .included-badge {
+          color: #00C853;
+          font-size: 0.98rem;
+          font-weight: 600;
+          margin-top: 0.5rem;
+          display: flex;
+          align-items: center;
+          gap: 0.3rem;
+        }
+        .feature-card .included-badge svg {
+          vertical-align: middle;
+        }
+        @media (max-width: 700px) {
+          .dashboard-banner, .dashboard-features {
+            padding-left: 0.5rem;
+            padding-right: 0.5rem;
+          }
+          .dashboard-banner {
+            max-width: 98vw;
+          }
+          .dashboard-features {
+            grid-template-columns: 1fr;
+          }
+        }
+        .ats-score-row {
+          display: flex;
+          align-items: center;
+          gap: 1.1rem;
+          margin: 0.5rem 0 0.2rem 0;
+        }
+        .ats-donut {
+          width: 54px;
+          height: 54px;
+          position: relative;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
+        .ats-donut svg {
+          width: 54px;
+          height: 54px;
+          transform: rotate(-90deg);
+        }
+        .ats-donut .ats-score-text {
+          position: absolute;
+          top: 50%;
+          left: 50%;
+          transform: translate(-50%, -50%);
+          font-size: 1.1rem;
+          font-weight: 700;
+          color: #111;
+          text-align: center;
+          letter-spacing: 0.5px;
+        }
+        .ats-score-details {
+          display: flex;
+          flex-direction: column;
+          gap: 0.1rem;
+        }
+        .ats-score-details .ats-score-label {
+          font-size: 1.05rem;
+          font-weight: 700;
+          color: #232B36;
+          margin-bottom: 0.1rem;
+        }
+        .ats-score-details .ats-score-summary {
+          font-size: 1rem;
+          color: #4B5563;
+          max-width: 340px;
+        }
+        .user-plan-status {
           display: flex;
           flex-direction: column;
           align-items: center;
-          justify-content: center;
-          min-height: 50vh;
-          gap: var(--space-md);
+          margin-top: 1.2rem;
+          gap: 0.3rem;
         }
-
-        .loading-spinner {
-          width: 40px;
-          height: 40px;
-          border: 4px solid var(--color-divider);
-          border-top: 4px solid var(--color-accent-blue);
-          border-radius: 50%;
-          animation: spin 1s linear infinite;
+        .user-plan-label {
+          font-size: 0.92rem;
+          color: #6B7280;
+          font-weight: 500;
+          margin-bottom: 0.1rem;
+          letter-spacing: 0.01em;
         }
-
-        @keyframes spin {
-          0% { transform: rotate(0deg); }
-          100% { transform: rotate(360deg); }
-        }
-
-        .loading-container p {
-          color: var(--color-text-secondary);
-          font-size: var(--font-size-sm);
-        }
-
-        .auth-container {
+        .user-plan-badge {
+          font-size: 1.05rem;
+          font-weight: 700;
+          border-radius: 999px;
+          padding: 0.22rem 1.1rem 0.22rem 0.8rem;
           display: flex;
+          align-items: center;
+          gap: 0.4em;
+          background: #FFF7E6;
+          color: #FF9100;
+          box-shadow: 0 1px 4px rgba(31,41,55,0.06);
+        }
+        .user-plan-badge.essential {
+          color: #0077B5;
+          background: #E3F2FD;
+        }
+        .user-plan-badge.pro {
+          color: #388E3C;
+          background: #E8F5E9;
+        }
+        .user-plan-badge.premium {
+          color: #C62828;
+          background: #FFEBEE;
+        }
+        .user-plan-icon {
+          width: 1.1em;
+          height: 1.1em;
+          vertical-align: middle;
+        }
+        .dashboard-banner .upgrade-btn {
+          width: 100%;
+          margin-top: 0.2rem;
+        }
+        .dashboard-banner-footer {
+          display: flex;
+          justify-content: flex-end;
+          align-items: center;
+          gap: 1rem;
+          width: 100%;
+          margin-top: 1.2rem;
+          padding-top: 0.7rem;
+          border-top: 1px solid #F3F4F6;
+        }
+        .user-plan-badge {
+          display: flex;
+          align-items: center;
+          gap: 0.4em;
+          background: #FFF7E6;
+          color: #FF9100;
+          font-weight: 600;
+          border-radius: 999px;
+          padding: 0.4rem 1.1rem;
+          font-size: 1.01rem;
+          box-shadow: 0 1px 4px rgba(31,41,55,0.06);
+        }
+        .status-action-row {
+          display: flex;
+          flex-direction: row;
+          align-items: center;
+          justify-content: flex-end;
+          gap: 0.7rem;
+          margin-top: 0.5rem;
+          width: 100%;
+        }
+        .status-action-row .upgrade-btn {
+          display: inline-flex;
           align-items: center;
           justify-content: center;
-          min-height: 100vh;
-          padding: var(--space-lg);
-          background: var(--color-bg-light);
+          background: #1976D2;
+          color: #fff;
+          border: none;
+          font-weight: 600;
+          border-radius: 12px;
+          padding: 0.6rem 1.5rem;
+          font-size: 1.02rem;
+          min-width: 0;
+          box-shadow: 0 1px 4px rgba(31,41,55,0.06);
+          transition: background 0.18s, color 0.18s, border-color 0.18s;
+          text-decoration: none;
+          margin-top: 0;
+          width: auto;
         }
-
-        .subscription-header {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          margin-bottom: var(--space-md);
+        .status-action-row .upgrade-btn:hover,
+        .status-action-row .upgrade-btn:focus {
+          background: #125bb5;
+          color: #fff;
         }
-
-        .subscription-header h2 {
-          font-size: var(--font-size-xl);
-          font-weight: var(--font-weight-semibold);
-          color: var(--color-text-main);
-          margin: 0;
+        .jh-tooltip-trigger {
+          cursor: pointer;
+          margin-left: 0.4em;
+          vertical-align: middle;
+          position: relative;
+          display: inline-block;
         }
-
-        .plan-badge {
-          background: var(--color-cta-green);
-          color: white;
-          padding: var(--space-xs) var(--space-sm);
-          border-radius: var(--radius-button);
-          font-weight: var(--font-weight-bold);
-          font-size: var(--font-size-xs);
-          text-transform: uppercase;
-          letter-spacing: 0.5px;
+        .jh-tooltip-text {
+          display: none;
+          position: absolute;
+          z-index: 1000;
+          padding: 0.5rem 0.8rem;
+          background-color: #333;
+          color: #fff;
+          border-radius: 4px;
+          top: 120%;
+          left: 50%;
+          transform: translateX(-50%);
+          min-width: 180px;
+          max-width: 260px;
+          white-space: normal;
+          word-break: break-word;
+          font-size: 0.98rem;
+          box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+          pointer-events: none;
+          text-align: left;
         }
-
-        .plan-badge.free {
-          background: var(--color-text-muted);
-        }
-
-        .plan-badge.essential {
-          background: var(--color-accent-blue);
-        }
-
-        .plan-badge.pro {
-          background: var(--color-cta-green);
-        }
-
-        .plan-badge.premium {
-          background: linear-gradient(135deg, var(--color-cta-green), var(--color-accent-blue));
-        }
-
-        .plan-status {
-          color: var(--color-text-secondary);
-          margin-bottom: var(--space-md);
-          font-size: var(--font-size-sm);
-        }
-
-        .plan-status span {
-          font-weight: var(--font-weight-semibold);
-          color: var(--color-success);
-        }
-
-        .plan-features h3 {
-          font-size: var(--font-size-lg);
-          font-weight: var(--font-weight-semibold);
-          color: var(--color-text-main);
-          margin-bottom: var(--space-sm);
-        }
-
-        .plan-features ul {
-          list-style: none;
-          padding: 0;
-          margin: 0;
-        }
-
-        .plan-features li {
-          color: var(--color-text-secondary);
-          margin-bottom: var(--space-xs);
-          font-size: var(--font-size-sm);
-          display: flex;
-          align-items: center;
-          gap: var(--space-xs);
-        }
-
-        .plan-features li::before {
-          content: "✓";
-          color: var(--color-success);
-          font-weight: var(--font-weight-bold);
-        }
-
-        .stat-number {
-          font-size: var(--font-size-3xl);
-          font-weight: var(--font-weight-bold);
-          color: var(--color-accent-blue);
-          margin-bottom: var(--space-xs);
-          line-height: 1;
-        }
-
-        .stat-label {
-          color: var(--color-text-secondary);
-          font-size: var(--font-size-sm);
-          font-weight: var(--font-weight-medium);
-          text-transform: uppercase;
-          letter-spacing: 0.5px;
-        }
-
-        .feature h3 {
-          font-size: var(--font-size-lg);
-          font-weight: var(--font-weight-semibold);
-          color: var(--color-text-main);
-          margin-bottom: var(--space-sm);
-        }
-
-        .feature p {
-          color: var(--color-text-secondary);
-          line-height: 1.6;
-          margin-bottom: var(--space-md);
-          font-size: var(--font-size-sm);
-        }
-
-        .feature-icon {
-          font-size: 2rem;
-          margin-bottom: var(--space-sm);
+        .jh-tooltip-trigger:hover .jh-tooltip-text,
+        .jh-tooltip-trigger:focus .jh-tooltip-text,
+        .jh-tooltip-trigger:focus-visible .jh-tooltip-text {
           display: block;
+          pointer-events: auto;
         }
-
-        .btn-primary.disabled {
-          background: var(--color-disabled) !important;
-          color: var(--color-text-muted) !important;
-          cursor: not-allowed !important;
-          box-shadow: none !important;
-        }
-
-        .btn-primary.disabled:hover {
-          background: var(--color-disabled) !important;
-          box-shadow: none !important;
-        }
-
-        .avatar {
-          width: 32px;
-          height: 32px;
-          border-radius: var(--radius-full);
-          object-fit: cover;
-        }
-
-        section {
-          margin-bottom: var(--space-xl);
-        }
-
-        section h2 {
-          font-size: var(--font-size-2xl);
-          font-weight: var(--font-weight-bold);
-          color: var(--color-text-main);
-          margin-bottom: var(--space-lg);
-          text-align: center;
-        }
-
-        @media (max-width: 768px) {
-          .subscription-header {
-            flex-direction: column;
-            gap: var(--space-sm);
-            text-align: center;
-          }
-
-          .features {
-            flex-direction: column;
-          }
-
-          .feature {
-            max-width: none;
-          }
+        .plan-transition-message {
+          background: #E6F7FF;
+          color: #1976D2;
+          padding: 0.7em 1em;
+          border-radius: 8px;
+          margin-bottom: 0.7em;
+          font-size: 1.01rem;
         }
       `}</style>
 
-      <script dangerouslySetInnerHTML={{
-        __html: `
-          // User menu toggle
-          const userToggle = document.querySelector('.nav-user-toggle');
-          const userMenu = document.querySelector('.nav-user-menu');
-          if (userToggle && userMenu) {
-            userToggle.addEventListener('click', (e) => {
-              e.stopPropagation();
-              userMenu.classList.toggle('open');
-            });
-            
-            // Close menu when clicking outside
-            document.addEventListener('click', () => {
-              userMenu.classList.remove('open');
-            });
-          }
-        `
-      }} />
+      <main>
+        <div className="dashboard-banner">
+          <a href="#" className="settings-link" aria-label="Account Settings">
+            <svg width="20" height="20" fill="none" stroke="#6B7280" strokeWidth="2" viewBox="0 0 24 24">
+              <circle cx="12" cy="12" r="3.2"/>
+              <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06A1.65 1.65 0 0015 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 008.6 15a1.65 1.65 0 00-1.82-.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.6 8.6a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 008.6 4.6a1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0015 4.6a1.65 1.65 0 001.82.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 8.6a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06A1.65 1.65 0 0015 15a1.65 1.65 0 001.82.33z"/>
+            </svg>
+          </a>
+          <div className="welcome-row">
+            <h2>Welcome back, {user.name || 'User'}!</h2>
+            {(user.plan === 'trial' || user.plan === 'essential' || user.plan === 'pro' || user.plan === 'premium') && (
+              <div className="plan-transition-message">
+                Your previous ATS resume score has been carried over from your free account. You now have access to more features and unlimited scoring!
+              </div>
+            )}
+            {user.plan === 'trial' && (
+              <div className="trial-countdown">
+                You have {daysLeft(user.trialEndsAt)} day{daysLeft(user.trialEndsAt) !== 1 ? 's' : ''} left in your trial!
+              </div>
+            )}
+            <div className="user-email">{user.email}</div>
+          </div>
+          <div className="ats-score-row">
+            {atsDonut(atsScore.percent)}
+            <div className="ats-score-details">
+              <span className="ats-score-label">{atsScore.value} / {atsScore.max}</span>
+              <span className="ats-score-summary">{atsScore.summary}</span>
+            </div>
+          </div>
+          <div className="status-action-row">
+            <span className={`user-plan-badge ${user.plan}`}>
+              {planIcon(user.plan)}
+              {user.plan.charAt(0).toUpperCase() + user.plan.slice(1)}
+            </span>
+            {user.plan === 'cancelled' && (
+              <a href="pricing-a.html" className="upgrade-btn">Reactivate</a>
+            )}
+          </div>
+        </div>
+
+        <div className="dashboard-features">
+          {features.map((feature) => {
+            const isUnlocked = unlocked.includes(feature.key);
+            return (
+              <div key={feature.key} className={`feature-card${isUnlocked ? '' : ' locked'}`}>
+                <div className="feature-title">{feature.title}</div>
+                <div className="feature-desc">{feature.desc}</div>
+                <div className="feature-action">
+                  {isUnlocked && feature.key === 'ats' && (
+                    <>
+                      <input type="file" id="ats-upload-input" accept="application/pdf" style={{display: 'none'}} />
+                      <button className="btn-primary" id="ats-upload-btn">{feature.action}</button>
+                    </>
+                  )}
+                  {isUnlocked && feature.key === 'feedback' && (
+                    <a href="resume-feedback-pro.html" className="btn-primary">{feature.action}</a>
+                  )}
+                  {isUnlocked && feature.key === 'interview' && (
+                    <a href="interview-questions.html" className="btn-primary">{feature.action}</a>
+                  )}
+                  {isUnlocked && feature.key === 'rewriting' && (
+                    <a href="resume-feedback-pro.html#rewrite" className="btn-primary">{feature.action}</a>
+                  )}
+                  {isUnlocked && feature.key === 'coverLetter' && (
+                    <a href="cover-letter-generator.html" className="btn-primary">{feature.action}</a>
+                  )}
+                  {isUnlocked && feature.key === 'mockInterview' && (
+                    <a href="mock-interview.html" className="btn-primary">{feature.action}</a>
+                  )}
+                  {isUnlocked && feature.key === 'linkedin' && (
+                    <a href="linkedin-optimizer.html" className="btn-primary">{feature.action}</a>
+                  )}
+                  {isUnlocked && feature.key === 'priorityReview' && (
+                    <div style={{display: 'flex', alignItems: 'center', gap: '0.6rem', margin: '0.7rem 0 0.2rem 0'}}>
+                      <svg width="22" height="22" fill="none" stroke="#00E676" strokeWidth="2" viewBox="0 0 24 24">
+                        <circle cx="12" cy="12" r="10"/>
+                        <path d="M12 8v4l2.5 2.5"/>
+                      </svg>
+                      <span style={{fontWeight: '600', color: '#00C853'}}>All your AI-generated content will get priority review.</span>
+                    </div>
+                  )}
+                  {!isUnlocked && (
+                    <button className="btn-locked">
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2">
+                        <rect x="3" y="11" width="18" height="8" rx="2"/>
+                        <path d="M7 11V7a5 5 0 0110 0v4"/>
+                      </svg>
+                      {feature.action}
+                    </button>
+                  )}
+                </div>
+                {isUnlocked && (user.plan === 'trial' || user.plan === 'essential' || user.plan === 'pro' || user.plan === 'premium') && (
+                  <div className="included-badge">
+                    <svg width="16" height="16" fill="#00C853" viewBox="0 0 24 24">
+                      <path d="M20.285 6.709a1 1 0 00-1.414-1.418l-9.192 9.192-4.242-4.242a1 1 0 00-1.414 1.414l4.949 4.95a1 1 0 001.414 0l9.899-9.896z"/>
+                    </svg>
+                    Included in {user.plan === 'trial' ? 'Trial' : user.plan.charAt(0).toUpperCase() + user.plan.slice(1)}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </main>
     </>
   );
 }
