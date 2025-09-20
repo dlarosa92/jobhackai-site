@@ -171,13 +171,273 @@ export default function Dashboard() {
       <Head>
         <title>Dashboard – JobHackAI</title>
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        <link rel="stylesheet" href="/css/tokens.css" />
-        <link rel="stylesheet" href="/css/main.css" />
-        <link rel="stylesheet" href="/css/header.css" />
-        <link rel="stylesheet" href="/css/footer.css" />
       </Head>
 
       <style jsx>{`
+        /* JobHackAI Header Styles */
+        .site-header {
+          background: #fff;
+          border-bottom: 1px solid #E5E7EB;
+          position: sticky;
+          top: 0;
+          z-index: 100;
+        }
+
+        .container {
+          max-width: 1200px;
+          margin: 0 auto;
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          padding: 1rem 2rem;
+          height: 64px;
+          box-sizing: border-box;
+        }
+
+        .nav-logo {
+          display: flex;
+          align-items: center;
+          font-weight: 800;
+          font-size: 1.25rem;
+          gap: 0.5rem;
+          text-decoration: none;
+          color: #1F2937;
+        }
+
+        .nav-logo svg {
+          height: 24px;
+          width: 24px;
+        }
+
+        .nav-group {
+          margin-left: 2.5rem;
+          display: flex;
+          align-items: center;
+          gap: 1.5rem;
+        }
+
+        .nav-links {
+          display: flex;
+          gap: 0.8rem;
+          align-items: center;
+        }
+
+        .nav-links a {
+          text-decoration: none;
+          color: #1F2937;
+          font-weight: 500;
+          padding: 0.25rem 0.3rem;
+          font-size: 0.95rem;
+          white-space: nowrap;
+          position: relative;
+          transition: color 0.2s;
+        }
+
+        .nav-links a:not(.cta-button)::after {
+          content: '';
+          display: block;
+          position: absolute;
+          left: 0;
+          bottom: -2px;
+          width: 0;
+          height: 2px;
+          background: #007BFF;
+          transition: width 0.2s;
+        }
+
+        .nav-links a:not(.cta-button):hover::after {
+          width: 100%;
+        }
+
+        .nav-links a.cta-button {
+          background: #00E676;
+          color: white !important;
+          text-decoration: none;
+          padding: 0.5rem 1rem;
+          border-radius: 8px;
+          font-weight: 600;
+          transition: background 0.15s, box-shadow 0.15s;
+          box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+        }
+
+        .nav-links a.cta-button:hover {
+          background: #00c965;
+          box-shadow: 0 4px 16px rgba(0,230,118,0.10);
+        }
+
+        .mobile-toggle {
+          display: none;
+          background: none;
+          border: none;
+          font-size: 2rem;
+          margin-left: 1.5rem;
+          cursor: pointer;
+          color: #1F2937;
+        }
+
+        .mobile-nav {
+          display: none;
+        }
+
+        @media (max-width: 900px) {
+          .container {
+            padding: 0 1rem;
+          }
+          .nav-links {
+            display: none;
+          }
+          .cta-button {
+            display: none;
+          }
+          .mobile-toggle {
+            display: block;
+          }
+          .mobile-nav {
+            display: flex;
+            flex-direction: column;
+            position: fixed;
+            top: 64px;
+            right: 0;
+            width: 80vw;
+            max-width: 320px;
+            background: #fff;
+            box-shadow: -2px 0 16px rgba(0,0,0,0.08);
+            padding: 2rem 1.5rem;
+            gap: 1.5rem;
+            z-index: 200;
+            transform: translateX(100%);
+            transition: transform 0.3s cubic-bezier(.4,0,.2,1);
+            height: calc(100vh - 64px);
+            visibility: hidden;
+            pointer-events: none;
+          }
+          .mobile-nav.open {
+            transform: translateX(0);
+            visibility: visible;
+            pointer-events: auto;
+          }
+          .mobile-nav a {
+            color: #1F2937;
+            font-weight: 700;
+            text-decoration: none;
+            font-size: 1.1rem;
+            padding: 0.5rem 0;
+            border-radius: 4px;
+            transition: background 0.2s, color 0.2s;
+          }
+          .mobile-nav a.cta-button {
+            display: block;
+            background: #00E676;
+            color: #fff !important;
+            margin-top: 1.5rem;
+            text-align: center;
+            padding: 0.75rem 0;
+            border-radius: 8px;
+            font-size: 1.1rem;
+            font-weight: 800;
+          }
+          .mobile-nav a:hover {
+            background: #F9FAFB;
+            color: #007BFF;
+          }
+        }
+
+        /* JobHackAI Footer Styles */
+        .site-footer {
+          background: #fff;
+          border-top: 1px solid #E5E7EB;
+          padding: 12px 0;
+          font-size: 0.95rem;
+          color: #6B7280;
+          margin-top: 2rem;
+          font-family: 'Inter', sans-serif;
+          position: relative;
+          z-index: 1;
+        }
+
+        .footer-container {
+          max-width: 1100px;
+          margin: 0 auto;
+          display: grid;
+          grid-template-columns: auto 1fr auto;
+          align-items: center;
+          padding: 0 2rem;
+          min-height: 56px;
+          gap: 1rem;
+        }
+
+        .footer-brand {
+          justify-self: start;
+          display: flex;
+          align-items: center;
+          gap: 0.5rem;
+          font-weight: 800;
+          color: #1F2937;
+        }
+
+        .footer-logo {
+          height: 24px;
+          width: 24px;
+        }
+
+        .footer-legal {
+          justify-self: center;
+          text-align: center;
+          margin: 0;
+          padding: 0;
+          font-size: 1rem;
+          color: #6B7280;
+        }
+
+        .footer-legal p { 
+          margin: 0; 
+        }
+
+        .footer-links {
+          justify-self: end;
+          display: flex;
+          align-items: center;
+          gap: 2rem;
+          margin: 0;
+          padding: 0;
+          white-space: nowrap;
+        }
+
+        .footer-links a {
+          text-decoration: none;
+          color: #4B5563;
+          font-weight: 500;
+          margin: 0;
+        }
+
+        .footer-links a:hover {
+          color: #1F2937;
+        }
+
+        @media (max-width: 900px) {
+          .footer-container {
+            grid-template-columns: 1fr;
+            text-align: center;
+            padding: 1rem 2rem;
+            row-gap: 1rem;
+            min-height: unset;
+          }
+
+          .footer-brand,
+          .footer-legal,
+          .footer-links {
+            justify-self: center;
+            margin: 0 auto;
+          }
+
+          .footer-links {
+            justify-content: center;
+            width: 100%;
+            white-space: normal;
+            gap: 1rem;
+          }
+        }
+
         .dashboard-banner {
           background: #fff;
           border-radius: 16px;
