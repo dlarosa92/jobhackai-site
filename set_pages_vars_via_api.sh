@@ -16,6 +16,14 @@ upsert_var () {
     --data "{\"value\":\"${value}\",\"type\":\"plain_text\"}" >/dev/null
 }
 
+upsert_secret () {
+  local name="$1" value="$2"
+  [ -z "${value:-}" ] && return 0
+  echo "→ Set secret ${name}"
+  curl -fsS -X PUT "${API}/secrets/${name}" "${auth_hdr[@]}" \
+    --data "{\"value\":\"${value}\"}" >/dev/null
+}
+
 delete_var () {
   local name="$1"
   echo "→ Delete variable ${name} (if exists)"
@@ -38,15 +46,22 @@ upsert_var "NEXT_PUBLIC_FIREBASE_PROJECT_ID" "${NEXT_PUBLIC_FIREBASE_PROJECT_ID}
 [ -n "${NEXT_PUBLIC_FIREBASE_APP_ID:-}" ] && upsert_var "NEXT_PUBLIC_FIREBASE_APP_ID" "${NEXT_PUBLIC_FIREBASE_APP_ID}"
 [ -n "${NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY:-}" ] && upsert_var "NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY" "${NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY}"
 
-echo "== Removing legacy/non-prefixed & misplaced secrets =="
+echo "== Removing legacy/non-prefixed vars (secrets preserved unless explicitly requested) =="
 delete_var "FIREBASE_API_KEY"
 delete_var "FIREBASE_AUTH_DOMAIN"
 delete_var "FIREBASE_PROJECT_ID"
-delete_var "STRIPE_SECRET_KEY"
+# Preserve STRIPE_SECRET_KEY on Pages for now; set DELETE_STRIPE_FROM_PAGES=1 to remove
+if [ "${DELETE_STRIPE_FROM_PAGES:-0}" = "1" ]; then
+  delete_var "STRIPE_SECRET_KEY"
+  delete_secret "STRIPE_SECRET_KEY"
+fi
 delete_secret "FIREBASE_API_KEY"
 delete_secret "FIREBASE_AUTH_DOMAIN"
 delete_secret "FIREBASE_PROJECT_ID"
-delete_secret "STRIPE_SECRET_KEY"
+
+echo "== Upserting Pages secrets for QA (optional) =="
+[ -n "${STRIPE_SECRET_KEY:-}" ] && upsert_secret "STRIPE_SECRET_KEY" "${STRIPE_SECRET_KEY}"
+[ -n "${FRONTEND_URL:-}" ] && upsert_secret "FRONTEND_URL" "${FRONTEND_URL}"
 
 echo "== Current variables =="
 curl -fsS "${API}/variables" "${auth_hdr[@]}" | sed 's/{"success":true,"errors":\[\],"messages":\[\],"result":/Result: /'
