@@ -2,3 +2,6 @@ node_modules/
 *.log
 jobhackai-site/
 .DS_Store
+
+.next/
+out/
