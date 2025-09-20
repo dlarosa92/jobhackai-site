@@ -23,8 +23,8 @@ export default function StripeTest() {
         'Interview Question Generator',
         'Email Support'
       ],
-      priceId: 'price_1234567890', // This would be your actual Stripe price ID
-      stripePriceId: 'price_1234567890'
+      priceId: 'prod_T0Nempar2BWTfg', // Essential Plan
+      stripePriceId: 'prod_T0Nempar2BWTfg'
     },
     {
       id: 'pro',
@@ -39,8 +39,8 @@ export default function StripeTest() {
         'Mock Interview Practice',
         'Priority Support'
       ],
-      priceId: 'price_0987654321',
-      stripePriceId: 'price_0987654321'
+      priceId: 'prod_T0Ni7b3qqsH9ca', // Pro Plan
+      stripePriceId: 'prod_T0Ni7b3qqsH9ca'
     },
     {
       id: 'premium',
@@ -55,8 +55,8 @@ export default function StripeTest() {
         'Career Coaching Session',
         'Phone Support'
       ],
-      priceId: 'price_1122334455',
-      stripePriceId: 'price_1122334455'
+      priceId: 'prod_T0NkBDSDoW38ko', // Premium Plan
+      stripePriceId: 'prod_T0NkBDSDoW38ko'
     }
   ];
 
