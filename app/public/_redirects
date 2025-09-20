@@ -1,6 +1,6 @@
 # Handle client-side routing for Next.js static export
-/dashboard    /dashboard/index.html    200
-/dashboard-simple    /dashboard-simple/index.html    200
+/dashboard/   /dashboard/index.html    200
+/dashboard-simple/   /dashboard-simple/index.html    200
 
 # Fallback for all other routes
 /*    /index.html   200
