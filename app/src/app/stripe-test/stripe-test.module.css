@@ -1,0 +1,64 @@
+.sectionHeader {
+  display: grid;
+  gap: var(--space-3);
+  max-width: 48rem;
+  margin-inline: auto;
+  text-align: center;
+}
+
+.sectionHeader p {
+  font-size: var(--text-lg);
+  color: var(--color-muted);
+}
+
+.layout {
+  display: grid;
+  gap: var(--space-5);
+  max-width: 760px;
+  margin: 0 auto;
+}
+
+.summaryCard {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.keyHighlight {
+  font-family: var(--font-sans);
+  font-size: var(--text-base);
+  font-weight: 600;
+  padding: 0.5rem 0.75rem;
+  border-radius: var(--radius);
+  background-color: color-mix(in srgb, var(--color-accent) 12%, var(--color-surface));
+  border: 1px solid var(--color-border);
+  width: fit-content;
+}
+
+.actionRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+
+.log {
+  font-family: var(--font-sans);
+  background-color: color-mix(in srgb, var(--color-primary) 8%, var(--color-surface));
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-4);
+  font-size: var(--text-sm);
+  line-height: var(--line-height-base);
+  min-height: 6rem;
+  white-space: pre-wrap;
+}
+
+.testForm {
+  display: grid;
+  gap: var(--space-4);
+}
+
+@media (min-width: 768px) {
+  .sectionHeader {
+    text-align: left;
+  }
+}

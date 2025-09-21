@@ -1,0 +1,17 @@
+.shell {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--color-bg);
+}
+
+.main {
+  flex: 1 1 auto;
+  padding-block: var(--space-8);
+}
+
+@media (max-width: 959px) {
+  .main {
+    padding-block: var(--space-6);
+  }
+}

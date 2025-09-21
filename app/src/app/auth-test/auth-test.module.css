@@ -1,0 +1,80 @@
+.sectionHeader {
+  display: grid;
+  gap: var(--space-3);
+  max-width: 48rem;
+  margin-inline: auto;
+  text-align: center;
+}
+
+.sectionHeader p {
+  font-size: var(--text-lg);
+  color: var(--color-muted);
+}
+
+.grid {
+  display: grid;
+  gap: var(--space-5);
+  max-width: 720px;
+  margin: 0 auto;
+}
+
+.statusBlock {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.statusLabel {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  text-transform: uppercase;
+  color: var(--color-muted);
+  letter-spacing: 0.04em;
+}
+
+.statusValue {
+  font-size: var(--text-base);
+  font-weight: 600;
+}
+
+.statusSuccess {
+  color: var(--color-success);
+}
+
+.statusError {
+  color: var(--color-danger);
+}
+
+.actionRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+
+.log {
+  font-family: var(--font-sans);
+  background-color: color-mix(in srgb, var(--color-accent) 8%, var(--color-surface));
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-4);
+  font-size: var(--text-sm);
+  line-height: var(--line-height-base);
+  min-height: 6rem;
+  white-space: pre-wrap;
+}
+
+.form {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.formActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+
+@media (min-width: 768px) {
+  .sectionHeader {
+    text-align: left;
+  }
+}

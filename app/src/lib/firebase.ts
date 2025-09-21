@@ -1,8 +1,8 @@
-import { initializeApp, getApps, getApp } from 'firebase/app';
-import { getAuth } from 'firebase/auth';
+import { FirebaseApp, getApp, getApps, initializeApp } from 'firebase/app';
+import { Auth, getAuth } from 'firebase/auth';
 
 export const firebaseConfig = {
-  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY!,
+  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY || '',
   authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN || '',
   projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || '',
   storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || '',
@@ -10,11 +10,21 @@ export const firebaseConfig = {
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID || '',
 };
 
-// Avoid initializing Firebase Auth during SSR/static build to prevent build-time errors
-const isBrowser = typeof window !== 'undefined';
-const app = isBrowser ? (getApps().length ? getApp() : initializeApp(firebaseConfig)) : undefined;
+let clientApp: FirebaseApp | undefined;
+let clientAuth: Auth | null = null;
 
-// Export auth only on client; on server it will be a benign null (typed as any)
-export const auth: any = isBrowser && app ? getAuth(app) : null;
+if (typeof window !== 'undefined') {
+  const hasConfig = Boolean(firebaseConfig.apiKey);
 
-export default app;
+  if (!hasConfig) {
+    console.warn('Firebase configuration is missing NEXT_PUBLIC_* environment variables.');
+  } else {
+    clientApp = getApps().length ? getApp() : initializeApp(firebaseConfig);
+    clientAuth = getAuth(clientApp);
+  }
+}
+
+export const app = clientApp;
+export const auth = clientAuth;
+
+export default clientApp;
