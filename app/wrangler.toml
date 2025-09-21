@@ -27,10 +27,14 @@ ENVIRONMENT = "qa"
 
 [env.qa.vars]
 ENVIRONMENT = "qa"
-STRIPE_PUBLISHABLE_KEY = "pk_test_your_stripe_test_key"
-FIREBASE_API_KEY = "your_firebase_api_key"
+STRIPE_PUBLISHABLE_KEY = "pk_test_51S4MsxApMPhcB1Y6sC4oQzNL"
+STRIPE_SECRET_KEY = "sk_test_51S4MsxApMPhcB1Y6sC4oQzNL"
+FIREBASE_API_KEY = "AIzaSyCDZksp8XpRJaYnoihiuXT5Uvd0YrbLdfw"
+FRONTEND_URL = "https://qa.jobhackai.io"
 
 [env.production.vars]
 ENVIRONMENT = "production"
 STRIPE_PUBLISHABLE_KEY = "pk_live_your_stripe_live_key"
-FIREBASE_API_KEY = "your_firebase_api_key"
+STRIPE_SECRET_KEY = "sk_live_your_stripe_live_secret_key"
+FIREBASE_API_KEY = "AIzaSyCDZksp8XpRJaYnoihiuXT5Uvd0YrbLdfw"
+FRONTEND_URL = "https://app.jobhackai.io"

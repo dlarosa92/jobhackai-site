@@ -27,45 +27,82 @@ export async function onRequest(context: any) {
 }
 
 async function createCheckoutSession(data: any, env: any) {
-  const { priceId, userId, userEmail } = data;
-  
-  const stripe = require('stripe')(env.STRIPE_SECRET_KEY);
-  
-  const session = await stripe.checkout.sessions.create({
-    customer_email: userEmail,
-    payment_method_types: ['card'],
-    line_items: [
-      {
-        price: priceId,
-        quantity: 1,
+  try {
+    const { priceId, userId, userEmail } = data;
+    
+    if (!env.STRIPE_SECRET_KEY) {
+      throw new Error('STRIPE_SECRET_KEY is not configured');
+    }
+    
+    const stripe = require('stripe')(env.STRIPE_SECRET_KEY);
+    
+    const session = await stripe.checkout.sessions.create({
+      customer_email: userEmail,
+      payment_method_types: ['card'],
+      line_items: [
+        {
+          price: priceId,
+          quantity: 1,
+        },
+      ],
+      mode: 'subscription',
+      success_url: `${env.FRONTEND_URL}/dashboard?success=true`,
+      cancel_url: `${env.FRONTEND_URL}/pricing?canceled=true`,
+      metadata: {
+        userId: userId,
       },
-    ],
-    mode: 'subscription',
-    success_url: `${env.FRONTEND_URL}/dashboard?success=true`,
-    cancel_url: `${env.FRONTEND_URL}/pricing?canceled=true`,
-    metadata: {
-      userId: userId,
-    },
-  });
+    });
 
-  return new Response(JSON.stringify({ sessionId: session.id }), {
-    headers: { 'Content-Type': 'application/json' },
-  });
+    return new Response(JSON.stringify({ 
+      success: true, 
+      url: session.url,
+      sessionId: session.id 
+    }), {
+      headers: { 'Content-Type': 'application/json' },
+    });
+  } catch (error) {
+    console.error('Stripe checkout error:', error);
+    return new Response(JSON.stringify({ 
+      success: false, 
+      error: `Stripe API error: ${error.message}` 
+    }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
 }
 
 async function createCustomerPortal(data: any, env: any) {
-  const { customerId } = data;
-  
-  const stripe = require('stripe')(env.STRIPE_SECRET_KEY);
-  
-  const session = await stripe.billingPortal.sessions.create({
-    customer: customerId,
-    return_url: `${env.FRONTEND_URL}/dashboard`,
-  });
+  try {
+    const { customerId } = data;
+    
+    if (!env.STRIPE_SECRET_KEY) {
+      throw new Error('STRIPE_SECRET_KEY is not configured');
+    }
+    
+    const stripe = require('stripe')(env.STRIPE_SECRET_KEY);
+    
+    const session = await stripe.billingPortal.sessions.create({
+      customer: customerId,
+      return_url: `${env.FRONTEND_URL}/dashboard`,
+    });
 
-  return new Response(JSON.stringify({ url: session.url }), {
-    headers: { 'Content-Type': 'application/json' },
-  });
+    return new Response(JSON.stringify({ 
+      success: true, 
+      url: session.url 
+    }), {
+      headers: { 'Content-Type': 'application/json' },
+    });
+  } catch (error) {
+    console.error('Stripe portal error:', error);
+    return new Response(JSON.stringify({ 
+      success: false, 
+      error: `Stripe API error: ${error.message}` 
+    }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
 }
 
 async function handleWebhook(data: any, env: any) {
