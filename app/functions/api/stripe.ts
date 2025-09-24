@@ -74,17 +74,69 @@ async function createCheckoutSession(data: any, env: any) {
 
 async function createCustomerPortal(data: any, env: any) {
   try {
-    const { customerId } = data;
+    const { customerId, userEmail, userId } = data || {};
     
     if (!env.STRIPE_SECRET_KEY) {
       throw new Error('STRIPE_SECRET_KEY is not configured');
     }
     
     const stripe = require('stripe')(env.STRIPE_SECRET_KEY);
+
+    // Resolve a customer to open the portal for
+    let customer = null;
+
+    if (customerId) {
+      try {
+        customer = await stripe.customers.retrieve(customerId);
+      } catch {}
+    }
+
+    if (!customer && userEmail) {
+      // Try to find by email
+      const list = await stripe.customers.list({ email: userEmail, limit: 1 });
+      if (list.data && list.data.length > 0) {
+        customer = list.data[0];
+      }
+    }
+
+    if (!customer && userEmail) {
+      // Create a lightweight customer if not found
+      customer = await stripe.customers.create({
+        email: userEmail,
+        metadata: userId ? { userId } : undefined,
+      });
+    }
+
+    if (!customer) {
+      throw new Error('Unable to resolve Stripe customer');
+    }
     
+    // Ensure there is a portal configuration in test mode; create a basic one if missing
+    let configurationId: string | undefined;
+    try {
+      const configs = await stripe.billingPortal.configurations.list({ limit: 1 });
+      if (configs.data && configs.data.length > 0) {
+        configurationId = configs.data[0].id;
+      } else {
+        const created = await stripe.billingPortal.configurations.create({
+          business_profile: { headline: 'JobHackAI Billing' },
+          features: {
+            payment_method_update: { enabled: true },
+            subscription_cancel: { enabled: true },
+            subscription_update: { enabled: true },
+            invoice_history: { enabled: true },
+          },
+        });
+        configurationId = created.id;
+      }
+    } catch {
+      // If listing/creating fails, proceed without configuration and let Stripe use default (if present)
+    }
+
     const session = await stripe.billingPortal.sessions.create({
-      customer: customerId,
-      return_url: `${env.FRONTEND_URL}/dashboard`,
+      customer: customer.id,
+      return_url: `${env.FRONTEND_URL || ''}/dashboard`,
+      ...(configurationId ? { configuration: configurationId } : {}),
     });
 
     return new Response(JSON.stringify({ 

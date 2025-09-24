@@ -132,8 +132,10 @@ export default function StripeTest() {
         body: JSON.stringify({
           action: 'create-customer-portal',
           data: {
-            customerId: 'cus_test123', // This would be a real customer ID
-            userId: user.uid
+            // Let the backend resolve or create the customer using email/uid
+            customerId: undefined,
+            userId: user.uid,
+            userEmail: user.email
           }
         }),
       });
