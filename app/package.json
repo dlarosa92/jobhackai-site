@@ -4,7 +4,7 @@
   "description": "JobHackAI Cloudflare Application",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "next dev -p 3003",
     "build": "next build",
     "postbuild": "cp -f public/_redirects out/_redirects",
     "start": "next start",
