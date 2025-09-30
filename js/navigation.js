@@ -316,8 +316,20 @@ const NAVIGATION_CONFIG = {
       { text: 'Home', href: 'index.html' },
       { text: 'Dashboard', href: 'dashboard.html' },
       { text: 'Blog', href: 'index.html#blog' },
-      { text: 'Resume Feedback', href: 'resume-feedback-pro.html' },
-      { text: 'Interview Questions', href: 'interview-questions.html' }
+      { 
+        text: 'Resume Tools',
+        isDropdown: true,
+        items: [
+          { text: 'Resume Feedback', href: 'resume-feedback-pro.html' },
+        ]
+      },
+      { 
+        text: 'Interview Prep',
+        isDropdown: true,
+        items: [
+          { text: 'Interview Questions', href: 'interview-questions.html' },
+        ]
+      }
     ],
     userNav: {
       cta: { text: 'Upgrade', href: 'pricing-a.html', isCTA: true },
@@ -333,8 +345,20 @@ const NAVIGATION_CONFIG = {
       { text: 'Home', href: 'index.html' },
       { text: 'Dashboard', href: 'dashboard.html' },
       { text: 'Blog', href: 'index.html#blog' },
-      { text: 'Resume Feedback', href: 'resume-feedback-pro.html' },
-      { text: 'Interview Questions', href: 'interview-questions.html' }
+      { 
+        text: 'Resume Tools',
+        isDropdown: true,
+        items: [
+          { text: 'Resume Feedback', href: 'resume-feedback-pro.html' },
+        ]
+      },
+      { 
+        text: 'Interview Prep',
+        isDropdown: true,
+        items: [
+          { text: 'Interview Questions', href: 'interview-questions.html' },
+        ]
+      }
     ],
     userNav: {
       cta: { text: 'Upgrade', href: 'pricing-a.html', isCTA: true },
