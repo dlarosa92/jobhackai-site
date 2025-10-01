@@ -1,0 +1,377 @@
+<!-- DO NOT EDIT HEADER OR FOOTER PER-PAGE. Use canonical snippet from docs/snippets.md. -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pricing – JobHackAI</title>
+  <link rel="icon" type="image/png" href="assets/JobHackAI_Logo_favicon-32x32.png">
+
+  <!-- Design tokens & global styles -->
+  <link rel="stylesheet" href="css/tokens.css">
+  <link rel="stylesheet" href="css/main.css">
+
+  <!-- Component overrides -->
+  <link rel="stylesheet" href="css/header.css">
+  <link rel="stylesheet" href="css/footer.css">
+</head>
+<body>
+  <!-- Header -->
+  <header class="site-header">
+    <div class="container">
+      <a href="index.html" class="nav-logo" aria-label="Go to homepage">
+        <svg width="24" height="24" fill="none" stroke="#1F2937" stroke-width="2" xmlns="http://www.w3.org/2000/svg">
+          <rect x="3" y="7" width="18" height="13" rx="2"/>
+          <path d="M8 7V5a2 2 0 012-2h4a2 2 0 012 2v2"/>
+        </svg>
+        <span>JOBHACKAI</span>
+      </a>
+      <div class="nav-group">
+        <nav class="nav-links" role="navigation">
+          <!-- Navigation will be dynamically populated by navigation.js -->
+        </nav>
+      </div>
+      <button class="mobile-toggle" aria-label="Open navigation menu" aria-expanded="false" aria-controls="mobileNav">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="3" y1="12" x2="21" y2="12"></line>
+          <line x1="3" y1="6" x2="21" y2="6"></line>
+          <line x1="3" y1="18" x2="21" y2="18"></line>
+        </svg>
+      </button>
+    </div>
+  </header>
+  <nav class="mobile-nav" id="mobileNav">
+    <!-- Mobile navigation will be dynamically populated by navigation.js -->
+  </nav>
+  <script>
+    // Hamburger menu toggle
+    const mobileToggle = document.querySelector('.mobile-toggle');
+    const mobileNav = document.getElementById('mobileNav');
+    if (mobileToggle && mobileNav) {
+      mobileToggle.addEventListener('click', () => {
+        const isOpen = mobileNav.classList.toggle('open');
+        mobileToggle.setAttribute('aria-expanded', isOpen);
+      });
+      // Close mobile nav on link click
+      document.querySelectorAll('.mobile-nav a').forEach(link => {
+        link.addEventListener('click', () => {
+          mobileNav.classList.remove('open');
+          mobileToggle.setAttribute('aria-expanded', 'false');
+        });
+      });
+    }
+  </script>
+  <!-- page content -->
+  <main>
+    <section class="pricing-section">
+      <div class="pricing-table-wrapper">
+        <h1 class="pricing-title">Choose the Plan That Matches Your Ambition</h1>
+        <table class="pricing-table" role="table" aria-label="JobHackAI Pricing Plans">
+          <thead>
+            <tr>
+              <th>Feature</th>
+              <th>Create Account</th>
+              <th>3-Day Trial</th>
+              <th>Essential<br><span class="plan-price">$29/mo</span></th>
+              <th>Pro<br><span class="plan-price">$59/mo</span></th>
+              <th>Premium<br><span class="plan-price">$99/mo</span></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>ATS Resume Scoring</td>
+              <td class="yes">
+                <svg class="pricing-icon" viewBox="0 0 24 24" fill="none" stroke="#1F2937" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4.5 12.5l5 5L19.5 7.5"/></svg>
+              </td>
+              <td class="yes"><svg class="pricing-icon" viewBox="0 0 24 24" fill="none" stroke="#1F2937" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4.5 12.5l5 5L19.5 7.5"/></svg></td>
+              <td class="yes"><svg class="pricing-icon" viewBox="0 0 24 24" fill="none" stroke="#1F2937" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4.5 12.5l5 5L19.5 7.5"/></svg></td>
+              <td class="yes"><svg class="pricing-icon" viewBox="0 0 24 24" fill="none" stroke="#1F2937" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4.5 12.5l5 5L19.5 7.5"/></svg></td>
+              <td class="yes"><svg class="pricing-icon" viewBox="0 0 24 24" fill="none" stroke="#1F2937" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4.5 12.5l5 5L19.5 7.5"/></svg></td>
+            </tr>
+            <tr>
+              <td>Resume Feedback</td>
+              <td class="no"><svg class="pricing-icon" viewBox="0 0 24 24" fill="none" stroke="#FF0000" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></td>
+              <td class="yes"><svg class="pricing-icon" viewBox="0 0 24 24" fill="none" stroke="#1F2937" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4.5 12.5l5 5L19.5 7.5"/></svg></td>
+              <td class="yes"><svg class="pricing-icon" viewBox="0 0 24 24" fill="none" stroke="#1F2937" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4.5 12.5l5 5L19.5 7.5"/></svg></td>
+              <td class="yes"><svg class="pricing-icon" viewBox="0 0 24 24" fill="none" stroke="#1F2937" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4.5 12.5l5 5L19.5 7.5"/></svg></td>
+              <td class="yes"><svg class="pricing-icon" viewBox="0 0 24 24" fill="none" stroke="#1F2937" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4.5 12.5l5 5L19.5 7.5"/></svg></td>
+            </tr>
+            <tr>
+              <td>Resume Rewriting</td>
+              <td class="no"><svg class="pricing-icon" viewBox="0 0 24 24" fill="none" stroke="#FF0000" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></td>
+              <td class="lock"><svg class="pricing-icon" viewBox="0 0 24 24" fill="none" stroke="#1F2937" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" aria-label="Locked" role="img" title="Locked"><rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V8a4 4 0 0 1 8 0v2"/><circle cx="12" cy="15" r="1.75"/></svg></td>
+              <td class="lock"><svg class="pricing-icon" viewBox="0 0 24 24" fill="none" stroke="#1F2937" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" aria-label="Locked" role="img" title="Locked"><rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V8a4 4 0 0 1 8 0v2"/><circle cx="12" cy="15" r="1.75"/></svg></td>
+              <td class="yes"><svg class="pricing-icon" viewBox="0 0 24 24" fill="none" stroke="#1F2937" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4.5 12.5l5 5L19.5 7.5"/></svg></td>
+              <td class="yes"><svg class="pricing-icon" viewBox="0 0 24 24" fill="none" stroke="#1F2937" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4.5 12.5l5 5L19.5 7.5"/></svg></td>
+            </tr>
+            <tr>
+              <td>Cover Letter Generator</td>
+              <td class="no"><svg class="pricing-icon" viewBox="0 0 24 24" fill="none" stroke="#FF0000" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></td>
+              <td class="lock"><svg class="pricing-icon" viewBox="0 0 24 24" fill="none" stroke="#1F2937" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" aria-label="Locked" role="img" title="Locked"><rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V8a4 4 0 0 1 8 0v2"/><circle cx="12" cy="15" r="1.75"/></svg></td>
+              <td class="lock"><svg class="pricing-icon" viewBox="0 0 24 24" fill="none" stroke="#1F2937" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" aria-label="Locked" role="img" title="Locked"><rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V8a4 4 0 0 1 8 0v2"/><circle cx="12" cy="15" r="1.75"/></svg></td>
+              <td class="yes"><svg class="pricing-icon" viewBox="0 0 24 24" fill="none" stroke="#1F2937" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4.5 12.5l5 5L19.5 7.5"/></svg></td>
+              <td class="yes"><svg class="pricing-icon" viewBox="0 0 24 24" fill="none" stroke="#1F2937" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4.5 12.5l5 5L19.5 7.5"/></svg></td>
+            </tr>
+            <tr>
+              <td>Interview Questions</td>
+              <td class="no"><svg class="pricing-icon" viewBox="0 0 24 24" fill="none" stroke="#FF0000" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></td>
+              <td class="yes"><svg class="pricing-icon" viewBox="0 0 24 24" fill="none" stroke="#1F2937" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4.5 12.5l5 5L19.5 7.5"/></svg></td>
+              <td class="yes"><svg class="pricing-icon" viewBox="0 0 24 24" fill="none" stroke="#1F2937" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4.5 12.5l5 5L19.5 7.5"/></svg></td>
+              <td class="yes"><svg class="pricing-icon" viewBox="0 0 24 24" fill="none" stroke="#1F2937" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4.5 12.5l5 5L19.5 7.5"/></svg></td>
+              <td class="yes"><svg class="pricing-icon" viewBox="0 0 24 24" fill="none" stroke="#1F2937" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4.5 12.5l5 5L19.5 7.5"/></svg></td>
+            </tr>
+            <tr>
+              <td>Mock Interviews</td>
+              <td class="no"><svg class="pricing-icon" viewBox="0 0 24 24" fill="none" stroke="#FF0000" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></td>
+              <td class="lock"><svg class="pricing-icon" viewBox="0 0 24 24" fill="none" stroke="#1F2937" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" aria-label="Locked" role="img" title="Locked"><rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V8a4 4 0 0 1 8 0v2"/><circle cx="12" cy="15" r="1.75"/></svg></td>
+              <td class="lock"><svg class="pricing-icon" viewBox="0 0 24 24" fill="none" stroke="#1F2937" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" aria-label="Locked" role="img" title="Locked"><rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V8a4 4 0 0 1 8 0v2"/><circle cx="12" cy="15" r="1.75"/></svg></td>
+              <td class="yes"><svg class="pricing-icon" viewBox="0 0 24 24" fill="none" stroke="#1F2937" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4.5 12.5l5 5L19.5 7.5"/></svg></td>
+              <td class="yes"><svg class="pricing-icon" viewBox="0 0 24 24" fill="none" stroke="#1F2937" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4.5 12.5l5 5L19.5 7.5"/></svg></td>
+            </tr>
+            <tr>
+              <td>LinkedIn Optimizer</td>
+              <td class="no"><svg class="pricing-icon" viewBox="0 0 24 24" fill="none" stroke="#FF0000" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></td>
+              <td class="lock"><svg class="pricing-icon" viewBox="0 0 24 24" fill="none" stroke="#1F2937" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" aria-label="Locked" role="img" title="Locked"><rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V8a4 4 0 0 1 8 0v2"/><circle cx="12" cy="15" r="1.75"/></svg></td>
+              <td class="lock"><svg class="pricing-icon" viewBox="0 0 24 24" fill="none" stroke="#1F2937" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" aria-label="Locked" role="img" title="Locked"><rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V8a4 4 0 0 1 8 0v2"/><circle cx="12" cy="15" r="1.75"/></svg></td>
+              <td class="lock"><svg class="pricing-icon" viewBox="0 0 24 24" fill="none" stroke="#1F2937" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" aria-label="Locked" role="img" title="Locked"><rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V8a4 4 0 0 1 8 0v2"/><circle cx="12" cy="15" r="1.75"/></svg></td>
+              <td class="yes"><svg class="pricing-icon" viewBox="0 0 24 24" fill="none" stroke="#1F2937" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4.5 12.5l5 5L19.5 7.5"/></svg></td>
+            </tr>
+            <tr>
+              <td>Priority Review</td>
+              <td class="no"><svg class="pricing-icon" viewBox="0 0 24 24" fill="none" stroke="#FF0000" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></td>
+              <td class="lock"><svg class="pricing-icon" viewBox="0 0 24 24" fill="none" stroke="#1F2937" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" aria-label="Locked" role="img" title="Locked"><rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V8a4 4 0 0 1 8 0v2"/><circle cx="12" cy="15" r="1.75"/></svg></td>
+              <td class="lock"><svg class="pricing-icon" viewBox="0 0 24 24" fill="none" stroke="#1F2937" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" aria-label="Locked" role="img" title="Locked"><rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V8a4 4 0 0 1 8 0v2"/><circle cx="12" cy="15" r="1.75"/></svg></td>
+              <td class="lock"><svg class="pricing-icon" viewBox="0 0 24 24" fill="none" stroke="#1F2937" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" aria-label="Locked" role="img" title="Locked"><rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V8a4 4 0 0 1 8 0v2"/><circle cx="12" cy="15" r="1.75"/></svg></td>
+              <td class="yes"><svg class="pricing-icon" viewBox="0 0 24 24" fill="none" stroke="#1F2937" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4.5 12.5l5 5L19.5 7.5"/></svg></td>
+            </tr>
+            <tr class="pricing-signup-row">
+              <td></td>
+              <td><button class="btn-primary stripe-checkout-btn" data-plan="create-account" data-amount="0">Create Free Account</button></td>
+              <td><button class="btn-primary stripe-checkout-btn" data-plan="trial" data-amount="0">Start Free Trial</button></td>
+              <td><button class="btn-primary stripe-checkout-btn" data-plan="essential" data-amount="2900">Get Essential Plan</button></td>
+              <td><button class="btn-primary stripe-checkout-btn" data-plan="pro" data-amount="5900">Get Pro Plan</button></td>
+              <td><button class="btn-primary stripe-checkout-btn" data-plan="premium" data-amount="9900">Get Premium Plan</button></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+  <!-- Footer -->
+  <footer class="site-footer">
+    <div class="footer-container">
+      <div class="footer-brand">
+        <svg class="footer-logo" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect x="3" y="7" width="18" height="13" rx="2" stroke="#1F2937" stroke-width="2"/>
+          <path d="M8 7V5a2 2 0 012-2h4a2 2 0 012 2v2" stroke="#1F2937" stroke-width="2"/>
+        </svg>
+        <span class="footer-name">JOBHACKAI</span>
+      </div>
+      <div class="footer-legal">
+        <p>© 2025 JobHackAI. All rights reserved.</p>
+      </div>
+      <div class="footer-links">
+        <a href="index.html">Home</a>
+        <a href="support.html">Support</a>
+        <a href="privacy.html">Privacy</a>
+      </div>
+    </div>
+  </footer>
+  <!-- Load navigation system -->
+  <script src="js/navigation.js"></script>
+  <!-- Load Stripe integration -->
+  <script src="js/stripe-integration.js"></script>
+  <!-- scripts -->
+  <script src="js/main.js" type="module"></script>
+  <script src="js/analytics.js" type="module"></script>
+  <script>
+    // Initialize pricing page Stripe functionality
+    document.addEventListener('DOMContentLoaded', () => {
+      // Initialize navigation system
+      if (window.JobHackAINavigation && window.JobHackAINavigation.initializeNavigation) {
+        window.JobHackAINavigation.initializeNavigation();
+      }
+      
+      const checkoutButtons = document.querySelectorAll('.stripe-checkout-btn');
+      
+      // Check if user is already authenticated
+      const isAuthenticated = localStorage.getItem('user-authenticated') === 'true';
+      const userEmail = localStorage.getItem('user-email');
+      const currentPlan = localStorage.getItem('user-plan') || 'free';
+      
+      checkoutButtons.forEach(button => {
+        button.addEventListener('click', (e) => {
+          e.preventDefault();
+          const plan = button.dataset.plan;
+          const amount = parseInt(button.dataset.amount);
+          
+          if (plan === 'create-account') {
+            window.location.href = 'login.html';
+            return;
+          }
+          
+          // If user is authenticated, handle upgrade directly
+          if (isAuthenticated && userEmail) {
+            handleAuthenticatedUserUpgrade(plan, amount, currentPlan);
+          } else {
+            // New user - redirect to login with plan selected
+            localStorage.setItem('selected-plan', plan);
+            localStorage.setItem('plan-amount', amount);
+            window.location.href = 'login.html';
+          }
+        });
+      });
+      
+      // Update button text for authenticated users
+      if (isAuthenticated) {
+        updateButtonsForAuthenticatedUser(currentPlan);
+      }
+    });
+    
+    function userHasCard(userEmail) {
+      const db = JSON.parse(localStorage.getItem('user-db') || '{}');
+      if (!db[userEmail]) return false;
+      return Array.isArray(db[userEmail].cards) && db[userEmail].cards.length > 0;
+    }
+    
+    function handleAuthenticatedUserUpgrade(newPlan, amount, currentPlan) {
+      // Don't allow downgrading to same or lower plan
+      const planHierarchy = ['free', 'trial', 'essential', 'pro', 'premium'];
+      const currentIndex = planHierarchy.indexOf(currentPlan);
+      const newIndex = planHierarchy.indexOf(newPlan);
+      
+      if (newIndex <= currentIndex) {
+        alert(`You're already on the ${currentPlan} plan. Please select a higher tier to upgrade.`);
+        return;
+      }
+      
+      // Only free plan doesn't require a card - all others (including trial) need a card
+      const plansRequiringCard = ['trial', 'essential', 'pro', 'premium'];
+      const userEmail = localStorage.getItem('user-email');
+      if (plansRequiringCard.includes(newPlan) && !userHasCard(userEmail)) {
+        showAddCardModal();
+        return;
+      }
+      
+      // Show confirmation dialog
+      const planNames = {
+        'trial': '3-Day Free Trial',
+        'essential': 'Essential Plan ($29/mo)',
+        'pro': 'Pro Plan ($59/mo)',
+        'premium': 'Premium Plan ($99/mo)'
+      };
+      
+      const confirmMessage = `Upgrade from ${currentPlan} to ${planNames[newPlan]}?\n\nThis will start your new plan immediately.`;
+      
+      if (confirm(confirmMessage)) {
+        // INTEGRATION: STRIPE - Handle subscription upgrade here
+        // For demo, just update the user's plan
+        const getUserDB = () => {
+          try {
+            return JSON.parse(localStorage.getItem('user-db') || '{}');
+          } catch (error) {
+            console.error('Error loading user database:', error);
+            return {};
+          }
+        };
+        
+        const setUserDB = (db) => {
+          try {
+            localStorage.setItem('user-db', JSON.stringify(db));
+            localStorage.setItem('user-db-backup', JSON.stringify(db));
+          } catch (error) {
+            console.error('Error saving user database:', error);
+          }
+        };
+        
+        const db = getUserDB();
+        if (db[userEmail]) {
+          // Only update the plan property, preserve all other user data (including cards)
+          db[userEmail].plan = newPlan;
+          db[userEmail].lastUpgrade = new Date().toISOString();
+          setUserDB(db);
+          
+          // Update local storage
+          localStorage.setItem('user-plan', newPlan);
+          localStorage.setItem('dev-plan', newPlan);
+          localStorage.removeItem('selected-plan');
+          localStorage.removeItem('plan-amount');
+          
+          // Sync with navigation system
+          if (window.JobHackAINavigation) {
+            window.JobHackAINavigation.setAuthState(true, newPlan);
+          }
+          
+          alert(`Successfully upgraded to ${planNames[newPlan]}! Redirecting to dashboard...`);
+          window.location.href = 'dashboard.html';
+        } else {
+          alert('Error: User data not found. Please try logging in again.');
+          window.location.href = 'login.html';
+        }
+      }
+    }
+    
+    function updateButtonsForAuthenticatedUser(currentPlan) {
+      const buttons = document.querySelectorAll('.stripe-checkout-btn');
+      const planNames = {
+        'trial': '3-Day Free Trial',
+        'essential': 'Essential Plan',
+        'pro': 'Pro Plan',
+        'premium': 'Premium Plan'
+      };
+      
+      buttons.forEach(button => {
+        const plan = button.dataset.plan;
+        if (plan === 'create-account') {
+          button.textContent = 'Dashboard';
+          button.onclick = () => window.location.href = 'dashboard.html';
+        } else if (plan === currentPlan) {
+          button.textContent = `Current Plan`;
+          button.disabled = true;
+          button.style.opacity = '0.6';
+          button.style.cursor = 'not-allowed';
+        } else {
+          button.textContent = `Upgrade to ${planNames[plan]}`;
+        }
+      });
+    }
+    
+    // Modal for adding card
+    function showAddCardModal() {
+      let modal = document.getElementById('addCardModal');
+      if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'addCardModal';
+        modal.style.position = 'fixed';
+        modal.style.top = '0';
+        modal.style.left = '0';
+        modal.style.width = '100vw';
+        modal.style.height = '100vh';
+        modal.style.background = 'rgba(0,0,0,0.35)';
+        modal.style.display = 'flex';
+        modal.style.alignItems = 'center';
+        modal.style.justifyContent = 'center';
+        modal.style.zIndex = '9999';
+        modal.innerHTML = `
+          <div style="background:#fff; padding:2rem 2.5rem; border-radius:16px; box-shadow:0 4px 32px rgba(0,0,0,0.13); max-width:350px; text-align:center;">
+            <h2 style="color:#232B36; font-size:1.2rem; margin-bottom:0.7rem;">Add a Payment Method</h2>
+            <p style="color:#4B5563; font-size:1rem; margin-bottom:1.2rem;">You must add a payment method to upgrade your plan.</p>
+            <button id="goToBillingBtn" style="background:#00E676; color:#fff; border:none; border-radius:8px; padding:0.8rem 1.5rem; font-size:1.05rem; font-weight:700; cursor:pointer; margin-bottom:0.7rem;">Go to Billing</button><br>
+            <button id="closeAddCardModal" style="background:#f0f0f0; color:#232B36; border:none; border-radius:8px; padding:0.7rem 1.2rem; font-size:1rem; font-weight:600; cursor:pointer;">Cancel</button>
+          </div>
+        `;
+        document.body.appendChild(modal);
+        document.getElementById('goToBillingBtn').onclick = function() {
+          window.location.href = 'billing-management.html';
+        };
+        document.getElementById('closeAddCardModal').onclick = function() {
+          modal.style.display = 'none';
+        };
+      } else {
+        modal.style.display = 'flex';
+      }
+    }
+  </script>
+  
+</body>
+</html>

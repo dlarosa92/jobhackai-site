@@ -615,6 +615,38 @@ export default function Dashboard() {
           margin-bottom: 0.7em;
           font-size: 1.01rem;
         }
+        .nav-actions {
+          display: flex;
+          align-items: center;
+          gap: 1rem;
+        }
+        .upgrade-btn {
+          background: #00E676;
+          color: #fff;
+          font-weight: 700;
+          border: none;
+          border-radius: 8px;
+          padding: 0.6rem 1.5rem;
+          font-size: 1.01rem;
+          text-decoration: none;
+          transition: background 0.18s;
+        }
+        .upgrade-btn:hover {
+          background: #00c965;
+          text-decoration: none;
+        }
+        .user-profile {
+          color: #6B7280;
+          text-decoration: none;
+          padding: 0.5rem;
+          border-radius: 50%;
+          transition: color 0.18s, background 0.18s;
+        }
+        .user-profile:hover {
+          color: #232B36;
+          background: #F3F4F6;
+          text-decoration: none;
+        }
       `}</style>
 
       {/* JobHackAI HEADER (canonical) */}
@@ -630,6 +662,8 @@ export default function Dashboard() {
           <div className="nav-group">
             <nav className="nav-links" role="navigation">
               <a href="/">Home</a>
+              <a href="/dashboard">Dashboard</a>
+              <a href="/blog">Blog</a>
               <div className="nav-dropdown">
                 <a href="#" className="nav-dropdown-toggle">
                   Resume Tools
@@ -655,11 +689,16 @@ export default function Dashboard() {
                   <a href="/mockInterview">Mock Interview Practice</a>
                 </div>
               </div>
-              <a href="/pricing">Pricing</a>
-              <a href="/blog">Blog</a>
-              <a href="/login">Login</a>
-              <a href="/pricing" className="cta-button">Start Free Trial</a>
             </nav>
+            <div className="nav-actions">
+              <a href="/pricing" className="upgrade-btn">Upgrade</a>
+              <a href="/account" className="user-profile" aria-label="User Profile">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+                  <circle cx="12" cy="7" r="4"/>
+                </svg>
+              </a>
+            </div>
           </div>
           <button className="mobile-toggle" aria-label="Open navigation menu" aria-expanded="false" aria-controls="mobileNav">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -672,15 +711,13 @@ export default function Dashboard() {
       </header>
       <nav className="mobile-nav" id="mobileNav">
         <a href="/">Home</a>
+        <a href="/dashboard">Dashboard</a>
+        <a href="/blog">Blog</a>
         <a href="/resume-feedback-pro">ATS Resume Score</a>
         <a href="/resume-feedback-pro">Resume Feedback</a>
         <a href="/rewriting">Resume Rewriting</a>
         <a href="/interview">Interview Questions</a>
         <a href="/mockInterview">Mock Interview Practice</a>
-        <a href="/pricing">Pricing</a>
-        <a href="/blog">Blog</a>
-        <a href="/login">Login</a>
-        <a href="/pricing" className="cta-button">Start Free Trial</a>
       </nav>
 
       <main>

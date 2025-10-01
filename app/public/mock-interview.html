@@ -1,0 +1,765 @@
+<!-- DO NOT EDIT HEADER OR FOOTER PER-PAGE. Use canonical snippet from docs/snippets.md. -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mock Interviews – JobHackAI</title>
+  <link rel="icon" type="image/png" href="assets/JobHackAI_Logo_favicon-32x32.png">
+  <link rel="stylesheet" href="css/tokens.css">
+  <link rel="stylesheet" href="css/main.css">
+  <link rel="stylesheet" href="css/header.css">
+  <link rel="stylesheet" href="css/footer.css">
+  <style>
+    .mi-main {
+      max-width: 900px;
+      margin: 2.5rem auto 4rem auto;
+      padding: 0 1rem;
+    }
+    .mi-card {
+      background: #fff;
+      border-radius: 16px;
+      box-shadow: 0 2px 12px rgba(31,41,55,0.07);
+      padding: 2rem;
+      margin-bottom: 2rem;
+    }
+    .mi-locked {
+      display: flex;
+      align-items: center;
+      gap: 0.8rem;
+      background: #FFF7E6;
+      border: 1px solid #F59E0B;
+      border-radius: 12px;
+      padding: 1rem 1.25rem;
+      font-size: 1.04rem;
+      color: #92400E;
+    }
+    .mi-locked-message {
+      flex: 1;
+    }
+    .mi-upgrade-btn {
+      background: #F59E0B;
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      padding: 0.5rem 1rem;
+      font-size: 0.9rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.18s;
+    }
+    .mi-upgrade-btn:hover,
+    .mi-upgrade-btn:focus {
+      background: #D97706;
+    }
+    .mi-role-autocomplete {
+      position: relative;
+      width: 100%;
+      max-width: 300px;
+      margin-bottom: 1.5rem;
+    }
+    .mi-role-label {
+      display: block;
+      font-weight: 600;
+      margin-bottom: 0.5rem;
+      color: #232B36;
+    }
+    .mi-role-input {
+      width: 100%;
+      padding: 0.85rem 1.1rem;
+      border: 2px solid #E5E7EB;
+      border-radius: 10px;
+      font-size: 1.08rem;
+      transition: border 0.18s;
+      background: #fff;
+      color: #232B36;
+      box-sizing: border-box;
+    }
+    .mi-role-input:focus {
+      border-color: #1976D2;
+      outline: none;
+    }
+    .mi-role-dropdown {
+      position: absolute;
+      left: 0;
+      right: 0;
+      top: 100%;
+      background: #fff;
+      border: 1.5px solid #E5E7EB;
+      border-top: none;
+      border-radius: 0 0 10px 10px;
+      box-shadow: 0 2px 8px rgba(31,41,55,0.07);
+      z-index: 10;
+      max-height: 220px;
+      overflow-y: auto;
+      display: none;
+    }
+    .mi-role-item {
+      padding: 0.85rem 1.1rem;
+      cursor: pointer;
+      font-size: 1.08rem;
+      color: #232B36;
+      transition: background 0.15s;
+    }
+    .mi-role-item:hover,
+    .mi-role-item.active {
+      background: #F3F4F6;
+    }
+    .mi-question {
+      font-size: 1.2rem;
+      font-weight: 600;
+      color: #232B36;
+      line-height: 1.4;
+    }
+    .mi-answer-input {
+      width: 100%;
+      min-height: 120px;
+      padding: 1rem;
+      border: 2px solid #E5E7EB;
+      border-radius: 10px;
+      font-size: 1rem;
+      background: #fff;
+      color: #232B36;
+      resize: vertical;
+      box-sizing: border-box;
+      font-family: inherit;
+      line-height: 1.5;
+    }
+    .mi-answer-input:focus {
+      border-color: #1976D2;
+      outline: none;
+    }
+    .mi-history-list {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+    }
+    .mi-history-item {
+      padding: 0.75rem;
+      border-radius: 8px;
+      margin-bottom: 0.5rem;
+      background: #fff;
+      border: 1px solid #E5E7EB;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    .mi-history-item:hover {
+      background: #F9FAFB;
+    }
+    .mi-history-empty {
+      color: #6B7280;
+      font-style: italic;
+      text-align: center;
+      padding: 1rem;
+    }
+    .mi-usage-meter {
+      background: #F8FAFC;
+      border-radius: 8px;
+      padding: 1rem;
+      border: 1px solid #E5E7EB;
+    }
+    .mi-usage-text {
+      font-size: 0.9rem;
+      color: #6B7280;
+      margin-bottom: 0.5rem;
+    }
+    .mi-usage-bar {
+      width: 100%;
+      height: 8px;
+      background: #E5E7EB;
+      border-radius: 4px;
+      overflow: hidden;
+      margin-bottom: 0.5rem;
+    }
+    .mi-usage-progress {
+      height: 100%;
+      background: #00E676;
+      transition: width 0.3s ease;
+    }
+    .mi-usage-warning {
+      font-size: 0.85rem;
+      color: #F59E0B;
+      font-weight: 600;
+    }
+    .mi-usage-upsell {
+      font-size: 0.85rem;
+      color: #DC2626;
+      font-weight: 600;
+    }
+    .mi-score-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 1rem;
+      margin-bottom: 1rem;
+    }
+    .mi-score-item {
+      background: #F8FAFC;
+      border-radius: 8px;
+      padding: 1rem;
+      text-align: center;
+    }
+    .mi-score-label {
+      font-size: 0.9rem;
+      color: #6B7280;
+      margin-bottom: 0.5rem;
+    }
+    .mi-score-value {
+      font-size: 1.5rem;
+      font-weight: 700;
+      color: #1976D2;
+    }
+    .mi-total-score {
+      text-align: center;
+      font-size: 1.2rem;
+      font-weight: 700;
+      color: #232B36;
+    }
+    .clg-btn {
+      background: #00E676;
+      color: #fff;
+      border: none;
+      border-radius: 12px;
+      font-size: 1.13rem;
+      padding: 1rem 2rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: background 0.18s;
+    }
+    .clg-btn:hover,
+    .clg-btn:focus {
+      background: #00c965;
+    }
+    .clg-btn:disabled {
+      background: #9CA3AF;
+      cursor: not-allowed;
+    }
+  </style>
+</head>
+<body>
+  <!-- Header -->
+  <header class="site-header">
+    <div class="container">
+      <a href="index.html" class="nav-logo" aria-label="Go to homepage">
+        <svg width="24" height="24" fill="none" stroke="#1F2937" stroke-width="2" xmlns="http://www.w3.org/2000/svg">
+          <rect x="3" y="7" width="18" height="13" rx="2"/>
+          <path d="M8 7V5a2 2 0 012-2h4a2 2 0 012 2v2"/>
+        </svg>
+        <span>JOBHACKAI</span>
+      </a>
+      <div class="nav-group">
+        <nav class="nav-links" role="navigation">
+          <!-- Navigation will be dynamically populated by navigation.js -->
+        </nav>
+      </div>
+      <button class="mobile-toggle" aria-label="Open navigation menu" aria-expanded="false" aria-controls="mobileNav">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="3" y1="12" x2="21" y2="12"></line>
+          <line x1="3" y1="6" x2="21" y2="6"></line>
+          <line x1="3" y1="18" x2="21" y2="18"></line>
+        </svg>
+      </button>
+    </div>
+  </header>
+  <nav class="mobile-nav" id="mobileNav">
+    <!-- Mobile navigation will be dynamically populated by navigation.js -->
+  </nav>
+  <script>
+    // Hamburger menu toggle
+    const mobileToggle = document.querySelector('.mobile-toggle');
+    const mobileNav = document.getElementById('mobileNav');
+    if (mobileToggle && mobileNav) {
+      mobileToggle.addEventListener('click', () => {
+        const isOpen = mobileNav.classList.toggle('open');
+        mobileToggle.setAttribute('aria-expanded', isOpen);
+      });
+      // Close mobile nav on link click
+      document.querySelectorAll('.mobile-nav a').forEach(link => {
+        link.addEventListener('click', () => {
+          mobileNav.classList.remove('open');
+          mobileToggle.setAttribute('aria-expanded', 'false');
+        });
+      });
+    }
+
+    // --- AUTHENTICATION CHECK ---
+    function checkAuthentication() {
+      // Use navigation system's authentication check for consistency
+      if (window.JobHackAINavigation) {
+        const authState = window.JobHackAINavigation.getAuthState();
+        if (!authState.isAuthenticated) {
+          const mainContent = document.querySelector('main');
+          mainContent.innerHTML = `
+            <div style="max-width: 600px; margin: 4rem auto; text-align: center; padding: 2rem;">
+              <div style="font-size: 4rem; margin-bottom: 1rem;">🔒</div>
+              <h1 style="font-size: 2rem; font-weight: 700; color: var(--color-text-main); margin-bottom: 1rem;">
+                Login Required
+              </h1>
+              <p style="font-size: 1.1rem; color: var(--color-text-secondary); margin-bottom: 2rem; line-height: 1.6;">
+                Mock Interviews requires you to be logged in to access this tool. 
+                Please sign in to get started.
+              </p>
+              <div style="display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap;">
+                <a href="login.html" class="btn-primary" style="text-decoration: none;">
+                  Sign In
+                </a>
+                <a href="pricing-a.html" class="btn-outline" style="text-decoration: none;">
+                  View Pricing
+                </a>
+              </div>
+            </div>
+          `;
+          return false;
+        }
+        return true;
+      } else {
+        // Fallback to localStorage check if navigation system not available
+        const isAuthenticated = localStorage.getItem('user-authenticated') === 'true';
+        if (!isAuthenticated) {
+          const mainContent = document.querySelector('main');
+          mainContent.innerHTML = `
+            <div style="max-width: 600px; margin: 4rem auto; text-align: center; padding: 2rem;">
+              <div style="font-size: 4rem; margin-bottom: 1rem;">🔒</div>
+              <h1 style="font-size: 2rem; font-weight: 700; color: var(--color-text-main); margin-bottom: 1rem;">
+                Login Required
+              </h1>
+              <p style="font-size: 1.1rem; color: var(--color-text-secondary); margin-bottom: 2rem; line-height: 1.6;">
+                Mock Interviews requires you to be logged in to access this tool. 
+                Please sign in to get started.
+              </p>
+              <div style="display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap;">
+                <a href="login.html" class="btn-primary" style="text-decoration: none;">
+                  Sign In
+                </a>
+                <a href="pricing-a.html" class="btn-outline" style="text-decoration: none;">
+                  View Pricing
+                </a>
+              </div>
+            </div>
+          `;
+          return false;
+        }
+        return true;
+      }
+    }
+
+    // --- USER PLAN LOGIC ---
+    function getUserPlan() {
+      // Use navigation system's plan detection for consistency
+      if (window.JobHackAINavigation) {
+        return window.JobHackAINavigation.getEffectivePlan();
+      } else {
+        return localStorage.getItem('user-plan') || 'free';
+      }
+    }
+
+    // --- PLAN LOGIC ---
+    function updateMockInterviewUIForPlan() {
+      const userPlan = getUserPlan();
+      
+      // Show/hide locked content based on plan
+      if (['pro', 'premium'].includes(userPlan)) {
+        // Show mock interview functionality
+        document.getElementById('mi-locked').style.display = 'none';
+        document.getElementById('mi-setup').style.display = 'block';
+      } else {
+        // Show locked message
+        document.getElementById('mi-locked').style.display = 'flex';
+        document.getElementById('mi-setup').style.display = 'none';
+      }
+    }
+    
+    // --- PAGE ACCESS CONTROL ---
+    function enforceAccess() {
+      const authState = window.JobHackAINavigation ? 
+        window.JobHackAINavigation.getAuthState() : 
+        { isAuthenticated: localStorage.getItem('user-authenticated') === 'true' };
+      
+      const userPlan = getUserPlan();
+      const allowedPlans = ['pro', 'premium'];
+      
+      if (!authState.isAuthenticated || !allowedPlans.includes(userPlan)) {
+        window.location.href = 'login.html';
+      }
+    }
+    
+    // Initialize page when DOM is ready
+    document.addEventListener('DOMContentLoaded', function() {
+      // Wait for navigation system to be ready
+      const initPage = () => {
+        // Check authentication first
+        if (!checkAuthentication()) {
+          return; // Stop here if not authenticated
+        }
+        
+        // Update UI based on plan
+        updateMockInterviewUIForPlan();
+        checkPlanAccess();
+        
+        // Enforce access control
+        enforceAccess();
+      };
+      
+      // Try to initialize immediately, then retry after a short delay
+      initPage();
+      setTimeout(initPage, 100);
+      
+      // Listen for plan changes from navigation system
+      window.addEventListener('planChanged', function(event) {
+        updateMockInterviewUIForPlan();
+        checkPlanAccess();
+      });
+    });
+  </script>
+
+  <!-- Main Content -->
+  <main class="mi-main">
+    <div class="mi-card mi-locked" id="mi-locked" style="display:none;">
+      <svg width="22" height="22" fill="none" stroke="#b59f00" stroke-width="2" style="flex-shrink:0;" viewBox="0 0 24 24"><path d="M6 10V7a5 5 0 1110 0v3"/><rect x="5" y="10" width="12" height="8" rx="2"/></svg>
+      <span class="mi-locked-message">This feature is only available on <strong>Pro</strong> and <strong>Premium</strong> plans.</span>
+      <button class="mi-upgrade-btn" onclick="window.location.href='pricing-a.html'">Upgrade</button>
+    </div>
+    <div class="mi-card" id="mi-setup">
+      <div style="display:flex;align-items:flex-start;gap:2.5rem;">
+        <div style="flex:1;display:flex;flex-direction:column;align-items:center;">
+          <div style="margin-bottom:1.5rem;">
+            <svg width="120" height="120" viewBox="0 0 120 120" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <circle cx="60" cy="60" r="60" fill="#E5F0FF"/>
+              <ellipse cx="60" cy="52" rx="28" ry="28" fill="#1976D2"/>
+              <ellipse cx="60" cy="52" rx="20" ry="20" fill="#FFD6A0"/>
+              <rect x="40" y="80" width="40" height="20" rx="10" fill="#1976D2"/>
+            </svg>
+          </div>
+          <div class="mi-role-autocomplete" id="mi-role-autocomplete">
+            <label for="mi-role-input" class="mi-role-label">Target Role</label>
+            <input id="mi-role-input" class="mi-role-input" type="text" placeholder="e.g., Software Engineer" autocomplete="off" aria-autocomplete="list" aria-haspopup="listbox" aria-expanded="false" />
+            <div id="mi-role-dropdown" class="mi-role-dropdown" role="listbox"></div>
+          </div>
+          <button class="clg-btn" id="mi-begin" type="button" style="width:220px;">Start Interview</button>
+        </div>
+        <aside style="min-width:220px;max-width:260px;width:100%;background:#F8FAFC;border-radius:var(--radius-card);box-shadow:var(--shadow-card);padding:1.2rem 1.2rem 1rem 1.2rem;">
+          <div style="font-weight:700;font-size:1.1rem;margin-bottom:1.1rem;color:var(--color-text-main);">Session History</div>
+          <ul id="mi-history-list" class="mi-history-list">
+            <li class="mi-history-empty">No previous sessions yet.</li>
+          </ul>
+        </aside>
+      </div>
+    </div>
+    <div class="mi-card" id="mi-session" style="display:none;">
+      <div style="display:flex;align-items:flex-start;gap:2.5rem;">
+        <div style="flex:1;">
+          <div style="display:flex;align-items:center;gap:0.7rem;margin-bottom:1.2rem;">
+            <div style="width:44px;height:44px;border-radius:50%;background:#1976D2;display:flex;align-items:center;justify-content:center;">
+              <span style="color:#fff;font-weight:700;font-size:1.2rem;">AI</span>
+            </div>
+            <div id="mi-question" class="mi-question">Tell me about yourself and your experience.</div>
+          </div>
+          <textarea class="mi-answer-input" id="mi-answer" placeholder="Type your response..."></textarea>
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-top:0.5rem;">
+            <div id="mi-role-qcount" style="color:var(--color-text-secondary);font-size:1.01rem;font-weight:500;">Role: <span id="mi-role-label">Software Engineer</span> | Question <span id="mi-qnum">1</span> of <span id="mi-qtotal">10</span></div>
+            <button class="clg-btn" id="mi-next" type="button" style="min-width:120px;">Next</button>
+          </div>
+          <div class="mi-usage-meter" id="mi-usage-meter" style="display:none;margin-top:1.2rem;">
+            <div class="mi-usage-text">Sessions used this month: <span id="mi-sessions-used">0</span>/20</div>
+            <div class="mi-usage-bar"><div class="mi-usage-progress" id="mi-usage-progress" style="width:0%"></div></div>
+            <div id="mi-usage-warning" class="mi-usage-warning" style="display:none;">You've used over half your monthly interviews.</div>
+            <div id="mi-usage-upsell" class="mi-usage-upsell" style="display:none;">Almost out! <b>Upgrade to Premium</b> for unlimited interviews.</div>
+          </div>
+          <div id="mi-score-breakdown" style="display:none;margin-top:2rem;">
+            <div class="mi-score-grid">
+              <div class="mi-score-item"><div class="mi-score-label">Relevance of Answer</div><div class="mi-score-value" id="score-relevance">0</div></div>
+              <div class="mi-score-item"><div class="mi-score-label">Structure & Delivery</div><div class="mi-score-value" id="score-structure">0</div></div>
+              <div class="mi-score-item"><div class="mi-score-label">Confidence & Clarity</div><div class="mi-score-value" id="score-confidence">0</div></div>
+              <div class="mi-score-item"><div class="mi-score-label">Depth & Insight</div><div class="mi-score-value" id="score-depth">0</div></div>
+              <div class="mi-score-item"><div class="mi-score-label">Grammar & Pace</div><div class="mi-score-value" id="score-grammar">0</div></div>
+            </div>
+            <div class="mi-total-score">Total: <span id="score-total">0</span> / 100</div>
+          </div>
+        </div>
+        <aside style="min-width:220px;max-width:260px;width:100%;background:#F8FAFC;border-radius:var(--radius-card);box-shadow:var(--shadow-card);padding:1.2rem 1.2rem 1rem 1.2rem;">
+          <div style="font-weight:700;font-size:1.1rem;margin-bottom:1.1rem;color:var(--color-text-main);">Session History</div>
+          <ul id="mi-history-list-session" class="mi-history-list">
+            <li class="mi-history-empty">No previous sessions yet.</li>
+          </ul>
+        </aside>
+      </div>
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer class="site-footer" style="position:sticky;bottom:0;width:100%;background:var(--color-card-bg);">
+    <div class="footer-container">
+      <div class="footer-brand">
+        <svg class="footer-logo" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect x="3" y="7" width="18" height="13" rx="2" stroke="#1F2937" stroke-width="2"/>
+          <path d="M8 7V5a2 2 0 012-2h4a2 2 0 012 2v2" stroke="#1F2937" stroke-width="2"/>
+        </svg>
+        <span class="footer-name">JOBHACKAI</span>
+      </div>
+      <div class="footer-legal">
+        <p>© 2025 JobHackAI. All rights reserved.</p>
+      </div>
+      <div class="footer-links">
+        <a href="index.html">Home</a>
+        <a href="support.html">Support</a>
+        <a href="privacy.html">Privacy</a>
+      </div>
+    </div>
+  </footer>
+
+  <script>
+    // --- AUTHENTICATION CHECK ---
+    function checkAuthentication() {
+      const isAuthenticated = localStorage.getItem('user-authenticated') === 'true';
+      const mainContent = document.querySelector('main');
+      
+      if (!isAuthenticated) {
+        mainContent.innerHTML = `
+          <div style="max-width: 600px; margin: 4rem auto; text-align: center; padding: 2rem;">
+            <div style="font-size: 4rem; margin-bottom: 1rem;">🔒</div>
+            <h1 style="font-size: 2rem; font-weight: 700; color: var(--color-text-main); margin-bottom: 1rem;">
+              Login Required
+            </h1>
+            <p style="font-size: 1.1rem; color: var(--color-text-secondary); margin-bottom: 2rem; line-height: 1.6;">
+              Mock Interviews requires you to be logged in to access this tool. 
+              Please sign in to get started.
+            </p>
+            <div style="display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap;">
+              <a href="login.html" class="btn-primary" style="text-decoration: none;">
+                Sign In
+              </a>
+              <a href="pricing-a.html" class="btn-outline" style="text-decoration: none;">
+                View Pricing
+              </a>
+            </div>
+          </div>
+        `;
+        return false;
+      }
+      return true;
+    }
+
+    // --- PLAN-BASED ACCESS CONTROL ---
+    function checkPlanAccess() {
+      const currentPlan = getUserPlan();
+      const lockedDiv = document.getElementById('mi-locked');
+      const setupDiv = document.getElementById('mi-setup');
+      const sessionDiv = document.getElementById('mi-session');
+      const historySidebar = document.getElementById('mi-history-sidebar');
+      const usageMeter = document.getElementById('mi-usage-meter');
+      
+      if (!lockedDiv || !setupDiv || !sessionDiv) return;
+      
+      const locked = (currentPlan === 'trial' || currentPlan === 'essential' || currentPlan === 'free');
+      lockedDiv.style.display = locked ? 'flex' : 'none';
+      setupDiv.style.display = locked ? 'none' : '';
+      sessionDiv.style.display = 'none';
+      
+      if (historySidebar) historySidebar.style.display = (currentPlan === 'pro' || currentPlan === 'premium') ? 'block' : 'none';
+      if (usageMeter) usageMeter.style.display = (currentPlan === 'pro' || currentPlan === 'premium') ? '' : 'none';
+    }
+
+    // --- Initialize on load ---
+    document.addEventListener('DOMContentLoaded', function() {
+      // Check authentication first
+      if (!checkAuthentication()) {
+        return; // Stop here if not authenticated
+      }
+      
+      // Wait for navigation system to be ready
+      setTimeout(checkPlanAccess, 100);
+
+      // Add Pro plan mock interview usage indicator
+      const main = document.querySelector('main');
+      const userPlan = getUserPlan();
+      if (userPlan === 'pro' && main) {
+        // For demo, assume 20 left (replace with dynamic count if available)
+        const usageDiv = document.createElement('div');
+        usageDiv.className = 'mi-plan-limit';
+        usageDiv.innerHTML = `
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false" style="vertical-align:middle"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="8"/><line x1="12" y1="12" x2="12" y2="16"/></svg>
+          <span style="margin-left:0.4em;vertical-align:middle;">20 mock interviews left this month.</span>
+          <span class="jh-tooltip-trigger" tabindex="0" aria-label="More info" style="margin-left:0.4em;vertical-align:middle;">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false" style="vertical-align:middle"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="8"/><line x1="12" y1="12" x2="12" y2="16"/></svg>
+            <span class="jh-tooltip-text">Upgrade to Premium for unlimited mock interviews.</span>
+          </span>
+        `;
+        main.prepend(usageDiv);
+      }
+    });
+
+    // --- Mock Interview Logic ---
+    // Read context from Interview Questions page
+    const url = new URL(window.location.href);
+    const mode = url.searchParams.get('mode') || 'current';
+    const setId = url.searchParams.get('set') || '';
+    const roleParam = url.searchParams.get('role') || '';
+    const roles = [
+      'Software Engineer', 'Data Analyst', 'Product Manager', 'Marketing Specialist',
+      'Sales Representative', 'Customer Success Manager', 'UX Designer', 'DevOps Engineer',
+      'Data Scientist', 'Business Analyst', 'Project Manager', 'Content Writer',
+      'Graphic Designer', 'HR Specialist', 'Financial Analyst', 'Operations Manager'
+    ];
+
+    const roleInput = document.getElementById('mi-role-input');
+    const roleDropdown = document.getElementById('mi-role-dropdown');
+    const beginBtn = document.getElementById('mi-begin');
+    const setupDiv = document.getElementById('mi-setup');
+    const sessionDiv = document.getElementById('mi-session');
+
+    // Role autocomplete
+    roleInput.addEventListener('input', function() {
+      const value = this.value.toLowerCase();
+      if (value.length < 2) {
+        roleDropdown.style.display = 'none';
+        return;
+      }
+      const filteredRoles = roles.filter(role => 
+        role.toLowerCase().includes(value)
+      );
+      if (filteredRoles.length > 0) {
+        roleDropdown.innerHTML = filteredRoles.map(role => 
+          `<div class="mi-role-item" data-role="${role}">${role}</div>`
+        ).join('');
+        roleDropdown.style.display = 'block';
+      } else {
+        roleDropdown.style.display = 'none';
+      }
+    });
+
+    roleDropdown.addEventListener('click', function(e) {
+      if (e.target.classList.contains('mi-role-item')) {
+        const role = e.target.dataset.role;
+        roleInput.value = role;
+        roleDropdown.style.display = 'none';
+      }
+    });
+
+    document.addEventListener('click', function(e) {
+      if (!roleInput.contains(e.target) && !roleDropdown.contains(e.target)) {
+        roleDropdown.style.display = 'none';
+      }
+    });
+
+    // Pre-populate role from query
+    if (roleParam) { roleInput.value = roleParam; }
+
+    // Build questions from context (saved or set) with fallbacks
+    function buildQuestionsFromContext(){
+      // Default bank
+      const fallback = [
+        'Tell me about yourself and your experience.',
+        'What are your biggest strengths and weaknesses?',
+        'Why are you interested in this position?',
+        'Where do you see yourself in 5 years?',
+        'Tell me about a challenging project you worked on.',
+        'How do you handle stress and pressure?',
+        'Describe a time when you had to learn something quickly.',
+        'What is your leadership style?',
+        'How do you stay organized and prioritize tasks?',
+        'Do you have any questions for me?'
+      ];
+      let dyn = [];
+      if (mode === 'saved') {
+        try {
+          const p = JSON.parse(localStorage.getItem('mi_payload')||'null');
+          if (p && Array.isArray(p.questions) && p.questions.length) {
+            dyn = p.questions.filter(q=>typeof q==='string' && q.trim());
+          }
+        } catch {}
+        try { localStorage.removeItem('mi_payload'); } catch {}
+      } else if (setId) {
+        try {
+          const raw = localStorage.getItem(`iq_set_${setId}`);
+          if (raw) {
+            const s = JSON.parse(raw);
+            if (Array.isArray(s.questions)) {
+              dyn = s.questions.map(q=> typeof q==='string'? q : (q?.q||'')).filter(Boolean);
+            }
+          }
+        } catch {}
+      }
+      return (dyn && dyn.length) ? dyn : fallback;
+    }
+
+    let questions = buildQuestionsFromContext();
+
+    // --- QA: Integration verification ---
+    function miRunIntegrationQA(){
+      const qa = new URL(window.location.href).searchParams.get('qa');
+      if(!qa) return;
+      try { localStorage.setItem('qa_flag','1'); } catch {}
+      const expectMode = sessionStorage.getItem('qa_expect_mode') || '';
+      const expectCount = Number(sessionStorage.getItem('qa_expect_count') || '0');
+      const expectRole = sessionStorage.getItem('qa_expect_role') || '';
+      const actualMode = (mode || '');
+      const actualCount = Array.isArray(questions)? questions.length : 0;
+      const actualRole = roleParam || (roleInput?.value || '');
+      const results = {
+        mode: expectMode ? (expectMode === actualMode ? 'pass' : 'fail') : 'n/a',
+        count: expectCount ? (expectCount === actualCount ? 'pass' : 'fail') : 'n/a',
+        role: expectRole ? (expectRole === actualRole ? 'pass' : 'fail') : 'n/a',
+        payloadCleared: (actualMode === 'saved') ? (localStorage.getItem('mi_payload') ? 'fail' : 'pass') : 'n/a'
+      };
+      try {
+        Object.entries(results).forEach(([k,v])=> sessionStorage.setItem(`qa_mi_${k}`, String(v)));
+      } catch {}
+      console.log('[QA] Mock Interview integration', { expectMode, expectCount, expectRole, actualMode, actualCount, actualRole, results });
+    }
+    // Run shortly after load so DOM is ready
+    setTimeout(miRunIntegrationQA, 50);
+
+    // Start interview
+    beginBtn.addEventListener('click', function() {
+      if (roleInput.value.trim()) {
+        setupDiv.style.display = 'none';
+        sessionDiv.style.display = 'block';
+        document.getElementById('mi-role-label').textContent = roleInput.value;
+        document.getElementById('mi-qtotal').textContent = String(questions.length);
+        // Initialize first question explicitly
+        currentQuestion = 0;
+        questionEl.textContent = questions[currentQuestion];
+        qnumEl.textContent = currentQuestion + 1;
+      }
+    });
+
+    // Question navigation uses `questions` built from context
+
+    let currentQuestion = 0;
+    const questionEl = document.getElementById('mi-question');
+    const qnumEl = document.getElementById('mi-qnum');
+    const nextBtn = document.getElementById('mi-next');
+
+    nextBtn.addEventListener('click', function() {
+      if (currentQuestion < questions.length - 1) {
+        currentQuestion++;
+        questionEl.textContent = questions[currentQuestion];
+        qnumEl.textContent = currentQuestion + 1;
+        
+        // Clear answer input
+        document.getElementById('mi-answer').value = '';
+        
+        // Show score breakdown on last question
+        if (currentQuestion === questions.length - 1) {
+          document.getElementById('mi-score-breakdown').style.display = 'block';
+          nextBtn.textContent = 'Finish';
+        }
+      } else {
+        // Interview complete
+        alert('Interview completed! Check your scores above.');
+      }
+    });
+  </script>
+  <!-- Load navigation system -->
+  <script src="js/navigation.js"></script>
+  <script>
+    // Initialize navigation system when DOM is ready
+    document.addEventListener('DOMContentLoaded', function() {
+      if (window.JobHackAINavigation && window.JobHackAINavigation.initializeNavigation) {
+        window.JobHackAINavigation.initializeNavigation();
+      }
+    });
+  </script>
+  <script src="js/main.js" type="module"></script>
+  <script src="js/analytics.js" type="module"></script>
+</body>
+</html>

@@ -1,0 +1,643 @@
+<!-- DO NOT EDIT HEADER OR FOOTER PER-PAGE. Use canonical snippet from docs/snippets.md. -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Login or Sign Up – JobHackAI</title>
+  <link rel="icon" type="image/png" href="assets/JobHackAI_Logo_favicon-32x32.png">
+
+  <!-- Design tokens & global styles -->
+  <link rel="stylesheet" href="css/tokens.css">
+  <link rel="stylesheet" href="css/main.css">
+
+  <!-- Component overrides -->
+  <link rel="stylesheet" href="css/header.css">
+  <link rel="stylesheet" href="css/footer.css">
+  <style>
+    .auth-container {
+      max-width: 400px;
+      margin: 3.5rem auto 2.5rem auto;
+      background: #fff;
+      border-radius: 20px;
+      box-shadow: 0 4px 24px rgba(31,41,55,0.07);
+      padding: 2.5rem 2rem 2rem 2rem;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    .auth-logo {
+      font-weight: 800;
+      font-size: 1.2rem;
+      margin-bottom: 0.5rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .auth-title {
+      font-size: 1.3rem;
+      font-weight: 700;
+      margin-bottom: 1.2rem;
+      color: #232B36;
+      text-align: center;
+    }
+    /* NEW: Selected plan indicator */
+    .selected-plan-banner {
+      width: 100%;
+      background: linear-gradient(135deg, #00E676 0%, #00c965 100%);
+      color: white;
+      padding: 1rem;
+      border-radius: 12px;
+      margin-bottom: 1.5rem;
+      text-align: center;
+      display: none; /* Show via JS when plan is selected */
+    }
+    .selected-plan-banner h3 {
+      margin: 0 0 0.3rem 0;
+      font-size: 1.1rem;
+      font-weight: 700;
+    }
+    .selected-plan-banner p {
+      margin: 0;
+      font-size: 0.95rem;
+      opacity: 0.95;
+    }
+    .selected-plan-banner .plan-price {
+      font-weight: 700;
+      font-size: 1.05rem;
+    }
+    .auth-social-btn {
+      width: 100%;
+      margin-bottom: 0.7rem;
+      font-size: 1.08rem;
+      font-weight: 700;
+      border-radius: 8px;
+      border: none;
+      padding: 0.85rem 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.7rem;
+      cursor: pointer;
+      transition: background 0.18s;
+      text-decoration: none;
+    }
+    .auth-social-btn.google { background: #fff; color: #232B36; border: 1.5px solid #E5E7EB; }
+    .auth-social-btn.google:hover { background: #F5F5F5; }
+    .auth-social-btn.linkedin { background: #0077B5; color: #fff; }
+    .auth-social-btn.linkedin:hover { background: #005983; }
+    .auth-separator {
+      display: flex;
+      align-items: center;
+      width: 100%;
+      margin: 1.2rem 0 1.2rem 0;
+      color: #BDBDBD;
+      font-size: 1rem;
+    }
+    .auth-separator span { margin: 0 0.7rem; }
+    .auth-separator:before, .auth-separator:after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: #E5E7EB;
+    }
+    .auth-form {
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      gap: 0.8rem;
+      align-items: flex-start;
+    }
+    .auth-input {
+      width: 100%;
+      padding: 0.8rem 0.9rem 0.8rem 0.9rem;
+      border: 1.5px solid #E5E7EB;
+      border-radius: 8px;
+      font-size: 1rem;
+      font-family: inherit;
+      color: #232B36;
+      background: #F9FAFB;
+      transition: border 0.18s;
+      box-sizing: border-box;
+      margin: 0;
+    }
+    .auth-input:focus {
+      border-color: #00E676;
+      outline: none;
+    }
+    .auth-error {
+      color: #FF3B30;
+      font-size: 0.98rem;
+      margin-bottom: 0.5rem;
+      text-align: left;
+      width: 100%;
+      display: none; /* Show via JS if error */
+    }
+    .auth-actions {
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      gap: 0.7rem;
+      margin-top: 0.5rem;
+    }
+    .auth-continue-btn {
+      width: 100%;
+      background: #00E676;
+      color: #fff;
+      font-weight: 700;
+      border: none;
+      border-radius: 8px;
+      padding: 0.85rem 0;
+      font-size: 1.08rem;
+      cursor: pointer;
+      transition: background 0.18s, box-shadow 0.18s;
+      text-decoration: none;
+    }
+    .auth-continue-btn:hover,
+    .auth-continue-btn:focus {
+      background: #00c965;
+      box-shadow: 0 4px 16px rgba(0,230,118,0.10);
+      outline: none;
+    }
+    .auth-continue-btn:disabled {
+      background: #BDBDBD;
+      cursor: not-allowed;
+    }
+    .auth-links {
+      width: 100%;
+      text-align: center;
+      margin-top: 1.2rem;
+      font-size: 1rem;
+      color: #4B5563;
+    }
+    .auth-links a {
+      color: #0077B5;
+      text-decoration: none;
+      font-weight: 600;
+      margin-left: 0.2rem;
+      transition: color 0.18s;
+    }
+    .auth-links a:hover, .auth-links a:focus {
+      color: #005983;
+      text-decoration: underline;
+      outline: none;
+    }
+    .auth-footer {
+      margin-top: 2.2rem;
+      font-size: 0.95rem;
+      color: #6B7280;
+      text-align: center;
+    }
+    .auth-footer a {
+      color: #0077B5;
+      text-decoration: none;
+      margin: 0 0.3rem;
+      transition: color 0.18s;
+    }
+    .auth-footer a:hover {
+      color: #005983;
+      text-decoration: underline;
+    }
+    .auth-card-step {
+      margin-top: 1.5rem;
+      width: 100%;
+      display: none; /* Show via JS after signup */
+    }
+    @media (max-width: 600px) {
+      .auth-container {
+        padding: 1.2rem 0.5rem 1.2rem 0.5rem;
+        max-width: 98vw;
+      }
+    }
+  </style>
+</head>
+<body>
+  <!-- Header -->
+  <header class="site-header">
+    <div class="container">
+      <a href="index.html" class="nav-logo" aria-label="Go to homepage">
+        <svg width="24" height="24" fill="none" stroke="#1F2937" stroke-width="2" xmlns="http://www.w3.org/2000/svg">
+          <rect x="3" y="7" width="18" height="13" rx="2"/>
+          <path d="M8 7V5a2 2 0 012-2h4a2 2 0 012 2v2"/>
+        </svg>
+        <span>JOBHACKAI</span>
+      </a>
+      <div class="nav-group">
+        <nav class="nav-links" role="navigation">
+          <a href="index.html">Home</a>
+          <a href="#what-you-get">What You Get</a>
+          <a href="pricing-a.html">Pricing</a>
+          <a href="index.html#blog">Blog</a>
+        </nav>
+      </div>
+      <button class="mobile-toggle" aria-label="Open navigation menu" aria-expanded="false" aria-controls="mobileNav">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="3" y1="12" x2="21" y2="12"></line>
+          <line x1="3" y1="6" x2="21" y2="6"></line>
+          <line x1="3" y1="18" x2="21" y2="18"></line>
+        </svg>
+      </button>
+    </div>
+  </header>
+  <nav class="mobile-nav" id="mobileNav">
+    <a href="index.html">Home</a>
+    <a href="#what-you-get">What You Get</a>
+    <a href="pricing-a.html">Pricing</a>
+    <a href="index.html#blog">Blog</a>
+  </nav>
+  <!-- INTEGRATION: ZAPIER - On login, lookup user in Google Sheets via Zapier -->
+  <!-- INTEGRATION: GOOGLE SHEETS - Store and retrieve user data for authentication and plan management -->
+  <script>
+    // Hamburger menu toggle (leave outside DOMContentLoaded for header)
+    const mobileToggle = document.querySelector('.mobile-toggle');
+    const mobileNav = document.getElementById('mobileNav');
+    if (mobileToggle && mobileNav) {
+      mobileToggle.addEventListener('click', () => {
+        const isOpen = mobileNav.classList.toggle('open');
+        mobileToggle.setAttribute('aria-expanded', isOpen);
+      });
+      document.querySelectorAll('.mobile-nav a').forEach(link => {
+        link.addEventListener('click', () => {
+          mobileNav.classList.remove('open');
+          mobileToggle.setAttribute('aria-expanded', 'false');
+        });
+      });
+    }
+
+    // --- MAIN AUTH LOGIC ---
+    document.addEventListener('DOMContentLoaded', function() {
+      // --- SMART USER FLOW DETECTION ---
+      const selectedPlan = localStorage.getItem('selected-plan');
+      const isAuthenticated = localStorage.getItem('user-authenticated') === 'true';
+      const userEmail = localStorage.getItem('user-email'); // Track if user exists
+      
+      // Show selected plan banner if coming from pricing
+      if (selectedPlan && selectedPlan !== 'create-account') {
+        showSelectedPlanBanner(selectedPlan);
+      }
+      
+      // Determine if this is a new user or existing user
+      const isNewUser = !isAuthenticated && !userEmail;
+      
+      // Smart flow: If new user with plan selected, show signup form directly
+      if (isNewUser && selectedPlan && selectedPlan !== 'create-account') {
+        showSignupForm();
+        updateSignupButtonText(selectedPlan);
+      }
+      // Note: Authenticated users should handle upgrades directly on pricing page
+      
+      // --- FORM TOGGLING LOGIC ---
+      const loginForm = document.getElementById('loginForm');
+      const signupForm = document.getElementById('signupForm');
+      const loginLinks = document.getElementById('loginLinks');
+      const signupLinks = document.getElementById('signupLinks');
+      const showSignUpLink = document.getElementById('showSignUpLink');
+      const showLoginLink = document.getElementById('showLoginLink');
+      
+      if (showSignUpLink && showLoginLink) {
+        showSignUpLink.addEventListener('click', function(e) {
+          e.preventDefault();
+          showSignupForm();
+        });
+        showLoginLink.addEventListener('click', function(e) {
+          e.preventDefault();
+          showLoginForm();
+        });
+      }
+
+      // --- LOGIN LOGIC ---
+      loginForm.addEventListener('submit', function(e) {
+        e.preventDefault();
+        const email = document.getElementById('loginEmail').value.trim();
+        const password = document.getElementById('loginPassword').value.trim();
+        const loginError = document.getElementById('loginError');
+        loginError.style.display = 'none';
+        
+        if (!email || !password) {
+          loginError.textContent = 'Please enter both email and password';
+          loginError.style.display = 'block';
+          return;
+        }
+        
+        // INTEGRATION: ZAPIER/GOOGLE SHEETS - Authenticate user
+        const db = getUserDB();
+        if (!db[email]) {
+          loginError.textContent = 'No account found with that email. Please sign up.';
+          loginError.style.display = 'block';
+          return;
+        }
+        
+        // Update user login timestamp and ensure user exists
+        const userData = ensureUserExists(email);
+        
+        // Store user authentication state
+        localStorage.setItem('user-email', email);
+        localStorage.setItem('user-authenticated', 'true');
+        localStorage.setItem('user-plan', userData.plan || 'free');
+        localStorage.setItem('dev-plan', userData.plan || 'free');
+        
+        // Sync with navigation system
+        if (window.JobHackAINavigation) {
+          window.JobHackAINavigation.setAuthState(true, userData.plan);
+        }
+        
+        // Redirect to dashboard (no upgrade logic here)
+        window.location.href = 'dashboard.html';
+      });
+
+      // --- SIGNUP LOGIC ---
+      signupForm.addEventListener('submit', function(e) {
+        e.preventDefault();
+        const firstName = document.getElementById('firstName').value.trim();
+        const lastName = document.getElementById('lastName').value.trim();
+        const email = document.getElementById('signupEmail').value.trim();
+        const password = document.getElementById('signupPassword').value.trim();
+        const confirmPassword = document.getElementById('confirmPassword').value.trim();
+        const signupError = document.getElementById('signupError');
+        signupError.style.display = 'none';
+        
+        if (!firstName || !lastName || !email || !password || !confirmPassword) {
+          signupError.textContent = 'Please fill in all fields';
+          signupError.style.display = 'block';
+          return;
+        }
+        if (password.length < 8) {
+          signupError.textContent = 'Password must be at least 8 characters';
+          signupError.style.display = 'block';
+          return;
+        }
+        if (password !== confirmPassword) {
+          signupError.textContent = 'Passwords do not match';
+          signupError.style.display = 'block';
+          return;
+        }
+        
+        // INTEGRATION: ZAPIER/GOOGLE SHEETS - Check if email already exists
+        const db = getUserDB();
+        if (db[email]) {
+          signupError.textContent = 'An account with this email already exists. Please log in.';
+          signupError.style.display = 'block';
+          return;
+        }
+        
+        // Store user info for card step
+        localStorage.setItem('pending-signup-email', email);
+        localStorage.setItem('pending-signup-firstName', firstName);
+        localStorage.setItem('pending-signup-lastName', lastName);
+        localStorage.setItem('user-email', email);
+        
+        // Only show card step if plan requires payment
+        const planToUse = selectedPlan || 'free';
+        if (planRequiresCard(planToUse)) {
+          // Redirect to real add-card.html UI
+          window.location.href = 'add-card.html';
+        } else {
+          // Create user account with improved persistence
+          const userData = ensureUserExists(email, {
+            plan: planToUse,
+            firstName: firstName,
+            lastName: lastName
+          });
+          
+          // Set authentication state
+          localStorage.setItem('user-authenticated', 'true');
+          localStorage.setItem('user-plan', planToUse);
+          localStorage.setItem('dev-plan', planToUse);
+          
+          // Sync with navigation system
+          if (window.JobHackAINavigation) {
+            window.JobHackAINavigation.setAuthState(true, planToUse);
+          }
+          
+          // Clear selected plan after successful signup
+          localStorage.removeItem('selected-plan');
+          localStorage.removeItem('plan-amount');
+          
+          window.location.href = 'dashboard.html';
+        }
+      });
+
+      // --- REMOVE CARD STEP LOGIC ---
+      // (No longer needed, all card entry uses add-card.html)
+
+      // --- HELPER FUNCTIONS ---
+      function showSelectedPlanBanner(plan) {
+        const banner = document.getElementById('selectedPlanBanner');
+        const planName = document.getElementById('selectedPlanName');
+        const planPrice = document.getElementById('selectedPlanPrice');
+        
+        const planNames = {
+          'trial': '3-Day Free Trial',
+          'essential': 'Essential Plan',
+          'pro': 'Pro Plan',
+          'premium': 'Premium Plan',
+          'free': 'Free Account'
+        };
+        
+        const planPrices = {
+          'trial': '$0 for 3 days',
+          'essential': '$29/mo',
+          'pro': '$59/mo',
+          'premium': '$99/mo',
+          'free': '$0/mo'
+        };
+        
+        planName.textContent = planNames[plan] || 'Selected Plan';
+        planPrice.textContent = planPrices[plan] || '$0/mo';
+        banner.style.display = 'block';
+      }
+      
+      function showSignupForm() {
+        document.getElementById('loginForm').style.display = 'none';
+        document.getElementById('loginLinks').style.display = 'none';
+        document.getElementById('signupForm').style.display = 'flex';
+        document.getElementById('signupLinks').style.display = 'block';
+        document.getElementById('auth-title').textContent = 'Create your account';
+      }
+      
+      function showLoginForm() {
+        document.getElementById('signupForm').style.display = 'none';
+        document.getElementById('signupLinks').style.display = 'none';
+        document.getElementById('loginForm').style.display = 'flex';
+        document.getElementById('loginLinks').style.display = 'block';
+        document.getElementById('auth-title').textContent = 'Log in to continue';
+      }
+      
+      function updateSignupButtonText(plan) {
+        const btn = document.getElementById('signupContinueBtn');
+        const planNames = {
+          'trial': 'Start Free Trial',
+          'essential': 'Create Essential Account',
+          'pro': 'Create Pro Account',
+          'premium': 'Create Premium Account',
+          'free': 'Create Free Account'
+        };
+        btn.textContent = planNames[plan] || 'Create Account';
+      }
+      
+      // Note: Upgrade logic moved to pricing page for authenticated users
+
+      // --- DEV PLAN TOGGLE LOGIC ---
+      function syncDevPlanWithUserPlan() {
+        const plan = localStorage.getItem('user-plan') || 'free';
+        localStorage.setItem('dev-plan', plan);
+      }
+      window.addEventListener('storage', syncDevPlanWithUserPlan);
+
+      // --- ERROR HANDLING FOR TROUBLESHOOTING ---
+      window.addEventListener('error', function(event) {
+        // INTEGRATION: ERROR REPORTING (e.g., Sentry, Cloudflare Workers Logpush)
+        console.error('Global error captured:', event.message, event.error);
+      });
+
+      // --- UTILS (Mock DB, Plan, Card Step, etc.) ---
+      function getUserDB() {
+        try {
+          const db = JSON.parse(localStorage.getItem('user-db') || '{}');
+          // Initialize with demo user if empty
+          if (Object.keys(db).length === 0) {
+            const demoUser = {
+              'demo@jobhackai.com': {
+                plan: 'free',
+                firstName: 'Demo',
+                lastName: 'User',
+                cards: [],
+                created: new Date().toISOString()
+              }
+            };
+            setUserDB(demoUser);
+            return demoUser;
+          }
+          return db;
+        } catch (error) {
+          console.error('Error loading user database:', error);
+          return {};
+        }
+      }
+      
+      function setUserDB(db) {
+        try {
+          localStorage.setItem('user-db', JSON.stringify(db));
+          // Also store a backup
+          localStorage.setItem('user-db-backup', JSON.stringify(db));
+        } catch (error) {
+          console.error('Error saving user database:', error);
+        }
+      }
+      
+      function planRequiresCard(plan) {
+        return plan === 'essential' || plan === 'pro' || plan === 'premium' || plan === 'trial';
+      }
+      
+      // --- IMPROVED USER PERSISTENCE ---
+      function ensureUserExists(email, userData = {}) {
+        const db = getUserDB();
+        if (!db[email]) {
+          db[email] = {
+            plan: userData.plan || 'free',
+            firstName: userData.firstName || 'User',
+            lastName: userData.lastName || '',
+            cards: userData.cards || [],
+            created: new Date().toISOString(),
+            lastLogin: new Date().toISOString()
+          };
+          setUserDB(db);
+        } else {
+          // Update last login
+          db[email].lastLogin = new Date().toISOString();
+          setUserDB(db);
+        }
+        return db[email];
+      }
+    });
+  </script>
+  <!-- page content -->
+  <main>
+    <div class="auth-container" role="main" aria-labelledby="auth-title">
+      <a href="index.html" class="btn-secondary" style="margin-bottom:1.2rem; font-size:1rem; padding:0.4rem 1.1rem; border-radius:6px; display:inline-block; text-decoration:none;">&larr; Back to homepage</a>
+      <div class="auth-logo" style="margin-bottom:0.2rem;">
+        <span aria-hidden="true" style="font-size:1.3rem;">&#128274;</span>
+        <span style="font-weight:800; letter-spacing:0.5px;">JOBHACKAI</span>
+      </div>
+      <div class="auth-title" id="auth-title">Log in or sign up</div>
+      <!-- NEW: Selected plan banner -->
+      <div class="selected-plan-banner" id="selectedPlanBanner">
+        <h3 id="selectedPlanName">Selected Plan</h3>
+        <p>You're signing up for: <span class="plan-price" id="selectedPlanPrice">$0/mo</span></p>
+      </div>
+      <a class="auth-social-btn google" id="googleSignIn" aria-label="Continue with Google" href="#">
+        <svg width="22" height="22" viewBox="0 0 48 48" aria-hidden="true" style="vertical-align:middle;"><g><path fill="#4285F4" d="M24 9.5c3.54 0 6.7 1.22 9.19 3.23l6.85-6.85C35.93 2.68 30.34 0 24 0 14.82 0 6.73 5.48 2.69 13.44l7.98 6.2C12.13 13.13 17.62 9.5 24 9.5z"/><path fill="#34A853" d="M46.1 24.55c0-1.64-.15-3.22-.42-4.74H24v9.01h12.42c-.54 2.9-2.18 5.36-4.65 7.02l7.19 5.6C43.93 37.13 46.1 31.3 46.1 24.55z"/><path fill="#FBBC05" d="M9.67 28.09a14.5 14.5 0 010-8.18l-7.98-6.2A23.94 23.94 0 000 24c0 3.77.9 7.34 2.69 10.56l7.98-6.47z"/><path fill="#EA4335" d="M24 48c6.34 0 11.66-2.1 15.54-5.73l-7.19-5.6c-2.01 1.35-4.6 2.15-8.35 2.15-6.38 0-11.87-3.63-14.33-8.89l-7.98 6.47C6.73 42.52 14.82 48 24 48z"/></g></svg>
+        Continue with Google
+      </a>
+      <a class="auth-social-btn linkedin" id="linkedinSignIn" aria-label="Continue with LinkedIn" href="#">
+        <svg width="22" height="22" viewBox="0 0 32 32" aria-hidden="true" style="vertical-align:middle;"><path d="M29 0H3C1.3 0 0 1.3 0 3v26c0 1.7 1.3 3 3 3h26c1.7 0 3-1.3 3-3V3c0-1.7-1.3-3-3-3zM9.4 27.1H5.2V12h4.2v15.1zM7.3 10.4c-1.3 0-2.3-1-2.3-2.3s1-2.3 2.3-2.3c1.3 0 2.3 1 2.3 2.3s-1 2.3-2.3 2.3zM27.1 27.1h-4.2v-7.3c0-1.7 0-3.8-2.3-3.8-2.3 0-2.7 1.8-2.7 3.7v7.4h-4.2V12h4v2.1h.1c.6-1.1 2-2.3 4.1-2.3 4.4 0 5.2 2.9 5.2 6.7v8.6z" fill="#fff"/></svg>
+        Continue with LinkedIn
+      </a>
+      <div class="auth-separator"><span>or</span></div>
+      <!-- Login Form -->
+      <form class="auth-form" id="loginForm" autocomplete="on" aria-label="Login form">
+        <div class="auth-error" id="loginError" aria-live="polite"></div>
+        <label for="loginEmail" class="sr-only">Email address</label>
+        <input type="email" id="loginEmail" class="auth-input" name="loginEmail" placeholder="Email address" required autocomplete="email" />
+        <label for="loginPassword" class="sr-only">Password</label>
+        <input type="password" id="loginPassword" class="auth-input" name="loginPassword" placeholder="Password" required autocomplete="current-password" minlength="8" />
+        <button type="submit" class="auth-continue-btn" id="loginContinueBtn">Log In</button>
+      </form>
+      <div class="auth-links" id="loginLinks">
+        Don't have an account?
+        <a href="#" id="showSignUpLink">Sign up</a>
+        <br />
+        <a href="#" id="forgotPasswordLink">Forgot your password?</a>
+      </div>
+      <!-- Signup Form (hidden by default) -->
+      <form class="auth-form" id="signupForm" autocomplete="on" aria-label="Sign up form" style="display:none;">
+        <div class="auth-error" id="signupError" aria-live="polite"></div>
+        <label for="firstName" class="sr-only">First Name</label>
+        <input type="text" id="firstName" class="auth-input" name="firstName" placeholder="First Name" required autocomplete="given-name" />
+        <label for="lastName" class="sr-only">Last Name</label>
+        <input type="text" id="lastName" class="auth-input" name="lastName" placeholder="Last Name" required autocomplete="family-name" />
+        <label for="signupEmail" class="sr-only">Email address</label>
+        <input type="email" id="signupEmail" class="auth-input" name="signupEmail" placeholder="Email address" required autocomplete="email" />
+        <label for="signupPassword" class="sr-only">Password</label>
+        <input type="password" id="signupPassword" class="auth-input" name="signupPassword" placeholder="Password" required autocomplete="new-password" minlength="8" />
+        <label for="confirmPassword" class="sr-only">Confirm Password</label>
+        <input type="password" id="confirmPassword" class="auth-input" name="confirmPassword" placeholder="Confirm Password" required autocomplete="new-password" minlength="8" />
+        <button type="submit" class="auth-continue-btn" id="signupContinueBtn">Sign Up</button>
+      </form>
+      <div class="auth-links" id="signupLinks" style="display:none;">
+        Already have an account?
+        <a href="#" id="showLoginLink">Back to Login</a>
+      </div>
+      <div class="auth-footer">
+        © 2025 JobHackAI. All rights reserved.<br />
+        <a href="terms.html">Terms</a> · <a href="privacy.html">Privacy</a>
+      </div>
+    </div>
+  </main>
+  <!-- Footer -->
+  <footer class="site-footer">
+    <div class="footer-container">
+      <div class="footer-brand">
+        <svg class="footer-logo" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect x="3" y="7" width="18" height="13" rx="2" stroke="#1F2937" stroke-width="2"/>
+          <path d="M8 7V5a2 2 0 012-2h4a2 2 0 012 2v2" stroke="#1F2937" stroke-width="2"/>
+        </svg>
+        <span class="footer-name">JOBHACKAI</span>
+      </div>
+      <div class="footer-legal">
+        <p>© 2025 JobHackAI. All rights reserved.</p>
+      </div>
+      <div class="footer-links">
+        <a href="index.html">Home</a>
+        <a href="support.html">Support</a>
+        <a href="privacy.html">Privacy</a>
+      </div>
+    </div>
+  </footer>
+  <!-- scripts -->
+  <script src="js/navigation.js"></script>
+  <script src="js/main.js" type="module"></script>
+  <script src="js/analytics.js" type="module"></script>
+  <!-- include firebase-config.js & Firebase SDK here if using auth -->
+</body>
+</html>

@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Checkout – JobHackAI</title>
+  <link rel="icon" type="image/png" href="assets/JobHackAI_Logo_favicon-32x32.png">
+  <link rel="stylesheet" href="css/tokens.css" />
+  <link rel="stylesheet" href="css/main.css" />
+  <link rel="stylesheet" href="css/header.css" />
+  <link rel="stylesheet" href="css/footer.css" />
+  <style>
+    body { min-height: 100vh; display: flex; flex-direction: column; }
+    .checkout-container {
+      max-width: 500px;
+      margin: 3rem auto 2rem auto;
+      background: #fff;
+      border-radius: 20px;
+      box-shadow: 0 4px 24px rgba(31,41,55,0.07);
+      padding: 2.5rem 2rem 2rem 2rem;
+    }
+    .checkout-title {
+      font-size: 1.4rem;
+      font-weight: 800;
+      margin-bottom: 0.7rem;
+      color: #232B36;
+      text-align: center;
+    }
+    .checkout-summary {
+      background: #F9FAFB;
+      border-radius: 12px;
+      padding: 1.5rem;
+      margin-bottom: 1.5rem;
+      border: 1px solid #E5E7EB;
+    }
+    .summary-row {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 0.5rem;
+    }
+    .summary-row.total {
+      border-top: 1px solid #E5E7EB;
+      padding-top: 0.5rem;
+      margin-top: 0.5rem;
+      font-weight: 700;
+      font-size: 1.1rem;
+    }
+    .stripe-box,
+    #stripeElement,
+    .demo-card-input {
+      width: 100%;
+      box-sizing: border-box;
+      max-width: 100%;
+    }
+    .demo-card-input input {
+      width: 100%;
+      box-sizing: border-box;
+    }
+    .StripeElement {
+      width: 100% !important;
+      box-sizing: border-box;
+      max-width: 100%;
+    }
+    .checkout-error {
+      color: #FF3B30;
+      font-size: 0.98rem;
+      margin-bottom: 0.7rem;
+      text-align: left;
+      width: 100%;
+      display: none;
+    }
+    .checkout-btn {
+      width: 100%;
+      background: #00E676;
+      color: #fff;
+      font-weight: 700;
+      border: none;
+      border-radius: 8px;
+      padding: 0.95rem 0;
+      font-size: 1.13rem;
+      cursor: pointer;
+      transition: background 0.18s, box-shadow 0.18s;
+      text-decoration: none;
+      margin-top: 0.5rem;
+    }
+    .checkout-btn:disabled {
+      background: #BDBDBD;
+      cursor: not-allowed;
+    }
+    .secure-badge {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      color: #4B5563;
+      font-size: 0.9rem;
+      margin-top: 1rem;
+    }
+    @media (max-width: 600px) {
+      .checkout-container { padding: 1.5rem 1rem; max-width: 98vw; }
+    }
+  </style>
+</head>
+<body>
+  <!-- Header -->
+  <header class="site-header">
+    <div class="container">
+      <a href="index.html" class="nav-logo" aria-label="Go to homepage">
+        <svg width="24" height="24" fill="none" stroke="#1F2937" stroke-width="2" xmlns="http://www.w3.org/2000/svg">
+          <rect x="3" y="7" width="18" height="13" rx="2"/>
+          <path d="M8 7V5a2 2 0 012-2h4a2 2 0 012 2v2"/>
+        </svg>
+        <span>JOBHACKAI</span>
+      </a>
+    </div>
+  </header>
+  <main>
+    <div class="checkout-container" role="main" aria-labelledby="checkout-title">
+      <div class="checkout-title" id="checkout-title">Complete Your Subscription</div>
+      
+      <div class="checkout-summary">
+        <div class="summary-row">
+          <span>Plan:</span>
+          <span id="planName">Loading...</span>
+        </div>
+        <div class="summary-row">
+          <span>Billing Cycle:</span>
+          <span>Monthly</span>
+        </div>
+        <div class="summary-row total">
+          <span>Total:</span>
+          <span id="planPrice">Loading...</span>
+        </div>
+      </div>
+
+      <form id="checkoutForm" autocomplete="off" style="width:100%;">
+        <div class="checkout-error" id="checkoutError" aria-live="polite"></div>
+        <button type="button" class="apple-google-pay-btn" id="appleGooglePayBtn" style="width:100%;background:#232B36;color:#fff;font-weight:700;border:none;border-radius:8px;padding:0.95rem 0;font-size:1.13rem;cursor:pointer;margin-bottom:0.5rem;display:flex;align-items:center;justify-content:center;gap:0.5rem;position:relative;">
+          <svg width="24" height="24" fill="none" stroke="#fff" stroke-width="2" style="vertical-align:middle;"><rect x="2" y="2" width="20" height="20" rx="4"/><path d="M7 12h10"/><path d="M12 7v10"/></svg>
+          Pay with Apple Pay / Google Pay (Demo)
+          <span class="pay-spinner" id="paySpinner" style="display:none;position:absolute;right:1rem;top:50%;transform:translateY(-50%);"><svg width="20" height="20" viewBox="0 0 50 50"><circle cx="25" cy="25" r="20" fill="none" stroke="#fff" stroke-width="4" stroke-linecap="round" stroke-dasharray="31.4 31.4" transform="rotate(-90 25 25)"><animateTransform attributeName="transform" type="rotate" from="0 25 25" to="360 25 25" dur="1s" repeatCount="indefinite"/></circle></svg></span>
+        </button>
+        <div style="font-size:0.95rem;color:#4B5563;margin-bottom:1rem;text-align:center;">You'll be able to use any card saved to your device.</div>
+        <div class="stripe-box" id="stripeElement">
+          <!-- Stripe Elements will be injected here -->
+          <div style="color:#BDBDBD; text-align: center; padding: 1rem;">
+            <div style="margin-bottom: 0.5rem;">Loading secure payment form...</div>
+            <div style="font-size: 0.9rem;">Powered by Stripe</div>
+          </div>
+        </div>
+        <button type="submit" class="checkout-btn" id="checkoutSubmitBtn" disabled>
+          <span class="btn-spinner" id="btnSpinner" style="display:none;vertical-align:middle;margin-right:0.5rem;"><svg width="20" height="20" viewBox="0 0 50 50"><circle cx="25" cy="25" r="20" fill="none" stroke="#fff" stroke-width="4" stroke-linecap="round" stroke-dasharray="31.4 31.4" transform="rotate(-90 25 25)"><animateTransform attributeName="transform" type="rotate" from="0 25 25" to="360 25 25" dur="1s" repeatCount="indefinite"/></circle></svg></span>
+          <span id="btnText">Complete Subscription</span>
+        </button>
+        <div class="legal-links" style="margin-top:1rem;text-align:center;font-size:0.93rem;">
+          <a href="privacy.html" style="color:#1976D2;text-decoration:underline;margin-right:1.2rem;">Privacy Policy</a>
+          <a href="terms.html" style="color:#1976D2;text-decoration:underline;">Terms of Service</a>
+        </div>
+      </form>
+      
+      <div class="secure-badge">
+        <svg width="16" height="16" fill="none" stroke="#4B5563" stroke-width="2">
+          <path d="M12 2L3 7l9 5 9-5-9-5zM3 7l9 5 9-5"/>
+          <path d="M3 17l9 5 9-5"/>
+          <path d="M3 12l9 5 9-5"/>
+        </svg>
+        Secure payment powered by Stripe
+      </div>
+    </div>
+  </main>
+  <footer class="site-footer">
+    <div class="footer-container">
+      <div class="footer-brand">
+        <svg class="footer-logo" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect x="3" y="7" width="18" height="13" rx="2" stroke="#1F2937" stroke-width="2"/>
+          <path d="M8 7V5a2 2 0 012-2h4a2 2 0 012 2v2" stroke="#1F2937" stroke-width="2"/>
+        </svg>
+        <span class="footer-name">JOBHACKAI</span>
+      </div>
+      <div class="footer-legal">
+        <p>© 2025 JobHackAI. All rights reserved.</p>
+      </div>
+      <div class="footer-links">
+        <a href="index.html">Home</a>
+        <a href="support.html">Support</a>
+        <a href="privacy.html">Privacy</a>
+      </div>
+    </div>
+  </footer>
+  
+  <!-- Load Stripe integration -->
+  <script src="js/stripe-integration.js"></script>
+  <script>
+    // Update checkout page with plan details
+    document.addEventListener('DOMContentLoaded', () => {
+      const selectedPlan = localStorage.getItem('selected-plan');
+      const planAmount = localStorage.getItem('plan-amount');
+      
+      if (!selectedPlan || selectedPlan === 'trial') {
+        // Redirect to add-card page for trial
+        window.location.href = 'add-card.html';
+        return;
+      }
+      
+      // Update page content with plan details
+      const planName = document.getElementById('planName');
+      const planPrice = document.getElementById('planPrice');
+      const title = document.getElementById('checkout-title');
+      const button = document.getElementById('checkoutSubmitBtn');
+      
+      if (planName) planName.textContent = selectedPlan.charAt(0).toUpperCase() + selectedPlan.slice(1);
+      if (planPrice) planPrice.textContent = `$${(planAmount/100).toFixed(2)}/month`;
+      if (title) title.textContent = `Complete Your ${selectedPlan.charAt(0).toUpperCase() + selectedPlan.slice(1)} Subscription`;
+      if (button) button.textContent = `Subscribe to ${selectedPlan.charAt(0).toUpperCase() + selectedPlan.slice(1)}`;
+    });
+
+    // Apple Pay / Google Pay demo button logic with spinner
+    document.addEventListener('DOMContentLoaded', function() {
+      var appleGooglePayBtn = document.getElementById('appleGooglePayBtn');
+      var paySpinner = document.getElementById('paySpinner');
+      if (appleGooglePayBtn) {
+        appleGooglePayBtn.addEventListener('click', function() {
+          // TODO: In production, initialize Stripe Payment Request Button here
+          // In demo mode, simulate payment success with spinner
+          appleGooglePayBtn.disabled = true;
+          if (paySpinner) paySpinner.style.display = 'inline-block';
+          setTimeout(function() {
+            var container = document.querySelector('.checkout-container');
+            if (container) {
+              container.innerHTML = `
+                <div style="text-align: center; padding: 2rem;">
+                  <div style="color: #00E676; font-size: 3rem; margin-bottom: 1rem;">✓</div>
+                  <h2 style="color: #232B36; margin-bottom: 1rem;">Payment Successful!</h2>
+                  <p style="color: #4B5563;">Your payment with Apple Pay / Google Pay (Demo) was successful. Redirecting to dashboard...</p>
+                </div>
+              `;
+              setTimeout(function() {
+                window.location.href = 'dashboard.html';
+              }, 2000);
+            }
+          }, 1200);
+        });
+      }
+      // ...existing plan logic...
+      const selectedPlan = localStorage.getItem('selected-plan');
+      const planAmount = localStorage.getItem('plan-amount');
+      const reassure = document.querySelector('.secure-badge');
+      if (selectedPlan && selectedPlan !== 'trial') {
+        if (reassure) reassure.innerHTML = `<svg width="18" height="18" fill="none" stroke="#1976D2" stroke-width="2" style="vertical-align:middle;margin-right:0.3rem;"><circle cx="9" cy="9" r="8"/><path d="M6 9l2 2 4-4"/></svg> Cancel anytime. No long-term commitment.`;
+      } else {
+        if (reassure) reassure.innerHTML = `<svg width="18" height="18" fill="none" stroke="#1976D2" stroke-width="2" style="vertical-align:middle;margin-right:0.3rem;"><circle cx="9" cy="9" r="8"/><path d="M6 9l2 2 4-4"/></svg> You won't be charged until your trial ends. We'll send you a reminder before billing.`;
+      }
+    });
+
+    // Spinner logic for checkout submit button
+    var checkoutForm = document.getElementById('checkoutForm');
+    var checkoutBtn = document.getElementById('checkoutSubmitBtn');
+    var btnSpinner = document.getElementById('btnSpinner');
+    var btnText = document.getElementById('btnText');
+    if (checkoutForm && checkoutBtn && btnSpinner && btnText) {
+      checkoutForm.addEventListener('submit', function() {
+        btnSpinner.style.display = 'inline-block';
+        btnText.textContent = 'Processing...';
+      });
+    }
+  </script>
+</body>
+</html> 

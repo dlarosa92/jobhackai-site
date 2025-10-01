@@ -1,0 +1,184 @@
+<!-- DO NOT EDIT HEADER OR FOOTER PER-PAGE. Use canonical snippet from docs/snippets.md. -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pricing – JobHackAI</title>
+  <link rel="icon" type="image/png" href="assets/JobHackAI_Logo_favicon-32x32.png">
+  <link rel="stylesheet" href="css/tokens.css">
+  <link rel="stylesheet" href="css/main.css">
+  <link rel="stylesheet" href="css/header.css">
+  <link rel="stylesheet" href="css/footer.css">
+</head>
+<body>
+  <!-- Header (canonical) -->
+  <header class="site-header">
+    <div class="container">
+      <a href="index.html" class="nav-logo" aria-label="Go to homepage">
+        <svg width="24" height="24" fill="none" stroke="#1F2937" stroke-width="2" xmlns="http://www.w3.org/2000/svg">
+          <rect x="3" y="7" width="18" height="13" rx="2"/>
+          <path d="M8 7V5a2 2 0 012-2h4a2 2 0 012 2v2"/>
+        </svg>
+        <span>JOBHACKAI</span>
+      </a>
+      <div class="nav-group">
+        <nav class="nav-links" role="navigation">
+          <a href="index.html">Home</a>
+          <a href="#what-you-get">What You Get</a>
+          <a href="pricing-a.html">Pricing</a>
+          <a href="#blog">Blog</a>
+          <a href="login.html">Login</a>
+          <a href="pricing-a.html" class="cta-button">Start Free Trial</a>
+        </nav>
+      </div>
+      <button class="mobile-toggle" aria-label="Open navigation menu" aria-expanded="false" aria-controls="mobileNav">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="3" y1="12" x2="21" y2="12"></line>
+          <line x1="3" y1="6" x2="21" y2="6"></line>
+          <line x1="3" y1="18" x2="21" y2="18"></line>
+        </svg>
+      </button>
+    </div>
+  </header>
+  <nav class="mobile-nav" id="mobileNav">
+    <a href="index.html">Home</a>
+    <a href="#what-you-get">What You Get</a>
+    <a href="pricing-a.html">Pricing</a>
+    <a href="blog.html">Blog</a>
+    <a href="login.html">Login</a>
+    <a href="pricing-a.html" class="cta-button">Start Free Trial</a>
+  </nav>
+  <script>
+    // Hamburger menu toggle
+    const mobileToggle = document.querySelector('.mobile-toggle');
+    const mobileNav = document.getElementById('mobileNav');
+    if (mobileToggle && mobileNav) {
+      mobileToggle.addEventListener('click', () => {
+        const isOpen = mobileNav.classList.toggle('open');
+        mobileToggle.setAttribute('aria-expanded', isOpen);
+      });
+      // Close mobile nav on link click
+      document.querySelectorAll('.mobile-nav a').forEach(link => {
+        link.addEventListener('click', () => {
+          mobileNav.classList.remove('open');
+          mobileToggle.setAttribute('aria-expanded', 'false');
+        });
+      });
+    }
+  </script>
+  <!-- Main Content -->
+  <main>
+    <section class="pricing-b-hero" style="max-width: 700px; margin: 0 auto; text-align: center; padding: 3.5rem 1rem 2.5rem 1rem;">
+      <h1 style="font-size:2.3rem; font-weight:800; color:#232B36; margin-bottom:0.5rem;">250 Free Trials Left This Month</h1>
+      <p style="font-size:1.15rem; color:#4B5563; margin-bottom:2rem;">82% of recruiters use AI — your resume better be ready</p>
+      <a href="#" class="btn-primary" style="font-size:1.15rem; padding:0.9rem 2.5rem; margin-bottom:2.5rem;">Start Free Trial</a>
+      <h2 style="font-size:1.25rem; font-weight:700; color:#232B36; margin:2.5rem 0 1.5rem 0;">Upgrade Now to Unlock Everything</h2>
+    </section>
+    <section class="pricing-b-cards" style="display:flex; flex-wrap:wrap; gap:2rem; justify-content:center; margin-bottom:2.5rem;">
+      <div class="pricing-b-card" style="background:#fff; border-radius:20px; box-shadow:0 4px 24px rgba(31,41,55,0.07); padding:2.2rem 2rem 2rem 2rem; min-width:260px; max-width:340px; flex:1 1 260px; display:flex; flex-direction:column; align-items:center;">
+        <h3 style="font-size:1.25rem; font-weight:800; margin-bottom:0.7rem; color:#232B36;">Essential<br><span style="font-size:1.1rem; font-weight:700; color:#232B36;">$29/mo</span></h3>
+        <ul style="list-style:none; padding:0; margin:0 0 1.2rem 0; text-align:left;">
+          <li style="margin-bottom:0.7rem;"><span style="color:#00C853; font-size:1.2rem;">&#10003;</span> Resume Feedback</li>
+          <li style="margin-bottom:0.7rem;"><span style="color:#00C853; font-size:1.2rem;">&#10003;</span> ATS resume scoring</li>
+          <li style="margin-bottom:0.7rem;"><span style="color:#00C853; font-size:1.2rem;">&#10003;</span> Interview Questions</li>
+        </ul>
+        <a href="#" class="btn-primary" style="min-width:110px;">Sign Up</a>
+      </div>
+      <div class="pricing-b-card" style="background:#fff; border-radius:20px; box-shadow:0 4px 24px rgba(31,41,55,0.07); padding:2.2rem 2rem 2rem 2rem; min-width:260px; max-width:340px; flex:1 1 260px; display:flex; flex-direction:column; align-items:center;">
+        <h3 style="font-size:1.25rem; font-weight:800; margin-bottom:0.7rem; color:#232B36;">Pro<br><span style="font-size:1.1rem; font-weight:700; color:#232B36;">$59/mo</span></h3>
+        <ul style="list-style:none; padding:0; margin:0 0 1.2rem 0; text-align:left;">
+          <li style="margin-bottom:0.7rem;"><span style="color:#00C853; font-size:1.2rem;">&#10003;</span> Everything in Essential</li>
+          <li style="margin-bottom:0.7rem;"><span style="color:#00C853; font-size:1.2rem;">&#10003;</span> Resume Rewriting</li>
+          <li style="margin-bottom:0.7rem;"><span style="color:#00C853; font-size:1.2rem;">&#10003;</span> Cover Letter Generator</li>
+          <li style="margin-bottom:0.7rem;"><span style="color:#00C853; font-size:1.2rem;">&#10003;</span> Mock Interviews</li>
+        </ul>
+        <a href="#" class="btn-primary" style="min-width:110px;">Sign Up</a>
+      </div>
+      <div class="pricing-b-card" style="background:#fff; border-radius:20px; box-shadow:0 4px 24px rgba(31,41,55,0.07); padding:2.2rem 2rem 2rem 2rem; min-width:260px; max-width:340px; flex:1 1 260px; display:flex; flex-direction:column; align-items:center;">
+        <h3 style="font-size:1.25rem; font-weight:800; margin-bottom:0.7rem; color:#232B36;">Premium<br><span style="font-size:1.1rem; font-weight:700; color:#232B36;">$99/mo</span></h3>
+        <ul style="list-style:none; padding:0; margin:0 0 1.2rem 0; text-align:left;">
+          <li style="margin-bottom:0.7rem;"><span style="color:#00C853; font-size:1.2rem;">&#10003;</span> Everything in Pro</li>
+          <li style="margin-bottom:0.7rem;"><span style="color:#00C853; font-size:1.2rem;">&#10003;</span> LinkedIn Optimizer</li>
+          <li style="margin-bottom:0.7rem;"><span style="color:#00C853; font-size:1.2rem;">&#10003;</span> Priority Review</li>
+        </ul>
+        <a href="#" class="btn-primary" style="min-width:110px;">Sign Up</a>
+      </div>
+    </section>
+    <div style="text-align:center; color:#4B5563; font-size:1.08rem; margin-bottom:2.5rem;">
+      Your free trial unlocks full access for 3 days.<br>
+      No risk, Cancel anytime.
+    </div>
+  </main>
+  <!-- Footer (canonical) -->
+  <footer class="site-footer">
+    <div class="footer-container">
+      <div class="footer-brand">
+        <svg class="footer-logo" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect x="3" y="7" width="18" height="13" rx="2" stroke="#1F2937" stroke-width="2"/>
+          <path d="M8 7V5a2 2 0 012-2h4a2 2 0 012 2v2" stroke="#1F2937" stroke-width="2"/>
+        </svg>
+        <span class="footer-name">JOBHACKAI</span>
+      </div>
+      <div class="footer-legal">
+        <p>© 2025 JobHackAI. All rights reserved.</p>
+      </div>
+      <div class="footer-links">
+        <a href="index.html">Home</a>
+        <a href="support.html">Support</a>
+        <a href="privacy.html">Privacy</a>
+      </div>
+    </div>
+  </footer>
+  <!-- Load navigation system -->
+  <script src="js/navigation.js"></script>
+  <!-- Load Stripe integration -->
+  <script src="js/stripe-integration.js"></script>
+  <script src="js/main.js" type="module"></script>
+  <script src="js/analytics.js" type="module"></script>
+  <script>
+    // Initialize pricing page Stripe functionality
+    document.addEventListener('DOMContentLoaded', () => {
+      // Update free trial button
+      const freeTrialBtn = document.querySelector('.pricing-b-hero .btn-primary');
+      if (freeTrialBtn) {
+        freeTrialBtn.addEventListener('click', (e) => {
+          e.preventDefault();
+          window.location.href = 'add-card.html';
+        });
+      }
+
+      // Update pricing card buttons
+      const pricingCards = document.querySelectorAll('.pricing-b-card');
+      const plans = ['essential', 'pro', 'premium'];
+      const amounts = [2900, 5900, 9900];
+
+      pricingCards.forEach((card, index) => {
+        const button = card.querySelector('.btn-primary');
+        if (button && plans[index]) {
+          button.addEventListener('click', (e) => {
+            e.preventDefault();
+            const plan = plans[index];
+            const amount = amounts[index];
+            handlePaidSubscription(plan, amount);
+          });
+        }
+      });
+    });
+
+    function handlePaidSubscription(plan, amount) {
+      // Store plan info for checkout
+      localStorage.setItem('selected-plan', plan);
+      localStorage.setItem('plan-amount', amount);
+      
+      // Redirect to checkout page or open Stripe checkout
+      if (window.jobHackAIStripe) {
+        window.jobHackAIStripe.openCheckout(plan, amount);
+      } else {
+        // Fallback to add-card page
+        window.location.href = 'add-card.html';
+      }
+    }
+  </script>
+</body>
+</html> 
