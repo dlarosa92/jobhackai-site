@@ -205,21 +205,37 @@
           const plan = button.dataset.plan;
           const amount = parseInt(button.dataset.amount);
           
+          // Add loading state
+          const originalText = button.textContent;
+          button.disabled = true;
+          button.style.opacity = '0.7';
+          button.style.cursor = 'wait';
+          
           if (plan === 'free') {
             // Store free plan selection and redirect to signup
             localStorage.setItem('selected-plan', 'free');
-            window.location.href = 'login.html';
+            button.innerHTML = '<span style="display: inline-block; margin-right: 8px;">⏳</span> Redirecting...';
+            setTimeout(() => {
+              window.location.href = 'login.html';
+            }, 300);
             return;
           }
           
           // If user is authenticated, handle upgrade directly
           if (isAuthenticated && userEmail) {
+            button.textContent = originalText;
+            button.disabled = false;
+            button.style.opacity = '1';
+            button.style.cursor = 'pointer';
             handleAuthenticatedUserUpgrade(plan, amount, currentPlan);
           } else {
             // New user - redirect to login with plan selected
             localStorage.setItem('selected-plan', plan);
             localStorage.setItem('plan-amount', amount);
-            window.location.href = 'login.html';
+            button.innerHTML = '<span style="display: inline-block; margin-right: 8px;">⏳</span> Redirecting...';
+            setTimeout(() => {
+              window.location.href = 'login.html';
+            }, 300);
           }
         });
       });
@@ -243,7 +259,7 @@
       const newIndex = planHierarchy.indexOf(newPlan);
       
       if (newIndex <= currentIndex) {
-        alert(`You're already on the ${currentPlan} plan. Please select a higher tier to upgrade.`);
+        showUpgradeErrorModal(currentPlan, newPlan);
         return;
       }
       
@@ -255,17 +271,202 @@
         return;
       }
       
-      // Show confirmation dialog
+      // Show enhanced confirmation modal
+      showUpgradeConfirmationModal(newPlan, currentPlan, amount);
+    }
+    
+    function showUpgradeConfirmationModal(newPlan, currentPlan, amount) {
       const planNames = {
         'trial': '3-Day Free Trial',
-        'essential': 'Essential Plan ($29/mo)',
-        'pro': 'Pro Plan ($59/mo)',
-        'premium': 'Premium Plan ($99/mo)'
+        'essential': 'Essential Plan',
+        'pro': 'Pro Plan',
+        'premium': 'Premium Plan'
       };
       
-      const confirmMessage = `Upgrade from ${currentPlan} to ${planNames[newPlan]}?\n\nThis will start your new plan immediately.`;
+      const planPrices = {
+        'trial': '$0 for 3 days',
+        'essential': '$29/month',
+        'pro': '$59/month',
+        'premium': '$99/month'
+      };
       
-      if (confirm(confirmMessage)) {
+      const modal = document.createElement('div');
+      modal.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100vw;
+        height: 100vh;
+        background: rgba(0,0,0,0.5);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 10000;
+        animation: fadeIn 0.2s ease-out;
+      `;
+      
+      modal.innerHTML = `
+        <style>
+          @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+          @keyframes slideUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+        </style>
+        <div style="
+          background: white;
+          border-radius: 16px;
+          padding: 2rem;
+          max-width: 450px;
+          margin: 1rem;
+          box-shadow: 0 20px 25px -5px rgba(0,0,0,0.15);
+          animation: slideUp 0.3s ease-out;
+        ">
+          <div style="text-align: center; margin-bottom: 1.5rem;">
+            <div style="width: 60px; height: 60px; background: linear-gradient(135deg, #00E676 0%, #00c965 100%); border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 1rem;">
+              <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3">
+                <path d="M5 12l5 5L20 7"/>
+              </svg>
+            </div>
+            <h3 style="margin: 0 0 0.5rem 0; color: #232B36; font-size: 1.5rem; font-weight: 700;">Upgrade Your Plan</h3>
+            <p style="margin: 0; color: #64748B; font-size: 1rem;">You're about to upgrade to a better plan</p>
+          </div>
+          
+          <div style="background: #F8FAFC; border-radius: 12px; padding: 1.25rem; margin-bottom: 1.5rem;">
+            <div style="display: flex; justify-content: space-between; margin-bottom: 0.75rem; padding-bottom: 0.75rem; border-bottom: 1px solid #E2E8F0;">
+              <span style="color: #64748B; font-size: 0.95rem;">Current Plan:</span>
+              <span style="color: #232B36; font-weight: 600;">${currentPlan.charAt(0).toUpperCase() + currentPlan.slice(1)}</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+              <span style="color: #64748B; font-size: 0.95rem;">New Plan:</span>
+              <div style="text-align: right;">
+                <div style="color: #00E676; font-weight: 700; font-size: 1.1rem;">${planNames[newPlan]}</div>
+                <div style="color: #232B36; font-size: 0.9rem;">${planPrices[newPlan]}</div>
+              </div>
+            </div>
+          </div>
+          
+          <div style="background: #FFF7ED; border: 1px solid #FED7AA; border-radius: 8px; padding: 0.875rem; margin-bottom: 1.5rem;">
+            <p style="margin: 0; color: #9A3412; font-size: 0.9rem; line-height: 1.5;">
+              <strong>Note:</strong> Your new plan will start immediately and you'll be charged ${planPrices[newPlan]} starting today.
+            </p>
+          </div>
+          
+          <div style="display: flex; gap: 0.75rem;">
+            <button id="cancelUpgrade" style="
+              flex: 1;
+              background: white;
+              color: #64748B;
+              border: 1px solid #CBD5E1;
+              padding: 0.875rem;
+              border-radius: 8px;
+              cursor: pointer;
+              font-weight: 600;
+              font-size: 1rem;
+              transition: all 0.2s;
+            " onmouseover="this.style.background='#F8FAFC'" onmouseout="this.style.background='white'">
+              Cancel
+            </button>
+            <button id="confirmUpgrade" style="
+              flex: 1;
+              background: #00E676;
+              color: white;
+              border: none;
+              padding: 0.875rem;
+              border-radius: 8px;
+              cursor: pointer;
+              font-weight: 700;
+              font-size: 1rem;
+              transition: all 0.2s;
+            " onmouseover="this.style.background='#00c965'" onmouseout="this.style.background='#00E676'">
+              Confirm Upgrade
+            </button>
+          </div>
+        </div>
+      `;
+      
+      document.body.appendChild(modal);
+      
+      // Handle cancel
+      modal.querySelector('#cancelUpgrade').addEventListener('click', () => {
+        modal.remove();
+      });
+      
+      // Handle confirm
+      modal.querySelector('#confirmUpgrade').addEventListener('click', () => {
+        modal.remove();
+        processUpgrade(newPlan, currentPlan);
+      });
+      
+      // Close on background click
+      modal.addEventListener('click', (e) => {
+        if (e.target === modal) {
+          modal.remove();
+        }
+      });
+    }
+    
+    function showUpgradeErrorModal(currentPlan, newPlan) {
+      const modal = document.createElement('div');
+      modal.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100vw;
+        height: 100vh;
+        background: rgba(0,0,0,0.5);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 10000;
+      `;
+      
+      modal.innerHTML = `
+        <div style="
+          background: white;
+          border-radius: 16px;
+          padding: 2rem;
+          max-width: 400px;
+          margin: 1rem;
+          text-align: center;
+          box-shadow: 0 20px 25px -5px rgba(0,0,0,0.15);
+        ">
+          <div style="width: 60px; height: 60px; background: #FEF2F2; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 1rem;">
+            <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#DC2626" stroke-width="2">
+              <circle cx="12" cy="12" r="10"/>
+              <line x1="12" y1="8" x2="12" y2="12"/>
+              <line x1="12" y1="16" x2="12.01" y2="16"/>
+            </svg>
+          </div>
+          <h3 style="margin: 0 0 0.75rem 0; color: #232B36; font-size: 1.3rem; font-weight: 700;">Already on This Plan</h3>
+          <p style="margin: 0 0 1.5rem 0; color: #64748B; line-height: 1.6;">
+            You're currently on the <strong>${currentPlan}</strong> plan. Please select a higher tier to upgrade your account.
+          </p>
+          <button onclick="this.closest('div').parentElement.remove()" style="
+            width: 100%;
+            background: #00E676;
+            color: white;
+            border: none;
+            padding: 0.875rem;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 1rem;
+          ">
+            Got it
+          </button>
+        </div>
+      `;
+      
+      document.body.appendChild(modal);
+      
+      modal.addEventListener('click', (e) => {
+        if (e.target === modal) {
+          modal.remove();
+        }
+      });
+    }
+    
+    function processUpgrade(newPlan, currentPlan) {
+      const userEmail = localStorage.getItem('user-email');
+      if (true) {
         // INTEGRATION: STRIPE - Handle subscription upgrade here
         // For demo, just update the user's plan
         const getUserDB = () => {
@@ -304,8 +505,8 @@
             window.JobHackAINavigation.setAuthState(true, newPlan);
           }
           
-          alert(`Successfully upgraded to ${planNames[newPlan]}! Redirecting to dashboard...`);
-          window.location.href = 'dashboard.html';
+          // Show success modal
+          showUpgradeSuccessModal(newPlan);
         } else {
           alert('Error: User data not found. Please try logging in again.');
           window.location.href = 'login.html';
@@ -343,6 +544,79 @@
           button.textContent = `Upgrade to ${planNames[plan]}`;
         }
       });
+    }
+    
+    function showUpgradeSuccessModal(newPlan) {
+      const planNames = {
+        'trial': '3-Day Free Trial',
+        'essential': 'Essential Plan',
+        'pro': 'Pro Plan',
+        'premium': 'Premium Plan'
+      };
+      
+      const modal = document.createElement('div');
+      modal.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100vw;
+        height: 100vh;
+        background: rgba(0,0,0,0.6);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 10000;
+        animation: fadeIn 0.2s ease-out;
+      `;
+      
+      modal.innerHTML = `
+        <style>
+          @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+          @keyframes scaleIn { from { transform: scale(0.9); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+          @keyframes checkmark {
+            0% { stroke-dashoffset: 100; }
+            100% { stroke-dashoffset: 0; }
+          }
+        </style>
+        <div style="
+          background: white;
+          border-radius: 20px;
+          padding: 3rem 2rem;
+          max-width: 400px;
+          margin: 1rem;
+          text-align: center;
+          box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25);
+          animation: scaleIn 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+        ">
+          <div style="width: 80px; height: 80px; background: linear-gradient(135deg, #00E676 0%, #00c965 100%); border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 1.5rem; box-shadow: 0 10px 25px rgba(0, 230, 118, 0.3);">
+            <svg width="40" height="40" viewBox="0 0 52 52" style="stroke-dasharray: 100; stroke-dashoffset: 0; animation: checkmark 0.6s cubic-bezier(0.65, 0, 0.45, 1) 0.2s forwards;">
+              <circle cx="26" cy="26" r="25" fill="none" stroke="white" stroke-width="3" opacity="0.3"/>
+              <path fill="none" stroke="white" stroke-width="4" stroke-linecap="round" d="M14 27l8 8 16-16" style="stroke-dasharray: 50; stroke-dashoffset: 50; animation: checkmark 0.5s ease-out 0.3s forwards;"/>
+            </svg>
+          </div>
+          <h2 style="margin: 0 0 0.75rem 0; color: #232B36; font-size: 1.75rem; font-weight: 800;">Upgrade Successful!</h2>
+          <p style="margin: 0 0 0.5rem 0; color: #64748B; font-size: 1.1rem; line-height: 1.6;">
+            You're now on the <strong style="color: #00E676;">${planNames[newPlan]}</strong>
+          </p>
+          <p style="margin: 0 0 2rem 0; color: #94A3B8; font-size: 0.95rem;">
+            Redirecting you to your dashboard...
+          </p>
+          <div style="width: 40px; height: 4px; background: linear-gradient(90deg, #00E676 0%, #00c965 100%); border-radius: 2px; margin: 0 auto; animation: progressBar 1.5s ease-out;"></div>
+        </div>
+        <style>
+          @keyframes progressBar {
+            from { width: 0%; }
+            to { width: 100%; }
+          }
+        </style>
+      `;
+      
+      document.body.appendChild(modal);
+      
+      // Redirect after animation
+      setTimeout(() => {
+        window.location.href = 'billing-management.html';
+      }, 2000);
     }
     
     // Modal for adding card

@@ -47,12 +47,12 @@ document.addEventListener('DOMContentLoaded', async function() {
     // Store selected plan
     localStorage.setItem('selected-plan', selectedPlan);
     
-    // Show selected plan banner
-    showSelectedPlanBanner(selectedPlan);
-    
     // Auto-switch to signup form for new users with plan
     if (!localStorage.getItem('user-email')) {
-      showSignupForm();
+      showSignupForm(selectedPlan);
+    } else {
+      // Existing user who somehow landed here - show login
+      showLoginForm();
     }
   } else {
     // No explicit plan selected: hide banner and show Login by default
@@ -63,11 +63,15 @@ document.addEventListener('DOMContentLoaded', async function() {
   // ===== FORM TOGGLING =====
   showSignUpLink?.addEventListener('click', function(e) {
     e.preventDefault();
-    showSignupForm();
+    // Preserve plan selection when manually switching to signup
+    const currentPlan = localStorage.getItem('selected-plan');
+    showSignupForm(currentPlan);
   });
   
   showLoginLink?.addEventListener('click', function(e) {
     e.preventDefault();
+    // Clear plan selection when manually switching to login
+    localStorage.removeItem('selected-plan');
     showLoginForm();
   });
   
@@ -282,20 +286,34 @@ document.addEventListener('DOMContentLoaded', async function() {
   
   // ===== HELPER FUNCTIONS =====
   
-  function showSignupForm() {
+  function showSignupForm(planOverride = null) {
     loginForm.style.display = 'none';
     loginLinks.style.display = 'none';
     signupForm.style.display = 'flex';
     signupLinks.style.display = 'block';
-    authTitle.textContent = 'Create your account';
     hideError(loginError);
     hideError(signupError);
     
     // Show banner only when plan is explicitly selected and equals 'trial' or paid
-    const plan = localStorage.getItem('selected-plan');
-    if (plan && ['trial','essential','pro','premium'].includes(plan)) {
+    const plan = planOverride || localStorage.getItem('selected-plan');
+    
+    // Update title based on plan context
+    const planNames = {
+      'trial': '3-Day Free Trial',
+      'essential': 'Essential Plan',
+      'pro': 'Pro Plan',
+      'premium': 'Premium Plan',
+      'free': 'Free Account'
+    };
+    
+    if (plan && planNames[plan] && plan !== 'free') {
+      authTitle.textContent = `Sign up for ${planNames[plan]}`;
       showSelectedPlanBanner(plan);
+    } else if (plan === 'free') {
+      authTitle.textContent = 'Create your free account';
+      hideSelectedPlanBanner();
     } else {
+      authTitle.textContent = 'Create your account';
       hideSelectedPlanBanner();
     }
   }
@@ -305,7 +323,7 @@ document.addEventListener('DOMContentLoaded', async function() {
     signupLinks.style.display = 'none';
     loginForm.style.display = 'flex';
     loginLinks.style.display = 'block';
-    authTitle.textContent = 'Log in to your account';
+    authTitle.textContent = 'Welcome back';
     hideError(loginError);
     hideError(signupError);
     
