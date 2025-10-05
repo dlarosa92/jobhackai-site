@@ -246,8 +246,9 @@
       });
       
       // Update button text for authenticated users
-      if (isAuthenticated) {
-        updateButtonsForAuthenticatedUser(currentPlan);
+      const { isAuthenticated: _isAuthInit, currentPlan: _initPlan } = getAuthState();
+      if (_isAuthInit) {
+        updateButtonsForAuthenticatedUser(_initPlan);
       }
     });
     
