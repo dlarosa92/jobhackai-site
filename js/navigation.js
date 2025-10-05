@@ -521,7 +521,7 @@ function isFeatureUnlocked(featureKey) {
     return false;
   }
   
-  const planConfig = PLANS[currentPlan];
+  const planConfig = PLANS[currentPlan] || { features: [] };
   const isUnlocked = planConfig && planConfig.features.includes(featureKey);
   
   // Additional check for free account usage limits
@@ -763,14 +763,14 @@ function updateNavigation() {
         updateLink(link, item.href);
         link.textContent = item.text;
         if (item.locked) {
-          navLog('info', 'Creating locked link', item);
-          link.style.opacity = '0.5';
-          link.style.pointerEvents = 'auto';
+          // Do not fade or reduce opacity; make it a clear button-like link
           link.classList.add('locked-link');
+          link.style.opacity = '1';
+          link.style.cursor = 'pointer';
           link.addEventListener('click', function(e) {
             e.preventDefault();
             navLog('info', 'Locked link clicked', { text: item.text, href: item.href });
-            showUpgradeModal('essential'); // or appropriate plan
+            showUpgradeModal('essential');
           });
           link.title = 'Upgrade your plan to unlock this feature.';
         }
@@ -853,9 +853,9 @@ function updateNavigation() {
         updateLink(link, item.href);
         link.textContent = item.text;
         if (item.locked) {
-          link.style.opacity = '0.5';
-          link.style.pointerEvents = 'auto';
           link.classList.add('locked-link');
+          link.style.opacity = '1';
+          link.style.cursor = 'pointer';
           link.addEventListener('click', function(e) {
             e.preventDefault();
             navLog('info', 'Mobile locked link clicked', { text: item.text, href: item.href });

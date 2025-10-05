@@ -183,10 +183,11 @@ class UserProfileManager {
     try {
       const userRef = doc(db, 'users', uid);
       
-      await updateDoc(userRef, {
+      // Use setDoc with merge to create the document if it doesn't exist
+      await setDoc(userRef, {
         lastLoginAt: serverTimestamp(),
         updatedAt: serverTimestamp()
-      });
+      }, { merge: true });
       
       console.log('✅ Last login updated:', uid);
       
