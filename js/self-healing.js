@@ -42,6 +42,9 @@ window.selfHealing.showUserAlert = function(errors) {
   msgDiv.innerHTML = Array.isArray(errors) ? errors.map(e => `<div>${typeof e === 'string' ? e : (e.message || JSON.stringify(e))}</div>`).join('') : (errors.message || JSON.stringify(errors));
 };
 
+// Preserve the previously defined alert function
+const preservedShowUserAlert = window.selfHealing.showUserAlert;
+
 window.selfHealing = {
   // Configuration
   config: {
@@ -51,6 +54,9 @@ window.selfHealing = {
     maxFixAttempts: 3,
     fixCooldown: 10000 // 10 seconds between fix attempts
   },
+  
+  // Expose alert API on the main object
+  showUserAlert: preservedShowUserAlert,
   
   // State tracking
   fixAttempts: 0,

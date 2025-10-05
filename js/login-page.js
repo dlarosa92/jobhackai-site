@@ -33,7 +33,8 @@ document.addEventListener('DOMContentLoaded', async function() {
   // Check for selected plan from pricing page (URL param takes precedence)
   const urlParams = new URLSearchParams(window.location.search);
   const planParam = urlParams.get('plan');
-  const selectedPlan = planParam || null;
+  const storedSelection = localStorage.getItem('selected-plan');
+  const selectedPlan = planParam || storedSelection || null;
   
   if (selectedPlan && selectedPlan !== 'create-account') {
     // Store selected plan
@@ -47,9 +48,10 @@ document.addEventListener('DOMContentLoaded', async function() {
       showSignupForm();
     }
   } else {
-    // No explicit plan selected: clear any stale selection and hide banner
-    localStorage.removeItem('selected-plan');
-    hideSelectedPlanBanner();
+    // No explicit plan selected: hide banner but do not force-clear if user arrived from pricing
+    if (!planParam) {
+      hideSelectedPlanBanner();
+    }
     // Default to signup form for new users without a selected plan
     if (!localStorage.getItem('user-email')) {
       showSignupForm();
@@ -287,9 +289,11 @@ document.addEventListener('DOMContentLoaded', async function() {
     hideError(loginError);
     hideError(signupError);
     
-    // Hide plan banner for general signup
-    const selectedPlan = localStorage.getItem('selected-plan');
-    if (!selectedPlan) {
+    // Show banner only when plan is explicitly selected and equals 'trial' or paid
+    const plan = localStorage.getItem('selected-plan');
+    if (plan && ['trial','essential','pro','premium'].includes(plan)) {
+      showSelectedPlanBanner(plan);
+    } else {
       hideSelectedPlanBanner();
     }
   }
@@ -303,7 +307,7 @@ document.addEventListener('DOMContentLoaded', async function() {
     hideError(loginError);
     hideError(signupError);
     
-    // Hide plan banner for login
+    // Login never shows a plan banner
     hideSelectedPlanBanner();
   }
   
@@ -329,6 +333,10 @@ document.addEventListener('DOMContentLoaded', async function() {
     };
     
     if (banner && planName && planPrice) {
+      if (!plan || plan === 'free') {
+        banner.style.display = 'none';
+        return;
+      }
       planName.textContent = planNames[plan] || 'Selected Plan';
       planPrice.textContent = planPrices[plan] || '$0/mo';
       banner.style.display = 'block';
