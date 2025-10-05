@@ -235,6 +235,19 @@ window.selfHealing = {
       fixes.push('Set default user plan');
     }
     
+    // Fix missing keys that are required by smoke tests
+    const requiredKeys = ['user-authenticated', 'user-plan'];
+    requiredKeys.forEach(key => {
+      if (!localStorage.getItem(key)) {
+        if (key === 'user-authenticated') {
+          localStorage.setItem(key, 'false');
+        } else if (key === 'user-plan') {
+          localStorage.setItem(key, 'free');
+        }
+        fixes.push(`Set default ${key}`);
+      }
+    });
+    
     // Fix DOM issues
     if (!document.querySelector('.nav-group') && document.querySelector('.site-header')) {
       const header = document.querySelector('.site-header .container');
