@@ -8,17 +8,9 @@ name = "jobhackai-app-preview"
 [env.production]
 name = "jobhackai-app-prod"
 
-# KV Storage for Preview
-[[env.preview.kv_namespaces]]
-binding = "JOBHACKAI_KV"
-id = "REPLACE_WITH_QA_KV_ID"
-preview_id = "REPLACE_WITH_QA_KV_PREVIEW_ID"
+# No KV namespaces in Pages preview env for now
 
-# KV Storage for Production
-[[env.production.kv_namespaces]]
-binding = "JOBHACKAI_KV"
-id = "REPLACE_WITH_PROD_KV_ID"
-preview_id = "REPLACE_WITH_PROD_KV_PREVIEW_ID"
+# No KV namespaces configured in Pages production env for now
 
 # Environment variables
 [vars]
