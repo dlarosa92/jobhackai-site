@@ -128,12 +128,31 @@ class AuthManager {
           console.warn('Could not update last login in Firestore:', err);
         });
         
-        // Update local database
-        const userRecord = UserDatabase.createOrUpdateUser(user.email, userData);
+        // CRITICAL: Retrieve user's actual plan from Firestore
+        const profileResult = await UserProfileManager.getProfile(user.uid);
+        let actualPlan = 'free'; // default fallback
         
-        // Update navigation state
+        if (profileResult.success && profileResult.profile) {
+          actualPlan = profileResult.profile.plan || 'free';
+          console.log('✅ Retrieved user plan from Firestore:', actualPlan);
+        } else {
+          console.warn('⚠️ Could not retrieve profile from Firestore, using local data');
+          // Fallback to local database if Firestore fails
+          const userRecord = UserDatabase.getUser(user.email);
+          if (userRecord) {
+            actualPlan = userRecord.plan || 'free';
+          }
+        }
+        
+        // Update local database with correct plan
+        const userRecord = UserDatabase.createOrUpdateUser(user.email, {
+          ...userData,
+          plan: actualPlan
+        });
+        
+        // Update navigation state with correct plan
         if (window.JobHackAINavigation) {
-          window.JobHackAINavigation.setAuthState(true, userRecord.plan);
+          window.JobHackAINavigation.setAuthState(true, actualPlan);
         }
         
         // Store auth state
@@ -242,8 +261,32 @@ class AuthManager {
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
       const user = userCredential.user;
 
-      // Update last login
-      UserDatabase.createOrUpdateUser(email, { uid: user.uid });
+      // CRITICAL: Retrieve user's actual plan from Firestore
+      const profileResult = await UserProfileManager.getProfile(user.uid);
+      let actualPlan = 'free'; // default fallback
+      
+      if (profileResult.success && profileResult.profile) {
+        actualPlan = profileResult.profile.plan || 'free';
+        console.log('✅ Retrieved user plan from Firestore during sign-in:', actualPlan);
+      } else {
+        console.warn('⚠️ Could not retrieve profile from Firestore during sign-in, using local data');
+        // Fallback to local database if Firestore fails
+        const userRecord = UserDatabase.getUser(email);
+        if (userRecord) {
+          actualPlan = userRecord.plan || 'free';
+        }
+      }
+
+      // Update local database with correct plan
+      UserDatabase.createOrUpdateUser(email, { 
+        uid: user.uid,
+        plan: actualPlan
+      });
+
+      // Update navigation state with correct plan
+      if (window.JobHackAINavigation) {
+        window.JobHackAINavigation.setAuthState(true, actualPlan);
+      }
 
       return { success: true, user };
     } catch (error) {
@@ -262,11 +305,24 @@ class AuthManager {
 
       // Extract name from display name
       const nameParts = user.displayName ? user.displayName.split(' ') : ['', ''];
+      
+      // CRITICAL: Retrieve user's actual plan from Firestore
+      const profileResult = await UserProfileManager.getProfile(user.uid);
+      let actualPlan = 'free'; // default fallback
+      
+      if (profileResult.success && profileResult.profile) {
+        actualPlan = profileResult.profile.plan || 'free';
+        console.log('✅ Retrieved user plan from Firestore during Google sign-in:', actualPlan);
+      } else {
+        console.warn('⚠️ Could not retrieve profile from Firestore during Google sign-in, using selected plan');
+        actualPlan = this.getSelectedPlan() || 'free';
+      }
+      
       const userData = {
         uid: user.uid,
         firstName: nameParts[0] || '',
         lastName: nameParts.slice(1).join(' ') || '',
-        plan: this.getSelectedPlan() || 'free'
+        plan: actualPlan
       };
 
       UserDatabase.createOrUpdateUser(user.email, userData);
