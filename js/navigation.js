@@ -17,11 +17,74 @@ window.agentInterface = window.agentInterface || {
   safe: () => ({ status: 'not-implemented' })
 };
 
-window.stateManager = window.stateManager || {
-  createBackup: () => ({ status: 'not-implemented' }),
-  restoreBackup: () => ({ status: 'not-implemented' }),
-  listBackups: () => ({ status: 'not-implemented' })
-};
+// Lightweight state manager with pub/sub around localStorage
+window.stateManager = window.stateManager || (function() {
+  const watchers = new Map(); // key -> Set<callback>
+
+  function notify(key, newValue, oldValue) {
+    if (!watchers.has(key)) return;
+    watchers.get(key).forEach(cb => {
+      try { cb(newValue, oldValue); } catch (e) { /* no-op */ }
+    });
+  }
+
+  function get(key) {
+    return localStorage.getItem(key);
+  }
+
+  function set(key, value) {
+    const oldValue = localStorage.getItem(key);
+    localStorage.setItem(key, value);
+    notify(key, value, oldValue);
+  }
+
+  function watch(key, callback) {
+    if (!watchers.has(key)) watchers.set(key, new Set());
+    watchers.get(key).add(callback);
+    return () => unwatch(key, callback);
+  }
+
+  function unwatch(key, callback) {
+    if (watchers.has(key)) watchers.get(key).delete(callback);
+  }
+
+  // Cross-tab updates
+  window.addEventListener('storage', (e) => {
+    if (!e.key) return;
+    notify(e.key, e.newValue, e.oldValue);
+  });
+
+  // Simple backup/restore helpers (namespaced by timestamp)
+  function createBackup() {
+    const snapshot = {
+      'user-authenticated': localStorage.getItem('user-authenticated'),
+      'user-plan': localStorage.getItem('user-plan'),
+      'dev-plan': localStorage.getItem('dev-plan'),
+      'user-email': localStorage.getItem('user-email')
+    };
+    const id = `backup-${Date.now()}`;
+    localStorage.setItem(id, JSON.stringify(snapshot));
+    return { status: 'ok', id };
+  }
+
+  function restoreBackup(id) {
+    try {
+      const snapshot = JSON.parse(localStorage.getItem(id) || '{}');
+      Object.entries(snapshot).forEach(([k, v]) => {
+        set(k, v);
+      });
+      return { status: 'ok' };
+    } catch (e) {
+      return { status: 'error', error: e?.message };
+    }
+  }
+
+  function listBackups() {
+    return Object.keys(localStorage).filter(k => k.startsWith('backup-'));
+  }
+
+  return { get, set, watch, unwatch, createBackup, restoreBackup, listBackups };
+})();
 
 // --- LOGGING SYSTEM ---
 const DEBUG = {
