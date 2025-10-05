@@ -30,11 +30,18 @@ document.addEventListener('DOMContentLoaded', async function() {
     return;
   }
   
-  // Check for selected plan from pricing page (URL param takes precedence)
+  // Check for selected plan (only respect stored selection if we came from pricing)
   const urlParams = new URLSearchParams(window.location.search);
   const planParam = urlParams.get('plan');
   const storedSelection = localStorage.getItem('selected-plan');
-  const selectedPlan = planParam || storedSelection || null;
+  const referrer = document.referrer ? new URL(document.referrer) : null;
+  const cameFromPricing = !!(referrer && /pricing-(a|b)\.html$/.test(referrer.pathname));
+  const selectedPlan = planParam || (cameFromPricing ? storedSelection : null);
+
+  // Clear any stale selection when arriving directly (e.g., header Login link)
+  if (!planParam && !cameFromPricing && storedSelection) {
+    localStorage.removeItem('selected-plan');
+  }
   
   if (selectedPlan && selectedPlan !== 'create-account') {
     // Store selected plan
@@ -48,9 +55,8 @@ document.addEventListener('DOMContentLoaded', async function() {
       showSignupForm();
     }
   } else {
-    // No explicit plan selected: hide banner
+    // No explicit plan selected: hide banner and show Login by default
     hideSelectedPlanBanner();
-    // For direct navigation (no selected plan), show Login form by default
     showLoginForm();
   }
   
