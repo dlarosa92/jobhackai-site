@@ -83,7 +83,7 @@ async function createCustomerPortal(data: any, env: any) {
     const stripe = require('stripe')(env.STRIPE_SECRET_KEY);
 
     // Resolve a customer to open the portal for
-    let customer = null;
+    let customer: any = null;
 
     if (customerId) {
       try {

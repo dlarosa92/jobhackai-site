@@ -245,10 +245,9 @@
     <a href="pricing-a.html">Pricing</a>
     <a href="index.html#blog">Blog</a>
   </nav>
-  <!-- INTEGRATION: ZAPIER - On login, lookup user in Google Sheets via Zapier -->
-  <!-- INTEGRATION: GOOGLE SHEETS - Store and retrieve user data for authentication and plan management -->
+  <!-- INTEGRATION: Firebase Authentication for secure user login (see js/login-page.js) -->
   <script>
-    // Hamburger menu toggle (leave outside DOMContentLoaded for header)
+    // Hamburger menu toggle only - all auth logic moved to js/login-page.js
     const mobileToggle = document.querySelector('.mobile-toggle');
     const mobileNav = document.getElementById('mobileNav');
     if (mobileToggle && mobileNav) {
@@ -263,293 +262,6 @@
         });
       });
     }
-
-    // --- MAIN AUTH LOGIC ---
-    document.addEventListener('DOMContentLoaded', function() {
-      // --- SMART USER FLOW DETECTION ---
-      const selectedPlan = localStorage.getItem('selected-plan');
-      const isAuthenticated = localStorage.getItem('user-authenticated') === 'true';
-      const userEmail = localStorage.getItem('user-email'); // Track if user exists
-      
-      // Show selected plan banner if coming from pricing
-      if (selectedPlan && selectedPlan !== 'create-account') {
-        showSelectedPlanBanner(selectedPlan);
-      }
-      
-      // Determine if this is a new user or existing user
-      const isNewUser = !isAuthenticated && !userEmail;
-      
-      // Smart flow: If new user with plan selected, show signup form directly
-      if (isNewUser && selectedPlan && selectedPlan !== 'create-account') {
-        showSignupForm();
-        updateSignupButtonText(selectedPlan);
-      }
-      // Note: Authenticated users should handle upgrades directly on pricing page
-      
-      // --- FORM TOGGLING LOGIC ---
-      const loginForm = document.getElementById('loginForm');
-      const signupForm = document.getElementById('signupForm');
-      const loginLinks = document.getElementById('loginLinks');
-      const signupLinks = document.getElementById('signupLinks');
-      const showSignUpLink = document.getElementById('showSignUpLink');
-      const showLoginLink = document.getElementById('showLoginLink');
-      
-      if (showSignUpLink && showLoginLink) {
-        showSignUpLink.addEventListener('click', function(e) {
-          e.preventDefault();
-          showSignupForm();
-        });
-        showLoginLink.addEventListener('click', function(e) {
-          e.preventDefault();
-          showLoginForm();
-        });
-      }
-
-      // --- LOGIN LOGIC ---
-      loginForm.addEventListener('submit', function(e) {
-        e.preventDefault();
-        const email = document.getElementById('loginEmail').value.trim();
-        const password = document.getElementById('loginPassword').value.trim();
-        const loginError = document.getElementById('loginError');
-        loginError.style.display = 'none';
-        
-        if (!email || !password) {
-          loginError.textContent = 'Please enter both email and password';
-          loginError.style.display = 'block';
-          return;
-        }
-        
-        // INTEGRATION: ZAPIER/GOOGLE SHEETS - Authenticate user
-        const db = getUserDB();
-        if (!db[email]) {
-          loginError.textContent = 'No account found with that email. Please sign up.';
-          loginError.style.display = 'block';
-          return;
-        }
-        
-        // Update user login timestamp and ensure user exists
-        const userData = ensureUserExists(email);
-        
-        // Store user authentication state
-        localStorage.setItem('user-email', email);
-        localStorage.setItem('user-authenticated', 'true');
-        localStorage.setItem('user-plan', userData.plan || 'free');
-        localStorage.setItem('dev-plan', userData.plan || 'free');
-        
-        // Sync with navigation system
-        if (window.JobHackAINavigation) {
-          window.JobHackAINavigation.setAuthState(true, userData.plan);
-        }
-        
-        // Redirect to dashboard (no upgrade logic here)
-        window.location.href = 'dashboard.html';
-      });
-
-      // --- SIGNUP LOGIC ---
-      signupForm.addEventListener('submit', function(e) {
-        e.preventDefault();
-        const firstName = document.getElementById('firstName').value.trim();
-        const lastName = document.getElementById('lastName').value.trim();
-        const email = document.getElementById('signupEmail').value.trim();
-        const password = document.getElementById('signupPassword').value.trim();
-        const confirmPassword = document.getElementById('confirmPassword').value.trim();
-        const signupError = document.getElementById('signupError');
-        signupError.style.display = 'none';
-        
-        if (!firstName || !lastName || !email || !password || !confirmPassword) {
-          signupError.textContent = 'Please fill in all fields';
-          signupError.style.display = 'block';
-          return;
-        }
-        if (password.length < 8) {
-          signupError.textContent = 'Password must be at least 8 characters';
-          signupError.style.display = 'block';
-          return;
-        }
-        if (password !== confirmPassword) {
-          signupError.textContent = 'Passwords do not match';
-          signupError.style.display = 'block';
-          return;
-        }
-        
-        // INTEGRATION: ZAPIER/GOOGLE SHEETS - Check if email already exists
-        const db = getUserDB();
-        if (db[email]) {
-          signupError.textContent = 'An account with this email already exists. Please log in.';
-          signupError.style.display = 'block';
-          return;
-        }
-        
-        // Store user info for card step
-        localStorage.setItem('pending-signup-email', email);
-        localStorage.setItem('pending-signup-firstName', firstName);
-        localStorage.setItem('pending-signup-lastName', lastName);
-        localStorage.setItem('user-email', email);
-        
-        // Only show card step if plan requires payment
-        const planToUse = selectedPlan || 'free';
-        if (planRequiresCard(planToUse)) {
-          // Redirect to real add-card.html UI
-          window.location.href = 'add-card.html';
-        } else {
-          // Create user account with improved persistence
-          const userData = ensureUserExists(email, {
-            plan: planToUse,
-            firstName: firstName,
-            lastName: lastName
-          });
-          
-          // Set authentication state
-          localStorage.setItem('user-authenticated', 'true');
-          localStorage.setItem('user-plan', planToUse);
-          localStorage.setItem('dev-plan', planToUse);
-          
-          // Sync with navigation system
-          if (window.JobHackAINavigation) {
-            window.JobHackAINavigation.setAuthState(true, planToUse);
-          }
-          
-          // Clear selected plan after successful signup
-          localStorage.removeItem('selected-plan');
-          localStorage.removeItem('plan-amount');
-          
-          window.location.href = 'dashboard.html';
-        }
-      });
-
-      // --- REMOVE CARD STEP LOGIC ---
-      // (No longer needed, all card entry uses add-card.html)
-
-      // --- HELPER FUNCTIONS ---
-      function showSelectedPlanBanner(plan) {
-        const banner = document.getElementById('selectedPlanBanner');
-        const planName = document.getElementById('selectedPlanName');
-        const planPrice = document.getElementById('selectedPlanPrice');
-        
-        const planNames = {
-          'trial': '3-Day Free Trial',
-          'essential': 'Essential Plan',
-          'pro': 'Pro Plan',
-          'premium': 'Premium Plan',
-          'free': 'Free Account'
-        };
-        
-        const planPrices = {
-          'trial': '$0 for 3 days',
-          'essential': '$29/mo',
-          'pro': '$59/mo',
-          'premium': '$99/mo',
-          'free': '$0/mo'
-        };
-        
-        planName.textContent = planNames[plan] || 'Selected Plan';
-        planPrice.textContent = planPrices[plan] || '$0/mo';
-        banner.style.display = 'block';
-      }
-      
-      function showSignupForm() {
-        document.getElementById('loginForm').style.display = 'none';
-        document.getElementById('loginLinks').style.display = 'none';
-        document.getElementById('signupForm').style.display = 'flex';
-        document.getElementById('signupLinks').style.display = 'block';
-        document.getElementById('auth-title').textContent = 'Create your account';
-      }
-      
-      function showLoginForm() {
-        document.getElementById('signupForm').style.display = 'none';
-        document.getElementById('signupLinks').style.display = 'none';
-        document.getElementById('loginForm').style.display = 'flex';
-        document.getElementById('loginLinks').style.display = 'block';
-        document.getElementById('auth-title').textContent = 'Log in to continue';
-      }
-      
-      function updateSignupButtonText(plan) {
-        const btn = document.getElementById('signupContinueBtn');
-        const planNames = {
-          'trial': 'Start Free Trial',
-          'essential': 'Create Essential Account',
-          'pro': 'Create Pro Account',
-          'premium': 'Create Premium Account',
-          'free': 'Create Free Account'
-        };
-        btn.textContent = planNames[plan] || 'Create Account';
-      }
-      
-      // Note: Upgrade logic moved to pricing page for authenticated users
-
-      // --- DEV PLAN TOGGLE LOGIC ---
-      function syncDevPlanWithUserPlan() {
-        const plan = localStorage.getItem('user-plan') || 'free';
-        localStorage.setItem('dev-plan', plan);
-      }
-      window.addEventListener('storage', syncDevPlanWithUserPlan);
-
-      // --- ERROR HANDLING FOR TROUBLESHOOTING ---
-      window.addEventListener('error', function(event) {
-        // INTEGRATION: ERROR REPORTING (e.g., Sentry, Cloudflare Workers Logpush)
-        console.error('Global error captured:', event.message, event.error);
-      });
-
-      // --- UTILS (Mock DB, Plan, Card Step, etc.) ---
-      function getUserDB() {
-        try {
-          const db = JSON.parse(localStorage.getItem('user-db') || '{}');
-          // Initialize with demo user if empty
-          if (Object.keys(db).length === 0) {
-            const demoUser = {
-              'demo@jobhackai.com': {
-                plan: 'free',
-                firstName: 'Demo',
-                lastName: 'User',
-                cards: [],
-                created: new Date().toISOString()
-              }
-            };
-            setUserDB(demoUser);
-            return demoUser;
-          }
-          return db;
-        } catch (error) {
-          console.error('Error loading user database:', error);
-          return {};
-        }
-      }
-      
-      function setUserDB(db) {
-        try {
-          localStorage.setItem('user-db', JSON.stringify(db));
-          // Also store a backup
-          localStorage.setItem('user-db-backup', JSON.stringify(db));
-        } catch (error) {
-          console.error('Error saving user database:', error);
-        }
-      }
-      
-      function planRequiresCard(plan) {
-        return plan === 'essential' || plan === 'pro' || plan === 'premium' || plan === 'trial';
-      }
-      
-      // --- IMPROVED USER PERSISTENCE ---
-      function ensureUserExists(email, userData = {}) {
-        const db = getUserDB();
-        if (!db[email]) {
-          db[email] = {
-            plan: userData.plan || 'free',
-            firstName: userData.firstName || 'User',
-            lastName: userData.lastName || '',
-            cards: userData.cards || [],
-            created: new Date().toISOString(),
-            lastLogin: new Date().toISOString()
-          };
-          setUserDB(db);
-        } else {
-          // Update last login
-          db[email].lastLogin = new Date().toISOString();
-          setUserDB(db);
-        }
-        return db[email];
-      }
-    });
   </script>
   <!-- page content -->
   <main>
@@ -559,7 +271,7 @@
         <span aria-hidden="true" style="font-size:1.3rem;">&#128274;</span>
         <span style="font-weight:800; letter-spacing:0.5px;">JOBHACKAI</span>
       </div>
-      <div class="auth-title" id="auth-title">Log in or sign up</div>
+      <div class="auth-title" id="auth-title">Create your account</div>
       <!-- NEW: Selected plan banner -->
       <div class="selected-plan-banner" id="selectedPlanBanner">
         <h3 id="selectedPlanName">Selected Plan</h3>
@@ -574,8 +286,8 @@
         Continue with LinkedIn
       </a>
       <div class="auth-separator"><span>or</span></div>
-      <!-- Login Form -->
-      <form class="auth-form" id="loginForm" autocomplete="on" aria-label="Login form">
+      <!-- Login Form (hidden by default; JS will show when toggled) -->
+      <form class="auth-form" id="loginForm" autocomplete="on" aria-label="Login form" style="display:none;">
         <div class="auth-error" id="loginError" aria-live="polite"></div>
         <label for="loginEmail" class="sr-only">Email address</label>
         <input type="email" id="loginEmail" class="auth-input" name="loginEmail" placeholder="Email address" required autocomplete="email" />
@@ -589,8 +301,8 @@
         <br />
         <a href="#" id="forgotPasswordLink">Forgot your password?</a>
       </div>
-      <!-- Signup Form (hidden by default) -->
-      <form class="auth-form" id="signupForm" autocomplete="on" aria-label="Sign up form" style="display:none;">
+      <!-- Signup Form (default visible; JS may toggle) -->
+      <form class="auth-form" id="signupForm" autocomplete="on" aria-label="Sign up form">
         <div class="auth-error" id="signupError" aria-live="polite"></div>
         <label for="firstName" class="sr-only">First Name</label>
         <input type="text" id="firstName" class="auth-input" name="firstName" placeholder="First Name" required autocomplete="given-name" />
@@ -638,6 +350,7 @@
   <script src="js/navigation.js"></script>
   <script src="js/main.js" type="module"></script>
   <script src="js/analytics.js" type="module"></script>
-  <!-- include firebase-config.js & Firebase SDK here if using auth -->
+  <!-- Firebase Authentication -->
+  <script src="js/login-page.js" type="module"></script>
 </body>
 </html>

@@ -532,6 +532,7 @@
       </div>
     </div>
   </footer>
+  <script src="js/free-account-manager.js"></script>
   <script>
     // --- AUTHENTICATION CHECK ---
     function checkAuthentication() {
@@ -769,7 +770,14 @@
           let usageText = '';
           let tooltip = '';
           if (user.plan === 'free') {
-            usageText = '1 free ATS resume score per month.';
+            const usageStats = window.freeAccountManager ? window.freeAccountManager.getUsageStats() : null;
+            if (usageStats && usageStats.atsScoring.remaining > 0) {
+              usageText = `${usageStats.atsScoring.remaining} ATS score${usageStats.atsScoring.remaining === 1 ? '' : 's'} remaining this month.`;
+            } else if (usageStats && usageStats.atsScoring.remaining === 0) {
+              usageText = 'Monthly limit reached. Upgrade for unlimited scoring.';
+            } else {
+              usageText = '1 free ATS resume score per month.';
+            }
             tooltip = `<span class="jh-tooltip-trigger" tabindex="0" aria-label="More info" style="margin-left:0.4em;vertical-align:middle;">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false" style="vertical-align:middle"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="8"/><line x1="12" y1="12" x2="12" y2="16"/></svg>
               <span class="jh-tooltip-text">Upgrade for unlimited ATS scoring and detailed feedback.</span>
@@ -870,6 +878,23 @@
         atsUploadInput.addEventListener('change', function(e) {
           const file = e.target.files[0];
           if (!file) return;
+
+          // Check free account usage limits
+          const userPlan = window.JobHackAINavigation ? window.JobHackAINavigation.getEffectivePlan() : 'free';
+          if (userPlan === 'free' && window.freeAccountManager) {
+            const usageCheck = window.freeAccountManager.canUseATSScoring();
+            if (!usageCheck.allowed) {
+              // Show upgrade modal
+              const upgradeMsg = window.freeAccountManager.getUpgradeMessage();
+              if (upgradeMsg) {
+                alert(`${upgradeMsg.title}\n\n${upgradeMsg.message}`);
+                // Redirect to pricing
+                window.location.href = 'pricing-a.html';
+                return;
+              }
+            }
+          }
+
           // Store last uploaded resume in localStorage for use on Resume Feedback page
           const reader = new FileReader();
           reader.onload = function(evt) {
@@ -879,6 +904,16 @@
             localStorage.setItem('lastUploadedResumeName', file.name);
           };
           reader.readAsDataURL(file);
+
+          // Record usage for free accounts
+          if (userPlan === 'free' && window.freeAccountManager) {
+            const usageResult = window.freeAccountManager.recordATSUsage();
+            if (!usageResult.success) {
+              alert(usageResult.message);
+              return;
+            }
+          }
+
           // Simulate ATS scoring and update donut/summary
           const score = Math.floor(Math.random() * 31) + 60; // 60-90%
           const summary = score > 85 ? 'Excellent! Your resume is highly ATS compatible.' : score > 70 ? 'Your resume meets many ATS criteria and is likely to be noticed.' : 'Your resume needs improvement for better ATS results.';

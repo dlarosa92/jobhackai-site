@@ -146,7 +146,7 @@
             </tr>
             <tr class="pricing-signup-row">
               <td></td>
-              <td><button class="btn-primary stripe-checkout-btn" data-plan="create-account" data-amount="0">Create Free Account</button></td>
+              <td><button class="btn-primary stripe-checkout-btn" data-plan="free" data-amount="0">Create Free Account</button></td>
               <td><button class="btn-primary stripe-checkout-btn" data-plan="trial" data-amount="0">Start Free Trial</button></td>
               <td><button class="btn-primary stripe-checkout-btn" data-plan="essential" data-amount="2900">Get Essential Plan</button></td>
               <td><button class="btn-primary stripe-checkout-btn" data-plan="pro" data-amount="5900">Get Pro Plan</button></td>
@@ -205,7 +205,9 @@
           const plan = button.dataset.plan;
           const amount = parseInt(button.dataset.amount);
           
-          if (plan === 'create-account') {
+          if (plan === 'free') {
+            // Store free plan selection and redirect to signup
+            localStorage.setItem('selected-plan', 'free');
             window.location.href = 'login.html';
             return;
           }
@@ -322,9 +324,16 @@
       
       buttons.forEach(button => {
         const plan = button.dataset.plan;
-        if (plan === 'create-account') {
-          button.textContent = 'Dashboard';
-          button.onclick = () => window.location.href = 'dashboard.html';
+        if (plan === 'free') {
+          if (currentPlan === 'free') {
+            button.textContent = 'Current Plan';
+            button.disabled = true;
+            button.style.opacity = '0.6';
+            button.style.cursor = 'not-allowed';
+          } else {
+            button.textContent = 'Dashboard';
+            button.onclick = () => window.location.href = 'dashboard.html';
+          }
         } else if (plan === currentPlan) {
           button.textContent = `Current Plan`;
           button.disabled = true;

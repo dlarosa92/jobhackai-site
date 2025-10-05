@@ -237,7 +237,8 @@ const PLANS = {
     color: '#6B7280',
     bgColor: '#F3F4F6',
     icon: '🔒',
-    features: ['ats']
+    features: ['ats'],
+    description: '1 ATS score per month'
   },
   trial: {
     name: 'Trial',
@@ -522,6 +523,17 @@ function isFeatureUnlocked(featureKey) {
   
   const planConfig = PLANS[currentPlan];
   const isUnlocked = planConfig && planConfig.features.includes(featureKey);
+  
+  // Additional check for free account usage limits
+  if (isUnlocked && currentPlan === 'free' && featureKey === 'ats') {
+    if (window.freeAccountManager) {
+      const usageCheck = window.freeAccountManager.canUseATSScoring();
+      if (!usageCheck.allowed) {
+        navLog('info', 'isFeatureUnlocked: Free account usage limit reached', featureKey);
+        return false;
+      }
+    }
+  }
   
   navLog('debug', 'isFeatureUnlocked: Feature access check', {
     featureKey,
@@ -1367,11 +1379,11 @@ function initializeNavigation() {
     }
   }
 
-  // Create quick plan switcher and append to document
-  navLog('debug', 'Creating quick plan switcher');
-  const switcher = createQuickPlanSwitcher();
-  document.body.appendChild(switcher);
-  navLog('debug', 'Quick plan switcher appended to body');
+//   // Create quick plan switcher and append to document
+//   navLog('debug', 'Creating quick plan switcher');
+//   const switcher = createQuickPlanSwitcher();
+//   document.body.appendChild(switcher);
+//   navLog('debug', 'Quick plan switcher appended to body');
 
   // Update navigation
   navLog('debug', 'Calling updateNavigation()');

@@ -252,15 +252,108 @@
       }
     });
 
-    // Spinner logic for checkout submit button
-    var checkoutForm = document.getElementById('checkoutForm');
-    var checkoutBtn = document.getElementById('checkoutSubmitBtn');
-    var btnSpinner = document.getElementById('btnSpinner');
-    var btnText = document.getElementById('btnText');
-    if (checkoutForm && checkoutBtn && btnSpinner && btnText) {
-      checkoutForm.addEventListener('submit', function() {
+    // Stripe Checkout: plan → price mapping (Test mode IDs)
+    const PLAN_PRICE_MAP = {
+      essential: 'price_1S4MsxApMPhcB1Y6sC4oQzNL',
+      pro: 'price_1S4MwlApMPhcB1Y6ejrHX2g9',
+      premium: 'price_1S4MykApMPhcB1Y6g4OStoSy'
+    };
+
+    function getAuthUser() {
+      try {
+        return JSON.parse(localStorage.getItem('auth-user') || 'null');
+      } catch (e) {
+        return null;
+      }
+    }
+
+    async function startStripeCheckout() {
+      const errorDiv = document.getElementById('checkoutError');
+      const checkoutBtn = document.getElementById('checkoutSubmitBtn');
+      const btnSpinner = document.getElementById('btnSpinner');
+      const btnText = document.getElementById('btnText');
+
+      const selectedPlan = localStorage.getItem('selected-plan');
+      if (!selectedPlan) {
+        errorDiv.textContent = 'No plan selected. Please choose a plan.';
+        errorDiv.style.display = 'block';
+        return;
+      }
+      if (selectedPlan === 'trial') {
+        window.location.href = 'add-card.html';
+        return;
+      }
+
+      const priceId = PLAN_PRICE_MAP[selectedPlan];
+      if (!priceId) {
+        errorDiv.textContent = 'There was a problem loading pricing for your plan. Please try again.';
+        errorDiv.style.display = 'block';
+        return;
+      }
+
+      const authUser = getAuthUser();
+      if (!authUser || !authUser.email || !authUser.uid) {
+        errorDiv.textContent = 'Please sign in to continue to checkout.';
+        errorDiv.style.display = 'block';
+        setTimeout(() => { window.location.href = 'login.html'; }, 1200);
+        return;
+      }
+
+      if (btnSpinner && btnText) {
         btnSpinner.style.display = 'inline-block';
         btnText.textContent = 'Processing...';
+      }
+      if (checkoutBtn) checkoutBtn.disabled = true;
+      errorDiv.style.display = 'none';
+
+      try {
+        const res = await fetch('/api/stripe', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'create-checkout-session',
+            data: {
+              priceId: priceId,
+              userId: authUser.uid,
+              userEmail: authUser.email
+            }
+          })
+        });
+
+        const data = await res.json();
+        if (data && data.success && data.url) {
+          window.location.href = data.url;
+          return;
+        }
+
+        throw new Error(data && data.error ? data.error : 'Checkout failed.');
+      } catch (err) {
+        errorDiv.textContent = 'Unable to start checkout. Please try again or contact support.';
+        errorDiv.style.display = 'block';
+      } finally {
+        if (btnSpinner && btnText) {
+          btnSpinner.style.display = 'none';
+          btnText.textContent = `Subscribe to ${selectedPlan.charAt(0).toUpperCase() + selectedPlan.slice(1)}`;
+        }
+        if (checkoutBtn) checkoutBtn.disabled = false;
+      }
+    }
+
+    // Auto-start checkout on load
+    document.addEventListener('DOMContentLoaded', () => {
+      const selectedPlan = localStorage.getItem('selected-plan');
+      if (selectedPlan && selectedPlan !== 'trial') {
+        // Delay slightly to ensure UI renders, then kick off
+        setTimeout(() => startStripeCheckout(), 150);
+      }
+    });
+
+    // Hook submit to retry start if needed
+    var checkoutForm = document.getElementById('checkoutForm');
+    if (checkoutForm) {
+      checkoutForm.addEventListener('submit', function(e) {
+        e.preventDefault();
+        startStripeCheckout();
       });
     }
   </script>
