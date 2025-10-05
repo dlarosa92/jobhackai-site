@@ -4,11 +4,9 @@ pages_build_output_dir = "out"
 
 [env.preview]
 name = "jobhackai-app-preview"
-route = "qa.jobhackai.io/*"
 
 [env.production]
 name = "jobhackai-app-prod"
-route = "app.jobhackai.io/*"
 
 # KV Storage for Preview
 [[env.preview.kv_namespaces]]
