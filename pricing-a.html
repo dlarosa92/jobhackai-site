@@ -194,10 +194,12 @@
       
       const checkoutButtons = document.querySelectorAll('.stripe-checkout-btn');
       
-      // Check if user is already authenticated
-      const isAuthenticated = localStorage.getItem('user-authenticated') === 'true';
-      const userEmail = localStorage.getItem('user-email');
-      const currentPlan = localStorage.getItem('user-plan') || 'free';
+      // Check if user is already authenticated (compute at click-time for freshness)
+      const getAuthState = () => ({
+        isAuthenticated: localStorage.getItem('user-authenticated') === 'true',
+        userEmail: localStorage.getItem('user-email'),
+        currentPlan: localStorage.getItem('user-plan') || 'free'
+      });
       
       checkoutButtons.forEach(button => {
         button.addEventListener('click', (e) => {
@@ -214,6 +216,7 @@
           if (plan === 'free') {
             // Store free plan selection and redirect to signup
             localStorage.setItem('selected-plan', 'free');
+            localStorage.setItem('selected-plan-ts', Date.now().toString());
             button.innerHTML = '<span style="display: inline-block; margin-right: 8px;">⏳</span> Redirecting...';
             setTimeout(() => {
               window.location.href = 'login.html';
@@ -222,6 +225,7 @@
           }
           
           // If user is authenticated, handle upgrade directly
+          const { isAuthenticated, userEmail, currentPlan } = getAuthState();
           if (isAuthenticated && userEmail) {
             button.textContent = originalText;
             button.disabled = false;
@@ -232,6 +236,7 @@
             // New user - redirect to login with plan selected
             localStorage.setItem('selected-plan', plan);
             localStorage.setItem('plan-amount', amount);
+            localStorage.setItem('selected-plan-ts', Date.now().toString());
             button.innerHTML = '<span style="display: inline-block; margin-right: 8px;">⏳</span> Redirecting...';
             setTimeout(() => {
               window.location.href = 'login.html';

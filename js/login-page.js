@@ -30,17 +30,21 @@ document.addEventListener('DOMContentLoaded', async function() {
     return;
   }
   
-  // Check for selected plan (only respect stored selection if we came from pricing)
+  // Check for selected plan with freshness window
   const urlParams = new URLSearchParams(window.location.search);
   const planParam = urlParams.get('plan');
   const storedSelection = localStorage.getItem('selected-plan');
   const referrer = document.referrer ? new URL(document.referrer) : null;
   const cameFromPricing = !!(referrer && /pricing-(a|b)\.html$/.test(referrer.pathname));
-  const selectedPlan = planParam || (cameFromPricing ? storedSelection : null);
+  // Accept recent plan selections even if referrer is lost (e.g., refresh)
+  const selectionTs = parseInt(localStorage.getItem('selected-plan-ts') || '0', 10);
+  const isFreshSelection = Date.now() - selectionTs < 5 * 60 * 1000; // 5 minutes
+  const selectedPlan = planParam || ((cameFromPricing || isFreshSelection) ? storedSelection : null);
 
-  // Clear any stale selection when arriving directly (e.g., header Login link)
-  if (!planParam && !cameFromPricing && storedSelection) {
+  // Clear stale selection if it's not fresh and no pricing referrer
+  if (!planParam && !cameFromPricing && storedSelection && !isFreshSelection) {
     localStorage.removeItem('selected-plan');
+    localStorage.removeItem('selected-plan-ts');
   }
   
   if (selectedPlan && selectedPlan !== 'create-account') {
