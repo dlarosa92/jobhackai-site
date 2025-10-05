@@ -2,16 +2,16 @@ name = "jobhackai-app-dev"
 compatibility_date = "2024-01-01"
 pages_build_output_dir = "out"
 
-[env.qa]
-name = "jobhackai-app-qa"
+[env.preview]
+name = "jobhackai-app-preview"
 route = "qa.jobhackai.io/*"
 
 [env.production]
 name = "jobhackai-app-prod"
 route = "app.jobhackai.io/*"
 
-# KV Storage for QA
-[[env.qa.kv_namespaces]]
+# KV Storage for Preview
+[[env.preview.kv_namespaces]]
 binding = "JOBHACKAI_KV"
 id = "REPLACE_WITH_QA_KV_ID"
 preview_id = "REPLACE_WITH_QA_KV_PREVIEW_ID"
@@ -26,8 +26,8 @@ preview_id = "REPLACE_WITH_PROD_KV_PREVIEW_ID"
 [vars]
 ENVIRONMENT = "qa"
 
-[env.qa.vars]
-ENVIRONMENT = "qa"
+[env.preview.vars]
+ENVIRONMENT = "preview"
 STRIPE_PUBLISHABLE_KEY = "pk_test_51S4MsxApMPhcB1Y6sC4oQzNL"
 STRIPE_SECRET_KEY = "sk_test_51S4MsxApMPhcB1Y6sC4oQzNL"
 FIREBASE_API_KEY = "AIzaSyCDZksp8XpRJaYnoihiuXT5Uvd0YrbLdfw"
