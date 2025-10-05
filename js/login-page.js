@@ -48,14 +48,10 @@ document.addEventListener('DOMContentLoaded', async function() {
       showSignupForm();
     }
   } else {
-    // No explicit plan selected: hide banner but do not force-clear if user arrived from pricing
-    if (!planParam) {
-      hideSelectedPlanBanner();
-    }
-    // Default to signup form for new users without a selected plan
-    if (!localStorage.getItem('user-email')) {
-      showSignupForm();
-    }
+    // No explicit plan selected: hide banner
+    hideSelectedPlanBanner();
+    // For direct navigation (no selected plan), show Login form by default
+    showLoginForm();
   }
   
   // ===== FORM TOGGLING =====

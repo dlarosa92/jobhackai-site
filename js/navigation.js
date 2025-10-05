@@ -1420,8 +1420,8 @@ function initializeNavigation() {
   
   // Force clean visitor state for unauthenticated users
   if (!authState.isAuthenticated) {
-    // Clear any residual plan data and force visitor state
-    localStorage.removeItem('user-plan');
+    // Ensure a valid default plan key exists for logged-out users (used by diagnostics)
+    localStorage.setItem('user-plan', 'free');
     localStorage.removeItem('dev-plan');
     devPlan = null;
     
