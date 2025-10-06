@@ -217,9 +217,10 @@
             // Store free plan selection and redirect to signup
             localStorage.setItem('selected-plan', 'free');
             localStorage.setItem('selected-plan-ts', Date.now().toString());
+            localStorage.setItem('selected-plan-context', 'pricing-a'); // Track where selection came from
             button.innerHTML = '<span style="display: inline-block; margin-right: 8px;">⏳</span> Redirecting...';
             setTimeout(() => {
-              window.location.href = 'login.html';
+              window.location.href = 'login.html?plan=free';
             }, 300);
             return;
           }
@@ -237,9 +238,20 @@
             localStorage.setItem('selected-plan', plan);
             localStorage.setItem('plan-amount', amount);
             localStorage.setItem('selected-plan-ts', Date.now().toString());
+            localStorage.setItem('selected-plan-context', 'pricing-a'); // Track where selection came from
+            
+            // DEBUG: Log plan storage
+            console.log('💾 Storing plan selection:', {
+              plan,
+              amount,
+              timestamp: Date.now(),
+              context: 'pricing-a',
+              stored: localStorage.getItem('selected-plan')
+            });
+            
             button.innerHTML = '<span style="display: inline-block; margin-right: 8px;">⏳</span> Redirecting...';
             setTimeout(() => {
-              window.location.href = 'login.html';
+              window.location.href = `login.html?plan=${plan}`;
             }, 300);
           }
         });

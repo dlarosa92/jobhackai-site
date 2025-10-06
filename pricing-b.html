@@ -144,7 +144,11 @@
       if (freeTrialBtn) {
         freeTrialBtn.addEventListener('click', (e) => {
           e.preventDefault();
-          window.location.href = 'add-card.html';
+          // Store trial plan selection
+          localStorage.setItem('selected-plan', 'trial');
+          localStorage.setItem('selected-plan-ts', Date.now().toString());
+          localStorage.setItem('selected-plan-context', 'pricing-b');
+          window.location.href = 'add-card.html?plan=trial';
         });
       }
 
@@ -167,16 +171,18 @@
     });
 
     function handlePaidSubscription(plan, amount) {
-      // Store plan info for checkout
+      // Store plan info for checkout with context
       localStorage.setItem('selected-plan', plan);
       localStorage.setItem('plan-amount', amount);
+      localStorage.setItem('selected-plan-ts', Date.now().toString());
+      localStorage.setItem('selected-plan-context', 'pricing-b');
       
       // Redirect to checkout page or open Stripe checkout
       if (window.jobHackAIStripe) {
         window.jobHackAIStripe.openCheckout(plan, amount);
       } else {
-        // Fallback to add-card page
-        window.location.href = 'add-card.html';
+        // Fallback to add-card page with plan context
+        window.location.href = `add-card.html?plan=${plan}`;
       }
     }
   </script>

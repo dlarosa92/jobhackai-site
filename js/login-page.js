@@ -30,21 +30,45 @@ document.addEventListener('DOMContentLoaded', async function() {
     return;
   }
   
-  // Check for selected plan with freshness window
+  // Check for selected plan with enhanced validation
   const urlParams = new URLSearchParams(window.location.search);
   const planParam = urlParams.get('plan');
   const storedSelection = localStorage.getItem('selected-plan');
+  const planContext = localStorage.getItem('selected-plan-context');
   const referrer = document.referrer ? new URL(document.referrer) : null;
   const cameFromPricing = !!(referrer && /pricing-(a|b)\.html$/.test(referrer.pathname));
-  // Accept recent plan selections even if referrer is lost (e.g., refresh)
+  const cameFromCheckout = !!(referrer && /(checkout|add-card)\.html$/.test(referrer.pathname));
+  
+  // Accept recent plan selections with context validation
   const selectionTs = parseInt(localStorage.getItem('selected-plan-ts') || '0', 10);
-  const isFreshSelection = Date.now() - selectionTs < 5 * 60 * 1000; // 5 minutes
-  const selectedPlan = planParam || ((cameFromPricing || isFreshSelection) ? storedSelection : null);
+  const isFreshSelection = Date.now() - selectionTs < 10 * 60 * 1000; // 10 minutes (increased for better UX)
+  const hasValidContext = planContext && ['pricing-a', 'pricing-b', 'checkout', 'add-card'].includes(planContext);
+  
+  // Priority: URL param > fresh selection with valid context > referrer-based
+  const selectedPlan = planParam || 
+    ((hasValidContext && isFreshSelection) ? storedSelection : null) ||
+    ((cameFromPricing || cameFromCheckout) ? storedSelection : null);
+  
+  // DEBUG: Log plan detection
+  console.log('🔍 Plan Detection Debug:', {
+    planParam,
+    storedSelection,
+    planContext,
+    cameFromPricing,
+    cameFromCheckout,
+    selectionTs,
+    isFreshSelection,
+    hasValidContext,
+    selectedPlan,
+    referrer: document.referrer
+  });
 
-  // Clear stale selection if it's not fresh and no pricing referrer
-  if (!planParam && !cameFromPricing && storedSelection && !isFreshSelection) {
+  // Clear stale selection if it's not fresh and no valid context
+  if (!planParam && !cameFromPricing && !cameFromCheckout && storedSelection && (!isFreshSelection || !hasValidContext)) {
     localStorage.removeItem('selected-plan');
     localStorage.removeItem('selected-plan-ts');
+    localStorage.removeItem('selected-plan-context');
+    console.log('🧹 Cleared stale plan selection');
   }
   
   if (selectedPlan && selectedPlan !== 'create-account') {
@@ -310,15 +334,26 @@ document.addEventListener('DOMContentLoaded', async function() {
       'free': 'Free Account'
     };
     
+    // DEBUG: Log plan processing
+    console.log('🎯 showSignupForm Debug:', {
+      planOverride,
+      plan,
+      planNames: planNames[plan],
+      authTitle: authTitle.textContent
+    });
+    
     if (plan && planNames[plan] && plan !== 'free') {
       authTitle.textContent = `Sign up for ${planNames[plan]}`;
       showSelectedPlanBanner(plan);
+      console.log('✅ Showing plan banner for:', plan);
     } else if (plan === 'free') {
       authTitle.textContent = 'Create your free account';
       hideSelectedPlanBanner();
+      console.log('✅ Showing free account form');
     } else {
       authTitle.textContent = 'Create your account';
       hideSelectedPlanBanner();
+      console.log('⚠️ No plan detected, showing generic form');
     }
   }
   

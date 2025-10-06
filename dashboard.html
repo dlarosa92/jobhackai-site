@@ -534,17 +534,25 @@
   </footer>
   <script src="js/free-account-manager.js"></script>
   <script>
-    // --- AUTHENTICATION CHECK ---
+    // --- ENHANCED AUTHENTICATION CHECK ---
     function checkAuthentication() {
       const isAuthenticated = localStorage.getItem('user-authenticated') === 'true';
+      const userEmail = localStorage.getItem('user-email');
+      const userPlan = localStorage.getItem('user-plan');
       const mainContent = document.querySelector('main');
       
-      if (!isAuthenticated) {
+      if (!isAuthenticated || !userEmail) {
+        // Clear any stale authentication data
+        localStorage.removeItem('user-authenticated');
+        localStorage.removeItem('user-email');
+        localStorage.removeItem('user-plan');
+        localStorage.removeItem('user-db');
+        
         mainContent.innerHTML = `
           <div style="max-width: 600px; margin: 4rem auto; text-align: center; padding: 2rem;">
             <div style="font-size: 4rem; margin-bottom: 1rem;">🔒</div>
             <h1 style="font-size: 2rem; font-weight: 700; color: var(--color-text-main); margin-bottom: 1rem;">
-              Login Required
+              Authentication Required
             </h1>
             <p style="font-size: 1.1rem; color: var(--color-text-secondary); margin-bottom: 2rem; line-height: 1.6;">
               You need to be logged in to access your dashboard. 
@@ -562,6 +570,13 @@
         `;
         return false;
       }
+      
+      // Validate user plan exists
+      if (!userPlan) {
+        console.warn('User authenticated but no plan found, setting to free');
+        localStorage.setItem('user-plan', 'free');
+      }
+      
       return true;
     }
 
