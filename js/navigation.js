@@ -272,9 +272,21 @@ function setAuthState(isAuthenticated, plan = null) {
 function logout() {
   navLog('info', 'logout() called');
   
+  // Clear all authentication data
   localStorage.removeItem('user-authenticated');
+  localStorage.removeItem('user-email');
   localStorage.removeItem('user-plan');
   localStorage.removeItem('dev-plan');
+  localStorage.removeItem('user-db');
+  localStorage.removeItem('selected-plan');
+  localStorage.removeItem('selected-plan-ts');
+  localStorage.removeItem('selected-plan-context');
+  localStorage.removeItem('plan-amount');
+  localStorage.removeItem('pending-signup-email');
+  localStorage.removeItem('pending-signup-firstName');
+  localStorage.removeItem('pending-signup-lastName');
+  localStorage.removeItem('trial-activated');
+  localStorage.removeItem('trial-start-date');
   
   // Only log on debug level to reduce spam
   navLog('debug', 'localStorage cleared', {
@@ -282,6 +294,11 @@ function logout() {
     'user-plan': localStorage.getItem('user-plan'),
     'dev-plan': localStorage.getItem('dev-plan')
   });
+  
+  // Force navigation update immediately
+  if (typeof updateNavigation === 'function') {
+    updateNavigation();
+  }
   
   window.location.href = 'index.html';
 }

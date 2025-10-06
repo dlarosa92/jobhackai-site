@@ -550,8 +550,15 @@
             button.style.opacity = '0.6';
             button.style.cursor = 'not-allowed';
           } else {
-            button.textContent = 'Dashboard';
-            button.onclick = () => window.location.href = 'dashboard.html';
+            // Only show Dashboard button if user is actually authenticated
+            const isAuthenticated = localStorage.getItem('user-authenticated') === 'true';
+            if (isAuthenticated) {
+              button.textContent = 'Dashboard';
+              button.onclick = () => window.location.href = 'dashboard.html';
+            } else {
+              button.textContent = 'Get Started';
+              button.onclick = () => window.location.href = 'login.html';
+            }
           }
         } else if (plan === currentPlan) {
           button.textContent = `Current Plan`;

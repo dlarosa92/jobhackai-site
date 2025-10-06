@@ -65,10 +65,10 @@
 </nav>
 
 <!-- User Navigation (shown when logged in) -->
-<nav class="user-nav" style="display: none;">
+<nav class="user-nav" id="userNav" style="display: none;">
   <div class="container">
     <div class="user-nav-links">
-      <a href="dashboard.html">Dashboard</a>
+      <a href="dashboard.html" class="auth-required">Dashboard</a>
       <div class="nav-dropdown">
         <button class="nav-dropdown-trigger" aria-expanded="false">
           Resume Builder
@@ -376,4 +376,36 @@ document.addEventListener('click', (e) => {
     });
   }
 });
+
+// Authentication-based navigation control
+function checkAuthenticationAndUpdateNav() {
+  const isAuthenticated = localStorage.getItem('user-authenticated') === 'true';
+  const userNav = document.getElementById('userNav');
+  const authRequiredLinks = document.querySelectorAll('.auth-required');
+  
+  if (isAuthenticated) {
+    // Show user navigation for authenticated users
+    if (userNav) {
+      userNav.style.display = 'block';
+    }
+  } else {
+    // Hide user navigation for non-authenticated users
+    if (userNav) {
+      userNav.style.display = 'none';
+    }
+    
+    // Remove any auth-required links from main navigation
+    authRequiredLinks.forEach(link => {
+      if (link.parentNode) {
+        link.parentNode.removeChild(link);
+      }
+    });
+  }
+}
+
+// Run on page load
+document.addEventListener('DOMContentLoaded', checkAuthenticationAndUpdateNav);
+
+// Also run when localStorage changes (for SPA-like behavior)
+window.addEventListener('storage', checkAuthenticationAndUpdateNav);
 </script> 
