@@ -329,7 +329,7 @@
   <script>
     // --- AUTHENTICATION CHECK ---
     function checkAuthentication() {
-      const isAuthenticated = localStorage.getItem('user-authenticated') === 'true';
+      const isAuthenticated = localStorage.getItem('user-authenticated') === 'true' && !!localStorage.getItem('user-email');
       const mainContent = document.querySelector('main');
       
       if (!isAuthenticated) {

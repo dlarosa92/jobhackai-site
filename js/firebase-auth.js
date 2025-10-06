@@ -155,18 +155,22 @@ class AuthManager {
           window.JobHackAINavigation.setAuthState(true, actualPlan);
         }
         
-        // Store auth state
+        // Store auth state (synchronously to avoid race conditions)
         localStorage.setItem('auth-user', JSON.stringify({
           email: user.email,
           uid: user.uid,
           displayName: user.displayName
         }));
+        localStorage.setItem('user-email', user.email || '');
+        localStorage.setItem('user-authenticated', 'true');
         
         // Notify listeners
         this.notifyAuthStateChange(user, userRecord);
       } else {
         // User is signed out
         localStorage.removeItem('auth-user');
+        localStorage.removeItem('user-email');
+        localStorage.setItem('user-authenticated', 'false');
         
         if (window.JobHackAINavigation) {
           window.JobHackAINavigation.setAuthState(false, 'visitor');

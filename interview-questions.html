@@ -529,7 +529,7 @@
         return true;
       } else {
         // Fallback to localStorage check if navigation system not available
-        const isAuthenticated = localStorage.getItem('user-authenticated') === 'true';
+        const isAuthenticated = localStorage.getItem('user-authenticated') === 'true' && !!localStorage.getItem('user-email');
         if (!isAuthenticated) {
           const mainContent = document.querySelector('main');
           mainContent.innerHTML = `

@@ -211,7 +211,7 @@
   <script>
     // --- PAGE ACCESS CONTROL ---
     function enforceAccess() {
-      const isAuthenticated = localStorage.getItem('user-authenticated') === 'true';
+      const isAuthenticated = localStorage.getItem('user-authenticated') === 'true' && !!localStorage.getItem('user-email');
       const plan = localStorage.getItem('user-plan') || 'free';
       const allowedPlans = ['trial', 'essential', 'pro', 'premium'];
       if (!isAuthenticated || !allowedPlans.includes(plan)) {
@@ -223,7 +223,7 @@
   <script>
     // --- AUTHENTICATION CHECK ---
     function checkAuthentication() {
-      const isAuthenticated = localStorage.getItem('user-authenticated') === 'true';
+      const isAuthenticated = localStorage.getItem('user-authenticated') === 'true' && !!localStorage.getItem('user-email');
       const mainContent = document.querySelector('main');
       
       if (!isAuthenticated) {

@@ -536,7 +536,7 @@
   <script>
     // --- ENHANCED AUTHENTICATION CHECK ---
     function checkAuthentication() {
-      const isAuthenticated = localStorage.getItem('user-authenticated') === 'true';
+      const isAuthenticated = localStorage.getItem('user-authenticated') === 'true' && !!localStorage.getItem('user-email');
       const userEmail = localStorage.getItem('user-email');
       const userPlan = localStorage.getItem('user-plan');
       const mainContent = document.querySelector('main');

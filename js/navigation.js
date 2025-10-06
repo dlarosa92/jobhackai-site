@@ -201,7 +201,8 @@ function detectNavigationIssues() {
   
   // Check if authentication state is consistent
   const authState = getAuthState();
-  const isAuthenticated = localStorage.getItem('user-authenticated') === 'true';
+  const storedAuth = localStorage.getItem('user-authenticated');
+  const isAuthenticated = storedAuth === 'true' && !!localStorage.getItem('user-email');
   if (authState.isAuthenticated !== isAuthenticated) {
     issues.push('Authentication state inconsistency');
     navLog('warn', 'Navigation issue detected: Auth state inconsistency', { 
@@ -231,7 +232,7 @@ function autoEnableDebugIfNeeded() {
 
 // --- AUTHENTICATION STATE MANAGEMENT ---
 function getAuthState() {
-  const isAuthenticated = localStorage.getItem('user-authenticated') === 'true';
+  const isAuthenticated = localStorage.getItem('user-authenticated') === 'true' && !!localStorage.getItem('user-email');
   const userPlan = localStorage.getItem('user-plan') || 'free';
   const devPlan = localStorage.getItem('dev-plan');
   
@@ -249,7 +250,7 @@ function getAuthState() {
 function setAuthState(isAuthenticated, plan = null) {
   navLog('info', 'setAuthState() called', { isAuthenticated, plan });
   
-  localStorage.setItem('user-authenticated', isAuthenticated.toString());
+  localStorage.setItem('user-authenticated', isAuthenticated ? 'true' : 'false');
   if (plan) {
     localStorage.setItem('user-plan', plan);
     localStorage.setItem('dev-plan', plan);
