@@ -295,6 +295,9 @@ class AuthManager {
         plan: actualPlan
       });
 
+      // Persist auth state immediately
+      localStorage.setItem('user-email', user.email || '');
+      localStorage.setItem('user-authenticated', 'true');
       // Update navigation state with correct plan
       if (window.JobHackAINavigation) {
         window.JobHackAINavigation.setAuthState(true, actualPlan);
@@ -340,12 +343,14 @@ class AuthManager {
       UserDatabase.createOrUpdateUser(user.email, userData);
 
       // Ensure navigation/auth state is updated immediately (avoid redirect race)
-      if (window.JobHackAINavigation) {
-        try {
+      try {
+        localStorage.setItem('user-email', user.email || '');
+        localStorage.setItem('user-authenticated', 'true');
+        if (window.JobHackAINavigation) {
           window.JobHackAINavigation.setAuthState(true, actualPlan);
-        } catch (e) {
-          console.warn('setAuthState failed during Google sign-in:', e);
         }
+      } catch (e) {
+        console.warn('auth state persist failed during Google sign-in:', e);
       }
 
       // Initialize free account tracking for new free users

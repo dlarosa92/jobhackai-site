@@ -403,7 +403,7 @@ document.addEventListener('DOMContentLoaded', async function() {
     };
     
     if (banner && planName && planPrice) {
-      if (!plan || plan === 'free') {
+      if (!plan) {
         banner.style.display = 'none';
         return;
       }
