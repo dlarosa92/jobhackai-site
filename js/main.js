@@ -49,6 +49,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (!sameOrigin || !samePage) return;
 
+    // Guard against empty hash
+    if (!url.hash || url.hash === '#') return;
+    
     const target = document.querySelector(url.hash);
     if (!target) return;
 
@@ -58,9 +61,13 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   window.addEventListener('load', () => {
-    if (location.hash) {
-      const target = document.querySelector(location.hash);
-      if (target) setTimeout(() => smoothTo(target), 0);
+    if (location.hash && location.hash !== '#') {
+      try {
+        const target = document.querySelector(location.hash);
+        if (target) setTimeout(() => smoothTo(target), 0);
+      } catch (e) {
+        // Invalid selector, ignore
+      }
     }
   });
 })();

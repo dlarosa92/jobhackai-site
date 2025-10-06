@@ -118,10 +118,17 @@ document.addEventListener('DOMContentLoaded', async function() {
       if (result.success) {
         // Route based on selected plan
         const plan = selectedPlan || localStorage.getItem('selected-plan') || 'free';
+        
+        // Small delay to ensure auth state is fully persisted
+        await new Promise(resolve => setTimeout(resolve, 200));
+        
         if (planRequiresPayment(plan)) {
           window.location.href = plan === 'trial' ? 'add-card.html' : 'checkout.html';
         } else {
           // Free (no subscription) -> take user to dashboard
+          localStorage.removeItem('selected-plan');
+          localStorage.removeItem('selected-plan-ts');
+          localStorage.removeItem('selected-plan-context');
           window.location.href = 'dashboard.html';
         }
       } else if (result.error) {
@@ -344,14 +351,16 @@ document.addEventListener('DOMContentLoaded', async function() {
       authTitle: authTitle.textContent
     });
     
-    if (plan && planNames[plan] && plan !== 'free') {
-      authTitle.textContent = `Sign up for ${planNames[plan]}`;
-      showSelectedPlanBanner(plan);
-      console.log('✅ Showing plan banner for:', plan);
-    } else if (plan === 'free') {
-      authTitle.textContent = 'Create your free account';
-      hideSelectedPlanBanner();
-      console.log('✅ Showing free account form');
+    if (plan && planNames[plan]) {
+      if (plan === 'free') {
+        authTitle.textContent = 'Create your free account';
+        showSelectedPlanBanner(plan);  // Show banner for free account too
+        console.log('✅ Showing free account form with banner');
+      } else {
+        authTitle.textContent = `Sign up for ${planNames[plan]}`;
+        showSelectedPlanBanner(plan);
+        console.log('✅ Showing plan banner for:', plan);
+      }
     } else {
       authTitle.textContent = 'Create your account';
       hideSelectedPlanBanner();

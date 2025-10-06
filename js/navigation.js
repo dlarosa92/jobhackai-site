@@ -361,6 +361,10 @@ if (!localStorage.getItem('user-authenticated')) {
 if (!localStorage.getItem('user-plan')) {
   localStorage.setItem('user-plan', 'free');
 }
+// Ensure dev-plan is always set for consistency
+if (!localStorage.getItem('dev-plan')) {
+  localStorage.setItem('dev-plan', localStorage.getItem('user-plan') || 'free');
+}
 
 // --- NAVIGATION CONFIGURATION ---
 const NAVIGATION_CONFIG = {
