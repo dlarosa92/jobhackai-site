@@ -110,7 +110,7 @@ class AuthManager {
   }
 
   setupAuthStateListener() {
-    onAuthStateChanged(auth, (user) => {
+    onAuthStateChanged(auth, async (user) => {
       this.currentUser = user;
       
       if (user) {

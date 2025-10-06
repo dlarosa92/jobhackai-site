@@ -350,6 +350,18 @@
   <script src="js/navigation.js"></script>
   <script src="js/main.js" type="module"></script>
   <script src="js/analytics.js" type="module"></script>
+  <!-- Initialize navigation early to render correct visitor nav with CTA -->
+  <script>
+    if (window.JobHackAINavigation && typeof window.JobHackAINavigation.initializeNavigation === 'function') {
+      window.JobHackAINavigation.initializeNavigation();
+    } else {
+      window.addEventListener('DOMContentLoaded', function() {
+        if (window.JobHackAINavigation && typeof window.JobHackAINavigation.initializeNavigation === 'function') {
+          window.JobHackAINavigation.initializeNavigation();
+        }
+      });
+    }
+  </script>
   <!-- Firebase Authentication -->
   <script src="js/login-page.js" type="module"></script>
 </body>
