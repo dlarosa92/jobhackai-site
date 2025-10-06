@@ -232,17 +232,51 @@ function autoEnableDebugIfNeeded() {
 
 // --- AUTHENTICATION STATE MANAGEMENT ---
 function getAuthState() {
-  const isAuthenticated = localStorage.getItem('user-authenticated') === 'true' && !!localStorage.getItem('user-email');
+  let isAuthenticated = localStorage.getItem('user-authenticated') === 'true' && !!localStorage.getItem('user-email');
   const userPlan = localStorage.getItem('user-plan') || 'free';
   const devPlan = localStorage.getItem('dev-plan');
-  
+
+  // Self-heal from Firebase auth storage if needed
+  if (!isAuthenticated) {
+    try {
+      // 1) Try our own auth-user cache first
+      const authUserRaw = localStorage.getItem('auth-user');
+      if (authUserRaw) {
+        const authUser = JSON.parse(authUserRaw);
+        if (authUser && authUser.email) {
+          localStorage.setItem('user-email', authUser.email);
+          localStorage.setItem('user-authenticated', 'true');
+          isAuthenticated = true;
+        }
+      }
+      // 2) Fall back to Firebase SDK local storage
+      if (!isAuthenticated) {
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i);
+          if (key && key.startsWith('firebase:authUser:')) {
+            const firebaseAuthRaw = localStorage.getItem(key);
+            try {
+              const firebaseAuth = JSON.parse(firebaseAuthRaw || '{}');
+              if (firebaseAuth && firebaseAuth.email) {
+                localStorage.setItem('user-email', firebaseAuth.email);
+                localStorage.setItem('user-authenticated', 'true');
+                isAuthenticated = true;
+                break;
+              }
+            } catch (_) {}
+          }
+        }
+      }
+    } catch (e) {
+      navLog('warn', 'Auth self-heal failed', e);
+    }
+  }
+
   const authState = {
     isAuthenticated,
     userPlan: isAuthenticated ? userPlan : null,
     devPlan: devPlan || null
   };
-  
-  // Only log on debug level to reduce spam
   navLog('debug', 'getAuthState() called', authState);
   return authState;
 }
