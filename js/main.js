@@ -15,11 +15,15 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   // Example: track when report is downloaded
-  const downloadBtn = document.querySelector('#download-report-btn');
-  if (downloadBtn) {
-    downloadBtn.addEventListener('click', () => {
-      trackEvent('Report', 'Download', 'LinkedIn Optimizer Report');
-    });
+  try {
+    const downloadBtn = document.querySelector('#download-report-btn');
+    if (downloadBtn) {
+      downloadBtn.addEventListener('click', () => {
+        trackEvent('Report', 'Download', 'LinkedIn Optimizer Report');
+      });
+    }
+  } catch (e) {
+    // Defensive: avoid throwing on pages without this selector
   }
 });
 

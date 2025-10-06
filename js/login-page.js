@@ -121,6 +121,7 @@ document.addEventListener('DOMContentLoaded', async function() {
         if (planRequiresPayment(plan)) {
           window.location.href = plan === 'trial' ? 'add-card.html' : 'checkout.html';
         } else {
+          // Free (no subscription) -> take user to dashboard
           window.location.href = 'dashboard.html';
         }
       } else if (result.error) {
@@ -184,7 +185,8 @@ document.addEventListener('DOMContentLoaded', async function() {
           localStorage.removeItem('selected-plan');
           // Route free users to onboarding
           if (plan === 'free') {
-            window.location.href = 'free-account-onboarding.html';
+            // Take user to dashboard (no subscription yet)
+            window.location.href = 'dashboard.html';
           } else {
             window.location.href = 'dashboard.html';
           }

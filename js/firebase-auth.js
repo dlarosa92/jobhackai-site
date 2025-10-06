@@ -246,6 +246,14 @@ class AuthManager {
         console.warn('Could not create Firestore profile (will retry on next login):', err);
       }
 
+      // Ensure navigation/auth state is in sync immediately to prevent race conditions
+      if (window.JobHackAINavigation) {
+        try {
+          window.JobHackAINavigation.setAuthState(true, userData.plan || 'free');
+        } catch (e) {
+          console.warn('setAuthState failed during signUp:', e);
+        }
+      }
       return { success: true, user };
     } catch (error) {
       console.error('Sign up error:', error);
@@ -326,6 +334,15 @@ class AuthManager {
       };
 
       UserDatabase.createOrUpdateUser(user.email, userData);
+
+      // Ensure navigation/auth state is updated immediately (avoid redirect race)
+      if (window.JobHackAINavigation) {
+        try {
+          window.JobHackAINavigation.setAuthState(true, actualPlan);
+        } catch (e) {
+          console.warn('setAuthState failed during Google sign-in:', e);
+        }
+      }
 
       // Initialize free account tracking for new free users
       if (userData.plan === 'free') {
