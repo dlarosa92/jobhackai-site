@@ -238,7 +238,7 @@ function getAuthState() {
 
   // Self-heal from Firebase auth storage if needed
   const forceTs = parseInt(localStorage.getItem('force-logged-out') || '0', 10);
-  const cooldownActive = forceTs && (Date.now() - forceTs) < 15000; // 15s TTL
+  const cooldownActive = forceTs && (Date.now() - forceTs) < 60000; // 60s TTL
   if (!isAuthenticated && !cooldownActive) {
     try {
       // 1) Try our own auth-user cache first
@@ -367,7 +367,7 @@ async function logout() {
     }
   } catch (_) { /* best effort */ }
 
-  // TTL cooldown for self-heal
+  // TTL cooldown for self-heal (60s)
   try { localStorage.setItem('force-logged-out', String(Date.now())); } catch (_) {}
 
   // Multi-tab broadcast

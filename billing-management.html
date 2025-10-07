@@ -3,6 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>html.auth-pending{visibility:hidden}</style>
+  <script src="js/static-auth-guard.js?v=20251007-2"></script>
   <title>Billing Management – JobHackAI</title>
   <link rel="icon" type="image/png" href="assets/JobHackAI_Logo_favicon-32x32.png">
   <link rel="stylesheet" href="css/tokens.css">
@@ -1194,7 +1196,8 @@
     }
   </script>
   <!-- Load navigation system -->
-  <script src="js/navigation.js?v=20251007-1"></script>
+  <script src="js/navigation.js?v=20251007-2"></script>
+  <script src="js/universal-logout.js?v=20251007-2"></script>
   <script>
     // Ensure navigation system is properly initialized
     function initializeNavigationSystem() {
