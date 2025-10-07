@@ -106,6 +106,16 @@ window.selfHealing = {
     
     selfHealing.isChecking = true;
     
+    // Respect forced logout cooldown (prevents auto rehydrate immediately after logout)
+    try {
+      const ts = parseInt(localStorage.getItem('force-logged-out') || '0', 10);
+      if (ts && (Date.now() - ts) < 15000) {
+        console.info('[self-heal] In logout cooldown; skipping auth rehydrate checks');
+        setTimeout(() => { selfHealing.isChecking = false; }, 100);
+        return;
+      }
+    } catch (_) {}
+
     const issues = [];
     
     // Check navigation (only if not already fixing)

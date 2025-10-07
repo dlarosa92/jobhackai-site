@@ -237,7 +237,9 @@ function getAuthState() {
   const devPlan = localStorage.getItem('dev-plan');
 
   // Self-heal from Firebase auth storage if needed
-  if (!isAuthenticated) {
+  const forceTs = parseInt(localStorage.getItem('force-logged-out') || '0', 10);
+  const cooldownActive = forceTs && (Date.now() - forceTs) < 15000; // 15s TTL
+  if (!isAuthenticated && !cooldownActive) {
     try {
       // 1) Try our own auth-user cache first
       const authUserRaw = localStorage.getItem('auth-user');
@@ -304,37 +306,89 @@ function setAuthState(isAuthenticated, plan = null) {
   }, 100);
 }
 
-function logout() {
+async function logout() {
   navLog('info', 'logout() called');
   
+  // Best-effort: sign out from Firebase (if auth manager is available)
+  try {
+    if (window.FirebaseAuthManager && typeof window.FirebaseAuthManager.signOut === 'function') {
+      await window.FirebaseAuthManager.signOut();
+    }
+  } catch (_) { /* no-op */ }
+
   // Clear all authentication data
-  localStorage.removeItem('user-authenticated');
-  localStorage.removeItem('user-email');
-  localStorage.removeItem('user-plan');
-  localStorage.removeItem('dev-plan');
-  localStorage.removeItem('user-db');
-  localStorage.removeItem('selected-plan');
-  localStorage.removeItem('selected-plan-ts');
-  localStorage.removeItem('selected-plan-context');
-  localStorage.removeItem('plan-amount');
-  localStorage.removeItem('pending-signup-email');
-  localStorage.removeItem('pending-signup-firstName');
-  localStorage.removeItem('pending-signup-lastName');
-  localStorage.removeItem('trial-activated');
-  localStorage.removeItem('trial-start-date');
+  try {
+    localStorage.removeItem('user-authenticated');
+    localStorage.removeItem('user-email');
+    localStorage.removeItem('user-plan');
+    localStorage.removeItem('dev-plan');
+    localStorage.removeItem('user-db');
+    localStorage.removeItem('user-db-backup');
+    localStorage.removeItem('selected-plan');
+    localStorage.removeItem('selected-plan-ts');
+    localStorage.removeItem('selected-plan-context');
+    localStorage.removeItem('plan-amount');
+    localStorage.removeItem('pending-signup-email');
+    localStorage.removeItem('pending-signup-firstName');
+    localStorage.removeItem('pending-signup-lastName');
+    localStorage.removeItem('trial-activated');
+    localStorage.removeItem('trial-start-date');
+    localStorage.removeItem('auth-user');
+  } catch (_) { /* no-op */ }
+
+  // Remove Firebase SDK local persistence to prevent self-heal re-login
+  try {
+    for (let i = localStorage.length - 1; i >= 0; i--) {
+      const key = localStorage.key(i);
+      if (key && key.startsWith('firebase:authUser:')) {
+        localStorage.removeItem(key);
+      }
+    }
+  } catch (_) { /* no-op */ }
+
+  // IndexedDB cleanup (prevents re-hydration)
+  const deleteDb = (name) => new Promise((res) => {
+    try {
+      const req = indexedDB.deleteDatabase(name);
+      req.onsuccess = req.onerror = req.onblocked = () => res();
+    } catch (_) { res(); }
+  });
+  try {
+    await deleteDb('firebaseLocalStorageDb');
+    await deleteDb('firebase-installations-database');
+    if (indexedDB.databases) {
+      const dbs = await indexedDB.databases();
+      for (const db of (dbs || [])) {
+        const name = db && db.name ? db.name : null;
+        if (name && name.toLowerCase().includes('firebase')) {
+          await deleteDb(name);
+        }
+      }
+    }
+  } catch (_) { /* best effort */ }
+
+  // TTL cooldown for self-heal
+  try { localStorage.setItem('force-logged-out', String(Date.now())); } catch (_) {}
+
+  // Multi-tab broadcast
+  try { new BroadcastChannel('auth').postMessage({ type: 'logout', ts: Date.now() }); } catch (_) {}
+
+  // Explicitly mark as logged out to keep guards simple
+  try { localStorage.setItem('user-authenticated', 'false'); } catch (_) {}
   
-  // Only log on debug level to reduce spam
-  navLog('debug', 'localStorage cleared', {
+  // Log state
+  navLog('debug', 'Post-logout storage state', {
     'user-authenticated': localStorage.getItem('user-authenticated'),
     'user-plan': localStorage.getItem('user-plan'),
     'dev-plan': localStorage.getItem('dev-plan')
   });
   
-  // Force navigation update immediately
+  // Update navigation immediately
   if (typeof updateNavigation === 'function') {
     updateNavigation();
   }
-  
+
+  // Redirect to home
   window.location.href = 'index.html';
 }
 
@@ -1476,6 +1530,11 @@ function initializeNavigation() {
   
   // Force clean visitor state for unauthenticated users
   if (!authState.isAuthenticated) {
+    // Clear force flag if not needed anymore (kept until first init completes)
+    if (localStorage.getItem('force-logged-out') === 'true') {
+      // remove after navigation renders once on home
+      setTimeout(() => { try { localStorage.removeItem('force-logged-out'); } catch (_) {} }, 500);
+    }
     // Ensure a valid default plan key exists for logged-out users (used by diagnostics)
     localStorage.setItem('user-plan', 'free');
     localStorage.removeItem('dev-plan');

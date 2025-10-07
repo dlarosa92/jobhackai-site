@@ -107,6 +107,8 @@ class AuthManager {
     this.currentUser = null;
     this.authStateListeners = [];
     this.setupAuthStateListener();
+    // Expose globally for consumers that can't import modules
+    try { window.FirebaseAuthManager = this; } catch (_) { /* no-op */ }
   }
 
   setupAuthStateListener() {
@@ -400,6 +402,23 @@ class AuthManager {
       // Clear local storage
       localStorage.removeItem('auth-user');
       localStorage.removeItem('user-plan');
+      localStorage.removeItem('user-email');
+      localStorage.setItem('user-authenticated', 'false');
+
+      // Remove Firebase SDK cached user keys to avoid automatic re-login from persistence
+      try {
+        for (let i = localStorage.length - 1; i >= 0; i--) {
+          const key = localStorage.key(i);
+          if (key && key.startsWith('firebase:authUser:')) {
+            localStorage.removeItem(key);
+          }
+        }
+      } catch (_) { /* no-op */ }
+
+      // Sync navigation if available
+      if (window.JobHackAINavigation && typeof window.JobHackAINavigation.setAuthState === 'function') {
+        window.JobHackAINavigation.setAuthState(false, 'visitor');
+      }
       
       return { success: true };
     } catch (error) {

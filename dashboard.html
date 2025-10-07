@@ -534,12 +534,36 @@
   </footer>
   <script src="js/free-account-manager.js"></script>
   <script>
+    // --- STATIC PAGE AUTH GUARD ---
+    (function(){
+      try {
+        const ts = parseInt(localStorage.getItem('force-logged-out') || '0', 10);
+        const cooldown = ts && (Date.now() - ts) < 15000;
+        const ua = localStorage.getItem('user-authenticated') === 'true' && !!localStorage.getItem('user-email');
+        // Prefer Firebase events if available
+        if (window.firebase?.auth?.getAuth && window.firebase?.auth?.onAuthStateChanged) {
+          const auth = window.firebase.auth.getAuth();
+          window.firebase.auth.onAuthStateChanged(auth, function(user){ if (!user) location.replace('login.html'); });
+        } else if (!ua && !cooldown) {
+          location.replace('login.html');
+        }
+        // Cross-tab logout sync
+        try { const ch = new BroadcastChannel('auth'); ch.onmessage = (e) => { if (e?.data?.type === 'logout') location.replace('login.html'); }; } catch(_){}
+      } catch(_) {}
+    })();
+
     // --- ENHANCED AUTHENTICATION CHECK ---
     function checkAuthentication() {
       const isAuthenticated = localStorage.getItem('user-authenticated') === 'true' && !!localStorage.getItem('user-email');
       const userEmail = localStorage.getItem('user-email');
       const userPlan = localStorage.getItem('user-plan');
       const mainContent = document.querySelector('main');
+      
+      if (!isAuthenticated || !userEmail) {
+        // Hard redirect to login for any unauthenticated access
+        window.location.href = 'login.html';
+        return false;
+      }
       
       if (!isAuthenticated || !userEmail) {
         // Clear any stale authentication data
@@ -957,7 +981,7 @@
     }
   </script>
   <!-- Load navigation system -->
-  <script src="js/navigation.js"></script>
+  <script src="js/navigation.js?v=20251007-1"></script>
   <script>
     if (window.JobHackAINavigation && typeof window.JobHackAINavigation.initializeNavigation === 'function') {
       window.JobHackAINavigation.initializeNavigation();
