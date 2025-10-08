@@ -226,6 +226,15 @@ Required environment variables (Cloudflare):
 - `PRICE_ESSENTIAL_MONTHLY`, `PRICE_PRO_MONTHLY`, `PRICE_PREMIUM_MONTHLY`
 - `FRONTEND_URL` (e.g., https://dev.jobhackai.io)
 
+KV binding (wrangler-managed): edit `app/wrangler.toml`
+
+```
+[[kv_namespaces]]
+binding = "JOBHACKAI_KV"
+id = "<dev_kv_id>"
+preview_id = "<dev_kv_preview_id>"
+```
+
 KV namespaces (bind as `JOBHACKAI_KV`):
 
 - `cusByUid:<uid>` → Stripe customer id

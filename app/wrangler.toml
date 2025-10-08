@@ -2,6 +2,12 @@ name = "jobhackai-app-dev"
 compatibility_date = "2024-01-01"
 pages_build_output_dir = "out"
 
+# KV namespaces for dev Pages project
+[[kv_namespaces]]
+binding = "JOBHACKAI_KV"
+id = "__FILL_IN_DEV_KV_ID__"
+preview_id = "__FILL_IN_DEV_KV_PREVIEW_ID__"
+
 [env.preview]
 name = "jobhackai-app-preview"
 
@@ -15,6 +21,7 @@ name = "jobhackai-app-prod"
 # Environment variables
 [vars]
 ENVIRONMENT = "qa"
+FRONTEND_URL = "https://dev.jobhackai.io"
 
 [env.preview.vars]
 ENVIRONMENT = "preview"

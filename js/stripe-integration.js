@@ -9,7 +9,12 @@ class JobHackAIStripe {
     this.stripe = null;
     this.elements = null;
     this.cardElement = null;
-    this.isDemoMode = true; // Set to false for production
+    // Auto-detect demo vs real mode:
+    // - Use REAL mode on dev.jobhackai.io to exercise the new API endpoints
+    // - Allow overriding via window.__forceStripeDemo = true
+    this.isDemoMode = (typeof window !== 'undefined' && window.__forceStripeDemo === true)
+      ? true
+      : (location.hostname !== 'dev.jobhackai.io');
     this.demoStripeKey = 'pk_test_demo_key_for_wix_compatibility';
     this.productionStripeKey = 'pk_live_your_actual_stripe_key';
     
@@ -555,32 +560,43 @@ class JobHackAIStripe {
     }
 
     try {
-      // Create checkout session (would call your backend)
-      const response = await fetch('/api/create-checkout-session', {
+      // Resolve auth user for backend mapping
+      const authUser = (function getAuthUser(){
+        try {
+          const u = window.FirebaseAuthManager?.getCurrentUser?.();
+          if (u && u.uid && u.email) return { uid: u.uid, email: u.email };
+        } catch(_){}
+        try {
+          const ls = JSON.parse(localStorage.getItem('auth-user') || '{}');
+          if (ls && ls.uid && ls.email) return { uid: ls.uid, email: ls.email };
+        } catch(_){}
+        return null;
+      })();
+
+      if (!authUser) {
+        console.error('Missing authenticated user for checkout');
+        alert('Please log in to start your subscription.');
+        window.location.href = 'login.html';
+        return;
+      }
+
+      // Create checkout session (Cloudflare Pages Function)
+      const response = await fetch('/api/stripe-checkout', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
           plan: plan,
-          amount: amount,
-          success_url: window.location.origin + '/dashboard.html',
-          cancel_url: window.location.origin + '/pricing-a.html',
+          firebaseUid: authUser.uid,
+          email: authUser.email
         }),
       });
 
-      const session = await response.json();
-
+      const { ok, url, error } = await response.json();
+      if (!ok || !url) throw new Error(error || 'Failed to create checkout session');
       // Redirect to Stripe Checkout
-      const result = await this.stripe.redirectToCheckout({
-        sessionId: session.id,
-      });
-
-      if (result.error) {
-        console.error('Checkout error:', result.error);
-        // Fallback to checkout page
-        window.location.href = 'checkout.html';
-      }
+      window.location.href = url;
     } catch (error) {
       console.error('Failed to create checkout session:', error);
       // Fallback to checkout page
@@ -602,21 +618,30 @@ class JobHackAIStripe {
     }
 
     try {
-      // Create customer portal session (would call your backend)
-      const response = await fetch('/api/create-portal-session', {
+      // Resolve current user
+      let uid = null;
+      try { uid = window.FirebaseAuthManager?.getCurrentUser?.()?.uid || null; } catch(_){}
+      if (!uid) {
+        try { uid = JSON.parse(localStorage.getItem('auth-user') || '{}').uid || null; } catch(_){}
+      }
+      if (!uid) {
+        alert('Please log in to manage your subscription.');
+        window.location.href = 'login.html';
+        return;
+      }
+
+      // Create customer portal session (Cloudflare Pages Function)
+      const response = await fetch('/api/billing-portal', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          return_url: window.location.origin + '/account-setting.html',
-        }),
+        body: JSON.stringify({ firebaseUid: uid }),
       });
 
-      const session = await response.json();
-
-      // Redirect to Stripe Customer Portal
-      window.location.href = session.url;
+      const { ok, url, error } = await response.json();
+      if (!ok || !url) throw new Error(error || 'Failed to create billing portal session');
+      window.location.href = url;
     } catch (error) {
       console.error('Failed to create portal session:', error);
     }
