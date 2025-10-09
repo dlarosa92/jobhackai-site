@@ -1175,13 +1175,36 @@
     
     // INTEGRATION: ZAPIER - Call Zapier to create Stripe Customer Portal session
     // INTEGRATION: STRIPE - Redirect user to Stripe Customer Portal URL
-    function manageSubscription() {
-      // TODO: In production, this would redirect to Stripe Customer Portal
-      // For demo, show subscription management modal
-      if (window.jobHackAIStripe) {
-        window.jobHackAIStripe.manageSubscription();
-      } else {
-        alert('Subscription management is not available in demo mode.');
+    async function manageSubscription() {
+      try {
+        // Use the SECURE /api/billing-portal endpoint with Firebase token
+        const user = window.FirebaseAuthManager?.getCurrentUser?.();
+        if (!user) {
+          throw new Error('Not authenticated');
+        }
+        
+        const idToken = await user.getIdToken();
+        if (!idToken) {
+          throw new Error('Could not get ID token');
+        }
+        
+        const res = await fetch('/api/billing-portal', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${idToken}`
+          }
+        });
+        
+        const data = await res.json();
+        if (data && data.ok && data.url) { 
+          location.href = data.url; 
+          return; 
+        }
+        throw new Error(data?.error || 'Portal failed');
+      } catch (e) {
+        console.error('Portal error:', e);
+        alert('Unable to open billing portal. Please try again.');
       }
     }
     

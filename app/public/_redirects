@@ -1,6 +1,16 @@
-# Handle client-side routing for Next.js static export
-/dashboard/   /dashboard/index.html    200
-/dashboard-simple/   /dashboard-simple/index.html    200
+# Cloudflare Pages Redirects
+# This file configures URL routing and redirects
 
-# Fallback for all other routes
-/*    /index.html   200
+# Standardize dashboard route - dashboard.html redirects to /dashboard
+/dashboard.html /dashboard 301
+
+# Retire legacy demo/payment pages
+/add-card /pricing-a.html 301
+/checkout.html /pricing-a.html 301
+
+# API routes - ensure no caching
+/api/* 200
+  Cache-Control: no-store
+
+# Default fallback for SPA routes
+/* /index.html 200

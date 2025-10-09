@@ -33,6 +33,9 @@ worker/
 .env.production.local
 .env.qa
 
+# Local wrangler config
+wrangler.local.toml
+
 # IDE/editor cruft
 .vscode/
 .idea/

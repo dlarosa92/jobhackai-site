@@ -38,10 +38,11 @@
       };
     } catch (_) {}
 
-    // Decide quickly
+    // Decide with a short grace period (longer after Stripe return)
+    var isPaidReturn = location.search.indexOf('paid=1') !== -1;
+    var grace = isPaidReturn ? 8000 : 3000;
     if (!isAuthed()) {
-      location.replace('/login.html');
-      return;
+      setTimeout(function(){ if (!isAuthed()) location.replace('/login.html'); }, grace);
     }
 
     // Reveal when authenticated

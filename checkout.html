@@ -197,8 +197,8 @@
       const planAmount = localStorage.getItem('plan-amount');
       
       if (!selectedPlan || selectedPlan === 'trial') {
-        // Redirect to add-card page for trial
-        window.location.href = 'add-card.html';
+        // Deprecated page: use pricing to start Checkout
+        window.location.href = 'pricing-a.html';
         return;
       }
       
@@ -279,10 +279,7 @@
         errorDiv.style.display = 'block';
         return;
       }
-      if (selectedPlan === 'trial') {
-        window.location.href = 'add-card.html';
-        return;
-      }
+      if (selectedPlan === 'trial') { window.location.href = 'pricing-a.html'; return; }
 
       const priceId = PLAN_PRICE_MAP[selectedPlan];
       if (!priceId) {

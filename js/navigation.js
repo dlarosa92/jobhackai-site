@@ -1566,6 +1566,12 @@ function initializeNavigation() {
   // Update navigation
   navLog('debug', 'Calling updateNavigation()');
   updateNavigation();
+  // Reconcile plan from KV and then handle post-checkout activation if needed
+  try {
+    reconcilePlanFromKV().then(() => {
+      waitForPlanActivationIfNeeded();
+    });
+  } catch (_) {}
   
   // Update quick plan switcher state
   navLog('debug', 'Updating quick plan switcher state');
@@ -1589,6 +1595,42 @@ function initializeNavigation() {
   navLog('info', '=== initializeNavigation() COMPLETE ===');
 }
 
+// --- KV Plan Reconciliation and Post-Checkout Activation ---
+async function fetchKVPlan() {
+  try {
+    const idToken = await window.FirebaseAuthManager?.getCurrentUser?.()?.getIdToken?.();
+    if (!idToken) return null;
+    const r = await fetch('/api/plan/me', { headers: { Authorization: `Bearer ${idToken}` } });
+    if (!r.ok) return null;
+    const { plan } = await r.json();
+    return plan || 'free';
+  } catch (_) { return null; }
+}
+
+async function reconcilePlanFromKV() {
+  const auth = getAuthState();
+  if (!auth.isAuthenticated) return;
+  const kvPlan = await fetchKVPlan();
+  const current = localStorage.getItem('user-plan');
+  if (kvPlan && kvPlan !== current) {
+    localStorage.setItem('user-plan', kvPlan);
+    localStorage.setItem('dev-plan', kvPlan);
+    updateNavigation();
+    try { new BroadcastChannel('auth').postMessage({ type: 'plan-update', plan: kvPlan }); } catch (_) {}
+  }
+}
+
+async function waitForPlanActivationIfNeeded() {
+  if (!location.search.includes('paid=1')) return;
+  const deadline = Date.now() + 10000; // 10s
+  while (Date.now() < deadline) {
+    await reconcilePlanFromKV();
+    const effective = getEffectivePlan();
+    if (effective !== 'free' && effective !== 'trial') break;
+    await new Promise(r => setTimeout(r, 500));
+  }
+}
+
 // --- GLOBAL EXPORTS ---
 window.JobHackAINavigation = {
   getCurrentPlan,
@@ -1601,6 +1643,8 @@ window.JobHackAINavigation = {
   showUpgradeModal,
   updateNavigation,
   initializeNavigation,
+  fetchKVPlan,
+  reconcilePlanFromKV,
   PLANS,
   NAVIGATION_CONFIG
 };

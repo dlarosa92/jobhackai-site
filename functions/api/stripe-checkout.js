@@ -1,3 +1,4 @@
+import { getBearer, verifyFirebaseIdToken } from '../_lib/firebase-auth';
 export async function onRequest(context) {
   const { request, env } = context;
   const origin = request.headers.get('Origin') || '';
@@ -10,31 +11,35 @@ export async function onRequest(context) {
   }
 
   try {
-    const { plan, firebaseUid, email } = await request.json();
-    if (!plan || !firebaseUid || !email) {
-      return json({ ok: false, error: 'Missing plan|firebaseUid|email' }, 422, origin);
+    const { plan } = await request.json();
+    const token = getBearer(request);
+    if (!token) return json({ ok: false, error: 'unauthorized' }, 401, origin);
+    const { uid, payload } = await verifyFirebaseIdToken(token, env.FIREBASE_PROJECT_ID);
+    const email = (payload?.email) || '';
+    if (!plan) {
+      return json({ ok: false, error: 'Missing plan' }, 422, origin);
     }
 
     const priceId = planToPrice(env, plan);
     if (!priceId) return json({ ok: false, error: 'Invalid plan' }, 400, origin);
 
     // Reuse or create customer
-    let customerId = await env.JOBHACKAI_KV?.get(kvCusKey(firebaseUid));
+    let customerId = await env.JOBHACKAI_KV?.get(kvCusKey(uid));
     if (!customerId) {
       const res = await stripe(env, '/customers', {
         method: 'POST',
         headers: stripeFormHeaders(env),
-        body: form({ email, 'metadata[firebaseUid]': firebaseUid })
+        body: form({ email, 'metadata[firebaseUid]': uid })
       });
       const c = await res.json();
       if (!res.ok) return json({ ok: false, error: c?.error?.message || 'stripe_customer_error' }, 502, origin);
       customerId = c.id;
-      await env.JOBHACKAI_KV?.put(kvCusKey(firebaseUid), customerId);
-      await env.JOBHACKAI_KV?.put(kvEmailKey(firebaseUid), email);
+      await env.JOBHACKAI_KV?.put(kvCusKey(uid), customerId);
+      await env.JOBHACKAI_KV?.put(kvEmailKey(uid), email);
     }
 
     // Create Checkout Session (subscription)
-    const idem = `${firebaseUid}:${plan}:${Date.now()}`;
+    const idem = `${firebaseUid}:${plan}`;
     const sessionRes = await stripe(env, '/checkout/sessions', {
       method: 'POST',
       headers: { ...stripeFormHeaders(env), 'Idempotency-Key': idem },
@@ -46,7 +51,8 @@ export async function onRequest(context) {
         success_url: `${env.FRONTEND_URL || 'https://dev.jobhackai.io'}/dashboard.html?paid=1`,
         cancel_url: `${env.FRONTEND_URL || 'https://dev.jobhackai.io'}/pricing-a.html`,
         allow_promotion_codes: 'true',
-        payment_method_collection: 'always'
+        payment_method_collection: 'if_required',
+        'metadata[firebaseUid]': uid
       })
     });
     const s = await sessionRes.json();

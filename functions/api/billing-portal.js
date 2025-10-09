@@ -1,3 +1,4 @@
+import { getBearer, verifyFirebaseIdToken } from '../_lib/firebase-auth';
 export async function onRequest(context) {
   const { request, env } = context;
   const origin = request.headers.get('Origin') || '';
@@ -6,16 +7,17 @@ export async function onRequest(context) {
   if (request.method !== 'POST') return new Response('Method not allowed', { status: 405, headers: corsHeaders(origin) });
 
   try {
-    const { firebaseUid } = await request.json();
-    if (!firebaseUid) return json({ ok: false, error: 'Missing firebaseUid' }, 422, origin);
+    const token = getBearer(request);
+    if (!token) return json({ ok: false, error: 'unauthorized' }, 401, origin);
+    const { uid } = await verifyFirebaseIdToken(token, env.FIREBASE_PROJECT_ID);
 
-    const customerId = await env.JOBHACKAI_KV?.get(kvCusKey(firebaseUid));
+    const customerId = await env.JOBHACKAI_KV?.get(kvCusKey(uid));
     if (!customerId) return json({ ok: false, error: 'No customer for user' }, 404, origin);
 
     const res = await fetch('https://api.stripe.com/v1/billing_portal/sessions', {
       method: 'POST',
       headers: { Authorization: `Bearer ${env.STRIPE_SECRET_KEY}`, 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({ customer: customerId, return_url: `${env.FRONTEND_URL || 'https://dev.jobhackai.io'}/account-setting.html` })
+      body: new URLSearchParams({ customer: customerId, return_url: `${env.FRONTEND_URL || 'https://dev.jobhackai.io'}/dashboard.html` })
     });
     const p = await res.json();
     if (!res.ok) return json({ ok: false, error: p?.error?.message || 'portal_error' }, 502, origin);

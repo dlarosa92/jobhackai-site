@@ -1,11 +1,13 @@
 export async function onRequest(context) {
   const { request, env } = context;
-  if (request.method !== 'POST') return new Response('Method not allowed', { status: 405, headers: { 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': 'https://dev.jobhackai.io', 'Vary': 'Origin' } });
+  const origin = request.headers.get('Origin') || '';
+  
+  if (request.method !== 'POST') return new Response('Method not allowed', { status: 405, headers: corsHeaders(origin, env) });
 
   // Read raw body for signature verification
   const raw = await request.text();
   const valid = await verifyStripeWebhook(env, request, raw);
-  if (!valid) return new Response('Invalid signature', { status: 401, headers: { 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': 'https://dev.jobhackai.io', 'Vary': 'Origin' } });
+  if (!valid) return new Response('Invalid signature', { status: 401, headers: corsHeaders(origin, env) });
 
   const event = JSON.parse(raw);
 
@@ -15,7 +17,7 @@ export async function onRequest(context) {
       const seenKey = `evt:${event.id}`;
       const seen = await env.JOBHACKAI_KV?.get(seenKey);
       if (seen) {
-        return new Response('[ok]', { status: 200, headers: { 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': 'https://dev.jobhackai.io', 'Vary': 'Origin' } });
+        return new Response('[ok]', { status: 200, headers: corsHeaders(origin, env) });
       }
       await env.JOBHACKAI_KV?.put(seenKey, '1', { expirationTtl: 86400 });
     }
@@ -64,26 +66,40 @@ export async function onRequest(context) {
     }
 
     if (event.type === 'customer.subscription.created' || event.type === 'customer.subscription.updated') {
-      const status = event.data.object.status;
-      const items = event.data.object.items?.data || [];
+      const subscription = event.data.object;
+      const status = subscription.status;
+      const items = subscription.items?.data || [];
       const pId = items[0]?.price?.id || '';
       const plan = priceToPlan(env, pId);
-      const customerId = event.data.object.customer || null;
-      const uid = await fetchUidFromCustomer(customerId);
+      
+      // Get uid from subscription metadata first (more reliable), then fallback to customer
+      let uid = subscription.metadata?.firebaseUid;
+      if (!uid) {
+        const customerId = subscription.customer || null;
+        uid = await fetchUidFromCustomer(customerId);
+      }
+      
       const paid = status === 'active' || status === 'trialing';
       await setPlan(uid, paid && plan ? plan : 'free', event.created || Math.floor(Date.now()/1000));
     }
 
     if (event.type === 'customer.subscription.deleted') {
-      const customerId = event.data.object.customer || null;
-      const uid = await fetchUidFromCustomer(customerId);
+      const subscription = event.data.object;
+      
+      // Get uid from subscription metadata first, then fallback to customer
+      let uid = subscription.metadata?.firebaseUid;
+      if (!uid) {
+        const customerId = subscription.customer || null;
+        uid = await fetchUidFromCustomer(customerId);
+      }
+      
       await setPlan(uid, 'free', event.created || Math.floor(Date.now()/1000));
     }
   } catch (_) {
     // swallow errors to avoid endless retries; state can heal on next login fetch
   }
 
-  return new Response('[ok]', { status: 200, headers: { 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': 'https://dev.jobhackai.io', 'Vary': 'Origin' } });
+  return new Response('[ok]', { status: 200, headers: corsHeaders(origin, env) });
 }
 
 async function verifyStripeWebhook(env, req, rawBody) {
@@ -101,7 +117,24 @@ async function verifyStripeWebhook(env, req, rawBody) {
   return diff === 0 && age <= 300;
 }
 
+function corsHeaders(origin, env) {
+  // Dynamic CORS: support dev, qa, and production origins
+  const allowedOrigins = [
+    'https://dev.jobhackai.io',
+    'https://qa.jobhackai.io', 
+    'https://app.jobhackai.io'
+  ];
+  const allowed = allowedOrigins.includes(origin) ? origin : allowedOrigins[0];
+  return { 
+    'Cache-Control': 'no-store', 
+    'Access-Control-Allow-Origin': allowed, 
+    'Vary': 'Origin',
+    'Content-Type': 'application/json'
+  };
+}
+
 const kvPlanKey = (uid) => `planByUid:${uid}`;
+
 function priceToPlan(env, priceId) {
   const rev = {
     [env.PRICE_ESSENTIAL_MONTHLY]: 'essential',

@@ -37,12 +37,12 @@ document.addEventListener('DOMContentLoaded', async function() {
   const planContext = localStorage.getItem('selected-plan-context');
   const referrer = document.referrer ? new URL(document.referrer) : null;
   const cameFromPricing = !!(referrer && /pricing-(a|b)\.html$/.test(referrer.pathname));
-  const cameFromCheckout = !!(referrer && /(checkout|add-card)\.html$/.test(referrer.pathname));
+  const cameFromCheckout = !!(referrer && /(checkout)\.html$/.test(referrer.pathname));
   
   // Accept recent plan selections with context validation
   const selectionTs = parseInt(localStorage.getItem('selected-plan-ts') || '0', 10);
   const isFreshSelection = Date.now() - selectionTs < 10 * 60 * 1000; // 10 minutes (increased for better UX)
-  const hasValidContext = planContext && ['pricing-a', 'pricing-b', 'checkout', 'add-card'].includes(planContext);
+  const hasValidContext = planContext && ['pricing-a', 'pricing-b', 'checkout'].includes(planContext);
   
   // Priority: URL param > fresh selection with valid context > referrer-based
   const selectedPlan = planParam || 
@@ -123,7 +123,18 @@ document.addEventListener('DOMContentLoaded', async function() {
         await new Promise(resolve => setTimeout(resolve, 200));
         
         if (planRequiresPayment(plan)) {
-          window.location.href = plan === 'trial' ? 'add-card.html' : 'checkout.html';
+          // Start server-driven checkout; trial requires card
+          try {
+            const idToken = await authManager.getCurrentUser()?.getIdToken?.();
+            const res = await fetch('/api/stripe-checkout', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}) },
+              body: JSON.stringify({ plan, startTrial: plan === 'trial' })
+            });
+            const data = await res.json();
+            if (data && data.ok && data.url) { window.location.href = data.url; return; }
+          } catch (_) {}
+          window.location.href = 'pricing-a.html';
         } else {
           // Free (no subscription) -> take user to dashboard
           localStorage.removeItem('selected-plan');
@@ -187,7 +198,17 @@ document.addEventListener('DOMContentLoaded', async function() {
         // Route based on selected plan
         const plan = selectedPlan || 'free';
         if (planRequiresPayment(plan)) {
-          window.location.href = plan === 'trial' ? `add-card.html?plan=${plan}` : `checkout.html`;
+          try {
+            const idToken = await authManager.getCurrentUser()?.getIdToken?.();
+            const res = await fetch('/api/stripe-checkout', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}) },
+              body: JSON.stringify({ plan, startTrial: plan === 'trial' })
+            });
+            const data = await res.json();
+            if (data && data.ok && data.url) { window.location.href = data.url; return; }
+          } catch (_) {}
+          window.location.href = 'pricing-a.html';
         } else {
           localStorage.removeItem('selected-plan');
           // Route free users to onboarding
@@ -264,8 +285,17 @@ document.addEventListener('DOMContentLoaded', async function() {
         const plan = selectedPlan || 'free';
         
         if (planRequiresPayment(plan)) {
-          // Redirect to add payment method
-          window.location.href = `add-card.html?plan=${plan}`;
+          try {
+            const idToken = await authManager.getCurrentUser()?.getIdToken?.();
+            const res = await fetch('/api/stripe-checkout', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}) },
+              body: JSON.stringify({ plan, startTrial: plan === 'trial' })
+            });
+            const data = await res.json();
+            if (data && data.ok && data.url) { window.location.href = data.url; return; }
+          } catch (_) {}
+          window.location.href = 'pricing-a.html';
         } else {
           // Success! Redirect to dashboard
           localStorage.removeItem('selected-plan');
