@@ -108,12 +108,20 @@ class AuthManager {
     this.authStateListeners = [];
     this.setupAuthStateListener();
     // Expose globally for consumers that can't import modules
-    try { window.FirebaseAuthManager = this; } catch (_) { /* no-op */ }
+    try { 
+      window.FirebaseAuthManager = this;
+      // Also expose currentUser directly for easier access
+      window.FirebaseAuthManager.currentUser = this.currentUser;
+    } catch (_) { /* no-op */ }
   }
 
   setupAuthStateListener() {
     onAuthStateChanged(auth, async (user) => {
       this.currentUser = user;
+      // Update the exposed currentUser property
+      if (window.FirebaseAuthManager) {
+        window.FirebaseAuthManager.currentUser = user;
+      }
       
       if (user) {
         // User is signed in
