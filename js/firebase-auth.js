@@ -528,6 +528,19 @@ class AuthManager {
   }
 
   /**
+   * Wait for auth state to be ready
+   */
+  async waitForAuthReady(timeoutMs = 5000) {
+    const startTime = Date.now();
+    
+    while (!this.currentUser && (Date.now() - startTime) < timeoutMs) {
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+    
+    return this.currentUser;
+  }
+
+  /**
    * Check if user is authenticated
    */
   isAuthenticated() {

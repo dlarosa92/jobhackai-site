@@ -240,13 +240,7 @@
             (async () => {
               try {
                 // Wait for Firebase to be ready
-                let attempts = 0;
-                while (!window.FirebaseAuthManager?.currentUser && attempts < 20) {
-                  await new Promise(r => setTimeout(r, 100));
-                  attempts++;
-                }
-                
-                const user = window.FirebaseAuthManager?.currentUser;
+                const user = await window.FirebaseAuthManager?.waitForAuthReady?.() || window.FirebaseAuthManager?.currentUser;
                 if (!user) {
                   throw new Error('Not authenticated');
                 }
