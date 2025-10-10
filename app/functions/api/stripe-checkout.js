@@ -102,7 +102,7 @@ export async function onRequest(context) {
         
         if (!res.ok) {
           console.log('❌ Stripe customer creation failed:', c?.error);
-          return json({ ok: false, error: c?.error?.message || 'stripe_customer_error' }, 502, origin, env);
+          return json({ ok: false, error: c?.error?.message || 'stripe_customer_error', details: c?.error }, res.status || 400, origin, env);
         }
         
         customerId = c.id;
@@ -118,7 +118,9 @@ export async function onRequest(context) {
     }
 
     // Create Checkout Session (subscription) with trial support
-    const idem = `${uid}:${plan}:${startTrial ? 'trial' : 'paid'}`;
+    // Use timestamp to create unique key for each checkout attempt
+    // This prevents idempotency conflicts when users retry after canceling
+    const idem = `${uid}:${plan}:${startTrial ? 'trial' : 'paid'}:${Date.now()}`;
     console.log('🔍 Creating checkout session with idempotency key:', idem);
     
     // Build session configuration
@@ -163,7 +165,21 @@ export async function onRequest(context) {
       
       if (!sessionRes.ok) {
         console.log('❌ Checkout session creation failed:', s?.error);
-        return json({ ok: false, error: s?.error?.message || 'stripe_checkout_error', details: s?.error }, 502, origin, env);
+        
+        // Special handling for idempotency errors
+        if (s?.error?.type === 'idempotency_error') {
+          return json({ 
+            ok: false, 
+            error: 'Please try again. Your previous checkout session may still be active.', 
+            details: s?.error 
+          }, 409, origin, env); // 409 Conflict
+        }
+        
+        return json({ 
+          ok: false, 
+          error: s?.error?.message || 'stripe_checkout_error', 
+          details: s?.error 
+        }, sessionRes.status || 400, origin, env);
       }
 
       console.log('✅ Checkout session created:', { id: s.id, hasUrl: !!s.url });

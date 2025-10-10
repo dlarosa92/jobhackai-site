@@ -22,7 +22,7 @@ export async function onRequest(context) {
       body: new URLSearchParams({ customer: customerId, return_url: `${env.FRONTEND_URL || 'https://dev.jobhackai.io'}/dashboard` })
     });
     const p = await res.json();
-    if (!res.ok) return json({ ok: false, error: p?.error?.message || 'portal_error' }, 502, origin, env);
+    if (!res.ok) return json({ ok: false, error: p?.error?.message || 'portal_error', details: p?.error }, res.status || 400, origin, env);
     return json({ ok: true, url: p.url }, 200, origin, env);
   } catch (e) {
     return json({ ok: false, error: e?.message || 'server_error' }, 500, origin, env);
