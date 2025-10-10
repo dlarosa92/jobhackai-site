@@ -23,11 +23,16 @@ document.addEventListener('DOMContentLoaded', async function() {
   const loginError = document.getElementById('loginError');
   const signupError = document.getElementById('signupError');
   
-  // Check if user is already authenticated
-  if (authManager.isAuthenticated()) {
-    // Redirect to dashboard if already logged in
-    window.location.href = 'dashboard.html';
-    return;
+  // Check if user is already authenticated (wait for auth to be ready)
+  try {
+    const user = await authManager.waitForAuthReady(3000); // Wait up to 3 seconds
+    if (user) {
+      console.log('✅ User already authenticated, redirecting to dashboard');
+      window.location.href = 'dashboard.html';
+      return;
+    }
+  } catch (error) {
+    console.log('Auth check timeout, proceeding with login form');
   }
   
   // Check for selected plan with enhanced validation
