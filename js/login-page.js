@@ -31,16 +31,27 @@ document.addEventListener('DOMContentLoaded', async function() {
     
     if (isAuthInStorage && authUser) {
       console.log('✅ User authenticated (from localStorage), redirecting to dashboard');
-      window.location.href = 'dashboard.html';
+      // Add smooth transition with loading state
+      document.body.style.opacity = '0.7';
+      document.body.style.transition = 'opacity 0.3s ease';
+      setTimeout(() => {
+        window.location.href = 'dashboard.html';
+      }, 100);
       return true;
     }
     
-    // Method 2: Wait for Firebase auth to be ready
+    // Method 2: Wait for Firebase auth to be ready with longer timeout
     try {
-      const user = await authManager.waitForAuthReady(2000); // Wait up to 2 seconds
+      console.log('🔍 Checking Firebase auth state...');
+      const user = await authManager.waitForAuthReady(5000); // Increased to 5 seconds
       if (user) {
         console.log('✅ User authenticated (from Firebase), redirecting to dashboard');
-        window.location.href = 'dashboard.html';
+        // Add smooth transition with loading state
+        document.body.style.opacity = '0.7';
+        document.body.style.transition = 'opacity 0.3s ease';
+        setTimeout(() => {
+          window.location.href = 'dashboard.html';
+        }, 100);
         return true;
       }
     } catch (error) {
@@ -52,6 +63,19 @@ document.addEventListener('DOMContentLoaded', async function() {
   
   const isAuthenticated = await checkAuth();
   if (isAuthenticated) return;
+  
+  // Listen for auth state changes in case user gets authenticated after page load
+  const unsubscribe = authManager.onAuthStateChanged((user) => {
+    if (user) {
+      console.log('✅ Auth state changed: User authenticated, redirecting to dashboard');
+      document.body.style.opacity = '0.7';
+      document.body.style.transition = 'opacity 0.3s ease';
+      setTimeout(() => {
+        window.location.href = 'dashboard.html';
+      }, 200);
+      unsubscribe(); // Stop listening after redirect
+    }
+  });
   
   // Check for selected plan with enhanced validation
   const urlParams = new URLSearchParams(window.location.search);
@@ -142,27 +166,39 @@ document.addEventListener('DOMContentLoaded', async function() {
         // Route based on selected plan
         const plan = selectedPlan || localStorage.getItem('selected-plan') || 'free';
         
-        // Small delay to ensure auth state is fully persisted
-        await new Promise(resolve => setTimeout(resolve, 200));
+        // Show loading state with smooth transition
+        document.body.style.opacity = '0.7';
+        document.body.style.transition = 'opacity 0.3s ease';
+        this.textContent = 'Redirecting...';
+        
+        // Longer delay to ensure auth state is fully persisted
+        await new Promise(resolve => setTimeout(resolve, 500));
         
         if (planRequiresPayment(plan)) {
           // Start server-driven checkout; trial requires card
           try {
-            const idToken = await authManager.getCurrentUser()?.getIdToken?.();
+            const idToken = await authManager.getCurrentUser()?.getIdToken?.(true); // Force refresh
             const res = await fetch('/api/stripe-checkout', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json', ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}) },
               body: JSON.stringify({ plan, startTrial: plan === 'trial' })
             });
             const data = await res.json();
-            if (data && data.ok && data.url) { window.location.href = data.url; return; }
-          } catch (_) {}
+            if (data && data.ok && data.url) { 
+              console.log('🚀 Redirecting to Stripe checkout:', data.url);
+              window.location.href = data.url; 
+              return; 
+            }
+          } catch (error) {
+            console.error('Checkout error:', error);
+          }
           window.location.href = 'pricing-a.html';
         } else {
           // Free (no subscription) -> take user to dashboard
           localStorage.removeItem('selected-plan');
           localStorage.removeItem('selected-plan-ts');
           localStorage.removeItem('selected-plan-context');
+          console.log('🚀 Redirecting to dashboard for free plan');
           window.location.href = 'dashboard.html';
         }
       } else if (result.error) {

@@ -124,7 +124,7 @@ function planToPrice(env, plan) {
     essential: env.STRIPE_PRICE_ESSENTIAL_MONTHLY,
     pro: env.STRIPE_PRICE_PRO_MONTHLY,
     premium: env.STRIPE_PRICE_PREMIUM_MONTHLY,
-    trial: env.STRIPE_PRICE_PRO_MONTHLY  // trial uses pro price with trial_period_days
+    trial: env.STRIPE_PRICE_ESSENTIAL_MONTHLY  // trial uses essential price with trial_period_days
   };
   return map[plan] || null;
 }
