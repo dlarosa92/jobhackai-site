@@ -1,5 +1,3 @@
-import { getBearer, verifyFirebaseIdToken } from '../_lib/firebase-auth';
-
 export async function onRequest(context) {
   const { request, env } = context;
   const origin = request.headers.get('Origin') || '';
@@ -12,6 +10,17 @@ export async function onRequest(context) {
   }
 
   try {
+    // Import Firebase auth helpers with error handling
+    let getBearer, verifyFirebaseIdToken;
+    try {
+      const firebaseAuth = await import('../_lib/firebase-auth.js');
+      getBearer = firebaseAuth.getBearer;
+      verifyFirebaseIdToken = firebaseAuth.verifyFirebaseIdToken;
+      console.log('✅ Firebase auth helpers imported successfully');
+    } catch (importError) {
+      console.error('❌ Failed to import Firebase auth helpers:', importError);
+      return json({ ok: false, error: 'Auth system unavailable', details: importError.message }, 500, origin, env);
+    }
     console.log('🔍 Stripe checkout request received:', {
       method: request.method,
       hasAuth: !!request.headers.get('authorization'),
@@ -40,8 +49,16 @@ export async function onRequest(context) {
     }
 
     console.log('🔍 Verifying Firebase token...');
-    const { uid, payload } = await verifyFirebaseIdToken(token, env.FIREBASE_PROJECT_ID);
-    console.log('✅ Token verified:', { uid, email: payload?.email });
+    let uid, payload;
+    try {
+      const tokenResult = await verifyFirebaseIdToken(token, env.FIREBASE_PROJECT_ID);
+      uid = tokenResult.uid;
+      payload = tokenResult.payload;
+      console.log('✅ Token verified:', { uid, email: payload?.email });
+    } catch (tokenError) {
+      console.error('❌ Token verification failed:', tokenError);
+      return json({ ok: false, error: 'Invalid authentication token', details: tokenError.message }, 401, origin, env);
+    }
 
     const email = (payload?.email) || '';
     if (!plan) {
