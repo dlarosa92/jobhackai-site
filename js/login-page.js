@@ -65,7 +65,7 @@ document.addEventListener('DOMContentLoaded', async function() {
   if (isAuthenticated) return;
   
   // Listen for auth state changes in case user gets authenticated after page load
-  const unsubscribe = authManager.onAuthStateChanged((user) => {
+  const unsubscribe = authManager.onAuthStateChange((user) => {
     if (user) {
       console.log('✅ Auth state changed: User authenticated, redirecting to dashboard');
       document.body.style.opacity = '0.7';
