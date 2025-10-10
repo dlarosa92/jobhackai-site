@@ -14,11 +14,17 @@ export async function onRequest({ request, env }) {
 
   const present = {};
   for (const k of keys) {
-    present[k] = typeof env[k] !== 'undefined';
+    present[k] = {
+      exists: typeof env[k] !== 'undefined',
+      value: env[k] ? `${env[k].toString().substring(0, 20)}...` : env[k]
+    };
   }
 
   // KV binding presence check
-  present['JOBHACKAI_KV'] = !!env.JOBHACKAI_KV;
+  present['JOBHACKAI_KV'] = {
+    exists: !!env.JOBHACKAI_KV,
+    value: env.JOBHACKAI_KV ? 'KV binding available' : 'KV binding not available'
+  };
 
   return new Response(JSON.stringify({ present }, null, 2), {
     headers: { 
