@@ -117,10 +117,12 @@ class AuthManager {
 
   setupAuthStateListener() {
     onAuthStateChanged(auth, async (user) => {
+      console.log('🔥 Firebase auth state changed:', user ? `User: ${user.email}` : 'No user');
       this.currentUser = user;
       // Update the exposed currentUser property
       if (window.FirebaseAuthManager) {
         window.FirebaseAuthManager.currentUser = user;
+        console.log('🔥 Updated window.FirebaseAuthManager.currentUser:', user ? `User: ${user.email}` : 'null');
       }
       
       if (user) {
@@ -532,11 +534,16 @@ class AuthManager {
    */
   async waitForAuthReady(timeoutMs = 5000) {
     const startTime = Date.now();
+    console.log('🔥 waitForAuthReady started, currentUser:', this.currentUser);
     
     while (!this.currentUser && (Date.now() - startTime) < timeoutMs) {
       await new Promise(resolve => setTimeout(resolve, 100));
+      if ((Date.now() - startTime) % 1000 < 100) { // Log every second
+        console.log('🔥 waitForAuthReady waiting... currentUser:', this.currentUser);
+      }
     }
     
+    console.log('🔥 waitForAuthReady finished, currentUser:', this.currentUser);
     return this.currentUser;
   }
 
