@@ -1,6 +1,19 @@
 import { getBearer, verifyFirebaseIdToken } from '../_lib/firebase-auth.js';
 
+console.log('✅ [MODULE INIT] stripe-checkout.js loaded successfully');
+console.log('✅ [MODULE INIT] Imported functions:', { 
+  hasGetBearer: typeof getBearer === 'function',
+  hasVerifyToken: typeof verifyFirebaseIdToken === 'function'
+});
+
 export async function onRequest(context) {
+  console.log('🚀 [REQUEST START] stripe-checkout onRequest called');
+  console.log('🚀 [REQUEST START] Context:', {
+    hasRequest: !!context.request,
+    hasEnv: !!context.env,
+    method: context.request?.method,
+    url: context.request?.url
+  });
   const { request, env } = context;
   const origin = request.headers.get('Origin') || '';
 

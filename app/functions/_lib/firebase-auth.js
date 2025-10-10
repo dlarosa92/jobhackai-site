@@ -3,9 +3,25 @@
 
 import { createRemoteJWKSet, jwtVerify } from 'jose';
 
-const JWKS = createRemoteJWKSet(
-  new URL('https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com')
-);
+console.log('✅ [FIREBASE-AUTH] Module loading...');
+console.log('✅ [FIREBASE-AUTH] jose imports:', {
+  hasCreateRemoteJWKSet: typeof createRemoteJWKSet === 'function',
+  hasJwtVerify: typeof jwtVerify === 'function'
+});
+
+let JWKS;
+try {
+  console.log('✅ [FIREBASE-AUTH] Creating JWKS...');
+  JWKS = createRemoteJWKSet(
+    new URL('https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com')
+  );
+  console.log('✅ [FIREBASE-AUTH] JWKS created successfully');
+} catch (jwksError) {
+  console.error('❌ [FIREBASE-AUTH] JWKS creation failed:', jwksError);
+  throw jwksError;
+}
+
+console.log('✅ [FIREBASE-AUTH] Module loaded successfully');
 
 export function getBearer(req) {
   const h = req.headers.get('authorization') || req.headers.get('Authorization') || '';
