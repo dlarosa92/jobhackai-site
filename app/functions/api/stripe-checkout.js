@@ -36,7 +36,13 @@ export async function onRequest(context) {
         essential: !!env.STRIPE_PRICE_ESSENTIAL_MONTHLY,
         pro: !!env.STRIPE_PRICE_PRO_MONTHLY,
         premium: !!env.STRIPE_PRICE_PREMIUM_MONTHLY
-      }
+      },
+      actualValues: {
+        essential: env.STRIPE_PRICE_ESSENTIAL_MONTHLY,
+        pro: env.STRIPE_PRICE_PRO_MONTHLY,
+        premium: env.STRIPE_PRICE_PREMIUM_MONTHLY
+      },
+      allEnvKeys: Object.keys(env).filter(k => k.includes('STRIPE') || k.includes('FIREBASE'))
     });
 
     const { plan, startTrial } = await request.json();

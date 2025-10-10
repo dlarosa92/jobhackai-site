@@ -1,7 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // Removed output: 'export' to enable Pages Functions API routes
-  // ...(process.env.NODE_ENV === 'production' && { output: 'export' }),
+  // Re-enabled output: 'export' to fix Pages Functions dependency bundling
+  ...(process.env.NODE_ENV === 'production' && { output: 'export' }),
   trailingSlash: true,
   images: {
     unoptimized: true
