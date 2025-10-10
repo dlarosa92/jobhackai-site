@@ -12,35 +12,87 @@ export async function onRequest(context) {
   }
 
   try {
+    console.log('🔍 Stripe checkout request received:', {
+      method: request.method,
+      hasAuth: !!request.headers.get('authorization'),
+      origin
+    });
+
+    // Validate environment variables
+    console.log('🔍 Environment check:', {
+      hasStripeKey: !!env.STRIPE_SECRET_KEY,
+      hasFirebaseProject: !!env.FIREBASE_PROJECT_ID,
+      hasKv: !!env.JOBHACKAI_KV,
+      hasPrices: {
+        essential: !!env.STRIPE_PRICE_ESSENTIAL_MONTHLY,
+        pro: !!env.STRIPE_PRICE_PRO_MONTHLY,
+        premium: !!env.STRIPE_PRICE_PREMIUM_MONTHLY
+      }
+    });
+
     const { plan, startTrial } = await request.json();
+    console.log('🔍 Request data:', { plan, startTrial });
+
     const token = getBearer(request);
-    if (!token) return json({ ok: false, error: 'unauthorized' }, 401, origin, env);
+    if (!token) {
+      console.log('❌ No authorization token');
+      return json({ ok: false, error: 'unauthorized' }, 401, origin, env);
+    }
+
+    console.log('🔍 Verifying Firebase token...');
     const { uid, payload } = await verifyFirebaseIdToken(token, env.FIREBASE_PROJECT_ID);
+    console.log('✅ Token verified:', { uid, email: payload?.email });
+
     const email = (payload?.email) || '';
     if (!plan) {
+      console.log('❌ Missing plan');
       return json({ ok: false, error: 'Missing plan' }, 422, origin, env);
     }
 
+    console.log('🔍 Getting price ID for plan:', plan);
     const priceId = planToPrice(env, plan);
-    if (!priceId) return json({ ok: false, error: 'Invalid plan' }, 400, origin, env);
+    console.log('🔍 Price ID:', priceId);
+    
+    if (!priceId) {
+      console.log('❌ Invalid plan, no price ID found');
+      return json({ ok: false, error: 'Invalid plan' }, 400, origin, env);
+    }
 
     // Reuse or create customer
+    console.log('🔍 Checking for existing customer:', kvCusKey(uid));
     let customerId = await env.JOBHACKAI_KV?.get(kvCusKey(uid));
+    
     if (!customerId) {
-      const res = await stripe(env, '/customers', {
-        method: 'POST',
-        headers: stripeFormHeaders(env),
-        body: form({ email, 'metadata[firebaseUid]': uid })
-      });
-      const c = await res.json();
-      if (!res.ok) return json({ ok: false, error: c?.error?.message || 'stripe_customer_error' }, 502, origin, env);
-      customerId = c.id;
-      await env.JOBHACKAI_KV?.put(kvCusKey(uid), customerId);
-      await env.JOBHACKAI_KV?.put(kvEmailKey(uid), email);
+      console.log('🔍 Creating new Stripe customer for:', email);
+      try {
+        const res = await stripe(env, '/customers', {
+          method: 'POST',
+          headers: stripeFormHeaders(env),
+          body: form({ email, 'metadata[firebaseUid]': uid })
+        });
+        const c = await res.json();
+        console.log('🔍 Stripe customer response:', { ok: res.ok, status: res.status });
+        
+        if (!res.ok) {
+          console.log('❌ Stripe customer creation failed:', c?.error);
+          return json({ ok: false, error: c?.error?.message || 'stripe_customer_error' }, 502, origin, env);
+        }
+        
+        customerId = c.id;
+        console.log('✅ Customer created:', customerId);
+        await env.JOBHACKAI_KV?.put(kvCusKey(uid), customerId);
+        await env.JOBHACKAI_KV?.put(kvEmailKey(uid), email);
+      } catch (error) {
+        console.error('❌ Error creating Stripe customer:', error);
+        return json({ ok: false, error: 'Failed to create customer', details: error.message }, 500, origin, env);
+      }
+    } else {
+      console.log('✅ Using existing customer:', customerId);
     }
 
     // Create Checkout Session (subscription) with trial support
     const idem = `${uid}:${plan}:${startTrial ? 'trial' : 'paid'}`;
+    console.log('🔍 Creating checkout session with idempotency key:', idem);
     
     // Build session configuration
     const sessionConfig = {
@@ -58,22 +110,44 @@ export async function onRequest(context) {
     
     // Add trial period if needed (requires card)
     if (startTrial) {
+      console.log('🔍 Adding 3-day trial to session');
       sessionConfig['subscription_data[trial_period_days]'] = '3';
       sessionConfig['subscription_data[metadata][firebaseUid]'] = uid;
       sessionConfig['subscription_data[metadata][plan]'] = plan;
     }
     
-    const sessionRes = await stripe(env, '/checkout/sessions', {
-      method: 'POST',
-      headers: { ...stripeFormHeaders(env), 'Idempotency-Key': idem },
-      body: form(sessionConfig)
+    console.log('🔍 Session config:', {
+      mode: sessionConfig.mode,
+      customer: customerId,
+      priceId,
+      hasTrial: startTrial
     });
-    const s = await sessionRes.json();
-    if (!sessionRes.ok) return json({ ok: false, error: s?.error?.message || 'stripe_checkout_error' }, 502, origin, env);
+    
+    try {
+      console.log('🔍 Calling Stripe checkout/sessions API...');
+      const sessionRes = await stripe(env, '/checkout/sessions', {
+        method: 'POST',
+        headers: { ...stripeFormHeaders(env), 'Idempotency-Key': idem },
+        body: form(sessionConfig)
+      });
+      
+      console.log('🔍 Checkout response:', { ok: sessionRes.ok, status: sessionRes.status });
+      const s = await sessionRes.json();
+      
+      if (!sessionRes.ok) {
+        console.log('❌ Checkout session creation failed:', s?.error);
+        return json({ ok: false, error: s?.error?.message || 'stripe_checkout_error', details: s?.error }, 502, origin, env);
+      }
 
-    return json({ ok: true, url: s.url, sessionId: s.id }, 200, origin, env);
+      console.log('✅ Checkout session created:', { id: s.id, hasUrl: !!s.url });
+      return json({ ok: true, url: s.url, sessionId: s.id }, 200, origin, env);
+    } catch (error) {
+      console.error('❌ Error creating checkout session:', error);
+      return json({ ok: false, error: 'Failed to create checkout session', details: error.message }, 500, origin, env);
+    }
   } catch (e) {
-    return json({ ok: false, error: e?.message || 'server_error' }, 500, origin, env);
+    console.error('❌ Unexpected error in stripe-checkout:', e);
+    return json({ ok: false, error: e?.message || 'server_error', details: e?.stack }, 500, origin, env);
   }
 }
 
