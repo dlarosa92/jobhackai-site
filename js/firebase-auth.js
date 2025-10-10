@@ -243,11 +243,12 @@ class AuthManager {
       }
 
       // Create user record in local database
+      const selectedPlan = this.getSelectedPlan();
       const userData = {
         uid: user.uid,
         firstName: firstName || '',
         lastName: lastName || '',
-        plan: this.getSelectedPlan() || 'free'
+        plan: selectedPlan || 'free'
       };
       
       UserDatabase.createOrUpdateUser(email, userData);
@@ -265,8 +266,9 @@ class AuthManager {
         displayName: `${firstName} ${lastName}`.trim(),
         firstName: firstName || '',
         lastName: lastName || '',
-        plan: this.getSelectedPlan() || 'free',
-        signupSource: 'email_password'
+        plan: selectedPlan === 'trial' ? 'pending' : (selectedPlan || 'free'), // Don't set trial immediately, wait for webhook
+        signupSource: 'email_password',
+        pendingPlan: selectedPlan === 'trial' ? 'trial' : null // Track what they selected
       };
 
       try {
@@ -416,14 +418,16 @@ class AuthManager {
       }
 
       // Create or update Firestore profile
+      const selectedPlan = this.getSelectedPlan();
       const firestoreData = {
         email: user.email,
         displayName: user.displayName || '',
         firstName: nameParts[0] || '',
         lastName: nameParts.slice(1).join(' ') || '',
         photoURL: user.photoURL || null,
-        plan: this.getSelectedPlan() || 'free',
-        signupSource: 'google_oauth'
+        plan: selectedPlan === 'trial' ? 'pending' : (selectedPlan || 'free'), // Don't set trial immediately, wait for webhook
+        signupSource: 'google_oauth',
+        pendingPlan: selectedPlan === 'trial' ? 'trial' : null // Track what they selected
       };
       
       try {

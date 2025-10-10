@@ -65,13 +65,23 @@ export async function onRequest(context) {
 
     if (event.type === 'customer.subscription.created' || event.type === 'customer.subscription.updated') {
       const status = event.data.object.status;
+      const metadata = event.data.object.metadata || {};
+      const originalPlan = metadata.original_plan;
       const items = event.data.object.items?.data || [];
       const pId = items[0]?.price?.id || '';
       const plan = priceToPlan(env, pId);
       const customerId = event.data.object.customer || null;
       const uid = await fetchUidFromCustomer(customerId);
-      const paid = status === 'active' || status === 'trialing';
-      await setPlan(uid, paid && plan ? plan : 'free', event.created || Math.floor(Date.now()/1000));
+      
+      let effectivePlan = 'free';
+      if (status === 'trialing' && originalPlan === 'trial') {
+        effectivePlan = 'trial'; // User is in trial period
+      } else if (status === 'active') {
+        // Extract plan from price ID (auto-converts trial to essential)
+        effectivePlan = plan || 'essential';
+      }
+      
+      await setPlan(uid, effectivePlan, event.created || Math.floor(Date.now()/1000));
     }
 
     if (event.type === 'customer.subscription.deleted') {

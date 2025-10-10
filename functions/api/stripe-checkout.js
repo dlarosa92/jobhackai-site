@@ -40,20 +40,31 @@ export async function onRequest(context) {
 
     // Create Checkout Session (subscription)
     const idem = `${firebaseUid}:${plan}`;
+    
+    // Prepare session body with trial support
+    const sessionBody = {
+      mode: 'subscription',
+      customer: customerId,
+      'line_items[0][price]': priceId,
+      'line_items[0][quantity]': 1,
+      success_url: `${env.FRONTEND_URL || 'https://dev.jobhackai.io'}/dashboard.html?paid=1`,
+      cancel_url: `${env.FRONTEND_URL || 'https://dev.jobhackai.io'}/pricing-a.html`,
+      allow_promotion_codes: 'true',
+      payment_method_collection: 'if_required',
+      'metadata[firebaseUid]': uid,
+      'metadata[plan]': plan
+    };
+    
+    // Add trial period for trial plan
+    if (plan === 'trial') {
+      sessionBody['subscription_data[trial_period_days]'] = '3';
+      sessionBody['subscription_data[metadata][original_plan]'] = plan;
+    }
+    
     const sessionRes = await stripe(env, '/checkout/sessions', {
       method: 'POST',
       headers: { ...stripeFormHeaders(env), 'Idempotency-Key': idem },
-      body: form({
-        mode: 'subscription',
-        customer: customerId,
-        'line_items[0][price]': priceId,
-        'line_items[0][quantity]': 1,
-        success_url: `${env.FRONTEND_URL || 'https://dev.jobhackai.io'}/dashboard.html?paid=1`,
-        cancel_url: `${env.FRONTEND_URL || 'https://dev.jobhackai.io'}/pricing-a.html`,
-        allow_promotion_codes: 'true',
-        payment_method_collection: 'if_required',
-        'metadata[firebaseUid]': uid
-      })
+      body: form(sessionBody)
     });
     const s = await sessionRes.json();
     if (!sessionRes.ok) return json({ ok: false, error: s?.error?.message || 'stripe_checkout_error' }, 502, origin);
@@ -87,6 +98,7 @@ const kvCusKey = (uid) => `cusByUid:${uid}`;
 const kvEmailKey = (uid) => `emailByUid:${uid}`;
 function planToPrice(env, plan) {
   const map = {
+    trial: env.PRICE_ESSENTIAL_MONTHLY, // Use Essential price with trial period
     essential: env.PRICE_ESSENTIAL_MONTHLY,
     pro: env.PRICE_PRO_MONTHLY,
     premium: env.PRICE_PREMIUM_MONTHLY
