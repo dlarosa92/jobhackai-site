@@ -787,7 +787,7 @@
       
       const planNames = {
         'free': 'Free Plan',
-        'trial': 'Free Trial',
+        'trial': '3-Day Trial',
         'essential': 'Essential Plan',
         'pro': 'Pro Plan',
         'premium': 'Premium Plan',
@@ -796,7 +796,7 @@
       
       const planPrices = {
         'free': '$0/month',
-        'trial': '$0/month',
+        'trial': '$0 for 3 days, then $29/month',
         'essential': '$29.00/month',
         'pro': '$59.00/month',
         'premium': '$99.00/month',
@@ -805,6 +805,24 @@
       
       document.getElementById('currentPlanName').textContent = planNames[userPlan] || 'Free Plan';
       document.getElementById('currentPlanPrice').textContent = planPrices[userPlan] || '$0/month';
+      
+      // Show trial reminder if trial
+      if (userPlan === 'trial') {
+        const trialEndsAt = localStorage.getItem('trial-ends-at');
+        if (trialEndsAt) {
+          const daysLeft = Math.ceil((new Date(trialEndsAt) - new Date()) / (1000 * 60 * 60 * 24));
+          if (daysLeft > 0) {
+            const trialReminder = document.getElementById('trialReminder');
+            if (trialReminder) {
+              trialReminder.style.display = 'flex';
+              const trialDaysLeft = document.getElementById('trialDaysLeft');
+              if (trialDaysLeft) {
+                trialDaysLeft.textContent = daysLeft;
+              }
+            }
+          }
+        }
+      }
       
       const isActive = localStorage.getItem('subscription-active') === 'true' || userPlan === 'trial' || userPlan === 'free';
       document.getElementById('planStatus').textContent = isActive ? 'Active' : 'Inactive';
@@ -887,30 +905,16 @@
     }
     
     function loadSavedPaymentMethods() {
-      const savedCards = getUserCards();
-      console.log('getUserCards:', savedCards); // Extra logging
-      document.getElementById('savedCardsArrayLog').textContent = JSON.stringify(savedCards, null, 2);
+      // Use Stripe Portal for security - don't show cards directly in-app
       const savedCardsGrid = document.getElementById('savedCardsGrid');
       if (!savedCardsGrid) return;
-      if (savedCards.length === 0) {
-        savedCardsGrid.innerHTML = '<div style="color:#888; padding:1rem;">No cards found. Add a card to get started.</div>';
-        return;
-      }
-      savedCardsGrid.innerHTML = savedCards.map((card, index) => `
-        <div class="saved-card${card.isDefault ? ' default' : ''}">
-          <div class="card-info">
-            <div class="card-icon">${card.brand.toUpperCase().substring(0, 2)}</div>
-            <div class="card-details">
-              <h4>•••• •••• •••• ${card.last4}</h4>
-              <p>Expires ${card.expiry}${card.isDefault ? ' • Default' : ''}</p>
-            </div>
-          </div>
-          <div class="card-actions">
-            ${!card.isDefault ? `<button class=\"btn-small btn-outline-small\" onclick=\"setDefaultCard('${card.id}')\">Set Default</button>` : ''}
-            <button class="btn-small btn-danger-small" onclick="removeCard('${card.id}')">Remove</button>
-          </div>
+      
+      savedCardsGrid.innerHTML = `
+        <div style="text-align: center; padding: 2rem; background: #f8fafc; border-radius: 8px; border: 1px solid #e2e8f0;">
+          <p style="color: #6b7280; margin-bottom: 1rem;">Manage your payment methods securely through the Stripe Customer Portal.</p>
+          <button class="btn-primary" onclick="manageSubscription()" style="margin-top: 0.5rem;">Open Billing Portal</button>
         </div>
-      `).join('');
+      `;
     }
     
     function getDemoBillingHistory(plan) {
@@ -941,36 +945,19 @@
     }
 
     function loadBillingHistory() {
-      // INTEGRATION: GOOGLE SHEETS - Retrieve billing history for user from Sheets
-      // Get current plan from navigation system
-      let userPlan = 'trial';
-      
-      try {
-        if (window.JobHackAINavigation && typeof window.JobHackAINavigation.getEffectivePlan === 'function') {
-          userPlan = window.JobHackAINavigation.getEffectivePlan();
-        } else {
-          userPlan = getCurrentPlanStandalone();
-        }
-      } catch (error) {
-        console.error('Error getting plan for billing history:', error);
-        userPlan = getCurrentPlanStandalone();
-      }
-      const demoHistory = getDemoBillingHistory(userPlan);
+      // Use Stripe Portal for billing history - don't show invoices directly in-app
       const billingTable = document.getElementById('billingHistoryTable');
       if (!billingTable) return;
-      if (demoHistory.length === 0) {
-        billingTable.innerHTML = `<tr><td colspan="5" style="text-align: center; padding: 2rem; color: #64748B;">No billing history available</td></tr>`;
-        return;
-      }
-      billingTable.innerHTML = demoHistory.map(item => `
+      
+      billingTable.innerHTML = `
         <tr>
-          <td>${item.date.toLocaleDateString()}</td>
-          <td>${item.description}</td>
-          <td>${item.amount}</td>
-          <td><span class="status-${item.status.toLowerCase()}">${item.status}</span></td>
-          <td><a href="#" onclick="downloadInvoice('${item.invoice}')" style="color: #1976D2; text-decoration: underline;">Download</a></td>
+          <td colspan="5" style="text-align: center; color: #6b7280; padding: 2rem;">
+            View your complete billing history and download invoices in the Stripe Customer Portal.
+            <br><br>
+            <button class="btn-primary" onclick="manageSubscription()">Open Billing Portal</button>
+          </td>
         </tr>
-      `).join('');
+      `;
     }
 
     // INTEGRATION: STRIPE - Download invoices from Stripe if available

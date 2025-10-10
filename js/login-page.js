@@ -5,6 +5,11 @@
 
 import authManager from './firebase-auth.js';
 
+// Helper function to check if plan requires payment
+function planRequiresPayment(plan) {
+  return ['essential', 'pro', 'premium', 'trial'].includes(plan);
+}
+
 // Wait for DOM to be ready
 document.addEventListener('DOMContentLoaded', async function() {
   // Get DOM elements
@@ -67,6 +72,11 @@ document.addEventListener('DOMContentLoaded', async function() {
   // Listen for auth state changes in case user gets authenticated after page load
   const unsubscribe = authManager.onAuthStateChange((user) => {
     if (user) {
+      const plan = selectedPlan || localStorage.getItem('selected-plan');
+      if (plan && planRequiresPayment(plan)) {
+        console.log('✅ Auth changed but paid plan selected, skipping auto-redirect');
+        return;
+      }
       console.log('✅ Auth state changed: User authenticated, redirecting to dashboard');
       document.body.style.opacity = '0.7';
       document.body.style.transition = 'opacity 0.3s ease';
@@ -544,9 +554,6 @@ document.addEventListener('DOMContentLoaded', async function() {
     return hasUppercase && hasLowercase && hasNumber;
   }
   
-  function planRequiresPayment(plan) {
-    return ['essential', 'pro', 'premium', 'trial'].includes(plan);
-  }
 });
 
 // Hamburger menu toggle

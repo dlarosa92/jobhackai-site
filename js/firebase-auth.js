@@ -140,32 +140,40 @@ class AuthManager {
           console.warn('Could not update last login in Firestore:', err);
         });
         
-        // CRITICAL: Retrieve user's actual plan from Firestore
-        const profileResult = await UserProfileManager.getProfile(user.uid);
-        let actualPlan = 'free'; // default fallback
+        // CRITICAL: Prioritize fresh plan selections over existing plans
+        const pendingSelection = localStorage.getItem('selected-plan');
+        const selectionTs = parseInt(localStorage.getItem('selected-plan-ts') || '0', 10);
+        const isFreshSelection = Date.now() - selectionTs < 2 * 60 * 1000; // 2 minutes
         
-        // Prioritize KV plan over Firestore for UI display
-        let kvPlan = null;
-        try {
-          if (window.JobHackAINavigation && typeof window.JobHackAINavigation.fetchKVPlan === 'function') {
-            kvPlan = await window.JobHackAINavigation.fetchKVPlan();
-          }
-        } catch (e) {
-          console.warn('Could not fetch plan from KV:', e);
-        }
+        let actualPlan = 'free';
         
-        if (kvPlan && kvPlan !== 'free') {
-          actualPlan = kvPlan;
-          console.log('✅ Retrieved user plan from KV:', actualPlan);
-        } else if (profileResult.success && profileResult.profile) {
-          actualPlan = profileResult.profile.plan || 'free';
-          console.log('✅ Retrieved user plan from Firestore (KV fallback):', actualPlan);
+        if (pendingSelection && pendingSelection !== 'free' && isFreshSelection) {
+          actualPlan = pendingSelection === 'trial' ? 'pending' : pendingSelection;
+          console.log('✅ Using fresh plan selection in auth listener:', actualPlan);
         } else {
-          console.warn('⚠️ Could not retrieve profile from Firestore, using local data');
-          // Fallback to local database if Firestore fails
-          const userRecord = UserDatabase.getUser(user.email);
-          if (userRecord) {
-            actualPlan = userRecord.plan || 'free';
+          let kvPlan = null;
+          try {
+            if (window.JobHackAINavigation && typeof window.JobHackAINavigation.fetchKVPlan === 'function') {
+              kvPlan = await window.JobHackAINavigation.fetchKVPlan();
+            }
+          } catch (e) {
+            console.warn('Could not fetch plan from KV:', e);
+          }
+          
+          if (kvPlan && kvPlan !== 'free') {
+            actualPlan = kvPlan;
+            console.log('✅ Retrieved user plan from KV:', actualPlan);
+          } else {
+            const profileResult = await UserProfileManager.getProfile(user.uid);
+            if (profileResult.success && profileResult.profile) {
+              actualPlan = profileResult.profile.plan || 'free';
+              console.log('✅ Retrieved user plan from Firestore (KV fallback):', actualPlan);
+            } else {
+              const userRecord = UserDatabase.getUser(user.email);
+              if (userRecord) {
+                actualPlan = userRecord.plan || 'free';
+              }
+            }
           }
         }
         
@@ -363,30 +371,32 @@ class AuthManager {
       // Extract name from display name
       const nameParts = user.displayName ? user.displayName.split(' ') : ['', ''];
       
-      // CRITICAL: Retrieve user's actual plan from KV first, then Firestore
-      let actualPlan = 'free'; // default fallback
-      
-      // Prioritize KV plan over Firestore for UI display
-      let kvPlan = null;
-      try {
-        if (window.JobHackAINavigation && typeof window.JobHackAINavigation.fetchKVPlan === 'function') {
-          kvPlan = await window.JobHackAINavigation.fetchKVPlan();
-        }
-      } catch (e) {
-        console.warn('Could not fetch plan from KV during Google sign-in:', e);
-      }
-      
-      if (kvPlan && kvPlan !== 'free') {
-        actualPlan = kvPlan;
-        console.log('✅ Retrieved user plan from KV during Google sign-in:', actualPlan);
+      // CRITICAL: Prioritize newly selected plan over existing plans
+      const selectedPlan = this.getSelectedPlan();
+      let actualPlan = 'free';
+
+      if (selectedPlan && selectedPlan !== 'free') {
+        actualPlan = selectedPlan === 'trial' ? 'pending' : selectedPlan;
+        console.log('✅ Using newly selected plan for Google sign-in:', actualPlan);
       } else {
-        const profileResult = await UserProfileManager.getProfile(user.uid);
-        if (profileResult.success && profileResult.profile) {
-          actualPlan = profileResult.profile.plan || 'free';
-          console.log('✅ Retrieved user plan from Firestore during Google sign-in (KV fallback):', actualPlan);
+        let kvPlan = null;
+        try {
+          if (window.JobHackAINavigation && typeof window.JobHackAINavigation.fetchKVPlan === 'function') {
+            kvPlan = await window.JobHackAINavigation.fetchKVPlan();
+          }
+        } catch (e) {
+          console.warn('Could not fetch plan from KV during Google sign-in:', e);
+        }
+        
+        if (kvPlan && kvPlan !== 'free') {
+          actualPlan = kvPlan;
+          console.log('✅ Retrieved user plan from KV during Google sign-in:', actualPlan);
         } else {
-          console.warn('⚠️ Could not retrieve profile from Firestore during Google sign-in, using selected plan');
-          actualPlan = this.getSelectedPlan() || 'free';
+          const profileResult = await UserProfileManager.getProfile(user.uid);
+          if (profileResult.success && profileResult.profile) {
+            actualPlan = profileResult.profile.plan || 'free';
+            console.log('✅ Retrieved user plan from Firestore during Google sign-in (KV fallback):', actualPlan);
+          }
         }
       }
       
@@ -418,7 +428,6 @@ class AuthManager {
       }
 
       // Create or update Firestore profile
-      const selectedPlan = this.getSelectedPlan();
       const firestoreData = {
         email: user.email,
         displayName: user.displayName || '',

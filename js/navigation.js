@@ -647,7 +647,14 @@ function getEffectivePlan() {
     return devOverride;
   }
   // Otherwise use their actual plan
-  const effectivePlan = authState.userPlan || 'free';
+  let effectivePlan = authState.userPlan || 'free';
+  
+  // Map 'pending' to 'free' for feature access
+  if (effectivePlan === 'pending') {
+    effectivePlan = 'free';
+    navLog('info', 'getEffectivePlan: Mapping pending to free for feature access');
+  }
+  
   navLog('info', 'getEffectivePlan: Using user plan', effectivePlan);
   return effectivePlan;
 }
@@ -1602,8 +1609,16 @@ async function fetchKVPlan() {
     if (!idToken) return null;
     const r = await fetch('/api/plan/me', { headers: { Authorization: `Bearer ${idToken}` } });
     if (!r.ok) return null;
-    const { plan } = await r.json();
-    return plan || 'free';
+    const data = await r.json();
+    
+    // Store trial end date if available
+    if (data.trialEndsAt) {
+      localStorage.setItem('trial-ends-at', data.trialEndsAt);
+    } else {
+      localStorage.removeItem('trial-ends-at');
+    }
+    
+    return data.plan || 'free';
   } catch (_) { return null; }
 }
 

@@ -362,6 +362,107 @@
       });
     }
   </script>
+  
+  <!-- Account Settings Functionality -->
+  <script>
+    document.addEventListener('DOMContentLoaded', async () => {
+      const user = window.FirebaseAuthManager?.getCurrentUser?.();
+      if (!user) {
+        window.location.href = 'login.html';
+        return;
+      }
+      
+      // Load real user data
+      try {
+        const profileResult = await UserProfileManager.getProfile(user.uid);
+        const profile = profileResult.profile || {};
+        
+        const userName = profile.displayName || 
+          `${profile.firstName || ''} ${profile.lastName || ''}`.trim() || 
+          'User';
+        const userEmail = user.email || '';
+        
+        // Update the profile info display
+        const nameElement = document.querySelector('.profile-info-row .settings-readonly:nth-of-type(1)');
+        const emailElement = document.querySelector('.profile-info-row .settings-readonly:nth-of-type(2)');
+        
+        if (nameElement) nameElement.textContent = userName;
+        if (emailElement) emailElement.textContent = userEmail;
+      } catch (error) {
+        console.error('Failed to load user profile:', error);
+      }
+      
+      // Add password reset functionality
+      const resetPasswordBtn = document.querySelector('.btn-outline[type="button"]');
+      if (resetPasswordBtn) {
+        resetPasswordBtn.addEventListener('click', async () => {
+          const providerData = user.providerData || [];
+          const hasPassword = providerData.some(p => p.providerId === 'password');
+          
+          if (!hasPassword) {
+            alert('You signed in with Google. To change your Google password, visit https://myaccount.google.com/');
+            return;
+          }
+          
+          try {
+            await firebase.auth().sendPasswordResetEmail(user.email);
+            alert('Password reset email sent! Check your inbox.');
+          } catch (error) {
+            alert('Failed to send reset email: ' + error.message);
+          }
+        });
+      }
+      
+      // Add delete account functionality
+      const dangerZone = document.createElement('div');
+      dangerZone.className = 'settings-block';
+      dangerZone.style.cssText = 'margin-top: 3rem; border-top: 2px solid #fee; padding-top: 2rem;';
+      dangerZone.innerHTML = `
+        <div class="settings-label" style="color: #dc2626; margin-bottom: 0.5rem;">Danger Zone</div>
+        <p style="color: #6b7280; margin-bottom: 1rem;">Once you delete your account, there is no going back. Please be certain.</p>
+        <button class="btn-outline-grey" onclick="deleteAccount()" style="background: #fee; border-color: #dc2626; color: #dc2626;">Delete Account</button>
+      `;
+      
+      // Add to the end of the settings card
+      const settingsCard = document.querySelector('.account-settings-card');
+      if (settingsCard) {
+        settingsCard.appendChild(dangerZone);
+      }
+    });
+    
+    async function deleteAccount() {
+      const confirmed = confirm(
+        'Are you sure you want to delete your account? This will:\\n\\n' +
+        '• Cancel your subscription\\n' +
+        '• Delete all your data\\n' +
+        '• Remove your saved resumes\\n\\n' +
+        'This action cannot be undone!'
+      );
+      
+      if (!confirmed) return;
+      
+      try {
+        const user = window.FirebaseAuthManager?.getCurrentUser?.();
+        const idToken = await user.getIdToken();
+        
+        // Cancel subscription
+        await fetch('/api/cancel-subscription', {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${idToken}` }
+        });
+        
+        // Delete account
+        await user.delete();
+        localStorage.clear();
+        
+        alert('Your account has been deleted.');
+        window.location.href = 'index.html';
+      } catch (error) {
+        alert('Failed to delete account: ' + error.message);
+      }
+    }
+  </script>
+  
   <!-- Billing Integration Tests -->
   <script src="js/billing-integration-test.js"></script>
 </body>

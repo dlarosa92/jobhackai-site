@@ -82,6 +82,11 @@ export async function onRequest(context) {
       }
       
       await setPlan(uid, effectivePlan, event.created || Math.floor(Date.now()/1000));
+
+      // Store trial end date if this is a trial subscription
+      if (effectivePlan === 'trial' && event.data.object.trial_end) {
+        await env.JOBHACKAI_KV?.put(`trialEndByUid:${uid}`, String(event.data.object.trial_end));
+      }
     }
 
     if (event.type === 'customer.subscription.deleted') {
