@@ -239,14 +239,20 @@
             // Authenticated path → server checkout (using SECURE endpoints)
             (async () => {
               try {
+                console.log('🔥 Starting checkout for plan:', plan);
+                
                 // Wait for Firebase to be ready
                 const user = await window.FirebaseAuthManager?.waitForAuthReady?.() || window.FirebaseAuthManager?.currentUser;
+                console.log('🔥 User after waitForAuthReady:', user ? `User: ${user.email}` : 'null');
+                
                 if (!user) {
                   throw new Error('Not authenticated');
                 }
                 
                 // Force refresh token to ensure it's valid
                 const idToken = await user.getIdToken(true);
+                console.log('🔥 ID Token obtained:', idToken ? `${idToken.substring(0, 20)}...` : 'null');
+                
                 if (!idToken) {
                   throw new Error('Could not get ID token');
                 }
@@ -263,8 +269,12 @@
                   })
                 });
                 
+                console.log('🔥 Stripe checkout response status:', res.status);
                 const data = await res.json();
+                console.log('🔥 Stripe checkout response data:', data);
+                
                 if (data && data.ok && data.url) { 
+                  console.log('🔥 Redirecting to Stripe:', data.url);
                   window.location.href = data.url; 
                   return; 
                 }

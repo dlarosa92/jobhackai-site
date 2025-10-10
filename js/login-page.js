@@ -23,17 +23,35 @@ document.addEventListener('DOMContentLoaded', async function() {
   const loginError = document.getElementById('loginError');
   const signupError = document.getElementById('signupError');
   
-  // Check if user is already authenticated (wait for auth to be ready)
-  try {
-    const user = await authManager.waitForAuthReady(3000); // Wait up to 3 seconds
-    if (user) {
-      console.log('✅ User already authenticated, redirecting to dashboard');
+  // Check if user is already authenticated (multiple approaches)
+  const checkAuth = async () => {
+    // Method 1: Check localStorage first (fastest)
+    const isAuthInStorage = localStorage.getItem('user-authenticated') === 'true';
+    const authUser = localStorage.getItem('auth-user');
+    
+    if (isAuthInStorage && authUser) {
+      console.log('✅ User authenticated (from localStorage), redirecting to dashboard');
       window.location.href = 'dashboard.html';
-      return;
+      return true;
     }
-  } catch (error) {
-    console.log('Auth check timeout, proceeding with login form');
-  }
+    
+    // Method 2: Wait for Firebase auth to be ready
+    try {
+      const user = await authManager.waitForAuthReady(2000); // Wait up to 2 seconds
+      if (user) {
+        console.log('✅ User authenticated (from Firebase), redirecting to dashboard');
+        window.location.href = 'dashboard.html';
+        return true;
+      }
+    } catch (error) {
+      console.log('Firebase auth check timeout, proceeding with login form');
+    }
+    
+    return false;
+  };
+  
+  const isAuthenticated = await checkAuth();
+  if (isAuthenticated) return;
   
   // Check for selected plan with enhanced validation
   const urlParams = new URLSearchParams(window.location.search);
