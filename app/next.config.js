@@ -1,7 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // Only use static export for production builds
-  ...(process.env.NODE_ENV === 'production' && { output: 'export' }),
+  // Removed output: 'export' to enable Pages Functions API routes
+  // ...(process.env.NODE_ENV === 'production' && { output: 'export' }),
   trailingSlash: true,
   images: {
     unoptimized: true
