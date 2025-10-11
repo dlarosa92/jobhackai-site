@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import Head from 'next/head';
+import { onAuthStateChanged, signOut } from 'firebase/auth';
+import { auth } from '../lib/firebase';
 
 export default function Dashboard() {
   const [user, setUser] = useState({
@@ -148,6 +150,44 @@ export default function Dashboard() {
   };
 
   useEffect(() => {
+    // Sync auth + plan from Firebase + KV
+    if (auth) {
+      const unsubscribe = onAuthStateChanged(auth, async (u) => {
+        if (!u) {
+          try { localStorage.setItem('user-authenticated', 'false'); } catch (_) {}
+          if (typeof window !== 'undefined') window.location.href = '/login';
+          return;
+        }
+        try { localStorage.setItem('user-authenticated', 'true'); localStorage.setItem('user-email', u.email || ''); } catch (_) {}
+
+        // Default plan
+        let plan = 'free';
+        let trialEndsAt = '';
+        try {
+          const token = await u.getIdToken();
+          const r = await fetch('/api/plan/me', { headers: { Authorization: `Bearer ${token}` } });
+          if (r.ok) {
+            const data = await r.json();
+            plan = data?.plan || 'free';
+            trialEndsAt = data?.trialEndsAt || '';
+            try {
+              localStorage.setItem('user-plan', plan);
+              if (trialEndsAt) localStorage.setItem('trial-ends-at', trialEndsAt);
+            } catch (_) {}
+          }
+        } catch (_) {}
+
+        setUser(prev => ({
+          ...prev,
+          name: u.displayName || prev.name,
+          email: u.email || prev.email,
+          plan: plan as any,
+          trialEndsAt: trialEndsAt || prev.trialEndsAt
+        }));
+      });
+      return () => unsubscribe();
+    }
+
     // Mobile menu toggle functionality
     const mobileToggle = document.querySelector('.mobile-toggle');
     const mobileNav = document.getElementById('mobileNav');

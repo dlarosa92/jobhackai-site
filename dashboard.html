@@ -551,14 +551,8 @@
     // --- HELPER FUNCTIONS ---
     async function getFirebaseIdToken() {
       try {
-        if (window.firebase && window.firebase.auth) {
-          const auth = window.firebase.auth.getAuth();
-          const user = auth.currentUser;
-          if (user) {
-            return await user.getIdToken();
-          }
-        }
-        return null;
+        const u = window.FirebaseAuthManager?.getCurrentUser?.();
+        return u ? await u.getIdToken() : null;
       } catch (error) {
         console.warn('Could not get Firebase token:', error);
         return null;
@@ -786,9 +780,19 @@
       });
       
       // Create user object from authentication data
+      let authUserName = 'User';
+      let authUserEmail = 'user@example.com';
+      try {
+        const u = window.FirebaseAuthManager?.getCurrentUser?.();
+        if (u) {
+          authUserEmail = u.email || authUserEmail;
+          const dn = u.displayName || '';
+          if (dn) authUserName = dn;
+        }
+      } catch (_) {}
       const user = {
-        name: "User", // This would come from the auth system
-        email: "user@example.com", // This would come from the auth system
+        name: authUserName,
+        email: authUserEmail,
         plan: currentPlan,
         trialEndsAt: localStorage.getItem('trial-ends-at') || new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString(),
         hasUsedFreeTrial: true,
