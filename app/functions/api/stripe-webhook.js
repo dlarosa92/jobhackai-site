@@ -70,7 +70,6 @@ export async function onRequest(context) {
       const status = subscription.status;
       const items = subscription.items?.data || [];
       const pId = items[0]?.price?.id || '';
-      const plan = priceToPlan(env, pId);
       
       // Get uid from subscription metadata first (more reliable), then fallback to customer
       let uid = subscription.metadata?.firebaseUid;
@@ -79,8 +78,43 @@ export async function onRequest(context) {
         uid = await fetchUidFromCustomer(customerId);
       }
       
-      const paid = status === 'active' || status === 'trialing';
-      await setPlan(uid, paid && plan ? plan : 'free', event.created || Math.floor(Date.now()/1000));
+      let effectivePlan = 'free';
+      
+      if (status === 'trialing') {
+        // Check if this was originally a trial subscription
+        const originalPlan = subscription.metadata?.plan;
+        if (originalPlan === 'trial') {
+          effectivePlan = 'trial';
+          console.log('✅ Setting plan to trial for user:', uid);
+          
+          // Store trial end date if available
+          if (subscription.trial_end) {
+            await env.JOBHACKAI_KV?.put(`trialEndByUid:${uid}`, String(subscription.trial_end));
+            console.log('✅ Stored trial end date:', new Date(subscription.trial_end * 1000).toISOString());
+          }
+        } else {
+          // Regular subscription in trial period
+          effectivePlan = priceToPlan(env, pId) || 'essential';
+        }
+      } else if (status === 'active') {
+        // Active subscription - convert from trial to paid plan
+        const originalPlan = subscription.metadata?.plan;
+        if (originalPlan === 'trial') {
+          // Trial ended, convert to essential
+          effectivePlan = 'essential';
+          console.log('✅ Trial ended, converting to essential for user:', uid);
+          // Remove trial end date since trial is over
+          await env.JOBHACKAI_KV?.delete(`trialEndByUid:${uid}`);
+        } else {
+          effectivePlan = priceToPlan(env, pId) || 'essential';
+        }
+      } else if (status === 'past_due' || status === 'unpaid') {
+        // Subscription issues, but still has access
+        effectivePlan = priceToPlan(env, pId) || 'essential';
+      }
+      
+      await setPlan(uid, effectivePlan, event.created || Math.floor(Date.now()/1000));
+      console.log('✅ Webhook set plan:', { uid, plan: effectivePlan, status });
     }
 
     if (event.type === 'customer.subscription.deleted') {

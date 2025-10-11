@@ -548,10 +548,27 @@
       } catch(_) {}
     })();
 
+    // --- HELPER FUNCTIONS ---
+    async function getFirebaseIdToken() {
+      try {
+        if (window.firebase && window.firebase.auth) {
+          const auth = window.firebase.auth.getAuth();
+          const user = auth.currentUser;
+          if (user) {
+            return await user.getIdToken();
+          }
+        }
+        return null;
+      } catch (error) {
+        console.warn('Could not get Firebase token:', error);
+        return null;
+      }
+    }
+
     // --- ENHANCED AUTHENTICATION CHECK ---
     async function checkAuthentication() {
       // Version stamp for deployment verification
-      console.log('🔧 dashboard.html VERSION: redirect-fix-v2-AUTH-GUARD-FIXED - ' + new Date().toISOString());
+      console.log('🔧 dashboard.html VERSION: redirect-fix-v3-STRIPE-SYNC-ADDED - ' + new Date().toISOString());
 
       // Prevent redirect loop - check if we came from login
       const cameFromLogin = document.referrer && document.referrer.includes('login.html');
@@ -714,6 +731,51 @@
         // Fallback: try localStorage directly
         currentPlan = localStorage.getItem('user-plan') || 'free';
         console.log('⚠️ Navigation not ready, using localStorage plan:', currentPlan);
+      }
+
+      // If coming from Stripe with ?paid=1 but KV says 'free', force sync
+      const urlParams = new URLSearchParams(window.location.search);
+      if (urlParams.get('paid') === '1' && currentPlan === 'free') {
+        console.log('🔄 KV mismatch detected, forcing Stripe sync...');
+        try {
+          // Get Firebase ID token for authentication
+          const firebaseToken = await getFirebaseIdToken();
+          if (firebaseToken) {
+            const syncResponse = await fetch('/api/sync-stripe-plan', {
+              method: 'POST',
+              headers: { 
+                'Authorization': `Bearer ${firebaseToken}`,
+                'Content-Type': 'application/json'
+              }
+            });
+            
+            if (syncResponse.ok) {
+              const syncData = await syncResponse.json();
+              if (syncData.plan && syncData.plan !== 'free') {
+                console.log('✅ Sync successful, updating plan:', syncData.plan);
+                currentPlan = syncData.plan;
+                localStorage.setItem('user-plan', currentPlan);
+                if (syncData.trialEndsAt) {
+                  localStorage.setItem('trial-ends-at', syncData.trialEndsAt);
+                  console.log('✅ Updated trial end date:', syncData.trialEndsAt);
+                }
+                
+                // Force navigation update with new plan
+                if (window.JobHackAINavigation?.setAuthState) {
+                  window.JobHackAINavigation.setAuthState(true, currentPlan);
+                }
+              } else {
+                console.log('⚠️ Sync returned free plan, keeping current');
+              }
+            } else {
+              console.warn('⚠️ Sync failed:', syncResponse.status);
+            }
+          } else {
+            console.warn('⚠️ Could not get Firebase token for sync');
+          }
+        } catch (syncError) {
+          console.warn('⚠️ Sync error:', syncError);
+        }
       }
 
       console.log('📊 Dashboard Debug:', {

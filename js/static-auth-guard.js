@@ -1,5 +1,6 @@
 // Static Auth Guard for protected HTML pages
 // Hides content until auth is confirmed. Redirects unauthenticated users.
+// Version: auth-guard-v2-FIREBASE-FIX
 (function () {
   try {
     // Hide page until decision
@@ -20,7 +21,7 @@
         // Optional: trust firebase shard only if present (same profile)
         for (var i = 0; i < localStorage.length; i++) {
           var k = localStorage.key(i);
-          if (k && k.indexOf('firebase:authUser:') === 0) {
+          if (k && (k.indexOf('firebase:authUser:') === 0 || k.indexOf('firebase:host:') === 0)) {
             return true;
           }
         }
