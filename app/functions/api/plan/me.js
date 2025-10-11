@@ -15,7 +15,12 @@ export async function onRequest(context) {
     const { uid } = await verifyFirebaseIdToken(token, env.FIREBASE_PROJECT_ID);
 
     const plan = (await env.JOBHACKAI_KV?.get(`planByUid:${uid}`)) || 'free';
-    return new Response(JSON.stringify({ plan }), {
+    const trialEnd = await env.JOBHACKAI_KV?.get(`trialEndByUid:${uid}`);
+
+    return new Response(JSON.stringify({ 
+      plan, 
+      trialEndsAt: trialEnd ? new Date(parseInt(trialEnd) * 1000).toISOString() : null 
+    }), {
       headers: corsHeaders(origin, env)
     });
   } catch (e) {

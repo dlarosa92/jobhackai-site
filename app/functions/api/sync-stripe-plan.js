@@ -127,7 +127,7 @@ function priceToPlan(env, priceId) {
   const map = {
     [env.STRIPE_PRICE_ESSENTIAL_MONTHLY]: 'essential',
     [env.STRIPE_PRICE_PRO_MONTHLY]: 'pro',
-    [env.STRICE_PRICE_PREMIUM_MONTHLY]: 'premium'
+    [env.STRIPE_PRICE_PREMIUM_MONTHLY]: 'premium'
   };
   return map[priceId] || null;
 }

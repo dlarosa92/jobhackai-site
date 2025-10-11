@@ -2,6 +2,13 @@ export async function onRequest(context) {
   const { request, env } = context;
   const origin = request.headers.get('Origin') || '';
   
+  console.log('🔔 [WEBHOOK] Request received:', {
+    method: request.method,
+    hasSignature: !!request.headers.get('stripe-signature'),
+    origin,
+    timestamp: new Date().toISOString()
+  });
+  
   if (request.method !== 'POST') return new Response('Method not allowed', { status: 405, headers: corsHeaders(origin, env) });
 
   // Read raw body for signature verification
@@ -10,6 +17,13 @@ export async function onRequest(context) {
   if (!valid) return new Response('Invalid signature', { status: 401, headers: corsHeaders(origin, env) });
 
   const event = JSON.parse(raw);
+  
+  console.log('🔔 [WEBHOOK] Event parsed:', {
+    type: event.type,
+    id: event.id,
+    created: event.created,
+    hasData: !!event.data
+  });
 
   // Event de-duplication (24h) AFTER verification
   try {
@@ -83,6 +97,13 @@ export async function onRequest(context) {
       if (status === 'trialing') {
         // Check if this was originally a trial subscription
         const originalPlan = subscription.metadata?.plan;
+        console.log('🔔 [WEBHOOK] Processing trialing status:', {
+          uid,
+          originalPlan,
+          trialEnd: subscription.trial_end,
+          metadata: subscription.metadata
+        });
+        
         if (originalPlan === 'trial') {
           effectivePlan = 'trial';
           console.log('✅ Setting plan to trial for user:', uid);
@@ -95,10 +116,17 @@ export async function onRequest(context) {
         } else {
           // Regular subscription in trial period
           effectivePlan = priceToPlan(env, pId) || 'essential';
+          console.log('✅ Regular subscription in trial, plan:', effectivePlan);
         }
       } else if (status === 'active') {
         // Active subscription - convert from trial to paid plan
         const originalPlan = subscription.metadata?.plan;
+        console.log('🔔 [WEBHOOK] Processing active status:', {
+          uid,
+          originalPlan,
+          priceId: pId
+        });
+        
         if (originalPlan === 'trial') {
           // Trial ended, convert to essential
           effectivePlan = 'essential';
@@ -107,10 +135,12 @@ export async function onRequest(context) {
           await env.JOBHACKAI_KV?.delete(`trialEndByUid:${uid}`);
         } else {
           effectivePlan = priceToPlan(env, pId) || 'essential';
+          console.log('✅ Active subscription, plan:', effectivePlan);
         }
       } else if (status === 'past_due' || status === 'unpaid') {
         // Subscription issues, but still has access
         effectivePlan = priceToPlan(env, pId) || 'essential';
+        console.log('✅ Subscription issues but keeping access, plan:', effectivePlan);
       }
       
       await setPlan(uid, effectivePlan, event.created || Math.floor(Date.now()/1000));
