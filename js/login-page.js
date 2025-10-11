@@ -4,7 +4,7 @@
  */
 
 // Version stamp for deployment verification
-console.log('🔧 login-page.js VERSION: redirect-fix-v1 - ' + new Date().toISOString());
+console.log('🔧 login-page.js VERSION: redirect-fix-v3-CACHE-BUST-FIX - ' + new Date().toISOString());
 
 import authManager from './firebase-auth.js';
 
