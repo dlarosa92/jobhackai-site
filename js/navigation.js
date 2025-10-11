@@ -480,7 +480,6 @@ const NAVIGATION_CONFIG = {
       { text: 'Interview Questions', href: 'interview-questions.html', locked: true }
     ],
     userNav: {
-      cta: { text: 'Manage Billing', href: 'account-setting.html', isCTA: true },
       menuItems: [
         { text: 'Account', href: 'account-setting.html' },
         { text: 'Logout', href: '#', action: 'logout' }
@@ -497,7 +496,6 @@ const NAVIGATION_CONFIG = {
       { text: 'Interview Questions', href: 'interview-questions.html' }
     ],
     userNav: {
-      cta: { text: 'Upgrade', href: 'pricing-a.html', isCTA: true },
       menuItems: [
         { text: 'Account', href: 'account-setting.html' },
         { text: 'Logout', href: '#', action: 'logout' }
@@ -514,7 +512,6 @@ const NAVIGATION_CONFIG = {
       { text: 'Interview Questions', href: 'interview-questions.html' }
     ],
     userNav: {
-      cta: { text: 'Manage Billing', href: 'account-setting.html', isCTA: true },
       menuItems: [
         { text: 'Account', href: 'account-setting.html' },
         { text: 'Logout', href: '#', action: 'logout' }
@@ -546,7 +543,6 @@ const NAVIGATION_CONFIG = {
       }
     ],
     userNav: {
-      cta: { text: 'Manage Billing', href: 'account-setting.html', isCTA: true },
       menuItems: [
         { text: 'Account', href: 'account-setting.html' },
         { text: 'Logout', href: '#', action: 'logout' }

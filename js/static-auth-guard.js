@@ -41,7 +41,7 @@
 
     // Decide with a short grace period (longer after Stripe return)
     var isPaidReturn = location.search.indexOf('paid=1') !== -1;
-    var grace = isPaidReturn ? 8000 : 3000;
+    var grace = isPaidReturn ? 10000 : 5000;
     if (!isAuthed()) {
       setTimeout(function(){ if (!isAuthed()) location.replace('/login.html'); }, grace);
     }
