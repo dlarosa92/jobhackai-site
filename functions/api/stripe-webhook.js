@@ -50,6 +50,7 @@ export async function onRequest(context) {
 
   try {
     if (event.type === 'checkout.session.completed') {
+      console.log('🎯 WEBHOOK: checkout.session.completed received');
       const sessionId = event.data?.object?.id;
       // Expand line items to reliably get price id
       const r = await fetch(`https://api.stripe.com/v1/checkout/sessions/${sessionId}?expand[]=line_items.data.price`, {
@@ -60,10 +61,18 @@ export async function onRequest(context) {
       const plan = priceToPlan(env, priceId);
       const customerId = sess?.customer || event.data?.object?.customer || null;
       const uid = await fetchUidFromCustomer(customerId);
-      if (plan && uid) await setPlan(uid, plan, event.created || Math.floor(Date.now()/1000));
+      console.log(`📝 CHECKOUT DATA: priceId=${priceId}, plan=${plan}, customerId=${customerId}, uid=${uid}`);
+      if (plan && uid) {
+        console.log(`✍️ WRITING TO KV: planByUid:${uid} = ${plan}`);
+        await setPlan(uid, plan, event.created || Math.floor(Date.now()/1000));
+        console.log(`✅ KV WRITE SUCCESS: ${uid} → ${plan}`);
+      } else {
+        console.warn(`⚠️ SKIPPED KV WRITE: plan=${plan}, uid=${uid}`);
+      }
     }
 
     if (event.type === 'customer.subscription.created' || event.type === 'customer.subscription.updated') {
+      console.log(`🎯 WEBHOOK: ${event.type} received`);
       const status = event.data.object.status;
       const metadata = event.data.object.metadata || {};
       const originalPlan = metadata.original_plan;
@@ -81,20 +90,29 @@ export async function onRequest(context) {
         effectivePlan = plan || 'essential';
       }
       
+      console.log(`📝 SUBSCRIPTION DATA: status=${status}, priceId=${pId}, basePlan=${plan}, effectivePlan=${effectivePlan}, uid=${uid}`);
+      console.log(`✍️ WRITING TO KV: planByUid:${uid} = ${effectivePlan}`);
       await setPlan(uid, effectivePlan, event.created || Math.floor(Date.now()/1000));
+      console.log(`✅ KV WRITE SUCCESS: ${uid} → ${effectivePlan}`);
 
       // Store trial end date if this is a trial subscription
       if (effectivePlan === 'trial' && event.data.object.trial_end) {
         await env.JOBHACKAI_KV?.put(`trialEndByUid:${uid}`, String(event.data.object.trial_end));
+        console.log(`✅ TRIAL END DATE STORED: ${new Date(event.data.object.trial_end * 1000).toISOString()}`);
       }
     }
 
     if (event.type === 'customer.subscription.deleted') {
+      console.log('🎯 WEBHOOK: customer.subscription.deleted received');
       const customerId = event.data.object.customer || null;
       const uid = await fetchUidFromCustomer(customerId);
+      console.log(`📝 DELETION DATA: customerId=${customerId}, uid=${uid}`);
+      console.log(`✍️ WRITING TO KV: planByUid:${uid} = free`);
       await setPlan(uid, 'free', event.created || Math.floor(Date.now()/1000));
+      console.log(`✅ KV WRITE SUCCESS: ${uid} → free`);
     }
-  } catch (_) {
+  } catch (err) {
+    console.error('❌ WEBHOOK ERROR:', err.message || err);
     // swallow errors to avoid endless retries; state can heal on next login fetch
   }
 

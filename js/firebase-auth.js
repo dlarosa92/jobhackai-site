@@ -35,15 +35,26 @@ const auth = getAuth(app);
 async function fetchPlanDirectFromKV() {
   try {
     const user = auth.currentUser;
-    if (!user) return null;
+    if (!user) {
+      console.log('🔍 fetchPlanDirectFromKV: no currentUser');
+      return null;
+    }
     const idToken = await user.getIdToken();
-    if (!idToken) return null;
+    if (!idToken) {
+      console.log('🔍 fetchPlanDirectFromKV: no idToken');
+      return null;
+    }
+    console.log(`🔍 fetchPlanDirectFromKV: calling /api/plan/me for uid=${user.uid}`);
     const res = await fetch('/api/plan/me', { headers: { Authorization: `Bearer ${idToken}` } });
-    if (!res.ok) return null;
+    if (!res.ok) {
+      console.log(`🔍 fetchPlanDirectFromKV: API returned ${res.status}`);
+      return null;
+    }
     const data = await res.json();
+    console.log(`📊 fetchPlanDirectFromKV: API returned plan="${data?.plan}"`);
     return data?.plan || null;
   } catch (e) {
-    console.warn('Direct KV fetch failed:', e);
+    console.warn('❌ Direct KV fetch failed:', e);
     return null;
   }
 }
