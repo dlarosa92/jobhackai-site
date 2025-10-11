@@ -537,28 +537,21 @@
   <script src="js/free-account-manager.js"></script>
   <script src="js/universal-logout.js?v=20251007-2"></script>
   <script>
-    // --- STATIC PAGE AUTH GUARD ---
+    // --- CROSS-TAB LOGOUT SYNC ONLY ---
     (function(){
       try {
-        const ts = parseInt(localStorage.getItem('force-logged-out') || '0', 10);
-        const cooldown = ts && (Date.now() - ts) < 15000;
-        const ua = localStorage.getItem('user-authenticated') === 'true' && !!localStorage.getItem('user-email');
-        // Prefer Firebase events if available
-        if (window.firebase?.auth?.getAuth && window.firebase?.auth?.onAuthStateChanged) {
-          const auth = window.firebase.auth.getAuth();
-          window.firebase.auth.onAuthStateChanged(auth, function(user){ if (!user) location.replace('login.html'); });
-        } else if (!ua && !cooldown) {
-          location.replace('login.html');
-        }
-        // Cross-tab logout sync
-        try { const ch = new BroadcastChannel('auth'); ch.onmessage = (e) => { if (e?.data?.type === 'logout') location.replace('login.html'); }; } catch(_){}
+        // Cross-tab logout sync only - removed problematic auth guard
+        const ch = new BroadcastChannel('auth');
+        ch.onmessage = (e) => { 
+          if (e?.data?.type === 'logout') location.replace('login.html'); 
+        };
       } catch(_) {}
     })();
 
     // --- ENHANCED AUTHENTICATION CHECK ---
     async function checkAuthentication() {
       // Version stamp for deployment verification
-      console.log('🔧 dashboard.html VERSION: redirect-fix-v1 - ' + new Date().toISOString());
+      console.log('🔧 dashboard.html VERSION: redirect-fix-v2-AUTH-GUARD-FIXED - ' + new Date().toISOString());
 
       // Prevent redirect loop - check if we came from login
       const cameFromLogin = document.referrer && document.referrer.includes('login.html');
