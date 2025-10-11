@@ -31,6 +31,23 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/12.1.0/firebas
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 
+// --- DIRECT KV PLAN FETCH (navigation-independent) ---
+async function fetchPlanDirectFromKV() {
+  try {
+    const user = auth.currentUser;
+    if (!user) return null;
+    const idToken = await user.getIdToken();
+    if (!idToken) return null;
+    const res = await fetch('/api/plan/me', { headers: { Authorization: `Bearer ${idToken}` } });
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data?.plan || null;
+  } catch (e) {
+    console.warn('Direct KV fetch failed:', e);
+    return null;
+  }
+}
+
 // Set persistence to local (stays logged in across sessions)
 setPersistence(auth, browserLocalPersistence).catch((error) => {
   console.error('Error setting persistence:', error);
@@ -169,6 +186,11 @@ class AuthManager {
           try {
             if (window.JobHackAINavigation && typeof window.JobHackAINavigation.fetchKVPlan === 'function') {
               kvPlan = await window.JobHackAINavigation.fetchKVPlan();
+            }
+            // Fallback: fetch directly from KV if navigation not ready
+            if (!kvPlan) {
+              kvPlan = await fetchPlanDirectFromKV();
+              if (kvPlan) console.log('✅ Fetched plan directly from KV (navigation not ready):', kvPlan);
             }
           } catch (e) {
             console.warn('Could not fetch plan from KV:', e);

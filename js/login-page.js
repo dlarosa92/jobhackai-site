@@ -15,6 +15,8 @@ function planRequiresPayment(plan) {
 
 // Wait for DOM to be ready
 document.addEventListener('DOMContentLoaded', async function() {
+  // Prevent auto-redirect races when user is actively logging in
+  let loginInProgress = false;
   // Get DOM elements
   const loginForm = document.getElementById('loginForm');
   const signupForm = document.getElementById('signupForm');
@@ -33,6 +35,10 @@ document.addEventListener('DOMContentLoaded', async function() {
   
   // Check if user is already authenticated (multiple approaches)
   const checkAuth = async () => {
+    if (loginInProgress) {
+      console.log('⏸️ Login in progress, skipping auto-redirect');
+      return false;
+    }
     // Method 1: Check localStorage first (fastest)
     const isAuthInStorage = localStorage.getItem('user-authenticated') === 'true';
     const authUser = localStorage.getItem('auth-user');
@@ -166,7 +172,7 @@ document.addEventListener('DOMContentLoaded', async function() {
   // ===== GOOGLE SIGN-IN =====
   googleSignInBtn?.addEventListener('click', async function(e) {
     e.preventDefault();
-    
+    loginInProgress = true;
     // Show loading state
     const originalText = this.textContent;
     this.textContent = 'Signing in...';
@@ -229,7 +235,7 @@ document.addEventListener('DOMContentLoaded', async function() {
       showError(loginError, 'An unexpected error occurred. Please try again.');
       this.textContent = originalText;
       this.disabled = false;
-    }
+    } finally { loginInProgress = false; }
   });
   
   // ===== LinkedIn SIGN-IN (NOT YET IMPLEMENTED) =====
