@@ -2,7 +2,7 @@
 // Handles dynamic navigation based on authentication state and user plan
 
 // Version stamp for deployment verification
-console.log('🔧 navigation.js VERSION: redirect-fix-v1 - ' + new Date().toISOString());
+console.log('🔧 navigation.js VERSION: redirect-fix-v3-SYNC-AND-CLEANUP - ' + new Date().toISOString());
 
 // --- ROBUSTNESS GLOBALS ---
 // Ensure robustness globals are available for smoke tests and agent interface
@@ -1164,15 +1164,44 @@ function updateQuickPlanSwitcher() {
 }
 
 function updateDevPlanToggle() {
-  // This function was referenced but not implemented
-  // Since we're using the Quick Plan Switcher instead of the old dev toggle,
-  // we can either remove the calls or implement a no-op function
-  navLog('debug', 'updateDevPlanToggle called (no-op for Quick Plan Switcher)');
-  // No action needed - Quick Plan Switcher handles all plan updates
+  // No-op function - dev plan toggle removed
+  navLog('debug', 'updateDevPlanToggle called (no-op)');
 }
 
-// --- QUICK PLAN SWITCHER (REPLACES DEV PLAN TOGGLE) ---
+// --- QUICK PLAN SWITCHER REMOVED ---
+// Quick Plan Switcher has been removed per user request
+// All dev/testing plan switching should be done via browser dev tools or localStorage directly
+
 function createQuickPlanSwitcher() {
+  // Stub function - Quick Plan Switcher removed
+  navLog('warn', 'createQuickPlanSwitcher() called but function is disabled');
+  return null;
+}
+
+function applyQuickState() {
+  // Stub function - Quick Plan Switcher removed
+  navLog('warn', 'applyQuickState() called but function is disabled');
+}
+
+function loginAsQuickUser() {
+  // Stub function - Quick Plan Switcher removed
+  navLog('warn', 'loginAsQuickUser() called but function is disabled');
+}
+
+function resetQuickState() {
+  // Stub function - Quick Plan Switcher removed
+  navLog('warn', 'resetQuickState() called but function is disabled');
+}
+
+function updateQuickStateDisplay() {
+  // Stub function - Quick Plan Switcher removed (no-op)
+}
+
+// Old implementation removed - was 330+ lines of code
+// If needed for debugging, use: localStorage.setItem('dev-plan', 'trial')
+
+/*
+function createQuickPlanSwitcher_OLD() {
   navLog('info', 'createQuickPlanSwitcher() called');
   
   const switcher = document.createElement('div');
@@ -1500,6 +1529,8 @@ function updateQuickStateDisplay() {
     stateSelect.value = isAuth ? plan : 'logged-out';
   }
 }
+*/
+// End of commented-out Quick Plan Switcher code
 
 // --- FEATURE ACCESS CONTROL ---
 function checkFeatureAccess(featureKey, targetPlan = 'premium') {

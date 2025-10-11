@@ -734,7 +734,7 @@
       }
 
       // If coming from Stripe with ?paid=1 but KV says 'free', force sync
-      const urlParams = new URLSearchParams(window.location.search);
+      // Reuse urlParams from line 705
       if (urlParams.get('paid') === '1' && currentPlan === 'free') {
         console.log('🔄 KV mismatch detected, forcing Stripe sync...');
         try {
