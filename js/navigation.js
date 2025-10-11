@@ -1,6 +1,9 @@
 // JobHackAI Navigation System
 // Handles dynamic navigation based on authentication state and user plan
 
+// Version stamp for deployment verification
+console.log('🔧 navigation.js VERSION: redirect-fix-v1 - ' + new Date().toISOString());
+
 // --- ROBUSTNESS GLOBALS ---
 // Ensure robustness globals are available for smoke tests and agent interface
 window.siteHealth = window.siteHealth || {

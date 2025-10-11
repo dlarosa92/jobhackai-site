@@ -3,6 +3,9 @@
  * Integrates with firebase-auth.js for secure authentication
  */
 
+// Version stamp for deployment verification
+console.log('🔧 login-page.js VERSION: redirect-fix-v1 - ' + new Date().toISOString());
+
 import authManager from './firebase-auth.js';
 
 // Helper function to check if plan requires payment

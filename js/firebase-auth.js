@@ -4,6 +4,9 @@
  * Supports: Email/Password, Google Sign-In
  */
 
+// Version stamp for deployment verification
+console.log('🔧 firebase-auth.js VERSION: redirect-fix-v1 - ' + new Date().toISOString());
+
 import { firebaseConfig } from './firebase-config.js';
 
 import UserProfileManager from './firestore-profiles.js';

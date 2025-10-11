@@ -557,16 +557,76 @@
 
     // --- ENHANCED AUTHENTICATION CHECK ---
     function checkAuthentication() {
+      // Version stamp for deployment verification
+      console.log('🔧 dashboard.html VERSION: redirect-fix-v1 - ' + new Date().toISOString());
+
+      // Prevent redirect loop - check if we came from login
+      const cameFromLogin = document.referrer && document.referrer.includes('login.html');
+      const redirectAttempts = parseInt(sessionStorage.getItem('dashboard-redirect-attempts') || '0');
+
+      console.log('🔍 Dashboard auth check:', {
+        referrer: document.referrer,
+        cameFromLogin,
+        redirectAttempts,
+        localStorage: {
+          authenticated: localStorage.getItem('user-authenticated'),
+          email: localStorage.getItem('user-email')
+        }
+      });
+
+      // If we came from login, wait for Firebase to initialize
+      if (cameFromLogin) {
+        console.log('⏳ Came from login, waiting for Firebase auth state...');
+        
+        // Wait up to 3 seconds for Firebase to set auth state
+        let waitCount = 0;
+        const maxWait = 30; // 3 seconds (100ms intervals)
+        
+        while (waitCount < maxWait) {
+          const isAuth = localStorage.getItem('user-authenticated') === 'true';
+          const hasEmail = !!localStorage.getItem('user-email');
+          
+          if (isAuth && hasEmail) {
+            console.log('✅ Firebase auth state confirmed after', waitCount * 100, 'ms');
+            break;
+          }
+          
+          await new Promise(resolve => setTimeout(resolve, 100));
+          waitCount++;
+        }
+      }
+
       const isAuthenticated = localStorage.getItem('user-authenticated') === 'true' && !!localStorage.getItem('user-email');
       const userEmail = localStorage.getItem('user-email');
       const userPlan = localStorage.getItem('user-plan');
       const mainContent = document.querySelector('main');
       
       if (!isAuthenticated || !userEmail) {
-        // Hard redirect to login for any unauthenticated access
+        // Track redirect attempts to prevent infinite loops
+        sessionStorage.setItem('dashboard-redirect-attempts', String(redirectAttempts + 1));
+        
+        if (redirectAttempts >= 3) {
+          console.error('🚨 Too many redirect attempts, clearing state');
+          localStorage.clear();
+          sessionStorage.clear();
+          alert('Authentication error. Please clear your browser cache and try logging in again.');
+          window.location.href = 'login.html';
+          return false;
+        }
+        
+        if (cameFromLogin) {
+          console.error('⚠️ Redirect loop detected! Came from login but not authenticated after wait.');
+          alert('Authentication error. Please try logging in again.');
+          localStorage.clear();
+        }
+        
+        console.log('❌ Not authenticated, redirecting to login (attempt', redirectAttempts + 1, ')');
         window.location.href = 'login.html';
         return false;
       }
+
+      // Clear redirect attempts on successful auth
+      sessionStorage.removeItem('dashboard-redirect-attempts');
       
       if (!isAuthenticated || !userEmail) {
         // Clear any stale authentication data
@@ -629,7 +689,23 @@
       
       // Get user data from authentication system
       const authState = getAuthState();
-      const currentPlan = window.JobHackAINavigation ? window.JobHackAINavigation.getEffectivePlan() : 'free';
+      // Wait for navigation system to be ready
+      let currentPlan = 'free';
+      if (window.JobHackAINavigation && typeof window.JobHackAINavigation.getEffectivePlan === 'function') {
+        currentPlan = window.JobHackAINavigation.getEffectivePlan();
+        console.log('✅ Got plan from navigation:', currentPlan);
+      } else {
+        // Fallback: try localStorage directly
+        currentPlan = localStorage.getItem('user-plan') || 'free';
+        console.log('⚠️ Navigation not ready, using localStorage plan:', currentPlan);
+      }
+
+      console.log('📊 Dashboard Debug:', {
+        'user-plan': localStorage.getItem('user-plan'),
+        'trial-ends-at': localStorage.getItem('trial-ends-at'),
+        'user-authenticated': localStorage.getItem('user-authenticated'),
+        'currentPlan': currentPlan
+      });
       
       // Create user object from authentication data
       const user = {
