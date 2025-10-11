@@ -556,7 +556,7 @@
     })();
 
     // --- ENHANCED AUTHENTICATION CHECK ---
-    function checkAuthentication() {
+    async function checkAuthentication() {
       // Version stamp for deployment verification
       console.log('🔧 dashboard.html VERSION: redirect-fix-v1 - ' + new Date().toISOString());
 
@@ -681,14 +681,37 @@
     }
 
     // --- Initialize on load ---
-    document.addEventListener('DOMContentLoaded', function() {
+    document.addEventListener('DOMContentLoaded', async function() {
       // Check authentication first
-      if (!checkAuthentication()) {
+      const authOk = await checkAuthentication();
+      if (!authOk) {
         return; // Stop here if not authenticated
       }
       
       // Get user data from authentication system
       const authState = getAuthState();
+      
+      // Force KV plan fetch when landing with ?paid=1 or on dashboard load
+      const urlParams = new URLSearchParams(window.location.search);
+      if (urlParams.get('paid') === '1' || authState.userPlan === 'pending') {
+        console.log('🔄 Forcing KV plan refresh (paid=1 or pending plan)');
+        if (window.JobHackAINavigation?.fetchKVPlan) {
+          try {
+            const freshPlan = await window.JobHackAINavigation.fetchKVPlan();
+            if (freshPlan) {
+              console.log('✅ Fetched fresh plan from KV:', freshPlan);
+              localStorage.setItem('user-plan', freshPlan);
+              // Force navigation update
+              if (window.JobHackAINavigation?.setAuthState) {
+                window.JobHackAINavigation.setAuthState(true, freshPlan);
+              }
+            }
+          } catch (e) {
+            console.warn('⚠️ Could not fetch plan from KV:', e);
+          }
+        }
+      }
+      
       // Wait for navigation system to be ready
       let currentPlan = 'free';
       if (window.JobHackAINavigation && typeof window.JobHackAINavigation.getEffectivePlan === 'function') {
