@@ -193,10 +193,16 @@ class AuthManager {
           actualPlan = pendingSelection === 'trial' ? 'pending' : pendingSelection;
           console.log('✅ Using fresh plan selection in auth listener:', actualPlan);
         } else {
+          // FIX: Wait for auth to be ready before fetching plan to prevent race condition
           let kvPlan = null;
           try {
+            // Wait for Firebase auth to be fully ready (max 3 seconds)
+            console.log('🔄 Waiting for Firebase auth to be ready before plan fetching...');
+            await this.waitForAuthReady(3000);
+            
             if (window.JobHackAINavigation && typeof window.JobHackAINavigation.fetchKVPlan === 'function') {
               kvPlan = await window.JobHackAINavigation.fetchKVPlan();
+              if (kvPlan) console.log('✅ Fetched plan via navigation system:', kvPlan);
             }
             // Fallback: fetch directly from KV if navigation not ready
             if (!kvPlan) {
@@ -205,12 +211,27 @@ class AuthManager {
             }
           } catch (e) {
             console.warn('Could not fetch plan from KV:', e);
+            // Add retry mechanism for failed KV fetches
+            try {
+              console.log('🔄 Retrying plan fetch after 1 second...');
+              await new Promise(resolve => setTimeout(resolve, 1000));
+              if (window.JobHackAINavigation && typeof window.JobHackAINavigation.fetchKVPlan === 'function') {
+                kvPlan = await window.JobHackAINavigation.fetchKVPlan();
+              }
+              if (!kvPlan) {
+                kvPlan = await fetchPlanDirectFromKV();
+              }
+              if (kvPlan) console.log('✅ Retry successful, fetched plan:', kvPlan);
+            } catch (retryError) {
+              console.warn('Retry also failed:', retryError);
+            }
           }
           
           if (kvPlan && kvPlan !== 'free') {
             actualPlan = kvPlan;
             console.log('✅ Retrieved user plan from KV:', actualPlan);
           } else {
+            console.log('⚠️ KV fetch failed, falling back to Firestore/local storage');
             const profileResult = await UserProfileManager.getProfile(user.uid);
             if (profileResult.success && profileResult.profile) {
               actualPlan = profileResult.profile.plan || 'free';
@@ -219,6 +240,27 @@ class AuthManager {
               const userRecord = UserDatabase.getUser(user.email);
               if (userRecord) {
                 actualPlan = userRecord.plan || 'free';
+                console.log('✅ Retrieved user plan from local database (Firestore fallback):', actualPlan);
+              } else {
+                console.log('⚠️ All plan sources failed, defaulting to free');
+                // FIX: Add delayed retry for plan reconciliation
+                console.log('🔄 Scheduling delayed plan reconciliation in 5 seconds...');
+                setTimeout(async () => {
+                  try {
+                    console.log('🔄 Attempting delayed plan reconciliation...');
+                    const delayedKvPlan = await window.JobHackAINavigation?.fetchKVPlan?.();
+                    if (delayedKvPlan && delayedKvPlan !== 'free') {
+                      console.log('✅ Delayed reconciliation successful:', delayedKvPlan);
+                      localStorage.setItem('user-plan', delayedKvPlan);
+                      localStorage.setItem('dev-plan', delayedKvPlan);
+                      if (window.JobHackAINavigation) {
+                        window.JobHackAINavigation.updateNavigation();
+                      }
+                    }
+                  } catch (e) {
+                    console.warn('Delayed reconciliation failed:', e);
+                  }
+                }, 5000);
               }
             }
           }
@@ -349,20 +391,45 @@ class AuthManager {
       // CRITICAL: Retrieve user's actual plan from KV first, then Firestore
       let actualPlan = 'free'; // default fallback
       
-      // Prioritize KV plan over Firestore for UI display
+      // FIX: Wait for auth to be ready before fetching plan to prevent race condition
       let kvPlan = null;
       try {
+        // Wait for Firebase auth to be fully ready (max 3 seconds)
+        console.log('🔄 Waiting for Firebase auth to be ready during sign-in...');
+        await this.waitForAuthReady(3000);
+        
         if (window.JobHackAINavigation && typeof window.JobHackAINavigation.fetchKVPlan === 'function') {
           kvPlan = await window.JobHackAINavigation.fetchKVPlan();
+          if (kvPlan) console.log('✅ Fetched plan via navigation system during sign-in:', kvPlan);
+        }
+        // Fallback: fetch directly from KV if navigation not ready
+        if (!kvPlan) {
+          kvPlan = await fetchPlanDirectFromKV();
+          if (kvPlan) console.log('✅ Fetched plan directly from KV during sign-in:', kvPlan);
         }
       } catch (e) {
         console.warn('Could not fetch plan from KV during sign-in:', e);
+        // Add retry mechanism for failed KV fetches
+        try {
+          console.log('🔄 Retrying plan fetch during sign-in after 1 second...');
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          if (window.JobHackAINavigation && typeof window.JobHackAINavigation.fetchKVPlan === 'function') {
+            kvPlan = await window.JobHackAINavigation.fetchKVPlan();
+          }
+          if (!kvPlan) {
+            kvPlan = await fetchPlanDirectFromKV();
+          }
+          if (kvPlan) console.log('✅ Retry successful during sign-in, fetched plan:', kvPlan);
+        } catch (retryError) {
+          console.warn('Retry also failed during sign-in:', retryError);
+        }
       }
       
       if (kvPlan && kvPlan !== 'free') {
         actualPlan = kvPlan;
         console.log('✅ Retrieved user plan from KV during sign-in:', actualPlan);
       } else {
+        console.log('⚠️ KV fetch failed during sign-in, falling back to Firestore/local storage');
         const profileResult = await UserProfileManager.getProfile(user.uid);
         if (profileResult.success && profileResult.profile) {
           actualPlan = profileResult.profile.plan || 'free';
@@ -373,6 +440,9 @@ class AuthManager {
           const userRecord = UserDatabase.getUser(email);
           if (userRecord) {
             actualPlan = userRecord.plan || 'free';
+            console.log('✅ Retrieved user plan from local database during sign-in:', actualPlan);
+          } else {
+            console.log('⚠️ All plan sources failed during sign-in, defaulting to free');
           }
         }
       }
@@ -417,23 +487,51 @@ class AuthManager {
         actualPlan = selectedPlan === 'trial' ? 'pending' : selectedPlan;
         console.log('✅ Using newly selected plan for Google sign-in:', actualPlan);
       } else {
+        // FIX: Wait for auth to be ready before fetching plan to prevent race condition
         let kvPlan = null;
         try {
+          // Wait for Firebase auth to be fully ready (max 3 seconds)
+          console.log('🔄 Waiting for Firebase auth to be ready during Google sign-in...');
+          await this.waitForAuthReady(3000);
+          
           if (window.JobHackAINavigation && typeof window.JobHackAINavigation.fetchKVPlan === 'function') {
             kvPlan = await window.JobHackAINavigation.fetchKVPlan();
+            if (kvPlan) console.log('✅ Fetched plan via navigation system during Google sign-in:', kvPlan);
+          }
+          // Fallback: fetch directly from KV if navigation not ready
+          if (!kvPlan) {
+            kvPlan = await fetchPlanDirectFromKV();
+            if (kvPlan) console.log('✅ Fetched plan directly from KV during Google sign-in:', kvPlan);
           }
         } catch (e) {
           console.warn('Could not fetch plan from KV during Google sign-in:', e);
+          // Add retry mechanism for failed KV fetches
+          try {
+            console.log('🔄 Retrying plan fetch during Google sign-in after 1 second...');
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            if (window.JobHackAINavigation && typeof window.JobHackAINavigation.fetchKVPlan === 'function') {
+              kvPlan = await window.JobHackAINavigation.fetchKVPlan();
+            }
+            if (!kvPlan) {
+              kvPlan = await fetchPlanDirectFromKV();
+            }
+            if (kvPlan) console.log('✅ Retry successful during Google sign-in, fetched plan:', kvPlan);
+          } catch (retryError) {
+            console.warn('Retry also failed during Google sign-in:', retryError);
+          }
         }
         
         if (kvPlan && kvPlan !== 'free') {
           actualPlan = kvPlan;
           console.log('✅ Retrieved user plan from KV during Google sign-in:', actualPlan);
         } else {
+          console.log('⚠️ KV fetch failed during Google sign-in, falling back to Firestore');
           const profileResult = await UserProfileManager.getProfile(user.uid);
           if (profileResult.success && profileResult.profile) {
             actualPlan = profileResult.profile.plan || 'free';
             console.log('✅ Retrieved user plan from Firestore during Google sign-in (KV fallback):', actualPlan);
+          } else {
+            console.log('⚠️ All plan sources failed during Google sign-in, defaulting to free');
           }
         }
       }

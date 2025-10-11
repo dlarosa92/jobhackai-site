@@ -1273,11 +1273,28 @@ function initializeNavigation() {
 // --- KV Plan Reconciliation and Post-Checkout Activation ---
 async function fetchKVPlan() {
   try {
-    const idToken = await window.FirebaseAuthManager?.getCurrentUser?.()?.getIdToken?.();
-    if (!idToken) return null;
+    // FIX: Add better error handling and logging
+    const currentUser = window.FirebaseAuthManager?.getCurrentUser?.();
+    if (!currentUser) {
+      console.log('🔍 fetchKVPlan: No current user available');
+      return null;
+    }
+    
+    const idToken = await currentUser.getIdToken?.();
+    if (!idToken) {
+      console.log('🔍 fetchKVPlan: No ID token available');
+      return null;
+    }
+    
+    console.log('🔍 fetchKVPlan: Fetching plan from API...');
     const r = await fetch('/api/plan/me', { headers: { Authorization: `Bearer ${idToken}` } });
-    if (!r.ok) return null;
+    if (!r.ok) {
+      console.warn(`🔍 fetchKVPlan: API returned ${r.status} ${r.statusText}`);
+      return null;
+    }
+    
     const data = await r.json();
+    console.log('🔍 fetchKVPlan: API response:', data);
     
     // Store trial end date if available
     if (data.trialEndsAt) {
@@ -1286,20 +1303,51 @@ async function fetchKVPlan() {
       localStorage.removeItem('trial-ends-at');
     }
     
-    return data.plan || 'free';
-  } catch (_) { return null; }
+    const plan = data.plan || 'free';
+    console.log(`✅ fetchKVPlan: Successfully fetched plan: ${plan}`);
+    return plan;
+  } catch (error) {
+    console.warn('❌ fetchKVPlan: Error fetching plan:', error);
+    return null;
+  }
 }
 
 async function reconcilePlanFromKV() {
   const auth = getAuthState();
   if (!auth.isAuthenticated) return;
-  const kvPlan = await fetchKVPlan();
+  
+  // FIX: Add retry mechanism for plan reconciliation
+  let kvPlan = null;
+  let retryCount = 0;
+  const maxRetries = 3;
+  
+  while (!kvPlan && retryCount < maxRetries) {
+    try {
+      kvPlan = await fetchKVPlan();
+      if (kvPlan) {
+        console.log(`✅ Plan reconciliation successful on attempt ${retryCount + 1}:`, kvPlan);
+        break;
+      }
+    } catch (error) {
+      console.warn(`⚠️ Plan reconciliation attempt ${retryCount + 1} failed:`, error);
+    }
+    
+    retryCount++;
+    if (retryCount < maxRetries) {
+      console.log(`🔄 Retrying plan reconciliation in ${retryCount * 1000}ms...`);
+      await new Promise(resolve => setTimeout(resolve, retryCount * 1000));
+    }
+  }
+  
   const current = localStorage.getItem('user-plan');
   if (kvPlan && kvPlan !== current) {
+    console.log(`🔄 Updating plan from ${current} to ${kvPlan}`);
     localStorage.setItem('user-plan', kvPlan);
     localStorage.setItem('dev-plan', kvPlan);
     updateNavigation();
     try { new BroadcastChannel('auth').postMessage({ type: 'plan-update', plan: kvPlan }); } catch (_) {}
+  } else if (!kvPlan) {
+    console.warn('⚠️ Plan reconciliation failed after all retries, keeping current plan:', current);
   }
 }
 
