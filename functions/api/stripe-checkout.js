@@ -11,37 +11,57 @@ export async function onRequest(context) {
   }
 
   try {
-    const { plan } = await request.json();
+    console.log('🔵 [CHECKOUT] Request start', {
+      method: request.method,
+      origin,
+      hasAuth: !!request.headers.get('authorization')
+    });
+
+    const body = await request.json();
+    console.log('🔵 [CHECKOUT] Parsed body', body);
+    const { plan } = body || {};
+
     const token = getBearer(request);
-    if (!token) return json({ ok: false, error: 'unauthorized' }, 401, origin);
+    if (!token) {
+      console.log('🔴 [CHECKOUT] Missing bearer token');
+      return json({ ok: false, error: 'unauthorized' }, 401, origin);
+    }
     const { uid, payload } = await verifyFirebaseIdToken(token, env.FIREBASE_PROJECT_ID);
     const email = (payload?.email) || '';
+
     if (!plan) {
+      console.log('🔴 [CHECKOUT] Missing plan field');
       return json({ ok: false, error: 'Missing plan' }, 422, origin);
     }
 
     const priceId = planToPrice(env, plan);
-    if (!priceId) return json({ ok: false, error: 'Invalid plan' }, 400, origin);
+    console.log('🔵 [CHECKOUT] Plan→Price', { plan, priceId, envKeys: Object.keys(env).filter(k => k.includes('PRICE_')) });
+    if (!priceId) {
+      console.log('🔴 [CHECKOUT] Invalid plan', { plan });
+      return json({ ok: false, error: 'Invalid plan' }, 400, origin);
+    }
 
     // Reuse or create customer
     let customerId = await env.JOBHACKAI_KV?.get(kvCusKey(uid));
     if (!customerId) {
+      console.log('🔵 [CHECKOUT] Creating Stripe customer for uid', uid);
       const res = await stripe(env, '/customers', {
         method: 'POST',
         headers: stripeFormHeaders(env),
         body: form({ email, 'metadata[firebaseUid]': uid })
       });
       const c = await res.json();
-      if (!res.ok) return json({ ok: false, error: c?.error?.message || 'stripe_customer_error' }, 502, origin);
+      if (!res.ok) {
+        console.log('🔴 [CHECKOUT] Customer create failed', c);
+        return json({ ok: false, error: c?.error?.message || 'stripe_customer_error' }, 502, origin);
+      }
       customerId = c.id;
       await env.JOBHACKAI_KV?.put(kvCusKey(uid), customerId);
       await env.JOBHACKAI_KV?.put(kvEmailKey(uid), email);
     }
 
     // Create Checkout Session (subscription)
-    const idem = `${firebaseUid}:${plan}`;
-    
-    // Prepare session body with trial support
+    const idem = `${uid}:${plan}`;
     const sessionBody = {
       mode: 'subscription',
       customer: customerId,
@@ -54,23 +74,27 @@ export async function onRequest(context) {
       'metadata[firebaseUid]': uid,
       'metadata[plan]': plan
     };
-    
-    // Add trial period for trial plan
     if (plan === 'trial') {
       sessionBody['subscription_data[trial_period_days]'] = '3';
       sessionBody['subscription_data[metadata][original_plan]'] = plan;
     }
-    
+
+    console.log('🔵 [CHECKOUT] Creating session', { customerId, priceId });
     const sessionRes = await stripe(env, '/checkout/sessions', {
       method: 'POST',
       headers: { ...stripeFormHeaders(env), 'Idempotency-Key': idem },
       body: form(sessionBody)
     });
     const s = await sessionRes.json();
-    if (!sessionRes.ok) return json({ ok: false, error: s?.error?.message || 'stripe_checkout_error' }, 502, origin);
+    if (!sessionRes.ok) {
+      console.log('🔴 [CHECKOUT] Session create failed', s);
+      return json({ ok: false, error: s?.error?.message || 'stripe_checkout_error' }, 502, origin);
+    }
 
+    console.log('✅ [CHECKOUT] Session created', { id: s.id, url: s.url });
     return json({ ok: true, url: s.url, sessionId: s.id }, 200, origin);
   } catch (e) {
+    console.log('🔴 [CHECKOUT] Exception', e?.message || e);
     return json({ ok: false, error: e?.message || 'server_error' }, 500, origin);
   }
 }
