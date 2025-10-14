@@ -1,6 +1,6 @@
 // Static Auth Guard for protected HTML pages
 // Hides content until auth is confirmed. Redirects unauthenticated users.
-// Version: auth-guard-v2-FIREBASE-FIX
+// Version: auth-guard-v3-FIREBASE-FIRST
 (function () {
   try {
     // Hide page until decision
@@ -13,16 +13,16 @@
       return;
     }
 
-    function isAuthed() {
+    function hasFirebaseAuth() {
       try {
-        var ua = localStorage.getItem('user-authenticated') === 'true';
-        var email = !!localStorage.getItem('user-email');
-        if (ua && email) return true;
-        // Optional: trust firebase shard only if present (same profile)
+        // Check for actual Firebase auth user shard
         for (var i = 0; i < localStorage.length; i++) {
           var k = localStorage.key(i);
-          if (k && (k.indexOf('firebase:authUser:') === 0 || k.indexOf('firebase:host:') === 0)) {
-            return true;
+          if (k && k.indexOf('firebase:authUser:') === 0) {
+            var userData = localStorage.getItem(k);
+            if (userData && userData !== 'null' && userData.length > 10) {
+              return true;
+            }
           }
         }
       } catch (_) {}
@@ -39,15 +39,31 @@
       };
     } catch (_) {}
 
-    // Decide with a short grace period (longer after Stripe return)
-    var isPaidReturn = location.search.indexOf('paid=1') !== -1;
-    var grace = isPaidReturn ? 10000 : 5000;
-    if (!isAuthed()) {
-      setTimeout(function(){ if (!isAuthed()) location.replace('/login.html'); }, grace);
+    // Decide after actively waiting for Firebase auth to appear
+    var startTime = Date.now();
+    var maxWait = 8000; // 8 seconds max
+    var checkInterval = 100; // 100ms polling
+
+    function checkAndReveal() {
+      var elapsed = Date.now() - startTime;
+
+      if (hasFirebaseAuth()) {
+        // Firebase auth confirmed - reveal page
+        document.documentElement.classList.remove('auth-pending');
+        return;
+      }
+
+      if (elapsed >= maxWait) {
+        // Timeout - redirect to login
+        location.replace('/login.html');
+        return;
+      }
+
+      // Keep checking
+      setTimeout(checkAndReveal, checkInterval);
     }
 
-    // Reveal when authenticated
-    document.documentElement.classList.remove('auth-pending');
+    checkAndReveal();
   } catch (_) {
     // Fail safe: if guard errors, go conservative
     try { location.replace('/login.html'); } catch (_) {}
