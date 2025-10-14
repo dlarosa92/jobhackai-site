@@ -1,29 +1,13 @@
 export async function onRequest(context) {
   const { request, env } = context;
-  const origin = request.headers.get('Origin') || '';
-  
-  console.log('🔔 [WEBHOOK] Request received:', {
-    method: request.method,
-    hasSignature: !!request.headers.get('stripe-signature'),
-    origin,
-    timestamp: new Date().toISOString()
-  });
-  
-  if (request.method !== 'POST') return new Response('Method not allowed', { status: 405, headers: corsHeaders(origin, env) });
+  if (request.method !== 'POST') return new Response('Method not allowed', { status: 405, headers: { 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': 'https://dev.jobhackai.io', 'Vary': 'Origin' } });
 
   // Read raw body for signature verification
   const raw = await request.text();
   const valid = await verifyStripeWebhook(env, request, raw);
-  if (!valid) return new Response('Invalid signature', { status: 401, headers: corsHeaders(origin, env) });
+  if (!valid) return new Response('Invalid signature', { status: 401, headers: { 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': 'https://dev.jobhackai.io', 'Vary': 'Origin' } });
 
   const event = JSON.parse(raw);
-  
-  console.log('🔔 [WEBHOOK] Event parsed:', {
-    type: event.type,
-    id: event.id,
-    created: event.created,
-    hasData: !!event.data
-  });
 
   // Event de-duplication (24h) AFTER verification
   try {
@@ -31,7 +15,7 @@ export async function onRequest(context) {
       const seenKey = `evt:${event.id}`;
       const seen = await env.JOBHACKAI_KV?.get(seenKey);
       if (seen) {
-        return new Response('[ok]', { status: 200, headers: corsHeaders(origin, env) });
+        return new Response('[ok]', { status: 200, headers: { 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': 'https://dev.jobhackai.io', 'Vary': 'Origin' } });
       }
       await env.JOBHACKAI_KV?.put(seenKey, '1', { expirationTtl: 86400 });
     }
@@ -66,6 +50,7 @@ export async function onRequest(context) {
 
   try {
     if (event.type === 'checkout.session.completed') {
+      console.log('🎯 WEBHOOK: checkout.session.completed received');
       const sessionId = event.data?.object?.id;
       // Expand line items to reliably get price id
       const r = await fetch(`https://api.stripe.com/v1/checkout/sessions/${sessionId}?expand[]=line_items.data.price`, {
@@ -76,94 +61,62 @@ export async function onRequest(context) {
       const plan = priceToPlan(env, priceId);
       const customerId = sess?.customer || event.data?.object?.customer || null;
       const uid = await fetchUidFromCustomer(customerId);
-      if (plan && uid) await setPlan(uid, plan, event.created || Math.floor(Date.now()/1000));
+      console.log(`📝 CHECKOUT DATA: priceId=${priceId}, plan=${plan}, customerId=${customerId}, uid=${uid}`);
+      if (plan && uid) {
+        console.log(`✍️ WRITING TO KV: planByUid:${uid} = ${plan}`);
+        await setPlan(uid, plan, event.created || Math.floor(Date.now()/1000));
+        console.log(`✅ KV WRITE SUCCESS: ${uid} → ${plan}`);
+      } else {
+        console.warn(`⚠️ SKIPPED KV WRITE: plan=${plan}, uid=${uid}`);
+      }
     }
 
     if (event.type === 'customer.subscription.created' || event.type === 'customer.subscription.updated') {
-      const subscription = event.data.object;
-      const status = subscription.status;
-      const items = subscription.items?.data || [];
+      console.log(`🎯 WEBHOOK: ${event.type} received`);
+      const status = event.data.object.status;
+      const metadata = event.data.object.metadata || {};
+      const originalPlan = metadata.original_plan;
+      const items = event.data.object.items?.data || [];
       const pId = items[0]?.price?.id || '';
-      
-      // Get uid from subscription metadata first (more reliable), then fallback to customer
-      let uid = subscription.metadata?.firebaseUid;
-      if (!uid) {
-        const customerId = subscription.customer || null;
-        uid = await fetchUidFromCustomer(customerId);
-      }
+      const plan = priceToPlan(env, pId);
+      const customerId = event.data.object.customer || null;
+      const uid = await fetchUidFromCustomer(customerId);
       
       let effectivePlan = 'free';
-      
-      if (status === 'trialing') {
-        // Check if this was originally a trial subscription
-        const originalPlan = subscription.metadata?.plan;
-        console.log('🔔 [WEBHOOK] Processing trialing status:', {
-          uid,
-          originalPlan,
-          trialEnd: subscription.trial_end,
-          metadata: subscription.metadata
-        });
-        
-        if (originalPlan === 'trial') {
-          effectivePlan = 'trial';
-          console.log('✅ Setting plan to trial for user:', uid);
-          
-          // Store trial end date if available
-          if (subscription.trial_end) {
-            await env.JOBHACKAI_KV?.put(`trialEndByUid:${uid}`, String(subscription.trial_end));
-            console.log('✅ Stored trial end date:', new Date(subscription.trial_end * 1000).toISOString());
-          }
-        } else {
-          // Regular subscription in trial period
-          effectivePlan = priceToPlan(env, pId) || 'essential';
-          console.log('✅ Regular subscription in trial, plan:', effectivePlan);
-        }
+      if (status === 'trialing' && originalPlan === 'trial') {
+        effectivePlan = 'trial'; // User is in trial period
       } else if (status === 'active') {
-        // Active subscription - convert from trial to paid plan
-        const originalPlan = subscription.metadata?.plan;
-        console.log('🔔 [WEBHOOK] Processing active status:', {
-          uid,
-          originalPlan,
-          priceId: pId
-        });
-        
-        if (originalPlan === 'trial') {
-          // Trial ended, convert to essential
-          effectivePlan = 'essential';
-          console.log('✅ Trial ended, converting to essential for user:', uid);
-          // Remove trial end date since trial is over
-          await env.JOBHACKAI_KV?.delete(`trialEndByUid:${uid}`);
-        } else {
-          effectivePlan = priceToPlan(env, pId) || 'essential';
-          console.log('✅ Active subscription, plan:', effectivePlan);
-        }
-      } else if (status === 'past_due' || status === 'unpaid') {
-        // Subscription issues, but still has access
-        effectivePlan = priceToPlan(env, pId) || 'essential';
-        console.log('✅ Subscription issues but keeping access, plan:', effectivePlan);
+        // Extract plan from price ID (auto-converts trial to essential)
+        effectivePlan = plan || 'essential';
       }
       
+      console.log(`📝 SUBSCRIPTION DATA: status=${status}, priceId=${pId}, basePlan=${plan}, effectivePlan=${effectivePlan}, uid=${uid}`);
+      console.log(`✍️ WRITING TO KV: planByUid:${uid} = ${effectivePlan}`);
       await setPlan(uid, effectivePlan, event.created || Math.floor(Date.now()/1000));
-      console.log('✅ Webhook set plan:', { uid, plan: effectivePlan, status });
+      console.log(`✅ KV WRITE SUCCESS: ${uid} → ${effectivePlan}`);
+
+      // Store trial end date if this is a trial subscription
+      if (effectivePlan === 'trial' && event.data.object.trial_end) {
+        await env.JOBHACKAI_KV?.put(`trialEndByUid:${uid}`, String(event.data.object.trial_end));
+        console.log(`✅ TRIAL END DATE STORED: ${new Date(event.data.object.trial_end * 1000).toISOString()}`);
+      }
     }
 
     if (event.type === 'customer.subscription.deleted') {
-      const subscription = event.data.object;
-      
-      // Get uid from subscription metadata first, then fallback to customer
-      let uid = subscription.metadata?.firebaseUid;
-      if (!uid) {
-        const customerId = subscription.customer || null;
-        uid = await fetchUidFromCustomer(customerId);
-      }
-      
+      console.log('🎯 WEBHOOK: customer.subscription.deleted received');
+      const customerId = event.data.object.customer || null;
+      const uid = await fetchUidFromCustomer(customerId);
+      console.log(`📝 DELETION DATA: customerId=${customerId}, uid=${uid}`);
+      console.log(`✍️ WRITING TO KV: planByUid:${uid} = free`);
       await setPlan(uid, 'free', event.created || Math.floor(Date.now()/1000));
+      console.log(`✅ KV WRITE SUCCESS: ${uid} → free`);
     }
-  } catch (_) {
+  } catch (err) {
+    console.error('❌ WEBHOOK ERROR:', err.message || err);
     // swallow errors to avoid endless retries; state can heal on next login fetch
   }
 
-  return new Response('[ok]', { status: 200, headers: corsHeaders(origin, env) });
+  return new Response('[ok]', { status: 200, headers: { 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': 'https://dev.jobhackai.io', 'Vary': 'Origin' } });
 }
 
 async function verifyStripeWebhook(env, req, rawBody) {
@@ -181,24 +134,7 @@ async function verifyStripeWebhook(env, req, rawBody) {
   return diff === 0 && age <= 300;
 }
 
-function corsHeaders(origin, env) {
-  // Dynamic CORS: support dev, qa, and production origins
-  const allowedOrigins = [
-    'https://dev.jobhackai.io',
-    'https://qa.jobhackai.io', 
-    'https://app.jobhackai.io'
-  ];
-  const allowed = allowedOrigins.includes(origin) ? origin : allowedOrigins[0];
-  return { 
-    'Cache-Control': 'no-store', 
-    'Access-Control-Allow-Origin': allowed, 
-    'Vary': 'Origin',
-    'Content-Type': 'application/json'
-  };
-}
-
 const kvPlanKey = (uid) => `planByUid:${uid}`;
-
 function priceToPlan(env, priceId) {
   const rev = {
     [env.PRICE_ESSENTIAL_MONTHLY]: 'essential',
