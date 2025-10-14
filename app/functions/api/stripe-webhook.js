@@ -137,9 +137,9 @@ async function verifyStripeWebhook(env, req, rawBody) {
 const kvPlanKey = (uid) => `planByUid:${uid}`;
 function priceToPlan(env, priceId) {
   const rev = {
-    [env.PRICE_ESSENTIAL_MONTHLY]: 'essential',
-    [env.PRICE_PRO_MONTHLY]: 'pro',
-    [env.PRICE_PREMIUM_MONTHLY]: 'premium'
+    [env.STRIPE_PRICE_ESSENTIAL_MONTHLY]: 'essential',
+    [env.STRIPE_PRICE_PRO_MONTHLY]: 'pro',
+    [env.STRIPE_PRICE_PREMIUM_MONTHLY]: 'premium'
   };
   return rev[priceId] || null;
 }

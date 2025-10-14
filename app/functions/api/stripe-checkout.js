@@ -98,10 +98,10 @@ const kvCusKey = (uid) => `cusByUid:${uid}`;
 const kvEmailKey = (uid) => `emailByUid:${uid}`;
 function planToPrice(env, plan) {
   const map = {
-    trial: env.PRICE_ESSENTIAL_MONTHLY, // Use Essential price with trial period
-    essential: env.PRICE_ESSENTIAL_MONTHLY,
-    pro: env.PRICE_PRO_MONTHLY,
-    premium: env.PRICE_PREMIUM_MONTHLY
+    trial: env.STRIPE_PRICE_ESSENTIAL_MONTHLY, // Use Essential price with trial period
+    essential: env.STRIPE_PRICE_ESSENTIAL_MONTHLY,
+    pro: env.STRIPE_PRICE_PRO_MONTHLY,
+    premium: env.STRIPE_PRICE_PREMIUM_MONTHLY
   };
   return map[plan] || null;
 }
