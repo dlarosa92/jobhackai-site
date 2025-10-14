@@ -15,34 +15,36 @@ export async function onRequest(context) {
       });
     }
 
-    // Check KV storage for subscription data
-    const subscriptionKey = `subscription:${userId}`;
-    const subscriptionData = await env.JOBHACKAI_KV.get(subscriptionKey);
+    // Check KV storage for usage data
+    const usageKey = `usage:${userId}`;
+    const usageData = await env.JOBHACKAI_KV.get(usageKey);
 
-    if (subscriptionData) {
-      const subscription = JSON.parse(subscriptionData);
+    if (usageData) {
+      const usage = JSON.parse(usageData);
       return new Response(JSON.stringify({
         success: true,
-        status: subscription.status || 'active',
-        plan: subscription.plan || 'free',
-        currentPeriodEnd: subscription.currentPeriodEnd,
-        cancelAtPeriodEnd: subscription.cancelAtPeriodEnd
+        resumeScans: usage.resumeScans || 0,
+        coverLetters: usage.coverLetters || 0,
+        interviewQuestions: usage.interviewQuestions || 0,
+        lastActivity: usage.lastActivity
       }), {
         headers: { 'Content-Type': 'application/json' }
       });
     }
 
-    // Default to free plan if no subscription found
+    // Default usage stats
     return new Response(JSON.stringify({
       success: true,
-      status: 'active',
-      plan: 'free'
+      resumeScans: 0,
+      coverLetters: 0,
+      interviewQuestions: 0,
+      lastActivity: null
     }), {
       headers: { 'Content-Type': 'application/json' }
     });
 
   } catch (error) {
-    console.error('Subscription API error:', error);
+    console.error('Usage API error:', error);
     return new Response(JSON.stringify({ error: 'Internal server error' }), {
       status: 500,
       headers: { 'Content-Type': 'application/json' }

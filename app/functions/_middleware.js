@@ -15,6 +15,3 @@ export async function onRequest({ next, env }) {
 
   return new Response(res.body, { status: res.status, statusText: res.statusText, headers: h });
 }
-
-
-

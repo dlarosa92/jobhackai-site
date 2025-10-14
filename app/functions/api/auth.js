@@ -24,6 +24,3 @@ export async function onRequest(context) {
     return new Response('Internal server error', { status: 500 });
   }
 }
-
-
-
