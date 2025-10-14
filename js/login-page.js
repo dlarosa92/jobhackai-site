@@ -39,39 +39,38 @@ document.addEventListener('DOMContentLoaded', async function() {
       console.log('⏸️ Login in progress, skipping auto-redirect');
       return false;
     }
-    // Method 1: Check localStorage first (fastest)
-    const isAuthInStorage = localStorage.getItem('user-authenticated') === 'true';
-    const authUser = localStorage.getItem('auth-user');
-    
-    if (isAuthInStorage && authUser) {
-      console.log('✅ User authenticated (from localStorage), redirecting to dashboard');
-      // Add smooth transition with loading state
-      document.body.style.opacity = '0.7';
-      document.body.style.transition = 'opacity 0.3s ease';
-      setTimeout(() => {
-        window.location.href = 'dashboard.html';
-      }, 100);
-      return true;
-    }
-    
-    // Method 2: Wait for Firebase auth to be ready with longer timeout
+
+    // ONLY check Firebase, not localStorage
     try {
       console.log('🔍 Checking Firebase auth state...');
-      const user = await authManager.waitForAuthReady(5000); // Increased to 5 seconds
-      if (user) {
-        console.log('✅ User authenticated (from Firebase), redirecting to dashboard');
-        // Add smooth transition with loading state
+      const user = await authManager.waitForAuthReady(5000);
+      if (user && user.email) {
+        console.log('✅ User authenticated via Firebase:', user.email);
+        // Sync to localStorage for other consumers
+        try {
+          localStorage.setItem('user-authenticated', 'true');
+          localStorage.setItem('user-email', user.email);
+        } catch (_) {}
+
+        // If user is buying a plan, stay on login
+        const selectedPlan = new URLSearchParams(window.location.search).get('plan') || 
+                             localStorage.getItem('selected-plan');
+        if (selectedPlan && ['essential', 'pro', 'premium', 'trial'].includes(selectedPlan)) {
+          console.log('✅ Paid plan selected, staying on login for checkout');
+          return false;
+        }
+
+        // Redirect to dashboard
+        console.log('✅ Redirecting to dashboard');
         document.body.style.opacity = '0.7';
         document.body.style.transition = 'opacity 0.3s ease';
-        setTimeout(() => {
-          window.location.href = 'dashboard.html';
-        }, 100);
+        setTimeout(() => { window.location.href = 'dashboard.html'; }, 100);
         return true;
       }
     } catch (error) {
-      console.log('Firebase auth check timeout, proceeding with login form');
+      console.log('No Firebase user, proceeding with login form');
     }
-    
+
     return false;
   };
   

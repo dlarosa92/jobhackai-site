@@ -561,113 +561,35 @@
 
     // --- ENHANCED AUTHENTICATION CHECK ---
     async function checkAuthentication() {
-      // Version stamp for deployment verification
-      console.log('🔧 dashboard.html VERSION: redirect-fix-v3-STRIPE-SYNC-ADDED - ' + new Date().toISOString());
+      console.log('🔧 dashboard.html VERSION: auth-race-fix-v4 - ' + new Date().toISOString());
 
-      // Prevent redirect loop - check if we came from login
-      const cameFromLogin = document.referrer && document.referrer.includes('login.html');
-      const redirectAttempts = parseInt(sessionStorage.getItem('dashboard-redirect-attempts') || '0');
-
-      console.log('🔍 Dashboard auth check:', {
-        referrer: document.referrer,
-        cameFromLogin,
-        redirectAttempts,
-        localStorage: {
-          authenticated: localStorage.getItem('user-authenticated'),
-          email: localStorage.getItem('user-email')
-        }
-      });
-
-      // If we came from login, wait for Firebase to initialize
-      if (cameFromLogin) {
-        console.log('⏳ Came from login, waiting for Firebase auth state...');
-        
-        // Wait up to 3 seconds for Firebase to set auth state
-        let waitCount = 0;
-        const maxWait = 30; // 3 seconds (100ms intervals)
-        
-        while (waitCount < maxWait) {
-          const isAuth = localStorage.getItem('user-authenticated') === 'true';
-          const hasEmail = !!localStorage.getItem('user-email');
-          
-          if (isAuth && hasEmail) {
-            console.log('✅ Firebase auth state confirmed after', waitCount * 100, 'ms');
-            break;
-          }
-          
-          await new Promise(resolve => setTimeout(resolve, 100));
-          waitCount++;
-        }
+      // Wait for FirebaseAuthManager to be available
+      let waitCount = 0;
+      while (!window.FirebaseAuthManager && waitCount < 50) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+        waitCount++;
       }
 
-      const isAuthenticated = localStorage.getItem('user-authenticated') === 'true' && !!localStorage.getItem('user-email');
-      const userEmail = localStorage.getItem('user-email');
-      const userPlan = localStorage.getItem('user-plan');
-      const mainContent = document.querySelector('main');
-      
-      if (!isAuthenticated || !userEmail) {
-        // Track redirect attempts to prevent infinite loops
-        sessionStorage.setItem('dashboard-redirect-attempts', String(redirectAttempts + 1));
-        
-        if (redirectAttempts >= 3) {
-          console.error('🚨 Too many redirect attempts, clearing state');
-          localStorage.clear();
-          sessionStorage.clear();
-          alert('Authentication error. Please clear your browser cache and try logging in again.');
-          window.location.href = 'login.html';
-          return false;
-        }
-        
-        if (cameFromLogin) {
-          console.error('⚠️ Redirect loop detected! Came from login but not authenticated after wait.');
-          alert('Authentication error. Please try logging in again.');
-          localStorage.clear();
-        }
-        
-        console.log('❌ Not authenticated, redirecting to login (attempt', redirectAttempts + 1, ')');
+      if (!window.FirebaseAuthManager) {
+        console.error('❌ FirebaseAuthManager not available');
         window.location.href = 'login.html';
         return false;
       }
 
-      // Clear redirect attempts on successful auth
-      sessionStorage.removeItem('dashboard-redirect-attempts');
-      
-      if (!isAuthenticated || !userEmail) {
-        // Clear any stale authentication data
-        localStorage.removeItem('user-authenticated');
-        localStorage.removeItem('user-email');
-        localStorage.removeItem('user-plan');
-        localStorage.removeItem('user-db');
-        
-        mainContent.innerHTML = `
-          <div style="max-width: 600px; margin: 4rem auto; text-align: center; padding: 2rem;">
-            <div style="font-size: 4rem; margin-bottom: 1rem;">🔒</div>
-            <h1 style="font-size: 2rem; font-weight: 700; color: var(--color-text-main); margin-bottom: 1rem;">
-              Authentication Required
-            </h1>
-            <p style="font-size: 1.1rem; color: var(--color-text-secondary); margin-bottom: 2rem; line-height: 1.6;">
-              You need to be logged in to access your dashboard. 
-              Please sign in to view your account and tools.
-            </p>
-            <div style="display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap;">
-              <a href="login.html" class="btn-primary" style="text-decoration: none;">
-                Sign In
-              </a>
-              <a href="pricing-a.html" class="btn-outline" style="text-decoration: none;">
-                View Pricing
-              </a>
-            </div>
-          </div>
-        `;
+      const user = window.FirebaseAuthManager.getCurrentUser();
+      if (!user || !user.email) {
+        console.error('❌ No Firebase user available');
+        window.location.href = 'login.html';
         return false;
       }
-      
-      // Validate user plan exists
-      if (!userPlan) {
-        console.warn('User authenticated but no plan found, setting to free');
-        localStorage.setItem('user-plan', 'free');
-      }
-      
+
+      console.log('✅ Authenticated:', user.email);
+      // Sync to localStorage for other components
+      try {
+        localStorage.setItem('user-authenticated', 'true');
+        localStorage.setItem('user-email', user.email);
+      } catch (_) {}
+
       return true;
     }
 
