@@ -47,8 +47,8 @@ export async function onRequest(context) {
       customer: customerId,
       'line_items[0][price]': priceId,
       'line_items[0][quantity]': 1,
-      success_url: `${env.FRONTEND_URL || 'https://dev.jobhackai.io'}/dashboard.html?paid=1`,
-      cancel_url: `${env.FRONTEND_URL || 'https://dev.jobhackai.io'}/pricing-a.html`,
+      success_url: (env.STRIPE_SUCCESS_URL || `${env.FRONTEND_URL || 'https://dev.jobhackai.io'}/dashboard?paid=1`),
+      cancel_url: (env.STRIPE_CANCEL_URL || `${env.FRONTEND_URL || 'https://dev.jobhackai.io'}/pricing-a`),
       allow_promotion_codes: 'true',
       payment_method_collection: 'if_required',
       'metadata[firebaseUid]': uid,
@@ -89,11 +89,12 @@ function form(obj) {
   Object.entries(obj).forEach(([k, v]) => { if (v !== undefined && v !== null) p.append(k, String(v)); });
   return p;
 }
-function corsHeaders(origin) {
-  const allowed = origin === 'https://dev.jobhackai.io' ? origin : 'https://dev.jobhackai.io';
+function corsHeaders(origin, env) {
+  const expected = (env && env.FRONTEND_URL) ? env.FRONTEND_URL : 'https://dev.jobhackai.io';
+  const allowed = origin === expected ? origin : expected;
   return { 'Access-Control-Allow-Origin': allowed, 'Access-Control-Allow-Methods': 'POST,OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type,Authorization,Stripe-Signature,Idempotency-Key', 'Vary': 'Origin', 'Content-Type': 'application/json' };
 }
-function json(body, status, origin) { return new Response(JSON.stringify(body), { status, headers: corsHeaders(origin) }); }
+function json(body, status, origin, env) { return new Response(JSON.stringify(body), { status, headers: corsHeaders(origin, env) }); }
 const kvCusKey = (uid) => `cusByUid:${uid}`;
 const kvEmailKey = (uid) => `emailByUid:${uid}`;
 function planToPrice(env, plan) {

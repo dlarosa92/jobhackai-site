@@ -31,6 +31,6 @@ export async function onRequest(context) {
   
   return new Response(JSON.stringify({ ok: true }), { 
     status: 200,
-    headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': 'https://dev.jobhackai.io', 'Vary': 'Origin' }
+    headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': env.FRONTEND_URL || 'https://dev.jobhackai.io', 'Vary': 'Origin' }
   });
 }

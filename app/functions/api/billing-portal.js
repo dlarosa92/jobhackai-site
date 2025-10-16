@@ -14,10 +14,11 @@ export async function onRequest(context) {
     const customerId = await env.JOBHACKAI_KV?.get(kvCusKey(uid));
     if (!customerId) return json({ ok: false, error: 'No customer for user' }, 404, origin);
 
+    const portalReturn = env.STRIPE_PORTAL_RETURN_URL || `${env.FRONTEND_URL || 'https://dev.jobhackai.io'}/dashboard`;
     const res = await fetch('https://api.stripe.com/v1/billing_portal/sessions', {
       method: 'POST',
       headers: { Authorization: `Bearer ${env.STRIPE_SECRET_KEY}`, 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({ customer: customerId, return_url: `${env.FRONTEND_URL || 'https://dev.jobhackai.io'}/dashboard.html` })
+      body: new URLSearchParams({ customer: customerId, return_url: portalReturn })
     });
     const p = await res.json();
     if (!res.ok) return json({ ok: false, error: p?.error?.message || 'portal_error' }, 502, origin);
@@ -27,11 +28,12 @@ export async function onRequest(context) {
   }
 }
 
-function corsHeaders(origin) {
-  const allowed = origin === 'https://dev.jobhackai.io' ? origin : 'https://dev.jobhackai.io';
+function corsHeaders(origin, env) {
+  const expected = (env && env.FRONTEND_URL) ? env.FRONTEND_URL : 'https://dev.jobhackai.io';
+  const allowed = origin === expected ? origin : expected;
   return { 'Access-Control-Allow-Origin': allowed, 'Access-Control-Allow-Methods': 'POST,OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type,Authorization', 'Vary': 'Origin', 'Content-Type': 'application/json' };
 }
-function json(body, status, origin) { return new Response(JSON.stringify(body), { status, headers: corsHeaders(origin) }); }
+function json(body, status, origin, env) { return new Response(JSON.stringify(body), { status, headers: corsHeaders(origin, env) }); }
 const kvCusKey = (uid) => `cusByUid:${uid}`;
 
 
