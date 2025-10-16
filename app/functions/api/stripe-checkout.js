@@ -39,7 +39,8 @@ export async function onRequest(context) {
     }
 
     // Create Checkout Session (subscription)
-    const idem = `${firebaseUid}:${plan}`;
+    // Idempotency key must be stable per user+plan; use verified uid
+    const idem = `${uid}:${plan}`;
     
     // Prepare session body with trial support
     const sessionBody = {
