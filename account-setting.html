@@ -431,7 +431,7 @@
             Trial • ${daysLeft} day${daysLeft !== 1 ? 's' : ''} left
           </div>
           <br>
-          <button class="btn-primary" data-test-id="manage-subscription-btn" onclick="openBillingPortal()">Manage Subscription</button>
+          <button class="btn-primary" onclick="openBillingPortal()">Manage Subscription</button>
         `;
       } else {
         // essential, pro, premium
@@ -443,7 +443,7 @@
             ${planNames[plan] || plan} Plan • ${planPrices[plan] || '$0/mo'}
           </div>
           <br>
-          <button class="btn-primary" data-test-id="manage-subscription-btn" onclick="openBillingPortal()">Manage Subscription</button>
+          <button class="btn-primary" onclick="openBillingPortal()">Manage Subscription</button>
         `;
       }
     }
