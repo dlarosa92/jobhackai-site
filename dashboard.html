@@ -576,6 +576,19 @@
         return false;
       }
 
+      // If localStorage indicates we're authenticated, give Firebase a moment to restore session
+      try {
+        const isAuthInStorage = localStorage.getItem('user-authenticated') === 'true';
+        if (isAuthInStorage) {
+          console.log('⏳ localStorage says authenticated; waiting for Firebase to restore session...');
+          try { await window.FirebaseAuthManager.waitForAuthReady?.(3000); } catch (_) {}
+          if (!window.FirebaseAuthManager.getCurrentUser?.()) {
+            // Small extra grace period to avoid ping-pong
+            await new Promise(resolve => setTimeout(resolve, 500));
+          }
+        }
+      } catch (_) {}
+
       const user = window.FirebaseAuthManager.getCurrentUser();
       if (!user || !user.email) {
         console.error('❌ No Firebase user available');
