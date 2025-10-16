@@ -12,6 +12,25 @@
   <link rel="stylesheet" href="css/main.css">
   <link rel="stylesheet" href="css/header.css">
   <link rel="stylesheet" href="css/footer.css">
+  <script type="module">
+    import authManager from './js/firebase-auth.js';
+    document.documentElement.classList.add('auth-pending');
+    (async () => {
+      try {
+        const user = await authManager.waitForAuthReady(4000);
+        if (!user) {
+          location.replace('/login');
+          return;
+        }
+      } catch (_) {
+        // Conservative fallback
+        location.replace('/login');
+        return;
+      } finally {
+        document.documentElement.classList.remove('auth-pending');
+      }
+    })();
+  </script>
   <style>
     .dashboard-banner {
       background: #fff;

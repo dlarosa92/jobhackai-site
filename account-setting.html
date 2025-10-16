@@ -284,6 +284,12 @@
         <div class="settings-label" style="margin-bottom:0.5rem;">Subscription</div>
         <div style="color: #6B7280;">Loading subscription details...</div>
       </div>
+      <!-- Authenticated-only stable Billing link for navigation/tests -->
+      <div class="settings-block" style="margin-bottom:2.2rem;">
+        <a href="billing-management.html" id="billingLink" data-test-id="billing-link" class="btn-outline" style="display:none; text-decoration: none;">
+          Billing
+        </a>
+      </div>
       <!-- Actions Row -->
       <div class="settings-actions-row" style="display:flex; gap:1rem; margin-bottom:2.2rem; flex-wrap:wrap;">
         <a href="#" class="btn-link">Compare Plans</a>
@@ -504,6 +510,9 @@
         
         // Render billing section
         await renderBillingSection();
+        // Unhide stable Billing link for authenticated users
+        const billingLinkEl = document.getElementById('billingLink');
+        if (billingLinkEl) billingLinkEl.style.display = '';
         
         // Hide skeleton, show content
         document.getElementById('profile-skeleton').style.display = 'none';
@@ -514,6 +523,8 @@
         document.getElementById('profile-name').textContent = user.displayName || 'User';
         document.getElementById('profile-email').textContent = user.email || 'user@example.com';
         await renderBillingSection();
+        const billingLinkEl = document.getElementById('billingLink');
+        if (billingLinkEl) billingLinkEl.style.display = '';
         document.getElementById('profile-skeleton').style.display = 'none';
         document.getElementById('profile-content').style.display = 'block';
       }
