@@ -4,24 +4,24 @@ export async function onRequest(context) {
   const origin = request.headers.get('Origin') || '';
 
   if (request.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders(origin) });
+    return new Response(null, { headers: corsHeaders(origin, env) });
   }
   if (request.method !== 'POST') {
-    return new Response('Method not allowed', { status: 405, headers: corsHeaders(origin) });
+    return new Response('Method not allowed', { status: 405, headers: corsHeaders(origin, env) });
   }
 
   try {
     const { plan } = await request.json();
     const token = getBearer(request);
-    if (!token) return json({ ok: false, error: 'unauthorized' }, 401, origin);
+    if (!token) return json({ ok: false, error: 'unauthorized' }, 401, origin, env);
     const { uid, payload } = await verifyFirebaseIdToken(token, env.FIREBASE_PROJECT_ID);
     const email = (payload?.email) || '';
     if (!plan) {
-      return json({ ok: false, error: 'Missing plan' }, 422, origin);
+      return json({ ok: false, error: 'Missing plan' }, 422, origin, env);
     }
 
     const priceId = planToPrice(env, plan);
-    if (!priceId) return json({ ok: false, error: 'Invalid plan' }, 400, origin);
+    if (!priceId) return json({ ok: false, error: 'Invalid plan' }, 400, origin, env);
 
     // Reuse or create customer
     let customerId = await env.JOBHACKAI_KV?.get(kvCusKey(uid));
@@ -32,14 +32,14 @@ export async function onRequest(context) {
         body: form({ email, 'metadata[firebaseUid]': uid })
       });
       const c = await res.json();
-      if (!res.ok) return json({ ok: false, error: c?.error?.message || 'stripe_customer_error' }, 502, origin);
+      if (!res.ok) return json({ ok: false, error: c?.error?.message || 'stripe_customer_error' }, 502, origin, env);
       customerId = c.id;
       await env.JOBHACKAI_KV?.put(kvCusKey(uid), customerId);
       await env.JOBHACKAI_KV?.put(kvEmailKey(uid), email);
     }
 
     // Create Checkout Session (subscription)
-    const idem = `${firebaseUid}:${plan}`;
+    const idem = `${uid}:${plan}`;
     
     // Prepare session body with trial support
     const sessionBody = {
@@ -50,7 +50,7 @@ export async function onRequest(context) {
       success_url: `${env.FRONTEND_URL || 'https://dev.jobhackai.io'}/dashboard.html?paid=1`,
       cancel_url: `${env.FRONTEND_URL || 'https://dev.jobhackai.io'}/pricing-a.html`,
       allow_promotion_codes: 'true',
-      payment_method_collection: 'if_required',
+      payment_method_collection: 'always',
       'metadata[firebaseUid]': uid,
       'metadata[plan]': plan
     };
@@ -67,11 +67,11 @@ export async function onRequest(context) {
       body: form(sessionBody)
     });
     const s = await sessionRes.json();
-    if (!sessionRes.ok) return json({ ok: false, error: s?.error?.message || 'stripe_checkout_error' }, 502, origin);
+    if (!sessionRes.ok) return json({ ok: false, error: s?.error?.message || 'stripe_checkout_error' }, 502, origin, env);
 
-    return json({ ok: true, url: s.url, sessionId: s.id }, 200, origin);
+    return json({ ok: true, url: s.url, sessionId: s.id }, 200, origin, env);
   } catch (e) {
-    return json({ ok: false, error: e?.message || 'server_error' }, 500, origin);
+    return json({ ok: false, error: e?.message || 'server_error' }, 500, origin, env);
   }
 }
 
@@ -89,11 +89,14 @@ function form(obj) {
   Object.entries(obj).forEach(([k, v]) => { if (v !== undefined && v !== null) p.append(k, String(v)); });
   return p;
 }
-function corsHeaders(origin) {
-  const allowed = origin === 'https://dev.jobhackai.io' ? origin : 'https://dev.jobhackai.io';
+function corsHeaders(origin, env) {
+  const fallbackOrigins = ['https://dev.jobhackai.io', 'https://qa.jobhackai.io'];
+  const configured = (env && env.FRONTEND_URL) ? env.FRONTEND_URL : null;
+  const allowedList = configured ? [configured, ...fallbackOrigins] : fallbackOrigins;
+  const allowed = origin && allowedList.includes(origin) ? origin : (configured || 'https://dev.jobhackai.io');
   return { 'Access-Control-Allow-Origin': allowed, 'Access-Control-Allow-Methods': 'POST,OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type,Authorization,Stripe-Signature,Idempotency-Key', 'Vary': 'Origin', 'Content-Type': 'application/json' };
 }
-function json(body, status, origin) { return new Response(JSON.stringify(body), { status, headers: corsHeaders(origin) }); }
+function json(body, status, origin, env) { return new Response(JSON.stringify(body), { status, headers: corsHeaders(origin, env) }); }
 const kvCusKey = (uid) => `cusByUid:${uid}`;
 const kvEmailKey = (uid) => `emailByUid:${uid}`;
 function planToPrice(env, plan) {
