@@ -90,8 +90,10 @@ function form(obj) {
   return p;
 }
 function corsHeaders(origin, env) {
-  const expected = (env && env.FRONTEND_URL) ? env.FRONTEND_URL : 'https://dev.jobhackai.io';
-  const allowed = origin === expected ? origin : expected;
+  const fallbackOrigins = ['https://dev.jobhackai.io', 'https://qa.jobhackai.io'];
+  const configured = (env && env.FRONTEND_URL) ? env.FRONTEND_URL : null;
+  const allowedList = configured ? [configured, ...fallbackOrigins] : fallbackOrigins;
+  const allowed = origin && allowedList.includes(origin) ? origin : (configured || 'https://dev.jobhackai.io');
   return { 'Access-Control-Allow-Origin': allowed, 'Access-Control-Allow-Methods': 'POST,OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type,Authorization,Stripe-Signature,Idempotency-Key', 'Vary': 'Origin', 'Content-Type': 'application/json' };
 }
 function json(body, status, origin, env) { return new Response(JSON.stringify(body), { status, headers: corsHeaders(origin, env) }); }
