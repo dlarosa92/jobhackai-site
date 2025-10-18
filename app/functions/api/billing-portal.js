@@ -3,16 +3,16 @@ export async function onRequest(context) {
   const { request, env } = context;
   const origin = request.headers.get('Origin') || '';
 
-  if (request.method === 'OPTIONS') return new Response(null, { headers: corsHeaders(origin) });
-  if (request.method !== 'POST') return new Response('Method not allowed', { status: 405, headers: corsHeaders(origin) });
+  if (request.method === 'OPTIONS') return new Response(null, { headers: corsHeaders(origin, env) });
+  if (request.method !== 'POST') return new Response('Method not allowed', { status: 405, headers: corsHeaders(origin, env) });
 
   try {
     const token = getBearer(request);
-    if (!token) return json({ ok: false, error: 'unauthorized' }, 401, origin);
+    if (!token) return json({ ok: false, error: 'unauthorized' }, 401, origin, env);
     const { uid } = await verifyFirebaseIdToken(token, env.FIREBASE_PROJECT_ID);
 
     const customerId = await env.JOBHACKAI_KV?.get(kvCusKey(uid));
-    if (!customerId) return json({ ok: false, error: 'No customer for user' }, 404, origin);
+    if (!customerId) return json({ ok: false, error: 'No customer for user' }, 404, origin, env);
 
     const portalReturn = env.STRIPE_PORTAL_RETURN_URL || `${env.FRONTEND_URL || 'https://dev.jobhackai.io'}/dashboard`;
     const res = await fetch('https://api.stripe.com/v1/billing_portal/sessions', {
@@ -21,10 +21,10 @@ export async function onRequest(context) {
       body: new URLSearchParams({ customer: customerId, return_url: portalReturn })
     });
     const p = await res.json();
-    if (!res.ok) return json({ ok: false, error: p?.error?.message || 'portal_error' }, 502, origin);
-    return json({ ok: true, url: p.url }, 200, origin);
+    if (!res.ok) return json({ ok: false, error: p?.error?.message || 'portal_error' }, 502, origin, env);
+    return json({ ok: true, url: p.url }, 200, origin, env);
   } catch (e) {
-    return json({ ok: false, error: e?.message || 'server_error' }, 500, origin);
+    return json({ ok: false, error: e?.message || 'server_error' }, 500, origin, env);
   }
 }
 
