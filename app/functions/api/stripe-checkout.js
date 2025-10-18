@@ -50,7 +50,7 @@ export async function onRequest(context) {
       success_url: (env.STRIPE_SUCCESS_URL || `${env.FRONTEND_URL || 'https://dev.jobhackai.io'}/dashboard?paid=1`),
       cancel_url: (env.STRIPE_CANCEL_URL || `${env.FRONTEND_URL || 'https://dev.jobhackai.io'}/pricing-a`),
       allow_promotion_codes: 'true',
-      payment_method_collection: 'always',
+      payment_method_collection: 'if_required',
       'metadata[firebaseUid]': uid,
       'metadata[plan]': plan
     };
