@@ -52,22 +52,36 @@ export async function onRequest(context) {
     if (event.type === 'checkout.session.completed') {
       console.log('🎯 WEBHOOK: checkout.session.completed received');
       const sessionId = event.data?.object?.id;
+      const sessionMetadata = event.data?.object?.metadata || {};
+      const originalPlan = sessionMetadata.plan;
+      
       // Expand line items to reliably get price id
       const r = await fetch(`https://api.stripe.com/v1/checkout/sessions/${sessionId}?expand[]=line_items.data.price`, {
         headers: { Authorization: `Bearer ${env.STRIPE_SECRET_KEY}` }
       });
       const sess = await r.json();
       const priceId = sess?.line_items?.data?.[0]?.price?.id || '';
-      const plan = priceToPlan(env, priceId);
       const customerId = sess?.customer || event.data?.object?.customer || null;
       const uid = await fetchUidFromCustomer(customerId);
-      console.log(`📝 CHECKOUT DATA: priceId=${priceId}, plan=${plan}, customerId=${customerId}, uid=${uid}`);
-      if (plan && uid) {
-        console.log(`✍️ WRITING TO KV: planByUid:${uid} = ${plan}`);
-        await setPlan(uid, plan, event.created || Math.floor(Date.now()/1000));
-        console.log(`✅ KV WRITE SUCCESS: ${uid} → ${plan}`);
+      
+      // Determine effective plan based on original plan and subscription status
+      let effectivePlan = 'free';
+      if (originalPlan === 'trial') {
+        effectivePlan = 'trial'; // Show as trial immediately
+        // Mark trial as used
+        await env.JOBHACKAI_KV?.put(`trialUsedByUid:${uid}`, '1');
+        console.log(`✅ TRIAL MARKED AS USED: ${uid}`);
       } else {
-        console.warn(`⚠️ SKIPPED KV WRITE: plan=${plan}, uid=${uid}`);
+        effectivePlan = priceToPlan(env, priceId) || 'essential';
+      }
+      
+      console.log(`📝 CHECKOUT DATA: originalPlan=${originalPlan}, priceId=${priceId}, effectivePlan=${effectivePlan}, customerId=${customerId}, uid=${uid}`);
+      if (effectivePlan && uid) {
+        console.log(`✍️ WRITING TO KV: planByUid:${uid} = ${effectivePlan}`);
+        await setPlan(uid, effectivePlan, event.created || Math.floor(Date.now()/1000));
+        console.log(`✅ KV WRITE SUCCESS: ${uid} → ${effectivePlan}`);
+      } else {
+        console.warn(`⚠️ SKIPPED KV WRITE: effectivePlan=${effectivePlan}, uid=${uid}`);
       }
     }
 
@@ -107,6 +121,16 @@ export async function onRequest(context) {
       const customerId = event.data.object.customer || null;
       const uid = await fetchUidFromCustomer(customerId);
       console.log(`📝 DELETION DATA: customerId=${customerId}, uid=${uid}`);
+      console.log(`✍️ WRITING TO KV: planByUid:${uid} = free`);
+      await setPlan(uid, 'free', event.created || Math.floor(Date.now()/1000));
+      console.log(`✅ KV WRITE SUCCESS: ${uid} → free`);
+    }
+
+    if (event.type === 'customer.subscription.cancelled') {
+      console.log('🎯 WEBHOOK: customer.subscription.cancelled received');
+      const customerId = event.data.object.customer || null;
+      const uid = await fetchUidFromCustomer(customerId);
+      console.log(`📝 CANCELLATION DATA: customerId=${customerId}, uid=${uid}`);
       console.log(`✍️ WRITING TO KV: planByUid:${uid} = free`);
       await setPlan(uid, 'free', event.created || Math.floor(Date.now()/1000));
       console.log(`✅ KV WRITE SUCCESS: ${uid} → free`);

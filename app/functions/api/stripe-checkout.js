@@ -20,6 +20,15 @@ export async function onRequest(context) {
       return json({ ok: false, error: 'Missing plan' }, 422, origin, env);
     }
 
+    // Prevent multiple trials per user
+    if (plan === 'trial') {
+      const trialUsed = await env.JOBHACKAI_KV?.get(`trialUsedByUid:${uid}`);
+      if (trialUsed) {
+        console.log('🔴 [CHECKOUT] Trial already used for user', uid);
+        return json({ ok: false, error: 'Trial already used. Please select a paid plan.' }, 400, origin, env);
+      }
+    }
+
     const priceId = planToPrice(env, plan);
     if (!priceId) return json({ ok: false, error: 'Invalid plan' }, 400, origin, env);
 
