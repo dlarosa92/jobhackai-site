@@ -146,6 +146,30 @@ class AuthManager {
     } catch (_) { /* no-op */ }
   }
 
+  // Initialize free ATS credit for new users
+  async initializeFreeATSCredit(uid) {
+    try {
+      // Check if credit already initialized
+      const creditKey = `creditsByUid:${uid}`;
+      const existing = localStorage.getItem(creditKey);
+      
+      if (existing) {
+        console.log('✅ ATS credit already initialized');
+        return JSON.parse(existing);
+      }
+      
+      // Initialize 1 lifetime credit
+      const credits = { ats_free_lifetime: 1 };
+      localStorage.setItem(creditKey, JSON.stringify(credits));
+      console.log('✅ Initialized 1 free lifetime ATS credit');
+      
+      return credits;
+    } catch (e) {
+      console.warn('Failed to initialize ATS credit:', e);
+      return { ats_free_lifetime: 0 };
+    }
+  }
+
   setupAuthStateListener() {
     onAuthStateChanged(auth, async (user) => {
       console.log('🔥 Firebase auth state changed:', user ? `User: ${user.email}` : 'No user');
@@ -169,6 +193,9 @@ class AuthManager {
         console.log('✅ localStorage synced immediately for auth guards');
         
         // User is signed in - now do async operations
+        // Initialize free ATS credit for new users
+        await this.initializeFreeATSCredit(user.uid);
+        
         const userData = {
           uid: user.uid,
           email: user.email,

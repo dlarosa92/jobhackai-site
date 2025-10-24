@@ -67,12 +67,20 @@ export async function onRequest(context) {
     const status = latestSub.status;
     const items = latestSub.items?.data || [];
     const priceId = items[0]?.price?.id || '';
+    const cancelAtPeriodEnd = latestSub.cancel_at_period_end;
+    const cancelAt = latestSub.cancel_at;
+    const currentPeriodEnd = latestSub.current_period_end;
+    const schedule = latestSub.schedule;
     
     console.log('🔍 Latest subscription:', { 
       status, 
       priceId, 
       trialEnd: latestSub.trial_end,
-      metadata: latestSub.metadata 
+      metadata: latestSub.metadata,
+      cancelAtPeriodEnd,
+      cancelAt,
+      currentPeriodEnd,
+      schedule
     });
 
     let plan = 'free';
@@ -109,10 +117,49 @@ export async function onRequest(context) {
     await env.JOBHACKAI_KV?.put(`planByUid:${uid}`, plan);
     await env.JOBHACKAI_KV?.put(`planTsByUid:${uid}`, String(timestamp));
 
+    // Store cancellation data if present
+    if (cancelAtPeriodEnd && cancelAt) {
+      await env.JOBHACKAI_KV?.put(`cancelAtByUid:${uid}`, String(cancelAt));
+      console.log(`✅ CANCELLATION STORED: cancels at ${new Date(cancelAt * 1000).toISOString()}`);
+    } else {
+      await env.JOBHACKAI_KV?.delete(`cancelAtByUid:${uid}`);
+    }
+
+    // Store current period end for renewal display
+    if (currentPeriodEnd) {
+      await env.JOBHACKAI_KV?.put(`periodEndByUid:${uid}`, String(currentPeriodEnd));
+    }
+
+    // Fetch and store scheduled plan change if exists
+    if (schedule) {
+      const schedRes = await fetch(`https://api.stripe.com/v1/subscription_schedules/${schedule}`, {
+        headers: { Authorization: `Bearer ${env.STRIPE_SECRET_KEY}` }
+      });
+      const schedData = await schedRes.json();
+      
+      if (schedData && schedData.phases && schedData.phases.length > 1) {
+        const nextPhase = schedData.phases[1];
+        const nextPriceId = nextPhase.items[0]?.price;
+        const nextPlan = priceToPlan(env, nextPriceId);
+        const transitionTime = nextPhase.start_date;
+        
+        if (nextPlan && transitionTime) {
+          await env.JOBHACKAI_KV?.put(`scheduledPlanByUid:${uid}`, nextPlan);
+          await env.JOBHACKAI_KV?.put(`scheduledAtByUid:${uid}`, String(transitionTime));
+          console.log(`✅ SCHEDULED CHANGE STORED: ${plan} → ${nextPlan} at ${new Date(transitionTime * 1000).toISOString()}`);
+        }
+      }
+    } else {
+      await env.JOBHACKAI_KV?.delete(`scheduledPlanByUid:${uid}`);
+      await env.JOBHACKAI_KV?.delete(`scheduledAtByUid:${uid}`);
+    }
+
     return json({ 
       ok: true, 
       plan, 
       trialEndsAt,
+      cancelAt: cancelAt ? new Date(cancelAt * 1000).toISOString() : null,
+      currentPeriodEnd: currentPeriodEnd ? new Date(currentPeriodEnd * 1000).toISOString() : null,
       subscriptionStatus: status,
       priceId 
     }, 200, origin, env);
@@ -133,12 +180,10 @@ function priceToPlan(env, priceId) {
 }
 
 function corsHeaders(origin, env) {
-  const allowedOrigins = [
-    'https://dev.jobhackai.io',
-    'https://qa.jobhackai.io', 
-    'https://app.jobhackai.io'
-  ];
-  const allowed = allowedOrigins.includes(origin) ? origin : allowedOrigins[0];
+  const fallbackOrigins = ['https://dev.jobhackai.io', 'https://qa.jobhackai.io', 'https://app.jobhackai.io'];
+  const configured = (env && env.FRONTEND_URL) ? env.FRONTEND_URL : null;
+  const allowedList = configured ? [configured, ...fallbackOrigins] : fallbackOrigins;
+  const allowed = origin && allowedList.includes(origin) ? origin : (configured || fallbackOrigins[0]);
   return { 
     'Access-Control-Allow-Origin': allowed, 
     'Access-Control-Allow-Methods': 'POST,OPTIONS', 

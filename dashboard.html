@@ -815,6 +815,25 @@
       const diff = Math.ceil((end - now) / (1000 * 60 * 60 * 24));
       return diff > 0 ? diff : 0;
     }
+
+    // Fetch subscription status for warning banners
+    async function fetchSubscriptionStatus() {
+      try {
+        const user = firebase.auth().currentUser;
+        if (!user) return null;
+        
+        const idToken = await user.getIdToken();
+        const res = await fetch('/api/plan/me', {
+          headers: { Authorization: `Bearer ${idToken}` }
+        });
+        
+        if (!res.ok) return null;
+        return await res.json();
+      } catch (e) {
+        console.warn('Failed to fetch subscription status:', e);
+        return null;
+      }
+    }
     // Example ATS score (replace with real value from backend or Google Sheets)
     const atsScore = {
       percent: 78, // 0-100
@@ -822,9 +841,12 @@
       max: 100,
       summary: "Your resume meets many ATS criteria and is likely to be noticed."
     };
-    function renderDashboard(user) {
+    async function renderDashboard(user) {
       const root = document.getElementById('dashboard-root');
       const unlocked = featureMatrix[user.plan] || [];
+      
+      // Fetch subscription status for warning banners
+      const subStatus = await fetchSubscriptionStatus();
       // ATS Donut SVG (green ring, black text)
       function atsDonut(percent) {
         const radius = 23;
@@ -864,6 +886,23 @@
           <h2>Welcome back, ${user.name || 'User'}!</h2>
           ${user.plan === 'trial' || user.plan === 'essential' || user.plan === 'pro' || user.plan === 'premium' ? `<div class="plan-transition-message" style="background:#E6F7FF;color:#1976D2;padding:0.7em 1em;border-radius:8px;margin-bottom:0.7em;font-size:1.01rem;">Your previous ATS resume score has been carried over from your free account. You now have access to more features and unlimited scoring!</div>` : ''}
           ${user.plan === 'trial' ? `<div class="trial-countdown">You have ${daysLeft(user.trialEndsAt)} day${daysLeft(user.trialEndsAt) !== 1 ? 's' : ''} left in your trial!</div>` : ''}
+          ${subStatus && subStatus.cancelAt ? `
+            <div style="background:#FEF3C7;border-left:4px solid #F59E0B;color:#92400E;padding:0.8rem 1rem;border-radius:8px;margin:0.5rem 0;font-size:0.98rem;">
+              ⚠️ <strong>Your subscription will be canceled on ${new Date(subStatus.cancelAt).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}.</strong> You'll have access until then.
+              <a href="#" onclick="openBillingPortal(event)" style="color:#92400E;text-decoration:underline;margin-left:0.5rem;">Manage subscription</a>
+            </div>
+          ` : ''}
+          ${subStatus && subStatus.scheduledPlanChange ? `
+            <div style="background:#DBEAFE;border-left:4px solid #3B82F6;color:#1E40AF;padding:0.8rem 1rem;border-radius:8px;margin:0.5rem 0;font-size:0.98rem;">
+              ℹ️ <strong>Your plan will change to ${subStatus.scheduledPlanChange.newPlan.charAt(0).toUpperCase() + subStatus.scheduledPlanChange.newPlan.slice(1)} on ${new Date(subStatus.scheduledPlanChange.effectiveDate).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}.</strong>
+              <a href="#" onclick="openBillingPortal(event)" style="color:#1E40AF;text-decoration:underline;margin-left:0.5rem;">View details</a>
+            </div>
+          ` : ''}
+          ${subStatus && subStatus.currentPeriodEnd && user.plan !== 'free' && !subStatus.cancelAt && !subStatus.scheduledPlanChange ? `
+            <div style="color:#6B7280;font-size:0.92rem;margin:0.3rem 0;">
+              Renews on ${new Date(subStatus.currentPeriodEnd).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}
+            </div>
+          ` : ''}
           <div class="user-email">${user.email}</div>
         </div>
         <div class="ats-score-row">
@@ -905,18 +944,20 @@
           let usageText = '';
           let tooltip = '';
           if (user.plan === 'free') {
-            const usageStats = window.freeAccountManager ? window.freeAccountManager.getUsageStats() : null;
-            if (usageStats && usageStats.atsScoring.remaining > 0) {
-              usageText = `${usageStats.atsScoring.remaining} ATS score${usageStats.atsScoring.remaining === 1 ? '' : 's'} remaining this month.`;
-            } else if (usageStats && usageStats.atsScoring.remaining === 0) {
-              usageText = 'Monthly limit reached. Upgrade for unlimited scoring.';
+            // Check lifetime credit
+            const creditKey = `creditsByUid:${user.uid}`;
+            const creditsData = localStorage.getItem(creditKey);
+            const credits = creditsData ? JSON.parse(creditsData) : { ats_free_lifetime: 1 };
+            
+            if (credits.ats_free_lifetime > 0) {
+              usageText = 'You have 1 free ATS score (lifetime).';
+              tooltip = `<span class="jh-tooltip-trigger" tabindex="0" aria-label="More info" style="margin-left:0.4em;vertical-align:middle;">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false" style="vertical-align:middle"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="8"/><line x1="12" y1="12" x2="12" y2="16"/></svg>
+                <span class="jh-tooltip-content">This is a one-time free score. After use, upgrade for unlimited ATS scoring.</span>
+              </span>`;
             } else {
-              usageText = '1 free ATS resume score per month.';
+              usageText = 'Free ATS score used. Upgrade for unlimited scoring.';
             }
-            tooltip = `<span class="jh-tooltip-trigger" tabindex="0" aria-label="More info" style="margin-left:0.4em;vertical-align:middle;">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false" style="vertical-align:middle"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="8"/><line x1="12" y1="12" x2="12" y2="16"/></svg>
-              <span class="jh-tooltip-text">Upgrade for unlimited ATS scoring and detailed feedback.</span>
-            </span>`;
           } else if (user.plan === 'trial') {
             usageText = 'Unlimited ATS resume scoring during your trial.';
             tooltip = `<span class="jh-tooltip-trigger" tabindex="0" aria-label="More info" style="margin-left:0.4em;vertical-align:middle;">
@@ -1009,12 +1050,43 @@
       const atsUploadBtn = document.getElementById('ats-upload-btn');
       const atsUploadInput = document.getElementById('ats-upload-input');
       if (atsUploadBtn && atsUploadInput) {
-        atsUploadBtn.addEventListener('click', () => atsUploadInput.click());
-        atsUploadInput.addEventListener('change', function(e) {
+        atsUploadBtn.addEventListener('click', async function() {
+          const user = firebase.auth().currentUser;
+          if (!user) {
+            alert('Please log in to use ATS scoring');
+            return;
+          }
+          
+          // Fetch current plan
+          const idToken = await user.getIdToken();
+          const planRes = await fetch('/api/plan/me', {
+            headers: { Authorization: `Bearer ${idToken}` }
+          });
+          const planData = await planRes.json();
+          const plan = planData.plan || 'free';
+          
+          // Check credits for free users
+          if (plan === 'free') {
+            const creditKey = `creditsByUid:${user.uid}`;
+            const creditsData = localStorage.getItem(creditKey);
+            const credits = creditsData ? JSON.parse(creditsData) : { ats_free_lifetime: 0 };
+            
+            if (credits.ats_free_lifetime <= 0) {
+              alert('You have used your free ATS score. Upgrade to unlock unlimited scoring!');
+              window.location.href = 'pricing-a.html';
+              return;
+            }
+          }
+          
+          // Trigger file input
+          atsUploadInput.click();
+        });
+        
+        atsUploadInput.addEventListener('change', async function(e) {
           const file = e.target.files[0];
           if (!file) return;
 
-          // Check free account usage limits
+          // Check free account usage limits (legacy check)
           const userPlan = window.JobHackAINavigation ? window.JobHackAINavigation.getEffectivePlan() : 'free';
           if (userPlan === 'free' && window.freeAccountManager) {
             const usageCheck = window.freeAccountManager.canUseATSScoring();
@@ -1052,6 +1124,34 @@
           // Simulate ATS scoring and update donut/summary
           const score = Math.floor(Math.random() * 31) + 60; // 60-90%
           const summary = score > 85 ? 'Excellent! Your resume is highly ATS compatible.' : score > 70 ? 'Your resume meets many ATS criteria and is likely to be noticed.' : 'Your resume needs improvement for better ATS results.';
+          
+          // Consume credit for free users after successful score
+          const user = firebase.auth().currentUser;
+          if (user) {
+            const idToken = await user.getIdToken();
+            const planRes = await fetch('/api/plan/me', {
+              headers: { Authorization: `Bearer ${idToken}` }
+            });
+            const planData = await planRes.json();
+            const plan = planData.plan || 'free';
+            
+            if (plan === 'free') {
+              const creditKey = `creditsByUid:${user.uid}`;
+              const creditsData = localStorage.getItem(creditKey);
+              const credits = creditsData ? JSON.parse(creditsData) : { ats_free_lifetime: 1 };
+              
+              // Consume credit
+              credits.ats_free_lifetime = 0;
+              localStorage.setItem(creditKey, JSON.stringify(credits));
+              console.log('✅ Free ATS credit consumed');
+              
+              // Update UI to show credit used
+              const usageDiv = document.querySelector('.feature-card:has(#ats-upload-btn) .usage-indicator');
+              if (usageDiv) {
+                usageDiv.innerHTML = 'Free ATS score used. <a href="pricing-a.html" style="color:#0077B5;text-decoration:underline;">Upgrade for unlimited</a>';
+              }
+            }
+          }
           // Update donut
           const donut = document.querySelector('.ats-donut');
           if (donut) {
@@ -1074,6 +1174,39 @@
         });
       }
       // NOTE: Resume Feedback page should read the last uploaded resume from localStorage (key: 'lastUploadedResume') if present.
+    }
+
+    // Billing portal helper function
+    async function openBillingPortal(event) {
+      event.preventDefault();
+      
+      try {
+        const user = firebase.auth().currentUser;
+        if (!user) {
+          alert('Please log in to manage your subscription');
+          return;
+        }
+        
+        const idToken = await user.getIdToken();
+        const res = await fetch('/api/billing-portal', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${idToken}`,
+            'Content-Type': 'application/json'
+          }
+        });
+        
+        const data = await res.json();
+        
+        if (data.ok && data.url) {
+          window.location.href = data.url;
+        } else {
+          alert('Unable to open billing portal: ' + (data.error || 'Unknown error'));
+        }
+      } catch (e) {
+        console.error('Billing portal error:', e);
+        alert('Failed to open billing portal. Please try again.');
+      }
     }
   </script>
   <!-- Load Firebase auth for token retrieval -->

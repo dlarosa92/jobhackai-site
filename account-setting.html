@@ -407,44 +407,97 @@
     
     // --- RENDER BILLING SECTION ---
     async function renderBillingSection() {
-      const plan = window.JobHackAINavigation?.getEffectivePlan() || 'free';
-      const section = document.getElementById('billing-section-dynamic');
+      const billingSection = document.getElementById('billing-section-dynamic');
+      if (!billingSection) return;
       
-      if (!section) return;
-      
-      if (plan === 'free') {
-        section.innerHTML = `
-          <div class="settings-label" style="margin-bottom:0.5rem;">Subscription</div>
-          <p style="color: #6B7280; margin-bottom: 1rem;">You're on the Free plan. Upgrade to unlock premium features.</p>
-          <a href="pricing-a.html" class="btn-primary" style="text-decoration: none;">View Plans</a>
-        `;
-      } else if (plan === 'trial') {
-        const trialEnd = localStorage.getItem('trial-ends-at');
-        let daysLeft = 3;
-        if (trialEnd) {
-          const msLeft = new Date(trialEnd) - Date.now();
-          daysLeft = Math.max(0, Math.ceil(msLeft / 86400000));
+      try {
+        const user = firebase.auth().currentUser;
+        if (!user) {
+          billingSection.innerHTML = '<div style="color: #6B7280;">Please log in to view subscription details.</div>';
+          return;
         }
-        section.innerHTML = `
-          <div class="settings-label" style="margin-bottom:0.5rem;">Subscription</div>
-          <div style="display: inline-block; background: #DBEAFE; color: #1E40AF; padding: 0.5rem 1rem; border-radius: 8px; font-weight: 600; margin-bottom: 1rem;">
-            Trial • ${daysLeft} day${daysLeft !== 1 ? 's' : ''} left
-          </div>
-          <br>
-          <button class="btn-primary" onclick="openBillingPortal()">Manage Subscription</button>
-        `;
-      } else {
-        // essential, pro, premium
-        const planNames = { essential: 'Essential', pro: 'Pro', premium: 'Premium' };
-        const planPrices = { essential: '$29/mo', pro: '$59/mo', premium: '$99/mo' };
-        section.innerHTML = `
-          <div class="settings-label" style="margin-bottom:0.5rem;">Subscription</div>
-          <div style="display: inline-block; background: #D1FAE5; color: #065F46; padding: 0.5rem 1rem; border-radius: 8px; font-weight: 600; margin-bottom: 1rem;">
-            ${planNames[plan] || plan} Plan • ${planPrices[plan] || '$0/mo'}
-          </div>
-          <br>
-          <button class="btn-primary" onclick="openBillingPortal()">Manage Subscription</button>
-        `;
+        
+        const idToken = await user.getIdToken();
+        const res = await fetch('/api/plan/me', {
+          headers: { Authorization: `Bearer ${idToken}` }
+        });
+        
+        if (!res.ok) {
+          billingSection.innerHTML = '<div style="color: #EF4444;">Failed to load subscription details.</div>';
+          return;
+        }
+        
+        const data = await res.json();
+        const plan = data.plan || 'free';
+        
+        // Plan name mapping
+        const planNames = {
+          free: 'Free Account',
+          trial: 'Trial (3 days)',
+          essential: 'Essential',
+          pro: 'Pro',
+          premium: 'Premium'
+        };
+        
+        const planPrices = {
+          free: 'Free',
+          trial: 'Free for 3 days',
+          essential: '$29/month',
+          pro: '$59/month',
+          premium: '$99/month'
+        };
+        
+        let html = '<div class="settings-label" style="margin-bottom:0.5rem;">Subscription</div>';
+        
+        if (plan === 'free') {
+          html += `
+            <div style="margin-bottom:0.8rem;">
+              <div style="font-size:1.1rem;font-weight:600;color:#232B36;">Free Account</div>
+              <div style="color:#6B7280;font-size:0.98rem;margin-top:0.2rem;">Limited features • Upgrade anytime</div>
+            </div>
+            <a href="pricing-a.html" class="btn-primary" style="text-decoration:none;display:inline-block;">View Plans</a>
+          `;
+        } else {
+          html += `<div style="margin-bottom:0.8rem;">`;
+          html += `<div style="font-size:1.1rem;font-weight:600;color:#232B36;">${planNames[plan]} Plan</div>`;
+          html += `<div style="color:#6B7280;font-size:0.98rem;margin-top:0.2rem;">${planPrices[plan]}</div>`;
+          
+          // Show cancellation warning
+          if (data.cancelAt) {
+            const cancelDate = new Date(data.cancelAt).toLocaleDateString('en-US', { 
+              year: 'numeric', month: 'long', day: 'numeric' 
+            });
+            html += `<div style="background:#FEF3C7;border-left:4px solid #F59E0B;color:#92400E;padding:0.6rem 0.8rem;border-radius:6px;margin-top:0.8rem;font-size:0.95rem;">
+              ⚠️ <strong>Cancels on ${cancelDate}</strong>
+            </div>`;
+          } 
+          // Show scheduled plan change
+          else if (data.scheduledPlanChange) {
+            const effectiveDate = new Date(data.scheduledPlanChange.effectiveDate).toLocaleDateString('en-US', { 
+              year: 'numeric', month: 'long', day: 'numeric' 
+            });
+            const newPlanName = planNames[data.scheduledPlanChange.newPlan] || data.scheduledPlanChange.newPlan;
+            html += `<div style="background:#DBEAFE;border-left:4px solid #3B82F6;color:#1E40AF;padding:0.6rem 0.8rem;border-radius:6px;margin-top:0.8rem;font-size:0.95rem;">
+              ℹ️ <strong>Changes to ${newPlanName} on ${effectiveDate}</strong>
+            </div>`;
+          }
+          // Show next renewal date
+          else if (data.currentPeriodEnd) {
+            const renewDate = new Date(data.currentPeriodEnd).toLocaleDateString('en-US', { 
+              year: 'numeric', month: 'long', day: 'numeric' 
+            });
+            html += `<div style="color:#6B7280;font-size:0.92rem;margin-top:0.4rem;">Renews on ${renewDate}</div>`;
+          }
+          
+          html += `</div>`;
+          html += `<button class="btn-outline" type="button" onclick="openBillingPortal()">Manage Subscription</button>`;
+        }
+        
+        billingSection.innerHTML = html;
+        
+      } catch (e) {
+        console.error('Error rendering billing section:', e);
+        billingSection.innerHTML = '<div style="color: #EF4444;">Error loading subscription details.</div>';
       }
     }
     
