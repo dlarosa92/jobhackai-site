@@ -15,6 +15,8 @@ function planRequiresPayment(plan) {
 
 // Wait for DOM to be ready
 document.addEventListener('DOMContentLoaded', async function() {
+  console.log('🚀 login-page.js v2 - Optimistic UI with instant plan banner');
+  
   // Prevent auto-redirect races when user is actively logging in
   let loginInProgress = false;
   // Get DOM elements
@@ -33,6 +35,32 @@ document.addEventListener('DOMContentLoaded', async function() {
   const loginError = document.getElementById('loginError');
   const signupError = document.getElementById('signupError');
   
+  // OPTIMISTIC UI: Show appropriate form immediately based on localStorage
+  const showOptimisticUI = () => {
+    const hasUserEmail = localStorage.getItem('user-email');
+    const selectedPlan = new URLSearchParams(window.location.search).get('plan') || 
+                        localStorage.getItem('selected-plan');
+    
+    console.log('🎯 Optimistic UI check:', { hasUserEmail, selectedPlan });
+    
+    if (hasUserEmail) {
+      // User has email in localStorage - show "Welcome back" login form
+      console.log('✅ Showing optimistic login form for:', hasUserEmail);
+      showLoginForm();
+    } else if (selectedPlan && selectedPlan !== 'create-account') {
+      // Plan selected - show signup form with plan banner
+      console.log('✅ Showing optimistic signup form for plan:', selectedPlan);
+      showSignupForm(selectedPlan);
+    } else {
+      // Default - show signup form
+      console.log('✅ Showing default signup form');
+      showSignupForm();
+    }
+  };
+  
+  // Show UI immediately (optimistic)
+  showOptimisticUI();
+  
   // Check if user is already authenticated (multiple approaches)
   const checkAuth = async () => {
     if (loginInProgress) {
@@ -43,7 +71,7 @@ document.addEventListener('DOMContentLoaded', async function() {
     // ONLY check Firebase, not localStorage
     try {
       console.log('🔍 Checking Firebase auth state...');
-      const user = await authManager.waitForAuthReady(2000);
+      const user = await authManager.waitForAuthReady(2000); // Reduced from 5s to 2s
       if (user && user.email) {
         console.log('✅ User authenticated via Firebase:', user.email);
         // Sync to localStorage for other consumers
@@ -93,7 +121,7 @@ document.addEventListener('DOMContentLoaded', async function() {
     }
   });
   
-  // Check for selected plan with enhanced validation
+  // INSTANT PLAN BANNER: Read plan synchronously and display immediately
   const urlParams = new URLSearchParams(window.location.search);
   const planParam = urlParams.get('plan');
   const storedSelection = localStorage.getItem('selected-plan');
@@ -134,9 +162,15 @@ document.addEventListener('DOMContentLoaded', async function() {
     console.log('🧹 Cleared stale plan selection');
   }
   
+  // INSTANT PLAN BANNER DISPLAY (synchronous, no waiting for Firebase)
   if (selectedPlan && selectedPlan !== 'create-account') {
+    console.log('🎯 INSTANT: Displaying plan banner for:', selectedPlan);
     // Store selected plan
     localStorage.setItem('selected-plan', selectedPlan);
+    
+    // Show plan banner immediately with smooth animation
+    showSelectedPlanBanner(selectedPlan);
+    addFadeInAnimation();
     
     // Auto-switch to signup form for new users with plan
     if (!localStorage.getItem('user-email')) {
@@ -515,6 +549,23 @@ document.addEventListener('DOMContentLoaded', async function() {
       planName.textContent = planNames[plan] || 'Selected Plan';
       planPrice.textContent = planPrices[plan] || '$0/mo';
       banner.style.display = 'block';
+      console.log('✅ Plan banner displayed for:', plan);
+    }
+  }
+  
+  function addFadeInAnimation() {
+    const banner = document.getElementById('selectedPlanBanner');
+    if (banner) {
+      // Add smooth fade-in animation
+      banner.style.opacity = '0';
+      banner.style.transform = 'translateY(-10px)';
+      banner.style.transition = 'opacity 0.25s ease-in-out, transform 0.25s ease-in-out';
+      
+      // Trigger animation on next frame
+      requestAnimationFrame(() => {
+        banner.style.opacity = '1';
+        banner.style.transform = 'translateY(0)';
+      });
     }
   }
 

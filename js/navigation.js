@@ -310,16 +310,24 @@ function setAuthState(isAuthenticated, plan = null) {
 }
 
 async function logout() {
-  navLog('info', 'logout() called');
+  navLog('info', 'logout() called - v2 with non-blocking cleanup');
   
-  // Best-effort: sign out from Firebase (if auth manager is available)
-  try {
-    if (window.FirebaseAuthManager && typeof window.FirebaseAuthManager.signOut === 'function') {
-      await window.FirebaseAuthManager.signOut();
-    }
-  } catch (_) { /* no-op */ }
+  // Add visual feedback FIRST (synchronous)
+  document.body.style.opacity = '0.7';
+  document.body.style.transition = 'opacity 0.3s ease';
+  
+  // Show logout message IMMEDIATELY (synchronous)
+  const logoutMsg = document.createElement('div');
+  logoutMsg.style.cssText = `
+    position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    background: rgba(0,0,0,0.8); color: white; padding: 1rem 2rem;
+    border-radius: 8px; z-index: 10000; font-weight: 600;
+  `;
+  logoutMsg.textContent = 'Logging out...';
+  document.body.appendChild(logoutMsg);
+  navLog('info', 'Visual feedback shown');
 
-  // Clear all authentication data
+  // Clear localStorage SYNCHRONOUSLY (fast, non-blocking)
   try {
     localStorage.removeItem('user-authenticated');
     localStorage.removeItem('user-email');
@@ -337,76 +345,97 @@ async function logout() {
     localStorage.removeItem('trial-activated');
     localStorage.removeItem('trial-start-date');
     localStorage.removeItem('auth-user');
-  } catch (_) { /* no-op */ }
-
-  // Remove Firebase SDK local persistence to prevent self-heal re-login
-  try {
+    
+    // Remove Firebase SDK local persistence
     for (let i = localStorage.length - 1; i >= 0; i--) {
       const key = localStorage.key(i);
       if (key && key.startsWith('firebase:authUser:')) {
         localStorage.removeItem(key);
       }
     }
-  } catch (_) { /* no-op */ }
-
-  // IndexedDB cleanup (prevents re-hydration)
-  const deleteDb = (name) => new Promise((res) => {
-    try {
-      const req = indexedDB.deleteDatabase(name);
-      req.onsuccess = req.onerror = req.onblocked = () => res();
-    } catch (_) { res(); }
-  });
-  try {
-    await deleteDb('firebaseLocalStorageDb');
-    await deleteDb('firebase-installations-database');
-    if (indexedDB.databases) {
-      const dbs = await indexedDB.databases();
-      for (const db of (dbs || [])) {
-        const name = db && db.name ? db.name : null;
-        if (name && name.toLowerCase().includes('firebase')) {
-          await deleteDb(name);
-        }
-      }
-    }
-  } catch (_) { /* best effort */ }
-
-  // TTL cooldown for self-heal (60s)
-  try { localStorage.setItem('force-logged-out', String(Date.now())); } catch (_) {}
-
-  // Multi-tab broadcast
-  try { new BroadcastChannel('auth').postMessage({ type: 'logout', ts: Date.now() }); } catch (_) {}
-
-  // Explicitly mark as logged out to keep guards simple
-  try { localStorage.setItem('user-authenticated', 'false'); } catch (_) {}
+    
+    // Mark as logged out
+    localStorage.setItem('user-authenticated', 'false');
+    localStorage.setItem('force-logged-out', String(Date.now()));
+  } catch (e) {
+    navLog('warn', 'localStorage cleanup error:', e);
+  }
   
-  // Log state
-  navLog('debug', 'Post-logout storage state', {
-    'user-authenticated': localStorage.getItem('user-authenticated'),
-    'user-plan': localStorage.getItem('user-plan'),
-    'dev-plan': localStorage.getItem('dev-plan')
-  });
+  // Multi-tab broadcast (synchronous)
+  try { 
+    new BroadcastChannel('auth').postMessage({ type: 'logout', ts: Date.now() }); 
+  } catch (_) {}
   
-  // Update navigation immediately
+  // Update navigation immediately (synchronous)
   if (typeof updateNavigation === 'function') {
     updateNavigation();
   }
 
-  // Add visual feedback
-  document.body.style.opacity = '0.7';
-  document.body.style.transition = 'opacity 0.3s ease';
+  // CRITICAL: Schedule redirect with setTimeout (guaranteed to execute)
+  // This ensures redirect happens even if async operations below hang
+  navLog('info', 'Scheduling redirect in 300ms');
+  setTimeout(() => {
+    navLog('info', 'Executing redirect to /login.html');
+    location.replace('/login.html');
+  }, 300);
   
-  // Show logout message
-  const logoutMsg = document.createElement('div');
-  logoutMsg.style.cssText = `
-    position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
-    background: rgba(0,0,0,0.8); color: white; padding: 1rem 2rem;
-    border-radius: 8px; z-index: 10000; font-weight: 600;
-  `;
-  logoutMsg.textContent = 'Logging out...';
-  document.body.appendChild(logoutMsg);
+  // Background cleanup (non-blocking) - runs AFTER redirect is scheduled
+  // Use Promise.race with timeout to prevent hanging
+  const cleanupWithTimeout = async () => {
+    const deleteDb = (name) => new Promise((res) => {
+      try {
+        const req = indexedDB.deleteDatabase(name);
+        req.onsuccess = req.onerror = req.onblocked = () => res();
+      } catch (_) { res(); }
+    });
+    
+    const cleanup = async () => {
+      try {
+        await deleteDb('firebaseLocalStorageDb');
+        await deleteDb('firebase-installations-database');
+        if (indexedDB.databases) {
+          const dbs = await indexedDB.databases();
+          for (const db of (dbs || [])) {
+            const name = db && db.name ? db.name : null;
+            if (name && name.toLowerCase().includes('firebase')) {
+              await deleteDb(name);
+            }
+          }
+        }
+        navLog('info', 'IndexedDB cleanup completed');
+      } catch (e) {
+        navLog('warn', 'IndexedDB cleanup error (non-critical):', e);
+      }
+    };
+    
+    const timeout = new Promise(resolve => setTimeout(() => {
+      navLog('warn', 'IndexedDB cleanup timeout after 1s (non-critical)');
+      resolve();
+    }, 1000));
+    
+    // Race cleanup vs timeout (max 1s)
+    await Promise.race([cleanup(), timeout]);
+  };
   
-  // Redirect immediately (visual transition will happen during page unload)
-  location.replace('login.html');
+  // Best-effort: sign out from Firebase (non-blocking)
+  const firebaseSignOut = async () => {
+    try {
+      if (window.FirebaseAuthManager && typeof window.FirebaseAuthManager.signOut === 'function') {
+        await window.FirebaseAuthManager.signOut();
+        navLog('info', 'Firebase signOut completed');
+      }
+    } catch (e) {
+      navLog('warn', 'Firebase signOut error (non-critical):', e);
+    }
+  };
+  
+  // Run both cleanup operations in parallel, don't await
+  // They will complete in background, redirect happens regardless
+  Promise.all([cleanupWithTimeout(), firebaseSignOut()]).catch(e => {
+    navLog('warn', 'Background cleanup error (non-critical):', e);
+  });
+  
+  navLog('info', 'logout() setup complete, redirect scheduled');
 }
 
 // --- PLAN CONFIGURATION ---

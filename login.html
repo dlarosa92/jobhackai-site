@@ -23,14 +23,44 @@
       opacity: 0;
     }
     
-    /* Plan banner animations */
+    /* Plan banner animations - improved */
     .selected-plan-banner {
       opacity: 0;
-      animation: fadeInBanner 0.25s ease-in-out forwards;
+      transform: translateY(-10px);
+      transition: opacity 0.25s ease-in-out, transform 0.25s ease-in-out;
     }
-    @keyframes fadeInBanner {
-      from { opacity: 0; transform: translateY(-10px); }
-      to { opacity: 1; transform: translateY(0); }
+    .selected-plan-banner.show {
+      opacity: 1;
+      transform: translateY(0);
+    }
+    
+    /* Loading states */
+    .auth-form.loading {
+      opacity: 0.7;
+      pointer-events: none;
+    }
+    
+    .auth-continue-btn.loading {
+      position: relative;
+      color: transparent;
+    }
+    
+    .auth-continue-btn.loading::after {
+      content: '';
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 20px;
+      height: 20px;
+      margin: -10px 0 0 -10px;
+      border: 2px solid #ffffff;
+      border-radius: 50%;
+      border-top-color: transparent;
+      animation: spin 1s linear infinite;
+    }
+    
+    @keyframes spin {
+      to { transform: rotate(360deg); }
     }
     
     .auth-container {
