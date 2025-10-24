@@ -43,7 +43,7 @@ document.addEventListener('DOMContentLoaded', async function() {
     // ONLY check Firebase, not localStorage
     try {
       console.log('🔍 Checking Firebase auth state...');
-      const user = await authManager.waitForAuthReady(5000);
+      const user = await authManager.waitForAuthReady(2000);
       if (user && user.email) {
         console.log('✅ User authenticated via Firebase:', user.email);
         // Sync to localStorage for other consumers
@@ -64,7 +64,7 @@ document.addEventListener('DOMContentLoaded', async function() {
         console.log('✅ Redirecting to dashboard');
         document.body.style.opacity = '0.7';
         document.body.style.transition = 'opacity 0.3s ease';
-        setTimeout(() => { window.location.href = 'dashboard.html'; }, 100);
+        window.location.href = 'dashboard.html';
         return true;
       }
     } catch (error) {
@@ -88,9 +88,7 @@ document.addEventListener('DOMContentLoaded', async function() {
       console.log('✅ Auth state changed: User authenticated, redirecting to dashboard');
       document.body.style.opacity = '0.7';
       document.body.style.transition = 'opacity 0.3s ease';
-      setTimeout(() => {
-        window.location.href = 'dashboard.html';
-      }, 200);
+      window.location.href = 'dashboard.html';
       unsubscribe(); // Stop listening after redirect
     }
   });
@@ -189,8 +187,8 @@ document.addEventListener('DOMContentLoaded', async function() {
         document.body.style.transition = 'opacity 0.3s ease';
         this.textContent = 'Redirecting...';
         
-        // Longer delay to ensure auth state is fully persisted
-        await new Promise(resolve => setTimeout(resolve, 500));
+        // Brief delay to ensure auth state is fully persisted
+        await new Promise(resolve => setTimeout(resolve, 100));
         
         if (planRequiresPayment(plan)) {
           // Start server-driven checkout; trial requires card

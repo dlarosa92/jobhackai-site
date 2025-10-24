@@ -15,6 +15,24 @@
   <link rel="stylesheet" href="css/header.css">
   <link rel="stylesheet" href="css/footer.css">
   <style>
+    /* Page transitions */
+    body {
+      transition: opacity 0.3s ease;
+    }
+    .page-transition-out {
+      opacity: 0;
+    }
+    
+    /* Plan banner animations */
+    .selected-plan-banner {
+      opacity: 0;
+      animation: fadeInBanner 0.25s ease-in-out forwards;
+    }
+    @keyframes fadeInBanner {
+      from { opacity: 0; transform: translateY(-10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    
     .auth-container {
       max-width: 400px;
       margin: 3.5rem auto 2.5rem auto;

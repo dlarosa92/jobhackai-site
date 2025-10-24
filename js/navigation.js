@@ -391,8 +391,24 @@ async function logout() {
     updateNavigation();
   }
 
-  // Redirect to home
-  location.replace('index.html');
+  // Add visual feedback
+  document.body.style.opacity = '0.7';
+  document.body.style.transition = 'opacity 0.3s ease';
+  
+  // Show logout message briefly
+  const logoutMsg = document.createElement('div');
+  logoutMsg.style.cssText = `
+    position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    background: rgba(0,0,0,0.8); color: white; padding: 1rem 2rem;
+    border-radius: 8px; z-index: 10000; font-weight: 600;
+  `;
+  logoutMsg.textContent = 'Logging out...';
+  document.body.appendChild(logoutMsg);
+  
+  // Redirect to login page after brief delay
+  setTimeout(() => {
+    location.replace('login.html');
+  }, 300);
 }
 
 // --- PLAN CONFIGURATION ---

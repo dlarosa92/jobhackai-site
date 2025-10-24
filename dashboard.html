@@ -461,6 +461,34 @@
       display: block;
       pointer-events: auto;
     }
+    .feature-card .feature-action .usage-indicator {
+      flex-basis: 100%;
+      margin-top: 0.45rem;
+      color: #6B7280;
+      line-height: 1.35;
+      font-size: 0.95rem;
+    }
+    
+    /* Loading skeleton */
+    .loading-skeleton {
+      background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+      background-size: 200% 100%;
+      animation: loading 1.5s infinite;
+    }
+    @keyframes loading {
+      0% { background-position: 200% 0; }
+      100% { background-position: -200% 0; }
+    }
+    .skeleton-banner {
+      height: 200px;
+      border-radius: 16px;
+      margin: 2rem auto;
+      max-width: 540px;
+    }
+    .skeleton-card {
+      height: 210px;
+      border-radius: 16px;
+    }
   </style>
 </head>
 <body>
@@ -512,7 +540,15 @@
   </script>
   <!-- Main Content -->
   <main>
-    <div id="dashboard-root"></div>
+    <div id="dashboard-root">
+      <!-- Loading skeleton while auth loads -->
+      <div class="loading-skeleton skeleton-banner"></div>
+      <div class="dashboard-features">
+        <div class="loading-skeleton skeleton-card"></div>
+        <div class="loading-skeleton skeleton-card"></div>
+        <div class="loading-skeleton skeleton-card"></div>
+      </div>
+    </div>
   </main>
   <!-- Footer (canonical) -->
   <footer class="site-footer">
@@ -581,7 +617,7 @@
         const isAuthInStorage = localStorage.getItem('user-authenticated') === 'true';
         if (isAuthInStorage) {
           console.log('⏳ localStorage says authenticated; waiting for Firebase to restore session...');
-          try { await window.FirebaseAuthManager.waitForAuthReady?.(3000); } catch (_) {}
+          try { await window.FirebaseAuthManager.waitForAuthReady?.(2000); } catch (_) {}
           if (!window.FirebaseAuthManager.getCurrentUser?.()) {
             // Small extra grace period to avoid ping-pong
             await new Promise(resolve => setTimeout(resolve, 500));
@@ -717,10 +753,12 @@
       // Create user object from authentication data
       let authUserName = 'User';
       let authUserEmail = 'user@example.com';
+      let authUserUid = null;
       try {
         const u = window.FirebaseAuthManager?.getCurrentUser?.();
         if (u) {
           authUserEmail = u.email || authUserEmail;
+          authUserUid = u.uid || null;
           const dn = u.displayName || '';
           if (dn) authUserName = dn;
         }
@@ -728,6 +766,7 @@
       const user = {
         name: authUserName,
         email: authUserEmail,
+        uid: authUserUid,
         plan: currentPlan,
         trialEndsAt: localStorage.getItem('trial-ends-at') || new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString(),
         hasUsedFreeTrial: true,
@@ -819,7 +858,7 @@
     // Fetch subscription status for warning banners
     async function fetchSubscriptionStatus() {
       try {
-        const user = firebase.auth().currentUser;
+        const user = window.FirebaseAuthManager?.getCurrentUser?.();
         if (!user) return null;
         
         const idToken = await user.getIdToken();
@@ -953,7 +992,7 @@
               usageText = 'You have 1 free ATS score (lifetime).';
               tooltip = `<span class="jh-tooltip-trigger" tabindex="0" aria-label="More info" style="margin-left:0.4em;vertical-align:middle;">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false" style="vertical-align:middle"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="8"/><line x1="12" y1="12" x2="12" y2="16"/></svg>
-                <span class="jh-tooltip-content">This is a one-time free score. After use, upgrade for unlimited ATS scoring.</span>
+                <span class="jh-tooltip-text">This is a one-time free score. After use, upgrade for unlimited ATS scoring.</span>
               </span>`;
             } else {
               usageText = 'Free ATS score used. Upgrade for unlimited scoring.';
@@ -1051,7 +1090,7 @@
       const atsUploadInput = document.getElementById('ats-upload-input');
       if (atsUploadBtn && atsUploadInput) {
         atsUploadBtn.addEventListener('click', async function() {
-          const user = firebase.auth().currentUser;
+          const user = window.FirebaseAuthManager?.getCurrentUser?.();
           if (!user) {
             alert('Please log in to use ATS scoring');
             return;
@@ -1126,7 +1165,7 @@
           const summary = score > 85 ? 'Excellent! Your resume is highly ATS compatible.' : score > 70 ? 'Your resume meets many ATS criteria and is likely to be noticed.' : 'Your resume needs improvement for better ATS results.';
           
           // Consume credit for free users after successful score
-          const user = firebase.auth().currentUser;
+          const user = window.FirebaseAuthManager?.getCurrentUser?.();
           if (user) {
             const idToken = await user.getIdToken();
             const planRes = await fetch('/api/plan/me', {
@@ -1181,7 +1220,7 @@
       event.preventDefault();
       
       try {
-        const user = firebase.auth().currentUser;
+        const user = window.FirebaseAuthManager?.getCurrentUser?.();
         if (!user) {
           alert('Please log in to manage your subscription');
           return;

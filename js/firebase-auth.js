@@ -223,9 +223,9 @@ class AuthManager {
           // FIX: Wait for auth to be ready before fetching plan to prevent race condition
           let kvPlan = null;
           try {
-            // Wait for Firebase auth to be fully ready (max 3 seconds)
+            // Wait for Firebase auth to be fully ready (max 2 seconds)
             console.log('🔄 Waiting for Firebase auth to be ready before plan fetching...');
-            await this.waitForAuthReady(3000);
+            await this.waitForAuthReady(2000);
             
             if (window.JobHackAINavigation && typeof window.JobHackAINavigation.fetchKVPlan === 'function') {
               kvPlan = await window.JobHackAINavigation.fetchKVPlan();
@@ -339,6 +339,14 @@ class AuthManager {
       const userRecord = UserDatabase.getUser(this.currentUser.email);
       callback(this.currentUser, userRecord);
     }
+    
+    // Return unsubscribe function
+    return () => {
+      const index = this.authStateListeners.indexOf(callback);
+      if (index > -1) {
+        this.authStateListeners.splice(index, 1);
+      }
+    };
   }
 
   /**
@@ -421,9 +429,9 @@ class AuthManager {
       // FIX: Wait for auth to be ready before fetching plan to prevent race condition
       let kvPlan = null;
       try {
-        // Wait for Firebase auth to be fully ready (max 3 seconds)
+        // Wait for Firebase auth to be fully ready (max 2 seconds)
         console.log('🔄 Waiting for Firebase auth to be ready during sign-in...');
-        await this.waitForAuthReady(3000);
+        await this.waitForAuthReady(2000);
         
         if (window.JobHackAINavigation && typeof window.JobHackAINavigation.fetchKVPlan === 'function') {
           kvPlan = await window.JobHackAINavigation.fetchKVPlan();
@@ -517,9 +525,9 @@ class AuthManager {
         // FIX: Wait for auth to be ready before fetching plan to prevent race condition
         let kvPlan = null;
         try {
-          // Wait for Firebase auth to be fully ready (max 3 seconds)
+          // Wait for Firebase auth to be fully ready (max 2 seconds)
           console.log('🔄 Waiting for Firebase auth to be ready during Google sign-in...');
-          await this.waitForAuthReady(3000);
+          await this.waitForAuthReady(2000);
           
           if (window.JobHackAINavigation && typeof window.JobHackAINavigation.fetchKVPlan === 'function') {
             kvPlan = await window.JobHackAINavigation.fetchKVPlan();
