@@ -255,3 +255,6 @@ class UserProfileManager {
 // Export for use in other modules
 export default UserProfileManager;
 export { db };
+
+// Expose to window for non-module scripts
+window.UserProfileManager = UserProfileManager;

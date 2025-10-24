@@ -395,7 +395,7 @@ async function logout() {
   document.body.style.opacity = '0.7';
   document.body.style.transition = 'opacity 0.3s ease';
   
-  // Show logout message briefly
+  // Show logout message
   const logoutMsg = document.createElement('div');
   logoutMsg.style.cssText = `
     position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
@@ -405,10 +405,8 @@ async function logout() {
   logoutMsg.textContent = 'Logging out...';
   document.body.appendChild(logoutMsg);
   
-  // Redirect to login page after brief delay
-  setTimeout(() => {
-    location.replace('login.html');
-  }, 300);
+  // Redirect immediately (visual transition will happen during page unload)
+  location.replace('login.html');
 }
 
 // --- PLAN CONFIGURATION ---
