@@ -1224,8 +1224,17 @@
       }
     }
     
-    // Start initialization
-    initializeNavigationSystem();
+    // Start initialization after DOM is ready and Firebase auth is loaded
+    window.addEventListener('DOMContentLoaded', async function() {
+      // Wait for FirebaseAuthManager to be available (it's a module script)
+      let waitCount = 0;
+      while (!window.FirebaseAuthManager && waitCount < 50) {
+        await new Promise(resolve => setTimeout(resolve, 100)); // Wait up to 5 seconds
+        waitCount++;
+      }
+      
+      initializeNavigationSystem();
+    });
   </script>
   <!-- Billing Integration Tests -->
   <script src="js/billing-integration-test.js"></script>

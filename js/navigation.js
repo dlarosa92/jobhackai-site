@@ -1284,12 +1284,18 @@ function initializeNavigation() {
   // Update navigation
   navLog('debug', 'Calling updateNavigation()');
   updateNavigation();
-  // Reconcile plan from KV and then handle post-checkout activation if needed
-  try {
-    reconcilePlanFromKV().then(() => {
-      waitForPlanActivationIfNeeded();
-    });
-  } catch (_) {}
+  
+  // REMOVED: Do NOT call reconcilePlanFromKV() here - it causes race condition
+  // Plan reconciliation will be handled by:
+  // 1. Firebase auth's onAuthStateChanged listener (already implemented)
+  // 2. Page-specific DOMContentLoaded handlers that wait for auth
+  // 3. Manual calls with ?paid=1 parameter
+  
+  // Only handle post-checkout activation polling (doesn't need immediate plan fetch)
+  if (location.search.includes('paid=1')) {
+    // This will be handled by dashboard.html's DOMContentLoaded after auth is confirmed
+    navLog('info', 'Checkout flow detected, plan sync will be handled by page auth check');
+  }
   
   // Update quick plan switcher state
   navLog('debug', 'Updating quick plan switcher state');
@@ -1316,7 +1322,21 @@ function initializeNavigation() {
 // --- KV Plan Reconciliation and Post-Checkout Activation ---
 async function fetchKVPlan() {
   try {
-    // FIX: Add better error handling and logging
+    // DEFENSIVE GUARD: Ensure FirebaseAuthManager is loaded
+    if (!window.FirebaseAuthManager) {
+      console.log('🔍 fetchKVPlan: FirebaseAuthManager not loaded yet, skipping');
+      return null;
+    }
+
+    // DEFENSIVE GUARD: Wait for auth to be ready if it's still initializing
+    if (window.FirebaseAuthManager.waitForAuthReady) {
+      try {
+        await window.FirebaseAuthManager.waitForAuthReady(1000); // Short timeout
+      } catch (e) {
+        console.log('🔍 fetchKVPlan: Auth ready timeout, continuing anyway');
+      }
+    }
+
     const currentUser = window.FirebaseAuthManager?.getCurrentUser?.();
     if (!currentUser) {
       console.log('🔍 fetchKVPlan: No current user available');
@@ -1357,12 +1377,23 @@ async function fetchKVPlan() {
 
 async function reconcilePlanFromKV() {
   const auth = getAuthState();
-  if (!auth.isAuthenticated) return;
+  if (!auth.isAuthenticated) {
+    console.log('🔍 reconcilePlanFromKV: User not authenticated, skipping');
+    return;
+  }
+  
+  // Check if FirebaseAuthManager is loaded
+  if (!window.FirebaseAuthManager) {
+    console.log('🔍 reconcilePlanFromKV: FirebaseAuthManager not loaded, skipping');
+    return;
+  }
   
   // FIX: Add retry mechanism for plan reconciliation
   let kvPlan = null;
   let retryCount = 0;
   const maxRetries = 3;
+  
+  console.log('🔍 reconcilePlanFromKV: Starting plan reconciliation...');
   
   while (!kvPlan && retryCount < maxRetries) {
     try {
