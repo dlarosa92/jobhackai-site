@@ -411,7 +411,7 @@
       if (!billingSection) return;
       
       try {
-        const user = firebase.auth().currentUser;
+        const user = window.FirebaseAuthManager?.getCurrentUser?.();
         if (!user) {
           billingSection.innerHTML = '<div style="color: #6B7280;">Please log in to view subscription details.</div>';
           return;
