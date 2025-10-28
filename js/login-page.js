@@ -38,42 +38,80 @@ async function handlePostAuthRedirect(plan) {
   }
 }
 
+// Safe fallback initialization when main init fails
+function safeFallbackInit() {
+  console.error('[AUTH INIT ERROR] Main initialization failed, using fallback');
+  
+  try {
+    // Force login form visible
+    const loginForm = document.getElementById('loginForm');
+    const signupForm = document.getElementById('signupForm');
+    const loginLinks = document.getElementById('loginLinks');
+    const signupLinks = document.getElementById('signupLinks');
+    const authTitle = document.getElementById('auth-title');
+    const banner = document.getElementById('selectedPlanBanner');
+    
+    if (loginForm) loginForm.style.display = 'flex';
+    if (signupForm) signupForm.style.display = 'none';
+    if (loginLinks) loginLinks.style.display = 'block';
+    if (signupLinks) signupLinks.style.display = 'none';
+    if (authTitle) authTitle.textContent = 'Welcome back';
+    if (banner) banner.style.display = 'none';
+    
+    // Minimal password toggle handlers (shows error on click)
+    ['toggleLoginPassword', 'toggleSignupPassword', 'toggleConfirmPassword'].forEach(id => {
+      const btn = document.getElementById(id);
+      if (btn) {
+        btn.onclick = () => {
+          alert('Service unavailable. Please refresh the page.');
+        };
+      }
+    });
+    
+    console.log('[FALLBACK] Basic UI wired successfully');
+  } catch (fallbackErr) {
+    console.error('[FALLBACK ERROR]', fallbackErr);
+  }
+}
+
 // Wait for DOM to be ready
 document.addEventListener('DOMContentLoaded', async function() {
-  console.log('🧭 login-page.js v2 starting');
+  try {
+    console.log('🧭 login-page.js v2 starting');
+    console.log('[AUTH INIT START]');
 
-  // Prevent bounce if coming from logout
-  if (sessionStorage.getItem('logout-intent') === '1') {
-    console.log('🚫 Logout intent detected — staying on login');
-    sessionStorage.removeItem('logout-intent');
-    return;
-  }
+    // Prevent bounce if coming from logout - clear flag but DON'T return early
+    if (sessionStorage.getItem('logout-intent') === '1') {
+      console.log('🚫 Logout intent detected — staying on login');
+      sessionStorage.removeItem('logout-intent');
+      // Continue with initialization below instead of returning
+    }
 
-  // Prevent auto-redirect races when user is actively logging in
-  let loginInProgress = false;
-  // Get DOM elements
-  const loginForm = document.getElementById('loginForm');
-  const signupForm = document.getElementById('signupForm');
-  const loginLinks = document.getElementById('loginLinks');
-  const signupLinks = document.getElementById('signupLinks');
-  const showSignUpLink = document.getElementById('showSignUpLink');
-  const showLoginLink = document.getElementById('showLoginLink');
-  const googleSignInBtn = document.getElementById('googleSignIn');
-  const linkedinSignInBtn = document.getElementById('linkedinSignIn');
-  const forgotPasswordLink = document.getElementById('forgotPasswordLink');
-  const authTitle = document.getElementById('auth-title');
-  const forgotPasswordOverlay = document.getElementById('forgotPasswordOverlay');
-  const forgotPasswordEmailInput = document.getElementById('forgotPasswordEmail');
-  const forgotPasswordSendBtn = document.getElementById('forgotPasswordSendBtn');
-  const forgotPasswordCloseBtn = document.getElementById('forgotPasswordCloseBtn');
-  const forgotPasswordError = document.getElementById('forgotPasswordError');
-  const forgotPasswordSuccess = document.getElementById('forgotPasswordSuccess');
-  
-  // Error display elements
-  const loginError = document.getElementById('loginError');
-  const signupError = document.getElementById('signupError');
-  
-  // Check if user is already authenticated (multiple approaches)
+    // Prevent auto-redirect races when user is actively logging in
+    let loginInProgress = false;
+    // Get DOM elements
+    const loginForm = document.getElementById('loginForm');
+    const signupForm = document.getElementById('signupForm');
+    const loginLinks = document.getElementById('loginLinks');
+    const signupLinks = document.getElementById('signupLinks');
+    const showSignUpLink = document.getElementById('showSignUpLink');
+    const showLoginLink = document.getElementById('showLoginLink');
+    const googleSignInBtn = document.getElementById('googleSignIn');
+    const linkedinSignInBtn = document.getElementById('linkedinSignIn');
+    const forgotPasswordLink = document.getElementById('forgotPasswordLink');
+    const authTitle = document.getElementById('auth-title');
+    const forgotPasswordOverlay = document.getElementById('forgotPasswordOverlay');
+    const forgotPasswordEmailInput = document.getElementById('forgotPasswordEmail');
+    const forgotPasswordSendBtn = document.getElementById('forgotPasswordSendBtn');
+    const forgotPasswordCloseBtn = document.getElementById('forgotPasswordCloseBtn');
+    const forgotPasswordError = document.getElementById('forgotPasswordError');
+    const forgotPasswordSuccess = document.getElementById('forgotPasswordSuccess');
+    
+    // Error display elements
+    const loginError = document.getElementById('loginError');
+    const signupError = document.getElementById('signupError');
+    
+    // Check if user is already authenticated (multiple approaches)
   const checkAuth = async () => {
     if (loginInProgress) {
       console.log('⏸️ Login in progress, skipping auto-redirect');
@@ -619,6 +657,11 @@ document.addEventListener('DOMContentLoaded', async function() {
   setupPasswordToggle('toggleSignupPassword', 'signupPassword', 'signupPasswordEyeIcon');
   setupPasswordToggle('toggleConfirmPassword', 'confirmPassword', 'confirmPasswordEyeIcon');
   
+  console.log('[AUTH INIT COMPLETE] All initialization successful');
+  } catch (err) {
+    console.error('[AUTH INIT ERROR]', err);
+    safeFallbackInit();
+  }
 });
 
 // Hamburger menu toggle

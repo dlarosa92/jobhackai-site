@@ -22,7 +22,12 @@ import {
   sendPasswordResetEmail,
   updateProfile,
   setPersistence,
-  browserLocalPersistence
+  browserLocalPersistence,
+  sendEmailVerification,
+  applyActionCode,
+  checkActionCode,
+  verifyPasswordResetCode,
+  confirmPasswordReset
 } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-auth.js";
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-app.js";
@@ -223,9 +228,9 @@ class AuthManager {
           // FIX: Wait for auth to be ready before fetching plan to prevent race condition
           let kvPlan = null;
           try {
-            // Wait for Firebase auth to be fully ready (max 2 seconds)
+            // Wait for Firebase auth to be fully ready (max 3 seconds)
             console.log('🔄 Waiting for Firebase auth to be ready before plan fetching...');
-            await this.waitForAuthReady(2000);
+            await this.waitForAuthReady(3000);
             
             if (window.JobHackAINavigation && typeof window.JobHackAINavigation.fetchKVPlan === 'function') {
               kvPlan = await window.JobHackAINavigation.fetchKVPlan();
@@ -339,14 +344,6 @@ class AuthManager {
       const userRecord = UserDatabase.getUser(this.currentUser.email);
       callback(this.currentUser, userRecord);
     }
-    
-    // Return unsubscribe function
-    return () => {
-      const index = this.authStateListeners.indexOf(callback);
-      if (index > -1) {
-        this.authStateListeners.splice(index, 1);
-      }
-    };
   }
 
   /**
@@ -363,6 +360,14 @@ class AuthManager {
         await updateProfile(user, {
           displayName: `${firstName} ${lastName}`.trim()
         });
+      }
+
+      // Send email verification for password-based signups
+      try {
+        await sendEmailVerification(user);
+        console.log('📧 Verification email sent to', user.email);
+      } catch (e) {
+        console.warn('Could not send verification email:', e);
       }
 
       // Create user record in local database
@@ -429,9 +434,9 @@ class AuthManager {
       // FIX: Wait for auth to be ready before fetching plan to prevent race condition
       let kvPlan = null;
       try {
-        // Wait for Firebase auth to be fully ready (max 2 seconds)
+        // Wait for Firebase auth to be fully ready (max 3 seconds)
         console.log('🔄 Waiting for Firebase auth to be ready during sign-in...');
-        await this.waitForAuthReady(2000);
+        await this.waitForAuthReady(3000);
         
         if (window.JobHackAINavigation && typeof window.JobHackAINavigation.fetchKVPlan === 'function') {
           kvPlan = await window.JobHackAINavigation.fetchKVPlan();
@@ -525,9 +530,9 @@ class AuthManager {
         // FIX: Wait for auth to be ready before fetching plan to prevent race condition
         let kvPlan = null;
         try {
-          // Wait for Firebase auth to be fully ready (max 2 seconds)
+          // Wait for Firebase auth to be fully ready (max 3 seconds)
           console.log('🔄 Waiting for Firebase auth to be ready during Google sign-in...');
-          await this.waitForAuthReady(2000);
+          await this.waitForAuthReady(3000);
           
           if (window.JobHackAINavigation && typeof window.JobHackAINavigation.fetchKVPlan === 'function') {
             kvPlan = await window.JobHackAINavigation.fetchKVPlan();
@@ -737,6 +742,32 @@ class AuthManager {
   isAuthenticated() {
     return !!this.currentUser;
   }
+
+  /**
+   * Returns true if this Firebase user signed up with email/password
+   * (vs google.com etc.)
+   */
+  isEmailPasswordUser(user) {
+    if (!user || !user.providerData) return false;
+    return user.providerData.some(p => p.providerId === 'password');
+  }
+
+  /**
+   * Send (or resend) a verification email to the current user
+   */
+  async sendVerificationEmail() {
+    try {
+      const user = this.getCurrentUser();
+      if (!user) {
+        return { success: false, error: 'No authenticated user.' };
+      }
+      await sendEmailVerification(user);
+      return { success: true };
+    } catch (err) {
+      console.warn('sendVerificationEmail error:', err);
+      return { success: false, error: this.getErrorMessage(err) || 'Could not send verification email.' };
+    }
+  }
 }
 
 // Create singleton instance
@@ -745,4 +776,8 @@ const authManager = new AuthManager();
 // Export for use in pages
 export default authManager;
 export { auth, UserDatabase };
+// Back-compat: some modules import named waitForAuthReady; provide a proxy
+export async function waitForAuthReady(timeoutMs = 5000) {
+  return authManager.waitForAuthReady(timeoutMs);
+}
 
