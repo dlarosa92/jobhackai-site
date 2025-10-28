@@ -4,19 +4,51 @@
  */
 
 // Version stamp for deployment verification
-console.log('🔧 login-page.js VERSION: redirect-fix-v3-CACHE-BUST-FIX - ' + new Date().toISOString());
+console.log('🔧 login-page.js VERSION: redirect-fix-v2 - ' + new Date().toISOString());
 
 import authManager from './firebase-auth.js';
+import { waitForAuthReady } from './firebase-auth.js';
 
 // Helper function to check if plan requires payment
 function planRequiresPayment(plan) {
   return ['essential', 'pro', 'premium', 'trial'].includes(plan);
 }
 
+// Unified post-auth redirect helper (Stripe or Dashboard)
+async function handlePostAuthRedirect(plan) {
+  if (planRequiresPayment(plan)) {
+    try {
+      const idToken = await authManager.getCurrentUser()?.getIdToken?.(true);
+      const res = await fetch('/api/stripe-checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}) },
+        body: JSON.stringify({ plan, startTrial: plan === 'trial' })
+      });
+      const data = await res.json();
+      if (data && data.ok && data.url) { window.location.href = data.url; return; }
+    } catch (error) {
+      console.error('Checkout error:', error);
+    }
+    window.location.href = 'pricing-a.html';
+  } else {
+    localStorage.removeItem('selected-plan');
+    localStorage.removeItem('selected-plan-ts');
+    localStorage.removeItem('selected-plan-context');
+    window.location.href = 'dashboard.html';
+  }
+}
+
 // Wait for DOM to be ready
 document.addEventListener('DOMContentLoaded', async function() {
-  console.log('🚀 login-page.js v2 - Optimistic UI with instant plan banner');
-  
+  console.log('🧭 login-page.js v2 starting');
+
+  // Prevent bounce if coming from logout
+  if (sessionStorage.getItem('logout-intent') === '1') {
+    console.log('🚫 Logout intent detected — staying on login');
+    sessionStorage.removeItem('logout-intent');
+    return;
+  }
+
   // Prevent auto-redirect races when user is actively logging in
   let loginInProgress = false;
   // Get DOM elements
@@ -30,36 +62,16 @@ document.addEventListener('DOMContentLoaded', async function() {
   const linkedinSignInBtn = document.getElementById('linkedinSignIn');
   const forgotPasswordLink = document.getElementById('forgotPasswordLink');
   const authTitle = document.getElementById('auth-title');
+  const forgotPasswordOverlay = document.getElementById('forgotPasswordOverlay');
+  const forgotPasswordEmailInput = document.getElementById('forgotPasswordEmail');
+  const forgotPasswordSendBtn = document.getElementById('forgotPasswordSendBtn');
+  const forgotPasswordCloseBtn = document.getElementById('forgotPasswordCloseBtn');
+  const forgotPasswordError = document.getElementById('forgotPasswordError');
+  const forgotPasswordSuccess = document.getElementById('forgotPasswordSuccess');
   
   // Error display elements
   const loginError = document.getElementById('loginError');
   const signupError = document.getElementById('signupError');
-  
-  // OPTIMISTIC UI: Show appropriate form immediately based on localStorage
-  const showOptimisticUI = () => {
-    const hasUserEmail = localStorage.getItem('user-email');
-    const selectedPlan = new URLSearchParams(window.location.search).get('plan') || 
-                        localStorage.getItem('selected-plan');
-    
-    console.log('🎯 Optimistic UI check:', { hasUserEmail, selectedPlan });
-    
-    if (hasUserEmail) {
-      // User has email in localStorage - show "Welcome back" login form
-      console.log('✅ Showing optimistic login form for:', hasUserEmail);
-      showLoginForm();
-    } else if (selectedPlan && selectedPlan !== 'create-account') {
-      // Plan selected - show signup form with plan banner
-      console.log('✅ Showing optimistic signup form for plan:', selectedPlan);
-      showSignupForm(selectedPlan);
-    } else {
-      // Default - show signup form
-      console.log('✅ Showing default signup form');
-      showSignupForm();
-    }
-  };
-  
-  // Show UI immediately (optimistic)
-  showOptimisticUI();
   
   // Check if user is already authenticated (multiple approaches)
   const checkAuth = async () => {
@@ -71,29 +83,13 @@ document.addEventListener('DOMContentLoaded', async function() {
     // ONLY check Firebase, not localStorage
     try {
       console.log('🔍 Checking Firebase auth state...');
-      const user = await authManager.waitForAuthReady(2000); // Reduced from 5s to 2s
+      const user = await waitForAuthReady(4000);
       if (user && user.email) {
-        console.log('✅ User authenticated via Firebase:', user.email);
-        // Sync to localStorage for other consumers
-        try {
-          localStorage.setItem('user-authenticated', 'true');
-          localStorage.setItem('user-email', user.email);
-        } catch (_) {}
-
-        // If user is buying a plan, stay on login
-        const selectedPlan = new URLSearchParams(window.location.search).get('plan') || 
-                             localStorage.getItem('selected-plan');
-        if (selectedPlan && ['essential', 'pro', 'premium', 'trial'].includes(selectedPlan)) {
-          console.log('✅ Paid plan selected, staying on login for checkout');
-          return false;
-        }
-
-        // Redirect to dashboard
-        console.log('✅ Redirecting to dashboard');
-        document.body.style.opacity = '0.7';
-        document.body.style.transition = 'opacity 0.3s ease';
-        window.location.href = 'dashboard.html';
+        console.log(`✅ Authenticated as ${user.email}, redirecting to dashboard`);
+        location.replace('/dashboard.html');
         return true;
+      } else {
+        console.log('🔓 No authenticated user — showing login UI');
       }
     } catch (error) {
       console.log('No Firebase user, proceeding with login form');
@@ -116,12 +112,14 @@ document.addEventListener('DOMContentLoaded', async function() {
       console.log('✅ Auth state changed: User authenticated, redirecting to dashboard');
       document.body.style.opacity = '0.7';
       document.body.style.transition = 'opacity 0.3s ease';
-      window.location.href = 'dashboard.html';
+      setTimeout(() => {
+        window.location.href = 'dashboard.html';
+      }, 200);
       unsubscribe(); // Stop listening after redirect
     }
   });
   
-  // INSTANT PLAN BANNER: Read plan synchronously and display immediately
+  // Check for selected plan with enhanced validation
   const urlParams = new URLSearchParams(window.location.search);
   const planParam = urlParams.get('plan');
   const storedSelection = localStorage.getItem('selected-plan');
@@ -162,15 +160,9 @@ document.addEventListener('DOMContentLoaded', async function() {
     console.log('🧹 Cleared stale plan selection');
   }
   
-  // INSTANT PLAN BANNER DISPLAY (synchronous, no waiting for Firebase)
   if (selectedPlan && selectedPlan !== 'create-account') {
-    console.log('🎯 INSTANT: Displaying plan banner for:', selectedPlan);
     // Store selected plan
     localStorage.setItem('selected-plan', selectedPlan);
-    
-    // Show plan banner immediately with smooth animation
-    showSelectedPlanBanner(selectedPlan);
-    addFadeInAnimation();
     
     // Auto-switch to signup form for new users with plan
     if (!localStorage.getItem('user-email')) {
@@ -221,8 +213,8 @@ document.addEventListener('DOMContentLoaded', async function() {
         document.body.style.transition = 'opacity 0.3s ease';
         this.textContent = 'Redirecting...';
         
-        // Brief delay to ensure auth state is fully persisted
-        await new Promise(resolve => setTimeout(resolve, 100));
+        // Longer delay to ensure auth state is fully persisted
+        await new Promise(resolve => setTimeout(resolve, 500));
         
         if (planRequiresPayment(plan)) {
           // Start server-driven checkout; trial requires card
@@ -304,30 +296,13 @@ document.addEventListener('DOMContentLoaded', async function() {
       const result = await authManager.signIn(email, password);
       
       if (result.success) {
-        // Route based on selected plan
-        const plan = selectedPlan || 'free';
-        if (planRequiresPayment(plan)) {
-          try {
-            const idToken = await authManager.getCurrentUser()?.getIdToken?.();
-            const res = await fetch('/api/stripe-checkout', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json', ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}) },
-              body: JSON.stringify({ plan, startTrial: plan === 'trial' })
-            });
-            const data = await res.json();
-            if (data && data.ok && data.url) { window.location.href = data.url; return; }
-          } catch (_) {}
-          window.location.href = 'pricing-a.html';
-        } else {
-          localStorage.removeItem('selected-plan');
-          // Route free users to onboarding
-          if (plan === 'free') {
-            // Take user to dashboard (no subscription yet)
-            window.location.href = 'dashboard.html';
-          } else {
-            window.location.href = 'dashboard.html';
-          }
+        const signedInUser = authManager.getCurrentUser();
+        if (signedInUser && authManager.isEmailPasswordUser(signedInUser) && signedInUser.emailVerified === false) {
+          window.location.href = 'verify-email.html';
+          return;
         }
+        const plan = selectedPlan || 'free';
+        await handlePostAuthRedirect(plan);
       } else {
         // Show error
         showError(loginError, result.error);
@@ -390,26 +365,13 @@ document.addEventListener('DOMContentLoaded', async function() {
       const result = await authManager.signUp(email, password, firstName, lastName);
       
       if (result.success) {
-        // Check if plan requires payment
-        const plan = selectedPlan || 'free';
-        
-        if (planRequiresPayment(plan)) {
-          try {
-            const idToken = await authManager.getCurrentUser()?.getIdToken?.();
-            const res = await fetch('/api/stripe-checkout', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json', ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}) },
-              body: JSON.stringify({ plan, startTrial: plan === 'trial' })
-            });
-            const data = await res.json();
-            if (data && data.ok && data.url) { window.location.href = data.url; return; }
-          } catch (_) {}
-          window.location.href = 'pricing-a.html';
-        } else {
-          // Success! Redirect to dashboard
-          localStorage.removeItem('selected-plan');
-          window.location.href = 'dashboard.html';
+        const newUser = authManager.getCurrentUser();
+        if (newUser && authManager.isEmailPasswordUser(newUser) && newUser.emailVerified === false) {
+          window.location.href = 'verify-email.html';
+          return;
         }
+        const plan = selectedPlan || 'free';
+        await handlePostAuthRedirect(plan);
       } else {
         // Show error
         showError(signupError, result.error);
@@ -424,39 +386,48 @@ document.addEventListener('DOMContentLoaded', async function() {
     }
   });
   
-  // ===== FORGOT PASSWORD =====
-  forgotPasswordLink?.addEventListener('click', async function(e) {
+  // ===== FORGOT PASSWORD (MODAL) =====
+  forgotPasswordLink?.addEventListener('click', function(e) {
     e.preventDefault();
-    
-    const email = document.getElementById('loginEmail').value.trim();
-    
-    if (!email) {
-      showError(loginError, 'Please enter your email address first.');
-      return;
-    }
-    
-    if (!isValidEmail(email)) {
-      showError(loginError, 'Please enter a valid email address.');
-      return;
-    }
-    
-    // Show confirmation dialog
-    const confirmed = confirm(`Send password reset email to ${email}?`);
-    
-    if (confirmed) {
-      try {
-        const result = await authManager.resetPassword(email);
-        
-        if (result.success) {
-          alert(`Password reset email sent to ${email}. Please check your inbox.`);
-          hideError(loginError);
-        } else {
-          showError(loginError, result.error);
-        }
-      } catch (error) {
-        console.error('Password reset error:', error);
-        showError(loginError, 'An unexpected error occurred. Please try again.');
+    hideError(loginError);
+    if (forgotPasswordOverlay) forgotPasswordOverlay.style.display = 'flex';
+    const currentLoginEmail = document.getElementById('loginEmail')?.value?.trim() || '';
+    if (forgotPasswordEmailInput) forgotPasswordEmailInput.value = currentLoginEmail;
+    if (forgotPasswordError) { forgotPasswordError.style.display = 'none'; forgotPasswordError.textContent = ''; }
+    if (forgotPasswordSuccess) { forgotPasswordSuccess.style.display = 'none'; }
+  });
+
+  forgotPasswordSendBtn?.addEventListener('click', async function() {
+    const email = forgotPasswordEmailInput?.value?.trim();
+    if (!email || !isValidEmail(email)) {
+      if (forgotPasswordError) {
+        forgotPasswordError.textContent = 'Please enter a valid email address.';
+        forgotPasswordError.style.display = 'block';
       }
+      if (forgotPasswordSuccess) forgotPasswordSuccess.style.display = 'none';
+      return;
+    }
+    const result = await authManager.resetPassword(email);
+    if (result.success) {
+      if (forgotPasswordError) { forgotPasswordError.style.display = 'none'; forgotPasswordError.textContent = ''; }
+      if (forgotPasswordSuccess) forgotPasswordSuccess.style.display = 'block';
+    } else {
+      if (forgotPasswordError) {
+        forgotPasswordError.textContent = result.error || 'Something went wrong. Please try again.';
+        forgotPasswordError.style.display = 'block';
+      }
+      if (forgotPasswordSuccess) forgotPasswordSuccess.style.display = 'none';
+    }
+  });
+
+  function closeForgotOverlay() {
+    if (forgotPasswordOverlay) forgotPasswordOverlay.style.display = 'none';
+  }
+
+  forgotPasswordCloseBtn?.addEventListener('click', function() { closeForgotOverlay(); });
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape' && forgotPasswordOverlay && forgotPasswordOverlay.style.display === 'flex') {
+      closeForgotOverlay();
     }
   });
   
@@ -546,26 +517,14 @@ document.addEventListener('DOMContentLoaded', async function() {
         banner.style.display = 'none';
         return;
       }
-      planName.textContent = planNames[plan] || 'Selected Plan';
-      planPrice.textContent = planPrices[plan] || '$0/mo';
+      const finalPlanName = planNames[plan] || 'Selected Plan';
+      const finalPlanPrice = planPrices[plan] || '$0/mo';
+      planName.textContent = finalPlanName;
+      planPrice.textContent = finalPlanPrice;
       banner.style.display = 'block';
-      console.log('✅ Plan banner displayed for:', plan);
-    }
-  }
-  
-  function addFadeInAnimation() {
-    const banner = document.getElementById('selectedPlanBanner');
-    if (banner) {
-      // Add smooth fade-in animation
-      banner.style.opacity = '0';
-      banner.style.transform = 'translateY(-10px)';
-      banner.style.transition = 'opacity 0.25s ease-in-out, transform 0.25s ease-in-out';
       
-      // Trigger animation on next frame
-      requestAnimationFrame(() => {
-        banner.style.opacity = '1';
-        banner.style.transform = 'translateY(0)';
-      });
+      // Debug trace for plan banner rendering
+      console.trace('selectedPlanBanner:', { planName: finalPlanName, planPrice: finalPlanPrice, plan });
     }
   }
 
@@ -610,6 +569,55 @@ document.addEventListener('DOMContentLoaded', async function() {
     
     return hasUppercase && hasLowercase && hasNumber;
   }
+  
+  // ===== PASSWORD TOGGLE FUNCTIONALITY =====
+  
+  // Helper function to toggle password visibility
+  function setupPasswordToggle(buttonId, inputId, iconId) {
+    const toggleBtn = document.getElementById(buttonId);
+    const passwordInput = document.getElementById(inputId);
+    const icon = document.getElementById(iconId);
+    
+    if (!toggleBtn || !passwordInput || !icon) return;
+    
+    const togglePassword = () => {
+      const isPassword = passwordInput.type === 'password';
+      passwordInput.type = isPassword ? 'text' : 'password';
+      toggleBtn.setAttribute('aria-pressed', isPassword ? 'true' : 'false');
+      toggleBtn.setAttribute('aria-label', isPassword ? 'Hide password' : 'Show password');
+      
+      // Update icon based on visibility
+      if (isPassword) {
+        // Show eye-off icon (crossed out eye)
+        icon.innerHTML = `
+          <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/>
+          <line x1="1" y1="1" x2="23" y2="23"/>
+        `;
+      } else {
+        // Show eye icon
+        icon.innerHTML = `
+          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+          <circle cx="12" cy="12" r="3"/>
+        `;
+      }
+    };
+    
+    // Click handler
+    toggleBtn.addEventListener('click', togglePassword);
+    
+    // Keyboard handler (Enter and Space)
+    toggleBtn.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        togglePassword();
+      }
+    });
+  }
+  
+  // Setup toggles for all password fields
+  setupPasswordToggle('toggleLoginPassword', 'loginPassword', 'loginPasswordEyeIcon');
+  setupPasswordToggle('toggleSignupPassword', 'signupPassword', 'signupPasswordEyeIcon');
+  setupPasswordToggle('toggleConfirmPassword', 'confirmPassword', 'confirmPasswordEyeIcon');
   
 });
 
