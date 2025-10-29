@@ -176,6 +176,8 @@ class AuthManager {
   }
 
   setupAuthStateListener() {
+    let authReadyDispatched = false;
+    
     onAuthStateChanged(auth, async (user) => {
       console.log('🔥 Firebase auth state changed:', user ? `User: ${user.email}` : 'No user');
       this.currentUser = user;
@@ -183,6 +185,15 @@ class AuthManager {
       if (window.FirebaseAuthManager) {
         window.FirebaseAuthManager.currentUser = user;
         console.log('🔥 Updated window.FirebaseAuthManager.currentUser:', user ? `User: ${user.email}` : 'null');
+      }
+      
+      // Dispatch firebase-auth-ready event on first auth state change
+      if (!authReadyDispatched) {
+        authReadyDispatched = true;
+        console.log('🔥 Dispatching firebase-auth-ready event');
+        document.dispatchEvent(new CustomEvent("firebase-auth-ready", {
+          detail: { user: user || null }
+        }));
       }
       
       if (user) {
@@ -766,6 +777,39 @@ class AuthManager {
     } catch (err) {
       console.warn('sendVerificationEmail error:', err);
       return { success: false, error: this.getErrorMessage(err) || 'Could not send verification email.' };
+    }
+  }
+
+  /**
+   * Require verified email - redirects if not authenticated or not verified
+   * Used to gate access to dashboard and other protected pages
+   */
+  async requireVerifiedEmail() {
+    try {
+      // Wait for auth to be ready
+      const user = await this.waitForAuthReady(4000);
+      
+      if (!user) {
+        console.log('No authenticated user, redirecting to login');
+        window.location.href = '/login.html';
+        return false;
+      }
+      
+      // Reload user to get latest verification status
+      await user.reload();
+      
+      if (!user.emailVerified) {
+        console.log('User not verified, redirecting to verify-email');
+        window.location.href = `/verify-email.html?email=${encodeURIComponent(user.email || '')}`;
+        return false;
+      }
+      
+      console.log('User verified, allowing access');
+      return true;
+    } catch (error) {
+      console.error('requireVerifiedEmail error:', error);
+      window.location.href = '/login.html';
+      return false;
     }
   }
 }

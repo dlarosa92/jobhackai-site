@@ -1440,3 +1440,26 @@ window.navDebug = {
     console.log(`🔧 Debug logging ${DEBUG.enabled ? 'ENABLED' : 'DISABLED'}`);
   },
 };
+
+// Initialize navigation when Firebase auth is ready
+document.addEventListener('firebase-auth-ready', (event) => {
+  console.log('🔥 Firebase auth ready, initializing navigation');
+  initializeNavigation();
+});
+
+// Fallback: Initialize immediately if Firebase is already ready
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', () => {
+    // Check if Firebase is already ready (auth state already changed)
+    if (window.FirebaseAuthManager && window.FirebaseAuthManager.currentUser !== undefined) {
+      console.log('🔥 Firebase already ready, initializing navigation');
+      initializeNavigation();
+    }
+  });
+} else {
+  // DOM already loaded, check if Firebase is ready
+  if (window.FirebaseAuthManager && window.FirebaseAuthManager.currentUser !== undefined) {
+    console.log('🔥 Firebase already ready, initializing navigation');
+    initializeNavigation();
+  }
+}

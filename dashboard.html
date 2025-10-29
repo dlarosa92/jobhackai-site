@@ -5,6 +5,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <style>html.auth-pending{visibility:hidden}</style>
+  <script src="js/redirect-tracer.js?v=1"></script>
   <script src="js/static-auth-guard.js?v=20251007-2"></script>
   <title>Dashboard – JobHackAI</title>
   <link rel="icon" type="image/png" href="assets/JobHackAI_Logo_favicon-32x32.png">
@@ -1270,5 +1271,21 @@
   </script>
   <script src="js/main.js" type="module"></script>
   <script src="js/analytics.js" type="module"></script>
+  <script type="module">
+    import authManager from './js/firebase-auth.js';
+
+    (async () => {
+      console.log('📋 dashboard guard v3 running');
+      
+      // Require verified email before allowing dashboard access
+      const isVerified = await authManager.requireVerifiedEmail();
+      if (!isVerified) {
+        console.log('🚫 User not verified or not authenticated — redirecting');
+        return; // requireVerifiedEmail handles the redirect
+      }
+      
+      console.log('✅ Verified user accessing dashboard');
+    })();
+  </script>
 </body>
 </html> 
