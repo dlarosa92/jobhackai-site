@@ -749,6 +749,8 @@ function updateNavigation() {
   const devOverride = getDevPlanOverride();
   const currentPlan = getEffectivePlan();
   const authState = getAuthState();
+  const currentFirebaseUser = window.FirebaseAuthManager?.getCurrentUser?.();
+  const isSignedInButUnverified = !!(authState.isAuthenticated && currentFirebaseUser && currentFirebaseUser.emailVerified === false);
   
   // Additional debugging for visitor state issues
   if (currentPlan !== 'visitor' && !authState.isAuthenticated) {
@@ -777,7 +779,7 @@ function updateNavigation() {
   });
   
   const navGroup = document.querySelector('.nav-group');
-  const navLinks = document.querySelector('.nav-links');
+  const navLinks = document.querySelector('nav.nav-links');
   const mobileNav = document.getElementById('mobileNav');
   
   navLog('debug', 'DOM elements found', {
@@ -827,6 +829,34 @@ function updateNavigation() {
   if (mobileNav) {
     mobileNav.innerHTML = '';
     navLog('debug', 'Cleared mobile nav');
+  }
+
+  // Special minimal header for signed-in but unverified users
+  if (isSignedInButUnverified) {
+    navLog('info', 'Rendering minimal header for unverified user');
+    // navLinks remains empty; add only Logout action on the right
+    let navActions = document.querySelector('.nav-actions');
+    if (!navActions) {
+      navActions = document.createElement('div');
+      navActions.className = 'nav-actions';
+      if (navGroup) navGroup.appendChild(navActions);
+    } else {
+      navActions.innerHTML = '';
+    }
+    const logoutBtn = document.createElement('a');
+    logoutBtn.href = '#';
+    logoutBtn.textContent = 'Logout';
+    logoutBtn.className = 'btn btn-secondary';
+    logoutBtn.style.cssText = 'background:#F3F4F6;color:#6B7280;padding:0.5rem 1rem;border-radius:8px;text-decoration:none;font-weight:600;display:inline-block;';
+    logoutBtn.addEventListener('click', (e) => { e.preventDefault(); logout(); });
+    navActions.appendChild(logoutBtn);
+
+    // Clear mobile nav as well (no links for unverified)
+    if (mobileNav) mobileNav.innerHTML = '';
+
+    // Skip normal rendering
+    navLog('info', '=== updateNavigation() COMPLETE (unverified minimal) ===');
+    return;
   }
 
   // --- Build Nav Links (Desktop) ---

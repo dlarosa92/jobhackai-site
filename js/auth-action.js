@@ -141,6 +141,10 @@ async function handleEmailVerification() {
     
     await applyActionCode(auth, oobCode);
     
+    // Try to refresh current user session if available
+    try { await auth.currentUser?.reload?.(); } catch (_) {}
+    try { sessionStorage.setItem('emailJustVerified', '1'); } catch(_) {}
+
     showSuccess("✅ Email verified successfully!");
     pageTitle.textContent = "Email Verified";
     status.textContent = "Your email has been verified. You can now access your dashboard.";
@@ -150,10 +154,8 @@ async function handleEmailVerification() {
     goToLoginBtn.style.display = 'none'; // Hide login button for verified users
     goToDashboardBtn.style.display = 'block';
     
-    // Auto-redirect to dashboard after 3 seconds
-    setTimeout(() => {
-      window.location.href = '/dashboard.html';
-    }, 3000);
+    // Redirect to dashboard
+    setTimeout(() => { window.location.href = '/dashboard.html'; }, 1200);
     
   } catch (error) {
     console.error('Email verification failed:', error);
@@ -241,10 +243,9 @@ async function handlePasswordResetSubmit(event) {
     goToLoginBtn.style.display = 'block';
     goToDashboardBtn.style.display = 'none';
     
-    // Auto-redirect to login after 3 seconds
-    setTimeout(() => {
-      window.location.href = '/login.html';
-    }, 3000);
+    // Flag success for login page banner and redirect
+    try { sessionStorage.setItem('resetPasswordSuccess', '1'); } catch(_) {}
+    setTimeout(() => { window.location.href = '/login.html'; }, 1200);
     
   } catch (error) {
     console.error('Password reset failed:', error);

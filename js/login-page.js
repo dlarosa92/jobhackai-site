@@ -80,6 +80,38 @@ document.addEventListener('DOMContentLoaded', async function() {
     console.log('🧭 login-page.js v2 starting');
     console.log('[AUTH INIT START]');
 
+    // Paint selected plan banner instantly from sessionStorage (no async)
+    try {
+      const raw = sessionStorage.getItem('selectedPlan');
+      const planData = raw ? JSON.parse(raw) : {};
+      if (planData && planData.planName) {
+        const banner = document.getElementById('selectedPlanBanner');
+        const planNameEl = document.getElementById('selectedPlanName');
+        const planPriceEl = document.getElementById('selectedPlanPrice');
+        if (banner && planNameEl && planPriceEl) {
+          planNameEl.textContent = planData.planName;
+          planPriceEl.textContent = planData.price || '';
+          banner.style.display = 'block';
+          banner.style.background = '#00E676';
+          banner.style.color = '#fff';
+        }
+      }
+      // Show success banner after password reset
+      if (sessionStorage.getItem('resetPasswordSuccess') === '1') {
+        const loginError = document.getElementById('loginError');
+        if (loginError) {
+          loginError.textContent = 'Your password has been updated. Please sign in.';
+          loginError.style.display = 'block';
+          loginError.style.background = '#F0FDF4';
+          loginError.style.color = '#059669';
+          loginError.style.border = '1px solid #BBF7D0';
+          loginError.style.borderRadius = '8px';
+          loginError.style.padding = '0.75rem';
+        }
+        sessionStorage.removeItem('resetPasswordSuccess');
+      }
+    } catch(_) {}
+
     // Prevent bounce if coming from logout - clear flag but DON'T return early
     if (sessionStorage.getItem('logout-intent') === '1') {
       console.log('🚫 Logout intent detected — staying on login');
