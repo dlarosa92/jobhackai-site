@@ -80,38 +80,6 @@ document.addEventListener('DOMContentLoaded', async function() {
     console.log('🧭 login-page.js v2 starting');
     console.log('[AUTH INIT START]');
 
-    // Paint selected plan banner instantly from sessionStorage (no async)
-    try {
-      const raw = sessionStorage.getItem('selectedPlan');
-      const planData = raw ? JSON.parse(raw) : {};
-      if (planData && planData.planName) {
-        const banner = document.getElementById('selectedPlanBanner');
-        const planNameEl = document.getElementById('selectedPlanName');
-        const planPriceEl = document.getElementById('selectedPlanPrice');
-        if (banner && planNameEl && planPriceEl) {
-          planNameEl.textContent = planData.planName;
-          planPriceEl.textContent = planData.price || '';
-          banner.style.display = 'block';
-          banner.style.background = '#00E676';
-          banner.style.color = '#fff';
-        }
-      }
-      // Show success banner after password reset
-      if (sessionStorage.getItem('resetPasswordSuccess') === '1') {
-        const loginError = document.getElementById('loginError');
-        if (loginError) {
-          loginError.textContent = 'Your password has been updated. Please sign in.';
-          loginError.style.display = 'block';
-          loginError.style.background = '#F0FDF4';
-          loginError.style.color = '#059669';
-          loginError.style.border = '1px solid #BBF7D0';
-          loginError.style.borderRadius = '8px';
-          loginError.style.padding = '0.75rem';
-        }
-        sessionStorage.removeItem('resetPasswordSuccess');
-      }
-    } catch(_) {}
-
     // Prevent bounce if coming from logout - clear flag but DON'T return early
     if (sessionStorage.getItem('logout-intent') === '1') {
       console.log('🚫 Logout intent detected — staying on login');
@@ -189,45 +157,28 @@ document.addEventListener('DOMContentLoaded', async function() {
     }
   });
   
-  // Check for selected plan with enhanced validation
+  // === PLAN DETECTION (FIXED) ===
   const urlParams = new URLSearchParams(window.location.search);
   const planParam = urlParams.get('plan');
   const storedSelection = localStorage.getItem('selected-plan');
   const planContext = localStorage.getItem('selected-plan-context');
-  const referrer = document.referrer ? new URL(document.referrer) : null;
-  const cameFromPricing = !!(referrer && /pricing-(a|b)\.html$/.test(referrer.pathname));
-  const cameFromCheckout = !!(referrer && /(checkout)\.html$/.test(referrer.pathname));
   
-  // Accept recent plan selections with context validation
-  const selectionTs = parseInt(localStorage.getItem('selected-plan-ts') || '0', 10);
-  const isFreshSelection = Date.now() - selectionTs < 10 * 60 * 1000; // 10 minutes (increased for better UX)
-  const hasValidContext = planContext && ['pricing-a', 'pricing-b', 'checkout'].includes(planContext);
+  // Check for explicit plan: URL param or stored selection with valid context
+  const hasExplicitPlan =
+    (planParam && planParam.trim() !== '') ||
+    (storedSelection && planContext && ['pricing-a', 'pricing-b', 'checkout'].includes(planContext));
   
-  // Priority: URL param > fresh selection with valid context > referrer-based
-  const selectedPlan = planParam || 
-    ((hasValidContext && isFreshSelection) ? storedSelection : null) ||
-    ((cameFromPricing || cameFromCheckout) ? storedSelection : null);
+  const selectedPlan = hasExplicitPlan
+    ? (planParam || storedSelection || null)
+    : null;
   
-  // DEBUG: Log plan detection
-  console.log('🔍 Plan Detection Debug:', {
-    planParam,
-    storedSelection,
-    planContext,
-    cameFromPricing,
-    cameFromCheckout,
-    selectionTs,
-    isFreshSelection,
-    hasValidContext,
-    selectedPlan,
-    referrer: document.referrer
-  });
-
-  // Clear stale selection if it's not fresh and no valid context
-  if (!planParam && !cameFromPricing && !cameFromCheckout && storedSelection && (!isFreshSelection || !hasValidContext)) {
+  console.log('🔍 Plan Detection Debug (FIXED):', { planParam, storedSelection, planContext, selectedPlan });
+  
+  if (!selectedPlan) {
+    // Clean up any stale selections
     localStorage.removeItem('selected-plan');
     localStorage.removeItem('selected-plan-ts');
     localStorage.removeItem('selected-plan-context');
-    console.log('🧹 Cleared stale plan selection');
   }
   
   if (selectedPlan && selectedPlan !== 'create-account') {
