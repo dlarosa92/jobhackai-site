@@ -218,14 +218,18 @@
           button.style.cursor = 'wait';
           
           if (plan === 'free') {
-            // Store free plan selection and redirect to signup
-            localStorage.setItem('selected-plan', 'free');
-            localStorage.setItem('selected-plan-ts', Date.now().toString());
-            localStorage.setItem('selected-plan-context', 'pricing-a'); // Track where selection came from
-            button.innerHTML = '<span style="display: inline-block; margin-right: 8px;">⏳</span> Redirecting...';
-            setTimeout(() => {
-              window.location.href = 'login.html?plan=free';
-            }, 300);
+            // Store normalized plan selection in sessionStorage
+            function selectPlan(planId, planName, price) {
+              sessionStorage.setItem("selectedPlan", JSON.stringify({
+                planId,
+                planName,
+                price,
+                source: "pricing-page",
+                timestamp: Date.now()
+              }));
+              window.location.href = "/login.html?plan=" + encodeURIComponent(planId);
+            }
+            selectPlan('free', 'Free Plan', '$0/mo');
             return;
           }
           
@@ -289,25 +293,25 @@
               }
             })();
           } else {
-            // New user - redirect to login with plan selected
-            localStorage.setItem('selected-plan', plan);
-            localStorage.setItem('plan-amount', amount);
-            localStorage.setItem('selected-plan-ts', Date.now().toString());
-            localStorage.setItem('selected-plan-context', 'pricing-a'); // Track where selection came from
-            
-            // DEBUG: Log plan storage
-            console.log('💾 Storing plan selection:', {
-              plan,
-              amount,
-              timestamp: Date.now(),
-              context: 'pricing-a',
-              stored: localStorage.getItem('selected-plan')
-            });
-            
-            button.innerHTML = '<span style="display: inline-block; margin-right: 8px;">⏳</span> Redirecting...';
-            setTimeout(() => {
-              window.location.href = `login.html?plan=${plan}`;
-            }, 300);
+            // New user - store normalized plan selection in sessionStorage
+            function selectPlan(planId, planName, price) {
+              sessionStorage.setItem("selectedPlan", JSON.stringify({
+                planId,
+                planName,
+                price,
+                source: "pricing-page",
+                timestamp: Date.now()
+              }));
+              window.location.href = "/login.html?plan=" + encodeURIComponent(planId);
+            }
+            const planMap = {
+              trial: { planId: 'trial', planName: '3-Day Trial', price: '$0' },
+              essential: { planId: 'essential', planName: 'Essential Plan', price: '$29/mo' },
+              pro: { planId: 'pro', planName: 'Pro Plan', price: '$59/mo' },
+              premium: { planId: 'premium', planName: 'Premium Plan', price: '$99/mo' }
+            };
+            const payload = planMap[plan] || { planId: plan, planName: 'Selected Plan', price: '' };
+            selectPlan(payload.planId, payload.planName, payload.price);
           }
         });
       });

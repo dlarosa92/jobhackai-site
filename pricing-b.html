@@ -145,11 +145,18 @@
       if (freeTrialBtn) {
         freeTrialBtn.addEventListener('click', (e) => {
           e.preventDefault();
-          // Store trial plan selection
-          localStorage.setItem('selected-plan', 'trial');
-          localStorage.setItem('selected-plan-ts', Date.now().toString());
-          localStorage.setItem('selected-plan-context', 'pricing-b');
-          window.location.href = 'add-card.html?plan=trial';
+          // Store normalized plan selection in sessionStorage
+          function selectPlan(planId, planName, price) {
+            sessionStorage.setItem("selectedPlan", JSON.stringify({
+              planId,
+              planName,
+              price,
+              source: "pricing-page",
+              timestamp: Date.now()
+            }));
+            window.location.href = "/login.html?plan=" + encodeURIComponent(planId);
+          }
+          selectPlan('trial', '3-Day Trial', '$0');
         });
       }
 
@@ -172,19 +179,24 @@
     });
 
     function handlePaidSubscription(plan, amount) {
-      // Store plan info for checkout with context
-      localStorage.setItem('selected-plan', plan);
-      localStorage.setItem('plan-amount', amount);
-      localStorage.setItem('selected-plan-ts', Date.now().toString());
-      localStorage.setItem('selected-plan-context', 'pricing-b');
-      
-      // Redirect to checkout page or open Stripe checkout
-      if (window.jobHackAIStripe) {
-        window.jobHackAIStripe.openCheckout(plan, amount);
-      } else {
-        // Fallback to add-card page with plan context
-        window.location.href = `add-card.html?plan=${plan}`;
+      // Store normalized plan selection in sessionStorage
+      function selectPlan(planId, planName, price) {
+        sessionStorage.setItem("selectedPlan", JSON.stringify({
+          planId,
+          planName,
+          price,
+          source: "pricing-page",
+          timestamp: Date.now()
+        }));
+        window.location.href = "/login.html?plan=" + encodeURIComponent(planId);
       }
+      const planMap = {
+        essential: { planId: 'essential', planName: 'Essential Plan', price: '$29/mo' },
+        pro: { planId: 'pro', planName: 'Pro Plan', price: '$59/mo' },
+        premium: { planId: 'premium', planName: 'Premium Plan', price: '$99/mo' }
+      };
+      const payload = planMap[plan] || { planId: plan, planName: 'Selected Plan', price: '' };
+      selectPlan(payload.planId, payload.planName, payload.price);
     }
   </script>
 </body>

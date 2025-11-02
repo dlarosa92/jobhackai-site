@@ -3,8 +3,32 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <style>html.auth-pending{visibility:hidden}</style>
+  <style>
+    html.auth-pending{visibility:hidden}
+    body.account-protected .account-settings-wrapper { display: none; }
+    body.account-protected main { display: none; }
+    body.account-protected #profile-skeleton { display: none; }
+    body.account-protected #profile-content { display: none; }
+  </style>
   <script src="js/static-auth-guard.js?v=20251007-2"></script>
+  <script>
+    document.addEventListener("firebase-auth-ready", function () {
+      const mgr = window.FirebaseAuthManager;
+      const user = mgr ? mgr.getCurrentUser() : null;
+      if (!user) {
+        window.location.href = "/login.html";
+        return;
+      }
+      if (!user.emailVerified) {
+        window.location.href = "/verify-email.html?email=" + encodeURIComponent(user.email || "");
+        return;
+      }
+      // user is verified, show content
+      document.body.classList.remove("account-protected");
+    });
+    // default: hide
+    document.body.classList.add("account-protected");
+  </script>
   <title>Account Settings – JobHackAI</title>
   <link rel="icon" type="image/png" href="assets/JobHackAI_Logo_favicon-32x32.png">
   <link rel="stylesheet" href="css/tokens.css">

@@ -2,10 +2,9 @@
 /dashboard/   /dashboard/index.html    200
 /dashboard-simple/   /dashboard-simple/index.html    200
 
-# Auth routing - use 200 rewrites to avoid redirect loop issues
-/auth/action   /auth/action.html   200
-/auth/verify   /auth/action.html   200
-/auth/reset    /auth/action.html   200
+# Auth routes - Firebase sends /auth/action but Cloudflare needs /auth/action/
+/auth/action   /auth/action/index.html   200
+/auth/action/   /auth/action/index.html   200
 
 # Fallback for all other routes
 /*    /index.html   200
