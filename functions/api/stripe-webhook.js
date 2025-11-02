@@ -1,11 +1,11 @@
 export async function onRequest(context) {
   const { request, env } = context;
-  if (request.method !== 'POST') return new Response('Method not allowed', { status: 405, headers: { 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': 'https://dev.jobhackai.io', 'Vary': 'Origin' } });
+  if (request.method !== 'POST') return new Response('Method not allowed', { status: 405, headers: { 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': env.FRONTEND_URL || 'https://dev.jobhackai.io', 'Vary': 'Origin' } });
 
   // Read raw body for signature verification
   const raw = await request.text();
   const valid = await verifyStripeWebhook(env, request, raw);
-  if (!valid) return new Response('Invalid signature', { status: 401, headers: { 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': 'https://dev.jobhackai.io', 'Vary': 'Origin' } });
+  if (!valid) return new Response('Invalid signature', { status: 401, headers: { 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': env.FRONTEND_URL || 'https://dev.jobhackai.io', 'Vary': 'Origin' } });
 
   const event = JSON.parse(raw);
 
@@ -15,7 +15,7 @@ export async function onRequest(context) {
       const seenKey = `evt:${event.id}`;
       const seen = await env.JOBHACKAI_KV?.get(seenKey);
       if (seen) {
-        return new Response('[ok]', { status: 200, headers: { 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': 'https://dev.jobhackai.io', 'Vary': 'Origin' } });
+        return new Response('[ok]', { status: 200, headers: { 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': env.FRONTEND_URL || 'https://dev.jobhackai.io', 'Vary': 'Origin' } });
       }
       await env.JOBHACKAI_KV?.put(seenKey, '1', { expirationTtl: 86400 });
     }
@@ -116,7 +116,7 @@ export async function onRequest(context) {
     // swallow errors to avoid endless retries; state can heal on next login fetch
   }
 
-  return new Response('[ok]', { status: 200, headers: { 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': 'https://dev.jobhackai.io', 'Vary': 'Origin' } });
+  return new Response('[ok]', { status: 200, headers: { 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': env.FRONTEND_URL || 'https://dev.jobhackai.io', 'Vary': 'Origin' } });
 }
 
 async function verifyStripeWebhook(env, req, rawBody) {

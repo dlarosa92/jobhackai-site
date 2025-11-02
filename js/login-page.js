@@ -240,7 +240,8 @@ document.addEventListener('DOMContentLoaded', async function() {
       setTimeout(() => {
         window.location.href = 'dashboard.html';
       }, 200);
-      unsubscribe(); // Stop listening after redirect
+      // Guard against non-function unsubscribe (prevents TypeError and loops)
+      if (typeof unsubscribe === 'function') unsubscribe();
     }
   });
   

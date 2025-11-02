@@ -586,6 +586,7 @@
         
         // Render billing section
         await renderBillingSection();
+
         
         // Hide skeleton, show content
         document.getElementById('profile-skeleton').style.display = 'none';
@@ -596,6 +597,7 @@
         document.getElementById('profile-name').textContent = user.displayName || 'User';
         document.getElementById('profile-email').textContent = user.email || 'user@example.com';
         await renderBillingSection();
+
         document.getElementById('profile-skeleton').style.display = 'none';
         document.getElementById('profile-content').style.display = 'block';
       }
