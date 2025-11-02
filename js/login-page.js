@@ -461,17 +461,83 @@ document.addEventListener('DOMContentLoaded', async function() {
   });
   
   // ===== FORGOT PASSWORD (MODAL) =====
+  // Scroll lock management for modal
+  let savedScrollPosition = 0;
+  
+  function lockBodyScroll() {
+    savedScrollPosition = window.pageYOffset || document.documentElement.scrollTop;
+    document.body.style.position = 'fixed';
+    document.body.style.top = `-${savedScrollPosition}px`;
+    document.body.style.width = '100%';
+    document.body.style.overflow = 'hidden';
+  }
+  
+  function unlockBodyScroll() {
+    document.body.style.position = '';
+    document.body.style.top = '';
+    document.body.style.width = '';
+    document.body.style.overflow = '';
+    window.scrollTo(0, savedScrollPosition);
+  }
+
+  let isModalOpening = false;
+  let isSendingResetLink = false;
+
   forgotPasswordLink?.addEventListener('click', function(e) {
     e.preventDefault();
+    e.stopPropagation();
+    
+    // Prevent multiple rapid clicks
+    if (isModalOpening || (forgotPasswordOverlay && forgotPasswordOverlay.style.display === 'flex')) {
+      return;
+    }
+    
+    isModalOpening = true;
     hideError(loginError);
-    if (forgotPasswordOverlay) forgotPasswordOverlay.style.display = 'flex';
+    
+    // Lock scroll before opening modal to prevent scroll jump
+    lockBodyScroll();
+    
+    // Clear previous state
     const currentLoginEmail = document.getElementById('loginEmail')?.value?.trim() || '';
     if (forgotPasswordEmailInput) forgotPasswordEmailInput.value = currentLoginEmail;
     if (forgotPasswordError) { forgotPasswordError.style.display = 'none'; forgotPasswordError.textContent = ''; }
     if (forgotPasswordSuccess) { forgotPasswordSuccess.style.display = 'none'; }
+    
+    // Show modal with smooth transition
+    if (forgotPasswordOverlay) {
+      forgotPasswordOverlay.style.opacity = '0';
+      forgotPasswordOverlay.style.display = 'flex';
+      
+      // Use requestAnimationFrame for smooth appearance
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          if (forgotPasswordOverlay) {
+            forgotPasswordOverlay.style.transition = 'opacity 0.2s ease-in-out';
+            forgotPasswordOverlay.style.opacity = '1';
+            
+            // Focus on email input after animation
+            setTimeout(() => {
+              if (forgotPasswordEmailInput) {
+                forgotPasswordEmailInput.focus();
+              }
+              isModalOpening = false;
+            }, 50);
+          }
+        });
+      });
+    }
   });
 
-  forgotPasswordSendBtn?.addEventListener('click', async function() {
+  forgotPasswordSendBtn?.addEventListener('click', async function(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    // Prevent multiple clicks
+    if (isSendingResetLink) {
+      return;
+    }
+    
     const email = forgotPasswordEmailInput?.value?.trim();
     if (!email || !isValidEmail(email)) {
       if (forgotPasswordError) {
@@ -481,27 +547,108 @@ document.addEventListener('DOMContentLoaded', async function() {
       if (forgotPasswordSuccess) forgotPasswordSuccess.style.display = 'none';
       return;
     }
-    const result = await authManager.resetPassword(email);
-    if (result.success) {
-      if (forgotPasswordError) { forgotPasswordError.style.display = 'none'; forgotPasswordError.textContent = ''; }
-      if (forgotPasswordSuccess) forgotPasswordSuccess.style.display = 'block';
-    } else {
+    
+    // Show loading state
+    isSendingResetLink = true;
+    const originalText = this.textContent;
+    this.textContent = 'Sending...';
+    this.disabled = true;
+    this.style.cursor = 'not-allowed';
+    this.style.opacity = '0.7';
+    
+    // Clear previous messages
+    if (forgotPasswordError) { forgotPasswordError.style.display = 'none'; forgotPasswordError.textContent = ''; }
+    if (forgotPasswordSuccess) forgotPasswordSuccess.style.display = 'none';
+    
+    try {
+      const result = await authManager.resetPassword(email);
+      if (result.success) {
+        if (forgotPasswordError) { forgotPasswordError.style.display = 'none'; forgotPasswordError.textContent = ''; }
+        if (forgotPasswordSuccess) forgotPasswordSuccess.style.display = 'block';
+        // Clear email input after success
+        if (forgotPasswordEmailInput) forgotPasswordEmailInput.value = '';
+      } else {
+        if (forgotPasswordError) {
+          forgotPasswordError.textContent = result.error || 'Something went wrong. Please try again.';
+          forgotPasswordError.style.display = 'block';
+        }
+        if (forgotPasswordSuccess) forgotPasswordSuccess.style.display = 'none';
+      }
+    } catch (error) {
+      console.error('Password reset error:', error);
       if (forgotPasswordError) {
-        forgotPasswordError.textContent = result.error || 'Something went wrong. Please try again.';
+        forgotPasswordError.textContent = 'An unexpected error occurred. Please try again.';
         forgotPasswordError.style.display = 'block';
       }
       if (forgotPasswordSuccess) forgotPasswordSuccess.style.display = 'none';
+    } finally {
+      // Restore button state
+      isSendingResetLink = false;
+      this.textContent = originalText;
+      this.disabled = false;
+      this.style.cursor = 'pointer';
+      this.style.opacity = '1';
+    }
+  });
+
+  // Allow Enter key to submit password reset form
+  forgotPasswordEmailInput?.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter' && !isSendingResetLink) {
+      e.preventDefault();
+      forgotPasswordSendBtn?.click();
     }
   });
 
   function closeForgotOverlay() {
-    if (forgotPasswordOverlay) forgotPasswordOverlay.style.display = 'none';
+    if (forgotPasswordOverlay && forgotPasswordOverlay.style.display === 'flex') {
+      // Smooth fade-out
+      forgotPasswordOverlay.style.opacity = '0';
+      setTimeout(() => {
+        if (forgotPasswordOverlay) {
+          forgotPasswordOverlay.style.display = 'none';
+          unlockBodyScroll();
+        }
+      }, 200);
+    }
   }
 
-  forgotPasswordCloseBtn?.addEventListener('click', function() { closeForgotOverlay(); });
+  forgotPasswordCloseBtn?.addEventListener('click', function(e) {
+    e.preventDefault();
+    closeForgotOverlay();
+  });
+  
+  // Close modal when clicking backdrop
+  forgotPasswordOverlay?.addEventListener('click', function(e) {
+    if (e.target === forgotPasswordOverlay) {
+      closeForgotOverlay();
+    }
+  });
+  
+  // Close modal on Escape key
   document.addEventListener('keydown', function(e) {
     if (e.key === 'Escape' && forgotPasswordOverlay && forgotPasswordOverlay.style.display === 'flex') {
       closeForgotOverlay();
+    }
+  });
+  
+  // Focus trap: prevent tabbing outside modal
+  forgotPasswordOverlay?.addEventListener('keydown', function(e) {
+    if (e.key !== 'Tab') return;
+    
+    const focusableElements = forgotPasswordOverlay.querySelectorAll(
+      'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+    );
+    const firstFocusable = focusableElements[0];
+    const lastFocusable = focusableElements[focusableElements.length - 1];
+    
+    if (e.shiftKey && e.target === firstFocusable) {
+      // Shift+Tab from first element: wrap to last
+      e.preventDefault();
+      lastFocusable?.focus();
+    } else if (!e.shiftKey && e.target === lastFocusable) {
+      // Tab from last element: wrap to first
+      e.preventDefault();
+      firstFocusable?.focus();
     }
   });
   
