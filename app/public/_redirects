@@ -3,9 +3,11 @@
 /dashboard-simple/   /dashboard-simple/index.html    200
 
 # Auth routing
-/auth/action /auth/action.html 200
-/auth/verify /auth/action.html 200
-/auth/reset  /auth/action.html 200
+# Using 301 redirect instead of 200 rewrite to prevent redirect loops
+# This explicitly redirects rather than silently rewriting
+/auth/action   /auth/action.html   301
+/auth/verify   /auth/action.html   200
+/auth/reset    /auth/action.html   200
 
 # Fallback for all other routes
 /*    /index.html   200
