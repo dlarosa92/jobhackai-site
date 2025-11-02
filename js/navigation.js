@@ -749,8 +749,6 @@ function updateNavigation() {
   const devOverride = getDevPlanOverride();
   const currentPlan = getEffectivePlan();
   const authState = getAuthState();
-  const currentFirebaseUser = window.FirebaseAuthManager?.getCurrentUser?.();
-  const isSignedInButUnverified = !!(authState.isAuthenticated && currentFirebaseUser && currentFirebaseUser.emailVerified === false);
   
   // Additional debugging for visitor state issues
   if (currentPlan !== 'visitor' && !authState.isAuthenticated) {
@@ -779,7 +777,7 @@ function updateNavigation() {
   });
   
   const navGroup = document.querySelector('.nav-group');
-  const navLinks = document.querySelector('nav.nav-links');
+  const navLinks = document.querySelector('.nav-links');
   const mobileNav = document.getElementById('mobileNav');
   
   navLog('debug', 'DOM elements found', {
@@ -829,34 +827,6 @@ function updateNavigation() {
   if (mobileNav) {
     mobileNav.innerHTML = '';
     navLog('debug', 'Cleared mobile nav');
-  }
-
-  // Special minimal header for signed-in but unverified users
-  if (isSignedInButUnverified) {
-    navLog('info', 'Rendering minimal header for unverified user');
-    // navLinks remains empty; add only Logout action on the right
-    let navActions = document.querySelector('.nav-actions');
-    if (!navActions) {
-      navActions = document.createElement('div');
-      navActions.className = 'nav-actions';
-      if (navGroup) navGroup.appendChild(navActions);
-    } else {
-      navActions.innerHTML = '';
-    }
-    const logoutBtn = document.createElement('a');
-    logoutBtn.href = '#';
-    logoutBtn.textContent = 'Logout';
-    logoutBtn.className = 'btn btn-secondary';
-    logoutBtn.style.cssText = 'background:#F3F4F6;color:#6B7280;padding:0.5rem 1rem;border-radius:8px;text-decoration:none;font-weight:600;display:inline-block;';
-    logoutBtn.addEventListener('click', (e) => { e.preventDefault(); logout(); });
-    navActions.appendChild(logoutBtn);
-
-    // Clear mobile nav as well (no links for unverified)
-    if (mobileNav) mobileNav.innerHTML = '';
-
-    // Skip normal rendering
-    navLog('info', '=== updateNavigation() COMPLETE (unverified minimal) ===');
-    return;
   }
 
   // --- Build Nav Links (Desktop) ---
@@ -1187,13 +1157,6 @@ function initializeNavigation() {
     localStorage.removeItem('dev-plan');
     devPlan = null;
     
-    // Clear any URL parameters that might interfere with visitor state
-    if (window.location.search.includes('plan=')) {
-      const cleanUrl = window.location.pathname;
-      window.history.replaceState({}, '', cleanUrl);
-      navLog('info', 'Cleared URL plan parameter for visitor state');
-    }
-    
     navLog('info', 'Force-cleared plan data for unauthenticated user');
   } else {
     // If dev-plan is not set or matches visitor, always set to user-plan
@@ -1471,10 +1434,85 @@ window.navDebug = {
   },
 };
 
+// Navigation gating functions (Phase 2)
+function renderMarketingNav(desktop, mobile) {
+  if (!desktop) return;
+  desktop.innerHTML = `
+    <a href="/index.html">Home</a>
+    <a href="/blog.html">Blog</a>
+    <a href="/features.html">Features</a>
+    <a href="/pricing.html">Pricing</a>
+    <a class="btn-link" href="/login.html">Login</a>
+    <a class="btn-primary" href="/signup.html">Start Free Trial</a>
+  `;
+  if (mobile) mobile.innerHTML = desktop.innerHTML;
+}
+
+function renderUnverifiedNav(desktop, mobile) {
+  if (!desktop) return;
+  desktop.innerHTML = `
+    <span class="nav-status">Verify your email to unlock your account</span>
+    <button id="nav-logout-btn" class="btn-outline">Logout</button>
+  `;
+  if (mobile) mobile.innerHTML = desktop.innerHTML;
+  const btn = document.getElementById("nav-logout-btn");
+  if (btn && window.FirebaseAuthManager) {
+    btn.onclick = () => window.FirebaseAuthManager.signOut();
+  }
+}
+
+function renderVerifiedNav(desktop, mobile) {
+  if (!desktop) return;
+  desktop.innerHTML = `
+    <a href="/dashboard.html">Dashboard</a>
+    <a href="/interview-questions.html">Interview Questions</a>
+    <a href="/pricing.html">Pricing</a>
+    <a href="/account-setting.html" class="nav-account-link">Account</a>
+    <button id="nav-logout-btn" class="btn-outline">Logout</button>
+  `;
+  if (mobile) mobile.innerHTML = desktop.innerHTML;
+  const btn = document.getElementById("nav-logout-btn");
+  if (btn && window.FirebaseAuthManager) {
+    btn.onclick = () => window.FirebaseAuthManager.signOut();
+  }
+}
+
+function applyNavForUser(user) {
+  const desktopNav = document.querySelector("nav.nav-links");
+  const mobileNav = document.querySelector(".mobile-nav");
+  const logo = document.querySelector(".site-logo, .nav-logo, header .logo, a.nav-logo");
+  
+  if (!desktopNav) return;
+  
+  if (!user) {
+    renderMarketingNav(desktopNav, mobileNav);
+    if (logo) logo.onclick = () => (window.location.href = "/index.html");
+    return;
+  }
+  
+  if (!user.emailVerified) {
+    renderUnverifiedNav(desktopNav, mobileNav);
+    if (logo) logo.onclick = () => (window.location.href = "/verify-email.html?email=" + encodeURIComponent(user.email || ""));
+    return;
+  }
+  
+  renderVerifiedNav(desktopNav, mobileNav);
+  if (logo) logo.onclick = () => (window.location.href = "/dashboard.html");
+}
+
 // Initialize navigation when Firebase auth is ready
-document.addEventListener('firebase-auth-ready', (event) => {
+document.addEventListener('firebase-auth-ready', async (event) => {
   console.log('🔥 Firebase auth ready, initializing navigation');
-  initializeNavigation();
+  try {
+    const user = window.FirebaseAuthManager
+      ? window.FirebaseAuthManager.getCurrentUser()
+      : null;
+    applyNavForUser(user);
+    initializeNavigation();
+  } catch (err) {
+    console.warn("[nav] failed to apply state", err);
+    initializeNavigation();
+  }
 });
 
 // Fallback: Initialize immediately if Firebase is already ready
@@ -1483,6 +1521,8 @@ if (document.readyState === 'loading') {
     // Check if Firebase is already ready (auth state already changed)
     if (window.FirebaseAuthManager && window.FirebaseAuthManager.currentUser !== undefined) {
       console.log('🔥 Firebase already ready, initializing navigation');
+      const user = window.FirebaseAuthManager.getCurrentUser();
+      applyNavForUser(user);
       initializeNavigation();
     }
   });
@@ -1490,6 +1530,8 @@ if (document.readyState === 'loading') {
   // DOM already loaded, check if Firebase is ready
   if (window.FirebaseAuthManager && window.FirebaseAuthManager.currentUser !== undefined) {
     console.log('🔥 Firebase already ready, initializing navigation');
+    const user = window.FirebaseAuthManager.getCurrentUser();
+    applyNavForUser(user);
     initializeNavigation();
   }
 }

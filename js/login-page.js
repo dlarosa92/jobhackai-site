@@ -596,6 +596,11 @@ document.addEventListener('DOMContentLoaded', async function() {
       planPrice.textContent = finalPlanPrice;
       banner.style.display = 'block';
       
+      // Add 'show' class for CSS animation
+      requestAnimationFrame(() => {
+        banner.classList.add('show');
+      });
+      
       // Debug trace for plan banner rendering
       console.trace('selectedPlanBanner:', { planName: finalPlanName, planPrice: finalPlanPrice, plan });
     }
@@ -604,6 +609,7 @@ document.addEventListener('DOMContentLoaded', async function() {
   function hideSelectedPlanBanner() {
     const banner = document.getElementById('selectedPlanBanner');
     if (banner) {
+      banner.classList.remove('show');
       banner.style.display = 'none';
       // Also clear any text to avoid confusion in screen readers
       const planName = document.getElementById('selectedPlanName');
