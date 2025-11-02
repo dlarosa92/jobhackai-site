@@ -309,90 +309,32 @@ function setAuthState(isAuthenticated, plan = null) {
   }, 100);
 }
 
-async function logout() {
-  navLog('info', 'logout() called');
-  
-  // Best-effort: sign out from Firebase (if auth manager is available)
+async function logout(e) {
+  e?.preventDefault?.();
+  console.log('🚪 logout() v2: triggered');
+
+  // Set logout intent immediately
+  sessionStorage.setItem('logout-intent', '1');
+
+  // Attempt Firebase sign out
   try {
-    if (window.FirebaseAuthManager && typeof window.FirebaseAuthManager.signOut === 'function') {
-      await window.FirebaseAuthManager.signOut();
-    }
-  } catch (_) { /* no-op */ }
-
-  // Clear all authentication data
-  try {
-    localStorage.removeItem('user-authenticated');
-    localStorage.removeItem('user-email');
-    localStorage.removeItem('user-plan');
-    localStorage.removeItem('dev-plan');
-    localStorage.removeItem('user-db');
-    localStorage.removeItem('user-db-backup');
-    localStorage.removeItem('selected-plan');
-    localStorage.removeItem('selected-plan-ts');
-    localStorage.removeItem('selected-plan-context');
-    localStorage.removeItem('plan-amount');
-    localStorage.removeItem('pending-signup-email');
-    localStorage.removeItem('pending-signup-firstName');
-    localStorage.removeItem('pending-signup-lastName');
-    localStorage.removeItem('trial-activated');
-    localStorage.removeItem('trial-start-date');
-    localStorage.removeItem('auth-user');
-  } catch (_) { /* no-op */ }
-
-  // Remove Firebase SDK local persistence to prevent self-heal re-login
-  try {
-    for (let i = localStorage.length - 1; i >= 0; i--) {
-      const key = localStorage.key(i);
-      if (key && key.startsWith('firebase:authUser:')) {
-        localStorage.removeItem(key);
-      }
-    }
-  } catch (_) { /* no-op */ }
-
-  // IndexedDB cleanup (prevents re-hydration)
-  const deleteDb = (name) => new Promise((res) => {
-    try {
-      const req = indexedDB.deleteDatabase(name);
-      req.onsuccess = req.onerror = req.onblocked = () => res();
-    } catch (_) { res(); }
-  });
-  try {
-    await deleteDb('firebaseLocalStorageDb');
-    await deleteDb('firebase-installations-database');
-    if (indexedDB.databases) {
-      const dbs = await indexedDB.databases();
-      for (const db of (dbs || [])) {
-        const name = db && db.name ? db.name : null;
-        if (name && name.toLowerCase().includes('firebase')) {
-          await deleteDb(name);
-        }
-      }
-    }
-  } catch (_) { /* best effort */ }
-
-  // TTL cooldown for self-heal (60s)
-  try { localStorage.setItem('force-logged-out', String(Date.now())); } catch (_) {}
-
-  // Multi-tab broadcast
-  try { new BroadcastChannel('auth').postMessage({ type: 'logout', ts: Date.now() }); } catch (_) {}
-
-  // Explicitly mark as logged out to keep guards simple
-  try { localStorage.setItem('user-authenticated', 'false'); } catch (_) {}
-  
-  // Log state
-  navLog('debug', 'Post-logout storage state', {
-    'user-authenticated': localStorage.getItem('user-authenticated'),
-    'user-plan': localStorage.getItem('user-plan'),
-    'dev-plan': localStorage.getItem('dev-plan')
-  });
-  
-  // Update navigation immediately
-  if (typeof updateNavigation === 'function') {
-    updateNavigation();
+    await window.FirebaseAuthManager?.signOut?.();
+    console.log('✅ Firebase signOut complete');
+  } catch (err) {
+    console.warn('⚠️ signOut error (ignored):', err);
   }
 
-  // Redirect to home
-  location.replace('index.html');
+  // Safely clear localStorage
+  try {
+    ['user-authenticated', 'user-email', 'user-plan', 'dev-plan', 'auth-user']
+      .forEach(k => localStorage.removeItem(k));
+  } catch (err) {
+    console.warn('⚠️ localStorage cleanup failed:', err);
+  }
+
+  // Redirect to login (keep .html for now)
+  console.log('➡️ Redirecting to /login.html');
+  location.replace('/login.html');
 }
 
 // --- PLAN CONFIGURATION ---
@@ -1215,13 +1157,6 @@ function initializeNavigation() {
     localStorage.removeItem('dev-plan');
     devPlan = null;
     
-    // Clear any URL parameters that might interfere with visitor state
-    if (window.location.search.includes('plan=')) {
-      const cleanUrl = window.location.pathname;
-      window.history.replaceState({}, '', cleanUrl);
-      navLog('info', 'Cleared URL plan parameter for visitor state');
-    }
-    
     navLog('info', 'Force-cleared plan data for unauthenticated user');
   } else {
     // If dev-plan is not set or matches visitor, always set to user-plan
@@ -1241,12 +1176,18 @@ function initializeNavigation() {
   // Update navigation
   navLog('debug', 'Calling updateNavigation()');
   updateNavigation();
-  // Reconcile plan from KV and then handle post-checkout activation if needed
-  try {
-    reconcilePlanFromKV().then(() => {
-      waitForPlanActivationIfNeeded();
-    });
-  } catch (_) {}
+  
+  // REMOVED: Do NOT call reconcilePlanFromKV() here - it causes race condition
+  // Plan reconciliation will be handled by:
+  // 1. Firebase auth's onAuthStateChanged listener (already implemented)
+  // 2. Page-specific DOMContentLoaded handlers that wait for auth
+  // 3. Manual calls with ?paid=1 parameter
+  
+  // Only handle post-checkout activation polling (doesn't need immediate plan fetch)
+  if (location.search.includes('paid=1')) {
+    // This will be handled by dashboard.html's DOMContentLoaded after auth is confirmed
+    navLog('info', 'Checkout flow detected, plan sync will be handled by page auth check');
+  }
   
   // Update quick plan switcher state
   navLog('debug', 'Updating quick plan switcher state');
@@ -1273,7 +1214,21 @@ function initializeNavigation() {
 // --- KV Plan Reconciliation and Post-Checkout Activation ---
 async function fetchKVPlan() {
   try {
-    // FIX: Add better error handling and logging
+    // DEFENSIVE GUARD: Ensure FirebaseAuthManager is loaded
+    if (!window.FirebaseAuthManager) {
+      console.log('🔍 fetchKVPlan: FirebaseAuthManager not loaded yet, skipping');
+      return null;
+    }
+
+    // DEFENSIVE GUARD: Wait for auth to be ready if it's still initializing
+    if (window.FirebaseAuthManager.waitForAuthReady) {
+      try {
+        await window.FirebaseAuthManager.waitForAuthReady(1000); // Short timeout
+      } catch (e) {
+        console.log('🔍 fetchKVPlan: Auth ready timeout, continuing anyway');
+      }
+    }
+
     const currentUser = window.FirebaseAuthManager?.getCurrentUser?.();
     if (!currentUser) {
       console.log('🔍 fetchKVPlan: No current user available');
@@ -1314,12 +1269,23 @@ async function fetchKVPlan() {
 
 async function reconcilePlanFromKV() {
   const auth = getAuthState();
-  if (!auth.isAuthenticated) return;
+  if (!auth.isAuthenticated) {
+    console.log('🔍 reconcilePlanFromKV: User not authenticated, skipping');
+    return;
+  }
+  
+  // Check if FirebaseAuthManager is loaded
+  if (!window.FirebaseAuthManager) {
+    console.log('🔍 reconcilePlanFromKV: FirebaseAuthManager not loaded, skipping');
+    return;
+  }
   
   // FIX: Add retry mechanism for plan reconciliation
   let kvPlan = null;
   let retryCount = 0;
   const maxRetries = 3;
+  
+  console.log('🔍 reconcilePlanFromKV: Starting plan reconciliation...');
   
   while (!kvPlan && retryCount < maxRetries) {
     try {
@@ -1467,3 +1433,105 @@ window.navDebug = {
     console.log(`🔧 Debug logging ${DEBUG.enabled ? 'ENABLED' : 'DISABLED'}`);
   },
 };
+
+// Navigation gating functions (Phase 2)
+function renderMarketingNav(desktop, mobile) {
+  if (!desktop) return;
+  desktop.innerHTML = `
+    <a href="/index.html">Home</a>
+    <a href="/blog.html">Blog</a>
+    <a href="/features.html">Features</a>
+    <a href="/pricing.html">Pricing</a>
+    <a class="btn-link" href="/login.html">Login</a>
+    <a class="btn-primary" href="/signup.html">Start Free Trial</a>
+  `;
+  if (mobile) mobile.innerHTML = desktop.innerHTML;
+}
+
+function renderUnverifiedNav(desktop, mobile) {
+  if (!desktop) return;
+  desktop.innerHTML = `
+    <span class="nav-status">Verify your email to unlock your account</span>
+    <button id="nav-logout-btn" class="btn-outline">Logout</button>
+  `;
+  if (mobile) mobile.innerHTML = desktop.innerHTML;
+  const btn = document.getElementById("nav-logout-btn");
+  if (btn && window.FirebaseAuthManager) {
+    btn.onclick = () => window.FirebaseAuthManager.signOut();
+  }
+}
+
+function renderVerifiedNav(desktop, mobile) {
+  if (!desktop) return;
+  desktop.innerHTML = `
+    <a href="/dashboard.html">Dashboard</a>
+    <a href="/interview-questions.html">Interview Questions</a>
+    <a href="/pricing.html">Pricing</a>
+    <a href="/account-setting.html" class="nav-account-link">Account</a>
+    <button id="nav-logout-btn" class="btn-outline">Logout</button>
+  `;
+  if (mobile) mobile.innerHTML = desktop.innerHTML;
+  const btn = document.getElementById("nav-logout-btn");
+  if (btn && window.FirebaseAuthManager) {
+    btn.onclick = () => window.FirebaseAuthManager.signOut();
+  }
+}
+
+function applyNavForUser(user) {
+  const desktopNav = document.querySelector("nav.nav-links");
+  const mobileNav = document.querySelector(".mobile-nav");
+  const logo = document.querySelector(".site-logo, .nav-logo, header .logo, a.nav-logo");
+  
+  if (!desktopNav) return;
+  
+  if (!user) {
+    renderMarketingNav(desktopNav, mobileNav);
+    if (logo) logo.onclick = () => (window.location.href = "/index.html");
+    return;
+  }
+  
+  if (!user.emailVerified) {
+    renderUnverifiedNav(desktopNav, mobileNav);
+    if (logo) logo.onclick = () => (window.location.href = "/verify-email.html?email=" + encodeURIComponent(user.email || ""));
+    return;
+  }
+  
+  renderVerifiedNav(desktopNav, mobileNav);
+  if (logo) logo.onclick = () => (window.location.href = "/dashboard.html");
+}
+
+// Initialize navigation when Firebase auth is ready
+document.addEventListener('firebase-auth-ready', async (event) => {
+  console.log('🔥 Firebase auth ready, initializing navigation');
+  try {
+    const user = window.FirebaseAuthManager
+      ? window.FirebaseAuthManager.getCurrentUser()
+      : null;
+    applyNavForUser(user);
+    initializeNavigation();
+  } catch (err) {
+    console.warn("[nav] failed to apply state", err);
+    initializeNavigation();
+  }
+});
+
+// Fallback: Initialize immediately if Firebase is already ready
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', () => {
+    // Check if Firebase is already ready (auth state already changed)
+    if (window.FirebaseAuthManager && window.FirebaseAuthManager.currentUser !== undefined) {
+      console.log('🔥 Firebase already ready, initializing navigation');
+      const user = window.FirebaseAuthManager.getCurrentUser();
+      applyNavForUser(user);
+      initializeNavigation();
+    }
+  });
+} else {
+  // DOM already loaded, check if Firebase is ready
+  if (window.FirebaseAuthManager && window.FirebaseAuthManager.currentUser !== undefined) {
+    console.log('🔥 Firebase already ready, initializing navigation');
+    const user = window.FirebaseAuthManager.getCurrentUser();
+    applyNavForUser(user);
+    initializeNavigation();
+  }
+}

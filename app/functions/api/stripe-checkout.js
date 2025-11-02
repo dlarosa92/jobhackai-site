@@ -20,6 +20,15 @@ export async function onRequest(context) {
       return json({ ok: false, error: 'Missing plan' }, 422, origin, env);
     }
 
+    // Prevent multiple trials per user
+    if (plan === 'trial') {
+      const trialUsed = await env.JOBHACKAI_KV?.get(`trialUsedByUid:${uid}`);
+      if (trialUsed) {
+        console.log('🔴 [CHECKOUT] Trial already used for user', uid);
+        return json({ ok: false, error: 'Trial already used. Please select a paid plan.' }, 400, origin, env);
+      }
+    }
+
     const priceId = planToPrice(env, plan);
     if (!priceId) return json({ ok: false, error: 'Invalid plan' }, 400, origin, env);
 
@@ -47,10 +56,10 @@ export async function onRequest(context) {
       customer: customerId,
       'line_items[0][price]': priceId,
       'line_items[0][quantity]': 1,
-      success_url: (env.STRIPE_SUCCESS_URL || `${env.FRONTEND_URL || 'https://dev.jobhackai.io'}/dashboard?paid=1`),
-      cancel_url: (env.STRIPE_CANCEL_URL || `${env.FRONTEND_URL || 'https://dev.jobhackai.io'}/pricing-a`),
+      success_url: `${env.FRONTEND_URL || 'https://dev.jobhackai.io'}/dashboard.html?paid=1`,
+      cancel_url: `${env.FRONTEND_URL || 'https://dev.jobhackai.io'}/pricing-a.html`,
       allow_promotion_codes: 'true',
-      payment_method_collection: 'if_required',
+      payment_method_collection: 'always',
       'metadata[firebaseUid]': uid,
       'metadata[plan]': plan
     };

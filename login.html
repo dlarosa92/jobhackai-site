@@ -15,6 +15,55 @@
   <link rel="stylesheet" href="css/header.css">
   <link rel="stylesheet" href="css/footer.css">
   <style>
+    /* Page transitions */
+    body {
+      transition: opacity 0.3s ease;
+    }
+    .page-transition-out {
+      opacity: 0;
+    }
+    
+    /* Plan banner animations - improved */
+    .selected-plan-banner {
+      opacity: 0;
+      transform: translateY(-10px);
+      transition: opacity 0.25s ease-in-out, transform 0.25s ease-in-out;
+    }
+    .selected-plan-banner.show {
+      opacity: 1;
+      transform: translateY(0);
+    }
+    
+    /* Loading states */
+    .auth-form.loading {
+      opacity: 0.7;
+      pointer-events: none;
+    }
+    
+    .auth-continue-btn.loading {
+      position: relative;
+      color: transparent;
+      cursor: progress;
+    }
+    
+    .auth-continue-btn.loading::after {
+      content: '';
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 20px;
+      height: 20px;
+      margin: -10px 0 0 -10px;
+      border: 2px solid #ffffff;
+      border-radius: 50%;
+      border-top-color: transparent;
+      animation: spin 1s linear infinite;
+    }
+    
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+    
     .auth-container {
       max-width: 400px;
       margin: 3.5rem auto 2.5rem auto;
@@ -268,10 +317,13 @@
     <div class="auth-container" role="main" aria-labelledby="auth-title">
       <a href="index.html" class="btn-secondary" style="margin-bottom:1.2rem; font-size:1rem; padding:0.4rem 1.1rem; border-radius:6px; display:inline-block; text-decoration:none;">&larr; Back to homepage</a>
       <div class="auth-logo" style="margin-bottom:0.2rem;">
-        <span aria-hidden="true" style="font-size:1.3rem;">&#128274;</span>
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#1F2937" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;" aria-hidden="true">
+          <rect x="5" y="10" width="14" height="10" rx="2"/>
+          <path d="M8 10V8a4 4 0 0 1 8 0v2"/>
+        </svg>
         <span style="font-weight:800; letter-spacing:0.5px;">JOBHACKAI</span>
       </div>
-      <div class="auth-title" id="auth-title">Create your account</div>
+      <div class="auth-title" id="auth-title">Welcome back</div>
       <!-- NEW: Selected plan banner -->
       <div class="selected-plan-banner" id="selectedPlanBanner" aria-live="polite">
         <h3 id="selectedPlanName">Selected Plan</h3>
@@ -286,13 +338,21 @@
         Continue with LinkedIn
       </a>
       <div class="auth-separator"><span>or</span></div>
-      <!-- Login Form (hidden by default; JS will show when toggled) -->
-      <form class="auth-form" id="loginForm" autocomplete="on" aria-label="Login form" style="display:none;">
+      <!-- Login Form (default visible; JS may toggle) -->
+      <form class="auth-form" id="loginForm" autocomplete="on" aria-label="Login form">
         <div class="auth-error" id="loginError" aria-live="polite"></div>
         <label for="loginEmail" class="sr-only">Email address</label>
         <input type="email" id="loginEmail" class="auth-input" name="loginEmail" placeholder="Email address" required autocomplete="email" />
         <label for="loginPassword" class="sr-only">Password</label>
-        <input type="password" id="loginPassword" class="auth-input" name="loginPassword" placeholder="Password" required autocomplete="current-password" minlength="8" />
+        <div style="position: relative; width: 100%;">
+          <input type="password" id="loginPassword" class="auth-input" name="loginPassword" placeholder="Password" required autocomplete="current-password" minlength="8" style="padding-right: 45px;" />
+          <button type="button" class="password-toggle" id="toggleLoginPassword" aria-label="Show password" aria-pressed="false" tabindex="0" style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); background: none; border: none; cursor: pointer; padding: 4px; display: flex; align-items: center; color: #6B7280;">
+            <svg id="loginPasswordEyeIcon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+              <circle cx="12" cy="12" r="3"/>
+            </svg>
+          </button>
+        </div>
         <button type="submit" class="auth-continue-btn" id="loginContinueBtn">Log In</button>
       </form>
       <div class="auth-links" id="loginLinks">
@@ -301,8 +361,8 @@
         <br />
         <a href="#" id="forgotPasswordLink">Forgot your password?</a>
       </div>
-      <!-- Signup Form (default visible; JS may toggle) -->
-      <form class="auth-form" id="signupForm" autocomplete="on" aria-label="Sign up form">
+      <!-- Signup Form (hidden by default; JS may toggle) -->
+      <form class="auth-form" id="signupForm" autocomplete="on" aria-label="Sign up form" style="display:none;">
         <div class="auth-error" id="signupError" aria-live="polite"></div>
         <label for="firstName" class="sr-only">First Name</label>
         <input type="text" id="firstName" class="auth-input" name="firstName" placeholder="First Name" required autocomplete="given-name" />
@@ -311,9 +371,25 @@
         <label for="signupEmail" class="sr-only">Email address</label>
         <input type="email" id="signupEmail" class="auth-input" name="signupEmail" placeholder="Email address" required autocomplete="email" />
         <label for="signupPassword" class="sr-only">Password</label>
-        <input type="password" id="signupPassword" class="auth-input" name="signupPassword" placeholder="Password" required autocomplete="new-password" minlength="8" />
+        <div style="position: relative; width: 100%;">
+          <input type="password" id="signupPassword" class="auth-input" name="signupPassword" placeholder="Password" required autocomplete="new-password" minlength="8" style="padding-right: 45px;" />
+          <button type="button" class="password-toggle" id="toggleSignupPassword" aria-label="Show password" aria-pressed="false" tabindex="0" style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); background: none; border: none; cursor: pointer; padding: 4px; display: flex; align-items: center; color: #6B7280;">
+            <svg id="signupPasswordEyeIcon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+              <circle cx="12" cy="12" r="3"/>
+            </svg>
+          </button>
+        </div>
         <label for="confirmPassword" class="sr-only">Confirm Password</label>
-        <input type="password" id="confirmPassword" class="auth-input" name="confirmPassword" placeholder="Confirm Password" required autocomplete="new-password" minlength="8" />
+        <div style="position: relative; width: 100%;">
+          <input type="password" id="confirmPassword" class="auth-input" name="confirmPassword" placeholder="Confirm Password" required autocomplete="new-password" minlength="8" style="padding-right: 45px;" />
+          <button type="button" class="password-toggle" id="toggleConfirmPassword" aria-label="Show password" aria-pressed="false" tabindex="0" style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); background: none; border: none; cursor: pointer; padding: 4px; display: flex; align-items: center; color: #6B7280;">
+            <svg id="confirmPasswordEyeIcon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+              <circle cx="12" cy="12" r="3"/>
+            </svg>
+          </button>
+        </div>
         <button type="submit" class="auth-continue-btn" id="signupContinueBtn">Sign Up</button>
       </form>
       <div class="auth-links" id="signupLinks" style="display:none;">
@@ -347,6 +423,7 @@
     </div>
   </footer>
   <!-- scripts -->
+  <script src="js/redirect-tracer.js?v=1"></script>
   <script src="js/navigation.js?v=20251007-2"></script>
   <script src="js/universal-logout.js?v=20251007-2"></script>
   <script src="js/main.js?v=20251006-1" type="module"></script>
@@ -365,5 +442,91 @@
   </script>
   <!-- Firebase Authentication -->
   <script src="js/login-page.js?v=20251011-1" type="module"></script>
+  
+  <!-- Forgot Password Modal -->
+  <div id="forgotPasswordOverlay" style="
+    position:fixed;
+    inset:0;
+    background:rgba(0,0,0,0.4);
+    display:none;
+    align-items:center;
+    justify-content:center;
+    z-index:10000;
+    font-family:Inter,system-ui,sans-serif;
+  ">
+    <div role="dialog" aria-modal="true" aria-labelledby="forgotPasswordTitle" style="
+      background:#FFFFFF;
+      border:1px solid #E5E7EB;
+      border-radius:16px;
+      box-shadow:0 20px 30px rgba(0,0,0,0.05);
+      max-width:400px;
+      width:90%;
+      padding:24px;
+      color:#1F2937;
+    ">
+      <h2 id="forgotPasswordTitle" style="margin:0 0 0.5rem 0;font-size:1.125rem;font-weight:600;color:#1F2937;">
+        Reset your password
+      </h2>
+      <p style="margin:0 0 1rem 0;font-size:0.9rem;line-height:1.4;color:#6B7280;">
+        Enter the email you used for JobHackAI. We’ll send you a link to create a new password.
+      </p>
+
+      <label for="forgotPasswordEmail" style="display:block;font-size:0.8rem;font-weight:500;color:#1F2937;margin-bottom:0.25rem;">
+        Email address
+      </label>
+      <input id="forgotPasswordEmail" type="email" style="
+        width:100%;
+        box-sizing:border-box;
+        border:1.5px solid #E5E7EB;
+        border-radius:8px;
+        padding:0.6rem 0.75rem;
+        font-size:1rem;
+        background:#F9FAFB;
+        color:#1F2937;
+        margin-bottom:0.75rem;
+      " />
+
+      <div id="forgotPasswordError" style="color:#DC2626;font-size:0.85rem;display:none;margin-bottom:0.75rem;"></div>
+
+      <button id="forgotPasswordSendBtn" style="
+        width:100%;
+        background:#00E676;
+        color:#FFFFFF;
+        font-weight:700;
+        border:none;
+        border-radius:8px;
+        padding:0.75rem;
+        font-size:1rem;
+        cursor:pointer;
+        margin-bottom:0.75rem;
+      ">
+        Send reset link
+      </button>
+
+      <div id="forgotPasswordSuccess" style="
+        display:none;
+        font-size:0.9rem;
+        line-height:1.4;
+        color:#6B7280;
+        margin-bottom:0.75rem;
+      ">
+        Check your inbox. If an account exists for that email, you’ll get a reset link shortly. Be sure to check spam.
+      </div>
+
+      <button id="forgotPasswordCloseBtn" style="
+        width:100%;
+        background:#F3F4F6;
+        color:#6B7280;
+        font-weight:600;
+        border:none;
+        border-radius:8px;
+        padding:0.75rem;
+        font-size:1rem;
+        cursor:pointer;
+      ">
+        Back to login
+      </button>
+    </div>
+  </div>
 </body>
 </html>

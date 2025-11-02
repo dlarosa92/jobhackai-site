@@ -4,36 +4,195 @@
  */
 
 // Version stamp for deployment verification
-console.log('🔧 login-page.js VERSION: redirect-fix-v3-CACHE-BUST-FIX - ' + new Date().toISOString());
+console.log('🔧 login-page.js VERSION: redirect-fix-v2 - ' + new Date().toISOString());
 
 import authManager from './firebase-auth.js';
+import { waitForAuthReady } from './firebase-auth.js';
 
 // Helper function to check if plan requires payment
 function planRequiresPayment(plan) {
   return ['essential', 'pro', 'premium', 'trial'].includes(plan);
 }
 
+// Unified post-auth redirect helper (Stripe or Dashboard)
+async function handlePostAuthRedirect(plan) {
+  if (planRequiresPayment(plan)) {
+    try {
+      const idToken = await authManager.getCurrentUser()?.getIdToken?.(true);
+      const res = await fetch('/api/stripe-checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}) },
+        body: JSON.stringify({ plan, startTrial: plan === 'trial' })
+      });
+      const data = await res.json();
+      if (data && data.ok && data.url) { window.location.href = data.url; return; }
+    } catch (error) {
+      console.error('Checkout error:', error);
+    }
+    window.location.href = 'pricing-a.html';
+  } else {
+    sessionStorage.removeItem('selectedPlan');
+    window.location.href = 'dashboard.html';
+  }
+}
+
+// Safe fallback initialization when main init fails
+function safeFallbackInit() {
+  console.error('[AUTH INIT ERROR] Main initialization failed, using fallback');
+  
+  try {
+    // Force login form visible
+    const loginForm = document.getElementById('loginForm');
+    const signupForm = document.getElementById('signupForm');
+    const loginLinks = document.getElementById('loginLinks');
+    const signupLinks = document.getElementById('signupLinks');
+    const authTitle = document.getElementById('auth-title');
+    const banner = document.getElementById('selectedPlanBanner');
+    
+    if (loginForm) loginForm.style.display = 'flex';
+    if (signupForm) signupForm.style.display = 'none';
+    if (loginLinks) loginLinks.style.display = 'block';
+    if (signupLinks) signupLinks.style.display = 'none';
+    if (authTitle) authTitle.textContent = 'Welcome back';
+    if (banner) banner.style.display = 'none';
+    
+    // Minimal password toggle handlers (shows error on click)
+    ['toggleLoginPassword', 'toggleSignupPassword', 'toggleConfirmPassword'].forEach(id => {
+      const btn = document.getElementById(id);
+      if (btn) {
+        btn.onclick = () => {
+          alert('Service unavailable. Please refresh the page.');
+        };
+      }
+    });
+    
+    console.log('[FALLBACK] Basic UI wired successfully');
+  } catch (fallbackErr) {
+    console.error('[FALLBACK ERROR]', fallbackErr);
+  }
+}
+
 // Wait for DOM to be ready
 document.addEventListener('DOMContentLoaded', async function() {
-  // Prevent auto-redirect races when user is actively logging in
-  let loginInProgress = false;
-  // Get DOM elements
-  const loginForm = document.getElementById('loginForm');
-  const signupForm = document.getElementById('signupForm');
-  const loginLinks = document.getElementById('loginLinks');
-  const signupLinks = document.getElementById('signupLinks');
-  const showSignUpLink = document.getElementById('showSignUpLink');
-  const showLoginLink = document.getElementById('showLoginLink');
-  const googleSignInBtn = document.getElementById('googleSignIn');
-  const linkedinSignInBtn = document.getElementById('linkedinSignIn');
-  const forgotPasswordLink = document.getElementById('forgotPasswordLink');
-  const authTitle = document.getElementById('auth-title');
+  try {
+    console.log('🧭 login-page.js v2 starting');
+    console.log('[AUTH INIT START]');
+
+    // Prevent bounce if coming from logout - clear flag but DON'T return early
+    if (sessionStorage.getItem('logout-intent') === '1') {
+      console.log('🚫 Logout intent detected — staying on login');
+      sessionStorage.removeItem('logout-intent');
+      // Continue with initialization below instead of returning
+    }
+
+    // Check for password reset success flag (don't remove yet, need to use it later)
+    const resetPasswordSuccess = sessionStorage.getItem('resetPasswordSuccess');
+
+    // Prevent auto-redirect races when user is actively logging in
+    let loginInProgress = false;
+    // Get DOM elements
+    const loginForm = document.getElementById('loginForm');
+    const signupForm = document.getElementById('signupForm');
+    const loginLinks = document.getElementById('loginLinks');
+    const signupLinks = document.getElementById('signupLinks');
+    const showSignUpLink = document.getElementById('showSignUpLink');
+    const showLoginLink = document.getElementById('showLoginLink');
+    const googleSignInBtn = document.getElementById('googleSignIn');
+    const linkedinSignInBtn = document.getElementById('linkedinSignIn');
+    const forgotPasswordLink = document.getElementById('forgotPasswordLink');
+    const authTitle = document.getElementById('auth-title');
+    const forgotPasswordOverlay = document.getElementById('forgotPasswordOverlay');
+    const forgotPasswordEmailInput = document.getElementById('forgotPasswordEmail');
+    const forgotPasswordSendBtn = document.getElementById('forgotPasswordSendBtn');
+    const forgotPasswordCloseBtn = document.getElementById('forgotPasswordCloseBtn');
+    const forgotPasswordError = document.getElementById('forgotPasswordError');
+    const forgotPasswordSuccess = document.getElementById('forgotPasswordSuccess');
+    
+    // Error display elements
+    const loginError = document.getElementById('loginError');
+    const signupError = document.getElementById('signupError');
+    
+    // === PLAN DETECTION (IMMEDIATE - BEFORE AUTH CHECK) ===
+  // Show banner immediately without waiting for auth to improve UX
+  const urlParams = new URLSearchParams(window.location.search);
+  const planParam = urlParams.get('plan');
   
-  // Error display elements
-  const loginError = document.getElementById('loginError');
-  const signupError = document.getElementById('signupError');
+  // Check sessionStorage for plan (pricing page stores it here as JSON)
+  let storedPlanData = null;
+  try {
+    const stored = sessionStorage.getItem('selectedPlan');
+    if (stored) {
+      storedPlanData = JSON.parse(stored);
+    }
+  } catch (e) {
+    console.warn('Failed to parse selectedPlan from sessionStorage:', e);
+  }
   
-  // Check if user is already authenticated (multiple approaches)
+  // Priority: URL param > sessionStorage planId
+  let selectedPlan = planParam || storedPlanData?.planId || null;
+  
+  console.log('🔍 Plan Detection Debug (sessionStorage):', { 
+    planParam, 
+    storedPlanData, 
+    selectedPlan 
+  });
+  
+  // Handle password reset success banner
+  if (resetPasswordSuccess === '1') {
+    console.log('✅ Password reset success detected — showing success banner');
+    showPasswordResetSuccessBanner();
+    sessionStorage.removeItem('resetPasswordSuccess'); // Clear flag after displaying
+    setTimeout(() => hideSelectedPlanBanner(), 5000); // Hide after 5 seconds
+    selectedPlan = null; // Don't show plan banner if password reset banner is showing
+  }
+  
+  // Show banner IMMEDIATELY if plan is detected (before auth check)
+  if (selectedPlan && selectedPlan !== 'create-account') {
+    // Store selected plan in sessionStorage to match pricing page
+    const planNames = {
+      'trial': '3-Day Free Trial',
+      'essential': 'Essential Plan',
+      'pro': 'Pro Plan',
+      'premium': 'Premium Plan',
+      'free': 'Free Account'
+    };
+    const planPrices = {
+      'trial': '$0 for 3 days',
+      'essential': '$29/mo',
+      'pro': '$59/mo',
+      'premium': '$99/mo',
+      'free': '$0/mo'
+    };
+    sessionStorage.setItem('selectedPlan', JSON.stringify({
+      planId: selectedPlan,
+      planName: planNames[selectedPlan] || 'Selected Plan',
+      price: planPrices[selectedPlan] || '$0/mo',
+      source: 'login-page',
+      timestamp: Date.now()
+    }));
+    
+    // Show banner IMMEDIATELY with fade-in effect
+    showSelectedPlanBanner(selectedPlan);
+    
+    // Auto-switch to signup form for new users with plan
+    if (!localStorage.getItem('user-email')) {
+      showSignupForm(selectedPlan, true); // Pass flag to skip banner (already shown)
+    } else {
+      // Existing user who somehow landed here - show login
+      showLoginForm();
+    }
+  } else {
+    // No explicit plan selected: hide banner and show Login by default
+    hideSelectedPlanBanner();
+    showLoginForm();
+  }
+  
+  // Clean up if no plan
+  if (!selectedPlan) {
+    sessionStorage.removeItem('selectedPlan');
+  }
+  
+  // === AUTH CHECK (RUN IN PARALLEL, DON'T BLOCK BANNER) ===
   const checkAuth = async () => {
     if (loginInProgress) {
       console.log('⏸️ Login in progress, skipping auto-redirect');
@@ -43,29 +202,13 @@ document.addEventListener('DOMContentLoaded', async function() {
     // ONLY check Firebase, not localStorage
     try {
       console.log('🔍 Checking Firebase auth state...');
-      const user = await authManager.waitForAuthReady(5000);
+      const user = await waitForAuthReady(4000);
       if (user && user.email) {
-        console.log('✅ User authenticated via Firebase:', user.email);
-        // Sync to localStorage for other consumers
-        try {
-          localStorage.setItem('user-authenticated', 'true');
-          localStorage.setItem('user-email', user.email);
-        } catch (_) {}
-
-        // If user is buying a plan, stay on login
-        const selectedPlan = new URLSearchParams(window.location.search).get('plan') || 
-                             localStorage.getItem('selected-plan');
-        if (selectedPlan && ['essential', 'pro', 'premium', 'trial'].includes(selectedPlan)) {
-          console.log('✅ Paid plan selected, staying on login for checkout');
-          return false;
-        }
-
-        // Redirect to dashboard
-        console.log('✅ Redirecting to dashboard');
-        document.body.style.opacity = '0.7';
-        document.body.style.transition = 'opacity 0.3s ease';
-        setTimeout(() => { window.location.href = 'dashboard.html'; }, 100);
+        console.log(`✅ Authenticated as ${user.email}, redirecting to dashboard`);
+        location.replace('/dashboard.html');
         return true;
+      } else {
+        console.log('🔓 No authenticated user — showing login UI');
       }
     } catch (error) {
       console.log('No Firebase user, proceeding with login form');
@@ -74,13 +217,19 @@ document.addEventListener('DOMContentLoaded', async function() {
     return false;
   };
   
+  // Run auth check in parallel (don't await before showing banner)
   const isAuthenticated = await checkAuth();
   if (isAuthenticated) return;
   
   // Listen for auth state changes in case user gets authenticated after page load
   const unsubscribe = authManager.onAuthStateChange((user) => {
     if (user) {
-      const plan = selectedPlan || localStorage.getItem('selected-plan');
+      let storedPlan = null;
+      try {
+        const stored = sessionStorage.getItem('selectedPlan');
+        storedPlan = stored ? JSON.parse(stored).planId : null;
+      } catch (e) {}
+      const plan = selectedPlan || storedPlan;
       if (plan && planRequiresPayment(plan)) {
         console.log('✅ Auth changed but paid plan selected, skipping auto-redirect');
         return;
@@ -96,76 +245,22 @@ document.addEventListener('DOMContentLoaded', async function() {
     }
   });
   
-  // Check for selected plan with enhanced validation
-  const urlParams = new URLSearchParams(window.location.search);
-  const planParam = urlParams.get('plan');
-  const storedSelection = localStorage.getItem('selected-plan');
-  const planContext = localStorage.getItem('selected-plan-context');
-  const referrer = document.referrer ? new URL(document.referrer) : null;
-  const cameFromPricing = !!(referrer && /pricing-(a|b)\.html$/.test(referrer.pathname));
-  const cameFromCheckout = !!(referrer && /(checkout)\.html$/.test(referrer.pathname));
-  
-  // Accept recent plan selections with context validation
-  const selectionTs = parseInt(localStorage.getItem('selected-plan-ts') || '0', 10);
-  const isFreshSelection = Date.now() - selectionTs < 10 * 60 * 1000; // 10 minutes (increased for better UX)
-  const hasValidContext = planContext && ['pricing-a', 'pricing-b', 'checkout'].includes(planContext);
-  
-  // Priority: URL param > fresh selection with valid context > referrer-based
-  const selectedPlan = planParam || 
-    ((hasValidContext && isFreshSelection) ? storedSelection : null) ||
-    ((cameFromPricing || cameFromCheckout) ? storedSelection : null);
-  
-  // DEBUG: Log plan detection
-  console.log('🔍 Plan Detection Debug:', {
-    planParam,
-    storedSelection,
-    planContext,
-    cameFromPricing,
-    cameFromCheckout,
-    selectionTs,
-    isFreshSelection,
-    hasValidContext,
-    selectedPlan,
-    referrer: document.referrer
-  });
-
-  // Clear stale selection if it's not fresh and no valid context
-  if (!planParam && !cameFromPricing && !cameFromCheckout && storedSelection && (!isFreshSelection || !hasValidContext)) {
-    localStorage.removeItem('selected-plan');
-    localStorage.removeItem('selected-plan-ts');
-    localStorage.removeItem('selected-plan-context');
-    console.log('🧹 Cleared stale plan selection');
-  }
-  
-  if (selectedPlan && selectedPlan !== 'create-account') {
-    // Store selected plan
-    localStorage.setItem('selected-plan', selectedPlan);
-    
-    // Auto-switch to signup form for new users with plan
-    if (!localStorage.getItem('user-email')) {
-      showSignupForm(selectedPlan);
-    } else {
-      // Existing user who somehow landed here - show login
-      showLoginForm();
-    }
-  } else {
-    // No explicit plan selected: hide banner and show Login by default
-    hideSelectedPlanBanner();
-    showLoginForm();
-  }
-  
   // ===== FORM TOGGLING =====
   showSignUpLink?.addEventListener('click', function(e) {
     e.preventDefault();
     // Preserve plan selection when manually switching to signup
-    const currentPlan = localStorage.getItem('selected-plan');
+    let currentPlan = null;
+    try {
+      const stored = sessionStorage.getItem('selectedPlan');
+      currentPlan = stored ? JSON.parse(stored).planId : null;
+    } catch (e) {}
     showSignupForm(currentPlan);
   });
   
   showLoginLink?.addEventListener('click', function(e) {
     e.preventDefault();
     // Clear plan selection when manually switching to login
-    localStorage.removeItem('selected-plan');
+    sessionStorage.removeItem('selectedPlan');
     showLoginForm();
   });
   
@@ -183,7 +278,12 @@ document.addEventListener('DOMContentLoaded', async function() {
       
       if (result.success) {
         // Route based on selected plan
-        const plan = selectedPlan || localStorage.getItem('selected-plan') || 'free';
+        let storedPlan = null;
+        try {
+          const stored = sessionStorage.getItem('selectedPlan');
+          storedPlan = stored ? JSON.parse(stored).planId : null;
+        } catch (e) {}
+        const plan = selectedPlan || storedPlan || 'free';
         
         // Show loading state with smooth transition
         document.body.style.opacity = '0.7';
@@ -214,9 +314,7 @@ document.addEventListener('DOMContentLoaded', async function() {
           window.location.href = 'pricing-a.html';
         } else {
           // Free (no subscription) -> take user to dashboard
-          localStorage.removeItem('selected-plan');
-          localStorage.removeItem('selected-plan-ts');
-          localStorage.removeItem('selected-plan-context');
+          sessionStorage.removeItem('selectedPlan');
           console.log('🚀 Redirecting to dashboard for free plan');
           window.location.href = 'dashboard.html';
         }
@@ -273,30 +371,13 @@ document.addEventListener('DOMContentLoaded', async function() {
       const result = await authManager.signIn(email, password);
       
       if (result.success) {
-        // Route based on selected plan
-        const plan = selectedPlan || 'free';
-        if (planRequiresPayment(plan)) {
-          try {
-            const idToken = await authManager.getCurrentUser()?.getIdToken?.();
-            const res = await fetch('/api/stripe-checkout', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json', ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}) },
-              body: JSON.stringify({ plan, startTrial: plan === 'trial' })
-            });
-            const data = await res.json();
-            if (data && data.ok && data.url) { window.location.href = data.url; return; }
-          } catch (_) {}
-          window.location.href = 'pricing-a.html';
-        } else {
-          localStorage.removeItem('selected-plan');
-          // Route free users to onboarding
-          if (plan === 'free') {
-            // Take user to dashboard (no subscription yet)
-            window.location.href = 'dashboard.html';
-          } else {
-            window.location.href = 'dashboard.html';
-          }
+        const signedInUser = authManager.getCurrentUser();
+        if (signedInUser && authManager.isEmailPasswordUser(signedInUser) && signedInUser.emailVerified === false) {
+          window.location.href = 'verify-email.html';
+          return;
         }
+        const plan = selectedPlan || 'free';
+        await handlePostAuthRedirect(plan);
       } else {
         // Show error
         showError(loginError, result.error);
@@ -359,26 +440,13 @@ document.addEventListener('DOMContentLoaded', async function() {
       const result = await authManager.signUp(email, password, firstName, lastName);
       
       if (result.success) {
-        // Check if plan requires payment
-        const plan = selectedPlan || 'free';
-        
-        if (planRequiresPayment(plan)) {
-          try {
-            const idToken = await authManager.getCurrentUser()?.getIdToken?.();
-            const res = await fetch('/api/stripe-checkout', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json', ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}) },
-              body: JSON.stringify({ plan, startTrial: plan === 'trial' })
-            });
-            const data = await res.json();
-            if (data && data.ok && data.url) { window.location.href = data.url; return; }
-          } catch (_) {}
-          window.location.href = 'pricing-a.html';
-        } else {
-          // Success! Redirect to dashboard
-          localStorage.removeItem('selected-plan');
-          window.location.href = 'dashboard.html';
+        const newUser = authManager.getCurrentUser();
+        if (newUser && authManager.isEmailPasswordUser(newUser) && newUser.emailVerified === false) {
+          window.location.href = 'verify-email.html';
+          return;
         }
+        const plan = selectedPlan || 'free';
+        await handlePostAuthRedirect(plan);
       } else {
         // Show error
         showError(signupError, result.error);
@@ -393,45 +461,201 @@ document.addEventListener('DOMContentLoaded', async function() {
     }
   });
   
-  // ===== FORGOT PASSWORD =====
-  forgotPasswordLink?.addEventListener('click', async function(e) {
+  // ===== FORGOT PASSWORD (MODAL) =====
+  // Scroll lock management for modal
+  let savedScrollPosition = 0;
+  
+  function lockBodyScroll() {
+    savedScrollPosition = window.pageYOffset || document.documentElement.scrollTop;
+    document.body.style.position = 'fixed';
+    document.body.style.top = `-${savedScrollPosition}px`;
+    document.body.style.width = '100%';
+    document.body.style.overflow = 'hidden';
+  }
+  
+  function unlockBodyScroll() {
+    document.body.style.position = '';
+    document.body.style.top = '';
+    document.body.style.width = '';
+    document.body.style.overflow = '';
+    window.scrollTo(0, savedScrollPosition);
+  }
+
+  let isModalOpening = false;
+  let isSendingResetLink = false;
+
+  forgotPasswordLink?.addEventListener('click', function(e) {
     e.preventDefault();
+    e.stopPropagation();
     
-    const email = document.getElementById('loginEmail').value.trim();
-    
-    if (!email) {
-      showError(loginError, 'Please enter your email address first.');
+    // Prevent multiple rapid clicks
+    if (isModalOpening || (forgotPasswordOverlay && forgotPasswordOverlay.style.display === 'flex')) {
       return;
     }
     
-    if (!isValidEmail(email)) {
-      showError(loginError, 'Please enter a valid email address.');
+    isModalOpening = true;
+    hideError(loginError);
+    
+    // Lock scroll before opening modal to prevent scroll jump
+    lockBodyScroll();
+    
+    // Clear previous state
+    const currentLoginEmail = document.getElementById('loginEmail')?.value?.trim() || '';
+    if (forgotPasswordEmailInput) forgotPasswordEmailInput.value = currentLoginEmail;
+    if (forgotPasswordError) { forgotPasswordError.style.display = 'none'; forgotPasswordError.textContent = ''; }
+    if (forgotPasswordSuccess) { forgotPasswordSuccess.style.display = 'none'; }
+    
+    // Show modal with smooth transition
+    if (forgotPasswordOverlay) {
+      forgotPasswordOverlay.style.opacity = '0';
+      forgotPasswordOverlay.style.display = 'flex';
+      
+      // Use requestAnimationFrame for smooth appearance
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          if (forgotPasswordOverlay) {
+            forgotPasswordOverlay.style.transition = 'opacity 0.2s ease-in-out';
+            forgotPasswordOverlay.style.opacity = '1';
+            
+            // Focus on email input after animation
+            setTimeout(() => {
+              if (forgotPasswordEmailInput) {
+                forgotPasswordEmailInput.focus();
+              }
+              isModalOpening = false;
+            }, 50);
+          }
+        });
+      });
+    }
+  });
+
+  forgotPasswordSendBtn?.addEventListener('click', async function(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    // Prevent multiple clicks
+    if (isSendingResetLink) {
       return;
     }
     
-    // Show confirmation dialog
-    const confirmed = confirm(`Send password reset email to ${email}?`);
-    
-    if (confirmed) {
-      try {
-        const result = await authManager.resetPassword(email);
-        
-        if (result.success) {
-          alert(`Password reset email sent to ${email}. Please check your inbox.`);
-          hideError(loginError);
-        } else {
-          showError(loginError, result.error);
-        }
-      } catch (error) {
-        console.error('Password reset error:', error);
-        showError(loginError, 'An unexpected error occurred. Please try again.');
+    const email = forgotPasswordEmailInput?.value?.trim();
+    if (!email || !isValidEmail(email)) {
+      if (forgotPasswordError) {
+        forgotPasswordError.textContent = 'Please enter a valid email address.';
+        forgotPasswordError.style.display = 'block';
       }
+      if (forgotPasswordSuccess) forgotPasswordSuccess.style.display = 'none';
+      return;
+    }
+    
+    // Show loading state
+    isSendingResetLink = true;
+    const originalText = this.textContent;
+    this.textContent = 'Sending...';
+    this.disabled = true;
+    this.style.cursor = 'not-allowed';
+    this.style.opacity = '0.7';
+    
+    // Clear previous messages
+    if (forgotPasswordError) { forgotPasswordError.style.display = 'none'; forgotPasswordError.textContent = ''; }
+    if (forgotPasswordSuccess) forgotPasswordSuccess.style.display = 'none';
+    
+    try {
+      const result = await authManager.resetPassword(email);
+      if (result.success) {
+        if (forgotPasswordError) { forgotPasswordError.style.display = 'none'; forgotPasswordError.textContent = ''; }
+        if (forgotPasswordSuccess) forgotPasswordSuccess.style.display = 'block';
+        // Clear email input after success
+        if (forgotPasswordEmailInput) forgotPasswordEmailInput.value = '';
+      } else {
+        if (forgotPasswordError) {
+          forgotPasswordError.textContent = result.error || 'Something went wrong. Please try again.';
+          forgotPasswordError.style.display = 'block';
+        }
+        if (forgotPasswordSuccess) forgotPasswordSuccess.style.display = 'none';
+      }
+    } catch (error) {
+      console.error('Password reset error:', error);
+      if (forgotPasswordError) {
+        forgotPasswordError.textContent = 'An unexpected error occurred. Please try again.';
+        forgotPasswordError.style.display = 'block';
+      }
+      if (forgotPasswordSuccess) forgotPasswordSuccess.style.display = 'none';
+    } finally {
+      // Restore button state
+      isSendingResetLink = false;
+      this.textContent = originalText;
+      this.disabled = false;
+      this.style.cursor = 'pointer';
+      this.style.opacity = '1';
+    }
+  });
+
+  // Allow Enter key to submit password reset form
+  forgotPasswordEmailInput?.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter' && !isSendingResetLink) {
+      e.preventDefault();
+      forgotPasswordSendBtn?.click();
+    }
+  });
+
+  function closeForgotOverlay() {
+    if (forgotPasswordOverlay && forgotPasswordOverlay.style.display === 'flex') {
+      // Smooth fade-out
+      forgotPasswordOverlay.style.opacity = '0';
+      setTimeout(() => {
+        if (forgotPasswordOverlay) {
+          forgotPasswordOverlay.style.display = 'none';
+          unlockBodyScroll();
+        }
+      }, 200);
+    }
+  }
+
+  forgotPasswordCloseBtn?.addEventListener('click', function(e) {
+    e.preventDefault();
+    closeForgotOverlay();
+  });
+  
+  // Close modal when clicking backdrop
+  forgotPasswordOverlay?.addEventListener('click', function(e) {
+    if (e.target === forgotPasswordOverlay) {
+      closeForgotOverlay();
+    }
+  });
+  
+  // Close modal on Escape key
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape' && forgotPasswordOverlay && forgotPasswordOverlay.style.display === 'flex') {
+      closeForgotOverlay();
+    }
+  });
+  
+  // Focus trap: prevent tabbing outside modal
+  forgotPasswordOverlay?.addEventListener('keydown', function(e) {
+    if (e.key !== 'Tab') return;
+    
+    const focusableElements = forgotPasswordOverlay.querySelectorAll(
+      'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+    );
+    const firstFocusable = focusableElements[0];
+    const lastFocusable = focusableElements[focusableElements.length - 1];
+    
+    if (e.shiftKey && e.target === firstFocusable) {
+      // Shift+Tab from first element: wrap to last
+      e.preventDefault();
+      lastFocusable?.focus();
+    } else if (!e.shiftKey && e.target === lastFocusable) {
+      // Tab from last element: wrap to first
+      e.preventDefault();
+      firstFocusable?.focus();
     }
   });
   
   // ===== HELPER FUNCTIONS =====
   
-  function showSignupForm(planOverride = null) {
+  function showSignupForm(planOverride = null, skipBanner = false) {
     loginForm.style.display = 'none';
     loginLinks.style.display = 'none';
     signupForm.style.display = 'flex';
@@ -440,7 +664,13 @@ document.addEventListener('DOMContentLoaded', async function() {
     hideError(signupError);
     
     // Show banner only when plan is explicitly selected and equals 'trial' or paid
-    const plan = planOverride || localStorage.getItem('selected-plan');
+    let plan = planOverride;
+    if (!plan) {
+      try {
+        const stored = sessionStorage.getItem('selectedPlan');
+        plan = stored ? JSON.parse(stored).planId : null;
+      } catch (e) {}
+    }
     
     // Update title based on plan context
     const planNames = {
@@ -456,18 +686,25 @@ document.addEventListener('DOMContentLoaded', async function() {
       planOverride,
       plan,
       planNames: planNames[plan],
-      authTitle: authTitle.textContent
+      authTitle: authTitle.textContent,
+      skipBanner
     });
     
     if (plan && planNames[plan]) {
       if (plan === 'free') {
         authTitle.textContent = 'Create your free account';
-        showSelectedPlanBanner(plan);  // Show banner for free account too
-        console.log('✅ Showing free account form with banner');
+        // Only show banner if not already shown (skipBanner flag)
+        if (!skipBanner) {
+          showSelectedPlanBanner(plan);
+        }
+        console.log('✅ Showing free account form' + (skipBanner ? ' (banner already shown)' : ' with banner'));
       } else {
         authTitle.textContent = `Sign up for ${planNames[plan]}`;
-        showSelectedPlanBanner(plan);
-        console.log('✅ Showing plan banner for:', plan);
+        // Only show banner if not already shown (skipBanner flag)
+        if (!skipBanner) {
+          showSelectedPlanBanner(plan);
+        }
+        console.log('✅ Showing plan form' + (skipBanner ? ' (banner already shown)' : ' with banner') + ' for:', plan);
       }
     } else {
       authTitle.textContent = 'Create your account';
@@ -515,21 +752,55 @@ document.addEventListener('DOMContentLoaded', async function() {
         banner.style.display = 'none';
         return;
       }
-      planName.textContent = planNames[plan] || 'Selected Plan';
-      planPrice.textContent = planPrices[plan] || '$0/mo';
+      const finalPlanName = planNames[plan] || 'Selected Plan';
+      const finalPlanPrice = planPrices[plan] || '$0/mo';
+      planName.textContent = finalPlanName;
+      planPrice.textContent = finalPlanPrice;
+      
+      // Remove 'show' class first to ensure clean state
+      banner.classList.remove('show');
+      
+      // Set display to block
       banner.style.display = 'block';
+      
+      // Force reflow to ensure display change is processed
+      void banner.offsetHeight;
+      
+      // Add 'show' class on next frame for smooth fade-in animation
+      requestAnimationFrame(() => {
+        banner.classList.add('show');
+        console.log('✅ Showing plan banner for:', plan, 'with fade-in effect');
+      });
+      
+      // Debug trace for plan banner rendering
+      console.trace('selectedPlanBanner:', { planName: finalPlanName, planPrice: finalPlanPrice, plan });
     }
   }
 
   function hideSelectedPlanBanner() {
     const banner = document.getElementById('selectedPlanBanner');
     if (banner) {
+      banner.classList.remove('show');
       banner.style.display = 'none';
       // Also clear any text to avoid confusion in screen readers
       const planName = document.getElementById('selectedPlanName');
       const planPrice = document.getElementById('selectedPlanPrice');
       if (planName) planName.textContent = '';
       if (planPrice) planPrice.textContent = '';
+    }
+  }
+
+  function showPasswordResetSuccessBanner() {
+    const banner = document.getElementById('selectedPlanBanner');
+    const planName = document.getElementById('selectedPlanName');
+    const planPrice = document.getElementById('selectedPlanPrice');
+    
+    if (banner && planName && planPrice) {
+      planName.textContent = '✓ Password Reset Successful';
+      planPrice.textContent = 'Your password has been updated. Please sign in.';
+      banner.style.display = 'block';
+      banner.style.background = 'linear-gradient(135deg, #059669 0%, #047857 100%)';
+      console.log('✅ Showing password reset success banner');
     }
   }
   
@@ -563,6 +834,60 @@ document.addEventListener('DOMContentLoaded', async function() {
     return hasUppercase && hasLowercase && hasNumber;
   }
   
+  // ===== PASSWORD TOGGLE FUNCTIONALITY =====
+  
+  // Helper function to toggle password visibility
+  function setupPasswordToggle(buttonId, inputId, iconId) {
+    const toggleBtn = document.getElementById(buttonId);
+    const passwordInput = document.getElementById(inputId);
+    const icon = document.getElementById(iconId);
+    
+    if (!toggleBtn || !passwordInput || !icon) return;
+    
+    const togglePassword = () => {
+      const isPassword = passwordInput.type === 'password';
+      passwordInput.type = isPassword ? 'text' : 'password';
+      toggleBtn.setAttribute('aria-pressed', isPassword ? 'true' : 'false');
+      toggleBtn.setAttribute('aria-label', isPassword ? 'Hide password' : 'Show password');
+      
+      // Update icon based on visibility
+      if (isPassword) {
+        // Show eye-off icon (crossed out eye)
+        icon.innerHTML = `
+          <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/>
+          <line x1="1" y1="1" x2="23" y2="23"/>
+        `;
+      } else {
+        // Show eye icon
+        icon.innerHTML = `
+          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+          <circle cx="12" cy="12" r="3"/>
+        `;
+      }
+    };
+    
+    // Click handler
+    toggleBtn.addEventListener('click', togglePassword);
+    
+    // Keyboard handler (Enter and Space)
+    toggleBtn.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        togglePassword();
+      }
+    });
+  }
+  
+  // Setup toggles for all password fields
+  setupPasswordToggle('toggleLoginPassword', 'loginPassword', 'loginPasswordEyeIcon');
+  setupPasswordToggle('toggleSignupPassword', 'signupPassword', 'signupPasswordEyeIcon');
+  setupPasswordToggle('toggleConfirmPassword', 'confirmPassword', 'confirmPasswordEyeIcon');
+  
+  console.log('[AUTH INIT COMPLETE] All initialization successful');
+  } catch (err) {
+    console.error('[AUTH INIT ERROR]', err);
+    safeFallbackInit();
+  }
 });
 
 // Hamburger menu toggle

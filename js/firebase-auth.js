@@ -22,7 +22,12 @@ import {
   sendPasswordResetEmail,
   updateProfile,
   setPersistence,
-  browserLocalPersistence
+  browserLocalPersistence,
+  sendEmailVerification,
+  applyActionCode,
+  checkActionCode,
+  verifyPasswordResetCode,
+  confirmPasswordReset
 } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-auth.js";
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-app.js";
@@ -146,7 +151,33 @@ class AuthManager {
     } catch (_) { /* no-op */ }
   }
 
+  // Initialize free ATS credit for new users
+  async initializeFreeATSCredit(uid) {
+    try {
+      // Check if credit already initialized
+      const creditKey = `creditsByUid:${uid}`;
+      const existing = localStorage.getItem(creditKey);
+      
+      if (existing) {
+        console.log('✅ ATS credit already initialized');
+        return JSON.parse(existing);
+      }
+      
+      // Initialize 1 lifetime credit
+      const credits = { ats_free_lifetime: 1 };
+      localStorage.setItem(creditKey, JSON.stringify(credits));
+      console.log('✅ Initialized 1 free lifetime ATS credit');
+      
+      return credits;
+    } catch (e) {
+      console.warn('Failed to initialize ATS credit:', e);
+      return { ats_free_lifetime: 0 };
+    }
+  }
+
   setupAuthStateListener() {
+    let authReadyDispatched = false;
+    
     onAuthStateChanged(auth, async (user) => {
       console.log('🔥 Firebase auth state changed:', user ? `User: ${user.email}` : 'No user');
       this.currentUser = user;
@@ -154,6 +185,15 @@ class AuthManager {
       if (window.FirebaseAuthManager) {
         window.FirebaseAuthManager.currentUser = user;
         console.log('🔥 Updated window.FirebaseAuthManager.currentUser:', user ? `User: ${user.email}` : 'null');
+      }
+      
+      // Dispatch firebase-auth-ready event on first auth state change
+      if (!authReadyDispatched) {
+        authReadyDispatched = true;
+        console.log('🔥 Dispatching firebase-auth-ready event');
+        document.dispatchEvent(new CustomEvent("firebase-auth-ready", {
+          detail: { user: user || null }
+        }));
       }
       
       if (user) {
@@ -169,6 +209,9 @@ class AuthManager {
         console.log('✅ localStorage synced immediately for auth guards');
         
         // User is signed in - now do async operations
+        // Initialize free ATS credit for new users
+        await this.initializeFreeATSCredit(user.uid);
+        
         const userData = {
           uid: user.uid,
           email: user.email,
@@ -183,9 +226,19 @@ class AuthManager {
         });
         
         // CRITICAL: Prioritize fresh plan selections over existing plans
-        const pendingSelection = localStorage.getItem('selected-plan');
-        const selectionTs = parseInt(localStorage.getItem('selected-plan-ts') || '0', 10);
-        const isFreshSelection = Date.now() - selectionTs < 2 * 60 * 1000; // 2 minutes
+        let pendingSelection = null;
+        let pendingTs = 0;
+        try {
+          const stored = sessionStorage.getItem('selectedPlan');
+          if (stored) {
+            const data = JSON.parse(stored);
+            pendingSelection = data.planId;
+            pendingTs = data.timestamp || 0;
+          }
+        } catch (e) {
+          console.warn('Failed to parse selectedPlan from sessionStorage:', e);
+        }
+        const isFreshSelection = Date.now() - pendingTs < 2 * 60 * 1000; // 2 minutes
         
         let actualPlan = 'free';
         
@@ -328,6 +381,14 @@ class AuthManager {
         await updateProfile(user, {
           displayName: `${firstName} ${lastName}`.trim()
         });
+      }
+
+      // Send email verification for password-based signups
+      try {
+        await sendEmailVerification(user);
+        console.log('📧 Verification email sent to', user.email);
+      } catch (e) {
+        console.warn('Could not send verification email:', e);
       }
 
       // Create user record in local database
@@ -643,11 +704,25 @@ class AuthManager {
   }
 
   /**
-   * Get selected plan from URL or localStorage
+   * Get selected plan from URL or sessionStorage
    */
   getSelectedPlan() {
     const urlParams = new URLSearchParams(window.location.search);
-    return urlParams.get('plan') || localStorage.getItem('selected-plan') || null;
+    const urlPlan = urlParams.get('plan');
+    if (urlPlan) return urlPlan;
+    
+    // Check sessionStorage for plan (pricing page stores it here as JSON)
+    try {
+      const stored = sessionStorage.getItem('selectedPlan');
+      if (stored) {
+        const data = JSON.parse(stored);
+        return data.planId || null;
+      }
+    } catch (e) {
+      console.warn('Failed to parse selectedPlan from sessionStorage:', e);
+    }
+    
+    return null;
   }
 
   /**
@@ -702,6 +777,65 @@ class AuthManager {
   isAuthenticated() {
     return !!this.currentUser;
   }
+
+  /**
+   * Returns true if this Firebase user signed up with email/password
+   * (vs google.com etc.)
+   */
+  isEmailPasswordUser(user) {
+    if (!user || !user.providerData) return false;
+    return user.providerData.some(p => p.providerId === 'password');
+  }
+
+  /**
+   * Send (or resend) a verification email to the current user
+   */
+  async sendVerificationEmail() {
+    try {
+      const user = this.getCurrentUser();
+      if (!user) {
+        return { success: false, error: 'No authenticated user.' };
+      }
+      await sendEmailVerification(user);
+      return { success: true };
+    } catch (err) {
+      console.warn('sendVerificationEmail error:', err);
+      return { success: false, error: this.getErrorMessage(err) || 'Could not send verification email.' };
+    }
+  }
+
+  /**
+   * Require verified email - redirects if not authenticated or not verified
+   * Used to gate access to dashboard and other protected pages
+   */
+  async requireVerifiedEmail() {
+    try {
+      // Wait for auth to be ready
+      const user = await this.waitForAuthReady(4000);
+      
+      if (!user) {
+        console.log('No authenticated user, redirecting to login');
+        window.location.href = '/login.html';
+        return false;
+      }
+      
+      // Reload user to get latest verification status
+      await user.reload();
+      
+      if (!user.emailVerified) {
+        console.log('User not verified, redirecting to verify-email');
+        window.location.href = `/verify-email.html?email=${encodeURIComponent(user.email || '')}`;
+        return false;
+      }
+      
+      console.log('User verified, allowing access');
+      return true;
+    } catch (error) {
+      console.error('requireVerifiedEmail error:', error);
+      window.location.href = '/login.html';
+      return false;
+    }
+  }
 }
 
 // Create singleton instance
@@ -710,4 +844,8 @@ const authManager = new AuthManager();
 // Export for use in pages
 export default authManager;
 export { auth, UserDatabase };
+// Back-compat: some modules import named waitForAuthReady; provide a proxy
+export async function waitForAuthReady(timeoutMs = 5000) {
+  return authManager.waitForAuthReady(timeoutMs);
+}
 

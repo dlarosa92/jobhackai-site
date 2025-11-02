@@ -14,11 +14,14 @@ export async function onRequest(context) {
     const customerId = await env.JOBHACKAI_KV?.get(kvCusKey(uid));
     if (!customerId) return json({ ok: false, error: 'No customer for user' }, 404, origin, env);
 
-    const portalReturn = env.STRIPE_PORTAL_RETURN_URL || `${env.FRONTEND_URL || 'https://dev.jobhackai.io'}/dashboard`;
     const res = await fetch('https://api.stripe.com/v1/billing_portal/sessions', {
       method: 'POST',
       headers: { Authorization: `Bearer ${env.STRIPE_SECRET_KEY}`, 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({ customer: customerId, return_url: portalReturn })
+      body: new URLSearchParams({
+        customer: customerId,
+        return_url: `${env.FRONTEND_URL || 'https://dev.jobhackai.io'}/dashboard`,
+        ...(env.STRIPE_PORTAL_CONFIGURATION_ID_DEV ? { configuration: env.STRIPE_PORTAL_CONFIGURATION_ID_DEV } : (env.STRIPE_PORTAL_CONFIGURATION_ID ? { configuration: env.STRIPE_PORTAL_CONFIGURATION_ID } : {}))
+      })
     });
     const p = await res.json();
     if (!res.ok) return json({ ok: false, error: p?.error?.message || 'portal_error' }, 502, origin, env);
