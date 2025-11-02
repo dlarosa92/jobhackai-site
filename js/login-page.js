@@ -112,7 +112,87 @@ document.addEventListener('DOMContentLoaded', async function() {
     const loginError = document.getElementById('loginError');
     const signupError = document.getElementById('signupError');
     
-    // Check if user is already authenticated (multiple approaches)
+    // === PLAN DETECTION (IMMEDIATE - BEFORE AUTH CHECK) ===
+  // Show banner immediately without waiting for auth to improve UX
+  const urlParams = new URLSearchParams(window.location.search);
+  const planParam = urlParams.get('plan');
+  
+  // Check sessionStorage for plan (pricing page stores it here as JSON)
+  let storedPlanData = null;
+  try {
+    const stored = sessionStorage.getItem('selectedPlan');
+    if (stored) {
+      storedPlanData = JSON.parse(stored);
+    }
+  } catch (e) {
+    console.warn('Failed to parse selectedPlan from sessionStorage:', e);
+  }
+  
+  // Priority: URL param > sessionStorage planId
+  let selectedPlan = planParam || storedPlanData?.planId || null;
+  
+  console.log('🔍 Plan Detection Debug (sessionStorage):', { 
+    planParam, 
+    storedPlanData, 
+    selectedPlan 
+  });
+  
+  // Handle password reset success banner
+  if (resetPasswordSuccess === '1') {
+    console.log('✅ Password reset success detected — showing success banner');
+    showPasswordResetSuccessBanner();
+    sessionStorage.removeItem('resetPasswordSuccess'); // Clear flag after displaying
+    setTimeout(() => hideSelectedPlanBanner(), 5000); // Hide after 5 seconds
+    selectedPlan = null; // Don't show plan banner if password reset banner is showing
+  }
+  
+  // Show banner IMMEDIATELY if plan is detected (before auth check)
+  if (selectedPlan && selectedPlan !== 'create-account') {
+    // Store selected plan in sessionStorage to match pricing page
+    const planNames = {
+      'trial': '3-Day Free Trial',
+      'essential': 'Essential Plan',
+      'pro': 'Pro Plan',
+      'premium': 'Premium Plan',
+      'free': 'Free Account'
+    };
+    const planPrices = {
+      'trial': '$0 for 3 days',
+      'essential': '$29/mo',
+      'pro': '$59/mo',
+      'premium': '$99/mo',
+      'free': '$0/mo'
+    };
+    sessionStorage.setItem('selectedPlan', JSON.stringify({
+      planId: selectedPlan,
+      planName: planNames[selectedPlan] || 'Selected Plan',
+      price: planPrices[selectedPlan] || '$0/mo',
+      source: 'login-page',
+      timestamp: Date.now()
+    }));
+    
+    // Show banner IMMEDIATELY with fade-in effect
+    showSelectedPlanBanner(selectedPlan);
+    
+    // Auto-switch to signup form for new users with plan
+    if (!localStorage.getItem('user-email')) {
+      showSignupForm(selectedPlan, true); // Pass flag to skip banner (already shown)
+    } else {
+      // Existing user who somehow landed here - show login
+      showLoginForm();
+    }
+  } else {
+    // No explicit plan selected: hide banner and show Login by default
+    hideSelectedPlanBanner();
+    showLoginForm();
+  }
+  
+  // Clean up if no plan
+  if (!selectedPlan) {
+    sessionStorage.removeItem('selectedPlan');
+  }
+  
+  // === AUTH CHECK (RUN IN PARALLEL, DON'T BLOCK BANNER) ===
   const checkAuth = async () => {
     if (loginInProgress) {
       console.log('⏸️ Login in progress, skipping auto-redirect');
@@ -137,6 +217,7 @@ document.addEventListener('DOMContentLoaded', async function() {
     return false;
   };
   
+  // Run auth check in parallel (don't await before showing banner)
   const isAuthenticated = await checkAuth();
   if (isAuthenticated) return;
   
@@ -162,80 +243,6 @@ document.addEventListener('DOMContentLoaded', async function() {
       unsubscribe(); // Stop listening after redirect
     }
   });
-  
-  // === PLAN DETECTION (FIXED - sessionStorage) ===
-  const urlParams = new URLSearchParams(window.location.search);
-  const planParam = urlParams.get('plan');
-  
-  // Check sessionStorage for plan (pricing page stores it here as JSON)
-  let storedPlanData = null;
-  try {
-    const stored = sessionStorage.getItem('selectedPlan');
-    if (stored) {
-      storedPlanData = JSON.parse(stored);
-    }
-  } catch (e) {
-    console.warn('Failed to parse selectedPlan from sessionStorage:', e);
-  }
-  
-  // Priority: URL param > sessionStorage planId
-  const selectedPlan = planParam || storedPlanData?.planId || null;
-  
-  console.log('🔍 Plan Detection Debug (sessionStorage):', { 
-    planParam, 
-    storedPlanData, 
-    selectedPlan 
-  });
-  
-  // Clean up if no plan
-  if (!selectedPlan) {
-    sessionStorage.removeItem('selectedPlan');
-  }
-  
-  // Handle password reset success banner
-  if (resetPasswordSuccess === '1') {
-    console.log('✅ Password reset success detected — showing success banner');
-    showPasswordResetSuccessBanner();
-    sessionStorage.removeItem('resetPasswordSuccess'); // Clear flag after displaying
-    setTimeout(() => hideSelectedPlanBanner(), 5000); // Hide after 5 seconds
-  }
-  
-  if (selectedPlan && selectedPlan !== 'create-account') {
-    // Store selected plan in sessionStorage to match pricing page
-    const planNames = {
-      'trial': '3-Day Free Trial',
-      'essential': 'Essential Plan',
-      'pro': 'Pro Plan',
-      'premium': 'Premium Plan',
-      'free': 'Free Account'
-    };
-    const planPrices = {
-      'trial': '$0 for 3 days',
-      'essential': '$29/mo',
-      'pro': '$59/mo',
-      'premium': '$99/mo',
-      'free': '$0/mo'
-    };
-    sessionStorage.setItem('selectedPlan', JSON.stringify({
-      planId: selectedPlan,
-      planName: planNames[selectedPlan] || 'Selected Plan',
-      price: planPrices[selectedPlan] || '$0/mo',
-      source: 'login-page',
-      timestamp: Date.now()
-    }));
-    
-    // Auto-switch to signup form for new users with plan
-    if (!localStorage.getItem('user-email')) {
-      showSignupForm(selectedPlan);
-    } else {
-      // Existing user who somehow landed here - show login
-      showLoginForm();
-    }
-  } else {
-    // No explicit plan selected: hide banner and show Login by default
-    hideSelectedPlanBanner();
-    showLoginForm();
-  }
   
   // ===== FORM TOGGLING =====
   showSignUpLink?.addEventListener('click', function(e) {
@@ -500,7 +507,7 @@ document.addEventListener('DOMContentLoaded', async function() {
   
   // ===== HELPER FUNCTIONS =====
   
-  function showSignupForm(planOverride = null) {
+  function showSignupForm(planOverride = null, skipBanner = false) {
     loginForm.style.display = 'none';
     loginLinks.style.display = 'none';
     signupForm.style.display = 'flex';
@@ -531,18 +538,25 @@ document.addEventListener('DOMContentLoaded', async function() {
       planOverride,
       plan,
       planNames: planNames[plan],
-      authTitle: authTitle.textContent
+      authTitle: authTitle.textContent,
+      skipBanner
     });
     
     if (plan && planNames[plan]) {
       if (plan === 'free') {
         authTitle.textContent = 'Create your free account';
-        showSelectedPlanBanner(plan);  // Show banner for free account too
-        console.log('✅ Showing free account form with banner');
+        // Only show banner if not already shown (skipBanner flag)
+        if (!skipBanner) {
+          showSelectedPlanBanner(plan);
+        }
+        console.log('✅ Showing free account form' + (skipBanner ? ' (banner already shown)' : ' with banner'));
       } else {
         authTitle.textContent = `Sign up for ${planNames[plan]}`;
-        showSelectedPlanBanner(plan);
-        console.log('✅ Showing plan banner for:', plan);
+        // Only show banner if not already shown (skipBanner flag)
+        if (!skipBanner) {
+          showSelectedPlanBanner(plan);
+        }
+        console.log('✅ Showing plan form' + (skipBanner ? ' (banner already shown)' : ' with banner') + ' for:', plan);
       }
     } else {
       authTitle.textContent = 'Create your account';
@@ -594,11 +608,20 @@ document.addEventListener('DOMContentLoaded', async function() {
       const finalPlanPrice = planPrices[plan] || '$0/mo';
       planName.textContent = finalPlanName;
       planPrice.textContent = finalPlanPrice;
+      
+      // Remove 'show' class first to ensure clean state
+      banner.classList.remove('show');
+      
+      // Set display to block
       banner.style.display = 'block';
       
-      // Add 'show' class for CSS animation
+      // Force reflow to ensure display change is processed
+      void banner.offsetHeight;
+      
+      // Add 'show' class on next frame for smooth fade-in animation
       requestAnimationFrame(() => {
         banner.classList.add('show');
+        console.log('✅ Showing plan banner for:', plan, 'with fade-in effect');
       });
       
       // Debug trace for plan banner rendering
