@@ -87,6 +87,9 @@ document.addEventListener('DOMContentLoaded', async function() {
       // Continue with initialization below instead of returning
     }
 
+    // Check for password reset success flag (don't remove yet, need to use it later)
+    const resetPasswordSuccess = sessionStorage.getItem('resetPasswordSuccess');
+
     // Prevent auto-redirect races when user is actively logging in
     let loginInProgress = false;
     // Get DOM elements
@@ -179,6 +182,14 @@ document.addEventListener('DOMContentLoaded', async function() {
     localStorage.removeItem('selected-plan');
     localStorage.removeItem('selected-plan-ts');
     localStorage.removeItem('selected-plan-context');
+  }
+  
+  // Handle password reset success banner
+  if (resetPasswordSuccess === '1') {
+    console.log('✅ Password reset success detected — showing success banner');
+    showPasswordResetSuccessBanner();
+    sessionStorage.removeItem('resetPasswordSuccess'); // Clear flag after displaying
+    setTimeout(() => hideSelectedPlanBanner(), 5000); // Hide after 5 seconds
   }
   
   if (selectedPlan && selectedPlan !== 'create-account') {
@@ -558,6 +569,20 @@ document.addEventListener('DOMContentLoaded', async function() {
       const planPrice = document.getElementById('selectedPlanPrice');
       if (planName) planName.textContent = '';
       if (planPrice) planPrice.textContent = '';
+    }
+  }
+
+  function showPasswordResetSuccessBanner() {
+    const banner = document.getElementById('selectedPlanBanner');
+    const planName = document.getElementById('selectedPlanName');
+    const planPrice = document.getElementById('selectedPlanPrice');
+    
+    if (banner && planName && planPrice) {
+      planName.textContent = '✓ Password Reset Successful';
+      planPrice.textContent = 'Your password has been updated. Please sign in.';
+      banner.style.display = 'block';
+      banner.style.background = 'linear-gradient(135deg, #059669 0%, #047857 100%)';
+      console.log('✅ Showing password reset success banner');
     }
   }
   
