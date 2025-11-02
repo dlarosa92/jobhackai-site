@@ -133,11 +133,18 @@ window.selfHealing = {
       }
     }
     
-    // Check localStorage
+    // Check localStorage - but don't flag as user-facing issues since these are auto-fixed
+    // The keys are initialized by navigation.js and auto-fixed below, so missing keys
+    // are normal for fresh sessions and don't warrant user alerts
     const requiredKeys = ['user-authenticated', 'user-plan'];
     requiredKeys.forEach(key => {
       if (!localStorage.getItem(key)) {
-        issues.push(`Missing localStorage key: ${key}`);
+        // Auto-fix immediately without user alert
+        if (key === 'user-authenticated') {
+          localStorage.setItem(key, 'false');
+        } else if (key === 'user-plan') {
+          localStorage.setItem(key, 'free');
+        }
       }
     });
     
@@ -187,16 +194,26 @@ window.selfHealing = {
   
   // Handle issues
   handleIssues: (issues) => {
-    console.warn('🔧 Issues detected:', issues);
+    // Filter out localStorage issues - these are auto-fixed silently
+    const filteredIssues = issues.filter(issue => 
+      !issue.includes('Missing localStorage key:')
+    );
+    
+    if (filteredIssues.length === 0) {
+      // All issues were localStorage-related and are being auto-fixed silently
+      return;
+    }
+    
+    console.warn('🔧 Issues detected:', filteredIssues);
     
     // Try to auto-fix
     if (selfHealing.config.autoFix && selfHealing.canAttemptFix()) {
-      selfHealing.attemptAutoFix(issues);
+      selfHealing.attemptAutoFix(filteredIssues);
     }
     
-    // Show user alert
+    // Show user alert only for non-localStorage issues
     if (selfHealing.config.showUserAlerts) {
-      selfHealing.showUserAlert(issues);
+      selfHealing.showUserAlert(filteredIssues);
     }
   },
   
