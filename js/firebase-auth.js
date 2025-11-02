@@ -226,9 +226,19 @@ class AuthManager {
         });
         
         // CRITICAL: Prioritize fresh plan selections over existing plans
-        const pendingSelection = localStorage.getItem('selected-plan');
-        const selectionTs = parseInt(localStorage.getItem('selected-plan-ts') || '0', 10);
-        const isFreshSelection = Date.now() - selectionTs < 2 * 60 * 1000; // 2 minutes
+        let pendingSelection = null;
+        let pendingTs = 0;
+        try {
+          const stored = sessionStorage.getItem('selectedPlan');
+          if (stored) {
+            const data = JSON.parse(stored);
+            pendingSelection = data.planId;
+            pendingTs = data.timestamp || 0;
+          }
+        } catch (e) {
+          console.warn('Failed to parse selectedPlan from sessionStorage:', e);
+        }
+        const isFreshSelection = Date.now() - pendingTs < 2 * 60 * 1000; // 2 minutes
         
         let actualPlan = 'free';
         
@@ -694,11 +704,25 @@ class AuthManager {
   }
 
   /**
-   * Get selected plan from URL or localStorage
+   * Get selected plan from URL or sessionStorage
    */
   getSelectedPlan() {
     const urlParams = new URLSearchParams(window.location.search);
-    return urlParams.get('plan') || localStorage.getItem('selected-plan') || null;
+    const urlPlan = urlParams.get('plan');
+    if (urlPlan) return urlPlan;
+    
+    // Check sessionStorage for plan (pricing page stores it here as JSON)
+    try {
+      const stored = sessionStorage.getItem('selectedPlan');
+      if (stored) {
+        const data = JSON.parse(stored);
+        return data.planId || null;
+      }
+    } catch (e) {
+      console.warn('Failed to parse selectedPlan from sessionStorage:', e);
+    }
+    
+    return null;
   }
 
   /**

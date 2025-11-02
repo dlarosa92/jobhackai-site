@@ -31,9 +31,7 @@ async function handlePostAuthRedirect(plan) {
     }
     window.location.href = 'pricing-a.html';
   } else {
-    localStorage.removeItem('selected-plan');
-    localStorage.removeItem('selected-plan-ts');
-    localStorage.removeItem('selected-plan-context');
+    sessionStorage.removeItem('selectedPlan');
     window.location.href = 'dashboard.html';
   }
 }
@@ -145,7 +143,12 @@ document.addEventListener('DOMContentLoaded', async function() {
   // Listen for auth state changes in case user gets authenticated after page load
   const unsubscribe = authManager.onAuthStateChange((user) => {
     if (user) {
-      const plan = selectedPlan || localStorage.getItem('selected-plan');
+      let storedPlan = null;
+      try {
+        const stored = sessionStorage.getItem('selectedPlan');
+        storedPlan = stored ? JSON.parse(stored).planId : null;
+      } catch (e) {}
+      const plan = selectedPlan || storedPlan;
       if (plan && planRequiresPayment(plan)) {
         console.log('✅ Auth changed but paid plan selected, skipping auto-redirect');
         return;
@@ -160,28 +163,33 @@ document.addEventListener('DOMContentLoaded', async function() {
     }
   });
   
-  // === PLAN DETECTION (FIXED) ===
+  // === PLAN DETECTION (FIXED - sessionStorage) ===
   const urlParams = new URLSearchParams(window.location.search);
   const planParam = urlParams.get('plan');
-  const storedSelection = localStorage.getItem('selected-plan');
-  const planContext = localStorage.getItem('selected-plan-context');
   
-  // Check for explicit plan: URL param or stored selection with valid context
-  const hasExplicitPlan =
-    (planParam && planParam.trim() !== '') ||
-    (storedSelection && planContext && ['pricing-a', 'pricing-b', 'checkout'].includes(planContext));
+  // Check sessionStorage for plan (pricing page stores it here as JSON)
+  let storedPlanData = null;
+  try {
+    const stored = sessionStorage.getItem('selectedPlan');
+    if (stored) {
+      storedPlanData = JSON.parse(stored);
+    }
+  } catch (e) {
+    console.warn('Failed to parse selectedPlan from sessionStorage:', e);
+  }
   
-  const selectedPlan = hasExplicitPlan
-    ? (planParam || storedSelection || null)
-    : null;
+  // Priority: URL param > sessionStorage planId
+  const selectedPlan = planParam || storedPlanData?.planId || null;
   
-  console.log('🔍 Plan Detection Debug (FIXED):', { planParam, storedSelection, planContext, selectedPlan });
+  console.log('🔍 Plan Detection Debug (sessionStorage):', { 
+    planParam, 
+    storedPlanData, 
+    selectedPlan 
+  });
   
+  // Clean up if no plan
   if (!selectedPlan) {
-    // Clean up any stale selections
-    localStorage.removeItem('selected-plan');
-    localStorage.removeItem('selected-plan-ts');
-    localStorage.removeItem('selected-plan-context');
+    sessionStorage.removeItem('selectedPlan');
   }
   
   // Handle password reset success banner
@@ -193,8 +201,28 @@ document.addEventListener('DOMContentLoaded', async function() {
   }
   
   if (selectedPlan && selectedPlan !== 'create-account') {
-    // Store selected plan
-    localStorage.setItem('selected-plan', selectedPlan);
+    // Store selected plan in sessionStorage to match pricing page
+    const planNames = {
+      'trial': '3-Day Free Trial',
+      'essential': 'Essential Plan',
+      'pro': 'Pro Plan',
+      'premium': 'Premium Plan',
+      'free': 'Free Account'
+    };
+    const planPrices = {
+      'trial': '$0 for 3 days',
+      'essential': '$29/mo',
+      'pro': '$59/mo',
+      'premium': '$99/mo',
+      'free': '$0/mo'
+    };
+    sessionStorage.setItem('selectedPlan', JSON.stringify({
+      planId: selectedPlan,
+      planName: planNames[selectedPlan] || 'Selected Plan',
+      price: planPrices[selectedPlan] || '$0/mo',
+      source: 'login-page',
+      timestamp: Date.now()
+    }));
     
     // Auto-switch to signup form for new users with plan
     if (!localStorage.getItem('user-email')) {
@@ -213,14 +241,18 @@ document.addEventListener('DOMContentLoaded', async function() {
   showSignUpLink?.addEventListener('click', function(e) {
     e.preventDefault();
     // Preserve plan selection when manually switching to signup
-    const currentPlan = localStorage.getItem('selected-plan');
+    let currentPlan = null;
+    try {
+      const stored = sessionStorage.getItem('selectedPlan');
+      currentPlan = stored ? JSON.parse(stored).planId : null;
+    } catch (e) {}
     showSignupForm(currentPlan);
   });
   
   showLoginLink?.addEventListener('click', function(e) {
     e.preventDefault();
     // Clear plan selection when manually switching to login
-    localStorage.removeItem('selected-plan');
+    sessionStorage.removeItem('selectedPlan');
     showLoginForm();
   });
   
@@ -238,7 +270,12 @@ document.addEventListener('DOMContentLoaded', async function() {
       
       if (result.success) {
         // Route based on selected plan
-        const plan = selectedPlan || localStorage.getItem('selected-plan') || 'free';
+        let storedPlan = null;
+        try {
+          const stored = sessionStorage.getItem('selectedPlan');
+          storedPlan = stored ? JSON.parse(stored).planId : null;
+        } catch (e) {}
+        const plan = selectedPlan || storedPlan || 'free';
         
         // Show loading state with smooth transition
         document.body.style.opacity = '0.7';
@@ -269,9 +306,7 @@ document.addEventListener('DOMContentLoaded', async function() {
           window.location.href = 'pricing-a.html';
         } else {
           // Free (no subscription) -> take user to dashboard
-          localStorage.removeItem('selected-plan');
-          localStorage.removeItem('selected-plan-ts');
-          localStorage.removeItem('selected-plan-context');
+          sessionStorage.removeItem('selectedPlan');
           console.log('🚀 Redirecting to dashboard for free plan');
           window.location.href = 'dashboard.html';
         }
@@ -474,7 +509,13 @@ document.addEventListener('DOMContentLoaded', async function() {
     hideError(signupError);
     
     // Show banner only when plan is explicitly selected and equals 'trial' or paid
-    const plan = planOverride || localStorage.getItem('selected-plan');
+    let plan = planOverride;
+    if (!plan) {
+      try {
+        const stored = sessionStorage.getItem('selectedPlan');
+        plan = stored ? JSON.parse(stored).planId : null;
+      } catch (e) {}
+    }
     
     // Update title based on plan context
     const planNames = {
