@@ -633,7 +633,7 @@ document.addEventListener('DOMContentLoaded', async function() {
   
   // Focus trap: prevent tabbing outside modal
   forgotPasswordOverlay?.addEventListener('keydown', function(e) {
-    if (e.key !== 'Tab' || e.target === forgotPasswordCloseBtn) return;
+    if (e.key !== 'Tab') return;
     
     const focusableElements = forgotPasswordOverlay.querySelectorAll(
       'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
@@ -642,9 +642,11 @@ document.addEventListener('DOMContentLoaded', async function() {
     const lastFocusable = focusableElements[focusableElements.length - 1];
     
     if (e.shiftKey && e.target === firstFocusable) {
+      // Shift+Tab from first element: wrap to last
       e.preventDefault();
       lastFocusable?.focus();
     } else if (!e.shiftKey && e.target === lastFocusable) {
+      // Tab from last element: wrap to first
       e.preventDefault();
       firstFocusable?.focus();
     }
