@@ -2,7 +2,7 @@
 const nextConfig = {
   // Re-enabled output: 'export' to fix Pages Functions dependency bundling
   ...(process.env.NODE_ENV === 'production' && { output: 'export' }),
-  trailingSlash: true,
+  trailingSlash: false,
   images: {
     unoptimized: true
   },
