@@ -9,5 +9,8 @@
 /auth/verify   /auth/action.html   200
 /auth/reset    /auth/action.html   200
 
+# Explicitly serve auth/action.html directly to prevent catch-all matching
+/auth/action.html   /auth/action.html   200
+
 # Fallback for all other routes
 /*    /index.html   200
