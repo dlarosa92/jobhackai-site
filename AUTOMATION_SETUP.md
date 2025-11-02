@@ -91,7 +91,13 @@ git commit -m "Release v1.0.0"
 
 ## Disabling Auto-Deploy
 
-If you need to commit without deploying, you can:
+If you need to commit without deploying, the **easiest way** is to add `[skip deploy]` to your commit message:
+
+```bash
+git commit -m "Update docs [skip deploy]"
+```
+
+Other options:
 
 1. **Temporarily rename the hook**:
    ```bash
@@ -103,11 +109,6 @@ If you need to commit without deploying, you can:
 2. **Use --no-verify** (Note: This skips ALL hooks):
    ```bash
    git commit --no-verify -m "My commit"
-   ```
-
-3. **Add the `[skip deploy]` keyword to your commit message**:
-   ```bash
-   git commit -m "Update docs [skip deploy]"
    ```
 
 ## Troubleshooting
