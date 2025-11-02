@@ -11,7 +11,8 @@
     "export": "next build && next export",
     "deploy": "wrangler pages deploy out",
     "deploy:qa": "wrangler pages deploy out --branch dev0",
-    "deploy:prod": "wrangler pages deploy out --branch main"
+    "deploy:prod": "wrangler pages deploy out --branch main",
+    "predeploy": "node ../scripts/check-auth-action.js"
   },
   "dependencies": {
     "next": "^14.0.0",
