@@ -1,4 +1,6 @@
-# JobHackAI - Technical Context Brief
+# JobHackAI
+
+<!-- Test commit to trigger Bugbot --> - Technical Context Brief
 
 ## 📁 1. Directory & Page Inventory
 
