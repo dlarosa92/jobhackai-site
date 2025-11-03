@@ -239,5 +239,3 @@ KV namespaces (bind as `JOBHACKAI_KV`):
 
 - `cusByUid:<uid>` → Stripe customer id
 - `planByUid:<uid>` → current plan string
-
-
