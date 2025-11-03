@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CSP Authentication Test</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      max-width: 800px;
+      margin: 40px auto;
+      padding: 20px;
+      background: #f5f5f5;
+    }
+    .test-section {
+      background: white;
+      border-radius: 8px;
+      padding: 20px;
+      margin-bottom: 20px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    .status {
+      padding: 10px;
+      border-radius: 4px;
+      margin: 10px 0;
+    }
+    .pass {
+      background: #d4edda;
+      color: #155724;
+      border: 1px solid #c3e6cb;
+    }
+    .fail {
+      background: #f8d7da;
+      color: #721c24;
+      border: 1px solid #f5c6cb;
+    }
+    .info {
+      background: #d1ecf1;
+      color: #0c5460;
+      border: 1px solid #bee5eb;
+    }
+    button {
+      background: #00E676;
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-weight: 600;
+      margin: 5px;
+    }
+    button:hover {
+      background: #00C853;
+    }
+    button:disabled {
+      background: #ccc;
+      cursor: not-allowed;
+    }
+    #console-output {
+      background: #1e1e1e;
+      color: #d4d4d4;
+      padding: 15px;
+      border-radius: 4px;
+      font-family: 'Courier New', monospace;
+      font-size: 12px;
+      max-height: 300px;
+      overflow-y: auto;
+      white-space: pre-wrap;
+    }
+    .domain-list {
+      background: #f8f9fa;
+      padding: 10px;
+      border-radius: 4px;
+      font-family: monospace;
+      font-size: 11px;
+      margin: 10px 0;
+    }
+  </style>
+</head>
+<body>
+  <h1>🔒 CSP Authentication Test Suite</h1>
+  <p>This page helps verify that CSP headers don't break Firebase authentication.</p>
+
+  <div class="test-section">
+    <h2>1. CSP Header Check</h2>
+    <button onclick="checkCSPHeader()">Check CSP Header</button>
+    <div id="csp-status"></div>
+  </div>
+
+  <div class="test-section">
+    <h2>2. Domain Connectivity Test</h2>
+    <button onclick="testDomains()">Test All Required Domains</button>
+    <div id="domain-status"></div>
+  </div>
+
+  <div class="test-section">
+    <h2>3. Firebase SDK Load Test</h2>
+    <button onclick="testFirebaseSDK()">Test Firebase SDK Import</button>
+    <div id="firebase-status"></div>
+  </div>
+
+  <div class="test-section">
+    <h2>4. Console Output</h2>
+    <div id="console-output">Waiting for tests...\n</div>
+  </div>
+
+  <div class="test-section">
+    <h2>5. Required CSP Domains</h2>
+    <div class="domain-list">
+      <strong>script-src:</strong><br>
+      'self', 'unsafe-inline', https://www.gstatic.com, https://apis.google.com, https://js.stripe.com<br><br>
+      
+      <strong>connect-src:</strong><br>
+      'self', https://identitytoolkit.googleapis.com, https://securetoken.googleapis.com,<br>
+      https://www.googleapis.com, https://firebase.googleapis.com,<br>
+      https://firebaseinstallations.googleapis.com, https://www.gstatic.com,<br>
+      https://api.stripe.com, https://checkout.stripe.com<br><br>
+      
+      <strong>frame-src:</strong><br>
+      'self', https://checkout.stripe.com, https://js.stripe.com,<br>
+      https://apis.google.com, https://*.firebaseapp.com
+    </div>
+  </div>
+
+  <script>
+    const output = document.getElementById('console-output');
+    
+    function log(message, type = 'info') {
+      const timestamp = new Date().toLocaleTimeString();
+      const prefix = type === 'error' ? '❌' : type === 'success' ? '✅' : 'ℹ️';
+      output.textContent += `[${timestamp}] ${prefix} ${message}\n`;
+      output.scrollTop = output.scrollHeight;
+      console.log(message);
+    }
+
+    async function checkCSPHeader() {
+      log('Checking CSP header...');
+      const statusDiv = document.getElementById('csp-status');
+      statusDiv.innerHTML = '<div class="status info">Checking...</div>';
+
+      try {
+        const response = await fetch(window.location.href, { method: 'HEAD' });
+        const cspHeader = response.headers.get('content-security-policy') || 
+                         response.headers.get('Content-Security-Policy');
+        
+        if (!cspHeader) {
+          statusDiv.innerHTML = '<div class="status fail">❌ CSP header not found!</div>';
+          log('CSP header not found in response', 'error');
+          return;
+        }
+
+        const requiredDomains = [
+          'firebase.googleapis.com',
+          'firebaseinstallations.googleapis.com',
+          '*.firebaseapp.com',
+          'apis.google.com',
+          'www.gstatic.com'
+        ];
+
+        const missing = [];
+        requiredDomains.forEach(domain => {
+          if (!cspHeader.includes(domain.replace('*.', ''))) {
+            missing.push(domain);
+          }
+        });
+
+        if (missing.length > 0) {
+          statusDiv.innerHTML = `
+            <div class="status fail">❌ Missing domains: ${missing.join(', ')}</div>
+            <div class="domain-list">${cspHeader}</div>
+          `;
+          log(`Missing required domains: ${missing.join(', ')}`, 'error');
+        } else {
+          statusDiv.innerHTML = `
+            <div class="status pass">✅ CSP header present with all required domains</div>
+            <div class="domain-list" style="margin-top:10px;">CSP: ${cspHeader.substring(0, 200)}...</div>
+          `;
+          log('CSP header validated successfully', 'success');
+        }
+      } catch (error) {
+        statusDiv.innerHTML = `<div class="status fail">❌ Error checking CSP: ${error.message}</div>`;
+        log(`Error checking CSP: ${error.message}`, 'error');
+      }
+    }
+
+    async function testDomains() {
+      log('Testing domain connectivity...');
+      const statusDiv = document.getElementById('domain-status');
+      statusDiv.innerHTML = '<div class="status info">Testing domains...</div>';
+
+      const domains = [
+        { url: 'https://www.gstatic.com/firebasejs/12.1.0/firebase-app.js', name: 'Firebase SDK (gstatic)' },
+        { url: 'https://apis.google.com/js/platform.js', name: 'Google APIs' },
+        { url: 'https://identitytoolkit.googleapis.com', name: 'Firebase Auth API' },
+        { url: 'https://securetoken.googleapis.com', name: 'Firebase Token Refresh' },
+        { url: 'https://firebase.googleapis.com', name: 'Firebase APIs' },
+        { url: 'https://firebaseinstallations.googleapis.com', name: 'Firebase Installations' }
+      ];
+
+      let results = [];
+      for (const domain of domains) {
+        try {
+          const controller = new AbortController();
+          const timeout = setTimeout(() => controller.abort(), 5000);
+          const response = await fetch(domain.url, { 
+            method: 'HEAD', 
+            mode: 'no-cors',
+            signal: controller.signal
+          });
+          clearTimeout(timeout);
+          results.push({ name: domain.name, status: 'pass', message: 'Accessible' });
+          log(`${domain.name}: ✅ Accessible`, 'success');
+        } catch (error) {
+          if (error.name === 'AbortError') {
+            results.push({ name: domain.name, status: 'info', message: 'Timeout (may still work)' });
+            log(`${domain.name}: ⏱️ Timeout (may be blocked by CSP or CORS)`, 'info');
+          } else {
+            results.push({ name: domain.name, status: 'fail', message: `Error: ${error.message}` });
+            log(`${domain.name}: ❌ Error - ${error.message}`, 'error');
+          }
+        }
+      }
+
+      const html = results.map(r => 
+        `<div class="status ${r.status}">${r.status === 'pass' ? '✅' : r.status === 'fail' ? '❌' : 'ℹ️'} ${r.name}: ${r.message}</div>`
+      ).join('');
+      statusDiv.innerHTML = html;
+    }
+
+    async function testFirebaseSDK() {
+      log('Testing Firebase SDK import...');
+      const statusDiv = document.getElementById('firebase-status');
+      statusDiv.innerHTML = '<div class="status info">Testing Firebase SDK...</div>';
+
+      try {
+        // Try to import Firebase SDK
+        const script = document.createElement('script');
+        script.type = 'module';
+        script.textContent = `
+          try {
+            import('https://www.gstatic.com/firebasejs/12.1.0/firebase-app.js').then(() => {
+              window.firebaseSDKLoaded = true;
+              document.dispatchEvent(new CustomEvent('firebase-sdk-loaded'));
+            }).catch(err => {
+              window.firebaseSDKError = err.message;
+              document.dispatchEvent(new CustomEvent('firebase-sdk-error', { detail: err }));
+            });
+          } catch (err) {
+            window.firebaseSDKError = err.message;
+            document.dispatchEvent(new CustomEvent('firebase-sdk-error', { detail: err }));
+          }
+        `;
+        document.head.appendChild(script);
+
+        // Wait for result
+        await new Promise((resolve) => {
+          const timeout = setTimeout(() => {
+            resolve();
+          }, 5000);
+
+          document.addEventListener('firebase-sdk-loaded', () => {
+            clearTimeout(timeout);
+            resolve();
+          }, { once: true });
+
+          document.addEventListener('firebase-sdk-error', (e) => {
+            clearTimeout(timeout);
+            window.firebaseSDKError = e.detail?.message || 'Unknown error';
+            resolve();
+          }, { once: true });
+        });
+
+        if (window.firebaseSDKLoaded) {
+          statusDiv.innerHTML = '<div class="status pass">✅ Firebase SDK loaded successfully!</div>';
+          log('Firebase SDK loaded successfully', 'success');
+        } else {
+          const errorMsg = window.firebaseSDKError || 'Unknown error';
+          statusDiv.innerHTML = `<div class="status fail">❌ Firebase SDK failed to load: ${errorMsg}</div>`;
+          log(`Firebase SDK failed: ${errorMsg}`, 'error');
+        }
+
+        // Cleanup
+        script.remove();
+      } catch (error) {
+        statusDiv.innerHTML = `<div class="status fail">❌ Test error: ${error.message}</div>`;
+        log(`Test error: ${error.message}`, 'error');
+      }
+    }
+
+    // Check for CSP violations in console
+    const originalError = console.error;
+    console.error = function(...args) {
+      const message = args.join(' ');
+      if (message.includes('Content Security Policy') || message.includes('CSP')) {
+        log(`CSP Violation detected: ${message}`, 'error');
+      }
+      originalError.apply(console, args);
+    };
+
+    // Auto-run first test
+    window.addEventListener('load', () => {
+      log('CSP Authentication Test Suite loaded');
+      log('Click buttons above to run tests');
+      log('Watch this console and browser DevTools for CSP violations');
+    });
+  </script>
+</body>
+</html>
+
