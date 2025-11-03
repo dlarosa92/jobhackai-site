@@ -385,7 +385,12 @@ class AuthManager {
 
       // Send email verification for password-based signups
       try {
-        await sendEmailVerification(user);
+        // Get the base URL for action handler
+        const actionUrl = `${window.location.protocol}//${window.location.host}/auth/action`;
+        await sendEmailVerification(user, {
+          url: actionUrl,
+          handleCodeInApp: true
+        });
         console.log('📧 Verification email sent to', user.email);
       } catch (e) {
         console.warn('Could not send verification email:', e);
@@ -409,7 +414,7 @@ class AuthManager {
         }
       }
 
-      // Create Firestore profile
+      // Create Firestore profile (non-blocking to prevent sign-up hanging)
       const firestoreData = {
         email: email,
         displayName: `${firstName} ${lastName}`.trim(),
@@ -420,11 +425,13 @@ class AuthManager {
         pendingPlan: selectedPlan === 'trial' ? 'trial' : null // Track what they selected
       };
 
-      try {
-        await UserProfileManager.createProfile(user.uid, firestoreData);
-      } catch (err) {
+      // Fire-and-forget with timeout to prevent hanging
+      Promise.race([
+        UserProfileManager.createProfile(user.uid, firestoreData),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Firestore profile creation timeout')), 5000))
+      ]).catch(err => {
         console.warn('Could not create Firestore profile (will retry on next login):', err);
-      }
+      });
 
       // Ensure navigation/auth state is in sync immediately to prevent race conditions
       if (window.JobHackAINavigation) {
@@ -695,7 +702,12 @@ class AuthManager {
    */
   async resetPassword(email) {
     try {
-      await sendPasswordResetEmail(auth, email);
+      // Get the base URL for action handler
+      const actionUrl = `${window.location.protocol}//${window.location.host}/auth/action`;
+      await sendPasswordResetEmail(auth, email, {
+        url: actionUrl,
+        handleCodeInApp: true
+      });
       return { success: true };
     } catch (error) {
       console.error('Password reset error:', error);
@@ -796,7 +808,12 @@ class AuthManager {
       if (!user) {
         return { success: false, error: 'No authenticated user.' };
       }
-      await sendEmailVerification(user);
+      // Get the base URL for action handler
+      const actionUrl = `${window.location.protocol}//${window.location.host}/auth/action`;
+      await sendEmailVerification(user, {
+        url: actionUrl,
+        handleCodeInApp: true
+      });
       return { success: true };
     } catch (err) {
       console.warn('sendVerificationEmail error:', err);
