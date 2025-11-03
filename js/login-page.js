@@ -439,9 +439,10 @@ document.addEventListener('DOMContentLoaded', async function() {
     try {
       const result = await authManager.signUp(email, password, firstName, lastName);
       
-      if (result.success) {
-        const newUser = authManager.getCurrentUser();
-        if (newUser && authManager.isEmailPasswordUser(newUser) && newUser.emailVerified === false) {
+      if (result.success && result.user) {
+        // Use the user from signUp result to avoid race condition with auth state listener
+        const newUser = result.user;
+        if (authManager.isEmailPasswordUser(newUser) && newUser.emailVerified === false) {
           window.location.href = 'verify-email.html';
           return;
         }

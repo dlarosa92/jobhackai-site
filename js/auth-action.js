@@ -291,10 +291,10 @@ async function routeAfterVerification() {
     } catch (err) {
       console.error('Checkout error from auth-action:', err);
     }
-    window.location.href = 'pricing-a.html';
+    window.location.href = '/pricing-a.html';
   } else {
     sessionStorage.removeItem('selectedPlan');
-    window.location.href = 'dashboard.html';
+    window.location.href = '/dashboard.html';
   }
 }
 
