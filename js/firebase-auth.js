@@ -5,7 +5,7 @@
  */
 
 // Version stamp for deployment verification
-console.log('🔧 firebase-auth.js VERSION: redirect-fix-v3-CACHE-BUST-FIX - ' + new Date().toISOString());
+console.log('🔧 firebase-auth.js VERSION: email-verification-dynamic-origin-fix - ' + new Date().toISOString());
 
 import { firebaseConfig } from './firebase-config.js';
 
@@ -385,7 +385,13 @@ class AuthManager {
 
       // Send email verification for password-based signups
       try {
-        await sendEmailVerification(user);
+        // Use current origin for verification link
+        const baseUrl = window.location.origin;
+        const actionCodeSettings = {
+          url: `${baseUrl}/auth/action`,
+          handleCodeInApp: true
+        };
+        await sendEmailVerification(user, actionCodeSettings);
         console.log('📧 Verification email sent to', user.email);
       } catch (e) {
         console.warn('Could not send verification email:', e);
@@ -796,7 +802,13 @@ class AuthManager {
       if (!user) {
         return { success: false, error: 'No authenticated user.' };
       }
-      await sendEmailVerification(user);
+      // Use current origin for verification link
+      const baseUrl = window.location.origin;
+      const actionCodeSettings = {
+        url: `${baseUrl}/auth/action`,
+        handleCodeInApp: true
+      };
+      await sendEmailVerification(user, actionCodeSettings);
       return { success: true };
     } catch (err) {
       console.warn('sendVerificationEmail error:', err);
