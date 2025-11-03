@@ -19,7 +19,10 @@
         window.location.href = "/login.html";
         return;
       }
-      if (!user.emailVerified) {
+      // Check email verification for email/password users only
+      // Google OAuth users are auto-verified by Firebase
+      const isEmailPasswordUser = user.providerData && user.providerData.some(p => p.providerId === 'password');
+      if (isEmailPasswordUser && !user.emailVerified) {
         window.location.href = "/verify-email.html?email=" + encodeURIComponent(user.email || "");
         return;
       }
@@ -384,6 +387,7 @@
   <!-- Load navigation system -->
   <script src="js/navigation.js?v=20251007-2"></script>
   <script src="js/universal-logout.js?v=20251007-2"></script>
+  <script src="js/session-timeout.js?v=1.0"></script>
   <script>
     // DO NOT call initializeNavigation synchronously on auth-protected pages
     // Wait for DOMContentLoaded so Firebase auth module has time to load

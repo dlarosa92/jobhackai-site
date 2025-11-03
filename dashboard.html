@@ -23,6 +23,17 @@
           location.replace('/login');
           return;
         }
+        
+        // Check email verification for email/password users only
+        // Google OAuth users are auto-verified
+        if (authManager.isEmailPasswordUser && authManager.isEmailPasswordUser(user)) {
+          await user.reload(); // Get fresh verification status
+          if (!user.emailVerified) {
+            console.log('Email/password user not verified, redirecting to verify-email');
+            location.replace(`/verify-email.html?email=${encodeURIComponent(user.email || '')}`);
+            return;
+          }
+        }
       } catch (_) {
         // Conservative fallback
         location.replace('/login');
@@ -1290,6 +1301,7 @@
   </script>
   <script src="js/main.js" type="module"></script>
   <script src="js/analytics.js" type="module"></script>
+  <script src="js/session-timeout.js?v=1.0"></script>
   <script type="module">
     import authManager from './js/firebase-auth.js';
 

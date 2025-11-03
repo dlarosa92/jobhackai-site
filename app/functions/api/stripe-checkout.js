@@ -16,8 +16,21 @@ export async function onRequest(context) {
     if (!token) return json({ ok: false, error: 'unauthorized' }, 401, origin, env);
     const { uid, payload } = await verifyFirebaseIdToken(token, env.FIREBASE_PROJECT_ID);
     const email = (payload?.email) || '';
+    
+    // Input validation
     if (!plan) {
       return json({ ok: false, error: 'Missing plan' }, 422, origin, env);
+    }
+    // Validate plan is allowed value
+    const allowedPlans = ['trial', 'essential', 'pro', 'premium'];
+    if (!allowedPlans.includes(plan)) {
+      console.log('⚠️ [CHECKOUT] Invalid plan value:', plan);
+      return json({ ok: false, error: 'Invalid plan' }, 400, origin, env);
+    }
+    // Validate email format
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      console.log('⚠️ [CHECKOUT] Invalid email format');
+      return json({ ok: false, error: 'Invalid email format' }, 400, origin, env);
     }
 
     // Prevent multiple trials per user
