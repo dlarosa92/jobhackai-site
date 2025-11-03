@@ -8,15 +8,15 @@ export async function onRequest(context) {
     const endpoint = url.pathname;
     const key = `rate_limit:${ip}:${endpoint}`;
     
-    // Get current count
+    // Get current count with proper NaN handling
     const count = await env.JOBHACKAI_KV?.get(key);
-    const currentCount = count ? parseInt(count) : 0;
+    const currentCount = count ? (parseInt(count, 10) || 0) : 0;
     
-    // Different limits for different endpoints
+    // Different limits for different endpoints (use exact path matching to avoid false positives)
     let limit = 100; // Default: 100 requests per minute
-    if (endpoint.includes('stripe-checkout') || endpoint.includes('billing-portal')) {
+    if (endpoint === '/api/stripe-checkout' || endpoint === '/api/billing-portal') {
       limit = 20; // Stripe endpoints: 20 requests per minute
-    } else if (endpoint.includes('auth') || endpoint.includes('login')) {
+    } else if (endpoint === '/api/auth' || endpoint.startsWith('/api/auth/')) {
       limit = 30; // Auth endpoints: 30 requests per minute
     }
     
