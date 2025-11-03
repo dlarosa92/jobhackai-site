@@ -23,23 +23,45 @@ window.selfHealing.showUserAlert = function(errors) {
     modal.style.alignItems = 'center';
     modal.style.justifyContent = 'center';
     modal.style.zIndex = '9999';
-    modal.innerHTML = `
-      <div style="background:#fff; padding:2rem 2.5rem; border-radius:16px; box-shadow:0 4px 32px rgba(0,0,0,0.13); max-width:400px; text-align:center;">
-        <h2 style="color:#232B36; font-size:1.2rem; margin-bottom:0.7rem;">Something went wrong</h2>
-        <div id="selfHealingUserAlertMsg" style="color:#4B5563; font-size:1rem; margin-bottom:1.2rem;"></div>
-        <button id="closeSelfHealingUserAlert" style="background:#00E676; color:#fff; border:none; border-radius:8px; padding:0.8rem 1.5rem; font-size:1.05rem; font-weight:700; cursor:pointer;">Close</button>
-      </div>
-    `;
-    document.body.appendChild(modal);
-    document.getElementById('closeSelfHealingUserAlert').onclick = function() {
+    
+    // Use DOM methods instead of innerHTML for XSS protection
+    const modalContent = document.createElement('div');
+    modalContent.style.cssText = 'background:#fff; padding:2rem 2.5rem; border-radius:16px; box-shadow:0 4px 32px rgba(0,0,0,0.13); max-width:400px; text-align:center;';
+    
+    const h2 = document.createElement('h2');
+    h2.style.cssText = 'color:#232B36; font-size:1.2rem; margin-bottom:0.7rem;';
+    h2.textContent = 'Something went wrong';
+    modalContent.appendChild(h2);
+    
+    const msgDiv = document.createElement('div');
+    msgDiv.id = 'selfHealingUserAlertMsg';
+    msgDiv.style.cssText = 'color:#4B5563; font-size:1rem; margin-bottom:1.2rem;';
+    modalContent.appendChild(msgDiv);
+    
+    const button = document.createElement('button');
+    button.id = 'closeSelfHealingUserAlert';
+    button.style.cssText = 'background:#00E676; color:#fff; border:none; border-radius:8px; padding:0.8rem 1.5rem; font-size:1.05rem; font-weight:700; cursor:pointer;';
+    button.textContent = 'Close';
+    button.onclick = function() {
       modal.style.display = 'none';
     };
+    modalContent.appendChild(button);
+    
+    modal.appendChild(modalContent);
+    document.body.appendChild(modal);
   } else {
     modal.style.display = 'flex';
   }
-  // Show error messages
+  
+  // Show error messages - use textContent to prevent XSS
   const msgDiv = document.getElementById('selfHealingUserAlertMsg');
-  msgDiv.innerHTML = Array.isArray(errors) ? errors.map(e => `<div>${typeof e === 'string' ? e : (e.message || JSON.stringify(e))}</div>`).join('') : (errors.message || JSON.stringify(errors));
+  msgDiv.textContent = ''; // Clear first
+  const errorArray = Array.isArray(errors) ? errors : [errors];
+  errorArray.forEach(error => {
+    const div = document.createElement('div');
+    div.textContent = typeof error === 'string' ? error : (error.message || JSON.stringify(error));
+    msgDiv.appendChild(div);
+  });
 };
 
 // Preserve the previously defined alert function

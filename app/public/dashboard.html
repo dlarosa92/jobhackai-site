@@ -533,6 +533,14 @@
     </div>
   </footer>
   <script>
+    // --- HTML ESCAPE HELPER (XSS Protection) ---
+    function escapeHtml(text) {
+      if (text == null) return '';
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
     // --- AUTHENTICATION CHECK ---
     function checkAuthentication() {
       const isAuthenticated = localStorage.getItem('user-authenticated') === 'true';
@@ -725,10 +733,10 @@
           <svg width="20" height="20" fill="none" stroke="#6B7280" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06A1.65 1.65 0 0015 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 008.6 15a1.65 1.65 0 00-1.82-.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.6 8.6a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 008.6 4.6a1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0015 4.6a1.65 1.65 0 001.82.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 8.6a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06A1.65 1.65 0 0015 15a1.65 1.65 0 001.82.33z"/></svg>
         </a>
         <div class="welcome-row">
-          <h2>Welcome back, ${user.name || 'User'}!</h2>
+          <h2>Welcome back, ${escapeHtml(user.name || 'User')}!</h2>
           ${user.plan === 'trial' || user.plan === 'essential' || user.plan === 'pro' || user.plan === 'premium' ? `<div class="plan-transition-message" style="background:#E6F7FF;color:#1976D2;padding:0.7em 1em;border-radius:8px;margin-bottom:0.7em;font-size:1.01rem;">Your previous ATS resume score has been carried over from your free account. You now have access to more features and unlimited scoring!</div>` : ''}
           ${user.plan === 'trial' ? `<div class="trial-countdown">You have ${daysLeft(user.trialEndsAt)} day${daysLeft(user.trialEndsAt) !== 1 ? 's' : ''} left in your trial!</div>` : ''}
-          <div class="user-email">${user.email}</div>
+          <div class="user-email">${escapeHtml(user.email)}</div>
         </div>
         <div class="ats-score-row">
           ${atsDonut(atsScore.percent)}
@@ -759,13 +767,13 @@
       for (const feature of orderedFeatures) {
         const isUnlocked = unlocked.includes(feature.key);
         featuresHtml += `<div class="feature-card${isUnlocked ? '' : ' locked'}">`;
-        featuresHtml += `<div class="feature-title">${feature.title}</div>`;
-        featuresHtml += `<div class="feature-desc">${feature.desc}</div>`;
+        featuresHtml += `<div class="feature-title">${escapeHtml(feature.title)}</div>`;
+        featuresHtml += `<div class="feature-desc">${escapeHtml(feature.desc)}</div>`;
         featuresHtml += `<div class="feature-action">`;
         if (isUnlocked && feature.key === 'ats') {
           // ATS Scoring: real upload
           featuresHtml += `<input type=\"file\" id=\"ats-upload-input\" accept=\"application/pdf\" style=\"display:none;\" />`;
-          featuresHtml += `<button class=\"btn-primary\" id=\"ats-upload-btn\">${feature.action}</button>`;
+          featuresHtml += `<button class=\"btn-primary\" id=\"ats-upload-btn\">${escapeHtml(feature.action)}</button>`;
           let usageText = '';
           let tooltip = '';
           if (user.plan === 'free') {
@@ -810,7 +818,7 @@
           featuresHtml += `<div class="usage-indicator">${usageText}${tooltip}</div>`;
         } else if (isUnlocked && feature.key === 'interview') {
           // Interview Questions: link to interview questions page
-          featuresHtml += `<a href=\"interview-questions.html\" class=\"btn-primary\">${feature.action}</a>`;
+          featuresHtml += `<a href=\"interview-questions.html\" class=\"btn-primary\">${escapeHtml(feature.action)}</a>`;
           let usageText = '';
           let tooltip = '';
           if (user.plan === 'free') {
@@ -852,7 +860,7 @@
           // Priority Review: icon and text for Premium
           featuresHtml += `<div style=\"display:flex;align-items:center;gap:0.6rem;margin:0.7rem 0 0.2rem 0;\"><svg width=\"22\" height=\"22\" fill=\"none\" stroke=\"#00E676\" stroke-width=\"2\" viewBox=\"0 0 24 24\"><circle cx=\"12\" cy=\"12\" r=\"10\"/><path d=\"M12 8v4l2.5 2.5\"/></svg><span style=\"font-weight:600;color:#00C853;\">All your AI-generated content will get priority review.</span></div>`;
         } else {
-          featuresHtml += `<button class=\"btn-locked\"><svg width=\"18\" height=\"18\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"#fff\" stroke-width=\"2\"><rect x=\"3\" y=\"11\" width=\"18\" height=\"8\" rx=\"2\"/><path d=\"M7 11V7a5 5 0 0110 0v4\"/></svg> ${feature.action}</button>`;
+          featuresHtml += `<button class=\"btn-locked\"><svg width=\"18\" height=\"18\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"#fff\" stroke-width=\"2\"><rect x=\"3\" y=\"11\" width=\"18\" height=\"8\" rx=\"2\"/><path d=\"M7 11V7a5 5 0 0110 0v4\"/></svg> ${escapeHtml(feature.action)}</button>`;
         }
         featuresHtml += `</div>`;
         if (isUnlocked && (user.plan === 'trial' || user.plan === 'essential' || user.plan === 'pro' || user.plan === 'premium')) {
@@ -861,7 +869,13 @@
         featuresHtml += `</div>`;
       }
       featuresHtml += '</div>';
-      root.innerHTML = banner + featuresHtml;
+      // Use DOM methods instead of innerHTML for safer HTML insertion
+      root.textContent = ''; // Clear first
+      const tempDiv = document.createElement('div');
+      tempDiv.innerHTML = banner + featuresHtml;
+      while (tempDiv.firstChild) {
+        root.appendChild(tempDiv.firstChild);
+      }
       // --- ATS Upload Button Logic ---
       const atsUploadBtn = document.getElementById('ats-upload-btn');
       const atsUploadInput = document.getElementById('ats-upload-input');

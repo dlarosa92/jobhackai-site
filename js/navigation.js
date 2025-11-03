@@ -686,44 +686,40 @@ function showUpgradeModal(targetPlan = 'premium') {
     z-index: 10000;
   `;
   
-  modal.innerHTML = `
-    <div style="
-      background: white;
-      border-radius: 12px;
-      padding: 2rem;
-      max-width: 400px;
-      margin: 1rem;
-      text-align: center;
-      box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
-    ">
-      <h3 style="margin: 0 0 1rem 0; color: #1F2937; font-size: 1.25rem;">Upgrade Required</h3>
-      <p style="margin: 0 0 1.5rem 0; color: #6B7280; line-height: 1.5;">
-        This feature is available in the ${PLANS[targetPlan].name} plan and above.
-      </p>
-      <div style="display: flex; gap: 0.75rem; justify-content: center;">
-        <button id="upgrade-cancel-btn" style="
-          background: #F3F4F6;
-          color: #6B7280;
-          border: none;
-          padding: 0.75rem 1.5rem;
-          border-radius: 8px;
-          cursor: pointer;
-          font-weight: 600;
-        ">Cancel</button>
-        <a href="pricing-a.html?plan=${targetPlan}" style="
-          background: #00E676;
-          color: white;
-          border: none;
-          padding: 0.75rem 1.5rem;
-          border-radius: 8px;
-          cursor: pointer;
-          font-weight: 600;
-          text-decoration: none;
-          display: inline-block;
-        ">Upgrade Now</a>
-      </div>
-    </div>
-  `;
+  // Use DOM methods instead of innerHTML for XSS protection
+  const modalContent = document.createElement('div');
+  modalContent.style.cssText = 'background: white; border-radius: 12px; padding: 2rem; max-width: 400px; margin: 1rem; text-align: center; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);';
+  
+  const h3 = document.createElement('h3');
+  h3.style.cssText = 'margin: 0 0 1rem 0; color: #1F2937; font-size: 1.25rem;';
+  h3.textContent = 'Upgrade Required';
+  modalContent.appendChild(h3);
+  
+  const p = document.createElement('p');
+  p.style.cssText = 'margin: 0 0 1.5rem 0; color: #6B7280; line-height: 1.5;';
+  const planName = PLANS[targetPlan]?.name || targetPlan;
+  p.textContent = `This feature is available in the ${planName} plan and above.`;
+  modalContent.appendChild(p);
+  
+  const buttonContainer = document.createElement('div');
+  buttonContainer.style.cssText = 'display: flex; gap: 0.75rem; justify-content: center;';
+  
+  const cancelBtn = document.createElement('button');
+  cancelBtn.id = 'upgrade-cancel-btn';
+  cancelBtn.style.cssText = 'background: #F3F4F6; color: #6B7280; border: none; padding: 0.75rem 1.5rem; border-radius: 8px; cursor: pointer; font-weight: 600;';
+  cancelBtn.textContent = 'Cancel';
+  buttonContainer.appendChild(cancelBtn);
+  
+  const upgradeLink = document.createElement('a');
+  // Escape targetPlan for URL (though it should be safe, better to be explicit)
+  const encodedPlan = encodeURIComponent(targetPlan);
+  upgradeLink.href = `pricing-a.html?plan=${encodedPlan}`;
+  upgradeLink.style.cssText = 'background: #00E676; color: white; border: none; padding: 0.75rem 1.5rem; border-radius: 8px; cursor: pointer; font-weight: 600; text-decoration: none; display: inline-block;';
+  upgradeLink.textContent = 'Upgrade Now';
+  buttonContainer.appendChild(upgradeLink);
+  
+  modalContent.appendChild(buttonContainer);
+  modal.appendChild(modalContent);
   
   document.body.appendChild(modal);
   
