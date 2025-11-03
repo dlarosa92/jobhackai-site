@@ -147,15 +147,15 @@ async function handleEmailVerification() {
 
     showSuccess("✅ Email verified successfully!");
     pageTitle.textContent = "Email Verified";
-    status.textContent = "Your email has been verified. You can now access your dashboard.";
+    status.textContent = "Your email has been verified. Redirecting...";
     
     // Show action buttons
     actionButtons.style.display = 'block';
     goToLoginBtn.style.display = 'none'; // Hide login button for verified users
     goToDashboardBtn.style.display = 'block';
     
-    // Redirect to dashboard
-    setTimeout(() => { window.location.href = '/dashboard.html'; }, 1200);
+    // Route based on selected plan
+    await routeAfterVerification();
     
   } catch (error) {
     console.error('Email verification failed:', error);
@@ -252,6 +252,49 @@ async function handlePasswordResetSubmit(event) {
     showError(`❌ Reset failed: ${error.message || 'Something went wrong. Please try again.'}`);
     resetPasswordBtn.disabled = false;
     resetPasswordBtn.textContent = "Reset Password";
+  }
+}
+
+// Route to appropriate page after verification based on selected plan
+async function routeAfterVerification() {
+  const urlParams = new URLSearchParams(window.location.search);
+  const planParam = urlParams.get('plan');
+  let storedSelection = null;
+  try {
+    const stored = sessionStorage.getItem('selectedPlan');
+    storedSelection = stored ? JSON.parse(stored).planId : null;
+  } catch (e) {}
+  const plan = planParam || storedSelection || 'free';
+
+  function planRequiresPayment(p) { return ['essential', 'pro', 'premium', 'trial'].includes(p); }
+
+  if (planRequiresPayment(plan)) {
+    try {
+      const user = auth.currentUser;
+      if (!user) {
+        console.error('No user found for checkout');
+        window.location.href = '/dashboard.html';
+        return;
+      }
+      const idToken = await user.getIdToken(true);
+      const res = await fetch('/api/stripe-checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}) },
+        body: JSON.stringify({ plan, startTrial: plan === 'trial' })
+      });
+      const data = await res.json();
+      if (data && data.ok && data.url) { 
+        console.log('🚀 Redirecting to Stripe checkout:', data.url);
+        window.location.href = data.url; 
+        return; 
+      }
+    } catch (err) {
+      console.error('Checkout error from auth-action:', err);
+    }
+    window.location.href = 'pricing-a.html';
+  } else {
+    sessionStorage.removeItem('selectedPlan');
+    window.location.href = 'dashboard.html';
   }
 }
 
