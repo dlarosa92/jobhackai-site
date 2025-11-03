@@ -70,7 +70,7 @@ export async function onRequest(context) {
       'line_items[0][price]': priceId,
       'line_items[0][quantity]': 1,
       success_url: `${env.FRONTEND_URL || 'https://dev.jobhackai.io'}/dashboard.html?paid=1`,
-      cancel_url: `${env.FRONTEND_URL || 'https://dev.jobhackai.io'}/pricing-a.html`,
+      cancel_url: `${env.FRONTEND_URL || 'https://dev.jobhackai.io'}/login.html?cancel=1`,
       allow_promotion_codes: 'true',
       payment_method_collection: 'always',
       'metadata[firebaseUid]': uid,

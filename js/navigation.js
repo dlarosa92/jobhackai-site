@@ -332,6 +332,13 @@ async function logout(e) {
     console.warn('⚠️ localStorage cleanup failed:', err);
   }
 
+  // Clear sessionStorage selectedPlan on logout
+  try {
+    sessionStorage.removeItem('selectedPlan');
+  } catch (err) {
+    console.warn('⚠️ sessionStorage cleanup failed:', err);
+  }
+
   // Redirect to login (keep .html for now)
   console.log('➡️ Redirecting to /login.html');
   location.replace('/login.html');

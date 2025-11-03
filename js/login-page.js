@@ -113,9 +113,20 @@ document.addEventListener('DOMContentLoaded', async function() {
     const signupError = document.getElementById('signupError');
     
     // === PLAN DETECTION (IMMEDIATE - BEFORE AUTH CHECK) ===
-  // Show banner immediately without waiting for auth to improve UX
   const urlParams = new URLSearchParams(window.location.search);
   const planParam = urlParams.get('plan');
+  const cancelParam = urlParams.get('cancel');
+  
+  // Handle Stripe cancel return - clear selectedPlan and hide banner
+  if (cancelParam === '1') {
+    console.log('🚫 Stripe cancel detected — clearing selectedPlan and hiding banner');
+    sessionStorage.removeItem('selectedPlan');
+    hideSelectedPlanBanner();
+    // Remove cancel param from URL
+    urlParams.delete('cancel');
+    const newUrl = window.location.pathname + (urlParams.toString() ? '?' + urlParams.toString() : '');
+    window.history.replaceState({}, '', newUrl);
+  }
   
   // Check sessionStorage for plan (pricing page stores it here as JSON)
   let storedPlanData = null;
@@ -137,6 +148,14 @@ document.addEventListener('DOMContentLoaded', async function() {
     selectedPlan 
   });
   
+  // Remove ?plan from URL after detection to prevent back-button persistence
+  if (planParam) {
+    urlParams.delete('plan');
+    const newUrl = window.location.pathname + (urlParams.toString() ? '?' + urlParams.toString() : '');
+    window.history.replaceState({}, '', newUrl);
+    console.log('🧹 Removed ?plan from URL to prevent back-button persistence');
+  }
+  
   // Handle password reset success banner
   if (resetPasswordSuccess === '1') {
     console.log('✅ Password reset success detected — showing success banner');
@@ -146,7 +165,7 @@ document.addEventListener('DOMContentLoaded', async function() {
     selectedPlan = null; // Don't show plan banner if password reset banner is showing
   }
   
-  // Show banner IMMEDIATELY if plan is detected (before auth check)
+  // Process plan selection - but DON'T show banner yet (gate by form state)
   if (selectedPlan && selectedPlan !== 'create-account') {
     // Store selected plan in sessionStorage to match pricing page
     const planNames = {
@@ -171,15 +190,17 @@ document.addEventListener('DOMContentLoaded', async function() {
       timestamp: Date.now()
     }));
     
-    // Show banner IMMEDIATELY with fade-in effect
-    showSelectedPlanBanner(selectedPlan);
-    
-    // Auto-switch to signup form for new users with plan
+    // Determine form to show - don't rely on localStorage.user-email (unreliable)
+    // Show signup form for new users, login form for existing users
+    // Banner will only show when signup form is active (handled in showSignupForm)
     if (!localStorage.getItem('user-email')) {
-      showSignupForm(selectedPlan, true); // Pass flag to skip banner (already shown)
+      // New user - show signup form with banner
+      showSignupForm(selectedPlan, false); // Don't skip banner - let showSignupForm handle it
     } else {
-      // Existing user who somehow landed here - show login
+      // Existing user - show login form WITHOUT banner
       showLoginForm();
+      // Keep selectedPlan in sessionStorage for post-auth redirect to Stripe
+      console.log('🔐 Existing user with selected plan - showing login form (no banner), will route to Stripe after login');
     }
   } else {
     // No explicit plan selected: hide banner and show Login by default
@@ -263,6 +284,52 @@ document.addEventListener('DOMContentLoaded', async function() {
     sessionStorage.removeItem('selectedPlan');
     showLoginForm();
   });
+  
+  // ===== NAVIGATION LINK HANDLERS =====
+  // Clear selectedPlan when navigating away from login page
+  function clearSelectedPlanOnNavigation() {
+    sessionStorage.removeItem('selectedPlan');
+    hideSelectedPlanBanner();
+  }
+  
+  // Add listeners to desktop nav links
+  const desktopNavLinks = document.querySelectorAll('.nav-links a');
+  desktopNavLinks.forEach(link => {
+    link.addEventListener('click', function(e) {
+      const href = this.getAttribute('href');
+      // Only clear if navigating away (not to login page itself)
+      if (href && !href.includes('login.html') && !href.startsWith('#')) {
+        clearSelectedPlanOnNavigation();
+      }
+    });
+  });
+  
+  // Add listeners to mobile nav links
+  const mobileNavLinks = document.querySelectorAll('.mobile-nav a');
+  mobileNavLinks.forEach(link => {
+    link.addEventListener('click', function(e) {
+      const href = this.getAttribute('href');
+      if (href && !href.includes('login.html') && !href.startsWith('#')) {
+        clearSelectedPlanOnNavigation();
+      }
+    });
+  });
+  
+  // Add listener to "Back to homepage" link
+  const backToHomeLink = document.querySelector('a[href="index.html"].btn-secondary');
+  if (backToHomeLink) {
+    backToHomeLink.addEventListener('click', function(e) {
+      clearSelectedPlanOnNavigation();
+    });
+  }
+  
+  // Add listener to logo link
+  const logoLink = document.querySelector('.nav-logo');
+  if (logoLink) {
+    logoLink.addEventListener('click', function(e) {
+      clearSelectedPlanOnNavigation();
+    });
+  }
   
   // ===== GOOGLE SIGN-IN =====
   googleSignInBtn?.addEventListener('click', async function(e) {
