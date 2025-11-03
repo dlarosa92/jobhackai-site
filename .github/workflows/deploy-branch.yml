@@ -1,0 +1,47 @@
+name: Deploy Branch Preview
+
+on:
+  pull_request:
+    branches:
+      - dev0
+    types: [opened, synchronize, reopened]
+  push:
+    branches:
+      - fix/banner-persistence
+
+jobs:
+  deploy:
+    name: Deploy to Branch Preview
+    runs-on: ubuntu-latest
+    if: github.head_ref == 'fix/banner-persistence' || github.ref == 'refs/heads/fix/banner-persistence'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+          
+      - name: Install dependencies
+        working-directory: app
+        run: npm ci
+        
+      - name: Build application
+        working-directory: app
+        run: npm run build
+        env:
+          NODE_ENV: production
+          
+      - name: Deploy to Cloudflare Pages (Branch Preview)
+        uses: cloudflare/pages-action@v1
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          projectName: jobhackai-app-qa
+          directory: app/out
+          branch: fix/banner-persistence
+          gitHubToken: ${{ secrets.GITHUB_TOKEN }}
+
