@@ -26,16 +26,20 @@
         
         // Check email verification for email/password users only
         // Google OAuth users are auto-verified
-        if (authManager.isEmailPasswordUser && authManager.isEmailPasswordUser(user)) {
+        const isEmailPassword = authManager.isEmailPasswordUser && authManager.isEmailPasswordUser(user);
+        console.log('📧 Email verification check:', { isEmailPassword, emailVerified: user.emailVerified });
+        
+        if (isEmailPassword) {
           await user.reload(); // Get fresh verification status
           if (!user.emailVerified) {
             console.log('Email/password user not verified, redirecting to verify-email');
             location.replace(`/verify-email.html?email=${encodeURIComponent(user.email || '')}`);
             return;
           }
+          console.log('✅ Email verified, allowing dashboard access');
         }
-      } catch (_) {
-        // Conservative fallback
+      } catch (error) {
+        console.error('Dashboard auth check error:', error);
         location.replace('/login');
         return;
       } finally {
@@ -1302,21 +1306,5 @@
   <script src="js/main.js" type="module"></script>
   <script src="js/analytics.js" type="module"></script>
   <script src="js/session-timeout.js?v=1.0"></script>
-  <script type="module">
-    import authManager from './js/firebase-auth.js';
-
-    (async () => {
-      console.log('📋 dashboard guard v3 running');
-      
-      // Require verified email before allowing dashboard access
-      const isVerified = await authManager.requireVerifiedEmail();
-      if (!isVerified) {
-        console.log('🚫 User not verified or not authenticated — redirecting');
-        return; // requireVerifiedEmail handles the redirect
-      }
-      
-      console.log('✅ Verified user accessing dashboard');
-    })();
-  </script>
 </body>
 </html> 
