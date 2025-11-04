@@ -54,8 +54,13 @@ document.addEventListener('DOMContentLoaded', async () => {
     const planParam = urlParams.get('plan');
     let storedSelection = null;
     try {
-      const stored = sessionStorage.getItem('selectedPlan');
-      storedSelection = stored ? JSON.parse(stored).planId : null;
+      const localStored = localStorage.getItem('selectedPlan');
+      if (localStored) {
+        storedSelection = JSON.parse(localStored).planId;
+      } else {
+        const sessionStored = sessionStorage.getItem('selectedPlan');
+        storedSelection = sessionStored ? JSON.parse(sessionStored).planId : null;
+      }
     } catch (e) {}
     const plan = planParam || storedSelection || 'free';
 

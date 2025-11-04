@@ -667,6 +667,9 @@ class AuthManager {
       localStorage.removeItem('user-plan');
       localStorage.removeItem('user-email');
       localStorage.setItem('user-authenticated', 'false');
+      // Clear any pending plan selections from both storages
+      try { sessionStorage.removeItem('selectedPlan'); } catch (_) {}
+      try { localStorage.removeItem('selectedPlan'); } catch (_) {}
 
       // Remove Firebase SDK cached user keys to avoid automatic re-login from persistence
       try {
