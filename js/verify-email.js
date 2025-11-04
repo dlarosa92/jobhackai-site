@@ -53,32 +53,37 @@ document.addEventListener('DOMContentLoaded', async () => {
     // First check billing status to see if user already has an active subscription or trial
     try {
       const idToken = await authManager.getCurrentUser()?.getIdToken?.(true);
-      if (idToken) {
-        const billingRes = await fetch('/api/billing-status', {
-          method: 'GET',
-          headers: { 'Authorization': `Bearer ${idToken}` }
-        });
-        
-        if (billingRes.ok) {
-          const billingData = await billingRes.json();
-          if (billingData.ok && (billingData.status === 'trialing' || billingData.status === 'active')) {
-            // User already has active subscription/trial - clear selectedPlan and go to dashboard
-            console.log('✅ [VERIFY-EMAIL] User already has active subscription/trial, redirecting to dashboard');
-            try {
-              sessionStorage.removeItem('selectedPlan');
-              localStorage.removeItem('selectedPlan');
-            } catch (_) {}
-            
-            // Close opener window if opened from email link
-            if (window.opener && !window.opener.closed) {
-              window.opener = null;
+        if (idToken) {
+          const billingRes = await fetch('/api/billing-status', {
+            method: 'GET',
+            headers: { 'Authorization': `Bearer ${idToken}` }
+          });
+
+          if (billingRes.ok) {
+            const billingData = await billingRes.json();
+            if (billingData.ok && (billingData.status === 'trialing' || billingData.status === 'active')) {
+              // User already has active subscription/trial - clear selectedPlan and go to dashboard
+              console.log('✅ [VERIFY-EMAIL] User already has active subscription/trial, redirecting to dashboard');
+              try {
+                sessionStorage.removeItem('selectedPlan');
+                localStorage.removeItem('selectedPlan');
+              } catch (_) {}
+
+              // Close opener window if opened from email link
+              if (window.opener && !window.opener.closed) {
+                try {
+                  window.opener.close();
+                } catch (closeErr) {
+                  console.warn('⚠️ [VERIFY-EMAIL] Failed to close opener window:', closeErr);
+                }
+                window.opener = null;
+              }
+
+              window.location.replace('dashboard.html');
+              return;
             }
-            
-            window.location.replace('dashboard.html');
-            return;
           }
         }
-      }
     } catch (err) {
       console.warn('⚠️ [VERIFY-EMAIL] Billing status check failed, continuing with plan selection:', err);
       // Continue with existing flow on error

@@ -688,43 +688,66 @@
       
       // Clear selectedPlan when arriving from successful checkout
       const urlParams = new URLSearchParams(window.location.search);
+
+      async function fetchBillingStatus(reason) {
+        try {
+          const firebaseToken = await getFirebaseIdToken();
+          if (!firebaseToken) {
+            console.warn(`⚠️ [DASHBOARD] Billing status sync skipped (${reason}): missing token`);
+            return null;
+          }
+
+          const billingRes = await fetch('/api/billing-status', {
+            method: 'GET',
+            headers: { 'Authorization': `Bearer ${firebaseToken}` }
+          });
+
+          if (!billingRes.ok) {
+            console.warn(`⚠️ [DASHBOARD] Billing status response not ok (${reason}):`, billingRes.status);
+            return null;
+          }
+
+          const billingData = await billingRes.json();
+          if (!billingData?.ok) {
+            console.warn(`⚠️ [DASHBOARD] Billing status payload not ok (${reason})`);
+            return null;
+          }
+
+          return billingData;
+        } catch (e) {
+          console.warn(`⚠️ [DASHBOARD] Billing status sync failed (${reason}):`, e);
+          return null;
+        }
+      }
+
+      function applyBillingData(billingData, logLabel) {
+        if (!billingData) return;
+
+        console.log(`✅ [DASHBOARD] Synced plan from Stripe ${logLabel}:`, billingData.plan);
+        localStorage.setItem('user-plan', billingData.plan);
+        localStorage.setItem('dev-plan', billingData.plan);
+
+        if (billingData.trialEndsAt) {
+          localStorage.setItem('trial-ends-at', new Date(billingData.trialEndsAt).toISOString());
+        }
+
+        // Update navigation state
+        if (window.JobHackAINavigation?.setAuthState) {
+          window.JobHackAINavigation.setAuthState(true, billingData.plan);
+        }
+      }
+
+      let billingStatusData = null;
+
       if (urlParams.get('paid') === '1') {
         console.log('✅ [DASHBOARD] Cleared selectedPlan after successful checkout');
         try {
           sessionStorage.removeItem('selectedPlan');
           localStorage.removeItem('selectedPlan');
         } catch (_) {}
-        
-        // Sync plan from Stripe billing-status API
-        try {
-          const firebaseToken = await getFirebaseIdToken();
-          if (firebaseToken) {
-            const billingRes = await fetch('/api/billing-status', {
-              method: 'GET',
-              headers: { 'Authorization': `Bearer ${firebaseToken}` }
-            });
-            
-            if (billingRes.ok) {
-              const billingData = await billingRes.json();
-              if (billingData.ok) {
-                console.log('✅ [DASHBOARD] Synced plan from Stripe:', billingData.plan);
-                localStorage.setItem('user-plan', billingData.plan);
-                localStorage.setItem('dev-plan', billingData.plan);
-                
-                if (billingData.trialEndsAt) {
-                  localStorage.setItem('trial-ends-at', new Date(billingData.trialEndsAt).toISOString());
-                }
-                
-                // Force navigation update
-                if (window.JobHackAINavigation?.setAuthState) {
-                  window.JobHackAINavigation.setAuthState(true, billingData.plan);
-                }
-              }
-            }
-          }
-        } catch (e) {
-          console.warn('⚠️ [DASHBOARD] Billing status sync failed:', e);
-        }
+
+        billingStatusData = await fetchBillingStatus('after checkout');
+        applyBillingData(billingStatusData, 'after successful checkout');
       }
       
       // Force KV plan fetch when pending or on normal dashboard load (fallback)
@@ -748,36 +771,11 @@
       }
       
       // Also sync from billing-status on every dashboard load to ensure accuracy
-      try {
-        const firebaseToken = await getFirebaseIdToken();
-        if (firebaseToken) {
-          const billingRes = await fetch('/api/billing-status', {
-            method: 'GET',
-            headers: { 'Authorization': `Bearer ${firebaseToken}` }
-          });
-          
-          if (billingRes.ok) {
-            const billingData = await billingRes.json();
-            if (billingData.ok) {
-              console.log('✅ [DASHBOARD] Synced plan from Stripe on load:', billingData.plan);
-              localStorage.setItem('user-plan', billingData.plan);
-              localStorage.setItem('dev-plan', billingData.plan);
-              
-              if (billingData.trialEndsAt) {
-                localStorage.setItem('trial-ends-at', new Date(billingData.trialEndsAt).toISOString());
-              }
-              
-              // Update navigation if plan changed
-              if (window.JobHackAINavigation?.setAuthState) {
-                window.JobHackAINavigation.setAuthState(true, billingData.plan);
-              }
-            }
-          }
-        }
-      } catch (e) {
-        console.warn('⚠️ [DASHBOARD] Billing status sync on load failed:', e);
-        // Fallback to KV if billing-status fails
+      if (!billingStatusData) {
+        billingStatusData = await fetchBillingStatus('on load');
+        applyBillingData(billingStatusData, 'on load');
       }
+      // Fallback to KV if billing-status fails is handled below when needed
       
       // Wait for navigation system to be ready
       let currentPlan = 'free';
