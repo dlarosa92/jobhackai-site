@@ -261,6 +261,7 @@ document.addEventListener('DOMContentLoaded', async function() {
     e.preventDefault();
     // Clear plan selection when manually switching to login
     sessionStorage.removeItem('selectedPlan');
+    try { localStorage.removeItem('selectedPlan'); } catch (_) {}
     showLoginForm();
   });
   
@@ -905,4 +906,15 @@ if (mobileToggle && mobileNav) {
     });
   });
 }
+
+// Clear plan selection if user navigates away from login page without authenticating
+window.addEventListener('beforeunload', () => {
+  try {
+    const user = authManager.getCurrentUser();
+    if (!user) {
+      sessionStorage.removeItem('selectedPlan');
+      localStorage.removeItem('selectedPlan');
+    }
+  } catch (_) {}
+});
 

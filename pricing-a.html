@@ -220,13 +220,15 @@
           if (plan === 'free') {
             // Store normalized plan selection in sessionStorage
             function selectPlan(planId, planName, price) {
-              sessionStorage.setItem("selectedPlan", JSON.stringify({
+              const selectedPlanPayload = {
                 planId,
                 planName,
                 price,
                 source: "pricing-page",
                 timestamp: Date.now()
-              }));
+              };
+              sessionStorage.setItem("selectedPlan", JSON.stringify(selectedPlanPayload));
+              try { localStorage.setItem("selectedPlan", JSON.stringify(selectedPlanPayload)); } catch (_) {}
               window.location.href = "/login.html?plan=" + encodeURIComponent(planId);
             }
             selectPlan('free', 'Free Plan', '$0/mo');
@@ -295,13 +297,15 @@
           } else {
             // New user - store normalized plan selection in sessionStorage
             function selectPlan(planId, planName, price) {
-              sessionStorage.setItem("selectedPlan", JSON.stringify({
+              const selectedPlanPayload = {
                 planId,
                 planName,
                 price,
                 source: "pricing-page",
                 timestamp: Date.now()
-              }));
+              };
+              sessionStorage.setItem("selectedPlan", JSON.stringify(selectedPlanPayload));
+              try { localStorage.setItem("selectedPlan", JSON.stringify(selectedPlanPayload)); } catch (_) {}
               window.location.href = "/login.html?plan=" + encodeURIComponent(planId);
             }
             const planMap = {

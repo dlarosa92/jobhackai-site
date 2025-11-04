@@ -326,11 +326,14 @@ async function logout(e) {
 
   // Safely clear localStorage
   try {
-    ['user-authenticated', 'user-email', 'user-plan', 'dev-plan', 'auth-user']
+    ['user-authenticated', 'user-email', 'user-plan', 'dev-plan', 'auth-user', 'selectedPlan']
       .forEach(k => localStorage.removeItem(k));
   } catch (err) {
     console.warn('⚠️ localStorage cleanup failed:', err);
   }
+
+  // Also clear any session-scoped plan selection
+  try { sessionStorage.removeItem('selectedPlan'); } catch (_) {}
 
   // Redirect to login (keep .html for now)
   console.log('➡️ Redirecting to /login.html');

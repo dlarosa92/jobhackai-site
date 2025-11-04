@@ -144,10 +144,16 @@ async function routeAfterVerification() {
   // Check for selected plan in sessionStorage
   let storedSelection = null;
   try {
-    const stored = sessionStorage.getItem('selectedPlan');
-    storedSelection = stored ? JSON.parse(stored).planId : null;
+    // Prefer localStorage to allow cross-tab access when email link opens a new tab
+    const localStored = localStorage.getItem('selectedPlan');
+    if (localStored) {
+      storedSelection = JSON.parse(localStored).planId;
+    } else {
+      const sessionStored = sessionStorage.getItem('selectedPlan');
+      storedSelection = sessionStored ? JSON.parse(sessionStored).planId : null;
+    }
   } catch (e) {
-    console.warn('Failed to parse selectedPlan from sessionStorage:', e);
+    console.warn('Failed to parse selectedPlan:', e);
   }
   
   const plan = storedSelection || 'free';
@@ -265,8 +271,13 @@ async function handleEmailVerification() {
     // Check for selected plan to determine redirect destination
     let storedSelection = null;
     try {
-      const stored = sessionStorage.getItem('selectedPlan');
-      storedSelection = stored ? JSON.parse(stored).planId : null;
+      const localStored = localStorage.getItem('selectedPlan');
+      if (localStored) {
+        storedSelection = JSON.parse(localStored).planId;
+      } else {
+        const sessionStored = sessionStorage.getItem('selectedPlan');
+        storedSelection = sessionStored ? JSON.parse(sessionStored).planId : null;
+      }
     } catch (e) {}
     
     const plan = storedSelection || 'free';
