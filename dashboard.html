@@ -686,10 +686,50 @@
       // Get user data from authentication system
       const authState = getAuthState();
       
-      // Force KV plan fetch when landing with ?paid=1 or on dashboard load
+      // Clear selectedPlan when arriving from successful checkout
       const urlParams = new URLSearchParams(window.location.search);
-      if (urlParams.get('paid') === '1' || authState.userPlan === 'pending') {
-        console.log('🔄 Forcing KV plan refresh (paid=1 or pending plan)');
+      if (urlParams.get('paid') === '1') {
+        console.log('✅ [DASHBOARD] Cleared selectedPlan after successful checkout');
+        try {
+          sessionStorage.removeItem('selectedPlan');
+          localStorage.removeItem('selectedPlan');
+        } catch (_) {}
+        
+        // Sync plan from Stripe billing-status API
+        try {
+          const firebaseToken = await getFirebaseIdToken();
+          if (firebaseToken) {
+            const billingRes = await fetch('/api/billing-status', {
+              method: 'GET',
+              headers: { 'Authorization': `Bearer ${firebaseToken}` }
+            });
+            
+            if (billingRes.ok) {
+              const billingData = await billingRes.json();
+              if (billingData.ok) {
+                console.log('✅ [DASHBOARD] Synced plan from Stripe:', billingData.plan);
+                localStorage.setItem('user-plan', billingData.plan);
+                localStorage.setItem('dev-plan', billingData.plan);
+                
+                if (billingData.trialEndsAt) {
+                  localStorage.setItem('trial-ends-at', new Date(billingData.trialEndsAt).toISOString());
+                }
+                
+                // Force navigation update
+                if (window.JobHackAINavigation?.setAuthState) {
+                  window.JobHackAINavigation.setAuthState(true, billingData.plan);
+                }
+              }
+            }
+          }
+        } catch (e) {
+          console.warn('⚠️ [DASHBOARD] Billing status sync failed:', e);
+        }
+      }
+      
+      // Force KV plan fetch when pending or on normal dashboard load (fallback)
+      if (authState.userPlan === 'pending') {
+        console.log('🔄 Forcing KV plan refresh (pending plan)');
         if (window.JobHackAINavigation?.fetchKVPlan) {
           try {
             const freshPlan = await window.JobHackAINavigation.fetchKVPlan();
@@ -705,6 +745,38 @@
             console.warn('⚠️ Could not fetch plan from KV:', e);
           }
         }
+      }
+      
+      // Also sync from billing-status on every dashboard load to ensure accuracy
+      try {
+        const firebaseToken = await getFirebaseIdToken();
+        if (firebaseToken) {
+          const billingRes = await fetch('/api/billing-status', {
+            method: 'GET',
+            headers: { 'Authorization': `Bearer ${firebaseToken}` }
+          });
+          
+          if (billingRes.ok) {
+            const billingData = await billingRes.json();
+            if (billingData.ok) {
+              console.log('✅ [DASHBOARD] Synced plan from Stripe on load:', billingData.plan);
+              localStorage.setItem('user-plan', billingData.plan);
+              localStorage.setItem('dev-plan', billingData.plan);
+              
+              if (billingData.trialEndsAt) {
+                localStorage.setItem('trial-ends-at', new Date(billingData.trialEndsAt).toISOString());
+              }
+              
+              // Update navigation if plan changed
+              if (window.JobHackAINavigation?.setAuthState) {
+                window.JobHackAINavigation.setAuthState(true, billingData.plan);
+              }
+            }
+          }
+        }
+      } catch (e) {
+        console.warn('⚠️ [DASHBOARD] Billing status sync on load failed:', e);
+        // Fallback to KV if billing-status fails
       }
       
       // Wait for navigation system to be ready
@@ -972,7 +1044,7 @@
           </div>
         </div>
         <div class="status-action-row">
-          <span class="user-plan-badge ${user.plan}">${planIcon(user.plan)}${user.plan.charAt(0).toUpperCase() + user.plan.slice(1)}</span>
+          <span class="user-plan-badge ${user.plan}">${planIcon(user.plan)}${user.plan === 'trial' && user.trialEndsAt ? `Trial (${daysLeft(user.trialEndsAt)} days left)` : user.plan.charAt(0).toUpperCase() + user.plan.slice(1)}</span>
           ${(user.plan === 'cancelled') ? `<a href="pricing-a.html" class="upgrade-btn">Reactivate</a>` : ''}
         </div>
       </div>`;
