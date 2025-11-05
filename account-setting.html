@@ -12,6 +12,23 @@
   </style>
   <script src="js/static-auth-guard.js?v=20251007-2"></script>
   <script>
+    // Wait for DOM to be ready before accessing document.body
+    function initializeAccountProtected() {
+      if (document.body) {
+        document.body.classList.add("account-protected");
+      } else {
+        // Fallback: wait for DOMContentLoaded
+        document.addEventListener("DOMContentLoaded", function() {
+          if (document.body) {
+            document.body.classList.add("account-protected");
+          }
+        });
+      }
+    }
+    
+    // Initialize immediately if body exists, otherwise wait
+    initializeAccountProtected();
+    
     document.addEventListener("firebase-auth-ready", function () {
       const mgr = window.FirebaseAuthManager;
       const user = mgr ? mgr.getCurrentUser() : null;
@@ -24,10 +41,10 @@
         return;
       }
       // user is verified, show content
-      document.body.classList.remove("account-protected");
+      if (document.body) {
+        document.body.classList.remove("account-protected");
+      }
     });
-    // default: hide
-    document.body.classList.add("account-protected");
   </script>
   <title>Account Settings – JobHackAI</title>
   <link rel="icon" type="image/png" href="assets/JobHackAI_Logo_favicon-32x32.png">
@@ -340,12 +357,13 @@
     </div>
   </footer>
   <script>
-    // --- AUTHENTICATION CHECK ---
+    // --- AUTHENTICATION CHECK (fallback only) ---
+    // Note: Primary auth check is handled by static-auth-guard.js and firebase-auth-ready event
     function checkAuthentication() {
       const isAuthenticated = localStorage.getItem('user-authenticated') === 'true' && !!localStorage.getItem('user-email');
       const mainContent = document.querySelector('main');
       
-      if (!isAuthenticated) {
+      if (!isAuthenticated && mainContent) {
         mainContent.innerHTML = `
           <div style="max-width: 600px; margin: 4rem auto; text-align: center; padding: 2rem;">
             <div style="font-size: 4rem; margin-bottom: 1rem;">🔒</div>
@@ -370,16 +388,6 @@
       }
       return true;
     }
-
-    // --- Initialize on load ---
-    document.addEventListener('DOMContentLoaded', function() {
-      // Check authentication first
-      if (!checkAuthentication()) {
-        return; // Stop here if not authenticated
-      }
-      
-      // Continue with existing account settings logic
-    });
   </script>
   <!-- Load navigation system -->
   <script src="js/navigation.js?v=20251007-2"></script>
@@ -559,69 +567,148 @@
     }
     
     // --- MAIN INITIALIZATION ---
-    document.addEventListener('DOMContentLoaded', async () => {
-      // Show skeleton immediately
-      document.getElementById('profile-skeleton').style.display = 'block';
+    // Wait for both DOM and Firebase auth to be ready
+    async function initializeAccountSettings() {
+      // Ensure DOM is ready
+      if (document.readyState === 'loading') {
+        await new Promise(resolve => {
+          if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', resolve, { once: true });
+          } else {
+            resolve();
+          }
+        });
+      }
       
-      // Wait for Firebase auth
+      // Show skeleton immediately
+      const profileSkeleton = document.getElementById('profile-skeleton');
+      const profileContent = document.getElementById('profile-content');
+      
+      if (!profileSkeleton || !profileContent) {
+        console.error('Account settings: Required DOM elements not found');
+        return;
+      }
+      
+      profileSkeleton.style.display = 'block';
+      
+      // Wait for Firebase auth - check if already ready or wait for event
       let user = window.FirebaseAuthManager?.getCurrentUser?.();
+      
       if (!user) {
-        // Wait up to 3s for Firebase to initialize
-        await new Promise(r => setTimeout(r, 3000));
+        // Wait for firebase-auth-ready event or timeout after 5 seconds
+        await new Promise((resolve) => {
+          const timeout = setTimeout(() => resolve(), 5000);
+          const handler = () => {
+            clearTimeout(timeout);
+            resolve();
+          };
+          if (document.addEventListener) {
+            document.addEventListener('firebase-auth-ready', handler, { once: true });
+          } else {
+            resolve();
+          }
+        });
+        
         user = window.FirebaseAuthManager?.getCurrentUser?.();
         if (!user) {
+          console.warn('Account settings: No authenticated user found, redirecting to login');
           window.location.href = 'login.html';
           return;
         }
       }
       
+      // Verify email is verified
+      if (user && !user.emailVerified) {
+        window.location.href = '/verify-email.html?email=' + encodeURIComponent(user.email || '');
+        return;
+      }
+      
       // Load real user data
       try {
-        const profileResult = await UserProfileManager.getProfile(user.uid);
-        const profile = profileResult.profile || {};
+        const profileNameEl = document.getElementById('profile-name');
+        const profileEmailEl = document.getElementById('profile-email');
         
-        const userName = profile.displayName || 
-          `${profile.firstName || ''} ${profile.lastName || ''}`.trim() || 
-          user.displayName ||
-          'User';
+        if (!profileNameEl || !profileEmailEl) {
+          throw new Error('Profile display elements not found');
+        }
         
-        document.getElementById('profile-name').textContent = userName;
-        document.getElementById('profile-email').textContent = user.email || 'user@example.com';
+        // Try to load profile from Firestore
+        let userName = user.displayName || 'User';
+        let profile = {};
         
-        // Render billing section
+        try {
+          if (window.UserProfileManager && typeof window.UserProfileManager.getProfile === 'function') {
+            const profileResult = await window.UserProfileManager.getProfile(user.uid);
+            profile = profileResult?.profile || {};
+            
+            userName = profile.displayName || 
+              `${profile.firstName || ''} ${profile.lastName || ''}`.trim() || 
+              user.displayName ||
+              'User';
+          }
+        } catch (profileError) {
+          console.warn('Failed to load profile from Firestore, using auth data:', profileError);
+        }
+        
+        profileNameEl.textContent = userName;
+        profileEmailEl.textContent = user.email || 'user@example.com';
+        
+        // Render billing section (preserves Stripe integration)
         await renderBillingSection();
-
         
         // Hide skeleton, show content
-        document.getElementById('profile-skeleton').style.display = 'none';
-        document.getElementById('profile-content').style.display = 'block';
+        profileSkeleton.style.display = 'none';
+        profileContent.style.display = 'block';
       } catch (error) {
-        console.error('Failed to load profile:', error);
-        // Still show content with basic info
-        document.getElementById('profile-name').textContent = user.displayName || 'User';
-        document.getElementById('profile-email').textContent = user.email || 'user@example.com';
-        await renderBillingSection();
-
-        document.getElementById('profile-skeleton').style.display = 'none';
-        document.getElementById('profile-content').style.display = 'block';
+        console.error('Failed to initialize account settings:', error);
+        // Still show content with basic info from auth
+        const profileNameEl = document.getElementById('profile-name');
+        const profileEmailEl = document.getElementById('profile-email');
+        
+        if (profileNameEl) {
+          profileNameEl.textContent = user.displayName || 'User';
+        }
+        if (profileEmailEl) {
+          profileEmailEl.textContent = user.email || 'user@example.com';
+        }
+        
+        try {
+          await renderBillingSection();
+        } catch (billingError) {
+          console.error('Failed to render billing section:', billingError);
+        }
+        
+        if (profileSkeleton) profileSkeleton.style.display = 'none';
+        if (profileContent) profileContent.style.display = 'block';
       }
       
       // Add delete account functionality
-      const dangerZone = document.createElement('div');
-      dangerZone.className = 'settings-block';
-      dangerZone.style.cssText = 'margin-top: 3rem; border-top: 2px solid #fee; padding-top: 2rem;';
-      dangerZone.innerHTML = `
-        <div class="settings-label" style="color: #dc2626; margin-bottom: 0.5rem;">Danger Zone</div>
-        <p style="color: #6b7280; margin-bottom: 1rem;">Once you delete your account, there is no going back. Please be certain.</p>
-        <button class="btn-outline-grey" onclick="deleteAccount()" style="background: #fee; border-color: #dc2626; color: #dc2626;">Delete Account</button>
-      `;
-      
-      // Add to the end of the settings card
-      const settingsCard = document.querySelector('.account-settings-card');
-      if (settingsCard) {
-        settingsCard.appendChild(dangerZone);
+      try {
+        const dangerZone = document.createElement('div');
+        dangerZone.className = 'settings-block';
+        dangerZone.style.cssText = 'margin-top: 3rem; border-top: 2px solid #fee; padding-top: 2rem;';
+        dangerZone.innerHTML = `
+          <div class="settings-label" style="color: #dc2626; margin-bottom: 0.5rem;">Danger Zone</div>
+          <p style="color: #6b7280; margin-bottom: 1rem;">Once you delete your account, there is no going back. Please be certain.</p>
+          <button class="btn-outline-grey" onclick="deleteAccount()" style="background: #fee; border-color: #dc2626; color: #dc2626;">Delete Account</button>
+        `;
+        
+        // Add to the end of the settings card
+        const settingsCard = document.querySelector('.account-settings-card');
+        if (settingsCard) {
+          settingsCard.appendChild(dangerZone);
+        }
+      } catch (error) {
+        console.error('Failed to add delete account functionality:', error);
       }
-    });
+    }
+    
+    // Start initialization when DOM is ready
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', initializeAccountSettings);
+    } else {
+      initializeAccountSettings();
+    }
     
     async function deleteAccount() {
       const confirmed = confirm(
