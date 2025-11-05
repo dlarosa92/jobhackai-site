@@ -181,13 +181,29 @@ class AuthManager {
     onAuthStateChanged(auth, async (user) => {
       console.log('🔥 Firebase auth state changed:', user ? `User: ${user.email}` : 'No user');
       
-      // ✅ CRITICAL: Check for logout-intent FIRST before processing user
+      // ✅ CRITICAL: Dispatch firebase-auth-ready event FIRST (before logout-intent check)
+      // This ensures pages waiting for this event (like navigation.js, account-setting.html) 
+      // don't hang indefinitely during logout. The event represents "auth state is ready",
+      // not necessarily "user is logged in".
+      if (!authReadyDispatched) {
+        authReadyDispatched = true;
+        console.log('🔥 Dispatching firebase-auth-ready event');
+        // Dispatch event with user = null if logout-intent is detected, otherwise use actual user
+        const logoutIntent = sessionStorage.getItem('logout-intent');
+        const eventUser = (logoutIntent === '1' && user) ? null : user;
+        document.dispatchEvent(new CustomEvent("firebase-auth-ready", {
+          detail: { user: eventUser || null }
+        }));
+      }
+      
+      // ✅ CRITICAL: Check for logout-intent before processing user
       // This prevents race conditions where Firebase auth persistence restores user during logout
       if (user) {
         const logoutIntent = sessionStorage.getItem('logout-intent');
         if (logoutIntent === '1') {
           console.log('🚫 Logout in progress, ignoring auth state change and preventing user restoration');
           // Don't set currentUser, don't update localStorage, just return
+          // Event already dispatched above, so pages can proceed
           return;
         }
       }
@@ -198,15 +214,6 @@ class AuthManager {
       if (window.FirebaseAuthManager) {
         window.FirebaseAuthManager.currentUser = user;
         console.log('🔥 Updated window.FirebaseAuthManager.currentUser:', user ? `User: ${user.email}` : 'null');
-      }
-      
-      // Dispatch firebase-auth-ready event on first auth state change
-      if (!authReadyDispatched) {
-        authReadyDispatched = true;
-        console.log('🔥 Dispatching firebase-auth-ready event');
-        document.dispatchEvent(new CustomEvent("firebase-auth-ready", {
-          detail: { user: user || null }
-        }));
       }
       
       if (user) {
