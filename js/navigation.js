@@ -353,6 +353,8 @@ async function logout(e) {
   await new Promise(resolve => setTimeout(resolve, 100));
 
   // Redirect to login (keep .html for now)
+  // Clear logout-intent to avoid stale state on back/cached navigation
+  try { sessionStorage.removeItem('logout-intent'); } catch (_) {}
   console.log('➡️ Redirecting to /login.html');
   location.replace('/login.html');
 }
