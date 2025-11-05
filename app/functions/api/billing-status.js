@@ -45,9 +45,20 @@ export async function onRequest(context) {
       return json({ ok: false, error: 'unauthorized' }, 401, origin, env);
     }
 
-    const { uid, payload } = await verifyFirebaseIdToken(token, env.FIREBASE_PROJECT_ID);
-    const email = (payload?.email) || '';
-    console.log('🔵 [BILLING-STATUS] Authenticated', { uid, email });
+    let uid, email;
+    try {
+      const authResult = await verifyFirebaseIdToken(token, env.FIREBASE_PROJECT_ID);
+      uid = authResult.uid;
+      email = authResult.payload?.email || '';
+      console.log('🔵 [BILLING-STATUS] Authenticated', { uid, email });
+    } catch (authError) {
+      console.error('🔴 [BILLING-STATUS] JWT verification failed:', authError?.message || authError);
+      return json({ 
+        ok: false, 
+        error: 'auth_failed', 
+        message: authError?.message || 'Invalid or expired token' 
+      }, 401, origin, env);
+    }
 
     // Get Stripe customer ID from KV
     let customerId = await env.JOBHACKAI_KV.get(kvCusKey(uid));
@@ -159,8 +170,13 @@ export async function onRequest(context) {
     return json(result, 200, origin, env);
 
   } catch (e) {
-    console.log('🔴 [BILLING-STATUS] Exception', e?.message || e, e?.stack);
-    return json({ ok: false, error: e?.message || 'server_error' }, 500, origin, env);
+    console.error('🔴 [BILLING-STATUS] Exception:', e?.message || e);
+    console.error('🔴 [BILLING-STATUS] Stack:', e?.stack);
+    return json({ 
+      ok: false, 
+      error: 'server_error', 
+      message: e?.message || 'An unexpected error occurred' 
+    }, 500, origin, env);
   }
 }
 
@@ -194,12 +210,21 @@ function priceIdToPlan(env, priceId) {
   if (!priceId) return 'free';
   
   // Map price IDs back to plan names
-  if (priceId === env.STRIPE_PRICE_ESSENTIAL_MONTHLY) return 'essential';
-  if (priceId === env.STRIPE_PRICE_PRO_MONTHLY) return 'pro';
-  if (priceId === env.STRIPE_PRICE_PREMIUM_MONTHLY) return 'premium';
+  // Support both naming conventions (PRICE_* and STRIPE_PRICE_*)
+  const essentialPriceId = env.STRIPE_PRICE_ESSENTIAL_MONTHLY || env.PRICE_ESSENTIAL_MONTHLY;
+  const proPriceId = env.STRIPE_PRICE_PRO_MONTHLY || env.PRICE_PRO_MONTHLY;
+  const premiumPriceId = env.STRIPE_PRICE_PREMIUM_MONTHLY || env.PRICE_PREMIUM_MONTHLY;
+  
+  if (priceId === essentialPriceId) return 'essential';
+  if (priceId === proPriceId) return 'pro';
+  if (priceId === premiumPriceId) return 'premium';
   
   // Default to essential if we can't match (shouldn't happen)
-  console.log('🟡 [BILLING-STATUS] Unknown price ID', priceId);
+  console.log('🟡 [BILLING-STATUS] Unknown price ID', priceId, {
+    essentialPriceId,
+    proPriceId,
+    premiumPriceId
+  });
   return 'essential';
 }
 
