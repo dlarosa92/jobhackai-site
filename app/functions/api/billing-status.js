@@ -23,6 +23,22 @@ export async function onRequest(context) {
       hasAuth: !!request.headers.get('authorization')
     });
 
+    // Validate environment variables
+    if (!env.FIREBASE_PROJECT_ID) {
+      console.error('❌ [BILLING-STATUS] Missing FIREBASE_PROJECT_ID');
+      return json({ ok: false, error: 'server_config_error', message: 'FIREBASE_PROJECT_ID not configured' }, 500, origin, env);
+    }
+
+    if (!env.JOBHACKAI_KV) {
+      console.error('❌ [BILLING-STATUS] Missing JOBHACKAI_KV binding');
+      return json({ ok: false, error: 'server_config_error', message: 'KV store not bound' }, 500, origin, env);
+    }
+
+    if (!env.STRIPE_SECRET_KEY) {
+      console.error('❌ [BILLING-STATUS] Missing STRIPE_SECRET_KEY');
+      return json({ ok: false, error: 'server_config_error', message: 'STRIPE_SECRET_KEY not configured' }, 500, origin, env);
+    }
+
     const token = getBearer(request);
     if (!token) {
       console.log('🔴 [BILLING-STATUS] Missing bearer token');
@@ -34,7 +50,7 @@ export async function onRequest(context) {
     console.log('🔵 [BILLING-STATUS] Authenticated', { uid, email });
 
     // Get Stripe customer ID from KV
-    let customerId = await env.JOBHACKAI_KV?.get(kvCusKey(uid));
+    let customerId = await env.JOBHACKAI_KV.get(kvCusKey(uid));
     
     if (!customerId) {
       console.log('🟡 [BILLING-STATUS] No customer found in KV for uid', uid);
@@ -46,7 +62,7 @@ export async function onRequest(context) {
         customerId = searchData.data[0].id;
         console.log('🟡 [BILLING-STATUS] Found customer by email', customerId);
         // Cache it for next time
-        await env.JOBHACKAI_KV?.put(kvCusKey(uid), customerId);
+        await env.JOBHACKAI_KV.put(kvCusKey(uid), customerId);
       } else {
         console.log('🟡 [BILLING-STATUS] No Stripe customer exists - returning free plan');
         return json({
