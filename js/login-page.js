@@ -78,11 +78,12 @@ document.addEventListener('DOMContentLoaded', async function() {
     console.log('🧭 login-page.js v2 starting');
     console.log('[AUTH INIT START]');
 
-    // Prevent bounce if coming from logout - clear flag but DON'T return early
-    if (sessionStorage.getItem('logout-intent') === '1') {
+    // Prevent bounce if coming from logout - keep flag during auth check, clear after
+    const hasLogoutIntent = sessionStorage.getItem('logout-intent') === '1';
+    if (hasLogoutIntent) {
       console.log('🚫 Logout intent detected — staying on login');
-      sessionStorage.removeItem('logout-intent');
-      // Continue with initialization below instead of returning
+      // Keep logout-intent flag during auth check to prevent redirects
+      // Will be cleared after auth check completes
     }
 
     // Check for password reset success flag (don't remove yet, need to use it later)
@@ -199,11 +200,24 @@ document.addEventListener('DOMContentLoaded', async function() {
       return false;
     }
 
+    // Check for logout-intent flag - if logout is in progress, don't redirect
+    const logoutIntent = sessionStorage.getItem('logout-intent');
+    if (logoutIntent === '1') {
+      console.log('🚫 Logout in progress, skipping auth check and redirect');
+      return false;
+    }
+
     // ONLY check Firebase, not localStorage
     try {
       console.log('🔍 Checking Firebase auth state...');
       const user = await waitForAuthReady(4000);
       if (user && user.email) {
+        // Double-check logout intent before redirecting
+        const logoutIntentCheck = sessionStorage.getItem('logout-intent');
+        if (logoutIntentCheck === '1') {
+          console.log('🚫 Logout in progress, preventing redirect to dashboard');
+          return false;
+        }
         console.log(`✅ Authenticated as ${user.email}, redirecting to dashboard`);
         location.replace('/dashboard.html');
         return true;
@@ -219,11 +233,25 @@ document.addEventListener('DOMContentLoaded', async function() {
   
   // Run auth check in parallel (don't await before showing banner)
   const isAuthenticated = await checkAuth();
+  
+  // Clear logout-intent flag after auth check completes (if it was set)
+  if (hasLogoutIntent) {
+    sessionStorage.removeItem('logout-intent');
+    console.log('✅ Cleared logout-intent flag after auth check');
+  }
+  
   if (isAuthenticated) return;
   
   // Listen for auth state changes in case user gets authenticated after page load
   const unsubscribe = authManager.onAuthStateChange((user) => {
     if (user) {
+      // Check for logout-intent flag - if logout is in progress, don't redirect
+      const logoutIntent = sessionStorage.getItem('logout-intent');
+      if (logoutIntent === '1') {
+        console.log('🚫 Logout in progress, ignoring auth state change and preventing redirect');
+        return;
+      }
+      
       let storedPlan = null;
       try {
         const stored = sessionStorage.getItem('selectedPlan');
@@ -238,6 +266,12 @@ document.addEventListener('DOMContentLoaded', async function() {
       document.body.style.opacity = '0.7';
       document.body.style.transition = 'opacity 0.3s ease';
       setTimeout(() => {
+        // Final check before redirect
+        const finalLogoutIntent = sessionStorage.getItem('logout-intent');
+        if (finalLogoutIntent === '1') {
+          console.log('🚫 Logout in progress, canceling redirect to dashboard');
+          return;
+        }
         window.location.href = 'dashboard.html';
       }, 200);
       // Guard against non-function unsubscribe (prevents TypeError and loops)

@@ -313,7 +313,7 @@ async function logout(e) {
   e?.preventDefault?.();
   console.log('🚪 logout() v2: triggered');
 
-  // Set logout intent immediately
+  // Set logout intent immediately - CRITICAL: Must be set before any async operations
   sessionStorage.setItem('logout-intent', '1');
 
   // Attempt Firebase sign out
@@ -332,8 +332,25 @@ async function logout(e) {
     console.warn('⚠️ localStorage cleanup failed:', err);
   }
 
+  // Clear all Firebase auth persistence keys to prevent automatic re-login
+  try {
+    for (let i = localStorage.length - 1; i >= 0; i--) {
+      const key = localStorage.key(i);
+      if (key && key.startsWith('firebase:authUser:')) {
+        localStorage.removeItem(key);
+        console.log('🗑️ Removed Firebase auth key:', key);
+      }
+    }
+  } catch (err) {
+    console.warn('⚠️ Firebase auth key cleanup failed:', err);
+  }
+
   // Also clear any session-scoped plan selection
   try { sessionStorage.removeItem('selectedPlan'); } catch (_) {}
+
+  // Small delay to ensure all cleanup completes before redirect
+  // This prevents race conditions with auth state listeners
+  await new Promise(resolve => setTimeout(resolve, 100));
 
   // Redirect to login (keep .html for now)
   console.log('➡️ Redirecting to /login.html');

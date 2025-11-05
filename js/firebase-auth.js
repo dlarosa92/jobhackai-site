@@ -197,6 +197,14 @@ class AuthManager {
       }
       
       if (user) {
+        // ✅ CRITICAL: Check for logout-intent before setting authenticated state
+        // This prevents race conditions where Firebase auth persistence restores user during logout
+        const logoutIntent = sessionStorage.getItem('logout-intent');
+        if (logoutIntent === '1') {
+          console.log('🚫 Logout in progress, ignoring auth state change');
+          return;
+        }
+        
         // ✅ CRITICAL: Set localStorage IMMEDIATELY (sync, before any await)
         // This prevents race conditions with static-auth-guard.js
         localStorage.setItem('user-authenticated', 'true');
