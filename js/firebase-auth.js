@@ -202,7 +202,12 @@ class AuthManager {
         const logoutIntent = sessionStorage.getItem('logout-intent');
         if (logoutIntent === '1') {
           console.log('🚫 Logout in progress, ignoring auth state change and preventing user restoration');
-          // Don't set currentUser, don't update localStorage, just return
+          // Set currentUser to null to maintain consistency with the event that was dispatched with user: null
+          this.currentUser = null;
+          if (window.FirebaseAuthManager) {
+            window.FirebaseAuthManager.currentUser = null;
+          }
+          // Don't update localStorage, just return
           // Event already dispatched above, so pages can proceed
           return;
         }

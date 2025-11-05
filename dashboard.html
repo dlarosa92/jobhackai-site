@@ -1042,7 +1042,7 @@
           </div>
         </div>
         <div class="status-action-row">
-          <span class="user-plan-badge ${user.plan}">${planIcon(user.plan)}${user.plan === 'trial' && user.trialEndsAt ? `Trial (${daysLeft(user.trialEndsAt)} days left)` : user.plan.charAt(0).toUpperCase() + user.plan.slice(1)}</span>
+          <span class="user-plan-badge ${user.plan}">${planIcon(user.plan)}${user.plan === 'trial' && user.trialEndsAt && !isNaN(new Date(user.trialEndsAt).getTime()) ? `Trial (${daysLeft(user.trialEndsAt)} days left)` : user.plan.charAt(0).toUpperCase() + user.plan.slice(1)}</span>
           ${(user.plan === 'cancelled') ? `<a href="pricing-a.html" class="upgrade-btn">Reactivate</a>` : ''}
         </div>
       </div>`;

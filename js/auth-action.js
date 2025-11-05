@@ -233,7 +233,7 @@ async function routeAfterVerification() {
   } else {
     // Free plan - redirect to dashboard
     console.log('✅ Free plan detected, redirecting to dashboard');
-    // Clear selectedPlan since we're going to dashboard
+    // Clear selectedPlan from both storages since we're going to dashboard
     try {
       sessionStorage.removeItem('selectedPlan');
       localStorage.removeItem('selectedPlan');
