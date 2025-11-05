@@ -236,6 +236,7 @@ async function routeAfterVerification() {
     // Clear selectedPlan since we're going to dashboard
     try {
       sessionStorage.removeItem('selectedPlan');
+      localStorage.removeItem('selectedPlan');
     } catch (e) {}
     
     // Close opener window if it exists
