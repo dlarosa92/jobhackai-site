@@ -53,6 +53,9 @@
       // If Firebase auth is ready, check if user exists
       if (hasFirebaseAuth() || window.FirebaseAuthManager?.getCurrentUser?.()) {
         document.documentElement.classList.remove('auth-pending');
+      } else {
+        // Firebase auth is ready but no user - immediately redirect
+        location.replace('/login.html');
       }
     }, { once: true });
 
@@ -63,6 +66,12 @@
       if (hasFirebaseAuth() || window.FirebaseAuthManager?.getCurrentUser?.()) {
         // Firebase auth confirmed - reveal page
         document.documentElement.classList.remove('auth-pending');
+        return;
+      }
+
+      // If firebase-auth-ready fired but no user exists, redirect immediately
+      if (firebaseAuthReady) {
+        location.replace('/login.html');
         return;
       }
 
