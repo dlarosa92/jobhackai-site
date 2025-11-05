@@ -180,6 +180,35 @@ class AuthManager {
     
     onAuthStateChanged(auth, async (user) => {
       console.log('🔥 Firebase auth state changed:', user ? `User: ${user.email}` : 'No user');
+      
+      // ✅ CRITICAL: Dispatch firebase-auth-ready event FIRST (before logout-intent check)
+      // This ensures pages waiting for this event (like navigation.js, account-setting.html) 
+      // don't hang indefinitely during logout. The event represents "auth state is ready",
+      // not necessarily "user is logged in".
+      if (!authReadyDispatched) {
+        authReadyDispatched = true;
+        console.log('🔥 Dispatching firebase-auth-ready event');
+        // Dispatch event with user = null if logout-intent is detected, otherwise use actual user
+        const logoutIntent = sessionStorage.getItem('logout-intent');
+        const eventUser = (logoutIntent === '1' && user) ? null : user;
+        document.dispatchEvent(new CustomEvent("firebase-auth-ready", {
+          detail: { user: eventUser || null }
+        }));
+      }
+      
+      // ✅ CRITICAL: Check for logout-intent before processing user
+      // This prevents race conditions where Firebase auth persistence restores user during logout
+      if (user) {
+        const logoutIntent = sessionStorage.getItem('logout-intent');
+        if (logoutIntent === '1') {
+          console.log('🚫 Logout in progress, ignoring auth state change and preventing user restoration');
+          // Don't set currentUser, don't update localStorage, just return
+          // Event already dispatched above, so pages can proceed
+          return;
+        }
+      }
+      
+      // Only set currentUser if logout-intent check passed
       this.currentUser = user;
       // Update the exposed currentUser property
       if (window.FirebaseAuthManager) {
@@ -187,23 +216,7 @@ class AuthManager {
         console.log('🔥 Updated window.FirebaseAuthManager.currentUser:', user ? `User: ${user.email}` : 'null');
       }
       
-      // Dispatch firebase-auth-ready event on first auth state change
-      if (!authReadyDispatched) {
-        authReadyDispatched = true;
-        console.log('🔥 Dispatching firebase-auth-ready event');
-        document.dispatchEvent(new CustomEvent("firebase-auth-ready", {
-          detail: { user: user || null }
-        }));
-      }
-      
       if (user) {
-        // ✅ CRITICAL: Check for logout-intent before setting authenticated state
-        // This prevents race conditions where Firebase auth persistence restores user during logout
-        const logoutIntent = sessionStorage.getItem('logout-intent');
-        if (logoutIntent === '1') {
-          console.log('🚫 Logout in progress, ignoring auth state change');
-          return;
-        }
         
         // ✅ CRITICAL: Set localStorage IMMEDIATELY (sync, before any await)
         // This prevents race conditions with static-auth-guard.js
@@ -771,11 +784,32 @@ class AuthManager {
     const startTime = Date.now();
     console.log('🔥 waitForAuthReady started, currentUser:', this.currentUser);
     
+    // Check logout-intent immediately - if logout is in progress, return null
+    const logoutIntent = sessionStorage.getItem('logout-intent');
+    if (logoutIntent === '1') {
+      console.log('🚫 Logout in progress, waitForAuthReady returning null');
+      return null;
+    }
+    
     while (!this.currentUser && (Date.now() - startTime) < timeoutMs) {
+      // Check logout-intent on each iteration
+      const logoutIntentCheck = sessionStorage.getItem('logout-intent');
+      if (logoutIntentCheck === '1') {
+        console.log('🚫 Logout in progress during wait, returning null');
+        return null;
+      }
+      
       await new Promise(resolve => setTimeout(resolve, 100));
       if ((Date.now() - startTime) % 1000 < 100) { // Log every second
         console.log('🔥 waitForAuthReady waiting... currentUser:', this.currentUser);
       }
+    }
+    
+    // Final check before returning
+    const finalLogoutIntent = sessionStorage.getItem('logout-intent');
+    if (finalLogoutIntent === '1') {
+      console.log('🚫 Logout in progress, waitForAuthReady returning null (final check)');
+      return null;
     }
     
     console.log('🔥 waitForAuthReady finished, currentUser:', this.currentUser);
