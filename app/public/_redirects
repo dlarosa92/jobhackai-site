@@ -1,6 +1,8 @@
 # Handle client-side routing for Next.js static export
 /dashboard/   /dashboard/index.html    200
 /dashboard-simple/   /dashboard-simple/index.html    200
+/account-setting     /account-setting.html   200
+/account-setting.html /account-setting.html  200
 
 # Auth routes - Firebase sends /auth/action but Cloudflare needs /auth/action/
 /auth/action   /auth/action/index.html   200
