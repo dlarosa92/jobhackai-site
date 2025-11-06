@@ -751,17 +751,29 @@
   // --- PLAN-BASED ACCESS CONTROL ---
   function checkPlanAccess() {
     const currentPlan = getUserPlan();
-    const lockedDiv = document.getElementById('lo-locked');
-    const formDiv = document.getElementById('lo-form');
+    const lockedDiv = document.getElementById('lo-locked-free');
+    const formDiv = document.getElementById('lo-input-section');
     const resultsDiv = document.getElementById('lo-results');
-    
-    if (!lockedDiv || !formDiv || !resultsDiv) return;
+    const mainContentDiv = document.getElementById('lo-main-content');
     
     // LinkedIn Optimizer is Premium-only
     const locked = (currentPlan !== 'premium');
-    lockedDiv.style.display = locked ? 'flex' : 'none';
-    formDiv.style.display = locked ? 'none' : '';
-    resultsDiv.style.display = 'none';
+    
+    if (lockedDiv) {
+      lockedDiv.style.display = locked ? 'flex' : 'none';
+    }
+    
+    if (mainContentDiv) {
+      mainContentDiv.style.display = locked ? 'none' : '';
+    }
+    
+    if (formDiv) {
+      formDiv.style.display = locked ? 'none' : '';
+    }
+    
+    if (resultsDiv) {
+      resultsDiv.style.display = 'none';
+    }
   }
 
   // --- PAGE ACCESS CONTROL ---
