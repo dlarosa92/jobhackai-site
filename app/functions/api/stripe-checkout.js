@@ -323,7 +323,7 @@ function planToPrice(env, plan) {
 }
 
 // Build a robust Idempotency-Key from stable parameters, so retries succeed
-// and parameter changes (e.g., URLs, price, customer) generate a new key
+// and parameter changes (e.g., URLs, price, customer, trial period) generate a new key
 async function makeIdemKey(uid, body) {
   try {
     const enc = new TextEncoder();
@@ -334,7 +334,14 @@ async function makeIdemKey(uid, body) {
       mode: body.mode,
       success_url: body.success_url,
       cancel_url: body.cancel_url,
-      metadata: { firebaseUid: body['metadata[firebaseUid]'], plan: body['metadata[plan]'] }
+      metadata: { firebaseUid: body['metadata[firebaseUid]'], plan: body['metadata[plan]'] },
+      // Include subscription_data fields to ensure idempotency key changes when trial parameters change
+      subscription_data: {
+        trial_period_days: body['subscription_data[trial_period_days]'] || null,
+        metadata: {
+          original_plan: body['subscription_data[metadata][original_plan]'] || null
+        }
+      }
     };
     const buf = await crypto.subtle.digest('SHA-256', enc.encode(JSON.stringify(stable)));
     const hex = [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, '0')).join('');
