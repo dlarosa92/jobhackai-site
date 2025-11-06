@@ -190,6 +190,8 @@
   
   <!-- Load Stripe integration -->
   <script src="js/stripe-integration.js"></script>
+  <!-- Load Firebase auth for token retrieval -->
+  <script type="module" src="js/firebase-auth.js?v=20251011-1"></script>
   <script>
     // Update checkout page with plan details
     document.addEventListener('DOMContentLoaded', () => {
@@ -288,8 +290,9 @@
         return;
       }
 
-      const authUser = getAuthUser();
-      if (!authUser || !authUser.email || !authUser.uid) {
+      // Check authentication using Firebase
+      const user = window.FirebaseAuthManager?.getCurrentUser?.();
+      if (!user) {
         errorDiv.textContent = 'Please sign in to continue to checkout.';
         errorDiv.style.display = 'block';
         setTimeout(() => { window.location.href = 'login.html'; }, 1200);
@@ -304,15 +307,34 @@
       errorDiv.style.display = 'none';
 
       try {
+        // Get Firebase ID token for authentication
+        const user = window.FirebaseAuthManager?.getCurrentUser?.();
+        if (!user) {
+          errorDiv.textContent = 'Please sign in to continue to checkout.';
+          errorDiv.style.display = 'block';
+          setTimeout(() => { window.location.href = 'login.html'; }, 1200);
+          return;
+        }
+
+        const idToken = await user.getIdToken();
+        if (!idToken) {
+          errorDiv.textContent = 'Authentication error. Please sign in again.';
+          errorDiv.style.display = 'block';
+          setTimeout(() => { window.location.href = 'login.html'; }, 1200);
+          return;
+        }
+
         const res = await fetch('/api/stripe', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${idToken}`
+          },
           body: JSON.stringify({
             action: 'create-checkout-session',
             data: {
-              priceId: priceId,
-              userId: authUser.uid,
-              userEmail: authUser.email
+              priceId: priceId
+              // userId and userEmail are now retrieved from the authenticated token
             }
           })
         });
