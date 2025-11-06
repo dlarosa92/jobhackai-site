@@ -1320,9 +1320,19 @@
         console.log(`🔄 [DASHBOARD] User clicked upgrade for ${featureKey}, targeting plan: ${targetPlan}`);
 
         try {
-          const idToken = await user.getIdToken();
+          // Get fresh token - force refresh if needed
+          let idToken;
+          try {
+            idToken = await user.getIdToken(true); // Force refresh
+          } catch (tokenError) {
+            console.error('❌ [DASHBOARD] Failed to get Firebase token:', tokenError);
+            alert('Your session has expired. Please log in again and try upgrading.');
+            window.location.href = 'login.html';
+            return;
+          }
+
           if (!idToken) {
-            alert('Please log in to upgrade your plan');
+            alert('Your session has expired. Please log in again and try upgrading.');
             window.location.href = 'login.html';
             return;
           }
@@ -1339,10 +1349,36 @@
             })
           });
 
+          // Check if response is ok before parsing JSON
+          if (!response.ok) {
+            const errorText = await response.text();
+            let errorData;
+            try {
+              errorData = JSON.parse(errorText);
+            } catch {
+              errorData = { error: errorText || 'Unknown error' };
+            }
+
+            // Handle specific error cases
+            if (response.status === 401 || response.status === 403) {
+              console.error('❌ [DASHBOARD] Authentication error:', errorData.error);
+              alert('Your session has expired. Please log in again and try upgrading.');
+              window.location.href = 'login.html';
+              return;
+            }
+
+            console.error('❌ [DASHBOARD] Stripe checkout failed:', errorData.error);
+            alert('Unable to start checkout: ' + (errorData.error || 'Unknown error'));
+            // Fallback to pricing page
+            window.location.href = `pricing-a.html?plan=${targetPlan}`;
+            return;
+          }
+
           const data = await response.json();
 
           if (data.ok && data.url) {
             // Redirect to Stripe Checkout
+            console.log('✅ [DASHBOARD] Redirecting to Stripe Checkout:', data.url);
             window.location.href = data.url;
           } else {
             console.error('❌ [DASHBOARD] Stripe checkout failed:', data.error);
@@ -1352,7 +1388,12 @@
           }
         } catch (error) {
           console.error('❌ [DASHBOARD] Upgrade error:', error);
-          alert('Failed to start upgrade. Please try again.');
+          // Check if it's a network error or auth error
+          if (error.message && (error.message.includes('Failed to fetch') || error.message.includes('NetworkError'))) {
+            alert('Network error. Please check your connection and try again.');
+          } else {
+            alert('Failed to start upgrade. Please try again.');
+          }
           // Fallback to pricing page
           window.location.href = `pricing-a.html?plan=${targetPlan}`;
         }

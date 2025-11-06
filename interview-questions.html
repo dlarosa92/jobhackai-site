@@ -6,6 +6,32 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <style>html.auth-pending{visibility:hidden}</style>
   <script src="js/static-auth-guard.js?v=20251007-2"></script>
+  <script>
+    // --- IMMEDIATE PAGE ACCESS CONTROL ---
+    // Run immediately to prevent content flash for unauthorized users
+    (function enforceAccessImmediate() {
+      const isAuthenticated = localStorage.getItem('user-authenticated') === 'true' && !!localStorage.getItem('user-email');
+      const plan = localStorage.getItem('user-plan') || 'free';
+      const allowedPlans = ['trial', 'essential', 'pro', 'premium'];
+      
+      // If not authenticated, redirect to login immediately
+      if (!isAuthenticated) {
+        console.log('🚫 [INTERVIEW-Q] Not authenticated, redirecting to login');
+        window.location.href = 'login.html';
+        return;
+      }
+      
+      // If authenticated but on wrong plan, redirect to pricing with upgrade modal immediately
+      if (!allowedPlans.includes(plan)) {
+        console.log('🚫 [INTERVIEW-Q] Access denied for plan:', plan);
+        window.location.href = 'pricing-a.html?plan=essential';
+        return;
+      }
+      
+      // Access granted - continue loading page
+      console.log('✅ [INTERVIEW-Q] Access granted for plan:', plan);
+    })();
+  </script>
   <title>Interview Questions – JobHackAI</title>
   <link rel="icon" type="image/png" href="assets/JobHackAI_Logo_favicon-32x32.png">
   <link rel="stylesheet" href="css/tokens.css">
@@ -1086,17 +1112,27 @@ function initIQPage(){ iqLoadPrefs(); iqState.prefs.count = IQ_FIXED_COUNT; iqRe
       }
     }
     
-    // --- PAGE ACCESS CONTROL ---
+    // --- PAGE ACCESS CONTROL (Second check after navigation system) ---
+    // Also run after navigation system initializes to double-check
     function enforceAccess() {
-      const authState = window.JobHackAINavigation ? 
-        window.JobHackAINavigation.getAuthState() : 
-        { isAuthenticated: localStorage.getItem('user-authenticated') === 'true' };
+      let authState, userPlan;
       
-      const userPlan = getUserPlan();
+      if (window.JobHackAINavigation) {
+        authState = window.JobHackAINavigation.getAuthState();
+        userPlan = window.JobHackAINavigation.getEffectivePlan();
+      } else {
+        authState = { isAuthenticated: localStorage.getItem('user-authenticated') === 'true' && !!localStorage.getItem('user-email') };
+        userPlan = localStorage.getItem('user-plan') || 'free';
+      }
+      
       const allowedPlans = ['trial', 'essential', 'pro', 'premium'];
       
       if (!authState.isAuthenticated || !allowedPlans.includes(userPlan)) {
-        window.location.href = 'login.html';
+        if (!authState.isAuthenticated) {
+          window.location.href = 'login.html';
+        } else {
+          window.location.href = 'pricing-a.html?plan=essential';
+        }
       }
     }
     

@@ -883,11 +883,16 @@ function updateNavigation() {
           // Dropdown items should inherit unlocked state from parent plan config
           // CRITICAL: Use strict equality to prevent issues with truthy non-boolean values
           if (dropdownItem.locked === true) {
+            // Remove href to prevent navigation even if JavaScript fails
+            link.href = '#';
+            link.setAttribute('aria-disabled', 'true');
             link.classList.add('locked-link');
             link.style.opacity = '1';
             link.style.cursor = 'pointer';
             link.addEventListener('click', function(e) {
               e.preventDefault();
+              e.stopPropagation();
+              e.stopImmediatePropagation();
               navLog('info', 'Locked dropdown link clicked', { 
                 text: dropdownItem.text, 
                 href: dropdownItem.href,
@@ -895,6 +900,7 @@ function updateNavigation() {
                 url: window.location.href 
               });
               showUpgradeModal('essential');
+              return false;
             });
             link.title = 'Upgrade your plan to unlock this feature.';
           }
@@ -929,14 +935,20 @@ function updateNavigation() {
         // CRITICAL: Only add locked handler if explicitly marked as locked in config
         // This prevents incorrect upgrade modals from appearing
         if (item.locked === true) {
+          // Remove href to prevent navigation even if JavaScript fails
+          link.href = '#';
+          link.setAttribute('aria-disabled', 'true');
           // Do not fade or reduce opacity; make it a clear button-like link
           link.classList.add('locked-link');
           link.style.opacity = '1';
           link.style.cursor = 'pointer';
           link.addEventListener('click', function(e) {
             e.preventDefault();
+            e.stopPropagation();
+            e.stopImmediatePropagation();
             navLog('info', 'Locked link clicked', { text: item.text, href: item.href, plan: currentPlan });
             showUpgradeModal('essential');
+            return false;
           });
           link.title = 'Upgrade your plan to unlock this feature.';
         }
@@ -1013,13 +1025,19 @@ function updateNavigation() {
           // Only add locked handler if explicitly marked as locked
           // CRITICAL: Use strict equality to prevent issues with truthy non-boolean values
           if (dropdownItem.locked === true) {
+            // Remove href to prevent navigation even if JavaScript fails
+            link.href = '#';
+            link.setAttribute('aria-disabled', 'true');
             link.classList.add('locked-link');
             link.style.opacity = '1';
             link.style.cursor = 'pointer';
             link.addEventListener('click', function(e) {
               e.preventDefault();
+              e.stopPropagation();
+              e.stopImmediatePropagation();
               navLog('info', 'Mobile locked dropdown link clicked', { text: dropdownItem.text, href: dropdownItem.href });
               showUpgradeModal('essential');
+              return false;
             });
             link.title = 'Upgrade your plan to unlock this feature.';
           }
@@ -1036,13 +1054,19 @@ function updateNavigation() {
         // CRITICAL: Use strict equality to prevent issues with truthy non-boolean values
         // Must match desktop regular items check for consistency
         if (item.locked === true) {
+          // Remove href to prevent navigation even if JavaScript fails
+          link.href = '#';
+          link.setAttribute('aria-disabled', 'true');
           link.classList.add('locked-link');
           link.style.opacity = '1';
           link.style.cursor = 'pointer';
           link.addEventListener('click', function(e) {
             e.preventDefault();
+            e.stopPropagation();
+            e.stopImmediatePropagation();
             navLog('info', 'Mobile locked link clicked', { text: item.text, href: item.href });
             showUpgradeModal('essential');
+            return false;
           });
           link.title = 'Upgrade your plan to unlock this feature.';
         }
