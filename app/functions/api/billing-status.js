@@ -157,8 +157,10 @@ function stripe(env, path, init) {
 }
 
 function corsHeaders(origin, env) {
-  const expected = (env && env.FRONTEND_URL) ? env.FRONTEND_URL : 'https://dev.jobhackai.io';
-  const allowed = origin === expected ? origin : expected;
+  const fallbackOrigins = ['https://dev.jobhackai.io', 'https://qa.jobhackai.io'];
+  const configured = (env && env.FRONTEND_URL) ? env.FRONTEND_URL : null;
+  const allowedList = configured ? [configured, ...fallbackOrigins] : fallbackOrigins;
+  const allowed = origin && allowedList.includes(origin) ? origin : (configured || 'https://dev.jobhackai.io');
   return {
     'Access-Control-Allow-Origin': allowed,
     'Access-Control-Allow-Methods': 'GET,OPTIONS',
