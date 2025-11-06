@@ -43,8 +43,21 @@ export async function onRequest(context) {
       console.log('🔴 [CHECKOUT] Missing bearer token');
       return json({ ok: false, error: 'unauthorized' }, 401, origin, env);
     }
-    const { uid, payload } = await verifyFirebaseIdToken(token, env.FIREBASE_PROJECT_ID);
-    const email = (payload?.email) || '';
+    
+    // Verify Firebase token with error handling
+    let uid, payload, email;
+    try {
+      const authResult = await verifyFirebaseIdToken(token, env.FIREBASE_PROJECT_ID);
+      uid = authResult.uid;
+      payload = authResult.payload;
+      email = (payload?.email) || '';
+    } catch (authError) {
+      console.log('🔴 [CHECKOUT] Firebase auth verification failed', {
+        error: authError?.message || authError,
+        name: authError?.name
+      });
+      return json({ ok: false, error: 'authentication_failed' }, 401, origin, env);
+    }
     if (!plan) {
       console.log('🔴 [CHECKOUT] Missing plan field');
       return json({ ok: false, error: 'Missing plan' }, 422, origin, env);
@@ -149,16 +162,40 @@ function stripe(env, path, init) {
   const url = `https://api.stripe.com/v1${path}`;
   const headers = new Headers(init?.headers || {});
   headers.set('Authorization', `Bearer ${env.STRIPE_SECRET_KEY}`);
+  
   // Add a timeout to avoid hanging requests causing upstream 5xx
-  const signal = (typeof AbortSignal !== 'undefined' && AbortSignal.timeout)
-    ? AbortSignal.timeout(15000)
-    : undefined;
+  // Use AbortController for better compatibility with Cloudflare Workers runtime
+  let signal = init?.signal; // Preserve any existing signal
+  let timeoutId = null;
+  
+  try {
+    // Only create timeout signal if no signal already exists
+    if (!signal && typeof AbortController !== 'undefined') {
+      const controller = new AbortController();
+      timeoutId = setTimeout(() => controller.abort(), 15000);
+      signal = controller.signal;
+    }
+  } catch (e) {
+    // If AbortController is not available, continue without timeout
+    console.log('🟡 [CHECKOUT] AbortController not available, continuing without timeout');
+  }
+  
   const fetchOptions = { ...init, headers };
   // Only add signal if it's defined, to avoid overriding any signal from init
   if (signal) {
     fetchOptions.signal = signal;
   }
-  return fetch(url, fetchOptions);
+  
+  const fetchPromise = fetch(url, fetchOptions);
+  
+  // Clean up timeout if fetch completes before timeout
+  if (timeoutId) {
+    fetchPromise.finally(() => {
+      if (timeoutId) clearTimeout(timeoutId);
+    });
+  }
+  
+  return fetchPromise;
 }
 function stripeFormHeaders(env) {
   return { Authorization: `Bearer ${env.STRIPE_SECRET_KEY}`, 'Content-Type': 'application/x-www-form-urlencoded' };
