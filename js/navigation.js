@@ -881,7 +881,8 @@ function updateNavigation() {
           link.textContent = dropdownItem.text;
           // Only add locked handler if explicitly marked as locked
           // Dropdown items should inherit unlocked state from parent plan config
-          if (dropdownItem.locked) {
+          // CRITICAL: Use strict equality to prevent issues with truthy non-boolean values
+          if (dropdownItem.locked === true) {
             link.classList.add('locked-link');
             link.style.opacity = '1';
             link.style.cursor = 'pointer';
@@ -1005,7 +1006,8 @@ function updateNavigation() {
           updateLink(link, dropdownItem.href);
           link.textContent = dropdownItem.text;
           // Only add locked handler if explicitly marked as locked
-          if (dropdownItem.locked) {
+          // CRITICAL: Use strict equality to prevent issues with truthy non-boolean values
+          if (dropdownItem.locked === true) {
             link.classList.add('locked-link');
             link.style.opacity = '1';
             link.style.cursor = 'pointer';
@@ -1026,7 +1028,9 @@ function updateNavigation() {
         const link = document.createElement('a');
         updateLink(link, item.href);
         link.textContent = item.text;
-        if (item.locked) {
+        // CRITICAL: Use strict equality to prevent issues with truthy non-boolean values
+        // Must match desktop regular items check for consistency
+        if (item.locked === true) {
           link.classList.add('locked-link');
           link.style.opacity = '1';
           link.style.cursor = 'pointer';
