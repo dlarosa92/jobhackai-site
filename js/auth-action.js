@@ -387,7 +387,24 @@ async function handlePasswordResetSubmit(event) {
     
     // Flag success for login page banner and redirect
     try { sessionStorage.setItem('resetPasswordSuccess', '1'); } catch(_) {}
-    setTimeout(() => { window.location.href = '/login.html'; }, 1200);
+    
+    setTimeout(() => {
+      // Close opener window if it exists (tab opened from email link)
+      // Re-evaluate inside setTimeout to avoid race condition where opener could be closed during delay
+      // This improves UX by cleaning up the previous tab after password reset
+      const hasOpener = window.opener && !window.opener.closed;
+      if (hasOpener) {
+        try {
+          window.opener.close();
+        } catch (e) {
+          console.warn('Could not close opener window:', e);
+        }
+      }
+      
+      // Redirect to login page
+      // Use replace to avoid adding to browser history (prevents back navigation to expired reset page)
+      window.location.replace('/login.html');
+    }, 1200);
     
   } catch (error) {
     console.error('Password reset failed:', error);
