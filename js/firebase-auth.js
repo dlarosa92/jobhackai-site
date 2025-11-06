@@ -59,7 +59,8 @@ async function fetchPlanDirectFromKV() {
     console.log(`📊 fetchPlanDirectFromKV: API returned plan="${data?.plan}"`);
     return data?.plan || null;
   } catch (e) {
-    console.warn('❌ Direct KV fetch failed:', e);
+    // KV fetch failed - this is non-critical, will fallback to other sources
+    console.log('ℹ️ Direct KV fetch unavailable, will use fallback:', e.message || 'network error');
     return null;
   }
 }
@@ -305,18 +306,29 @@ class AuthManager {
             actualPlan = kvPlan;
             console.log('✅ Retrieved user plan from KV:', actualPlan);
           } else {
-            console.log('⚠️ KV fetch failed, falling back to Firestore/local storage');
+            // KV fetch returned null or 'free' - try Firestore/local storage fallback
             const profileResult = await UserProfileManager.getProfile(user.uid);
             if (profileResult.success && profileResult.profile) {
               actualPlan = profileResult.profile.plan || 'free';
               console.log('✅ Retrieved user plan from Firestore (KV fallback):', actualPlan);
+            } else if (profileResult.isPermissionError) {
+              // Firestore permission error - use local storage fallback silently
+              const userRecord = UserDatabase.getUser(user.email);
+              if (userRecord && userRecord.plan) {
+                actualPlan = userRecord.plan;
+                console.log('✅ Retrieved user plan from local storage (Firestore unavailable):', actualPlan);
+              } else {
+                actualPlan = 'free';
+                console.log('ℹ️ Using default plan (KV/Firestore unavailable, no local storage found):', actualPlan);
+              }
             } else {
               const userRecord = UserDatabase.getUser(user.email);
-              if (userRecord) {
-                actualPlan = userRecord.plan || 'free';
-                console.log('✅ Retrieved user plan from local database (Firestore fallback):', actualPlan);
+              if (userRecord && userRecord.plan) {
+                actualPlan = userRecord.plan;
+                console.log('✅ Retrieved user plan from local database:', actualPlan);
               } else {
-                console.log('⚠️ All plan sources failed, defaulting to free');
+                actualPlan = 'free';
+                console.log('ℹ️ Using default plan (all sources unavailable):', actualPlan);
                 // FIX: Add delayed retry for plan reconciliation
                 console.log('🔄 Scheduling delayed plan reconciliation in 5 seconds...');
                 setTimeout(async () => {
@@ -511,11 +523,20 @@ class AuthManager {
         actualPlan = kvPlan;
         console.log('✅ Retrieved user plan from KV during sign-in:', actualPlan);
       } else {
-        console.log('⚠️ KV fetch failed during sign-in, falling back to Firestore/local storage');
+        // KV fetch returned null or 'free' - try Firestore/local storage fallback
         const profileResult = await UserProfileManager.getProfile(user.uid);
         if (profileResult.success && profileResult.profile) {
           actualPlan = profileResult.profile.plan || 'free';
           console.log('✅ Retrieved user plan from Firestore during sign-in (KV fallback):', actualPlan);
+        } else if (profileResult.isPermissionError) {
+          // Firestore permission error - use local storage fallback silently
+          const userRecord = UserDatabase.getUser(user.email);
+          if (userRecord && userRecord.plan) {
+            actualPlan = userRecord.plan;
+            console.log('✅ Retrieved user plan from local storage during sign-in:', actualPlan);
+          } else {
+            actualPlan = 'free';
+          }
         } else {
           console.warn('⚠️ Could not retrieve profile from Firestore during sign-in, using local data');
           // Fallback to local database if Firestore fails
@@ -607,11 +628,20 @@ class AuthManager {
           actualPlan = kvPlan;
           console.log('✅ Retrieved user plan from KV during Google sign-in:', actualPlan);
         } else {
-          console.log('⚠️ KV fetch failed during Google sign-in, falling back to Firestore');
+          // KV fetch returned null or 'free' - try Firestore/local storage fallback
           const profileResult = await UserProfileManager.getProfile(user.uid);
           if (profileResult.success && profileResult.profile) {
             actualPlan = profileResult.profile.plan || 'free';
             console.log('✅ Retrieved user plan from Firestore during Google sign-in (KV fallback):', actualPlan);
+          } else if (profileResult.isPermissionError) {
+            // Firestore permission error - use local storage fallback silently
+            const userRecord = UserDatabase.getUser(user.email);
+            if (userRecord && userRecord.plan) {
+              actualPlan = userRecord.plan;
+              console.log('✅ Retrieved user plan from local storage during Google sign-in:', actualPlan);
+            } else {
+              actualPlan = 'free';
+            }
           } else {
             console.log('⚠️ All plan sources failed during Google sign-in, defaulting to free');
           }

@@ -15,9 +15,20 @@ import {
 } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-firestore.js";
 
 import { firebaseConfig } from './firebase-config.js';
+import { getApps } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-app.js";
 
-// Initialize Firestore
-const app = initializeApp(firebaseConfig);
+// Use existing Firebase app instance if available to prevent multiple initializations
+// This prevents conflicts between firebase-config.js and firestore-profiles.js
+let app;
+const existingApps = getApps();
+if (existingApps.length > 0) {
+  app = existingApps[0];
+  console.log('✅ Using existing Firebase app instance for Firestore');
+} else {
+  app = initializeApp(firebaseConfig);
+  console.log('✅ Initialized new Firebase app instance for Firestore');
+}
+
 const db = getFirestore(app);
 
 /**
@@ -104,7 +115,14 @@ class UserProfileManager {
         return { success: false, error: 'Profile not found' };
       }
     } catch (error) {
-      console.error('❌ Error getting user profile:', error);
+      // Handle permission errors gracefully - these are expected if Firestore rules aren't configured
+      if (error.code === 'permission-denied' || 
+          error.message?.includes('permission') || 
+          error.message?.includes('Missing or insufficient')) {
+        console.log('ℹ️ Firestore permission denied (expected if security rules not configured) - profile may not exist:', uid);
+        return { success: false, error: 'Permission denied', code: 'permission-denied', isPermissionError: true };
+      }
+      console.warn('⚠️ Error getting user profile (non-critical):', error.message);
       return { success: false, error: error.message };
     }
   }
@@ -193,7 +211,14 @@ class UserProfileManager {
       
       return { success: true };
     } catch (error) {
-      console.error('❌ Error updating last login:', error);
+      // Handle permission errors silently - this is non-critical and expected if rules aren't configured
+      if (error.code === 'permission-denied' || 
+          error.message?.includes('permission') || 
+          error.message?.includes('Missing or insufficient')) {
+        // Don't log this as an error - it's expected behavior when Firestore rules aren't set up
+        return { success: false, error: 'Permission denied (non-blocking)', code: 'permission-denied', nonBlocking: true };
+      }
+      console.warn('⚠️ Error updating last login (non-critical):', error.message);
       return { success: false, error: error.message };
     }
   }
