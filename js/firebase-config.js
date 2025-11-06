@@ -22,7 +22,22 @@ const firebaseConfig = {
 
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
-const analytics = getAnalytics(app);
+
+// Conditionally initialize Analytics only in browser environment
+let analytics = null;
+if (typeof window !== 'undefined') {
+  try {
+    // Only initialize if measurementId is valid
+    if (firebaseConfig.measurementId) {
+      analytics = getAnalytics(app);
+      console.log('✅ Firebase Analytics initialized');
+    }
+  } catch (error) {
+    // Analytics initialization failed - log but don't block app
+    console.log('ℹ️ Firebase Analytics not available:', error.message);
+    analytics = null;
+  }
+}
 
 // Export for use across the site (and future Wix integration)
 export { app, analytics, firebaseConfig };

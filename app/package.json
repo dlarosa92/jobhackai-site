@@ -10,7 +10,7 @@
     "start": "next start",
     "export": "next build && next export",
     "deploy": "wrangler pages deploy out",
-    "deploy:qa": "wrangler pages deploy out --branch dev0",
+    "deploy:qa": "wrangler pages deploy out --project-name=jobhackai-app-dev --branch dev0",
     "deploy:prod": "wrangler pages deploy out --branch main"
   },
   "dependencies": {

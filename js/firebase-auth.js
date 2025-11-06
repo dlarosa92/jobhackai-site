@@ -59,7 +59,8 @@ async function fetchPlanDirectFromKV() {
     console.log(`📊 fetchPlanDirectFromKV: API returned plan="${data?.plan}"`);
     return data?.plan || null;
   } catch (e) {
-    console.warn('❌ Direct KV fetch failed:', e);
+    // KV fetch failed - this is non-critical, will fallback to other sources
+    console.log('ℹ️ Direct KV fetch unavailable, will use fallback:', e.message || 'network error');
     return null;
   }
 }
@@ -180,6 +181,35 @@ class AuthManager {
     
     onAuthStateChanged(auth, async (user) => {
       console.log('🔥 Firebase auth state changed:', user ? `User: ${user.email}` : 'No user');
+      
+      // ✅ CRITICAL: Dispatch firebase-auth-ready event FIRST (before logout-intent check)
+      // This ensures pages waiting for this event (like navigation.js, account-setting.html) 
+      // don't hang indefinitely during logout. The event represents "auth state is ready",
+      // not necessarily "user is logged in".
+      if (!authReadyDispatched) {
+        authReadyDispatched = true;
+        console.log('🔥 Dispatching firebase-auth-ready event');
+        // Dispatch event with user = null if logout-intent is detected, otherwise use actual user
+        const logoutIntent = sessionStorage.getItem('logout-intent');
+        const eventUser = (logoutIntent === '1' && user) ? null : user;
+        document.dispatchEvent(new CustomEvent("firebase-auth-ready", {
+          detail: { user: eventUser || null }
+        }));
+      }
+      
+      // ✅ CRITICAL: Check for logout-intent before processing user
+      // This prevents race conditions where Firebase auth persistence restores user during logout
+      if (user) {
+        const logoutIntent = sessionStorage.getItem('logout-intent');
+        if (logoutIntent === '1') {
+          console.log('🚫 Logout in progress, ignoring auth state change and preventing user restoration');
+          // Don't set currentUser, don't update localStorage, just return
+          // Event already dispatched above, so pages can proceed
+          return;
+        }
+      }
+      
+      // Only set currentUser if logout-intent check passed
       this.currentUser = user;
       // Update the exposed currentUser property
       if (window.FirebaseAuthManager) {
@@ -187,16 +217,8 @@ class AuthManager {
         console.log('🔥 Updated window.FirebaseAuthManager.currentUser:', user ? `User: ${user.email}` : 'null');
       }
       
-      // Dispatch firebase-auth-ready event on first auth state change
-      if (!authReadyDispatched) {
-        authReadyDispatched = true;
-        console.log('🔥 Dispatching firebase-auth-ready event');
-        document.dispatchEvent(new CustomEvent("firebase-auth-ready", {
-          detail: { user: user || null }
-        }));
-      }
-      
       if (user) {
+        
         // ✅ CRITICAL: Set localStorage IMMEDIATELY (sync, before any await)
         // This prevents race conditions with static-auth-guard.js
         localStorage.setItem('user-authenticated', 'true');
@@ -220,9 +242,9 @@ class AuthManager {
         };
         
         
-        // Sync with Firestore (update last login)
-        UserProfileManager.updateLastLogin(user.uid).catch(err => {
-          console.warn('Could not update last login in Firestore:', err);
+        // Sync with Firestore (update last login) - non-blocking, errors handled internally
+        UserProfileManager.updateLastLogin(user.uid).catch(() => {
+          // Error already handled in updateLastLogin - silence this to reduce console noise
         });
         
         // CRITICAL: Prioritize fresh plan selections over existing plans
@@ -284,18 +306,29 @@ class AuthManager {
             actualPlan = kvPlan;
             console.log('✅ Retrieved user plan from KV:', actualPlan);
           } else {
-            console.log('⚠️ KV fetch failed, falling back to Firestore/local storage');
+            // KV fetch returned null or 'free' - try Firestore/local storage fallback
             const profileResult = await UserProfileManager.getProfile(user.uid);
             if (profileResult.success && profileResult.profile) {
               actualPlan = profileResult.profile.plan || 'free';
               console.log('✅ Retrieved user plan from Firestore (KV fallback):', actualPlan);
+            } else if (profileResult.isPermissionError) {
+              // Firestore permission error - use local storage fallback silently
+              const userRecord = UserDatabase.getUser(user.email);
+              if (userRecord && userRecord.plan) {
+                actualPlan = userRecord.plan;
+                console.log('✅ Retrieved user plan from local storage (Firestore unavailable):', actualPlan);
+              } else {
+                actualPlan = 'free';
+                console.log('ℹ️ Using default plan (KV/Firestore unavailable, no local storage found):', actualPlan);
+              }
             } else {
               const userRecord = UserDatabase.getUser(user.email);
-              if (userRecord) {
-                actualPlan = userRecord.plan || 'free';
-                console.log('✅ Retrieved user plan from local database (Firestore fallback):', actualPlan);
+              if (userRecord && userRecord.plan) {
+                actualPlan = userRecord.plan;
+                console.log('✅ Retrieved user plan from local database:', actualPlan);
               } else {
-                console.log('⚠️ All plan sources failed, defaulting to free');
+                actualPlan = 'free';
+                console.log('ℹ️ Using default plan (all sources unavailable):', actualPlan);
                 // FIX: Add delayed retry for plan reconciliation
                 console.log('🔄 Scheduling delayed plan reconciliation in 5 seconds...');
                 setTimeout(async () => {
@@ -490,11 +523,20 @@ class AuthManager {
         actualPlan = kvPlan;
         console.log('✅ Retrieved user plan from KV during sign-in:', actualPlan);
       } else {
-        console.log('⚠️ KV fetch failed during sign-in, falling back to Firestore/local storage');
+        // KV fetch returned null or 'free' - try Firestore/local storage fallback
         const profileResult = await UserProfileManager.getProfile(user.uid);
         if (profileResult.success && profileResult.profile) {
           actualPlan = profileResult.profile.plan || 'free';
           console.log('✅ Retrieved user plan from Firestore during sign-in (KV fallback):', actualPlan);
+        } else if (profileResult.isPermissionError) {
+          // Firestore permission error - use local storage fallback silently
+          const userRecord = UserDatabase.getUser(user.email);
+          if (userRecord && userRecord.plan) {
+            actualPlan = userRecord.plan;
+            console.log('✅ Retrieved user plan from local storage during sign-in:', actualPlan);
+          } else {
+            actualPlan = 'free';
+          }
         } else {
           console.warn('⚠️ Could not retrieve profile from Firestore during sign-in, using local data');
           // Fallback to local database if Firestore fails
@@ -586,11 +628,20 @@ class AuthManager {
           actualPlan = kvPlan;
           console.log('✅ Retrieved user plan from KV during Google sign-in:', actualPlan);
         } else {
-          console.log('⚠️ KV fetch failed during Google sign-in, falling back to Firestore');
+          // KV fetch returned null or 'free' - try Firestore/local storage fallback
           const profileResult = await UserProfileManager.getProfile(user.uid);
           if (profileResult.success && profileResult.profile) {
             actualPlan = profileResult.profile.plan || 'free';
             console.log('✅ Retrieved user plan from Firestore during Google sign-in (KV fallback):', actualPlan);
+          } else if (profileResult.isPermissionError) {
+            // Firestore permission error - use local storage fallback silently
+            const userRecord = UserDatabase.getUser(user.email);
+            if (userRecord && userRecord.plan) {
+              actualPlan = userRecord.plan;
+              console.log('✅ Retrieved user plan from local storage during Google sign-in:', actualPlan);
+            } else {
+              actualPlan = 'free';
+            }
           } else {
             console.log('⚠️ All plan sources failed during Google sign-in, defaulting to free');
           }
@@ -667,6 +718,9 @@ class AuthManager {
       localStorage.removeItem('user-plan');
       localStorage.removeItem('user-email');
       localStorage.setItem('user-authenticated', 'false');
+      // Clear any pending plan selections from both storages
+      try { sessionStorage.removeItem('selectedPlan'); } catch (_) {}
+      try { localStorage.removeItem('selectedPlan'); } catch (_) {}
 
       // Remove Firebase SDK cached user keys to avoid automatic re-login from persistence
       try {
@@ -760,11 +814,32 @@ class AuthManager {
     const startTime = Date.now();
     console.log('🔥 waitForAuthReady started, currentUser:', this.currentUser);
     
+    // Check logout-intent immediately - if logout is in progress, return null
+    const logoutIntent = sessionStorage.getItem('logout-intent');
+    if (logoutIntent === '1') {
+      console.log('🚫 Logout in progress, waitForAuthReady returning null');
+      return null;
+    }
+    
     while (!this.currentUser && (Date.now() - startTime) < timeoutMs) {
+      // Check logout-intent on each iteration
+      const logoutIntentCheck = sessionStorage.getItem('logout-intent');
+      if (logoutIntentCheck === '1') {
+        console.log('🚫 Logout in progress during wait, returning null');
+        return null;
+      }
+      
       await new Promise(resolve => setTimeout(resolve, 100));
       if ((Date.now() - startTime) % 1000 < 100) { // Log every second
         console.log('🔥 waitForAuthReady waiting... currentUser:', this.currentUser);
       }
+    }
+    
+    // Final check before returning
+    const finalLogoutIntent = sessionStorage.getItem('logout-intent');
+    if (finalLogoutIntent === '1') {
+      console.log('🚫 Logout in progress, waitForAuthReady returning null (final check)');
+      return null;
     }
     
     console.log('🔥 waitForAuthReady finished, currentUser:', this.currentUser);
