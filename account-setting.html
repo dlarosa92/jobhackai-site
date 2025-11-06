@@ -12,20 +12,90 @@
   </style>
   <script src="js/static-auth-guard.js?v=20251007-2"></script>
   <script>
-    document.addEventListener("firebase-auth-ready", function () {
+    // Single consolidated auth check - wait for firebase-auth-ready event
+    let authCheckComplete = false;
+    document.addEventListener("firebase-auth-ready", function (event) {
+      if (authCheckComplete) return; // Prevent duplicate checks
+      authCheckComplete = true;
+      
       const mgr = window.FirebaseAuthManager;
       const user = mgr ? mgr.getCurrentUser() : null;
+      
+      // Check if user is authenticated via multiple methods
+      const hasLocalStorageAuth = localStorage.getItem('user-authenticated') === 'true' && !!localStorage.getItem('user-email');
+      
+      if (!user && !hasLocalStorageAuth) {
+        console.log('🔒 No authenticated user found, redirecting to login');
+        window.location.href = "/login.html";
+        return;
+      }
+      
+      // If we have localStorage auth but no Firebase user yet, wait a bit more
+      if (!user && hasLocalStorageAuth) {
+        console.log('⏳ Waiting for Firebase auth to sync...');
+        setTimeout(() => {
+          const retryUser = mgr ? mgr.getCurrentUser() : null;
+          if (!retryUser) {
+            console.log('🔒 Firebase auth not available after wait, redirecting to login');
+            window.location.href = "/login.html";
+            return;
+          }
+          checkEmailVerification(retryUser);
+        }, 2000);
+        return;
+      }
+      
+      checkEmailVerification(user);
+    });
+    
+    function checkEmailVerification(user) {
       if (!user) {
         window.location.href = "/login.html";
         return;
       }
-      if (!user.emailVerified) {
-        window.location.href = "/verify-email.html?email=" + encodeURIComponent(user.email || "");
-        return;
+      
+      // Reload user to get latest verification status
+      user.reload().then(() => {
+        if (!user.emailVerified) {
+          console.log('📧 User email not verified, redirecting to verify page');
+          window.location.href = "/verify-email.html?email=" + encodeURIComponent(user.email || "");
+          return;
+        }
+        // user is verified, show content
+        console.log('✅ User authenticated and verified, showing account settings');
+        document.body.classList.remove("account-protected");
+      }).catch(() => {
+        // If reload fails, check stored verification status
+        if (!user.emailVerified) {
+          window.location.href = "/verify-email.html?email=" + encodeURIComponent(user.email || "");
+          return;
+        }
+        document.body.classList.remove("account-protected");
+      });
+    }
+    
+    // Fallback: If firebase-auth-ready doesn't fire within 10 seconds, check manually
+    setTimeout(() => {
+      if (!authCheckComplete) {
+        console.log('⏰ Firebase auth ready event timeout, checking manually');
+        authCheckComplete = true;
+        const mgr = window.FirebaseAuthManager;
+        const user = mgr ? mgr.getCurrentUser() : null;
+        const hasLocalStorageAuth = localStorage.getItem('user-authenticated') === 'true' && !!localStorage.getItem('user-email');
+        
+        if (!user && !hasLocalStorageAuth) {
+          console.log('🔒 Manual check: No auth found, redirecting to login');
+          window.location.href = "/login.html";
+        } else if (user) {
+          checkEmailVerification(user);
+        } else {
+          // Has localStorage auth but no Firebase user - redirect to login to re-auth
+          console.log('🔒 Manual check: localStorage auth but no Firebase user, redirecting');
+          window.location.href = "/login.html";
+        }
       }
-      // user is verified, show content
-      document.body.classList.remove("account-protected");
-    });
+    }, 10000);
+    
     // default: hide
     document.body.classList.add("account-protected");
   </script>
@@ -339,48 +409,7 @@
       </div>
     </div>
   </footer>
-  <script>
-    // --- AUTHENTICATION CHECK ---
-    function checkAuthentication() {
-      const isAuthenticated = localStorage.getItem('user-authenticated') === 'true' && !!localStorage.getItem('user-email');
-      const mainContent = document.querySelector('main');
-      
-      if (!isAuthenticated) {
-        mainContent.innerHTML = `
-          <div style="max-width: 600px; margin: 4rem auto; text-align: center; padding: 2rem;">
-            <div style="font-size: 4rem; margin-bottom: 1rem;">🔒</div>
-            <h1 style="font-size: 2rem; font-weight: 700; color: var(--color-text-main); margin-bottom: 1rem;">
-              Login Required
-            </h1>
-            <p style="font-size: 1.1rem; color: var(--color-text-secondary); margin-bottom: 2rem; line-height: 1.6;">
-              You need to be logged in to access your account settings. 
-              Please sign in to manage your account.
-            </p>
-            <div style="display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap;">
-              <a href="login.html" class="btn-primary" style="text-decoration: none;">
-                Sign In
-              </a>
-              <a href="pricing-a.html" class="btn-outline" style="text-decoration: none;">
-                View Pricing
-              </a>
-            </div>
-          </div>
-        `;
-        return false;
-      }
-      return true;
-    }
-
-    // --- Initialize on load ---
-    document.addEventListener('DOMContentLoaded', function() {
-      // Check authentication first
-      if (!checkAuthentication()) {
-        return; // Stop here if not authenticated
-      }
-      
-      // Continue with existing account settings logic
-    });
-  </script>
+  <!-- Removed duplicate checkAuthentication - now handled by firebase-auth-ready event -->
   <!-- Load navigation system -->
   <script src="js/navigation.js?v=20251007-2"></script>
   <script src="js/universal-logout.js?v=20251007-2"></script>
@@ -408,29 +437,70 @@
     // --- BILLING PORTAL FUNCTION ---
     async function openBillingPortal() {
       try {
-        const idToken = await window.FirebaseAuthManager?.getCurrentUser?.()?.getIdToken?.();
-        if (!idToken) { 
-          alert('Please log in again.'); 
-          return; 
+        const user = window.FirebaseAuthManager?.getCurrentUser?.();
+        if (!user) {
+          alert('Please log in again.');
+          return;
         }
+
+        const idToken = await user.getIdToken();
+        if (!idToken) {
+          alert('Unable to get authentication token. Please log in again.');
+          return;
+        }
+
+        console.log('🔵 [ACCOUNT-SETTINGS] Opening billing portal...');
         
         const res = await fetch('/api/billing-portal', {
           method: 'POST',
-          headers: { 
-            'Content-Type': 'application/json', 
-            Authorization: `Bearer ${idToken}` 
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${idToken}`
           }
         });
-        
-        const data = await res.json();
+
+        // Handle 404 specifically - likely deployment issue
+        if (res.status === 404) {
+          console.error('❌ [ACCOUNT-SETTINGS] Billing portal endpoint not found (404)');
+          alert('Billing portal service is not available. Please contact support or try again later.');
+          return;
+        }
+
+        // Handle non-JSON responses
+        let data;
+        try {
+          data = await res.json();
+        } catch (jsonError) {
+          console.error('❌ [ACCOUNT-SETTINGS] Failed to parse response:', jsonError);
+          alert(`Error: ${res.status} ${res.statusText}. Please try again or contact support.`);
+          return;
+        }
+
         if (data.ok && data.url) {
+          console.log('✅ [ACCOUNT-SETTINGS] Redirecting to billing portal');
           window.location.href = data.url; // Redirect to Stripe portal
         } else {
-          alert('Unable to open billing portal. Please try again.');
+          const errorMsg = data.error || 'Unknown error';
+          console.error('❌ [ACCOUNT-SETTINGS] Billing portal error:', errorMsg);
+          
+          // Provide specific error messages
+          if (errorMsg.includes('No customer')) {
+            alert('No subscription found. Please subscribe to a plan first.');
+          } else if (errorMsg.includes('unauthorized')) {
+            alert('Your session has expired. Please log in again.');
+          } else {
+            alert(`Unable to open billing portal: ${errorMsg}. Please try again or contact support.`);
+          }
         }
       } catch (error) {
-        console.error('Billing portal error:', error);
-        alert('Unable to open billing portal. Please try again.');
+        console.error('❌ [ACCOUNT-SETTINGS] Billing portal exception:', error);
+        
+        // Provide more specific error messages
+        if (error.message?.includes('Failed to fetch')) {
+          alert('Network error. Please check your internet connection and try again.');
+        } else {
+          alert(`Unable to open billing portal: ${error.message || 'Unknown error'}. Please try again or contact support.`);
+        }
       }
     }
     
@@ -563,45 +633,117 @@
       // Show skeleton immediately
       document.getElementById('profile-skeleton').style.display = 'block';
       
-      // Wait for Firebase auth
+      // Wait for Firebase auth with longer timeout and better checks
       let user = window.FirebaseAuthManager?.getCurrentUser?.();
-      if (!user) {
-        // Wait up to 3s for Firebase to initialize
-        await new Promise(r => setTimeout(r, 3000));
-        user = window.FirebaseAuthManager?.getCurrentUser?.();
+      
+      // Also check localStorage as fallback
+      const hasLocalStorageAuth = localStorage.getItem('user-authenticated') === 'true' && !!localStorage.getItem('user-email');
+      
+      if (!user && !hasLocalStorageAuth) {
+        // No auth at all - redirect handled by static-auth-guard or firebase-auth-ready handler
+        console.log('⏳ Waiting for auth...');
+        // Don't redirect here - let the firebase-auth-ready handler do it
+        return;
+      }
+      
+      // If we have localStorage auth but no Firebase user, wait a bit more for Firebase to sync
+      if (!user && hasLocalStorageAuth) {
+        console.log('⏳ Waiting for Firebase auth to sync with localStorage...');
+        let retries = 0;
+        const maxRetries = 10; // 10 * 500ms = 5 seconds
+        while (!user && retries < maxRetries) {
+          await new Promise(r => setTimeout(r, 500));
+          user = window.FirebaseAuthManager?.getCurrentUser?.();
+          retries++;
+        }
+        
         if (!user) {
-          window.location.href = 'login.html';
-          return;
+          console.log('⚠️ Firebase auth not synced after wait, but localStorage has auth - proceeding anyway');
+          // Don't redirect - let the page try to load with localStorage auth
+          // The firebase-auth-ready handler will handle redirect if needed
         }
       }
       
+      // If still no user after all checks, firebase-auth-ready handler will redirect
+      if (!user && !hasLocalStorageAuth) {
+        return;
+      }
+      
       // Load real user data
+      // Ensure we have a user object before proceeding
+      if (!user) {
+        console.warn('⚠️ No user object available, cannot load profile');
+        // Fallback to localStorage email if available
+        const email = localStorage.getItem('user-email') || 'User';
+        document.getElementById('profile-name').textContent = 'User';
+        document.getElementById('profile-email').textContent = email;
+        await renderBillingSection();
+        document.getElementById('profile-skeleton').style.display = 'none';
+        document.getElementById('profile-content').style.display = 'block';
+        return;
+      }
+      
       try {
         const profileResult = await UserProfileManager.getProfile(user.uid);
-        const profile = profileResult.profile || {};
         
-        const userName = profile.displayName || 
-          `${profile.firstName || ''} ${profile.lastName || ''}`.trim() || 
-          user.displayName ||
-          'User';
+        // Handle Firestore permission errors gracefully - don't block page access
+        if (profileResult.isPermissionError) {
+          console.log('ℹ️ Firestore permission denied - using Firebase user data only');
+          // Permission error is non-critical, use Firebase user data
+          const userName = user.displayName || 
+            user.email?.split('@')[0] ||
+            'User';
+          
+          document.getElementById('profile-name').textContent = userName;
+          document.getElementById('profile-email').textContent = user.email || 'user@example.com';
+        } else if (profileResult.success && profileResult.profile) {
+          // Profile loaded successfully
+          const profile = profileResult.profile;
+          const userName = profile.displayName || 
+            `${profile.firstName || ''} ${profile.lastName || ''}`.trim() || 
+            user.displayName ||
+            user.email?.split('@')[0] ||
+            'User';
+          
+          document.getElementById('profile-name').textContent = userName;
+          document.getElementById('profile-email').textContent = user.email || 'user@example.com';
+        } else {
+          // Profile not found or failed to load - use Firebase user data
+          console.log('ℹ️ Profile not found or failed to load - using Firebase user data');
+          const userName = user.displayName || 
+            user.email?.split('@')[0] ||
+            'User';
+          
+          document.getElementById('profile-name').textContent = userName;
+          document.getElementById('profile-email').textContent = user.email || 'user@example.com';
+        }
         
-        document.getElementById('profile-name').textContent = userName;
-        document.getElementById('profile-email').textContent = user.email || 'user@example.com';
-        
-        // Render billing section
+        // Render billing section (may also fail with permission errors - that's OK)
         await renderBillingSection();
-
         
         // Hide skeleton, show content
         document.getElementById('profile-skeleton').style.display = 'none';
         document.getElementById('profile-content').style.display = 'block';
       } catch (error) {
-        console.error('Failed to load profile:', error);
-        // Still show content with basic info
-        document.getElementById('profile-name').textContent = user.displayName || 'User';
+        console.error('⚠️ Failed to load profile:', error);
+        // Error loading profile - still show page with basic info
+        // This ensures Firestore permission errors don't block access
+        const userName = user.displayName || 
+          user.email?.split('@')[0] ||
+          'User';
+        
+        document.getElementById('profile-name').textContent = userName;
         document.getElementById('profile-email').textContent = user.email || 'user@example.com';
-        await renderBillingSection();
-
+        
+        // Try to render billing section even if profile failed
+        try {
+          await renderBillingSection();
+        } catch (billingError) {
+          console.warn('⚠️ Billing section also failed:', billingError);
+          // Billing section failure is non-critical
+        }
+        
+        // Always show the page content
         document.getElementById('profile-skeleton').style.display = 'none';
         document.getElementById('profile-content').style.display = 'block';
       }
