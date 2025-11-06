@@ -879,6 +879,22 @@ function updateNavigation() {
           const link = document.createElement('a');
           updateLink(link, dropdownItem.href);
           link.textContent = dropdownItem.text;
+          // Only add locked handler if explicitly marked as locked
+          // Dropdown items should inherit unlocked state from parent plan config
+          // CRITICAL: Use strict equality to prevent issues with truthy non-boolean values
+          if (dropdownItem.locked === true) {
+            link.classList.add('locked-link');
+            link.style.opacity = '1';
+            link.style.cursor = 'pointer';
+            link.addEventListener('click', function(e) {
+              e.preventDefault();
+              navLog('info', 'Locked dropdown link clicked', { text: dropdownItem.text, href: dropdownItem.href });
+              showUpgradeModal('essential');
+            });
+            link.title = 'Upgrade your plan to unlock this feature.';
+          }
+          // IMPORTANT: Do not add any other click handlers to dropdown links
+          // They should navigate normally unless explicitly locked
           dropdownMenu.appendChild(link);
         });
 
@@ -905,18 +921,21 @@ function updateNavigation() {
         const link = document.createElement('a');
         updateLink(link, item.href);
         link.textContent = item.text;
-        if (item.locked) {
+        // CRITICAL: Only add locked handler if explicitly marked as locked in config
+        // This prevents incorrect upgrade modals from appearing
+        if (item.locked === true) {
           // Do not fade or reduce opacity; make it a clear button-like link
           link.classList.add('locked-link');
           link.style.opacity = '1';
           link.style.cursor = 'pointer';
           link.addEventListener('click', function(e) {
             e.preventDefault();
-            navLog('info', 'Locked link clicked', { text: item.text, href: item.href });
+            navLog('info', 'Locked link clicked', { text: item.text, href: item.href, plan: currentPlan });
             showUpgradeModal('essential');
           });
           link.title = 'Upgrade your plan to unlock this feature.';
         }
+        // IMPORTANT: Do not add any other click handlers - links should navigate normally unless locked
         navLinks.appendChild(link);
         // Removed verbose logging to prevent console spam
       }
@@ -986,6 +1005,20 @@ function updateNavigation() {
           const link = document.createElement('a');
           updateLink(link, dropdownItem.href);
           link.textContent = dropdownItem.text;
+          // Only add locked handler if explicitly marked as locked
+          // CRITICAL: Use strict equality to prevent issues with truthy non-boolean values
+          if (dropdownItem.locked === true) {
+            link.classList.add('locked-link');
+            link.style.opacity = '1';
+            link.style.cursor = 'pointer';
+            link.addEventListener('click', function(e) {
+              e.preventDefault();
+              navLog('info', 'Mobile locked dropdown link clicked', { text: dropdownItem.text, href: dropdownItem.href });
+              showUpgradeModal('essential');
+            });
+            link.title = 'Upgrade your plan to unlock this feature.';
+          }
+          // IMPORTANT: Do not add any other click handlers to mobile dropdown links
           submenu.appendChild(link);
         });
         group.appendChild(submenu);
@@ -995,7 +1028,9 @@ function updateNavigation() {
         const link = document.createElement('a');
         updateLink(link, item.href);
         link.textContent = item.text;
-        if (item.locked) {
+        // CRITICAL: Use strict equality to prevent issues with truthy non-boolean values
+        // Must match desktop regular items check for consistency
+        if (item.locked === true) {
           link.classList.add('locked-link');
           link.style.opacity = '1';
           link.style.cursor = 'pointer';
