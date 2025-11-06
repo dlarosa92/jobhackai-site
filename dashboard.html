@@ -1096,58 +1096,38 @@
           }
           featuresHtml += `<div class="usage-indicator">${usageText}${tooltip}</div>`;
         } else if (isUnlocked && feature.key === 'feedback') {
-          // Resume Feedback: link to feedback page (only if not free tier)
-          if (user.plan === 'free') {
-            // Free tier: show upgrade button
-            featuresHtml += `<button class=\"btn-locked\" data-feature-key=\"${feature.key}\"><svg width=\"18\" height=\"18\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"#fff\" stroke-width=\"2\"><rect x=\"3\" y=\"11\" width=\"18\" height=\"8\" rx=\"2\"/><path d=\"M7 11V7a5 5 0 0110 0v4\"/></svg> Upgrade to Unlock</button>`;
-            featuresHtml += `<div class="usage-indicator">Upgrade to Essential or Pro to unlock detailed feedback. <span class="jh-tooltip-trigger" tabindex="0" aria-label="More info" style="margin-left:0.4em;vertical-align:middle;">
+          // Resume Feedback: link to feedback page (unlocked for trial, essential, pro, premium)
+          featuresHtml += `<a href=\"resume-feedback-pro.html\" class=\"btn-primary\">Get Detailed Feedback</a>`;
+          let usageText = '';
+          let tooltip = '';
+          if (user.plan === 'trial') {
+            usageText = '3 feedbacks remaining in your trial.';
+            tooltip = `<span class="jh-tooltip-trigger" tabindex="0" aria-label="More info" style="margin-left:0.4em;vertical-align:middle;">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false" style="vertical-align:middle"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="8"/><line x1="12" y1="12" x2="12" y2="16"/></svg>
-              <span class="jh-tooltip-text">Upgrade to Essential or Pro for detailed feedback.</span>
-            </span></div>`;
-          } else {
-            // Trial/Essential/Pro/Premium: show action button
-            featuresHtml += `<a href=\"resume-feedback-pro.html\" class=\"btn-primary\">Get Detailed Feedback</a>`;
-            let usageText = '';
-            let tooltip = '';
-            if (user.plan === 'trial') {
-              usageText = '3 feedbacks remaining in your trial.';
-              tooltip = `<span class="jh-tooltip-trigger" tabindex="0" aria-label="More info" style="margin-left:0.4em;vertical-align:middle;">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false" style="vertical-align:middle"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="8"/><line x1="12" y1="12" x2="12" y2="16"/></svg>
-                <span class="jh-tooltip-text">You can get up to 3 detailed feedbacks during your trial. Upgrade to Pro for unlimited feedback.</span>
-              </span>`;
-            } else if (user.plan === 'essential') {
-              // For demo, assume 3 left (replace with dynamic count if available)
-              usageText = '3 resume feedbacks left this month.';
-              tooltip = `<span class="jh-tooltip-trigger" tabindex="0" aria-label="More info" style="margin-left:0.4em;vertical-align:middle;">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false" style="vertical-align:middle"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="8"/><line x1="12" y1="12" x2="12" y2="16"/></svg>
-                <span class="jh-tooltip-text">Upgrade to Pro for unlimited feedback.</span>
-              </span>`;
-            }
-            featuresHtml += `<div class="usage-indicator">${usageText}${tooltip}</div>`;
+              <span class="jh-tooltip-text">You can get up to 3 detailed feedbacks during your trial. Upgrade to Pro for unlimited feedback.</span>
+            </span>`;
+          } else if (user.plan === 'essential') {
+            // For demo, assume 3 left (replace with dynamic count if available)
+            usageText = '3 resume feedbacks left this month.';
+            tooltip = `<span class="jh-tooltip-trigger" tabindex="0" aria-label="More info" style="margin-left:0.4em;vertical-align:middle;">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false" style="vertical-align:middle"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="8"/><line x1="12" y1="12" x2="12" y2="16"/></svg>
+              <span class="jh-tooltip-text">Upgrade to Pro for unlimited feedback.</span>
+            </span>`;
           }
+          featuresHtml += `<div class="usage-indicator">${usageText}${tooltip}</div>`;
         } else if (isUnlocked && feature.key === 'interview') {
-          // Interview Questions: link to interview questions page (only if not free tier)
-          if (user.plan === 'free') {
-            // Free tier: show upgrade button
-            featuresHtml += `<button class=\"btn-locked\" data-feature-key=\"${feature.key}\"><svg width=\"18\" height=\"18\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"#fff\" stroke-width=\"2\"><rect x=\"3\" y=\"11\" width=\"18\" height=\"8\" rx=\"2\"/><path d=\"M7 11V7a5 5 0 0110 0v4\"/></svg> Upgrade to Unlock</button>`;
-            featuresHtml += `<div class="usage-indicator">Upgrade to Essential or Pro to unlock interview questions. <span class="jh-tooltip-trigger" tabindex="0" aria-label="More info" style="margin-left:0.4em;vertical-align:middle;">
+          // Interview Questions: link to interview questions page (unlocked for trial, essential, pro, premium)
+          featuresHtml += `<a href=\"interview-questions.html\" class=\"btn-primary\">${feature.action}</a>`;
+          let usageText = '';
+          let tooltip = '';
+          if (user.plan === 'trial') {
+            usageText = 'Unlimited interview questions during your trial.';
+            tooltip = `<span class="jh-tooltip-trigger" tabindex="0" aria-label="More info" style="margin-left:0.4em;vertical-align:middle;">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false" style="vertical-align:middle"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="8"/><line x1="12" y1="12" x2="12" y2="16"/></svg>
-              <span class="jh-tooltip-text">Unlimited interview questions available with Essential or Pro plans.</span>
-            </span></div>`;
-          } else {
-            // Trial/Essential/Pro/Premium: show action button
-            featuresHtml += `<a href=\"interview-questions.html\" class=\"btn-primary\">${feature.action}</a>`;
-            let usageText = '';
-            let tooltip = '';
-            if (user.plan === 'trial') {
-              usageText = 'Unlimited interview questions during your trial.';
-              tooltip = `<span class="jh-tooltip-trigger" tabindex="0" aria-label="More info" style="margin-left:0.4em;vertical-align:middle;">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false" style="vertical-align:middle"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="8"/><line x1="12" y1="12" x2="12" y2="16"/></svg>
-                <span class="jh-tooltip-text">Practice as much as you want during your trial.</span>
-              </span>`;
-            }
-            featuresHtml += `<div class="usage-indicator">${usageText}${tooltip}</div>`;
+              <span class="jh-tooltip-text">Practice as much as you want during your trial.</span>
+            </span>`;
           }
+          featuresHtml += `<div class="usage-indicator">${usageText}${tooltip}</div>`;
         } else if (isUnlocked && feature.key === 'rewriting') {
           // Resume Rewriting: link for Pro and Premium
           featuresHtml += `<a href="resume-feedback-pro.html#rewrite" class="btn-primary">Start Rewriting</a>`;
