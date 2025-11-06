@@ -1096,17 +1096,11 @@
           }
           featuresHtml += `<div class="usage-indicator">${usageText}${tooltip}</div>`;
         } else if (isUnlocked && feature.key === 'feedback') {
-          // Resume Feedback: link to feedback page
+          // Resume Feedback: link to feedback page (unlocked for trial, essential, pro, premium)
           featuresHtml += `<a href=\"resume-feedback-pro.html\" class=\"btn-primary\">Get Detailed Feedback</a>`;
           let usageText = '';
           let tooltip = '';
-          if (user.plan === 'free') {
-            usageText = 'Upgrade to Essential or Pro to unlock detailed feedback.';
-            tooltip = `<span class="jh-tooltip-trigger" tabindex="0" aria-label="More info" style="margin-left:0.4em;vertical-align:middle;">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false" style="vertical-align:middle"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="8"/><line x1="12" y1="12" x2="12" y2="16"/></svg>
-              <span class="jh-tooltip-text">Upgrade to Pro for unlimited feedback.</span>
-            </span>`;
-          } else if (user.plan === 'trial') {
+          if (user.plan === 'trial') {
             usageText = '3 feedbacks remaining in your trial.';
             tooltip = `<span class="jh-tooltip-trigger" tabindex="0" aria-label="More info" style="margin-left:0.4em;vertical-align:middle;">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false" style="vertical-align:middle"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="8"/><line x1="12" y1="12" x2="12" y2="16"/></svg>
@@ -1122,17 +1116,11 @@
           }
           featuresHtml += `<div class="usage-indicator">${usageText}${tooltip}</div>`;
         } else if (isUnlocked && feature.key === 'interview') {
-          // Interview Questions: link to interview questions page
+          // Interview Questions: link to interview questions page (unlocked for trial, essential, pro, premium)
           featuresHtml += `<a href=\"interview-questions.html\" class=\"btn-primary\">${feature.action}</a>`;
           let usageText = '';
           let tooltip = '';
-          if (user.plan === 'free') {
-            usageText = 'Upgrade to Essential or Pro to unlock interview questions.';
-            tooltip = `<span class="jh-tooltip-trigger" tabindex="0" aria-label="More info" style="margin-left:0.4em;vertical-align:middle;">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false" style="vertical-align:middle"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="8"/><line x1="12" y1="12" x2="12" y2="16"/></svg>
-              <span class="jh-tooltip-text">Practice as much as you want during your trial.</span>
-            </span>`;
-          } else if (user.plan === 'trial') {
+          if (user.plan === 'trial') {
             usageText = 'Unlimited interview questions during your trial.';
             tooltip = `<span class="jh-tooltip-trigger" tabindex="0" aria-label="More info" style="margin-left:0.4em;vertical-align:middle;">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false" style="vertical-align:middle"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="8"/><line x1="12" y1="12" x2="12" y2="16"/></svg>
@@ -1165,7 +1153,7 @@
           // Priority Review: icon and text for Premium
           featuresHtml += `<div style=\"display:flex;align-items:center;gap:0.6rem;margin:0.7rem 0 0.2rem 0;\"><svg width=\"22\" height=\"22\" fill=\"none\" stroke=\"#00E676\" stroke-width=\"2\" viewBox=\"0 0 24 24\"><circle cx=\"12\" cy=\"12\" r=\"10\"/><path d=\"M12 8v4l2.5 2.5\"/></svg><span style=\"font-weight:600;color:#00C853;\">All your AI-generated content will get priority review.</span></div>`;
         } else {
-          featuresHtml += `<button class=\"btn-locked\"><svg width=\"18\" height=\"18\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"#fff\" stroke-width=\"2\"><rect x=\"3\" y=\"11\" width=\"18\" height=\"8\" rx=\"2\"/><path d=\"M7 11V7a5 5 0 0110 0v4\"/></svg> ${feature.action}</button>`;
+          featuresHtml += `<button class=\"btn-locked\" data-feature-key=\"${feature.key}\"><svg width=\"18\" height=\"18\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"#fff\" stroke-width=\"2\"><rect x=\"3\" y=\"11\" width=\"18\" height=\"8\" rx=\"2\"/><path d=\"M7 11V7a5 5 0 0110 0v4\"/></svg> ${feature.action}</button>`;
         }
         featuresHtml += `</div>`;
         if (isUnlocked && (user.plan === 'trial' || user.plan === 'essential' || user.plan === 'pro' || user.plan === 'premium')) {
@@ -1303,6 +1291,85 @@
         });
       }
       // NOTE: Resume Feedback page should read the last uploaded resume from localStorage (key: 'lastUploadedResume') if present.
+      
+      // --- UPGRADE BUTTON HANDLERS ---
+      // Map features to minimum required plan (aligned with navigation.js PLANS config)
+      function getMinPlanForFeature(featureKey) {
+        const featureToPlanMap = {
+          'feedback': 'essential',    // Essential+ features (trial, essential, pro, premium)
+          'interview': 'essential',   // Essential+ features (trial, essential, pro, premium)
+          'rewriting': 'pro',        // Pro+ features
+          'coverLetter': 'pro',       // Pro+ features
+          'mockInterview': 'pro',     // Pro+ features
+          'linkedin': 'premium',      // Premium only
+          'priorityReview': 'premium' // Premium only
+        };
+        return featureToPlanMap[featureKey] || 'essential';
+      }
+
+      // Handle upgrade button clicks
+      async function handleUpgradeClick(featureKey) {
+        const user = window.FirebaseAuthManager?.getCurrentUser?.();
+        if (!user) {
+          alert('Please log in to upgrade your plan');
+          window.location.href = 'login.html';
+          return;
+        }
+
+        const targetPlan = getMinPlanForFeature(featureKey);
+        console.log(`🔄 [DASHBOARD] User clicked upgrade for ${featureKey}, targeting plan: ${targetPlan}`);
+
+        try {
+          const idToken = await user.getIdToken();
+          if (!idToken) {
+            alert('Please log in to upgrade your plan');
+            window.location.href = 'login.html';
+            return;
+          }
+
+          // Call Stripe checkout API with the target plan
+          const response = await fetch('/api/stripe-checkout', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${idToken}`
+            },
+            body: JSON.stringify({
+              plan: targetPlan
+            })
+          });
+
+          const data = await response.json();
+
+          if (data.ok && data.url) {
+            // Redirect to Stripe Checkout
+            window.location.href = data.url;
+          } else {
+            console.error('❌ [DASHBOARD] Stripe checkout failed:', data.error);
+            alert('Unable to start checkout. Please try again or visit our pricing page.');
+            // Fallback to pricing page
+            window.location.href = `pricing-a.html?plan=${targetPlan}`;
+          }
+        } catch (error) {
+          console.error('❌ [DASHBOARD] Upgrade error:', error);
+          alert('Failed to start upgrade. Please try again.');
+          // Fallback to pricing page
+          window.location.href = `pricing-a.html?plan=${targetPlan}`;
+        }
+      }
+
+      // Attach click handlers to all locked upgrade buttons
+      const lockedButtons = document.querySelectorAll('.btn-locked[data-feature-key]');
+      lockedButtons.forEach(button => {
+        const featureKey = button.getAttribute('data-feature-key');
+        if (featureKey) {
+          button.addEventListener('click', (e) => {
+            e.preventDefault();
+            handleUpgradeClick(featureKey);
+          });
+        }
+      });
+      console.log(`✅ [DASHBOARD] Attached ${lockedButtons.length} upgrade button handlers`);
     }
 
     // Billing portal helper function
