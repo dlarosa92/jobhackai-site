@@ -17,7 +17,14 @@ export async function onRequest(context) {
       hasAuth: !!request.headers.get('authorization')
     });
 
-    const body = await request.json();
+    // Safely parse JSON body
+    let body = null;
+    try {
+      body = await request.json();
+    } catch (parseErr) {
+      console.log('🔴 [CHECKOUT] Invalid JSON body', parseErr?.message || parseErr);
+      return json({ ok: false, error: 'invalid_json' }, 400, origin, env);
+    }
     console.log('🔵 [CHECKOUT] Parsed body', body);
     const { plan } = body || {};
 
@@ -142,7 +149,11 @@ function stripe(env, path, init) {
   const url = `https://api.stripe.com/v1${path}`;
   const headers = new Headers(init?.headers || {});
   headers.set('Authorization', `Bearer ${env.STRIPE_SECRET_KEY}`);
-  return fetch(url, { ...init, headers });
+  // Add a timeout to avoid hanging requests causing upstream 5xx
+  const signal = (typeof AbortSignal !== 'undefined' && AbortSignal.timeout)
+    ? AbortSignal.timeout(15000)
+    : undefined;
+  return fetch(url, { ...init, headers, signal });
 }
 function stripeFormHeaders(env) {
   return { Authorization: `Bearer ${env.STRIPE_SECRET_KEY}`, 'Content-Type': 'application/x-www-form-urlencoded' };
@@ -157,7 +168,14 @@ function corsHeaders(origin, env) {
   const configured = (env && env.FRONTEND_URL) ? env.FRONTEND_URL : null;
   const allowedList = configured ? [configured, ...fallbackOrigins] : fallbackOrigins;
   const allowed = origin && allowedList.includes(origin) ? origin : (configured || 'https://dev.jobhackai.io');
-  return { 'Access-Control-Allow-Origin': allowed, 'Access-Control-Allow-Methods': 'POST,OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type,Authorization,Stripe-Signature,Idempotency-Key', 'Vary': 'Origin', 'Content-Type': 'application/json' };
+  return {
+    'Access-Control-Allow-Origin': allowed,
+    'Access-Control-Allow-Methods': 'POST,OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type,Authorization,Stripe-Signature,Idempotency-Key',
+    'Vary': 'Origin',
+    'Content-Type': 'application/json',
+    'Cache-Control': 'no-store, no-cache, must-revalidate'
+  };
 }
 function json(body, status, origin, env) { return new Response(JSON.stringify(body), { status, headers: corsHeaders(origin, env) }); }
 const kvCusKey = (uid) => `cusByUid:${uid}`;
