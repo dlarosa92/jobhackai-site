@@ -1,4 +1,4 @@
-import { getBearer, verifyFirebaseIdToken } from '../_lib/firebase-auth';
+import { getBearer, verifyFirebaseIdToken } from '../_lib/firebase-auth.js';
 export async function onRequest(context) {
   const { request, env } = context;
   const origin = request.headers.get('Origin') || '';
@@ -20,6 +20,16 @@ export async function onRequest(context) {
     const body = await request.json();
     console.log('🔵 [CHECKOUT] Parsed body', body);
     const { plan } = body || {};
+
+    // Check required environment variables
+    if (!env.FIREBASE_PROJECT_ID) {
+      console.log('🔴 [CHECKOUT] Missing FIREBASE_PROJECT_ID');
+      return json({ ok: false, error: 'Server configuration error' }, 500, origin, env);
+    }
+    if (!env.STRIPE_SECRET_KEY) {
+      console.log('🔴 [CHECKOUT] Missing STRIPE_SECRET_KEY');
+      return json({ ok: false, error: 'Server configuration error' }, 500, origin, env);
+    }
 
     const token = getBearer(request);
     if (!token) {
@@ -94,8 +104,15 @@ export async function onRequest(context) {
     console.log('✅ [CHECKOUT] Session created', { id: s.id, url: s.url });
     return json({ ok: true, url: s.url, sessionId: s.id }, 200, origin, env);
   } catch (e) {
-    console.log('🔴 [CHECKOUT] Exception', e?.message || e);
-    return json({ ok: false, error: e?.message || 'server_error' }, 500, origin, env);
+    const errorMessage = e?.message || String(e) || 'server_error';
+    const errorStack = e?.stack ? String(e.stack).substring(0, 200) : '';
+    console.log('🔴 [CHECKOUT] Exception', {
+      message: errorMessage,
+      stack: errorStack,
+      name: e?.name
+    });
+    // Return a user-friendly error message (don't expose stack traces)
+    return json({ ok: false, error: errorMessage }, 500, origin, env);
   }
 }
 
