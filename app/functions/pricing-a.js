@@ -36,16 +36,22 @@ export async function onRequest(context) {
     // This bypasses the _redirects file and gets the static file directly
     const response = await next(htmlRequest);
     
-    // Return the response with 200 status (not a redirect)
-    // This ensures the browser receives the HTML content directly
+    // Preserve the original response status (e.g., 200, 404, 500)
+    // Only override Content-Type for successful responses (2xx) to ensure HTML is served correctly
+    // For error responses (4xx, 5xx), preserve the original Content-Type from the error page
+    const headers = new Headers(response.headers);
+    
+    // For successful responses, ensure Content-Type is text/html
+    // For error responses, preserve the original Content-Type (might be text/html for error pages)
+    if (response.status >= 200 && response.status < 300) {
+      headers.set('Content-Type', 'text/html; charset=utf-8');
+    }
+    
+    // Return the response with the original status code preserved
     return new Response(response.body, {
-      status: 200,
-      statusText: 'OK',
-      headers: {
-        // Spread response headers first, then override Content-Type to ensure it takes precedence
-        ...Object.fromEntries(response.headers.entries()),
-        'Content-Type': 'text/html; charset=utf-8'
-      }
+      status: response.status,
+      statusText: response.statusText,
+      headers: headers
     });
   }
   
