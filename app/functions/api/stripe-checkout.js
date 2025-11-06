@@ -65,10 +65,15 @@ export async function onRequest(context) {
 
     // Prevent multiple trials per user
     if (plan === 'trial') {
-      const trialUsed = await env.JOBHACKAI_KV?.get(`trialUsedByUid:${uid}`);
-      if (trialUsed) {
-        console.log('🔴 [CHECKOUT] Trial already used for user', uid);
-        return json({ ok: false, error: 'Trial already used. Please select a paid plan.' }, 400, origin, env);
+      try {
+        const trialUsed = await env.JOBHACKAI_KV?.get(`trialUsedByUid:${uid}`);
+        if (trialUsed) {
+          console.log('🔴 [CHECKOUT] Trial already used for user', uid);
+          return json({ ok: false, error: 'Trial already used. Please select a paid plan.' }, 400, origin, env);
+        }
+      } catch (kvError) {
+        console.log('🟡 [CHECKOUT] KV read error for trial check (non-fatal)', kvError?.message || kvError);
+        // Continue - allow trial if KV is unavailable
       }
     }
 
@@ -80,7 +85,14 @@ export async function onRequest(context) {
     }
 
     // Reuse or create customer
-    let customerId = await env.JOBHACKAI_KV?.get(kvCusKey(uid));
+    let customerId = null;
+    try {
+      customerId = await env.JOBHACKAI_KV?.get(kvCusKey(uid));
+    } catch (kvError) {
+      console.log('🟡 [CHECKOUT] KV read error (non-fatal)', kvError?.message || kvError);
+      // Continue without cached customer ID - will create new one
+    }
+    
     if (!customerId) {
       console.log('🔵 [CHECKOUT] Creating Stripe customer for uid', uid);
       try {
@@ -89,16 +101,44 @@ export async function onRequest(context) {
           headers: stripeFormHeaders(env),
           body: form({ email, 'metadata[firebaseUid]': uid })
         });
-        const c = await res.json();
+        
         if (!res.ok) {
-          console.log('🔴 [CHECKOUT] Customer create failed', c);
-          return json({ ok: false, error: c?.error?.message || 'stripe_customer_error' }, 502, origin, env);
+          const errorText = await res.text();
+          let errorData;
+          try {
+            errorData = JSON.parse(errorText);
+          } catch {
+            errorData = { error: { message: errorText || 'Unknown Stripe error' } };
+          }
+          console.log('🔴 [CHECKOUT] Customer create failed', {
+            status: res.status,
+            statusText: res.statusText,
+            error: errorData
+          });
+          return json({ ok: false, error: errorData?.error?.message || 'stripe_customer_error' }, 502, origin, env);
         }
+        
+        const c = await res.json();
+        if (!c || !c.id) {
+          console.log('🔴 [CHECKOUT] Invalid customer response', c);
+          return json({ ok: false, error: 'Invalid response from Stripe' }, 502, origin, env);
+        }
+        
         customerId = c.id;
-        await env.JOBHACKAI_KV?.put(kvCusKey(uid), customerId);
-        await env.JOBHACKAI_KV?.put(kvEmailKey(uid), email);
+        
+        // Try to cache customer ID (non-blocking)
+        try {
+          await env.JOBHACKAI_KV?.put(kvCusKey(uid), customerId);
+          await env.JOBHACKAI_KV?.put(kvEmailKey(uid), email);
+        } catch (kvWriteError) {
+          console.log('🟡 [CHECKOUT] KV write error (non-fatal)', kvWriteError?.message || kvWriteError);
+          // Continue - customer was created successfully
+        }
       } catch (customerError) {
-        console.log('🔴 [CHECKOUT] Customer create exception', customerError);
+        console.log('🔴 [CHECKOUT] Customer create exception', {
+          error: customerError?.message || customerError,
+          stack: customerError?.stack?.substring(0, 200)
+        });
         return json({ ok: false, error: 'Failed to create customer' }, 500, origin, env);
       }
     }
@@ -112,8 +152,8 @@ export async function onRequest(context) {
       customer: customerId,
       'line_items[0][price]': priceId,
       'line_items[0][quantity]': 1,
-      success_url: (env.STRIPE_SUCCESS_URL || `${env.FRONTEND_URL || 'https://dev.jobhackai.io'}/dashboard.html?paid=1`),
-      cancel_url: (env.STRIPE_CANCEL_URL || `${env.FRONTEND_URL || 'https://dev.jobhackai.io'}/pricing-a.html`),
+      success_url: (env.STRIPE_SUCCESS_URL || `${env.FRONTEND_URL || 'https://dev.jobhackai.io'}/dashboard?paid=1`),
+      cancel_url: (env.STRIPE_CANCEL_URL || `${env.FRONTEND_URL || 'https://dev.jobhackai.io'}/pricing-a`),
       allow_promotion_codes: 'true',
       payment_method_collection: 'if_required',
       'metadata[firebaseUid]': uid,
@@ -126,22 +166,52 @@ export async function onRequest(context) {
       sessionBody['subscription_data[metadata][original_plan]'] = plan;
     }
     
-    console.log('🔵 [CHECKOUT] Creating session', { customerId, priceId });
+    console.log('🔵 [CHECKOUT] Creating session', { customerId, priceId, plan });
     try {
       const sessionRes = await stripe(env, '/checkout/sessions', {
         method: 'POST',
         headers: { ...stripeFormHeaders(env), 'Idempotency-Key': idem },
         body: form(sessionBody)
       });
-      const s = await sessionRes.json();
+      
       if (!sessionRes.ok) {
-        console.log('🔴 [CHECKOUT] Session create failed', s);
-        return json({ ok: false, error: s?.error?.message || 'stripe_checkout_error' }, 502, origin, env);
+        const errorText = await sessionRes.text();
+        let errorData;
+        try {
+          errorData = JSON.parse(errorText);
+        } catch {
+          errorData = { error: { message: errorText || 'Unknown Stripe error' } };
+        }
+        console.log('🔴 [CHECKOUT] Session create failed', {
+          status: sessionRes.status,
+          statusText: sessionRes.statusText,
+          error: errorData,
+          customerId,
+          priceId
+        });
+        return json({ ok: false, error: errorData?.error?.message || 'stripe_checkout_error' }, 502, origin, env);
       }
+      
+      const s = await sessionRes.json();
+      if (!s || !s.url) {
+        console.log('🔴 [CHECKOUT] Invalid session response', s);
+        return json({ ok: false, error: 'Invalid response from Stripe' }, 502, origin, env);
+      }
+      
       console.log('✅ [CHECKOUT] Session created', { id: s.id, url: s.url });
       return json({ ok: true, url: s.url, sessionId: s.id }, 200, origin, env);
     } catch (sessionError) {
-      console.log('🔴 [CHECKOUT] Session create exception', sessionError);
+      console.log('🔴 [CHECKOUT] Session create exception', {
+        error: sessionError?.message || sessionError,
+        stack: sessionError?.stack?.substring(0, 200),
+        name: sessionError?.name
+      });
+      
+      // Check if it's a timeout error
+      if (sessionError?.name === 'AbortError' || sessionError?.message?.includes('timeout')) {
+        return json({ ok: false, error: 'Request timeout. Please try again.' }, 504, origin, env);
+      }
+      
       return json({ ok: false, error: 'Failed to create checkout session' }, 500, origin, env);
     }
 
