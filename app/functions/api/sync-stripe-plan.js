@@ -171,16 +171,34 @@ export async function onRequest(context) {
 }
 
 function priceToPlan(env, priceId) {
-  // Normalize env price IDs across naming variants
-  const essential = env.STRIPE_PRICE_ESSENTIAL_MONTHLY || env.PRICE_ESSENTIAL_MONTHLY || env.STRIPE_PRICE_ESSENTIAL || env.PRICE_ESSENTIAL;
-  const pro = env.STRIPE_PRICE_PRO_MONTHLY || env.PRICE_PRO_MONTHLY || env.STRIPE_PRICE_PRO || env.PRICE_PRO;
-  const premium = env.STRIPE_PRICE_PREMIUM_MONTHLY || env.PRICE_PREMIUM_MONTHLY || env.STRIPE_PRICE_PREMIUM || env.PRICE_PREMIUM;
-  const map = {
-    [essential]: 'essential',
-    [pro]: 'pro',
-    [premium]: 'premium'
-  };
-  return map[priceId] || null;
+  // Compare against all known env variants without creating undefined keys
+  const isMatch = (ids, id) => ids.some((v) => v && v === id);
+
+  const essentialIds = [
+    env.STRIPE_PRICE_ESSENTIAL_MONTHLY,
+    env.PRICE_ESSENTIAL_MONTHLY,
+    env.STRIPE_PRICE_ESSENTIAL,
+    env.PRICE_ESSENTIAL
+  ];
+  if (isMatch(essentialIds, priceId)) return 'essential';
+
+  const proIds = [
+    env.STRIPE_PRICE_PRO_MONTHLY,
+    env.PRICE_PRO_MONTHLY,
+    env.STRIPE_PRICE_PRO,
+    env.PRICE_PRO
+  ];
+  if (isMatch(proIds, priceId)) return 'pro';
+
+  const premiumIds = [
+    env.STRIPE_PRICE_PREMIUM_MONTHLY,
+    env.PRICE_PREMIUM_MONTHLY,
+    env.STRIPE_PRICE_PREMIUM,
+    env.PRICE_PREMIUM
+  ];
+  if (isMatch(premiumIds, priceId)) return 'premium';
+
+  return null;
 }
 
 function corsHeaders(origin, env) {
