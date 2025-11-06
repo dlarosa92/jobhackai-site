@@ -63,19 +63,24 @@ export async function onRequest(context) {
     let customerId = await env.JOBHACKAI_KV?.get(kvCusKey(uid));
     if (!customerId) {
       console.log('🔵 [CHECKOUT] Creating Stripe customer for uid', uid);
-      const res = await stripe(env, '/customers', {
-        method: 'POST',
-        headers: stripeFormHeaders(env),
-        body: form({ email, 'metadata[firebaseUid]': uid })
-      });
-      const c = await res.json();
-      if (!res.ok) {
-        console.log('🔴 [CHECKOUT] Customer create failed', c);
-        return json({ ok: false, error: c?.error?.message || 'stripe_customer_error' }, 502, origin, env);
+      try {
+        const res = await stripe(env, '/customers', {
+          method: 'POST',
+          headers: stripeFormHeaders(env),
+          body: form({ email, 'metadata[firebaseUid]': uid })
+        });
+        const c = await res.json();
+        if (!res.ok) {
+          console.log('🔴 [CHECKOUT] Customer create failed', c);
+          return json({ ok: false, error: c?.error?.message || 'stripe_customer_error' }, 502, origin, env);
+        }
+        customerId = c.id;
+        await env.JOBHACKAI_KV?.put(kvCusKey(uid), customerId);
+        await env.JOBHACKAI_KV?.put(kvEmailKey(uid), email);
+      } catch (customerError) {
+        console.log('🔴 [CHECKOUT] Customer create exception', customerError);
+        return json({ ok: false, error: 'Failed to create customer' }, 500, origin, env);
       }
-      customerId = c.id;
-      await env.JOBHACKAI_KV?.put(kvCusKey(uid), customerId);
-      await env.JOBHACKAI_KV?.put(kvEmailKey(uid), email);
     }
 
     // Create Checkout Session (subscription)
@@ -102,19 +107,24 @@ export async function onRequest(context) {
     }
     
     console.log('🔵 [CHECKOUT] Creating session', { customerId, priceId });
-    const sessionRes = await stripe(env, '/checkout/sessions', {
-      method: 'POST',
-      headers: { ...stripeFormHeaders(env), 'Idempotency-Key': idem },
-      body: form(sessionBody)
-    });
-    const s = await sessionRes.json();
-    if (!sessionRes.ok) {
-      console.log('🔴 [CHECKOUT] Session create failed', s);
-      return json({ ok: false, error: s?.error?.message || 'stripe_checkout_error' }, 502, origin, env);
+    try {
+      const sessionRes = await stripe(env, '/checkout/sessions', {
+        method: 'POST',
+        headers: { ...stripeFormHeaders(env), 'Idempotency-Key': idem },
+        body: form(sessionBody)
+      });
+      const s = await sessionRes.json();
+      if (!sessionRes.ok) {
+        console.log('🔴 [CHECKOUT] Session create failed', s);
+        return json({ ok: false, error: s?.error?.message || 'stripe_checkout_error' }, 502, origin, env);
+      }
+      console.log('✅ [CHECKOUT] Session created', { id: s.id, url: s.url });
+      return json({ ok: true, url: s.url, sessionId: s.id }, 200, origin, env);
+    } catch (sessionError) {
+      console.log('🔴 [CHECKOUT] Session create exception', sessionError);
+      return json({ ok: false, error: 'Failed to create checkout session' }, 500, origin, env);
     }
 
-    console.log('✅ [CHECKOUT] Session created', { id: s.id, url: s.url });
-    return json({ ok: true, url: s.url, sessionId: s.id }, 200, origin, env);
   } catch (e) {
     const errorMessage = e?.message || (e != null ? String(e) : 'server_error');
     const errorStack = e?.stack ? String(e.stack).substring(0, 200) : '';
@@ -140,7 +150,7 @@ function stripeFormHeaders(env) {
 function form(obj) {
   const p = new URLSearchParams();
   Object.entries(obj).forEach(([k, v]) => { if (v !== undefined && v !== null) p.append(k, String(v)); });
-  return p;
+  return p.toString();
 }
 function corsHeaders(origin, env) {
   const fallbackOrigins = ['https://dev.jobhackai.io', 'https://qa.jobhackai.io'];
