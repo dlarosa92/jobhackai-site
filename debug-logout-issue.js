@@ -61,3 +61,4 @@ window.debugLogoutIntent = function() {
 
 console.log('\n✅ Run window.debugLogoutIntent() to check logout state');
 console.log('✅ All debug info printed above');
+
