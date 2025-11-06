@@ -68,6 +68,8 @@ export async function onRequest(context) {
 async function createPortalSession(customerId, uid, origin, env) {
   const returnUrl = `${env.FRONTEND_URL || 'https://dev.jobhackai.io'}/dashboard`;
   
+  console.log('🔵 [BILLING-PORTAL] Creating portal session', { customerId, uid });
+  
   const portalParams = new URLSearchParams({
     customer: customerId,
     return_url: returnUrl
@@ -93,13 +95,15 @@ async function createPortalSession(customerId, uid, origin, env) {
   
   if (!res.ok) {
     console.log('🔴 [BILLING-PORTAL] Stripe API error', {
+      uid,
+      customerId,
       status: res.status,
       error: p?.error
     });
     return json({ ok: false, error: p?.error?.message || 'portal_error' }, 502, origin, env);
   }
 
-  console.log('✅ [BILLING-PORTAL] Portal session created', { url: p.url });
+  console.log('✅ [BILLING-PORTAL] Portal session created', { uid, customerId, url: p.url });
   return json({ ok: true, url: p.url }, 200, origin, env);
 }
 
