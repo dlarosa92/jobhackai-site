@@ -96,7 +96,10 @@
     }, 10000);
     
     // default: hide
-    document.body.classList.add("account-protected");
+    // Fix: Check if document.body exists before accessing classList
+    if (document.body) {
+      document.body.classList.add("account-protected");
+    }
   </script>
   <title>Account Settings – JobHackAI</title>
   <link rel="icon" type="image/png" href="assets/JobHackAI_Logo_favicon-32x32.png">
@@ -423,8 +426,46 @@
         waitCount++;
       }
       
-      if (window.JobHackAINavigation && typeof window.JobHackAINavigation.initializeNavigation === 'function') {
-        window.JobHackAINavigation.initializeNavigation();
+      // CRITICAL FIX: Delay navigation initialization on account-settings to allow plan sync to complete first
+      // This prevents navigation from rendering with incorrect 'free' plan which causes upgrade modal bugs
+      const initNav = () => {
+        if (window.JobHackAINavigation && typeof window.JobHackAINavigation.initializeNavigation === 'function') {
+          window.JobHackAINavigation.initializeNavigation();
+        }
+      };
+      
+      // Wait for plan sync to complete before initializing navigation
+      // Check if we need to sync plan first
+      const user = window.FirebaseAuthManager?.getCurrentUser?.();
+      if (user) {
+        // Try to get token and check plan
+        user.getIdToken().then(token => {
+          fetch('/api/billing-status', { headers: { Authorization: `Bearer ${token}` } })
+            .then(res => res.ok ? res.json() : null)
+            .then(data => {
+              if (data?.ok && data?.plan && data?.plan !== 'free') {
+                // Plan found, sync it before navigation
+                console.log('🔄 [ACCOUNT-SETTINGS] Syncing plan before navigation init:', data.plan);
+                localStorage.setItem('user-plan', data.plan);
+                localStorage.setItem('dev-plan', data.plan);
+                // Initialize navigation after sync
+                initNav();
+              } else {
+                // No plan found or already free, initialize navigation normally
+                initNav();
+              }
+            })
+            .catch(() => {
+              // If sync check fails, initialize navigation anyway
+              initNav();
+            });
+        }).catch(() => {
+          // If we can't get token, initialize navigation anyway
+          initNav();
+        });
+      } else {
+        // No user yet, initialize navigation normally
+        initNav();
       }
     });
   </script>
@@ -533,6 +574,42 @@
         }
         
         const plan = data.plan || 'free';
+        
+        // CRITICAL FIX: Sync plan from billing-status to localStorage/KV
+        // This ensures navigation and other components have the correct plan
+        if (plan !== 'free') {
+          console.log(`🔄 [ACCOUNT-SETTINGS] Syncing plan from billing-status: ${plan}`);
+          try {
+            localStorage.setItem('user-plan', plan);
+            // Also sync to navigation system if available
+            if (window.JobHackAINavigation) {
+              // Trigger plan sync by calling sync-stripe-plan API
+              const syncRes = await fetch('/api/sync-stripe-plan', {
+                method: 'POST',
+                headers: { Authorization: `Bearer ${idToken}` }
+              });
+              if (syncRes.ok) {
+                console.log('✅ [ACCOUNT-SETTINGS] Plan synced to KV storage');
+                // Update navigation with new plan
+                const syncData = await syncRes.json();
+                if (syncData.ok && syncData.plan) {
+                  localStorage.setItem('user-plan', syncData.plan);
+                  localStorage.setItem('dev-plan', syncData.plan); // Also update dev-plan for consistency
+                  // Trigger navigation update
+                  window.dispatchEvent(new CustomEvent('planChanged', { detail: { newPlan: syncData.plan } }));
+                  // CRITICAL: Re-initialize navigation to reflect new plan
+                  if (window.JobHackAINavigation && typeof window.JobHackAINavigation.updateNavigation === 'function') {
+                    console.log('🔄 [ACCOUNT-SETTINGS] Re-initializing navigation with synced plan:', syncData.plan);
+                    window.JobHackAINavigation.updateNavigation();
+                  }
+                }
+              }
+            }
+          } catch (syncError) {
+            console.warn('⚠️ [ACCOUNT-SETTINGS] Failed to sync plan:', syncError);
+            // Non-critical, continue rendering
+          }
+        }
         
         // Plan name mapping
         const planNames = {
@@ -643,6 +720,61 @@
         console.log('⏳ Waiting for auth...');
         // Don't redirect here - let the firebase-auth-ready handler do it
         return;
+      }
+      
+      // CRITICAL FIX: Sync plan from billing-status BEFORE loading profile
+      // This ensures navigation renders with the correct plan and prevents upgrade modal bugs
+      if (user || hasLocalStorageAuth) {
+        try {
+          // Wait a bit for user to be available if we only have localStorage auth
+          if (!user && hasLocalStorageAuth) {
+            let retries = 0;
+            while (!user && retries < 10) {
+              await new Promise(r => setTimeout(r, 200));
+              user = window.FirebaseAuthManager?.getCurrentUser?.();
+              retries++;
+            }
+          }
+          
+          if (user) {
+            const currentToken = await user.getIdToken();
+            if (currentToken) {
+              console.log('🔄 [ACCOUNT-SETTINGS] Pre-syncing plan from Stripe before page render...');
+              const billingRes = await fetch('/api/billing-status', {
+                headers: { Authorization: `Bearer ${currentToken}` }
+              });
+              if (billingRes.ok) {
+                const billingData = await billingRes.json();
+                if (billingData.ok && billingData.plan && billingData.plan !== 'free') {
+                  console.log(`🔄 [ACCOUNT-SETTINGS] Found plan ${billingData.plan} in Stripe, syncing...`);
+                  localStorage.setItem('user-plan', billingData.plan);
+                  localStorage.setItem('dev-plan', billingData.plan);
+                  // Sync to KV storage
+                  const syncRes = await fetch('/api/sync-stripe-plan', {
+                    method: 'POST',
+                    headers: { Authorization: `Bearer ${currentToken}` }
+                  });
+                  if (syncRes.ok) {
+                    const syncData = await syncRes.json();
+                    if (syncData.ok) {
+                      console.log('✅ [ACCOUNT-SETTINGS] Plan synced to KV, updating navigation...');
+                      // Trigger navigation update immediately
+                      window.dispatchEvent(new CustomEvent('planChanged', { 
+                        detail: { newPlan: billingData.plan, oldPlan: 'free' } 
+                      }));
+                      if (window.JobHackAINavigation && typeof window.JobHackAINavigation.updateNavigation === 'function') {
+                        window.JobHackAINavigation.updateNavigation();
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        } catch (preSyncError) {
+          console.warn('⚠️ [ACCOUNT-SETTINGS] Pre-sync failed (non-critical):', preSyncError);
+          // Continue with page load even if pre-sync fails
+        }
       }
       
       // If we have localStorage auth but no Firebase user, wait a bit more for Firebase to sync
