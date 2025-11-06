@@ -64,13 +64,12 @@
         // user is verified, show content
         console.log('✅ User authenticated and verified, showing account settings');
         document.body.classList.remove("account-protected");
-      }).catch(() => {
-        // If reload fails, check stored verification status
-        if (!user.emailVerified) {
-          window.location.href = "/verify-email.html?email=" + encodeURIComponent(user.email || "");
-          return;
-        }
-        document.body.classList.remove("account-protected");
+      }).catch((error) => {
+        // If reload fails, don't trust stale emailVerified value - be conservative
+        // Redirect to verify page to force fresh verification check
+        console.warn('⚠️ Failed to reload user verification status:', error);
+        console.log('🔒 Reload failed - redirecting to verify page for fresh check');
+        window.location.href = "/verify-email.html?email=" + encodeURIComponent(user.email || "");
       });
     }
     
