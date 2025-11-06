@@ -1,4 +1,4 @@
-import { getBearer, verifyFirebaseIdToken } from '../_lib/firebase-auth';
+import { getBearer, verifyFirebaseIdToken } from '../_lib/firebase-auth.js';
 
 /**
  * GET /api/billing-status
@@ -178,12 +178,13 @@ const kvCusKey = (uid) => `cusByUid:${uid}`;
 
 function priceIdToPlan(env, priceId) {
   if (!priceId) return 'free';
-  
-  // Map price IDs back to plan names
-  if (priceId === env.STRIPE_PRICE_ESSENTIAL_MONTHLY) return 'essential';
-  if (priceId === env.STRIPE_PRICE_PRO_MONTHLY) return 'pro';
-  if (priceId === env.STRIPE_PRICE_PREMIUM_MONTHLY) return 'premium';
-  
+  // Normalize env price IDs across naming variants
+  const essential = env.STRIPE_PRICE_ESSENTIAL_MONTHLY || env.PRICE_ESSENTIAL_MONTHLY || env.STRIPE_PRICE_ESSENTIAL || env.PRICE_ESSENTIAL;
+  const pro = env.STRIPE_PRICE_PRO_MONTHLY || env.PRICE_PRO_MONTHLY || env.STRIPE_PRICE_PRO || env.PRICE_PRO;
+  const premium = env.STRIPE_PRICE_PREMIUM_MONTHLY || env.PRICE_PREMIUM_MONTHLY || env.STRIPE_PRICE_PREMIUM || env.PRICE_PREMIUM;
+  if (priceId === essential) return 'essential';
+  if (priceId === pro) return 'pro';
+  if (priceId === premium) return 'premium';
   // Default to essential if we can't match (shouldn't happen)
   console.log('🟡 [BILLING-STATUS] Unknown price ID', priceId);
   return 'essential';

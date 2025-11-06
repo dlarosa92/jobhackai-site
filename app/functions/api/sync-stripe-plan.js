@@ -171,12 +171,16 @@ export async function onRequest(context) {
 }
 
 function priceToPlan(env, priceId) {
-  const map = {
-    [env.STRIPE_PRICE_ESSENTIAL_MONTHLY]: 'essential',
-    [env.STRIPE_PRICE_PRO_MONTHLY]: 'pro',
-    [env.STRIPE_PRICE_PREMIUM_MONTHLY]: 'premium'
-  };
-  return map[priceId] || null;
+  if (!priceId) return null;
+  // Normalize env price IDs across naming variants
+  const essential = env.STRIPE_PRICE_ESSENTIAL_MONTHLY || env.PRICE_ESSENTIAL_MONTHLY || env.STRIPE_PRICE_ESSENTIAL || env.PRICE_ESSENTIAL;
+  const pro = env.STRIPE_PRICE_PRO_MONTHLY || env.PRICE_PRO_MONTHLY || env.STRIPE_PRICE_PRO || env.PRICE_PRO;
+  const premium = env.STRIPE_PRICE_PREMIUM_MONTHLY || env.PRICE_PREMIUM_MONTHLY || env.STRIPE_PRICE_PREMIUM || env.PRICE_PREMIUM;
+  // Use if-statements to avoid undefined key collisions in map object
+  if (priceId === essential) return 'essential';
+  if (priceId === pro) return 'pro';
+  if (priceId === premium) return 'premium';
+  return null;
 }
 
 function corsHeaders(origin, env) {
