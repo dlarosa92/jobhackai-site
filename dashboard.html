@@ -1368,7 +1368,9 @@
             }
 
             console.error('❌ [DASHBOARD] Stripe checkout failed:', errorData.error);
-            alert('Unable to start checkout: ' + (errorData.error || 'Unknown error'));
+            const rawError = (errorData && typeof errorData.error === 'string') ? errorData.error.trim() : '';
+            const sanitized = rawError.startsWith('<!DOCTYPE') || rawError.startsWith('<html') ? 'server_error' : (rawError || 'Unknown error');
+            alert('Unable to start checkout. Please try again. (' + sanitized + ')');
             // Fallback to pricing page
             window.location.href = `pricing-a.html?plan=${targetPlan}`;
             return;
