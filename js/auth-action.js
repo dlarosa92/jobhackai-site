@@ -402,7 +402,8 @@ async function handlePasswordResetSubmit(event) {
       }
       
       // Redirect to login page
-      window.location.href = '/login.html';
+      // Use replace to avoid adding to browser history (prevents back navigation to expired reset page)
+      window.location.replace('/login.html');
     }, 1200);
     
   } catch (error) {
