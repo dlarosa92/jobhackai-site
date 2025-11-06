@@ -388,13 +388,11 @@ async function handlePasswordResetSubmit(event) {
     // Flag success for login page banner and redirect
     try { sessionStorage.setItem('resetPasswordSuccess', '1'); } catch(_) {}
     
-    // Close opener window if it exists (tab opened from email link)
-    // This will close the original tab the user was on before clicking the email link
-    const hasOpener = window.opener && !window.opener.closed;
-    
     setTimeout(() => {
-      // Close the opener tab (original tab) if it exists
+      // Close opener window if it exists (tab opened from email link)
+      // Re-evaluate inside setTimeout to avoid race condition where opener could be closed during delay
       // This improves UX by cleaning up the previous tab after password reset
+      const hasOpener = window.opener && !window.opener.closed;
       if (hasOpener) {
         try {
           window.opener.close();
