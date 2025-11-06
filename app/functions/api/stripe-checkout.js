@@ -153,7 +153,12 @@ function stripe(env, path, init) {
   const signal = (typeof AbortSignal !== 'undefined' && AbortSignal.timeout)
     ? AbortSignal.timeout(15000)
     : undefined;
-  return fetch(url, { ...init, headers, signal });
+  const fetchOptions = { ...init, headers };
+  // Only add signal if it's defined, to avoid overriding any signal from init
+  if (signal) {
+    fetchOptions.signal = signal;
+  }
+  return fetch(url, fetchOptions);
 }
 function stripeFormHeaders(env) {
   return { Authorization: `Bearer ${env.STRIPE_SECRET_KEY}`, 'Content-Type': 'application/x-www-form-urlencoded' };
