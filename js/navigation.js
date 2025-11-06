@@ -888,7 +888,12 @@ function updateNavigation() {
             link.style.cursor = 'pointer';
             link.addEventListener('click', function(e) {
               e.preventDefault();
-              navLog('info', 'Locked dropdown link clicked', { text: dropdownItem.text, href: dropdownItem.href });
+              navLog('info', 'Locked dropdown link clicked', { 
+                text: dropdownItem.text, 
+                href: dropdownItem.href,
+                currentPlan,
+                url: window.location.href 
+              });
               showUpgradeModal('essential');
             });
             link.title = 'Upgrade your plan to unlock this feature.';
@@ -1180,7 +1185,7 @@ function checkFeatureAccess(featureKey, targetPlan = 'premium') {
 }
 
 // --- INITIALIZATION ---
-function initializeNavigation() {
+async function initializeNavigation() {
   navLog('info', '=== initializeNavigation() START ===');
   navLog('info', 'Initialization context', {
     readyState: document.readyState,
@@ -1230,6 +1235,37 @@ function initializeNavigation() {
 //   document.body.appendChild(switcher);
 //   navLog('debug', 'Quick plan switcher appended to body');
 
+  // CRITICAL FIX: On account-settings page, sync plan before updating navigation
+  // This prevents navigation from rendering with incorrect 'free' plan
+  if (window.location.pathname.includes('account-setting') && authState.isAuthenticated) {
+    navLog('info', 'Account-settings page detected, syncing plan before navigation render');
+    try {
+      const user = window.FirebaseAuthManager?.getCurrentUser?.();
+      if (user) {
+        const token = await user.getIdToken();
+        // Quick check billing-status to get correct plan
+        const billingRes = await fetch('/api/billing-status', {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        if (billingRes.ok) {
+          const billingData = await billingRes.json();
+          if (billingData.ok && billingData.plan && billingData.plan !== 'free') {
+            navLog('info', 'Found plan from billing-status, updating localStorage before navigation render', billingData.plan);
+            localStorage.setItem('user-plan', billingData.plan);
+            localStorage.setItem('dev-plan', billingData.plan);
+            // Sync to KV asynchronously (don't wait)
+            fetch('/api/sync-stripe-plan', {
+              method: 'POST',
+              headers: { Authorization: `Bearer ${token}` }
+            }).catch(err => navLog('warn', 'Failed to sync plan to KV (non-critical):', err));
+          }
+        }
+      }
+    } catch (syncError) {
+      navLog('warn', 'Plan sync check failed (non-critical), continuing with navigation render:', syncError);
+    }
+  }
+  
   // Update navigation
   navLog('debug', 'Calling updateNavigation()');
   updateNavigation();
@@ -1308,6 +1344,40 @@ async function fetchKVPlan() {
     const data = await r.json();
     console.log('🔍 fetchKVPlan: API response:', data);
     
+    let plan = data.plan || 'free';
+    
+    // CRITICAL FIX: If plan is 'free' but user is authenticated, check billing-status as fallback
+    // This handles cases where KV storage is out of sync with Stripe
+    if (plan === 'free' && currentUser) {
+      console.log('🔍 fetchKVPlan: Plan is free, checking billing-status as fallback...');
+      try {
+        const billingRes = await fetch('/api/billing-status', { 
+          headers: { Authorization: `Bearer ${idToken}` } 
+        });
+        if (billingRes.ok) {
+          const billingData = await billingRes.json();
+          if (billingData.ok && billingData.plan && billingData.plan !== 'free') {
+            console.log(`🔄 fetchKVPlan: Found plan ${billingData.plan} from billing-status, syncing...`);
+            plan = billingData.plan;
+            // Sync to KV storage
+            try {
+              const syncRes = await fetch('/api/sync-stripe-plan', {
+                method: 'POST',
+                headers: { Authorization: `Bearer ${idToken}` }
+              });
+              if (syncRes.ok) {
+                console.log('✅ fetchKVPlan: Plan synced to KV storage');
+              }
+            } catch (syncError) {
+              console.warn('⚠️ fetchKVPlan: Failed to sync plan to KV:', syncError);
+            }
+          }
+        }
+      } catch (billingError) {
+        console.warn('⚠️ fetchKVPlan: Failed to check billing-status:', billingError);
+      }
+    }
+    
     // Store trial end date if available
     if (data.trialEndsAt) {
       localStorage.setItem('trial-ends-at', data.trialEndsAt);
@@ -1315,7 +1385,8 @@ async function fetchKVPlan() {
       localStorage.removeItem('trial-ends-at');
     }
     
-    const plan = data.plan || 'free';
+    // Update localStorage with correct plan
+    localStorage.setItem('user-plan', plan);
     console.log(`✅ fetchKVPlan: Successfully fetched plan: ${plan}`);
     return plan;
   } catch (error) {

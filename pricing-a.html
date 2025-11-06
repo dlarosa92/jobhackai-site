@@ -287,7 +287,20 @@
                 throw new Error(data?.error || 'Checkout failed');
               } catch (e) {
                 console.error('Checkout error:', e);
-                alert('Unable to start checkout. Please try again.');
+                const errorMessage = e?.message || 'Checkout failed';
+                console.error('Full checkout error details:', {
+                  message: errorMessage,
+                  stack: e?.stack,
+                  response: e?.response
+                });
+                // Provide more helpful error message
+                if (errorMessage.includes('unauthorized') || errorMessage.includes('token')) {
+                  alert('Your session has expired. Please log in again and try upgrading.');
+                } else if (errorMessage.includes('Trial already used')) {
+                  alert('You have already used your free trial. Please select a paid plan.');
+                } else {
+                  alert(`Unable to start checkout: ${errorMessage}. Please try again or contact support.`);
+                }
                 button.textContent = originalText;
                 button.disabled = false;
                 button.style.opacity = '1';
