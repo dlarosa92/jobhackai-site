@@ -242,9 +242,9 @@ class AuthManager {
         };
         
         
-        // Sync with Firestore (update last login)
-        UserProfileManager.updateLastLogin(user.uid).catch(err => {
-          console.warn('Could not update last login in Firestore:', err);
+        // Sync with Firestore (update last login) - non-blocking, errors handled internally
+        UserProfileManager.updateLastLogin(user.uid).catch(() => {
+          // Error already handled in updateLastLogin - silence this to reduce console noise
         });
         
         // CRITICAL: Prioritize fresh plan selections over existing plans
