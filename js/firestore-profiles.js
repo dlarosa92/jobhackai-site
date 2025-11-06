@@ -104,6 +104,12 @@ class UserProfileManager {
         return { success: false, error: 'Profile not found' };
       }
     } catch (error) {
+      // Handle permission errors gracefully
+      if (error.code === 'permission-denied' || error.message?.includes('permission') || error.message?.includes('Missing or insufficient')) {
+        console.warn('⚠️ Firestore permissions error - profile may not exist yet or rules may need configuration:', error.message);
+        // Return a graceful failure instead of throwing
+        return { success: false, error: 'Profile access denied. Please ensure your Firebase security rules allow authenticated users to access their own profiles.', code: 'permission-denied' };
+      }
       console.error('❌ Error getting user profile:', error);
       return { success: false, error: error.message };
     }
@@ -193,6 +199,12 @@ class UserProfileManager {
       
       return { success: true };
     } catch (error) {
+      // Handle permission errors gracefully - don't block auth flow
+      if (error.code === 'permission-denied' || error.message?.includes('permission') || error.message?.includes('Missing or insufficient')) {
+        console.warn('⚠️ Firestore permissions error - last login update skipped (non-blocking):', error.message);
+        // Return success to avoid blocking auth flow - this is non-critical
+        return { success: false, error: 'Permission denied (non-blocking)', code: 'permission-denied', nonBlocking: true };
+      }
       console.error('❌ Error updating last login:', error);
       return { success: false, error: error.message };
     }

@@ -12,6 +12,23 @@
   </style>
   <script src="js/static-auth-guard.js?v=20251007-2"></script>
   <script>
+    // Wait for DOM to be ready before accessing document.body
+    function initAccountProtected() {
+      if (document.body) {
+        document.body.classList.add("account-protected");
+      } else {
+        // If body doesn't exist yet, wait for DOMContentLoaded
+        document.addEventListener("DOMContentLoaded", function() {
+          if (document.body) {
+            document.body.classList.add("account-protected");
+          }
+        });
+      }
+    }
+    
+    // Initialize immediately if body exists (script at end of head)
+    initAccountProtected();
+    
     document.addEventListener("firebase-auth-ready", function () {
       const mgr = window.FirebaseAuthManager;
       const user = mgr ? mgr.getCurrentUser() : null;
@@ -24,10 +41,10 @@
         return;
       }
       // user is verified, show content
-      document.body.classList.remove("account-protected");
+      if (document.body) {
+        document.body.classList.remove("account-protected");
+      }
     });
-    // default: hide
-    document.body.classList.add("account-protected");
   </script>
   <title>Account Settings – JobHackAI</title>
   <link rel="icon" type="image/png" href="assets/JobHackAI_Logo_favicon-32x32.png">
@@ -578,15 +595,26 @@
       // Load real user data
       try {
         const profileResult = await UserProfileManager.getProfile(user.uid);
-        const profile = profileResult.profile || {};
         
-        const userName = profile.displayName || 
-          `${profile.firstName || ''} ${profile.lastName || ''}`.trim() || 
-          user.displayName ||
-          'User';
-        
-        document.getElementById('profile-name').textContent = userName;
-        document.getElementById('profile-email').textContent = user.email || 'user@example.com';
+        // Handle permission errors gracefully
+        if (!profileResult.success && profileResult.code === 'permission-denied') {
+          console.warn('⚠️ Profile access denied - using Firebase auth user data:', profileResult.error);
+          // Fall through to use Firebase auth user data
+        } else if (profileResult.success && profileResult.profile) {
+          const profile = profileResult.profile;
+          
+          const userName = profile.displayName || 
+            `${profile.firstName || ''} ${profile.lastName || ''}`.trim() || 
+            user.displayName ||
+            'User';
+          
+          document.getElementById('profile-name').textContent = userName;
+          document.getElementById('profile-email').textContent = user.email || 'user@example.com';
+        } else {
+          // Profile not found or other error - use Firebase auth user data
+          document.getElementById('profile-name').textContent = user.displayName || user.email?.split('@')[0] || 'User';
+          document.getElementById('profile-email').textContent = user.email || 'user@example.com';
+        }
         
         // Render billing section
         await renderBillingSection();
@@ -597,8 +625,8 @@
         document.getElementById('profile-content').style.display = 'block';
       } catch (error) {
         console.error('Failed to load profile:', error);
-        // Still show content with basic info
-        document.getElementById('profile-name').textContent = user.displayName || 'User';
+        // Still show content with basic info from Firebase Auth
+        document.getElementById('profile-name').textContent = user.displayName || user.email?.split('@')[0] || 'User';
         document.getElementById('profile-email').textContent = user.email || 'user@example.com';
         await renderBillingSection();
 
