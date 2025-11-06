@@ -3,8 +3,8 @@
 /dashboard-simple/   /dashboard-simple/index.html    200
 
 # Stripe checkout redirects (preserve query params)
-# Rewrite /pricing-a to /pricing-a.html (200 = internal rewrite, not redirect)
-/pricing-a    /pricing-a.html    200
+# NOTE: /pricing-a is handled by functions/pricing-a.js to prevent redirect loops
+# Do NOT add a redirect rule here for /pricing-a
 
 # Auth routes - Firebase sends /auth/action but Cloudflare needs /auth/action/
 /auth/action   /auth/action/index.html   200
