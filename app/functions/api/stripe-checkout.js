@@ -115,7 +115,10 @@ export async function onRequest(context) {
             statusText: res.statusText,
             error: errorData
           });
-          return json({ ok: false, error: errorData?.error?.message || 'stripe_customer_error' }, 502, origin, env);
+          const msg = errorData?.error?.message || 'stripe_customer_error';
+          const code = errorData?.error?.type || 'stripe_error';
+          const status = (res.status >= 400 && res.status < 500) ? res.status : 400;
+          return json({ ok: false, error: msg, code }, status, origin, env);
         }
         
         const c = await res.json();
@@ -144,7 +147,6 @@ export async function onRequest(context) {
     }
 
     // Create Checkout Session (subscription)
-    const idem = `${uid}:${plan}`;
     
     // Prepare session body with trial support
     const sessionBody = {
@@ -152,8 +154,8 @@ export async function onRequest(context) {
       customer: customerId,
       'line_items[0][price]': priceId,
       'line_items[0][quantity]': 1,
-      success_url: (env.STRIPE_SUCCESS_URL || `${env.FRONTEND_URL || 'https://dev.jobhackai.io'}/dashboard?paid=1`),
-      cancel_url: (env.STRIPE_CANCEL_URL || `${env.FRONTEND_URL || 'https://dev.jobhackai.io'}/pricing-a`),
+      success_url: (env.STRIPE_SUCCESS_URL || `${env.FRONTEND_URL || 'https://dev.jobhackai.io'}/dashboard.html?paid=1`),
+      cancel_url: (env.STRIPE_CANCEL_URL || `${env.FRONTEND_URL || 'https://dev.jobhackai.io'}/pricing-a.html`),
       allow_promotion_codes: 'true',
       payment_method_collection: 'if_required',
       'metadata[firebaseUid]': uid,
@@ -166,6 +168,9 @@ export async function onRequest(context) {
       sessionBody['subscription_data[metadata][original_plan]'] = plan;
     }
     
+    // Generate a robust idempotency key derived from stable parameters
+    const idem = await makeIdemKey(uid, sessionBody);
+
     console.log('🔵 [CHECKOUT] Creating session', { customerId, priceId, plan });
     try {
       const sessionRes = await stripe(env, '/checkout/sessions', {
@@ -189,7 +194,11 @@ export async function onRequest(context) {
           customerId,
           priceId
         });
-        return json({ ok: false, error: errorData?.error?.message || 'stripe_checkout_error' }, 502, origin, env);
+        const msg = errorData?.error?.message || 'stripe_checkout_error';
+        const code = errorData?.error?.type || 'stripe_error';
+        const status = (code === 'idempotency_error') ? 409
+          : (sessionRes.status >= 400 && sessionRes.status < 500 ? sessionRes.status : 400);
+        return json({ ok: false, error: msg, code }, status, origin, env);
       }
       
       const s = await sessionRes.json();
@@ -311,6 +320,29 @@ function planToPrice(env, plan) {
     premium: premium
   };
   return map[plan] || null;
+}
+
+// Build a robust Idempotency-Key from stable parameters, so retries succeed
+// and parameter changes (e.g., URLs, price, customer) generate a new key
+async function makeIdemKey(uid, body) {
+  try {
+    const enc = new TextEncoder();
+    const stable = {
+      customer: body.customer,
+      price: body['line_items[0][price]'],
+      quantity: body['line_items[0][quantity]'],
+      mode: body.mode,
+      success_url: body.success_url,
+      cancel_url: body.cancel_url,
+      metadata: { firebaseUid: body['metadata[firebaseUid]'], plan: body['metadata[plan]'] }
+    };
+    const buf = await crypto.subtle.digest('SHA-256', enc.encode(JSON.stringify(stable)));
+    const hex = [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, '0')).join('');
+    return `${uid}:${hex.slice(0, 16)}`;
+  } catch (_) {
+    // Fallback to legacy key if crypto API not available
+    return `${uid}:${body['metadata[plan]'] || 'plan'}`;
+  }
 }
 
 
