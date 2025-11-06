@@ -3,6 +3,7 @@
 /dashboard-simple/   /dashboard-simple/index.html    200
 
 # Stripe checkout redirects (preserve query params)
+/dashboard    /dashboard.html    200
 /pricing-a    /pricing-a.html    200
 
 # Auth routes - Firebase sends /auth/action but Cloudflare needs /auth/action/
