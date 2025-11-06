@@ -42,8 +42,9 @@ export async function onRequest(context) {
       status: 200,
       statusText: 'OK',
       headers: {
-        'Content-Type': 'text/html; charset=utf-8',
-        ...Object.fromEntries(response.headers.entries())
+        // Spread response headers first, then override Content-Type to ensure it takes precedence
+        ...Object.fromEntries(response.headers.entries()),
+        'Content-Type': 'text/html; charset=utf-8'
       }
     });
   }
