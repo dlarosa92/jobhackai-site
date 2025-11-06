@@ -1,4 +1,4 @@
-import { getBearer, verifyFirebaseIdToken } from '../_lib/firebase-auth';
+import { getBearer, verifyFirebaseIdToken } from '../_lib/firebase-auth.js';
 export async function onRequest(context) {
   const { request, env } = context;
   const origin = request.headers.get('Origin') || '';
@@ -11,12 +11,35 @@ export async function onRequest(context) {
   }
 
   try {
-    const { plan } = await request.json();
+    console.log('🔵 [CHECKOUT] Request start', {
+      method: request.method,
+      origin,
+      hasAuth: !!request.headers.get('authorization')
+    });
+
+    const body = await request.json();
+    console.log('🔵 [CHECKOUT] Parsed body', body);
+    const { plan } = body || {};
+
+    // Check required environment variables
+    if (!env.FIREBASE_PROJECT_ID) {
+      console.log('🔴 [CHECKOUT] Missing FIREBASE_PROJECT_ID');
+      return json({ ok: false, error: 'Server configuration error' }, 500, origin, env);
+    }
+    if (!env.STRIPE_SECRET_KEY) {
+      console.log('🔴 [CHECKOUT] Missing STRIPE_SECRET_KEY');
+      return json({ ok: false, error: 'Server configuration error' }, 500, origin, env);
+    }
+
     const token = getBearer(request);
-    if (!token) return json({ ok: false, error: 'unauthorized' }, 401, origin, env);
+    if (!token) {
+      console.log('🔴 [CHECKOUT] Missing bearer token');
+      return json({ ok: false, error: 'unauthorized' }, 401, origin, env);
+    }
     const { uid, payload } = await verifyFirebaseIdToken(token, env.FIREBASE_PROJECT_ID);
     const email = (payload?.email) || '';
     if (!plan) {
+      console.log('🔴 [CHECKOUT] Missing plan field');
       return json({ ok: false, error: 'Missing plan' }, 422, origin, env);
     }
 
@@ -30,18 +53,26 @@ export async function onRequest(context) {
     }
 
     const priceId = planToPrice(env, plan);
-    if (!priceId) return json({ ok: false, error: 'Invalid plan' }, 400, origin, env);
+    console.log('🔵 [CHECKOUT] Plan→Price', { plan, priceId, envKeys: Object.keys(env).filter(k => k.includes('PRICE_')) });
+    if (!priceId) {
+      console.log('🔴 [CHECKOUT] Invalid plan', { plan });
+      return json({ ok: false, error: 'Invalid plan' }, 400, origin, env);
+    }
 
     // Reuse or create customer
     let customerId = await env.JOBHACKAI_KV?.get(kvCusKey(uid));
     if (!customerId) {
+      console.log('🔵 [CHECKOUT] Creating Stripe customer for uid', uid);
       const res = await stripe(env, '/customers', {
         method: 'POST',
         headers: stripeFormHeaders(env),
         body: form({ email, 'metadata[firebaseUid]': uid })
       });
       const c = await res.json();
-      if (!res.ok) return json({ ok: false, error: c?.error?.message || 'stripe_customer_error' }, 502, origin, env);
+      if (!res.ok) {
+        console.log('🔴 [CHECKOUT] Customer create failed', c);
+        return json({ ok: false, error: c?.error?.message || 'stripe_customer_error' }, 502, origin, env);
+      }
       customerId = c.id;
       await env.JOBHACKAI_KV?.put(kvCusKey(uid), customerId);
       await env.JOBHACKAI_KV?.put(kvEmailKey(uid), email);
@@ -56,10 +87,10 @@ export async function onRequest(context) {
       customer: customerId,
       'line_items[0][price]': priceId,
       'line_items[0][quantity]': 1,
-      success_url: `${env.FRONTEND_URL || 'https://dev.jobhackai.io'}/dashboard.html?paid=1`,
-      cancel_url: `${env.FRONTEND_URL || 'https://dev.jobhackai.io'}/pricing-a.html`,
+      success_url: (env.STRIPE_SUCCESS_URL || `${env.FRONTEND_URL || 'https://dev.jobhackai.io'}/dashboard.html?paid=1`),
+      cancel_url: (env.STRIPE_CANCEL_URL || `${env.FRONTEND_URL || 'https://dev.jobhackai.io'}/pricing-a.html`),
       allow_promotion_codes: 'true',
-      payment_method_collection: 'always',
+      payment_method_collection: 'if_required',
       'metadata[firebaseUid]': uid,
       'metadata[plan]': plan
     };
@@ -70,17 +101,30 @@ export async function onRequest(context) {
       sessionBody['subscription_data[metadata][original_plan]'] = plan;
     }
     
+    console.log('🔵 [CHECKOUT] Creating session', { customerId, priceId });
     const sessionRes = await stripe(env, '/checkout/sessions', {
       method: 'POST',
       headers: { ...stripeFormHeaders(env), 'Idempotency-Key': idem },
       body: form(sessionBody)
     });
     const s = await sessionRes.json();
-    if (!sessionRes.ok) return json({ ok: false, error: s?.error?.message || 'stripe_checkout_error' }, 502, origin, env);
+    if (!sessionRes.ok) {
+      console.log('🔴 [CHECKOUT] Session create failed', s);
+      return json({ ok: false, error: s?.error?.message || 'stripe_checkout_error' }, 502, origin, env);
+    }
 
+    console.log('✅ [CHECKOUT] Session created', { id: s.id, url: s.url });
     return json({ ok: true, url: s.url, sessionId: s.id }, 200, origin, env);
   } catch (e) {
-    return json({ ok: false, error: e?.message || 'server_error' }, 500, origin, env);
+    const errorMessage = e?.message || (e != null ? String(e) : 'server_error');
+    const errorStack = e?.stack ? String(e.stack).substring(0, 200) : '';
+    console.log('🔴 [CHECKOUT] Exception', {
+      message: errorMessage,
+      stack: errorStack,
+      name: e?.name
+    });
+    // Return a user-friendly error message (don't expose stack traces)
+    return json({ ok: false, error: errorMessage }, 500, origin, env);
   }
 }
 
