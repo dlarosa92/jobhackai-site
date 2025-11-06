@@ -29,21 +29,21 @@ export async function onRequest(context) {
       // This will fetch pricing-a.html from the static assets
       const response = await next(assetRequest);
       
-      // If the asset was found, return it with proper headers
-      if (response.status === 200 || response.status === 304) {
-        const headers = new Headers(response.headers);
+      // Preserve the original response status and headers
+      const headers = new Headers(response.headers);
+      
+      // For successful responses (2xx), ensure Content-Type is text/html
+      // For error responses (4xx, 5xx), preserve the original Content-Type
+      if (response.status >= 200 && response.status < 300) {
         headers.set('Content-Type', 'text/html; charset=utf-8');
-        // Preserve cache headers from the asset response
-        return new Response(response.body, {
-          status: response.status,
-          headers: headers
-        });
       }
       
-      // If asset not found, return 404
-      return new Response('Pricing page not found', { 
-        status: 404,
-        headers: { 'Content-Type': 'text/plain' }
+      // Return the response with the original status code preserved
+      // This ensures we don't lose important error information (e.g., 500 vs 404)
+      return new Response(response.body, {
+        status: response.status,
+        statusText: response.statusText,
+        headers: headers
       });
     } catch (error) {
       console.error('Error serving pricing-a.html:', error);
