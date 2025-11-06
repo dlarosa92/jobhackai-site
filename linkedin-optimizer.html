@@ -5,6 +5,32 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <style>html.auth-pending{visibility:hidden}</style>
   <script src="js/static-auth-guard.js?v=20251007-2"></script>
+  <script>
+    // --- IMMEDIATE PAGE ACCESS CONTROL ---
+    // Run immediately to prevent content flash for unauthorized users
+    (function enforceAccessImmediate() {
+      const isAuthenticated = localStorage.getItem('user-authenticated') === 'true' && !!localStorage.getItem('user-email');
+      const plan = localStorage.getItem('user-plan') || 'free';
+      const allowedPlans = ['premium'];
+
+      // If not authenticated, redirect to login immediately
+      if (!isAuthenticated) {
+        console.log('🚫 [LINKEDIN-OPT] Not authenticated, redirecting to login');
+        window.location.href = 'login.html';
+        return;
+      }
+
+      // If authenticated but on wrong plan, redirect to pricing with upgrade modal immediately
+      if (!allowedPlans.includes(plan)) {
+        console.log('🚫 [LINKEDIN-OPT] Access denied for plan:', plan);
+        window.location.href = 'pricing-a.html?plan=premium';
+        return;
+      }
+
+      // Access granted - continue loading page
+      console.log('✅ [LINKEDIN-OPT] Access granted for plan:', plan);
+    })();
+  </script>
   <title>LinkedIn Profile Optimizer – JobHackAI</title>
   <link rel="icon" type="image/png" href="assets/JobHackAI_Logo_favicon-32x32.png">
   <!-- Design tokens & global styles -->
@@ -764,8 +790,8 @@
       // Update UI based on plan
       checkPlanAccess();
       
-      // Enforce access control
-      enforceAccess();
+      // Note: Access control is enforced immediately in <head> script
+      // This function only handles UI updates for authorized users
     };
     
     // Try to initialize immediately, then retry after a short delay
