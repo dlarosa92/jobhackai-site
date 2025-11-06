@@ -17,11 +17,20 @@ export async function onRequest(context) {
     const targetUrl = new URL(targetPath + url.search + url.hash, url.origin);
     
     // Create a new request for the HTML file
-    const htmlRequest = new Request(targetUrl.toString(), {
+    // Only include body for methods that support it (POST, PUT, PATCH, DELETE)
+    // GET and HEAD requests cannot have a body according to Fetch API spec
+    const requestInit = {
       method: request.method,
-      headers: request.headers,
-      body: request.body
-    });
+      headers: request.headers
+    };
+    
+    // Only add body for methods that support it
+    const methodsWithBody = ['POST', 'PUT', 'PATCH', 'DELETE'];
+    if (methodsWithBody.includes(request.method.toUpperCase())) {
+      requestInit.body = request.body;
+    }
+    
+    const htmlRequest = new Request(targetUrl.toString(), requestInit);
     
     // Use next() to fetch the actual pricing-a.html file
     // This bypasses the _redirects file and gets the static file directly
