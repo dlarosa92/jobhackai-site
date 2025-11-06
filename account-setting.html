@@ -777,7 +777,18 @@
       
       try {
         const user = window.FirebaseAuthManager?.getCurrentUser?.();
+        if (!user) {
+          alert('Your session has expired. Please log in again.');
+          window.location.href = '/login.html';
+          return;
+        }
+
         const idToken = await user.getIdToken();
+        if (!idToken) {
+          alert('Unable to get authentication token. Please log in again.');
+          window.location.href = '/login.html';
+          return;
+        }
         
         // Cancel subscription
         await fetch('/api/cancel-subscription', {
@@ -792,7 +803,8 @@
         alert('Your account has been deleted.');
         window.location.href = 'index.html';
       } catch (error) {
-        alert('Failed to delete account: ' + error.message);
+        console.error('❌ [ACCOUNT-SETTINGS] Delete account error:', error);
+        alert('Failed to delete account: ' + (error.message || 'Unknown error'));
       }
     }
   </script>
