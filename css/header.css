@@ -141,9 +141,8 @@
     pointer-events: auto;
   }
   
-  /* Overlay backdrop for mobile menu */
-  .mobile-nav::before {
-    content: '';
+  /* Overlay backdrop for mobile menu - separate element, not pseudo-element */
+  .mobile-nav-backdrop {
     position: fixed;
     top: 64px;
     left: 0;
@@ -154,10 +153,10 @@
     visibility: hidden;
     transition: opacity 0.3s ease, visibility 0.3s;
     pointer-events: none;
-    z-index: -1;
+    z-index: 199; /* Behind menu (z-index: 200) but above other content */
   }
   
-  .mobile-nav.open::before {
+  .mobile-nav-backdrop.show {
     opacity: 1;
     visibility: visible;
     pointer-events: auto;
