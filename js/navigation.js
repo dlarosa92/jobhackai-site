@@ -1298,6 +1298,44 @@ async function initializeNavigation() {
                 }
               }
             }
+          } else {
+            // plan/me returned successfully but without plan field - use billing-status as fallback
+            navLog('info', 'plan/me response missing plan field, checking billing-status as fallback');
+            const billingRes = await fetch('/api/billing-status', {
+              headers: { Authorization: `Bearer ${token}` }
+            });
+            if (billingRes.ok) {
+              const billingData = await billingRes.json();
+              if (billingData.ok && billingData.plan) {
+                navLog('info', 'Found plan from billing-status fallback (plan/me missing plan)', billingData.plan);
+                localStorage.setItem('user-plan', billingData.plan);
+                localStorage.setItem('dev-plan', billingData.plan);
+                // Sync to KV asynchronously
+                fetch('/api/sync-stripe-plan', {
+                  method: 'POST',
+                  headers: { Authorization: `Bearer ${token}` }
+                }).catch(err => navLog('warn', 'Failed to sync plan to KV (non-critical):', err));
+              }
+            }
+          }
+        } else {
+          // plan/me failed - use billing-status as fallback
+          navLog('info', 'plan/me request failed, checking billing-status as fallback');
+          const billingRes = await fetch('/api/billing-status', {
+            headers: { Authorization: `Bearer ${token}` }
+          });
+          if (billingRes.ok) {
+            const billingData = await billingRes.json();
+            if (billingData.ok && billingData.plan) {
+              navLog('info', 'Found plan from billing-status fallback (plan/me failed)', billingData.plan);
+              localStorage.setItem('user-plan', billingData.plan);
+              localStorage.setItem('dev-plan', billingData.plan);
+              // Sync to KV asynchronously
+              fetch('/api/sync-stripe-plan', {
+                method: 'POST',
+                headers: { Authorization: `Bearer ${token}` }
+              }).catch(err => navLog('warn', 'Failed to sync plan to KV (non-critical):', err));
+            }
           }
         }
       }
