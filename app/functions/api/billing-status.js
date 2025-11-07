@@ -39,12 +39,45 @@ export async function onRequest(context) {
     if (!customerId) {
       console.log('🟡 [BILLING-STATUS] No customer found in KV for uid', uid);
       // Try to find by email in Stripe as fallback
-      const searchRes = await stripe(env, `/customers?email=${encodeURIComponent(email)}&limit=1`);
+      // Get all customers with this email (not just first one) to handle duplicates
+      const searchRes = await stripe(env, `/customers?email=${encodeURIComponent(email)}&limit=100`);
       const searchData = await searchRes.json();
       
       if (searchRes.ok && searchData.data && searchData.data.length > 0) {
-        customerId = searchData.data[0].id;
-        console.log('🟡 [BILLING-STATUS] Found customer by email', customerId);
+        console.log('🟡 [BILLING-STATUS] Found', searchData.data.length, 'customers with email', email);
+        
+        // If multiple customers exist, find the one with an active subscription
+        if (searchData.data.length > 1) {
+          console.log('🟡 [BILLING-STATUS] Multiple customers found, checking subscriptions...');
+          
+          // Check each customer for active subscriptions
+          for (const customer of searchData.data) {
+            const subsCheckRes = await stripe(env, `/subscriptions?customer=${customer.id}&status=all&limit=1`);
+            const subsCheckData = await subsCheckRes.json();
+            
+            if (subsCheckRes.ok && subsCheckData.data && subsCheckData.data.length > 0) {
+              const hasActive = subsCheckData.data.some(s => 
+                s.status === 'trialing' || s.status === 'active' || s.status === 'past_due'
+              );
+              
+              if (hasActive) {
+                customerId = customer.id;
+                console.log('🟡 [BILLING-STATUS] Found customer with active subscription', customerId);
+                break;
+              }
+            }
+          }
+          
+          // If no customer with active subscription found, use the most recent one
+          if (!customerId) {
+            customerId = searchData.data.sort((a, b) => b.created - a.created)[0].id;
+            console.log('🟡 [BILLING-STATUS] No active subscriptions found, using most recent customer', customerId);
+          }
+        } else {
+          customerId = searchData.data[0].id;
+          console.log('🟡 [BILLING-STATUS] Found single customer by email', customerId);
+        }
+        
         // Cache it for next time
         await env.JOBHACKAI_KV?.put(kvCusKey(uid), customerId);
       } else {

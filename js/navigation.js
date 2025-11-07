@@ -1290,6 +1290,53 @@ async function initializeNavigation() {
     }
   }
   
+  // CRITICAL FIX: For authenticated users, fetch plan before rendering navigation
+  // This prevents race condition where navigation shows wrong plan initially
+  if (authState.isAuthenticated && window.FirebaseAuthManager?.getCurrentUser) {
+    navLog('info', 'Authenticated user detected, fetching plan before navigation render');
+    try {
+      const user = window.FirebaseAuthManager.getCurrentUser();
+      if (user) {
+        const token = await user.getIdToken();
+        // Fetch plan from API first
+        const planRes = await fetch('/api/plan/me', {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        if (planRes.ok) {
+          const planData = await planRes.json();
+          if (planData.plan) {
+            navLog('info', 'Fetched plan from API, updating localStorage', planData.plan);
+            localStorage.setItem('user-plan', planData.plan);
+            localStorage.setItem('dev-plan', planData.plan);
+            
+            // If plan is free, double-check with billing-status as fallback
+            if (planData.plan === 'free') {
+              navLog('info', 'Plan is free, checking billing-status as fallback');
+              const billingRes = await fetch('/api/billing-status', {
+                headers: { Authorization: `Bearer ${token}` }
+              });
+              if (billingRes.ok) {
+                const billingData = await billingRes.json();
+                if (billingData.ok && billingData.plan && billingData.plan !== 'free') {
+                  navLog('info', 'Found plan from billing-status fallback, updating', billingData.plan);
+                  localStorage.setItem('user-plan', billingData.plan);
+                  localStorage.setItem('dev-plan', billingData.plan);
+                  // Sync to KV asynchronously
+                  fetch('/api/sync-stripe-plan', {
+                    method: 'POST',
+                    headers: { Authorization: `Bearer ${token}` }
+                  }).catch(err => navLog('warn', 'Failed to sync plan to KV (non-critical):', err));
+                }
+              }
+            }
+          }
+        }
+      }
+    } catch (planError) {
+      navLog('warn', 'Plan fetch failed (non-critical), continuing with navigation render:', planError);
+    }
+  }
+  
   // Update navigation
   navLog('debug', 'Calling updateNavigation()');
   updateNavigation();
