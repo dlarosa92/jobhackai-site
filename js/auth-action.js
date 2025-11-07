@@ -11,6 +11,7 @@ import {
   confirmPasswordReset 
 } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-auth.js";
 import { firebaseConfig } from "/js/firebase-config.js";
+import authManager from "/js/firebase-auth.js";
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -133,6 +134,125 @@ function hideMessages() {
   successMessage.style.display = 'none';
 }
 
+// Helper function to check if plan requires payment
+function planRequiresPayment(plan) {
+  return ['essential', 'pro', 'premium', 'trial'].includes(plan);
+}
+
+// Route user after email verification based on plan selection
+async function routeAfterVerification() {
+  // Check for selected plan in sessionStorage
+  let storedSelection = null;
+  try {
+    // Prefer localStorage to allow cross-tab access when email link opens a new tab
+    const localStored = localStorage.getItem('selectedPlan');
+    if (localStored) {
+      storedSelection = JSON.parse(localStored).planId;
+    } else {
+      const sessionStored = sessionStorage.getItem('selectedPlan');
+      storedSelection = sessionStored ? JSON.parse(sessionStored).planId : null;
+    }
+  } catch (e) {
+    console.warn('Failed to parse selectedPlan:', e);
+  }
+  
+  const plan = storedSelection || 'free';
+  console.log('🔍 Plan detected after email verification:', plan);
+  
+  // Handle tab replacement: close opener window if it exists
+  const hasOpener = window.opener && !window.opener.closed;
+  
+  if (planRequiresPayment(plan)) {
+    // User selected a paid plan - redirect to Stripe checkout
+    try {
+      // Wait for auth to be ready
+      await authManager.waitForAuthReady(4000);
+      const user = authManager.getCurrentUser();
+      
+      if (!user) {
+        console.error('No user found after verification');
+        window.location.replace('/login.html');
+        return;
+      }
+      
+      const idToken = await user.getIdToken(true);
+      console.log('🚀 Starting Stripe checkout for plan:', plan);
+      
+      const res = await fetch('/api/stripe-checkout', {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json', 
+          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}) 
+        },
+        body: JSON.stringify({ plan, startTrial: plan === 'trial' })
+      });
+      
+      const data = await res.json();
+      if (data && data.ok && data.url) {
+        console.log('✅ Redirecting to Stripe checkout:', data.url);
+        // Close opener window if it exists (after a short delay to allow redirect)
+        if (hasOpener) {
+          setTimeout(() => {
+            try {
+              window.opener.close();
+            } catch (e) {
+              console.warn('Could not close opener window:', e);
+            }
+          }, 500);
+        }
+        // Use replace to avoid adding to browser history
+        window.location.replace(data.url);
+        return;
+      }
+      
+      console.error('Stripe checkout failed:', data?.error);
+      // Fall through to pricing page on error
+      if (hasOpener) {
+        setTimeout(() => {
+          try {
+            window.opener.close();
+          } catch (e) {
+            console.warn('Could not close opener window:', e);
+          }
+        }, 500);
+      }
+      window.location.replace('/pricing-a.html');
+    } catch (err) {
+      console.error('Checkout error from email verification flow:', err);
+      if (hasOpener) {
+        setTimeout(() => {
+          try {
+            window.opener.close();
+          } catch (e) {
+            console.warn('Could not close opener window:', e);
+          }
+        }, 500);
+      }
+      window.location.replace('/pricing-a.html');
+    }
+  } else {
+    // Free plan - redirect to dashboard
+    console.log('✅ Free plan detected, redirecting to dashboard');
+    // Clear selectedPlan since we're going to dashboard
+    try {
+      sessionStorage.removeItem('selectedPlan');
+    } catch (e) {}
+    
+    // Close opener window if it exists
+    if (hasOpener) {
+      setTimeout(() => {
+        try {
+          window.opener.close();
+        } catch (e) {
+          console.warn('Could not close opener window:', e);
+        }
+      }, 500);
+    }
+    // Use replace to avoid adding to browser history
+    window.location.replace('/dashboard.html');
+  }
+}
+
 // Handle email verification
 async function handleEmailVerification() {
   try {
@@ -147,15 +267,37 @@ async function handleEmailVerification() {
 
     showSuccess("✅ Email verified successfully!");
     pageTitle.textContent = "Email Verified";
-    status.textContent = "Your email has been verified. You can now access your dashboard.";
     
-    // Show action buttons
+    // Check for selected plan to determine redirect destination
+    let storedSelection = null;
+    try {
+      const localStored = localStorage.getItem('selectedPlan');
+      if (localStored) {
+        storedSelection = JSON.parse(localStored).planId;
+      } else {
+        const sessionStored = sessionStorage.getItem('selectedPlan');
+        storedSelection = sessionStored ? JSON.parse(sessionStored).planId : null;
+      }
+    } catch (e) {}
+    
+    const plan = storedSelection || 'free';
+    const requiresPayment = planRequiresPayment(plan);
+    
+    if (requiresPayment) {
+      status.textContent = "Your email has been verified. Redirecting to complete your subscription...";
+    } else {
+      status.textContent = "Your email has been verified. You can now access your dashboard.";
+    }
+    
+    // Show action buttons (but we'll redirect automatically)
     actionButtons.style.display = 'block';
     goToLoginBtn.style.display = 'none'; // Hide login button for verified users
     goToDashboardBtn.style.display = 'block';
     
-    // Redirect to dashboard
-    setTimeout(() => { window.location.href = '/dashboard.html'; }, 1200);
+    // Wait a moment for UI feedback, then route based on plan
+    setTimeout(() => {
+      routeAfterVerification();
+    }, 1200);
     
   } catch (error) {
     console.error('Email verification failed:', error);
@@ -245,7 +387,24 @@ async function handlePasswordResetSubmit(event) {
     
     // Flag success for login page banner and redirect
     try { sessionStorage.setItem('resetPasswordSuccess', '1'); } catch(_) {}
-    setTimeout(() => { window.location.href = '/login.html'; }, 1200);
+    
+    setTimeout(() => {
+      // Close opener window if it exists (tab opened from email link)
+      // Re-evaluate inside setTimeout to avoid race condition where opener could be closed during delay
+      // This improves UX by cleaning up the previous tab after password reset
+      const hasOpener = window.opener && !window.opener.closed;
+      if (hasOpener) {
+        try {
+          window.opener.close();
+        } catch (e) {
+          console.warn('Could not close opener window:', e);
+        }
+      }
+      
+      // Redirect to login page
+      // Use replace to avoid adding to browser history (prevents back navigation to expired reset page)
+      window.location.replace('/login.html');
+    }, 1200);
     
   } catch (error) {
     console.error('Password reset failed:', error);

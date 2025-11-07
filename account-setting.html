@@ -12,25 +12,109 @@
   </style>
   <script src="js/static-auth-guard.js?v=20251007-2"></script>
   <script>
-    document.addEventListener("firebase-auth-ready", function () {
+    // Single consolidated auth check - wait for firebase-auth-ready event
+    let authCheckComplete = false;
+    document.addEventListener("firebase-auth-ready", function (event) {
+      if (authCheckComplete) return; // Prevent duplicate checks
+      authCheckComplete = true;
+      
       const mgr = window.FirebaseAuthManager;
       const user = mgr ? mgr.getCurrentUser() : null;
+      
+      // Check if user is authenticated via multiple methods
+      const hasLocalStorageAuth = localStorage.getItem('user-authenticated') === 'true' && !!localStorage.getItem('user-email');
+      
+      if (!user && !hasLocalStorageAuth) {
+        console.log('🔒 No authenticated user found, redirecting to login');
+        window.location.href = "/login.html";
+        return;
+      }
+      
+      // If we have localStorage auth but no Firebase user yet, wait a bit more
+      if (!user && hasLocalStorageAuth) {
+        console.log('⏳ Waiting for Firebase auth to sync...');
+        setTimeout(() => {
+          const retryUser = mgr ? mgr.getCurrentUser() : null;
+          if (!retryUser) {
+            console.log('🔒 Firebase auth not available after wait, redirecting to login');
+            window.location.href = "/login.html";
+            return;
+          }
+          checkEmailVerification(retryUser);
+        }, 2000);
+        return;
+      }
+      
+      checkEmailVerification(user);
+    });
+    
+    function checkEmailVerification(user) {
       if (!user) {
         window.location.href = "/login.html";
         return;
       }
-      if (!user.emailVerified) {
+      
+      // Reload user to get latest verification status
+      user.reload().then(() => {
+        if (!user.emailVerified) {
+          console.log('📧 User email not verified, redirecting to verify page');
+          window.location.href = "/verify-email.html?email=" + encodeURIComponent(user.email || "");
+          return;
+        }
+        // user is verified, show content
+        console.log('✅ User authenticated and verified, showing account settings');
+        document.body.classList.remove("account-protected");
+      }).catch((error) => {
+        // If reload fails, don't trust stale emailVerified value - be conservative
+        // Redirect to verify page to force fresh verification check
+        console.warn('⚠️ Failed to reload user verification status:', error);
+        console.log('🔒 Reload failed - redirecting to verify page for fresh check');
         window.location.href = "/verify-email.html?email=" + encodeURIComponent(user.email || "");
-        return;
+      });
+    }
+    
+    // Fallback: If firebase-auth-ready doesn't fire within 10 seconds, check manually
+    setTimeout(() => {
+      if (!authCheckComplete) {
+        console.log('⏰ Firebase auth ready event timeout, checking manually');
+        authCheckComplete = true;
+        const mgr = window.FirebaseAuthManager;
+        const user = mgr ? mgr.getCurrentUser() : null;
+        const hasLocalStorageAuth = localStorage.getItem('user-authenticated') === 'true' && !!localStorage.getItem('user-email');
+        
+        if (!user && !hasLocalStorageAuth) {
+          console.log('🔒 Manual check: No auth found, redirecting to login');
+          window.location.href = "/login.html";
+        } else if (user) {
+          checkEmailVerification(user);
+        } else {
+          // Has localStorage auth but no Firebase user - redirect to login to re-auth
+          console.log('🔒 Manual check: localStorage auth but no Firebase user, redirecting');
+          window.location.href = "/login.html";
+        }
       }
-      // user is verified, show content
-      document.body.classList.remove("account-protected");
-    });
-    // default: hide
-    document.body.classList.add("account-protected");
+    }, 10000);
+    
+    // default: hide - ensure body exists before adding class
+    // Fix: Use DOMContentLoaded or execute immediately if DOM already loaded
+    function addAccountProtectedClass() {
+      if (document.body) {
+        document.body.classList.add("account-protected");
+      }
+    }
+    
+    if (document.readyState === 'loading') {
+      // DOM hasn't finished loading yet, wait for it
+      document.addEventListener('DOMContentLoaded', addAccountProtectedClass);
+    } else {
+      // DOM already loaded, execute immediately
+      addAccountProtectedClass();
+    }
   </script>
-  <title>Account Settings – JobHackAI</title>
-  <link rel="icon" type="image/png" href="assets/JobHackAI_Logo_favicon-32x32.png">
+  <title>JobHackAI</title>
+  <link rel="icon" type="image/png" href="assets/jobhackai_icon_only_128.png">
+  <link rel="apple-touch-icon" href="assets/jobhackai_icon_only_128.png">
+  <script src="js/dynamic-favicon.js?v=20250111-1"></script>
   <link rel="stylesheet" href="css/tokens.css">
   <link rel="stylesheet" href="css/main.css">
   <link rel="stylesheet" href="css/header.css">
@@ -237,10 +321,10 @@
         <nav class="nav-links" role="navigation">
           <a href="index.html">Home</a>
           <a href="#what-you-get">What You Get</a>
-          <a href="pricing-a.html">Pricing</a>
+          <a href="/pricing-a">Pricing</a>
           <a href="index.html#blog">Blog</a>
           <a href="login.html">Login</a>
-          <a href="pricing-a.html" class="cta-button">Start Free Trial</a>
+          <a href="/pricing-a" class="cta-button">Start Free Trial</a>
         </nav>
       </div>
       <button class="mobile-toggle" aria-label="Open navigation menu" aria-expanded="false" aria-controls="mobileNav">
@@ -255,10 +339,10 @@
   <nav class="mobile-nav" id="mobileNav">
     <a href="index.html">Home</a>
     <a href="#what-you-get">What You Get</a>
-    <a href="pricing-a.html">Pricing</a>
+    <a href="/pricing-a">Pricing</a>
     <a href="index.html#blog">Blog</a>
     <a href="login.html">Login</a>
-    <a href="pricing-a.html" class="cta-button">Start Free Trial</a>
+    <a href="/pricing-a" class="cta-button">Start Free Trial</a>
   </nav>
   <main>
     <!-- Skeleton Loading State -->
@@ -339,48 +423,7 @@
       </div>
     </div>
   </footer>
-  <script>
-    // --- AUTHENTICATION CHECK ---
-    function checkAuthentication() {
-      const isAuthenticated = localStorage.getItem('user-authenticated') === 'true' && !!localStorage.getItem('user-email');
-      const mainContent = document.querySelector('main');
-      
-      if (!isAuthenticated) {
-        mainContent.innerHTML = `
-          <div style="max-width: 600px; margin: 4rem auto; text-align: center; padding: 2rem;">
-            <div style="font-size: 4rem; margin-bottom: 1rem;">🔒</div>
-            <h1 style="font-size: 2rem; font-weight: 700; color: var(--color-text-main); margin-bottom: 1rem;">
-              Login Required
-            </h1>
-            <p style="font-size: 1.1rem; color: var(--color-text-secondary); margin-bottom: 2rem; line-height: 1.6;">
-              You need to be logged in to access your account settings. 
-              Please sign in to manage your account.
-            </p>
-            <div style="display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap;">
-              <a href="login.html" class="btn-primary" style="text-decoration: none;">
-                Sign In
-              </a>
-              <a href="pricing-a.html" class="btn-outline" style="text-decoration: none;">
-                View Pricing
-              </a>
-            </div>
-          </div>
-        `;
-        return false;
-      }
-      return true;
-    }
-
-    // --- Initialize on load ---
-    document.addEventListener('DOMContentLoaded', function() {
-      // Check authentication first
-      if (!checkAuthentication()) {
-        return; // Stop here if not authenticated
-      }
-      
-      // Continue with existing account settings logic
-    });
-  </script>
+  <!-- Removed duplicate checkAuthentication - now handled by firebase-auth-ready event -->
   <!-- Load navigation system -->
   <script src="js/navigation.js?v=20251007-2"></script>
   <script src="js/universal-logout.js?v=20251007-2"></script>
@@ -395,8 +438,46 @@
         waitCount++;
       }
       
-      if (window.JobHackAINavigation && typeof window.JobHackAINavigation.initializeNavigation === 'function') {
-        window.JobHackAINavigation.initializeNavigation();
+      // CRITICAL FIX: Delay navigation initialization on account-settings to allow plan sync to complete first
+      // This prevents navigation from rendering with incorrect 'free' plan which causes upgrade modal bugs
+      const initNav = () => {
+        if (window.JobHackAINavigation && typeof window.JobHackAINavigation.initializeNavigation === 'function') {
+          window.JobHackAINavigation.initializeNavigation();
+        }
+      };
+      
+      // Wait for plan sync to complete before initializing navigation
+      // Check if we need to sync plan first
+      const user = window.FirebaseAuthManager?.getCurrentUser?.();
+      if (user) {
+        // Try to get token and check plan
+        user.getIdToken().then(token => {
+          fetch('/api/billing-status', { headers: { Authorization: `Bearer ${token}` } })
+            .then(res => res.ok ? res.json() : null)
+            .then(data => {
+              if (data?.ok && data?.plan && data?.plan !== 'free') {
+                // Plan found, sync it before navigation
+                console.log('🔄 [ACCOUNT-SETTINGS] Syncing plan before navigation init:', data.plan);
+                localStorage.setItem('user-plan', data.plan);
+                localStorage.setItem('dev-plan', data.plan);
+                // Initialize navigation after sync
+                initNav();
+              } else {
+                // No plan found or already free, initialize navigation normally
+                initNav();
+              }
+            })
+            .catch(() => {
+              // If sync check fails, initialize navigation anyway
+              initNav();
+            });
+        }).catch(() => {
+          // If we can't get token, initialize navigation anyway
+          initNav();
+        });
+      } else {
+        // No user yet, initialize navigation normally
+        initNav();
       }
     });
   </script>
@@ -408,29 +489,70 @@
     // --- BILLING PORTAL FUNCTION ---
     async function openBillingPortal() {
       try {
-        const idToken = await window.FirebaseAuthManager?.getCurrentUser?.()?.getIdToken?.();
-        if (!idToken) { 
-          alert('Please log in again.'); 
-          return; 
+        const user = window.FirebaseAuthManager?.getCurrentUser?.();
+        if (!user) {
+          alert('Please log in again.');
+          return;
         }
+
+        const idToken = await user.getIdToken();
+        if (!idToken) {
+          alert('Unable to get authentication token. Please log in again.');
+          return;
+        }
+
+        console.log('🔵 [ACCOUNT-SETTINGS] Opening billing portal...');
         
         const res = await fetch('/api/billing-portal', {
           method: 'POST',
-          headers: { 
-            'Content-Type': 'application/json', 
-            Authorization: `Bearer ${idToken}` 
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${idToken}`
           }
         });
-        
-        const data = await res.json();
+
+        // Handle 404 specifically - likely deployment issue
+        if (res.status === 404) {
+          console.error('❌ [ACCOUNT-SETTINGS] Billing portal endpoint not found (404)');
+          alert('Billing portal service is not available. Please contact support or try again later.');
+          return;
+        }
+
+        // Handle non-JSON responses
+        let data;
+        try {
+          data = await res.json();
+        } catch (jsonError) {
+          console.error('❌ [ACCOUNT-SETTINGS] Failed to parse response:', jsonError);
+          alert(`Error: ${res.status} ${res.statusText}. Please try again or contact support.`);
+          return;
+        }
+
         if (data.ok && data.url) {
+          console.log('✅ [ACCOUNT-SETTINGS] Redirecting to billing portal');
           window.location.href = data.url; // Redirect to Stripe portal
         } else {
-          alert('Unable to open billing portal. Please try again.');
+          const errorMsg = data.error || 'Unknown error';
+          console.error('❌ [ACCOUNT-SETTINGS] Billing portal error:', errorMsg);
+          
+          // Provide specific error messages
+          if (errorMsg.includes('No customer')) {
+            alert('No subscription found. Please subscribe to a plan first.');
+          } else if (errorMsg.includes('unauthorized')) {
+            alert('Your session has expired. Please log in again.');
+          } else {
+            alert(`Unable to open billing portal: ${errorMsg}. Please try again or contact support.`);
+          }
         }
       } catch (error) {
-        console.error('Billing portal error:', error);
-        alert('Unable to open billing portal. Please try again.');
+        console.error('❌ [ACCOUNT-SETTINGS] Billing portal exception:', error);
+        
+        // Provide more specific error messages
+        if (error.message?.includes('Failed to fetch')) {
+          alert('Network error. Please check your internet connection and try again.');
+        } else {
+          alert(`Unable to open billing portal: ${error.message || 'Unknown error'}. Please try again or contact support.`);
+        }
       }
     }
     
@@ -447,7 +569,8 @@
         }
         
         const idToken = await user.getIdToken();
-        const res = await fetch('/api/plan/me', {
+        // Use billing-status API to get authoritative plan from Stripe
+        const res = await fetch('/api/billing-status', {
           headers: { Authorization: `Bearer ${idToken}` }
         });
         
@@ -457,7 +580,48 @@
         }
         
         const data = await res.json();
+        if (!data.ok) {
+          billingSection.innerHTML = '<div style="color: #EF4444;">Failed to load subscription details.</div>';
+          return;
+        }
+        
         const plan = data.plan || 'free';
+        
+        // CRITICAL FIX: Sync plan from billing-status to localStorage/KV
+        // This ensures navigation and other components have the correct plan
+        if (plan !== 'free') {
+          console.log(`🔄 [ACCOUNT-SETTINGS] Syncing plan from billing-status: ${plan}`);
+          try {
+            localStorage.setItem('user-plan', plan);
+            // Also sync to navigation system if available
+            if (window.JobHackAINavigation) {
+              // Trigger plan sync by calling sync-stripe-plan API
+              const syncRes = await fetch('/api/sync-stripe-plan', {
+                method: 'POST',
+                headers: { Authorization: `Bearer ${idToken}` }
+              });
+              if (syncRes.ok) {
+                console.log('✅ [ACCOUNT-SETTINGS] Plan synced to KV storage');
+                // Update navigation with new plan
+                const syncData = await syncRes.json();
+                if (syncData.ok && syncData.plan) {
+                  localStorage.setItem('user-plan', syncData.plan);
+                  localStorage.setItem('dev-plan', syncData.plan); // Also update dev-plan for consistency
+                  // Trigger navigation update
+                  window.dispatchEvent(new CustomEvent('planChanged', { detail: { newPlan: syncData.plan } }));
+                  // CRITICAL: Re-initialize navigation to reflect new plan
+                  if (window.JobHackAINavigation && typeof window.JobHackAINavigation.updateNavigation === 'function') {
+                    console.log('🔄 [ACCOUNT-SETTINGS] Re-initializing navigation with synced plan:', syncData.plan);
+                    window.JobHackAINavigation.updateNavigation();
+                  }
+                }
+              }
+            }
+          } catch (syncError) {
+            console.warn('⚠️ [ACCOUNT-SETTINGS] Failed to sync plan:', syncError);
+            // Non-critical, continue rendering
+          }
+        }
         
         // Plan name mapping
         const planNames = {
@@ -484,38 +648,36 @@
               <div style="font-size:1.1rem;font-weight:600;color:#232B36;">Free Account</div>
               <div style="color:#6B7280;font-size:0.98rem;margin-top:0.2rem;">Limited features • Upgrade anytime</div>
             </div>
-            <a href="pricing-a.html" class="btn-primary" style="text-decoration:none;display:inline-block;">View Plans</a>
+            <a href="/pricing-a" class="btn-primary" style="text-decoration:none;display:inline-block;">View Plans</a>
           `;
         } else {
           html += `<div style="margin-bottom:0.8rem;">`;
-          html += `<div style="font-size:1.1rem;font-weight:600;color:#232B36;">${planNames[plan]} Plan</div>`;
-          html += `<div style="color:#6B7280;font-size:0.98rem;margin-top:0.2rem;">${planPrices[plan]}</div>`;
           
-          // Show cancellation warning
-          if (data.cancelAt) {
-            const cancelDate = new Date(data.cancelAt).toLocaleDateString('en-US', { 
+          // Show trial status with days left
+          if (plan === 'trial' && data.trialEndsAt) {
+            const trialEndDate = new Date(data.trialEndsAt);
+            const daysLeft = Math.ceil((trialEndDate - new Date()) / (1000 * 60 * 60 * 24));
+            const trialEndDateStr = trialEndDate.toLocaleDateString('en-US', { 
               year: 'numeric', month: 'long', day: 'numeric' 
             });
-            html += `<div style="background:#FEF3C7;border-left:4px solid #F59E0B;color:#92400E;padding:0.6rem 0.8rem;border-radius:6px;margin-top:0.8rem;font-size:0.95rem;">
-              ⚠️ <strong>Cancels on ${cancelDate}</strong>
-            </div>`;
-          } 
-          // Show scheduled plan change
-          else if (data.scheduledPlanChange) {
-            const effectiveDate = new Date(data.scheduledPlanChange.effectiveDate).toLocaleDateString('en-US', { 
-              year: 'numeric', month: 'long', day: 'numeric' 
-            });
-            const newPlanName = planNames[data.scheduledPlanChange.newPlan] || data.scheduledPlanChange.newPlan;
-            html += `<div style="background:#DBEAFE;border-left:4px solid #3B82F6;color:#1E40AF;padding:0.6rem 0.8rem;border-radius:6px;margin-top:0.8rem;font-size:0.95rem;">
-              ℹ️ <strong>Changes to ${newPlanName} on ${effectiveDate}</strong>
-            </div>`;
-          }
-          // Show next renewal date
-          else if (data.currentPeriodEnd) {
-            const renewDate = new Date(data.currentPeriodEnd).toLocaleDateString('en-US', { 
-              year: 'numeric', month: 'long', day: 'numeric' 
-            });
-            html += `<div style="color:#6B7280;font-size:0.92rem;margin-top:0.4rem;">Renews on ${renewDate}</div>`;
+            html += `<div style="font-size:1.1rem;font-weight:600;color:#232B36;">Trial Plan</div>`;
+            html += `<div style="color:#6B7280;font-size:0.98rem;margin-top:0.2rem;">${daysLeft > 0 ? `${daysLeft} day${daysLeft !== 1 ? 's' : ''} left` : 'Trial ended'} • Ends on ${trialEndDateStr}</div>`;
+            if (daysLeft > 0) {
+              html += `<div style="background:#FEF3C7;border-left:4px solid #F59E0B;color:#92400E;padding:0.6rem 0.8rem;border-radius:6px;margin-top:0.8rem;font-size:0.95rem;">
+                ⏰ Your trial will convert to Essential Plan ($29/month) on ${trialEndDateStr}
+              </div>`;
+            }
+          } else {
+            html += `<div style="font-size:1.1rem;font-weight:600;color:#232B36;">${planNames[plan]} Plan</div>`;
+            html += `<div style="color:#6B7280;font-size:0.98rem;margin-top:0.2rem;">${planPrices[plan]}</div>`;
+            
+            // Show next renewal date for active subscriptions
+            if (data.currentPeriodEnd && data.status === 'active') {
+              const renewDate = new Date(data.currentPeriodEnd).toLocaleDateString('en-US', { 
+                year: 'numeric', month: 'long', day: 'numeric' 
+              });
+              html += `<div style="color:#6B7280;font-size:0.92rem;margin-top:0.4rem;">Renews on ${renewDate}</div>`;
+            }
           }
           
           html += `</div>`;
@@ -559,45 +721,172 @@
       // Show skeleton immediately
       document.getElementById('profile-skeleton').style.display = 'block';
       
-      // Wait for Firebase auth
+      // Wait for Firebase auth with longer timeout and better checks
       let user = window.FirebaseAuthManager?.getCurrentUser?.();
-      if (!user) {
-        // Wait up to 3s for Firebase to initialize
-        await new Promise(r => setTimeout(r, 3000));
-        user = window.FirebaseAuthManager?.getCurrentUser?.();
-        if (!user) {
-          window.location.href = 'login.html';
-          return;
+      
+      // Also check localStorage as fallback
+      const hasLocalStorageAuth = localStorage.getItem('user-authenticated') === 'true' && !!localStorage.getItem('user-email');
+      
+      if (!user && !hasLocalStorageAuth) {
+        // No auth at all - redirect handled by static-auth-guard or firebase-auth-ready handler
+        console.log('⏳ Waiting for auth...');
+        // Don't redirect here - let the firebase-auth-ready handler do it
+        return;
+      }
+      
+      // CRITICAL FIX: Sync plan from billing-status BEFORE loading profile
+      // This ensures navigation renders with the correct plan and prevents upgrade modal bugs
+      if (user || hasLocalStorageAuth) {
+        try {
+          // Wait a bit for user to be available if we only have localStorage auth
+          if (!user && hasLocalStorageAuth) {
+            let retries = 0;
+            while (!user && retries < 10) {
+              await new Promise(r => setTimeout(r, 200));
+              user = window.FirebaseAuthManager?.getCurrentUser?.();
+              retries++;
+            }
+          }
+          
+          if (user) {
+            const currentToken = await user.getIdToken();
+            if (currentToken) {
+              console.log('🔄 [ACCOUNT-SETTINGS] Pre-syncing plan from Stripe before page render...');
+              const billingRes = await fetch('/api/billing-status', {
+                headers: { Authorization: `Bearer ${currentToken}` }
+              });
+              if (billingRes.ok) {
+                const billingData = await billingRes.json();
+                if (billingData.ok && billingData.plan && billingData.plan !== 'free') {
+                  console.log(`🔄 [ACCOUNT-SETTINGS] Found plan ${billingData.plan} in Stripe, syncing...`);
+                  localStorage.setItem('user-plan', billingData.plan);
+                  localStorage.setItem('dev-plan', billingData.plan);
+                  // Sync to KV storage
+                  const syncRes = await fetch('/api/sync-stripe-plan', {
+                    method: 'POST',
+                    headers: { Authorization: `Bearer ${currentToken}` }
+                  });
+                  if (syncRes.ok) {
+                    const syncData = await syncRes.json();
+                    if (syncData.ok) {
+                      console.log('✅ [ACCOUNT-SETTINGS] Plan synced to KV, updating navigation...');
+                      // Trigger navigation update immediately
+                      window.dispatchEvent(new CustomEvent('planChanged', { 
+                        detail: { newPlan: billingData.plan, oldPlan: 'free' } 
+                      }));
+                      if (window.JobHackAINavigation && typeof window.JobHackAINavigation.updateNavigation === 'function') {
+                        window.JobHackAINavigation.updateNavigation();
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        } catch (preSyncError) {
+          console.warn('⚠️ [ACCOUNT-SETTINGS] Pre-sync failed (non-critical):', preSyncError);
+          // Continue with page load even if pre-sync fails
         }
       }
       
+      // If we have localStorage auth but no Firebase user, wait a bit more for Firebase to sync
+      if (!user && hasLocalStorageAuth) {
+        console.log('⏳ Waiting for Firebase auth to sync with localStorage...');
+        let retries = 0;
+        const maxRetries = 10; // 10 * 500ms = 5 seconds
+        while (!user && retries < maxRetries) {
+          await new Promise(r => setTimeout(r, 500));
+          user = window.FirebaseAuthManager?.getCurrentUser?.();
+          retries++;
+        }
+        
+        if (!user) {
+          console.log('⚠️ Firebase auth not synced after wait, but localStorage has auth - proceeding anyway');
+          // Don't redirect - let the page try to load with localStorage auth
+          // The firebase-auth-ready handler will handle redirect if needed
+        }
+      }
+      
+      // If still no user after all checks, firebase-auth-ready handler will redirect
+      if (!user && !hasLocalStorageAuth) {
+        return;
+      }
+      
       // Load real user data
+      // Ensure we have a user object before proceeding
+      if (!user) {
+        console.warn('⚠️ No user object available, cannot load profile');
+        // Fallback to localStorage email if available
+        const email = localStorage.getItem('user-email') || 'User';
+        document.getElementById('profile-name').textContent = 'User';
+        document.getElementById('profile-email').textContent = email;
+        await renderBillingSection();
+        document.getElementById('profile-skeleton').style.display = 'none';
+        document.getElementById('profile-content').style.display = 'block';
+        return;
+      }
+      
       try {
         const profileResult = await UserProfileManager.getProfile(user.uid);
-        const profile = profileResult.profile || {};
         
-        const userName = profile.displayName || 
-          `${profile.firstName || ''} ${profile.lastName || ''}`.trim() || 
-          user.displayName ||
-          'User';
+        // Handle Firestore permission errors gracefully - don't block page access
+        if (profileResult.isPermissionError) {
+          console.log('ℹ️ Firestore permission denied - using Firebase user data only');
+          // Permission error is non-critical, use Firebase user data
+          const userName = user.displayName || 
+            user.email?.split('@')[0] ||
+            'User';
+          
+          document.getElementById('profile-name').textContent = userName;
+          document.getElementById('profile-email').textContent = user.email || 'user@example.com';
+        } else if (profileResult.success && profileResult.profile) {
+          // Profile loaded successfully
+          const profile = profileResult.profile;
+          const userName = profile.displayName || 
+            `${profile.firstName || ''} ${profile.lastName || ''}`.trim() || 
+            user.displayName ||
+            user.email?.split('@')[0] ||
+            'User';
+          
+          document.getElementById('profile-name').textContent = userName;
+          document.getElementById('profile-email').textContent = user.email || 'user@example.com';
+        } else {
+          // Profile not found or failed to load - use Firebase user data
+          console.log('ℹ️ Profile not found or failed to load - using Firebase user data');
+          const userName = user.displayName || 
+            user.email?.split('@')[0] ||
+            'User';
+          
+          document.getElementById('profile-name').textContent = userName;
+          document.getElementById('profile-email').textContent = user.email || 'user@example.com';
+        }
         
-        document.getElementById('profile-name').textContent = userName;
-        document.getElementById('profile-email').textContent = user.email || 'user@example.com';
-        
-        // Render billing section
+        // Render billing section (may also fail with permission errors - that's OK)
         await renderBillingSection();
-
         
         // Hide skeleton, show content
         document.getElementById('profile-skeleton').style.display = 'none';
         document.getElementById('profile-content').style.display = 'block';
       } catch (error) {
-        console.error('Failed to load profile:', error);
-        // Still show content with basic info
-        document.getElementById('profile-name').textContent = user.displayName || 'User';
+        console.error('⚠️ Failed to load profile:', error);
+        // Error loading profile - still show page with basic info
+        // This ensures Firestore permission errors don't block access
+        const userName = user.displayName || 
+          user.email?.split('@')[0] ||
+          'User';
+        
+        document.getElementById('profile-name').textContent = userName;
         document.getElementById('profile-email').textContent = user.email || 'user@example.com';
-        await renderBillingSection();
-
+        
+        // Try to render billing section even if profile failed
+        try {
+          await renderBillingSection();
+        } catch (billingError) {
+          console.warn('⚠️ Billing section also failed:', billingError);
+          // Billing section failure is non-critical
+        }
+        
+        // Always show the page content
         document.getElementById('profile-skeleton').style.display = 'none';
         document.getElementById('profile-content').style.display = 'block';
       }
@@ -632,7 +921,18 @@
       
       try {
         const user = window.FirebaseAuthManager?.getCurrentUser?.();
+        if (!user) {
+          alert('Your session has expired. Please log in again.');
+          window.location.href = '/login.html';
+          return;
+        }
+
         const idToken = await user.getIdToken();
+        if (!idToken) {
+          alert('Unable to get authentication token. Please log in again.');
+          window.location.href = '/login.html';
+          return;
+        }
         
         // Cancel subscription
         await fetch('/api/cancel-subscription', {
@@ -647,7 +947,8 @@
         alert('Your account has been deleted.');
         window.location.href = 'index.html';
       } catch (error) {
-        alert('Failed to delete account: ' + error.message);
+        console.error('❌ [ACCOUNT-SETTINGS] Delete account error:', error);
+        alert('Failed to delete account: ' + (error.message || 'Unknown error'));
       }
     }
   </script>

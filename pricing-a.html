@@ -4,8 +4,10 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Pricing – JobHackAI</title>
-  <link rel="icon" type="image/png" href="assets/JobHackAI_Logo_favicon-32x32.png">
+  <title>JobHackAI</title>
+  <link rel="icon" type="image/png" href="assets/jobhackai_icon_only_128.png">
+  <link rel="apple-touch-icon" href="assets/jobhackai_icon_only_128.png">
+  <script src="js/dynamic-favicon.js?v=20250111-1"></script>
 
   <!-- Design tokens & global styles -->
   <link rel="stylesheet" href="css/tokens.css">
@@ -220,13 +222,15 @@
           if (plan === 'free') {
             // Store normalized plan selection in sessionStorage
             function selectPlan(planId, planName, price) {
-              sessionStorage.setItem("selectedPlan", JSON.stringify({
+              const selectedPlanPayload = {
                 planId,
                 planName,
                 price,
                 source: "pricing-page",
                 timestamp: Date.now()
-              }));
+              };
+              sessionStorage.setItem("selectedPlan", JSON.stringify(selectedPlanPayload));
+              try { localStorage.setItem("selectedPlan", JSON.stringify(selectedPlanPayload)); } catch (_) {}
               window.location.href = "/login.html?plan=" + encodeURIComponent(planId);
             }
             selectPlan('free', 'Free Plan', '$0/mo');
@@ -285,7 +289,20 @@
                 throw new Error(data?.error || 'Checkout failed');
               } catch (e) {
                 console.error('Checkout error:', e);
-                alert('Unable to start checkout. Please try again.');
+                const errorMessage = e?.message || 'Checkout failed';
+                console.error('Full checkout error details:', {
+                  message: errorMessage,
+                  stack: e?.stack,
+                  response: e?.response
+                });
+                // Provide more helpful error message
+                if (errorMessage.includes('unauthorized') || errorMessage.includes('token')) {
+                  alert('Your session has expired. Please log in again and try upgrading.');
+                } else if (errorMessage.includes('Trial already used')) {
+                  alert('You have already used your free trial. Please select a paid plan.');
+                } else {
+                  alert(`Unable to start checkout: ${errorMessage}. Please try again or contact support.`);
+                }
                 button.textContent = originalText;
                 button.disabled = false;
                 button.style.opacity = '1';
@@ -295,13 +312,15 @@
           } else {
             // New user - store normalized plan selection in sessionStorage
             function selectPlan(planId, planName, price) {
-              sessionStorage.setItem("selectedPlan", JSON.stringify({
+              const selectedPlanPayload = {
                 planId,
                 planName,
                 price,
                 source: "pricing-page",
                 timestamp: Date.now()
-              }));
+              };
+              sessionStorage.setItem("selectedPlan", JSON.stringify(selectedPlanPayload));
+              try { localStorage.setItem("selectedPlan", JSON.stringify(selectedPlanPayload)); } catch (_) {}
               window.location.href = "/login.html?plan=" + encodeURIComponent(planId);
             }
             const planMap = {

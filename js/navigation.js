@@ -313,7 +313,7 @@ async function logout(e) {
   e?.preventDefault?.();
   console.log('🚪 logout() v2: triggered');
 
-  // Set logout intent immediately
+  // Set logout intent immediately - CRITICAL: Must be set before any async operations
   sessionStorage.setItem('logout-intent', '1');
 
   // Attempt Firebase sign out
@@ -326,13 +326,35 @@ async function logout(e) {
 
   // Safely clear localStorage
   try {
-    ['user-authenticated', 'user-email', 'user-plan', 'dev-plan', 'auth-user']
+    ['user-authenticated', 'user-email', 'user-plan', 'dev-plan', 'auth-user', 'selectedPlan']
       .forEach(k => localStorage.removeItem(k));
   } catch (err) {
     console.warn('⚠️ localStorage cleanup failed:', err);
   }
 
+  // Clear all Firebase auth persistence keys to prevent automatic re-login
+  try {
+    for (let i = localStorage.length - 1; i >= 0; i--) {
+      const key = localStorage.key(i);
+      if (key && key.startsWith('firebase:authUser:')) {
+        localStorage.removeItem(key);
+        console.log('🗑️ Removed Firebase auth key:', key);
+      }
+    }
+  } catch (err) {
+    console.warn('⚠️ Firebase auth key cleanup failed:', err);
+  }
+
+  // Also clear any session-scoped plan selection
+  try { sessionStorage.removeItem('selectedPlan'); } catch (_) {}
+
+  // Small delay to ensure all cleanup completes before redirect
+  // This prevents race conditions with auth state listeners
+  await new Promise(resolve => setTimeout(resolve, 100));
+
   // Redirect to login (keep .html for now)
+  // Clear logout-intent to avoid stale state on back/cached navigation
+  try { sessionStorage.removeItem('logout-intent'); } catch (_) {}
   console.log('➡️ Redirecting to /login.html');
   location.replace('/login.html');
 }
@@ -407,10 +429,10 @@ const NAVIGATION_CONFIG = {
       { text: 'Home', href: 'index.html' },
       { text: 'Blog', href: 'index.html#blog' },
       { text: 'Features', href: 'features.html' },
-      { text: 'Pricing', href: 'pricing-a.html' },
+      { text: 'Pricing', href: '/pricing-a' },
       { text: 'Login', href: 'login.html' }
     ],
-    cta: { text: 'Start Free Trial', href: 'pricing-a.html', isCTA: true }
+    cta: { text: 'Start Free Trial', href: '/pricing-a', isCTA: true }
   },
   // Free Account (no plan)
   free: {
@@ -710,7 +732,7 @@ function showUpgradeModal(targetPlan = 'premium') {
           cursor: pointer;
           font-weight: 600;
         ">Cancel</button>
-        <a href="pricing-a.html?plan=${targetPlan}" style="
+        <a href="/pricing-a?plan=${targetPlan}" style="
           background: #00E676;
           color: white;
           border: none;
@@ -857,6 +879,33 @@ function updateNavigation() {
           const link = document.createElement('a');
           updateLink(link, dropdownItem.href);
           link.textContent = dropdownItem.text;
+          // Only add locked handler if explicitly marked as locked
+          // Dropdown items should inherit unlocked state from parent plan config
+          // CRITICAL: Use strict equality to prevent issues with truthy non-boolean values
+          if (dropdownItem.locked === true) {
+            // Remove href to prevent navigation even if JavaScript fails
+            link.href = '#';
+            link.setAttribute('aria-disabled', 'true');
+            link.classList.add('locked-link');
+            link.style.opacity = '1';
+            link.style.cursor = 'pointer';
+            link.addEventListener('click', function(e) {
+              e.preventDefault();
+              e.stopPropagation();
+              e.stopImmediatePropagation();
+              navLog('info', 'Locked dropdown link clicked', { 
+                text: dropdownItem.text, 
+                href: dropdownItem.href,
+                currentPlan,
+                url: window.location.href 
+              });
+              showUpgradeModal('essential');
+              return false;
+            });
+            link.title = 'Upgrade your plan to unlock this feature.';
+          }
+          // IMPORTANT: Do not add any other click handlers to dropdown links
+          // They should navigate normally unless explicitly locked
           dropdownMenu.appendChild(link);
         });
 
@@ -883,18 +932,27 @@ function updateNavigation() {
         const link = document.createElement('a');
         updateLink(link, item.href);
         link.textContent = item.text;
-        if (item.locked) {
+        // CRITICAL: Only add locked handler if explicitly marked as locked in config
+        // This prevents incorrect upgrade modals from appearing
+        if (item.locked === true) {
+          // Remove href to prevent navigation even if JavaScript fails
+          link.href = '#';
+          link.setAttribute('aria-disabled', 'true');
           // Do not fade or reduce opacity; make it a clear button-like link
           link.classList.add('locked-link');
           link.style.opacity = '1';
           link.style.cursor = 'pointer';
           link.addEventListener('click', function(e) {
             e.preventDefault();
-            navLog('info', 'Locked link clicked', { text: item.text, href: item.href });
+            e.stopPropagation();
+            e.stopImmediatePropagation();
+            navLog('info', 'Locked link clicked', { text: item.text, href: item.href, plan: currentPlan });
             showUpgradeModal('essential');
+            return false;
           });
           link.title = 'Upgrade your plan to unlock this feature.';
         }
+        // IMPORTANT: Do not add any other click handlers - links should navigate normally unless locked
         navLinks.appendChild(link);
         // Removed verbose logging to prevent console spam
       }
@@ -964,6 +1022,26 @@ function updateNavigation() {
           const link = document.createElement('a');
           updateLink(link, dropdownItem.href);
           link.textContent = dropdownItem.text;
+          // Only add locked handler if explicitly marked as locked
+          // CRITICAL: Use strict equality to prevent issues with truthy non-boolean values
+          if (dropdownItem.locked === true) {
+            // Remove href to prevent navigation even if JavaScript fails
+            link.href = '#';
+            link.setAttribute('aria-disabled', 'true');
+            link.classList.add('locked-link');
+            link.style.opacity = '1';
+            link.style.cursor = 'pointer';
+            link.addEventListener('click', function(e) {
+              e.preventDefault();
+              e.stopPropagation();
+              e.stopImmediatePropagation();
+              navLog('info', 'Mobile locked dropdown link clicked', { text: dropdownItem.text, href: dropdownItem.href });
+              showUpgradeModal('essential');
+              return false;
+            });
+            link.title = 'Upgrade your plan to unlock this feature.';
+          }
+          // IMPORTANT: Do not add any other click handlers to mobile dropdown links
           submenu.appendChild(link);
         });
         group.appendChild(submenu);
@@ -973,14 +1051,22 @@ function updateNavigation() {
         const link = document.createElement('a');
         updateLink(link, item.href);
         link.textContent = item.text;
-        if (item.locked) {
+        // CRITICAL: Use strict equality to prevent issues with truthy non-boolean values
+        // Must match desktop regular items check for consistency
+        if (item.locked === true) {
+          // Remove href to prevent navigation even if JavaScript fails
+          link.href = '#';
+          link.setAttribute('aria-disabled', 'true');
           link.classList.add('locked-link');
           link.style.opacity = '1';
           link.style.cursor = 'pointer';
           link.addEventListener('click', function(e) {
             e.preventDefault();
+            e.stopPropagation();
+            e.stopImmediatePropagation();
             navLog('info', 'Mobile locked link clicked', { text: item.text, href: item.href });
             showUpgradeModal('essential');
+            return false;
           });
           link.title = 'Upgrade your plan to unlock this feature.';
         }
@@ -1123,7 +1209,7 @@ function checkFeatureAccess(featureKey, targetPlan = 'premium') {
 }
 
 // --- INITIALIZATION ---
-function initializeNavigation() {
+async function initializeNavigation() {
   navLog('info', '=== initializeNavigation() START ===');
   navLog('info', 'Initialization context', {
     readyState: document.readyState,
@@ -1173,6 +1259,91 @@ function initializeNavigation() {
 //   document.body.appendChild(switcher);
 //   navLog('debug', 'Quick plan switcher appended to body');
 
+  // CRITICAL FIX: For authenticated users, fetch plan before rendering navigation
+  // This prevents race condition where navigation shows wrong plan initially
+  if (authState.isAuthenticated && window.FirebaseAuthManager?.getCurrentUser) {
+    navLog('info', 'Authenticated user detected, fetching plan before navigation render');
+    try {
+      const user = window.FirebaseAuthManager.getCurrentUser();
+      if (user) {
+        const token = await user.getIdToken();
+        // Fetch plan from API first
+        const planRes = await fetch('/api/plan/me', {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        if (planRes.ok) {
+          const planData = await planRes.json();
+          if (planData.plan) {
+            navLog('info', 'Fetched plan from API, updating localStorage', planData.plan);
+            localStorage.setItem('user-plan', planData.plan);
+            localStorage.setItem('dev-plan', planData.plan);
+            
+            // If plan is free, double-check with billing-status as fallback
+            if (planData.plan === 'free') {
+              navLog('info', 'Plan is free, checking billing-status as fallback');
+              const billingRes = await fetch('/api/billing-status', {
+                headers: { Authorization: `Bearer ${token}` }
+              });
+              if (billingRes.ok) {
+                const billingData = await billingRes.json();
+                if (billingData.ok && billingData.plan && billingData.plan !== 'free') {
+                  navLog('info', 'Found plan from billing-status fallback, updating', billingData.plan);
+                  localStorage.setItem('user-plan', billingData.plan);
+                  localStorage.setItem('dev-plan', billingData.plan);
+                  // Sync to KV asynchronously
+                  fetch('/api/sync-stripe-plan', {
+                    method: 'POST',
+                    headers: { Authorization: `Bearer ${token}` }
+                  }).catch(err => navLog('warn', 'Failed to sync plan to KV (non-critical):', err));
+                }
+              }
+            }
+          } else {
+            // plan/me returned successfully but without plan field - use billing-status as fallback
+            navLog('info', 'plan/me response missing plan field, checking billing-status as fallback');
+            const billingRes = await fetch('/api/billing-status', {
+              headers: { Authorization: `Bearer ${token}` }
+            });
+            if (billingRes.ok) {
+              const billingData = await billingRes.json();
+              if (billingData.ok && billingData.plan) {
+                navLog('info', 'Found plan from billing-status fallback (plan/me missing plan)', billingData.plan);
+                localStorage.setItem('user-plan', billingData.plan);
+                localStorage.setItem('dev-plan', billingData.plan);
+                // Sync to KV asynchronously
+                fetch('/api/sync-stripe-plan', {
+                  method: 'POST',
+                  headers: { Authorization: `Bearer ${token}` }
+                }).catch(err => navLog('warn', 'Failed to sync plan to KV (non-critical):', err));
+              }
+            }
+          }
+        } else {
+          // plan/me failed - use billing-status as fallback
+          navLog('info', 'plan/me request failed, checking billing-status as fallback');
+          const billingRes = await fetch('/api/billing-status', {
+            headers: { Authorization: `Bearer ${token}` }
+          });
+          if (billingRes.ok) {
+            const billingData = await billingRes.json();
+            if (billingData.ok && billingData.plan) {
+              navLog('info', 'Found plan from billing-status fallback (plan/me failed)', billingData.plan);
+              localStorage.setItem('user-plan', billingData.plan);
+              localStorage.setItem('dev-plan', billingData.plan);
+              // Sync to KV asynchronously
+              fetch('/api/sync-stripe-plan', {
+                method: 'POST',
+                headers: { Authorization: `Bearer ${token}` }
+              }).catch(err => navLog('warn', 'Failed to sync plan to KV (non-critical):', err));
+            }
+          }
+        }
+      }
+    } catch (planError) {
+      navLog('warn', 'Plan fetch failed (non-critical), continuing with navigation render:', planError);
+    }
+  }
+  
   // Update navigation
   navLog('debug', 'Calling updateNavigation()');
   updateNavigation();
@@ -1251,6 +1422,40 @@ async function fetchKVPlan() {
     const data = await r.json();
     console.log('🔍 fetchKVPlan: API response:', data);
     
+    let plan = data.plan || 'free';
+    
+    // CRITICAL FIX: If plan is 'free' but user is authenticated, check billing-status as fallback
+    // This handles cases where KV storage is out of sync with Stripe
+    if (plan === 'free' && currentUser) {
+      console.log('🔍 fetchKVPlan: Plan is free, checking billing-status as fallback...');
+      try {
+        const billingRes = await fetch('/api/billing-status', { 
+          headers: { Authorization: `Bearer ${idToken}` } 
+        });
+        if (billingRes.ok) {
+          const billingData = await billingRes.json();
+          if (billingData.ok && billingData.plan && billingData.plan !== 'free') {
+            console.log(`🔄 fetchKVPlan: Found plan ${billingData.plan} from billing-status, syncing...`);
+            plan = billingData.plan;
+            // Sync to KV storage
+            try {
+              const syncRes = await fetch('/api/sync-stripe-plan', {
+                method: 'POST',
+                headers: { Authorization: `Bearer ${idToken}` }
+              });
+              if (syncRes.ok) {
+                console.log('✅ fetchKVPlan: Plan synced to KV storage');
+              }
+            } catch (syncError) {
+              console.warn('⚠️ fetchKVPlan: Failed to sync plan to KV:', syncError);
+            }
+          }
+        }
+      } catch (billingError) {
+        console.warn('⚠️ fetchKVPlan: Failed to check billing-status:', billingError);
+      }
+    }
+    
     // Store trial end date if available
     if (data.trialEndsAt) {
       localStorage.setItem('trial-ends-at', data.trialEndsAt);
@@ -1258,7 +1463,8 @@ async function fetchKVPlan() {
       localStorage.removeItem('trial-ends-at');
     }
     
-    const plan = data.plan || 'free';
+    // Update localStorage with correct plan
+    localStorage.setItem('user-plan', plan);
     console.log(`✅ fetchKVPlan: Successfully fetched plan: ${plan}`);
     return plan;
   } catch (error) {

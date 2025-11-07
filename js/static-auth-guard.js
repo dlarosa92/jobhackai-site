@@ -15,7 +15,14 @@
 
     function hasFirebaseAuth() {
       try {
-        // Check for actual Firebase auth user shard
+        // First check: Look for our own auth state flags (set by firebase-auth.js)
+        const hasLocalStorageAuth = localStorage.getItem('user-authenticated') === 'true' && 
+                                    !!localStorage.getItem('user-email');
+        if (hasLocalStorageAuth) {
+          return true;
+        }
+        
+        // Second check: Look for Firebase SDK auth user shard
         for (var i = 0; i < localStorage.length; i++) {
           var k = localStorage.key(i);
           if (k && k.indexOf('firebase:authUser:') === 0) {
@@ -41,7 +48,7 @@
 
     // Decide after actively waiting for Firebase auth to appear
     var startTime = Date.now();
-    var maxWait = 8000; // 8 seconds max
+    var maxWait = 10000; // Increased to 10 seconds to allow Firebase auth to initialize
     var checkInterval = 100; // 100ms polling
 
     function checkAndReveal() {
@@ -49,14 +56,26 @@
 
       if (hasFirebaseAuth()) {
         // Firebase auth confirmed - reveal page
+        // But still wait for firebase-auth-ready event to ensure proper initialization
+        // The page content visibility is controlled by account-protected class
         document.documentElement.classList.remove('auth-pending');
         return;
       }
 
       if (elapsed >= maxWait) {
-        // Timeout - redirect to login
-        location.replace('/login.html');
-        return;
+        // Timeout - check one more time before redirecting
+        // Sometimes Firebase auth takes a moment to initialize even if localStorage is set
+        var finalCheck = hasFirebaseAuth();
+        if (!finalCheck) {
+          // Still no auth after timeout - redirect to login
+          console.log('⏰ Static auth guard timeout - no auth found, redirecting to login');
+          location.replace('/login.html');
+          return;
+        } else {
+          // Auth found on final check - reveal page
+          document.documentElement.classList.remove('auth-pending');
+          return;
+        }
       }
 
       // Keep checking

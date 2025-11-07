@@ -19,13 +19,37 @@ export default function Home() {
     return () => unsubscribe()
   }, [router])
 
+  // Use the same favicon for all tabs
+  useEffect(() => {
+    const FAVICON = '/assets/jobhackai_icon_only_128.png'
+
+    const updateFavicon = () => {
+      const existingFavicons = document.querySelectorAll('link[rel="icon"], link[rel="apple-touch-icon"]')
+      existingFavicons.forEach(link => link.remove())
+
+      const faviconLink = document.createElement('link')
+      faviconLink.rel = 'icon'
+      faviconLink.type = 'image/png'
+      faviconLink.href = FAVICON
+      document.head.appendChild(faviconLink)
+
+      const appleTouchLink = document.createElement('link')
+      appleTouchLink.rel = 'apple-touch-icon'
+      appleTouchLink.href = FAVICON
+      document.head.appendChild(appleTouchLink)
+    }
+
+    updateFavicon()
+  }, [])
+
   return (
     <>
       <Head>
-        <title>JobHackAI - ATS Resume Optimization</title>
+        <title>JobHackAI</title>
         <meta name="description" content="Optimize your resume for ATS systems and land more interviews" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <link rel="icon" href="/favicon.ico" />
+        <link rel="icon" type="image/png" href="/assets/jobhackai_icon_only_128.png" />
+        <link rel="apple-touch-icon" href="/assets/jobhackai_icon_only_128.png" />
       </Head>
       
       <main className="container">

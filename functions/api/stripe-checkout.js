@@ -1,4 +1,4 @@
-import { getBearer, verifyFirebaseIdToken } from '../_lib/firebase-auth';
+import { getBearer, verifyFirebaseIdToken } from '../_lib/firebase-auth.js';
 export async function onRequest(context) {
   const { request, env } = context;
   const origin = request.headers.get('Origin') || '';
@@ -20,6 +20,16 @@ export async function onRequest(context) {
     const body = await request.json();
     console.log('🔵 [CHECKOUT] Parsed body', body);
     const { plan } = body || {};
+
+    // Check required environment variables
+    if (!env.FIREBASE_PROJECT_ID) {
+      console.log('🔴 [CHECKOUT] Missing FIREBASE_PROJECT_ID');
+      return json({ ok: false, error: 'Server configuration error' }, 500, origin, env);
+    }
+    if (!env.STRIPE_SECRET_KEY) {
+      console.log('🔴 [CHECKOUT] Missing STRIPE_SECRET_KEY');
+      return json({ ok: false, error: 'Server configuration error' }, 500, origin, env);
+    }
 
     const token = getBearer(request);
     if (!token) {
@@ -61,7 +71,6 @@ export async function onRequest(context) {
     }
 
     // Create Checkout Session (subscription)
-    const idem = `${uid}:${plan}`;
     const sessionBody = {
       mode: 'subscription',
       customer: customerId,
@@ -70,7 +79,7 @@ export async function onRequest(context) {
       success_url: (env.STRIPE_SUCCESS_URL || `${env.FRONTEND_URL || 'https://dev.jobhackai.io'}/dashboard?paid=1`),
       cancel_url: (env.STRIPE_CANCEL_URL || `${env.FRONTEND_URL || 'https://dev.jobhackai.io'}/pricing-a`),
       allow_promotion_codes: 'true',
-      payment_method_collection: 'if_required',
+      payment_method_collection: 'always',
       'metadata[firebaseUid]': uid,
       'metadata[plan]': plan
     };
@@ -78,6 +87,9 @@ export async function onRequest(context) {
       sessionBody['subscription_data[trial_period_days]'] = '3';
       sessionBody['subscription_data[metadata][original_plan]'] = plan;
     }
+    
+    // Include payment_method_collection in idempotency key to ensure parameter changes generate new keys
+    const idem = `${uid}:${plan}:${sessionBody.payment_method_collection || 'always'}`;
 
     console.log('🔵 [CHECKOUT] Creating session', { customerId, priceId });
     const sessionRes = await stripe(env, '/checkout/sessions', {
@@ -94,8 +106,15 @@ export async function onRequest(context) {
     console.log('✅ [CHECKOUT] Session created', { id: s.id, url: s.url });
     return json({ ok: true, url: s.url, sessionId: s.id }, 200, origin, env);
   } catch (e) {
-    console.log('🔴 [CHECKOUT] Exception', e?.message || e);
-    return json({ ok: false, error: e?.message || 'server_error' }, 500, origin, env);
+    const errorMessage = e?.message || (e != null ? String(e) : 'server_error');
+    const errorStack = e?.stack ? String(e.stack).substring(0, 200) : '';
+    console.log('🔴 [CHECKOUT] Exception', {
+      message: errorMessage,
+      stack: errorStack,
+      name: e?.name
+    });
+    // Return a user-friendly error message (don't expose stack traces)
+    return json({ ok: false, error: errorMessage }, 500, origin, env);
   }
 }
 
