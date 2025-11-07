@@ -1259,34 +1259,88 @@ async function initializeNavigation() {
 //   document.body.appendChild(switcher);
 //   navLog('debug', 'Quick plan switcher appended to body');
 
-  // CRITICAL FIX: On account-settings page, sync plan before updating navigation
-  // This prevents navigation from rendering with incorrect 'free' plan
-  if (window.location.pathname.includes('account-setting') && authState.isAuthenticated) {
-    navLog('info', 'Account-settings page detected, syncing plan before navigation render');
+  // CRITICAL FIX: For authenticated users, fetch plan before rendering navigation
+  // This prevents race condition where navigation shows wrong plan initially
+  if (authState.isAuthenticated && window.FirebaseAuthManager?.getCurrentUser) {
+    navLog('info', 'Authenticated user detected, fetching plan before navigation render');
     try {
-      const user = window.FirebaseAuthManager?.getCurrentUser?.();
+      const user = window.FirebaseAuthManager.getCurrentUser();
       if (user) {
         const token = await user.getIdToken();
-        // Quick check billing-status to get correct plan
-        const billingRes = await fetch('/api/billing-status', {
+        // Fetch plan from API first
+        const planRes = await fetch('/api/plan/me', {
           headers: { Authorization: `Bearer ${token}` }
         });
-        if (billingRes.ok) {
-          const billingData = await billingRes.json();
-          if (billingData.ok && billingData.plan && billingData.plan !== 'free') {
-            navLog('info', 'Found plan from billing-status, updating localStorage before navigation render', billingData.plan);
-            localStorage.setItem('user-plan', billingData.plan);
-            localStorage.setItem('dev-plan', billingData.plan);
-            // Sync to KV asynchronously (don't wait)
-            fetch('/api/sync-stripe-plan', {
-              method: 'POST',
+        if (planRes.ok) {
+          const planData = await planRes.json();
+          if (planData.plan) {
+            navLog('info', 'Fetched plan from API, updating localStorage', planData.plan);
+            localStorage.setItem('user-plan', planData.plan);
+            localStorage.setItem('dev-plan', planData.plan);
+            
+            // If plan is free, double-check with billing-status as fallback
+            if (planData.plan === 'free') {
+              navLog('info', 'Plan is free, checking billing-status as fallback');
+              const billingRes = await fetch('/api/billing-status', {
+                headers: { Authorization: `Bearer ${token}` }
+              });
+              if (billingRes.ok) {
+                const billingData = await billingRes.json();
+                if (billingData.ok && billingData.plan && billingData.plan !== 'free') {
+                  navLog('info', 'Found plan from billing-status fallback, updating', billingData.plan);
+                  localStorage.setItem('user-plan', billingData.plan);
+                  localStorage.setItem('dev-plan', billingData.plan);
+                  // Sync to KV asynchronously
+                  fetch('/api/sync-stripe-plan', {
+                    method: 'POST',
+                    headers: { Authorization: `Bearer ${token}` }
+                  }).catch(err => navLog('warn', 'Failed to sync plan to KV (non-critical):', err));
+                }
+              }
+            }
+          } else {
+            // plan/me returned successfully but without plan field - use billing-status as fallback
+            navLog('info', 'plan/me response missing plan field, checking billing-status as fallback');
+            const billingRes = await fetch('/api/billing-status', {
               headers: { Authorization: `Bearer ${token}` }
-            }).catch(err => navLog('warn', 'Failed to sync plan to KV (non-critical):', err));
+            });
+            if (billingRes.ok) {
+              const billingData = await billingRes.json();
+              if (billingData.ok && billingData.plan) {
+                navLog('info', 'Found plan from billing-status fallback (plan/me missing plan)', billingData.plan);
+                localStorage.setItem('user-plan', billingData.plan);
+                localStorage.setItem('dev-plan', billingData.plan);
+                // Sync to KV asynchronously
+                fetch('/api/sync-stripe-plan', {
+                  method: 'POST',
+                  headers: { Authorization: `Bearer ${token}` }
+                }).catch(err => navLog('warn', 'Failed to sync plan to KV (non-critical):', err));
+              }
+            }
+          }
+        } else {
+          // plan/me failed - use billing-status as fallback
+          navLog('info', 'plan/me request failed, checking billing-status as fallback');
+          const billingRes = await fetch('/api/billing-status', {
+            headers: { Authorization: `Bearer ${token}` }
+          });
+          if (billingRes.ok) {
+            const billingData = await billingRes.json();
+            if (billingData.ok && billingData.plan) {
+              navLog('info', 'Found plan from billing-status fallback (plan/me failed)', billingData.plan);
+              localStorage.setItem('user-plan', billingData.plan);
+              localStorage.setItem('dev-plan', billingData.plan);
+              // Sync to KV asynchronously
+              fetch('/api/sync-stripe-plan', {
+                method: 'POST',
+                headers: { Authorization: `Bearer ${token}` }
+              }).catch(err => navLog('warn', 'Failed to sync plan to KV (non-critical):', err));
+            }
           }
         }
       }
-    } catch (syncError) {
-      navLog('warn', 'Plan sync check failed (non-critical), continuing with navigation render:', syncError);
+    } catch (planError) {
+      navLog('warn', 'Plan fetch failed (non-critical), continuing with navigation render:', planError);
     }
   }
   
