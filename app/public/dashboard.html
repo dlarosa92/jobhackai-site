@@ -1030,8 +1030,17 @@
         const closeBtn = document.getElementById('upgrade-popup-close');
         const okBtn = document.getElementById('upgrade-popup-ok');
         
+        // Escape key handler - stored so it can be removed later
+        const escapeKeyHandler = function(e) {
+          if (e.key === 'Escape' && overlay.classList.contains('show')) {
+            closePopup();
+          }
+        };
+        
         function closePopup() {
           overlay.classList.remove('show');
+          // Remove Escape key listener to prevent memory leak
+          document.removeEventListener('keydown', escapeKeyHandler);
           setTimeout(() => {
             overlay.remove();
             localStorage.setItem(popupShownKey, 'true');
@@ -1053,11 +1062,7 @@
         });
         
         // Close on Escape key
-        document.addEventListener('keydown', function(e) {
-          if (e.key === 'Escape' && overlay.classList.contains('show')) {
-            closePopup();
-          }
-        });
+        document.addEventListener('keydown', escapeKeyHandler);
       }
       
       // Show popup after a short delay to ensure page is rendered
