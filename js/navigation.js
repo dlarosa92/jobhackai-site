@@ -1259,37 +1259,6 @@ async function initializeNavigation() {
 //   document.body.appendChild(switcher);
 //   navLog('debug', 'Quick plan switcher appended to body');
 
-  // CRITICAL FIX: On account-settings page, sync plan before updating navigation
-  // This prevents navigation from rendering with incorrect 'free' plan
-  if (window.location.pathname.includes('account-setting') && authState.isAuthenticated) {
-    navLog('info', 'Account-settings page detected, syncing plan before navigation render');
-    try {
-      const user = window.FirebaseAuthManager?.getCurrentUser?.();
-      if (user) {
-        const token = await user.getIdToken();
-        // Quick check billing-status to get correct plan
-        const billingRes = await fetch('/api/billing-status', {
-          headers: { Authorization: `Bearer ${token}` }
-        });
-        if (billingRes.ok) {
-          const billingData = await billingRes.json();
-          if (billingData.ok && billingData.plan && billingData.plan !== 'free') {
-            navLog('info', 'Found plan from billing-status, updating localStorage before navigation render', billingData.plan);
-            localStorage.setItem('user-plan', billingData.plan);
-            localStorage.setItem('dev-plan', billingData.plan);
-            // Sync to KV asynchronously (don't wait)
-            fetch('/api/sync-stripe-plan', {
-              method: 'POST',
-              headers: { Authorization: `Bearer ${token}` }
-            }).catch(err => navLog('warn', 'Failed to sync plan to KV (non-critical):', err));
-          }
-        }
-      }
-    } catch (syncError) {
-      navLog('warn', 'Plan sync check failed (non-critical), continuing with navigation render:', syncError);
-    }
-  }
-  
   // CRITICAL FIX: For authenticated users, fetch plan before rendering navigation
   // This prevents race condition where navigation shows wrong plan initially
   if (authState.isAuthenticated && window.FirebaseAuthManager?.getCurrentUser) {
