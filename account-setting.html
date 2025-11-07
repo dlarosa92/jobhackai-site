@@ -95,10 +95,20 @@
       }
     }, 10000);
     
-    // default: hide
-    // Fix: Check if document.body exists before accessing classList
-    if (document.body) {
-      document.body.classList.add("account-protected");
+    // default: hide - ensure body exists before adding class
+    // Fix: Use DOMContentLoaded or execute immediately if DOM already loaded
+    function addAccountProtectedClass() {
+      if (document.body) {
+        document.body.classList.add("account-protected");
+      }
+    }
+    
+    if (document.readyState === 'loading') {
+      // DOM hasn't finished loading yet, wait for it
+      document.addEventListener('DOMContentLoaded', addAccountProtectedClass);
+    } else {
+      // DOM already loaded, execute immediately
+      addAccountProtectedClass();
     }
   </script>
   <title>JobHackAI</title>
