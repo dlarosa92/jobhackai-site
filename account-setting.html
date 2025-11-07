@@ -772,31 +772,41 @@
     
     // --- MAIN INITIALIZATION ---
     document.addEventListener('DOMContentLoaded', async () => {
-      // Show skeleton immediately
-      document.getElementById('profile-skeleton').style.display = 'block';
-      
-      // Wait for Firebase auth with longer timeout and better checks
+      // OPTIMIZATION: Show basic content immediately from localStorage/Firebase user
+      // This prevents the blank page flash
       let user = window.FirebaseAuthManager?.getCurrentUser?.();
-      
-      // Also check localStorage as fallback
       const hasLocalStorageAuth = localStorage.getItem('user-authenticated') === 'true' && !!localStorage.getItem('user-email');
+      
+      // Show basic user info immediately if available
+      if (user || hasLocalStorageAuth) {
+        const email = user?.email || localStorage.getItem('user-email') || 'user@example.com';
+        const userName = user?.displayName || email.split('@')[0] || 'User';
+        
+        // Show content immediately with basic info
+        document.getElementById('profile-name').textContent = userName;
+        document.getElementById('profile-email').textContent = email;
+        document.getElementById('profile-skeleton').style.display = 'none';
+        document.getElementById('profile-content').style.display = 'block';
+      } else {
+        // Show skeleton only if no auth data available
+        document.getElementById('profile-skeleton').style.display = 'block';
+      }
       
       if (!user && !hasLocalStorageAuth) {
         // No auth at all - redirect handled by static-auth-guard or firebase-auth-ready handler
         console.log('⏳ Waiting for auth...');
-        // Don't redirect here - let the firebase-auth-ready handler do it
         return;
       }
       
-      // CRITICAL FIX: Sync plan from billing-status BEFORE loading profile
-      // This ensures navigation renders with the correct plan and prevents upgrade modal bugs
-      if (user || hasLocalStorageAuth) {
+      // OPTIMIZATION: Run plan sync and profile loading in parallel (non-blocking)
+      // Plan sync runs in background - doesn't block page display
+      const planSyncPromise = (async () => {
         try {
-          // Wait a bit for user to be available if we only have localStorage auth
+          // Wait briefly for user if we only have localStorage auth
           if (!user && hasLocalStorageAuth) {
             let retries = 0;
-            while (!user && retries < 10) {
-              await new Promise(r => setTimeout(r, 200));
+            while (!user && retries < 5) { // Reduced retries for faster loading
+              await new Promise(r => setTimeout(r, 100));
               user = window.FirebaseAuthManager?.getCurrentUser?.();
               retries++;
             }
@@ -805,9 +815,7 @@
           if (user) {
             const currentToken = await user.getIdToken();
             if (currentToken) {
-              console.log('🔄 [ACCOUNT-SETTINGS] Syncing plan from Stripe to KV before page render...');
-              // Fix race condition: sync first (reads from Stripe and writes to KV atomically),
-              // then use the synced plan for display to ensure consistency
+              console.log('🔄 [ACCOUNT-SETTINGS] Syncing plan from Stripe to KV (background)...');
               const syncRes = await fetch('/api/sync-stripe-plan', {
                 method: 'POST',
                 headers: { Authorization: `Bearer ${currentToken}` }
@@ -818,7 +826,6 @@
                   console.log(`✅ [ACCOUNT-SETTINGS] Plan ${syncData.plan} synced to KV from Stripe`);
                   localStorage.setItem('user-plan', syncData.plan);
                   localStorage.setItem('dev-plan', syncData.plan);
-                  // Trigger navigation update immediately
                   window.dispatchEvent(new CustomEvent('planChanged', { 
                     detail: { newPlan: syncData.plan, oldPlan: 'free' } 
                   }));
@@ -830,111 +837,55 @@
             }
           }
         } catch (preSyncError) {
-          console.warn('⚠️ [ACCOUNT-SETTINGS] Pre-sync failed (non-critical):', preSyncError);
-          // Continue with page load even if pre-sync fails
+          console.warn('⚠️ [ACCOUNT-SETTINGS] Plan sync failed (non-critical):', preSyncError);
         }
-      }
+      })();
       
-      // If we have localStorage auth but no Firebase user, wait a bit more for Firebase to sync
+      // OPTIMIZATION: Load profile and billing in parallel
+      // Get user if not already available
       if (!user && hasLocalStorageAuth) {
-        console.log('⏳ Waiting for Firebase auth to sync with localStorage...');
         let retries = 0;
-        const maxRetries = 10; // 10 * 500ms = 5 seconds
+        const maxRetries = 5; // Reduced from 10 for faster loading
         while (!user && retries < maxRetries) {
-          await new Promise(r => setTimeout(r, 500));
+          await new Promise(r => setTimeout(r, 200));
           user = window.FirebaseAuthManager?.getCurrentUser?.();
           retries++;
         }
-        
-        if (!user) {
-          console.log('⚠️ Firebase auth not synced after wait, but localStorage has auth - proceeding anyway');
-          // Don't redirect - let the page try to load with localStorage auth
-          // The firebase-auth-ready handler will handle redirect if needed
-        }
       }
       
-      // If still no user after all checks, firebase-auth-ready handler will redirect
       if (!user && !hasLocalStorageAuth) {
         return;
       }
       
-      // Load real user data
-      // Ensure we have a user object before proceeding
-      if (!user) {
-        console.warn('⚠️ No user object available, cannot load profile');
-        // Fallback to localStorage email if available
-        const email = localStorage.getItem('user-email') || 'User';
-        document.getElementById('profile-name').textContent = 'User';
-        document.getElementById('profile-email').textContent = email;
-        await renderBillingSection();
-        document.getElementById('profile-skeleton').style.display = 'none';
-        document.getElementById('profile-content').style.display = 'block';
-        return;
-      }
+      // Load profile and billing section in parallel
+      const profilePromise = (async () => {
+        if (!user) return null;
+        try {
+          return await UserProfileManager.getProfile(user.uid);
+        } catch (error) {
+          console.error('⚠️ Failed to load profile:', error);
+          return null;
+        }
+      })();
       
-      try {
-        const profileResult = await UserProfileManager.getProfile(user.uid);
-        
-        // Handle Firestore permission errors gracefully - don't block page access
-        if (profileResult.isPermissionError) {
-          console.log('ℹ️ Firestore permission denied - using Firebase user data only');
-          // Permission error is non-critical, use Firebase user data
-          const userName = user.displayName || 
-            user.email?.split('@')[0] ||
-            'User';
-          
-          document.getElementById('profile-name').textContent = userName;
-          document.getElementById('profile-email').textContent = user.email || 'user@example.com';
-        } else if (profileResult.success && profileResult.profile) {
-          // Profile loaded successfully
-          const profile = profileResult.profile;
-          const userName = profile.displayName || 
-            `${profile.firstName || ''} ${profile.lastName || ''}`.trim() || 
+      const billingPromise = renderBillingSection();
+      
+      // Wait for both to complete (or fail)
+      const [profileResult] = await Promise.allSettled([profilePromise, billingPromise, planSyncPromise]);
+      
+      // Update profile name if we got better data
+      if (user && profileResult.status === 'fulfilled' && profileResult.value) {
+        const profile = profileResult.value;
+        if (profile.success && profile.profile && !profile.isPermissionError) {
+          const profileData = profile.profile;
+          const userName = profileData.displayName || 
+            `${profileData.firstName || ''} ${profileData.lastName || ''}`.trim() || 
             user.displayName ||
             user.email?.split('@')[0] ||
             'User';
           
           document.getElementById('profile-name').textContent = userName;
-          document.getElementById('profile-email').textContent = user.email || 'user@example.com';
-        } else {
-          // Profile not found or failed to load - use Firebase user data
-          console.log('ℹ️ Profile not found or failed to load - using Firebase user data');
-          const userName = user.displayName || 
-            user.email?.split('@')[0] ||
-            'User';
-          
-          document.getElementById('profile-name').textContent = userName;
-          document.getElementById('profile-email').textContent = user.email || 'user@example.com';
         }
-        
-        // Render billing section (may also fail with permission errors - that's OK)
-        await renderBillingSection();
-        
-        // Hide skeleton, show content
-        document.getElementById('profile-skeleton').style.display = 'none';
-        document.getElementById('profile-content').style.display = 'block';
-      } catch (error) {
-        console.error('⚠️ Failed to load profile:', error);
-        // Error loading profile - still show page with basic info
-        // This ensures Firestore permission errors don't block access
-        const userName = user.displayName || 
-          user.email?.split('@')[0] ||
-          'User';
-        
-        document.getElementById('profile-name').textContent = userName;
-        document.getElementById('profile-email').textContent = user.email || 'user@example.com';
-        
-        // Try to render billing section even if profile failed
-        try {
-          await renderBillingSection();
-        } catch (billingError) {
-          console.warn('⚠️ Billing section also failed:', billingError);
-          // Billing section failure is non-critical
-        }
-        
-        // Always show the page content
-        document.getElementById('profile-skeleton').style.display = 'none';
-        document.getElementById('profile-content').style.display = 'block';
       }
       
       // Add delete account functionality
