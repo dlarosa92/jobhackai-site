@@ -1218,7 +1218,8 @@
                 <span class="jh-tooltip-text">This is a one-time free score. After use, upgrade for unlimited ATS scoring.</span>
               </span>`;
             } else {
-              usageText = 'Free ATS score used. Upgrade for unlimited scoring.';
+              // Credit used - just show simple message without upgrade link
+              usageText = 'Free ATS score used.';
             }
           } else if (user.plan === 'trial') {
             usageText = 'Unlimited ATS resume scoring during your trial.';
@@ -1713,10 +1714,10 @@
               localStorage.setItem(creditKey, JSON.stringify(credits));
               console.log('✅ Free ATS credit consumed');
               
-              // Update UI to show credit used
+              // Update UI to show credit used (without upgrade link)
               const usageDiv = document.querySelector('.feature-card:has(#ats-upload-btn) .usage-indicator');
               if (usageDiv) {
-                usageDiv.innerHTML = 'Free ATS score used. <a href="pricing-a.html" style="color:#0077B5;text-decoration:underline;">Upgrade for unlimited</a>';
+                usageDiv.innerHTML = 'Free ATS score used.';
               }
             }
           }
