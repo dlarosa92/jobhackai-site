@@ -9,7 +9,38 @@
     body.account-protected main { display: none; }
     body.account-protected #profile-skeleton { display: none; }
     body.account-protected #profile-content { display: none; }
+    
+    /* CRITICAL: Show content immediately if we have cached auth (before Firebase verification) */
+    body:not(.account-protected) #profile-content {
+      display: block !important;
+    }
+    body:not(.account-protected) #profile-skeleton {
+      display: none !important;
+    }
   </style>
+  <script>
+    // CRITICAL: Remove account-protected class IMMEDIATELY if we have cached auth
+    // This runs before any other scripts to show content instantly
+    (function() {
+      const hasLocalStorageAuth = localStorage.getItem('user-authenticated') === 'true';
+      const cachedEmail = localStorage.getItem('user-email');
+      if (hasLocalStorageAuth && cachedEmail) {
+        // Use requestAnimationFrame to ensure DOM is ready
+        if (document.body) {
+          document.body.classList.remove("account-protected");
+        } else {
+          // Wait for body to exist
+          const observer = new MutationObserver(function(mutations, obs) {
+            if (document.body) {
+              document.body.classList.remove("account-protected");
+              obs.disconnect();
+            }
+          });
+          observer.observe(document.documentElement, { childList: true, subtree: true });
+        }
+      }
+    })();
+  </script>
   <script src="js/static-auth-guard.js?v=20251007-2"></script>
   <script>
     // Single consolidated auth check - wait for firebase-auth-ready event
@@ -376,13 +407,79 @@
     </div>
   </header>
   <nav class="mobile-nav" id="mobileNav">
-    <a href="index.html">Home</a>
-    <a href="#what-you-get">What You Get</a>
-    <a href="/pricing-a">Pricing</a>
-    <a href="index.html#blog">Blog</a>
-    <a href="login.html">Login</a>
-    <a href="/pricing-a" class="cta-button">Start Free Trial</a>
+    <!-- Mobile navigation will be dynamically populated by navigation.js -->
   </nav>
+  <script>
+    // Hamburger menu toggle with proper state management and click-outside handling
+    (function initMobileMenu() {
+      const mobileToggle = document.querySelector('.mobile-toggle');
+      const mobileNav = document.getElementById('mobileNav');
+      
+      if (!mobileToggle || !mobileNav) return;
+      
+      let isMenuOpen = false;
+      
+      // Function to open menu
+      function openMenu() {
+        if (isMenuOpen) return;
+        isMenuOpen = true;
+        mobileNav.classList.add('open');
+        mobileToggle.setAttribute('aria-expanded', 'true');
+        // Prevent body scroll when menu is open
+        document.body.style.overflow = 'hidden';
+      }
+      
+      // Function to close menu
+      function closeMenu() {
+        if (!isMenuOpen) return;
+        isMenuOpen = false;
+        mobileNav.classList.remove('open');
+        mobileToggle.setAttribute('aria-expanded', 'false');
+        // Restore body scroll
+        document.body.style.overflow = '';
+      }
+      
+      // Toggle menu on button click
+      mobileToggle.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (isMenuOpen) {
+          closeMenu();
+        } else {
+          openMenu();
+        }
+      });
+      
+      // Close menu when clicking on a link
+      mobileNav.addEventListener('click', (e) => {
+        if (e.target.tagName === 'A') {
+          closeMenu();
+        }
+      });
+      
+      // Close menu when clicking outside
+      document.addEventListener('click', (e) => {
+        if (isMenuOpen && 
+            !mobileNav.contains(e.target) && 
+            !mobileToggle.contains(e.target)) {
+          closeMenu();
+        }
+      });
+      
+      // Close menu on Escape key
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && isMenuOpen) {
+          closeMenu();
+        }
+      });
+      
+      // Close menu on window resize (if resizing to desktop)
+      window.addEventListener('resize', () => {
+        if (window.innerWidth > 900 && isMenuOpen) {
+          closeMenu();
+        }
+      });
+    })();
+  </script>
   <main>
     <!-- Skeleton Loading State -->
     <div id="profile-skeleton" class="account-settings-card" style="padding-bottom:1.5rem; display: none;">
@@ -773,15 +870,18 @@
     // --- MAIN INITIALIZATION ---
     // CRITICAL OPTIMIZATION: Show content immediately without waiting for async operations
     // This prevents the 2-3 second blank page flash
-    // Use DOMContentLoaded to ensure elements exist before accessing them
+    // Remove account-protected class immediately if we have cached auth data
     function initializeAccountSettingsImmediate() {
-      // Show content immediately using cached data
+      // Check if we have cached auth data
       const hasLocalStorageAuth = localStorage.getItem('user-authenticated') === 'true';
       const cachedEmail = localStorage.getItem('user-email');
       const cachedName = localStorage.getItem('user-name');
       
-      // Show content immediately if we have cached auth data
+      // CRITICAL: Remove account-protected class immediately if we have cached auth
+      // This allows content to show even before Firebase verification completes
       if (hasLocalStorageAuth && cachedEmail) {
+        document.body.classList.remove("account-protected");
+        
         const email = cachedEmail;
         const userName = cachedName || email.split('@')[0] || 'User';
         
@@ -804,12 +904,13 @@
       }
     }
     
-    // Run immediately if DOM is ready, otherwise wait for DOMContentLoaded
-    if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', initializeAccountSettingsImmediate);
-    } else {
-      // DOM already loaded, run immediately
+    // Run immediately - don't wait for DOMContentLoaded
+    // This ensures content shows as fast as possible
+    if (document.body) {
       initializeAccountSettingsImmediate();
+    } else {
+      // Body doesn't exist yet, wait for it
+      document.addEventListener('DOMContentLoaded', initializeAccountSettingsImmediate);
     }
     
     // Load fresh data in background (non-blocking)

@@ -662,22 +662,75 @@
     <!-- Mobile navigation will be dynamically populated by navigation.js -->
   </nav>
   <script>
-    // Hamburger menu toggle
-    const mobileToggle = document.querySelector('.mobile-toggle');
-    const mobileNav = document.getElementById('mobileNav');
-    if (mobileToggle && mobileNav) {
-      mobileToggle.addEventListener('click', () => {
-        const isOpen = mobileNav.classList.toggle('open');
-        mobileToggle.setAttribute('aria-expanded', isOpen);
+    // Hamburger menu toggle with proper state management and click-outside handling
+    (function initMobileMenu() {
+      const mobileToggle = document.querySelector('.mobile-toggle');
+      const mobileNav = document.getElementById('mobileNav');
+      
+      if (!mobileToggle || !mobileNav) return;
+      
+      let isMenuOpen = false;
+      
+      // Function to open menu
+      function openMenu() {
+        if (isMenuOpen) return;
+        isMenuOpen = true;
+        mobileNav.classList.add('open');
+        mobileToggle.setAttribute('aria-expanded', 'true');
+        // Prevent body scroll when menu is open
+        document.body.style.overflow = 'hidden';
+      }
+      
+      // Function to close menu
+      function closeMenu() {
+        if (!isMenuOpen) return;
+        isMenuOpen = false;
+        mobileNav.classList.remove('open');
+        mobileToggle.setAttribute('aria-expanded', 'false');
+        // Restore body scroll
+        document.body.style.overflow = '';
+      }
+      
+      // Toggle menu on button click
+      mobileToggle.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (isMenuOpen) {
+          closeMenu();
+        } else {
+          openMenu();
+        }
       });
-      // Close mobile nav on link click
-      document.querySelectorAll('.mobile-nav a').forEach(link => {
-        link.addEventListener('click', () => {
-          mobileNav.classList.remove('open');
-          mobileToggle.setAttribute('aria-expanded', 'false');
-        });
+      
+      // Close menu when clicking on a link
+      mobileNav.addEventListener('click', (e) => {
+        if (e.target.tagName === 'A') {
+          closeMenu();
+        }
       });
-    }
+      
+      // Close menu when clicking outside
+      document.addEventListener('click', (e) => {
+        if (isMenuOpen && 
+            !mobileNav.contains(e.target) && 
+            !mobileToggle.contains(e.target)) {
+          closeMenu();
+        }
+      });
+      
+      // Close menu on Escape key
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && isMenuOpen) {
+          closeMenu();
+        }
+      });
+      
+      // Close menu on window resize (if resizing to desktop)
+      window.addEventListener('resize', () => {
+        if (window.innerWidth > 900 && isMenuOpen) {
+          closeMenu();
+        }
+      });
+    })();
   </script>
   <!-- Main Content -->
   <main>
@@ -1211,15 +1264,32 @@
             const creditsData = localStorage.getItem(creditKey);
             const credits = creditsData ? JSON.parse(creditsData) : { ats_free_lifetime: 1 };
             
-            if (credits.ats_free_lifetime > 0) {
+            // Check if user has uploaded a resume
+            const hasUploadedResume = localStorage.getItem('hasUploadedResume') === 'true' || 
+                                      localStorage.getItem('lastUploadedResume') || 
+                                      localStorage.getItem('lastATSScore');
+            
+            if (credits.ats_free_lifetime > 0 && !hasUploadedResume) {
+              // User has credit available and hasn't uploaded yet
               usageText = 'You have 1 free ATS score (lifetime).';
               tooltip = `<span class="jh-tooltip-trigger" tabindex="0" aria-label="More info" style="margin-left:0.4em;vertical-align:middle;">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false" style="vertical-align:middle"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="8"/><line x1="12" y1="12" x2="12" y2="16"/></svg>
                 <span class="jh-tooltip-text">This is a one-time free score. After use, upgrade for unlimited ATS scoring.</span>
               </span>`;
+            } else if (hasUploadedResume && credits.ats_free_lifetime > 0) {
+              // User uploaded resume but still has credit (shouldn't happen, but handle gracefully)
+              usageText = 'Resume uploaded. Upgrade to trial or paid plan for unlimited scoring.';
+              tooltip = `<span class="jh-tooltip-trigger" tabindex="0" aria-label="More info" style="margin-left:0.4em;vertical-align:middle;">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false" style="vertical-align:middle"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="8"/><line x1="12" y1="12" x2="12" y2="16"/></svg>
+                <span class="jh-tooltip-text">Upgrade to unlock unlimited ATS scoring and access all features.</span>
+              </span>`;
             } else {
-              // Credit used - just show simple message without upgrade link
-              usageText = 'Free ATS score used.';
+              // Credit used - show upgrade message
+              usageText = 'Free ATS score used. Upgrade to trial or paid plan for unlimited scoring.';
+              tooltip = `<span class="jh-tooltip-trigger" tabindex="0" aria-label="More info" style="margin-left:0.4em;vertical-align:middle;">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false" style="vertical-align:middle"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="8"/><line x1="12" y1="12" x2="12" y2="16"/></svg>
+                <span class="jh-tooltip-text">Upgrade to unlock unlimited ATS scoring and access all features.</span>
+              </span>`;
             }
           } else if (user.plan === 'trial') {
             usageText = 'Unlimited ATS resume scoring during your trial.';
