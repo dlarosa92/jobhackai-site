@@ -236,7 +236,7 @@ export default function Dashboard() {
   return (
     <>
       <Head>
-        <title>Dashboard – JobHackAI</title>
+        <title>JobHackAI</title>
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
@@ -245,7 +245,9 @@ export default function Dashboard() {
         <link rel="stylesheet" href="/main.css" />
         <link rel="stylesheet" href="/header.css" />
         <link rel="stylesheet" href="/footer.css" />
-        <link rel="icon" type="image/png" href="/assets/JobHackAI_Logo_favicon-32x32.png" />
+        <link rel="icon" type="image/png" sizes="32x32" href="/assets/JobHackAI_Logo_favicon-32x32.png" />
+        <link rel="icon" type="image/png" sizes="512x512" href="/assets/JobHackAI_Logo_favicon-512x512.png" />
+        <link rel="apple-touch-icon" sizes="512x512" href="/assets/JobHackAI_Logo_favicon-512x512.png" />
       </Head>
 
       <style jsx>{`

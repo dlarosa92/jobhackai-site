@@ -22,10 +22,12 @@ export default function Home() {
   return (
     <>
       <Head>
-        <title>JobHackAI - ATS Resume Optimization</title>
+        <title>JobHackAI</title>
         <meta name="description" content="Optimize your resume for ATS systems and land more interviews" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <link rel="icon" href="/favicon.ico" />
+        <link rel="icon" type="image/png" sizes="32x32" href="/assets/JobHackAI_Logo_favicon-32x32.png" />
+        <link rel="icon" type="image/png" sizes="512x512" href="/assets/JobHackAI_Logo_favicon-512x512.png" />
+        <link rel="apple-touch-icon" sizes="512x512" href="/assets/JobHackAI_Logo_favicon-512x512.png" />
       </Head>
       
       <main className="container">
