@@ -771,26 +771,42 @@
     }
     
     // --- MAIN INITIALIZATION ---
+    // CRITICAL OPTIMIZATION: Show content immediately without waiting for async operations
+    // This prevents the 2-3 second blank page flash
+    (function initializeAccountSettings() {
+      // Show content immediately using cached data
+      const hasLocalStorageAuth = localStorage.getItem('user-authenticated') === 'true';
+      const cachedEmail = localStorage.getItem('user-email');
+      const cachedName = localStorage.getItem('user-name');
+      
+      // Show content immediately if we have cached auth data
+      if (hasLocalStorageAuth && cachedEmail) {
+        const email = cachedEmail;
+        const userName = cachedName || email.split('@')[0] || 'User';
+        
+        // Show content immediately with cached info
+        const profileNameEl = document.getElementById('profile-name');
+        const profileEmailEl = document.getElementById('profile-email');
+        const skeletonEl = document.getElementById('profile-skeleton');
+        const contentEl = document.getElementById('profile-content');
+        
+        if (profileNameEl) profileNameEl.textContent = userName;
+        if (profileEmailEl) profileEmailEl.textContent = email;
+        if (skeletonEl) skeletonEl.style.display = 'none';
+        if (contentEl) contentEl.style.display = 'block';
+      } else {
+        // Show skeleton if no cached data
+        const skeletonEl = document.getElementById('profile-skeleton');
+        const contentEl = document.getElementById('profile-content');
+        if (skeletonEl) skeletonEl.style.display = 'block';
+        if (contentEl) contentEl.style.display = 'none';
+      }
+    })();
+    
+    // Load fresh data in background (non-blocking)
     document.addEventListener('DOMContentLoaded', async () => {
-      // OPTIMIZATION: Show basic content immediately from localStorage/Firebase user
-      // This prevents the blank page flash
       let user = window.FirebaseAuthManager?.getCurrentUser?.();
       const hasLocalStorageAuth = localStorage.getItem('user-authenticated') === 'true' && !!localStorage.getItem('user-email');
-      
-      // Show basic user info immediately if available
-      if (user || hasLocalStorageAuth) {
-        const email = user?.email || localStorage.getItem('user-email') || 'user@example.com';
-        const userName = user?.displayName || email.split('@')[0] || 'User';
-        
-        // Show content immediately with basic info
-        document.getElementById('profile-name').textContent = userName;
-        document.getElementById('profile-email').textContent = email;
-        document.getElementById('profile-skeleton').style.display = 'none';
-        document.getElementById('profile-content').style.display = 'block';
-      } else {
-        // Show skeleton only if no auth data available
-        document.getElementById('profile-skeleton').style.display = 'block';
-      }
       
       if (!user && !hasLocalStorageAuth) {
         // No auth at all - redirect handled by static-auth-guard or firebase-auth-ready handler
@@ -798,14 +814,14 @@
         return;
       }
       
-      // OPTIMIZATION: Load everything in parallel without blocking
-      // Don't wait for user if we have localStorage auth - start loading immediately
+      // OPTIMIZATION: Load everything in parallel without blocking page display
+      // Page is already visible, so these can run in background
       const loadDataPromise = (async () => {
         // Get user if not already available (non-blocking, quick check)
         if (!user && hasLocalStorageAuth) {
           // Only wait briefly - don't block page display
-          for (let i = 0; i < 3 && !user; i++) {
-            await new Promise(r => setTimeout(r, 50)); // Very short waits
+          for (let i = 0; i < 5 && !user; i++) {
+            await new Promise(r => setTimeout(r, 100)); // Short waits
             user = window.FirebaseAuthManager?.getCurrentUser?.();
           }
         }
@@ -817,7 +833,7 @@
         // Run all async operations in parallel
         const promises = [];
         
-        // Plan sync (non-critical, runs in background)
+        // Plan sync (non-critical, runs in background, handle 404 gracefully)
         if (user) {
           promises.push((async () => {
             try {
@@ -827,6 +843,7 @@
                   method: 'POST',
                   headers: { Authorization: `Bearer ${currentToken}` }
                 });
+                // Handle 404 gracefully - endpoint might not be deployed yet
                 if (syncRes.ok) {
                   const syncData = await syncRes.json();
                   if (syncData.ok && syncData.plan && syncData.plan !== 'free') {
@@ -839,10 +856,13 @@
                       window.JobHackAINavigation.updateNavigation();
                     }
                   }
+                } else if (syncRes.status === 404) {
+                  console.log('ℹ️ [ACCOUNT-SETTINGS] sync-stripe-plan endpoint not available (404), skipping sync');
                 }
               }
             } catch (e) {
               // Non-critical, ignore
+              console.log('ℹ️ [ACCOUNT-SETTINGS] Plan sync failed (non-critical):', e.message);
             }
           })());
         }
@@ -858,7 +878,7 @@
           })());
         }
         
-        // Billing section (non-critical)
+        // Billing section (non-critical, loads in background)
         promises.push(renderBillingSection().catch(() => {}));
         
         // Wait for all to complete (don't block on failures)
@@ -875,7 +895,12 @@
               user.email?.split('@')[0] ||
               'User';
             
-            document.getElementById('profile-name').textContent = userName;
+            const profileNameEl = document.getElementById('profile-name');
+            if (profileNameEl) {
+              profileNameEl.textContent = userName;
+              // Cache for next time
+              localStorage.setItem('user-name', userName);
+            }
           }
         }
       })();

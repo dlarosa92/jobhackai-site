@@ -1312,18 +1312,16 @@
           return;
         }
         
+        // CRITICAL: Banner should ONLY show if user uploaded a resume for free ATS BEFORE upgrading
         // Check if user had uploaded a resume for free ATS scoring
-        // Check multiple indicators that user had a free account with resume upload
         const hasATSScoreHistory = localStorage.getItem('lastATSScore') || localStorage.getItem('lastATSSummary');
-        const hasUsedFreeATS = localStorage.getItem('hasUsedFreeATS') === 'true';
-        const hasFreeUsageData = localStorage.getItem('free-ats-usage');
-        const hasUploadedResume = localStorage.getItem('lastUploadedResume') || localStorage.getItem('hasUploadedResume') === 'true';
         
-        // Try to get user UID from Firebase Auth Manager
+        // Try to get user UID from Firebase Auth Manager to check credit usage
         const currentUser = window.FirebaseAuthManager?.getCurrentUser?.();
         const creditKey = currentUser?.uid ? `creditsByUid:${currentUser.uid}` : null;
         let hasUsedFreeCredit = false;
-        let hadFreeAccountWithCredit = false; // Track if user had free account (credit was initialized)
+        let hadFreeAccountWithCredit = false;
+        
         if (creditKey) {
           const creditsData = localStorage.getItem(creditKey);
           if (creditsData) {
@@ -1332,8 +1330,6 @@
               // User has used free credit if it's 0 (they had it and used it)
               hasUsedFreeCredit = credits.ats_free_lifetime === 0;
               // If creditsData exists, user had a free account (credit was initialized)
-              // Credit value of 1 means they had free account but haven't used it yet
-              // Credit value of 0 means they had free account and used it
               hadFreeAccountWithCredit = true;
             } catch (e) {
               // Ignore parse errors
@@ -1344,26 +1340,40 @@
         // Check if user was previously on free plan (stored when they upgrade)
         const wasFreeUser = localStorage.getItem('was-free-user') === 'true';
         
-        // Check if user has any ATS score history (even if they didn't use free credit)
-        // This covers the case where they upgraded before using their free credit
-        const hasAnyATSScore = hasATSScoreHistory || hasUploadedResume;
+        // Check legacy free usage data
+        const hasFreeUsageData = localStorage.getItem('free-ats-usage');
+        let legacyUsedFreeATS = false;
+        if (hasFreeUsageData) {
+          try {
+            const usageData = JSON.parse(hasFreeUsageData);
+            legacyUsedFreeATS = usageData.used === true;
+          } catch (e) {
+            // Ignore parse errors
+          }
+        }
         
-        // Show popup if user upgraded from free plan
-        // Check if they were previously on free (either via flag or by checking if they have free account indicators)
-        // Also show if they have any ATS score history (carryover scenario)
-        // Only consider creditKey condition if creditsData actually exists (proving they had a free account)
-        const wasFreeAccount = wasFreeUser || 
-                               hasFreeUsageData || 
-                               (hadFreeAccountWithCredit && !hasUsedFreeCredit); // Had free account credit initialized but hasn't used it yet
+        // Determine if user had a free account
+        const wasFreeAccount = wasFreeUser || hasFreeUsageData || hadFreeAccountWithCredit;
         
-        // Show popup only if:
-        // 1. User was previously on free account (verified via flag or indicators), OR
-        // 2. User has ATS score history (carryover scenario)
-        // Do NOT show to users who signed up directly for paid plans without ever having free accounts
-        const shouldShowPopup = wasFreeAccount || hasATSScoreHistory || hasUploadedResume || hasAnyATSScore;
+        // CRITICAL: Show popup ONLY if:
+        // 1. User upgraded from free account, AND
+        // 2. User actually uploaded a resume for free ATS (used their free credit OR has ATS score history)
+        // Do NOT show if user upgraded without uploading a resume first
+        const uploadedResumeForFreeATS = hasUsedFreeCredit || legacyUsedFreeATS || hasATSScoreHistory;
+        const shouldShowPopup = wasFreeAccount && uploadedResumeForFreeATS;
+        
         if (!shouldShowPopup) {
+          console.log('ℹ️ [UPGRADE-BANNER] Not showing banner:', {
+            wasFreeAccount,
+            uploadedResumeForFreeATS,
+            hasUsedFreeCredit,
+            legacyUsedFreeATS,
+            hasATSScoreHistory
+          });
           return;
         }
+        
+        console.log('✅ [UPGRADE-BANNER] Showing banner - user upgraded from free and uploaded resume');
         
         // Create and show popup
         const popupHTML = `
@@ -1395,19 +1405,24 @@
         };
         
         function closePopup() {
+          // Fade out animation
           overlay.classList.remove('show');
           // Remove Escape key listener to prevent memory leak
           document.removeEventListener('keydown', escapeKeyHandler);
+          // Wait for fade-out animation to complete before removing
           setTimeout(() => {
             overlay.remove();
             localStorage.setItem(popupShownKey, 'true');
-          }, 300);
+          }, 350); // Slightly longer than transition duration for smooth fade-out
         }
         
-        // Show popup with fade-in animation
-        setTimeout(() => {
-          overlay.classList.add('show');
-        }, 100);
+        // Show popup with smooth fade-in animation
+        // Use requestAnimationFrame to ensure DOM is ready
+        requestAnimationFrame(() => {
+          setTimeout(() => {
+            overlay.classList.add('show');
+          }, 50);
+        });
         
         // Close handlers
         closeBtn.addEventListener('click', closePopup);
