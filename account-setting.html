@@ -798,95 +798,90 @@
         return;
       }
       
-      // OPTIMIZATION: Run plan sync and profile loading in parallel (non-blocking)
-      // Plan sync runs in background - doesn't block page display
-      const planSyncPromise = (async () => {
-        try {
-          // Wait briefly for user if we only have localStorage auth
-          if (!user && hasLocalStorageAuth) {
-            let retries = 0;
-            while (!user && retries < 5) { // Reduced retries for faster loading
-              await new Promise(r => setTimeout(r, 100));
-              user = window.FirebaseAuthManager?.getCurrentUser?.();
-              retries++;
-            }
+      // OPTIMIZATION: Load everything in parallel without blocking
+      // Don't wait for user if we have localStorage auth - start loading immediately
+      const loadDataPromise = (async () => {
+        // Get user if not already available (non-blocking, quick check)
+        if (!user && hasLocalStorageAuth) {
+          // Only wait briefly - don't block page display
+          for (let i = 0; i < 3 && !user; i++) {
+            await new Promise(r => setTimeout(r, 50)); // Very short waits
+            user = window.FirebaseAuthManager?.getCurrentUser?.();
           }
-          
-          if (user) {
-            const currentToken = await user.getIdToken();
-            if (currentToken) {
-              console.log('🔄 [ACCOUNT-SETTINGS] Syncing plan from Stripe to KV (background)...');
-              const syncRes = await fetch('/api/sync-stripe-plan', {
-                method: 'POST',
-                headers: { Authorization: `Bearer ${currentToken}` }
-              });
-              if (syncRes.ok) {
-                const syncData = await syncRes.json();
-                if (syncData.ok && syncData.plan && syncData.plan !== 'free') {
-                  console.log(`✅ [ACCOUNT-SETTINGS] Plan ${syncData.plan} synced to KV from Stripe`);
-                  localStorage.setItem('user-plan', syncData.plan);
-                  localStorage.setItem('dev-plan', syncData.plan);
-                  window.dispatchEvent(new CustomEvent('planChanged', { 
-                    detail: { newPlan: syncData.plan, oldPlan: 'free' } 
-                  }));
-                  if (window.JobHackAINavigation && typeof window.JobHackAINavigation.updateNavigation === 'function') {
-                    window.JobHackAINavigation.updateNavigation();
+        }
+        
+        if (!user && !hasLocalStorageAuth) {
+          return;
+        }
+        
+        // Run all async operations in parallel
+        const promises = [];
+        
+        // Plan sync (non-critical, runs in background)
+        if (user) {
+          promises.push((async () => {
+            try {
+              const currentToken = await user.getIdToken();
+              if (currentToken) {
+                const syncRes = await fetch('/api/sync-stripe-plan', {
+                  method: 'POST',
+                  headers: { Authorization: `Bearer ${currentToken}` }
+                });
+                if (syncRes.ok) {
+                  const syncData = await syncRes.json();
+                  if (syncData.ok && syncData.plan && syncData.plan !== 'free') {
+                    localStorage.setItem('user-plan', syncData.plan);
+                    localStorage.setItem('dev-plan', syncData.plan);
+                    window.dispatchEvent(new CustomEvent('planChanged', { 
+                      detail: { newPlan: syncData.plan, oldPlan: 'free' } 
+                    }));
+                    if (window.JobHackAINavigation?.updateNavigation) {
+                      window.JobHackAINavigation.updateNavigation();
+                    }
                   }
                 }
               }
+            } catch (e) {
+              // Non-critical, ignore
             }
+          })());
+        }
+        
+        // Profile loading (non-critical, can fail gracefully)
+        if (user) {
+          promises.push((async () => {
+            try {
+              return await UserProfileManager.getProfile(user.uid);
+            } catch (error) {
+              return null;
+            }
+          })());
+        }
+        
+        // Billing section (non-critical)
+        promises.push(renderBillingSection().catch(() => {}));
+        
+        // Wait for all to complete (don't block on failures)
+        const results = await Promise.allSettled(promises);
+        
+        // Update profile name if we got better data
+        if (user && results[1]?.status === 'fulfilled' && results[1]?.value) {
+          const profile = results[1].value;
+          if (profile.success && profile.profile && !profile.isPermissionError) {
+            const profileData = profile.profile;
+            const userName = profileData.displayName || 
+              `${profileData.firstName || ''} ${profileData.lastName || ''}`.trim() || 
+              user.displayName ||
+              user.email?.split('@')[0] ||
+              'User';
+            
+            document.getElementById('profile-name').textContent = userName;
           }
-        } catch (preSyncError) {
-          console.warn('⚠️ [ACCOUNT-SETTINGS] Plan sync failed (non-critical):', preSyncError);
         }
       })();
       
-      // OPTIMIZATION: Load profile and billing in parallel
-      // Get user if not already available
-      if (!user && hasLocalStorageAuth) {
-        let retries = 0;
-        const maxRetries = 5; // Reduced from 10 for faster loading
-        while (!user && retries < maxRetries) {
-          await new Promise(r => setTimeout(r, 200));
-          user = window.FirebaseAuthManager?.getCurrentUser?.();
-          retries++;
-        }
-      }
-      
-      if (!user && !hasLocalStorageAuth) {
-        return;
-      }
-      
-      // Load profile and billing section in parallel
-      const profilePromise = (async () => {
-        if (!user) return null;
-        try {
-          return await UserProfileManager.getProfile(user.uid);
-        } catch (error) {
-          console.error('⚠️ Failed to load profile:', error);
-          return null;
-        }
-      })();
-      
-      const billingPromise = renderBillingSection();
-      
-      // Wait for both to complete (or fail)
-      const [profileResult] = await Promise.allSettled([profilePromise, billingPromise, planSyncPromise]);
-      
-      // Update profile name if we got better data
-      if (user && profileResult.status === 'fulfilled' && profileResult.value) {
-        const profile = profileResult.value;
-        if (profile.success && profile.profile && !profile.isPermissionError) {
-          const profileData = profile.profile;
-          const userName = profileData.displayName || 
-            `${profileData.firstName || ''} ${profileData.lastName || ''}`.trim() || 
-            user.displayName ||
-            user.email?.split('@')[0] ||
-            'User';
-          
-          document.getElementById('profile-name').textContent = userName;
-        }
-      }
+      // Don't await - let it run in background, page is already visible
+      loadDataPromise.catch(() => {});
       
       // Add delete account functionality
       const dangerZone = document.createElement('div');
