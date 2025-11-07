@@ -1345,11 +1345,13 @@
         // Also show if they have any ATS score history (carryover scenario)
         const wasFreeAccount = wasFreeUser || 
                                hasFreeUsageData || 
-                               (creditKey && !hasUsedFreeCredit && currentUser) || // Has credit key but hasn't used it (was free)
-                               (user.plan !== 'free' && !hasATSScoreHistory && !hasUploadedResume); // Upgraded but no history yet
+                               (creditKey && !hasUsedFreeCredit && currentUser); // Has credit key but hasn't used it (was free)
         
-        // Show popup for any user who upgraded from free, or has ATS score history
-        const shouldShowPopup = wasFreeAccount || hasATSScoreHistory || hasUploadedResume || hasAnyATSScore || wasFreeUser;
+        // Show popup only if:
+        // 1. User was previously on free account (verified via flag or indicators), OR
+        // 2. User has ATS score history (carryover scenario)
+        // Do NOT show to users who signed up directly for paid plans without ever having free accounts
+        const shouldShowPopup = wasFreeAccount || hasATSScoreHistory || hasUploadedResume || hasAnyATSScore;
         if (!shouldShowPopup) {
           return;
         }
