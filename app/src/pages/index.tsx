@@ -25,9 +25,8 @@ export default function Home() {
         <title>JobHackAI</title>
         <meta name="description" content="Optimize your resume for ATS systems and land more interviews" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <link rel="icon" type="image/png" sizes="32x32" href="/assets/JobHackAI_Logo_favicon-32x32.png" />
-        <link rel="icon" type="image/png" sizes="512x512" href="/assets/JobHackAI_Logo_favicon-512x512.png" />
-        <link rel="apple-touch-icon" sizes="512x512" href="/assets/JobHackAI_Logo_favicon-512x512.png" />
+        <link rel="icon" type="image/png" href="/assets/jobhackai_icon_only_128.png" />
+        <link rel="apple-touch-icon" href="/assets/jobhackai_icon_only_128.png" />
       </Head>
       
       <main className="container">
