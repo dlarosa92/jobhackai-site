@@ -1428,6 +1428,26 @@
       
       // --- Free Account Upgrade CTA Pop-up Logic ---
       function showFreeAccountUpgradePopup() {
+        // CRITICAL: Only show upgrade popup for free tier users
+        // Check plan from multiple sources to ensure accuracy
+        const currentPlan = localStorage.getItem('user-plan') || 'free';
+        const hasUnlimitedAccess = currentPlan === 'trial' || currentPlan === 'essential' || currentPlan === 'pro' || currentPlan === 'premium';
+        
+        // If user is on a paid plan, do NOT show upgrade popup
+        if (hasUnlimitedAccess) {
+          console.log('✅ [DASHBOARD] Skipping upgrade popup - user is on paid plan:', currentPlan);
+          return;
+        }
+        
+        // Double-check with navigation system if available
+        if (window.JobHackAINavigation) {
+          const navPlan = window.JobHackAINavigation.getEffectivePlan?.();
+          if (navPlan && (navPlan === 'trial' || navPlan === 'essential' || navPlan === 'pro' || navPlan === 'premium')) {
+            console.log('✅ [DASHBOARD] Skipping upgrade popup - navigation system confirms paid plan:', navPlan);
+            return;
+          }
+        }
+        
         // Create and show popup
         const popupHTML = `
           <div class="upgrade-popup-overlay" id="free-account-upgrade-popup-overlay">
