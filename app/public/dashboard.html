@@ -1131,7 +1131,7 @@
           const currentUser = window.FirebaseAuthManager?.getCurrentUser?.();
           let userPlan = user.plan || localStorage.getItem('user-plan') || 'free';
           
-          // Try to get fresh plan data from API first
+          // Try to get fresh plan data
           if (currentUser) {
             try {
               const idToken = await currentUser.getIdToken();
@@ -1141,44 +1141,16 @@
               if (planRes.ok) {
                 const planData = await planRes.json();
                 userPlan = planData.plan || userPlan;
-                // Update localStorage to keep it in sync
-                if (planData.plan) {
-                  localStorage.setItem('user-plan', planData.plan);
-                }
               }
             } catch (error) {
               console.error('Error fetching plan:', error);
             }
           }
           
-          // Also check billing-status API as fallback for trial users
-          if (userPlan === 'free' && currentUser) {
-            try {
-              const idToken = await currentUser.getIdToken();
-              const billingRes = await fetch('/api/billing-status', {
-                headers: { Authorization: `Bearer ${idToken}` }
-              });
-              if (billingRes.ok) {
-                const billingData = await billingRes.json();
-                if (billingData.plan && billingData.plan !== 'free') {
-                  userPlan = billingData.plan;
-                  localStorage.setItem('user-plan', billingData.plan);
-                  console.log('✅ Updated plan from billing-status:', billingData.plan);
-                }
-              }
-            } catch (error) {
-              console.warn('Error fetching billing status:', error);
-            }
-          }
-          
           const hasUnlimitedAccess = userPlan === 'trial' || userPlan === 'essential' || userPlan === 'pro' || userPlan === 'premium';
           
-          // Early return for trial/paid users - they have unlimited access
-          if (hasUnlimitedAccess) {
-            console.log('✅ Trial/paid user detected, allowing unlimited resume uploads. Plan:', userPlan);
-            // Continue to upload processing below
-          } else if (userPlan === 'free' && window.freeAccountManager) {
-            // Only check free account limits for free users
+          // Only check free account limits for free users - do NOT show alert for trial/paid users
+          if (!hasUnlimitedAccess && userPlan === 'free' && window.freeAccountManager) {
             const usageCheck = window.freeAccountManager.canUseATSScoring();
             if (!usageCheck.allowed) {
               // Show upgrade modal
