@@ -910,13 +910,15 @@
       }
       
       // Set flag if user upgraded from free to trial/paid plan
-      const previousPlan = localStorage.getItem('previous-plan') || 'free';
+      // Only set flag if previous-plan actually exists (not defaulting to 'free')
+      // This prevents direct paid signups from being incorrectly marked as former free users
+      const previousPlan = localStorage.getItem('previous-plan');
       if (previousPlan === 'free' && (currentPlan === 'trial' || currentPlan === 'essential' || currentPlan === 'pro' || currentPlan === 'premium')) {
         localStorage.setItem('was-free-user', 'true');
         console.log('✅ Marked user as former free user (upgraded to', currentPlan + ')');
       }
-      // Update previous plan for next check
-      if (currentPlan !== previousPlan) {
+      // Update previous plan for next check (only if it changed)
+      if (previousPlan !== currentPlan) {
         localStorage.setItem('previous-plan', currentPlan);
       }
 
