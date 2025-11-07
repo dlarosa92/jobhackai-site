@@ -22,7 +22,7 @@ export default function Home() {
   // Dynamic favicon based on color scheme
   useEffect(() => {
     const FAVICON_LIGHT = '/assets/jobhackai_icon_only_128.png'
-    const FAVICON_DARK = '/assets/jobhackai_icon_only_128.png' // TODO: Create white-outline version
+    const FAVICON_DARK = '/assets/jobhackai_favicon_dark.png'
 
     const updateFavicon = (isDarkMode: boolean) => {
       const faviconPath = isDarkMode ? FAVICON_DARK : FAVICON_LIGHT

@@ -7,10 +7,7 @@
 
   // Favicon paths - update these if you create separate light/dark versions
   const FAVICON_LIGHT = 'assets/jobhackai_icon_only_128.png';  // Dark icon for light backgrounds
-  const FAVICON_DARK = 'assets/jobhackai_icon_only_128.png';    // White outline icon for dark backgrounds (TODO: create this version)
-  
-  // For now, using the same icon - you'll need to create a white-outline version
-  // Once created, update FAVICON_DARK above to point to it (e.g., 'assets/jobhackai_icon_only_128_white.png')
+  const FAVICON_DARK = 'assets/jobhackai_favicon_dark.png';     // White outline icon for dark backgrounds
 
   function updateFavicon(isDarkMode) {
     // Remove existing favicon links
