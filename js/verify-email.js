@@ -94,12 +94,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     const planParam = urlParams.get('plan');
     let storedSelection = null;
     try {
-      const localStored = localStorage.getItem('selectedPlan');
-      if (localStored) {
-        storedSelection = JSON.parse(localStored).planId;
+      // Fix: Check sessionStorage first (primary source, set fresh on pricing page),
+      // then fall back to localStorage (may contain stale values from previous sessions)
+      const sessionStored = sessionStorage.getItem('selectedPlan');
+      if (sessionStored) {
+        storedSelection = JSON.parse(sessionStored).planId;
       } else {
-        const sessionStored = sessionStorage.getItem('selectedPlan');
-        storedSelection = sessionStored ? JSON.parse(sessionStored).planId : null;
+        const localStored = localStorage.getItem('selectedPlan');
+        storedSelection = localStored ? JSON.parse(localStored).planId : null;
       }
     } catch (e) {}
     const plan = planParam || storedSelection || 'free';

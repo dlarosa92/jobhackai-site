@@ -751,33 +751,25 @@
           if (user) {
             const currentToken = await user.getIdToken();
             if (currentToken) {
-              console.log('🔄 [ACCOUNT-SETTINGS] Pre-syncing plan from Stripe before page render...');
-              const billingRes = await fetch('/api/billing-status', {
+              console.log('🔄 [ACCOUNT-SETTINGS] Syncing plan from Stripe to KV before page render...');
+              // Fix race condition: sync first (reads from Stripe and writes to KV atomically),
+              // then use the synced plan for display to ensure consistency
+              const syncRes = await fetch('/api/sync-stripe-plan', {
+                method: 'POST',
                 headers: { Authorization: `Bearer ${currentToken}` }
               });
-              if (billingRes.ok) {
-                const billingData = await billingRes.json();
-                if (billingData.ok && billingData.plan && billingData.plan !== 'free') {
-                  console.log(`🔄 [ACCOUNT-SETTINGS] Found plan ${billingData.plan} in Stripe, syncing...`);
-                  localStorage.setItem('user-plan', billingData.plan);
-                  localStorage.setItem('dev-plan', billingData.plan);
-                  // Sync to KV storage
-                  const syncRes = await fetch('/api/sync-stripe-plan', {
-                    method: 'POST',
-                    headers: { Authorization: `Bearer ${currentToken}` }
-                  });
-                  if (syncRes.ok) {
-                    const syncData = await syncRes.json();
-                    if (syncData.ok) {
-                      console.log('✅ [ACCOUNT-SETTINGS] Plan synced to KV, updating navigation...');
-                      // Trigger navigation update immediately
-                      window.dispatchEvent(new CustomEvent('planChanged', { 
-                        detail: { newPlan: billingData.plan, oldPlan: 'free' } 
-                      }));
-                      if (window.JobHackAINavigation && typeof window.JobHackAINavigation.updateNavigation === 'function') {
-                        window.JobHackAINavigation.updateNavigation();
-                      }
-                    }
+              if (syncRes.ok) {
+                const syncData = await syncRes.json();
+                if (syncData.ok && syncData.plan && syncData.plan !== 'free') {
+                  console.log(`✅ [ACCOUNT-SETTINGS] Plan ${syncData.plan} synced to KV from Stripe`);
+                  localStorage.setItem('user-plan', syncData.plan);
+                  localStorage.setItem('dev-plan', syncData.plan);
+                  // Trigger navigation update immediately
+                  window.dispatchEvent(new CustomEvent('planChanged', { 
+                    detail: { newPlan: syncData.plan, oldPlan: 'free' } 
+                  }));
+                  if (window.JobHackAINavigation && typeof window.JobHackAINavigation.updateNavigation === 'function') {
+                    window.JobHackAINavigation.updateNavigation();
                   }
                 }
               }
