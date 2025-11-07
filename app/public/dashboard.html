@@ -1092,7 +1092,15 @@
             if (!hasUnlimitedAccess && plan === 'free') {
               const creditKey = `creditsByUid:${currentUser.uid}`;
               const creditsData = localStorage.getItem(creditKey);
-              const credits = creditsData ? JSON.parse(creditsData) : { ats_free_lifetime: 0 };
+              let credits = { ats_free_lifetime: 0 };
+              if (creditsData) {
+                try {
+                  credits = JSON.parse(creditsData);
+                } catch (e) {
+                  // Ignore parse errors, use default credits
+                  console.warn('Failed to parse credits data:', e);
+                }
+              }
               
               if (credits.ats_free_lifetime <= 0) {
                 alert('You have used your free ATS score. Upgrade to unlock unlimited scoring!');
