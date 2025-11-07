@@ -1535,17 +1535,23 @@
           if (!hasUnlimitedAccess && plan === 'free') {
             const creditKey = `creditsByUid:${user.uid}`;
             const creditsData = localStorage.getItem(creditKey);
-            let credits = { ats_free_lifetime: 0 };
+            let hasCredit = false;
+            
             if (creditsData) {
               try {
-                credits = JSON.parse(creditsData);
+                const credits = JSON.parse(creditsData);
+                hasCredit = credits.ats_free_lifetime > 0;
               } catch (e) {
-                // Ignore parse errors, use default credits
+                // Ignore parse errors, default to allowing (new user)
                 console.warn('Failed to parse credits data:', e);
+                hasCredit = true;
               }
+            } else {
+              // No credits data means user hasn't used it yet - they have 1 free credit
+              hasCredit = true;
             }
             
-            if (credits.ats_free_lifetime <= 0) {
+            if (!hasCredit) {
               // Show CTA pop-up instead of alert
               showFreeAccountUpgradePopup();
               return;
