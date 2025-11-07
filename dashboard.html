@@ -1016,10 +1016,16 @@
         <div class="welcome-row">
           <h2>Welcome back, ${user.name || 'User'}!</h2>
           ${(() => {
-            // Only show blue banner if user upgraded from free AND uploaded resume while on free plan
+            // Show blue banner if user upgraded from free to trial/subscription
+            // Check multiple indicators that user had a free account with resume upload
             const hasUpgradedPlan = user.plan === 'trial' || user.plan === 'essential' || user.plan === 'pro' || user.plan === 'premium';
-            const hasUploadedResumeOnFree = localStorage.getItem('lastATSScore') || localStorage.getItem('hasUsedFreeATS') === 'true';
-            return hasUpgradedPlan && hasUploadedResumeOnFree ? `<div class="plan-transition-message" style="background:#E6F7FF;color:#1976D2;padding:0.7em 1em;border-radius:8px;margin-bottom:0.7em;font-size:1.01rem;">Your previous ATS resume score has been carried over from your free account. You now have access to more features and unlimited scoring!</div>` : '';
+            const hasATSScoreHistory = localStorage.getItem('lastATSScore') || localStorage.getItem('lastATSSummary');
+            const hasUsedFreeATS = localStorage.getItem('hasUsedFreeATS') === 'true';
+            const hasFreeUsageData = localStorage.getItem('free-ats-usage');
+            const hasUploadedResume = localStorage.getItem('lastUploadedResume');
+            // Show banner if user is on upgraded plan AND has any indication of previous free account usage
+            const shouldShowBanner = hasUpgradedPlan && (hasATSScoreHistory || hasUsedFreeATS || hasFreeUsageData || hasUploadedResume);
+            return shouldShowBanner ? `<div class="plan-transition-message" style="background:#E6F7FF;color:#1976D2;padding:0.7em 1em;border-radius:8px;margin-bottom:0.7em;font-size:1.01rem;">Your previous ATS resume score has been carried over from your free account. You now have access to more features and unlimited scoring!</div>` : '';
           })()}
           ${user.plan === 'trial' ? `<div class="trial-countdown">You have ${daysLeft(user.trialEndsAt)} day${daysLeft(user.trialEndsAt) !== 1 ? 's' : ''} left in your trial!</div>` : ''}
           ${subStatus && subStatus.cancelAt ? `
@@ -1181,16 +1187,19 @@
             return;
           }
           
-          // Fetch current plan
+          // Fetch current plan and check if user has unlimited access
           const idToken = await user.getIdToken();
           const planRes = await fetch('/api/plan/me', {
             headers: { Authorization: `Bearer ${idToken}` }
           });
           const planData = await planRes.json();
-          const plan = planData.plan || 'free';
+          const plan = planData.plan || localStorage.getItem('user-plan') || 'free';
           
-          // Check credits for free users
-          if (plan === 'free') {
+          // Trial and subscription plans have unlimited ATS scoring - skip credit check
+          const hasUnlimitedAccess = plan === 'trial' || plan === 'essential' || plan === 'pro' || plan === 'premium';
+          
+          // Only check credits for free users
+          if (!hasUnlimitedAccess && plan === 'free') {
             const creditKey = `creditsByUid:${user.uid}`;
             const creditsData = localStorage.getItem(creditKey);
             const credits = creditsData ? JSON.parse(creditsData) : { ats_free_lifetime: 0 };
@@ -1210,9 +1219,12 @@
           const file = e.target.files[0];
           if (!file) return;
 
-          // Check free account usage limits (legacy check)
-          const userPlan = window.JobHackAINavigation ? window.JobHackAINavigation.getEffectivePlan() : 'free';
-          if (userPlan === 'free' && window.freeAccountManager) {
+          // Check free account usage limits - skip for trial/subscription users
+          const userPlan = window.JobHackAINavigation ? window.JobHackAINavigation.getEffectivePlan() : (localStorage.getItem('user-plan') || 'free');
+          const hasUnlimitedAccess = userPlan === 'trial' || userPlan === 'essential' || userPlan === 'pro' || userPlan === 'premium';
+          
+          // Only check free account limits for free users
+          if (!hasUnlimitedAccess && userPlan === 'free' && window.freeAccountManager) {
             const usageCheck = window.freeAccountManager.canUseATSScoring();
             if (!usageCheck.allowed) {
               // Show upgrade modal
@@ -1236,8 +1248,8 @@
           };
           reader.readAsDataURL(file);
 
-          // Record usage for free accounts
-          if (userPlan === 'free' && window.freeAccountManager) {
+          // Record usage for free accounts only (trial/subscription users have unlimited)
+          if (!hasUnlimitedAccess && userPlan === 'free' && window.freeAccountManager) {
             const usageResult = window.freeAccountManager.recordATSUsage();
             if (!usageResult.success) {
               alert(usageResult.message);
@@ -1249,7 +1261,7 @@
           const score = Math.floor(Math.random() * 31) + 60; // 60-90%
           const summary = score > 85 ? 'Excellent! Your resume is highly ATS compatible.' : score > 70 ? 'Your resume meets many ATS criteria and is likely to be noticed.' : 'Your resume needs improvement for better ATS results.';
           
-          // Consume credit for free users after successful score
+          // Consume credit for free users only (trial/subscription users have unlimited)
           const user = window.FirebaseAuthManager?.getCurrentUser?.();
           if (user) {
             const idToken = await user.getIdToken();
@@ -1257,9 +1269,11 @@
               headers: { Authorization: `Bearer ${idToken}` }
             });
             const planData = await planRes.json();
-            const plan = planData.plan || 'free';
+            const plan = planData.plan || localStorage.getItem('user-plan') || 'free';
+            const hasUnlimitedAccess = plan === 'trial' || plan === 'essential' || plan === 'pro' || plan === 'premium';
             
-            if (plan === 'free') {
+            // Only consume credits for free users
+            if (!hasUnlimitedAccess && plan === 'free') {
               const creditKey = `creditsByUid:${user.uid}`;
               const creditsData = localStorage.getItem(creditKey);
               const credits = creditsData ? JSON.parse(creditsData) : { ats_free_lifetime: 1 };
