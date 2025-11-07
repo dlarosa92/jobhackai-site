@@ -285,6 +285,45 @@
       color: #fff;
       border-color: #232B36;
     }
+    .plan-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4em;
+      font-size: 1.05rem;
+      font-weight: 700;
+      border-radius: 999px;
+      padding: 0.4rem 1.1rem;
+      box-shadow: 0 1px 4px rgba(31,41,55,0.06);
+      margin-left: 0.8rem;
+      vertical-align: middle;
+    }
+    .plan-badge.trial {
+      color: #FF9100;
+      background: #FFF7E6;
+    }
+    .plan-badge.essential {
+      color: #0077B5;
+      background: #E3F2FD;
+    }
+    .plan-badge.pro {
+      color: #388E3C;
+      background: #E8F5E9;
+    }
+    .plan-badge.premium {
+      color: #C62828;
+      background: #FFEBEE;
+    }
+    .plan-badge.free {
+      color: #6B7280;
+      background: #F3F4F6;
+    }
+    .subscription-action-row {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 0.8rem;
+      margin-top: 0.5rem;
+    }
     .btn-link {
       background: none;
       color: #1976D2;
@@ -640,6 +679,15 @@
           premium: '$99/month'
         };
         
+        // Plan badge text mapping
+        const planBadgeText = {
+          free: 'Free',
+          trial: 'Trial',
+          essential: 'Essential',
+          pro: 'Pro',
+          premium: 'Premium'
+        };
+        
         let html = '<div class="settings-label" style="margin-bottom:0.5rem;">Subscription</div>';
         
         if (plan === 'free') {
@@ -648,7 +696,10 @@
               <div style="font-size:1.1rem;font-weight:600;color:#232B36;">Free Account</div>
               <div style="color:#6B7280;font-size:0.98rem;margin-top:0.2rem;">Limited features • Upgrade anytime</div>
             </div>
-            <a href="/pricing-a" class="btn-primary" style="text-decoration:none;display:inline-block;">View Plans</a>
+            <div class="subscription-action-row">
+              <a href="/pricing-a" class="btn-primary" style="text-decoration:none;display:inline-block;">View Plans</a>
+              <span class="plan-badge free">${planBadgeText[plan]}</span>
+            </div>
           `;
         } else {
           html += `<div style="margin-bottom:0.8rem;">`;
@@ -681,7 +732,10 @@
           }
           
           html += `</div>`;
+          html += `<div class="subscription-action-row">`;
           html += `<button class="btn-outline" type="button" onclick="openBillingPortal()">Manage Subscription</button>`;
+          html += `<span class="plan-badge ${plan}">${planBadgeText[plan]}</span>`;
+          html += `</div>`;
         }
         
         billingSection.innerHTML = html;

@@ -728,7 +728,12 @@
         </a>
         <div class="welcome-row">
           <h2>Welcome back, ${user.name || 'User'}!</h2>
-          ${user.plan === 'trial' || user.plan === 'essential' || user.plan === 'pro' || user.plan === 'premium' ? `<div class="plan-transition-message" style="background:#E6F7FF;color:#1976D2;padding:0.7em 1em;border-radius:8px;margin-bottom:0.7em;font-size:1.01rem;">Your previous ATS resume score has been carried over from your free account. You now have access to more features and unlimited scoring!</div>` : ''}
+          ${(() => {
+            // Only show blue banner if user upgraded from free AND uploaded resume while on free plan
+            const hasUpgradedPlan = user.plan === 'trial' || user.plan === 'essential' || user.plan === 'pro' || user.plan === 'premium';
+            const hasUploadedResumeOnFree = localStorage.getItem('lastATSScore') || localStorage.getItem('hasUsedFreeATS') === 'true';
+            return hasUpgradedPlan && hasUploadedResumeOnFree ? `<div class="plan-transition-message" style="background:#E6F7FF;color:#1976D2;padding:0.7em 1em;border-radius:8px;margin-bottom:0.7em;font-size:1.01rem;">Your previous ATS resume score has been carried over from your free account. You now have access to more features and unlimited scoring!</div>` : '';
+          })()}
           ${user.plan === 'trial' ? `<div class="trial-countdown">You have ${daysLeft(user.trialEndsAt)} day${daysLeft(user.trialEndsAt) !== 1 ? 's' : ''} left in your trial!</div>` : ''}
           <div class="user-email">${user.email}</div>
         </div>
