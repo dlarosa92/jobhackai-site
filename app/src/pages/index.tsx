@@ -19,43 +19,27 @@ export default function Home() {
     return () => unsubscribe()
   }, [router])
 
-  // Dynamic favicon based on color scheme
+  // Use the same favicon for all tabs
   useEffect(() => {
-    const FAVICON_LIGHT = '/assets/jobhackai_icon_only_128.png'
-    const FAVICON_DARK = '/assets/jobhackai_favicon_dark.png'
+    const FAVICON = '/assets/jobhackai_icon_only_128.png'
 
-    const updateFavicon = (isDarkMode: boolean) => {
-      const faviconPath = isDarkMode ? FAVICON_DARK : FAVICON_LIGHT
+    const updateFavicon = () => {
       const existingFavicons = document.querySelectorAll('link[rel="icon"], link[rel="apple-touch-icon"]')
       existingFavicons.forEach(link => link.remove())
 
       const faviconLink = document.createElement('link')
       faviconLink.rel = 'icon'
       faviconLink.type = 'image/png'
-      faviconLink.href = faviconPath
+      faviconLink.href = FAVICON
       document.head.appendChild(faviconLink)
 
       const appleTouchLink = document.createElement('link')
       appleTouchLink.rel = 'apple-touch-icon'
-      appleTouchLink.href = faviconPath
+      appleTouchLink.href = FAVICON
       document.head.appendChild(appleTouchLink)
     }
 
-    const detectColorScheme = () => {
-      return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
-    }
-
-    const isDarkMode = detectColorScheme()
-    updateFavicon(isDarkMode)
-
-    if (window.matchMedia) {
-      const darkModeQuery = window.matchMedia('(prefers-color-scheme: dark)')
-      if (darkModeQuery.addEventListener) {
-        darkModeQuery.addEventListener('change', (e) => updateFavicon(e.matches))
-      } else if (darkModeQuery.addListener) {
-        darkModeQuery.addListener((e) => updateFavicon(e.matches))
-      }
-    }
+    updateFavicon()
   }, [])
 
   return (
