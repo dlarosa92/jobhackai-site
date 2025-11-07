@@ -7,30 +7,53 @@
 class FreeAccountManager {
   constructor() {
     this.USAGE_KEY = 'free-ats-usage';
-    this.MONTHLY_LIMIT = 1;
-    this.RESET_DAY = 1; // Reset on the 1st of each month
+    this.LIFETIME_LIMIT = 1; // Changed from monthly to lifetime
   }
 
   /**
    * Get current usage data for free accounts
+   * Handles migration from old monthly format to new lifetime format
    */
   getUsageData() {
     try {
       const stored = localStorage.getItem(this.USAGE_KEY);
       if (!stored) {
         return {
-          count: 0,
-          lastReset: new Date().toISOString().slice(0, 7), // YYYY-MM format
-          usageHistory: []
+          used: false,
+          usedAt: null
         };
       }
-      return JSON.parse(stored);
+      
+      const parsed = JSON.parse(stored);
+      
+      // Check if data is in old format (monthly tracking)
+      if (parsed.count !== undefined || parsed.lastReset !== undefined || parsed.usageHistory !== undefined) {
+        // Migrate from old format to new format
+        const hasUsedCredit = parsed.count > 0 || 
+                              (parsed.usageHistory && parsed.usageHistory.length > 0 && 
+                               parsed.usageHistory.some(entry => entry.count > 0));
+        
+        const migratedData = {
+          used: hasUsedCredit,
+          usedAt: hasUsedCredit ? (parsed.usageHistory && parsed.usageHistory.length > 0 
+            ? parsed.usageHistory[parsed.usageHistory.length - 1].month + '-01' 
+            : new Date().toISOString()) : null
+        };
+        
+        // Save migrated data
+        this.saveUsageData(migratedData);
+        console.log('✅ Migrated usage data from old monthly format to lifetime format');
+        
+        return migratedData;
+      }
+      
+      // Data is already in new format
+      return parsed;
     } catch (error) {
       console.error('Error loading usage data:', error);
       return {
-        count: 0,
-        lastReset: new Date().toISOString().slice(0, 7),
-        usageHistory: []
+        used: false,
+        usedAt: null
       };
     }
   }
@@ -47,41 +70,7 @@ class FreeAccountManager {
   }
 
   /**
-   * Check if usage should be reset for new month
-   */
-  shouldResetUsage() {
-    const currentMonth = new Date().toISOString().slice(0, 7);
-    const usageData = this.getUsageData();
-    return usageData.lastReset !== currentMonth;
-  }
-
-  /**
-   * Reset usage for new month
-   */
-  resetMonthlyUsage() {
-    const currentMonth = new Date().toISOString().slice(0, 7);
-    const usageData = this.getUsageData();
-    
-    // Archive previous month's usage
-    if (usageData.usageHistory.length === 0 || usageData.usageHistory[usageData.usageHistory.length - 1].month !== usageData.lastReset) {
-      usageData.usageHistory.push({
-        month: usageData.lastReset,
-        count: usageData.count
-      });
-    }
-
-    // Reset for new month
-    this.saveUsageData({
-      count: 0,
-      lastReset: currentMonth,
-      usageHistory: usageData.usageHistory.slice(-12) // Keep last 12 months
-    });
-
-    return true;
-  }
-
-  /**
-   * Check if free user can use ATS scoring
+   * Check if free user can use ATS scoring (lifetime limit)
    */
   canUseATSScoring() {
     const userPlan = localStorage.getItem('user-plan') || 'free';
@@ -91,25 +80,43 @@ class FreeAccountManager {
       return { allowed: true, reason: 'unlimited' };
     }
 
-    // Check if we need to reset for new month
-    if (this.shouldResetUsage()) {
-      this.resetMonthlyUsage();
+    // Check lifetime credit using Firebase UID-based credits
+    const currentUser = window.FirebaseAuthManager?.getCurrentUser?.();
+    if (currentUser && currentUser.uid) {
+      const creditKey = `creditsByUid:${currentUser.uid}`;
+      const creditsData = localStorage.getItem(creditKey);
+      if (creditsData) {
+        try {
+          const credits = JSON.parse(creditsData);
+          const hasCredit = credits.ats_free_lifetime > 0;
+          return {
+            allowed: hasCredit,
+            remaining: hasCredit ? 1 : 0,
+            total: this.LIFETIME_LIMIT,
+            used: hasCredit ? 0 : 1,
+            reason: hasCredit ? 'available' : 'limit_reached'
+          };
+        } catch (e) {
+          console.warn('Failed to parse credits data:', e);
+        }
+      }
     }
 
+    // Fallback to legacy usage tracking
     const usageData = this.getUsageData();
-    const remaining = this.MONTHLY_LIMIT - usageData.count;
+    const hasRemaining = !usageData.used;
 
     return {
-      allowed: remaining > 0,
-      remaining: Math.max(0, remaining),
-      total: this.MONTHLY_LIMIT,
-      used: usageData.count,
-      reason: remaining > 0 ? 'available' : 'limit_reached'
+      allowed: hasRemaining,
+      remaining: hasRemaining ? 1 : 0,
+      total: this.LIFETIME_LIMIT,
+      used: hasRemaining ? 0 : 1,
+      reason: hasRemaining ? 'available' : 'limit_reached'
     };
   }
 
   /**
-   * Record ATS scoring usage
+   * Record ATS scoring usage (lifetime limit)
    */
   recordATSUsage() {
     const userPlan = localStorage.getItem('user-plan') || 'free';
@@ -119,34 +126,68 @@ class FreeAccountManager {
       return { success: true, reason: 'unlimited' };
     }
 
-    // Check if we need to reset for new month
-    if (this.shouldResetUsage()) {
-      this.resetMonthlyUsage();
+    // Check lifetime credit using Firebase UID-based credits
+    const currentUser = window.FirebaseAuthManager?.getCurrentUser?.();
+    if (currentUser && currentUser.uid) {
+      const creditKey = `creditsByUid:${currentUser.uid}`;
+      const creditsData = localStorage.getItem(creditKey);
+      let credits = { ats_free_lifetime: 1 };
+      if (creditsData) {
+        try {
+          credits = JSON.parse(creditsData);
+        } catch (e) {
+          console.warn('Failed to parse credits data:', e);
+        }
+      }
+      
+      // Check if limit reached
+      if (credits.ats_free_lifetime <= 0) {
+        return { 
+          success: false, 
+          reason: 'limit_reached',
+          message: 'You have used your 1 free lifetime ATS score. Upgrade to continue.',
+          remaining: 0,
+          total: this.LIFETIME_LIMIT
+        };
+      }
+
+      // Credit consumption is handled in dashboard.html
+      // This function just validates
+      return {
+        success: true,
+        reason: 'recorded',
+        remaining: 0,
+        total: this.LIFETIME_LIMIT,
+        used: 1
+      };
     }
 
+    // Fallback to legacy usage tracking
     const usageData = this.getUsageData();
     
     // Check if limit reached
-    if (usageData.count >= this.MONTHLY_LIMIT) {
+    if (usageData.used) {
       return { 
         success: false, 
         reason: 'limit_reached',
-        message: 'You have reached your monthly limit of 1 free ATS score. Upgrade to continue.',
+        message: 'You have used your 1 free lifetime ATS score. Upgrade to continue.',
         remaining: 0,
-        total: this.MONTHLY_LIMIT
+        total: this.LIFETIME_LIMIT
       };
     }
 
     // Record usage
-    usageData.count++;
-    this.saveUsageData(usageData);
+    this.saveUsageData({
+      used: true,
+      usedAt: new Date().toISOString()
+    });
 
     return {
       success: true,
       reason: 'recorded',
-      remaining: this.MONTHLY_LIMIT - usageData.count,
-      total: this.MONTHLY_LIMIT,
-      used: usageData.count
+      remaining: 0,
+      total: this.LIFETIME_LIMIT,
+      used: 1
     };
   }
 
@@ -170,11 +211,11 @@ class FreeAccountManager {
     const total = usageCheck.total;
     
     if (remaining === 0) {
-      return `${total}/${total} ATS scores used this month`;
+      return `Free ATS score used (lifetime). Upgrade for unlimited scoring.`;
     } else if (remaining === 1) {
-      return `1 ATS score remaining this month`;
+      return `1 free ATS score (lifetime)`;
     } else {
-      return `${remaining} ATS scores remaining this month`;
+      return `${remaining} free ATS scores remaining`;
     }
   }
 
@@ -189,8 +230,8 @@ class FreeAccountManager {
     }
 
     return {
-      title: 'Monthly Limit Reached',
-      message: 'You\'ve used your 1 free ATS resume score for this month. Upgrade to continue scoring unlimited resumes.',
+      title: 'Free ATS Score Used',
+      message: 'You\'ve used your 1 free lifetime ATS resume score. Upgrade to continue scoring unlimited resumes.',
       cta: 'Upgrade Now',
       features: [
         'Unlimited ATS scoring',
@@ -210,8 +251,11 @@ class FreeAccountManager {
     if (userPlan === 'free') {
       // Ensure usage tracking is initialized
       const usageData = this.getUsageData();
-      if (!usageData.lastReset) {
-        this.resetMonthlyUsage();
+      if (usageData.used === undefined) {
+        this.saveUsageData({
+          used: false,
+          usedAt: null
+        });
       }
     }
   }
@@ -226,7 +270,7 @@ class FreeAccountManager {
       return {
         plan: userPlan,
         atsScoring: 'unlimited',
-        monthlyLimit: null
+        lifetimeLimit: null
       };
     }
 
@@ -238,21 +282,11 @@ class FreeAccountManager {
       atsScoring: {
         remaining: usageCheck.remaining,
         total: usageCheck.total,
-        used: usageData.count,
+        used: usageData.used ? 1 : 0,
         canUse: usageCheck.allowed
       },
-      monthlyLimit: this.MONTHLY_LIMIT,
-      resetDate: this.getNextResetDate()
+      lifetimeLimit: this.LIFETIME_LIMIT
     };
-  }
-
-  /**
-   * Get next reset date
-   */
-  getNextResetDate() {
-    const now = new Date();
-    const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, this.RESET_DAY);
-    return nextMonth.toISOString().slice(0, 10);
   }
 }
 

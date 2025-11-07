@@ -635,7 +635,7 @@
             button.style.opacity = '0.6';
             button.style.cursor = 'not-allowed';
           } else {
-            // Only show Dashboard button if user is actually authenticated
+            // For non-free plans, show Dashboard button
             const isAuthenticated = localStorage.getItem('user-authenticated') === 'true';
             if (isAuthenticated) {
               button.textContent = 'Dashboard';
@@ -644,6 +644,18 @@
               button.textContent = 'Get Started';
               button.onclick = () => window.location.href = 'login.html';
             }
+          }
+        } else if (plan === 'trial') {
+          if (currentPlan === 'free') {
+            // Free account users should see "Start Free Trial" not "Current Plan"
+            button.textContent = 'Start Free Trial';
+          } else if (currentPlan === 'trial') {
+            button.textContent = 'Current Plan';
+            button.disabled = true;
+            button.style.opacity = '0.6';
+            button.style.cursor = 'not-allowed';
+          } else {
+            button.textContent = `Upgrade to ${planNames[plan]}`;
           }
         } else if (plan === currentPlan) {
           button.textContent = `Current Plan`;
