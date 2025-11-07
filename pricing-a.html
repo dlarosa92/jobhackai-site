@@ -14,20 +14,6 @@
   <!-- Component overrides -->
   <link rel="stylesheet" href="css/header.css">
   <link rel="stylesheet" href="css/footer.css">
-  
-  <!-- Fix redirect loop: immediately redirect /pricing-a to /pricing-a.html -->
-  <script>
-    (function() {
-      // Only run if we're on /pricing-a without .html extension
-      const path = window.location.pathname;
-      if (path === '/pricing-a' || path === '/pricing-a/') {
-        const query = window.location.search;
-        const hash = window.location.hash;
-        // Redirect to .html version, preserving query params and hash
-        window.location.replace('/pricing-a.html' + query + hash);
-      }
-    })();
-  </script>
 </head>
 <body>
   <!-- Header -->
