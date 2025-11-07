@@ -429,10 +429,10 @@ const NAVIGATION_CONFIG = {
       { text: 'Home', href: 'index.html' },
       { text: 'Blog', href: 'index.html#blog' },
       { text: 'Features', href: 'features.html' },
-      { text: 'Pricing', href: 'pricing-a.html' },
+      { text: 'Pricing', href: '/pricing-a' },
       { text: 'Login', href: 'login.html' }
     ],
-    cta: { text: 'Start Free Trial', href: 'pricing-a.html', isCTA: true }
+    cta: { text: 'Start Free Trial', href: '/pricing-a', isCTA: true }
   },
   // Free Account (no plan)
   free: {
@@ -732,7 +732,7 @@ function showUpgradeModal(targetPlan = 'premium') {
           cursor: pointer;
           font-weight: 600;
         ">Cancel</button>
-        <a href="pricing-a.html?plan=${targetPlan}" style="
+        <a href="/pricing-a?plan=${targetPlan}" style="
           background: #00E676;
           color: white;
           border: none;

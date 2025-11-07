@@ -155,7 +155,7 @@ export async function onRequest(context) {
       'line_items[0][price]': priceId,
       'line_items[0][quantity]': 1,
       success_url: (env.STRIPE_SUCCESS_URL || `${env.FRONTEND_URL || 'https://dev.jobhackai.io'}/dashboard.html?paid=1`),
-      cancel_url: (env.STRIPE_CANCEL_URL || `${env.FRONTEND_URL || 'https://dev.jobhackai.io'}/pricing-a.html`),
+      cancel_url: (env.STRIPE_CANCEL_URL || `${env.FRONTEND_URL || 'https://dev.jobhackai.io'}/pricing-a`),
       allow_promotion_codes: 'true',
       payment_method_collection: 'if_required',
       'metadata[firebaseUid]': uid,
