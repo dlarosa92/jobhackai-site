@@ -116,7 +116,7 @@ async function createCustomerPortal(data, request, env, origin) {
 
     // Look up customer ID from authenticated user's uid (don't trust request body)
     const customerId = await env.JOBHACKAI_KV?.get(`cusByUid:${uid}`);
-    
+
     if (!customerId) {
       return json({ success: false, error: 'No customer found for authenticated user' }, 404, origin, env);
     }

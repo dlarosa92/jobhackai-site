@@ -4,7 +4,7 @@ export default function DashboardSimple() {
   return (
     <>
       <Head>
-        <title>Dashboard - JobHackAI</title>
+        <title>JobHackAI</title>
         <meta name="description" content="Manage your JobHackAI subscription and access all features" />
       </Head>
 
