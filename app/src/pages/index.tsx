@@ -19,15 +19,53 @@ export default function Home() {
     return () => unsubscribe()
   }, [router])
 
+  // Dynamic favicon based on color scheme
+  useEffect(() => {
+    const FAVICON_LIGHT = '/assets/jobhackai_icon_only_128.png'
+    const FAVICON_DARK = '/assets/jobhackai_favicon_dark.png'
+
+    const updateFavicon = (isDarkMode: boolean) => {
+      const faviconPath = isDarkMode ? FAVICON_DARK : FAVICON_LIGHT
+      const existingFavicons = document.querySelectorAll('link[rel="icon"], link[rel="apple-touch-icon"]')
+      existingFavicons.forEach(link => link.remove())
+
+      const faviconLink = document.createElement('link')
+      faviconLink.rel = 'icon'
+      faviconLink.type = 'image/png'
+      faviconLink.href = faviconPath
+      document.head.appendChild(faviconLink)
+
+      const appleTouchLink = document.createElement('link')
+      appleTouchLink.rel = 'apple-touch-icon'
+      appleTouchLink.href = faviconPath
+      document.head.appendChild(appleTouchLink)
+    }
+
+    const detectColorScheme = () => {
+      return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
+    }
+
+    const isDarkMode = detectColorScheme()
+    updateFavicon(isDarkMode)
+
+    if (window.matchMedia) {
+      const darkModeQuery = window.matchMedia('(prefers-color-scheme: dark)')
+      if (darkModeQuery.addEventListener) {
+        darkModeQuery.addEventListener('change', (e) => updateFavicon(e.matches))
+      } else if (darkModeQuery.addListener) {
+        darkModeQuery.addListener((e) => updateFavicon(e.matches))
+      }
+    }
+  }, [])
+
   return (
     <>
       <Head>
         <title>JobHackAI</title>
         <meta name="description" content="Optimize your resume for ATS systems and land more interviews" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <link rel="icon" type="image/png" sizes="32x32" href="/assets/JobHackAI_Logo_favicon-32x32.png" />
-        <link rel="icon" type="image/png" sizes="512x512" href="/assets/JobHackAI_Logo_favicon-512x512.png" />
-        <link rel="apple-touch-icon" sizes="512x512" href="/assets/JobHackAI_Logo_favicon-512x512.png" />
+        <link rel="icon" type="image/png" href="/assets/jobhackai_icon_only_128.png" />
+        <link rel="apple-touch-icon" href="/assets/jobhackai_icon_only_128.png" />
       </Head>
       
       <main className="container">

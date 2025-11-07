@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "next dev -p 3003",
     "build": "next build",
-    "postbuild": "cp -f public/_redirects out/_redirects && cp -f public/_headers out/_headers && cp -r ../*.html out/ && cp -r ../css out/ && cp -r ../js out/ && cp -r ../assets out/",
+    "postbuild": "cp -f public/_redirects out/_redirects && cp -f public/_headers out/_headers && cp -f ../index.html out/index.html && (cp -f ../*.html out/ 2>/dev/null || true) && cp -r ../css out/ && cp -r ../js out/ && cp -r ../assets out/",
     "start": "next start",
     "export": "next build && next export",
     "deploy": "wrangler pages deploy out",
