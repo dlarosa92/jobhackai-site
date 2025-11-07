@@ -157,7 +157,7 @@ export async function onRequest(context) {
       success_url: (env.STRIPE_SUCCESS_URL || `${env.FRONTEND_URL || 'https://dev.jobhackai.io'}/dashboard.html?paid=1`),
       cancel_url: (env.STRIPE_CANCEL_URL || `${env.FRONTEND_URL || 'https://dev.jobhackai.io'}/pricing-a`),
       allow_promotion_codes: 'true',
-      payment_method_collection: 'if_required',
+      payment_method_collection: 'always',
       'metadata[firebaseUid]': uid,
       'metadata[plan]': plan
     };
@@ -323,7 +323,7 @@ function planToPrice(env, plan) {
 }
 
 // Build a robust Idempotency-Key from stable parameters, so retries succeed
-// and parameter changes (e.g., URLs, price, customer, trial period) generate a new key
+// and parameter changes (e.g., URLs, price, customer, trial period, payment_method_collection) generate a new key
 async function makeIdemKey(uid, body) {
   try {
     const enc = new TextEncoder();
@@ -334,6 +334,7 @@ async function makeIdemKey(uid, body) {
       mode: body.mode,
       success_url: body.success_url,
       cancel_url: body.cancel_url,
+      payment_method_collection: body.payment_method_collection || null,
       metadata: { firebaseUid: body['metadata[firebaseUid]'], plan: body['metadata[plan]'] },
       // Include subscription_data fields to ensure idempotency key changes when trial parameters change
       subscription_data: {

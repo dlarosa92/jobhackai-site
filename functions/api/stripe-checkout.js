@@ -71,7 +71,6 @@ export async function onRequest(context) {
     }
 
     // Create Checkout Session (subscription)
-    const idem = `${uid}:${plan}`;
     const sessionBody = {
       mode: 'subscription',
       customer: customerId,
@@ -80,7 +79,7 @@ export async function onRequest(context) {
       success_url: (env.STRIPE_SUCCESS_URL || `${env.FRONTEND_URL || 'https://dev.jobhackai.io'}/dashboard?paid=1`),
       cancel_url: (env.STRIPE_CANCEL_URL || `${env.FRONTEND_URL || 'https://dev.jobhackai.io'}/pricing-a`),
       allow_promotion_codes: 'true',
-      payment_method_collection: 'if_required',
+      payment_method_collection: 'always',
       'metadata[firebaseUid]': uid,
       'metadata[plan]': plan
     };
@@ -88,6 +87,9 @@ export async function onRequest(context) {
       sessionBody['subscription_data[trial_period_days]'] = '3';
       sessionBody['subscription_data[metadata][original_plan]'] = plan;
     }
+    
+    // Include payment_method_collection in idempotency key to ensure parameter changes generate new keys
+    const idem = `${uid}:${plan}:${sessionBody.payment_method_collection || 'always'}`;
 
     console.log('🔵 [CHECKOUT] Creating session', { customerId, priceId });
     const sessionRes = await stripe(env, '/checkout/sessions', {
