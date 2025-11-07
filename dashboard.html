@@ -1601,7 +1601,9 @@
                   const credits = JSON.parse(creditsData);
                   hasCredit = credits.ats_free_lifetime > 0;
                 } catch (e) {
+                  // Ignore parse errors, default to allowing (new user or corrupted data)
                   console.warn('Failed to parse credits data:', e);
+                  hasCredit = true;
                 }
               } else {
                 // No credits data means user hasn't used it yet
