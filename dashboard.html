@@ -1322,6 +1322,7 @@
         const currentUser = window.FirebaseAuthManager?.getCurrentUser?.();
         const creditKey = currentUser?.uid ? `creditsByUid:${currentUser.uid}` : null;
         let hasUsedFreeCredit = false;
+        let hadFreeAccountWithCredit = false; // Track if user had free account (credit was initialized)
         if (creditKey) {
           const creditsData = localStorage.getItem(creditKey);
           if (creditsData) {
@@ -1329,6 +1330,10 @@
               const credits = JSON.parse(creditsData);
               // User has used free credit if it's 0 (they had it and used it)
               hasUsedFreeCredit = credits.ats_free_lifetime === 0;
+              // If creditsData exists, user had a free account (credit was initialized)
+              // Credit value of 1 means they had free account but haven't used it yet
+              // Credit value of 0 means they had free account and used it
+              hadFreeAccountWithCredit = true;
             } catch (e) {
               // Ignore parse errors
             }
@@ -1345,9 +1350,10 @@
         // Show popup if user upgraded from free plan
         // Check if they were previously on free (either via flag or by checking if they have free account indicators)
         // Also show if they have any ATS score history (carryover scenario)
+        // Only consider creditKey condition if creditsData actually exists (proving they had a free account)
         const wasFreeAccount = wasFreeUser || 
                                hasFreeUsageData || 
-                               (creditKey && !hasUsedFreeCredit && currentUser); // Has credit key but hasn't used it (was free)
+                               (hadFreeAccountWithCredit && !hasUsedFreeCredit); // Had free account credit initialized but hasn't used it yet
         
         // Show popup only if:
         // 1. User was previously on free account (verified via flag or indicators), OR
