@@ -12,6 +12,7 @@ class FreeAccountManager {
 
   /**
    * Get current usage data for free accounts
+   * Handles migration from old monthly format to new lifetime format
    */
   getUsageData() {
     try {
@@ -22,7 +23,32 @@ class FreeAccountManager {
           usedAt: null
         };
       }
-      return JSON.parse(stored);
+      
+      const parsed = JSON.parse(stored);
+      
+      // Check if data is in old format (monthly tracking)
+      if (parsed.count !== undefined || parsed.lastReset !== undefined || parsed.usageHistory !== undefined) {
+        // Migrate from old format to new format
+        const hasUsedCredit = parsed.count > 0 || 
+                              (parsed.usageHistory && parsed.usageHistory.length > 0 && 
+                               parsed.usageHistory.some(entry => entry.count > 0));
+        
+        const migratedData = {
+          used: hasUsedCredit,
+          usedAt: hasUsedCredit ? (parsed.usageHistory && parsed.usageHistory.length > 0 
+            ? parsed.usageHistory[parsed.usageHistory.length - 1].month + '-01' 
+            : new Date().toISOString()) : null
+        };
+        
+        // Save migrated data
+        this.saveUsageData(migratedData);
+        console.log('✅ Migrated usage data from old monthly format to lifetime format');
+        
+        return migratedData;
+      }
+      
+      // Data is already in new format
+      return parsed;
     } catch (error) {
       console.error('Error loading usage data:', error);
       return {
