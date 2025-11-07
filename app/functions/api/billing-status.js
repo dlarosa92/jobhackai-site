@@ -52,15 +52,21 @@ export async function onRequest(context) {
           
           // Check each customer for active subscriptions
           for (const customer of searchData.data) {
-            // Query only for active/trialing/past_due subscriptions to avoid missing active ones
-            const subsCheckRes = await stripe(env, `/subscriptions?customer=${customer.id}&status=active,trialing,past_due&limit=10`);
+            // Query all subscriptions and filter for active ones (Stripe status param accepts only single value)
+            const subsCheckRes = await stripe(env, `/subscriptions?customer=${customer.id}&status=all&limit=10`);
             const subsCheckData = await subsCheckRes.json();
             
             if (subsCheckRes.ok && subsCheckData.data && subsCheckData.data.length > 0) {
-              // If we got any subscriptions from this query, they're all active/trialing/past_due
-              customerId = customer.id;
-              console.log('🟡 [BILLING-STATUS] Found customer with active subscription', customerId);
-              break;
+              // Filter for active/trialing/past_due subscriptions
+              const hasActive = subsCheckData.data.some(s => 
+                s.status === 'trialing' || s.status === 'active' || s.status === 'past_due'
+              );
+              
+              if (hasActive) {
+                customerId = customer.id;
+                console.log('🟡 [BILLING-STATUS] Found customer with active subscription', customerId);
+                break;
+              }
             }
           }
           
