@@ -432,7 +432,7 @@ const NAVIGATION_CONFIG = {
       { text: 'Pricing', href: '/pricing-a' },
       { text: 'Login', href: 'login.html' }
     ],
-    cta: { text: 'Start Free Trial', href: '/pricing-a', isCTA: true }
+    cta: { text: 'Start Free Trial', href: '/login.html?plan=trial', isCTA: true, planId: 'trial' }
   },
   // Free Account (no plan)
   free: {
@@ -546,6 +546,73 @@ const NAVIGATION_CONFIG = {
     }
   }
 };
+
+const CTA_PLAN_METADATA = {
+  trial: {
+    planName: '3-Day Free Trial',
+    price: '$0 for 3 days'
+  },
+  essential: {
+    planName: 'Essential Plan',
+    price: '$29/mo'
+  },
+  pro: {
+    planName: 'Pro Plan',
+    price: '$59/mo'
+  },
+  premium: {
+    planName: 'Premium Plan',
+    price: '$99/mo'
+  }
+};
+
+function persistSelectedPlan(planId, { source = 'navigation-cta' } = {}) {
+  if (!planId) {
+    navLog('debug', 'persistSelectedPlan skipped — no planId provided', { source });
+    return;
+  }
+
+  const metadata = CTA_PLAN_METADATA[planId] || {
+    planName: 'Selected Plan',
+    price: '$0/mo'
+  };
+
+  const payload = {
+    planId,
+    planName: metadata.planName,
+    price: metadata.price,
+    source,
+    timestamp: Date.now()
+  };
+
+  try {
+    sessionStorage.setItem('selectedPlan', JSON.stringify(payload));
+  } catch (err) {
+    navLog('warn', 'Failed to persist selectedPlan in sessionStorage', { error: err?.message, planId, source });
+  }
+
+  try {
+    localStorage.setItem('selectedPlan', JSON.stringify(payload));
+  } catch (err) {
+    navLog('warn', 'Failed to persist selectedPlan in localStorage', { error: err?.message, planId, source });
+  }
+
+  navLog('debug', 'Persisted plan selection', { planId, source });
+}
+
+function attachPlanSelectionHandler(element, planId, source) {
+  if (!element || !planId) {
+    navLog('debug', 'attachPlanSelectionHandler skipped — missing element or planId', { source });
+    return;
+  }
+
+  const planSource = source || 'navigation-cta';
+  element.dataset.planId = planId;
+  element.dataset.planSource = planSource;
+
+  const handler = () => persistSelectedPlan(planId, { source: planSource });
+  element.addEventListener('click', handler, { passive: true });
+}
 
 // --- UTILITY FUNCTIONS ---
 function getCurrentPlan() {
@@ -832,6 +899,29 @@ function updateNavigation() {
     linkElement.href = finalHref;
   };
 
+  const createVisitorCTA = (isMobile = false) => {
+    if (!navConfig?.cta) return null;
+
+    const cta = document.createElement('a');
+    updateLink(cta, navConfig.cta.href);
+    cta.textContent = navConfig.cta.text;
+    cta.className = 'btn btn-primary';
+    cta.setAttribute('role', 'button');
+
+    if (isMobile) {
+      cta.style.cssText = 'background: #00E676; color: white !important; padding: 0.75rem 0; border-radius: 8px; text-decoration: none; font-weight: 600; display: block; text-align: center; margin-top: 1.5rem;';
+    } else {
+      cta.style.cssText = 'background: #00E676; color: white !important; padding: 0.5rem 1rem; border-radius: 8px; text-decoration: none; font-weight: 600; display: inline-block;';
+    }
+
+    if (navConfig.cta.planId) {
+      const planSource = isMobile ? 'navigation-cta-mobile' : 'navigation-cta-desktop';
+      attachPlanSelectionHandler(cta, navConfig.cta.planId, planSource);
+    }
+
+    return cta;
+  };
+
   // --- Clear old elements ---
   navLog('info', 'Clearing old navigation elements');
   const oldNavLinks = document.querySelector('.nav-links');
@@ -965,13 +1055,15 @@ function updateNavigation() {
         navActions.className = 'nav-actions';
         navGroup.appendChild(navActions);
       }
-      const ctaLink = document.createElement('a');
-      updateLink(ctaLink, navConfig.cta.href);
-      ctaLink.textContent = navConfig.cta.text;
-      ctaLink.className = 'btn btn-primary';
-      ctaLink.style.cssText = 'background: #00E676; color: white !important; padding: 0.5rem 1rem; border-radius: 8px; text-decoration: none; font-weight: 600; display: inline-block;';
-      navActions.appendChild(ctaLink);
-      navLog('info', 'Visitor CTA link created', { text: ctaLink.textContent, href: ctaLink.href, className: ctaLink.className });
+      const ctaLink = createVisitorCTA(false);
+      if (ctaLink) {
+        navActions.appendChild(ctaLink);
+        navLog('info', 'Visitor CTA link created', {
+          text: ctaLink.textContent,
+          href: ctaLink.href,
+          planId: navConfig.cta.planId || null
+        });
+      }
     }
     // --- Always append CTA for authenticated plans (only once, after nav links) ---
     if (isAuthView && navConfig.userNav && navConfig.userNav.cta) {
@@ -1076,14 +1168,15 @@ function updateNavigation() {
     });
     // --- Always append CTA for visitors in mobile nav ---
     if (!isAuthView && navConfig.cta && mobileNav) {
-      const cta = document.createElement('a');
-      updateLink(cta, navConfig.cta.href);
-      cta.textContent = navConfig.cta.text;
-      cta.className = 'btn btn-primary';
-      cta.style.cssText = 'background: #00E676; color: white !important; padding: 0.75rem 0; border-radius: 8px; text-decoration: none; font-weight: 600; display: block; text-align: center; margin-top: 1.5rem;';
-      cta.setAttribute('role', 'button');
-      mobileNav.appendChild(cta);
-      navLog('info', 'Mobile visitor CTA created', { text: cta.textContent, href: cta.href });
+      const cta = createVisitorCTA(true);
+      if (cta) {
+        mobileNav.appendChild(cta);
+        navLog('info', 'Mobile visitor CTA created', {
+          text: cta.textContent,
+          href: cta.href,
+          planId: navConfig.cta.planId || null
+        });
+      }
     } else if (!mobileNav) {
       navLog('warn', 'mobileNav is null, cannot append CTA for visitors');
     }
