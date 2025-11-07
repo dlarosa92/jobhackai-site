@@ -22,20 +22,84 @@ export async function onRequest(context) {
     }
 
     let uid;
+    let email;
     try {
       const tokenResult = await verifyFirebaseIdToken(token, env.FIREBASE_PROJECT_ID);
       uid = tokenResult.uid;
-      console.log('✅ Token verified:', { uid });
+      email = tokenResult.payload?.email;
+      console.log('✅ Token verified:', { uid, email });
     } catch (tokenError) {
       console.error('❌ Token verification failed:', tokenError);
       return json({ ok: false, error: 'Invalid authentication token' }, 401, origin, env);
     }
 
     // Get customer ID from KV
-    const customerId = await env.JOBHACKAI_KV?.get(`cusByUid:${uid}`);
+    let customerId = await env.JOBHACKAI_KV?.get(`cusByUid:${uid}`);
+    
+    // If not in KV, try to find by email (like billing-status does)
     if (!customerId) {
-      console.log('❌ No Stripe customer found for user:', uid);
-      return json({ ok: false, error: 'No Stripe customer found' }, 404, origin, env);
+      console.log('🟡 [SYNC-STRIPE-PLAN] No customer in KV, searching by email');
+      
+      if (email) {
+        try {
+          const searchRes = await fetch(`https://api.stripe.com/v1/customers?email=${encodeURIComponent(email)}&limit=100`, {
+            headers: { Authorization: `Bearer ${env.STRIPE_SECRET_KEY}` }
+          });
+          
+          if (searchRes.ok) {
+            const searchData = await searchRes.json();
+            if (searchData.data && searchData.data.length > 0) {
+              // Find customer with active subscription, or use most recent
+              let foundCustomer = null;
+              
+              if (searchData.data.length > 1) {
+                // Check each customer for active subscriptions
+                for (const customer of searchData.data) {
+                  const subsCheckRes = await fetch(`https://api.stripe.com/v1/subscriptions?customer=${customer.id}&status=all&limit=10`, {
+                    headers: { Authorization: `Bearer ${env.STRIPE_SECRET_KEY}` }
+                  });
+                  if (subsCheckRes.ok) {
+                    const subsCheckData = await subsCheckRes.json();
+                    if (subsCheckData.data && subsCheckData.data.length > 0) {
+                      const hasActive = subsCheckData.data.some(s => 
+                        s.status === 'trialing' || s.status === 'active' || s.status === 'past_due'
+                      );
+                      if (hasActive) {
+                        foundCustomer = customer.id;
+                        break;
+                      }
+                    }
+                  }
+                }
+                
+                // If no active subscription found, use most recent
+                if (!foundCustomer) {
+                  foundCustomer = searchData.data.sort((a, b) => b.created - a.created)[0].id;
+                }
+              } else {
+                foundCustomer = searchData.data[0].id;
+              }
+              
+              if (foundCustomer) {
+                customerId = foundCustomer;
+                // Cache it for next time
+                await env.JOBHACKAI_KV?.put(`cusByUid:${uid}`, customerId);
+                console.log('✅ [SYNC-STRIPE-PLAN] Found customer by email and cached:', customerId);
+              }
+            }
+          }
+        } catch (searchError) {
+          console.warn('⚠️ [SYNC-STRIPE-PLAN] Email search failed:', searchError);
+        }
+      }
+      
+      // If still no customer found, return free plan (not an error)
+      if (!customerId) {
+        console.log('ℹ️ [SYNC-STRIPE-PLAN] No Stripe customer found - returning free plan');
+        await env.JOBHACKAI_KV?.put(`planByUid:${uid}`, 'free');
+        await env.JOBHACKAI_KV?.put(`planTsByUid:${uid}`, String(Math.floor(Date.now() / 1000)));
+        return json({ ok: true, plan: 'free', trialEndsAt: null }, 200, origin, env);
+      }
     }
 
     console.log('🔍 Found customer ID:', customerId);

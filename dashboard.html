@@ -1564,13 +1564,46 @@
             return;
           }
           
-          // Fetch current plan and check if user has unlimited access
+          // CRITICAL: Check plan from billing-status first (most reliable for trial/paid users)
+          // This ensures trial/paid users are correctly identified even if KV sync hasn't completed
           const idToken = await user.getIdToken();
-          const planRes = await fetch('/api/plan/me', {
-            headers: { Authorization: `Bearer ${idToken}` }
-          });
-          const planData = await planRes.json();
-          const plan = planData.plan || localStorage.getItem('user-plan') || 'free';
+          let plan = localStorage.getItem('user-plan') || 'free';
+          
+          // Always check billing-status for trial/paid users (it has better fallback logic)
+          try {
+            const billingRes = await fetch('/api/billing-status', {
+              headers: { Authorization: `Bearer ${idToken}` }
+            });
+            if (billingRes.ok) {
+              const billingData = await billingRes.json();
+              if (billingData.ok && billingData.plan && billingData.plan !== 'free') {
+                plan = billingData.plan;
+                localStorage.setItem('user-plan', billingData.plan);
+                console.log('✅ [ATS-UPLOAD] Plan from billing-status:', plan);
+              }
+            }
+          } catch (billingError) {
+            console.warn('⚠️ [ATS-UPLOAD] billing-status check failed, using fallback:', billingError);
+          }
+          
+          // Fallback to plan/me if billing-status didn't work
+          if (plan === 'free') {
+            try {
+              const planRes = await fetch('/api/plan/me', {
+                headers: { Authorization: `Bearer ${idToken}` }
+              });
+              if (planRes.ok) {
+                const planData = await planRes.json();
+                if (planData.plan && planData.plan !== 'free') {
+                  plan = planData.plan;
+                  localStorage.setItem('user-plan', plan);
+                  console.log('✅ [ATS-UPLOAD] Plan from plan/me:', plan);
+                }
+              }
+            } catch (planError) {
+              console.warn('⚠️ [ATS-UPLOAD] plan/me check failed:', planError);
+            }
+          }
           
           // Trial and subscription plans have unlimited ATS scoring - skip credit check
           const hasUnlimitedAccess = plan === 'trial' || plan === 'essential' || plan === 'pro' || plan === 'premium';
@@ -1614,43 +1647,41 @@
           const currentUser = window.FirebaseAuthManager?.getCurrentUser?.();
           let userPlan = localStorage.getItem('user-plan') || 'free';
           
-          // Try to get fresh plan data from API first
+          // CRITICAL: Always check billing-status first (most reliable for trial/paid users)
+          // This ensures trial/paid users are correctly identified even if KV sync hasn't completed
           if (currentUser) {
             try {
               const idToken = await currentUser.getIdToken();
-              const planRes = await fetch('/api/plan/me', {
-                headers: { Authorization: `Bearer ${idToken}` }
-              });
-              if (planRes.ok) {
-                const planData = await planRes.json();
-                userPlan = planData.plan || userPlan;
-                // Update localStorage to keep it in sync
-                if (planData.plan) {
-                  localStorage.setItem('user-plan', planData.plan);
-                }
-              }
-            } catch (error) {
-              console.error('Error fetching plan:', error);
-            }
-          }
-          
-          // Also check billing-status API as fallback for trial users
-          if (userPlan === 'free' && currentUser) {
-            try {
-              const idToken = await currentUser.getIdToken();
+              
+              // Check billing-status first (has better fallback logic)
               const billingRes = await fetch('/api/billing-status', {
                 headers: { Authorization: `Bearer ${idToken}` }
               });
               if (billingRes.ok) {
                 const billingData = await billingRes.json();
-                if (billingData.plan && billingData.plan !== 'free') {
+                if (billingData.ok && billingData.plan && billingData.plan !== 'free') {
                   userPlan = billingData.plan;
                   localStorage.setItem('user-plan', billingData.plan);
-                  console.log('✅ Updated plan from billing-status:', billingData.plan);
+                  console.log('✅ [ATS-UPLOAD] Plan from billing-status:', billingData.plan);
+                }
+              }
+              
+              // Fallback to plan/me if billing-status didn't work or returned free
+              if (userPlan === 'free') {
+                const planRes = await fetch('/api/plan/me', {
+                  headers: { Authorization: `Bearer ${idToken}` }
+                });
+                if (planRes.ok) {
+                  const planData = await planRes.json();
+                  if (planData.plan && planData.plan !== 'free') {
+                    userPlan = planData.plan;
+                    localStorage.setItem('user-plan', planData.plan);
+                    console.log('✅ [ATS-UPLOAD] Plan from plan/me:', planData.plan);
+                  }
                 }
               }
             } catch (error) {
-              console.warn('Error fetching billing status:', error);
+              console.warn('⚠️ [ATS-UPLOAD] Error fetching plan:', error);
             }
           }
           

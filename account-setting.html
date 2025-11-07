@@ -773,7 +773,8 @@
     // --- MAIN INITIALIZATION ---
     // CRITICAL OPTIMIZATION: Show content immediately without waiting for async operations
     // This prevents the 2-3 second blank page flash
-    (function initializeAccountSettings() {
+    // Use DOMContentLoaded to ensure elements exist before accessing them
+    function initializeAccountSettingsImmediate() {
       // Show content immediately using cached data
       const hasLocalStorageAuth = localStorage.getItem('user-authenticated') === 'true';
       const cachedEmail = localStorage.getItem('user-email');
@@ -801,7 +802,15 @@
         if (skeletonEl) skeletonEl.style.display = 'block';
         if (contentEl) contentEl.style.display = 'none';
       }
-    })();
+    }
+    
+    // Run immediately if DOM is ready, otherwise wait for DOMContentLoaded
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', initializeAccountSettingsImmediate);
+    } else {
+      // DOM already loaded, run immediately
+      initializeAccountSettingsImmediate();
+    }
     
     // Load fresh data in background (non-blocking)
     document.addEventListener('DOMContentLoaded', async () => {
