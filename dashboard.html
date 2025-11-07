@@ -1599,7 +1599,7 @@
           const currentUser = window.FirebaseAuthManager?.getCurrentUser?.();
           let userPlan = localStorage.getItem('user-plan') || 'free';
           
-          // Try to get fresh plan data
+          // Try to get fresh plan data from API first
           if (currentUser) {
             try {
               const idToken = await currentUser.getIdToken();
@@ -1609,16 +1609,44 @@
               if (planRes.ok) {
                 const planData = await planRes.json();
                 userPlan = planData.plan || userPlan;
+                // Update localStorage to keep it in sync
+                if (planData.plan) {
+                  localStorage.setItem('user-plan', planData.plan);
+                }
               }
             } catch (error) {
               console.error('Error fetching plan:', error);
             }
           }
           
+          // Also check billing-status API as fallback for trial users
+          if (userPlan === 'free' && currentUser) {
+            try {
+              const idToken = await currentUser.getIdToken();
+              const billingRes = await fetch('/api/billing-status', {
+                headers: { Authorization: `Bearer ${idToken}` }
+              });
+              if (billingRes.ok) {
+                const billingData = await billingRes.json();
+                if (billingData.plan && billingData.plan !== 'free') {
+                  userPlan = billingData.plan;
+                  localStorage.setItem('user-plan', billingData.plan);
+                  console.log('✅ Updated plan from billing-status:', billingData.plan);
+                }
+              }
+            } catch (error) {
+              console.warn('Error fetching billing status:', error);
+            }
+          }
+          
           const hasUnlimitedAccess = userPlan === 'trial' || userPlan === 'essential' || userPlan === 'pro' || userPlan === 'premium';
           
-          // Only check free account limits for free users - do NOT show alert for trial/paid users
-          if (!hasUnlimitedAccess && userPlan === 'free') {
+          // Early return for trial/paid users - they have unlimited access
+          if (hasUnlimitedAccess) {
+            console.log('✅ Trial/paid user detected, allowing unlimited resume uploads. Plan:', userPlan);
+            // Continue to upload processing below
+          } else if (userPlan === 'free') {
+            // Only check free account limits for free users
             // Check lifetime credit first
             const currentUser = window.FirebaseAuthManager?.getCurrentUser?.();
             let hasCredit = false;
@@ -1674,6 +1702,7 @@
           localStorage.setItem('lastATSSummary', summary);
 
           // Record usage for free accounts only (trial/subscription users have unlimited)
+          // Double-check plan before recording usage
           if (!hasUnlimitedAccess && userPlan === 'free' && window.freeAccountManager) {
             const usageResult = window.freeAccountManager.recordATSUsage();
             if (!usageResult.success) {
@@ -1683,43 +1712,57 @@
           }
           
           // Consume credit for free users only (trial/subscription users have unlimited)
-          const user = window.FirebaseAuthManager?.getCurrentUser?.();
-          if (user) {
-            const idToken = await user.getIdToken();
-            const planRes = await fetch('/api/plan/me', {
-              headers: { Authorization: `Bearer ${idToken}` }
-            });
-            const planData = await planRes.json();
-            const plan = planData.plan || localStorage.getItem('user-plan') || 'free';
-            const hasUnlimitedAccess = plan === 'trial' || plan === 'essential' || plan === 'pro' || plan === 'premium';
-            
-            // Only consume credits for free users
-            if (!hasUnlimitedAccess && plan === 'free') {
-              const creditKey = `creditsByUid:${user.uid}`;
-              const creditsData = localStorage.getItem(creditKey);
-              let credits = { ats_free_lifetime: 1 }; // Default for new users
-              
-              if (creditsData) {
-                try {
-                  credits = JSON.parse(creditsData);
-                } catch (e) {
-                  // Handle corrupted JSON - default to consumed state (0) since validation already passed
-                  console.warn('Failed to parse credits data during consumption, defaulting to consumed:', e);
-                  credits = { ats_free_lifetime: 0 };
+          // Skip credit consumption entirely for trial/paid users
+          if (!hasUnlimitedAccess && userPlan === 'free') {
+            const user = window.FirebaseAuthManager?.getCurrentUser?.();
+            if (user) {
+              // Re-check plan one more time before consuming credit
+              let finalPlan = userPlan;
+              try {
+                const idToken = await user.getIdToken();
+                const planRes = await fetch('/api/plan/me', {
+                  headers: { Authorization: `Bearer ${idToken}` }
+                });
+                if (planRes.ok) {
+                  const planData = await planRes.json();
+                  finalPlan = planData.plan || finalPlan;
                 }
+              } catch (error) {
+                console.warn('Error re-checking plan before credit consumption:', error);
               }
               
-              // Consume credit
-              credits.ats_free_lifetime = 0;
-              localStorage.setItem(creditKey, JSON.stringify(credits));
-              console.log('✅ Free ATS credit consumed');
-              
-              // Update UI to show credit used (without upgrade link)
-              const usageDiv = document.querySelector('.feature-card:has(#ats-upload-btn) .usage-indicator');
-              if (usageDiv) {
-                usageDiv.innerHTML = 'Free ATS score used.';
+              // Only consume credits if still on free plan
+              if (finalPlan === 'free') {
+                const creditKey = `creditsByUid:${user.uid}`;
+                const creditsData = localStorage.getItem(creditKey);
+                let credits = { ats_free_lifetime: 1 }; // Default for new users
+                
+                if (creditsData) {
+                  try {
+                    credits = JSON.parse(creditsData);
+                  } catch (e) {
+                    // Handle corrupted JSON - default to consumed state (0) since validation already passed
+                    console.warn('Failed to parse credits data during consumption, defaulting to consumed:', e);
+                    credits = { ats_free_lifetime: 0 };
+                  }
+                }
+                
+                // Consume credit
+                credits.ats_free_lifetime = 0;
+                localStorage.setItem(creditKey, JSON.stringify(credits));
+                console.log('✅ Free ATS credit consumed');
+                
+                // Update UI to show credit used (without upgrade link)
+                const usageDiv = document.querySelector('.feature-card:has(#ats-upload-btn) .usage-indicator');
+                if (usageDiv) {
+                  usageDiv.innerHTML = 'Free ATS score used.';
+                }
+              } else {
+                console.log('✅ User upgraded to', finalPlan, '- skipping credit consumption');
               }
             }
+          } else {
+            console.log('✅ Trial/paid user - skipping credit consumption. Plan:', userPlan);
           }
           // Update donut
           const donut = document.querySelector('.ats-donut');

@@ -75,8 +75,9 @@ class FreeAccountManager {
   canUseATSScoring() {
     const userPlan = localStorage.getItem('user-plan') || 'free';
     
-    // Non-free plans have unlimited access
+    // Non-free plans (trial, essential, pro, premium) have unlimited access
     if (userPlan !== 'free') {
+      console.log('✅ freeAccountManager: User has unlimited access. Plan:', userPlan);
       return { allowed: true, reason: 'unlimited' };
     }
 
@@ -121,8 +122,9 @@ class FreeAccountManager {
   recordATSUsage() {
     const userPlan = localStorage.getItem('user-plan') || 'free';
     
-    // Non-free plans don't need tracking
+    // Non-free plans (trial, essential, pro, premium) don't need tracking
     if (userPlan !== 'free') {
+      console.log('✅ freeAccountManager: Skipping usage tracking for non-free plan:', userPlan);
       return { success: true, reason: 'unlimited' };
     }
 
