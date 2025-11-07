@@ -1676,7 +1676,17 @@
             if (!hasUnlimitedAccess && plan === 'free') {
               const creditKey = `creditsByUid:${user.uid}`;
               const creditsData = localStorage.getItem(creditKey);
-              const credits = creditsData ? JSON.parse(creditsData) : { ats_free_lifetime: 1 };
+              let credits = { ats_free_lifetime: 1 }; // Default for new users
+              
+              if (creditsData) {
+                try {
+                  credits = JSON.parse(creditsData);
+                } catch (e) {
+                  // Handle corrupted JSON - default to consumed state (0) since validation already passed
+                  console.warn('Failed to parse credits data during consumption, defaulting to consumed:', e);
+                  credits = { ats_free_lifetime: 0 };
+                }
+              }
               
               // Consume credit
               credits.ats_free_lifetime = 0;
