@@ -128,9 +128,17 @@
     
     // default: hide - ensure body exists before adding class
     // Fix: Use DOMContentLoaded or execute immediately if DOM already loaded
+    // CRITICAL: Check for cached auth before adding class to prevent race condition
+    // If cached auth exists, the inline script (lines 21-43) already removed the class
+    // Adding it back would defeat the optimization
     function addAccountProtectedClass() {
       if (document.body) {
-        document.body.classList.add("account-protected");
+        // Only add class if we don't have cached auth (to prevent race condition)
+        const hasLocalStorageAuth = localStorage.getItem('user-authenticated') === 'true';
+        const cachedEmail = localStorage.getItem('user-email');
+        if (!hasLocalStorageAuth || !cachedEmail) {
+          document.body.classList.add("account-protected");
+        }
       }
     }
     
