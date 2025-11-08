@@ -662,83 +662,8 @@
     <!-- Mobile navigation will be dynamically populated by navigation.js -->
   </nav>
   <div class="mobile-nav-backdrop" id="mobileNavBackdrop"></div>
-  <script>
-    // Hamburger menu toggle with proper state management and click-outside handling
-    (function initMobileMenu() {
-      const mobileToggle = document.querySelector('.mobile-toggle');
-      const mobileNav = document.getElementById('mobileNav');
-      const backdrop = document.getElementById('mobileNavBackdrop');
-      
-      if (!mobileToggle || !mobileNav) return;
-      
-      let isMenuOpen = false;
-      
-      // Function to open menu
-      function openMenu() {
-        if (isMenuOpen) return;
-        isMenuOpen = true;
-        mobileNav.classList.add('open');
-        if (backdrop) backdrop.classList.add('show');
-        mobileToggle.setAttribute('aria-expanded', 'true');
-        // Prevent body scroll when menu is open
-        document.body.style.overflow = 'hidden';
-      }
-      
-      // Function to close menu
-      function closeMenu() {
-        if (!isMenuOpen) return;
-        isMenuOpen = false;
-        mobileNav.classList.remove('open');
-        if (backdrop) backdrop.classList.remove('show');
-        mobileToggle.setAttribute('aria-expanded', 'false');
-        // Restore body scroll
-        document.body.style.overflow = '';
-      }
-      
-      // Toggle menu on button click
-      mobileToggle.addEventListener('click', (e) => {
-        e.stopPropagation();
-        if (isMenuOpen) {
-          closeMenu();
-        } else {
-          openMenu();
-        }
-      });
-      
-      // Close menu when clicking on a link
-      mobileNav.addEventListener('click', (e) => {
-        if (e.target.tagName === 'A') {
-          closeMenu();
-        }
-      });
-      
-      // Close menu when clicking on backdrop or outside
-      if (backdrop) {
-        backdrop.addEventListener('click', closeMenu);
-      }
-      document.addEventListener('click', (e) => {
-        if (isMenuOpen && 
-            !mobileNav.contains(e.target) && 
-            !mobileToggle.contains(e.target)) {
-          closeMenu();
-        }
-      });
-      
-      // Close menu on Escape key
-      document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape' && isMenuOpen) {
-          closeMenu();
-        }
-      });
-      
-      // Close menu on window resize (if resizing to desktop)
-      window.addEventListener('resize', () => {
-        if (window.innerWidth > 900 && isMenuOpen) {
-          closeMenu();
-        }
-      });
-    })();
-  </script>
+  <!-- Centralized mobile menu handler -->
+  <script src="js/mobile-menu.js?v=20250115-1"></script>
   <!-- Main Content -->
   <main>
     <div id="dashboard-root">
@@ -1712,8 +1637,49 @@
             }
           }
           
-          // Trigger file input
-          atsUploadInput.click();
+          // Trigger file input - ensure it works on mobile
+          // Mobile browsers require direct user interaction, so we ensure the click is properly handled
+          // The input should be positioned over the button for mobile compatibility
+          try {
+            // For mobile: ensure input is accessible and positioned correctly
+            const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+            
+            if (isMobile) {
+              // On mobile, position the input over the button area
+              const buttonRect = atsUploadBtn.getBoundingClientRect();
+              atsUploadInput.style.position = 'fixed';
+              atsUploadInput.style.top = buttonRect.top + 'px';
+              atsUploadInput.style.left = buttonRect.left + 'px';
+              atsUploadInput.style.width = buttonRect.width + 'px';
+              atsUploadInput.style.height = buttonRect.height + 'px';
+              atsUploadInput.style.opacity = '0';
+              atsUploadInput.style.zIndex = '9999';
+              atsUploadInput.style.pointerEvents = 'auto';
+              atsUploadInput.style.display = 'block';
+              
+              // Trigger click immediately while user gesture is active
+              atsUploadInput.focus();
+              atsUploadInput.click();
+              
+              // Reset after a short delay
+              setTimeout(() => {
+                atsUploadInput.style.position = '';
+                atsUploadInput.style.top = '';
+                atsUploadInput.style.left = '';
+                atsUploadInput.style.width = '';
+                atsUploadInput.style.height = '';
+                atsUploadInput.style.zIndex = '';
+                atsUploadInput.style.display = 'none';
+              }, 200);
+            } else {
+              // Desktop: simple click
+              atsUploadInput.click();
+            }
+          } catch (error) {
+            console.error('Error triggering file input:', error);
+            // Fallback: try direct click
+            atsUploadInput.click();
+          }
         });
         
         atsUploadInput.addEventListener('change', async function(e) {
