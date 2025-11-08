@@ -297,84 +297,9 @@
     <a href="index.html#blog">Blog</a>
   </nav>
   <div class="mobile-nav-backdrop" id="mobileNavBackdrop"></div>
+  <!-- Centralized mobile menu handler -->
+  <script src="js/mobile-menu.js?v=20250115-1"></script>
   <!-- INTEGRATION: Firebase Authentication for secure user login (see js/login-page.js) -->
-  <script>
-    // Hamburger menu toggle with proper state management and click-outside handling
-    (function initMobileMenu() {
-      const mobileToggle = document.querySelector('.mobile-toggle');
-      const mobileNav = document.getElementById('mobileNav');
-      const backdrop = document.getElementById('mobileNavBackdrop');
-      
-      if (!mobileToggle || !mobileNav) return;
-      
-      let isMenuOpen = false;
-      
-      // Function to open menu
-      function openMenu() {
-        if (isMenuOpen) return;
-        isMenuOpen = true;
-        mobileNav.classList.add('open');
-        if (backdrop) backdrop.classList.add('show');
-        mobileToggle.setAttribute('aria-expanded', 'true');
-        // Prevent body scroll when menu is open
-        document.body.style.overflow = 'hidden';
-      }
-      
-      // Function to close menu
-      function closeMenu() {
-        if (!isMenuOpen) return;
-        isMenuOpen = false;
-        mobileNav.classList.remove('open');
-        if (backdrop) backdrop.classList.remove('show');
-        mobileToggle.setAttribute('aria-expanded', 'false');
-        // Restore body scroll
-        document.body.style.overflow = '';
-      }
-      
-      // Toggle menu on button click
-      mobileToggle.addEventListener('click', (e) => {
-        e.stopPropagation();
-        if (isMenuOpen) {
-          closeMenu();
-        } else {
-          openMenu();
-        }
-      });
-      
-      // Close menu when clicking on a link
-      mobileNav.addEventListener('click', (e) => {
-        if (e.target.tagName === 'A') {
-          closeMenu();
-        }
-      });
-      
-      // Close menu when clicking on backdrop or outside
-      if (backdrop) {
-        backdrop.addEventListener('click', closeMenu);
-      }
-      document.addEventListener('click', (e) => {
-        if (isMenuOpen && 
-            !mobileNav.contains(e.target) && 
-            !mobileToggle.contains(e.target)) {
-          closeMenu();
-        }
-      });
-      
-      // Close menu on Escape key
-      document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape' && isMenuOpen) {
-          closeMenu();
-        }
-      });
-      
-      // Close menu on window resize (if resizing to desktop)
-      window.addEventListener('resize', () => {
-        if (window.innerWidth > 900 && isMenuOpen) {
-          closeMenu();
-        }
-      });
-    })();
-  </script>
   <!-- page content -->
   <main>
     <div class="auth-container" role="main" aria-labelledby="auth-title">
