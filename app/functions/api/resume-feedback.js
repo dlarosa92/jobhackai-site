@@ -343,7 +343,7 @@ export async function onRequest(context) {
     if (plan === 'trial' && env.JOBHACKAI_KV) {
       const throttleKey = `feedbackThrottle:${uid}`;
       await env.JOBHACKAI_KV.put(throttleKey, String(Date.now()), {
-        expirationTtl: 120 // 2 minutes
+        expirationTtl: 60 // 60 seconds - matches throttle window
       });
 
       const today = new Date().toISOString().split('T')[0];
