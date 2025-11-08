@@ -1107,9 +1107,36 @@ function updateNavigation() {
         const trigger = document.createElement('button');
         trigger.className = 'mobile-nav-trigger';
         trigger.textContent = item.text;
+        trigger.setAttribute('aria-expanded', 'false');
+        trigger.setAttribute('aria-controls', `mobile-submenu-${index}`);
+        
+        // Add toggle functionality
+        trigger.addEventListener('click', function(e) {
+          e.preventDefault();
+          e.stopPropagation();
+          const isOpen = group.classList.contains('open');
+          // Close all other groups
+          document.querySelectorAll('.mobile-nav-group.open').forEach(g => {
+            if (g !== group) {
+              g.classList.remove('open');
+              const t = g.querySelector('.mobile-nav-trigger');
+              if (t) t.setAttribute('aria-expanded', 'false');
+            }
+          });
+          // Toggle current group
+          if (isOpen) {
+            group.classList.remove('open');
+            trigger.setAttribute('aria-expanded', 'false');
+          } else {
+            group.classList.add('open');
+            trigger.setAttribute('aria-expanded', 'true');
+          }
+        });
+        
         group.appendChild(trigger);
         const submenu = document.createElement('div');
         submenu.className = 'mobile-nav-submenu';
+        submenu.id = `mobile-submenu-${index}`;
         item.items.forEach(dropdownItem => {
           const link = document.createElement('a');
           updateLink(link, dropdownItem.href);
