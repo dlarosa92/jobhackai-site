@@ -60,6 +60,72 @@ async function getTrialEndDate(uid, env) {
   return new Date(trialEndTimestamp);
 }
 
+/**
+ * Update usage counters for feedback requests
+ * Called for both cache hits and cache misses to prevent bypassing limits
+ */
+async function updateUsageCounters(uid, resumeId, plan, env) {
+  if (!env.JOBHACKAI_KV) {
+    return;
+  }
+
+  // Update throttles and usage (Trial)
+  if (plan === 'trial') {
+    const throttleKey = `feedbackThrottle:${uid}`;
+    await env.JOBHACKAI_KV.put(throttleKey, String(Date.now()), {
+      expirationTtl: 60 // 60 seconds - matches throttle window
+    });
+
+    const today = new Date().toISOString().split('T')[0];
+    const dailyKey = `feedbackDaily:${uid}:${today}`;
+    const currentCount = await env.JOBHACKAI_KV.get(dailyKey);
+    const newCount = currentCount ? parseInt(currentCount, 10) + 1 : 1;
+    await env.JOBHACKAI_KV.put(dailyKey, String(newCount), {
+      expirationTtl: 86400 // 24 hours
+    });
+
+    const docPassesKey = `feedbackDocPasses:${uid}:${resumeId}`;
+    const currentPasses = await env.JOBHACKAI_KV.get(docPassesKey);
+    const newPasses = currentPasses ? parseInt(currentPasses, 10) + 1 : 1;
+    
+    // Set expiration based on trial end date, or use 7 days as fallback
+    let expirationTtl = 604800; // 7 days default (covers 3-day trial + buffer)
+    const trialEndDate = await getTrialEndDate(uid, env);
+    if (trialEndDate) {
+      const now = Date.now();
+      const trialEndMs = trialEndDate.getTime();
+      const secondsUntilTrialEnd = Math.max(0, Math.floor((trialEndMs - now) / 1000));
+      // Use trial end date + 1 day buffer, or minimum 1 day
+      expirationTtl = Math.max(86400, secondsUntilTrialEnd + 86400);
+    }
+    
+    await env.JOBHACKAI_KV.put(docPassesKey, String(newPasses), {
+      expirationTtl: expirationTtl
+    });
+  }
+
+  // Track usage (Essential)
+  if (plan === 'essential') {
+    const now = new Date();
+    const monthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    const usageKey = `feedbackUsage:${uid}:${monthKey}`;
+    const currentUsage = await env.JOBHACKAI_KV.get(usageKey);
+    const newUsage = currentUsage ? parseInt(currentUsage, 10) + 1 : 1;
+    
+    // Calculate expiration: end of current month + 2 days buffer
+    // This ensures the key expires after the month boundary and doesn't interfere with next month
+    const year = now.getFullYear();
+    const month = now.getMonth();
+    const nextMonth = new Date(year, month + 1, 1); // First day of next month
+    const expirationDate = new Date(nextMonth.getTime() + (2 * 24 * 60 * 60 * 1000)); // +2 days
+    const expirationTtl = Math.max(86400, Math.floor((expirationDate.getTime() - now.getTime()) / 1000));
+    
+    await env.JOBHACKAI_KV.put(usageKey, String(newUsage), {
+      expirationTtl: expirationTtl
+    });
+  }
+}
+
 export async function onRequest(context) {
   const { request, env } = context;
   const origin = request.headers.get('Origin') || '';
@@ -195,9 +261,14 @@ export async function onRequest(context) {
       }
     }
 
-    // If cached, return cached result
+    // If cached, still update usage counters (user is consuming the feature)
+    // Then return cached result
     if (cachedResult) {
       console.log(`[RESUME-FEEDBACK] Cache hit for ${uid}`, { resumeId, plan });
+      
+      // Update throttles and usage even for cache hits (prevents bypassing limits)
+      await updateUsageCounters(uid, resumeId, plan, env);
+      
       return json({
         success: true,
         ...cachedResult,
@@ -339,61 +410,8 @@ export async function onRequest(context) {
       });
     }
 
-    // Update throttles and usage (Trial)
-    if (plan === 'trial' && env.JOBHACKAI_KV) {
-      const throttleKey = `feedbackThrottle:${uid}`;
-      await env.JOBHACKAI_KV.put(throttleKey, String(Date.now()), {
-        expirationTtl: 60 // 60 seconds - matches throttle window
-      });
-
-      const today = new Date().toISOString().split('T')[0];
-      const dailyKey = `feedbackDaily:${uid}:${today}`;
-      const currentCount = await env.JOBHACKAI_KV.get(dailyKey);
-      const newCount = currentCount ? parseInt(currentCount, 10) + 1 : 1;
-      await env.JOBHACKAI_KV.put(dailyKey, String(newCount), {
-        expirationTtl: 86400 // 24 hours
-      });
-
-      const docPassesKey = `feedbackDocPasses:${uid}:${resumeId}`;
-      const currentPasses = await env.JOBHACKAI_KV.get(docPassesKey);
-      const newPasses = currentPasses ? parseInt(currentPasses, 10) + 1 : 1;
-      
-      // Set expiration based on trial end date, or use 7 days as fallback
-      let expirationTtl = 604800; // 7 days default (covers 3-day trial + buffer)
-      const trialEndDate = await getTrialEndDate(uid, env);
-      if (trialEndDate) {
-        const now = Date.now();
-        const trialEndMs = trialEndDate.getTime();
-        const secondsUntilTrialEnd = Math.max(0, Math.floor((trialEndMs - now) / 1000));
-        // Use trial end date + 1 day buffer, or minimum 1 day
-        expirationTtl = Math.max(86400, secondsUntilTrialEnd + 86400);
-      }
-      
-      await env.JOBHACKAI_KV.put(docPassesKey, String(newPasses), {
-        expirationTtl: expirationTtl
-      });
-    }
-
-    // Track usage (Essential)
-    if (plan === 'essential' && env.JOBHACKAI_KV) {
-      const now = new Date();
-      const monthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-      const usageKey = `feedbackUsage:${uid}:${monthKey}`;
-      const currentUsage = await env.JOBHACKAI_KV.get(usageKey);
-      const newUsage = currentUsage ? parseInt(currentUsage, 10) + 1 : 1;
-      
-      // Calculate expiration: end of current month + 2 days buffer
-      // This ensures the key expires after the month boundary and doesn't interfere with next month
-      const year = now.getFullYear();
-      const month = now.getMonth();
-      const nextMonth = new Date(year, month + 1, 1); // First day of next month
-      const expirationDate = new Date(nextMonth.getTime() + (2 * 24 * 60 * 60 * 1000)); // +2 days
-      const expirationTtl = Math.max(86400, Math.floor((expirationDate.getTime() - now.getTime()) / 1000));
-      
-      await env.JOBHACKAI_KV.put(usageKey, String(newUsage), {
-        expirationTtl: expirationTtl
-      });
-    }
+    // Update throttles and usage counters (for cache misses)
+    await updateUsageCounters(uid, resumeId, plan, env);
 
     return json({
       success: true,
