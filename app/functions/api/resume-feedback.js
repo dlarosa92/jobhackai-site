@@ -381,7 +381,18 @@ export async function onRequest(context) {
       const usageKey = `feedbackUsage:${uid}:${monthKey}`;
       const currentUsage = await env.JOBHACKAI_KV.get(usageKey);
       const newUsage = currentUsage ? parseInt(currentUsage, 10) + 1 : 1;
-      await env.JOBHACKAI_KV.put(usageKey, String(newUsage));
+      
+      // Calculate expiration: end of current month + 2 days buffer
+      // This ensures the key expires after the month boundary and doesn't interfere with next month
+      const year = now.getFullYear();
+      const month = now.getMonth();
+      const nextMonth = new Date(year, month + 1, 1); // First day of next month
+      const expirationDate = new Date(nextMonth.getTime() + (2 * 24 * 60 * 60 * 1000)); // +2 days
+      const expirationTtl = Math.max(86400, Math.floor((expirationDate.getTime() - now.getTime()) / 1000));
+      
+      await env.JOBHACKAI_KV.put(usageKey, String(newUsage), {
+        expirationTtl: expirationTtl
+      });
     }
 
     return json({
