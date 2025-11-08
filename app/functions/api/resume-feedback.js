@@ -45,6 +45,21 @@ async function getUserPlan(uid, env) {
   return plan || 'free';
 }
 
+async function getTrialEndDate(uid, env) {
+  if (!env.JOBHACKAI_KV) {
+    return null;
+  }
+  
+  const trialEnd = await env.JOBHACKAI_KV.get(`trialEndByUid:${uid}`);
+  if (!trialEnd) {
+    return null;
+  }
+  
+  // Trial end is stored as Unix timestamp in seconds
+  const trialEndTimestamp = parseInt(trialEnd, 10) * 1000; // Convert to milliseconds
+  return new Date(trialEndTimestamp);
+}
+
 export async function onRequest(context) {
   const { request, env } = context;
   const origin = request.headers.get('Origin') || '';
@@ -125,16 +140,23 @@ export async function onRequest(context) {
       }
 
       // Per-doc cap check (Trial: max 3 passes per resume)
+      // Only enforce if user is still on trial plan (check in case they upgraded)
       const docPassesKey = `feedbackDocPasses:${uid}:${resumeId}`;
       const docPasses = await env.JOBHACKAI_KV.get(docPassesKey);
       
       if (docPasses && parseInt(docPasses, 10) >= 3) {
-        return json({
-          success: false,
-          error: 'Per-document limit reached',
-          message: 'You have reached the limit for this resume (3 passes). Upgrade to Pro for unlimited passes.',
-          upgradeRequired: true
-        }, 403, origin, env);
+        // Check if user is still on trial (they might have upgraded)
+        const currentPlan = await getUserPlan(uid, env);
+        if (currentPlan === 'trial') {
+          return json({
+            success: false,
+            error: 'Per-document limit reached',
+            message: 'You have reached the limit for this resume (3 passes). Upgrade to Pro for unlimited passes.',
+            upgradeRequired: true
+          }, 403, origin, env);
+        }
+        // If they upgraded, clear the old limit by not returning error
+        // The limit will be reset when we update it below
       }
     }
 
@@ -335,7 +357,21 @@ export async function onRequest(context) {
       const docPassesKey = `feedbackDocPasses:${uid}:${resumeId}`;
       const currentPasses = await env.JOBHACKAI_KV.get(docPassesKey);
       const newPasses = currentPasses ? parseInt(currentPasses, 10) + 1 : 1;
-      await env.JOBHACKAI_KV.put(docPassesKey, String(newPasses));
+      
+      // Set expiration based on trial end date, or use 7 days as fallback
+      let expirationTtl = 604800; // 7 days default (covers 3-day trial + buffer)
+      const trialEndDate = await getTrialEndDate(uid, env);
+      if (trialEndDate) {
+        const now = Date.now();
+        const trialEndMs = trialEndDate.getTime();
+        const secondsUntilTrialEnd = Math.max(0, Math.floor((trialEndMs - now) / 1000));
+        // Use trial end date + 1 day buffer, or minimum 1 day
+        expirationTtl = Math.max(86400, secondsUntilTrialEnd + 86400);
+      }
+      
+      await env.JOBHACKAI_KV.put(docPassesKey, String(newPasses), {
+        expirationTtl: expirationTtl
+      });
     }
 
     // Track usage (Essential)
