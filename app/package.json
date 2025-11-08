@@ -19,7 +19,11 @@
     "react-dom": "^18.2.0",
     "firebase": "^10.7.0", 
     "stripe": "^14.0.0",
-    "jose": "^5.0.0"
+    "jose": "^5.0.0",
+    "pdf-parse": "^1.1.1",
+    "mammoth": "^1.6.0",
+    "openai": "^4.20.0",
+    "tesseract.js": "^5.0.0"
   },
   "devDependencies": {
     "wrangler": "^3.0.0",
