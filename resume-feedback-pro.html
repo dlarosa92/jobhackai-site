@@ -375,6 +375,161 @@
       lastAtsCheckTime: null
     };
 
+    // --- GLOBAL STATE ---
+    let currentResumeId = null;
+    let currentJobTitle = null;
+
+    // --- API CLIENT FUNCTIONS ---
+    async function getAuthToken() {
+      // Wait for Firebase auth to be ready
+      if (window.FirebaseAuthManager && window.FirebaseAuthManager.waitForAuthReady) {
+        await window.FirebaseAuthManager.waitForAuthReady(3000);
+      }
+      
+      // Get Firebase ID token using FirebaseAuthManager
+      if (window.FirebaseAuthManager && window.FirebaseAuthManager.getCurrentUser) {
+        const user = window.FirebaseAuthManager.getCurrentUser();
+        if (user) {
+          return await user.getIdToken();
+        }
+      }
+      
+      // Fallback: try to get from localStorage
+      const firebaseKeys = Object.keys(localStorage).filter(k => k.startsWith('firebase:authUser:'));
+      if (firebaseKeys.length > 0) {
+        const authData = JSON.parse(localStorage.getItem(firebaseKeys[0]) || '{}');
+        if (authData.stsTokenManager?.accessToken) {
+          return authData.stsTokenManager.accessToken;
+        }
+      }
+      
+      throw new Error('Not authenticated. Please log in.');
+    }
+
+    async function uploadResume(file) {
+      const token = await getAuthToken();
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const response = await fetch('/api/resume-upload', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        },
+        body: formData
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Upload failed');
+      }
+
+      const data = await response.json();
+      currentResumeId = data.resumeId;
+      return data;
+    }
+
+    async function getAtsScore(resumeId, jobTitle) {
+      const token = await getAuthToken();
+      const response = await fetch('/api/ats-score', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ resumeId, jobTitle })
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to get ATS score');
+      }
+
+      return await response.json();
+    }
+
+    async function getResumeFeedback(resumeId, jobTitle) {
+      const token = await getAuthToken();
+      const response = await fetch('/api/resume-feedback', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ resumeId, jobTitle })
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to get feedback');
+      }
+
+      return await response.json();
+    }
+
+    async function rewriteResume(resumeId, section, jobTitle) {
+      const token = await getAuthToken();
+      const response = await fetch('/api/resume-rewrite', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ resumeId, section, jobTitle })
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to rewrite resume');
+      }
+
+      return await response.json();
+    }
+
+    function handleApiError(error) {
+      console.error('[API Error]', error);
+      let message = error.message || 'An error occurred';
+      
+      if (message.includes('Unauthorized') || message.includes('Not authenticated')) {
+        message = 'Please log in to continue.';
+        setTimeout(() => window.location.href = 'login.html', 2000);
+      } else if (message.includes('Usage limit') || message.includes('limit reached')) {
+        message = error.message + ' Upgrade to unlock more features.';
+      } else if (message.includes('Rate limit')) {
+        message = error.message + ' Please try again in a moment.';
+      } else if (message.includes('Feature locked') || message.includes('upgrade')) {
+        message = error.message;
+      }
+
+      // Show error message to user
+      const errorDiv = document.createElement('div');
+      errorDiv.style.cssText = 'background:#FEE2E2;border-left:4px solid #EF4444;color:#991B1B;padding:1rem;border-radius:8px;margin:1rem 0;';
+      errorDiv.textContent = message;
+      const main = document.querySelector('main');
+      if (main) {
+        main.insertBefore(errorDiv, main.firstChild);
+        setTimeout(() => errorDiv.remove(), 5000);
+      }
+
+      return message;
+    }
+
+    function showLoadingState(elementId) {
+      const element = document.getElementById(elementId);
+      if (element) {
+        element.style.opacity = '0.6';
+        element.style.pointerEvents = 'none';
+      }
+    }
+
+    function hideLoadingState(elementId) {
+      const element = document.getElementById(elementId);
+      if (element) {
+        element.style.opacity = '1';
+        element.style.pointerEvents = 'auto';
+      }
+    }
+
     // --- GLOBAL BUTTON LISTENER FUNCTIONS ---
     // Copy resume handler function
     const copyResumeHandler = function() {
@@ -383,17 +538,40 @@
         navigator.clipboard.writeText(rewritten.value || rewritten.textContent);
         this.textContent = 'Copied!';
         setTimeout(() => { this.textContent = 'Copy Rewritten Resume'; }, 1200);
-        // [AI INTEGRATION POINT] (Optional) Log copy event or trigger analytics/Zapier webhook.
       }
     };
     
     // Regenerate rewrite handler function
-    const regenerateRewriteHandler = function() {
-      // [AI INTEGRATION POINT] Regenerate Rewrite: Request new AI-optimized resume snippet.
-      // Send: original resume snippet or full resume
-      // Receive: rewritten resume snippet (string)
-      // Replace simulateRewrite with real API call and update UI with response.
-      simulateRewrite();
+    const regenerateRewriteHandler = async function() {
+      if (!currentResumeId) {
+        handleApiError(new Error('Please upload a resume first'));
+        return;
+      }
+
+      const jobTitle = document.getElementById('rf-job-title')?.value || currentJobTitle || 'Software Engineer';
+      const section = null; // Can be enhanced to allow section-specific rewrites
+
+      try {
+        showLoadingState('rf-rewrite-content');
+        this.disabled = true;
+        this.textContent = 'Regenerating...';
+
+        const result = await rewriteResume(currentResumeId, section, jobTitle);
+        
+        const rewrittenBox = document.querySelectorAll('#rf-rewrite-content .rf-snippet-box')[1];
+        if (rewrittenBox) {
+          rewrittenBox.value = result.rewritten;
+        }
+
+        this.textContent = 'Regenerate Rewrite';
+        this.disabled = false;
+        hideLoadingState('rf-rewrite-content');
+      } catch (error) {
+        handleApiError(error);
+        this.textContent = 'Regenerate Rewrite';
+        this.disabled = false;
+        hideLoadingState('rf-rewrite-content');
+      }
     };
     
     // Resume Rewriting Buttons - Fixed selectors to match actual HTML
@@ -469,60 +647,144 @@
       // ATS Resume Upload Logic
       const uploadInput = document.getElementById('rf-upload');
       if (uploadInput) {
-        uploadInput.addEventListener('change', function(e) {
+        uploadInput.addEventListener('change', async function(e) {
           const file = e.target.files[0];
           if (!file) return;
-          // [AI INTEGRATION POINT] Resume Upload: Send PDF to backend/AI for ATS scoring, rubric, and feedback.
-          // Send: file (PDF)
-          // Receive: { score, rubric[], feedback[] }
-          // Replace simulateAtsScoring with real API call and update UI with response.
-          simulateAtsScoring(file, true);
+
+          const jobTitleInput = document.getElementById('rf-job-title');
+          const jobTitle = jobTitleInput?.value?.trim() || 'Software Engineer';
+          currentJobTitle = jobTitle;
+
+          try {
+            showLoadingState('rf-ats-score-tile');
+            uploadInput.disabled = true;
+
+            // Upload resume
+            const uploadResult = await uploadResume(file);
+            currentResumeId = uploadResult.resumeId;
+
+            // Get ATS score
+            const scoreResult = await getAtsScore(uploadResult.resumeId, jobTitle);
+            updateProgressRing(scoreResult.score);
+            
+            // Convert breakdown to rubric format
+            const rubric = [
+              {
+                label: 'Keyword Match',
+                score: scoreResult.breakdown.keywordScore.score,
+                max: scoreResult.breakdown.keywordScore.max,
+                tip: scoreResult.breakdown.keywordScore.feedback
+              },
+              {
+                label: 'ATS Formatting',
+                score: scoreResult.breakdown.formattingScore.score,
+                max: scoreResult.breakdown.formattingScore.max,
+                tip: scoreResult.breakdown.formattingScore.feedback
+              },
+              {
+                label: 'Structure & Organization',
+                score: scoreResult.breakdown.structureScore.score,
+                max: scoreResult.breakdown.structureScore.max,
+                tip: scoreResult.breakdown.structureScore.feedback
+              },
+              {
+                label: 'Tone & Clarity',
+                score: scoreResult.breakdown.toneScore.score,
+                max: scoreResult.breakdown.toneScore.max,
+                tip: scoreResult.breakdown.toneScore.feedback
+              },
+              {
+                label: 'Grammar & Spelling',
+                score: scoreResult.breakdown.grammarScore.score,
+                max: scoreResult.breakdown.grammarScore.max,
+                tip: scoreResult.breakdown.grammarScore.feedback
+              }
+            ];
+            updateRubricGrid(rubric);
+
+            // Get feedback (if plan allows)
+            const plan = getCurrentUserPlan();
+            if (['trial', 'essential', 'pro', 'premium'].includes(plan)) {
+              try {
+                const feedbackResult = await getResumeFeedback(uploadResult.resumeId, jobTitle);
+                updateFeedbackGrid(feedbackResult.roleSpecificFeedback);
+                updateRubricGridFromFeedback(feedbackResult.atsRubric);
+              } catch (feedbackError) {
+                console.warn('[FEEDBACK] Failed to get feedback:', feedbackError);
+                // Continue without feedback if it fails
+              }
+            }
+
+            // Update original snippet in rewrite section
+            const origBox = document.querySelectorAll('#rf-rewrite-content .rf-snippet-box')[0];
+            if (origBox && uploadResult.textPreview) {
+              origBox.value = uploadResult.textPreview;
+            }
+
+            // Update description
+            const descEl = document.getElementById('rf-score-desc');
+            if (descEl) {
+              descEl.textContent = 'Your resume was analyzed. See your ATS score and feedback below.';
+            }
+
+            uploadInput.disabled = false;
+            hideLoadingState('rf-ats-score-tile');
+          } catch (error) {
+            handleApiError(error);
+            uploadInput.disabled = false;
+            hideLoadingState('rf-ats-score-tile');
+          }
         });
       }
       // Regenerate Feedback Button
       const regenBtn = document.getElementById('rf-regenerate-btn');
       if (regenBtn) {
-        regenBtn.addEventListener('click', function() {
-          // [AI INTEGRATION POINT] Regenerate Feedback: Request new ATS score, rubric, and feedback for current resume.
-          // Send: last uploaded file or resume text
-          // Receive: { score, rubric[], feedback[] }
-          // Replace simulateAtsScoring with real API call and update UI with response.
-          simulateAtsScoring(null, false);
+        regenBtn.addEventListener('click', async function() {
+          if (!currentResumeId) {
+            handleApiError(new Error('Please upload a resume first'));
+            return;
+          }
+
+          const jobTitleInput = document.getElementById('rf-job-title');
+          const jobTitle = jobTitleInput?.value?.trim() || currentJobTitle || 'Software Engineer';
+          currentJobTitle = jobTitle;
+
+          try {
+            showLoadingState('rf-feedback-content');
+            this.disabled = true;
+            this.textContent = 'Regenerating...';
+
+            const feedbackResult = await getResumeFeedback(currentResumeId, jobTitle);
+            updateFeedbackGrid(feedbackResult.roleSpecificFeedback);
+            updateRubricGridFromFeedback(feedbackResult.atsRubric);
+
+            this.textContent = 'Regenerate Feedback';
+            this.disabled = false;
+            hideLoadingState('rf-feedback-content');
+          } catch (error) {
+            handleApiError(error);
+            this.textContent = 'Regenerate Feedback';
+            this.disabled = false;
+            hideLoadingState('rf-feedback-content');
+          }
         });
       }
-             // Initial attachment of button listeners
-       attachRewriteButtonListeners();
-      // Initial simulated content
-      simulateAtsScoring(null, true);
-      simulateRewrite();
+      // Initial attachment of button listeners
+      attachRewriteButtonListeners();
     });
 
-    // Simulate ATS scoring and update UI
-    function simulateAtsScoring(file, isUpload) {
-      // [AI INTEGRATION POINT] This function simulates the response from the backend/AI. Replace with real API response handler.
-      // Simulate a random score and rubric for demo
-      const score = Math.floor(Math.random() * 31) + 60; // 60-90%
-      const rubric = [
-        { label: 'Keyword Match', score: Math.floor(Math.random()*8)+27, max: 35, tip: 'Add more industry keywords for your target job.' },
-        { label: 'ATS Formatting', score: Math.floor(Math.random()*6)+20, max: 25, tip: 'Avoid tables, graphics, and use standard headings.' },
-        { label: 'Structure & Organization', score: Math.floor(Math.random()*5)+16, max: 20, tip: 'Order sections: Contact, Experience, Education, Skills.' },
-        { label: 'Tone & Clarity', score: Math.floor(Math.random()*3)+8, max: 10, tip: 'Use action verbs and concise bullet points.' },
-        { label: 'Grammar & Spelling', score: Math.floor(Math.random()*4)+7, max: 10, tip: 'No major errors detected.' }
-      ];
-      // Update progress ring
-      updateProgressRing(score);
-      // Update rubric grid
+    // Update rubric grid from API response
+    function updateRubricGridFromFeedback(atsRubric) {
+      if (!atsRubric || !Array.isArray(atsRubric)) return;
+      
+      const rubric = atsRubric.map(item => ({
+        label: item.category || item.label,
+        score: item.score || 0,
+        max: item.max || 100,
+        tip: item.feedback || item.tip || ''
+      }));
+      
       updateRubricGrid(rubric);
-      // Update feedback grid (simulate)
-      updateFeedbackGrid();
-      // Optionally update other UI elements
-      document.getElementById('rf-score-desc').textContent = isUpload ? 'Your resume was analyzed. See your ATS score and feedback below.' : 'Feedback regenerated!';
-      // Simulate original snippet update on upload
-      if (isUpload) {
-        const orig = document.querySelectorAll('#rf-rewrite-content .rf-snippet-box')[0];
-        if (orig) orig.value = 'Sample original resume excerpt from uploaded file.';
-        simulateRewrite();
-      }
     }
 
     function updateProgressRing(score) {
@@ -560,54 +822,35 @@
         div.innerHTML = `
           <div class="rf-rubric-label">${item.label}</div>
           <div class="rf-rubric-score">${item.score} / ${item.max}</div>
-          <div style="color:var(--color-text-secondary);font-size:0.98rem;">${item.tip}</div>
+          <div style="color:var(--color-text-secondary);font-size:0.98rem;">${item.tip || item.feedback || ''}</div>
         `;
         grid.appendChild(div);
       });
     }
 
-    function updateFeedbackGrid() {
-      // For demo, just shuffle the tips
-      const feedbacks = [
-        { label: 'Header & Contact', score: '8/10', tip: 'Clear and concise. Consider adding a custom resume URL for extra polish.' },
-        { label: 'Professional Summary', score: '6/10', tip: 'Strong opening but lacks keywords for your target role (e.g. "Kubernetes", "ETL").' },
-        { label: 'Experience', score: '7/10', tip: 'Great STAR structure. Quantify impact with metrics ("improved uptime by 15%").' },
-        { label: 'Skills', score: '9/10', tip: 'Relevant and up-to-date. Group under sub-headings (Cloud, Data, Languages).' },
-        { label: 'Education', score: '10/10', tip: 'Well-formatted. No changes needed.' }
-      ];
-      // Shuffle for demo
-      for (let i = feedbacks.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [feedbacks[i], feedbacks[j]] = [feedbacks[j], feedbacks[i]];
-      }
+    function updateFeedbackGrid(roleSpecificFeedback) {
       const grid = document.getElementById('rf-feedback-grid');
       if (!grid) return;
+      
+      // Use provided feedback or default
+      const feedbacks = roleSpecificFeedback || [
+        { section: 'Header & Contact', score: '8/10', feedback: 'Clear and concise. Consider adding a custom resume URL for extra polish.' },
+        { section: 'Professional Summary', score: '6/10', feedback: 'Strong opening but lacks keywords for your target role.' },
+        { section: 'Experience', score: '7/10', feedback: 'Great structure. Quantify impact with metrics.' },
+        { section: 'Skills', score: '9/10', feedback: 'Relevant and up-to-date. Group under sub-headings.' },
+        { section: 'Education', score: '10/10', feedback: 'Well-formatted. No changes needed.' }
+      ];
+      
       grid.innerHTML = '';
       feedbacks.forEach(item => {
         const div = document.createElement('div');
         div.className = 'rf-feedback-card';
         div.innerHTML = `
-          <div class="rf-feedback-label">${item.label} <span class="rf-feedback-score">${item.score}</span></div>
-          <div class="rf-feedback-tip">${item.tip}</div>
+          <div class="rf-feedback-label">${item.section || item.label} <span class="rf-feedback-score">${item.score}</span></div>
+          <div class="rf-feedback-tip">${item.feedback || item.tip}</div>
         `;
         grid.appendChild(div);
       });
-    }
-
-    // Simulate resume rewrite
-    function simulateRewrite() {
-      // [AI INTEGRATION POINT] This function simulates the rewritten resume. Replace with real API response handler.
-      const rewritten = document.querySelectorAll('#rf-rewrite-content .rf-snippet-box')[1];
-      if (rewritten) {
-        const samples = [
-          'Optimized resume: Led cross-functional teams to deliver projects on time and under budget, increasing efficiency by 20%.',
-          'AI rewrite: Developed scalable cloud solutions, improving system reliability and reducing costs by 15%.',
-          'Enhanced resume: Implemented data-driven strategies, resulting in a 30% boost in customer satisfaction.',
-          'Rewritten: Streamlined workflows and automated reporting, saving 10+ hours per week for the team.',
-          'AI-optimized: Collaborated with stakeholders to define KPIs, driving measurable business outcomes.'
-        ];
-        rewritten.value = samples[Math.floor(Math.random() * samples.length)];
-      }
     }
 
     // --- Priority Review Tooltip (modular) ---
@@ -678,7 +921,10 @@
         if (atsScoreTile) {
           atsScoreTile.querySelector('#rf-plan-badge').textContent = 'Free Plan';
           atsScoreTile.querySelector('#rf-score-desc').textContent = 'Get your basic ATS compatibility score.';
-          atsScoreTile.querySelector('#rf-ats-checks').textContent = '2 ATS checks remaining this month';
+          // Check if free ATS score has been used
+          const usageKey = `atsUsage:${getCurrentUserPlan()}:lifetime`;
+          // For now, show message - will be updated dynamically after API call
+          atsScoreTile.querySelector('#rf-ats-checks').textContent = '1 free ATS score per account lifetime';
         }
         if (feedbackTile) {
           feedbackTile.querySelector('.rf-title .rf-plan-badge').textContent = 'Locked';
@@ -707,45 +953,33 @@
           atsScoreTile.querySelector('#rf-plan-badge').textContent = 'Trial Plan';
           atsScoreTile.querySelector('#rf-plan-badge').style.background = '#FF9100';
           atsScoreTile.querySelector('#rf-score-desc').textContent = 'Enjoy unlimited ATS scoring during your trial!';
-          atsScoreTile.querySelector('#rf-ats-checks').textContent = 'Unlimited ATS checks in trial';
+          atsScoreTile.querySelector('#rf-ats-checks').textContent = 'Unlimited ATS scoring during trial (throttled: 1 per 30s)';
         }
-        const feedbackCount = user.atsChecksUsed || 0;
+        // Trial has unlimited feedback with throttles (1/min, max 5/day, per-doc cap 3)
         if (feedbackTile) {
-          if (feedbackCount >= 3) {
-            feedbackTile.querySelector('.rf-title .rf-plan-badge').textContent = 'Trial Limit Reached';
-            feedbackTile.querySelector('.rf-title .rf-plan-badge').style.background = '#6B7280';
-            feedbackTile.querySelector('.rf-upgrade-text strong').textContent = 'Upgrade to Essential';
-            feedbackTile.querySelector('.rf-upgrade-text').innerHTML = '<strong>Upgrade to Essential</strong> for unlimited ATS feedback and keep your progress';
-            feedbackTile.querySelector('.rf-upgrade-text').style.display = 'block';
-            if (feedbackContent) feedbackContent.style.display = 'none';
+          feedbackTile.querySelector('.rf-title .rf-plan-badge').textContent = 'Trial Plan';
+          feedbackTile.querySelector('.rf-title .rf-plan-badge').style.background = '#FF9100';
+          feedbackTile.querySelector('.rf-upgrade-text').style.display = 'none';
+          if (feedbackContent) {
+            feedbackContent.style.display = 'block';
             // Remove any existing upgrade banner at the bottom
             const oldBanner = document.getElementById('rf-feedback-upgrade-banner');
             if (oldBanner) oldBanner.remove();
-          } else {
-            feedbackTile.querySelector('.rf-title .rf-plan-badge').textContent = 'Trial Plan';
-            feedbackTile.querySelector('.rf-title .rf-plan-badge').style.background = '#FF9100';
-            feedbackTile.querySelector('.rf-upgrade-text').style.display = 'none';
-            if (feedbackContent) {
-              feedbackContent.style.display = 'block';
-              // Remove any existing upgrade banner at the bottom
-              const oldBanner = document.getElementById('rf-feedback-upgrade-banner');
-              if (oldBanner) oldBanner.remove();
-              // Add upgrade banner at the bottom
-              const upgradeBanner = document.createElement('div');
-              upgradeBanner.className = 'rf-upgrade-prompt';
-              upgradeBanner.id = 'rf-feedback-upgrade-banner';
-              upgradeBanner.style.marginTop = '1.7rem';
-              upgradeBanner.innerHTML = `
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M12 5v14M5 12h14"/>
-                </svg>
-                <div class="rf-upgrade-text">
-                  <strong>Loving the trial? Upgrade to Essential</strong> to keep unlimited feedback and unlock more features
-                </div>
-                <a href="pricing-a.html" class="btn btn-secondary">Upgrade to Essential</a>
-              `;
-              feedbackTile.appendChild(upgradeBanner);
-            }
+            // Add upgrade banner at the bottom
+            const upgradeBanner = document.createElement('div');
+            upgradeBanner.className = 'rf-upgrade-prompt';
+            upgradeBanner.id = 'rf-feedback-upgrade-banner';
+            upgradeBanner.style.marginTop = '1.7rem';
+            upgradeBanner.innerHTML = `
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M12 5v14M5 12h14"/>
+              </svg>
+              <div class="rf-upgrade-text">
+                <strong>Trial shows you what to fix. Pro fixes it now (rewrites unlocked).</strong> Upgrade to Pro to complete your resume optimization.
+              </div>
+              <a href="pricing-a.html" class="btn btn-secondary">Upgrade to Pro</a>
+            `;
+            feedbackTile.appendChild(upgradeBanner);
           }
         }
         if (rewriteTile) {
@@ -785,9 +1019,11 @@
           atsScoreTile.querySelector('#rf-score-desc').textContent = 'Unlimited ATS scoring - your resume is getting noticed!';
           atsScoreTile.querySelector('#rf-ats-checks').textContent = 'Unlimited ATS checks';
         }
-        const feedbackCount = user.atsChecksUsed || 0;
+        // Essential: 3 feedbacks/month
         if (feedbackTile) {
-          if (feedbackCount >= 3) {
+          // Check monthly usage (will be updated dynamically via API)
+          const monthlyUsage = 0; // Will be fetched from /api/usage
+          if (monthlyUsage >= 3) {
             feedbackTile.querySelector('.rf-title .rf-plan-badge').textContent = 'Monthly Limit Reached';
             feedbackTile.querySelector('.rf-title .rf-plan-badge').style.background = '#6B7280';
             feedbackTile.querySelector('.rf-upgrade-text strong').textContent = 'Upgrade to Pro';
@@ -910,7 +1146,7 @@
                   <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
                 </svg>
                 <div class="rf-upgrade-text">
-                  <strong>Perfect! You have everything.</strong> Consider Premium for priority support and fastest processing
+                  <strong>Want priority review?</strong> Upgrade to Premium for front-of-the-line analysis and VIP support
                 </div>
                 <a href="pricing-a.html" class="btn btn-secondary">Upgrade to Premium</a>
               `;
@@ -1005,8 +1241,38 @@
             <span id="rf-ats-checks">2 ATS checks remaining this month</span>
           </div>
           <form id="rf-upload-form" style="margin:1rem 0 0.7rem 0;">
-            <label for="rf-upload" style="font-weight:600;">Upload your resume (PDF, max 2 MB):</label><br>
-            <input id="rf-upload" type="file" accept="application/pdf" style="margin-top:0.5rem;">
+            <label for="rf-job-title" style="font-weight:600;display:block;margin-bottom:0.5rem;">Target Job Title (recommended for better feedback):</label>
+            <input id="rf-job-title" type="text" placeholder="e.g., Software Engineer, Product Manager, Data Scientist" style="width:100%;max-width:400px;padding:0.5rem;border:1px solid var(--color-divider);border-radius:var(--radius-md);margin-bottom:1rem;" list="job-title-suggestions">
+            <datalist id="job-title-suggestions">
+              <option value="Software Engineer">
+              <option value="Full-stack Developer">
+              <option value="Platform Engineer">
+              <option value="DevOps Engineer">
+              <option value="Data Engineer">
+              <option value="Data Scientist">
+              <option value="AI Engineer">
+              <option value="LLM Engineer">
+              <option value="Product Manager">
+              <option value="Product Owner">
+              <option value="Epic Owner">
+              <option value="Business Owner">
+              <option value="Scrum Master">
+              <option value="Release Train Engineer (RTE)">
+              <option value="Agile Coach">
+              <option value="Solution Architect">
+              <option value="System Architect">
+              <option value="Data Architect">
+              <option value="UX Designer">
+              <option value="UX/UI Developer">
+              <option value="UX Researcher">
+              <option value="QA Engineer">
+              <option value="Threat Analyst">
+              <option value="Security Engineer">
+              <option value="Data Management">
+              <option value="IT Governance">
+            </datalist>
+            <label for="rf-upload" style="font-weight:600;">Upload your resume (PDF, DOCX, or TXT, max 2 MB):</label><br>
+            <input id="rf-upload" type="file" accept=".pdf,.docx,.txt,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain" style="margin-top:0.5rem;">
           </form>
         </div>
       </div>
