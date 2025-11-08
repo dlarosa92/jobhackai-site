@@ -9,7 +9,38 @@
     body.account-protected main { display: none; }
     body.account-protected #profile-skeleton { display: none; }
     body.account-protected #profile-content { display: none; }
+    
+    /* CRITICAL: Show content immediately if we have cached auth (before Firebase verification) */
+    body:not(.account-protected) #profile-content {
+      display: block !important;
+    }
+    body:not(.account-protected) #profile-skeleton {
+      display: none !important;
+    }
   </style>
+  <script>
+    // CRITICAL: Remove account-protected class IMMEDIATELY if we have cached auth
+    // This runs before any other scripts to show content instantly
+    (function() {
+      const hasLocalStorageAuth = localStorage.getItem('user-authenticated') === 'true';
+      const cachedEmail = localStorage.getItem('user-email');
+      if (hasLocalStorageAuth && cachedEmail) {
+        // Use requestAnimationFrame to ensure DOM is ready
+        if (document.body) {
+          document.body.classList.remove("account-protected");
+        } else {
+          // Wait for body to exist
+          const observer = new MutationObserver(function(mutations, obs) {
+            if (document.body) {
+              document.body.classList.remove("account-protected");
+              obs.disconnect();
+            }
+          });
+          observer.observe(document.documentElement, { childList: true, subtree: true });
+        }
+      }
+    })();
+  </script>
   <script src="js/static-auth-guard.js?v=20251007-2"></script>
   <script>
     // Single consolidated auth check - wait for firebase-auth-ready event
@@ -97,9 +128,17 @@
     
     // default: hide - ensure body exists before adding class
     // Fix: Use DOMContentLoaded or execute immediately if DOM already loaded
+    // CRITICAL: Check for cached auth before adding class to prevent race condition
+    // If cached auth exists, the inline script (lines 21-43) already removed the class
+    // Adding it back would defeat the optimization
     function addAccountProtectedClass() {
       if (document.body) {
-        document.body.classList.add("account-protected");
+        // Only add class if we don't have cached auth (to prevent race condition)
+        const hasLocalStorageAuth = localStorage.getItem('user-authenticated') === 'true';
+        const cachedEmail = localStorage.getItem('user-email');
+        if (!hasLocalStorageAuth || !cachedEmail) {
+          document.body.classList.add("account-protected");
+        }
       }
     }
     
@@ -285,6 +324,45 @@
       color: #fff;
       border-color: #232B36;
     }
+    .plan-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4em;
+      font-size: 1.05rem;
+      font-weight: 700;
+      border-radius: 999px;
+      padding: 0.4rem 1.1rem;
+      box-shadow: 0 1px 4px rgba(31,41,55,0.06);
+      margin-left: 0.8rem;
+      vertical-align: middle;
+    }
+    .plan-badge.trial {
+      color: #FF9100;
+      background: #FFF7E6;
+    }
+    .plan-badge.essential {
+      color: #0077B5;
+      background: #E3F2FD;
+    }
+    .plan-badge.pro {
+      color: #388E3C;
+      background: #E8F5E9;
+    }
+    .plan-badge.premium {
+      color: #C62828;
+      background: #FFEBEE;
+    }
+    .plan-badge.free {
+      color: #6B7280;
+      background: #F3F4F6;
+    }
+    .subscription-action-row {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 0.8rem;
+      margin-top: 0.5rem;
+    }
     .btn-link {
       background: none;
       color: #1976D2;
@@ -337,13 +415,86 @@
     </div>
   </header>
   <nav class="mobile-nav" id="mobileNav">
-    <a href="index.html">Home</a>
-    <a href="#what-you-get">What You Get</a>
-    <a href="/pricing-a">Pricing</a>
-    <a href="index.html#blog">Blog</a>
-    <a href="login.html">Login</a>
-    <a href="/pricing-a" class="cta-button">Start Free Trial</a>
+    <!-- Mobile navigation will be dynamically populated by navigation.js -->
   </nav>
+  <div class="mobile-nav-backdrop" id="mobileNavBackdrop"></div>
+  <script>
+    // Hamburger menu toggle with proper state management and click-outside handling
+    (function initMobileMenu() {
+      const mobileToggle = document.querySelector('.mobile-toggle');
+      const mobileNav = document.getElementById('mobileNav');
+      const backdrop = document.getElementById('mobileNavBackdrop');
+      
+      if (!mobileToggle || !mobileNav) return;
+      
+      let isMenuOpen = false;
+      
+      // Function to open menu
+      function openMenu() {
+        if (isMenuOpen) return;
+        isMenuOpen = true;
+        mobileNav.classList.add('open');
+        if (backdrop) backdrop.classList.add('show');
+        mobileToggle.setAttribute('aria-expanded', 'true');
+        // Prevent body scroll when menu is open
+        document.body.style.overflow = 'hidden';
+      }
+      
+      // Function to close menu
+      function closeMenu() {
+        if (!isMenuOpen) return;
+        isMenuOpen = false;
+        mobileNav.classList.remove('open');
+        if (backdrop) backdrop.classList.remove('show');
+        mobileToggle.setAttribute('aria-expanded', 'false');
+        // Restore body scroll
+        document.body.style.overflow = '';
+      }
+      
+      // Toggle menu on button click
+      mobileToggle.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (isMenuOpen) {
+          closeMenu();
+        } else {
+          openMenu();
+        }
+      });
+      
+      // Close menu when clicking on a link
+      mobileNav.addEventListener('click', (e) => {
+        if (e.target.tagName === 'A') {
+          closeMenu();
+        }
+      });
+      
+      // Close menu when clicking on backdrop or outside
+      if (backdrop) {
+        backdrop.addEventListener('click', closeMenu);
+      }
+      document.addEventListener('click', (e) => {
+        if (isMenuOpen && 
+            !mobileNav.contains(e.target) && 
+            !mobileToggle.contains(e.target)) {
+          closeMenu();
+        }
+      });
+      
+      // Close menu on Escape key
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && isMenuOpen) {
+          closeMenu();
+        }
+      });
+      
+      // Close menu on window resize (if resizing to desktop)
+      window.addEventListener('resize', () => {
+        if (window.innerWidth > 900 && isMenuOpen) {
+          closeMenu();
+        }
+      });
+    })();
+  </script>
   <main>
     <!-- Skeleton Loading State -->
     <div id="profile-skeleton" class="account-settings-card" style="padding-bottom:1.5rem; display: none;">
@@ -640,6 +791,15 @@
           premium: '$99/month'
         };
         
+        // Plan badge text mapping
+        const planBadgeText = {
+          free: 'Free',
+          trial: 'Trial',
+          essential: 'Essential',
+          pro: 'Pro',
+          premium: 'Premium'
+        };
+        
         let html = '<div class="settings-label" style="margin-bottom:0.5rem;">Subscription</div>';
         
         if (plan === 'free') {
@@ -648,7 +808,10 @@
               <div style="font-size:1.1rem;font-weight:600;color:#232B36;">Free Account</div>
               <div style="color:#6B7280;font-size:0.98rem;margin-top:0.2rem;">Limited features • Upgrade anytime</div>
             </div>
-            <a href="/pricing-a" class="btn-primary" style="text-decoration:none;display:inline-block;">View Plans</a>
+            <div class="subscription-action-row">
+              <a href="/pricing-a" class="btn-primary" style="text-decoration:none;display:inline-block;">View Plans</a>
+              <span class="plan-badge free">${planBadgeText[plan]}</span>
+            </div>
           `;
         } else {
           html += `<div style="margin-bottom:0.8rem;">`;
@@ -681,7 +844,10 @@
           }
           
           html += `</div>`;
+          html += `<div class="subscription-action-row">`;
           html += `<button class="btn-outline" type="button" onclick="openBillingPortal()">Manage Subscription</button>`;
+          html += `<span class="plan-badge ${plan}">${planBadgeText[plan]}</span>`;
+          html += `</div>`;
         }
         
         billingSection.innerHTML = html;
@@ -717,171 +883,155 @@
     }
     
     // --- MAIN INITIALIZATION ---
+    // CRITICAL OPTIMIZATION: Show content immediately without waiting for async operations
+    // This prevents the 2-3 second blank page flash
+    // Remove account-protected class immediately if we have cached auth data
+    function initializeAccountSettingsImmediate() {
+      // Check if we have cached auth data
+      const hasLocalStorageAuth = localStorage.getItem('user-authenticated') === 'true';
+      const cachedEmail = localStorage.getItem('user-email');
+      const cachedName = localStorage.getItem('user-name');
+      
+      // CRITICAL: Remove account-protected class immediately if we have cached auth
+      // This allows content to show even before Firebase verification completes
+      if (hasLocalStorageAuth && cachedEmail) {
+        document.body.classList.remove("account-protected");
+        
+        const email = cachedEmail;
+        const userName = cachedName || email.split('@')[0] || 'User';
+        
+        // Show content immediately with cached info
+        const profileNameEl = document.getElementById('profile-name');
+        const profileEmailEl = document.getElementById('profile-email');
+        const skeletonEl = document.getElementById('profile-skeleton');
+        const contentEl = document.getElementById('profile-content');
+        
+        if (profileNameEl) profileNameEl.textContent = userName;
+        if (profileEmailEl) profileEmailEl.textContent = email;
+        if (skeletonEl) skeletonEl.style.display = 'none';
+        if (contentEl) contentEl.style.display = 'block';
+      } else {
+        // Show skeleton if no cached data
+        const skeletonEl = document.getElementById('profile-skeleton');
+        const contentEl = document.getElementById('profile-content');
+        if (skeletonEl) skeletonEl.style.display = 'block';
+        if (contentEl) contentEl.style.display = 'none';
+      }
+    }
+    
+    // Run immediately - don't wait for DOMContentLoaded
+    // This ensures content shows as fast as possible
+    if (document.body) {
+      initializeAccountSettingsImmediate();
+    } else {
+      // Body doesn't exist yet, wait for it
+      document.addEventListener('DOMContentLoaded', initializeAccountSettingsImmediate);
+    }
+    
+    // Load fresh data in background (non-blocking)
     document.addEventListener('DOMContentLoaded', async () => {
-      // Show skeleton immediately
-      document.getElementById('profile-skeleton').style.display = 'block';
-      
-      // Wait for Firebase auth with longer timeout and better checks
       let user = window.FirebaseAuthManager?.getCurrentUser?.();
-      
-      // Also check localStorage as fallback
       const hasLocalStorageAuth = localStorage.getItem('user-authenticated') === 'true' && !!localStorage.getItem('user-email');
       
       if (!user && !hasLocalStorageAuth) {
         // No auth at all - redirect handled by static-auth-guard or firebase-auth-ready handler
         console.log('⏳ Waiting for auth...');
-        // Don't redirect here - let the firebase-auth-ready handler do it
         return;
       }
       
-      // CRITICAL FIX: Sync plan from billing-status BEFORE loading profile
-      // This ensures navigation renders with the correct plan and prevents upgrade modal bugs
-      if (user || hasLocalStorageAuth) {
-        try {
-          // Wait a bit for user to be available if we only have localStorage auth
-          if (!user && hasLocalStorageAuth) {
-            let retries = 0;
-            while (!user && retries < 10) {
-              await new Promise(r => setTimeout(r, 200));
-              user = window.FirebaseAuthManager?.getCurrentUser?.();
-              retries++;
-            }
+      // OPTIMIZATION: Load everything in parallel without blocking page display
+      // Page is already visible, so these can run in background
+      const loadDataPromise = (async () => {
+        // Get user if not already available (non-blocking, quick check)
+        if (!user && hasLocalStorageAuth) {
+          // Only wait briefly - don't block page display
+          for (let i = 0; i < 5 && !user; i++) {
+            await new Promise(r => setTimeout(r, 100)); // Short waits
+            user = window.FirebaseAuthManager?.getCurrentUser?.();
           }
-          
-          if (user) {
-            const currentToken = await user.getIdToken();
-            if (currentToken) {
-              console.log('🔄 [ACCOUNT-SETTINGS] Syncing plan from Stripe to KV before page render...');
-              // Fix race condition: sync first (reads from Stripe and writes to KV atomically),
-              // then use the synced plan for display to ensure consistency
-              const syncRes = await fetch('/api/sync-stripe-plan', {
-                method: 'POST',
-                headers: { Authorization: `Bearer ${currentToken}` }
-              });
-              if (syncRes.ok) {
-                const syncData = await syncRes.json();
-                if (syncData.ok && syncData.plan && syncData.plan !== 'free') {
-                  console.log(`✅ [ACCOUNT-SETTINGS] Plan ${syncData.plan} synced to KV from Stripe`);
-                  localStorage.setItem('user-plan', syncData.plan);
-                  localStorage.setItem('dev-plan', syncData.plan);
-                  // Trigger navigation update immediately
-                  window.dispatchEvent(new CustomEvent('planChanged', { 
-                    detail: { newPlan: syncData.plan, oldPlan: 'free' } 
-                  }));
-                  if (window.JobHackAINavigation && typeof window.JobHackAINavigation.updateNavigation === 'function') {
-                    window.JobHackAINavigation.updateNavigation();
+        }
+        
+        if (!user && !hasLocalStorageAuth) {
+          return;
+        }
+        
+        // Run all async operations in parallel
+        const promises = [];
+        
+        // Plan sync (non-critical, runs in background, handle 404 gracefully)
+        if (user) {
+          promises.push((async () => {
+            try {
+              const currentToken = await user.getIdToken();
+              if (currentToken) {
+                const syncRes = await fetch('/api/sync-stripe-plan', {
+                  method: 'POST',
+                  headers: { Authorization: `Bearer ${currentToken}` }
+                });
+                // Handle 404 gracefully - endpoint might not be deployed yet
+                if (syncRes.ok) {
+                  const syncData = await syncRes.json();
+                  if (syncData.ok && syncData.plan && syncData.plan !== 'free') {
+                    localStorage.setItem('user-plan', syncData.plan);
+                    localStorage.setItem('dev-plan', syncData.plan);
+                    window.dispatchEvent(new CustomEvent('planChanged', { 
+                      detail: { newPlan: syncData.plan, oldPlan: 'free' } 
+                    }));
+                    if (window.JobHackAINavigation?.updateNavigation) {
+                      window.JobHackAINavigation.updateNavigation();
+                    }
                   }
+                } else if (syncRes.status === 404) {
+                  console.log('ℹ️ [ACCOUNT-SETTINGS] sync-stripe-plan endpoint not available (404), skipping sync');
                 }
               }
+            } catch (e) {
+              // Non-critical, ignore
+              console.log('ℹ️ [ACCOUNT-SETTINGS] Plan sync failed (non-critical):', e.message);
+            }
+          })());
+        }
+        
+        // Profile loading (non-critical, can fail gracefully)
+        if (user) {
+          promises.push((async () => {
+            try {
+              return await UserProfileManager.getProfile(user.uid);
+            } catch (error) {
+              return null;
+            }
+          })());
+        }
+        
+        // Billing section (non-critical, loads in background)
+        promises.push(renderBillingSection().catch(() => {}));
+        
+        // Wait for all to complete (don't block on failures)
+        const results = await Promise.allSettled(promises);
+        
+        // Update profile name if we got better data
+        if (user && results[1]?.status === 'fulfilled' && results[1]?.value) {
+          const profile = results[1].value;
+          if (profile.success && profile.profile && !profile.isPermissionError) {
+            const profileData = profile.profile;
+            const userName = profileData.displayName || 
+              `${profileData.firstName || ''} ${profileData.lastName || ''}`.trim() || 
+              user.displayName ||
+              user.email?.split('@')[0] ||
+              'User';
+            
+            const profileNameEl = document.getElementById('profile-name');
+            if (profileNameEl) {
+              profileNameEl.textContent = userName;
+              // Cache for next time
+              localStorage.setItem('user-name', userName);
             }
           }
-        } catch (preSyncError) {
-          console.warn('⚠️ [ACCOUNT-SETTINGS] Pre-sync failed (non-critical):', preSyncError);
-          // Continue with page load even if pre-sync fails
         }
-      }
+      })();
       
-      // If we have localStorage auth but no Firebase user, wait a bit more for Firebase to sync
-      if (!user && hasLocalStorageAuth) {
-        console.log('⏳ Waiting for Firebase auth to sync with localStorage...');
-        let retries = 0;
-        const maxRetries = 10; // 10 * 500ms = 5 seconds
-        while (!user && retries < maxRetries) {
-          await new Promise(r => setTimeout(r, 500));
-          user = window.FirebaseAuthManager?.getCurrentUser?.();
-          retries++;
-        }
-        
-        if (!user) {
-          console.log('⚠️ Firebase auth not synced after wait, but localStorage has auth - proceeding anyway');
-          // Don't redirect - let the page try to load with localStorage auth
-          // The firebase-auth-ready handler will handle redirect if needed
-        }
-      }
-      
-      // If still no user after all checks, firebase-auth-ready handler will redirect
-      if (!user && !hasLocalStorageAuth) {
-        return;
-      }
-      
-      // Load real user data
-      // Ensure we have a user object before proceeding
-      if (!user) {
-        console.warn('⚠️ No user object available, cannot load profile');
-        // Fallback to localStorage email if available
-        const email = localStorage.getItem('user-email') || 'User';
-        document.getElementById('profile-name').textContent = 'User';
-        document.getElementById('profile-email').textContent = email;
-        await renderBillingSection();
-        document.getElementById('profile-skeleton').style.display = 'none';
-        document.getElementById('profile-content').style.display = 'block';
-        return;
-      }
-      
-      try {
-        const profileResult = await UserProfileManager.getProfile(user.uid);
-        
-        // Handle Firestore permission errors gracefully - don't block page access
-        if (profileResult.isPermissionError) {
-          console.log('ℹ️ Firestore permission denied - using Firebase user data only');
-          // Permission error is non-critical, use Firebase user data
-          const userName = user.displayName || 
-            user.email?.split('@')[0] ||
-            'User';
-          
-          document.getElementById('profile-name').textContent = userName;
-          document.getElementById('profile-email').textContent = user.email || 'user@example.com';
-        } else if (profileResult.success && profileResult.profile) {
-          // Profile loaded successfully
-          const profile = profileResult.profile;
-          const userName = profile.displayName || 
-            `${profile.firstName || ''} ${profile.lastName || ''}`.trim() || 
-            user.displayName ||
-            user.email?.split('@')[0] ||
-            'User';
-          
-          document.getElementById('profile-name').textContent = userName;
-          document.getElementById('profile-email').textContent = user.email || 'user@example.com';
-        } else {
-          // Profile not found or failed to load - use Firebase user data
-          console.log('ℹ️ Profile not found or failed to load - using Firebase user data');
-          const userName = user.displayName || 
-            user.email?.split('@')[0] ||
-            'User';
-          
-          document.getElementById('profile-name').textContent = userName;
-          document.getElementById('profile-email').textContent = user.email || 'user@example.com';
-        }
-        
-        // Render billing section (may also fail with permission errors - that's OK)
-        await renderBillingSection();
-        
-        // Hide skeleton, show content
-        document.getElementById('profile-skeleton').style.display = 'none';
-        document.getElementById('profile-content').style.display = 'block';
-      } catch (error) {
-        console.error('⚠️ Failed to load profile:', error);
-        // Error loading profile - still show page with basic info
-        // This ensures Firestore permission errors don't block access
-        const userName = user.displayName || 
-          user.email?.split('@')[0] ||
-          'User';
-        
-        document.getElementById('profile-name').textContent = userName;
-        document.getElementById('profile-email').textContent = user.email || 'user@example.com';
-        
-        // Try to render billing section even if profile failed
-        try {
-          await renderBillingSection();
-        } catch (billingError) {
-          console.warn('⚠️ Billing section also failed:', billingError);
-          // Billing section failure is non-critical
-        }
-        
-        // Always show the page content
-        document.getElementById('profile-skeleton').style.display = 'none';
-        document.getElementById('profile-content').style.display = 'block';
-      }
+      // Don't await - let it run in background, page is already visible
+      loadDataPromise.catch(() => {});
       
       // Add delete account functionality
       const dangerZone = document.createElement('div');

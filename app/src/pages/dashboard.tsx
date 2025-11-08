@@ -773,9 +773,25 @@ export default function Dashboard() {
           </a>
           <div className="welcome-row">
             <h2>Welcome back, {user.name}!</h2>
-            <div className="plan-transition-message">
-              Your previous ATS resume score has been carried over from your free account. You now have access to more features and unlimited scoring!
-            </div>
+            {(() => {
+              // Show blue banner if user upgraded from free to trial/subscription
+              // Check multiple indicators that user had a free account with resume upload
+              const hasUpgradedPlan = user.plan === 'trial' || user.plan === 'essential' || user.plan === 'pro' || user.plan === 'premium';
+              if (typeof window === 'undefined' || !hasUpgradedPlan) return null;
+              
+              const hasATSScoreHistory = localStorage.getItem('lastATSScore') || localStorage.getItem('lastATSSummary');
+              const hasUsedFreeATS = localStorage.getItem('hasUsedFreeATS') === 'true';
+              const hasFreeUsageData = localStorage.getItem('free-ats-usage');
+              const hasUploadedResume = localStorage.getItem('lastUploadedResume');
+              // Show banner if user is on upgraded plan AND has any indication of previous free account usage
+              const shouldShowBanner = hasATSScoreHistory || hasUsedFreeATS || hasFreeUsageData || hasUploadedResume;
+              
+              return shouldShowBanner ? (
+                <div className="plan-transition-message">
+                  Your previous ATS resume score has been carried over from your free account. You now have access to more features and unlimited scoring!
+                </div>
+              ) : null;
+            })()}
             <div className="user-email">{user.email}</div>
           </div>
           <div className="ats-score-row">

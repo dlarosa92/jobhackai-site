@@ -490,6 +490,125 @@
       line-height: 1.35;
       font-size: 0.95rem;
     }
+    /* Upgrade Pop-up Modal Styles */
+    .upgrade-popup-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.5);
+      z-index: 10000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      opacity: 0;
+      visibility: hidden;
+      transition: opacity 0.3s ease, visibility 0.3s ease;
+    }
+    .upgrade-popup-overlay.show {
+      opacity: 1;
+      visibility: visible;
+    }
+    .upgrade-popup-modal {
+      background: #fff;
+      border-radius: 16px;
+      box-shadow: 0 8px 32px rgba(31, 41, 55, 0.2);
+      max-width: 500px;
+      width: 90%;
+      max-height: 90vh;
+      overflow-y: auto;
+      padding: 2rem;
+      position: relative;
+      transform: scale(0.9) translateY(20px);
+      opacity: 0;
+      transition: transform 0.3s ease, opacity 0.3s ease;
+    }
+    .upgrade-popup-overlay.show .upgrade-popup-modal {
+      transform: scale(1) translateY(0);
+      opacity: 1;
+    }
+    .upgrade-popup-modal .close-btn {
+      position: absolute;
+      top: 1rem;
+      right: 1rem;
+      background: none;
+      border: none;
+      font-size: 1.5rem;
+      color: #6B7280;
+      cursor: pointer;
+      padding: 0.25rem;
+      line-height: 1;
+      transition: color 0.18s;
+      width: 32px;
+      height: 32px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 4px;
+    }
+    .upgrade-popup-modal .close-btn:hover {
+      color: #232B36;
+      background: #F3F4F6;
+    }
+    .upgrade-popup-modal h2 {
+      font-size: 1.5rem;
+      font-weight: 800;
+      color: #232B36;
+      margin: 0 0 1rem 0;
+      padding-right: 2rem;
+    }
+    .upgrade-popup-modal .popup-message {
+      background: #E6F7FF;
+      color: #1976D2;
+      padding: 1em 1.2em;
+      border-radius: 8px;
+      margin-bottom: 1.5rem;
+      font-size: 1.01rem;
+      line-height: 1.5;
+    }
+    .upgrade-popup-modal .popup-content {
+      color: #4B5563;
+      font-size: 1rem;
+      line-height: 1.6;
+      margin-bottom: 1.5rem;
+    }
+    .upgrade-popup-modal .popup-ok-btn {
+      background: #00E676;
+      color: #fff;
+      font-weight: 700;
+      border: none;
+      border-radius: 8px;
+      padding: 0.75rem 2rem;
+      font-size: 1.02rem;
+      cursor: pointer;
+      transition: background 0.18s;
+      width: 100%;
+      margin-top: 0.5rem;
+    }
+    .upgrade-popup-modal .popup-ok-btn:hover,
+    .upgrade-popup-modal .popup-ok-btn:focus {
+      background: #00c965;
+      outline: none;
+    }
+    .upgrade-popup-modal .popup-cancel-btn {
+      background: transparent;
+      color: #6B7280;
+      font-weight: 600;
+      border: 1px solid #D1D5DB;
+      border-radius: 8px;
+      padding: 0.75rem 2rem;
+      font-size: 1.02rem;
+      cursor: pointer;
+      transition: all 0.18s;
+      width: 100%;
+    }
+    .upgrade-popup-modal .popup-cancel-btn:hover,
+    .upgrade-popup-modal .popup-cancel-btn:focus {
+      background: #F3F4F6;
+      border-color: #9CA3AF;
+      outline: none;
+    }
     
     /* Loading skeleton */
     .loading-skeleton {
@@ -542,23 +661,83 @@
   <nav class="mobile-nav" id="mobileNav">
     <!-- Mobile navigation will be dynamically populated by navigation.js -->
   </nav>
+  <div class="mobile-nav-backdrop" id="mobileNavBackdrop"></div>
   <script>
-    // Hamburger menu toggle
-    const mobileToggle = document.querySelector('.mobile-toggle');
-    const mobileNav = document.getElementById('mobileNav');
-    if (mobileToggle && mobileNav) {
-      mobileToggle.addEventListener('click', () => {
-        const isOpen = mobileNav.classList.toggle('open');
-        mobileToggle.setAttribute('aria-expanded', isOpen);
+    // Hamburger menu toggle with proper state management and click-outside handling
+    (function initMobileMenu() {
+      const mobileToggle = document.querySelector('.mobile-toggle');
+      const mobileNav = document.getElementById('mobileNav');
+      const backdrop = document.getElementById('mobileNavBackdrop');
+      
+      if (!mobileToggle || !mobileNav) return;
+      
+      let isMenuOpen = false;
+      
+      // Function to open menu
+      function openMenu() {
+        if (isMenuOpen) return;
+        isMenuOpen = true;
+        mobileNav.classList.add('open');
+        if (backdrop) backdrop.classList.add('show');
+        mobileToggle.setAttribute('aria-expanded', 'true');
+        // Prevent body scroll when menu is open
+        document.body.style.overflow = 'hidden';
+      }
+      
+      // Function to close menu
+      function closeMenu() {
+        if (!isMenuOpen) return;
+        isMenuOpen = false;
+        mobileNav.classList.remove('open');
+        if (backdrop) backdrop.classList.remove('show');
+        mobileToggle.setAttribute('aria-expanded', 'false');
+        // Restore body scroll
+        document.body.style.overflow = '';
+      }
+      
+      // Toggle menu on button click
+      mobileToggle.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (isMenuOpen) {
+          closeMenu();
+        } else {
+          openMenu();
+        }
       });
-      // Close mobile nav on link click
-      document.querySelectorAll('.mobile-nav a').forEach(link => {
-        link.addEventListener('click', () => {
-          mobileNav.classList.remove('open');
-          mobileToggle.setAttribute('aria-expanded', 'false');
-        });
+      
+      // Close menu when clicking on a link
+      mobileNav.addEventListener('click', (e) => {
+        if (e.target.tagName === 'A') {
+          closeMenu();
+        }
       });
-    }
+      
+      // Close menu when clicking on backdrop or outside
+      if (backdrop) {
+        backdrop.addEventListener('click', closeMenu);
+      }
+      document.addEventListener('click', (e) => {
+        if (isMenuOpen && 
+            !mobileNav.contains(e.target) && 
+            !mobileToggle.contains(e.target)) {
+          closeMenu();
+        }
+      });
+      
+      // Close menu on Escape key
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && isMenuOpen) {
+          closeMenu();
+        }
+      });
+      
+      // Close menu on window resize (if resizing to desktop)
+      window.addEventListener('resize', () => {
+        if (window.innerWidth > 900 && isMenuOpen) {
+          closeMenu();
+        }
+      });
+    })();
   </script>
   <!-- Main Content -->
   <main>
@@ -789,6 +968,19 @@
         currentPlan = localStorage.getItem('user-plan') || 'free';
         console.log('⚠️ Navigation not ready, using localStorage plan:', currentPlan);
       }
+      
+      // Set flag if user upgraded from free to trial/paid plan
+      // Only set flag if previous-plan actually exists (not defaulting to 'free')
+      // This prevents direct paid signups from being incorrectly marked as former free users
+      const previousPlan = localStorage.getItem('previous-plan');
+      if (previousPlan === 'free' && (currentPlan === 'trial' || currentPlan === 'essential' || currentPlan === 'pro' || currentPlan === 'premium')) {
+        localStorage.setItem('was-free-user', 'true');
+        console.log('✅ Marked user as former free user (upgraded to', currentPlan + ')');
+      }
+      // Update previous plan for next check (only if it changed)
+      if (previousPlan !== currentPlan) {
+        localStorage.setItem('previous-plan', currentPlan);
+      }
 
       // If coming from Stripe with ?paid=1 but KV says 'free', force sync
       // Reuse urlParams from line 705
@@ -1015,7 +1207,6 @@
         </a>
         <div class="welcome-row">
           <h2>Welcome back, ${user.name || 'User'}!</h2>
-          ${user.plan === 'trial' || user.plan === 'essential' || user.plan === 'pro' || user.plan === 'premium' ? `<div class="plan-transition-message" style="background:#E6F7FF;color:#1976D2;padding:0.7em 1em;border-radius:8px;margin-bottom:0.7em;font-size:1.01rem;">Your previous ATS resume score has been carried over from your free account. You now have access to more features and unlimited scoring!</div>` : ''}
           ${user.plan === 'trial' ? `<div class="trial-countdown">You have ${daysLeft(user.trialEndsAt)} day${daysLeft(user.trialEndsAt) !== 1 ? 's' : ''} left in your trial!</div>` : ''}
           ${subStatus && subStatus.cancelAt ? `
             <div style="background:#FEF3C7;border-left:4px solid #F59E0B;color:#92400E;padding:0.8rem 1rem;border-radius:8px;margin:0.5rem 0;font-size:0.98rem;">
@@ -1080,14 +1271,32 @@
             const creditsData = localStorage.getItem(creditKey);
             const credits = creditsData ? JSON.parse(creditsData) : { ats_free_lifetime: 1 };
             
-            if (credits.ats_free_lifetime > 0) {
+            // Check if user has uploaded a resume
+            const hasUploadedResume = localStorage.getItem('hasUploadedResume') === 'true' || 
+                                      localStorage.getItem('lastUploadedResume') || 
+                                      localStorage.getItem('lastATSScore');
+            
+            if (credits.ats_free_lifetime > 0 && !hasUploadedResume) {
+              // User has credit available and hasn't uploaded yet
               usageText = 'You have 1 free ATS score (lifetime).';
               tooltip = `<span class="jh-tooltip-trigger" tabindex="0" aria-label="More info" style="margin-left:0.4em;vertical-align:middle;">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false" style="vertical-align:middle"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="8"/><line x1="12" y1="12" x2="12" y2="16"/></svg>
                 <span class="jh-tooltip-text">This is a one-time free score. After use, upgrade for unlimited ATS scoring.</span>
               </span>`;
+            } else if (hasUploadedResume && credits.ats_free_lifetime > 0) {
+              // User uploaded resume but still has credit (shouldn't happen, but handle gracefully)
+              usageText = 'Resume uploaded. Upgrade to trial or paid plan for unlimited scoring.';
+              tooltip = `<span class="jh-tooltip-trigger" tabindex="0" aria-label="More info" style="margin-left:0.4em;vertical-align:middle;">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false" style="vertical-align:middle"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="8"/><line x1="12" y1="12" x2="12" y2="16"/></svg>
+                <span class="jh-tooltip-text">Upgrade to unlock unlimited ATS scoring and access all features.</span>
+              </span>`;
             } else {
-              usageText = 'Free ATS score used. Upgrade for unlimited scoring.';
+              // Credit used - show upgrade message
+              usageText = 'Free ATS score used. Upgrade to trial or paid plan for unlimited scoring.';
+              tooltip = `<span class="jh-tooltip-trigger" tabindex="0" aria-label="More info" style="margin-left:0.4em;vertical-align:middle;">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false" style="vertical-align:middle"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="8"/><line x1="12" y1="12" x2="12" y2="16"/></svg>
+                <span class="jh-tooltip-text">Upgrade to unlock unlimited ATS scoring and access all features.</span>
+              </span>`;
             }
           } else if (user.plan === 'trial') {
             usageText = 'Unlimited ATS resume scoring during your trial.';
@@ -1165,6 +1374,262 @@
       }
       featuresHtml += '</div>';
       root.innerHTML = banner + featuresHtml;
+      
+      // --- Upgrade Pop-up Logic ---
+      function showUpgradePopup() {
+        // Check if popup was already shown
+        const popupShownKey = 'upgrade-popup-shown';
+        if (localStorage.getItem(popupShownKey) === 'true') {
+          return;
+        }
+        
+        // Check if user upgraded from free to trial/subscription
+        const hasUpgradedPlan = user.plan === 'trial' || user.plan === 'essential' || user.plan === 'pro' || user.plan === 'premium';
+        if (!hasUpgradedPlan) {
+          return;
+        }
+        
+        // CRITICAL: Banner should ONLY show if user uploaded a resume for free ATS BEFORE upgrading
+        // Check if user had uploaded a resume for free ATS scoring
+        const hasATSScoreHistory = localStorage.getItem('lastATSScore') || localStorage.getItem('lastATSSummary');
+        
+        // Try to get user UID from Firebase Auth Manager to check credit usage
+        const currentUser = window.FirebaseAuthManager?.getCurrentUser?.();
+        const creditKey = currentUser?.uid ? `creditsByUid:${currentUser.uid}` : null;
+        let hasUsedFreeCredit = false;
+        let hadFreeAccountWithCredit = false;
+        
+        if (creditKey) {
+          const creditsData = localStorage.getItem(creditKey);
+          if (creditsData) {
+            try {
+              const credits = JSON.parse(creditsData);
+              // User has used free credit if it's 0 (they had it and used it)
+              hasUsedFreeCredit = credits.ats_free_lifetime === 0;
+              // If creditsData exists, user had a free account (credit was initialized)
+              hadFreeAccountWithCredit = true;
+            } catch (e) {
+              // Ignore parse errors
+            }
+          }
+        }
+        
+        // Check if user was previously on free plan (stored when they upgrade)
+        const wasFreeUser = localStorage.getItem('was-free-user') === 'true';
+        
+        // Check legacy free usage data
+        const hasFreeUsageData = localStorage.getItem('free-ats-usage');
+        let legacyUsedFreeATS = false;
+        if (hasFreeUsageData) {
+          try {
+            const usageData = JSON.parse(hasFreeUsageData);
+            legacyUsedFreeATS = usageData.used === true;
+          } catch (e) {
+            // Ignore parse errors
+          }
+        }
+        
+        // Determine if user had a free account
+        const wasFreeAccount = wasFreeUser || hasFreeUsageData || hadFreeAccountWithCredit;
+        
+        // CRITICAL: Show popup ONLY if:
+        // 1. User upgraded from free account, AND
+        // 2. User actually uploaded a resume for free ATS (used their free credit OR has ATS score history)
+        // Do NOT show if user upgraded without uploading a resume first
+        const uploadedResumeForFreeATS = hasUsedFreeCredit || legacyUsedFreeATS || hasATSScoreHistory;
+        const shouldShowPopup = wasFreeAccount && uploadedResumeForFreeATS;
+        
+        if (!shouldShowPopup) {
+          console.log('ℹ️ [UPGRADE-BANNER] Not showing banner:', {
+            wasFreeAccount,
+            uploadedResumeForFreeATS,
+            hasUsedFreeCredit,
+            legacyUsedFreeATS,
+            hasATSScoreHistory
+          });
+          return;
+        }
+        
+        console.log('✅ [UPGRADE-BANNER] Showing banner - user upgraded from free and uploaded resume');
+        
+        // Create and show popup
+        const popupHTML = `
+          <div class="upgrade-popup-overlay" id="upgrade-popup-overlay">
+            <div class="upgrade-popup-modal">
+              <button class="close-btn" id="upgrade-popup-close" aria-label="Close">×</button>
+              <h2>Welcome back, ${user.name || 'User'}!</h2>
+              <div class="popup-message">
+                Your previous ATS resume score has been carried over from your free account. You now have access to more features and unlimited scoring!
+              </div>
+              <div class="popup-content">
+                <p>You can now upload unlimited resumes for ATS scoring and access additional features like detailed resume feedback and interview question generation.</p>
+              </div>
+              <button class="popup-ok-btn" id="upgrade-popup-ok">OK</button>
+            </div>
+          </div>
+        `;
+        
+        document.body.insertAdjacentHTML('beforeend', popupHTML);
+        const overlay = document.getElementById('upgrade-popup-overlay');
+        const closeBtn = document.getElementById('upgrade-popup-close');
+        const okBtn = document.getElementById('upgrade-popup-ok');
+        
+        // Escape key handler - stored so it can be removed later
+        const escapeKeyHandler = function(e) {
+          if (e.key === 'Escape' && overlay.classList.contains('show')) {
+            closePopup();
+          }
+        };
+        
+        function closePopup() {
+          // Fade out animation
+          overlay.classList.remove('show');
+          // Remove Escape key listener to prevent memory leak
+          document.removeEventListener('keydown', escapeKeyHandler);
+          // Wait for fade-out animation to complete before removing
+          setTimeout(() => {
+            overlay.remove();
+            localStorage.setItem(popupShownKey, 'true');
+          }, 350); // Slightly longer than transition duration for smooth fade-out
+        }
+        
+        // Show popup with smooth fade-in animation
+        // Use requestAnimationFrame to ensure DOM is ready
+        requestAnimationFrame(() => {
+          setTimeout(() => {
+            overlay.classList.add('show');
+          }, 50);
+        });
+        
+        // Close handlers
+        closeBtn.addEventListener('click', closePopup);
+        okBtn.addEventListener('click', closePopup);
+        overlay.addEventListener('click', function(e) {
+          if (e.target === overlay) {
+            closePopup();
+          }
+        });
+        
+        // Close on Escape key
+        document.addEventListener('keydown', escapeKeyHandler);
+      }
+      
+      // Show popup after a short delay to ensure page is rendered
+      setTimeout(() => {
+        showUpgradePopup();
+      }, 500);
+      
+      // --- Free Account Upgrade CTA Pop-up Logic ---
+      function showFreeAccountUpgradePopup() {
+        // CRITICAL: Only show upgrade popup for free tier users
+        // Check plan from multiple sources to ensure accuracy
+        const currentPlan = localStorage.getItem('user-plan') || 'free';
+        const hasUnlimitedAccess = currentPlan === 'trial' || currentPlan === 'essential' || currentPlan === 'pro' || currentPlan === 'premium';
+        
+        // If user is on a paid plan, do NOT show upgrade popup
+        if (hasUnlimitedAccess) {
+          console.log('✅ [DASHBOARD] Skipping upgrade popup - user is on paid plan:', currentPlan);
+          return;
+        }
+        
+        // Double-check with navigation system if available
+        if (window.JobHackAINavigation) {
+          const navPlan = window.JobHackAINavigation.getEffectivePlan?.();
+          if (navPlan && (navPlan === 'trial' || navPlan === 'essential' || navPlan === 'pro' || navPlan === 'premium')) {
+            console.log('✅ [DASHBOARD] Skipping upgrade popup - navigation system confirms paid plan:', navPlan);
+            return;
+          }
+        }
+        
+        // Create and show popup
+        const popupHTML = `
+          <div class="upgrade-popup-overlay" id="free-account-upgrade-popup-overlay">
+            <div class="upgrade-popup-modal">
+              <button class="close-btn" id="free-account-upgrade-popup-close" aria-label="Close">×</button>
+              <h2>Upgrade to Continue</h2>
+              <div class="popup-message">
+                You've used your 1 free lifetime ATS resume score. Upgrade to unlock unlimited scoring and access all features!
+              </div>
+              <div class="popup-content">
+                <p style="margin-bottom: 1rem; font-weight: 600; color: #232B36;">With a subscription, you'll get:</p>
+                <ul style="list-style: none; padding: 0; margin: 0 0 1.5rem 0;">
+                  <li style="padding: 0.5rem 0; display: flex; align-items: center; gap: 0.75rem;">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#00E676" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M20 6L9 17l-5-5"/>
+                    </svg>
+                    <span>Unlimited ATS resume scoring</span>
+                  </li>
+                  <li style="padding: 0.5rem 0; display: flex; align-items: center; gap: 0.75rem;">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#00E676" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M20 6L9 17l-5-5"/>
+                    </svg>
+                    <span>Detailed resume feedback</span>
+                  </li>
+                  <li style="padding: 0.5rem 0; display: flex; align-items: center; gap: 0.75rem;">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#00E676" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M20 6L9 17l-5-5"/>
+                    </svg>
+                    <span>Interview question generator</span>
+                  </li>
+                  <li style="padding: 0.5rem 0; display: flex; align-items: center; gap: 0.75rem;">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#00E676" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M20 6L9 17l-5-5"/>
+                    </svg>
+                    <span>Priority support</span>
+                  </li>
+                </ul>
+              </div>
+              <button class="popup-ok-btn" id="free-account-upgrade-popup-cta" style="margin-bottom: 0.5rem;">View Pricing Plans</button>
+              <button class="popup-cancel-btn" id="free-account-upgrade-popup-cancel" style="background: transparent; color: #6B7280; border: 1px solid #D1D5DB; margin-top: 0;">Maybe Later</button>
+            </div>
+          </div>
+        `;
+        
+        document.body.insertAdjacentHTML('beforeend', popupHTML);
+        const overlay = document.getElementById('free-account-upgrade-popup-overlay');
+        const closeBtn = document.getElementById('free-account-upgrade-popup-close');
+        const ctaBtn = document.getElementById('free-account-upgrade-popup-cta');
+        const cancelBtn = document.getElementById('free-account-upgrade-popup-cancel');
+        
+        // Escape key handler - stored so it can be removed later
+        const escapeKeyHandler = function(e) {
+          if (e.key === 'Escape' && overlay.classList.contains('show')) {
+            closePopup();
+          }
+        };
+        
+        function closePopup() {
+          overlay.classList.remove('show');
+          // Remove Escape key listener to prevent memory leak
+          document.removeEventListener('keydown', escapeKeyHandler);
+          setTimeout(() => {
+            overlay.remove();
+          }, 300);
+        }
+        
+        // Show popup with fade-in animation
+        setTimeout(() => {
+          overlay.classList.add('show');
+        }, 100);
+        
+        // CTA button - redirect to pricing
+        ctaBtn.addEventListener('click', () => {
+          window.location.href = 'pricing-a.html';
+        });
+        
+        // Close handlers
+        closeBtn.addEventListener('click', closePopup);
+        cancelBtn.addEventListener('click', closePopup);
+        overlay.addEventListener('click', function(e) {
+          if (e.target === overlay) {
+            closePopup();
+          }
+        });
+        
+        // Close on Escape key
+        document.addEventListener('keydown', escapeKeyHandler);
+      }
+      
       // --- ATS Upload Button Logic ---
       const atsUploadBtn = document.getElementById('ats-upload-btn');
       const atsUploadInput = document.getElementById('ats-upload-input');
@@ -1176,23 +1641,73 @@
             return;
           }
           
-          // Fetch current plan
+          // CRITICAL: Check plan from billing-status first (most reliable for trial/paid users)
+          // This ensures trial/paid users are correctly identified even if KV sync hasn't completed
           const idToken = await user.getIdToken();
-          const planRes = await fetch('/api/plan/me', {
-            headers: { Authorization: `Bearer ${idToken}` }
-          });
-          const planData = await planRes.json();
-          const plan = planData.plan || 'free';
+          let plan = localStorage.getItem('user-plan') || 'free';
           
-          // Check credits for free users
+          // Always check billing-status for trial/paid users (it has better fallback logic)
+          try {
+            const billingRes = await fetch('/api/billing-status', {
+              headers: { Authorization: `Bearer ${idToken}` }
+            });
+            if (billingRes.ok) {
+              const billingData = await billingRes.json();
+              if (billingData.ok && billingData.plan && billingData.plan !== 'free') {
+                plan = billingData.plan;
+                localStorage.setItem('user-plan', billingData.plan);
+                console.log('✅ [ATS-UPLOAD] Plan from billing-status:', plan);
+              }
+            }
+          } catch (billingError) {
+            console.warn('⚠️ [ATS-UPLOAD] billing-status check failed, using fallback:', billingError);
+          }
+          
+          // Fallback to plan/me if billing-status didn't work
           if (plan === 'free') {
+            try {
+              const planRes = await fetch('/api/plan/me', {
+                headers: { Authorization: `Bearer ${idToken}` }
+              });
+              if (planRes.ok) {
+                const planData = await planRes.json();
+                if (planData.plan && planData.plan !== 'free') {
+                  plan = planData.plan;
+                  localStorage.setItem('user-plan', plan);
+                  console.log('✅ [ATS-UPLOAD] Plan from plan/me:', plan);
+                }
+              }
+            } catch (planError) {
+              console.warn('⚠️ [ATS-UPLOAD] plan/me check failed:', planError);
+            }
+          }
+          
+          // Trial and subscription plans have unlimited ATS scoring - skip credit check
+          const hasUnlimitedAccess = plan === 'trial' || plan === 'essential' || plan === 'pro' || plan === 'premium';
+          
+          // Only check credits for free users - do NOT show alert for trial/paid users
+          if (!hasUnlimitedAccess && plan === 'free') {
             const creditKey = `creditsByUid:${user.uid}`;
             const creditsData = localStorage.getItem(creditKey);
-            const credits = creditsData ? JSON.parse(creditsData) : { ats_free_lifetime: 0 };
+            let hasCredit = false;
             
-            if (credits.ats_free_lifetime <= 0) {
-              alert('You have used your free ATS score. Upgrade to unlock unlimited scoring!');
-              window.location.href = 'pricing-a.html';
+            if (creditsData) {
+              try {
+                const credits = JSON.parse(creditsData);
+                hasCredit = credits.ats_free_lifetime > 0;
+              } catch (e) {
+                // Ignore parse errors, default to allowing (new user)
+                console.warn('Failed to parse credits data:', e);
+                hasCredit = true;
+              }
+            } else {
+              // No credits data means user hasn't used it yet - they have 1 free credit
+              hasCredit = true;
+            }
+            
+            if (!hasCredit) {
+              // Show CTA pop-up instead of alert
+              showFreeAccountUpgradePopup();
               return;
             }
           }
@@ -1205,19 +1720,89 @@
           const file = e.target.files[0];
           if (!file) return;
 
-          // Check free account usage limits (legacy check)
-          const userPlan = window.JobHackAINavigation ? window.JobHackAINavigation.getEffectivePlan() : 'free';
-          if (userPlan === 'free' && window.freeAccountManager) {
-            const usageCheck = window.freeAccountManager.canUseATSScoring();
-            if (!usageCheck.allowed) {
-              // Show upgrade modal
-              const upgradeMsg = window.freeAccountManager.getUpgradeMessage();
-              if (upgradeMsg) {
-                alert(`${upgradeMsg.title}\n\n${upgradeMsg.message}`);
-                // Redirect to pricing
-                window.location.href = 'pricing-a.html';
-                return;
+          // Check free account usage limits - skip for trial/subscription users
+          const currentUser = window.FirebaseAuthManager?.getCurrentUser?.();
+          let userPlan = localStorage.getItem('user-plan') || 'free';
+          
+          // CRITICAL: Always check billing-status first (most reliable for trial/paid users)
+          // This ensures trial/paid users are correctly identified even if KV sync hasn't completed
+          if (currentUser) {
+            try {
+              const idToken = await currentUser.getIdToken();
+              
+              // Check billing-status first (has better fallback logic)
+              const billingRes = await fetch('/api/billing-status', {
+                headers: { Authorization: `Bearer ${idToken}` }
+              });
+              if (billingRes.ok) {
+                const billingData = await billingRes.json();
+                if (billingData.ok && billingData.plan && billingData.plan !== 'free') {
+                  userPlan = billingData.plan;
+                  localStorage.setItem('user-plan', billingData.plan);
+                  console.log('✅ [ATS-UPLOAD] Plan from billing-status:', billingData.plan);
+                }
               }
+              
+              // Fallback to plan/me if billing-status didn't work or returned free
+              if (userPlan === 'free') {
+                const planRes = await fetch('/api/plan/me', {
+                  headers: { Authorization: `Bearer ${idToken}` }
+                });
+                if (planRes.ok) {
+                  const planData = await planRes.json();
+                  if (planData.plan && planData.plan !== 'free') {
+                    userPlan = planData.plan;
+                    localStorage.setItem('user-plan', planData.plan);
+                    console.log('✅ [ATS-UPLOAD] Plan from plan/me:', planData.plan);
+                  }
+                }
+              }
+            } catch (error) {
+              console.warn('⚠️ [ATS-UPLOAD] Error fetching plan:', error);
+            }
+          }
+          
+          const hasUnlimitedAccess = userPlan === 'trial' || userPlan === 'essential' || userPlan === 'pro' || userPlan === 'premium';
+          
+          // Early return for trial/paid users - they have unlimited access
+          if (hasUnlimitedAccess) {
+            console.log('✅ Trial/paid user detected, allowing unlimited resume uploads. Plan:', userPlan);
+            // Continue to upload processing below
+          } else if (userPlan === 'free') {
+            // Only check free account limits for free users
+            // Check lifetime credit first
+            const currentUser = window.FirebaseAuthManager?.getCurrentUser?.();
+            let hasCredit = false;
+            if (currentUser && currentUser.uid) {
+              const creditKey = `creditsByUid:${currentUser.uid}`;
+              const creditsData = localStorage.getItem(creditKey);
+              if (creditsData) {
+                try {
+                  const credits = JSON.parse(creditsData);
+                  hasCredit = credits.ats_free_lifetime > 0;
+                } catch (e) {
+                  // Ignore parse errors, default to allowing (new user or corrupted data)
+                  console.warn('Failed to parse credits data:', e);
+                  hasCredit = true;
+                }
+              } else {
+                // No credits data means user hasn't used it yet
+                hasCredit = true;
+              }
+            }
+            
+            // Also check freeAccountManager as fallback
+            if (!hasCredit && window.freeAccountManager) {
+              const usageCheck = window.freeAccountManager.canUseATSScoring();
+              hasCredit = usageCheck.allowed;
+            }
+            
+            if (!hasCredit) {
+              // Show CTA pop-up instead of alert
+              showFreeAccountUpgradePopup();
+              // Reset file input
+              e.target.value = '';
+              return;
             }
           }
 
@@ -1228,48 +1813,79 @@
             localStorage.setItem('lastUploadedResume', evt.target.result);
             // Optionally, store file name
             localStorage.setItem('lastUploadedResumeName', file.name);
+            // Mark that user has uploaded a resume (for upgrade popup detection)
+            localStorage.setItem('hasUploadedResume', 'true');
           };
           reader.readAsDataURL(file);
+          
+          // Store score for upgrade popup detection
+          const score = Math.floor(Math.random() * 31) + 60; // 60-90%
+          const summary = score > 85 ? 'Excellent! Your resume is highly ATS compatible.' : score > 70 ? 'Your resume meets many ATS criteria and is likely to be noticed.' : 'Your resume needs improvement for better ATS results.';
+          localStorage.setItem('lastATSScore', score.toString());
+          localStorage.setItem('lastATSSummary', summary);
 
-          // Record usage for free accounts
-          if (userPlan === 'free' && window.freeAccountManager) {
+          // Record usage for free accounts only (trial/subscription users have unlimited)
+          // Double-check plan before recording usage
+          if (!hasUnlimitedAccess && userPlan === 'free' && window.freeAccountManager) {
             const usageResult = window.freeAccountManager.recordATSUsage();
             if (!usageResult.success) {
               alert(usageResult.message);
               return;
             }
           }
-
-          // Simulate ATS scoring and update donut/summary
-          const score = Math.floor(Math.random() * 31) + 60; // 60-90%
-          const summary = score > 85 ? 'Excellent! Your resume is highly ATS compatible.' : score > 70 ? 'Your resume meets many ATS criteria and is likely to be noticed.' : 'Your resume needs improvement for better ATS results.';
           
-          // Consume credit for free users after successful score
-          const user = window.FirebaseAuthManager?.getCurrentUser?.();
-          if (user) {
-            const idToken = await user.getIdToken();
-            const planRes = await fetch('/api/plan/me', {
-              headers: { Authorization: `Bearer ${idToken}` }
-            });
-            const planData = await planRes.json();
-            const plan = planData.plan || 'free';
-            
-            if (plan === 'free') {
-              const creditKey = `creditsByUid:${user.uid}`;
-              const creditsData = localStorage.getItem(creditKey);
-              const credits = creditsData ? JSON.parse(creditsData) : { ats_free_lifetime: 1 };
+          // Consume credit for free users only (trial/subscription users have unlimited)
+          // Skip credit consumption entirely for trial/paid users
+          if (!hasUnlimitedAccess && userPlan === 'free') {
+            const user = window.FirebaseAuthManager?.getCurrentUser?.();
+            if (user) {
+              // Re-check plan one more time before consuming credit
+              let finalPlan = userPlan;
+              try {
+                const idToken = await user.getIdToken();
+                const planRes = await fetch('/api/plan/me', {
+                  headers: { Authorization: `Bearer ${idToken}` }
+                });
+                if (planRes.ok) {
+                  const planData = await planRes.json();
+                  finalPlan = planData.plan || finalPlan;
+                }
+              } catch (error) {
+                console.warn('Error re-checking plan before credit consumption:', error);
+              }
               
-              // Consume credit
-              credits.ats_free_lifetime = 0;
-              localStorage.setItem(creditKey, JSON.stringify(credits));
-              console.log('✅ Free ATS credit consumed');
-              
-              // Update UI to show credit used
-              const usageDiv = document.querySelector('.feature-card:has(#ats-upload-btn) .usage-indicator');
-              if (usageDiv) {
-                usageDiv.innerHTML = 'Free ATS score used. <a href="pricing-a.html" style="color:#0077B5;text-decoration:underline;">Upgrade for unlimited</a>';
+              // Only consume credits if still on free plan
+              if (finalPlan === 'free') {
+                const creditKey = `creditsByUid:${user.uid}`;
+                const creditsData = localStorage.getItem(creditKey);
+                let credits = { ats_free_lifetime: 1 }; // Default for new users
+                
+                if (creditsData) {
+                  try {
+                    credits = JSON.parse(creditsData);
+                  } catch (e) {
+                    // Handle corrupted JSON - default to consumed state (0) since validation already passed
+                    console.warn('Failed to parse credits data during consumption, defaulting to consumed:', e);
+                    credits = { ats_free_lifetime: 0 };
+                  }
+                }
+                
+                // Consume credit
+                credits.ats_free_lifetime = 0;
+                localStorage.setItem(creditKey, JSON.stringify(credits));
+                console.log('✅ Free ATS credit consumed');
+                
+                // Update UI to show credit used with upgrade message (consistent with initial render)
+                const usageDiv = document.querySelector('.feature-card:has(#ats-upload-btn) .usage-indicator');
+                if (usageDiv) {
+                  usageDiv.innerHTML = 'Free ATS score used. Upgrade to trial or paid plan for unlimited scoring. <span class="jh-tooltip-trigger" tabindex="0" aria-label="More info" style="margin-left:0.4em;vertical-align:middle;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false" style="vertical-align:middle"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="8"/><line x1="12" y1="12" x2="12" y2="16"/></svg><span class="jh-tooltip-text">Upgrade to unlock unlimited ATS scoring and access all features.</span></span>';
+                }
+              } else {
+                console.log('✅ User upgraded to', finalPlan, '- skipping credit consumption');
               }
             }
+          } else {
+            console.log('✅ Trial/paid user - skipping credit consumption. Plan:', userPlan);
           }
           // Update donut
           const donut = document.querySelector('.ats-donut');

@@ -1180,6 +1180,30 @@ function updateNavigation() {
     } else if (!mobileNav) {
       navLog('warn', 'mobileNav is null, cannot append CTA for visitors');
     }
+    // --- Add Account and Logout to mobile nav for authenticated users ---
+    if (isAuthView && navConfig.userNav && navConfig.userNav.menuItems && mobileNav) {
+      // Add a separator before user menu items
+      const separator = document.createElement('div');
+      separator.style.cssText = 'height: 1px; background: #E5E7EB; margin: 1rem 0;';
+      mobileNav.appendChild(separator);
+      
+      navConfig.userNav.menuItems.forEach((menuItem) => {
+        const menuLink = document.createElement('a');
+        if (menuItem.action === 'logout') {
+          menuLink.href = '#';
+          menuLink.addEventListener('click', (e) => {
+            e.preventDefault();
+            navLog('info', 'Mobile user logout clicked');
+            logout();
+          });
+        } else {
+          updateLink(menuLink, menuItem.href);
+        }
+        menuLink.textContent = menuItem.text;
+        mobileNav.appendChild(menuLink);
+      });
+    }
+    
     // --- Always append CTA for authenticated plans in mobile nav (only once, after nav links) ---
     if (isAuthView && navConfig.userNav && navConfig.userNav.cta && mobileNav) {
       const cta = document.createElement('a');

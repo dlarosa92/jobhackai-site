@@ -90,23 +90,83 @@
   </div>
 </header>
 <nav class="mobile-nav" id="mobileNav"></nav>
+<div class="mobile-nav-backdrop" id="mobileNavBackdrop"></div>
 <script>
-  // Hamburger menu toggle (match index.html behavior)
-  const mobileToggle = document.querySelector('.mobile-toggle');
-  const mobileNav = document.getElementById('mobileNav');
-  if (mobileToggle && mobileNav) {
-    mobileToggle.addEventListener('click', () => {
-      const isOpen = mobileNav.classList.toggle('open');
-      mobileToggle.setAttribute('aria-expanded', isOpen);
+  // Hamburger menu toggle with proper state management and click-outside handling
+  (function initMobileMenu() {
+    const mobileToggle = document.querySelector('.mobile-toggle');
+    const mobileNav = document.getElementById('mobileNav');
+    const backdrop = document.getElementById('mobileNavBackdrop');
+    
+    if (!mobileToggle || !mobileNav) return;
+    
+    let isMenuOpen = false;
+    
+    // Function to open menu
+    function openMenu() {
+      if (isMenuOpen) return;
+      isMenuOpen = true;
+      mobileNav.classList.add('open');
+      if (backdrop) backdrop.classList.add('show');
+      mobileToggle.setAttribute('aria-expanded', 'true');
+      // Prevent body scroll when menu is open
+      document.body.style.overflow = 'hidden';
+    }
+    
+    // Function to close menu
+    function closeMenu() {
+      if (!isMenuOpen) return;
+      isMenuOpen = false;
+      mobileNav.classList.remove('open');
+      if (backdrop) backdrop.classList.remove('show');
+      mobileToggle.setAttribute('aria-expanded', 'false');
+      // Restore body scroll
+      document.body.style.overflow = '';
+    }
+    
+    // Toggle menu on button click
+    mobileToggle.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (isMenuOpen) {
+        closeMenu();
+      } else {
+        openMenu();
+      }
     });
-    // Close mobile nav on link click
-    document.querySelectorAll('.mobile-nav a').forEach(link => {
-      link.addEventListener('click', () => {
-        mobileNav.classList.remove('open');
-        mobileToggle.setAttribute('aria-expanded', 'false');
-      });
+    
+    // Close menu when clicking on a link
+    mobileNav.addEventListener('click', (e) => {
+      if (e.target.tagName === 'A') {
+        closeMenu();
+      }
     });
-  }
+    
+    // Close menu when clicking on backdrop or outside
+    if (backdrop) {
+      backdrop.addEventListener('click', closeMenu);
+    }
+    document.addEventListener('click', (e) => {
+      if (isMenuOpen && 
+          !mobileNav.contains(e.target) && 
+          !mobileToggle.contains(e.target)) {
+        closeMenu();
+      }
+    });
+    
+    // Close menu on Escape key
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && isMenuOpen) {
+        closeMenu();
+      }
+    });
+    
+    // Close menu on window resize (if resizing to desktop)
+    window.addEventListener('resize', () => {
+      if (window.innerWidth > 900 && isMenuOpen) {
+        closeMenu();
+      }
+    });
+  })();
   // Close dropdowns when clicking outside
   document.addEventListener('click', (e) => {
     if (!e.target.closest('.nav-dropdown')) {
