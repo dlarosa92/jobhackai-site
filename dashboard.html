@@ -1890,6 +1890,26 @@
               body: formData
             });
 
+            // Check if response is ok before parsing JSON
+            // Non-ok responses (500, 502, etc.) might return HTML error pages, not JSON
+            if (!uploadResponse.ok) {
+              let errorMessage = 'Upload failed. Please try again.';
+              try {
+                // Try to parse error response as JSON first
+                const errorData = await uploadResponse.json();
+                errorMessage = errorData.error || errorData.message || errorMessage;
+              } catch (parseError) {
+                // If parsing fails, it's likely an HTML error page - use status text
+                errorMessage = `Upload failed (${uploadResponse.status}): ${uploadResponse.statusText || 'Server error'}`;
+              }
+              clearAtsState();
+              resetAtsGauge();
+              showErrorBanner(errorMessage);
+              hideLoadingState();
+              e.target.value = ''; // Reset file input
+              return;
+            }
+
             const uploadData = await uploadResponse.json();
 
             // Handle extraction failures (success: false but HTTP 200)
