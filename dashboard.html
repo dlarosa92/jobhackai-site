@@ -1863,6 +1863,8 @@
               showFreeAccountUpgradePopup();
               // Reset file input
               e.target.value = '';
+              // Hide loading state before returning (fixes stuck "Uploading..." button)
+              hideLoadingState();
               return;
             }
           }
