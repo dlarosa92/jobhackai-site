@@ -81,10 +81,14 @@ export async function onRequest(context) {
       const arrayBuffer = await file.arrayBuffer();
       extractionResult = await extractResumeText(arrayBuffer, fileName);
     } catch (extractError) {
+      // Return HTTP 200 with success: false for extraction failures (graceful error)
+      // This allows frontend to handle errors without treating them as HTTP errors
       return json({ 
-        success: false, 
-        error: extractError.message || 'Failed to extract text from file' 
-      }, 400, origin, env);
+        success: false,
+        message: extractError.message || 'Resume text could not be extracted. Please upload a text-based PDF or DOCX file.',
+        resumeText: null,
+        error: 'extraction_failed'
+      }, 200, origin, env);
     }
 
     // Store resume in KV
@@ -115,6 +119,7 @@ export async function onRequest(context) {
     return json({
       success: true,
       resumeId,
+      resumeText: extractionResult.text,
       textPreview: resumeData.textPreview,
       wordCount: extractionResult.wordCount,
       fileType: extractionResult.fileType,
