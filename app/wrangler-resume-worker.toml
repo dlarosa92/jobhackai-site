@@ -38,6 +38,8 @@ name = "jobhackai-resume-worker-prod"
 # Limits
 # CPU time limit increased to accommodate OCR processing (1-3 seconds)
 # Text-based PDFs process in <200ms, but OCR can take 1-3 seconds
-[limits]
-cpu_ms = 10000  # 10 seconds - sufficient buffer for OCR + text extraction + scoring
+# NOTE: CPU limits require a paid Cloudflare Workers plan
+# Uncomment below when upgrading to a paid plan for OCR processing
+# [limits]
+# cpu_ms = 10000  # 10 seconds - sufficient buffer for OCR + text extraction + scoring
 
