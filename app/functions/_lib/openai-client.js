@@ -2,9 +2,22 @@
 // Handles rate limiting, structured outputs, prompt caching, and cost tracking
 
 /**
- * Call OpenAI API with structured outputs
+ * Approximate token-aware truncation.
+ * Simple heuristic: ~4 characters ≈ 1 token.
+ * This is cheap and Cloudflare-compatible (no external libs).
+ */
+function truncateToApproxTokens(text, maxTokensApprox) {
+  if (!text || !maxTokensApprox || maxTokensApprox <= 0) return '';
+  const approxChars = maxTokensApprox * 4; // very rough but good enough for cost control
+  if (text.length <= approxChars) return text;
+  return text.slice(0, approxChars);
+}
+
+/**
+ * Call OpenAI API with structured outputs and optional fallback model.
  * @param {Object} options - API options
- * @param {string} options.model - Model to use (gpt-4o-mini, gpt-4o, etc.)
+ * @param {string} options.model - Primary model (gpt-4o-mini, gpt-4o, etc.)
+ * @param {string} [options.fallbackModel] - Optional fallback model on non-rate-limit failures
  * @param {Array} options.messages - Chat messages
  * @param {Object} options.responseFormat - Structured output schema (optional)
  * @param {number} options.maxTokens - Maximum tokens to generate
@@ -16,6 +29,7 @@
  */
 export async function callOpenAI({
   model = 'gpt-4o-mini',
+  fallbackModel = null,
   messages = [],
   responseFormat = null,
   maxTokens = 800,
@@ -28,48 +42,47 @@ export async function callOpenAI({
     throw new Error('OPENAI_API_KEY not configured. Please set it in Cloudflare Pages secrets.');
   }
 
-  // TODO: [OPENAI INTEGRATION POINT] - Implement OpenAI API call
-  // This is a placeholder - actual implementation needed
-  
   const apiKey = env.OPENAI_API_KEY;
   const apiUrl = 'https://api.openai.com/v1/chat/completions';
-  
+
   // Build request body
-  const requestBody = {
-    model,
-    messages,
-    max_tokens: maxTokens,
-    temperature
-  };
-  
-  // Add structured outputs if provided
-  if (responseFormat) {
-    requestBody.response_format = {
-      type: 'json_schema',
-      json_schema: responseFormat
+  const buildRequestBody = (activeModel) => {
+    const body = {
+      model: activeModel,
+      messages,
+      max_tokens: maxTokens,
+      temperature
     };
-  }
-  
-  // Add prompt caching if system prompt provided (for cacheable prompts >1024 tokens)
-  // Note: This requires OpenAI API support for prompt caching
-  // For now, we'll implement basic caching via KV
-  
-  // Check cache first (if system prompt provided)
+
+    // Add structured outputs if provided
+    if (responseFormat) {
+      body.response_format = {
+        type: 'json_schema',
+        json_schema: responseFormat
+      };
+    }
+
+    return body;
+  };
+
+  // KV-based prompt+input cache (our own cache layer, not OpenAI native)
   let cachedResponse = null;
+  let cacheKey = null;
   if (systemPrompt && env.JOBHACKAI_KV) {
-    const cacheKey = `openai_cache:${hashString(systemPrompt + JSON.stringify(messages))}`;
+    cacheKey = `openai_cache:${hashString(systemPrompt + JSON.stringify(messages))}`;
     cachedResponse = await env.JOBHACKAI_KV.get(cacheKey);
     if (cachedResponse) {
       const cached = JSON.parse(cachedResponse);
-      console.log(`[OPENAI] Cache hit for ${feature}`, { userId, model });
+      console.log(`[OPENAI] Cache hit for ${feature}`, { userId, model: cached.model });
       return cached;
     }
   }
-  
-  // Make API call with retry logic
+
   let lastError = null;
   const maxRetries = 3;
-  
+  let activeModel = model;
+  let usedFallback = false;
+
   for (let attempt = 0; attempt < maxRetries; attempt++) {
     try {
       const response = await fetch(apiUrl, {
@@ -78,77 +91,107 @@ export async function callOpenAI({
           'Authorization': `Bearer ${apiKey}`,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify(requestBody)
+        body: JSON.stringify(buildRequestBody(activeModel))
       });
-      
+
       if (response.status === 429) {
         // Rate limit - exponential backoff
         const retryAfter = parseInt(response.headers.get('Retry-After') || '60', 10);
         const waitTime = Math.min(retryAfter * 1000, 60000 * Math.pow(2, attempt));
-        
+
         if (attempt < maxRetries - 1) {
-          console.log(`[OPENAI] Rate limited, retrying after ${waitTime}ms`, { feature, attempt });
+          console.log(`[OPENAI] Rate limited, retrying after ${waitTime}ms`, { feature, attempt, model: activeModel });
           await sleep(waitTime);
           continue;
         } else {
-          throw new Error(`Rate limit exceeded. Please try again later.`);
+          throw new Error('Rate limit exceeded. Please try again later.');
         }
       }
-      
+
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error?.message || `OpenAI API error: ${response.status}`);
+        const message = errorData.error?.message || `OpenAI API error: ${response.status}`;
+
+        // Non-429 error: if we have a fallback model and haven't used it yet, switch and retry
+        if (!usedFallback && fallbackModel && activeModel !== fallbackModel && attempt < maxRetries - 1) {
+          console.warn(`[OPENAI] Error with model ${activeModel}, falling back to ${fallbackModel}`, {
+            feature,
+            userId,
+            status: response.status,
+            message
+          });
+          activeModel = fallbackModel;
+          usedFallback = true;
+          continue;
+        }
+
+        throw new Error(message);
       }
-      
+
       const data = await response.json();
-      
-      // Extract usage info
+
       const usage = data.usage || {};
       const promptTokens = usage.prompt_tokens || 0;
       const completionTokens = usage.completion_tokens || 0;
       const totalTokens = usage.total_tokens || 0;
       const cachedTokens = usage.cached_tokens || 0;
-      
-      // Log usage
+
       console.log(`[OPENAI] Usage for ${feature}`, {
         userId,
-        model,
+        model: data.model || activeModel,
         promptTokens,
         completionTokens,
         totalTokens,
         cachedTokens,
-        estimatedCost: estimateCost(model, promptTokens, completionTokens, cachedTokens)
+        estimatedCost: estimateCost(data.model || activeModel, promptTokens, completionTokens, cachedTokens)
       });
-      
-      // Cache response if system prompt provided
-      if (systemPrompt && env.JOBHACKAI_KV && !cachedResponse) {
-        const cacheKey = `openai_cache:${hashString(systemPrompt + JSON.stringify(messages))}`;
-        await env.JOBHACKAI_KV.put(cacheKey, JSON.stringify(data), {
-          expirationTtl: 86400 // 24 hours
-        });
-      }
-      
-      return {
-        content: data.choices[0]?.message?.content || '',
+
+      const result = {
+        content: data.choices?.[0]?.message?.content || '',
         usage: {
           promptTokens,
           completionTokens,
           totalTokens,
           cachedTokens
         },
-        model: data.model,
-        finishReason: data.choices[0]?.finish_reason
+        model: data.model || activeModel,
+        finishReason: data.choices?.[0]?.finish_reason
       };
-      
+
+      // Cache final response (only if we didn't hit cache earlier)
+      if (cacheKey && env.JOBHACKAI_KV && !cachedResponse) {
+        await env.JOBHACKAI_KV.put(cacheKey, JSON.stringify(result), {
+          expirationTtl: 86400 // 24 hours
+        });
+      }
+
+      return result;
+
     } catch (error) {
       lastError = error;
-      if (attempt < maxRetries - 1 && error.message.includes('Rate limit')) {
+      console.error('[OPENAI] callOpenAI error', {
+        feature,
+        userId,
+        model: activeModel,
+        attempt,
+        message: error.message
+      });
+
+      // If it's a non-rate-limit error and we already tried fallback or don't have one, stop retrying
+      if (!String(error.message || '').includes('Rate limit')) {
+        if (!fallbackModel || usedFallback || attempt >= maxRetries - 1) {
+          break;
+        }
+      }
+
+      if (attempt < maxRetries - 1 && String(error.message || '').includes('Rate limit')) {
         continue;
       }
-      throw error;
+
+      break;
     }
   }
-  
+
   throw lastError || new Error('OpenAI API call failed');
 }
 
@@ -159,37 +202,46 @@ export async function callOpenAI({
  * @returns {Promise<boolean>} True if flagged
  */
 export async function moderateContent(text, apiKey) {
-  // TODO: [OPENAI INTEGRATION POINT] - Implement moderation API
-  // const response = await fetch('https://api.openai.com/v1/moderations', {
-  //   method: 'POST',
-  //   headers: {
-  //     'Authorization': `Bearer ${apiKey}`,
-  //     'Content-Type': 'application/json'
-  //   },
-  //   body: JSON.stringify({ input: text })
-  // });
-  // const data = await response.json();
-  // return data.results[0]?.flagged || false;
-  
-  // For now, return false (no moderation)
+  // NOTE: still a stub by design. Wire this when you're ready to pay moderation costs.
+  // For now, always "not flagged".
   return false;
 }
 
 /**
- * Generate ATS feedback using AI
- * @param {string} resumeText - Resume text
- * @param {Object} ruleBasedScores - Scores from rule-based engine
- * @param {string} jobTitle - Target job title
- * @param {Object} env - Environment variables
- * @returns {Promise<Object>} AI-generated feedback
+ * Generate ATS feedback using AI (JSON schema structured output).
+ * High-frequency, low-cost endpoint → gpt-4o-mini, tightly capped tokens.
  */
 export async function generateATSFeedback(resumeText, ruleBasedScores, jobTitle, env) {
-  // TODO: [OPENAI INTEGRATION POINT] - Implement feedback generation
-  // This should use structured outputs to ensure consistent format
-  
+  const baseModel = env.OPENAI_MODEL_FEEDBACK || 'gpt-4o-mini';
+
+  // Respect env-driven config with sensible defaults
+  const maxOutputTokens = Number(env.OPENAI_MAX_TOKENS_ATS) > 0
+    ? Number(env.OPENAI_MAX_TOKENS_ATS)
+    : 800;
+
+  const temperature = Number.isFinite(Number(env.OPENAI_TEMPERATURE_SCORING))
+    ? Number(env.OPENAI_TEMPERATURE_SCORING)
+    : 0.2;
+
+  // Approximate input limit: keep input around same scale as output for cost control
+  const maxInputTokens = maxOutputTokens * 2; // resume + scores; still cheap with mini
+  const truncatedResume = truncateToApproxTokens(resumeText || '', maxInputTokens);
+
   const systemPrompt = `You are an ATS resume expert. Generate precise, actionable feedback based on rule-based scores.
-Keep feedback concise (120-180 words per section). Show 2 bullet rewrites using action verbs and metrics.`;
-  
+Keep feedback concise. For each category, provide:
+- A short explanation (2–3 sentences)
+- Up to 2 bullet suggestions, using action verbs and metrics where possible.`;
+
+  // We only send the minimal part of ruleBasedScores the model actually needs
+  const safeRuleScores = {
+    overallScore: ruleBasedScores?.overallScore,
+    keywordScore: ruleBasedScores?.keywordScore,
+    formattingScore: ruleBasedScores?.formattingScore,
+    structureScore: ruleBasedScores?.structureScore,
+    toneScore: ruleBasedScores?.toneScore,
+    grammarScore: ruleBasedScores?.grammarScore
+  };
+
   const messages = [
     {
       role: 'system',
@@ -197,10 +249,15 @@ Keep feedback concise (120-180 words per section). Show 2 bullet rewrites using 
     },
     {
       role: 'user',
-      content: `Resume text: ${resumeText.substring(0, 4000)}\n\nJob Title: ${jobTitle}\n\nRule-based scores: ${JSON.stringify(ruleBasedScores)}\n\nGenerate feedback for each category.`
+      content:
+        `You are evaluating a resume for ATS readiness.\n\n` +
+        `JOB TITLE: ${jobTitle || 'Unknown'}\n\n` +
+        `RULE-BASED SCORES (JSON): ${JSON.stringify(safeRuleScores)}\n\n` +
+        `RESUME TEXT:\n${truncatedResume}\n\n` +
+        `Return structured feedback for each category.`
     }
   ];
-  
+
   const responseFormat = {
     name: 'ats_feedback',
     schema: {
@@ -219,7 +276,8 @@ Keep feedback concise (120-180 words per section). Show 2 bullet rewrites using 
                 type: 'array',
                 items: { type: 'string' }
               }
-            }
+            },
+            required: ['category', 'score', 'max', 'feedback']
           }
         },
         roleSpecificFeedback: {
@@ -234,43 +292,66 @@ Keep feedback concise (120-180 words per section). Show 2 bullet rewrites using 
                 type: 'array',
                 items: { type: 'string' }
               }
-            }
+            },
+            required: ['section', 'feedback']
           }
         }
-      }
+      },
+      required: ['atsRubric']
     }
   };
-  
-  return await callOpenAI({
-    model: env.OPENAI_MODEL_FEEDBACK || 'gpt-4o-mini',
-    messages,
-    responseFormat,
-    maxTokens: 800,
-    temperature: 0.2,
-    systemPrompt,
-    feature: 'ats_feedback'
-  }, env);
+
+  return await callOpenAI(
+    {
+      model: baseModel,
+      // we *could* set a fallbackModel here (e.g. another mini variant), but for now
+      // we keep it single-model to avoid multiple paid calls for a cheap endpoint.
+      messages,
+      responseFormat,
+      maxTokens: maxOutputTokens,
+      temperature,
+      systemPrompt,
+      feature: 'ats_feedback'
+    },
+    env
+  );
 }
 
 /**
- * Generate resume rewrite using AI
- * @param {string} resumeText - Original resume text
- * @param {string} section - Section to rewrite (optional)
- * @param {string} jobTitle - Target job title
- * @param {Object} env - Environment variables
- * @returns {Promise<Object>} Rewritten resume
+ * Generate resume rewrite using AI.
+ * Uses gpt-4o for higher quality and structured output so UI can rely on shape.
+ * This is a premium feature, so we accept a higher per-call cost but still cap it.
  */
 export async function generateResumeRewrite(resumeText, section, jobTitle, env) {
-  // TODO: [OPENAI INTEGRATION POINT] - Implement rewrite generation
-  // Use gpt-4o for higher quality
-  
+  const baseModel = env.OPENAI_MODEL_REWRITE || 'gpt-4o';
+  const fallbackModel = 'gpt-4o-mini'; // cheaper fallback if 4o has issues
+
+  const maxOutputTokens = Number(env.OPENAI_MAX_TOKENS_REWRITE) > 0
+    ? Number(env.OPENAI_MAX_TOKENS_REWRITE)
+    : 2000;
+
+  const temperature = Number.isFinite(Number(env.OPENAI_TEMPERATURE_REWRITE))
+    ? Number(env.OPENAI_TEMPERATURE_REWRITE)
+    : 0.2;
+
+  // For rewrites, we allow more input but still bound it.
+  const maxInputTokens = maxOutputTokens * 2; // generous, but still controlled
+  const truncatedResume = truncateToApproxTokens(resumeText || '', maxInputTokens);
+
+  const safeJobTitle = jobTitle || 'Professional role';
+
   const systemPrompt = `You are an expert resume writer. Regenerate resume content to meet ATS best practices.
-Preserve facts, use 1-2 lines per bullet, quantify outcomes, no fluff.`;
-  
+Preserve all factual information. Use concise, results-oriented bullets (1–2 lines each). 
+Quantify outcomes when possible. Do not invent experience.`;
+
   const userPrompt = section
-    ? `Rewrite the ${section} section of this resume for a ${jobTitle} role:\n\n${resumeText}`
-    : `Rewrite this resume for a ${jobTitle} role:\n\n${resumeText.substring(0, 6000)}`;
-  
+    ? `Rewrite ONLY the "${section}" section of this resume for a ${safeJobTitle} role.\n\n` +
+      `Return:\n- "original": the original text you received\n- "rewritten": your improved version\n- "changes": a short list of what you improved.\n\n` +
+      `RESUME TEXT (may include other sections, but focus only on ${section}):\n${truncatedResume}`
+    : `Rewrite this resume for a ${safeJobTitle} role.\n\n` +
+      `Return:\n- "original": the original text you received\n- "rewritten": your improved version\n- "changes": a short list of what you improved.\n\n` +
+      `RESUME TEXT:\n${truncatedResume}`;
+
   const messages = [
     {
       role: 'system',
@@ -281,53 +362,83 @@ Preserve facts, use 1-2 lines per bullet, quantify outcomes, no fluff.`;
       content: userPrompt
     }
   ];
-  
-  return await callOpenAI({
-    model: env.OPENAI_MODEL_REWRITE || 'gpt-4o',
-    messages,
-    maxTokens: 2000,
-    temperature: 0.2,
-    systemPrompt,
-    feature: 'resume_rewrite'
-  }, env);
+
+  const responseFormat = {
+    name: 'resume_rewrite',
+    schema: {
+      type: 'object',
+      properties: {
+        original: { type: 'string' },
+        rewritten: { type: 'string' },
+        changes: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              type: { type: 'string' },
+              description: { type: 'string' }
+            },
+            required: ['description']
+          }
+        }
+      },
+      required: ['original', 'rewritten']
+    }
+  };
+
+  return await callOpenAI(
+    {
+      model: baseModel,
+      fallbackModel, // if 4o fails for non-rate reasons, we can still give them a rewrite with mini
+      messages,
+      responseFormat,
+      maxTokens: maxOutputTokens,
+      temperature,
+      systemPrompt,
+      feature: 'resume_rewrite'
+    },
+    env
+  );
 }
 
 /**
- * Estimate cost based on tokens
+ * Estimate cost based on tokens.
+ * NOTE: Keep this in sync with OpenAI pricing when you revise plans.
  */
 function estimateCost(model, promptTokens, completionTokens, cachedTokens = 0) {
-  // Pricing as of 2024 (approximate)
   const pricing = {
     'gpt-4o-mini': {
-      input: 0.15 / 1000000, // $0.15 per 1M tokens
-      output: 0.60 / 1000000  // $0.60 per 1M tokens
+      input: 0.15 / 1_000_000,  // $0.15 per 1M input tokens
+      output: 0.60 / 1_000_000  // $0.60 per 1M output tokens
     },
     'gpt-4o': {
-      input: 2.50 / 1000000, // $2.50 per 1M tokens
-      output: 10.00 / 1000000 // $10.00 per 1M tokens
+      input: 2.50 / 1_000_000,  // $2.50 per 1M input tokens
+      output: 10.00 / 1_000_000 // $10.00 per 1M output tokens
     }
   };
-  
+
   const modelPricing = pricing[model] || pricing['gpt-4o-mini'];
-  
-  // Cached tokens are free (or heavily discounted)
+
+  // Cached tokens are effectively free or heavily discounted; treat them as free here.
   const effectivePromptTokens = Math.max(0, promptTokens - cachedTokens);
-  
-  const cost = (effectivePromptTokens * modelPricing.input) + (completionTokens * modelPricing.output);
-  
-  return cost;
+
+  const cost =
+    effectivePromptTokens * modelPricing.input +
+    completionTokens * modelPricing.output;
+
+  return Number.isFinite(cost) ? cost : 0;
 }
 
 /**
  * Hash string for caching
  */
 function hashString(str) {
-  // Simple hash function (for Cloudflare Workers)
   let hash = 0;
+  if (!str) return '0';
   for (let i = 0; i < str.length; i++) {
     const char = str.charCodeAt(i);
     hash = ((hash << 5) - hash) + char;
-    hash = hash & hash; // Convert to 32-bit integer
+    hash |= 0; // Convert to 32-bit integer
   }
   return Math.abs(hash).toString(36);
 }
@@ -338,4 +449,3 @@ function hashString(str) {
 function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
-
