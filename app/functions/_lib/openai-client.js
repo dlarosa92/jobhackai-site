@@ -199,7 +199,19 @@ export async function callOpenAI({
         continue; // Retry with fallback model
       }
 
-      // If we've exhausted retries, used fallback, or don't have one, stop
+      // After switching to fallback (or if no fallback), allow retries for transient errors
+      // This handles cases where the fallback model fails due to transient issues (network, 500s, etc.)
+      if (!isRateLimit && attempt < maxRetries - 1) {
+        console.log(`[OPENAI] Retrying after transient error (attempt ${attempt + 1}/${maxRetries})`, {
+          feature,
+          userId,
+          model: activeModel,
+          error: error.message
+        });
+        continue; // Retry with same model (fallback if already switched)
+      }
+
+      // If we've exhausted all retries, stop
       break;
     }
   }
