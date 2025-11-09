@@ -177,17 +177,29 @@ export async function callOpenAI({
         message: error.message
       });
 
-      // If it's a non-rate-limit error and we already tried fallback or don't have one, stop retrying
-      if (!String(error.message || '').includes('Rate limit')) {
-        if (!fallbackModel || usedFallback || attempt >= maxRetries - 1) {
-          break;
-        }
-      }
+      // Check if this is a rate limit error
+      const isRateLimit = String(error.message || '').includes('Rate limit');
 
-      if (attempt < maxRetries - 1 && String(error.message || '').includes('Rate limit')) {
+      // For rate limit errors, retry with exponential backoff
+      if (isRateLimit && attempt < maxRetries - 1) {
         continue;
       }
 
+      // For non-rate-limit errors (network failures, timeouts, etc.):
+      // Try fallback model if available and not already used
+      if (!isRateLimit && !usedFallback && fallbackModel && activeModel !== fallbackModel && attempt < maxRetries - 1) {
+        console.warn(`[OPENAI] Network/API error with model ${activeModel}, falling back to ${fallbackModel}`, {
+          feature,
+          userId,
+          attempt,
+          error: error.message
+        });
+        activeModel = fallbackModel;
+        usedFallback = true;
+        continue; // Retry with fallback model
+      }
+
+      // If we've exhausted retries, used fallback, or don't have one, stop
       break;
     }
   }
