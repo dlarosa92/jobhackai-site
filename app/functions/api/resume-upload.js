@@ -107,7 +107,9 @@ export async function onRequest(context) {
       isMultiColumn: extractionResult.isMultiColumn,
       ocrUsed: extractionResult.ocrUsed,
       uploadedAt: timestamp,
-      textPreview: extractionResult.text.substring(0, 200) + '...'
+      textPreview: extractionResult.text.length > 200 
+        ? extractionResult.text.substring(0, 200) + '...'
+        : extractionResult.text
     };
 
     // Store in KV (no expiration for now - can be cleaned up later)
