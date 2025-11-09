@@ -93,11 +93,9 @@ export default {
           const data = await pdf(buffer);
           text = data.text?.trim() || "";
           
-          // Detect multi-column layout
-          if (text) {
-            const lines = text.split("\n");
-            const avgLineLength = lines.reduce((sum, line) => sum + line.trim().length, 0) / lines.length;
-            isMultiColumn = avgLineLength < 30 && lines.length > 20;
+          // Detect multi-column layout (only if we have sufficient text)
+          if (text && text.length >= 200) {
+            isMultiColumn = detectMultiColumnLayout(text);
           }
 
           // Fallback to OCR if text not selectable or too short
@@ -107,6 +105,10 @@ export default {
             });
             text = ocr.text;
             ocrUsed = true;
+            // Recalculate multi-column detection on OCR-extracted text
+            if (text && text.length >= 200) {
+              isMultiColumn = detectMultiColumnLayout(text);
+            }
           }
         } catch (pdfError) {
           // If pdf-parse fails, try OCR
@@ -116,6 +118,10 @@ export default {
             });
             text = ocr.text;
             ocrUsed = true;
+            // Detect multi-column layout on OCR-extracted text
+            if (text && text.length >= 200) {
+              isMultiColumn = detectMultiColumnLayout(text);
+            }
           } catch (ocrError) {
             return new Response(
               JSON.stringify({
@@ -364,6 +370,29 @@ function grammarCheck(text) {
   }
   
   return Math.max(0, score);
+}
+
+/**
+ * Detect multi-column layout in resume text
+ * @param {string} text - Resume text to analyze
+ * @returns {boolean} - True if multi-column layout detected
+ */
+function detectMultiColumnLayout(text) {
+  const lines = text.split("\n");
+  const avgLineLength = lines.reduce((sum, line) => sum + line.trim().length, 0) / lines.length;
+  
+  // If average line length is very short (< 30 chars), likely multi-column
+  if (avgLineLength < 30 && lines.length > 20) {
+    return true;
+  }
+  
+  // Check for many lines with similar short lengths (column pattern)
+  const shortLines = lines.filter(line => line.trim().length > 0 && line.trim().length < 40);
+  if (shortLines.length > lines.length * 0.6) {
+    return true;
+  }
+  
+  return false;
 }
 
 function detectIssues(text, isMultiColumn) {
