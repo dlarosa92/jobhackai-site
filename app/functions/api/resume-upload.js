@@ -118,10 +118,11 @@ export async function onRequest(context) {
     }
 
     // Return success
+    // Note: resumeText is NOT returned to avoid exposing PII to XSS attacks
+    // The resume text is securely stored in KV and can be fetched using resumeId when needed
     return json({
       success: true,
       resumeId,
-      resumeText: extractionResult.text,
       textPreview: resumeData.textPreview,
       wordCount: extractionResult.wordCount,
       fileType: extractionResult.fileType,

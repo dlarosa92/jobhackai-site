@@ -451,10 +451,8 @@
       currentResumeId = data.resumeId;
       
       // Store in sessionStorage for cross-page sync
+      // Note: Only store resumeId, not resumeText (PII security - resume text stored securely in backend KV)
       sessionStorage.setItem('currentResumeId', data.resumeId);
-      if (data.resumeText) {
-        sessionStorage.setItem('currentResumeText', data.resumeText);
-      }
       
       return data;
     }

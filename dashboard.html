@@ -1903,10 +1903,8 @@
             }
 
             // Step 2: Store resume data in sessionStorage for cross-page sync
+            // Note: Only store resumeId, not resumeText (PII security - resume text stored securely in backend KV)
             sessionStorage.setItem('currentResumeId', uploadData.resumeId);
-            if (uploadData.resumeText) {
-              sessionStorage.setItem('currentResumeText', uploadData.resumeText);
-            }
 
             // Step 3: Get ATS score
             const uploadBtn = document.getElementById('ats-upload-btn');
