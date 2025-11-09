@@ -406,6 +406,21 @@
       throw new Error('Not authenticated. Please log in.');
     }
 
+    // --- SHARED STATE MANAGEMENT HELPERS ---
+    function clearAtsState() {
+      // Clear old localStorage keys (to avoid stale state)
+      localStorage.removeItem('lastATSScore');
+      localStorage.removeItem('lastATSSummary');
+      localStorage.removeItem('lastUploadedResume');
+      localStorage.removeItem('lastUploadedResumeName');
+      
+      // Clear shared cross-page state
+      sessionStorage.removeItem('currentResumeId');
+      sessionStorage.removeItem('currentResumeText');
+      sessionStorage.removeItem('currentAtsScore');
+      sessionStorage.removeItem('currentAtsBreakdown');
+    }
+
     async function uploadResume(file) {
       const token = await getAuthToken();
       const formData = new FormData();
@@ -419,13 +434,26 @@
         body: formData
       });
 
+      // Handle HTTP errors
       if (!response.ok) {
         const error = await response.json();
         throw new Error(error.error || 'Upload failed');
       }
 
       const data = await response.json();
+      
+      // Handle extraction failures (success: false but HTTP 200)
+      if (!data.success) {
+        clearAtsState();
+        throw new Error(data.message || 'Resume text could not be extracted. Please upload a text-based PDF or DOCX file.');
+      }
+
       currentResumeId = data.resumeId;
+      
+      // Store in sessionStorage for cross-page sync
+      // Note: Only store resumeId, not resumeText (PII security - resume text stored securely in backend KV)
+      sessionStorage.setItem('currentResumeId', data.resumeId);
+      
       return data;
     }
 
@@ -665,6 +693,22 @@
 
             // Get ATS score
             const scoreResult = await getAtsScore(uploadResult.resumeId, jobTitle);
+            
+            // Store ATS score in sessionStorage for cross-page sync
+            if (scoreResult.success && scoreResult.score !== undefined) {
+              sessionStorage.setItem('currentAtsScore', scoreResult.score.toString());
+              if (scoreResult.breakdown) {
+                sessionStorage.setItem('currentAtsBreakdown', JSON.stringify(scoreResult.breakdown));
+              }
+              
+              // Also store in localStorage for backward compatibility
+              const summary = scoreResult.score > 85 ? 'Excellent! Your resume is highly ATS compatible.' : 
+                             scoreResult.score > 70 ? 'Your resume meets many ATS criteria and is likely to be noticed.' : 
+                             'Your resume needs improvement for better ATS results.';
+              localStorage.setItem('lastATSScore', scoreResult.score.toString());
+              localStorage.setItem('lastATSSummary', summary);
+            }
+            
             updateProgressRing(scoreResult.score);
             
             // Convert breakdown to rubric format
@@ -730,6 +774,8 @@
             uploadInput.disabled = false;
             hideLoadingState('rf-ats-score-tile');
           } catch (error) {
+            // Clear state on error
+            clearAtsState();
             handleApiError(error);
             uploadInput.disabled = false;
             hideLoadingState('rf-ats-score-tile');

@@ -81,10 +81,14 @@ export async function onRequest(context) {
       const arrayBuffer = await file.arrayBuffer();
       extractionResult = await extractResumeText(arrayBuffer, fileName);
     } catch (extractError) {
+      // Return HTTP 200 with success: false for extraction failures (graceful error)
+      // This allows frontend to handle errors without treating them as HTTP errors
+      // Note: resumeText is NOT included (even as null) for consistency and security
       return json({ 
-        success: false, 
-        error: extractError.message || 'Failed to extract text from file' 
-      }, 400, origin, env);
+        success: false,
+        message: extractError.message || 'Resume text could not be extracted. Please upload a text-based PDF or DOCX file.',
+        error: 'extraction_failed'
+      }, 200, origin, env);
     }
 
     // Store resume in KV
@@ -103,7 +107,9 @@ export async function onRequest(context) {
       isMultiColumn: extractionResult.isMultiColumn,
       ocrUsed: extractionResult.ocrUsed,
       uploadedAt: timestamp,
-      textPreview: extractionResult.text.substring(0, 200) + '...'
+      textPreview: extractionResult.text.length > 200 
+        ? extractionResult.text.substring(0, 200) + '...'
+        : extractionResult.text
     };
 
     // Store in KV (no expiration for now - can be cleaned up later)
@@ -112,6 +118,8 @@ export async function onRequest(context) {
     }
 
     // Return success
+    // Note: resumeText is NOT returned to avoid exposing PII to XSS attacks
+    // The resume text is securely stored in KV and can be fetched using resumeId when needed
     return json({
       success: true,
       resumeId,

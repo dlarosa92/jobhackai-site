@@ -1164,9 +1164,24 @@
           ${(user.plan === 'cancelled') ? `<a href="pricing-a.html" class="upgrade-btn">Reactivate</a>` : ''}
         </div>
       </div>`;
-      // Always load last ATS score/result from localStorage if present
-      let lastScore = localStorage.getItem('lastATSScore');
+      // Load ATS score from sessionStorage (preferred) or localStorage (fallback)
+      // sessionStorage is used for cross-page sync, localStorage for backward compatibility
+      let lastScore = sessionStorage.getItem('currentAtsScore') || localStorage.getItem('lastATSScore');
       let lastSummary = localStorage.getItem('lastATSSummary');
+      
+      // If we have a score from sessionStorage, also load breakdown
+      if (sessionStorage.getItem('currentAtsScore')) {
+        const breakdownStr = sessionStorage.getItem('currentAtsBreakdown');
+        if (breakdownStr) {
+          try {
+            const breakdown = JSON.parse(breakdownStr);
+            // Breakdown is available for future use if needed
+          } catch (e) {
+            console.warn('Failed to parse ATS breakdown from sessionStorage:', e);
+          }
+        }
+      }
+      
       if (lastScore && lastSummary) {
         atsScore.value = parseInt(lastScore, 10);
         atsScore.percent = parseInt(lastScore, 10);
@@ -1682,9 +1697,89 @@
           }
         });
         
+        // --- SHARED STATE MANAGEMENT HELPERS ---
+        function clearAtsState() {
+          // Clear old localStorage keys (to avoid stale 78% issues)
+          localStorage.removeItem('lastATSScore');
+          localStorage.removeItem('lastATSSummary');
+          localStorage.removeItem('lastUploadedResume');
+          localStorage.removeItem('lastUploadedResumeName');
+          
+          // Clear shared cross-page state
+          sessionStorage.removeItem('currentResumeId');
+          sessionStorage.removeItem('currentResumeText');
+          sessionStorage.removeItem('currentAtsScore');
+          sessionStorage.removeItem('currentAtsBreakdown');
+        }
+
+        function updateAtsGauge(score) {
+          const donut = document.querySelector('.ats-donut');
+          if (donut) {
+            const radius = 23;
+            const norm = 2 * Math.PI * radius;
+            const progress = (score / 100) * norm;
+            const svg = donut.querySelector('svg');
+            if (svg) {
+              const circles = svg.querySelectorAll('circle');
+              if (circles[1]) circles[1].setAttribute('stroke-dashoffset', (norm - progress));
+            }
+            const text = donut.querySelector('.ats-score-text');
+            if (text) text.textContent = score + '%';
+          }
+          const scoreLabel = document.querySelector('.ats-score-label');
+          if (scoreLabel) scoreLabel.textContent = score + ' / 100';
+        }
+
+        function resetAtsGauge() {
+          updateAtsGauge(0);
+          const scoreSummary = document.querySelector('.ats-score-summary');
+          if (scoreSummary) scoreSummary.textContent = '';
+        }
+
+        function showErrorBanner(message) {
+          // Remove any existing error banner
+          const existingBanner = document.querySelector('.ats-error-banner');
+          if (existingBanner) existingBanner.remove();
+          
+          const errorBanner = document.createElement('div');
+          errorBanner.className = 'ats-error-banner';
+          errorBanner.style.cssText = 'background:#FEE2E2;border-left:4px solid #EF4444;color:#991B1B;padding:0.75rem 1rem;border-radius:8px;margin:0.75rem 0;font-size:0.9rem;';
+          errorBanner.textContent = message || 'Upload failed. Please upload a text-based PDF, DOCX, or TXT resume.';
+          
+          const atsCard = document.querySelector('.feature-card:has(#ats-upload-btn)');
+          if (atsCard) {
+            atsCard.insertBefore(errorBanner, atsCard.firstChild);
+            // Auto-remove after 8 seconds
+            setTimeout(() => errorBanner.remove(), 8000);
+          }
+        }
+
+        function showLoadingState() {
+          const uploadBtn = document.getElementById('ats-upload-btn');
+          if (uploadBtn) {
+            uploadBtn.disabled = true;
+            uploadBtn.textContent = 'Uploading...';
+          }
+        }
+
+        function hideLoadingState() {
+          const uploadBtn = document.getElementById('ats-upload-btn');
+          if (uploadBtn) {
+            uploadBtn.disabled = false;
+            uploadBtn.textContent = 'Upload PDF';
+          }
+        }
+
         atsUploadInput.addEventListener('change', async function(e) {
           const file = e.target.files[0];
           if (!file) return;
+
+          // Clear any previous errors
+          const existingBanner = document.querySelector('.ats-error-banner');
+          if (existingBanner) existingBanner.remove();
+
+          // Show loading state
+          showLoadingState();
 
           // Check free account usage limits - skip for trial/subscription users
           const currentUser = window.FirebaseAuthManager?.getCurrentUser?.();
@@ -1768,61 +1863,128 @@
               showFreeAccountUpgradePopup();
               // Reset file input
               e.target.value = '';
+              // Hide loading state before returning (fixes stuck "Uploading..." button)
+              hideLoadingState();
               return;
             }
           }
 
-          // Store last uploaded resume in localStorage for use on Resume Feedback page
-          const reader = new FileReader();
-          reader.onload = function(evt) {
-            // Store as base64 string (for demo; in production, use backend or secure storage)
-            localStorage.setItem('lastUploadedResume', evt.target.result);
-            // Optionally, store file name
-            localStorage.setItem('lastUploadedResumeName', file.name);
-            // Mark that user has uploaded a resume (for upgrade popup detection)
-            localStorage.setItem('hasUploadedResume', 'true');
-          };
-          reader.readAsDataURL(file);
-          
-          // Store score for upgrade popup detection
-          const score = Math.floor(Math.random() * 31) + 60; // 60-90%
-          const summary = score > 85 ? 'Excellent! Your resume is highly ATS compatible.' : score > 70 ? 'Your resume meets many ATS criteria and is likely to be noticed.' : 'Your resume needs improvement for better ATS results.';
-          localStorage.setItem('lastATSScore', score.toString());
-          localStorage.setItem('lastATSSummary', summary);
-
-          // Record usage for free accounts only (trial/subscription users have unlimited)
-          // Double-check plan before recording usage
-          if (!hasUnlimitedAccess && userPlan === 'free' && window.freeAccountManager) {
-            const usageResult = window.freeAccountManager.recordATSUsage();
-            if (!usageResult.success) {
-              alert(usageResult.message);
-              return;
+          // Real API integration: Upload resume and get ATS score
+          try {
+            const currentUser = window.FirebaseAuthManager?.getCurrentUser?.();
+            if (!currentUser) {
+              throw new Error('Please log in to use ATS scoring');
             }
-          }
-          
-          // Consume credit for free users only (trial/subscription users have unlimited)
-          // Skip credit consumption entirely for trial/paid users
-          if (!hasUnlimitedAccess && userPlan === 'free') {
-            const user = window.FirebaseAuthManager?.getCurrentUser?.();
-            if (user) {
-              // Re-check plan one more time before consuming credit
-              let finalPlan = userPlan;
+
+            const idToken = await currentUser.getIdToken();
+            
+            // Step 1: Upload resume
+            const formData = new FormData();
+            formData.append('file', file);
+            
+            const uploadResponse = await fetch('/api/resume-upload', {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${idToken}`
+              },
+              body: formData
+            });
+
+            // Check if response is ok before parsing JSON
+            // Non-ok responses (500, 502, etc.) might return HTML error pages, not JSON
+            if (!uploadResponse.ok) {
+              let errorMessage = 'Upload failed. Please try again.';
               try {
-                const idToken = await user.getIdToken();
-                const planRes = await fetch('/api/plan/me', {
-                  headers: { Authorization: `Bearer ${idToken}` }
-                });
-                if (planRes.ok) {
-                  const planData = await planRes.json();
-                  finalPlan = planData.plan || finalPlan;
-                }
-              } catch (error) {
-                console.warn('Error re-checking plan before credit consumption:', error);
+                // Try to parse error response as JSON first
+                const errorData = await uploadResponse.json();
+                errorMessage = errorData.error || errorData.message || errorMessage;
+              } catch (parseError) {
+                // If parsing fails, it's likely an HTML error page - use status text
+                errorMessage = `Upload failed (${uploadResponse.status}): ${uploadResponse.statusText || 'Server error'}`;
               }
-              
-              // Only consume credits if still on free plan
-              if (finalPlan === 'free') {
-                const creditKey = `creditsByUid:${user.uid}`;
+              clearAtsState();
+              resetAtsGauge();
+              showErrorBanner(errorMessage);
+              hideLoadingState();
+              e.target.value = ''; // Reset file input
+              return;
+            }
+
+            const uploadData = await uploadResponse.json();
+
+            // Handle extraction failures (success: false but HTTP 200)
+            if (!uploadData.success) {
+              clearAtsState();
+              resetAtsGauge();
+              showErrorBanner(uploadData.message || 'Upload failed. Please upload a text-based PDF, DOCX, or TXT resume.');
+              hideLoadingState();
+              e.target.value = ''; // Reset file input
+              return;
+            }
+
+            // Step 2: Store resume data in sessionStorage for cross-page sync
+            // Note: Only store resumeId, not resumeText (PII security - resume text stored securely in backend KV)
+            sessionStorage.setItem('currentResumeId', uploadData.resumeId);
+
+            // Step 3: Get ATS score
+            const uploadBtn = document.getElementById('ats-upload-btn');
+            if (uploadBtn) uploadBtn.textContent = 'Scoring...';
+
+            // Get job title if available (default to 'Software Engineer' for now)
+            const jobTitle = 'Software Engineer'; // TODO: Add job title input to dashboard if needed
+            
+            const scoreResponse = await fetch('/api/ats-score', {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${idToken}`,
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify({
+                resumeId: uploadData.resumeId,
+                jobTitle: jobTitle
+              })
+            });
+
+            if (!scoreResponse.ok) {
+              const errorData = await scoreResponse.json();
+              throw new Error(errorData.error || 'Failed to get ATS score');
+            }
+
+            const scoreData = await scoreResponse.json();
+            
+            if (!scoreData.success) {
+              throw new Error(scoreData.error || 'Failed to get ATS score');
+            }
+
+            // Step 4: Update UI with real score
+            const score = scoreData.score || 0;
+            const breakdown = scoreData.breakdown || {};
+            
+            // Generate summary based on score
+            const summary = score > 85 ? 'Excellent! Your resume is highly ATS compatible.' : 
+                           score > 70 ? 'Your resume meets many ATS criteria and is likely to be noticed.' : 
+                           'Your resume needs improvement for better ATS results.';
+
+            // Update gauge
+            updateAtsGauge(score);
+            const scoreSummary = document.querySelector('.ats-score-summary');
+            if (scoreSummary) scoreSummary.textContent = summary;
+
+            // Store in sessionStorage for cross-page sync
+            sessionStorage.setItem('currentAtsScore', score.toString());
+            sessionStorage.setItem('currentAtsBreakdown', JSON.stringify(breakdown));
+
+            // Also store in localStorage for backward compatibility (but prefer sessionStorage)
+            localStorage.setItem('lastATSScore', score.toString());
+            localStorage.setItem('lastATSSummary', summary);
+            localStorage.setItem('hasUploadedResume', 'true');
+
+            // Record usage for free accounts (backend handles KV, but sync localStorage for UI consistency)
+            if (!hasUnlimitedAccess && userPlan === 'free') {
+              // Consume localStorage credit to keep UI in sync with backend
+              const currentUser = window.FirebaseAuthManager?.getCurrentUser?.();
+              if (currentUser && currentUser.uid) {
+                const creditKey = `creditsByUid:${currentUser.uid}`;
                 const creditsData = localStorage.getItem(creditKey);
                 let credits = { ats_free_lifetime: 1 }; // Default for new users
                 
@@ -1830,48 +1992,36 @@
                   try {
                     credits = JSON.parse(creditsData);
                   } catch (e) {
-                    // Handle corrupted JSON - default to consumed state (0) since validation already passed
-                    console.warn('Failed to parse credits data during consumption, defaulting to consumed:', e);
-                    credits = { ats_free_lifetime: 0 };
+                    console.warn('Failed to parse credits data during consumption:', e);
+                    credits = { ats_free_lifetime: 0 }; // Default to consumed on parse error
                   }
                 }
                 
                 // Consume credit
                 credits.ats_free_lifetime = 0;
                 localStorage.setItem(creditKey, JSON.stringify(credits));
-                console.log('✅ Free ATS credit consumed');
-                
-                // Update UI to show credit used with upgrade message (consistent with initial render)
-                const usageDiv = document.querySelector('.feature-card:has(#ats-upload-btn) .usage-indicator');
-                if (usageDiv) {
-                  usageDiv.innerHTML = 'Free ATS score used. Upgrade to trial or paid plan for unlimited scoring. <span class="jh-tooltip-trigger" tabindex="0" aria-label="More info" style="margin-left:0.4em;vertical-align:middle;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false" style="vertical-align:middle"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="8"/><line x1="12" y1="12" x2="12" y2="16"/></svg><span class="jh-tooltip-text">Upgrade to unlock unlimited ATS scoring and access all features.</span></span>';
-                }
-              } else {
-                console.log('✅ User upgraded to', finalPlan, '- skipping credit consumption');
+                console.log('✅ Free ATS credit consumed in localStorage');
+              }
+              
+              // Update UI message
+              const usageDiv = document.querySelector('.feature-card:has(#ats-upload-btn) .usage-indicator');
+              if (usageDiv) {
+                usageDiv.innerHTML = 'Free ATS score used. Upgrade to trial or paid plan for unlimited scoring. <span class="jh-tooltip-trigger" tabindex="0" aria-label="More info" style="margin-left:0.4em;vertical-align:middle;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false" style="vertical-align:middle"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="8"/><line x1="12" y1="12" x2="12" y2="16"/></svg><span class="jh-tooltip-text">Upgrade to unlock unlimited ATS scoring and access all features.</span></span>';
               }
             }
-          } else {
-            console.log('✅ Trial/paid user - skipping credit consumption. Plan:', userPlan);
+
+            // Reset file input and hide loading state
+            e.target.value = '';
+            hideLoadingState();
+
+          } catch (error) {
+            console.error('[ATS-UPLOAD] Error:', error);
+            clearAtsState();
+            resetAtsGauge();
+            showErrorBanner(error.message || 'Upload failed. Please try again.');
+            hideLoadingState();
+            e.target.value = ''; // Reset file input
           }
-          // Update donut
-          const donut = document.querySelector('.ats-donut');
-          if (donut) {
-            const radius = 23;
-            const norm = 2 * Math.PI * radius;
-            const progress = (score / 100) * norm;
-            const svg = donut.querySelector('svg');
-            if (svg) {
-              const circles = svg.querySelectorAll('circle');
-              if (circles[1]) circles[1].setAttribute('stroke-dashoffset', (norm - progress));
-            }
-            const text = donut.querySelector('.ats-score-text');
-            if (text) text.textContent = score + '%';
-          }
-          // Update score label and summary
-          const scoreLabel = document.querySelector('.ats-score-label');
-          if (scoreLabel) scoreLabel.textContent = score + ' / 100';
-          const scoreSummary = document.querySelector('.ats-score-summary');
-          if (scoreSummary) scoreSummary.textContent = summary;
         });
       }
       // NOTE: Resume Feedback page should read the last uploaded resume from localStorage (key: 'lastUploadedResume') if present.
