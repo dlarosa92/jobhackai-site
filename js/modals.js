@@ -1,380 +1,277 @@
+// Modal and Toast utilities for user-facing errors and notifications
+// Replaces console-only errors with user-facing modals
+
 /**
- * JobHackAI Modal System
- * Reusable modal components for error, warning, and success messages
- * Uses design system tokens for consistent styling
+ * Show error modal to user
+ * @param {string} title - Modal title
+ * @param {string} message - Error message
+ * @param {Object} options - Additional options
  */
+export function showErrorModal(title, message, options = {}) {
+  const {
+    onClose = null,
+    showRetry = false,
+    retryCallback = null,
+    buttonText = 'Got it'
+  } = options;
 
-(function() {
-  'use strict';
-
-  // Modal z-index management
-  let modalZIndex = 10000;
-  
-  // Track active modals to handle Escape key properly (only close topmost)
-  const activeModals = [];
-  
-  // Global Escape key handler - closes only the topmost modal
-  function handleGlobalEscape(e) {
-    if (e.key === 'Escape' && activeModals.length > 0) {
-      // Get the topmost modal (last in array = highest z-index)
-      const topmostModal = activeModals[activeModals.length - 1];
-      if (topmostModal && topmostModal.parentNode) {
-        // Remove from active modals first
-        const index = activeModals.indexOf(topmostModal);
-        if (index > -1) {
-          activeModals.splice(index, 1);
-        }
-        // Close the modal (this will call cleanup)
-        if (topmostModal._closeModal) {
-          topmostModal._closeModal();
-        } else {
-          topmostModal.remove();
-        }
-      }
-    }
+  // Remove existing error modal if present
+  const existingModal = document.getElementById('jh-error-modal');
+  if (existingModal) {
+    existingModal.remove();
   }
 
-  /**
-   * Base modal function - creates a modal with customizable content
-   * @param {Object} options - Modal configuration
-   * @param {string} options.type - 'error', 'warning', or 'success'
-   * @param {string} options.message - Main message text
-   * @param {string} [options.title] - Optional title (defaults based on type)
-   * @param {Function} [options.action] - Optional action button callback
-   * @param {string} [options.actionLabel] - Action button label
-   * @param {boolean} [options.showClose] - Show close button (default: true)
-   * @returns {HTMLElement} Modal element
-   */
-  function createModal({
-    type = 'info',
-    message,
-    title = null,
-    action = null,
-    actionLabel = 'OK',
-    showClose = true
-  }) {
-    // Default titles by type
-    const defaultTitles = {
-      error: 'Something went wrong',
-      warning: 'Please note',
-      success: 'Success',
-      info: 'Information'
-    };
+  const modal = document.createElement('div');
+  modal.id = 'jh-error-modal';
+  modal.style.cssText = `
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10000;
+    animation: fadeIn 0.2s ease;
+  `;
 
-    const modalTitle = title || defaultTitles[type] || 'Information';
-
-    // Icon SVG by type
-    const icons = {
-      error: `<svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#DC2626" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <circle cx="12" cy="12" r="10"/>
-        <line x1="12" y1="8" x2="12" y2="12"/>
-        <line x1="12" y1="16" x2="12.01" y2="16"/>
-      </svg>`,
-      warning: `<svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#D97706" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
-        <line x1="12" y1="9" x2="12" y2="13"/>
-        <line x1="12" y1="17" x2="12.01" y2="17"/>
-      </svg>`,
-      success: `<svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#10B981" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
-        <polyline points="22 4 12 14.01 9 11.01"/>
-      </svg>`,
-      info: `<svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#1976D2" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <circle cx="12" cy="12" r="10"/>
-        <line x1="12" y1="16" x2="12" y2="12"/>
-        <line x1="12" y1="8" x2="12.01" y2="8"/>
-      </svg>`
-    };
-
-    // Background colors by type
-    const bgColors = {
-      error: '#FEF2F2',
-      warning: '#FFFBEB',
-      success: '#F0FDF4',
-      info: '#EFF6FF'
-    };
-
-    // Icon container colors
-    const iconBgColors = {
-      error: '#FEE2E2',
-      warning: '#FEF3C7',
-      success: '#D1FAE5',
-      info: '#DBEAFE'
-    };
-
-    const modal = document.createElement('div');
-    modal.className = 'jh-modal-overlay';
-    modal.style.cssText = `
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100vw;
-      height: 100vh;
-      background: rgba(0, 0, 0, 0.5);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      z-index: ${modalZIndex++};
-      animation: fadeIn 0.2s ease-in-out;
-    `;
-
-    const modalContent = document.createElement('div');
-    modalContent.className = 'jh-modal-content';
-    modalContent.style.cssText = `
-      background: white;
+  modal.innerHTML = `
+    <div style="
+      background: #fff;
       border-radius: 16px;
       padding: 2rem;
-      max-width: 480px;
+      max-width: 500px;
       width: 90%;
-      margin: 1rem;
-      box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.15), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
-      animation: slideUp 0.3s ease-out;
-      position: relative;
-    `;
+      box-shadow: 0 4px 32px rgba(0, 0, 0, 0.15);
+      animation: slideUp 0.3s ease;
+    ">
+      <div style="display: flex; align-items: center; margin-bottom: 1rem;">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#EF4444" stroke-width="2" style="margin-right: 0.75rem;">
+          <circle cx="12" cy="12" r="10"/>
+          <line x1="12" y1="8" x2="12" y2="12"/>
+          <line x1="12" y1="16" x2="12.01" y2="16"/>
+        </svg>
+        <h2 style="margin: 0; color: #1F2937; font-size: 1.25rem; font-weight: 600;">${title}</h2>
+      </div>
+      <p style="margin: 0 0 1.5rem 0; color: #4B5563; line-height: 1.6;">${message}</p>
+      <div style="display: flex; gap: 0.75rem; justify-content: flex-end;">
+        ${showRetry && retryCallback ? `
+          <button id="jh-error-retry" style="
+            background: #00E676;
+            color: #fff;
+            border: none;
+            border-radius: 8px;
+            padding: 0.75rem 1.5rem;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: opacity 0.2s;
+          ">Try Again</button>
+        ` : ''}
+        <button id="jh-error-close" style="
+          background: ${showRetry ? '#F3F4F6' : '#00E676'};
+          color: ${showRetry ? '#1F2937' : '#fff'};
+          border: none;
+          border-radius: 8px;
+          padding: 0.75rem 1.5rem;
+          font-size: 1rem;
+          font-weight: 600;
+          cursor: pointer;
+          transition: opacity 0.2s;
+        ">${buttonText}</button>
+      </div>
+    </div>
+  `;
 
-    const iconContainer = document.createElement('div');
-    iconContainer.style.cssText = `
-      width: 64px;
-      height: 64px;
-      background: ${iconBgColors[type] || iconBgColors.info};
-      border-radius: 50%;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      margin: 0 auto 1.25rem;
-    `;
-    iconContainer.innerHTML = icons[type] || icons.info;
-
-    const titleEl = document.createElement('h3');
-    titleEl.style.cssText = `
-      margin: 0 0 0.75rem 0;
-      color: #232B36;
-      font-size: 1.5rem;
-      font-weight: 700;
-      text-align: center;
-    `;
-    titleEl.textContent = modalTitle;
-
-    const messageEl = document.createElement('p');
-    messageEl.style.cssText = `
-      margin: 0 0 1.5rem 0;
-      color: #64748B;
-      line-height: 1.6;
-      font-size: 1rem;
-      text-align: center;
-    `;
-    messageEl.textContent = message;
-
-    const buttonContainer = document.createElement('div');
-    buttonContainer.style.cssText = `
-      display: flex;
-      gap: 0.75rem;
-      justify-content: center;
-      flex-wrap: wrap;
-    `;
-
-    // Track this modal in active modals list
-    activeModals.push(modal);
-    
-    // Register global Escape handler if not already registered
-    if (!window._jhModalEscapeHandlerRegistered) {
-      document.addEventListener('keydown', handleGlobalEscape);
-      window._jhModalEscapeHandlerRegistered = true;
+  // Add animations
+  const style = document.createElement('style');
+  style.textContent = `
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
     }
+    @keyframes slideUp {
+      from { transform: translateY(20px); opacity: 0; }
+      to { transform: translateY(0); opacity: 1; }
+    }
+  `;
+  document.head.appendChild(style);
 
-    // Store cleanup function on modal for removal
-    modal._cleanupEscape = () => {
-      // Remove from active modals
-      const index = activeModals.indexOf(modal);
-      if (index > -1) {
-        activeModals.splice(index, 1);
-      }
-      // Remove global handler if no modals remain
-      if (activeModals.length === 0 && window._jhModalEscapeHandlerRegistered) {
-        document.removeEventListener('keydown', handleGlobalEscape);
-        window._jhModalEscapeHandlerRegistered = false;
-      }
-    };
+  document.body.appendChild(modal);
 
-    // Helper function to close modal with cleanup
-    const closeModal = () => {
-      if (modal._cleanupEscape) {
-        modal._cleanupEscape();
-      }
+  // Close handlers
+  const closeModal = () => {
+    modal.style.animation = 'fadeOut 0.2s ease';
+    setTimeout(() => {
       modal.remove();
-    };
-    
-    // Store close function on modal for Escape handler access
-    modal._closeModal = closeModal;
+      style.remove();
+      if (onClose) onClose();
+    }, 200);
+  };
 
-    // Close button
-    if (showClose) {
-      const closeBtn = document.createElement('button');
-      closeBtn.className = 'jh-modal-close';
-      closeBtn.style.cssText = `
-        background: #F3F4F6;
-        color: #4B5563;
-        border: none;
-        padding: 0.75rem 1.5rem;
-        border-radius: 8px;
-        cursor: pointer;
-        font-weight: 600;
-        font-size: 1rem;
-        transition: background 0.18s;
-        flex: 1;
-        min-width: 120px;
-      `;
-      closeBtn.textContent = 'Close';
-      closeBtn.addEventListener('click', closeModal);
-      closeBtn.addEventListener('mouseenter', () => {
-        closeBtn.style.background = '#E5E7EB';
-      });
-      closeBtn.addEventListener('mouseleave', () => {
-        closeBtn.style.background = '#F3F4F6';
-      });
-      buttonContainer.appendChild(closeBtn);
-    }
-
-    // Action button
-    if (action) {
-      const actionBtn = document.createElement('button');
-      actionBtn.className = 'jh-modal-action';
-      actionBtn.style.cssText = `
-        background: #00E676;
-        color: white;
-        border: none;
-        padding: 0.75rem 1.5rem;
-        border-radius: 8px;
-        cursor: pointer;
-        font-weight: 700;
-        font-size: 1rem;
-        transition: background 0.18s;
-        flex: 1;
-        min-width: 120px;
-      `;
-      actionBtn.textContent = actionLabel;
-      actionBtn.addEventListener('click', () => {
-        action();
-        closeModal();
-      });
-      actionBtn.addEventListener('mouseenter', () => {
-        actionBtn.style.background = '#00c965';
-      });
-      actionBtn.addEventListener('mouseleave', () => {
-        actionBtn.style.background = '#00E676';
-      });
-      buttonContainer.appendChild(actionBtn);
-    }
-
-    // Close on background click
-    modal.addEventListener('click', (e) => {
-      if (e.target === modal) {
-        closeModal();
-      }
+  document.getElementById('jh-error-close').addEventListener('click', closeModal);
+  
+  if (showRetry && retryCallback) {
+    document.getElementById('jh-error-retry').addEventListener('click', () => {
+      closeModal();
+      setTimeout(() => retryCallback(), 100);
     });
-
-    // Assemble modal
-    modalContent.appendChild(iconContainer);
-    modalContent.appendChild(titleEl);
-    modalContent.appendChild(messageEl);
-    modalContent.appendChild(buttonContainer);
-    modal.appendChild(modalContent);
-
-    // Add animations
-    if (!document.querySelector('#jh-modal-styles')) {
-      const styles = document.createElement('style');
-      styles.id = 'jh-modal-styles';
-      styles.textContent = `
-        @keyframes fadeIn {
-          from { opacity: 0; }
-          to { opacity: 1; }
-        }
-        @keyframes slideUp {
-          from {
-            opacity: 0;
-            transform: translateY(20px);
-          }
-          to {
-            opacity: 1;
-            transform: translateY(0);
-          }
-        }
-      `;
-      document.head.appendChild(styles);
-    }
-
-    document.body.appendChild(modal);
-
-    // Focus management for accessibility
-    const firstButton = modalContent.querySelector('button');
-    if (firstButton) {
-      setTimeout(() => firstButton.focus(), 100);
-    }
-
-    return modal;
   }
 
-  // Export public API
-  window.JobHackAIModals = {
-    /**
-     * Show error modal
-     * @param {string} message - Error message
-     * @param {Function} [action] - Optional action callback
-     * @param {string} [actionLabel] - Action button label
-     */
-    errorModal(message, action = null, actionLabel = 'Try Again') {
-      return createModal({
-        type: 'error',
-        message,
-        action,
-        actionLabel
-      });
-    },
+  // Close on backdrop click
+  modal.addEventListener('click', (e) => {
+    if (e.target === modal) {
+      closeModal();
+    }
+  });
 
-    /**
-     * Show warning modal
-     * @param {string} message - Warning message
-     * @param {Function} [action] - Optional action callback
-     * @param {string} [actionLabel] - Action button label
-     */
-    warningModal(message, action = null, actionLabel = 'Continue') {
-      return createModal({
-        type: 'warning',
-        message,
-        action,
-        actionLabel
-      });
-    },
-
-    /**
-     * Show success modal
-     * @param {string} message - Success message
-     * @param {Function} [action] - Optional action callback
-     * @param {string} [actionLabel] - Action button label
-     */
-    successModal(message, action = null, actionLabel = 'OK') {
-      return createModal({
-        type: 'success',
-        message,
-        action,
-        actionLabel
-      });
-    },
-
-    /**
-     * Show info modal
-     * @param {string} message - Info message
-     * @param {Function} [action] - Optional action callback
-     * @param {string} [actionLabel] - Action button label
-     */
-    infoModal(message, action = null, actionLabel = 'OK') {
-      return createModal({
-        type: 'info',
-        message,
-        action,
-        actionLabel
-      });
+  // Close on Escape key
+  const escapeHandler = (e) => {
+    if (e.key === 'Escape') {
+      closeModal();
+      document.removeEventListener('keydown', escapeHandler);
     }
   };
-})();
+  document.addEventListener('keydown', escapeHandler);
+}
 
+/**
+ * Show success toast notification
+ * @param {string} message - Success message
+ * @param {number} duration - Display duration in ms (default: 3000)
+ */
+export function showToast(message, duration = 3000) {
+  // Remove existing toast if present
+  const existingToast = document.getElementById('jh-toast');
+  if (existingToast) {
+    existingToast.remove();
+  }
+
+  const toast = document.createElement('div');
+  toast.id = 'jh-toast';
+  toast.style.cssText = `
+    position: fixed;
+    bottom: 2rem;
+    right: 2rem;
+    background: #00E676;
+    color: #fff;
+    padding: 1rem 1.5rem;
+    border-radius: 8px;
+    box-shadow: 0 4px 16px rgba(0, 230, 118, 0.3);
+    z-index: 10001;
+    animation: slideInRight 0.3s ease;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    max-width: 400px;
+  `;
+
+  toast.innerHTML = `
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+      <polyline points="22 4 12 14.01 9 11.01"/>
+    </svg>
+    <span style="font-weight: 500;">${message}</span>
+  `;
+
+  // Add animation
+  const style = document.createElement('style');
+  style.textContent = `
+    @keyframes slideInRight {
+      from { transform: translateX(100%); opacity: 0; }
+      to { transform: translateX(0); opacity: 1; }
+    }
+    @keyframes slideOutRight {
+      from { transform: translateX(0); opacity: 1; }
+      to { transform: translateX(100%); opacity: 0; }
+    }
+  `;
+  document.head.appendChild(style);
+
+  document.body.appendChild(toast);
+
+  setTimeout(() => {
+    toast.style.animation = 'slideOutRight 0.3s ease';
+    setTimeout(() => {
+      toast.remove();
+      style.remove();
+    }, 300);
+  }, duration);
+}
+
+/**
+ * Show loading overlay with message
+ * @param {string} message - Loading message
+ * @returns {Function} Function to hide the overlay
+ */
+export function showLoadingOverlay(message = 'Loading...') {
+  // Remove existing overlay if present
+  const existingOverlay = document.getElementById('jh-loading-overlay');
+  if (existingOverlay) {
+    existingOverlay.remove();
+  }
+
+  const overlay = document.createElement('div');
+  overlay.id = 'jh-loading-overlay';
+  overlay.style.cssText = `
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(255, 255, 255, 0.95);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
+    animation: fadeIn 0.2s ease;
+  `;
+
+  overlay.innerHTML = `
+    <div style="text-align: center;">
+      <div style="
+        width: 48px;
+        height: 48px;
+        border: 4px solid #E5E7EB;
+        border-top: 4px solid #00E676;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+        margin: 0 auto 1rem;
+      "></div>
+      <p style="margin: 0; color: #4B5563; font-size: 1rem; font-weight: 500;">${message}</p>
+    </div>
+  `;
+
+  // Add animations
+  const style = document.createElement('style');
+  style.textContent = `
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+  `;
+  document.head.appendChild(style);
+
+  document.body.appendChild(overlay);
+
+  return () => {
+    overlay.style.animation = 'fadeOut 0.2s ease';
+    setTimeout(() => {
+      overlay.remove();
+      style.remove();
+    }, 200);
+  };
+}
+
+// Make functions available globally for backward compatibility
+if (typeof window !== 'undefined') {
+  window.showErrorModal = showErrorModal;
+  window.showToast = showToast;
+  window.showLoadingOverlay = showLoadingOverlay;
+}

@@ -33,6 +33,23 @@ export async function onRequest(context) {
     const email = (payload?.email) || '';
     console.log('🔵 [BILLING-STATUS] Authenticated', { uid, email });
 
+    // Check cache first (session duration cache - 5 minutes)
+    const cacheKey = `billingStatus:${uid}`;
+    const cached = await env.JOBHACKAI_KV?.get(cacheKey);
+    if (cached) {
+      try {
+        const cachedData = JSON.parse(cached);
+        const cacheAge = Date.now() - cachedData.timestamp;
+        // Cache valid for 5 minutes (300000 ms)
+        if (cacheAge < 300000) {
+          console.log('✅ [BILLING-STATUS] Cache hit', { cacheAge: Math.round(cacheAge / 1000) + 's' });
+          return json({ ...cachedData.data, _cached: true }, 200, origin, env);
+        }
+      } catch (e) {
+        console.warn('⚠️ [BILLING-STATUS] Cache parse error, fetching fresh', e);
+      }
+    }
+
     // Get Stripe customer ID from KV
     let customerId = await env.JOBHACKAI_KV?.get(kvCusKey(uid));
     
@@ -173,6 +190,20 @@ export async function onRequest(context) {
       currentPeriodEnd: latestSub.current_period_end ? latestSub.current_period_end * 1000 : null,
       hasPaymentMethod: hasPaymentMethod
     };
+
+    // Cache result for 5 minutes (session duration)
+    if (env.JOBHACKAI_KV) {
+      try {
+        await env.JOBHACKAI_KV.put(cacheKey, JSON.stringify({
+          data: result,
+          timestamp: Date.now()
+        }), {
+          expirationTtl: 300 // 5 minutes
+        });
+      } catch (cacheError) {
+        console.warn('⚠️ [BILLING-STATUS] Cache write failed (non-fatal):', cacheError);
+      }
+    }
 
     console.log('✅ [BILLING-STATUS] Returning status', result);
     return json(result, 200, origin, env);

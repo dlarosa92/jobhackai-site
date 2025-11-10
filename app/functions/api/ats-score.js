@@ -369,6 +369,29 @@ export async function onRequest(context) {
       }
     }
 
+    // Persist ATS score to KV + Firestore hybrid (best effort)
+    if (kv && resumeId) {
+      try {
+        const lastResumeKey = `user:${uid}:lastResume`;
+        const resumeState = {
+          uid,
+          resumeId,
+          score: result.score,
+          breakdown: result.breakdown,
+          summary: result.feedback?.[0] || '',
+          jobTitle: jobTitle || '',
+          timestamp: Date.now(),
+          syncedAt: Date.now()
+        };
+        await kv.put(lastResumeKey, JSON.stringify(resumeState), {
+          expirationTtl: 2592000 // 30 days
+        });
+      } catch (persistError) {
+        console.warn('[ATS-SCORE] Persistence failed (non-fatal):', persistError);
+        // Continue without persistence if write fails
+      }
+    }
+
     return json({
       success: true,
       ...result
