@@ -204,17 +204,18 @@ export function showToast(message, duration = 3000) {
 /**
  * Show loading overlay with message
  * @param {string} message - Loading message
+ * @param {string} [id] - Optional custom ID for the overlay (default: 'jh-loading-overlay')
  * @returns {Function} Function to hide the overlay
  */
-export function showLoadingOverlay(message = 'Loading...') {
-  // Remove existing overlay if present
-  const existingOverlay = document.getElementById('jh-loading-overlay');
+export function showLoadingOverlay(message = 'Loading...', id = 'jh-loading-overlay') {
+  // Remove existing overlay with this ID if present (prevents duplicate IDs)
+  const existingOverlay = document.getElementById(id);
   if (existingOverlay) {
     existingOverlay.remove();
   }
 
   const overlay = document.createElement('div');
-  overlay.id = 'jh-loading-overlay';
+  overlay.id = id;
   overlay.style.cssText = `
     position: fixed;
     top: 0;
