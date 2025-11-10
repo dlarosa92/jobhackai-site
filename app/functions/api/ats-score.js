@@ -154,7 +154,11 @@ export async function onRequest(context) {
     let cachedResult = null;
     if (kv) {
       try {
-        const cacheHash = await hashString(`${resumeId || 'direct'}:${jobTitle}:ats`);
+        // Include resume text hash when resumeId is not available to prevent cache collisions
+        const cacheKeyBase = resumeId 
+          ? `${resumeId}:${jobTitle}:ats`
+          : `${await hashString(text.substring(0, 1000))}:${jobTitle}:ats`; // Use first 1000 chars for hash to ensure uniqueness
+        const cacheHash = await hashString(cacheKeyBase);
         const cacheKey = `atsCache:${cacheHash}`;
         const cached = await kv.get(cacheKey);
         
@@ -323,7 +327,11 @@ export async function onRequest(context) {
     // Cache result (24 hours) - best effort, skip if KV unavailable
     if (kv) {
       try {
-        const cacheHash = await hashString(`${resumeId || 'direct'}:${jobTitle}:ats`);
+        // Include resume text hash when resumeId is not available to prevent cache collisions
+        const cacheKeyBase = resumeId 
+          ? `${resumeId}:${jobTitle}:ats`
+          : `${await hashString(text.substring(0, 1000))}:${jobTitle}:ats`; // Use first 1000 chars for hash to ensure uniqueness
+        const cacheHash = await hashString(cacheKeyBase);
         const cacheKey = `atsCache:${cacheHash}`;
         await kv.put(cacheKey, JSON.stringify({
           result,
