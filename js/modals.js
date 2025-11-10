@@ -12,6 +12,27 @@
   
   // Track active modals to handle Escape key properly (only close topmost)
   const activeModals = [];
+  
+  // Global Escape key handler - closes only the topmost modal
+  function handleGlobalEscape(e) {
+    if (e.key === 'Escape' && activeModals.length > 0) {
+      // Get the topmost modal (last in array = highest z-index)
+      const topmostModal = activeModals[activeModals.length - 1];
+      if (topmostModal && topmostModal.parentNode) {
+        // Remove from active modals first
+        const index = activeModals.indexOf(topmostModal);
+        if (index > -1) {
+          activeModals.splice(index, 1);
+        }
+        // Close the modal (this will call cleanup)
+        if (topmostModal._closeModal) {
+          topmostModal._closeModal();
+        } else {
+          topmostModal.remove();
+        }
+      }
+    }
+  }
 
   /**
    * Base modal function - creates a modal with customizable content
@@ -155,31 +176,10 @@
     // Track this modal in active modals list
     activeModals.push(modal);
     
-    // Close on Escape key - use single global handler that closes only topmost modal
-    const handleEscape = (e) => {
-      if (e.key === 'Escape' && activeModals.length > 0) {
-        // Get the topmost modal (last in array = highest z-index)
-        const topmostModal = activeModals[activeModals.length - 1];
-        if (topmostModal && topmostModal.parentNode) {
-          // Remove from active modals first
-          const index = activeModals.indexOf(topmostModal);
-          if (index > -1) {
-            activeModals.splice(index, 1);
-          }
-          // Close the modal (this will call cleanup)
-          if (topmostModal._closeModal) {
-            topmostModal._closeModal();
-          } else {
-            topmostModal.remove();
-          }
-        }
-      }
-    };
-    
-    // Only register global Escape handler once
-    if (!window._jhModalEscapeHandler) {
-      window._jhModalEscapeHandler = handleEscape;
-      document.addEventListener('keydown', handleEscape);
+    // Register global Escape handler if not already registered
+    if (!window._jhModalEscapeHandlerRegistered) {
+      document.addEventListener('keydown', handleGlobalEscape);
+      window._jhModalEscapeHandlerRegistered = true;
     }
 
     // Store cleanup function on modal for removal
@@ -190,9 +190,9 @@
         activeModals.splice(index, 1);
       }
       // Remove global handler if no modals remain
-      if (activeModals.length === 0 && window._jhModalEscapeHandler) {
-        document.removeEventListener('keydown', window._jhModalEscapeHandler);
-        window._jhModalEscapeHandler = null;
+      if (activeModals.length === 0 && window._jhModalEscapeHandlerRegistered) {
+        document.removeEventListener('keydown', handleGlobalEscape);
+        window._jhModalEscapeHandlerRegistered = false;
       }
     };
 
