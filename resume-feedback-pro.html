@@ -193,6 +193,45 @@
       opacity: 1;
       pointer-events: auto;
     }
+    /* Tooltip style matching Resume Rewriting */
+    .rf-tooltip-trigger {
+      cursor: pointer;
+      margin-left: 0.4em;
+      vertical-align: middle;
+      position: relative;
+      display: inline-block;
+    }
+    .rf-tooltip-trigger svg {
+      width: 16px;
+      height: 16px;
+      color: #9CA3AF;
+      vertical-align: middle;
+    }
+    .rf-tooltip-text {
+      display: none;
+      position: absolute;
+      z-index: 1000;
+      padding: 0.5rem 0.8rem;
+      background-color: #333;
+      color: #fff;
+      border-radius: 4px;
+      bottom: 125%;
+      left: 50%;
+      transform: translateX(-50%);
+      min-width: 180px;
+      max-width: 260px;
+      white-space: normal;
+      word-break: break-word;
+      font-size: 0.9rem;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+      pointer-events: none;
+      text-align: left;
+    }
+    .rf-tooltip-trigger:hover .rf-tooltip-text,
+    .rf-tooltip-trigger:focus .rf-tooltip-text {
+      display: block;
+      pointer-events: auto;
+    }
   </style>
 </head>
 <body>
@@ -962,11 +1001,29 @@
 
       resetTiles();
 
+      // Helper function to update description with tooltip preserved
+      function updateDescriptionWithTooltip(element, text, tooltipText) {
+        if (!element) return;
+        const tooltipHtml = `<span class="rf-tooltip-trigger" tabindex="0" aria-label="More info" style="margin-left:0.4em;">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+            <circle cx="12" cy="12" r="10"/>
+            <line x1="12" y1="8" x2="12" y2="8"/>
+            <line x1="12" y1="12" x2="12" y2="16"/>
+          </svg>
+          <span class="rf-tooltip-text">${tooltipText}</span>
+        </span>`;
+        element.innerHTML = text + tooltipHtml;
+      }
+
       // Free Plan Logic
       if (plan === 'free') {
         if (atsScoreTile) {
           atsScoreTile.querySelector('#rf-plan-badge').textContent = 'Free Plan';
-          atsScoreTile.querySelector('#rf-score-desc').textContent = 'Get your basic ATS compatibility score.';
+          updateDescriptionWithTooltip(
+            atsScoreTile.querySelector('#rf-score-desc'),
+            'Get your basic ATS compatibility score.',
+            'Receive an overall ATS compliance score (0-100) for your resume, highlighting key areas to improve for better job application success.'
+          );
           // Check if free ATS score has been used
           const usageKey = `atsUsage:${getCurrentUserPlan()}:lifetime`;
           // For now, show message - will be updated dynamically after API call
@@ -998,7 +1055,11 @@
         if (atsScoreTile) {
           atsScoreTile.querySelector('#rf-plan-badge').textContent = 'Trial Plan';
           atsScoreTile.querySelector('#rf-plan-badge').style.background = '#FF9100';
-          atsScoreTile.querySelector('#rf-score-desc').textContent = 'Enjoy unlimited ATS scoring during your trial!';
+          updateDescriptionWithTooltip(
+            atsScoreTile.querySelector('#rf-score-desc'),
+            'Enjoy unlimited ATS scoring during your trial!',
+            'Receive an overall ATS compliance score (0-100) for your resume, highlighting key areas to improve for better job application success.'
+          );
           atsScoreTile.querySelector('#rf-ats-checks').textContent = 'Unlimited ATS scoring during trial (throttled: 1 per 30s)';
         }
         // Trial has unlimited feedback with throttles (1/min, max 5/day, per-doc cap 3)
@@ -1062,7 +1123,11 @@
         if (atsScoreTile) {
           atsScoreTile.querySelector('#rf-plan-badge').textContent = 'Essential Plan';
           atsScoreTile.querySelector('#rf-plan-badge').style.background = '#0077B5';
-          atsScoreTile.querySelector('#rf-score-desc').textContent = 'Unlimited ATS scoring - your resume is getting noticed!';
+          updateDescriptionWithTooltip(
+            atsScoreTile.querySelector('#rf-score-desc'),
+            'Unlimited ATS scoring - your resume is getting noticed!',
+            'Receive an overall ATS compliance score (0-100) for your resume, highlighting key areas to improve for better job application success.'
+          );
           atsScoreTile.querySelector('#rf-ats-checks').textContent = 'Unlimited ATS checks';
         }
         // Essential: 3 feedbacks/month
@@ -1137,7 +1202,11 @@
         if (atsScoreTile) {
           atsScoreTile.querySelector('#rf-plan-badge').textContent = plan.charAt(0).toUpperCase() + plan.slice(1) + ' Plan';
           atsScoreTile.querySelector('#rf-plan-badge').style.background = isProPlan ? '#388E3C' : '#C62828';
-          atsScoreTile.querySelector('#rf-score-desc').textContent = 'Unlimited ATS scoring - you\'re getting maximum visibility!';
+          updateDescriptionWithTooltip(
+            atsScoreTile.querySelector('#rf-score-desc'),
+            'Get your basic ATS compatibility score.',
+            'Receive an overall ATS compliance score (0-100) for your resume, highlighting key areas to improve for better job application success.'
+          );
           atsScoreTile.querySelector('#rf-ats-checks').textContent = 'Unlimited ATS scoring';
         }
         if (feedbackTile) {
@@ -1279,6 +1348,14 @@
           </div>
           <div style="color:var(--color-text-secondary);margin-bottom:0.7rem;" id="rf-score-desc">
             Get your basic ATS compatibility score.
+            <span class="rf-tooltip-trigger" tabindex="0" aria-label="More info" style="margin-left:0.4em;">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+                <circle cx="12" cy="12" r="10"/>
+                <line x1="12" y1="8" x2="12" y2="8"/>
+                <line x1="12" y1="12" x2="12" y2="16"/>
+              </svg>
+              <span class="rf-tooltip-text">Receive an overall ATS compliance score (0-100) for your resume, highlighting key areas to improve for better job application success.</span>
+            </span>
           </div>
           <div class="rf-plan-limit" id="rf-plan-limit">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -1317,7 +1394,7 @@
               <option value="Data Management">
               <option value="IT Governance">
             </datalist>
-            <label for="rf-upload" style="font-weight:600;">Upload your resume (PDF, DOCX, or TXT, max 2 MB):</label><br>
+            <label for="rf-upload" style="font-weight:600;display:block;margin-bottom:0.5rem;">Upload your resume (PDF, DOCX, or TXT, max 2 MB):</label>
             <input id="rf-upload" type="file" accept=".pdf,.docx,.txt,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain" style="margin-top:0.5rem;">
           </form>
         </div>
@@ -1332,6 +1409,14 @@
       </div>
       <div style="color:var(--color-text-secondary);margin-bottom:1.2rem;">
         Get detailed ATS feedback and role-specific insights.
+        <span class="rf-tooltip-trigger" tabindex="0" aria-label="More info" style="margin-left:0.4em;">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+            <circle cx="12" cy="12" r="10"/>
+            <line x1="12" y1="8" x2="12" y2="8"/>
+            <line x1="12" y1="12" x2="12" y2="16"/>
+          </svg>
+          <span class="rf-tooltip-text">Get comprehensive feedback on keyword matching, formatting, structure, tone, and grammar to improve your resume's ATS compatibility.</span>
+        </span>
       </div>
       <div class="rf-upgrade-prompt" style="display:none;">
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -1412,6 +1497,14 @@
       </div>
       <div style="color:var(--color-text-secondary);margin-bottom:1.2rem;">
         Upgrade to Pro to unlock AI-powered resume rewriting with ATS optimization and role-specific enhancements.
+        <span class="rf-tooltip-trigger" tabindex="0" aria-label="More info" style="margin-left:0.4em;">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+            <circle cx="12" cy="12" r="10"/>
+            <line x1="12" y1="8" x2="12" y2="8"/>
+            <line x1="12" y1="12" x2="12" y2="16"/>
+          </svg>
+          <span class="rf-tooltip-text">See a rewritten version of your resume tailored to your target job - ready to copy and paste. Unlimited with your Pro plan.</span>
+        </span>
       </div>
       <div class="rf-upgrade-prompt">
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
