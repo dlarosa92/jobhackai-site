@@ -7,26 +7,45 @@
   'use strict';
 
   let toastZIndex = 10001;
-  const toastContainer = (function() {
-    let container = document.getElementById('jh-toast-container');
-    if (!container) {
-      container = document.createElement('div');
-      container.id = 'jh-toast-container';
-      container.style.cssText = `
-        position: fixed;
-        top: 20px;
-        right: 20px;
-        z-index: ${toastZIndex};
-        display: flex;
-        flex-direction: column;
-        gap: 0.75rem;
-        pointer-events: none;
-        max-width: 400px;
-      `;
-      document.body.appendChild(container);
+  let toastContainer = null;
+  
+  // Initialize toast container when DOM is ready
+  function getToastContainer() {
+    if (!toastContainer) {
+      // Check if container already exists
+      toastContainer = document.getElementById('jh-toast-container');
+      
+      if (!toastContainer) {
+        // Wait for DOM to be ready
+        if (document.body) {
+          toastContainer = document.createElement('div');
+          toastContainer.id = 'jh-toast-container';
+          toastContainer.style.cssText = `
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: ${toastZIndex};
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+            pointer-events: none;
+            max-width: 400px;
+          `;
+          document.body.appendChild(toastContainer);
+        } else {
+          // DOM not ready, wait for it
+          if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', getToastContainer);
+          } else {
+            // Fallback: try again after a short delay
+            setTimeout(getToastContainer, 50);
+          }
+          return null;
+        }
+      }
     }
-    return container;
-  })();
+    return toastContainer;
+  }
 
   /**
    * Create and show toast notification
@@ -171,7 +190,13 @@
       document.head.appendChild(styles);
     }
 
-    toastContainer.appendChild(toast);
+    const container = getToastContainer();
+    if (container) {
+      container.appendChild(toast);
+    } else {
+      // If container not ready, append directly to body as fallback
+      document.body.appendChild(toast);
+    }
 
     // Auto-hide after duration
     if (duration > 0) {

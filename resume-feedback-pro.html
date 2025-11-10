@@ -853,36 +853,40 @@
           
           // Convert breakdown to rubric format if available
           if (cachedScore.breakdown) {
+            // Map cached breakdown structure (flat numbers) to rubric format
+            // Cached structure: breakdown.keywordScore = number, feedback = array
+            // Rubric expects: { score, max, tip }
+            const feedbackArray = cachedScore.feedback || [];
             const rubric = [
               {
                 label: 'Keyword Match',
-                score: cachedScore.breakdown.keywordScore?.score || 0,
-                max: cachedScore.breakdown.keywordScore?.max || 35,
-                tip: cachedScore.breakdown.keywordScore?.feedback || ''
+                score: typeof cachedScore.breakdown.keywordScore === 'number' ? cachedScore.breakdown.keywordScore : 0,
+                max: 40,
+                tip: feedbackArray[0] || ''
               },
               {
                 label: 'ATS Formatting',
-                score: cachedScore.breakdown.formattingScore?.score || 0,
-                max: cachedScore.breakdown.formattingScore?.max || 25,
-                tip: cachedScore.breakdown.formattingScore?.feedback || ''
+                score: typeof cachedScore.breakdown.formattingScore === 'number' ? cachedScore.breakdown.formattingScore : 0,
+                max: 20,
+                tip: feedbackArray[1] || ''
               },
               {
                 label: 'Structure & Organization',
-                score: cachedScore.breakdown.structureScore?.score || 0,
-                max: cachedScore.breakdown.structureScore?.max || 20,
-                tip: cachedScore.breakdown.structureScore?.feedback || ''
+                score: typeof cachedScore.breakdown.structureScore === 'number' ? cachedScore.breakdown.structureScore : 0,
+                max: 15,
+                tip: feedbackArray[2] || ''
               },
               {
                 label: 'Tone & Clarity',
-                score: cachedScore.breakdown.toneScore?.score || 0,
-                max: cachedScore.breakdown.toneScore?.max || 10,
-                tip: cachedScore.breakdown.toneScore?.feedback || ''
+                score: typeof cachedScore.breakdown.toneScore === 'number' ? cachedScore.breakdown.toneScore : 0,
+                max: 15,
+                tip: feedbackArray[3] || ''
               },
               {
                 label: 'Grammar & Spelling',
-                score: cachedScore.breakdown.grammarScore?.score || 0,
-                max: cachedScore.breakdown.grammarScore?.max || 10,
-                tip: cachedScore.breakdown.grammarScore?.feedback || ''
+                score: typeof cachedScore.breakdown.grammarScore === 'number' ? cachedScore.breakdown.grammarScore : 0,
+                max: 10,
+                tip: feedbackArray[4] || ''
               }
             ];
             updateRubricGrid(rubric);

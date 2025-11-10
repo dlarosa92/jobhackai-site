@@ -155,9 +155,40 @@ export async function onRequest(context) {
     const maxRetries = 3;
     let lastError = null;
     
-    originalText = section 
-      ? resumeData.text.split('\n').find(line => line.toLowerCase().includes(section.toLowerCase())) || resumeData.text.substring(0, 500)
-      : resumeData.text;
+    // Extract section content - find section header and extract all content until next section
+    if (section) {
+      const lines = resumeData.text.split('\n');
+      const sectionLower = section.toLowerCase();
+      let sectionStartIndex = -1;
+      
+      // Find the section header line
+      for (let i = 0; i < lines.length; i++) {
+        if (lines[i].toLowerCase().includes(sectionLower)) {
+          sectionStartIndex = i;
+          break;
+        }
+      }
+      
+      if (sectionStartIndex >= 0) {
+        // Extract from section header to end of resume or next major section
+        // Look for common section headers (uppercase, bold indicators, etc.)
+        const sectionLines = [];
+        for (let i = sectionStartIndex; i < lines.length; i++) {
+          const line = lines[i];
+          // Stop if we hit another major section (all caps, common headers)
+          if (i > sectionStartIndex && /^(EXPERIENCE|EDUCATION|SKILLS|PROJECTS|AWARDS|CERTIFICATIONS|SUMMARY|OBJECTIVE|PROFILE)/i.test(line.trim())) {
+            break;
+          }
+          sectionLines.push(line);
+        }
+        originalText = sectionLines.join('\n').trim();
+      } else {
+        // Section not found, use first 500 chars as fallback
+        originalText = resumeData.text.substring(0, 500);
+      }
+    } else {
+      originalText = resumeData.text;
+    }
     
     for (let attempt = 0; attempt < maxRetries; attempt++) {
       try {
