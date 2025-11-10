@@ -503,7 +503,8 @@
       const token = await getAuthToken();
       
       // Try to get resumeText from sessionStorage (fallback when KV unavailable)
-      const resumeText = sessionStorage.getItem('currentResumeText') || undefined;
+      // Use nullish coalescing to only convert null to undefined, preserving empty strings
+      const resumeText = sessionStorage.getItem('currentResumeText') ?? undefined;
       
       const response = await fetch('/api/ats-score', {
         method: 'POST',
