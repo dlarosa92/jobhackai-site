@@ -273,11 +273,11 @@
   <script src="js/universal-logout.js?v=20251007-2"></script>
   
   <!-- UX Enhancement Components -->
-  <script src="js/modals.js?v=20250115-1"></script>
-  <script src="js/loading-overlay.js?v=20250115-1"></script>
+  <script src="js/modals.js?v=20250115-1" type="module"></script>
+  <script src="js/loading-overlay.js?v=20250115-1" type="module"></script>
   <script src="js/toast.js?v=20250115-1"></script>
   <script src="js/file-validation.js?v=20250115-1"></script>
-  <script src="js/role-selector.js?v=20250115-1"></script>
+  <script src="js/role-selector.js?v=20250115-1" type="module"></script>
   <script src="js/api-retry.js?v=20250115-1"></script>
   <script src="js/state-persistence.js?v=20250115-1"></script>
   <script>
@@ -907,38 +907,50 @@
       // Initialize role selector - ensure it's initialized after DOM and RoleSelector are ready
       function initializeRoleSelector() {
         const jobTitleInput = document.getElementById('rf-job-title');
-        if (jobTitleInput && window.RoleSelector) {
+        if (!jobTitleInput) {
+          // Element not ready yet, retry
+          setTimeout(initializeRoleSelector, 100);
+          return;
+        }
+        
+        // Wait for RoleSelector class to be available (from role-selector.js module)
+        if (window.RoleSelector) {
           // Check if already initialized to avoid duplicate initialization
           if (!jobTitleInput.dataset.roleSelectorInitialized) {
-            new window.RoleSelector(jobTitleInput, {
-              placeholder: 'Start typing your target role (e.g., Data Engineer, Product Manager)',
-              onSelect: function(roleName, isCustom) {
-                // Update currentJobTitle when role is selected
-                currentJobTitle = roleName;
-                console.log('[RESUME-FEEDBACK] Role selected:', roleName, isCustom ? '(custom)' : '');
-              }
-            });
-            jobTitleInput.dataset.roleSelectorInitialized = 'true';
-            
-            // Also listen for input changes to update currentJobTitle when user types
-            jobTitleInput.addEventListener('input', function() {
-              const value = this.value.trim();
-              if (value) {
-                currentJobTitle = value;
-              }
-            });
-            
-            // Listen for blur to capture final value even if user doesn't select from dropdown
-            jobTitleInput.addEventListener('blur', function() {
-              const value = this.value.trim();
-              if (value) {
-                currentJobTitle = value;
-              }
-            });
+            try {
+              new window.RoleSelector(jobTitleInput, {
+                placeholder: 'Start typing your target role (e.g., Data Engineer, Product Manager)',
+                onSelect: function(roleName, isCustom) {
+                  // Update currentJobTitle when role is selected
+                  currentJobTitle = roleName;
+                  console.log('[RESUME-FEEDBACK] Role selected:', roleName, isCustom ? '(custom)' : '');
+                }
+              });
+              jobTitleInput.dataset.roleSelectorInitialized = 'true';
+              
+              // Also listen for input changes to update currentJobTitle when user types
+              jobTitleInput.addEventListener('input', function() {
+                const value = this.value.trim();
+                if (value) {
+                  currentJobTitle = value;
+                  console.log('[RESUME-FEEDBACK] Job title updated:', value);
+                }
+              });
+              
+              // Listen for blur to capture final value even if user doesn't select from dropdown
+              jobTitleInput.addEventListener('blur', function() {
+                const value = this.value.trim();
+                if (value) {
+                  currentJobTitle = value;
+                }
+              });
+            } catch (error) {
+              console.error('[RESUME-FEEDBACK] Failed to initialize RoleSelector:', error);
+            }
           }
-        } else if (jobTitleInput && !window.RoleSelector) {
-          // Retry if RoleSelector not loaded yet
-          setTimeout(initializeRoleSelector, 100);
+        } else {
+          // RoleSelector not loaded yet, wait and retry
+          setTimeout(initializeRoleSelector, 200);
         }
       }
       
@@ -999,6 +1011,7 @@
           }
           
           // Restore job title if available
+          const jobTitleInput = document.getElementById('rf-job-title');
           if (cachedScore.jobTitle && jobTitleInput) {
             jobTitleInput.value = cachedScore.jobTitle;
             currentJobTitle = cachedScore.jobTitle;
