@@ -1964,15 +1964,22 @@
             if (!uploadData.success) {
               clearAtsState();
               resetAtsGauge();
-              showErrorBanner(uploadData.message || 'Upload failed. Please upload a text-based PDF, DOCX, or TXT resume.');
+              // Show user-friendly error messages
+              const errorMsg = uploadData.error === 'invalid-text' 
+                ? 'We couldn\'t read your resume. Please upload a text-based PDF, DOCX, or TXT file.'
+                : uploadData.message || 'Upload failed. Please upload a text-based PDF, DOCX, or TXT resume.';
+              showErrorBanner(errorMsg);
               hideLoadingState();
               e.target.value = ''; // Reset file input
               return;
             }
 
             // Step 2: Store resume data in sessionStorage for cross-page sync
-            // Note: Only store resumeId, not resumeText (PII security - resume text stored securely in backend KV)
+            // Store both resumeId and resumeText (resumeText needed for direct scoring without KV)
             sessionStorage.setItem('currentResumeId', uploadData.resumeId);
+            if (uploadData.resumeText) {
+              sessionStorage.setItem('currentResumeText', uploadData.resumeText);
+            }
 
             // Step 3: Get ATS score
             const uploadBtn = document.getElementById('ats-upload-btn');
@@ -1989,19 +1996,52 @@
               },
               body: JSON.stringify({
                 resumeId: uploadData.resumeId,
+                resumeText: uploadData.resumeText, // Pass text directly to bypass KV requirement
                 jobTitle: jobTitle
               })
             });
 
             if (!scoreResponse.ok) {
-              const errorData = await scoreResponse.json();
-              throw new Error(errorData.error || 'Failed to get ATS score');
+              let errorMessage = 'Something went wrong scoring your resume. Please try again in a few minutes.';
+              try {
+                const errorData = await scoreResponse.json();
+                // Map error codes to user-friendly messages
+                if (errorData.error === 'invalid-text') {
+                  errorMessage = 'We couldn\'t read your resume. Please upload a text-based PDF, DOCX, or TXT file.';
+                } else if (errorData.error === 'scoring-failed' || errorData.error === 'invalid-result') {
+                  errorMessage = 'Something went wrong scoring your resume. Please try again in a few minutes.';
+                } else {
+                  errorMessage = errorData.message || errorData.error || errorMessage;
+                }
+              } catch (parseError) {
+                // If parsing fails, use default message
+              }
+              clearAtsState();
+              resetAtsGauge();
+              showErrorBanner(errorMessage);
+              hideLoadingState();
+              e.target.value = ''; // Reset file input
+              return;
             }
 
             const scoreData = await scoreResponse.json();
             
             if (!scoreData.success) {
-              throw new Error(scoreData.error || 'Failed to get ATS score');
+              // Map error codes to user-friendly messages
+              let errorMessage = 'Something went wrong scoring your resume. Please try again in a few minutes.';
+              if (scoreData.error === 'invalid-text') {
+                errorMessage = 'We couldn\'t read your resume. Please upload a text-based PDF, DOCX, or TXT file.';
+              } else if (scoreData.error === 'scoring-failed' || scoreData.error === 'invalid-result') {
+                errorMessage = 'Something went wrong scoring your resume. Please try again in a few minutes.';
+              } else {
+                errorMessage = scoreData.message || scoreData.error || errorMessage;
+              }
+              clearAtsState();
+              resetAtsGauge();
+              showErrorBanner(errorMessage);
+              hideLoadingState();
+              e.target.value = ''; // Reset file input
+              return;
             }
 
             // Step 4: Update UI with real score
@@ -2066,7 +2106,19 @@
             console.error('[ATS-UPLOAD] Error:', error);
             clearAtsState();
             resetAtsGauge();
-            showErrorBanner(error.message || 'Upload failed. Please try again.');
+            // Show user-friendly error messages - never show KV binding errors
+            let errorMessage = 'Something went wrong scoring your resume. Please try again in a few minutes.';
+            if (error.message) {
+              // Filter out technical errors that shouldn't be shown to users
+              if (error.message.includes('KV binding') || error.message.includes('Storage service unavailable')) {
+                errorMessage = 'Something went wrong scoring your resume. Please try again in a few minutes.';
+              } else if (error.message.includes('invalid-text') || error.message.includes('couldn\'t read')) {
+                errorMessage = 'We couldn\'t read your resume. Please upload a text-based PDF, DOCX, or TXT file.';
+              } else {
+                errorMessage = error.message;
+              }
+            }
+            showErrorBanner(errorMessage);
             hideLoadingState();
             e.target.value = ''; // Reset file input
           }

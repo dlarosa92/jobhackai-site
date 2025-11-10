@@ -57,16 +57,6 @@ export async function onRequest(context) {
     return json({ success: false, error: 'Method not allowed' }, 405, origin, env);
   }
 
-  // Early KV binding check
-  if (!env.JOBHACKAI_KV) {
-    console.error('[ATS-SCORE] KV binding not found');
-    return json({ 
-      success: false, 
-      error: 'KV binding not found',
-      message: 'Storage service unavailable' 
-    }, 500, origin, env);
-  }
-
   try {
     // Verify authentication
     const token = getBearer(request);
@@ -77,73 +67,134 @@ export async function onRequest(context) {
     const { uid } = await verifyFirebaseIdToken(token, env.FIREBASE_PROJECT_ID);
     const plan = await getUserPlan(uid, env);
 
-    // Parse request body
+    // Parse request body - accept both resumeId (for KV) and resumeText (for direct scoring)
     const body = await request.json();
-    const { resumeId, jobTitle } = body;
-
-    if (!resumeId) {
-      return json({ success: false, error: 'resumeId required' }, 400, origin, env);
-    }
+    const { resumeId, resumeText, jobTitle } = body;
 
     if (!jobTitle || jobTitle.trim().length === 0) {
       return json({ success: false, error: 'jobTitle required' }, 400, origin, env);
     }
 
-    // Throttle check (Trial only)
-    if (plan === 'trial') {
-      const throttleKey = `atsThrottle:${uid}`;
-      const lastRun = await env.JOBHACKAI_KV.get(throttleKey);
-      
-      if (lastRun) {
-        const lastRunTime = parseInt(lastRun, 10);
-        const now = Date.now();
-        const timeSinceLastRun = now - lastRunTime;
+    // Get resume text - prefer resumeText from request, fall back to KV if available
+    let text = resumeText;
+    let resumeData = null;
+
+    if (!text && resumeId) {
+      // Try to load from KV if resumeText not provided
+      const kv = env.JOBHACKAI_KV;
+      if (kv) {
+        try {
+          const resumeKey = `resume:${resumeId}`;
+          const resumeDataStr = await kv.get(resumeKey);
+          if (resumeDataStr) {
+            resumeData = JSON.parse(resumeDataStr);
+            // Verify resume belongs to user
+            if (resumeData.uid !== uid) {
+              return json({ success: false, error: 'Unauthorized' }, 403, origin, env);
+            }
+            text = resumeData.text;
+          }
+        } catch (kvError) {
+          console.warn('[ATS-SCORE] KV read failed (non-fatal):', kvError);
+          // Continue without KV - will use resumeText if provided
+        }
+      } else {
+        console.warn('[ATS-SCORE] KV missing and no resumeText provided');
+      }
+    }
+
+    // Validate text is available
+    if (!text || typeof text !== 'string' || text.trim().length < 100) {
+      return json({ 
+        success: false, 
+        error: 'invalid-text',
+        message: 'Resume text not available for scoring. Please upload a text-based PDF, DOCX, or TXT file.' 
+      }, 400, origin, env);
+    }
+
+    // Cost guardrails
+    if (text.length > 80000) {
+      return json({ 
+        success: false, 
+        error: 'Resume text exceeds 80,000 character limit' 
+      }, 400, origin, env);
+    }
+
+    // KV-based features (optional - only if KV is available)
+    const kv = env.JOBHACKAI_KV;
+    
+    // Throttle check (Trial only) - best effort, skip if KV unavailable
+    if (plan === 'trial' && kv) {
+      try {
+        const throttleKey = `atsThrottle:${uid}`;
+        const lastRun = await kv.get(throttleKey);
         
-        if (timeSinceLastRun < 30000) { // 30 seconds
-          const retryAfter = Math.ceil((30000 - timeSinceLastRun) / 1000);
+        if (lastRun) {
+          const lastRunTime = parseInt(lastRun, 10);
+          const now = Date.now();
+          const timeSinceLastRun = now - lastRunTime;
+          
+          if (timeSinceLastRun < 30000) { // 30 seconds
+            const retryAfter = Math.ceil((30000 - timeSinceLastRun) / 1000);
+            return json({
+              success: false,
+              error: 'Rate limit exceeded',
+              message: 'Please wait before running another ATS score.',
+              retryAfter
+            }, 429, origin, env);
+          }
+        }
+      } catch (throttleError) {
+        console.warn('[ATS-SCORE] Throttle check failed (non-fatal):', throttleError);
+        // Continue without throttling if KV unavailable
+      }
+    }
+
+    // Cache check (all plans) - best effort, skip if KV unavailable
+    let cachedResult = null;
+    if (kv) {
+      try {
+        const cacheHash = await hashString(`${resumeId || 'direct'}:${jobTitle}:ats`);
+        const cacheKey = `atsCache:${cacheHash}`;
+        const cached = await kv.get(cacheKey);
+        
+        if (cached) {
+          try {
+            const cachedData = JSON.parse(cached);
+            const cacheAge = Date.now() - cachedData.timestamp;
+            
+            // Cache valid for 24 hours
+            if (cacheAge < 86400000) {
+              cachedResult = cachedData.result;
+            }
+          } catch (parseError) {
+            console.error('[ATS-SCORE] Cache parse error:', parseError);
+            // Continue without cache if parse fails
+          }
+        }
+      } catch (cacheError) {
+        console.warn('[ATS-SCORE] Cache check failed (non-fatal):', cacheError);
+        // Continue without cache if KV unavailable
+      }
+    }
+
+    // Usage limits (Free plan - 1 lifetime) - best effort, skip if KV unavailable
+    if (plan === 'free' && kv) {
+      try {
+        const usageKey = `atsUsage:${uid}:lifetime`;
+        const usage = await kv.get(usageKey);
+        
+        if (usage && parseInt(usage, 10) >= 1) {
           return json({
             success: false,
-            error: 'Rate limit exceeded',
-            message: 'Please wait before running another ATS score.',
-            retryAfter
-          }, 429, origin, env);
+            error: 'Usage limit reached',
+            message: 'You have used your free ATS score. Upgrade to Trial or Essential for unlimited scoring.',
+            upgradeRequired: true
+          }, 403, origin, env);
         }
-      }
-    }
-
-    // Cache check (all plans)
-    let cachedResult = null;
-    const cacheHash = await hashString(`${resumeId}:${jobTitle}:ats`);
-    const cacheKey = `atsCache:${cacheHash}`;
-    const cached = await env.JOBHACKAI_KV.get(cacheKey);
-    
-    if (cached) {
-      try {
-        const cachedData = JSON.parse(cached);
-        const cacheAge = Date.now() - cachedData.timestamp;
-        
-        // Cache valid for 24 hours
-        if (cacheAge < 86400000) {
-          cachedResult = cachedData.result;
-        }
-      } catch (parseError) {
-        console.error('[ATS-SCORE] Cache parse error:', parseError);
-        // Continue without cache if parse fails
-      }
-    }
-
-    // Usage limits (Free plan - 1 lifetime)
-    if (plan === 'free') {
-      const usageKey = `atsUsage:${uid}:lifetime`;
-      const usage = await env.JOBHACKAI_KV.get(usageKey);
-      
-      if (usage && parseInt(usage, 10) >= 1) {
-        return json({
-          success: false,
-          error: 'Usage limit reached',
-          message: 'You have used your free ATS score. Upgrade to Trial or Essential for unlimited scoring.',
-          upgradeRequired: true
-        }, 403, origin, env);
+      } catch (usageError) {
+        console.warn('[ATS-SCORE] Usage check failed (non-fatal):', usageError);
+        // Continue without usage tracking if KV unavailable
       }
     }
 
@@ -157,94 +208,23 @@ export async function onRequest(context) {
       }, 200, origin, env);
     }
 
-    // Retrieve resume from KV
-    const resumeKey = `resume:${resumeId}`;
-    let resumeDataStr;
-    try {
-      resumeDataStr = await env.JOBHACKAI_KV.get(resumeKey);
-    } catch (kvError) {
-      console.error('[ATS-SCORE] KV read error:', kvError);
-      return json({ 
-        success: false, 
-        error: 'Storage error',
-        message: 'Failed to retrieve resume data' 
-      }, 500, origin, env);
-    }
-    
-    if (!resumeDataStr) {
-      return json({ success: false, error: 'Resume not found' }, 404, origin, env);
-    }
-
-    let resumeData;
-    try {
-      resumeData = JSON.parse(resumeDataStr);
-    } catch (parseError) {
-      console.error('[ATS-SCORE] Resume data parse error:', parseError);
-      return json({ 
-        success: false, 
-        error: 'Invalid resume data',
-        message: 'Failed to parse resume data' 
-      }, 500, origin, env);
-    }
-    
-    // Verify resume belongs to user
-    if (resumeData.uid !== uid) {
-      return json({ success: false, error: 'Unauthorized' }, 403, origin, env);
-    }
-
-    // Cost guardrails
-    if (resumeData.text.length > 80000) {
-      return json({ 
-        success: false, 
-        error: 'Resume text exceeds 80,000 character limit' 
-      }, 400, origin, env);
-    }
-
-    if (resumeData.fileSize > 2 * 1024 * 1024) {
-      return json({ 
-        success: false, 
-        error: 'File size exceeds 2MB limit' 
-      }, 400, origin, env);
-    }
-
-    // Validate resume text exists and is not empty
-    const text = resumeData.text;
-    if (!text || typeof text !== 'string' || text.trim().length === 0) {
-      console.error('[ATS-SCORE] Invalid resume text:', {
-        hasText: !!text,
-        textType: typeof text,
-        textLength: text?.length
-      });
-      return json({ 
-        success: false, 
-        error: 'Invalid resume data',
-        message: 'Resume text is missing or empty'
-      }, 400, origin, env);
-    }
-
-    // Validate text length (minimum 100 chars, max 80k)
-    if (text.length < 100) {
-      return json({ 
-        success: false, 
-        error: 'Text extraction failed or OCR not implemented',
-        message: 'Resume text is too short. Please upload a text-based PDF or DOCX file.'
-      }, 400, origin, env);
-    }
+    // Get isMultiColumn from resumeData if available, otherwise default to false
+    const isMultiColumn = resumeData?.isMultiColumn || false;
 
     // Run rule-based scoring (NO AI TOKENS)
     let ruleBasedScores;
     try {
-      console.log('[ATS-SCORE] Input length:', text.length);
+      console.log('[ATS-SCORE] Input length:', text.length, 'jobTitle:', jobTitle);
       console.log('[ATS-SCORE] Starting scoring:', {
         textLength: text.length,
         jobTitle,
-        isMultiColumn: resumeData.isMultiColumn
+        isMultiColumn
       });
       
       ruleBasedScores = scoreResume(
         text,
         jobTitle,
-        { isMultiColumn: resumeData.isMultiColumn }
+        { isMultiColumn }
       );
       
       console.log('[ATS-SCORE] Score result:', {
@@ -290,8 +270,18 @@ export async function onRequest(context) {
       console.error('[ATS-SCORE] Scoring error:', scoreError);
       return json({ 
         success: false, 
-        error: 'Scoring failed',
-        message: scoreError.message || 'Failed to calculate ATS score'
+        error: 'scoring-failed',
+        message: 'Unable to score resume at this time. Please try again in a few minutes.'
+      }, 500, origin, env);
+    }
+
+    // Validate scoring result
+    if (!ruleBasedScores || typeof ruleBasedScores.overallScore !== 'number') {
+      console.error('[ATS-SCORE] Invalid scoring result:', ruleBasedScores);
+      return json({ 
+        success: false, 
+        error: 'invalid-result',
+        message: 'Scoring engine returned invalid data. Please try again.'
       }, 500, origin, env);
     }
 
@@ -330,40 +320,43 @@ export async function onRequest(context) {
       recommendations: ruleBasedScores.recommendations || []
     };
 
-    // Cache result (24 hours)
-    try {
-      const cacheKey = `atsCache:${cacheHash}`;
-      await env.JOBHACKAI_KV.put(cacheKey, JSON.stringify({
-        result,
-        timestamp: Date.now()
-      }), {
-        expirationTtl: 86400 // 24 hours
-      });
-    } catch (cacheError) {
-      console.error('[ATS-SCORE] Cache write error:', cacheError);
-      // Continue without caching if write fails
+    // Cache result (24 hours) - best effort, skip if KV unavailable
+    if (kv) {
+      try {
+        const cacheHash = await hashString(`${resumeId || 'direct'}:${jobTitle}:ats`);
+        const cacheKey = `atsCache:${cacheHash}`;
+        await kv.put(cacheKey, JSON.stringify({
+          result,
+          timestamp: Date.now()
+        }), {
+          expirationTtl: 86400 // 24 hours
+        });
+      } catch (cacheError) {
+        console.warn('[ATS-SCORE] Cache write failed (non-fatal):', cacheError);
+        // Continue without caching if write fails
+      }
     }
 
-    // Update throttle (Trial only)
-    if (plan === 'trial') {
+    // Update throttle (Trial only) - best effort, skip if KV unavailable
+    if (plan === 'trial' && kv) {
       try {
         const throttleKey = `atsThrottle:${uid}`;
-        await env.JOBHACKAI_KV.put(throttleKey, String(Date.now()), {
+        await kv.put(throttleKey, String(Date.now()), {
           expirationTtl: 60 // 1 minute
         });
       } catch (throttleError) {
-        console.error('[ATS-SCORE] Throttle write error:', throttleError);
+        console.warn('[ATS-SCORE] Throttle write failed (non-fatal):', throttleError);
         // Continue without throttling if write fails
       }
     }
 
-    // Track usage (Free plan only)
-    if (plan === 'free') {
+    // Track usage (Free plan only) - best effort, skip if KV unavailable
+    if (plan === 'free' && kv) {
       try {
         const usageKey = `atsUsage:${uid}:lifetime`;
-        await env.JOBHACKAI_KV.put(usageKey, '1'); // No expiration - lifetime limit
+        await kv.put(usageKey, '1'); // No expiration - lifetime limit
       } catch (usageError) {
-        console.error('[ATS-SCORE] Usage tracking error:', usageError);
+        console.warn('[ATS-SCORE] Usage tracking failed (non-fatal):', usageError);
         // Continue without tracking if write fails
       }
     }
