@@ -1,6 +1,8 @@
 // Resume text extraction utility for PDF/DOCX/TXT files
 // Supports OCR for image-based PDFs using Tesseract.js
 
+import mammoth from 'mammoth';
+
 /**
  * Extract text from resume file
  * @param {File|Blob|ArrayBuffer} file - The file to extract text from
@@ -42,7 +44,12 @@ export async function extractResumeText(file, fileName) {
       text = decoder.decode(arrayBuffer);
     } else if (fileExt === 'docx') {
       // DOCX file - use mammoth
-      text = await extractDocxText(arrayBuffer);
+      try {
+        const result = await mammoth.extractRawText({ arrayBuffer });
+        text = result.value;
+      } catch (docxError) {
+        throw new Error(`Failed to extract text from DOCX: ${docxError.message}`);
+      }
     } else if (fileExt === 'pdf') {
       // PDF file - try text extraction first, fall back to OCR
       const pdfResult = await extractPdfText(arrayBuffer);
@@ -98,18 +105,6 @@ export async function extractResumeText(file, fileName) {
   }
 }
 
-/**
- * Extract text from DOCX file using mammoth
- */
-async function extractDocxText(arrayBuffer) {
-  // TODO: [OPENAI INTEGRATION POINT] - Implement mammoth.js import
-  // For now, return error indicating need for implementation
-  // In production, use: import mammoth from 'mammoth';
-  // const result = await mammoth.extractRawText({ arrayBuffer });
-  // return result.value;
-  
-  throw new Error('DOCX extraction not yet implemented. Please use PDF or TXT format.');
-}
 
 /**
  * Extract text from PDF file

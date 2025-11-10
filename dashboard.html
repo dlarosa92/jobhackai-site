@@ -483,22 +483,12 @@
       display: block;
       pointer-events: auto;
     }
-    .feature-card .feature-action .usage-indicator {
+    .feature-card .feature-action     .usage-indicator {
       flex-basis: 100%;
       margin-top: 0.45rem;
       color: #6B7280;
       line-height: 1.35;
       font-size: 0.95rem;
-    }
-    .upload-help-text {
-      font-family: 'Inter', sans-serif;
-      font-size: 0.85rem;
-      color: #6B7280;
-      margin-top: 0.5rem;
-      line-height: 1.5;
-    }
-    .upload-help-text strong {
-      color: #1F2937;
     }
     .upload-tooltip-container {
       display: inline-flex;
@@ -1220,7 +1210,6 @@
           // ATS Scoring: real upload
           featuresHtml += `<input type=\"file\" id=\"ats-upload-input\" accept=\".pdf,.docx,.txt\" title=\"Upload your resume in PDF, DOCX, or TXT format\" style=\"display:none;\" />`;
           featuresHtml += `<button class=\"btn-primary\" id=\"ats-upload-btn\">${feature.action}<span class=\"upload-tooltip-container\" title=\"You can upload PDF, DOCX, or TXT files. Avoid image-only scans for better accuracy.\"><svg width=\"14\" height=\"14\" fill=\"none\" stroke=\"#6B7280\" stroke-width=\"2\" viewBox=\"0 0 24 24\" style=\"margin-left:0.25rem;vertical-align:middle;\"><circle cx=\"12\" cy=\"12\" r=\"10\"></circle><line x1=\"12\" y1=\"16\" x2=\"12\" y2=\"12\"></line><line x1=\"12\" y1=\"8\" x2=\"12\" y2=\"8\"></line></svg></span></button>`;
-          featuresHtml += `<p class=\"upload-help-text\">Accepted file types: <strong>PDF, DOCX, or TXT</strong> (max 2 MB).<br>For best results, upload a text-based document instead of a scanned image.</p>`;
           let usageText = '';
           let tooltip = '';
           if (user.plan === 'free') {
