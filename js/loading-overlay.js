@@ -168,10 +168,14 @@
    * Hide all loading overlays
    */
   function hideAllLoadingOverlays() {
-    activeOverlays.forEach(overlay => {
+    // Create a copy of the array to avoid issues with modification during iteration
+    const overlaysToHide = [...activeOverlays];
+    overlaysToHide.forEach(overlay => {
       hideLoadingOverlay(overlay);
     });
-    activeOverlays = [];
+    // Don't clear activeOverlays immediately - let hideLoadingOverlay handle removal
+    // via setTimeout. This ensures form controls are re-enabled only when all overlays
+    // are actually removed from the DOM.
   }
 
   // Export public API

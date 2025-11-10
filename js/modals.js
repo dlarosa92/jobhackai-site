@@ -9,6 +9,9 @@
 
   // Modal z-index management
   let modalZIndex = 10000;
+  
+  // Track active modals to handle Escape key properly (only close topmost)
+  const activeModals = [];
 
   /**
    * Base modal function - creates a modal with customizable content
@@ -149,18 +152,48 @@
       flex-wrap: wrap;
     `;
 
-    // Close on Escape key - store handler for cleanup
+    // Track this modal in active modals list
+    activeModals.push(modal);
+    
+    // Close on Escape key - use single global handler that closes only topmost modal
     const handleEscape = (e) => {
-      if (e.key === 'Escape' && modal.parentNode) {
-        modal.remove();
-        document.removeEventListener('keydown', handleEscape);
+      if (e.key === 'Escape' && activeModals.length > 0) {
+        // Get the topmost modal (last in array = highest z-index)
+        const topmostModal = activeModals[activeModals.length - 1];
+        if (topmostModal && topmostModal.parentNode) {
+          // Remove from active modals first
+          const index = activeModals.indexOf(topmostModal);
+          if (index > -1) {
+            activeModals.splice(index, 1);
+          }
+          // Close the modal (this will call cleanup)
+          if (topmostModal._closeModal) {
+            topmostModal._closeModal();
+          } else {
+            topmostModal.remove();
+          }
+        }
       }
     };
-    document.addEventListener('keydown', handleEscape);
+    
+    // Only register global Escape handler once
+    if (!window._jhModalEscapeHandler) {
+      window._jhModalEscapeHandler = handleEscape;
+      document.addEventListener('keydown', handleEscape);
+    }
 
     // Store cleanup function on modal for removal
     modal._cleanupEscape = () => {
-      document.removeEventListener('keydown', handleEscape);
+      // Remove from active modals
+      const index = activeModals.indexOf(modal);
+      if (index > -1) {
+        activeModals.splice(index, 1);
+      }
+      // Remove global handler if no modals remain
+      if (activeModals.length === 0 && window._jhModalEscapeHandler) {
+        document.removeEventListener('keydown', window._jhModalEscapeHandler);
+        window._jhModalEscapeHandler = null;
+      }
     };
 
     // Helper function to close modal with cleanup
@@ -170,6 +203,9 @@
       }
       modal.remove();
     };
+    
+    // Store close function on modal for Escape handler access
+    modal._closeModal = closeModal;
 
     // Close button
     if (showClose) {
