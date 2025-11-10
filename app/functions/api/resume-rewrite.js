@@ -115,6 +115,10 @@ export async function onRequest(context) {
       return json({ success: false, error: 'resumeId required' }, 400, origin, env);
     }
 
+    if (!jobTitle || jobTitle.trim().length === 0) {
+      return json({ success: false, error: 'jobTitle required' }, 400, origin, env);
+    }
+
     if (!env.JOBHACKAI_KV) {
       return json({ success: false, error: 'Storage not available' }, 500, origin, env);
     }
@@ -181,7 +185,7 @@ export async function onRequest(context) {
         const aiResponse = await generateResumeRewrite(
           resumeData.text,
           section,
-          jobTitle || 'Software Engineer',
+          jobTitle.trim(),
           env
         );
 
