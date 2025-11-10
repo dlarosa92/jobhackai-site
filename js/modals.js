@@ -149,6 +149,28 @@
       flex-wrap: wrap;
     `;
 
+    // Close on Escape key - store handler for cleanup
+    const handleEscape = (e) => {
+      if (e.key === 'Escape' && modal.parentNode) {
+        modal.remove();
+        document.removeEventListener('keydown', handleEscape);
+      }
+    };
+    document.addEventListener('keydown', handleEscape);
+
+    // Store cleanup function on modal for removal
+    modal._cleanupEscape = () => {
+      document.removeEventListener('keydown', handleEscape);
+    };
+
+    // Helper function to close modal with cleanup
+    const closeModal = () => {
+      if (modal._cleanupEscape) {
+        modal._cleanupEscape();
+      }
+      modal.remove();
+    };
+
     // Close button
     if (showClose) {
       const closeBtn = document.createElement('button');
@@ -167,7 +189,7 @@
         min-width: 120px;
       `;
       closeBtn.textContent = 'Close';
-      closeBtn.addEventListener('click', () => modal.remove());
+      closeBtn.addEventListener('click', closeModal);
       closeBtn.addEventListener('mouseenter', () => {
         closeBtn.style.background = '#E5E7EB';
       });
@@ -197,7 +219,7 @@
       actionBtn.textContent = actionLabel;
       actionBtn.addEventListener('click', () => {
         action();
-        modal.remove();
+        closeModal();
       });
       actionBtn.addEventListener('mouseenter', () => {
         actionBtn.style.background = '#00c965';
@@ -208,40 +230,11 @@
       buttonContainer.appendChild(actionBtn);
     }
 
-    // Close on Escape key - store handler for cleanup
-    const handleEscape = (e) => {
-      if (e.key === 'Escape' && modal.parentNode) {
-        modal.remove();
-        document.removeEventListener('keydown', handleEscape);
-      }
-    };
-    document.addEventListener('keydown', handleEscape);
-
-    // Store cleanup function on modal for removal
-    modal._cleanupEscape = () => {
-      document.removeEventListener('keydown', handleEscape);
-    };
-
     // Close on background click
     modal.addEventListener('click', (e) => {
       if (e.target === modal) {
-        if (modal._cleanupEscape) {
-          modal._cleanupEscape();
-        }
-        modal.remove();
+        closeModal();
       }
-    });
-
-    // Cleanup escape listener when modal is removed via close button
-    const closeButtons = modal.querySelectorAll('.jh-modal-close, .jh-modal-action');
-    closeButtons.forEach(btn => {
-      const originalClick = btn.onclick;
-      btn.addEventListener('click', () => {
-        if (modal._cleanupEscape) {
-          modal._cleanupEscape();
-        }
-        if (originalClick) originalClick();
-      });
     });
 
     // Assemble modal
