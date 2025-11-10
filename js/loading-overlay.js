@@ -96,14 +96,16 @@
       document.head.appendChild(styles);
     }
 
-    // Disable form controls
-    const formControls = document.querySelectorAll('input, button, select, textarea');
-    formControls.forEach(control => {
-      if (!control.disabled) {
-        control.setAttribute('data-jh-loading-disabled', 'true');
-        control.disabled = true;
-      }
-    });
+    // Disable form controls only if this is the first overlay
+    if (activeOverlays.length === 0) {
+      const formControls = document.querySelectorAll('input, button, select, textarea');
+      formControls.forEach(control => {
+        if (!control.disabled) {
+          control.setAttribute('data-jh-loading-disabled', 'true');
+          control.disabled = true;
+        }
+      });
+    }
 
     document.body.appendChild(overlay);
     activeOverlays.push(overlay);
@@ -124,20 +126,29 @@
       overlay = overlayOrId;
     }
 
-    if (overlay) {
-      overlay.style.animation = 'fadeOut 0.2s ease-in-out';
-      setTimeout(() => {
-        overlay.remove();
-        activeOverlays = activeOverlays.filter(o => o !== overlay);
-      }, 200);
-    }
+    if (!overlay) return;
 
-    // Re-enable form controls
-    const disabledControls = document.querySelectorAll('[data-jh-loading-disabled="true"]');
-    disabledControls.forEach(control => {
-      control.disabled = false;
-      control.removeAttribute('data-jh-loading-disabled');
-    });
+    // Check if overlay is already being removed (prevent double removal)
+    if (overlay._isRemoving) return;
+    overlay._isRemoving = true;
+
+    overlay.style.animation = 'fadeOut 0.2s ease-in-out';
+    setTimeout(() => {
+      if (overlay.parentNode) {
+        overlay.remove();
+      }
+      // Remove from activeOverlays array (filter handles duplicates safely)
+      activeOverlays = activeOverlays.filter(o => o !== overlay);
+      
+      // Re-enable form controls only when all overlays are removed
+      if (activeOverlays.length === 0) {
+        const disabledControls = document.querySelectorAll('[data-jh-loading-disabled="true"]');
+        disabledControls.forEach(control => {
+          control.disabled = false;
+          control.removeAttribute('data-jh-loading-disabled');
+        });
+      }
+    }, 200);
 
     // Add fadeOut animation if needed
     if (!document.querySelector('#jh-loading-fadeout')) {

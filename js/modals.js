@@ -208,21 +208,41 @@
       buttonContainer.appendChild(actionBtn);
     }
 
-    // Close on background click
-    modal.addEventListener('click', (e) => {
-      if (e.target === modal) {
-        modal.remove();
-      }
-    });
-
-    // Close on Escape key
+    // Close on Escape key - store handler for cleanup
     const handleEscape = (e) => {
-      if (e.key === 'Escape') {
+      if (e.key === 'Escape' && modal.parentNode) {
         modal.remove();
         document.removeEventListener('keydown', handleEscape);
       }
     };
     document.addEventListener('keydown', handleEscape);
+
+    // Store cleanup function on modal for removal
+    modal._cleanupEscape = () => {
+      document.removeEventListener('keydown', handleEscape);
+    };
+
+    // Close on background click
+    modal.addEventListener('click', (e) => {
+      if (e.target === modal) {
+        if (modal._cleanupEscape) {
+          modal._cleanupEscape();
+        }
+        modal.remove();
+      }
+    });
+
+    // Cleanup escape listener when modal is removed via close button
+    const closeButtons = modal.querySelectorAll('.jh-modal-close, .jh-modal-action');
+    closeButtons.forEach(btn => {
+      const originalClick = btn.onclick;
+      btn.addEventListener('click', () => {
+        if (modal._cleanupEscape) {
+          modal._cleanupEscape();
+        }
+        if (originalClick) originalClick();
+      });
+    });
 
     // Assemble modal
     modalContent.appendChild(iconContainer);

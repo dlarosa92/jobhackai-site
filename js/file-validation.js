@@ -84,22 +84,29 @@
       const arrayBuffer = await file.slice(0, 1024).arrayBuffer();
       const uint8Array = new Uint8Array(arrayBuffer);
       
-      // Check PDF header
-      const pdfHeader = String.fromCharCode(...uint8Array.slice(0, 4));
+      // Check PDF header (only first 4 bytes)
+      const headerBytes = Array.from(uint8Array.slice(0, 4));
+      const pdfHeader = String.fromCharCode.apply(null, headerBytes);
       if (pdfHeader !== '%PDF') {
         return { isScanned: false, confidence: 'low' };
       }
 
       // Heuristic: Check for text extraction markers
       // Scanned PDFs often have fewer text extraction markers
-      const text = String.fromCharCode(...uint8Array);
+      // Convert uint8Array to string safely (avoid spread operator on large arrays)
+      const text = Array.from(uint8Array).map(byte => String.fromCharCode(byte)).join('');
       
       // Look for common PDF text operators
+      // Escape regex special characters and use word boundaries to avoid substring matches
       const textOperators = ['BT', 'Tj', 'TJ', 'Td', 'Tm', 'Tf'];
       let textOperatorCount = 0;
       
       for (const op of textOperators) {
-        const regex = new RegExp(op, 'g');
+        // Escape special regex characters
+        const escapedOp = op.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        // Use word boundaries or look for operators in context (e.g., preceded by space/newline)
+        // For PDF operators, they're typically standalone tokens
+        const regex = new RegExp(`\\b${escapedOp}\\b|\\s${escapedOp}\\s|\\n${escapedOp}\\n`, 'g');
         const matches = text.match(regex);
         if (matches) {
           textOperatorCount += matches.length;

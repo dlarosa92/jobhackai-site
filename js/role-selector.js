@@ -277,6 +277,10 @@
       
       if (e.key === 'ArrowDown') {
         e.preventDefault();
+        // Reset all items first (same as ArrowUp)
+        items.forEach((item, idx) => {
+          item.style.background = 'white';
+        });
         selectedIndex = Math.min(selectedIndex + 1, items.length - 1);
         if (items[selectedIndex]) {
           items[selectedIndex].scrollIntoView({ block: 'nearest' });
@@ -294,6 +298,10 @@
       } else if (e.key === 'Escape') {
         dropdown.style.display = 'none';
         selectedIndex = -1;
+        // Reset all items when closing
+        items.forEach((item) => {
+          item.style.background = 'white';
+        });
       }
     });
 
