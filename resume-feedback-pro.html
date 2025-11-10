@@ -271,6 +271,15 @@
   <!-- DEV-ONLY PLAN TOGGLE will be added by navigation.js -->
   <script src="js/navigation.js?v=20251007-2"></script>
   <script src="js/universal-logout.js?v=20251007-2"></script>
+  
+  <!-- UX Enhancement Components -->
+  <script src="js/modals.js?v=20250115-1"></script>
+  <script src="js/loading-overlay.js?v=20250115-1"></script>
+  <script src="js/toast.js?v=20250115-1"></script>
+  <script src="js/file-validation.js?v=20250115-1"></script>
+  <script src="js/role-selector.js?v=20250115-1"></script>
+  <script src="js/api-retry.js?v=20250115-1"></script>
+  <script src="js/state-persistence.js?v=20250115-1"></script>
   <script>
     if (window.JobHackAINavigation && typeof window.JobHackAINavigation.initializeNavigation === 'function') {
       window.JobHackAINavigation.initializeNavigation();
@@ -461,16 +470,26 @@
     }
 
     async function uploadResume(file) {
+      // Validate file before upload
+      const validation = await window.JobHackAIFileValidation.validateFile(file);
+      if (!validation.valid) {
+        throw new Error(validation.error);
+      }
+
       const token = await getAuthToken();
       const formData = new FormData();
       formData.append('file', file);
 
-      const response = await fetch('/api/resume-upload', {
+      // Use retry logic for upload
+      const response = await window.JobHackAIRetry.fetchWithRetry('/api/resume-upload', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`
         },
         body: formData
+      }, {
+        maxRetries: 3,
+        initialDelay: 1000
       });
 
       // Handle HTTP errors
@@ -484,16 +503,28 @@
       // Handle extraction failures (success: false but HTTP 200)
       if (!data.success) {
         clearAtsState();
-        throw new Error(data.message || 'Resume text could not be extracted. Please upload a text-based PDF or DOCX file.');
+        // Map common error codes to user-friendly messages
+        let errorMessage = data.message || 'Resume text could not be extracted.';
+        if (data.error === 'extraction_failed' || data.error === 'invalid-text') {
+          errorMessage = 'We couldn\'t read your resume. Please upload a text-based PDF, DOCX, or TXT file.';
+        }
+        throw new Error(errorMessage);
       }
 
       currentResumeId = data.resumeId;
       
-      // Store in sessionStorage for cross-page sync
-      // Store both resumeId and resumeText (resumeText needed for direct scoring without KV)
+      // Store in sessionStorage and localStorage for cross-page sync
       sessionStorage.setItem('currentResumeId', data.resumeId);
       if (data.resumeText) {
         sessionStorage.setItem('currentResumeText', data.resumeText);
+      }
+      
+      // Persist resume data
+      if (window.JobHackAIStatePersistence) {
+        window.JobHackAIStatePersistence.saveResumeData({
+          resumeId: data.resumeId,
+          resumeText: data.resumeText
+        });
       }
       
       return data;
@@ -506,7 +537,8 @@
       // Use nullish coalescing to only convert null to undefined, preserving empty strings
       const resumeText = sessionStorage.getItem('currentResumeText') ?? undefined;
       
-      const response = await fetch('/api/ats-score', {
+      // Use retry logic for API call
+      const response = await window.JobHackAIRetry.fetchWithRetry('/api/ats-score', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -517,30 +549,64 @@
           jobTitle,
           resumeText // Pass text directly to bypass KV requirement
         })
+      }, {
+        maxRetries: 3,
+        initialDelay: 1000
       });
 
       if (!response.ok) {
         const error = await response.json();
-        throw new Error(error.error || 'Failed to get ATS score');
+        // Map error codes to user-friendly messages
+        let errorMessage = error.error || 'Failed to get ATS score';
+        if (error.error === 'invalid-text') {
+          errorMessage = 'We couldn\'t read your resume. Please upload a text-based PDF, DOCX, or TXT file.';
+        } else if (error.error === 'Usage limit reached') {
+          errorMessage = error.message || 'You have used your free ATS score. Upgrade to unlock more features.';
+        } else if (error.error === 'Rate limit exceeded') {
+          errorMessage = error.message || 'Please wait before running another ATS score.';
+        }
+        throw new Error(errorMessage);
       }
 
-      return await response.json();
+      const result = await response.json();
+      
+      // Persist score to localStorage
+      if (result.success && window.JobHackAIStatePersistence) {
+        window.JobHackAIStatePersistence.saveATSScore({
+          score: result.score,
+          breakdown: result.breakdown,
+          resumeId,
+          jobTitle
+        });
+      }
+      
+      return result;
     }
 
     async function getResumeFeedback(resumeId, jobTitle) {
       const token = await getAuthToken();
-      const response = await fetch('/api/resume-feedback', {
+      
+      // Use retry logic for API call
+      const response = await window.JobHackAIRetry.fetchWithRetry('/api/resume-feedback', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({ resumeId, jobTitle })
+      }, {
+        maxRetries: 3,
+        initialDelay: 1000
       });
 
       if (!response.ok) {
         const error = await response.json();
-        throw new Error(error.error || 'Failed to get feedback');
+        // Map error codes to user-friendly messages
+        let errorMessage = error.error || 'Failed to get feedback';
+        if (error.error === 'Feature locked') {
+          errorMessage = 'This feature is available on the Pro plan. Upgrade to unlock full feedback.';
+        }
+        throw new Error(errorMessage);
       }
 
       return await response.json();
@@ -548,18 +614,28 @@
 
     async function rewriteResume(resumeId, section, jobTitle) {
       const token = await getAuthToken();
-      const response = await fetch('/api/resume-rewrite', {
+      
+      // Use retry logic for API call
+      const response = await window.JobHackAIRetry.fetchWithRetry('/api/resume-rewrite', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({ resumeId, section, jobTitle })
+      }, {
+        maxRetries: 3,
+        initialDelay: 1000
       });
 
       if (!response.ok) {
         const error = await response.json();
-        throw new Error(error.error || 'Failed to rewrite resume');
+        // Map error codes to user-friendly messages
+        let errorMessage = error.error || 'Failed to rewrite resume';
+        if (error.error === 'Feature locked') {
+          errorMessage = 'This feature is available on the Pro plan. Upgrade to unlock full feedback.';
+        }
+        throw new Error(errorMessage);
       }
 
       return await response.json();
@@ -568,44 +644,66 @@
     function handleApiError(error) {
       console.error('[API Error]', error);
       let message = error.message || 'An error occurred';
+      let modalType = 'error';
+      let action = null;
+      let actionLabel = 'OK';
       
+      // Map error messages to user-friendly modals
       if (message.includes('Unauthorized') || message.includes('Not authenticated')) {
         message = 'Please log in to continue.';
-        setTimeout(() => window.location.href = 'login.html', 2000);
+        action = () => window.location.href = 'login.html';
+        actionLabel = 'Go to Login';
       } else if (message.includes('Usage limit') || message.includes('limit reached')) {
-        message = error.message + ' Upgrade to unlock more features.';
+        message = message + ' Upgrade to unlock more features.';
+        action = () => window.location.href = 'pricing-a.html';
+        actionLabel = 'View Pricing';
       } else if (message.includes('Rate limit')) {
-        message = error.message + ' Please try again in a moment.';
+        message = message + ' Please try again in a moment.';
       } else if (message.includes('Feature locked') || message.includes('upgrade')) {
-        message = error.message;
+        message = message;
+        action = () => window.location.href = 'pricing-a.html';
+        actionLabel = 'Upgrade Now';
+      } else if (message.includes('timeout') || message.includes('took too long')) {
+        message = 'Our AI took too long to respond. Please try again or simplify your file.';
+        action = () => window.location.reload();
+        actionLabel = 'Reload Page';
+      } else if (message.includes('couldn\'t read') || message.includes('text-based')) {
+        // File reading error - already user-friendly
+      } else if (message.includes('scanned PDF')) {
+        message = 'This appears to be a scanned PDF (image-based). Please upload a text-based PDF, DOCX, or TXT file for best results.';
       }
 
-      // Show error message to user
-      const errorDiv = document.createElement('div');
-      errorDiv.style.cssText = 'background:#FEE2E2;border-left:4px solid #EF4444;color:#991B1B;padding:1rem;border-radius:8px;margin:1rem 0;';
-      errorDiv.textContent = message;
-      const main = document.querySelector('main');
-      if (main) {
-        main.insertBefore(errorDiv, main.firstChild);
-        setTimeout(() => errorDiv.remove(), 5000);
+      // Show modal instead of inline error
+      if (window.JobHackAIModals) {
+        window.JobHackAIModals.errorModal(message, action, actionLabel);
+      } else {
+        // Fallback to inline error if modals not loaded
+        const errorDiv = document.createElement('div');
+        errorDiv.style.cssText = 'background:#FEE2E2;border-left:4px solid #EF4444;color:#991B1B;padding:1rem;border-radius:8px;margin:1rem 0;';
+        errorDiv.textContent = message;
+        const main = document.querySelector('main');
+        if (main) {
+          main.insertBefore(errorDiv, main.firstChild);
+          setTimeout(() => errorDiv.remove(), 5000);
+        }
       }
 
       return message;
     }
 
-    function showLoadingState(elementId) {
-      const element = document.getElementById(elementId);
-      if (element) {
-        element.style.opacity = '0.6';
-        element.style.pointerEvents = 'none';
+    // Loading overlay management
+    let currentLoadingOverlay = null;
+    
+    function showLoadingState(message = 'Loading...') {
+      if (window.JobHackAILoading) {
+        currentLoadingOverlay = window.JobHackAILoading.show(message, 'main-loading-overlay');
       }
     }
 
-    function hideLoadingState(elementId) {
-      const element = document.getElementById(elementId);
-      if (element) {
-        element.style.opacity = '1';
-        element.style.pointerEvents = 'auto';
+    function hideLoadingState() {
+      if (window.JobHackAILoading) {
+        window.JobHackAILoading.hide('main-loading-overlay');
+        currentLoadingOverlay = null;
       }
     }
 
@@ -617,6 +715,11 @@
         navigator.clipboard.writeText(rewritten.value || rewritten.textContent);
         this.textContent = 'Copied!';
         setTimeout(() => { this.textContent = 'Copy Rewritten Resume'; }, 1200);
+        
+        // Show success toast
+        if (window.JobHackAIToast) {
+          window.JobHackAIToast.success('Copied to clipboard!');
+        }
       }
     };
     
@@ -631,7 +734,7 @@
       const section = null; // Can be enhanced to allow section-specific rewrites
 
       try {
-        showLoadingState('rf-rewrite-content');
+        showLoadingState('Rewriting resume...');
         this.disabled = true;
         this.textContent = 'Regenerating...';
 
@@ -642,14 +745,19 @@
           rewrittenBox.value = result.rewritten;
         }
 
+        // Show success toast
+        if (window.JobHackAIToast) {
+          window.JobHackAIToast.success('Resume rewritten successfully!');
+        }
+
         this.textContent = 'Regenerate Rewrite';
         this.disabled = false;
-        hideLoadingState('rf-rewrite-content');
+        hideLoadingState();
       } catch (error) {
         handleApiError(error);
         this.textContent = 'Regenerate Rewrite';
         this.disabled = false;
-        hideLoadingState('rf-rewrite-content');
+        hideLoadingState();
       }
     };
     
@@ -723,6 +831,66 @@
       
       // Start waiting for navigation system
       waitForNavigationAndInit();
+      // Initialize role selector
+      const jobTitleInput = document.getElementById('rf-job-title');
+      if (jobTitleInput && window.JobHackAIRoleSelector) {
+        window.JobHackAIRoleSelector.createRoleSelector(jobTitleInput, {
+          placeholder: 'Start typing your target role (e.g., Data Engineer, Product Manager)'
+        });
+      }
+
+      // Load cached ATS score on page load
+      if (window.JobHackAIStatePersistence) {
+        const cachedScore = window.JobHackAIStatePersistence.loadATSScore();
+        if (cachedScore && cachedScore.score) {
+          console.log('[RESUME-FEEDBACK] Loading cached ATS score:', cachedScore.score);
+          updateProgressRing(cachedScore.score);
+          
+          // Convert breakdown to rubric format if available
+          if (cachedScore.breakdown) {
+            const rubric = [
+              {
+                label: 'Keyword Match',
+                score: cachedScore.breakdown.keywordScore?.score || 0,
+                max: cachedScore.breakdown.keywordScore?.max || 35,
+                tip: cachedScore.breakdown.keywordScore?.feedback || ''
+              },
+              {
+                label: 'ATS Formatting',
+                score: cachedScore.breakdown.formattingScore?.score || 0,
+                max: cachedScore.breakdown.formattingScore?.max || 25,
+                tip: cachedScore.breakdown.formattingScore?.feedback || ''
+              },
+              {
+                label: 'Structure & Organization',
+                score: cachedScore.breakdown.structureScore?.score || 0,
+                max: cachedScore.breakdown.structureScore?.max || 20,
+                tip: cachedScore.breakdown.structureScore?.feedback || ''
+              },
+              {
+                label: 'Tone & Clarity',
+                score: cachedScore.breakdown.toneScore?.score || 0,
+                max: cachedScore.breakdown.toneScore?.max || 10,
+                tip: cachedScore.breakdown.toneScore?.feedback || ''
+              },
+              {
+                label: 'Grammar & Spelling',
+                score: cachedScore.breakdown.grammarScore?.score || 0,
+                max: cachedScore.breakdown.grammarScore?.max || 10,
+                tip: cachedScore.breakdown.grammarScore?.feedback || ''
+              }
+            ];
+            updateRubricGrid(rubric);
+          }
+          
+          // Restore job title if available
+          if (cachedScore.jobTitle && jobTitleInput) {
+            jobTitleInput.value = cachedScore.jobTitle;
+            currentJobTitle = cachedScore.jobTitle;
+          }
+        }
+      }
+
       // ATS Resume Upload Logic
       const uploadInput = document.getElementById('rf-upload');
       if (uploadInput) {
@@ -735,7 +903,7 @@
           currentJobTitle = jobTitle;
 
           try {
-            showLoadingState('rf-ats-score-tile');
+            showLoadingState('Analyzing your resume...');
             uploadInput.disabled = true;
 
             // Upload resume
@@ -743,6 +911,7 @@
             currentResumeId = uploadResult.resumeId;
 
             // Get ATS score
+            showLoadingState('Calculating ATS score...');
             const scoreResult = await getAtsScore(uploadResult.resumeId, jobTitle);
             
             // Store ATS score in sessionStorage for cross-page sync
@@ -801,6 +970,7 @@
             const plan = getCurrentUserPlan();
             if (['trial', 'essential', 'pro', 'premium'].includes(plan)) {
               try {
+                showLoadingState('Generating detailed feedback...');
                 const feedbackResult = await getResumeFeedback(uploadResult.resumeId, jobTitle);
                 updateFeedbackGrid(feedbackResult.roleSpecificFeedback);
                 updateRubricGridFromFeedback(feedbackResult.atsRubric);
@@ -822,14 +992,19 @@
               descEl.textContent = 'Your resume was analyzed. See your ATS score and feedback below.';
             }
 
+            // Show success toast
+            if (window.JobHackAIToast) {
+              window.JobHackAIToast.success('Resume analyzed successfully!');
+            }
+
             uploadInput.disabled = false;
-            hideLoadingState('rf-ats-score-tile');
+            hideLoadingState();
           } catch (error) {
             // Clear state on error
             clearAtsState();
             handleApiError(error);
             uploadInput.disabled = false;
-            hideLoadingState('rf-ats-score-tile');
+            hideLoadingState();
           }
         });
       }
@@ -847,7 +1022,7 @@
           currentJobTitle = jobTitle;
 
           try {
-            showLoadingState('rf-feedback-content');
+            showLoadingState('Regenerating feedback...');
             this.disabled = true;
             this.textContent = 'Regenerating...';
 
@@ -855,14 +1030,19 @@
             updateFeedbackGrid(feedbackResult.roleSpecificFeedback);
             updateRubricGridFromFeedback(feedbackResult.atsRubric);
 
+            // Show success toast
+            if (window.JobHackAIToast) {
+              window.JobHackAIToast.success('Feedback regenerated!');
+            }
+
             this.textContent = 'Regenerate Feedback';
             this.disabled = false;
-            hideLoadingState('rf-feedback-content');
+            hideLoadingState();
           } catch (error) {
             handleApiError(error);
             this.textContent = 'Regenerate Feedback';
             this.disabled = false;
-            hideLoadingState('rf-feedback-content');
+            hideLoadingState();
           }
         });
       }
@@ -1377,35 +1557,7 @@
           </div>
           <form id="rf-upload-form" style="margin:1rem 0 0.7rem 0;">
             <label for="rf-job-title" style="font-weight:600;display:block;margin-bottom:0.5rem;">Target Job Title (recommended for better feedback):</label>
-            <input id="rf-job-title" type="text" placeholder="e.g., Software Engineer, Product Manager, Data Scientist" style="width:100%;max-width:400px;padding:0.5rem;border:1px solid var(--color-divider);border-radius:var(--radius-md);margin-bottom:1rem;" list="job-title-suggestions">
-            <datalist id="job-title-suggestions">
-              <option value="Software Engineer">
-              <option value="Full-stack Developer">
-              <option value="Platform Engineer">
-              <option value="DevOps Engineer">
-              <option value="Data Engineer">
-              <option value="Data Scientist">
-              <option value="AI Engineer">
-              <option value="LLM Engineer">
-              <option value="Product Manager">
-              <option value="Product Owner">
-              <option value="Epic Owner">
-              <option value="Business Owner">
-              <option value="Scrum Master">
-              <option value="Release Train Engineer (RTE)">
-              <option value="Agile Coach">
-              <option value="Solution Architect">
-              <option value="System Architect">
-              <option value="Data Architect">
-              <option value="UX Designer">
-              <option value="UX/UI Developer">
-              <option value="UX Researcher">
-              <option value="QA Engineer">
-              <option value="Threat Analyst">
-              <option value="Security Engineer">
-              <option value="Data Management">
-              <option value="IT Governance">
-            </datalist>
+            <input id="rf-job-title" type="text" placeholder="Start typing your target role (e.g., Data Engineer, Product Manager)" style="width:100%;max-width:400px;padding:0.5rem;border:1px solid var(--color-divider);border-radius:var(--radius-md);margin-bottom:1rem;">
             <label for="rf-upload" style="font-weight:600;display:block;margin-bottom:0.5rem;">Upload your resume (PDF, DOCX, or TXT, max 2 MB):</label>
             <input id="rf-upload" type="file" accept=".pdf,.docx,.txt,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain" style="margin-top:0.5rem;">
           </form>
