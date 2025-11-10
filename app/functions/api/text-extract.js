@@ -81,12 +81,21 @@ export async function onRequest(context) {
       const arrayBuffer = await file.arrayBuffer();
       extractionResult = await extractResumeText(arrayBuffer, fileName);
     } catch (extractError) {
+      // Return appropriate HTTP status code for extraction failures
+      // 400 for client errors (unsupported format, file too large, etc.)
+      // 500 for server errors (extraction processing failures)
+      const isClientError = extractError.message?.includes('Unsupported') || 
+                           extractError.message?.includes('exceeds') ||
+                           extractError.message?.includes('limit') ||
+                           extractError.message?.includes('Unreadable');
+      const statusCode = isClientError ? 400 : 500;
+      
       return json({ 
         success: false,
         message: extractError.message || 'Resume text could not be extracted. Please upload a text-based PDF or DOCX file.',
         error: 'extraction_failed',
         warnings: extractError.message?.includes('OCR') ? ['OCR processing may take up to 20 seconds'] : []
-      }, 200, origin, env);
+      }, statusCode, origin, env);
     }
 
     // Return clean JSON response

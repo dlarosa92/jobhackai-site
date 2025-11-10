@@ -12,15 +12,15 @@ function corsHeaders(origin, env) {
     'http://localhost:3003',
     'http://localhost:8788'
   ];
-  
+
   const allowedOrigin = allowedOrigins.includes(origin) ? origin : allowedOrigins[0];
-  
+
   return {
     'Access-Control-Allow-Origin': allowedOrigin,
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     'Access-Control-Max-Age': '86400',
-    'Vary': 'Origin'
+    Vary: 'Origin'
   };
 }
 
@@ -39,7 +39,7 @@ async function getUserPlan(uid, env) {
   if (!env.JOBHACKAI_KV) {
     return 'free';
   }
-  
+
   const plan = await env.JOBHACKAI_KV.get(`planByUid:${uid}`);
   return plan || 'free';
 }
@@ -57,7 +57,6 @@ export async function onRequest(context) {
   }
 
   try {
-    // Verify authentication
     const token = getBearer(request);
     if (!token) {
       return json({ success: false, error: 'Unauthorized' }, 401, origin, env);
@@ -66,7 +65,6 @@ export async function onRequest(context) {
     const { uid } = await verifyFirebaseIdToken(token, env.FIREBASE_PROJECT_ID);
     const plan = await getUserPlan(uid, env);
 
-    // Check plan access (Pro/Premium only)
     if (plan !== 'pro' && plan !== 'premium') {
       return json({
         success: false,
@@ -76,19 +74,16 @@ export async function onRequest(context) {
       }, 403, origin, env);
     }
 
-    // Throttle check (Pro/Premium: ~1/hr, 5/day)
     if (env.JOBHACKAI_KV) {
       const now = Date.now();
-      
-      // Hourly throttle
       const hourlyKey = `rewriteThrottle:${uid}:hour`;
       const lastHourly = await env.JOBHACKAI_KV.get(hourlyKey);
-      
+
       if (lastHourly) {
         const lastHourlyTime = parseInt(lastHourly, 10);
         const timeSinceLastHourly = now - lastHourlyTime;
-        
-        if (timeSinceLastHourly < 3600000) { // 1 hour
+
+        if (timeSinceLastHourly < 3600000) {
           const retryAfter = Math.ceil((3600000 - timeSinceLastHourly) / 1000);
           return json({
             success: false,
@@ -99,11 +94,10 @@ export async function onRequest(context) {
         }
       }
 
-      // Daily limit (5/day)
       const today = new Date().toISOString().split('T')[0];
       const dailyKey = `rewriteDaily:${uid}:${today}`;
       const dailyCount = await env.JOBHACKAI_KV.get(dailyKey);
-      
+
       if (dailyCount && parseInt(dailyCount, 10) >= 5) {
         return json({
           success: false,
@@ -114,7 +108,6 @@ export async function onRequest(context) {
       }
     }
 
-    // Parse request body
     const body = await request.json();
     const { resumeId, section, jobTitle } = body;
 
@@ -122,43 +115,67 @@ export async function onRequest(context) {
       return json({ success: false, error: 'resumeId required' }, 400, origin, env);
     }
 
-    // Retrieve resume from KV
     if (!env.JOBHACKAI_KV) {
       return json({ success: false, error: 'Storage not available' }, 500, origin, env);
     }
 
     const resumeKey = `resume:${resumeId}`;
     const resumeDataStr = await env.JOBHACKAI_KV.get(resumeKey);
-    
+
     if (!resumeDataStr) {
       return json({ success: false, error: 'Resume not found' }, 404, origin, env);
     }
 
     const resumeData = JSON.parse(resumeDataStr);
-    
-    // Verify resume belongs to user
+
     if (resumeData.uid !== uid) {
       return json({ success: false, error: 'Unauthorized' }, 403, origin, env);
     }
 
-    // Cost guardrails
     if (resumeData.text.length > 80000) {
-      return json({ 
-        success: false, 
-        error: 'Resume text exceeds 80,000 character limit' 
+      return json({
+        success: false,
+        error: 'Resume text exceeds 80,000 character limit'
       }, 400, origin, env);
     }
 
-    // Generate rewrite using AI with exponential backoff retry
     let rewrittenText = '';
     let originalText = '';
     const maxRetries = 3;
     let lastError = null;
-    
-    originalText = section 
-      ? resumeData.text.split('\n').find(line => line.toLowerCase().includes(section.toLowerCase())) || resumeData.text.substring(0, 500)
-      : resumeData.text;
-    
+
+    if (section) {
+      const lines = resumeData.text.split('\n');
+      const sectionLower = section.toLowerCase();
+      let sectionStartIndex = -1;
+
+      for (let i = 0; i < lines.length; i++) {
+        if (lines[i].toLowerCase().includes(sectionLower)) {
+          sectionStartIndex = i;
+          break;
+        }
+      }
+
+      if (sectionStartIndex >= 0) {
+        const sectionLines = [];
+        for (let i = sectionStartIndex; i < lines.length; i++) {
+          const line = lines[i];
+          if (
+            i > sectionStartIndex &&
+            /^(EXPERIENCE|EDUCATION|SKILLS|PROJECTS|AWARDS|CERTIFICATIONS|SUMMARY|OBJECTIVE|PROFILE)/i.test(line.trim())
+          ) {
+            break;
+          }
+          sectionLines.push(line);
+        }
+        originalText = sectionLines.join('\n').trim();
+      } else {
+        originalText = resumeData.text.substring(0, 500);
+      }
+    } else {
+      originalText = resumeData.text;
+    }
+
     for (let attempt = 0; attempt < maxRetries; attempt++) {
       try {
         const aiResponse = await generateResumeRewrite(
@@ -167,34 +184,64 @@ export async function onRequest(context) {
           jobTitle || 'Software Engineer',
           env
         );
-        
-        // Parse structured output
-        if (aiResponse.content) {
-          const parsed = typeof aiResponse.content === 'string' 
-            ? JSON.parse(aiResponse.content)
-            : aiResponse.content;
-          
-          rewrittenText = parsed.rewritten || parsed.content || '';
-          
-          if (rewrittenText) {
-            break; // Success, exit retry loop
+
+        if (!aiResponse || !aiResponse.content) {
+          // Handle falsy content: treat as error and apply backoff
+          lastError = new Error('AI response missing content');
+          console.error(`[RESUME-REWRITE] AI response missing content (attempt ${attempt + 1}/${maxRetries})`);
+          if (attempt < maxRetries - 1) {
+            const waitTime = Math.pow(2, attempt + 1) * 1000;
+            await new Promise((resolve) => setTimeout(resolve, waitTime));
+          }
+          continue;
+        }
+
+        let parsed;
+
+        if (typeof aiResponse.content === 'string') {
+          try {
+            parsed = JSON.parse(aiResponse.content);
+          } catch (parseError) {
+            rewrittenText = aiResponse.content.trim();
+            if (rewrittenText) {
+              break;
+            }
+            // Empty string after trim - treat as error
+            lastError = new Error('AI returned empty content');
+            if (attempt < maxRetries - 1) {
+              const waitTime = Math.pow(2, attempt + 1) * 1000;
+              await new Promise((resolve) => setTimeout(resolve, waitTime));
+            }
+            continue;
+          }
+        } else {
+          parsed = aiResponse.content;
+        }
+
+        rewrittenText = parsed.rewritten || parsed.content || '';
+
+        if (rewrittenText) {
+          break;
+        } else {
+          // No rewritten text extracted - treat as error
+          lastError = new Error('Failed to extract rewritten text from AI response');
+          if (attempt < maxRetries - 1) {
+            const waitTime = Math.pow(2, attempt + 1) * 1000;
+            await new Promise((resolve) => setTimeout(resolve, waitTime));
           }
         }
       } catch (aiError) {
         lastError = aiError;
         console.error(`[RESUME-REWRITE] AI rewrite error (attempt ${attempt + 1}/${maxRetries}):`, aiError);
-        
-        // Exponential backoff: wait 2s, 4s, 8s (longer for rewrite since it's more expensive)
+
         if (attempt < maxRetries - 1) {
           const waitTime = Math.pow(2, attempt + 1) * 1000;
-          await new Promise(resolve => setTimeout(resolve, waitTime));
+          await new Promise((resolve) => setTimeout(resolve, waitTime));
         }
       }
     }
-    
-    // If all retries failed, return error
+
     if (!rewrittenText) {
-      // Log failed response to KV for diagnostics (best effort)
       if (lastError && env.JOBHACKAI_KV) {
         try {
           const errorKey = `rewriteError:${uid}:${Date.now()}`;
@@ -205,13 +252,13 @@ export async function onRequest(context) {
             error: lastError.message,
             timestamp: Date.now()
           }), {
-            expirationTtl: 604800 // 7 days
+            expirationTtl: 604800
           });
         } catch (kvError) {
           console.warn('[RESUME-REWRITE] Failed to log error to KV:', kvError);
         }
       }
-      
+
       return json({
         success: false,
         error: 'Failed to generate rewrite',
@@ -220,11 +267,10 @@ export async function onRequest(context) {
       }, 500, origin, env);
     }
 
-    // Update throttles
     if (env.JOBHACKAI_KV) {
       const hourlyKey = `rewriteThrottle:${uid}:hour`;
       await env.JOBHACKAI_KV.put(hourlyKey, String(Date.now()), {
-        expirationTtl: 3600 // 1 hour
+        expirationTtl: 3600
       });
 
       const today = new Date().toISOString().split('T')[0];
@@ -232,7 +278,7 @@ export async function onRequest(context) {
       const currentCount = await env.JOBHACKAI_KV.get(dailyKey);
       const newCount = currentCount ? parseInt(currentCount, 10) + 1 : 1;
       await env.JOBHACKAI_KV.put(dailyKey, String(newCount), {
-        expirationTtl: 86400 // 24 hours
+        expirationTtl: 86400
       });
     }
 
@@ -242,13 +288,12 @@ export async function onRequest(context) {
       rewritten: rewrittenText,
       section: section || 'full'
     }, 200, origin, env);
-
   } catch (error) {
     console.error('[RESUME-REWRITE] Error:', error);
-    return json({ 
-      success: false, 
+    return json({
+      success: false,
       error: 'Internal server error',
-      message: error.message 
+      message: error.message
     }, 500, origin, env);
   }
 }

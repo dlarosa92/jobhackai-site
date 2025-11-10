@@ -324,28 +324,45 @@ export async function onRequest(context) {
           env
         );
         
+        // Handle falsy content: treat as error and apply backoff
+        if (!aiResponse || !aiResponse.content) {
+          lastError = new Error('AI response missing content');
+          console.error(`[RESUME-FEEDBACK] AI response missing content (attempt ${attempt + 1}/${maxRetries})`);
+          if (attempt < maxRetries - 1) {
+            const waitTime = Math.pow(2, attempt) * 1000;
+            await new Promise(resolve => setTimeout(resolve, waitTime));
+          }
+          continue;
+        }
+        
         // Parse AI response (structured output should be JSON)
-        if (aiResponse.content) {
-          try {
-            aiFeedback = typeof aiResponse.content === 'string' 
-              ? JSON.parse(aiResponse.content)
-              : aiResponse.content;
-            
-            // Validate structure
-            if (aiFeedback && aiFeedback.atsRubric) {
-              break; // Success, exit retry loop
-            }
-          } catch (parseError) {
-            lastError = parseError;
-            console.error(`[RESUME-FEEDBACK] Failed to parse AI response (attempt ${attempt + 1}/${maxRetries}):`, parseError);
-            // Apply exponential backoff for parse errors too
+        try {
+          aiFeedback = typeof aiResponse.content === 'string' 
+            ? JSON.parse(aiResponse.content)
+            : aiResponse.content;
+          
+          // Validate structure
+          if (aiFeedback && aiFeedback.atsRubric) {
+            break; // Success, exit retry loop
+          } else {
+            // Invalid structure - treat as error
+            lastError = new Error('AI response missing required atsRubric structure');
+            console.error(`[RESUME-FEEDBACK] Invalid AI response structure (attempt ${attempt + 1}/${maxRetries})`);
             if (attempt < maxRetries - 1) {
               const waitTime = Math.pow(2, attempt) * 1000;
               await new Promise(resolve => setTimeout(resolve, waitTime));
             }
-            // Continue to next attempt if parsing fails
-            continue;
           }
+        } catch (parseError) {
+          lastError = parseError;
+          console.error(`[RESUME-FEEDBACK] Failed to parse AI response (attempt ${attempt + 1}/${maxRetries}):`, parseError);
+          // Apply exponential backoff for parse errors too
+          if (attempt < maxRetries - 1) {
+            const waitTime = Math.pow(2, attempt) * 1000;
+            await new Promise(resolve => setTimeout(resolve, waitTime));
+          }
+          // Continue to next attempt if parsing fails
+          continue;
         }
       } catch (aiError) {
         lastError = aiError;

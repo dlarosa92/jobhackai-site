@@ -49,7 +49,6 @@ export function showErrorModal(title, message, options = {}) {
     animation: fadeIn 0.2s ease;
   `;
 
-  // Escape user input to prevent XSS
   const escapedTitle = escapeHtml(title);
   const escapedMessage = escapeHtml(message);
   const escapedButtonText = escapeHtml(buttonText);
@@ -102,38 +101,40 @@ export function showErrorModal(title, message, options = {}) {
     </div>
   `;
 
-  // Add animations
-  const style = document.createElement('style');
-  style.textContent = `
-    @keyframes fadeIn {
-      from { opacity: 0; }
-      to { opacity: 1; }
-    }
-    @keyframes fadeOut {
-      from { opacity: 1; }
-      to { opacity: 0; }
-    }
-    @keyframes slideUp {
-      from { transform: translateY(20px); opacity: 0; }
-      to { transform: translateY(0); opacity: 1; }
-    }
-  `;
-  document.head.appendChild(style);
+  // Add animations (only if style doesn't already exist to prevent duplicates)
+  let style = document.getElementById('jh-modal-styles');
+  if (!style) {
+    style = document.createElement('style');
+    style.id = 'jh-modal-styles';
+    style.textContent = `
+      @keyframes fadeIn {
+        from { opacity: 0; }
+        to { opacity: 1; }
+      }
+      @keyframes slideUp {
+        from { transform: translateY(20px); opacity: 0; }
+        to { transform: translateY(0); opacity: 1; }
+      }
+      @keyframes fadeOut {
+        from { opacity: 1; }
+        to { opacity: 0; }
+      }
+    `;
+    document.head.appendChild(style);
+  }
 
   document.body.appendChild(modal);
 
-  // Close handlers
   const closeModal = () => {
     modal.style.animation = 'fadeOut 0.2s ease';
     setTimeout(() => {
       modal.remove();
-      style.remove();
       if (onClose) onClose();
     }, 200);
   };
 
   document.getElementById('jh-error-close').addEventListener('click', closeModal);
-  
+
   if (showRetry && retryCallback) {
     document.getElementById('jh-error-retry').addEventListener('click', () => {
       closeModal();
@@ -141,14 +142,12 @@ export function showErrorModal(title, message, options = {}) {
     });
   }
 
-  // Close on backdrop click
   modal.addEventListener('click', (e) => {
     if (e.target === modal) {
       closeModal();
     }
   });
 
-  // Close on Escape key
   const escapeHandler = (e) => {
     if (e.key === 'Escape') {
       closeModal();
@@ -164,7 +163,6 @@ export function showErrorModal(title, message, options = {}) {
  * @param {number} duration - Display duration in ms (default: 3000)
  */
 export function showToast(message, duration = 3000) {
-  // Remove existing toast if present
   const existingToast = document.getElementById('jh-toast');
   if (existingToast) {
     existingToast.remove();
@@ -189,7 +187,6 @@ export function showToast(message, duration = 3000) {
     max-width: 400px;
   `;
 
-  // Escape user input to prevent XSS
   const escapedMessage = escapeHtml(message);
 
   toast.innerHTML = `
@@ -200,19 +197,22 @@ export function showToast(message, duration = 3000) {
     <span style="font-weight: 500;">${escapedMessage}</span>
   `;
 
-  // Add animation
-  const style = document.createElement('style');
-  style.textContent = `
-    @keyframes slideInRight {
-      from { transform: translateX(100%); opacity: 0; }
-      to { transform: translateX(0); opacity: 1; }
-    }
-    @keyframes slideOutRight {
-      from { transform: translateX(0); opacity: 1; }
-      to { transform: translateX(100%); opacity: 0; }
-    }
-  `;
-  document.head.appendChild(style);
+  let style = document.getElementById('jh-toast-styles');
+  if (!style) {
+    style = document.createElement('style');
+    style.id = 'jh-toast-styles';
+    style.textContent = `
+      @keyframes slideInRight {
+        from { transform: translateX(100%); opacity: 0; }
+        to { transform: translateX(0); opacity: 1; }
+      }
+      @keyframes slideOutRight {
+        from { transform: translateX(0); opacity: 1; }
+        to { transform: translateX(100%); opacity: 0; }
+      }
+    `;
+    document.head.appendChild(style);
+  }
 
   document.body.appendChild(toast);
 
@@ -220,7 +220,6 @@ export function showToast(message, duration = 3000) {
     toast.style.animation = 'slideOutRight 0.3s ease';
     setTimeout(() => {
       toast.remove();
-      style.remove();
     }, 300);
   }, duration);
 }
@@ -228,17 +227,17 @@ export function showToast(message, duration = 3000) {
 /**
  * Show loading overlay with message
  * @param {string} message - Loading message
+ * @param {string} [id] - Optional custom ID for the overlay (default: 'jh-loading-overlay')
  * @returns {Function} Function to hide the overlay
  */
-export function showLoadingOverlay(message = 'Loading...') {
-  // Remove existing overlay if present
-  const existingOverlay = document.getElementById('jh-loading-overlay');
+export function showLoadingOverlay(message = 'Loading...', id = 'jh-loading-overlay') {
+  const existingOverlay = document.getElementById(id);
   if (existingOverlay) {
     existingOverlay.remove();
   }
 
   const overlay = document.createElement('div');
-  overlay.id = 'jh-loading-overlay';
+  overlay.id = id;
   overlay.style.cssText = `
     position: fixed;
     top: 0;
@@ -254,7 +253,6 @@ export function showLoadingOverlay(message = 'Loading...') {
     animation: fadeIn 0.2s ease;
   `;
 
-  // Escape user input to prevent XSS
   const escapedMessage = escapeHtml(message);
 
   overlay.innerHTML = `
@@ -272,22 +270,25 @@ export function showLoadingOverlay(message = 'Loading...') {
     </div>
   `;
 
-  // Add animations
-  const style = document.createElement('style');
-  style.textContent = `
-    @keyframes fadeIn {
-      from { opacity: 0; }
-      to { opacity: 1; }
-    }
-    @keyframes fadeOut {
-      from { opacity: 1; }
-      to { opacity: 0; }
-    }
-    @keyframes spin {
-      to { transform: rotate(360deg); }
-    }
-  `;
-  document.head.appendChild(style);
+  let style = document.getElementById('jh-loading-styles');
+  if (!style) {
+    style = document.createElement('style');
+    style.id = 'jh-loading-styles';
+    style.textContent = `
+      @keyframes fadeIn {
+        from { opacity: 0; }
+        to { opacity: 1; }
+      }
+      @keyframes spin {
+        to { transform: rotate(360deg); }
+      }
+      @keyframes fadeOut {
+        from { opacity: 1; }
+        to { opacity: 0; }
+      }
+    `;
+    document.head.appendChild(style);
+  }
 
   document.body.appendChild(overlay);
 
@@ -295,12 +296,10 @@ export function showLoadingOverlay(message = 'Loading...') {
     overlay.style.animation = 'fadeOut 0.2s ease';
     setTimeout(() => {
       overlay.remove();
-      style.remove();
     }, 200);
   };
 }
 
-// Make functions available globally for backward compatibility
 if (typeof window !== 'undefined') {
   window.showErrorModal = showErrorModal;
   window.showToast = showToast;
