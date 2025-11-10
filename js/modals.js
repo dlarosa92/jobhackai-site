@@ -85,19 +85,27 @@ export function showErrorModal(title, message, options = {}) {
     </div>
   `;
 
-  // Add animations
-  const style = document.createElement('style');
-  style.textContent = `
-    @keyframes fadeIn {
-      from { opacity: 0; }
-      to { opacity: 1; }
-    }
-    @keyframes slideUp {
-      from { transform: translateY(20px); opacity: 0; }
-      to { transform: translateY(0); opacity: 1; }
-    }
-  `;
-  document.head.appendChild(style);
+  // Add animations (only if style doesn't already exist to prevent duplicates)
+  let style = document.getElementById('jh-modal-styles');
+  if (!style) {
+    style = document.createElement('style');
+    style.id = 'jh-modal-styles';
+    style.textContent = `
+      @keyframes fadeIn {
+        from { opacity: 0; }
+        to { opacity: 1; }
+      }
+      @keyframes slideUp {
+        from { transform: translateY(20px); opacity: 0; }
+        to { transform: translateY(0); opacity: 1; }
+      }
+      @keyframes fadeOut {
+        from { opacity: 1; }
+        to { opacity: 0; }
+      }
+    `;
+    document.head.appendChild(style);
+  }
 
   document.body.appendChild(modal);
 
@@ -106,7 +114,7 @@ export function showErrorModal(title, message, options = {}) {
     modal.style.animation = 'fadeOut 0.2s ease';
     setTimeout(() => {
       modal.remove();
-      style.remove();
+      // Don't remove style element - it's shared and may be needed by other modals
       if (onClose) onClose();
     }, 200);
   };
@@ -176,19 +184,23 @@ export function showToast(message, duration = 3000) {
     <span style="font-weight: 500;">${message}</span>
   `;
 
-  // Add animation
-  const style = document.createElement('style');
-  style.textContent = `
-    @keyframes slideInRight {
-      from { transform: translateX(100%); opacity: 0; }
-      to { transform: translateX(0); opacity: 1; }
-    }
-    @keyframes slideOutRight {
-      from { transform: translateX(0); opacity: 1; }
-      to { transform: translateX(100%); opacity: 0; }
-    }
-  `;
-  document.head.appendChild(style);
+  // Add animation (only if style doesn't already exist to prevent duplicates)
+  let style = document.getElementById('jh-toast-styles');
+  if (!style) {
+    style = document.createElement('style');
+    style.id = 'jh-toast-styles';
+    style.textContent = `
+      @keyframes slideInRight {
+        from { transform: translateX(100%); opacity: 0; }
+        to { transform: translateX(0); opacity: 1; }
+      }
+      @keyframes slideOutRight {
+        from { transform: translateX(0); opacity: 1; }
+        to { transform: translateX(100%); opacity: 0; }
+      }
+    `;
+    document.head.appendChild(style);
+  }
 
   document.body.appendChild(toast);
 
@@ -196,7 +208,7 @@ export function showToast(message, duration = 3000) {
     toast.style.animation = 'slideOutRight 0.3s ease';
     setTimeout(() => {
       toast.remove();
-      style.remove();
+      // Don't remove style element - it's shared and may be needed by other toasts
     }, 300);
   }, duration);
 }
@@ -246,18 +258,26 @@ export function showLoadingOverlay(message = 'Loading...', id = 'jh-loading-over
     </div>
   `;
 
-  // Add animations
-  const style = document.createElement('style');
-  style.textContent = `
-    @keyframes fadeIn {
-      from { opacity: 0; }
-      to { opacity: 1; }
-    }
-    @keyframes spin {
-      to { transform: rotate(360deg); }
-    }
-  `;
-  document.head.appendChild(style);
+  // Add animations (only if style doesn't already exist to prevent duplicates)
+  let style = document.getElementById('jh-loading-styles');
+  if (!style) {
+    style = document.createElement('style');
+    style.id = 'jh-loading-styles';
+    style.textContent = `
+      @keyframes fadeIn {
+        from { opacity: 0; }
+        to { opacity: 1; }
+      }
+      @keyframes spin {
+        to { transform: rotate(360deg); }
+      }
+      @keyframes fadeOut {
+        from { opacity: 1; }
+        to { opacity: 0; }
+      }
+    `;
+    document.head.appendChild(style);
+  }
 
   document.body.appendChild(overlay);
 
@@ -265,7 +285,7 @@ export function showLoadingOverlay(message = 'Loading...', id = 'jh-loading-over
     overlay.style.animation = 'fadeOut 0.2s ease';
     setTimeout(() => {
       overlay.remove();
-      style.remove();
+      // Don't remove style element - it's shared and may be needed by other overlays
     }, 200);
   };
 }

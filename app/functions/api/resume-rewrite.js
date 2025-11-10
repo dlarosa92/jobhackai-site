@@ -168,12 +168,27 @@ export async function onRequest(context) {
           env
         );
         
-        // Parse structured output
+        // Parse structured output or handle plain text fallback
         if (aiResponse.content) {
-          const parsed = typeof aiResponse.content === 'string' 
-            ? JSON.parse(aiResponse.content)
-            : aiResponse.content;
+          let parsed;
           
+          // Try to parse as JSON (structured output), but handle plain text gracefully
+          if (typeof aiResponse.content === 'string') {
+            try {
+              parsed = JSON.parse(aiResponse.content);
+            } catch (parseError) {
+              // If JSON parsing fails, treat as plain text (fallback for non-structured responses)
+              rewrittenText = aiResponse.content.trim();
+              if (rewrittenText) {
+                break; // Success, exit retry loop
+              }
+              continue; // Empty text, try again
+            }
+          } else {
+            parsed = aiResponse.content;
+          }
+          
+          // Extract rewritten text from structured output
           rewrittenText = parsed.rewritten || parsed.content || '';
           
           if (rewrittenText) {

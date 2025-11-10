@@ -674,8 +674,13 @@
       }
 
       // Show modal instead of inline error
-      if (window.JobHackAIModals) {
-        window.JobHackAIModals.errorModal(message, action, actionLabel);
+      if (window.showErrorModal) {
+        window.showErrorModal('Error', message, {
+          buttonText: actionLabel || 'Got it',
+          onClose: action || null,
+          showRetry: !!action,
+          retryCallback: action || null
+        });
       } else {
         // Fallback to inline error if modals not loaded
         const errorDiv = document.createElement('div');
@@ -833,8 +838,8 @@
       waitForNavigationAndInit();
       // Initialize role selector
       const jobTitleInput = document.getElementById('rf-job-title');
-      if (jobTitleInput && window.JobHackAIRoleSelector) {
-        window.JobHackAIRoleSelector.createRoleSelector(jobTitleInput, {
+      if (jobTitleInput && window.RoleSelector) {
+        new window.RoleSelector(jobTitleInput, {
           placeholder: 'Start typing your target role (e.g., Data Engineer, Product Manager)'
         });
       }
