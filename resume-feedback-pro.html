@@ -490,21 +490,33 @@
       currentResumeId = data.resumeId;
       
       // Store in sessionStorage for cross-page sync
-      // Note: Only store resumeId, not resumeText (PII security - resume text stored securely in backend KV)
+      // Store both resumeId and resumeText (resumeText needed for direct scoring without KV)
       sessionStorage.setItem('currentResumeId', data.resumeId);
+      if (data.resumeText) {
+        sessionStorage.setItem('currentResumeText', data.resumeText);
+      }
       
       return data;
     }
 
     async function getAtsScore(resumeId, jobTitle) {
       const token = await getAuthToken();
+      
+      // Try to get resumeText from sessionStorage (fallback when KV unavailable)
+      // Use nullish coalescing to only convert null to undefined, preserving empty strings
+      const resumeText = sessionStorage.getItem('currentResumeText') ?? undefined;
+      
       const response = await fetch('/api/ats-score', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ resumeId, jobTitle })
+        body: JSON.stringify({ 
+          resumeId, 
+          jobTitle,
+          resumeText // Pass text directly to bypass KV requirement
+        })
       });
 
       if (!response.ok) {
