@@ -1,8 +1,23 @@
 // Dynamic Role Selector with Firestore integration
 // Supports auto-complete, custom roles, and telemetry
 
-import { getFirestore, collection, getDocs, query, limit, orderBy } from 'firebase/firestore';
+// Use CDN imports to match firebase-config.js
 import { app } from './firebase-config.js';
+
+// Dynamically import Firestore from CDN
+let getFirestore, collection, getDocs, query, limit, orderBy;
+async function loadFirestore() {
+  if (!getFirestore) {
+    const firestoreModule = await import('https://www.gstatic.com/firebasejs/12.1.0/firebase-firestore.js');
+    getFirestore = firestoreModule.getFirestore;
+    collection = firestoreModule.collection;
+    getDocs = firestoreModule.getDocs;
+    query = firestoreModule.query;
+    limit = firestoreModule.limit;
+    orderBy = firestoreModule.orderBy;
+  }
+  return { getFirestore, collection, getDocs, query, limit, orderBy };
+}
 
 /**
  * Role Selector Component
@@ -55,10 +70,12 @@ export class RoleSelector {
 
   async loadRoles() {
     try {
-      const db = getFirestore(app);
-      const rolesRef = collection(db, 'roles');
-      const q = query(rolesRef, orderBy('name'), limit(100));
-      const snapshot = await getDocs(q);
+      // Load Firestore module dynamically
+      const firestore = await loadFirestore();
+      const db = firestore.getFirestore(app);
+      const rolesRef = firestore.collection(db, 'roles');
+      const q = firestore.query(rolesRef, firestore.orderBy('name'), firestore.limit(100));
+      const snapshot = await firestore.getDocs(q);
 
       if (!snapshot.empty) {
         this.roles = snapshot.docs.map((doc) => ({
