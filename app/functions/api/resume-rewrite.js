@@ -149,33 +149,76 @@ export async function onRequest(context) {
       }, 400, origin, env);
     }
 
-    // Generate rewrite using AI
-    // TODO: [OPENAI INTEGRATION POINT] - Uncomment when OpenAI is configured
-    // let rewrittenText = '';
-    // try {
-    //   const aiResponse = await generateResumeRewrite(
-    //     resumeData.text,
-    //     section,
-    //     jobTitle || 'Software Engineer',
-    //     env
-    //   );
-    //   
-    //   rewrittenText = aiResponse.content || '';
-    // } catch (aiError) {
-    //   console.error('[RESUME-REWRITE] AI rewrite error:', aiError);
-    //   return json({
-    //     success: false,
-    //     error: 'Failed to generate rewrite',
-    //     message: aiError.message
-    //   }, 500, origin, env);
-    // }
-
-    // For now, return placeholder (AI integration pending)
-    const originalText = section 
-      ? `[${section} section from resume]`
-      : resumeData.text.substring(0, 500) + '...';
+    // Generate rewrite using AI with exponential backoff retry
+    let rewrittenText = '';
+    let originalText = '';
+    const maxRetries = 3;
+    let lastError = null;
     
-    const rewrittenText = `[AI-optimized rewrite will appear here when OpenAI is configured]\n\nOriginal: ${originalText}`;
+    originalText = section 
+      ? resumeData.text.split('\n').find(line => line.toLowerCase().includes(section.toLowerCase())) || resumeData.text.substring(0, 500)
+      : resumeData.text;
+    
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      try {
+        const aiResponse = await generateResumeRewrite(
+          resumeData.text,
+          section,
+          jobTitle || 'Software Engineer',
+          env
+        );
+        
+        // Parse structured output
+        if (aiResponse.content) {
+          const parsed = typeof aiResponse.content === 'string' 
+            ? JSON.parse(aiResponse.content)
+            : aiResponse.content;
+          
+          rewrittenText = parsed.rewritten || parsed.content || '';
+          
+          if (rewrittenText) {
+            break; // Success, exit retry loop
+          }
+        }
+      } catch (aiError) {
+        lastError = aiError;
+        console.error(`[RESUME-REWRITE] AI rewrite error (attempt ${attempt + 1}/${maxRetries}):`, aiError);
+        
+        // Exponential backoff: wait 2s, 4s, 8s (longer for rewrite since it's more expensive)
+        if (attempt < maxRetries - 1) {
+          const waitTime = Math.pow(2, attempt + 1) * 1000;
+          await new Promise(resolve => setTimeout(resolve, waitTime));
+        }
+      }
+    }
+    
+    // If all retries failed, return error
+    if (!rewrittenText) {
+      // Log failed response to KV for diagnostics (best effort)
+      if (lastError && env.JOBHACKAI_KV) {
+        try {
+          const errorKey = `rewriteError:${uid}:${Date.now()}`;
+          await env.JOBHACKAI_KV.put(errorKey, JSON.stringify({
+            resumeId,
+            section,
+            jobTitle,
+            error: lastError.message,
+            timestamp: Date.now()
+          }), {
+            expirationTtl: 604800 // 7 days
+          });
+        } catch (kvError) {
+          console.warn('[RESUME-REWRITE] Failed to log error to KV:', kvError);
+        }
+      }
+      
+      return json({
+        success: false,
+        error: 'Failed to generate rewrite',
+        message: lastError?.message || 'AI rewrite timed out. Please try again.',
+        retryable: true
+      }, 500, origin, env);
+    }
 
     // Update throttles
     if (env.JOBHACKAI_KV) {

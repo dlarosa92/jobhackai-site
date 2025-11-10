@@ -310,32 +310,104 @@ export async function onRequest(context) {
       { isMultiColumn: resumeData.isMultiColumn }
     );
 
-    // Generate AI feedback
-    // TODO: [OPENAI INTEGRATION POINT] - Uncomment when OpenAI is configured
-    // let aiFeedback = null;
-    // try {
-    //   const aiResponse = await generateATSFeedback(
-    //     resumeData.text,
-    //     ruleBasedScores,
-    //     jobTitle,
-    //     env
-    //   );
-    //   
-    //   // Parse AI response
-    //   if (aiResponse.content) {
-    //     try {
-    //       aiFeedback = JSON.parse(aiResponse.content);
-    //     } catch (parseError) {
-    //       console.error('[RESUME-FEEDBACK] Failed to parse AI response:', parseError);
-    //     }
-    //   }
-    // } catch (aiError) {
-    //   console.error('[RESUME-FEEDBACK] AI feedback error:', aiError);
-    //   // Continue without AI feedback if it fails
-    // }
+    // Generate AI feedback with exponential backoff retry
+    let aiFeedback = null;
+    const maxRetries = 3;
+    let lastError = null;
+    
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      try {
+        const aiResponse = await generateATSFeedback(
+          resumeData.text,
+          ruleBasedScores,
+          jobTitle,
+          env
+        );
+        
+        // Parse AI response (structured output should be JSON)
+        if (aiResponse.content) {
+          try {
+            aiFeedback = typeof aiResponse.content === 'string' 
+              ? JSON.parse(aiResponse.content)
+              : aiResponse.content;
+            
+            // Validate structure
+            if (aiFeedback && aiFeedback.atsRubric) {
+              break; // Success, exit retry loop
+            }
+          } catch (parseError) {
+            console.error('[RESUME-FEEDBACK] Failed to parse AI response:', parseError);
+            // Continue to next attempt if parsing fails
+          }
+        }
+      } catch (aiError) {
+        lastError = aiError;
+        console.error(`[RESUME-FEEDBACK] AI feedback error (attempt ${attempt + 1}/${maxRetries}):`, aiError);
+        
+        // Exponential backoff: wait 1s, 2s, 4s
+        if (attempt < maxRetries - 1) {
+          const waitTime = Math.pow(2, attempt) * 1000;
+          await new Promise(resolve => setTimeout(resolve, waitTime));
+        }
+      }
+    }
+    
+    // Log failed responses to KV for diagnostics (best effort)
+    if (!aiFeedback && lastError && env.JOBHACKAI_KV) {
+      try {
+        const errorKey = `feedbackError:${uid}:${Date.now()}`;
+        await env.JOBHACKAI_KV.put(errorKey, JSON.stringify({
+          resumeId,
+          jobTitle,
+          error: lastError.message,
+          timestamp: Date.now()
+        }), {
+          expirationTtl: 604800 // 7 days
+        });
+      } catch (kvError) {
+        console.warn('[RESUME-FEEDBACK] Failed to log error to KV:', kvError);
+      }
+    }
 
-    // For now, use rule-based scores formatted as feedback (AI integration pending)
-    const result = {
+    // Build result with AI feedback if available, otherwise use rule-based scores
+    const result = aiFeedback && aiFeedback.atsRubric ? {
+      atsRubric: aiFeedback.atsRubric.map((item, idx) => ({
+        category: item.category || ['Keyword Match', 'ATS Formatting', 'Structure & Organization', 'Tone & Clarity', 'Grammar & Spelling'][idx],
+        score: item.score ?? ruleBasedScores[['keywordScore', 'formattingScore', 'structureScore', 'toneScore', 'grammarScore'][idx]]?.score ?? 0,
+        max: item.max ?? 10,
+        feedback: item.feedback || ruleBasedScores[['keywordScore', 'formattingScore', 'structureScore', 'toneScore', 'grammarScore'][idx]]?.feedback || '',
+        suggestions: item.suggestions || []
+      })),
+      roleSpecificFeedback: aiFeedback.roleSpecificFeedback || [
+        {
+          section: 'Header & Contact',
+          score: '8/10',
+          feedback: 'Clear and concise. Consider adding a custom resume URL for extra polish.'
+        },
+        {
+          section: 'Professional Summary',
+          score: '6/10',
+          feedback: 'Strong opening but lacks keywords for your target role.'
+        },
+        {
+          section: 'Experience',
+          score: '7/10',
+          feedback: 'Great structure. Quantify impact with metrics.'
+        },
+        {
+          section: 'Skills',
+          score: '9/10',
+          feedback: 'Relevant and up-to-date. Group under sub-headings.'
+        },
+        {
+          section: 'Education',
+          score: '10/10',
+          feedback: 'Well-formatted. No changes needed.'
+        }
+      ],
+      aiFeedback: aiFeedback
+    } : {
+      // Fallback to rule-based scores if AI fails
       atsRubric: [
         {
           category: 'Keyword Match',
@@ -395,7 +467,7 @@ export async function onRequest(context) {
           feedback: 'Well-formatted. No changes needed.'
         }
       ],
-      aiFeedback: null // Will be populated when OpenAI is configured
+      aiFeedback: null
     };
 
     // Cache result (24 hours)
