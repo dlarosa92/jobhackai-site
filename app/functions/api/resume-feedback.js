@@ -336,8 +336,15 @@ export async function onRequest(context) {
               break; // Success, exit retry loop
             }
           } catch (parseError) {
-            console.error('[RESUME-FEEDBACK] Failed to parse AI response:', parseError);
+            lastError = parseError;
+            console.error(`[RESUME-FEEDBACK] Failed to parse AI response (attempt ${attempt + 1}/${maxRetries}):`, parseError);
+            // Apply exponential backoff for parse errors too
+            if (attempt < maxRetries - 1) {
+              const waitTime = Math.pow(2, attempt) * 1000;
+              await new Promise(resolve => setTimeout(resolve, waitTime));
+            }
             // Continue to next attempt if parsing fails
+            continue;
           }
         }
       } catch (aiError) {

@@ -204,42 +204,85 @@ export class RoleSelector {
     }
   }
 
+  /**
+   * Escape HTML to prevent XSS attacks
+   * @param {string} text - Text to escape
+   * @returns {string} Escaped HTML string
+   */
+  escapeHtml(text) {
+    if (typeof text !== 'string') return '';
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+  }
+
   showDropdown(matches, query) {
-    let html = '';
+    // Escape query to prevent XSS
+    const escapedQuery = this.escapeHtml(query);
+
+    // Create dropdown using DOM methods to avoid XSS
+    this.dropdown.innerHTML = '';
+    this.dropdown.style.display = 'block';
 
     // Add matches
     matches.forEach((role, index) => {
-      html += `
-        <div class="role-option" data-role="${role.name}" data-index="${index}" style="
-          padding: 0.75rem 1rem;
-          cursor: pointer;
-          border-bottom: 1px solid #F3F4F6;
-          transition: background 0.15s;
-        " onmouseover="this.style.background='#F9FAFB'" onmouseout="this.style.background='#fff'">
-          <div style="font-weight: 500; color: #1F2937;">${this.highlightMatch(role.name, query)}</div>
-          ${role.category ? `<div style="font-size: 0.875rem; color: #6B7280; margin-top: 0.25rem;">${role.category}</div>` : ''}
-        </div>
+      const optionDiv = document.createElement('div');
+      optionDiv.className = 'role-option';
+      optionDiv.setAttribute('data-role', this.escapeHtml(role.name));
+      optionDiv.setAttribute('data-index', String(index));
+      optionDiv.style.cssText = `
+        padding: 0.75rem 1rem;
+        cursor: pointer;
+        border-bottom: 1px solid #F3F4F6;
+        transition: background 0.15s;
       `;
+      optionDiv.addEventListener('mouseover', () => {
+        optionDiv.style.background = '#F9FAFB';
+      });
+      optionDiv.addEventListener('mouseout', () => {
+        optionDiv.style.background = '#fff';
+      });
+
+      // Create name div with highlighted match
+      const nameDiv = document.createElement('div');
+      nameDiv.style.cssText = 'font-weight: 500; color: #1F2937;';
+      nameDiv.innerHTML = this.highlightMatch(role.name, query);
+      optionDiv.appendChild(nameDiv);
+
+      // Add category if present
+      if (role.category) {
+        const categoryDiv = document.createElement('div');
+        categoryDiv.style.cssText = 'font-size: 0.875rem; color: #6B7280; margin-top: 0.25rem;';
+        categoryDiv.textContent = role.category; // Use textContent for safety
+        optionDiv.appendChild(categoryDiv);
+      }
+
+      this.dropdown.appendChild(optionDiv);
     });
 
     // Add custom option
     if (this.options.showCustomOption) {
-      html += `
-        <div class="role-option role-custom" data-role="custom" style="
-          padding: 0.75rem 1rem;
-          cursor: pointer;
-          background: #F9FAFB;
-          border-top: 2px solid #E5E7EB;
-          font-style: italic;
-          color: #6B7280;
-        " onmouseover="this.style.background='#F3F4F6'" onmouseout="this.style.background='#F9FAFB'">
-          Use "${query}" as custom role
-        </div>
+      const customDiv = document.createElement('div');
+      customDiv.className = 'role-option role-custom';
+      customDiv.setAttribute('data-role', 'custom');
+      customDiv.style.cssText = `
+        padding: 0.75rem 1rem;
+        cursor: pointer;
+        background: #F9FAFB;
+        border-top: 2px solid #E5E7EB;
+        font-style: italic;
+        color: #6B7280;
       `;
+      customDiv.addEventListener('mouseover', () => {
+        customDiv.style.background = '#F3F4F6';
+      });
+      customDiv.addEventListener('mouseout', () => {
+        customDiv.style.background = '#F9FAFB';
+      });
+      // Use textContent to safely display query
+      customDiv.textContent = `Use "${query}" as custom role`;
+      this.dropdown.appendChild(customDiv);
     }
-
-    this.dropdown.innerHTML = html;
-    this.dropdown.style.display = 'block';
 
     // Add click handlers
     this.dropdown.querySelectorAll('.role-option').forEach(option => {
@@ -250,13 +293,23 @@ export class RoleSelector {
   }
 
   highlightMatch(text, query) {
-    const index = text.toLowerCase().indexOf(query.toLowerCase());
-    if (index === -1) return text;
+    // Escape text and query to prevent XSS
+    const escapedText = this.escapeHtml(text);
+    const escapedQuery = this.escapeHtml(query);
     
-    const before = text.substring(0, index);
-    const match = text.substring(index, index + query.length);
-    const after = text.substring(index + query.length);
+    // Find match in escaped text (case-insensitive)
+    const textLower = text.toLowerCase();
+    const queryLower = query.toLowerCase();
+    const index = textLower.indexOf(queryLower);
     
+    if (index === -1) return escapedText;
+    
+    // Split escaped text at the match position
+    const before = escapedText.substring(0, index);
+    const match = escapedText.substring(index, index + query.length);
+    const after = escapedText.substring(index + query.length);
+    
+    // Return HTML with properly escaped content and safe <strong> tag
     return `${before}<strong>${match}</strong>${after}`;
   }
 

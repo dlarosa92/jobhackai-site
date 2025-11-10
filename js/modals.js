@@ -2,6 +2,18 @@
 // Replaces console-only errors with user-facing modals
 
 /**
+ * Escape HTML to prevent XSS attacks
+ * @param {string} text - Text to escape
+ * @returns {string} Escaped HTML string
+ */
+function escapeHtml(text) {
+  if (typeof text !== 'string') return '';
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
+
+/**
  * Show error modal to user
  * @param {string} title - Modal title
  * @param {string} message - Error message
@@ -37,6 +49,11 @@ export function showErrorModal(title, message, options = {}) {
     animation: fadeIn 0.2s ease;
   `;
 
+  // Escape user input to prevent XSS
+  const escapedTitle = escapeHtml(title);
+  const escapedMessage = escapeHtml(message);
+  const escapedButtonText = escapeHtml(buttonText);
+
   modal.innerHTML = `
     <div style="
       background: #fff;
@@ -53,9 +70,9 @@ export function showErrorModal(title, message, options = {}) {
           <line x1="12" y1="8" x2="12" y2="12"/>
           <line x1="12" y1="16" x2="12.01" y2="16"/>
         </svg>
-        <h2 style="margin: 0; color: #1F2937; font-size: 1.25rem; font-weight: 600;">${title}</h2>
+        <h2 style="margin: 0; color: #1F2937; font-size: 1.25rem; font-weight: 600;">${escapedTitle}</h2>
       </div>
-      <p style="margin: 0 0 1.5rem 0; color: #4B5563; line-height: 1.6;">${message}</p>
+      <p style="margin: 0 0 1.5rem 0; color: #4B5563; line-height: 1.6;">${escapedMessage}</p>
       <div style="display: flex; gap: 0.75rem; justify-content: flex-end;">
         ${showRetry && retryCallback ? `
           <button id="jh-error-retry" style="
@@ -80,7 +97,7 @@ export function showErrorModal(title, message, options = {}) {
           font-weight: 600;
           cursor: pointer;
           transition: opacity 0.2s;
-        ">${buttonText}</button>
+        ">${escapedButtonText}</button>
       </div>
     </div>
   `;
@@ -168,12 +185,15 @@ export function showToast(message, duration = 3000) {
     max-width: 400px;
   `;
 
+  // Escape user input to prevent XSS
+  const escapedMessage = escapeHtml(message);
+
   toast.innerHTML = `
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
       <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
       <polyline points="22 4 12 14.01 9 11.01"/>
     </svg>
-    <span style="font-weight: 500;">${message}</span>
+    <span style="font-weight: 500;">${escapedMessage}</span>
   `;
 
   // Add animation
@@ -230,6 +250,9 @@ export function showLoadingOverlay(message = 'Loading...') {
     animation: fadeIn 0.2s ease;
   `;
 
+  // Escape user input to prevent XSS
+  const escapedMessage = escapeHtml(message);
+
   overlay.innerHTML = `
     <div style="text-align: center;">
       <div style="
@@ -241,7 +264,7 @@ export function showLoadingOverlay(message = 'Loading...') {
         animation: spin 1s linear infinite;
         margin: 0 auto 1rem;
       "></div>
-      <p style="margin: 0; color: #4B5563; font-size: 1rem; font-weight: 500;">${message}</p>
+      <p style="margin: 0; color: #4B5563; font-size: 1rem; font-weight: 500;">${escapedMessage}</p>
     </div>
   `;
 
