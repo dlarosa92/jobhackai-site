@@ -178,12 +178,72 @@ export async function onRequest(context) {
       }, 400, origin, env);
     }
 
+    // Validate resume text exists and is not empty
+    if (!resumeData.text || typeof resumeData.text !== 'string' || resumeData.text.trim().length === 0) {
+      console.error('[ATS-SCORE] Invalid resume text:', {
+        hasText: !!resumeData.text,
+        textType: typeof resumeData.text,
+        textLength: resumeData.text?.length
+      });
+      return json({ 
+        success: false, 
+        error: 'Invalid resume data',
+        message: 'Resume text is missing or empty'
+      }, 400, origin, env);
+    }
+
     // Run rule-based scoring (NO AI TOKENS)
-    const ruleBasedScores = scoreResume(
-      resumeData.text,
-      jobTitle,
-      { isMultiColumn: resumeData.isMultiColumn }
-    );
+    let ruleBasedScores;
+    try {
+      console.log('[ATS-SCORE] Starting scoring:', {
+        textLength: resumeData.text.length,
+        jobTitle,
+        isMultiColumn: resumeData.isMultiColumn
+      });
+      
+      ruleBasedScores = scoreResume(
+        resumeData.text,
+        jobTitle,
+        { isMultiColumn: resumeData.isMultiColumn }
+      );
+      
+      console.log('[ATS-SCORE] Scoring completed:', {
+        overallScore: ruleBasedScores?.overallScore,
+        hasKeywordScore: !!ruleBasedScores?.keywordScore,
+        hasFormattingScore: !!ruleBasedScores?.formattingScore
+      });
+      
+      // Validate scoreResume returned a valid object
+      if (!ruleBasedScores || typeof ruleBasedScores !== 'object') {
+        console.error('[ATS-SCORE] scoreResume returned invalid result:', ruleBasedScores);
+        throw new Error('Scoring engine returned invalid result');
+      }
+      
+      // Validate required properties exist
+      if (typeof ruleBasedScores.overallScore !== 'number' ||
+          !ruleBasedScores.keywordScore ||
+          !ruleBasedScores.formattingScore ||
+          !ruleBasedScores.structureScore ||
+          !ruleBasedScores.toneScore ||
+          !ruleBasedScores.grammarScore) {
+        console.error('[ATS-SCORE] scoreResume missing required properties:', {
+          overallScore: ruleBasedScores.overallScore,
+          hasKeywordScore: !!ruleBasedScores.keywordScore,
+          hasFormattingScore: !!ruleBasedScores.formattingScore,
+          hasStructureScore: !!ruleBasedScores.structureScore,
+          hasToneScore: !!ruleBasedScores.toneScore,
+          hasGrammarScore: !!ruleBasedScores.grammarScore
+        });
+        throw new Error('Scoring engine returned incomplete result');
+      }
+    } catch (scoreError) {
+      console.error('[ATS-SCORE] Scoring error:', scoreError);
+      return json({ 
+        success: false, 
+        error: 'Scoring failed',
+        message: scoreError.message || 'Failed to calculate ATS score'
+      }, 500, origin, env);
+    }
 
     // Generate AI feedback (only for narrative, not scores)
     // TODO: [OPENAI INTEGRATION POINT] - Uncomment when OpenAI is configured
@@ -210,7 +270,7 @@ export async function onRequest(context) {
         toneScore: ruleBasedScores.toneScore,
         grammarScore: ruleBasedScores.grammarScore
       },
-      recommendations: ruleBasedScores.recommendations,
+      recommendations: ruleBasedScores.recommendations || [],
       aiFeedback: null // Will be populated when OpenAI is configured
     };
 
