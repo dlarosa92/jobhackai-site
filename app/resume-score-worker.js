@@ -233,7 +233,7 @@ function calculateAtsScore(text, jobTitle = "", metadata = {}) {
   const { isMultiColumn = false } = metadata;
   
   const breakdown = {
-    keywordRelevance: keywordRelevance(text, jobTitle),
+    keywordScore: keywordScore(text, jobTitle),
     formatting: formattingCompliance(text, isMultiColumn),
     structure: sectionCompleteness(text),
     tone: toneClarity(text),
@@ -255,7 +255,8 @@ function calculateAtsScore(text, jobTitle = "", metadata = {}) {
 
 // === Subfunctions ===
 
-function keywordRelevance(text, jobTitle) {
+// Unified keyword scoring function (alias for keywordRelevance)
+function keywordScore(text, jobTitle) {
   const textLower = text.toLowerCase();
   const jobTitleLower = (jobTitle || "").toLowerCase();
   
@@ -291,6 +292,9 @@ function keywordRelevance(text, jobTitle) {
   // Cap at 40% weight
   return Math.min((match / keywords.length) * 40, 40);
 }
+
+// Alias for backward compatibility
+const keywordRelevance = keywordScore;
 
 function formattingCompliance(text, isMultiColumn) {
   let score = 20;

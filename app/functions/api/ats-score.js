@@ -57,6 +57,16 @@ export async function onRequest(context) {
     return json({ success: false, error: 'Method not allowed' }, 405, origin, env);
   }
 
+  // Early KV binding check
+  if (!env.JOBHACKAI_KV) {
+    console.error('[ATS-SCORE] KV binding not found');
+    return json({ 
+      success: false, 
+      error: 'KV binding not found',
+      message: 'Storage service unavailable' 
+    }, 500, origin, env);
+  }
+
   try {
     // Verify authentication
     const token = getBearer(request);
@@ -80,7 +90,7 @@ export async function onRequest(context) {
     }
 
     // Throttle check (Trial only)
-    if (plan === 'trial' && env.JOBHACKAI_KV) {
+    if (plan === 'trial') {
       const throttleKey = `atsThrottle:${uid}`;
       const lastRun = await env.JOBHACKAI_KV.get(throttleKey);
       
@@ -103,12 +113,12 @@ export async function onRequest(context) {
 
     // Cache check (all plans)
     let cachedResult = null;
-    if (env.JOBHACKAI_KV) {
-      const cacheHash = await hashString(`${resumeId}:${jobTitle}:ats`);
-      const cacheKey = `atsCache:${cacheHash}`;
-      const cached = await env.JOBHACKAI_KV.get(cacheKey);
-      
-      if (cached) {
+    const cacheHash = await hashString(`${resumeId}:${jobTitle}:ats`);
+    const cacheKey = `atsCache:${cacheHash}`;
+    const cached = await env.JOBHACKAI_KV.get(cacheKey);
+    
+    if (cached) {
+      try {
         const cachedData = JSON.parse(cached);
         const cacheAge = Date.now() - cachedData.timestamp;
         
@@ -116,11 +126,14 @@ export async function onRequest(context) {
         if (cacheAge < 86400000) {
           cachedResult = cachedData.result;
         }
+      } catch (parseError) {
+        console.error('[ATS-SCORE] Cache parse error:', parseError);
+        // Continue without cache if parse fails
       }
     }
 
     // Usage limits (Free plan - 1 lifetime)
-    if (plan === 'free' && env.JOBHACKAI_KV) {
+    if (plan === 'free') {
       const usageKey = `atsUsage:${uid}:lifetime`;
       const usage = await env.JOBHACKAI_KV.get(usageKey);
       
@@ -145,18 +158,34 @@ export async function onRequest(context) {
     }
 
     // Retrieve resume from KV
-    if (!env.JOBHACKAI_KV) {
-      return json({ success: false, error: 'Storage not available' }, 500, origin, env);
-    }
-
     const resumeKey = `resume:${resumeId}`;
-    const resumeDataStr = await env.JOBHACKAI_KV.get(resumeKey);
+    let resumeDataStr;
+    try {
+      resumeDataStr = await env.JOBHACKAI_KV.get(resumeKey);
+    } catch (kvError) {
+      console.error('[ATS-SCORE] KV read error:', kvError);
+      return json({ 
+        success: false, 
+        error: 'Storage error',
+        message: 'Failed to retrieve resume data' 
+      }, 500, origin, env);
+    }
     
     if (!resumeDataStr) {
       return json({ success: false, error: 'Resume not found' }, 404, origin, env);
     }
 
-    const resumeData = JSON.parse(resumeDataStr);
+    let resumeData;
+    try {
+      resumeData = JSON.parse(resumeDataStr);
+    } catch (parseError) {
+      console.error('[ATS-SCORE] Resume data parse error:', parseError);
+      return json({ 
+        success: false, 
+        error: 'Invalid resume data',
+        message: 'Failed to parse resume data' 
+      }, 500, origin, env);
+    }
     
     // Verify resume belongs to user
     if (resumeData.uid !== uid) {
@@ -179,11 +208,12 @@ export async function onRequest(context) {
     }
 
     // Validate resume text exists and is not empty
-    if (!resumeData.text || typeof resumeData.text !== 'string' || resumeData.text.trim().length === 0) {
+    const text = resumeData.text;
+    if (!text || typeof text !== 'string' || text.trim().length === 0) {
       console.error('[ATS-SCORE] Invalid resume text:', {
-        hasText: !!resumeData.text,
-        textType: typeof resumeData.text,
-        textLength: resumeData.text?.length
+        hasText: !!text,
+        textType: typeof text,
+        textLength: text?.length
       });
       return json({ 
         success: false, 
@@ -192,25 +222,38 @@ export async function onRequest(context) {
       }, 400, origin, env);
     }
 
+    // Validate text length (minimum 100 chars, max 80k)
+    if (text.length < 100) {
+      return json({ 
+        success: false, 
+        error: 'Text extraction failed or OCR not implemented',
+        message: 'Resume text is too short. Please upload a text-based PDF or DOCX file.'
+      }, 400, origin, env);
+    }
+
     // Run rule-based scoring (NO AI TOKENS)
     let ruleBasedScores;
     try {
+      console.log('[ATS-SCORE] Input length:', text.length);
       console.log('[ATS-SCORE] Starting scoring:', {
-        textLength: resumeData.text.length,
+        textLength: text.length,
         jobTitle,
         isMultiColumn: resumeData.isMultiColumn
       });
       
       ruleBasedScores = scoreResume(
-        resumeData.text,
+        text,
         jobTitle,
         { isMultiColumn: resumeData.isMultiColumn }
       );
       
-      console.log('[ATS-SCORE] Scoring completed:', {
+      console.log('[ATS-SCORE] Score result:', {
         overallScore: ruleBasedScores?.overallScore,
-        hasKeywordScore: !!ruleBasedScores?.keywordScore,
-        hasFormattingScore: !!ruleBasedScores?.formattingScore
+        keywordScore: ruleBasedScores?.keywordScore?.score,
+        formattingScore: ruleBasedScores?.formattingScore?.score,
+        structureScore: ruleBasedScores?.structureScore?.score,
+        toneScore: ruleBasedScores?.toneScore?.score,
+        grammarScore: ruleBasedScores?.grammarScore?.score
       });
       
       // Validate scoreResume returned a valid object
@@ -222,20 +265,27 @@ export async function onRequest(context) {
       // Validate required properties exist
       if (typeof ruleBasedScores.overallScore !== 'number' ||
           !ruleBasedScores.keywordScore ||
+          typeof ruleBasedScores.keywordScore.score !== 'number' ||
           !ruleBasedScores.formattingScore ||
+          typeof ruleBasedScores.formattingScore.score !== 'number' ||
           !ruleBasedScores.structureScore ||
+          typeof ruleBasedScores.structureScore.score !== 'number' ||
           !ruleBasedScores.toneScore ||
-          !ruleBasedScores.grammarScore) {
+          typeof ruleBasedScores.toneScore.score !== 'number' ||
+          !ruleBasedScores.grammarScore ||
+          typeof ruleBasedScores.grammarScore.score !== 'number') {
         console.error('[ATS-SCORE] scoreResume missing required properties:', {
           overallScore: ruleBasedScores.overallScore,
-          hasKeywordScore: !!ruleBasedScores.keywordScore,
-          hasFormattingScore: !!ruleBasedScores.formattingScore,
-          hasStructureScore: !!ruleBasedScores.structureScore,
-          hasToneScore: !!ruleBasedScores.toneScore,
-          hasGrammarScore: !!ruleBasedScores.grammarScore
+          keywordScore: ruleBasedScores.keywordScore,
+          formattingScore: ruleBasedScores.formattingScore,
+          structureScore: ruleBasedScores.structureScore,
+          toneScore: ruleBasedScores.toneScore,
+          grammarScore: ruleBasedScores.grammarScore
         });
         throw new Error('Scoring engine returned incomplete result');
       }
+
+      console.log('[ATS-SCORE] Scoring completed successfully');
     } catch (scoreError) {
       console.error('[ATS-SCORE] Scoring error:', scoreError);
       return json({ 
@@ -264,19 +314,24 @@ export async function onRequest(context) {
     const result = {
       score: ruleBasedScores.overallScore,
       breakdown: {
-        keywordScore: ruleBasedScores.keywordScore,
-        formattingScore: ruleBasedScores.formattingScore,
-        structureScore: ruleBasedScores.structureScore,
-        toneScore: ruleBasedScores.toneScore,
-        grammarScore: ruleBasedScores.grammarScore
+        keywordScore: ruleBasedScores.keywordScore.score,
+        formattingScore: ruleBasedScores.formattingScore.score,
+        structureScore: ruleBasedScores.structureScore.score,
+        toneScore: ruleBasedScores.toneScore.score,
+        grammarScore: ruleBasedScores.grammarScore.score
       },
-      recommendations: ruleBasedScores.recommendations || [],
-      aiFeedback: null // Will be populated when OpenAI is configured
+      feedback: [
+        ruleBasedScores.keywordScore.feedback,
+        ruleBasedScores.formattingScore.feedback,
+        ruleBasedScores.structureScore.feedback,
+        ruleBasedScores.toneScore.feedback,
+        ruleBasedScores.grammarScore.feedback
+      ].filter(Boolean),
+      recommendations: ruleBasedScores.recommendations || []
     };
 
     // Cache result (24 hours)
-    if (env.JOBHACKAI_KV) {
-      const cacheHash = await hashString(`${resumeId}:${jobTitle}:ats`);
+    try {
       const cacheKey = `atsCache:${cacheHash}`;
       await env.JOBHACKAI_KV.put(cacheKey, JSON.stringify({
         result,
@@ -284,20 +339,33 @@ export async function onRequest(context) {
       }), {
         expirationTtl: 86400 // 24 hours
       });
+    } catch (cacheError) {
+      console.error('[ATS-SCORE] Cache write error:', cacheError);
+      // Continue without caching if write fails
     }
 
     // Update throttle (Trial only)
-    if (plan === 'trial' && env.JOBHACKAI_KV) {
-      const throttleKey = `atsThrottle:${uid}`;
-      await env.JOBHACKAI_KV.put(throttleKey, String(Date.now()), {
-        expirationTtl: 60 // 1 minute
-      });
+    if (plan === 'trial') {
+      try {
+        const throttleKey = `atsThrottle:${uid}`;
+        await env.JOBHACKAI_KV.put(throttleKey, String(Date.now()), {
+          expirationTtl: 60 // 1 minute
+        });
+      } catch (throttleError) {
+        console.error('[ATS-SCORE] Throttle write error:', throttleError);
+        // Continue without throttling if write fails
+      }
     }
 
     // Track usage (Free plan only)
-    if (plan === 'free' && env.JOBHACKAI_KV) {
-      const usageKey = `atsUsage:${uid}:lifetime`;
-      await env.JOBHACKAI_KV.put(usageKey, '1'); // No expiration - lifetime limit
+    if (plan === 'free') {
+      try {
+        const usageKey = `atsUsage:${uid}:lifetime`;
+        await env.JOBHACKAI_KV.put(usageKey, '1'); // No expiration - lifetime limit
+      } catch (usageError) {
+        console.error('[ATS-SCORE] Usage tracking error:', usageError);
+        // Continue without tracking if write fails
+      }
     }
 
     return json({
