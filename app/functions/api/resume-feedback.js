@@ -147,9 +147,13 @@ export async function onRequest(context) {
 
     const { uid } = await verifyFirebaseIdToken(token, env.FIREBASE_PROJECT_ID);
     const plan = await getUserPlan(uid, env);
+    
+    // Log plan detection for debugging
+    console.log('[RESUME-FEEDBACK] Plan check:', { uid, plan, hasKV: !!env.JOBHACKAI_KV });
 
     // Check plan access (Free plan locked)
     if (plan === 'free') {
+      console.log('[RESUME-FEEDBACK] Access denied - plan is free');
       return json({
         success: false,
         error: 'Feature locked',

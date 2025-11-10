@@ -934,6 +934,17 @@
                 if (value) {
                   currentJobTitle = value;
                   console.log('[RESUME-FEEDBACK] Job title updated:', value);
+                } else {
+                  // Clear currentJobTitle if input is cleared
+                  currentJobTitle = null;
+                }
+              });
+              
+              // Prevent default value from being set
+              jobTitleInput.addEventListener('focus', function() {
+                // Ensure no default value is set when focusing
+                if (this.value === 'Software Engineer' && !currentJobTitle) {
+                  this.value = '';
                 }
               });
               
@@ -942,6 +953,8 @@
                 const value = this.value.trim();
                 if (value) {
                   currentJobTitle = value;
+                } else {
+                  currentJobTitle = null;
                 }
               });
             } catch (error) {
@@ -1246,13 +1259,28 @@
     function updateProgressRing(score) {
       // Update SVG ring and text
       const svg = document.querySelector('#rf-ats-score-tile .rf-progress-ring svg');
-      if (!svg) return;
+      if (!svg) {
+        console.warn('[RESUME-FEEDBACK] SVG not found for progress ring');
+        return;
+      }
       const circle = svg.querySelectorAll('circle')[1];
+      if (!circle) {
+        console.warn('[RESUME-FEEDBACK] Progress circle not found');
+        return;
+      }
       const percent = Math.max(0, Math.min(100, score));
       const radius = 36;
       const circumference = 2 * Math.PI * radius;
       const offset = circumference - (percent / 100) * circumference;
+      
+      // Ensure circle is visible and green
+      circle.setAttribute('stroke', '#00E676');
+      circle.setAttribute('stroke-width', '8');
+      circle.setAttribute('stroke-dasharray', String(circumference));
       circle.setAttribute('stroke-dashoffset', offset);
+      circle.setAttribute('stroke-linecap', 'round');
+      circle.setAttribute('fill', 'none');
+      
       // Update text
       let text = svg.querySelector('text');
       if (!text) {
@@ -1266,6 +1294,8 @@
         svg.appendChild(text);
       }
       text.textContent = percent + '%';
+      
+      console.log('[RESUME-FEEDBACK] Updated progress ring to', percent + '%');
     }
 
     function updateRubricGrid(rubric) {
@@ -1586,7 +1616,7 @@
             'Unlimited ATS scoring - you\'re getting maximum visibility!',
             'Receive an overall ATS compliance score (0-100) for your resume, highlighting key areas to improve for better job application success. Score as many resumes as you need with unlimited access.'
           );
-          atsScoreTile.querySelector('#rf-ats-checks').textContent = 'Unlimited ATS scoring';
+          atsScoreTile.querySelector('#rf-ats-checks').innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;vertical-align:middle;margin-right:4px;"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg> Unlimited ATS scoring - you\'re getting maximum visibility!';
         }
         if (feedbackTile) {
           feedbackTile.querySelector('.rf-title .rf-plan-badge').textContent = plan.charAt(0).toUpperCase() + plan.slice(1) + ' Plan';
@@ -1727,7 +1757,7 @@
           </div>
           <form id="rf-upload-form" style="margin:1rem 0 0.7rem 0;">
             <label for="rf-job-title" style="font-weight:600;display:block;margin-bottom:0.5rem;">Target Job Title (recommended for better feedback):</label>
-            <input id="rf-job-title" type="text" placeholder="Start typing your target role (e.g., Data Engineer, Product Manager)" style="width:100%;max-width:400px;padding:0.5rem;border:1px solid var(--color-divider);border-radius:var(--radius-md);margin-bottom:1rem;">
+            <input id="rf-job-title" type="text" placeholder="Start typing your target role (e.g., Data Engineer, Product Manager)" style="width:100%;max-width:400px;padding:0.5rem;border:1px solid var(--color-divider);border-radius:var(--radius-md);margin-bottom:1rem;" value="" autocomplete="off">
             <label for="rf-upload" style="font-weight:600;display:block;margin-bottom:0.5rem;">Upload your resume (PDF, DOCX, or TXT, max 2 MB):</label>
             <input id="rf-upload" type="file" accept=".pdf,.docx,.txt,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain" style="margin-top:0.5rem;">
           </form>
