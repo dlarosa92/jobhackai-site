@@ -1073,14 +1073,61 @@
         return null;
       }
     }
-    // Example ATS score (replace with real value from backend or Google Sheets)
-    const atsScore = {
-      percent: 78, // 0-100
-      value: 78,
+    // ATS score - initialized as null, will be populated from state persistence
+    let atsScore = {
+      percent: null, // Will be set from state persistence
+      value: null,
       max: 100,
-      summary: "Your resume meets many ATS criteria and is likely to be noticed."
+      summary: null
     };
+    
+    // Load ATS score from state persistence BEFORE rendering
+    function loadAtsScoreFromStorage() {
+      let lastScore = null;
+      let lastSummary = null;
+      let lastJobTitle = null;
+      
+      // Try state persistence utility first (handles cache expiration)
+      if (window.JobHackAIStatePersistence) {
+        const cachedScore = window.JobHackAIStatePersistence.loadATSScore();
+        if (cachedScore && cachedScore.score !== null && cachedScore.score !== undefined) {
+          lastScore = cachedScore.score.toString();
+          lastJobTitle = cachedScore.jobTitle || null;
+          // Generate summary from score if breakdown available
+          if (cachedScore.score > 85) {
+            lastSummary = 'Excellent! Your resume is highly ATS compatible.';
+          } else if (cachedScore.score > 70) {
+            lastSummary = 'Your resume meets many ATS criteria and is likely to be noticed.';
+          } else {
+            lastSummary = 'Your resume needs improvement for better ATS results.';
+          }
+        }
+      }
+      
+      // Fallback to sessionStorage/localStorage if state persistence not available or no cached score
+      if (!lastScore) {
+        lastScore = sessionStorage.getItem('currentAtsScore') || localStorage.getItem('lastATSScore');
+        lastSummary = localStorage.getItem('lastATSSummary');
+      }
+      
+      // Only update score if we have valid data (prevent reset to 0% or 78%)
+      if (lastScore) {
+        const scoreValue = parseInt(lastScore, 10);
+        // Only update if score is valid (0-100)
+        if (!isNaN(scoreValue) && scoreValue >= 0 && scoreValue <= 100) {
+          atsScore.value = scoreValue;
+          atsScore.percent = scoreValue;
+          atsScore.summary = lastSummary || 'Your resume was analyzed.';
+          atsScore.jobTitle = lastJobTitle;
+        }
+      }
+      
+      return atsScore;
+    }
+    
     async function renderDashboard(user) {
+      // Load ATS score BEFORE rendering
+      loadAtsScoreFromStorage();
       const root = document.getElementById('dashboard-root');
       const unlocked = featureMatrix[user.plan] || [];
       
@@ -1144,67 +1191,53 @@
           <div class="user-email">${user.email}</div>
         </div>
         <div class="ats-score-row">
-          ${atsDonut(atsScore.percent)}
-          <div class="ats-score-details">
-            <span class="ats-score-label">${atsScore.value} / ${atsScore.max}</span>
-            <span class="ats-score-summary">${atsScore.summary}</span>
-          </div>
+          ${atsScore.percent !== null && atsScore.percent !== undefined ? `
+            ${atsDonut(atsScore.percent)}
+            <div class="ats-score-details">
+              <span class="ats-score-label">${atsScore.value} / ${atsScore.max}</span>
+              <span class="ats-score-summary">${atsScore.summary}</span>
+            </div>
+          ` : `
+            <div class="ats-score-details">
+              <span class="ats-score-label" style="color:#6B7280;">No ATS score yet</span>
+              <span class="ats-score-summary" style="color:#9CA3AF;">Upload your resume to get your ATS compatibility score</span>
+            </div>
+          `}
         </div>
         <div class="status-action-row">
           <span class="user-plan-badge ${user.plan}">${planIcon(user.plan)}${user.plan === 'trial' && user.trialEndsAt ? `Trial (${daysLeft(user.trialEndsAt)} days left)` : user.plan.charAt(0).toUpperCase() + user.plan.slice(1)}</span>
           ${(user.plan === 'cancelled') ? `<a href="pricing-a.html" class="upgrade-btn">Reactivate</a>` : ''}
         </div>
       </div>`;
-      // Load ATS score from state persistence (preferred) or sessionStorage/localStorage (fallback)
-      // Use state persistence utility to ensure score persists across navigation
-      let lastScore = null;
-      let lastSummary = null;
+      // Show one-time "Carried Over ATS Score" message for migrated users
+      // Check if user has legacy score and hasn't seen the message yet
+      const hasLegacyScore = localStorage.getItem('lastATSScore') || sessionStorage.getItem('currentAtsScore');
+      const hasSeenCarriedOverMessage = localStorage.getItem('hasSeenCarriedOverAtsMessage') === 'true';
       
-      // Try state persistence utility first (handles cache expiration)
-      if (window.JobHackAIStatePersistence) {
-        const cachedScore = window.JobHackAIStatePersistence.loadATSScore();
-        if (cachedScore && cachedScore.score) {
-          lastScore = cachedScore.score.toString();
-          // Generate summary from score if breakdown available
-          if (cachedScore.score > 85) {
-            lastSummary = 'Excellent! Your resume is highly ATS compatible.';
-          } else if (cachedScore.score > 70) {
-            lastSummary = 'Your resume meets many ATS criteria and is likely to be noticed.';
-          } else {
-            lastSummary = 'Your resume needs improvement for better ATS results.';
-          }
+      if (hasLegacyScore && !hasSeenCarriedOverMessage && atsScore.percent !== null) {
+        // Show one-time message
+        const carriedOverBanner = document.createElement('div');
+        carriedOverBanner.style.cssText = `
+          background: #EFF6FF;
+          border-left: 4px solid #3B82F6;
+          color: #1E40AF;
+          padding: 0.8rem 1rem;
+          border-radius: 8px;
+          margin: 1rem auto;
+          max-width: 540px;
+          font-size: 0.98rem;
+        `;
+        carriedOverBanner.innerHTML = `
+          ℹ️ <strong>Carried Over ATS Score</strong> — Your previous ATS score has been loaded. Upload a new resume to get an updated score.
+        `;
+        const bannerContainer = document.querySelector('.dashboard-banner');
+        if (bannerContainer && bannerContainer.parentNode) {
+          bannerContainer.parentNode.insertBefore(carriedOverBanner, bannerContainer.nextSibling);
         }
+        // Mark as seen
+        localStorage.setItem('hasSeenCarriedOverAtsMessage', 'true');
       }
       
-      // Fallback to sessionStorage/localStorage if state persistence not available or no cached score
-      if (!lastScore) {
-        lastScore = sessionStorage.getItem('currentAtsScore') || localStorage.getItem('lastATSScore');
-        lastSummary = localStorage.getItem('lastATSSummary');
-      }
-      
-      // If we have a score from sessionStorage, also load breakdown
-      if (sessionStorage.getItem('currentAtsScore')) {
-        const breakdownStr = sessionStorage.getItem('currentAtsBreakdown');
-        if (breakdownStr) {
-          try {
-            const breakdown = JSON.parse(breakdownStr);
-            // Breakdown is available for future use if needed
-          } catch (e) {
-            console.warn('Failed to parse ATS breakdown from sessionStorage:', e);
-          }
-        }
-      }
-      
-      // Only update score if we have valid data (prevent reset to 0%)
-      if (lastScore && lastSummary) {
-        const scoreValue = parseInt(lastScore, 10);
-        // Only update if score is valid (0-100)
-        if (!isNaN(scoreValue) && scoreValue >= 0 && scoreValue <= 100) {
-          atsScore.value = scoreValue;
-          atsScore.percent = scoreValue;
-          atsScore.summary = lastSummary;
-        }
-      }
       // Features
       let featuresHtml = '<div class="dashboard-features">';
       // Always render ATS Scoring first

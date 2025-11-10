@@ -152,14 +152,32 @@
     }
 
     // Scanned PDF detection (for PDFs only)
+    // Skip OCR detection for free users - show educational modal instead
     if (file.name.toLowerCase().endsWith('.pdf')) {
+      // Check user plan
+      const userPlan = localStorage.getItem('user-plan') || 'free';
+      if (userPlan === 'free') {
+        // For free users, detect scanned PDFs but show educational modal instead of blocking
+        const scanCheck = await detectScannedPDF(file);
+        if (scanCheck.isScanned && scanCheck.confidence === 'high') {
+          return {
+            valid: true, // Allow upload but show modal
+            warning: true,
+            warningMessage: 'This appears to be a scanned PDF. For best results, please upload a text-based PDF, DOCX, or TXT file. Scanned PDFs may not be processed correctly.',
+            isScanned: true
+          };
+        }
+      } else {
+        // For paid users, detect and warn about scanned PDFs
       const scanCheck = await detectScannedPDF(file);
       if (scanCheck.isScanned && scanCheck.confidence === 'high') {
         return {
-          valid: false,
-          error: 'This appears to be a scanned PDF (image-based). Please upload a text-based PDF, DOCX, or TXT file for best results.',
+            valid: true, // Allow upload but show modal about OCR processing
+            warning: true,
+            warningMessage: 'We\'re scanning your résumé — this may take up to 20 seconds.',
           isScanned: true
         };
+        }
       }
     }
 

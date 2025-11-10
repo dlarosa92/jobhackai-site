@@ -475,6 +475,22 @@
       if (!validation.valid) {
         throw new Error(validation.error);
       }
+      
+      // Handle warnings (e.g., scanned PDF detection)
+      if (validation.warning && window.showErrorModal) {
+        const userPlan = getCurrentUserPlan();
+        if (userPlan === 'free') {
+          // Educational modal for free users
+          window.showErrorModal('Scanned PDF Detected', 
+            validation.warningMessage || 'This appears to be a scanned PDF. For best results, please upload a text-based PDF, DOCX, or TXT file.',
+            { buttonText: 'OK' });
+        } else {
+          // Informational modal for paid users about OCR processing
+          window.showErrorModal('Processing Scanned PDF', 
+            validation.warningMessage || 'We\'re scanning your résumé — this may take up to 20 seconds.',
+            { buttonText: 'OK' });
+        }
+      }
 
       const token = await getAuthToken();
       const formData = new FormData();
@@ -507,8 +523,21 @@
         let errorMessage = data.message || 'Resume text could not be extracted.';
         if (data.error === 'extraction_failed' || data.error === 'invalid-text') {
           errorMessage = 'We couldn\'t read your resume. Please upload a text-based PDF, DOCX, or TXT file.';
+        } else if (data.error && data.error.includes('OCR')) {
+          // OCR-related error - show modal with helpful message
+          errorMessage = 'This appears to be a scanned PDF. We\'re working on OCR support. For now, please upload a text-based PDF, DOCX, or TXT file.';
         }
         throw new Error(errorMessage);
+      }
+      
+      // Handle OCR status if present
+      if (data.ocrUsed === true || data.ocrUsed === 'pending') {
+        // Show informational modal about OCR processing
+        if (window.showErrorModal) {
+          window.showErrorModal('Processing Scanned PDF', 
+            'We\'re scanning your résumé — this may take up to 20 seconds. Please wait...',
+            { buttonText: 'OK' });
+        }
       }
 
       currentResumeId = data.resumeId;
@@ -642,7 +671,10 @@
     }
 
     function handleApiError(error) {
-      console.error('[API Error]', error);
+      // Downgrade to debug level - user-facing errors shown via modals
+      if (window.console && window.console.debug) {
+        window.console.debug('[API Error]', error);
+      }
       let message = error.message || 'An error occurred';
       let modalType = 'error';
       let action = null;
@@ -735,7 +767,11 @@
         return;
       }
 
-      const jobTitle = document.getElementById('rf-job-title')?.value || currentJobTitle || 'Software Engineer';
+      const jobTitle = document.getElementById('rf-job-title')?.value?.trim() || currentJobTitle;
+      if (!jobTitle) {
+        handleApiError(new Error('Please enter a target job title'));
+        return;
+      }
       const section = null; // Can be enhanced to allow section-specific rewrites
 
       try {
@@ -753,6 +789,17 @@
         // Show success toast
         if (window.JobHackAIToast) {
           window.JobHackAIToast.success('Resume rewritten successfully!');
+        }
+        
+        // Save job title to state persistence
+        if (window.JobHackAIStatePersistence && jobTitle) {
+          const cachedScore = window.JobHackAIStatePersistence.loadATSScore();
+          if (cachedScore) {
+            window.JobHackAIStatePersistence.saveATSScore({
+              ...cachedScore,
+              jobTitle: jobTitle
+            });
+          }
         }
 
         this.textContent = 'Regenerate Rewrite';
@@ -908,11 +955,37 @@
           if (!file) return;
 
           const jobTitleInput = document.getElementById('rf-job-title');
-          const jobTitle = jobTitleInput?.value?.trim() || 'Software Engineer';
-          currentJobTitle = jobTitle;
+          const jobTitle = jobTitleInput?.value?.trim() || currentJobTitle;
+          if (!jobTitle) {
+            // Use placeholder text as fallback, but don't hardcode "Software Engineer"
+            const placeholder = jobTitleInput?.placeholder || '';
+            if (placeholder && !placeholder.includes('Start typing')) {
+              // If placeholder has been set by role selector, use it
+              currentJobTitle = placeholder;
+            } else {
+              // Show error if no role selected
+              handleApiError(new Error('Please enter a target job title for better feedback'));
+              uploadInput.disabled = false;
+              hideLoadingState();
+              return;
+            }
+          } else {
+            currentJobTitle = jobTitle;
+          }
+          
+          // Save job title to state persistence
+          if (window.JobHackAIStatePersistence && currentJobTitle) {
+            const cachedScore = window.JobHackAIStatePersistence.loadATSScore();
+            if (cachedScore) {
+              window.JobHackAIStatePersistence.saveATSScore({
+                ...cachedScore,
+                jobTitle: currentJobTitle
+              });
+            }
+          }
 
           try {
-            showLoadingState('Analyzing your resume...');
+            showLoadingState('Analyzing your résumé for ATS criteria…');
             uploadInput.disabled = true;
 
             // Upload resume
@@ -920,8 +993,8 @@
             currentResumeId = uploadResult.resumeId;
 
             // Get ATS score
-            showLoadingState('Calculating ATS score...');
-            const scoreResult = await getAtsScore(uploadResult.resumeId, jobTitle);
+            showLoadingState('Calculating your ATS score…');
+            const scoreResult = await getAtsScore(uploadResult.resumeId, currentJobTitle);
             
             // Store ATS score in sessionStorage for cross-page sync
             if (scoreResult.success && scoreResult.score !== undefined) {
@@ -979,13 +1052,26 @@
             const plan = getCurrentUserPlan();
             if (['trial', 'essential', 'pro', 'premium'].includes(plan)) {
               try {
-                showLoadingState('Generating detailed feedback...');
-                const feedbackResult = await getResumeFeedback(uploadResult.resumeId, jobTitle);
+                showLoadingState('Optimizing for ATS compliance…');
+                const feedbackResult = await getResumeFeedback(uploadResult.resumeId, currentJobTitle);
                 updateFeedbackGrid(feedbackResult.roleSpecificFeedback);
                 updateRubricGridFromFeedback(feedbackResult.atsRubric);
               } catch (feedbackError) {
-                console.warn('[FEEDBACK] Failed to get feedback:', feedbackError);
-                // Continue without feedback if it fails
+                // Log at debug level, show user-friendly modal
+                if (window.console && window.console.debug) {
+                  window.console.debug('[FEEDBACK] Failed to get feedback:', feedbackError);
+                }
+                // Show error modal but keep ATS score visible
+                if (window.showErrorModal) {
+                  const errorMsg = feedbackError.message || 'Failed to generate feedback. Your ATS score is still available.';
+                  window.showErrorModal('Feedback Generation Failed', errorMsg, {
+                    buttonText: 'OK',
+                    onClose: () => {
+                      // Keep ATS score visible - don't clear state
+                    }
+                  });
+                }
+                // Continue without feedback if it fails - ATS score remains visible
               }
             }
 
@@ -1003,7 +1089,7 @@
 
             // Show success toast
             if (window.JobHackAIToast) {
-              window.JobHackAIToast.success('Resume analyzed successfully!');
+              window.JobHackAIToast.success('ATS score saved successfully.');
             }
 
             uploadInput.disabled = false;
@@ -1027,7 +1113,11 @@
           }
 
           const jobTitleInput = document.getElementById('rf-job-title');
-          const jobTitle = jobTitleInput?.value?.trim() || currentJobTitle || 'Software Engineer';
+          const jobTitle = jobTitleInput?.value?.trim() || currentJobTitle;
+          if (!jobTitle) {
+            handleApiError(new Error('Please enter a target job title'));
+            return;
+          }
           currentJobTitle = jobTitle;
 
           try {
@@ -1041,7 +1131,7 @@
 
             // Show success toast
             if (window.JobHackAIToast) {
-              window.JobHackAIToast.success('Feedback regenerated!');
+              window.JobHackAIToast.success('Updated feedback ready!');
             }
 
             this.textContent = 'Regenerate Feedback';
@@ -1162,15 +1252,23 @@
 
     // --- Insert Priority Review CTA below ATS Score & Feedback for Essential/Pro ---
     function updatePriorityReviewCTA() {
-      // Remove any existing CTA
+      // Remove any existing CTA (only show one Premium banner per page)
       const oldCta = document.getElementById('priority-review-cta-main');
       if (oldCta) oldCta.remove();
-      if (user.plan === 'essential' || user.plan === 'pro') {
-        const feedbackTile = document.getElementById('rf-feedback-tile');
-        if (feedbackTile && feedbackTile.parentNode) {
-          const cta = renderPriorityReviewCTA();
-          cta.id = 'priority-review-cta-main';
-          feedbackTile.parentNode.insertBefore(cta, feedbackTile.nextSibling);
+      
+      // Only show Priority Review CTA for Essential/Pro plans, and only if no Premium banner exists in feedback tile
+      const plan = getCurrentUserPlan();
+      if (plan === 'essential' || plan === 'pro') {
+        // Check if Premium banner already exists in feedback tile
+        const existingPremiumBanner = document.getElementById('rf-feedback-upgrade-banner');
+        if (!existingPremiumBanner || plan === 'essential') {
+          // Only show Priority Review CTA if no Premium banner exists, or for Essential plan
+          const feedbackTile = document.getElementById('rf-feedback-tile');
+          if (feedbackTile && feedbackTile.parentNode) {
+            const cta = renderPriorityReviewCTA();
+            cta.id = 'priority-review-cta-main';
+            feedbackTile.parentNode.insertBefore(cta, feedbackTile.nextSibling);
+          }
         }
       }
     }
@@ -1448,26 +1546,9 @@
             rewriteContent.style.display = 'block';
             // Re-attach button listeners when content is shown
             setTimeout(attachRewriteButtonListeners, 100);
-            // Add premium upsell for Pro users
-            if (isProPlan) {
-              const oldBanner = document.getElementById('rf-rewrite-upgrade-banner');
-              if (oldBanner) oldBanner.remove();
-              const upgradeBanner = document.createElement('div');
-              upgradeBanner.className = 'rf-upgrade-prompt';
-              upgradeBanner.id = 'rf-rewrite-upgrade-banner';
-              upgradeBanner.style.marginTop = '1.7rem';
-              upgradeBanner.style.background = '#FEF3C7';
-              upgradeBanner.innerHTML = `
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
-                </svg>
-                <div class="rf-upgrade-text">
-                  <strong>Want priority review?</strong> Upgrade to Premium for front-of-the-line analysis and VIP support
-                </div>
-                <a href="pricing-a.html" class="btn btn-secondary">Upgrade to Premium</a>
-              `;
-              rewriteTile.appendChild(upgradeBanner);
-            }
+            // Remove any Premium upgrade banner from rewrite tile (only show in feedback tile)
+            const oldBanner = document.getElementById('rf-rewrite-upgrade-banner');
+            if (oldBanner) oldBanner.remove();
           }
         }
       }
