@@ -634,7 +634,17 @@
         let errorMessage = error.error || 'Failed to get feedback';
         if (error.error === 'Feature locked') {
           errorMessage = 'This feature is available on the Pro plan. Upgrade to unlock full feedback.';
+        } else if (error.error === 'Unauthorized') {
+          errorMessage = 'Please log in to continue.';
+        } else if (response.status === 403) {
+          errorMessage = error.message || 'Access denied. Please check your plan or try logging in again.';
         }
+        console.error('[RESUME-FEEDBACK] API error:', {
+          status: response.status,
+          error: error.error,
+          message: error.message,
+          upgradeRequired: error.upgradeRequired
+        });
         throw new Error(errorMessage);
       }
 
@@ -663,7 +673,17 @@
         let errorMessage = error.error || 'Failed to rewrite resume';
         if (error.error === 'Feature locked') {
           errorMessage = 'This feature is available on the Pro plan. Upgrade to unlock full feedback.';
+        } else if (error.error === 'Unauthorized') {
+          errorMessage = 'Please log in to continue.';
+        } else if (response.status === 403) {
+          errorMessage = error.message || 'Access denied. Please check your plan or try logging in again.';
         }
+        console.error('[RESUME-REWRITE] API error:', {
+          status: response.status,
+          error: error.error,
+          message: error.message,
+          upgradeRequired: error.upgradeRequired
+        });
         throw new Error(errorMessage);
       }
 
@@ -883,12 +903,51 @@
       
       // Start waiting for navigation system
       waitForNavigationAndInit();
-      // Initialize role selector
-      const jobTitleInput = document.getElementById('rf-job-title');
-      if (jobTitleInput && window.RoleSelector) {
-        new window.RoleSelector(jobTitleInput, {
-          placeholder: 'Start typing your target role (e.g., Data Engineer, Product Manager)'
-        });
+      
+      // Initialize role selector - ensure it's initialized after DOM and RoleSelector are ready
+      function initializeRoleSelector() {
+        const jobTitleInput = document.getElementById('rf-job-title');
+        if (jobTitleInput && window.RoleSelector) {
+          // Check if already initialized to avoid duplicate initialization
+          if (!jobTitleInput.dataset.roleSelectorInitialized) {
+            new window.RoleSelector(jobTitleInput, {
+              placeholder: 'Start typing your target role (e.g., Data Engineer, Product Manager)',
+              onSelect: function(roleName, isCustom) {
+                // Update currentJobTitle when role is selected
+                currentJobTitle = roleName;
+                console.log('[RESUME-FEEDBACK] Role selected:', roleName, isCustom ? '(custom)' : '');
+              }
+            });
+            jobTitleInput.dataset.roleSelectorInitialized = 'true';
+            
+            // Also listen for input changes to update currentJobTitle when user types
+            jobTitleInput.addEventListener('input', function() {
+              const value = this.value.trim();
+              if (value) {
+                currentJobTitle = value;
+              }
+            });
+            
+            // Listen for blur to capture final value even if user doesn't select from dropdown
+            jobTitleInput.addEventListener('blur', function() {
+              const value = this.value.trim();
+              if (value) {
+                currentJobTitle = value;
+              }
+            });
+          }
+        } else if (jobTitleInput && !window.RoleSelector) {
+          // Retry if RoleSelector not loaded yet
+          setTimeout(initializeRoleSelector, 100);
+        }
+      }
+      
+      // Initialize role selector after DOM is ready
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initializeRoleSelector);
+      } else {
+        // DOM already ready, but wait a bit for scripts to load
+        setTimeout(initializeRoleSelector, 100);
       }
 
       // Load cached ATS score on page load
@@ -1051,10 +1110,19 @@
             const plan = getCurrentUserPlan();
             if (['trial', 'essential', 'pro', 'premium'].includes(plan)) {
               try {
-                showLoadingState('Optimizing for ATS compliance…');
-                const feedbackResult = await getResumeFeedback(uploadResult.resumeId, currentJobTitle);
-                updateFeedbackGrid(feedbackResult.roleSpecificFeedback);
-                updateRubricGridFromFeedback(feedbackResult.atsRubric);
+                // Ensure we have a job title - read from input field or use currentJobTitle
+                const jobTitleInput = document.getElementById('rf-job-title');
+                const jobTitleForFeedback = jobTitleInput?.value?.trim() || currentJobTitle;
+                
+                if (!jobTitleForFeedback) {
+                  console.warn('[RESUME-FEEDBACK] No job title provided, skipping feedback generation');
+                  // Continue without feedback - ATS score is still available
+                } else {
+                  showLoadingState('Optimizing for ATS compliance…');
+                  const feedbackResult = await getResumeFeedback(uploadResult.resumeId, jobTitleForFeedback);
+                  updateFeedbackGrid(feedbackResult.roleSpecificFeedback);
+                  updateRubricGridFromFeedback(feedbackResult.atsRubric);
+                }
               } catch (feedbackError) {
                 // Log at debug level, show user-friendly modal
                 if (window.console && window.console.debug) {
