@@ -227,18 +227,6 @@
       background: #00c965;
       outline: none;
     }
-    .feature-card .included-badge {
-      color: #00C853;
-      font-size: 0.98rem;
-      font-weight: 600;
-      margin-top: 0.5rem;
-      display: flex;
-      align-items: center;
-      gap: 0.3rem;
-    }
-    .feature-card .included-badge svg {
-      vertical-align: middle;
-    }
     @media (max-width: 700px) {
       .dashboard-banner, .dashboard-features {
         padding-left: 0.5rem;
@@ -489,13 +477,6 @@
       color: #6B7280;
       line-height: 1.35;
       font-size: 0.95rem;
-    }
-    .upload-tooltip-container {
-      display: inline-flex;
-      align-items: center;
-      margin-left: 0.25rem;
-      cursor: help;
-      vertical-align: middle;
     }
     /* Upgrade Pop-up Modal Styles */
     .upgrade-popup-overlay {
@@ -1209,7 +1190,7 @@
         if (isUnlocked && feature.key === 'ats') {
           // ATS Scoring: real upload
           featuresHtml += `<input type=\"file\" id=\"ats-upload-input\" accept=\".pdf,.docx,.txt\" title=\"Upload your resume in PDF, DOCX, or TXT format\" style=\"display:none;\" />`;
-          featuresHtml += `<button class=\"btn-primary\" id=\"ats-upload-btn\">${feature.action}<span class=\"upload-tooltip-container\" title=\"You can upload PDF, DOCX, or TXT files. Avoid image-only scans for better accuracy.\"><svg width=\"14\" height=\"14\" fill=\"none\" stroke=\"#6B7280\" stroke-width=\"2\" viewBox=\"0 0 24 24\" style=\"margin-left:0.25rem;vertical-align:middle;\"><circle cx=\"12\" cy=\"12\" r=\"10\"></circle><line x1=\"12\" y1=\"16\" x2=\"12\" y2=\"12\"></line><line x1=\"12\" y1=\"8\" x2=\"12\" y2=\"8\"></line></svg></span></button>`;
+          featuresHtml += `<button class=\"btn-primary\" id=\"ats-upload-btn\">${feature.action}</button>`;
           let usageText = '';
           let tooltip = '';
           if (user.plan === 'free') {
@@ -1332,9 +1313,6 @@
           featuresHtml += `<button class=\"btn-locked\" data-feature-key=\"${feature.key}\"><svg width=\"18\" height=\"18\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"#fff\" stroke-width=\"2\"><rect x=\"3\" y=\"11\" width=\"18\" height=\"8\" rx=\"2\"/><path d=\"M7 11V7a5 5 0 0110 0v4\"/></svg> ${feature.action}</button>`;
         }
         featuresHtml += `</div>`;
-        if (isUnlocked && (user.plan === 'trial' || user.plan === 'essential' || user.plan === 'pro' || user.plan === 'premium')) {
-          featuresHtml += `<div class="included-badge"><svg width="16" height="16" fill="#00C853" viewBox="0 0 24 24"><path d="M20.285 6.709a1 1 0 00-1.414-1.418l-9.192 9.192-4.242-4.242a1 1 0 00-1.414 1.414l4.949 4.95a1 1 0 001.414 0l9.899-9.896z"/></svg> Included in ${user.plan === 'trial' ? 'Trial' : user.plan.charAt(0).toUpperCase() + user.plan.slice(1)}</div>`;
-        }
         featuresHtml += `</div>`;
       }
       featuresHtml += '</div>';
@@ -1784,9 +1762,6 @@
           if (uploadBtn) {
             uploadBtn.disabled = true;
             uploadBtn.textContent = 'Uploading...';
-            // Remove tooltip during loading to avoid confusion
-            const tooltip = uploadBtn.querySelector('.upload-tooltip-container');
-            if (tooltip) tooltip.style.display = 'none';
           }
         }
 
@@ -1794,10 +1769,7 @@
           const uploadBtn = document.getElementById('ats-upload-btn');
           if (uploadBtn) {
             uploadBtn.disabled = false;
-            uploadBtn.innerHTML = 'Upload Resume<span class="upload-tooltip-container" title="You can upload PDF, DOCX, or TXT files. Avoid image-only scans for better accuracy."><svg width="14" height="14" fill="none" stroke="#6B7280" stroke-width="2" viewBox="0 0 24 24" style="margin-left:0.25rem;vertical-align:middle;"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12" y2="8"></line></svg></span>';
-            // Restore tooltip visibility
-            const tooltip = uploadBtn.querySelector('.upload-tooltip-container');
-            if (tooltip) tooltip.style.display = 'inline-flex';
+            uploadBtn.textContent = 'Upload Resume';
           }
         }
 
