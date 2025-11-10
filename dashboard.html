@@ -490,6 +490,23 @@
       line-height: 1.35;
       font-size: 0.95rem;
     }
+    .upload-help-text {
+      font-family: 'Inter', sans-serif;
+      font-size: 0.85rem;
+      color: #6B7280;
+      margin-top: 0.5rem;
+      line-height: 1.5;
+    }
+    .upload-help-text strong {
+      color: #1F2937;
+    }
+    .upload-tooltip-container {
+      display: inline-flex;
+      align-items: center;
+      margin-left: 0.25rem;
+      cursor: help;
+      vertical-align: middle;
+    }
     /* Upgrade Pop-up Modal Styles */
     .upgrade-popup-overlay {
       position: fixed;
@@ -1003,7 +1020,7 @@
         key: "ats",
         title: "ATS Resume Score",
         desc: "Receive an overall ATS compliance score for your resume, highlighting key areas to improve.",
-        action: "Upload PDF",
+        action: "Upload Resume",
         included: true
       },
       {
@@ -1201,8 +1218,9 @@
         featuresHtml += `<div class="feature-action">`;
         if (isUnlocked && feature.key === 'ats') {
           // ATS Scoring: real upload
-          featuresHtml += `<input type=\"file\" id=\"ats-upload-input\" accept=\"application/pdf\" style=\"display:none;\" />`;
-          featuresHtml += `<button class=\"btn-primary\" id=\"ats-upload-btn\">${feature.action}</button>`;
+          featuresHtml += `<input type=\"file\" id=\"ats-upload-input\" accept=\".pdf,.docx,.txt\" title=\"Upload your resume in PDF, DOCX, or TXT format\" style=\"display:none;\" />`;
+          featuresHtml += `<button class=\"btn-primary\" id=\"ats-upload-btn\">${feature.action}<span class=\"upload-tooltip-container\" title=\"You can upload PDF, DOCX, or TXT files. Avoid image-only scans for better accuracy.\"><svg width=\"14\" height=\"14\" fill=\"none\" stroke=\"#6B7280\" stroke-width=\"2\" viewBox=\"0 0 24 24\" style=\"margin-left:0.25rem;vertical-align:middle;\"><circle cx=\"12\" cy=\"12\" r=\"10\"></circle><line x1=\"12\" y1=\"16\" x2=\"12\" y2=\"12\"></line><line x1=\"12\" y1=\"8\" x2=\"12\" y2=\"8\"></line></svg></span></button>`;
+          featuresHtml += `<p class=\"upload-help-text\">Accepted file types: <strong>PDF, DOCX, or TXT</strong> (max 2 MB).<br>For best results, upload a text-based document instead of a scanned image.</p>`;
           let usageText = '';
           let tooltip = '';
           if (user.plan === 'free') {
@@ -1744,7 +1762,7 @@
           const errorBanner = document.createElement('div');
           errorBanner.className = 'ats-error-banner';
           errorBanner.style.cssText = 'background:#FEE2E2;border-left:4px solid #EF4444;color:#991B1B;padding:0.75rem 1rem;border-radius:8px;margin:0.75rem 0;font-size:0.9rem;';
-          errorBanner.textContent = message || 'Upload failed. Please upload a text-based PDF, DOCX, or TXT resume.';
+          errorBanner.textContent = message || 'Upload failed. Please upload a PDF, DOCX, or TXT resume.';
           
           const atsCard = document.querySelector('.feature-card:has(#ats-upload-btn)');
           if (atsCard) {
@@ -1759,6 +1777,9 @@
           if (uploadBtn) {
             uploadBtn.disabled = true;
             uploadBtn.textContent = 'Uploading...';
+            // Remove tooltip during loading to avoid confusion
+            const tooltip = uploadBtn.querySelector('.upload-tooltip-container');
+            if (tooltip) tooltip.style.display = 'none';
           }
         }
 
@@ -1766,7 +1787,10 @@
           const uploadBtn = document.getElementById('ats-upload-btn');
           if (uploadBtn) {
             uploadBtn.disabled = false;
-            uploadBtn.textContent = 'Upload PDF';
+            uploadBtn.innerHTML = 'Upload Resume<span class="upload-tooltip-container" title="You can upload PDF, DOCX, or TXT files. Avoid image-only scans for better accuracy."><svg width="14" height="14" fill="none" stroke="#6B7280" stroke-width="2" viewBox="0 0 24 24" style="margin-left:0.25rem;vertical-align:middle;"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12" y2="8"></line></svg></span>';
+            // Restore tooltip visibility
+            const tooltip = uploadBtn.querySelector('.upload-tooltip-container');
+            if (tooltip) tooltip.style.display = 'inline-flex';
           }
         }
 
@@ -1777,6 +1801,23 @@
           // Clear any previous errors
           const existingBanner = document.querySelector('.ats-error-banner');
           if (existingBanner) existingBanner.remove();
+
+          // Validate file type
+          const allowed = ['pdf', 'docx', 'txt'];
+          const ext = file.name.split('.').pop().toLowerCase();
+          if (!allowed.includes(ext)) {
+            showErrorBanner('Invalid file type. Please upload PDF, DOCX, or TXT.');
+            e.target.value = ''; // Reset file input
+            return;
+          }
+
+          // Validate file size (2 MB = 2 * 1024 * 1024 bytes)
+          const maxSize = 2 * 1024 * 1024; // 2 MB
+          if (file.size > maxSize) {
+            showErrorBanner('File size exceeds 2 MB limit. Please upload a smaller file.');
+            e.target.value = ''; // Reset file input
+            return;
+          }
 
           // Show loading state
           showLoadingState();
