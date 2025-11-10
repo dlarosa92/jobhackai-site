@@ -112,17 +112,25 @@ export async function onRequest(context) {
         : extractionResult.text
     };
 
-    // Store in KV (no expiration for now - can be cleaned up later)
-    if (env.JOBHACKAI_KV) {
-      await env.JOBHACKAI_KV.put(resumeKey, JSON.stringify(resumeData));
+    // Store in KV (best-effort only - KV is optional for dev environments)
+    const kv = env.JOBHACKAI_KV;
+    if (kv) {
+      try {
+        await kv.put(resumeKey, JSON.stringify(resumeData));
+      } catch (kvError) {
+        console.warn('[RESUME-UPLOAD] KV write failed (non-fatal):', kvError);
+        // Continue without KV storage - not a fatal error
+      }
+    } else {
+      console.warn('[RESUME-UPLOAD] KV binding missing, skipping storage');
     }
 
-    // Return success
-    // Note: resumeText is NOT returned to avoid exposing PII to XSS attacks
-    // The resume text is securely stored in KV and can be fetched using resumeId when needed
+    // Return success with resumeText for direct scoring (bypasses KV requirement)
+    // Note: resumeText is returned to enable scoring without KV in dev environments
     return json({
       success: true,
       resumeId,
+      resumeText: extractionResult.text, // Include full text for direct scoring
       textPreview: resumeData.textPreview,
       wordCount: extractionResult.wordCount,
       fileType: extractionResult.fileType,

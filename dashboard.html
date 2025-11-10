@@ -227,18 +227,6 @@
       background: #00c965;
       outline: none;
     }
-    .feature-card .included-badge {
-      color: #00C853;
-      font-size: 0.98rem;
-      font-weight: 600;
-      margin-top: 0.5rem;
-      display: flex;
-      align-items: center;
-      gap: 0.3rem;
-    }
-    .feature-card .included-badge svg {
-      vertical-align: middle;
-    }
     @media (max-width: 700px) {
       .dashboard-banner, .dashboard-features {
         padding-left: 0.5rem;
@@ -489,13 +477,6 @@
       color: #6B7280;
       line-height: 1.35;
       font-size: 0.95rem;
-    }
-    .upload-tooltip-container {
-      display: inline-flex;
-      align-items: center;
-      margin-left: 0.25rem;
-      cursor: help;
-      vertical-align: middle;
     }
     /* Upgrade Pop-up Modal Styles */
     .upgrade-popup-overlay {
@@ -1209,7 +1190,7 @@
         if (isUnlocked && feature.key === 'ats') {
           // ATS Scoring: real upload
           featuresHtml += `<input type=\"file\" id=\"ats-upload-input\" accept=\".pdf,.docx,.txt\" title=\"Upload your resume in PDF, DOCX, or TXT format\" style=\"display:none;\" />`;
-          featuresHtml += `<button class=\"btn-primary\" id=\"ats-upload-btn\">${feature.action}<span class=\"upload-tooltip-container\" title=\"You can upload PDF, DOCX, or TXT files. Avoid image-only scans for better accuracy.\"><svg width=\"14\" height=\"14\" fill=\"none\" stroke=\"#6B7280\" stroke-width=\"2\" viewBox=\"0 0 24 24\" style=\"margin-left:0.25rem;vertical-align:middle;\"><circle cx=\"12\" cy=\"12\" r=\"10\"></circle><line x1=\"12\" y1=\"16\" x2=\"12\" y2=\"12\"></line><line x1=\"12\" y1=\"8\" x2=\"12\" y2=\"8\"></line></svg></span></button>`;
+          featuresHtml += `<button class=\"btn-primary\" id=\"ats-upload-btn\">${feature.action}</button>`;
           let usageText = '';
           let tooltip = '';
           if (user.plan === 'free') {
@@ -1332,9 +1313,6 @@
           featuresHtml += `<button class=\"btn-locked\" data-feature-key=\"${feature.key}\"><svg width=\"18\" height=\"18\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"#fff\" stroke-width=\"2\"><rect x=\"3\" y=\"11\" width=\"18\" height=\"8\" rx=\"2\"/><path d=\"M7 11V7a5 5 0 0110 0v4\"/></svg> ${feature.action}</button>`;
         }
         featuresHtml += `</div>`;
-        if (isUnlocked && (user.plan === 'trial' || user.plan === 'essential' || user.plan === 'pro' || user.plan === 'premium')) {
-          featuresHtml += `<div class="included-badge"><svg width="16" height="16" fill="#00C853" viewBox="0 0 24 24"><path d="M20.285 6.709a1 1 0 00-1.414-1.418l-9.192 9.192-4.242-4.242a1 1 0 00-1.414 1.414l4.949 4.95a1 1 0 001.414 0l9.899-9.896z"/></svg> Included in ${user.plan === 'trial' ? 'Trial' : user.plan.charAt(0).toUpperCase() + user.plan.slice(1)}</div>`;
-        }
         featuresHtml += `</div>`;
       }
       featuresHtml += '</div>';
@@ -1784,9 +1762,6 @@
           if (uploadBtn) {
             uploadBtn.disabled = true;
             uploadBtn.textContent = 'Uploading...';
-            // Remove tooltip during loading to avoid confusion
-            const tooltip = uploadBtn.querySelector('.upload-tooltip-container');
-            if (tooltip) tooltip.style.display = 'none';
           }
         }
 
@@ -1794,10 +1769,7 @@
           const uploadBtn = document.getElementById('ats-upload-btn');
           if (uploadBtn) {
             uploadBtn.disabled = false;
-            uploadBtn.innerHTML = 'Upload Resume<span class="upload-tooltip-container" title="You can upload PDF, DOCX, or TXT files. Avoid image-only scans for better accuracy."><svg width="14" height="14" fill="none" stroke="#6B7280" stroke-width="2" viewBox="0 0 24 24" style="margin-left:0.25rem;vertical-align:middle;"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12" y2="8"></line></svg></span>';
-            // Restore tooltip visibility
-            const tooltip = uploadBtn.querySelector('.upload-tooltip-container');
-            if (tooltip) tooltip.style.display = 'inline-flex';
+            uploadBtn.textContent = 'Upload Resume';
           }
         }
 
@@ -1964,15 +1936,22 @@
             if (!uploadData.success) {
               clearAtsState();
               resetAtsGauge();
-              showErrorBanner(uploadData.message || 'Upload failed. Please upload a text-based PDF, DOCX, or TXT resume.');
+              // Show user-friendly error messages
+              const errorMsg = uploadData.error === 'invalid-text' 
+                ? 'We couldn\'t read your resume. Please upload a text-based PDF, DOCX, or TXT file.'
+                : uploadData.message || 'Upload failed. Please upload a text-based PDF, DOCX, or TXT resume.';
+              showErrorBanner(errorMsg);
               hideLoadingState();
               e.target.value = ''; // Reset file input
               return;
             }
 
             // Step 2: Store resume data in sessionStorage for cross-page sync
-            // Note: Only store resumeId, not resumeText (PII security - resume text stored securely in backend KV)
+            // Store both resumeId and resumeText (resumeText needed for direct scoring without KV)
             sessionStorage.setItem('currentResumeId', uploadData.resumeId);
+            if (uploadData.resumeText) {
+              sessionStorage.setItem('currentResumeText', uploadData.resumeText);
+            }
 
             // Step 3: Get ATS score
             const uploadBtn = document.getElementById('ats-upload-btn');
@@ -1989,19 +1968,52 @@
               },
               body: JSON.stringify({
                 resumeId: uploadData.resumeId,
+                resumeText: uploadData.resumeText, // Pass text directly to bypass KV requirement
                 jobTitle: jobTitle
               })
             });
 
             if (!scoreResponse.ok) {
-              const errorData = await scoreResponse.json();
-              throw new Error(errorData.error || 'Failed to get ATS score');
+              let errorMessage = 'Something went wrong scoring your resume. Please try again in a few minutes.';
+              try {
+                const errorData = await scoreResponse.json();
+                // Map error codes to user-friendly messages
+                if (errorData.error === 'invalid-text') {
+                  errorMessage = 'We couldn\'t read your resume. Please upload a text-based PDF, DOCX, or TXT file.';
+                } else if (errorData.error === 'scoring-failed' || errorData.error === 'invalid-result') {
+                  errorMessage = 'Something went wrong scoring your resume. Please try again in a few minutes.';
+                } else {
+                  errorMessage = errorData.message || errorData.error || errorMessage;
+                }
+              } catch (parseError) {
+                // If parsing fails, use default message
+              }
+              clearAtsState();
+              resetAtsGauge();
+              showErrorBanner(errorMessage);
+              hideLoadingState();
+              e.target.value = ''; // Reset file input
+              return;
             }
 
             const scoreData = await scoreResponse.json();
             
             if (!scoreData.success) {
-              throw new Error(scoreData.error || 'Failed to get ATS score');
+              // Map error codes to user-friendly messages
+              let errorMessage = 'Something went wrong scoring your resume. Please try again in a few minutes.';
+              if (scoreData.error === 'invalid-text') {
+                errorMessage = 'We couldn\'t read your resume. Please upload a text-based PDF, DOCX, or TXT file.';
+              } else if (scoreData.error === 'scoring-failed' || scoreData.error === 'invalid-result') {
+                errorMessage = 'Something went wrong scoring your resume. Please try again in a few minutes.';
+              } else {
+                errorMessage = scoreData.message || scoreData.error || errorMessage;
+              }
+              clearAtsState();
+              resetAtsGauge();
+              showErrorBanner(errorMessage);
+              hideLoadingState();
+              e.target.value = ''; // Reset file input
+              return;
             }
 
             // Step 4: Update UI with real score
@@ -2066,7 +2078,19 @@
             console.error('[ATS-UPLOAD] Error:', error);
             clearAtsState();
             resetAtsGauge();
-            showErrorBanner(error.message || 'Upload failed. Please try again.');
+            // Show user-friendly error messages - never show KV binding errors
+            let errorMessage = 'Something went wrong scoring your resume. Please try again in a few minutes.';
+            if (error.message) {
+              // Filter out technical errors that shouldn't be shown to users
+              if (error.message.includes('KV binding') || error.message.includes('Storage service unavailable')) {
+                errorMessage = 'Something went wrong scoring your resume. Please try again in a few minutes.';
+              } else if (error.message.includes('invalid-text') || error.message.includes('couldn\'t read')) {
+                errorMessage = 'We couldn\'t read your resume. Please upload a text-based PDF, DOCX, or TXT file.';
+              } else {
+                errorMessage = error.message;
+              }
+            }
+            showErrorBanner(errorMessage);
             hideLoadingState();
             e.target.value = ''; // Reset file input
           }
