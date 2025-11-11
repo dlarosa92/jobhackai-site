@@ -35,7 +35,8 @@
         headers: {
           'Authorization': `Bearer ${idToken}`,
           'Content-Type': 'application/json'
-        }
+        },
+        body: JSON.stringify({}) // Include empty body to satisfy Content-Type header
       });
 
       if (!response.ok) {
