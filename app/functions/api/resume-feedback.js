@@ -306,8 +306,21 @@ export async function onRequest(context) {
           return json({ success: false, error: 'Unauthorized' }, 403, origin, env);
         }
       } else {
-        // KV available but resume not found - require KV storage
-        return json({ success: false, error: 'Resume not found' }, 404, origin, env);
+        // KV available but resume not found - allow dev fallback if resumeText provided
+        if (isDevEnvironment && resumeText) {
+          // Use resume text from request body (dev mode fallback when KV resume missing)
+          resumeData = {
+            uid,
+            text: resumeText,
+            isMultiColumn: isMultiColumn || false,
+            fileName: 'dev-resume',
+            uploadedAt: Date.now()
+          };
+          console.log('[RESUME-FEEDBACK] KV resume not found, using dev fallback with resumeText from request body');
+        } else {
+          // KV available but resume not found and no dev fallback
+          return json({ success: false, error: 'Resume not found' }, 404, origin, env);
+        }
       }
     } else {
       // KV not available - allow dev fallback with resumeText in request body
@@ -320,7 +333,7 @@ export async function onRequest(context) {
           fileName: 'dev-resume',
           uploadedAt: Date.now()
         };
-        console.log('[RESUME-FEEDBACK] Using dev fallback: resume text from request body');
+        console.log('[RESUME-FEEDBACK] KV not available, using dev fallback: resume text from request body');
       } else {
         // KV not available and no dev fallback provided
         return json({ 

@@ -615,6 +615,23 @@
     async function getResumeFeedback(resumeId, jobTitle) {
       const token = await getAuthToken();
       
+      // Try to get resumeText from sessionStorage (fallback when KV unavailable)
+      // Use nullish coalescing to only convert null to undefined, preserving empty strings
+      const resumeText = sessionStorage.getItem('currentResumeText') ?? undefined;
+      
+      // Build request body with optional resumeText for dev fallback
+      const requestBody = { resumeId, jobTitle };
+      if (resumeText) {
+        requestBody.resumeText = resumeText;
+        // Also get isMultiColumn if available from state persistence
+        if (window.JobHackAIStatePersistence) {
+          const resumeData = window.JobHackAIStatePersistence.loadResumeData();
+          if (resumeData && resumeData.isMultiColumn !== undefined) {
+            requestBody.isMultiColumn = resumeData.isMultiColumn;
+          }
+        }
+      }
+      
       // Use retry logic for API call
       const response = await window.JobHackAIRetry.fetchWithRetry('/api/resume-feedback', {
         method: 'POST',
@@ -622,7 +639,7 @@
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ resumeId, jobTitle })
+        body: JSON.stringify(requestBody)
       }, {
         maxRetries: 3,
         initialDelay: 1000
@@ -905,11 +922,19 @@
       waitForNavigationAndInit();
       
       // Initialize role selector - ensure it's initialized after DOM and RoleSelector are ready
+      let roleSelectorInitAttempts = 0;
+      const MAX_ROLE_SELECTOR_ATTEMPTS = 50; // Try for up to 10 seconds (50 * 200ms)
+      
       function initializeRoleSelector() {
         const jobTitleInput = document.getElementById('rf-job-title');
         if (!jobTitleInput) {
           // Element not ready yet, retry
-          setTimeout(initializeRoleSelector, 100);
+          if (roleSelectorInitAttempts < MAX_ROLE_SELECTOR_ATTEMPTS) {
+            roleSelectorInitAttempts++;
+            setTimeout(initializeRoleSelector, 100);
+          } else {
+            console.warn('[RESUME-FEEDBACK] Job title input not found after max attempts');
+          }
           return;
         }
         
@@ -927,6 +952,7 @@
                 }
               });
               jobTitleInput.dataset.roleSelectorInitialized = 'true';
+              console.log('[RESUME-FEEDBACK] RoleSelector initialized successfully');
               
               // Also listen for input changes to update currentJobTitle when user types
               jobTitleInput.addEventListener('input', function() {
@@ -959,11 +985,21 @@
               });
             } catch (error) {
               console.error('[RESUME-FEEDBACK] Failed to initialize RoleSelector:', error);
+              // Retry once more after a delay
+              if (roleSelectorInitAttempts < MAX_ROLE_SELECTOR_ATTEMPTS) {
+                roleSelectorInitAttempts++;
+                setTimeout(initializeRoleSelector, 500);
+              }
             }
           }
         } else {
           // RoleSelector not loaded yet, wait and retry
-          setTimeout(initializeRoleSelector, 200);
+          if (roleSelectorInitAttempts < MAX_ROLE_SELECTOR_ATTEMPTS) {
+            roleSelectorInitAttempts++;
+            setTimeout(initializeRoleSelector, 200);
+          } else {
+            console.warn('[RESUME-FEEDBACK] RoleSelector not available after max attempts - dropdown may not work');
+          }
         }
       }
       
