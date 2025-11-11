@@ -149,10 +149,17 @@ export async function onRequest(context) {
     const plan = await getUserPlan(uid, env);
     
     // Log plan detection for debugging
-    console.log('[RESUME-FEEDBACK] Plan check:', { uid, plan, hasKV: !!env.JOBHACKAI_KV });
+    console.log('[RESUME-FEEDBACK] Plan check:', { uid, plan, hasKV: !!env.JOBHACKAI_KV, environment: env.ENVIRONMENT, origin });
+
+    // Dev environment bypass: Allow authenticated users in dev environment
+    // This allows testing with dev plan override without requiring KV storage setup
+    const isDevEnvironment = env.ENVIRONMENT === 'dev' || origin.includes('dev.jobhackai.io');
+    const effectivePlan = isDevEnvironment && plan === 'free' ? 'pro' : plan;
+    
+    console.log('[RESUME-FEEDBACK] Effective plan:', { plan, effectivePlan, isDevEnvironment });
 
     // Check plan access (Free plan locked)
-    if (plan === 'free') {
+    if (effectivePlan === 'free') {
       console.log('[RESUME-FEEDBACK] Access denied - plan is free');
       return json({
         success: false,
@@ -175,7 +182,7 @@ export async function onRequest(context) {
     }
 
     // Throttle check (Trial only)
-    if (plan === 'trial' && env.JOBHACKAI_KV) {
+    if (effectivePlan === 'trial' && env.JOBHACKAI_KV) {
       const throttleKey = `feedbackThrottle:${uid}`;
       const lastRun = await env.JOBHACKAI_KV.get(throttleKey);
       
@@ -231,7 +238,7 @@ export async function onRequest(context) {
     }
 
     // Usage limits (Essential: 3/month)
-    if (plan === 'essential' && env.JOBHACKAI_KV) {
+    if (effectivePlan === 'essential' && env.JOBHACKAI_KV) {
       const now = new Date();
       const monthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
       const usageKey = `feedbackUsage:${uid}:${monthKey}`;
@@ -268,10 +275,10 @@ export async function onRequest(context) {
     // If cached, still update usage counters (user is consuming the feature)
     // Then return cached result
     if (cachedResult) {
-      console.log(`[RESUME-FEEDBACK] Cache hit for ${uid}`, { resumeId, plan });
+      console.log(`[RESUME-FEEDBACK] Cache hit for ${uid}`, { resumeId, plan: effectivePlan });
       
       // Update throttles and usage even for cache hits (prevents bypassing limits)
-      await updateUsageCounters(uid, resumeId, plan, env);
+      await updateUsageCounters(uid, resumeId, effectivePlan, env);
       
       return json({
         success: true,
@@ -511,7 +518,7 @@ export async function onRequest(context) {
     }
 
     // Update throttles and usage counters (for cache misses)
-    await updateUsageCounters(uid, resumeId, plan, env);
+    await updateUsageCounters(uid, resumeId, effectivePlan, env);
 
     return json({
       success: true,
