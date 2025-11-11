@@ -1099,9 +1099,15 @@
           }
         }
         
-        if (cachedScore && cachedScore.score) {
+        if (cachedScore && cachedScore.score !== null && cachedScore.score !== undefined) {
           console.log('[RESUME-FEEDBACK] Loading cached ATS score:', cachedScore.score);
           updateProgressRing(cachedScore.score);
+          
+          // Update description
+          const descEl = document.getElementById('rf-score-desc-text');
+          if (descEl) {
+            descEl.textContent = 'Your resume was analyzed. See your ATS score and feedback below.';
+          }
           
           // Convert breakdown to rubric format if available
           if (cachedScore.breakdown) {
@@ -1176,6 +1182,21 @@
           if (cachedScore.jobTitle && jobTitleInput) {
             jobTitleInput.value = cachedScore.jobTitle;
             currentJobTitle = cachedScore.jobTitle;
+          }
+        } else {
+          // Empty state: no cached score
+          console.log('[RESUME-FEEDBACK] No cached score found, showing empty state');
+          updateProgressRing(null);
+          updateRubricGrid([]);
+          // Show empty state for Role-Specific Feedback
+          const feedbackGrid = document.getElementById('rf-feedback-grid');
+          if (feedbackGrid) {
+            feedbackGrid.innerHTML = `
+              <div class="rf-feedback-card" style="opacity:0.6;grid-column:1/-1;">
+                <div class="rf-feedback-label">No feedback yet</div>
+                <div class="rf-feedback-tip">Provide a target job title (e.g., <strong>Software Engineer</strong>) to get tailored feedback here.</div>
+              </div>
+            `;
           }
         }
       }
@@ -1328,7 +1349,7 @@
             }
 
             // Update description
-            const descEl = document.getElementById('rf-score-desc');
+            const descEl = document.getElementById('rf-score-desc-text');
             if (descEl) {
               descEl.textContent = 'Your resume was analyzed. See your ATS score and feedback below.';
             }
@@ -1395,16 +1416,38 @@
       attachRewriteButtonListeners();
     });
 
+    // Map internal keys to user-friendly labels
+    function mapLabelToUserFriendly(key) {
+      const labelMap = {
+        'overallScore': 'Overall ATS Score',
+        'keywordScore': 'Keyword Match',
+        'formattingScore': 'ATS Formatting',
+        'structureScore': 'Structure & Organization',
+        'toneScore': 'Tone & Clarity',
+        'grammarScore': 'Grammar & Spelling'
+      };
+      return labelMap[key] || key;
+    }
+
     // Update rubric grid from API response
     function updateRubricGridFromFeedback(atsRubric) {
       if (!atsRubric || !Array.isArray(atsRubric)) return;
       
-      const rubric = atsRubric.map(item => ({
-        label: item.category || item.label,
-        score: item.score || 0,
-        max: item.max || 100,
-        tip: item.feedback || item.tip || ''
-      }));
+      const rubric = atsRubric.map(item => {
+        // Extract label from category, label, or key - ensure user-friendly
+        let label = item.category || item.label || item.key || '';
+        // If label is a camelCase key, map it to user-friendly name
+        if (label && (label.includes('Score') || label.match(/^[a-z]+[A-Z]/))) {
+          label = mapLabelToUserFriendly(label);
+        }
+        
+        return {
+          label: label,
+          score: item.score || 0,
+          max: item.max || 100,
+          tip: item.feedback || item.tip || ''
+        };
+      });
       
       updateRubricGrid(rubric);
     }
@@ -1421,6 +1464,32 @@
         console.warn('[RESUME-FEEDBACK] Progress circle not found');
         return;
       }
+      
+      // Handle empty state (score is null/undefined)
+      if (score === null || score === undefined) {
+        // Show hollow ring with "—"
+        circle.setAttribute('stroke', '#E5E7EB');
+        circle.setAttribute('stroke-width', '8');
+        circle.setAttribute('stroke-dasharray', '226.2');
+        circle.setAttribute('stroke-dashoffset', '0');
+        circle.setAttribute('stroke-linecap', 'round');
+        circle.setAttribute('fill', 'none');
+        
+        let text = svg.querySelector('text');
+        if (!text) {
+          text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+          text.setAttribute('x', '40');
+          text.setAttribute('y', '48');
+          text.setAttribute('text-anchor', 'middle');
+          text.setAttribute('font-size', '1.6rem');
+          text.setAttribute('font-weight', '700');
+          text.setAttribute('fill', '#9CA3AF');
+          svg.appendChild(text);
+        }
+        text.textContent = '—';
+        return;
+      }
+      
       const percent = Math.max(0, Math.min(100, score));
       const radius = 36;
       const circumference = 2 * Math.PI * radius;
@@ -1446,6 +1515,7 @@
         text.setAttribute('fill', '#1F2937');
         svg.appendChild(text);
       }
+      text.setAttribute('fill', '#1F2937');
       text.textContent = percent + '%';
       
       console.log('[RESUME-FEEDBACK] Updated progress ring to', percent + '%');
@@ -1455,11 +1525,45 @@
       const grid = document.getElementById('rf-rubric-grid');
       if (!grid) return;
       grid.innerHTML = '';
+      
+      // Handle empty state
+      if (!rubric || rubric.length === 0 || (rubric.length === 1 && rubric[0].score === null)) {
+        // Show empty state placeholders
+        const emptyRubric = [
+          { label: 'Keyword Match', score: null, max: 40, tip: 'Upload a résumé to check role-specific keywords.' },
+          { label: 'ATS Formatting', score: null, max: 20, tip: 'We\'ll scan for tables, columns, and parser-safe layout.' },
+          { label: 'Structure & Organization', score: null, max: 15, tip: 'We\'ll validate standard section order.' },
+          { label: 'Tone & Clarity', score: null, max: 15, tip: 'We\'ll flag passive voice and vague phrasing.' },
+          { label: 'Grammar & Spelling', score: null, max: 10, tip: 'We\'ll surface major issues.' }
+        ];
+        emptyRubric.forEach(item => {
+          const div = document.createElement('div');
+          div.className = 'rf-rubric-item';
+          div.style.opacity = '0.6';
+          div.innerHTML = `
+            <div class="rf-rubric-label">${item.label}</div>
+            <div class="rf-rubric-score" style="color:var(--color-text-muted);">— / —</div>
+            <div style="color:var(--color-text-secondary);font-size:0.98rem;">${item.tip}</div>
+          `;
+          grid.appendChild(div);
+        });
+        // Hide summary card in empty state
+        const summaryCard = document.getElementById('rf-summary-card');
+        if (summaryCard) summaryCard.style.display = 'none';
+        return;
+      }
+      
       rubric.forEach(item => {
+        // Ensure label is user-friendly (map camelCase keys)
+        let label = item.label || '';
+        if (label && (label.includes('Score') || label.match(/^[a-z]+[A-Z]/))) {
+          label = mapLabelToUserFriendly(label);
+        }
+        
         const div = document.createElement('div');
         div.className = 'rf-rubric-item';
         div.innerHTML = `
-          <div class="rf-rubric-label">${item.label}</div>
+          <div class="rf-rubric-label">${label}</div>
           <div class="rf-rubric-score">${item.score} / ${item.max}</div>
           <div style="color:var(--color-text-secondary);font-size:0.98rem;">${item.tip || item.feedback || ''}</div>
         `;
@@ -1545,17 +1649,19 @@
       const grid = document.getElementById('rf-feedback-grid');
       if (!grid) return;
       
-      // Use provided feedback or default
-      const feedbacks = roleSpecificFeedback || [
-        { section: 'Header & Contact', score: '8/10', feedback: 'Clear and concise. Consider adding a custom resume URL for extra polish.' },
-        { section: 'Professional Summary', score: '6/10', feedback: 'Strong opening but lacks keywords for your target role.' },
-        { section: 'Experience', score: '7/10', feedback: 'Great structure. Quantify impact with metrics.' },
-        { section: 'Skills', score: '9/10', feedback: 'Relevant and up-to-date. Group under sub-headings.' },
-        { section: 'Education', score: '10/10', feedback: 'Well-formatted. No changes needed.' }
-      ];
+      // Handle empty state
+      if (!roleSpecificFeedback || !Array.isArray(roleSpecificFeedback) || roleSpecificFeedback.length === 0) {
+        grid.innerHTML = `
+          <div class="rf-feedback-card" style="opacity:0.6;grid-column:1/-1;">
+            <div class="rf-feedback-label">No feedback yet</div>
+            <div class="rf-feedback-tip">Provide a target job title (e.g., <strong>Software Engineer</strong>) to get tailored feedback here.</div>
+          </div>
+        `;
+        return;
+      }
       
       grid.innerHTML = '';
-      feedbacks.forEach(item => {
+      roleSpecificFeedback.forEach(item => {
         const div = document.createElement('div');
         div.className = 'rf-feedback-card';
         div.innerHTML = `
