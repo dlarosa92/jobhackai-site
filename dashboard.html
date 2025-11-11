@@ -969,10 +969,20 @@
       // Only set flag if previous-plan actually exists (not defaulting to 'free')
       // This prevents direct paid signups from being incorrectly marked as former free users
       const previousPlan = localStorage.getItem('previous-plan');
-      if (previousPlan === 'free' && (currentPlan === 'trial' || currentPlan === 'essential' || currentPlan === 'pro' || currentPlan === 'premium')) {
+      const hasUpgradedPlan = currentPlan === 'trial' || currentPlan === 'essential' || currentPlan === 'pro' || currentPlan === 'premium';
+      
+      // Track if user JUST upgraded (plan changed from free to paid in this session)
+      if (previousPlan === 'free' && hasUpgradedPlan) {
         localStorage.setItem('was-free-user', 'true');
-        console.log('✅ Marked user as former free user (upgraded to', currentPlan + ')');
+        // Set timestamp for when upgrade happened (only if not already set)
+        if (!localStorage.getItem('upgrade-timestamp')) {
+          localStorage.setItem('upgrade-timestamp', Date.now().toString());
+          console.log('✅ Marked user as former free user (upgraded to', currentPlan + ') - upgrade timestamp set');
+        } else {
+          console.log('✅ Marked user as former free user (upgraded to', currentPlan + ') - upgrade timestamp already exists');
+        }
       }
+      
       // Update previous plan for next check (only if it changed)
       if (previousPlan !== currentPlan) {
         localStorage.setItem('previous-plan', currentPlan);
@@ -1003,6 +1013,14 @@
                 if (syncData.trialEndsAt) {
                   localStorage.setItem('trial-ends-at', syncData.trialEndsAt);
                   console.log('✅ Updated trial end date:', syncData.trialEndsAt);
+                }
+                
+                // Set upgrade timestamp if user was upgrading from free account
+                const previousPlanBeforeSync = localStorage.getItem('previous-plan') || 'free';
+                if (previousPlanBeforeSync === 'free' && !localStorage.getItem('upgrade-timestamp')) {
+                  localStorage.setItem('upgrade-timestamp', Date.now().toString());
+                  localStorage.setItem('was-free-user', 'true');
+                  console.log('✅ Set upgrade timestamp after Stripe checkout return');
                 }
                 
                 // Force navigation update with new plan
@@ -1554,12 +1572,34 @@
         // Check if popup was already shown
         const popupShownKey = 'upgrade-popup-shown';
         if (localStorage.getItem(popupShownKey) === 'true') {
+          console.log('ℹ️ [UPGRADE-BANNER] Popup already shown previously');
           return;
         }
         
         // Check if user upgraded from free to trial/subscription
         const hasUpgradedPlan = user.plan === 'trial' || user.plan === 'essential' || user.plan === 'pro' || user.plan === 'premium';
         if (!hasUpgradedPlan) {
+          console.log('ℹ️ [UPGRADE-BANNER] User is not on upgraded plan:', user.plan);
+          return;
+        }
+        
+        // CRITICAL: Only show popup if upgrade happened recently (within 24 hours)
+        // This ensures it only shows on first login after upgrade, not on every login
+        const upgradeTimestamp = localStorage.getItem('upgrade-timestamp');
+        if (!upgradeTimestamp) {
+          console.log('ℹ️ [UPGRADE-BANNER] No upgrade timestamp found - user did not recently upgrade');
+          return;
+        }
+        
+        const upgradeTime = parseInt(upgradeTimestamp, 10);
+        const now = Date.now();
+        const hoursSinceUpgrade = (now - upgradeTime) / (1000 * 60 * 60);
+        
+        // Only show popup if upgrade happened within last 24 hours
+        if (hoursSinceUpgrade > 24) {
+          console.log('ℹ️ [UPGRADE-BANNER] Upgrade happened more than 24 hours ago:', hoursSinceUpgrade.toFixed(1), 'hours');
+          // Clear the upgrade timestamp since it's no longer recent
+          localStorage.removeItem('upgrade-timestamp');
           return;
         }
         
@@ -1619,7 +1659,8 @@
             uploadedResumeForFreeATS,
             hasUsedFreeCredit,
             legacyUsedFreeATS,
-            hasATSScoreHistory
+            hasATSScoreHistory,
+            hoursSinceUpgrade: hoursSinceUpgrade.toFixed(1)
           });
           return;
         }
@@ -1664,6 +1705,8 @@
           setTimeout(() => {
             overlay.remove();
             localStorage.setItem(popupShownKey, 'true');
+            // Clear upgrade timestamp since popup has been shown
+            localStorage.removeItem('upgrade-timestamp');
           }, 350); // Slightly longer than transition duration for smooth fade-out
         }
         
