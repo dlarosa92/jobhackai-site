@@ -552,7 +552,8 @@
       if (window.JobHackAIStatePersistence) {
         window.JobHackAIStatePersistence.saveResumeData({
           resumeId: data.resumeId,
-          resumeText: data.resumeText
+          resumeText: data.resumeText,
+          isMultiColumn: data.isMultiColumn
         });
       }
       
@@ -989,6 +990,8 @@
               if (roleSelectorInitAttempts < MAX_ROLE_SELECTOR_ATTEMPTS) {
                 roleSelectorInitAttempts++;
                 setTimeout(initializeRoleSelector, 500);
+              } else {
+                console.warn('[RESUME-FEEDBACK] RoleSelector initialization failed after max attempts - dropdown may not work');
               }
             }
           }
