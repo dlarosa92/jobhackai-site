@@ -1054,14 +1054,31 @@
       };
       
       // Continue with existing dashboard logic
-      renderDashboard(user);
-      
-      // Initialize usage strip after dashboard renders
-      setTimeout(() => {
-        if (window.JobHackAIUsageStrip) {
-          window.JobHackAIUsageStrip.init({ containerSelector: '#usage-strip-container' });
-        }
-      }, 500);
+      // Wait for renderDashboard to complete before initializing usage strip
+      renderDashboard(user).then(() => {
+        // Initialize usage strip after dashboard renders and FirebaseAuthManager is ready
+        // Use a small delay to ensure DOM is updated
+        setTimeout(() => {
+          if (window.JobHackAIUsageStrip && window.FirebaseAuthManager?.getCurrentUser) {
+            window.JobHackAIUsageStrip.init({ containerSelector: '#usage-strip-container' });
+          } else {
+            // Retry if FirebaseAuthManager not ready yet
+            setTimeout(() => {
+              if (window.JobHackAIUsageStrip) {
+                window.JobHackAIUsageStrip.init({ containerSelector: '#usage-strip-container' });
+              }
+            }, 500);
+          }
+        }, 100);
+      }).catch(err => {
+        console.warn('[DASHBOARD] Error rendering dashboard:', err);
+        // Still try to initialize usage strip even if dashboard render fails
+        setTimeout(() => {
+          if (window.JobHackAIUsageStrip) {
+            window.JobHackAIUsageStrip.init({ containerSelector: '#usage-strip-container' });
+          }
+        }, 1000);
+      });
     });
 
     // --- USER DATA INJECTION (replace with your data source, e.g. from Google Sheets or Wix Data) ---

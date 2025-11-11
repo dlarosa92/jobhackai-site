@@ -1105,40 +1105,67 @@
           
           // Convert breakdown to rubric format if available
           if (cachedScore.breakdown) {
-            // Map cached breakdown structure (flat numbers) to rubric format
-            // Cached structure: breakdown.keywordScore = number, feedback = array
-            // Rubric expects: { score, max, tip }
+            // Handle both flat number structure and nested object structure
+            // Flat: breakdown.keywordScore = number
+            // Nested: breakdown.keywordScore = { score, max, feedback }
             const feedbackArray = cachedScore.feedback || [];
+            
+            // Helper to extract score from either structure
+            const getScore = (breakdownItem) => {
+              if (typeof breakdownItem === 'number') {
+                return breakdownItem;
+              } else if (breakdownItem && typeof breakdownItem === 'object' && typeof breakdownItem.score === 'number') {
+                return breakdownItem.score;
+              }
+              return 0;
+            };
+            
+            // Helper to extract max from either structure
+            const getMax = (breakdownItem, defaultMax) => {
+              if (breakdownItem && typeof breakdownItem === 'object' && typeof breakdownItem.max === 'number') {
+                return breakdownItem.max;
+              }
+              return defaultMax;
+            };
+            
+            // Helper to extract feedback/tip from either structure
+            const getTip = (breakdownItem, index) => {
+              if (breakdownItem && typeof breakdownItem === 'object' && breakdownItem.feedback) {
+                return breakdownItem.feedback;
+              }
+              return feedbackArray[index] || '';
+            };
+            
             const rubric = [
               {
                 label: 'Keyword Match',
-                score: typeof cachedScore.breakdown.keywordScore === 'number' ? cachedScore.breakdown.keywordScore : 0,
-                max: 40,
-                tip: feedbackArray[0] || ''
+                score: getScore(cachedScore.breakdown.keywordScore),
+                max: getMax(cachedScore.breakdown.keywordScore, 40),
+                tip: getTip(cachedScore.breakdown.keywordScore, 0)
               },
               {
                 label: 'ATS Formatting',
-                score: typeof cachedScore.breakdown.formattingScore === 'number' ? cachedScore.breakdown.formattingScore : 0,
-                max: 20,
-                tip: feedbackArray[1] || ''
+                score: getScore(cachedScore.breakdown.formattingScore),
+                max: getMax(cachedScore.breakdown.formattingScore, 20),
+                tip: getTip(cachedScore.breakdown.formattingScore, 1)
               },
               {
                 label: 'Structure & Organization',
-                score: typeof cachedScore.breakdown.structureScore === 'number' ? cachedScore.breakdown.structureScore : 0,
-                max: 15,
-                tip: feedbackArray[2] || ''
+                score: getScore(cachedScore.breakdown.structureScore),
+                max: getMax(cachedScore.breakdown.structureScore, 15),
+                tip: getTip(cachedScore.breakdown.structureScore, 2)
               },
               {
                 label: 'Tone & Clarity',
-                score: typeof cachedScore.breakdown.toneScore === 'number' ? cachedScore.breakdown.toneScore : 0,
-                max: 15,
-                tip: feedbackArray[3] || ''
+                score: getScore(cachedScore.breakdown.toneScore),
+                max: getMax(cachedScore.breakdown.toneScore, 15),
+                tip: getTip(cachedScore.breakdown.toneScore, 3)
               },
               {
                 label: 'Grammar & Spelling',
-                score: typeof cachedScore.breakdown.grammarScore === 'number' ? cachedScore.breakdown.grammarScore : 0,
-                max: 10,
-                tip: feedbackArray[4] || ''
+                score: getScore(cachedScore.breakdown.grammarScore),
+                max: getMax(cachedScore.breakdown.grammarScore, 10),
+                tip: getTip(cachedScore.breakdown.grammarScore, 4)
               }
             ];
             updateRubricGrid(rubric);
