@@ -78,7 +78,39 @@
     .rf-feedback-score { display: inline-block; background: #00E676; color: #fff; font-weight: 700; border-radius: 999px; padding: 0.2em 0.8em; font-size: 1rem; margin-left: 0.5rem; }
     .rf-feedback-tip { color: var(--color-text-secondary); font-size: 1.01rem; margin-top: 0.3rem; }
     .rf-snippet-box { width: 100%; min-height: 120px; border: 2px solid var(--color-divider); border-radius: var(--radius-lg); padding: 1rem; font-size: 1.05rem; margin-bottom: 1.2rem; background: #F9FAFB; color: var(--color-text-main); resize: vertical; }
-    @media (max-width: 700px) { .rf-rubric-grid, .rf-feedback-grid { grid-template-columns: 1fr; } }
+    .rf-summary-card {
+      background: var(--color-card-bg);
+      border-radius: var(--radius-xl);
+      box-shadow: var(--shadow-md);
+      padding: var(--space-lg);
+      margin-bottom: var(--space-lg);
+    }
+    .rf-summary-list {
+      list-style: none;
+      padding: 0;
+      margin: 1rem 0 0 0;
+    }
+    .rf-summary-list li {
+      padding: 0.8rem 0;
+      padding-left: 1.5rem;
+      position: relative;
+      color: var(--color-text-main);
+      font-size: 1.05rem;
+      line-height: 1.6;
+      border-bottom: 1px solid var(--color-divider);
+    }
+    .rf-summary-list li:last-child {
+      border-bottom: none;
+    }
+    .rf-summary-list li::before {
+      content: "•";
+      position: absolute;
+      left: 0;
+      color: var(--color-accent-blue, #1976D2);
+      font-weight: 700;
+      font-size: 1.5rem;
+      line-height: 1;
+    }
     .rf-plan-badge {
       display: inline-block;
       background: var(--color-accent-blue);
@@ -1014,9 +1046,59 @@
         setTimeout(initializeRoleSelector, 100);
       }
 
-      // Load cached ATS score on page load
-      if (window.JobHackAIStatePersistence) {
-        const cachedScore = window.JobHackAIStatePersistence.loadATSScore();
+      // Load cached ATS score on page load (with KV fallback)
+      async function loadCachedAtsScore() {
+        let cachedScore = null;
+        
+        // Try state persistence first
+        if (window.JobHackAIStatePersistence) {
+          cachedScore = window.JobHackAIStatePersistence.loadATSScore();
+        }
+        
+        // KV fallback: If localStorage is empty, fetch from KV via API
+        if (!cachedScore || !cachedScore.score) {
+          try {
+            const currentUser = window.FirebaseAuthManager?.getCurrentUser?.();
+            if (currentUser) {
+              const idToken = await currentUser.getIdToken();
+              const kvResponse = await fetch('/api/ats-score-persist', {
+                method: 'GET',
+                headers: {
+                  'Authorization': `Bearer ${idToken}`
+                }
+              });
+              
+              if (kvResponse.ok) {
+                const kvData = await kvResponse.json();
+                if (kvData.success && kvData.data) {
+                  const resumeData = kvData.data;
+                  cachedScore = {
+                    score: resumeData.score,
+                    breakdown: resumeData.breakdown || {},
+                    jobTitle: resumeData.jobTitle || null,
+                    resumeId: resumeData.resumeId || null
+                  };
+                  
+                  // Save to localStorage for future use (cache)
+                  if (window.JobHackAIStatePersistence) {
+                    window.JobHackAIStatePersistence.saveATSScore({
+                      score: resumeData.score,
+                      breakdown: resumeData.breakdown || {},
+                      resumeId: resumeData.resumeId || '',
+                      jobTitle: resumeData.jobTitle
+                    });
+                  }
+                  
+                  console.log('[RESUME-FEEDBACK] Loaded ATS score from KV:', resumeData.score);
+                }
+              }
+            }
+          } catch (kvError) {
+            console.warn('[RESUME-FEEDBACK] KV fallback failed (non-fatal):', kvError);
+            // Continue without KV data - user can upload a new resume
+          }
+        }
+        
         if (cachedScore && cachedScore.score) {
           console.log('[RESUME-FEEDBACK] Loading cached ATS score:', cachedScore.score);
           updateProgressRing(cachedScore.score);
@@ -1070,6 +1152,11 @@
           }
         }
       }
+      
+      // Load cached ATS score on page load (async)
+      loadCachedAtsScore().catch(err => {
+        console.warn('[RESUME-FEEDBACK] Failed to load cached score:', err);
+      });
 
       // ATS Resume Upload Logic
       const uploadInput = document.getElementById('rf-upload');
@@ -1351,6 +1438,80 @@
         `;
         grid.appendChild(div);
       });
+      
+      // Update summary card after rubric is updated
+      updateSummaryCard(rubric);
+    }
+
+    function updateSummaryCard(rubric) {
+      const summaryCard = document.getElementById('rf-summary-card');
+      const summaryList = document.getElementById('rf-summary-list');
+      if (!summaryCard || !summaryList) return;
+      
+      // Generate 2-3 actionable bullets from the biggest scoring gaps
+      const bullets = generateSummaryBullets(rubric);
+      
+      if (bullets.length === 0) {
+        summaryCard.style.display = 'none';
+        return;
+      }
+      
+      // Show card and populate bullets
+      summaryCard.style.display = 'block';
+      summaryList.innerHTML = '';
+      bullets.forEach(bullet => {
+        const li = document.createElement('li');
+        li.textContent = bullet;
+        summaryList.appendChild(li);
+      });
+    }
+
+    function generateSummaryBullets(rubric) {
+      if (!rubric || !Array.isArray(rubric) || rubric.length === 0) {
+        return [];
+      }
+      
+      // Calculate percentage scores and identify biggest gaps
+      const gaps = rubric.map(item => {
+        const percentage = item.max > 0 ? (item.score / item.max) * 100 : 0;
+        return {
+          label: item.label,
+          percentage,
+          score: item.score,
+          max: item.max,
+          tip: item.tip || item.feedback || ''
+        };
+      }).sort((a, b) => a.percentage - b.percentage); // Sort by lowest percentage first
+      
+      // Generate 2-3 bullets from the biggest gaps
+      const bullets = [];
+      const maxBullets = 3;
+      
+      for (let i = 0; i < Math.min(maxBullets, gaps.length); i++) {
+        const gap = gaps[i];
+        if (gap.percentage < 80) { // Only include if score is below 80%
+          let bullet = '';
+          
+          // Generate actionable bullet based on category
+          if (gap.label.includes('Keyword')) {
+            bullet = `Improve keyword matching: ${gap.tip || 'Add more industry-specific keywords relevant to your target role.'}`;
+          } else if (gap.label.includes('Formatting')) {
+            bullet = `Fix formatting issues: ${gap.tip || 'Ensure your resume uses standard formatting without tables or graphics.'}`;
+          } else if (gap.label.includes('Structure')) {
+            bullet = `Optimize structure: ${gap.tip || 'Organize sections in the standard order: Contact, Experience, Education, Skills.'}`;
+          } else if (gap.label.includes('Tone')) {
+            bullet = `Enhance tone and clarity: ${gap.tip || 'Use action verbs and concise bullet points to improve readability.'}`;
+          } else if (gap.label.includes('Grammar')) {
+            bullet = `Review grammar and spelling: ${gap.tip || 'Proofread carefully to eliminate errors.'}`;
+          } else {
+            bullet = `Improve ${gap.label.toLowerCase()}: ${gap.tip || `Your ${gap.label.toLowerCase()} score is ${Math.round(gap.percentage)}%. Focus on this area for better results.`}`;
+          }
+          
+          bullets.push(bullet);
+        }
+      }
+      
+      return bullets;
     }
 
     function updateFeedbackGrid(roleSpecificFeedback) {
@@ -1859,6 +2020,13 @@
             <div class="rf-rubric-score">7 / 10</div>
             <div style="color:var(--color-text-secondary);font-size:0.98rem;">No major errors detected.</div>
           </div>
+        </div>
+        <!-- Summary & Next Steps Card -->
+        <div class="rf-card rf-summary-card" id="rf-summary-card" style="display:none;margin-top:2rem;">
+          <div class="rf-section-title">Summary & Next Steps</div>
+          <ul class="rf-summary-list" id="rf-summary-list" style="list-style:none;padding:0;margin:1rem 0 0 0;">
+            <!-- Summary bullets will be generated here -->
+          </ul>
         </div>
         <!-- Role-Specific Feedback -->
         <div class="rf-section-title" id="rf-role-title" style="margin-top:2rem;">Role-Specific Feedback</div>

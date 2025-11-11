@@ -127,6 +127,83 @@
       text-decoration: none;
       outline: none;
     }
+    /* Usage & Limits Strip Styles */
+    #usage-strip-container {
+      margin-left: 1rem;
+    }
+    .usage-strip {
+      display: flex;
+      flex-direction: row;
+      gap: 1rem;
+      align-items: center;
+      font-size: 0.9rem;
+      color: var(--color-text-secondary, #6B7280);
+    }
+    .usage-item {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.4rem 0.8rem;
+      background: var(--color-card-bg, #F9FAFB);
+      border-radius: var(--radius-md, 6px);
+      border: 1px solid var(--color-divider, #E5E7EB);
+    }
+    .usage-label {
+      font-weight: 600;
+      color: var(--color-text-main, #1F2937);
+    }
+    .usage-meter {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 0.1rem;
+    }
+    .usage-value {
+      font-weight: 700;
+      color: var(--color-text-main, #1F2937);
+    }
+    .usage-period {
+      font-size: 0.85rem;
+      color: var(--color-text-muted, #9CA3AF);
+    }
+    .usage-badge {
+      padding: 0.2rem 0.6rem;
+      border-radius: 999px;
+      font-weight: 600;
+      font-size: 0.85rem;
+    }
+    .usage-unlimited {
+      background: #D1FAE5;
+      color: #065F46;
+    }
+    .usage-trial-badge {
+      background: #FEF3C7;
+      color: #92400E;
+    }
+    .usage-cooldown {
+      font-weight: 600;
+      color: var(--color-accent-blue, #1976D2);
+    }
+    .usage-tooltip {
+      cursor: help;
+      opacity: 0.6;
+    }
+    .usage-upgrade-link {
+      color: var(--color-accent-blue, #1976D2);
+      text-decoration: none;
+      font-weight: 600;
+      font-size: 0.85rem;
+    }
+    .usage-upgrade-link:hover {
+      text-decoration: underline;
+    }
+    @media (max-width: 768px) {
+      #usage-strip-container {
+        margin-left: 0;
+        margin-top: 0.5rem;
+        width: 100%;
+      }
+    }
     .dashboard-features {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(270px, 1fr));
@@ -636,6 +713,8 @@
           <!-- Navigation will be dynamically populated by navigation.js -->
           <a href="index.html#blog">Blog</a>
         </nav>
+        <!-- Usage & Limits Strip -->
+        <div id="usage-strip-container"></div>
       </div>
       <button class="mobile-toggle" aria-label="Open navigation menu" aria-expanded="false" aria-controls="mobileNav">
         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -689,6 +768,7 @@
   
   <!-- UX Enhancement Components -->
   <script src="js/state-persistence.js?v=20250115-1"></script>
+  <script src="js/usage-strip.js?v=20250115-1"></script>
   <script>
     // --- CROSS-TAB LOGOUT SYNC ONLY ---
     (function(){
@@ -975,6 +1055,13 @@
       
       // Continue with existing dashboard logic
       renderDashboard(user);
+      
+      // Initialize usage strip after dashboard renders
+      setTimeout(() => {
+        if (window.JobHackAIUsageStrip) {
+          window.JobHackAIUsageStrip.init({ containerSelector: '#usage-strip-container' });
+        }
+      }, 500);
     });
 
     // --- USER DATA INJECTION (replace with your data source, e.g. from Google Sheets or Wix Data) ---
@@ -1082,10 +1169,11 @@
     };
     
     // Load ATS score from state persistence BEFORE rendering
-    function loadAtsScoreFromStorage() {
+    async function loadAtsScoreFromStorage() {
       let lastScore = null;
       let lastSummary = null;
       let lastJobTitle = null;
+      let lastBreakdown = null;
       
       // Try state persistence utility first (handles cache expiration)
       if (window.JobHackAIStatePersistence) {
@@ -1093,6 +1181,7 @@
         if (cachedScore && cachedScore.score !== null && cachedScore.score !== undefined) {
           lastScore = cachedScore.score.toString();
           lastJobTitle = cachedScore.jobTitle || null;
+          lastBreakdown = cachedScore.breakdown || null;
           // Generate summary from score if breakdown available
           if (cachedScore.score > 85) {
             lastSummary = 'Excellent! Your resume is highly ATS compatible.';
@@ -1108,6 +1197,67 @@
       if (!lastScore) {
         lastScore = sessionStorage.getItem('currentAtsScore') || localStorage.getItem('lastATSScore');
         lastSummary = localStorage.getItem('lastATSSummary');
+        const breakdownStr = sessionStorage.getItem('currentAtsBreakdown') || localStorage.getItem('lastATSBreakdown');
+        if (breakdownStr) {
+          try {
+            lastBreakdown = JSON.parse(breakdownStr);
+          } catch (e) {
+            console.warn('[DASHBOARD] Failed to parse breakdown from storage:', e);
+          }
+        }
+      }
+      
+      // KV fallback: If localStorage is empty, fetch from KV via API
+      if (!lastScore) {
+        try {
+          const currentUser = window.FirebaseAuthManager?.getCurrentUser?.();
+          if (currentUser) {
+            const idToken = await currentUser.getIdToken();
+            const kvResponse = await fetch('/api/ats-score-persist', {
+              method: 'GET',
+              headers: {
+                'Authorization': `Bearer ${idToken}`
+              }
+            });
+            
+            if (kvResponse.ok) {
+              const kvData = await kvResponse.json();
+              if (kvData.success && kvData.data) {
+                const resumeData = kvData.data;
+                lastScore = resumeData.score?.toString() || null;
+                lastJobTitle = resumeData.jobTitle || null;
+                lastBreakdown = resumeData.breakdown || null;
+                
+                // Generate summary from score
+                if (lastScore) {
+                  const scoreValue = parseInt(lastScore, 10);
+                  if (scoreValue > 85) {
+                    lastSummary = 'Excellent! Your resume is highly ATS compatible.';
+                  } else if (scoreValue > 70) {
+                    lastSummary = 'Your resume meets many ATS criteria and is likely to be noticed.';
+                  } else {
+                    lastSummary = 'Your resume needs improvement for better ATS results.';
+                  }
+                  
+                  // Save to localStorage for future use (cache)
+                  if (window.JobHackAIStatePersistence) {
+                    window.JobHackAIStatePersistence.saveATSScore({
+                      score: scoreValue,
+                      breakdown: lastBreakdown || {},
+                      resumeId: resumeData.resumeId || '',
+                      jobTitle: lastJobTitle
+                    });
+                  }
+                  
+                  console.log('[DASHBOARD] Loaded ATS score from KV:', scoreValue);
+                }
+              }
+            }
+          }
+        } catch (kvError) {
+          console.warn('[DASHBOARD] KV fallback failed (non-fatal):', kvError);
+          // Continue without KV data - user can upload a new resume
+        }
       }
       
       // Only update score if we have valid data (prevent reset to 0% or 78%)
@@ -1119,6 +1269,7 @@
           atsScore.percent = scoreValue;
           atsScore.summary = lastSummary || 'Your resume was analyzed.';
           atsScore.jobTitle = lastJobTitle;
+          atsScore.breakdown = lastBreakdown;
         }
       }
       
@@ -1126,8 +1277,8 @@
     }
     
     async function renderDashboard(user) {
-      // Load ATS score BEFORE rendering
-      loadAtsScoreFromStorage();
+      // Load ATS score BEFORE rendering (now async with KV fallback)
+      await loadAtsScoreFromStorage();
       const root = document.getElementById('dashboard-root');
       const unlocked = featureMatrix[user.plan] || [];
       
