@@ -305,11 +305,12 @@ export async function onRequest(context) {
         if (resumeData.uid !== uid) {
           return json({ success: false, error: 'Unauthorized' }, 403, origin, env);
         }
+      } else {
+        // KV available but resume not found - require KV storage
+        return json({ success: false, error: 'Resume not found' }, 404, origin, env);
       }
-    }
-    
-    // Dev environment fallback: allow resume text in request body when KV is unavailable
-    if (!resumeData) {
+    } else {
+      // KV not available - allow dev fallback with resumeText in request body
       if (isDevEnvironment && resumeText) {
         // Use resume text from request body (dev mode fallback)
         resumeData = {
@@ -320,16 +321,13 @@ export async function onRequest(context) {
           uploadedAt: Date.now()
         };
         console.log('[RESUME-FEEDBACK] Using dev fallback: resume text from request body');
-      } else if (!env.JOBHACKAI_KV) {
+      } else {
         // KV not available and no dev fallback provided
         return json({ 
           success: false, 
           error: 'Storage not available',
           message: 'KV storage is required for resume retrieval. In dev environments, you can pass resumeText in the request body as a fallback.'
         }, 500, origin, env);
-      } else {
-        // KV available but resume not found
-        return json({ success: false, error: 'Resume not found' }, 404, origin, env);
       }
     }
 
