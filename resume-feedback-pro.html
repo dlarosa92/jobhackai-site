@@ -1526,8 +1526,9 @@
       if (!grid) return;
       grid.innerHTML = '';
       
-      // Handle empty state
-      if (!rubric || rubric.length === 0 || (rubric.length === 1 && rubric[0].score === null)) {
+      // Handle empty state - check if all scores are null or array is empty
+      const hasAnyValidScore = rubric && rubric.length > 0 && rubric.some(item => item.score !== null && item.score !== undefined);
+      if (!rubric || rubric.length === 0 || !hasAnyValidScore) {
         // Show empty state placeholders
         const emptyRubric = [
           { label: 'Keyword Match', score: null, max: 40, tip: 'Upload a résumé to check role-specific keywords.' },
@@ -1746,6 +1747,7 @@
       // Helper function to update description with tooltip preserved
       function updateDescriptionWithTooltip(element, text, tooltipText) {
         if (!element) return;
+        // Preserve the nested span structure for text-only updates
         const tooltipHtml = `<span class="rf-tooltip-trigger" tabindex="0" aria-label="More info" style="margin-left:0.4em;">
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
             <circle cx="12" cy="12" r="10"/>
@@ -1754,7 +1756,8 @@
           </svg>
           <span class="rf-tooltip-text">${tooltipText}</span>
         </span>`;
-        element.innerHTML = text + tooltipHtml;
+        // Use innerHTML but preserve the nested span structure for #rf-score-desc-text
+        element.innerHTML = `<span id="rf-score-desc-text">${text}</span>` + tooltipHtml;
       }
 
       // Free Plan Logic
