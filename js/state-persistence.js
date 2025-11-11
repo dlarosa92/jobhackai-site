@@ -11,6 +11,7 @@
     ATS_BREAKDOWN: 'jh_last_ats_breakdown',
     RESUME_ID: 'jh_last_resume_id',
     RESUME_TEXT: 'jh_last_resume_text',
+    RESUME_IS_MULTI_COLUMN: 'jh_last_resume_is_multi_column',
     JOB_TITLE: 'jh_last_job_title',
     TIMESTAMP: 'jh_last_score_timestamp'
   };
@@ -110,15 +111,20 @@
    * @param {Object} data - Resume data
    * @param {string} data.resumeId - Resume ID
    * @param {string} [data.resumeText] - Resume text (optional, for fallback)
+   * @param {boolean} [data.isMultiColumn] - Whether resume is multi-column format
    */
-  function saveResumeData({ resumeId, resumeText }) {
+  function saveResumeData({ resumeId, resumeText, isMultiColumn }) {
     try {
       sessionStorage.setItem('currentResumeId', resumeId);
       if (resumeText) {
         sessionStorage.setItem('currentResumeText', resumeText);
       }
+      if (isMultiColumn !== undefined) {
+        sessionStorage.setItem('currentResumeIsMultiColumn', String(isMultiColumn));
+        localStorage.setItem(STORAGE_KEYS.RESUME_IS_MULTI_COLUMN, String(isMultiColumn));
+      }
       localStorage.setItem(STORAGE_KEYS.RESUME_ID, resumeId);
-      console.log('[STATE-PERSISTENCE] Saved resume data:', resumeId);
+      console.log('[STATE-PERSISTENCE] Saved resume data:', resumeId, isMultiColumn !== undefined ? `(isMultiColumn: ${isMultiColumn})` : '');
     } catch (error) {
       console.warn('[STATE-PERSISTENCE] Failed to save resume data:', error);
     }
@@ -132,6 +138,8 @@
     try {
       const resumeId = sessionStorage.getItem('currentResumeId') || localStorage.getItem(STORAGE_KEYS.RESUME_ID);
       const resumeText = sessionStorage.getItem('currentResumeText');
+      const isMultiColumnStr = sessionStorage.getItem('currentResumeIsMultiColumn') || localStorage.getItem(STORAGE_KEYS.RESUME_IS_MULTI_COLUMN);
+      const isMultiColumn = isMultiColumnStr !== null ? isMultiColumnStr === 'true' : undefined;
 
       if (!resumeId) {
         return null;
@@ -139,7 +147,8 @@
 
       return {
         resumeId,
-        resumeText: resumeText || null
+        resumeText: resumeText || null,
+        isMultiColumn
       };
     } catch (error) {
       console.warn('[STATE-PERSISTENCE] Failed to load resume data:', error);
