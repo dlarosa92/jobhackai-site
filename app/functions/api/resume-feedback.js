@@ -153,7 +153,10 @@ export async function onRequest(context) {
 
     // Dev environment bypass: Allow authenticated users in dev environment
     // This allows testing with dev plan override without requiring KV storage setup
-    const isDevEnvironment = env.ENVIRONMENT === 'dev' || origin.includes('dev.jobhackai.io');
+    // SECURITY: Use exact origin matching to prevent bypass attacks (e.g., attacker.com/dev.jobhackai.io)
+    const allowedDevOrigins = ['https://dev.jobhackai.io', 'http://localhost:3003', 'http://localhost:8788'];
+    const isDevOrigin = origin && allowedDevOrigins.includes(origin);
+    const isDevEnvironment = env.ENVIRONMENT === 'dev' || isDevOrigin;
     const effectivePlan = isDevEnvironment && plan === 'free' ? 'pro' : plan;
     
     console.log('[RESUME-FEEDBACK] Effective plan:', { plan, effectivePlan, isDevEnvironment });
