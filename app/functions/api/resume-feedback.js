@@ -174,7 +174,7 @@ export async function onRequest(context) {
 
     // Parse request body
     const body = await request.json();
-    const { resumeId, jobTitle } = body;
+    const { resumeId, jobTitle, resumeText, isMultiColumn } = body;
 
     if (!resumeId) {
       return json({ success: false, error: 'resumeId required' }, 400, origin, env);
@@ -290,23 +290,47 @@ export async function onRequest(context) {
       }, 200, origin, env);
     }
 
-    // Retrieve resume from KV
-    if (!env.JOBHACKAI_KV) {
-      return json({ success: false, error: 'Storage not available' }, 500, origin, env);
-    }
-
-    const resumeKey = `resume:${resumeId}`;
-    const resumeDataStr = await env.JOBHACKAI_KV.get(resumeKey);
+    // Retrieve resume from KV or request body (dev fallback)
+    let resumeData = null;
     
-    if (!resumeDataStr) {
-      return json({ success: false, error: 'Resume not found' }, 404, origin, env);
+    if (env.JOBHACKAI_KV) {
+      // Try to get resume from KV storage
+      const resumeKey = `resume:${resumeId}`;
+      const resumeDataStr = await env.JOBHACKAI_KV.get(resumeKey);
+      
+      if (resumeDataStr) {
+        resumeData = JSON.parse(resumeDataStr);
+        
+        // Verify resume belongs to user
+        if (resumeData.uid !== uid) {
+          return json({ success: false, error: 'Unauthorized' }, 403, origin, env);
+        }
+      }
     }
-
-    const resumeData = JSON.parse(resumeDataStr);
     
-    // Verify resume belongs to user
-    if (resumeData.uid !== uid) {
-      return json({ success: false, error: 'Unauthorized' }, 403, origin, env);
+    // Dev environment fallback: allow resume text in request body when KV is unavailable
+    if (!resumeData) {
+      if (isDevEnvironment && resumeText) {
+        // Use resume text from request body (dev mode fallback)
+        resumeData = {
+          uid,
+          text: resumeText,
+          isMultiColumn: isMultiColumn || false,
+          fileName: 'dev-resume',
+          uploadedAt: Date.now()
+        };
+        console.log('[RESUME-FEEDBACK] Using dev fallback: resume text from request body');
+      } else if (!env.JOBHACKAI_KV) {
+        // KV not available and no dev fallback provided
+        return json({ 
+          success: false, 
+          error: 'Storage not available',
+          message: 'KV storage is required for resume retrieval. In dev environments, you can pass resumeText in the request body as a fallback.'
+        }, 500, origin, env);
+      } else {
+        // KV available but resume not found
+        return json({ success: false, error: 'Resume not found' }, 404, origin, env);
+      }
     }
 
     // Cost guardrails
