@@ -1762,7 +1762,7 @@
         if (atsScoreTile) {
           atsScoreTile.querySelector('#rf-plan-badge').textContent = 'Free Plan';
           updateDescriptionWithTooltip(
-            atsScoreTile.querySelector('#rf-score-desc'),
+            atsScoreTile.querySelector('#rf-score-desc-text'),
             'Get your basic ATS compatibility score.',
             'Receive an overall ATS compliance score (0-100) for your resume, highlighting key areas to improve for better job application success.'
           );
@@ -1798,7 +1798,7 @@
           atsScoreTile.querySelector('#rf-plan-badge').textContent = 'Trial Plan';
           atsScoreTile.querySelector('#rf-plan-badge').style.background = '#FF9100';
           updateDescriptionWithTooltip(
-            atsScoreTile.querySelector('#rf-score-desc'),
+            atsScoreTile.querySelector('#rf-score-desc-text'),
             'Enjoy unlimited ATS scoring during your trial!',
             'Receive an overall ATS compliance score (0-100) for your resume, highlighting key areas to improve for better job application success.'
           );
@@ -1866,7 +1866,7 @@
           atsScoreTile.querySelector('#rf-plan-badge').textContent = 'Essential Plan';
           atsScoreTile.querySelector('#rf-plan-badge').style.background = '#0077B5';
           updateDescriptionWithTooltip(
-            atsScoreTile.querySelector('#rf-score-desc'),
+            atsScoreTile.querySelector('#rf-score-desc-text'),
             'Unlimited ATS scoring - your resume is getting noticed!',
             'Receive an overall ATS compliance score (0-100) for your resume, highlighting key areas to improve for better job application success.'
           );
@@ -1945,7 +1945,7 @@
           atsScoreTile.querySelector('#rf-plan-badge').textContent = plan.charAt(0).toUpperCase() + plan.slice(1) + ' Plan';
           atsScoreTile.querySelector('#rf-plan-badge').style.background = isProPlan ? '#388E3C' : '#C62828';
           updateDescriptionWithTooltip(
-            atsScoreTile.querySelector('#rf-score-desc'),
+            atsScoreTile.querySelector('#rf-score-desc-text'),
             'Unlimited ATS scoring - you\'re getting maximum visibility!',
             'Receive an overall ATS compliance score (0-100) for your resume, highlighting key areas to improve for better job application success. Score as many resumes as you need with unlimited access.'
           );
