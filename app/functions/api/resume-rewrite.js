@@ -180,6 +180,7 @@ export async function onRequest(context) {
       originalText = resumeData.text;
     }
 
+    let tokenUsage = 0;
     for (let attempt = 0; attempt < maxRetries; attempt++) {
       try {
         const aiResponse = await generateResumeRewrite(
@@ -188,6 +189,11 @@ export async function onRequest(context) {
           jobTitle.trim(),
           env
         );
+
+        // Capture token usage
+        if (aiResponse && aiResponse.usage) {
+          tokenUsage = aiResponse.usage.totalTokens || 0;
+        }
 
         if (!aiResponse || !aiResponse.content) {
           // Handle falsy content: treat as error and apply backoff
@@ -288,6 +294,7 @@ export async function onRequest(context) {
 
     return json({
       success: true,
+      tokenUsage,
       original: originalText,
       rewritten: rewrittenText,
       section: section || 'full'

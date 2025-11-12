@@ -361,6 +361,7 @@ export async function onRequest(context) {
 
     // Generate AI feedback with exponential backoff retry
     let aiFeedback = null;
+    let tokenUsage = 0;
     const maxRetries = 3;
     let lastError = null;
     
@@ -372,6 +373,11 @@ export async function onRequest(context) {
           jobTitle,
           env
         );
+        
+        // Capture token usage
+        if (aiResponse && aiResponse.usage) {
+          tokenUsage = aiResponse.usage.totalTokens || 0;
+        }
         
         // Handle falsy content: treat as error and apply backoff
         if (!aiResponse || !aiResponse.content) {
@@ -560,6 +566,7 @@ export async function onRequest(context) {
 
     return json({
       success: true,
+      tokenUsage,
       ...result
     }, 200, origin, env);
 

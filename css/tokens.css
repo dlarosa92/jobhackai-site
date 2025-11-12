@@ -5,7 +5,8 @@
   --color-text-secondary: #4B5563;     /* Secondary text (gray) */
   --color-text-muted: #6B7280;         /* Muted text */
   --color-card-bg: #FFFFFF;            /* Cards, nav, footer */
-  --color-cta-green: #007A43;          /* Primary CTA (button green), WCAG AA compliant */
+  --color-cta-green: #00E676;          /* Primary CTA (button green) */
+  --color-cta-green-hover: #00c965;   /* CTA hover state */
   --color-accent-blue: #007BFF;        /* Accent blue (links, outlines) */
   --color-divider: #E5E7EB;            /* Dividers, borders */
   --color-error: #DC2626;              /* Error states */
@@ -37,8 +38,8 @@
   --radius-xl: 16px;
   --radius-full: 9999px;
   /* Semantic radii used across components */
-  --radius-button: 12px;
-  --radius-card: 18px;
+  --radius-button: 8px;
+  --radius-card: 8px;
 
   /* --- Shadows --- */
   --shadow-sm: 0 1px 2px rgba(0,0,0,0.05);

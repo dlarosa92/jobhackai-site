@@ -64,17 +64,48 @@ export async function onRequest(context) {
       atsScans: {
         used: 0,
         limit: plan === 'free' ? 1 : null, // Free: 1 lifetime, others: unlimited
-        remaining: plan === 'free' ? 1 : null
+        remaining: plan === 'free' ? 1 : null,
+        cooldown: 0
       },
       resumeFeedback: {
         used: 0,
         limit: plan === 'essential' ? 3 : plan === 'trial' ? null : null, // Essential: 3/month, Trial: unlimited (throttled), Pro/Premium: unlimited
-        remaining: plan === 'essential' ? 3 : null
+        remaining: plan === 'essential' ? 3 : null,
+        cooldown: 0
       },
       resumeRewrite: {
         used: 0,
         limit: (plan === 'pro' || plan === 'premium') ? null : 0, // Pro/Premium: unlimited (throttled), others: locked
-        remaining: (plan === 'pro' || plan === 'premium') ? null : 0
+        remaining: (plan === 'pro' || plan === 'premium') ? null : 0,
+        cooldown: 0
+      },
+      coverLetters: {
+        used: 0,
+        limit: (plan === 'pro' || plan === 'premium') ? null : 0, // Pro/Premium: unlimited, others: locked
+        remaining: (plan === 'pro' || plan === 'premium') ? null : 0,
+        cooldown: 0
+      },
+      interviewQuestions: {
+        used: 0,
+        limit: (plan === 'trial' || plan === 'essential' || plan === 'pro' || plan === 'premium') ? null : 0, // Trial/Essential/Pro/Premium: unlimited (1-min cooldown), others: locked
+        remaining: (plan === 'trial' || plan === 'essential' || plan === 'pro' || plan === 'premium') ? null : 0,
+        cooldown: 0
+      },
+      mockInterviews: {
+        used: 0,
+        limit: (plan === 'pro' || plan === 'premium') ? null : 0, // Pro/Premium: 1/hr, 5/day limit, others: locked
+        remaining: (plan === 'pro' || plan === 'premium') ? null : 0,
+        cooldown: 0
+      },
+      linkedInOptimizer: {
+        used: 0,
+        limit: plan === 'premium' ? null : 0, // Premium: unlimited, others: locked
+        remaining: plan === 'premium' ? null : 0,
+        cooldown: 0
+      },
+      priorityReview: {
+        enabled: plan === 'premium', // Premium: enabled, no usage limit
+        plan: plan
       }
     };
 
@@ -84,6 +115,7 @@ export async function onRequest(context) {
       const atsUsed = await env.JOBHACKAI_KV.get(atsUsageKey);
       usage.atsScans.used = atsUsed ? parseInt(atsUsed, 10) : 0;
       usage.atsScans.remaining = Math.max(0, 1 - usage.atsScans.used);
+      usage.atsScans.cooldown = 0; // No cooldown for ATS scans
     }
 
     // Check feedback usage (Essential: monthly, Trial: daily/per-doc)
@@ -94,6 +126,7 @@ export async function onRequest(context) {
       const feedbackUsed = await env.JOBHACKAI_KV.get(feedbackUsageKey);
       usage.resumeFeedback.used = feedbackUsed ? parseInt(feedbackUsed, 10) : 0;
       usage.resumeFeedback.remaining = Math.max(0, 3 - usage.resumeFeedback.used);
+      usage.resumeFeedback.cooldown = 0; // No cooldown for Essential plan
     } else if (plan === 'trial' && env.JOBHACKAI_KV) {
       // Trial: check daily limit (5/day)
       const today = new Date().toISOString().split('T')[0];
@@ -102,6 +135,16 @@ export async function onRequest(context) {
       usage.resumeFeedback.used = dailyUsed ? parseInt(dailyUsed, 10) : 0;
       usage.resumeFeedback.limit = 5; // Daily limit
       usage.resumeFeedback.remaining = Math.max(0, 5 - usage.resumeFeedback.used);
+      
+      // Check cooldown (60-second throttle for trial)
+      const throttleKey = `feedbackThrottle:${uid}`;
+      const lastFeedback = await env.JOBHACKAI_KV.get(throttleKey);
+      if (lastFeedback) {
+        const timeSinceLastFeedback = Date.now() - parseInt(lastFeedback, 10);
+        if (timeSinceLastFeedback < 60000) {
+          usage.resumeFeedback.cooldown = Math.ceil((60000 - timeSinceLastFeedback) / 1000);
+        }
+      }
     }
 
     // Check rewrite usage (Pro/Premium: daily limit 5)
@@ -112,6 +155,48 @@ export async function onRequest(context) {
       usage.resumeRewrite.used = rewriteUsed ? parseInt(rewriteUsed, 10) : 0;
       usage.resumeRewrite.limit = 5; // Daily limit
       usage.resumeRewrite.remaining = Math.max(0, 5 - usage.resumeRewrite.used);
+      
+      // Check cooldown (hourly throttle)
+      const hourlyKey = `rewriteThrottle:${uid}:hour`;
+      const lastHourly = await env.JOBHACKAI_KV.get(hourlyKey);
+      if (lastHourly) {
+        const timeSinceLastHourly = Date.now() - parseInt(lastHourly, 10);
+        if (timeSinceLastHourly < 3600000) {
+          usage.resumeRewrite.cooldown = Math.ceil((3600000 - timeSinceLastHourly) / 1000);
+        }
+      }
+    }
+
+    // Check mock interview usage (Pro/Premium: 1/hr, 5/day limit)
+    if ((plan === 'pro' || plan === 'premium') && env.JOBHACKAI_KV) {
+      const today = new Date().toISOString().split('T')[0];
+      const mockDailyKey = `mockDaily:${uid}:${today}`;
+      const mockUsed = await env.JOBHACKAI_KV.get(mockDailyKey);
+      usage.mockInterviews.used = mockUsed ? parseInt(mockUsed, 10) : 0;
+      usage.mockInterviews.limit = 5; // Daily limit
+      usage.mockInterviews.remaining = Math.max(0, 5 - usage.mockInterviews.used);
+      
+      // Check cooldown (hourly throttle)
+      const hourlyKey = `mockThrottle:${uid}:hour`;
+      const lastHourly = await env.JOBHACKAI_KV.get(hourlyKey);
+      if (lastHourly) {
+        const timeSinceLastHourly = Date.now() - parseInt(lastHourly, 10);
+        if (timeSinceLastHourly < 3600000) {
+          usage.mockInterviews.cooldown = Math.ceil((3600000 - timeSinceLastHourly) / 1000);
+        }
+      }
+    }
+
+    // Check interview questions cooldown (1-min cooldown for all plans)
+    if ((plan === 'trial' || plan === 'essential' || plan === 'pro' || plan === 'premium') && env.JOBHACKAI_KV) {
+      const interviewThrottleKey = `interviewThrottle:${uid}`;
+      const lastInterview = await env.JOBHACKAI_KV.get(interviewThrottleKey);
+      if (lastInterview) {
+        const timeSinceLastInterview = Date.now() - parseInt(lastInterview, 10);
+        if (timeSinceLastInterview < 60000) {
+          usage.interviewQuestions.cooldown = Math.ceil((60000 - timeSinceLastInterview) / 1000);
+        }
+      }
     }
 
     return new Response(JSON.stringify({
