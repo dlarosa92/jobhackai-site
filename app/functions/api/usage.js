@@ -64,17 +64,48 @@ export async function onRequest(context) {
       atsScans: {
         used: 0,
         limit: plan === 'free' ? 1 : null, // Free: 1 lifetime, others: unlimited
-        remaining: plan === 'free' ? 1 : null
+        remaining: plan === 'free' ? 1 : null,
+        cooldown: 0
       },
       resumeFeedback: {
         used: 0,
         limit: plan === 'essential' ? 3 : plan === 'trial' ? null : null, // Essential: 3/month, Trial: unlimited (throttled), Pro/Premium: unlimited
-        remaining: plan === 'essential' ? 3 : null
+        remaining: plan === 'essential' ? 3 : null,
+        cooldown: 0
       },
       resumeRewrite: {
         used: 0,
         limit: (plan === 'pro' || plan === 'premium') ? null : 0, // Pro/Premium: unlimited (throttled), others: locked
-        remaining: (plan === 'pro' || plan === 'premium') ? null : 0
+        remaining: (plan === 'pro' || plan === 'premium') ? null : 0,
+        cooldown: 0
+      },
+      coverLetters: {
+        used: 0,
+        limit: (plan === 'pro' || plan === 'premium') ? null : 0, // Pro/Premium: unlimited, others: locked
+        remaining: (plan === 'pro' || plan === 'premium') ? null : 0,
+        cooldown: 0
+      },
+      interviewQuestions: {
+        used: 0,
+        limit: (plan === 'trial' || plan === 'essential' || plan === 'pro' || plan === 'premium') ? null : 0, // Trial/Essential/Pro/Premium: unlimited (1-min cooldown), others: locked
+        remaining: (plan === 'trial' || plan === 'essential' || plan === 'pro' || plan === 'premium') ? null : 0,
+        cooldown: 0 // 1-min cooldown (to be tracked when feature is implemented)
+      },
+      mockInterviews: {
+        used: 0,
+        limit: plan === 'pro' ? 20 : plan === 'premium' ? null : 0, // Pro: 20/month, Premium: unlimited (1/hr, 5/day soft limit), others: locked
+        remaining: plan === 'pro' ? 20 : plan === 'premium' ? null : 0,
+        cooldown: 0 // 1/hr cooldown for Premium (to be tracked when feature is implemented)
+      },
+      linkedInOptimizer: {
+        used: 0,
+        limit: plan === 'premium' ? null : 0, // Premium: unlimited, others: locked
+        remaining: plan === 'premium' ? null : 0,
+        cooldown: 0
+      },
+      priorityReview: {
+        enabled: plan === 'premium', // Premium: enabled, others: disabled
+        plan: plan
       }
     };
 
@@ -112,6 +143,47 @@ export async function onRequest(context) {
       usage.resumeRewrite.used = rewriteUsed ? parseInt(rewriteUsed, 10) : 0;
       usage.resumeRewrite.limit = 5; // Daily limit
       usage.resumeRewrite.remaining = Math.max(0, 5 - usage.resumeRewrite.used);
+      
+      // Check cooldown (1 hour throttle)
+      const hourlyKey = `rewriteThrottle:${uid}:hour`;
+      const lastHourly = await env.JOBHACKAI_KV.get(hourlyKey);
+      if (lastHourly) {
+        const lastHourlyTime = parseInt(lastHourly, 10);
+        const timeSinceLastHourly = Date.now() - lastHourlyTime;
+        if (timeSinceLastHourly < 3600000) {
+          usage.resumeRewrite.cooldown = Math.ceil((3600000 - timeSinceLastHourly) / 1000); // seconds
+        }
+      }
+    }
+    
+    // Check mock interview usage (Pro: 20/month, Premium: daily limit 5)
+    if (plan === 'pro' && env.JOBHACKAI_KV) {
+      const now = new Date();
+      const monthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+      const mockInterviewUsageKey = `mockInterviewUsage:${uid}:${monthKey}`;
+      const mockInterviewUsed = await env.JOBHACKAI_KV.get(mockInterviewUsageKey);
+      usage.mockInterviews.used = mockInterviewUsed ? parseInt(mockInterviewUsed, 10) : 0;
+      usage.mockInterviews.limit = 20; // Monthly limit
+      usage.mockInterviews.remaining = Math.max(0, 20 - usage.mockInterviews.used);
+    } else if (plan === 'premium' && env.JOBHACKAI_KV) {
+      // Premium: check daily limit (5/day)
+      const today = new Date().toISOString().split('T')[0];
+      const dailyKey = `mockInterviewDaily:${uid}:${today}`;
+      const dailyUsed = await env.JOBHACKAI_KV.get(dailyKey);
+      usage.mockInterviews.used = dailyUsed ? parseInt(dailyUsed, 10) : 0;
+      usage.mockInterviews.limit = null; // Unlimited but soft limit
+      usage.mockInterviews.remaining = null;
+      
+      // Check cooldown (1 hour throttle)
+      const hourlyKey = `mockInterviewThrottle:${uid}:hour`;
+      const lastHourly = await env.JOBHACKAI_KV.get(hourlyKey);
+      if (lastHourly) {
+        const lastHourlyTime = parseInt(lastHourly, 10);
+        const timeSinceLastHourly = Date.now() - lastHourlyTime;
+        if (timeSinceLastHourly < 3600000) {
+          usage.mockInterviews.cooldown = Math.ceil((3600000 - timeSinceLastHourly) / 1000); // seconds
+        }
+      }
     }
 
     return new Response(JSON.stringify({
