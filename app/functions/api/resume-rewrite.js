@@ -145,6 +145,7 @@ export async function onRequest(context) {
 
     let rewrittenText = '';
     let originalText = '';
+    let tokenUsage = 0;
     const maxRetries = 3;
     let lastError = null;
 
@@ -188,6 +189,11 @@ export async function onRequest(context) {
           jobTitle.trim(),
           env
         );
+
+        // Capture token usage from OpenAI response
+        if (aiResponse && aiResponse.usage) {
+          tokenUsage = aiResponse.usage.totalTokens || 0;
+        }
 
         if (!aiResponse || !aiResponse.content) {
           // Handle falsy content: treat as error and apply backoff
@@ -288,6 +294,7 @@ export async function onRequest(context) {
 
     return json({
       success: true,
+      tokenUsage: tokenUsage,
       original: originalText,
       rewritten: rewrittenText,
       section: section || 'full'
