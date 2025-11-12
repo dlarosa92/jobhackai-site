@@ -107,11 +107,18 @@ export function renderUsageIndicator({ feature, usage, plan, container, customTe
 
   // Quota-based (circular meter) - can coexist with cooldown
   if (hasQuota) {
-    const percentage = usage.remaining !== null ? (usage.remaining / usage.limit) * 100 : 0;
-    const isLow = percentage < 33;
-    const isMedium = percentage >= 33 && percentage < 66;
+    // Calculate percentage of items USED (not remaining) for progress meter
+    // If usage.used is available, use it; otherwise calculate from remaining
+    const used = usage.used !== null && usage.used !== undefined 
+      ? usage.used 
+      : (usage.remaining !== null ? usage.limit - usage.remaining : 0);
+    const percentage = (used / usage.limit) * 100;
     
-    ariaLabelParts.push(`${usage.used || 0} of ${usage.limit} used, ${usage.remaining || 0} remaining`);
+    // Color thresholds based on usage percentage (high usage = warning/error)
+    const isHighUsage = percentage >= 66; // 66%+ used = error (red)
+    const isMediumUsage = percentage >= 33 && percentage < 66; // 33-66% used = warning (yellow)
+    
+    ariaLabelParts.push(`${used} of ${usage.limit} used, ${usage.remaining !== null ? usage.remaining : usage.limit - used} remaining`);
     
     // Circular progress indicator
     const radius = 16;
@@ -131,7 +138,7 @@ export function renderUsageIndicator({ feature, usage, plan, container, customTe
             cy="18" 
             r="${radius}" 
             fill="none" 
-            stroke="${isLow ? 'var(--color-error)' : isMedium ? 'var(--color-warning)' : 'var(--color-cta-green)'}" 
+            stroke="${isHighUsage ? 'var(--color-error)' : isMediumUsage ? 'var(--color-warning)' : 'var(--color-cta-green)'}" 
             stroke-width="3"
             stroke-dasharray="${circumference}"
             stroke-dashoffset="${offset}"
@@ -140,7 +147,7 @@ export function renderUsageIndicator({ feature, usage, plan, container, customTe
           />
         </svg>
         <span style="color: var(--color-text-secondary); font-size: 0.95rem;">
-          ${customText || `${usage.used || 0} / ${usage.limit} used`}
+          ${customText || `${used} / ${usage.limit} used`}
           ${usage.remaining !== null ? ` • ${usage.remaining} remaining` : ''}
         </span>
       </div>
