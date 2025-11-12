@@ -73,19 +73,18 @@ export function renderUsageIndicator({ feature, usage, plan, container, customTe
 
   // Build indicator HTML
   let indicatorHTML = '<div class="usage-indicator" role="status"';
-  let ariaLabel = '';
-  let contentHTML = '';
+  let ariaLabelParts = [];
+  let contentParts = [];
 
-  // Cooldown chip (time-based limit)
+  // Cooldown chip (time-based limit) - can coexist with quota
   if (hasCooldown) {
     const minutes = Math.floor(usage.cooldown / 60);
     const seconds = usage.cooldown % 60;
     const timeStr = minutes > 0 ? `${minutes}:${String(seconds).padStart(2, '0')}` : `${seconds}s`;
     
-    ariaLabel = `${featureName} cooldown: ${timeStr} remaining`;
-    indicatorHTML += ` aria-label="${ariaLabel}">`;
+    ariaLabelParts.push(`cooldown: ${timeStr} remaining`);
     
-    contentHTML = `
+    contentParts.push(`
       <span class="usage-indicator__cooldown" style="
         display: inline-flex;
         align-items: center;
@@ -103,23 +102,23 @@ export function renderUsageIndicator({ feature, usage, plan, container, customTe
         </svg>
         ${timeStr} cooldown
       </span>
-    `;
+    `);
   }
-  // Quota-based (circular meter)
-  else if (hasQuota) {
+
+  // Quota-based (circular meter) - can coexist with cooldown
+  if (hasQuota) {
     const percentage = usage.remaining !== null ? (usage.remaining / usage.limit) * 100 : 0;
     const isLow = percentage < 33;
     const isMedium = percentage >= 33 && percentage < 66;
     
-    ariaLabel = `${featureName}: ${usage.used || 0} of ${usage.limit} used, ${usage.remaining || 0} remaining`;
-    indicatorHTML += ` aria-label="${ariaLabel}">`;
+    ariaLabelParts.push(`${usage.used || 0} of ${usage.limit} used, ${usage.remaining || 0} remaining`);
     
     // Circular progress indicator
     const radius = 16;
     const circumference = 2 * Math.PI * radius;
     const offset = circumference - (percentage / 100) * circumference;
     
-    contentHTML = `
+    contentParts.push(`
       <div class="usage-indicator__meter" style="
         display: inline-flex;
         align-items: center;
@@ -145,30 +144,39 @@ export function renderUsageIndicator({ feature, usage, plan, container, customTe
           ${usage.remaining !== null ? ` • ${usage.remaining} remaining` : ''}
         </span>
       </div>
-    `;
+    `);
   }
-  // Unlimited badge
-  else if (isUnlimited) {
+
+  // If we have cooldown or quota, use those; otherwise check for unlimited or fallback
+  let ariaLabel = '';
+  let contentHTML = '';
+  
+  if (contentParts.length > 0) {
+    // We have cooldown and/or quota indicators
+    ariaLabel = ariaLabelParts.length > 0 
+      ? `${featureName}: ${ariaLabelParts.join('; ')}`
+      : `${featureName} usage information`;
+    contentHTML = contentParts.join('<span style="margin: 0 0.5rem;">•</span>');
+  } else if (isUnlimited) {
+    // Unlimited badge
     const planName = plan === 'trial' ? 'Trial' : 
                      plan === 'essential' ? 'Essential' : 
                      plan === 'pro' ? 'Pro' : 
                      plan === 'premium' ? 'Premium' : plan;
     
     ariaLabel = `${featureName}: Unlimited with ${planName} plan`;
-    indicatorHTML += ` aria-label="${ariaLabel}">`;
-    
     contentHTML = `
       <span style="color: var(--color-text-secondary); font-size: 0.95rem;">
         ${customText || `Unlimited with your ${planName} plan.`}
       </span>
     `;
-  }
-  // Fallback
-  else {
+  } else {
+    // Fallback
     ariaLabel = `${featureName} usage information`;
-    indicatorHTML += ` aria-label="${ariaLabel}">`;
     contentHTML = `<span style="color: var(--color-text-secondary); font-size: 0.95rem;">${customText || 'Usage information unavailable'}</span>`;
   }
+  
+  indicatorHTML += ` aria-label="${ariaLabel}">`;
 
   indicatorHTML += contentHTML + '</div>';
   container.innerHTML = indicatorHTML;
