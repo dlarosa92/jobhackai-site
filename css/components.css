@@ -1,0 +1,86 @@
+/* JobHackAI Component Styles */
+
+/* Fade Transitions */
+.fade-enter {
+  opacity: 0;
+  transform: translateY(8px);
+  transition: opacity 0.35s ease, transform 0.35s ease;
+}
+
+.fade-enter-active {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.fade-exit {
+  opacity: 1;
+  transform: translateY(0);
+  transition: opacity 0.25s ease, transform 0.25s ease;
+}
+
+.fade-exit-active {
+  opacity: 0;
+  transform: translateY(8px);
+}
+
+/* Summary Card Styles */
+.rf-summary-card {
+  background: var(--color-card-bg);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-md);
+  padding: var(--space-lg);
+  margin-top: var(--space-lg);
+  margin-bottom: var(--space-lg);
+}
+
+.rf-summary-bullets {
+  list-style: none;
+  padding: 0;
+  margin: var(--space-sm) 0 0 0;
+}
+
+.rf-summary-bullets li {
+  padding: var(--space-xs) 0;
+  color: var(--color-text-main);
+  font-size: var(--font-size-base);
+  line-height: 1.6;
+  position: relative;
+  padding-left: 1.5rem;
+}
+
+.rf-summary-bullets li::before {
+  content: '•';
+  position: absolute;
+  left: 0;
+  color: var(--color-cta-green);
+  font-weight: var(--font-weight-bold);
+  font-size: 1.2rem;
+}
+
+/* Placeholder Styles */
+.ats-placeholder-note {
+  text-align: center;
+  color: var(--color-text-muted);
+  font-style: italic;
+  margin-top: var(--space-sm);
+  font-size: var(--font-size-base);
+}
+
+/* Empty State CTA Button */
+.ats-empty-cta {
+  background: var(--color-cta-green);
+  color: #fff;
+  font-weight: var(--font-weight-semibold);
+  border: none;
+  border-radius: var(--radius-button);
+  padding: 0.75rem 2rem;
+  font-size: var(--font-size-base);
+  cursor: pointer;
+  transition: background var(--transition-normal);
+  margin-top: var(--space-md);
+}
+
+.ats-empty-cta:hover {
+  background: var(--color-cta-green-hover);
+}
+
