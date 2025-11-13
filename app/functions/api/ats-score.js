@@ -298,11 +298,12 @@ export async function onRequest(context) {
           // Reduce grammar score but keep deterministic scoring structure
           const deduction = 3;
           const originalScore = ruleBasedScores.grammarScore.score;
-          ruleBasedScores.grammarScore.score = Math.max(0, ruleBasedScores.grammarScore.max - deduction);
+          const newScore = Math.max(0, originalScore - deduction);
+          ruleBasedScores.grammarScore.score = newScore;
           
           // Update feedback
-          ruleBasedScores.grammarScore.feedback += 
-            ' Some grammar or spelling inconsistencies were detected. Review and correct misspellings.';
+          ruleBasedScores.grammarScore.feedback =
+            'Some grammar or spelling inconsistencies were detected. Review and correct misspellings.';
           
           // Recalculate overall score
           ruleBasedScores.overallScore = Math.round(
@@ -317,7 +318,8 @@ export async function onRequest(context) {
             resumeId: resumeId || 'unknown', 
             errorsPresent, 
             originalScore, 
-            newScore: ruleBasedScores.grammarScore.score 
+            newScore, 
+            deduction 
           });
         } else {
           console.log('[GRAMMAR-AI] checked:', { resumeId: resumeId || 'unknown', errorsPresent: false });
