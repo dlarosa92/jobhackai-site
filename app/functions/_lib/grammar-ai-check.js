@@ -26,8 +26,16 @@ export async function verifyGrammarWithAI(resumeText, env) {
     return false;
   }
 
+  // Truncate resume text to control costs (keep it small)
+  // ~4 chars per token, so 500 tokens ≈ 2000 chars
+  const maxChars = 2000;
+  const sourceText = typeof resumeText === 'string' ? resumeText : '';
+  const truncatedText = sourceText.length > maxChars
+    ? sourceText.substring(0, maxChars) + '...'
+    : sourceText;
+
   // Build cache key
-  const cacheKeyBase = `grammar-ai:${resumeText}`;
+  const cacheKeyBase = `grammar-ai:${truncatedText}`;
   const cacheHash = await hashString(cacheKeyBase);
   const cacheKey = `grammarCheck:${cacheHash}`;
 
@@ -45,13 +53,6 @@ export async function verifyGrammarWithAI(resumeText, env) {
       // Continue to API call if cache fails
     }
   }
-
-  // Truncate resume text to control costs (keep it small)
-  // ~4 chars per token, so 500 tokens ≈ 2000 chars
-  const maxChars = 2000;
-  const truncatedText = resumeText.length > maxChars 
-    ? resumeText.substring(0, maxChars) + '...'
-    : resumeText;
 
   const model = env.OPENAI_MODEL_GRAMMAR || 'gpt-4o-mini';
   const apiUrl = 'https://api.openai.com/v1/chat/completions';
