@@ -56,7 +56,8 @@ export function scoreResume(resumeText, jobTitle, metadata = {}) {
     grammarScore: {
       score: grammarScore.score,
       max: 10,
-      feedback: grammarScore.feedback
+      feedback: grammarScore.feedback,
+      aiCheckRequired: grammarScore.aiCheckRequired || false
     },
     overallScore,
     recommendations: generateRecommendations({
@@ -371,7 +372,11 @@ function scoreGrammarAndSpelling(resumeText) {
     feedback = 'Grammar and spelling need attention. Proofread carefully.';
   }
   
-  return { score, feedback };
+  // Flag for AI check: only if score is perfect (max)
+  const maxScore = 10;
+  const aiCheckRequired = score === maxScore;
+  
+  return { score, feedback, aiCheckRequired };
 }
 
 /**

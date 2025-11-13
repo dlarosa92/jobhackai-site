@@ -1,9 +1,10 @@
 // Resume Feedback endpoint
-// AI-powered section-by-section feedback
+// AI-powered section-by-section feedback with hybrid grammar verification
 
 import { getBearer, verifyFirebaseIdToken } from '../_lib/firebase-auth.js';
 import { generateATSFeedback } from '../_lib/openai-client.js';
 import { scoreResume } from '../_lib/ats-scoring-engine.js';
+import { verifyGrammarWithAI } from '../_lib/grammar-ai-check.js';
 
 function corsHeaders(origin, env) {
   const allowedOrigins = [
@@ -358,6 +359,45 @@ export async function onRequest(context) {
       jobTitle,
       { isMultiColumn: resumeData.isMultiColumn }
     );
+
+    // Hybrid grammar verification: AI check only if rule-based score is perfect
+    if (ruleBasedScores.grammarScore?.aiCheckRequired) {
+      try {
+        const errorsPresent = await verifyGrammarWithAI(resumeData.text, env);
+        
+        if (errorsPresent) {
+          // Reduce grammar score but keep deterministic scoring structure
+          const deduction = 3;
+          const originalScore = ruleBasedScores.grammarScore.score;
+          ruleBasedScores.grammarScore.score = Math.max(0, ruleBasedScores.grammarScore.max - deduction);
+          
+          // Update feedback
+          ruleBasedScores.grammarScore.feedback += 
+            ' Some grammar or spelling inconsistencies were detected. Review and correct misspellings.';
+          
+          // Recalculate overall score
+          ruleBasedScores.overallScore = Math.round(
+            ruleBasedScores.keywordScore.score +
+            ruleBasedScores.formattingScore.score +
+            ruleBasedScores.structureScore.score +
+            ruleBasedScores.toneScore.score +
+            ruleBasedScores.grammarScore.score
+          );
+          
+          console.log('[GRAMMAR-AI] checked:', { 
+            resumeId: resumeId || 'unknown', 
+            errorsPresent, 
+            originalScore, 
+            newScore: ruleBasedScores.grammarScore.score 
+          });
+        } else {
+          console.log('[GRAMMAR-AI] checked:', { resumeId: resumeId || 'unknown', errorsPresent: false });
+        }
+      } catch (grammarCheckError) {
+        // Fail gracefully - keep original score if AI check fails
+        console.error('[GRAMMAR-AI] Grammar check error (non-fatal):', grammarCheckError);
+      }
+    }
 
     // Generate AI feedback with exponential backoff retry
     let aiFeedback = null;
