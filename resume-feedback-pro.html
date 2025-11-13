@@ -232,6 +232,79 @@
       display: block;
       pointer-events: auto;
     }
+    /* Summary & Next Steps Card */
+    .rf-summary-card {
+      background: var(--color-card-bg);
+      border-radius: var(--radius-xl);
+      box-shadow: var(--shadow-md);
+      padding: var(--space-lg);
+      margin-bottom: var(--space-lg);
+    }
+    .rf-summary-bullets {
+      list-style: none;
+      padding: 0;
+      margin: var(--space-sm) 0 0 0;
+    }
+    .rf-summary-bullets li {
+      padding: var(--space-xs) 0;
+      color: var(--color-text-main);
+      font-size: var(--font-size-base);
+      line-height: 1.6;
+      position: relative;
+      padding-left: 1.5rem;
+    }
+    .rf-summary-bullets li::before {
+      content: '•';
+      color: var(--color-cta-green);
+      font-weight: var(--font-weight-bold);
+      position: absolute;
+      left: 0;
+    }
+    /* Fade Transitions */
+    .fade-enter {
+      opacity: 0;
+      transform: translateY(8px);
+      transition: opacity 0.35s ease, transform 0.35s ease;
+    }
+    .fade-enter-active {
+      opacity: 1;
+      transform: translateY(0);
+    }
+    .fade-exit {
+      opacity: 1;
+      transform: translateY(0);
+      transition: opacity 0.25s ease, transform 0.25s ease;
+    }
+    .fade-exit-active {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+    /* Empty State Placeholders */
+    .ats-placeholder-note {
+      text-align: center;
+      color: var(--color-text-muted);
+      font-style: italic;
+      margin-top: var(--space-sm);
+      font-size: var(--font-size-base);
+    }
+    .rf-placeholder-cta {
+      text-align: center;
+      margin-top: var(--space-md);
+    }
+    .rf-placeholder-cta button {
+      background: var(--color-cta-green);
+      color: #fff;
+      font-weight: var(--font-weight-semibold);
+      border-radius: var(--radius-lg);
+      padding: 0.75rem 2rem;
+      border: none;
+      cursor: pointer;
+      transition: background 0.18s;
+      font-size: var(--font-size-base);
+    }
+    .rf-placeholder-cta button:hover {
+      background: var(--color-cta-green-hover);
+    }
   </style>
 </head>
 <body>
@@ -1014,9 +1087,58 @@
         setTimeout(initializeRoleSelector, 100);
       }
 
-      // Load cached ATS score on page load
-      if (window.JobHackAIStatePersistence) {
-        const cachedScore = window.JobHackAIStatePersistence.loadATSScore();
+      // Load cached ATS score on page load (with KV fallback)
+      async function loadCachedATSScore() {
+        let cachedScore = null;
+        
+        // Try state persistence first
+        if (window.JobHackAIStatePersistence) {
+          cachedScore = window.JobHackAIStatePersistence.loadATSScore();
+        }
+        
+        // If no cached score, try KV fallback
+        if (!cachedScore || !cachedScore.score) {
+          try {
+            const user = window.FirebaseAuthManager?.getCurrentUser?.();
+            if (user) {
+              const idToken = await user.getIdToken();
+              const kvResponse = await fetch('/api/ats-score-persist', {
+                method: 'GET',
+                headers: {
+                  'Authorization': `Bearer ${idToken}`
+                }
+              });
+              
+              if (kvResponse.ok) {
+                const kvData = await kvResponse.json();
+                if (kvData.success && kvData.data) {
+                  const resumeData = kvData.data;
+                  cachedScore = {
+                    score: resumeData.score,
+                    breakdown: resumeData.breakdown || {},
+                    jobTitle: resumeData.jobTitle || null,
+                    resumeId: resumeData.resumeId || null
+                  };
+                  
+                  // Cache KV results back to localStorage
+                  if (window.JobHackAIStatePersistence) {
+                    window.JobHackAIStatePersistence.saveATSScore({
+                      score: resumeData.score,
+                      breakdown: resumeData.breakdown || {},
+                      resumeId: resumeData.resumeId || '',
+                      jobTitle: resumeData.jobTitle || null
+                    });
+                  }
+                  
+                  console.log('[RESUME-FEEDBACK] Loaded ATS score from KV:', resumeData.score);
+                }
+              }
+            }
+          } catch (kvError) {
+            console.warn('[RESUME-FEEDBACK] KV fetch failed:', kvError);
+          }
+        }
+        
         if (cachedScore && cachedScore.score) {
           console.log('[RESUME-FEEDBACK] Loading cached ATS score:', cachedScore.score);
           updateProgressRing(cachedScore.score);
@@ -1060,6 +1182,7 @@
               }
             ];
             updateRubricGrid(rubric);
+            updateSummaryCard(rubric);
           }
           
           // Restore job title if available
@@ -1070,6 +1193,22 @@
           }
         }
       }
+      
+      // Load cached score on page load
+      loadCachedATSScore().then(() => {
+        // Check if we have resume data after loading
+        const hasResumeData = document.querySelector('#rf-rubric-grid .rf-rubric-item .rf-rubric-score')?.textContent !== '— / —';
+        
+        if (!hasResumeData) {
+          // Show placeholder note and CTA
+          const placeholder = document.getElementById('ats-placeholder');
+          if (placeholder) placeholder.style.display = 'block';
+          const placeholderCta = document.getElementById('rf-placeholder-cta');
+          if (placeholderCta) placeholderCta.style.display = 'block';
+          const regenBtn = document.getElementById('rf-regenerate-btn');
+          if (regenBtn) regenBtn.style.display = 'none';
+        }
+      });
 
       // ATS Resume Upload Logic
       const uploadInput = document.getElementById('rf-upload');
@@ -1136,6 +1275,13 @@
             
             updateProgressRing(scoreResult.score);
             
+            // Hide placeholder and show feedback
+            hidePlaceholder();
+            const placeholderCta = document.getElementById('rf-placeholder-cta');
+            if (placeholderCta) placeholderCta.style.display = 'none';
+            const regenBtn = document.getElementById('rf-regenerate-btn');
+            if (regenBtn) regenBtn.style.display = 'block';
+            
             // Convert breakdown to rubric format
             const rubric = [
               {
@@ -1170,6 +1316,12 @@
               }
             ];
             updateRubricGrid(rubric);
+            
+            // Trigger fade transitions
+            setTimeout(() => {
+              showATSFeedback();
+              showRoleFeedback();
+            }, 100);
 
             // Get feedback (if plan allows)
             const plan = getCurrentUserPlan();
@@ -1186,7 +1338,24 @@
                   showLoadingState('Optimizing for ATS compliance…');
                   const feedbackResult = await getResumeFeedback(uploadResult.resumeId, jobTitleForFeedback);
                   updateFeedbackGrid(feedbackResult.roleSpecificFeedback);
-                  updateRubricGridFromFeedback(feedbackResult.atsRubric);
+            updateRubricGridFromFeedback(feedbackResult.atsRubric);
+            
+                  // Trigger fade transition for role feedback
+                  setTimeout(() => {
+                    showRoleFeedback();
+                  }, 100);
+                  
+                  // Update summary card from new rubric
+                  const atsRubricArray = feedbackResult.atsRubric || [];
+                  if (atsRubricArray.length > 0) {
+                    const rubric = atsRubricArray.map(item => ({
+                      label: item.category || item.label,
+                      score: item.score || 0,
+                      max: item.max || 100,
+                      tip: item.feedback || item.tip || ''
+                    }));
+                    updateSummaryCard(rubric);
+                  }
                 }
               } catch (feedbackError) {
                 // Log at debug level, show user-friendly modal
@@ -1205,6 +1374,10 @@
                 }
                 // Continue without feedback if it fails - ATS score remains visible
               }
+            } else {
+              // Show placeholder CTA for free users
+              const placeholderCta = document.getElementById('rf-placeholder-cta');
+              if (placeholderCta) placeholderCta.style.display = 'block';
             }
 
             // Update original snippet in rewrite section
@@ -1302,6 +1475,24 @@
         console.warn('[RESUME-FEEDBACK] SVG not found for progress ring');
         return;
       }
+      
+      const hasResumeData = score !== undefined && score !== null;
+      
+      if (!hasResumeData) {
+        // Hide progress ring, show placeholder
+        const progressRing = document.querySelector('#rf-ats-score-tile .rf-progress-ring');
+        if (progressRing) {
+          progressRing.style.display = 'none';
+        }
+        return;
+      }
+      
+      // Show progress ring
+      const progressRing = document.querySelector('#rf-ats-score-tile .rf-progress-ring');
+      if (progressRing) {
+        progressRing.style.display = 'inline-block';
+      }
+      
       const circle = svg.querySelectorAll('circle')[1];
       if (!circle) {
         console.warn('[RESUME-FEEDBACK] Progress circle not found');
@@ -1313,7 +1504,7 @@
       const offset = circumference - (percent / 100) * circumference;
       
       // Ensure circle is visible and green
-      circle.setAttribute('stroke', '#00E676');
+      circle.setAttribute('stroke', 'var(--color-cta-green)');
       circle.setAttribute('stroke-width', '8');
       circle.setAttribute('stroke-dasharray', String(circumference));
       circle.setAttribute('stroke-dashoffset', offset);
@@ -1344,38 +1535,124 @@
       rubric.forEach(item => {
         const div = document.createElement('div');
         div.className = 'rf-rubric-item';
+        // Use — / — for empty scores
+        const scoreDisplay = (item.score === undefined || item.score === null) ? '— / —' : `${item.score} / ${item.max}`;
         div.innerHTML = `
           <div class="rf-rubric-label">${item.label}</div>
-          <div class="rf-rubric-score">${item.score} / ${item.max}</div>
+          <div class="rf-rubric-score">${scoreDisplay}</div>
           <div style="color:var(--color-text-secondary);font-size:0.98rem;">${item.tip || item.feedback || ''}</div>
         `;
         grid.appendChild(div);
       });
+      
+      // Update summary card with lowest-scoring categories
+      updateSummaryCard(rubric);
+    }
+    
+    function updateSummaryCard(rubric) {
+      const summaryCard = document.getElementById('rf-summary-card');
+      const summaryBullets = document.getElementById('rf-summary-bullets');
+      if (!summaryCard || !summaryBullets) return;
+      
+      // Check if we have valid resume data
+      const hasResumeData = rubric && rubric.length > 0 && rubric.some(item => 
+        item.score !== undefined && item.score !== null
+      );
+      
+      if (!hasResumeData) {
+        summaryCard.style.display = 'none';
+        return;
+      }
+      
+      // Find lowest-scoring categories (2-3 items)
+      const scoredItems = rubric
+        .filter(item => item.score !== undefined && item.score !== null)
+        .map(item => ({
+          ...item,
+          percentage: (item.score / item.max) * 100
+        }))
+        .sort((a, b) => a.percentage - b.percentage)
+        .slice(0, 3);
+      
+      if (scoredItems.length === 0) {
+        summaryCard.style.display = 'none';
+        return;
+      }
+      
+      summaryBullets.innerHTML = '';
+      scoredItems.forEach(item => {
+        const li = document.createElement('li');
+        li.textContent = `${item.label}: ${item.tip || item.feedback || 'Focus on improving this area.'}`;
+        summaryBullets.appendChild(li);
+      });
+      
+      summaryCard.style.display = 'block';
     }
 
     function updateFeedbackGrid(roleSpecificFeedback) {
       const grid = document.getElementById('rf-feedback-grid');
       if (!grid) return;
       
-      // Use provided feedback or default
-      const feedbacks = roleSpecificFeedback || [
-        { section: 'Header & Contact', score: '8/10', feedback: 'Clear and concise. Consider adding a custom resume URL for extra polish.' },
-        { section: 'Professional Summary', score: '6/10', feedback: 'Strong opening but lacks keywords for your target role.' },
-        { section: 'Experience', score: '7/10', feedback: 'Great structure. Quantify impact with metrics.' },
-        { section: 'Skills', score: '9/10', feedback: 'Relevant and up-to-date. Group under sub-headings.' },
-        { section: 'Education', score: '10/10', feedback: 'Well-formatted. No changes needed.' }
-      ];
+      const hasResumeData = roleSpecificFeedback && roleSpecificFeedback.length > 0;
       
       grid.innerHTML = '';
-      feedbacks.forEach(item => {
+      
+      if (!hasResumeData) {
+        // Show placeholder cards
+        const placeholderCards = [
+          { section: 'Header & Contact', placeholder: 'Your résumé feedback will appear here once analyzed.' },
+          { section: 'Professional Summary', placeholder: 'We\'ll review your summary and tone for keyword alignment.' },
+          { section: 'Experience', placeholder: 'Experience feedback coming after your first analysis.' },
+          { section: 'Skills', placeholder: 'We\'ll score your technical and soft skills once you upload.' },
+          { section: 'Education', placeholder: 'Education section feedback appears here after analysis.' }
+        ];
+        
+        placeholderCards.forEach(item => {
+          const div = document.createElement('div');
+          div.className = 'rf-feedback-card';
+          div.innerHTML = `
+            <div class="rf-feedback-label">${item.section}</div>
+            <div class="rf-feedback-tip" style="color: var(--color-text-muted); font-style: italic;">${item.placeholder}</div>
+          `;
+          grid.appendChild(div);
+        });
+        return;
+      }
+      
+      // Use provided feedback
+      roleSpecificFeedback.forEach(item => {
         const div = document.createElement('div');
         div.className = 'rf-feedback-card';
+        const scoreDisplay = (item.score === undefined || item.score === null) ? '— / —' : item.score;
         div.innerHTML = `
-          <div class="rf-feedback-label">${item.section || item.label} <span class="rf-feedback-score">${item.score}</span></div>
+          <div class="rf-feedback-label">${item.section || item.label} <span class="rf-feedback-score">${scoreDisplay}</span></div>
           <div class="rf-feedback-tip">${item.feedback || item.tip}</div>
         `;
         grid.appendChild(div);
       });
+    }
+    
+    // Fade transition helpers
+    function hidePlaceholder() {
+      const ph = document.getElementById('ats-placeholder');
+      if (ph) {
+        ph.classList.add('fade-exit');
+        setTimeout(() => ph.remove(), 250);
+      }
+    }
+    
+    function showATSFeedback() {
+      const el = document.getElementById('ats-feedback-container');
+      if (!el) return;
+      el.classList.add('fade-enter');
+      requestAnimationFrame(() => el.classList.add('fade-enter-active'));
+    }
+    
+    function showRoleFeedback() {
+      const el = document.getElementById('role-feedback-container');
+      if (!el) return;
+      el.classList.add('fade-enter');
+      requestAnimationFrame(() => el.classList.add('fade-enter-active'));
     }
 
     // --- Priority Review Tooltip (modular) ---
@@ -1869,8 +2146,13 @@
       </div>
       <!-- Hidden content that will be shown for unlocked plans -->
       <div id="rf-feedback-content" style="display:none;">
+        <!-- Empty state placeholder -->
+        <div id="ats-placeholder" class="ats-placeholder-note" style="display:none;">
+          Upload your résumé above to generate your ATS Score and detailed feedback.
+        </div>
         <!-- ATS Rubric -->
-        <div class="rf-rubric-grid" id="rf-rubric-grid">
+        <div id="ats-feedback-container">
+          <div class="rf-rubric-grid" id="rf-rubric-grid">
           <div class="rf-rubric-item">
             <div class="rf-rubric-label">Keyword Match</div>
             <div class="rf-rubric-score">27 / 35</div>
@@ -1897,12 +2179,19 @@
             <div style="color:var(--color-text-secondary);font-size:0.98rem;">No major errors detected.</div>
           </div>
         </div>
-        <!-- Role-Specific Feedback -->
-        <div class="rf-section-title" id="rf-role-title" style="margin-top:2rem;">Role-Specific Feedback</div>
-        <div style="color:var(--color-text-secondary);margin-bottom:1.2rem;" id="rf-role-desc">
-          Basic feedback on your resume's content and presentation for your target role. Upgrade to Pro for comprehensive analysis and unlimited suggestions.
+        <!-- Summary & Next Steps Card -->
+        <div class="rf-summary-card" id="rf-summary-card" style="display:none;margin-top:2rem;">
+          <div class="rf-section-title">Summary & Next Steps</div>
+          <ul class="rf-summary-bullets" id="rf-summary-bullets"></ul>
         </div>
-        <div class="rf-feedback-grid" id="rf-feedback-grid">
+        </div>
+        <!-- Role-Specific Feedback -->
+        <div id="role-feedback-container">
+          <div class="rf-section-title" id="rf-role-title" style="margin-top:2rem;">Role-Specific Feedback</div>
+          <div style="color:var(--color-text-secondary);margin-bottom:1.2rem;" id="rf-role-desc">
+            Basic feedback on your resume's content and presentation for your target role. Upgrade to Pro for comprehensive analysis and unlimited suggestions.
+          </div>
+          <div class="rf-feedback-grid" id="rf-feedback-grid">
           <div class="rf-feedback-card">
             <div class="rf-feedback-label">Header & Contact <span class="rf-feedback-score">8/10</span></div>
             <div class="rf-feedback-tip">Clear and concise. Consider adding a custom resume URL for extra polish.</div>
@@ -1924,7 +2213,11 @@
             <div class="rf-feedback-tip">Well-formatted. No changes needed.</div>
           </div>
         </div>
-        <button class="btn btn-primary" id="rf-regenerate-btn" style="margin-top:1.7rem;">Regenerate Feedback</button>
+        <button class="btn btn-primary" id="rf-regenerate-btn" style="margin-top:1.7rem;display:none;">Regenerate Feedback</button>
+        <div class="rf-placeholder-cta" id="rf-placeholder-cta" style="display:none;">
+          <button onclick="document.getElementById('rf-upload').click()">Upload Resume to Get Feedback</button>
+        </div>
+        </div>
       </div>
     </section>
 
