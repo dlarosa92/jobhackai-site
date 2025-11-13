@@ -292,7 +292,7 @@ export async function onRequest(context) {
     // Hybrid grammar verification: AI check only if rule-based score is perfect
     if (ruleBasedScores.grammarScore?.aiCheckRequired) {
       try {
-        const errorsPresent = await verifyGrammarWithAI(resumeData.text, env);
+        const errorsPresent = await verifyGrammarWithAI(text, env);
         
         if (errorsPresent) {
           // Reduce grammar score but keep deterministic scoring structure
