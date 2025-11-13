@@ -1082,10 +1082,11 @@
     };
     
     // Load ATS score from state persistence BEFORE rendering
-    function loadAtsScoreFromStorage() {
+    async function loadAtsScoreFromStorage() {
       let lastScore = null;
       let lastSummary = null;
       let lastJobTitle = null;
+      let lastBreakdown = null;
       
       // Try state persistence utility first (handles cache expiration)
       if (window.JobHackAIStatePersistence) {
@@ -1093,6 +1094,7 @@
         if (cachedScore && cachedScore.score !== null && cachedScore.score !== undefined) {
           lastScore = cachedScore.score.toString();
           lastJobTitle = cachedScore.jobTitle || null;
+          lastBreakdown = cachedScore.breakdown || null;
           // Generate summary from score if breakdown available
           if (cachedScore.score > 85) {
             lastSummary = 'Excellent! Your resume is highly ATS compatible.';
@@ -1108,6 +1110,63 @@
       if (!lastScore) {
         lastScore = sessionStorage.getItem('currentAtsScore') || localStorage.getItem('lastATSScore');
         lastSummary = localStorage.getItem('lastATSSummary');
+        const breakdownStr = sessionStorage.getItem('currentAtsBreakdown') || localStorage.getItem('lastATSBreakdown');
+        if (breakdownStr) {
+          try {
+            lastBreakdown = JSON.parse(breakdownStr);
+          } catch (e) {
+            console.warn('[DASHBOARD] Failed to parse breakdown:', e);
+          }
+        }
+      }
+      
+      // If still no score, try KV fallback via API
+      if (!lastScore) {
+        try {
+          const user = window.FirebaseAuthManager?.getCurrentUser?.();
+          if (user) {
+            const idToken = await user.getIdToken();
+            const kvResponse = await fetch('/api/ats-score-persist', {
+              method: 'GET',
+              headers: {
+                'Authorization': `Bearer ${idToken}`
+              }
+            });
+            
+            if (kvResponse.ok) {
+              const kvData = await kvResponse.json();
+              if (kvData.success && kvData.data) {
+                const resumeData = kvData.data;
+                lastScore = resumeData.score?.toString();
+                lastJobTitle = resumeData.jobTitle || null;
+                lastBreakdown = resumeData.breakdown || null;
+                
+                // Generate summary from score
+                if (resumeData.score > 85) {
+                  lastSummary = 'Excellent! Your resume is highly ATS compatible.';
+                } else if (resumeData.score > 70) {
+                  lastSummary = 'Your resume meets many ATS criteria and is likely to be noticed.';
+                } else {
+                  lastSummary = 'Your resume needs improvement for better ATS results.';
+                }
+                
+                // Cache KV results back to localStorage via state persistence
+                if (window.JobHackAIStatePersistence && lastScore) {
+                  window.JobHackAIStatePersistence.saveATSScore({
+                    score: parseFloat(lastScore),
+                    breakdown: lastBreakdown || {},
+                    resumeId: resumeData.resumeId || '',
+                    jobTitle: lastJobTitle
+                  });
+                }
+                
+                console.log('[DASHBOARD] Loaded ATS score from KV:', lastScore);
+              }
+            }
+          }
+        } catch (kvError) {
+          console.warn('[DASHBOARD] KV fetch failed:', kvError);
+        }
       }
       
       // Only update score if we have valid data (prevent reset to 0% or 78%)
@@ -1119,6 +1178,7 @@
           atsScore.percent = scoreValue;
           atsScore.summary = lastSummary || 'Your resume was analyzed.';
           atsScore.jobTitle = lastJobTitle;
+          atsScore.breakdown = lastBreakdown;
         }
       }
       
@@ -1126,8 +1186,8 @@
     }
     
     async function renderDashboard(user) {
-      // Load ATS score BEFORE rendering
-      loadAtsScoreFromStorage();
+      // Load ATS score BEFORE rendering (now async)
+      await loadAtsScoreFromStorage();
       const root = document.getElementById('dashboard-root');
       const unlocked = featureMatrix[user.plan] || [];
       
@@ -1199,8 +1259,8 @@
             </div>
           ` : `
             <div class="ats-score-details">
-              <span class="ats-score-label" style="color:#6B7280;">No ATS score yet</span>
-              <span class="ats-score-summary" style="color:#9CA3AF;">Upload your resume to get your ATS compatibility score</span>
+              <span class="ats-score-label" style="color:var(--color-text-muted);">— / —</span>
+              <span class="ats-score-summary" style="color:var(--color-text-muted);font-style:italic;">Upload your résumé above to generate your ATS Score and detailed feedback.</span>
             </div>
           `}
         </div>
