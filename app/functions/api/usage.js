@@ -1,4 +1,6 @@
 import { getBearer, verifyFirebaseIdToken } from '../_lib/firebase-auth.js';
+import { getUsageForUser, checkFeatureAllowed, getCooldownStatus } from '../_lib/usage-tracker.js';
+import { FEATURE_KEYS } from '../_lib/usage-config.js';
 
 function corsHeaders(origin, env) {
   const allowedOrigins = [
@@ -59,19 +61,29 @@ export async function onRequest(context) {
     const { uid } = await verifyFirebaseIdToken(token, env.FIREBASE_PROJECT_ID);
     const plan = await getUserPlan(uid, env);
 
-    // Get usage data from KV
+    // Initialize usage doc and get normalized usage
+    await getUsageForUser(env, uid, plan);
+
+    // Get usage data using new usage-tracker.js system
+    // For resumeFeedback (primary feature for this endpoint)
+    const resumeFeedbackCheck = await checkFeatureAllowed(env, uid, FEATURE_KEYS.RESUME_FEEDBACK);
+    const resumeFeedbackCooldown = await getCooldownStatus(env, uid, FEATURE_KEYS.RESUME_FEEDBACK, 60); // 60 second cooldown
+
+    // For ATS Score
+    const atsScoreCheck = await checkFeatureAllowed(env, uid, FEATURE_KEYS.ATS_SCORE);
+
     const usage = {
       atsScans: {
-        used: 0,
-        limit: plan === 'free' ? 1 : null, // Free: 1 lifetime, others: unlimited
-        remaining: plan === 'free' ? 1 : null,
+        used: atsScoreCheck.used || 0,
+        limit: atsScoreCheck.limit,
+        remaining: atsScoreCheck.limit !== null ? Math.max(0, (atsScoreCheck.limit || 0) - (atsScoreCheck.used || 0)) : null,
         cooldown: 0
       },
       resumeFeedback: {
-        used: 0,
-        limit: plan === 'essential' ? 3 : plan === 'trial' ? null : null, // Essential: 3/month, Trial: unlimited (throttled), Pro/Premium: unlimited
-        remaining: plan === 'essential' ? 3 : null,
-        cooldown: 0
+        used: resumeFeedbackCheck.used || 0,
+        limit: resumeFeedbackCheck.limit,
+        remaining: resumeFeedbackCheck.limit !== null ? Math.max(0, (resumeFeedbackCheck.limit || 0) - (resumeFeedbackCheck.used || 0)) : null,
+        cooldown: resumeFeedbackCooldown.cooldownSecondsRemaining || 0
       },
       resumeRewrite: {
         used: 0,
@@ -109,31 +121,8 @@ export async function onRequest(context) {
       }
     };
 
-    // Check ATS usage (Free plan: lifetime limit)
-    if (plan === 'free' && env.JOBHACKAI_KV) {
-      const atsUsageKey = `atsUsage:${uid}:lifetime`;
-      const atsUsed = await env.JOBHACKAI_KV.get(atsUsageKey);
-      usage.atsScans.used = atsUsed ? parseInt(atsUsed, 10) : 0;
-      usage.atsScans.remaining = Math.max(0, 1 - usage.atsScans.used);
-    }
-
-    // Check feedback usage (Essential: monthly, Trial: daily/per-doc)
-    if (plan === 'essential' && env.JOBHACKAI_KV) {
-      const now = new Date();
-      const monthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-      const feedbackUsageKey = `feedbackUsage:${uid}:${monthKey}`;
-      const feedbackUsed = await env.JOBHACKAI_KV.get(feedbackUsageKey);
-      usage.resumeFeedback.used = feedbackUsed ? parseInt(feedbackUsed, 10) : 0;
-      usage.resumeFeedback.remaining = Math.max(0, 3 - usage.resumeFeedback.used);
-    } else if (plan === 'trial' && env.JOBHACKAI_KV) {
-      // Trial: check daily limit (5/day)
-      const today = new Date().toISOString().split('T')[0];
-      const dailyKey = `feedbackDaily:${uid}:${today}`;
-      const dailyUsed = await env.JOBHACKAI_KV.get(dailyKey);
-      usage.resumeFeedback.used = dailyUsed ? parseInt(dailyUsed, 10) : 0;
-      usage.resumeFeedback.limit = 5; // Daily limit
-      usage.resumeFeedback.remaining = Math.max(0, 5 - usage.resumeFeedback.used);
-    }
+    // Usage data for resumeFeedback and atsScans is now populated above using usage-tracker.js
+    // Remaining features use legacy logic (to be migrated later)
 
     // Check rewrite usage (Pro/Premium: daily limit 5)
     if ((plan === 'pro' || plan === 'premium') && env.JOBHACKAI_KV) {
@@ -186,10 +175,19 @@ export async function onRequest(context) {
       }
     }
 
+    // Return usage data with resumeFeedback in the format expected by frontend
     return new Response(JSON.stringify({
       success: true,
       plan,
-      usage
+      usage,
+      // Also return resumeFeedback usage in the format expected by renderResumeFeedbackUsageTile
+      resumeFeedbackUsage: {
+        plan: resumeFeedbackCheck.plan,
+        feature: FEATURE_KEYS.RESUME_FEEDBACK,
+        limit: resumeFeedbackCheck.limit,
+        used: resumeFeedbackCheck.used,
+        cooldownSecondsRemaining: resumeFeedbackCooldown.cooldownSecondsRemaining || 0
+      }
     }), {
       headers: corsHeaders(origin, env)
     });

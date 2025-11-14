@@ -338,6 +338,15 @@
     .usage-meter--green { background: rgba(0, 230, 118, 0.15); color: #00E676; }
     .usage-meter--yellow { background: rgba(255, 193, 7, 0.18); color: #FF9100; }
     .usage-meter--red { background: rgba(225, 29, 72, 0.15); color: #E11D48; }
+    .usage-meter-circular {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .usage-tile--locked {
+      opacity: 0.8;
+    }
     .usage-tile .usage-text {
       display: flex;
       flex-direction: column;
@@ -929,50 +938,105 @@
         const used = (usageInfo?.used ?? 0);
         const cooldownLeft = Number(usageInfo?.cooldownSecondsRemaining || 0);
 
-        // Determine meter content and color
-        let meterContent = '∞';
-        let meterClass = 'usage-meter usage-meter--green';
-        let subtitle = '';
+        // Determine state and styling
+        const locked = limit === 0;
+        const isUnlimited = limit === null;
+        const ratio = (limit && limit > 0) ? (used / limit) : 0;
+        const isLimitReached = !isUnlimited && !locked && ratio >= 1;
+        const isWarning = !isUnlimited && !locked && ratio >= 0.66 && ratio < 1;
+        const isYellow = !isUnlimited && !locked && ratio >= 0.33 && ratio < 0.66;
+        const isGreen = !isUnlimited && !locked && ratio < 0.33;
 
-        if (limit === 0) {
-          meterContent = '🔒';
-          meterClass = 'usage-meter usage-meter--red';
-          subtitle = 'Upgrade to unlock';
-        } else if (limit === null) {
+        // Determine meter color
+        let meterColor = '#00E676'; // green
+        let meterBgColor = 'rgba(0, 230, 118, 0.15)';
+        if (locked || isLimitReached || isWarning) {
+          meterColor = '#E11D48'; // red
+          meterBgColor = 'rgba(225, 29, 72, 0.15)';
+        } else if (isYellow) {
+          meterColor = '#FF9100'; // yellow
+          meterBgColor = 'rgba(255, 193, 7, 0.18)';
+        }
+
+        // Build circular progress meter SVG
+        const meterSize = 36;
+        const meterRadius = 14;
+        const meterCircumference = 2 * Math.PI * meterRadius;
+        let meterProgress = 0;
+        let meterContent = '';
+        let showLockIcon = false;
+
+        if (locked) {
+          showLockIcon = true;
+          meterProgress = 0;
+        } else if (isUnlimited) {
           meterContent = '∞';
-          meterClass = 'usage-meter usage-meter--green';
-          subtitle = (plan === 'pro' || plan === 'premium') ? 'Unlimited' : 'Unlimited (trial)';
-        } else if (typeof limit === 'number') {
-          const ratio = limit > 0 ? (used / limit) : 1;
+          meterProgress = 0;
+        } else {
           meterContent = `${used}/${limit}`;
-          if (ratio >= 1) {
-            meterClass = 'usage-meter usage-meter--red';
-            subtitle = 'Limit reached';
-          } else if (ratio >= 0.66) {
-            meterClass = 'usage-meter usage-meter--red';
-            subtitle = `${limit - used} left`;
-          } else if (ratio >= 0.33) {
-            meterClass = 'usage-meter usage-meter--yellow';
-            subtitle = `${limit - used} left`;
-          } else {
-            meterClass = 'usage-meter usage-meter--green';
-            subtitle = `${limit - used} left`;
-          }
+          meterProgress = Math.min(100, (used / limit) * 100);
+        }
+
+        const meterOffset = meterCircumference - (meterProgress / 100) * meterCircumference;
+        
+        // Lock icon SVG (design system)
+        const lockIconSvg = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="${meterColor}" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);">
+          <rect x="3" y="11" width="18" height="8" rx="2"/>
+          <path d="M7 11V7a5 5 0 0110 0v4"/>
+        </svg>`;
+
+        // Cooldown icon SVG (clock icon)
+        const cooldownIconSvg = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:0.25rem;">
+          <circle cx="12" cy="12" r="10"/>
+          <polyline points="12 6 12 12 16 14"/>
+        </svg>`;
+
+        // Build meter SVG
+        const meterSvg = `<div class="usage-meter-circular" style="width:${meterSize}px;height:${meterSize}px;position:relative;flex-shrink:0;">
+          <svg width="${meterSize}" height="${meterSize}" viewBox="0 0 ${meterSize} ${meterSize}" style="transform:rotate(-90deg);">
+            <circle cx="${meterSize/2}" cy="${meterSize/2}" r="${meterRadius}" 
+              stroke="#E5E7EB" stroke-width="3" fill="none"/>
+            ${!isUnlimited ? `<circle cx="${meterSize/2}" cy="${meterSize/2}" r="${meterRadius}" 
+              stroke="${meterColor}" stroke-width="3" fill="none"
+              stroke-dasharray="${meterCircumference}"
+              stroke-dashoffset="${meterOffset}"
+              stroke-linecap="round"/>` : ''}
+          </svg>
+          ${showLockIcon ? lockIconSvg : ''}
+          ${!showLockIcon && !isUnlimited ? `<span style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:0.75rem;font-weight:700;color:${meterColor};white-space:nowrap;">${meterContent}</span>` : ''}
+          ${!showLockIcon && isUnlimited ? `<span style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:1.1rem;font-weight:700;color:${meterColor};">∞</span>` : ''}
+        </div>`;
+
+        // Determine microcopy
+        let subtitle = '';
+        if (locked) {
+          subtitle = 'Feedback Limit Reached — Upgrade to Pro for unlimited use.';
+        } else if (isUnlimited) {
+          subtitle = (plan === 'pro' || plan === 'premium') ? 'Unlimited' : 'Unlimited (trial)';
+        } else if (isLimitReached) {
+          subtitle = 'Feedback Limit Reached — Upgrade to Pro for unlimited use.';
+        } else if (used === 0) {
+          subtitle = `You have ${limit} AI feedback reports this month.`;
+        } else if (limit - used === 1) {
+          subtitle = '1 more AI feedback remaining this month.';
+        } else {
+          subtitle = `${limit - used} more AI feedback reports remaining this month.`;
         }
 
         // Build tile HTML
         const title = 'Resume Feedback';
-        const locked = limit === 0;
-        const cta = locked ? `<button class="btn btn-secondary" style="margin-left:auto;" onclick="window.location.href='pricing-a.html'">Upgrade</button>` : '';
+        const tileClass = locked || isLimitReached ? 'usage-tile usage-tile--locked' : 'usage-tile';
+        const cta = (locked || isLimitReached) ? `<button class="btn btn-secondary" style="margin-left:auto;" onclick="window.location.href='pricing-a.html'">Upgrade to Pro</button>` : '';
         const cooldownChip = cooldownLeft > 0
-          ? `<span style="margin-left:auto;color:var(--color-accent-blue);font-weight:600;">⚡ Cooldown: ${window.formatCooldown ? window.formatCooldown(cooldownLeft) : (cooldownLeft + 's')}</span>`
+          ? `<span style="margin-left:auto;color:var(--color-accent-blue);font-weight:600;display:inline-flex;align-items:center;">${cooldownIconSvg}Cooldown: ${window.formatCooldown ? window.formatCooldown(cooldownLeft) : (cooldownLeft + 's')}</span>`
           : '';
+        
         container.innerHTML = `
-          <div class="usage-tile" id="rf-usage-tile">
-            <div class="${meterClass}">${meterContent}</div>
+          <div class="${tileClass}" id="rf-usage-tile">
+            ${meterSvg}
             <div class="usage-text">
               <div class="title">${title}</div>
-              <div class="subtitle">${subtitle || ''}</div>
+              <div class="subtitle">${subtitle}</div>
             </div>
             ${cooldownChip}
             ${cta}
@@ -1345,6 +1409,12 @@
                 jobTitleInput.value = analysis.jobTitle;
                 currentJobTitle = analysis.jobTitle;
               }
+              // Hide placeholder when cached data is loaded
+              hidePlaceholder();
+              const placeholderCta = document.getElementById('rf-placeholder-cta');
+              if (placeholderCta) placeholderCta.style.display = 'none';
+              const regenBtn = document.getElementById('rf-regenerate-btn');
+              if (regenBtn) regenBtn.style.display = 'block';
             } catch (e) {
               console.warn('[RESUME-FEEDBACK] Failed to render cached analysis:', e);
             }
@@ -1386,6 +1456,12 @@
                   if (Array.isArray(a.roleSpecificFeedback)) {
                     updateFeedbackGrid(a.roleSpecificFeedback);
                   }
+                  // Hide placeholder when KV data is loaded
+                  hidePlaceholder();
+                  const placeholderCta = document.getElementById('rf-placeholder-cta');
+                  if (placeholderCta) placeholderCta.style.display = 'none';
+                  const regenBtn = document.getElementById('rf-regenerate-btn');
+                  if (regenBtn) regenBtn.style.display = 'block';
                   if (window.JobHackAIStatePersistence && typeof window.JobHackAIStatePersistence.saveLastAtsAnalysis === 'function') {
                     window.JobHackAIStatePersistence.saveLastAtsAnalysis(a);
                   }
@@ -1492,6 +1568,12 @@
             jobTitleInput.value = cachedScore.jobTitle;
             currentJobTitle = cachedScore.jobTitle;
           }
+          // Hide placeholder when legacy cached data is loaded
+          hidePlaceholder();
+          const placeholderCta = document.getElementById('rf-placeholder-cta');
+          if (placeholderCta) placeholderCta.style.display = 'none';
+          const regenBtn = document.getElementById('rf-regenerate-btn');
+          if (regenBtn) regenBtn.style.display = 'block';
         }
       }
       
@@ -2317,61 +2399,76 @@
       updatePriorityReviewCTA();
     }
 
-    // Add usage indicator using shared component
-    document.addEventListener('DOMContentLoaded', async function() {
-      const main = document.querySelector('main');
-      const currentPlan = getCurrentUserPlan();
-      
-      // Only show usage indicator for plans that have limits (essential, trial)
-      if (main && (currentPlan === 'essential' || currentPlan === 'trial')) {
+    // Initialize usage tile on page load for all plans
+    async function initializeUsageTile() {
+      try {
+        const container = document.getElementById('usage-strip');
+        if (!container) {
+          console.warn('[RESUME-FEEDBACK] Usage strip container not found');
+          return;
+        }
+
+        // Get auth token using proper function
+        let token;
         try {
-          // Fetch usage data from API
-          const token = localStorage.getItem('firebase-id-token');
-          if (!token) {
-            console.warn('[RESUME-FEEDBACK] No auth token available for usage fetch');
-            return;
-          }
+          token = await getAuthToken();
+        } catch (authError) {
+          console.warn('[RESUME-FEEDBACK] Failed to get auth token for usage fetch:', authError);
+          return;
+        }
 
-          const usageResponse = await fetch('/api/usage', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${token}`
-            }
-          });
+        // Fetch usage data from API
+        const usageResponse = await fetch('/api/usage', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({})
+        });
 
-          if (!usageResponse.ok) {
-            console.warn('[RESUME-FEEDBACK] Failed to fetch usage data');
-            return;
-          }
+        if (!usageResponse.ok) {
+          console.warn('[RESUME-FEEDBACK] Failed to fetch usage data:', usageResponse.status);
+          return;
+        }
 
-          const usageData = await usageResponse.json();
-          
-          if (usageData.success && usageData.usage && usageData.usage.resumeFeedback) {
-            // Create container for usage indicator
-            const usageContainer = document.createElement('div');
-            usageContainer.className = 'rf-plan-limit';
-            usageContainer.style.cssText = 'margin-top: 0.5rem; margin-bottom: 1rem;';
-            
-            // Render usage indicator using shared component
-            if (window.renderUsageIndicator) {
-              window.renderUsageIndicator({
-                feature: 'resumeFeedback',
-                usage: usageData.usage.resumeFeedback,
-                plan: usageData.plan,
-                container: usageContainer
-              });
-              
-              // Insert at the top of main content
-              main.insertBefore(usageContainer, main.firstChild);
-            } else {
-              console.warn('[RESUME-FEEDBACK] Usage indicator component not loaded');
-            }
-          }
-        } catch (error) {
-          console.error('[RESUME-FEEDBACK] Error loading usage indicator:', error);
+        const usageData = await usageResponse.json();
+        
+        // Use resumeFeedbackUsage if available (new format), otherwise fall back to usage.resumeFeedback
+        const resumeFeedbackUsage = usageData.resumeFeedbackUsage || (usageData.usage && usageData.usage.resumeFeedback ? {
+          plan: usageData.plan,
+          feature: 'resumeFeedback',
+          limit: usageData.usage.resumeFeedback.limit,
+          used: usageData.usage.resumeFeedback.used,
+          cooldownSecondsRemaining: usageData.usage.resumeFeedback.cooldown || 0
+        } : null);
+
+        if (resumeFeedbackUsage) {
+          // Render usage tile using the proper component
+          renderResumeFeedbackUsageTile(resumeFeedbackUsage);
+        } else {
+          console.warn('[RESUME-FEEDBACK] No resume feedback usage data in API response');
+        }
+      } catch (error) {
+        console.error('[RESUME-FEEDBACK] Error initializing usage tile:', error);
+      }
+    }
+
+    // Initialize usage tile on page load (after navigation system is ready)
+    document.addEventListener('DOMContentLoaded', function() {
+      // Wait for navigation system to be ready before initializing
+      function waitForNavigationAndInitUsage() {
+        if (window.JobHackAINavigation && typeof window.JobHackAINavigation.getEffectivePlan === 'function') {
+          // Navigation system ready, initialize usage tile
+          initializeUsageTile();
+        } else {
+          // Retry after a short delay
+          setTimeout(waitForNavigationAndInitUsage, 100);
         }
       }
+      
+      // Start waiting for navigation system
+      waitForNavigationAndInitUsage();
     });
 
     // --- PLAN LOGIC ---
@@ -2418,11 +2515,13 @@
     <!-- ATS Score Tile -->
     <section class="rf-card" id="rf-ats-score-tile">
       <div style="display:flex;align-items:center;gap:2.5rem;flex-wrap:wrap;">
-        <div class="rf-progress-ring">
-          <svg viewBox="0 0 80 80">
+        <!-- Progress ring is initially hidden; it will be shown and populated by updateProgressRing() -->
+        <div class="rf-progress-ring" style="display:none;">
+          <svg viewBox="0 0 80 80" aria-hidden="true" focusable="false">
+            <!-- Background track -->
             <circle cx="40" cy="40" r="36" stroke="#E5E7EB" stroke-width="8" fill="none"/>
-            <circle cx="40" cy="40" r="36" stroke="#00E676" stroke-width="8" fill="none" stroke-dasharray="226.2" stroke-dashoffset="49" stroke-linecap="round"/>
-            <text x="40" y="48" text-anchor="middle" font-size="1.6rem" font-weight="700" fill="#1F2937">78%</text>
+            <!-- Active progress ring (configured dynamically in updateProgressRing) -->
+            <circle cx="40" cy="40" r="36" stroke="var(--color-cta-green)" stroke-width="8" fill="none"/>
           </svg>
         </div>
         <div style="flex:1;min-width:220px;">
