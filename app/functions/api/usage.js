@@ -69,8 +69,8 @@ export async function onRequest(context) {
       },
       resumeFeedback: {
         used: 0,
-        limit: plan === 'essential' ? 3 : plan === 'trial' ? null : null, // Essential: 3/month, Trial: unlimited (throttled), Pro/Premium: unlimited
-        remaining: plan === 'essential' ? 3 : null,
+        limit: plan === 'essential' ? 3 : plan === 'trial' ? 3 : null, // Essential: 3/month, Trial: 3 total, Pro/Premium: unlimited
+        remaining: plan === 'essential' ? 3 : plan === 'trial' ? 3 : null,
         cooldown: 0
       },
       resumeRewrite: {
@@ -117,7 +117,7 @@ export async function onRequest(context) {
       usage.atsScans.remaining = Math.max(0, 1 - usage.atsScans.used);
     }
 
-    // Check feedback usage (Essential: monthly, Trial: daily/per-doc)
+    // Check feedback usage (Essential: monthly, Trial: lifetime during trial)
     if (plan === 'essential' && env.JOBHACKAI_KV) {
       const now = new Date();
       const monthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
@@ -126,13 +126,12 @@ export async function onRequest(context) {
       usage.resumeFeedback.used = feedbackUsed ? parseInt(feedbackUsed, 10) : 0;
       usage.resumeFeedback.remaining = Math.max(0, 3 - usage.resumeFeedback.used);
     } else if (plan === 'trial' && env.JOBHACKAI_KV) {
-      // Trial: check daily limit (5/day)
-      const today = new Date().toISOString().split('T')[0];
-      const dailyKey = `feedbackDaily:${uid}:${today}`;
-      const dailyUsed = await env.JOBHACKAI_KV.get(dailyKey);
-      usage.resumeFeedback.used = dailyUsed ? parseInt(dailyUsed, 10) : 0;
-      usage.resumeFeedback.limit = 5; // Daily limit
-      usage.resumeFeedback.remaining = Math.max(0, 5 - usage.resumeFeedback.used);
+      // Trial: total limit (3 feedbacks for entire trial period)
+      const totalKey = `feedbackTrialTotal:${uid}`;
+      const totalUsed = await env.JOBHACKAI_KV.get(totalKey);
+      usage.resumeFeedback.used = totalUsed ? parseInt(totalUsed, 10) : 0;
+      usage.resumeFeedback.limit = 3;
+      usage.resumeFeedback.remaining = Math.max(0, 3 - usage.resumeFeedback.used);
     }
 
     // Check rewrite usage (Pro/Premium: daily limit 5)
