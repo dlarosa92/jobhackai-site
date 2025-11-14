@@ -7,7 +7,8 @@ import { calcOverallScore } from './calc-overall-score.js';
 
 /**
  * Clean resume text for grammar AI processing
- * Normalizes whitespace, removes non-ASCII characters, trims, and limits length
+ * Normalizes whitespace, removes control characters, trims, and limits length
+ * Preserves Unicode characters (accented names, em dashes, smart quotes, etc.)
  * @param {string} text - Raw resume text
  * @returns {string} Cleaned and truncated text (max 2000 chars)
  */
@@ -18,7 +19,9 @@ function cleanResumeForGrammarAI(text) {
   
   return text
     .replace(/\s+/g, ' ')
-    .replace(/[^\x20-\x7E]/g, '')
+    // Remove only control characters (0x00-0x1F) and DEL (0x7F)
+    // Preserve all printable Unicode characters (accented names, em dashes, etc.)
+    .replace(/[\x00-\x1F\x7F]/g, '')
     .trim()
     .substring(0, 2000);
 }
