@@ -19,7 +19,7 @@ export function scoreResume(resumeText, jobTitle, metadata = {}) {
   const jobKeywords = extractJobKeywords(normalizedJobTitle);
   
   // Score each category
-  const keywordScore = scoreKeywordRelevance(resumeText, jobTitle, jobKeywords);
+  const keywordScore = scoreKeywordRelevance(resumeText, normalizedJobTitle, jobKeywords);
   const formattingScore = scoreFormattingCompliance(resumeText, isMultiColumn);
   const structureScore = scoreStructureAndCompleteness(resumeText);
   const toneScore = scoreToneAndClarity(resumeText);
@@ -80,24 +80,29 @@ export function scoreResume(resumeText, jobTitle, metadata = {}) {
  */
 function scoreKeywordRelevance(resumeText, jobTitle, jobKeywords) {
   const textLower = resumeText.toLowerCase();
-  const jobTitleLower = jobTitle.toLowerCase();
+  const jobTitleLower = (jobTitle || '').toLowerCase();
   
   // Check for job title match (10 pts)
+  // Skip if job title is empty - don't award points for empty string match
   let titleScore = 0;
-  if (textLower.includes(jobTitleLower)) {
-    titleScore = 10;
-  } else {
-    // Partial match
-    const titleWords = jobTitleLower.split(/\s+/);
-    const matchedWords = titleWords.filter(word => 
-      word.length > 3 && textLower.includes(word)
-    );
-    titleScore = Math.round((matchedWords.length / titleWords.length) * 10);
+  if (jobTitleLower && jobTitleLower.trim().length > 0) {
+    if (textLower.includes(jobTitleLower)) {
+      titleScore = 10;
+    } else {
+      // Partial match
+      const titleWords = jobTitleLower.split(/\s+/).filter(w => w.length > 0);
+      if (titleWords.length > 0) {
+        const matchedWords = titleWords.filter(word => 
+          word.length > 3 && textLower.includes(word)
+        );
+        titleScore = Math.round((matchedWords.length / titleWords.length) * 10);
+      }
+    }
   }
   
   // Check for skill keywords (30 pts)
   // Common skill keywords based on job title
-  const skillKeywords = getSkillKeywordsForJob(jobTitle);
+  const skillKeywords = getSkillKeywordsForJob(jobTitleLower);
   let keywordMatches = 0;
   let totalKeywords = skillKeywords.length;
   
@@ -417,6 +422,10 @@ function generateRecommendations(scores) {
  * Normalize job title for keyword matching
  */
 function normalizeJobTitle(jobTitle) {
+  // Handle null/undefined/empty strings
+  if (!jobTitle || typeof jobTitle !== 'string' || jobTitle.trim().length === 0) {
+    return '';
+  }
   return jobTitle.toLowerCase()
     .replace(/[^a-z0-9\s]/g, '')
     .trim();
@@ -434,6 +443,11 @@ function extractJobKeywords(jobTitle) {
  * Get skill keywords based on job title
  */
 function getSkillKeywordsForJob(jobTitle) {
+  // Handle empty/null/undefined job titles
+  if (!jobTitle || typeof jobTitle !== 'string' || jobTitle.trim().length === 0) {
+    // Return general tech keywords for empty job titles
+    return ['collaboration', 'problem solving', 'communication', 'project management'];
+  }
   const jobTitleLower = jobTitle.toLowerCase();
   const keywords = [];
   
