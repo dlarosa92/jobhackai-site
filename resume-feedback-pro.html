@@ -649,7 +649,7 @@
       }
 
       let token = await getAuthToken();
-      const formData = new FormData();
+      let formData = new FormData();
       formData.append('file', file);
 
       // Retry logic with token refresh on 401
