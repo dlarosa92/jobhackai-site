@@ -12,7 +12,8 @@
     RESUME_ID: 'jh_last_resume_id',
     RESUME_TEXT: 'jh_last_resume_text',
     JOB_TITLE: 'jh_last_job_title',
-    TIMESTAMP: 'jh_last_score_timestamp'
+    TIMESTAMP: 'jh_last_score_timestamp',
+    LAST_ANALYSIS: 'jh_last_ats_analysis'
   };
 
   // Cache expiration: 24 hours
@@ -167,6 +168,52 @@
     }
   }
 
+  /**
+   * Save the last ATS analysis (score + rubric + role feedback) to localStorage
+   * @param {Object} data
+   * @param {number} data.createdAt - Timestamp (ms)
+   * @param {string} data.plan
+   * @param {string} data.jobTitle
+   * @param {Object} data.atsScore - { overall: number, breakdown: { ... } }
+   * @param {Array} data.atsRubric
+   * @param {Array} data.roleSpecificFeedback
+   */
+  function saveLastAtsAnalysis(data) {
+    try {
+      const payload = {
+        ...data,
+        savedAt: Date.now()
+      };
+      localStorage.setItem(STORAGE_KEYS.LAST_ANALYSIS, JSON.stringify(payload));
+      console.log('[STATE-PERSISTENCE] Saved last ATS analysis');
+    } catch (error) {
+      console.warn('[STATE-PERSISTENCE] Failed to save last ATS analysis:', error);
+    }
+  }
+
+  /**
+   * Load the last ATS analysis if not expired (24h)
+   * @returns {Object|null}
+   */
+  function loadLastAtsAnalysis() {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEYS.LAST_ANALYSIS);
+      if (!raw) return null;
+      const data = JSON.parse(raw);
+      const createdAt = typeof data.createdAt === 'number' ? data.createdAt : data.savedAt;
+      if (!createdAt) return null;
+      const age = Date.now() - createdAt;
+      if (age > CACHE_EXPIRATION) {
+        localStorage.removeItem(STORAGE_KEYS.LAST_ANALYSIS);
+        return null;
+      }
+      return data;
+    } catch (error) {
+      console.warn('[STATE-PERSISTENCE] Failed to load last ATS analysis:', error);
+      return null;
+    }
+  }
+
   // Export public API
   window.JobHackAIStatePersistence = {
     saveATSScore,
@@ -175,6 +222,8 @@
     saveResumeData,
     loadResumeData,
     syncScoreToKV,
+    saveLastAtsAnalysis,
+    loadLastAtsAnalysis,
     STORAGE_KEYS,
     CACHE_EXPIRATION
   };

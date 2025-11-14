@@ -2,6 +2,7 @@
 // Stores ATS scores in KV + Firebase Firestore hybrid for cross-device continuity
 
 import { getBearer, verifyFirebaseIdToken } from '../_lib/firebase-auth.js';
+import { getLastAtsAnalysis } from '../_lib/ats-analysis-persistence.js';
 
 function corsHeaders(origin, env) {
   const allowedOrigins = [
@@ -34,6 +35,14 @@ function json(data, status = 200, origin, env) {
   });
 }
 
+async function getUserPlan(uid, env) {
+  if (!env.JOBHACKAI_KV) {
+    return 'free';
+  }
+  const plan = await env.JOBHACKAI_KV.get(`planByUid:${uid}`);
+  return plan || 'free';
+}
+
 /**
  * Store ATS score in KV + Firestore
  */
@@ -60,20 +69,14 @@ export async function onRequest(context) {
 
     // GET: Retrieve last ATS score
     if (request.method === 'GET') {
-      const kv = env.JOBHACKAI_KV;
-      if (!kv) {
-        return json({ success: false, error: 'Storage not available' }, 500, origin, env);
-      }
-
-      const lastResumeKey = `user:${uid}:lastResume`;
-      const lastResumeData = await kv.get(lastResumeKey);
-
-      if (!lastResumeData) {
-        return json({ success: true, data: null }, 200, origin, env);
-      }
-
-      const resumeData = JSON.parse(lastResumeData);
-      return json({ success: true, data: resumeData }, 200, origin, env);
+      const plan = await getUserPlan(uid, env);
+      const analysis = await getLastAtsAnalysis(env, uid);
+      return json({
+        success: true,
+        hasAnalysis: !!analysis,
+        plan,
+        analysis: analysis || null
+      }, 200, origin, env);
     }
 
     // POST: Store ATS score

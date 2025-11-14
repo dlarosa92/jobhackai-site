@@ -305,6 +305,63 @@
     .rf-placeholder-cta button:hover {
       background: var(--color-cta-green-hover);
     }
+    /* Usage Strip + Tile Meters */
+    .usage-strip {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 0.8rem;
+      margin-bottom: 1rem;
+    }
+    .usage-tile {
+      background: var(--color-card-bg);
+      border: 1px solid var(--color-divider);
+      border-radius: var(--radius-lg);
+      padding: 0.8rem 1rem;
+      display: flex;
+      align-items: center;
+      gap: 0.8rem;
+      min-height: 56px;
+    }
+    .usage-meter {
+      width: 36px;
+      height: 36px;
+      display: inline-flex;
+      border-radius: 999px;
+      background: #E5E7EB;
+      color: #111827;
+      font-weight: 700;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.95rem;
+      flex-shrink: 0;
+    }
+    .usage-meter--green { background: rgba(0, 230, 118, 0.15); color: #00E676; }
+    .usage-meter--yellow { background: rgba(255, 193, 7, 0.18); color: #FF9100; }
+    .usage-meter--red { background: rgba(225, 29, 72, 0.15); color: #E11D48; }
+    .usage-tile .usage-text {
+      display: flex;
+      flex-direction: column;
+      line-height: 1.2;
+    }
+    .usage-tile .usage-text .title {
+      font-weight: 600;
+      color: var(--color-text-main);
+      font-size: 0.95rem;
+    }
+    .usage-tile .usage-text .subtitle {
+      color: var(--color-text-secondary);
+      font-size: 0.88rem;
+    }
+    .cooldown-banner {
+      display: none;
+      background: rgba(0, 123, 255, 0.08);
+      color: var(--color-accent-blue);
+      border: 1px solid rgba(0, 123, 255, 0.25);
+      border-radius: var(--radius-lg);
+      padding: 0.6rem 0.9rem;
+      font-weight: 600;
+      margin-top: 0.6rem;
+    }
   </style>
 </head>
 <body>
@@ -720,26 +777,54 @@
       });
 
       if (!response.ok) {
-        const error = await response.json();
-        // Map error codes to user-friendly messages
-        let errorMessage = error.error || 'Failed to get feedback';
-        if (error.error === 'Feature locked') {
-          errorMessage = 'This feature is available on the Pro plan. Upgrade to unlock full feedback.';
-        } else if (error.error === 'Unauthorized') {
-          errorMessage = 'Please log in to continue.';
-        } else if (response.status === 403) {
-          errorMessage = error.message || 'Access denied. Please check your plan or try logging in again.';
+        let errorData = {};
+        try { errorData = await response.json(); } catch {}
+        // Cooldown (429)
+        if (response.status === 429) {
+          const seconds = Number(errorData.cooldownSecondsRemaining || 0);
+          if (seconds > 0) {
+            showCooldownBanner(seconds);
+          }
+          // Still update tile if usage info available
+          try {
+            renderResumeFeedbackUsageTile({
+              plan: errorData.plan || 'free',
+              feature: 'resumeFeedback',
+              limit: errorData.limit ?? null,
+              used: errorData.used ?? null,
+              cooldownSecondsRemaining: seconds
+            });
+          } catch {}
+          const msg = errorData.message || 'Please wait before requesting another feedback.';
+          throw new Error(msg);
         }
-        console.error('[RESUME-FEEDBACK] API error:', {
-          status: response.status,
-          error: error.error,
-          message: error.message,
-          upgradeRequired: error.upgradeRequired
-        });
+        // Forbidden (403) - limit reached or locked
+        if (response.status === 403) {
+          try {
+            renderResumeFeedbackUsageTile({
+              plan: errorData.plan || 'free',
+              feature: 'resumeFeedback',
+              limit: errorData.limit ?? 0,
+              used: errorData.used ?? 0,
+              cooldownSecondsRemaining: 0
+            });
+          } catch {}
+          const msg = errorData.message || 'Access denied. Your plan does not allow more feedback.';
+          throw new Error(msg);
+        }
+        // Other errors
+        const errorMessage = errorData.error === 'Unauthorized'
+          ? 'Please log in to continue.'
+          : (errorData.message || 'Failed to get feedback');
         throw new Error(errorMessage);
       }
 
-      return await response.json();
+      const result = await response.json();
+      // Render usage tile if provided
+      if (result && result.usage) {
+        renderResumeFeedbackUsageTile(result.usage);
+      }
+      return result;
     }
 
     async function rewriteResume(resumeId, section, jobTitle) {
@@ -779,6 +864,99 @@
       }
 
       return await response.json();
+    }
+
+    // Render "Usage Strip + Tile Meters" for Resume Feedback
+    function renderResumeFeedbackUsageTile(usageInfo) {
+      try {
+        const container = document.getElementById('usage-strip');
+        if (!container) return;
+        const plan = (usageInfo?.plan || 'free');
+        const limit = (usageInfo?.limit ?? null);
+        const used = (usageInfo?.used ?? 0);
+        const cooldownLeft = Number(usageInfo?.cooldownSecondsRemaining || 0);
+
+        // Determine meter content and color
+        let meterContent = '∞';
+        let meterClass = 'usage-meter usage-meter--green';
+        let subtitle = '';
+
+        if (limit === 0) {
+          meterContent = '🔒';
+          meterClass = 'usage-meter usage-meter--red';
+          subtitle = 'Upgrade to unlock';
+        } else if (limit === null) {
+          meterContent = '∞';
+          meterClass = 'usage-meter usage-meter--green';
+          subtitle = (plan === 'pro' || plan === 'premium') ? 'Unlimited' : 'Unlimited (trial)';
+        } else if (typeof limit === 'number') {
+          const ratio = limit > 0 ? (used / limit) : 1;
+          meterContent = `${used}/${limit}`;
+          if (ratio >= 1) {
+            meterClass = 'usage-meter usage-meter--red';
+            subtitle = 'Limit reached';
+          } else if (ratio >= 0.66) {
+            meterClass = 'usage-meter usage-meter--red';
+            subtitle = `${limit - used} left`;
+          } else if (ratio >= 0.33) {
+            meterClass = 'usage-meter usage-meter--yellow';
+            subtitle = `${limit - used} left`;
+          } else {
+            meterClass = 'usage-meter usage-meter--green';
+            subtitle = `${limit - used} left`;
+          }
+        }
+
+        // Build tile HTML
+        const title = 'Resume Feedback';
+        const locked = limit === 0;
+        const cta = locked ? `<button class="btn btn-secondary" style="margin-left:auto;" onclick="window.location.href='pricing-a.html'">Upgrade</button>` : '';
+        const cooldownChip = cooldownLeft > 0
+          ? `<span style="margin-left:auto;color:var(--color-accent-blue);font-weight:600;">⚡ Cooldown: ${window.formatCooldown ? window.formatCooldown(cooldownLeft) : (cooldownLeft + 's')}</span>`
+          : '';
+        container.innerHTML = `
+          <div class="usage-tile" id="rf-usage-tile">
+            <div class="${meterClass}">${meterContent}</div>
+            <div class="usage-text">
+              <div class="title">${title}</div>
+              <div class="subtitle">${subtitle || ''}</div>
+            </div>
+            ${cooldownChip}
+            ${cta}
+          </div>
+          <div id="rf-cooldown-banner" class="cooldown-banner" role="status" aria-live="polite"></div>
+        `;
+      } catch (e) {
+        console.warn('[USAGE] Failed to render usage tile:', e);
+      }
+    }
+
+    // Cooldown UI: disable regenerate button and show countdown banner
+    function showCooldownBanner(secondsRemaining) {
+      try {
+        const btn = document.getElementById('rf-regenerate-btn');
+        const banner = document.getElementById('rf-cooldown-banner');
+        let remaining = Math.max(0, Number(secondsRemaining || 0));
+        if (!banner) return;
+        if (btn) btn.disabled = true;
+        banner.style.display = 'block';
+        const update = () => {
+          const m = Math.floor(remaining / 60);
+          const s = remaining % 60;
+          const label = m > 0 ? `${m}:${String(s).padStart(2, '0')}` : `${s}s`;
+          banner.textContent = `⚡ Cooldown: ${label}`;
+          if (remaining <= 0) {
+            if (btn) btn.disabled = false;
+            banner.style.display = 'none';
+            clearInterval(timer);
+          }
+          remaining -= 1;
+        };
+        update();
+        const timer = setInterval(update, 1000);
+      } catch (e) {
+        console.warn('[USAGE] Failed to show cooldown banner:', e);
+      }
     }
 
     function handleApiError(error) {
@@ -1087,16 +1265,87 @@
         setTimeout(initializeRoleSelector, 100);
       }
 
-      // Load cached ATS score on page load (with KV fallback)
+      // Load cached ATS analysis on page load (LocalStorage first, then KV fallback)
       async function loadCachedATSScore() {
         let cachedScore = null;
-        
+        // 1) Load full analysis from localStorage if available
+        if (window.JobHackAIStatePersistence && typeof window.JobHackAIStatePersistence.loadLastAtsAnalysis === 'function') {
+          const analysis = window.JobHackAIStatePersistence.loadLastAtsAnalysis();
+          if (analysis && analysis.atsScore && typeof analysis.atsScore.overall === 'number') {
+            try {
+              updateProgressRing(analysis.atsScore.overall);
+              if (Array.isArray(analysis.atsRubric)) {
+                updateRubricGridFromFeedback(analysis.atsRubric);
+                updateSummaryCard(analysis.atsRubric.map((i) => ({
+                  label: i.category || i.label,
+                  score: i.score,
+                  max: i.max,
+                  tip: i.feedback || i.tip
+                })));
+              }
+              if (Array.isArray(analysis.roleSpecificFeedback)) {
+                updateFeedbackGrid(analysis.roleSpecificFeedback);
+              }
+              const jobTitleInput = document.getElementById('rf-job-title');
+              if (analysis.jobTitle && jobTitleInput) {
+                jobTitleInput.value = analysis.jobTitle;
+                currentJobTitle = analysis.jobTitle;
+              }
+            } catch (e) {
+              console.warn('[RESUME-FEEDBACK] Failed to render cached analysis:', e);
+            }
+          }
+        }
+
         // Try state persistence first
         if (window.JobHackAIStatePersistence) {
           cachedScore = window.JobHackAIStatePersistence.loadATSScore();
         }
         
-        // If no cached score, try KV fallback
+        // 2) KV fallback for full analysis
+        try {
+          const user = window.FirebaseAuthManager?.getCurrentUser?.();
+          if (user) {
+            const idToken = await user.getIdToken();
+            const kvResponse = await fetch('/api/ats-score-persist', {
+              method: 'GET',
+              headers: { 'Authorization': `Bearer ${idToken}` }
+            });
+            if (kvResponse.ok) {
+              const kvData = await kvResponse.json();
+              if (kvData && kvData.hasAnalysis && kvData.analysis) {
+                const a = kvData.analysis;
+                // Render and re-cache
+                try {
+                  if (a.atsScore && typeof a.atsScore.overall === 'number') {
+                    updateProgressRing(a.atsScore.overall);
+                  }
+                  if (Array.isArray(a.atsRubric)) {
+                    updateRubricGridFromFeedback(a.atsRubric);
+                    updateSummaryCard(a.atsRubric.map((i) => ({
+                      label: i.category || i.label,
+                      score: i.score,
+                      max: i.max,
+                      tip: i.feedback || i.tip
+                    })));
+                  }
+                  if (Array.isArray(a.roleSpecificFeedback)) {
+                    updateFeedbackGrid(a.roleSpecificFeedback);
+                  }
+                  if (window.JobHackAIStatePersistence && typeof window.JobHackAIStatePersistence.saveLastAtsAnalysis === 'function') {
+                    window.JobHackAIStatePersistence.saveLastAtsAnalysis(a);
+                  }
+                } catch (renderErr) {
+                  console.warn('[RESUME-FEEDBACK] Failed to render KV analysis:', renderErr);
+                }
+              }
+            }
+          }
+        } catch (kvError) {
+          console.warn('[RESUME-FEEDBACK] KV fetch failed:', kvError);
+        }
+
+        // 3) As a fallback, use cached ATS score (pre-existing behavior)
         if (!cachedScore || !cachedScore.score) {
           try {
             const user = window.FirebaseAuthManager?.getCurrentUser?.();
@@ -1111,16 +1360,15 @@
               
               if (kvResponse.ok) {
                 const kvData = await kvResponse.json();
-                if (kvData.success && kvData.data) {
-                  const resumeData = kvData.data;
+                // Preserve backward compatibility if old shape ever returns
+                const resumeData = kvData?.data;
+                if (kvData?.success && resumeData) {
                   cachedScore = {
                     score: resumeData.score,
                     breakdown: resumeData.breakdown || {},
                     jobTitle: resumeData.jobTitle || null,
                     resumeId: resumeData.resumeId || null
                   };
-                  
-                  // Cache KV results back to localStorage
                   if (window.JobHackAIStatePersistence) {
                     window.JobHackAIStatePersistence.saveATSScore({
                       score: resumeData.score,
@@ -1129,8 +1377,7 @@
                       jobTitle: resumeData.jobTitle || null
                     });
                   }
-                  
-                  console.log('[RESUME-FEEDBACK] Loaded ATS score from KV:', resumeData.score);
+                  console.log('[RESUME-FEEDBACK] Loaded legacy KV ATS score:', resumeData.score);
                 }
               }
             }
@@ -1356,6 +1603,24 @@
                     }));
                     updateSummaryCard(rubric);
                   }
+                  // Persist full analysis to localStorage
+                  if (window.JobHackAIStatePersistence && typeof window.JobHackAIStatePersistence.saveLastAtsAnalysis === 'function') {
+                    try {
+                      window.JobHackAIStatePersistence.saveLastAtsAnalysis({
+                        createdAt: Date.now(),
+                        plan,
+                        jobTitle: jobTitleForFeedback,
+                        atsScore: {
+                          overall: typeof scoreResult?.score === 'number' ? scoreResult.score : null,
+                          breakdown: scoreResult?.breakdown || null
+                        },
+                        atsRubric: feedbackResult.atsRubric,
+                        roleSpecificFeedback: feedbackResult.roleSpecificFeedback
+                      });
+                    } catch (persistErr) {
+                      console.warn('[RESUME-FEEDBACK] Failed to save local analysis:', persistErr);
+                    }
+                  }
                 }
               } catch (feedbackError) {
                 // Log at debug level, show user-friendly modal
@@ -1437,6 +1702,22 @@
             // Show success toast
             if (window.JobHackAIToast) {
               window.JobHackAIToast.success('Updated feedback ready!');
+            }
+            // Persist full analysis to localStorage after regenerate
+            if (window.JobHackAIStatePersistence && typeof window.JobHackAIStatePersistence.saveLastAtsAnalysis === 'function') {
+              try {
+                const cached = window.JobHackAIStatePersistence.loadATSScore();
+                window.JobHackAIStatePersistence.saveLastAtsAnalysis({
+                  createdAt: Date.now(),
+                  plan: getCurrentUserPlan(),
+                  jobTitle,
+                  atsScore: cached ? { overall: cached.score, breakdown: cached.breakdown } : null,
+                  atsRubric: feedbackResult.atsRubric,
+                  roleSpecificFeedback: feedbackResult.roleSpecificFeedback
+                });
+              } catch (persistErr) {
+                console.warn('[RESUME-FEEDBACK] Failed to save local analysis (regen):', persistErr);
+              }
             }
 
             this.textContent = 'Regenerate Feedback';
@@ -2076,6 +2357,10 @@
 
   <!-- page content -->
   <main style="max-width:900px;margin:2.5rem auto 4rem auto;padding:0 1rem;">
+    <!-- Usage Strip -->
+    <section id="usage-strip" class="usage-strip" aria-live="polite">
+      <!-- Resume Feedback usage tile will render here -->
+    </section>
     <!-- ATS Score Tile -->
     <section class="rf-card" id="rf-ats-score-tile">
       <div style="display:flex;align-items:center;gap:2.5rem;flex-wrap:wrap;">

@@ -5,6 +5,9 @@ import { getBearer, verifyFirebaseIdToken } from '../_lib/firebase-auth.js';
 import { generateATSFeedback } from '../_lib/openai-client.js';
 import { scoreResume } from '../_lib/ats-scoring-engine.js';
 import { applyHybridGrammarScoring } from '../_lib/hybrid-grammar-scoring.js';
+import { FEATURE_KEYS } from '../_lib/usage-config.js';
+import { getUsageForUser, checkFeatureAllowed, incrementFeatureUsage, getCooldownStatus, touchCooldown } from '../_lib/usage-tracker.js';
+import { saveLastAtsAnalysis } from '../_lib/ats-analysis-persistence.js';
 
 function corsHeaders(origin, env) {
   const allowedOrigins = [
@@ -162,14 +165,37 @@ export async function onRequest(context) {
     
     console.log('[RESUME-FEEDBACK] Effective plan:', { plan, effectivePlan, isDevEnvironment });
 
-    // Check plan access (Free plan locked)
-    if (effectivePlan === 'free') {
-      console.log('[RESUME-FEEDBACK] Access denied - plan is free');
+    // Initialize usage doc and enforce cooldown/limits BEFORE any heavy work
+    await getUsageForUser(env, uid, effectivePlan);
+
+    // Cooldown check (60 seconds)
+    const cooldown = await getCooldownStatus(env, uid, FEATURE_KEYS.RESUME_FEEDBACK, 60);
+    if (cooldown.onCooldown) {
       return json({
         success: false,
-        error: 'Feature locked',
-        message: 'Resume Feedback is available in Trial, Essential, Pro, or Premium plans.',
-        upgradeRequired: true
+        error: 'cooldown',
+        message: 'Please wait before requesting another feedback.',
+        feature: FEATURE_KEYS.RESUME_FEEDBACK,
+        plan: effectivePlan,
+        reason: 'cooldown',
+        used: null,
+        limit: null,
+        cooldownSecondsRemaining: cooldown.cooldownSecondsRemaining
+      }, 429, origin, env);
+    }
+
+    // Usage limit check
+    const usageCheck = await checkFeatureAllowed(env, uid, FEATURE_KEYS.RESUME_FEEDBACK);
+    if (!usageCheck.allowed) {
+      return json({
+        success: false,
+        error: 'forbidden',
+        message: 'Feature usage limit reached',
+        feature: usageCheck.feature,
+        plan: usageCheck.plan,
+        reason: usageCheck.reason,
+        used: usageCheck.used,
+        limit: usageCheck.limit
       }, 403, origin, env);
     }
 
@@ -185,78 +211,7 @@ export async function onRequest(context) {
       return json({ success: false, error: 'jobTitle required' }, 400, origin, env);
     }
 
-    // Throttle check (Trial only)
-    if (effectivePlan === 'trial' && env.JOBHACKAI_KV) {
-      const throttleKey = `feedbackThrottle:${uid}`;
-      const lastRun = await env.JOBHACKAI_KV.get(throttleKey);
-      
-      if (lastRun) {
-        const lastRunTime = parseInt(lastRun, 10);
-        const now = Date.now();
-        const timeSinceLastRun = now - lastRunTime;
-        
-        if (timeSinceLastRun < 60000) { // 60 seconds
-          const retryAfter = Math.ceil((60000 - timeSinceLastRun) / 1000);
-          return json({
-            success: false,
-            error: 'Rate limit exceeded',
-            message: 'Please wait before requesting another feedback (1 request per minute).',
-            retryAfter
-          }, 429, origin, env);
-        }
-      }
-
-      // Daily limit check (Trial: max 5/day)
-      const today = new Date().toISOString().split('T')[0];
-      const dailyKey = `feedbackDaily:${uid}:${today}`;
-      const dailyCount = await env.JOBHACKAI_KV.get(dailyKey);
-      
-      if (dailyCount && parseInt(dailyCount, 10) >= 5) {
-        return json({
-          success: false,
-          error: 'Daily limit reached',
-          message: 'You have reached the daily limit (5 feedbacks/day). Upgrade to Pro for unlimited feedback.',
-          upgradeRequired: true
-        }, 429, origin, env);
-      }
-
-      // Per-doc cap check (Trial: max 3 passes per resume)
-      // Only enforce if user is still on trial plan (check in case they upgraded)
-      const docPassesKey = `feedbackDocPasses:${uid}:${resumeId}`;
-      const docPasses = await env.JOBHACKAI_KV.get(docPassesKey);
-      
-      if (docPasses && parseInt(docPasses, 10) >= 3) {
-        // Check if user is still on trial (they might have upgraded)
-        const currentPlan = await getUserPlan(uid, env);
-        if (currentPlan === 'trial') {
-          return json({
-            success: false,
-            error: 'Per-document limit reached',
-            message: 'You have reached the limit for this resume (3 passes). Upgrade to Pro for unlimited passes.',
-            upgradeRequired: true
-          }, 403, origin, env);
-        }
-        // If they upgraded, clear the old limit by not returning error
-        // The limit will be reset when we update it below
-      }
-    }
-
-    // Usage limits (Essential: 3/month)
-    if (effectivePlan === 'essential' && env.JOBHACKAI_KV) {
-      const now = new Date();
-      const monthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-      const usageKey = `feedbackUsage:${uid}:${monthKey}`;
-      const usage = await env.JOBHACKAI_KV.get(usageKey);
-      
-      if (usage && parseInt(usage, 10) >= 3) {
-        return json({
-          success: false,
-          error: 'Monthly limit reached',
-          message: 'You have used all 3 feedbacks this month. Upgrade to Pro for unlimited feedback.',
-          upgradeRequired: true
-        }, 403, origin, env);
-      }
-    }
+    // All ad-hoc throttles/limits replaced by centralized usage tracker
 
     // Cache check (all plans)
     let cachedResult = null;
@@ -280,14 +235,26 @@ export async function onRequest(context) {
     // Then return cached result
     if (cachedResult) {
       console.log(`[RESUME-FEEDBACK] Cache hit for ${uid}`, { resumeId, plan: effectivePlan });
-      
-      // Update throttles and usage even for cache hits (prevents bypassing limits)
-      await updateUsageCounters(uid, resumeId, effectivePlan, env);
-      
+      // Increment usage and touch cooldown for cache hits too
+      let usageMeta = null;
+      try {
+        const inc = await incrementFeatureUsage(env, uid, effectivePlan, FEATURE_KEYS.RESUME_FEEDBACK);
+        await touchCooldown(env, uid, effectivePlan, FEATURE_KEYS.RESUME_FEEDBACK);
+        usageMeta = {
+          plan: inc.plan,
+          feature: FEATURE_KEYS.RESUME_FEEDBACK,
+          limit: inc.limit,
+          used: inc.used,
+          cooldownSecondsRemaining: 0
+        };
+      } catch (e) {
+        console.warn('[RESUME-FEEDBACK] Usage increment/touch failed (non-fatal):', e);
+      }
       return json({
         success: true,
         ...cachedResult,
-        cached: true
+        cached: true,
+        ...(usageMeta ? { usage: usageMeta } : {})
       }, 200, origin, env);
     }
 
@@ -570,13 +537,51 @@ export async function onRequest(context) {
       });
     }
 
-    // Update throttles and usage counters (for cache misses)
-    await updateUsageCounters(uid, resumeId, effectivePlan, env);
+    // Increment usage and touch cooldown for success (cache miss)
+    let usageMeta = null;
+    try {
+      const inc = await incrementFeatureUsage(env, uid, effectivePlan, FEATURE_KEYS.RESUME_FEEDBACK);
+      await touchCooldown(env, uid, effectivePlan, FEATURE_KEYS.RESUME_FEEDBACK);
+      usageMeta = {
+        plan: inc.plan,
+        feature: FEATURE_KEYS.RESUME_FEEDBACK,
+        limit: inc.limit,
+        used: inc.used,
+        cooldownSecondsRemaining: 0
+      };
+    } catch (e) {
+      console.warn('[RESUME-FEEDBACK] Usage increment/touch failed (non-fatal):', e);
+    }
+
+    // Persist last ATS analysis (24h TTL)
+    try {
+      const breakdown = {
+        keywordScore: ruleBasedScores.keywordScore.score,
+        formattingScore: ruleBasedScores.formattingScore.score,
+        structureScore: ruleBasedScores.structureScore.score,
+        toneScore: ruleBasedScores.toneScore.score,
+        grammarScore: ruleBasedScores.grammarScore.score
+      };
+      await saveLastAtsAnalysis(env, uid, {
+        createdAt: Date.now(),
+        plan: effectivePlan,
+        jobTitle,
+        atsScore: {
+          overall: ruleBasedScores.overallScore,
+          breakdown
+        },
+        atsRubric: result.atsRubric,
+        roleSpecificFeedback: result.roleSpecificFeedback
+      });
+    } catch (persistErr) {
+      console.warn('[RESUME-FEEDBACK] saveLastAtsAnalysis failed (non-fatal):', persistErr);
+    }
 
     return json({
       success: true,
       tokenUsage: tokenUsage,
-      ...result
+      ...result,
+      ...(usageMeta ? { usage: usageMeta } : {})
     }, 200, origin, env);
 
   } catch (error) {

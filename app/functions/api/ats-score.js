@@ -4,6 +4,8 @@
 import { getBearer, verifyFirebaseIdToken } from '../_lib/firebase-auth.js';
 import { scoreResume } from '../_lib/ats-scoring-engine.js';
 import { applyHybridGrammarScoring } from '../_lib/hybrid-grammar-scoring.js';
+import { FEATURE_KEYS } from '../_lib/usage-config.js';
+import { getUsageForUser, checkFeatureAllowed, incrementFeatureUsage } from '../_lib/usage-tracker.js';
 
 function corsHeaders(origin, env) {
   const allowedOrigins = [
@@ -75,6 +77,27 @@ export async function onRequest(context) {
       return json({ success: false, error: 'jobTitle required' }, 400, origin, env);
     }
 
+    // Initialize/normalize usage doc for user and enforce feature limits
+    try {
+      await getUsageForUser(env, uid, plan);
+      const usageCheck = await checkFeatureAllowed(env, uid, FEATURE_KEYS.ATS_SCORE);
+      if (!usageCheck.allowed) {
+        return json({
+          success: false,
+          error: 'forbidden',
+          message: 'Feature usage limit reached',
+          feature: usageCheck.feature,
+          plan: usageCheck.plan,
+          reason: usageCheck.reason,
+          used: usageCheck.used,
+          limit: usageCheck.limit
+        }, 403, origin, env);
+      }
+    } catch (usageErr) {
+      console.warn('[ATS-SCORE] Usage check failed (non-fatal):', usageErr);
+      // Continue - best effort, but still try to process request
+    }
+
     // Get resume text - prefer resumeText from request, fall back to KV if available
     let text = resumeText;
     let resumeData = null;
@@ -122,33 +145,6 @@ export async function onRequest(context) {
 
     // KV-based features (optional - only if KV is available)
     const kv = env.JOBHACKAI_KV;
-    
-    // Throttle check (Trial only) - best effort, skip if KV unavailable
-    if (plan === 'trial' && kv) {
-      try {
-        const throttleKey = `atsThrottle:${uid}`;
-        const lastRun = await kv.get(throttleKey);
-        
-        if (lastRun) {
-          const lastRunTime = parseInt(lastRun, 10);
-          const now = Date.now();
-          const timeSinceLastRun = now - lastRunTime;
-          
-          if (timeSinceLastRun < 30000) { // 30 seconds
-            const retryAfter = Math.ceil((30000 - timeSinceLastRun) / 1000);
-            return json({
-              success: false,
-              error: 'Rate limit exceeded',
-              message: 'Please wait before running another ATS score.',
-              retryAfter
-            }, 429, origin, env);
-          }
-        }
-      } catch (throttleError) {
-        console.warn('[ATS-SCORE] Throttle check failed (non-fatal):', throttleError);
-        // Continue without throttling if KV unavailable
-      }
-    }
 
     // Cache check (all plans) - best effort, skip if KV unavailable
     let cachedResult = null;
@@ -182,33 +178,26 @@ export async function onRequest(context) {
       }
     }
 
-    // Usage limits (Free plan - 1 lifetime) - best effort, skip if KV unavailable
-    if (plan === 'free' && kv) {
-      try {
-        const usageKey = `atsUsage:${uid}:lifetime`;
-        const usage = await kv.get(usageKey);
-        
-        if (usage && parseInt(usage, 10) >= 1) {
-          return json({
-            success: false,
-            error: 'Usage limit reached',
-            message: 'You have used your free ATS score. Upgrade to Trial or Essential for unlimited scoring.',
-            upgradeRequired: true
-          }, 403, origin, env);
-        }
-      } catch (usageError) {
-        console.warn('[ATS-SCORE] Usage check failed (non-fatal):', usageError);
-        // Continue without usage tracking if KV unavailable
-      }
-    }
-
     // If cached, return cached result
     if (cachedResult) {
       console.log(`[ATS-SCORE] Cache hit for ${uid}`, { resumeId, plan });
+      let usageMeta = null;
+      try {
+        const inc = await incrementFeatureUsage(env, uid, plan, FEATURE_KEYS.ATS_SCORE);
+        usageMeta = {
+          plan: inc.plan,
+          feature: FEATURE_KEYS.ATS_SCORE,
+          limit: inc.limit,
+          used: inc.used
+        };
+      } catch (incErr) {
+        console.warn('[ATS-SCORE] Usage increment failed (non-fatal):', incErr);
+      }
       return json({
         success: true,
         ...cachedResult,
-        cached: true
+        cached: true,
+        ...(usageMeta ? { usage: usageMeta } : {})
       }, 200, origin, env);
     }
 
@@ -353,28 +342,18 @@ export async function onRequest(context) {
       }
     }
 
-    // Update throttle (Trial only) - best effort, skip if KV unavailable
-    if (plan === 'trial' && kv) {
-      try {
-        const throttleKey = `atsThrottle:${uid}`;
-        await kv.put(throttleKey, String(Date.now()), {
-          expirationTtl: 60 // 1 minute
-        });
-      } catch (throttleError) {
-        console.warn('[ATS-SCORE] Throttle write failed (non-fatal):', throttleError);
-        // Continue without throttling if write fails
-      }
-    }
-
-    // Track usage (Free plan only) - best effort, skip if KV unavailable
-    if (plan === 'free' && kv) {
-      try {
-        const usageKey = `atsUsage:${uid}:lifetime`;
-        await kv.put(usageKey, '1'); // No expiration - lifetime limit
-      } catch (usageError) {
-        console.warn('[ATS-SCORE] Usage tracking failed (non-fatal):', usageError);
-        // Continue without tracking if write fails
-      }
+    // Increment usage after successful scoring
+    let usageMeta = null;
+    try {
+      const inc = await incrementFeatureUsage(env, uid, plan, FEATURE_KEYS.ATS_SCORE);
+      usageMeta = {
+        plan: inc.plan,
+        feature: FEATURE_KEYS.ATS_SCORE,
+        limit: inc.limit,
+        used: inc.used
+      };
+    } catch (usageError) {
+      console.warn('[ATS-SCORE] Usage tracking failed (non-fatal):', usageError);
     }
 
     // Persist ATS score to KV + Firestore hybrid (best effort)
@@ -403,6 +382,7 @@ export async function onRequest(context) {
     return json({
       success: true,
       ...result
+      , ...(usageMeta ? { usage: usageMeta } : {})
     }, 200, origin, env);
 
   } catch (error) {
