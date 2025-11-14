@@ -940,6 +940,7 @@
         if (!banner) return;
         if (btn) btn.disabled = true;
         banner.style.display = 'block';
+        let timer = null;
         const update = () => {
           const m = Math.floor(remaining / 60);
           const s = remaining % 60;
@@ -948,12 +949,12 @@
           if (remaining <= 0) {
             if (btn) btn.disabled = false;
             banner.style.display = 'none';
-            clearInterval(timer);
+            if (timer) clearInterval(timer);
           }
           remaining -= 1;
         };
         update();
-        const timer = setInterval(update, 1000);
+        timer = setInterval(update, 1000);
       } catch (e) {
         console.warn('[USAGE] Failed to show cooldown banner:', e);
       }
