@@ -261,11 +261,23 @@ export async function touchCooldown(env, uid, plan, featureKey) {
   usage = normalizeUsage(usage, plan);
   if (!usage.features) usage.features = {};
   if (!usage.features[featureKey]) {
-    usage.features[featureKey] = { lifetimeUsed: 0, periodUsed: 0, lastUsedAt: null };
+    // Initialize feature with correct schema based on feature type
+    if (featureKey === FEATURE_KEYS.ATS_SCORE) {
+      usage.features[featureKey] = { lifetimeUsed: 0 };
+    } else if (featureKey === FEATURE_KEYS.RESUME_FEEDBACK) {
+      usage.features[featureKey] = { lifetimeUsed: 0, periodUsed: 0, lastUsedAt: null };
+    } else {
+      // Fallback for unknown features (should not happen, but be safe)
+      usage.features[featureKey] = { lifetimeUsed: 0, periodUsed: 0, lastUsedAt: null };
+    }
   }
-  usage.features[featureKey].lastUsedAt = nowMs();
+  // Only update lastUsedAt if the feature supports it (RESUME_FEEDBACK)
+  if (featureKey === FEATURE_KEYS.RESUME_FEEDBACK) {
+    usage.features[featureKey].lastUsedAt = nowMs();
+  }
   await writeUsage(env, uid, usage);
-  return { feature: featureKey, plan: usage.plan, lastUsedAt: usage.features[featureKey].lastUsedAt };
+  const lastUsedAt = usage.features[featureKey]?.lastUsedAt || null;
+  return { feature: featureKey, plan: usage.plan, lastUsedAt };
 }
 
 // Re-export for convenience

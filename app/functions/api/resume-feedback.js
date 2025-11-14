@@ -165,7 +165,66 @@ export async function onRequest(context) {
     
     console.log('[RESUME-FEEDBACK] Effective plan:', { plan, effectivePlan, isDevEnvironment });
 
+    // Parse request body first (needed for cache check)
+    const body = await request.json();
+    const { resumeId, jobTitle, resumeText, isMultiColumn } = body;
+
+    if (!resumeId) {
+      return json({ success: false, error: 'resumeId required' }, 400, origin, env);
+    }
+
+    if (!jobTitle || jobTitle.trim().length === 0) {
+      return json({ success: false, error: 'jobTitle required' }, 400, origin, env);
+    }
+
+    // Cache check BEFORE cooldown/limit checks (allows access to cached results)
+    let cachedResult = null;
+    if (env.JOBHACKAI_KV) {
+      const cacheHash = await hashString(`${resumeId}:${jobTitle}:feedback`);
+      const cacheKey = `feedbackCache:${cacheHash}`;
+      const cached = await env.JOBHACKAI_KV.get(cacheKey);
+      
+      if (cached) {
+        const cachedData = JSON.parse(cached);
+        const cacheAge = Date.now() - cachedData.timestamp;
+        
+        // Cache valid for 24 hours
+        if (cacheAge < 86400000) {
+          cachedResult = cachedData.result;
+        }
+      }
+    }
+
+    // If cached result found, return it without enforcing cooldown/limits
+    // (cached results should be accessible regardless of current quota status)
+    if (cachedResult) {
+      console.log(`[RESUME-FEEDBACK] Cache hit for ${uid}`, { resumeId, plan: effectivePlan });
+      // Still update usage counters for cache hits (user is consuming the feature)
+      let usageMeta = null;
+      try {
+        await getUsageForUser(env, uid, effectivePlan);
+        const inc = await incrementFeatureUsage(env, uid, effectivePlan, FEATURE_KEYS.RESUME_FEEDBACK);
+        await touchCooldown(env, uid, effectivePlan, FEATURE_KEYS.RESUME_FEEDBACK);
+        usageMeta = {
+          plan: inc.plan,
+          feature: FEATURE_KEYS.RESUME_FEEDBACK,
+          limit: inc.limit,
+          used: inc.used,
+          cooldownSecondsRemaining: 0
+        };
+      } catch (e) {
+        console.warn('[RESUME-FEEDBACK] Usage increment/touch failed (non-fatal):', e);
+      }
+      return json({
+        success: true,
+        ...cachedResult,
+        cached: true,
+        usage: usageMeta
+      }, 200, origin, env);
+    }
+
     // Initialize usage doc and enforce cooldown/limits BEFORE any heavy work
+    // (only for cache misses - new API calls)
     await getUsageForUser(env, uid, effectivePlan);
 
     // Cooldown check (60 seconds)
@@ -197,65 +256,6 @@ export async function onRequest(context) {
         used: usageCheck.used,
         limit: usageCheck.limit
       }, 403, origin, env);
-    }
-
-    // Parse request body
-    const body = await request.json();
-    const { resumeId, jobTitle, resumeText, isMultiColumn } = body;
-
-    if (!resumeId) {
-      return json({ success: false, error: 'resumeId required' }, 400, origin, env);
-    }
-
-    if (!jobTitle || jobTitle.trim().length === 0) {
-      return json({ success: false, error: 'jobTitle required' }, 400, origin, env);
-    }
-
-    // All ad-hoc throttles/limits replaced by centralized usage tracker
-
-    // Cache check (all plans)
-    let cachedResult = null;
-    if (env.JOBHACKAI_KV) {
-      const cacheHash = await hashString(`${resumeId}:${jobTitle}:feedback`);
-      const cacheKey = `feedbackCache:${cacheHash}`;
-      const cached = await env.JOBHACKAI_KV.get(cacheKey);
-      
-      if (cached) {
-        const cachedData = JSON.parse(cached);
-        const cacheAge = Date.now() - cachedData.timestamp;
-        
-        // Cache valid for 24 hours
-        if (cacheAge < 86400000) {
-          cachedResult = cachedData.result;
-        }
-      }
-    }
-
-    // If cached, still update usage counters (user is consuming the feature)
-    // Then return cached result
-    if (cachedResult) {
-      console.log(`[RESUME-FEEDBACK] Cache hit for ${uid}`, { resumeId, plan: effectivePlan });
-      // Increment usage and touch cooldown for cache hits too
-      let usageMeta = null;
-      try {
-        const inc = await incrementFeatureUsage(env, uid, effectivePlan, FEATURE_KEYS.RESUME_FEEDBACK);
-        await touchCooldown(env, uid, effectivePlan, FEATURE_KEYS.RESUME_FEEDBACK);
-        usageMeta = {
-          plan: inc.plan,
-          feature: FEATURE_KEYS.RESUME_FEEDBACK,
-          limit: inc.limit,
-          used: inc.used,
-          cooldownSecondsRemaining: 0
-        };
-      } catch (e) {
-        console.warn('[RESUME-FEEDBACK] Usage increment/touch failed (non-fatal):', e);
-      }
-      return json({
-        success: true,
-        ...cachedResult,
-        cached: true,
-        ...(usageMeta ? { usage: usageMeta } : {})
-      }, 200, origin, env);
     }
 
     // Retrieve resume from KV or request body (dev fallback)

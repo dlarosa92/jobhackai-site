@@ -77,28 +77,8 @@ export async function onRequest(context) {
       return json({ success: false, error: 'jobTitle required' }, 400, origin, env);
     }
 
-    // Initialize/normalize usage doc for user and enforce feature limits
-    try {
-      await getUsageForUser(env, uid, plan);
-      const usageCheck = await checkFeatureAllowed(env, uid, FEATURE_KEYS.ATS_SCORE);
-      if (!usageCheck.allowed) {
-        return json({
-          success: false,
-          error: 'forbidden',
-          message: 'Feature usage limit reached',
-          feature: usageCheck.feature,
-          plan: usageCheck.plan,
-          reason: usageCheck.reason,
-          used: usageCheck.used,
-          limit: usageCheck.limit
-        }, 403, origin, env);
-      }
-    } catch (usageErr) {
-      console.warn('[ATS-SCORE] Usage check failed (non-fatal):', usageErr);
-      // Continue - best effort, but still try to process request
-    }
-
     // Get resume text - prefer resumeText from request, fall back to KV if available
+    // (needed for cache key generation)
     let text = resumeText;
     let resumeData = null;
 
@@ -126,7 +106,7 @@ export async function onRequest(context) {
       }
     }
 
-    // Validate text is available
+    // Validate text is available (needed for cache key and scoring)
     if (!text || typeof text !== 'string' || text.trim().length < 100) {
       return json({ 
         success: false, 
@@ -143,10 +123,9 @@ export async function onRequest(context) {
       }, 400, origin, env);
     }
 
+    // Cache check BEFORE usage limit check (allows access to cached results)
     // KV-based features (optional - only if KV is available)
     const kv = env.JOBHACKAI_KV;
-
-    // Cache check (all plans) - best effort, skip if KV unavailable
     let cachedResult = null;
     if (kv) {
       try {
@@ -178,7 +157,8 @@ export async function onRequest(context) {
       }
     }
 
-    // If cached, return cached result
+    // If cached result found, return it without enforcing usage limits
+    // (cached results should be accessible regardless of current quota status)
     if (cachedResult) {
       console.log(`[ATS-SCORE] Cache hit for ${uid}`, { resumeId, plan });
       let usageMeta = null;
@@ -199,6 +179,28 @@ export async function onRequest(context) {
         cached: true,
         ...(usageMeta ? { usage: usageMeta } : {})
       }, 200, origin, env);
+    }
+
+    // Initialize/normalize usage doc for user and enforce feature limits
+    // (only for cache misses - new API calls)
+    try {
+      await getUsageForUser(env, uid, plan);
+      const usageCheck = await checkFeatureAllowed(env, uid, FEATURE_KEYS.ATS_SCORE);
+      if (!usageCheck.allowed) {
+        return json({
+          success: false,
+          error: 'forbidden',
+          message: 'Feature usage limit reached',
+          feature: usageCheck.feature,
+          plan: usageCheck.plan,
+          reason: usageCheck.reason,
+          used: usageCheck.used,
+          limit: usageCheck.limit
+        }, 403, origin, env);
+      }
+    } catch (usageErr) {
+      console.warn('[ATS-SCORE] Usage check failed (non-fatal):', usageErr);
+      // Continue - best effort, but still try to process request
     }
 
     // Get isMultiColumn from resumeData if available, otherwise default to false
