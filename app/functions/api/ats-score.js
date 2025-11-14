@@ -66,7 +66,30 @@ export async function onRequest(context) {
       return json({ success: false, error: 'Unauthorized' }, 401, origin, env);
     }
 
-    const { uid } = await verifyFirebaseIdToken(token, env.FIREBASE_PROJECT_ID);
+    let uid;
+    try {
+      const result = await verifyFirebaseIdToken(token, env.FIREBASE_PROJECT_ID);
+      uid = result.uid;
+    } catch (authError) {
+      // Check if it's a token expiration error
+      const errorMessage = authError.message || '';
+      if (errorMessage.includes('exp') || errorMessage.includes('expired') || errorMessage.includes('timestamp')) {
+        console.error('[ATS-SCORE] Token expired:', authError);
+        return json({ 
+          success: false, 
+          error: 'Token expired',
+          message: 'Your session has expired. Please refresh the page and try again.'
+        }, 401, origin, env);
+      }
+      // Other auth errors
+      console.error('[ATS-SCORE] Auth error:', authError);
+      return json({ 
+        success: false, 
+        error: 'Unauthorized',
+        message: 'Invalid authentication token. Please log in again.'
+      }, 401, origin, env);
+    }
+    
     const plan = await getUserPlan(uid, env);
 
     // Parse request body - accept both resumeId (for KV) and resumeText (for direct scoring)

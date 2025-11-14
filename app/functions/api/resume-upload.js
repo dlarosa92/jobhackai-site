@@ -54,7 +54,29 @@ export async function onRequest(context) {
       return json({ success: false, error: 'Unauthorized' }, 401, origin, env);
     }
 
-    const { uid } = await verifyFirebaseIdToken(token, env.FIREBASE_PROJECT_ID);
+    let uid;
+    try {
+      const result = await verifyFirebaseIdToken(token, env.FIREBASE_PROJECT_ID);
+      uid = result.uid;
+    } catch (authError) {
+      // Check if it's a token expiration error
+      const errorMessage = authError.message || '';
+      if (errorMessage.includes('exp') || errorMessage.includes('expired') || errorMessage.includes('timestamp')) {
+        console.error('[RESUME-UPLOAD] Token expired:', authError);
+        return json({ 
+          success: false, 
+          error: 'Token expired',
+          message: 'Your session has expired. Please refresh the page and try again.'
+        }, 401, origin, env);
+      }
+      // Other auth errors
+      console.error('[RESUME-UPLOAD] Auth error:', authError);
+      return json({ 
+        success: false, 
+        error: 'Unauthorized',
+        message: 'Invalid authentication token. Please log in again.'
+      }, 401, origin, env);
+    }
 
     // Parse form data
     const formData = await request.formData();

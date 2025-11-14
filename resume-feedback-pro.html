@@ -558,7 +558,7 @@
     let currentJobTitle = null;
 
     // --- API CLIENT FUNCTIONS ---
-    async function getAuthToken() {
+    async function getAuthToken(forceRefresh = false) {
       // Wait for Firebase auth to be ready
       if (window.FirebaseAuthManager && window.FirebaseAuthManager.waitForAuthReady) {
         await window.FirebaseAuthManager.waitForAuthReady(3000);
@@ -568,16 +568,33 @@
       if (window.FirebaseAuthManager && window.FirebaseAuthManager.getCurrentUser) {
         const user = window.FirebaseAuthManager.getCurrentUser();
         if (user) {
-          return await user.getIdToken();
+          // Force refresh if requested or if token might be expired
+          // getIdToken(true) forces a refresh, getIdToken() uses cached if valid
+          return await user.getIdToken(forceRefresh);
         }
       }
       
-      // Fallback: try to get from localStorage
+      // Fallback: try to get from localStorage (but this won't auto-refresh)
       const firebaseKeys = Object.keys(localStorage).filter(k => k.startsWith('firebase:authUser:'));
       if (firebaseKeys.length > 0) {
         const authData = JSON.parse(localStorage.getItem(firebaseKeys[0]) || '{}');
         if (authData.stsTokenManager?.accessToken) {
-          return authData.stsTokenManager.accessToken;
+          // Check if token is expired (rough check - exp claim is in seconds)
+          const token = authData.stsTokenManager.accessToken;
+          try {
+            const payload = JSON.parse(atob(token.split('.')[1]));
+            const expTime = payload.exp * 1000; // Convert to milliseconds
+            const now = Date.now();
+            // If expired or expires in less than 5 minutes, force refresh
+            if (expTime < now + 300000) {
+              // Token expired or expiring soon - need to refresh via FirebaseAuthManager
+              throw new Error('Token expired - need refresh');
+            }
+            return token;
+          } catch (e) {
+            // If we can't parse or token is expired, throw to trigger re-auth
+            throw new Error('Not authenticated. Please log in.');
+          }
         }
       }
       
@@ -622,26 +639,62 @@
         }
       }
 
-      const token = await getAuthToken();
+      let token = await getAuthToken();
       const formData = new FormData();
       formData.append('file', file);
 
-      // Use retry logic for upload
-      const response = await window.JobHackAIRetry.fetchWithRetry('/api/resume-upload', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`
-        },
-        body: formData
-      }, {
-        maxRetries: 3,
-        initialDelay: 1000
-      });
+      // Retry logic with token refresh on 401
+      let response;
+      let lastError;
+      for (let attempt = 0; attempt <= 2; attempt++) {
+        try {
+          response = await window.JobHackAIRetry.fetchWithRetry('/api/resume-upload', {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${token}`
+            },
+            body: formData
+          }, {
+            maxRetries: attempt === 0 ? 2 : 0, // Only retry network errors on first attempt
+            initialDelay: 1000
+          });
+          
+          // If we got a response, break out of retry loop
+          break;
+        } catch (fetchError) {
+          lastError = fetchError;
+          
+          // Check if it's a 401 (token expired) and we haven't refreshed yet
+          if (fetchError.status === 401 && attempt === 0) {
+            console.log('[RESUME-UPLOAD] Token expired, refreshing and retrying...');
+            // Force token refresh and retry once
+            token = await getAuthToken(true);
+            // Recreate formData for retry (FormData can only be used once)
+            formData = new FormData();
+            formData.append('file', file);
+            continue;
+          }
+          
+          // For other errors or if refresh didn't help, throw
+          throw fetchError;
+        }
+      }
 
       // Handle HTTP errors
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Upload failed');
+      if (!response || !response.ok) {
+        let error;
+        try {
+          error = await response.json();
+        } catch {
+          error = { error: lastError?.message || 'Upload failed' };
+        }
+        
+        // Handle token expiration error specifically
+        if (response?.status === 401 || error.error === 'Token expired') {
+          throw new Error('Your session has expired. Please refresh the page and try again.');
+        }
+        
+        throw new Error(error.message || error.error || 'Upload failed');
       }
 
       const data = await response.json();
