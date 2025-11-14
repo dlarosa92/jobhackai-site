@@ -60,8 +60,16 @@ export async function onRequest(context) {
       uid = result.uid;
     } catch (authError) {
       // Check if it's a token expiration error
+      // Use specific checks to avoid false positives (e.g., "Expected token" or "Unexpected error")
       const errorMessage = authError.message || '';
-      if (errorMessage.includes('exp') || errorMessage.includes('expired') || errorMessage.includes('timestamp')) {
+      const errorName = authError.name || '';
+      const isExpired = 
+        errorMessage.includes('exp claim') || 
+        errorMessage.includes('expired') || 
+        errorMessage.includes('JWTExpired') ||
+        errorName.includes('JWTExpired');
+      
+      if (isExpired) {
         console.error('[RESUME-UPLOAD] Token expired:', authError);
         return json({ 
           success: false, 
