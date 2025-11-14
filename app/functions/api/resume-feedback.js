@@ -327,7 +327,7 @@ export async function onRequest(context) {
     // Get rule-based scores first (for AI context)
     const ruleBasedScores = scoreResume(
       resumeData.text,
-      jobTitle,
+      normalizedJobTitle,
       { isMultiColumn: resumeData.isMultiColumn }
     );
 
@@ -350,7 +350,7 @@ export async function onRequest(context) {
         const aiResponse = await generateATSFeedback(
           resumeData.text,
           ruleBasedScores,
-          jobTitle,
+          normalizedJobTitle,
           env
         );
         
