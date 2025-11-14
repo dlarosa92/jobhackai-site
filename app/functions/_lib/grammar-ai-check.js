@@ -34,10 +34,9 @@ export async function verifyGrammarWithAI(resumeText, env) {
     ? sourceText.substring(0, maxChars) + '...'
     : sourceText;
 
-  // Build cache key
-  const cacheKeyBase = `grammar-ai:${truncatedText}`;
-  const cacheHash = await hashString(cacheKeyBase);
-  const cacheKey = `grammarCheck:${cacheHash}`;
+  // Build cache key - hash truncatedText directly to ensure KV key size safety
+  const truncatedTextHash = await hashString(truncatedText);
+  const cacheKey = `grammarCheck:grammar-ai:${truncatedTextHash}`;
 
   // Check KV cache first
   if (env.JOBHACKAI_KV) {

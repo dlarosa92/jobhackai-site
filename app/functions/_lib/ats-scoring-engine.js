@@ -2,6 +2,8 @@
 // Computes numeric scores without AI tokens - uses rules only
 // AI is used separately for narrative feedback
 
+import { calcOverallScore } from './calc-overall-score.js';
+
 /**
  * Score resume using rule-based rubric
  * @param {string} resumeText - Extracted resume text
@@ -23,14 +25,17 @@ export function scoreResume(resumeText, jobTitle, metadata = {}) {
   const toneScore = scoreToneAndClarity(resumeText);
   const grammarScore = scoreGrammarAndSpelling(resumeText);
   
-  // Calculate overall score
-  const overallScore = Math.round(
-    keywordScore.score +
-    formattingScore.score +
-    structureScore.score +
-    toneScore.score +
-    grammarScore.score
-  );
+  // Build scores object for overall calculation
+  const scores = {
+    keywordScore,
+    formattingScore,
+    structureScore,
+    toneScore,
+    grammarScore
+  };
+  
+  // Calculate overall score using shared helper
+  const overallScore = calcOverallScore(scores);
   
   return {
     keywordScore: {
