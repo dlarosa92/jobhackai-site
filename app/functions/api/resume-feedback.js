@@ -429,14 +429,21 @@ export async function onRequest(context) {
     }
 
     // Build result with AI feedback if available, otherwise use rule-based scores
+    // CRITICAL: Always use rule-based scores as source of truth to prevent drift
+    const scoreKeys = ['keywordScore', 'formattingScore', 'structureScore', 'toneScore', 'grammarScore'];
+    const categoryNames = ['Keyword Match', 'ATS Formatting', 'Structure & Organization', 'Tone & Clarity', 'Grammar & Spelling'];
     const result = aiFeedback && aiFeedback.atsRubric ? {
-      atsRubric: aiFeedback.atsRubric.map((item, idx) => ({
-        category: item.category || ['Keyword Match', 'ATS Formatting', 'Structure & Organization', 'Tone & Clarity', 'Grammar & Spelling'][idx],
-        score: item.score ?? ruleBasedScores[['keywordScore', 'formattingScore', 'structureScore', 'toneScore', 'grammarScore'][idx]]?.score ?? 0,
-        max: item.max ?? 10,
-        feedback: item.feedback || ruleBasedScores[['keywordScore', 'formattingScore', 'structureScore', 'toneScore', 'grammarScore'][idx]]?.feedback || '',
-        suggestions: item.suggestions || []
-      })),
+      atsRubric: aiFeedback.atsRubric.map((item, idx) => {
+        const ruleScore = ruleBasedScores[scoreKeys[idx]];
+        // Force use of rule-based scores - never trust AI-generated scores
+        return {
+          category: item.category || categoryNames[idx],
+          score: ruleScore?.score ?? 0, // Always use rule-based score
+          max: ruleScore?.max ?? 10, // Always use rule-based max
+          feedback: item.feedback || ruleScore?.feedback || '', // Prefer AI feedback, fallback to rule-based
+          suggestions: item.suggestions || []
+        };
+      }),
       roleSpecificFeedback: aiFeedback.roleSpecificFeedback || [
         {
           section: 'Header & Contact',
