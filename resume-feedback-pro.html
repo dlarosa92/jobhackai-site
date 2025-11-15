@@ -578,15 +578,8 @@
 
       // Handle HTTP errors
       if (!response.ok) {
-        const error = await response.json().catch(() => ({ error: 'Upload failed', message: `HTTP ${response.status}` }));
-        const errorMessage = error.message || error.error || 'Upload failed';
-        
-        // Handle JWT expiration errors
-        if (errorMessage.includes('exp claim') || errorMessage.includes('timestamp check failed') || response.status === 401) {
-          throw new Error('Your session has expired. Please log in again.');
-        }
-        
-        throw new Error(errorMessage);
+        const error = await response.json();
+        throw new Error(error.error || 'Upload failed');
       }
 
       const data = await response.json();
@@ -794,8 +787,8 @@
       let actionLabel = 'OK';
       
       // Map error messages to user-friendly modals
-      if (message.includes('Unauthorized') || message.includes('Not authenticated') || message.includes('exp claim') || message.includes('timestamp check failed')) {
-        message = 'Your session has expired. Please log in again to continue.';
+      if (message.includes('Unauthorized') || message.includes('Not authenticated')) {
+        message = 'Please log in to continue.';
         action = () => window.location.href = 'login.html';
         actionLabel = 'Go to Login';
       } else if (message.includes('Usage limit') || message.includes('limit reached')) {
@@ -1212,244 +1205,205 @@
         }
       });
 
-      // Helper function to generate ATS score and feedback
-      async function generateATSAndFeedback() {
-        const uploadInput = document.getElementById('rf-upload');
-        const file = uploadInput?.files[0];
-        if (!file) {
-          handleApiError(new Error('Please select a resume file first'));
-          return;
-        }
-
-        const jobTitleInput = document.getElementById('rf-job-title');
-        const jobTitle = jobTitleInput?.value?.trim() || '';
-        currentJobTitle = jobTitle; // Save for later use (optional, so empty is OK)
-        
-        // Save job title to state persistence (even if empty)
-        if (window.JobHackAIStatePersistence) {
-          const cachedScore = window.JobHackAIStatePersistence.loadATSScore();
-          if (cachedScore) {
-            window.JobHackAIStatePersistence.saveATSScore({
-              ...cachedScore,
-              jobTitle: currentJobTitle
-            });
-          }
-        }
-
-        const generateBtn = document.getElementById('rf-generate-btn');
-        const statusDiv = document.getElementById('rf-generate-status');
-        
-        try {
-          generateBtn.disabled = true;
-          if (statusDiv) {
-            statusDiv.style.display = 'none';
-          }
-          showLoadingState('Analyzing your résumé for ATS criteria…');
-          uploadInput.disabled = true;
-
-          // Upload resume
-          const uploadResult = await uploadResume(file);
-          currentResumeId = uploadResult.resumeId;
-
-          // Get ATS score
-          showLoadingState('Calculating your ATS score…');
-          const scoreResult = await getAtsScore(uploadResult.resumeId, currentJobTitle);
-          
-          // Store ATS score in sessionStorage for cross-page sync
-          if (scoreResult.success && scoreResult.score !== undefined) {
-            sessionStorage.setItem('currentAtsScore', scoreResult.score.toString());
-            if (scoreResult.breakdown) {
-              sessionStorage.setItem('currentAtsBreakdown', JSON.stringify(scoreResult.breakdown));
-            }
-            
-            // Also store in localStorage for backward compatibility
-            const summary = scoreResult.score > 85 ? 'Excellent! Your resume is highly ATS compatible.' : 
-                           scoreResult.score > 70 ? 'Your resume meets many ATS criteria and is likely to be noticed.' : 
-                           'Your resume needs improvement for better ATS results.';
-            localStorage.setItem('lastATSScore', scoreResult.score.toString());
-            localStorage.setItem('lastATSSummary', summary);
-          }
-          
-          updateProgressRing(scoreResult.score);
-          
-          // Hide placeholder and show feedback
-          hidePlaceholder();
-          const placeholderCta = document.getElementById('rf-placeholder-cta');
-          if (placeholderCta) placeholderCta.style.display = 'none';
-          const regenBtn = document.getElementById('rf-regenerate-btn');
-          if (regenBtn) regenBtn.style.display = 'block';
-          
-          // Convert breakdown to rubric format
-          const rubric = [
-            {
-              label: 'Keyword Match',
-              score: scoreResult.breakdown.keywordScore.score,
-              max: scoreResult.breakdown.keywordScore.max,
-              tip: scoreResult.breakdown.keywordScore.feedback
-            },
-            {
-              label: 'ATS Formatting',
-              score: scoreResult.breakdown.formattingScore.score,
-              max: scoreResult.breakdown.formattingScore.max,
-              tip: scoreResult.breakdown.formattingScore.feedback
-            },
-            {
-              label: 'Structure & Organization',
-              score: scoreResult.breakdown.structureScore.score,
-              max: scoreResult.breakdown.structureScore.max,
-              tip: scoreResult.breakdown.structureScore.feedback
-            },
-            {
-              label: 'Tone & Clarity',
-              score: scoreResult.breakdown.toneScore.score,
-              max: scoreResult.breakdown.toneScore.max,
-              tip: scoreResult.breakdown.toneScore.feedback
-            },
-            {
-              label: 'Grammar & Spelling',
-              score: scoreResult.breakdown.grammarScore.score,
-              max: scoreResult.breakdown.grammarScore.max,
-              tip: scoreResult.breakdown.grammarScore.feedback
-            }
-          ];
-          updateRubricGrid(rubric);
-          
-          // Trigger fade transitions
-          setTimeout(() => {
-            showATSFeedback();
-            showRoleFeedback();
-          }, 100);
-
-          // Get feedback (if plan allows)
-          const plan = getCurrentUserPlan();
-          if (['trial', 'essential', 'pro', 'premium'].includes(plan)) {
-            try {
-              // Job title is optional - use empty string if not provided
-              const jobTitleForFeedback = jobTitleInput?.value?.trim() || '';
-              
-              showLoadingState('Optimizing for ATS compliance…');
-              const feedbackResult = await getResumeFeedback(uploadResult.resumeId, jobTitleForFeedback);
-              updateFeedbackGrid(feedbackResult.roleSpecificFeedback);
-              updateRubricGridFromFeedback(feedbackResult.atsRubric);
-            
-              // Trigger fade transition for role feedback
-              setTimeout(() => {
-                showRoleFeedback();
-              }, 100);
-              
-              // Update summary card from new rubric
-              const atsRubricArray = feedbackResult.atsRubric || [];
-              if (atsRubricArray.length > 0) {
-                const rubric = atsRubricArray.map(item => ({
-                  label: item.category || item.label,
-                  score: item.score || 0,
-                  max: item.max || 100,
-                  tip: item.feedback || item.tip || ''
-                }));
-                updateSummaryCard(rubric);
-              }
-            } catch (feedbackError) {
-              // Log at debug level, show user-friendly modal
-              if (window.console && window.console.debug) {
-                window.console.debug('[FEEDBACK] Failed to get feedback:', feedbackError);
-              }
-              // Show error modal but keep ATS score visible
-              if (window.showErrorModal) {
-                const errorMsg = feedbackError.message || 'Failed to generate feedback. Your ATS score is still available.';
-                window.showErrorModal('Feedback Generation Failed', errorMsg, {
-                  buttonText: 'OK',
-                  onClose: () => {
-                    // Keep ATS score visible - don't clear state
-                  }
-                });
-              }
-              // Continue without feedback if it fails - ATS score remains visible
-            }
-          } else {
-            // Show placeholder CTA for free users
-            const placeholderCta = document.getElementById('rf-placeholder-cta');
-            if (placeholderCta) placeholderCta.style.display = 'block';
-          }
-
-          // Update original snippet in rewrite section
-          const origBox = document.querySelectorAll('#rf-rewrite-content .rf-snippet-box')[0];
-          if (origBox && uploadResult.textPreview) {
-            origBox.value = uploadResult.textPreview;
-          }
-
-          // Update description
-          const descEl = document.getElementById('rf-score-desc');
-          if (descEl) {
-            descEl.textContent = 'Your resume was analyzed. See your ATS score and feedback below.';
-          }
-
-          // Show success toast
-          if (window.JobHackAIToast) {
-            window.JobHackAIToast.success('ATS score saved successfully.');
-          }
-
-          uploadInput.disabled = false;
-          generateBtn.disabled = false;
-          hideLoadingState();
-        } catch (error) {
-          // Clear state on error
-          clearAtsState();
-          handleApiError(error);
-          uploadInput.disabled = false;
-          generateBtn.disabled = false;
-          hideLoadingState();
-        }
-      }
-
-      // ATS Resume Upload Logic - Only update UI, don't trigger processing
+      // ATS Resume Upload Logic
       const uploadInput = document.getElementById('rf-upload');
-      const fileNameSpan = document.getElementById('rf-file-name');
-      const generateBtn = document.getElementById('rf-generate-btn');
-      const statusDiv = document.getElementById('rf-generate-status');
-      
       if (uploadInput) {
-        uploadInput.addEventListener('change', function(e) {
+        uploadInput.addEventListener('change', async function(e) {
           const file = e.target.files[0];
-          if (file) {
-            // Update file name display
-            if (fileNameSpan) {
-              fileNameSpan.textContent = file.name;
-              fileNameSpan.style.color = 'var(--color-success)';
-              fileNameSpan.style.fontWeight = '600';
-            }
-            
-            // Enable generate button
-            if (generateBtn) {
-              generateBtn.disabled = false;
-            }
-            
-            // Show ready status
-            if (statusDiv) {
-              statusDiv.style.display = 'block';
-              statusDiv.textContent = 'Ready to analyze';
-              statusDiv.style.background = 'rgba(5,150,105,0.08)';
-              statusDiv.style.color = 'var(--color-success)';
+          if (!file) return;
+
+          const jobTitleInput = document.getElementById('rf-job-title');
+          const jobTitle = jobTitleInput?.value?.trim() || currentJobTitle;
+          if (!jobTitle) {
+            // Use placeholder text as fallback, but don't hardcode "Software Engineer"
+            const placeholder = jobTitleInput?.placeholder || '';
+            if (placeholder && !placeholder.includes('Start typing')) {
+              // If placeholder has been set by role selector, use it
+              currentJobTitle = placeholder;
+            } else {
+              // Show error if no role selected
+              handleApiError(new Error('Please enter a target job title for better feedback'));
+              uploadInput.disabled = false;
+              return;
             }
           } else {
-            // Reset if file cleared
-            if (fileNameSpan) {
-              fileNameSpan.textContent = 'No file selected';
-              fileNameSpan.style.color = 'var(--color-text-muted)';
-              fileNameSpan.style.fontWeight = 'normal';
+            currentJobTitle = jobTitle;
+          }
+          
+          // Save job title to state persistence
+          if (window.JobHackAIStatePersistence && currentJobTitle) {
+            const cachedScore = window.JobHackAIStatePersistence.loadATSScore();
+            if (cachedScore) {
+              window.JobHackAIStatePersistence.saveATSScore({
+                ...cachedScore,
+                jobTitle: currentJobTitle
+              });
             }
-            if (generateBtn) {
-              generateBtn.disabled = true;
+          }
+
+          try {
+            showLoadingState('Analyzing your résumé for ATS criteria…');
+            uploadInput.disabled = true;
+
+            // Upload resume
+            const uploadResult = await uploadResume(file);
+            currentResumeId = uploadResult.resumeId;
+
+            // Get ATS score
+            showLoadingState('Calculating your ATS score…');
+            const scoreResult = await getAtsScore(uploadResult.resumeId, currentJobTitle);
+            
+            // Store ATS score in sessionStorage for cross-page sync
+            if (scoreResult.success && scoreResult.score !== undefined) {
+              sessionStorage.setItem('currentAtsScore', scoreResult.score.toString());
+              if (scoreResult.breakdown) {
+                sessionStorage.setItem('currentAtsBreakdown', JSON.stringify(scoreResult.breakdown));
+              }
+              
+              // Also store in localStorage for backward compatibility
+              const summary = scoreResult.score > 85 ? 'Excellent! Your resume is highly ATS compatible.' : 
+                             scoreResult.score > 70 ? 'Your resume meets many ATS criteria and is likely to be noticed.' : 
+                             'Your resume needs improvement for better ATS results.';
+              localStorage.setItem('lastATSScore', scoreResult.score.toString());
+              localStorage.setItem('lastATSSummary', summary);
             }
-            if (statusDiv) {
-              statusDiv.style.display = 'none';
+            
+            updateProgressRing(scoreResult.score);
+            
+            // Hide placeholder and show feedback
+            hidePlaceholder();
+            const placeholderCta = document.getElementById('rf-placeholder-cta');
+            if (placeholderCta) placeholderCta.style.display = 'none';
+            const regenBtn = document.getElementById('rf-regenerate-btn');
+            if (regenBtn) regenBtn.style.display = 'block';
+            
+            // Convert breakdown to rubric format
+            const rubric = [
+              {
+                label: 'Keyword Match',
+                score: scoreResult.breakdown.keywordScore.score,
+                max: scoreResult.breakdown.keywordScore.max,
+                tip: scoreResult.breakdown.keywordScore.feedback
+              },
+              {
+                label: 'ATS Formatting',
+                score: scoreResult.breakdown.formattingScore.score,
+                max: scoreResult.breakdown.formattingScore.max,
+                tip: scoreResult.breakdown.formattingScore.feedback
+              },
+              {
+                label: 'Structure & Organization',
+                score: scoreResult.breakdown.structureScore.score,
+                max: scoreResult.breakdown.structureScore.max,
+                tip: scoreResult.breakdown.structureScore.feedback
+              },
+              {
+                label: 'Tone & Clarity',
+                score: scoreResult.breakdown.toneScore.score,
+                max: scoreResult.breakdown.toneScore.max,
+                tip: scoreResult.breakdown.toneScore.feedback
+              },
+              {
+                label: 'Grammar & Spelling',
+                score: scoreResult.breakdown.grammarScore.score,
+                max: scoreResult.breakdown.grammarScore.max,
+                tip: scoreResult.breakdown.grammarScore.feedback
+              }
+            ];
+            updateRubricGrid(rubric);
+            
+            // Trigger fade transition for ATS feedback
+            setTimeout(() => {
+              showATSFeedback();
+            }, 100);
+
+            // Get feedback (if plan allows)
+            const plan = getCurrentUserPlan();
+            if (['trial', 'essential', 'pro', 'premium'].includes(plan)) {
+              try {
+                // Ensure we have a job title - read from input field or use currentJobTitle
+                const jobTitleInput = document.getElementById('rf-job-title');
+                const jobTitleForFeedback = jobTitleInput?.value?.trim() || currentJobTitle;
+                
+                if (!jobTitleForFeedback) {
+                  console.warn('[RESUME-FEEDBACK] No job title provided, skipping feedback generation');
+                  // Show role feedback section even without feedback data
+                  setTimeout(() => {
+                    showRoleFeedback();
+                  }, 100);
+                } else {
+                  showLoadingState('Optimizing for ATS compliance…');
+                  const feedbackResult = await getResumeFeedback(uploadResult.resumeId, jobTitleForFeedback);
+                  updateFeedbackGrid(feedbackResult.roleSpecificFeedback);
+            updateRubricGridFromFeedback(feedbackResult.atsRubric);
+            
+                  // Trigger fade transition for role feedback (only once, after feedback is loaded)
+                  setTimeout(() => {
+                    showRoleFeedback();
+                  }, 100);
+                  
+                  // Update summary card from new rubric
+                  const atsRubricArray = feedbackResult.atsRubric || [];
+                  if (atsRubricArray.length > 0) {
+                    const rubric = atsRubricArray.map(item => ({
+                      label: item.category || item.label,
+                      score: item.score || 0,
+                      max: item.max || 100,
+                      tip: item.feedback || item.tip || ''
+                    }));
+                    updateSummaryCard(rubric);
+                  }
+                }
+              } catch (feedbackError) {
+                // Log at debug level, show user-friendly modal
+                if (window.console && window.console.debug) {
+                  window.console.debug('[FEEDBACK] Failed to get feedback:', feedbackError);
+                }
+                // Show error modal but keep ATS score visible
+                if (window.showErrorModal) {
+                  const errorMsg = feedbackError.message || 'Failed to generate feedback. Your ATS score is still available.';
+                  window.showErrorModal('Feedback Generation Failed', errorMsg, {
+                    buttonText: 'OK',
+                    onClose: () => {
+                      // Keep ATS score visible - don't clear state
+                    }
+                  });
+                }
+                // Continue without feedback if it fails - ATS score remains visible
+              }
+            } else {
+              // Show placeholder CTA for free users
+              const placeholderCta = document.getElementById('rf-placeholder-cta');
+              if (placeholderCta) placeholderCta.style.display = 'block';
             }
+
+            // Update original snippet in rewrite section
+            const origBox = document.querySelectorAll('#rf-rewrite-content .rf-snippet-box')[0];
+            if (origBox && uploadResult.textPreview) {
+              origBox.value = uploadResult.textPreview;
+            }
+
+            // Update description
+            const descEl = document.getElementById('rf-score-desc');
+            if (descEl) {
+              descEl.textContent = 'Your resume was analyzed. See your ATS score and feedback below.';
+            }
+
+            // Show success toast
+            if (window.JobHackAIToast) {
+              window.JobHackAIToast.success('ATS score saved successfully.');
+            }
+
+            uploadInput.disabled = false;
+            hideLoadingState();
+          } catch (error) {
+            // Clear state on error
+            clearAtsState();
+            handleApiError(error);
+            uploadInput.disabled = false;
+            hideLoadingState();
           }
         });
-      }
-
-      // Generate Button Click Handler
-      if (generateBtn) {
-        generateBtn.addEventListener('click', generateATSAndFeedback);
       }
       // Regenerate Feedback Button
       const regenBtn = document.getElementById('rf-regenerate-btn');
@@ -1461,7 +1415,11 @@
           }
 
           const jobTitleInput = document.getElementById('rf-job-title');
-          const jobTitle = jobTitleInput?.value?.trim() || ''; // Job title is optional
+          const jobTitle = jobTitleInput?.value?.trim() || currentJobTitle;
+          if (!jobTitle) {
+            handleApiError(new Error('Please enter a target job title'));
+            return;
+          }
           currentJobTitle = jobTitle;
 
           try {
@@ -1746,11 +1704,6 @@
       const feedbackContent = document.getElementById('rf-feedback-content');
       const rewriteContent = document.getElementById('rf-rewrite-content');
       const plan = getCurrentUserPlan();
-      
-      // Reload usage indicator when plan changes
-      if (typeof loadUsageIndicator === 'function') {
-        loadUsageIndicator();
-      }
 
       // Clean up old upgrade banners
       const cleanupOldBanners = () => {
@@ -2026,44 +1979,41 @@
       updatePriorityReviewCTA();
     }
 
-    // Function to load and render usage indicator (for all plans)
-    async function loadUsageIndicator() {
-      try {
-        const currentPlan = getCurrentUserPlan();
-        
-        // Show usage indicator for all plans (trial, essential, pro, premium)
-        if (!['trial', 'essential', 'pro', 'premium'].includes(currentPlan)) {
-          return; // Skip for free plan
-        }
-        
-        // Fetch usage data from API
-        const token = localStorage.getItem('firebase-id-token');
-        if (!token) {
-          console.warn('[RESUME-FEEDBACK] No auth token available for usage fetch');
-          return;
-        }
-
-        const usageResponse = await fetch('/api/usage', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
+    // Add usage indicator using shared component
+    document.addEventListener('DOMContentLoaded', async function() {
+      const main = document.querySelector('main');
+      const currentPlan = getCurrentUserPlan();
+      
+      // Only show usage indicator for plans that have limits (essential, trial)
+      if (main && (currentPlan === 'essential' || currentPlan === 'trial')) {
+        try {
+          // Fetch usage data from API
+          const token = localStorage.getItem('firebase-id-token');
+          if (!token) {
+            console.warn('[RESUME-FEEDBACK] No auth token available for usage fetch');
+            return;
           }
-        });
 
-        if (!usageResponse.ok) {
-          console.warn('[RESUME-FEEDBACK] Failed to fetch usage data');
-          return;
-        }
+          const usageResponse = await fetch('/api/usage', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`
+            }
+          });
 
-        const usageData = await usageResponse.json();
-        
-        if (usageData.success && usageData.usage && usageData.usage.resumeFeedback) {
-          // Use existing container below the tile
-          const usageContainer = document.getElementById('rf-plan-limit');
-          if (usageContainer) {
-            // Clear existing content
-            usageContainer.innerHTML = '';
+          if (!usageResponse.ok) {
+            console.warn('[RESUME-FEEDBACK] Failed to fetch usage data');
+            return;
+          }
+
+          const usageData = await usageResponse.json();
+          
+          if (usageData.success && usageData.usage && usageData.usage.resumeFeedback) {
+            // Create container for usage indicator
+            const usageContainer = document.createElement('div');
+            usageContainer.className = 'rf-plan-limit';
+            usageContainer.style.cssText = 'margin-top: 0.5rem; margin-bottom: 1rem;';
             
             // Render usage indicator using shared component
             if (window.renderUsageIndicator) {
@@ -2073,27 +2023,18 @@
                 plan: usageData.plan,
                 container: usageContainer
               });
+              
+              // Insert at the top of main content
+              main.insertBefore(usageContainer, main.firstChild);
             } else {
               console.warn('[RESUME-FEEDBACK] Usage indicator component not loaded');
-              // Fallback to text display
-              const used = usageData.usage.resumeFeedback.used || 0;
-              const limit = usageData.usage.resumeFeedback.limit;
-              const remaining = usageData.usage.resumeFeedback.remaining;
-              if (limit === null) {
-                usageContainer.innerHTML = '<span>Unlimited analyses available</span>';
-              } else {
-                usageContainer.innerHTML = `<span>${used} / ${limit} feedbacks used${remaining !== null ? ` • ${remaining} remaining` : ''}</span>`;
-              }
             }
           }
+        } catch (error) {
+          console.error('[RESUME-FEEDBACK] Error loading usage indicator:', error);
         }
-      } catch (error) {
-        console.error('[RESUME-FEEDBACK] Error loading usage indicator:', error);
       }
-    }
-
-    // Load usage indicator on page load
-    document.addEventListener('DOMContentLoaded', loadUsageIndicator);
+    });
 
     // --- PLAN LOGIC ---
     // Update plan badge and ATS scoring section to reflect userPlan
@@ -2132,9 +2073,9 @@
 
   <!-- page content -->
   <main style="max-width:900px;margin:2.5rem auto 4rem auto;padding:0 1rem;">
-    <!-- Analyze Your Resume Tile -->
+    <!-- ATS Score Tile -->
     <section class="rf-card" id="rf-ats-score-tile">
-      <div style="display:flex;align-items:flex-start;gap:2.5rem;flex-wrap:wrap;">
+      <div style="display:flex;align-items:center;gap:2.5rem;flex-wrap:wrap;">
         <div class="rf-progress-ring">
           <svg viewBox="0 0 80 80">
             <circle cx="40" cy="40" r="36" stroke="#E5E7EB" stroke-width="8" fill="none"/>
@@ -2142,92 +2083,30 @@
             <text x="40" y="48" text-anchor="middle" font-size="1.6rem" font-weight="700" fill="#1F2937">78%</text>
           </svg>
         </div>
-        <div style="flex:1;min-width:220px;display:flex;flex-direction:column;">
+        <div style="flex:1;min-width:220px;">
           <div class="rf-title" id="rf-title" style="margin-bottom:0.2rem;">
-            Analyze Your Resume
-            <span class="rf-plan-badge" id="rf-plan-badge">Premium Plan</span>
-            <span id="rf-trial-badge" style="display:none;margin-left:0.5rem;padding:0.2rem 0.6rem;border-radius:var(--radius-md);background:rgba(255,145,0,0.1);color:#FF9100;font-size:0.8rem;font-weight:600;"></span>
+            ATS Resume Score
+            <span class="rf-plan-badge" id="rf-plan-badge">Free Plan</span>
           </div>
-          <div style="color:var(--color-text-secondary);margin-bottom:0.5rem;" id="rf-score-desc">
-            Get instant ATS compatibility scoring and personalized feedback to improve your resume's job application success rate.
+          <div style="color:var(--color-text-secondary);margin-bottom:0.7rem;" id="rf-score-desc">
+            Get your basic ATS compatibility score.
             <span class="rf-tooltip-trigger" tabindex="0" aria-label="More info" style="margin-left:0.4em;">
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
                 <circle cx="12" cy="12" r="10"/>
                 <line x1="12" y1="8" x2="12" y2="8"/>
                 <line x1="12" y1="12" x2="12" y2="16"/>
               </svg>
-              <span class="rf-tooltip-text">Receive an overall ATS compliance score (0-100) and AI-powered feedback tailored to your target role.</span>
+              <span class="rf-tooltip-text">Receive an overall ATS compliance score (0-100) for your resume, highlighting key areas to improve for better job application success.</span>
             </span>
           </div>
-
-          <form id="rf-upload-form" style="margin:1rem 0 0 0;">
-            <div style="margin-bottom:0.75rem;">
-              <label for="rf-job-title" style="font-weight:600;display:block;margin-bottom:0.5rem;">
-                Target Job Title
-                <span style="font-weight:400;font-size:0.85rem;color:var(--color-text-muted);margin-left:0.35rem;">(Optional but recommended)</span>
-              </label>
-              <input
-                id="rf-job-title"
-                type="text"
-                placeholder="e.g., Data Engineer, Product Manager, Software Developer"
-                style="width:100%;max-width:400px;padding:0.5rem;border:1px solid var(--color-divider);border-radius:var(--radius-md);"
-                value=""
-                autocomplete="off"
-              >
-              <div style="font-size:0.85rem;color:var(--color-text-muted);margin-top:0.25rem;">
-                Adding a job title helps us provide role-specific keyword suggestions and tailored feedback.
-              </div>
-            </div>
-
-            <div style="margin-bottom:0.75rem;">
-              <label for="rf-upload" style="font-weight:600;display:block;margin-bottom:0.5rem;">Resume File</label>
-              <div style="display:flex;align-items:center;gap:0.75rem;flex-wrap:wrap;">
-                <div style="position:relative;">
-                  <input
-                    id="rf-upload"
-                    type="file"
-                    accept=".pdf,.docx,.txt,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain"
-                    style="position:absolute;opacity:0;width:0;height:0;"
-                  >
-                  <label for="rf-upload" style="display:inline-flex;align-items:center;gap:0.4rem;padding:0.5rem 1rem;background:#FFFFFF;border:1px solid var(--color-divider);border-radius:var(--radius-md);font-size:0.95rem;font-weight:600;color:var(--color-text-main);cursor:pointer;">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                      <polyline points="17 8 12 3 7 8"/>
-                      <line x1="12" y1="3" x2="12" y2="15"/>
-                    </svg>
-                    Choose File
-                  </label>
-                </div>
-                <span id="rf-file-name" style="font-size:0.95rem;color:var(--color-text-muted);">No file selected</span>
-              </div>
-              <div style="font-size:0.85rem;color:var(--color-text-muted);margin-top:0.25rem;">
-                Supported formats: PDF, DOCX, or TXT. Maximum file size: 2 MB.
-              </div>
-            </div>
-
-            <button
-              type="button"
-              id="rf-generate-btn"
-              class="btn-primary"
-              style="margin-top:0.5rem;"
-              disabled
-              tabindex="0"
-              aria-label="Generate ATS Score and Feedback"
-            >
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:0.35rem;">
-                <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
-              </svg>
-              Generate ATS Score &amp; Feedback
-            </button>
-
-            <div id="rf-generate-status" style="display:none;margin-top:0.5rem;font-size:0.85rem;padding:0.35rem 0.75rem;border-radius:var(--radius-md);background:rgba(5,150,105,0.08);color:var(--color-success);">
-              Ready to analyze
-            </div>
-
-            <!-- Existing plan-limit / usage indicator container -->
-            <div class="rf-plan-limit" id="rf-plan-limit" style="margin-top:0.75rem;">
-              <span id="rf-ats-checks"></span>
-            </div>
+          <div class="rf-plan-limit" id="rf-plan-limit">
+            <span id="rf-ats-checks">2 ATS checks remaining this month</span>
+          </div>
+          <form id="rf-upload-form" style="margin:1rem 0 0.7rem 0;">
+            <label for="rf-job-title" style="font-weight:600;display:block;margin-bottom:0.5rem;">Target Job Title (recommended for better feedback):</label>
+            <input id="rf-job-title" type="text" placeholder="Start typing your target role (e.g., Data Engineer, Product Manager)" style="width:100%;max-width:400px;padding:0.5rem;border:1px solid var(--color-divider);border-radius:var(--radius-md);margin-bottom:1rem;" value="" autocomplete="off">
+            <label for="rf-upload" style="font-weight:600;display:block;margin-bottom:0.5rem;">Upload your resume (PDF, DOCX, or TXT, max 2 MB):</label>
+            <input id="rf-upload" type="file" accept=".pdf,.docx,.txt,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain" style="margin-top:0.5rem;">
           </form>
         </div>
       </div>
