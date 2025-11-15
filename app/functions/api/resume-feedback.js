@@ -181,9 +181,9 @@ export async function onRequest(context) {
       return json({ success: false, error: 'resumeId required' }, 400, origin, env);
     }
 
-    if (!jobTitle || jobTitle.trim().length === 0) {
-      return json({ success: false, error: 'jobTitle required' }, 400, origin, env);
-    }
+    // Job title is optional - normalize to empty string if not provided
+    // The scoring engine handles empty job titles gracefully
+    const normalizedJobTitle = (jobTitle && jobTitle.trim().length > 0) ? jobTitle.trim() : '';
 
     // Throttle check (Trial only)
     if (effectivePlan === 'trial' && env.JOBHACKAI_KV) {
@@ -261,7 +261,7 @@ export async function onRequest(context) {
     // Cache check (all plans)
     let cachedResult = null;
     if (env.JOBHACKAI_KV) {
-      const cacheHash = await hashString(`${resumeId}:${jobTitle}:feedback`);
+      const cacheHash = await hashString(`${resumeId}:${normalizedJobTitle}:feedback`);
       const cacheKey = `feedbackCache:${cacheHash}`;
       const cached = await env.JOBHACKAI_KV.get(cacheKey);
       
@@ -356,7 +356,7 @@ export async function onRequest(context) {
     // Get rule-based scores first (for AI context)
     const ruleBasedScores = scoreResume(
       resumeData.text,
-      jobTitle,
+      normalizedJobTitle,
       { isMultiColumn: resumeData.isMultiColumn }
     );
 
@@ -379,7 +379,7 @@ export async function onRequest(context) {
         const aiResponse = await generateATSFeedback(
           resumeData.text,
           ruleBasedScores,
-          jobTitle,
+          normalizedJobTitle,
           env
         );
         
@@ -446,7 +446,7 @@ export async function onRequest(context) {
         const errorKey = `feedbackError:${uid}:${Date.now()}`;
         await env.JOBHACKAI_KV.put(errorKey, JSON.stringify({
           resumeId,
-          jobTitle,
+          jobTitle: normalizedJobTitle,
           error: lastError.message,
           timestamp: Date.now()
         }), {
@@ -567,7 +567,7 @@ export async function onRequest(context) {
 
     // Cache result (24 hours)
     if (env.JOBHACKAI_KV) {
-      const cacheHash = await hashString(`${resumeId}:${jobTitle}:feedback`);
+      const cacheHash = await hashString(`${resumeId}:${normalizedJobTitle}:feedback`);
       const cacheKey = `feedbackCache:${cacheHash}`;
       await env.JOBHACKAI_KV.put(cacheKey, JSON.stringify({
         result,
