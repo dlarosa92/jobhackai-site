@@ -1371,10 +1371,13 @@
             origBox.value = uploadResult.textPreview;
           }
 
-          // Update description
+          // Update description (preserve tooltip HTML)
           const descEl = document.getElementById('rf-score-desc');
           if (descEl) {
-            descEl.textContent = 'Your resume was analyzed. See your ATS score and feedback below.';
+            // Preserve existing tooltip if it exists
+            const existingTooltip = descEl.querySelector('.rf-tooltip-trigger');
+            const tooltipHtml = existingTooltip ? existingTooltip.outerHTML : '';
+            descEl.innerHTML = 'Your resume was analyzed. See your ATS score and feedback below.' + (tooltipHtml ? ' ' + tooltipHtml : '');
           }
 
           // Show success toast
@@ -1455,12 +1458,8 @@
           }
 
           const jobTitleInput = document.getElementById('rf-job-title');
-          const jobTitle = jobTitleInput?.value?.trim() || currentJobTitle;
-          if (!jobTitle) {
-            handleApiError(new Error('Please enter a target job title'));
-            return;
-          }
-          currentJobTitle = jobTitle;
+          const jobTitle = jobTitleInput?.value?.trim() || '';
+          currentJobTitle = jobTitle; // Job title is optional, so empty is OK
 
           try {
             showLoadingState('Regenerating feedback...');
