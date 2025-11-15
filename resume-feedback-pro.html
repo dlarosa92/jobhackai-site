@@ -1345,6 +1345,8 @@
               if (window.console && window.console.debug) {
                 window.console.debug('[FEEDBACK] Failed to get feedback:', feedbackError);
               }
+              // Hide role feedback container since we don't have valid feedback data
+              hideRoleFeedback();
               // Show error modal but keep ATS score visible
               if (window.showErrorModal) {
                 const errorMsg = feedbackError.message || 'Failed to generate feedback. Your ATS score is still available.';
@@ -1686,8 +1688,16 @@
     function showRoleFeedback() {
       const el = document.getElementById('role-feedback-container');
       if (!el) return;
+      el.style.display = 'block';
       el.classList.add('fade-enter');
       requestAnimationFrame(() => el.classList.add('fade-enter-active'));
+    }
+
+    function hideRoleFeedback() {
+      const el = document.getElementById('role-feedback-container');
+      if (!el) return;
+      el.style.display = 'none';
+      el.classList.remove('fade-enter', 'fade-enter-active');
     }
 
     // --- Priority Review Tooltip (modular) ---
