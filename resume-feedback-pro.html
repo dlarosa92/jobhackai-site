@@ -1680,6 +1680,12 @@
     function showATSFeedback() {
       const el = document.getElementById('ats-feedback-container');
       if (!el) return;
+      // Clear animation classes first to ensure animation triggers on repeat runs
+      el.classList.remove('fade-enter', 'fade-enter-active');
+      // Force reflow to reset animation state
+      void el.offsetWidth;
+      // Re-apply animation classes
+      el.style.display = 'block';
       el.classList.add('fade-enter');
       requestAnimationFrame(() => el.classList.add('fade-enter-active'));
     }
@@ -1687,6 +1693,11 @@
     function showRoleFeedback() {
       const el = document.getElementById('role-feedback-container');
       if (!el) return;
+      // Clear animation classes first to ensure animation triggers on repeat runs
+      el.classList.remove('fade-enter', 'fade-enter-active');
+      // Force reflow to reset animation state
+      void el.offsetWidth;
+      // Re-apply animation classes
       el.style.display = 'block';
       el.classList.add('fade-enter');
       requestAnimationFrame(() => el.classList.add('fade-enter-active'));
