@@ -251,10 +251,10 @@ export async function generateATSFeedback(resumeText, ruleBasedScores, jobTitle,
   const maxInputTokens = maxOutputTokens * 2; // resume + scores; still cheap with mini
   const truncatedResume = truncateToApproxTokens(resumeText || '', maxInputTokens);
 
-  const systemPrompt = `You are an ATS resume expert. Generate precise, actionable feedback based on the provided rule-based scores.
-IMPORTANT: Use the exact scores provided in RULE-BASED SCORES. Do NOT generate or modify scores. Your role is to provide feedback and suggestions only.
+  const systemPrompt = `You are an ATS resume expert. Generate precise, actionable feedback based on rule-based scores.
+CRITICAL: Use the exact scores provided in RULE-BASED SCORES. Do NOT generate or modify scores. Your role is to provide feedback and suggestions only.
 Keep feedback concise. For each category, provide:
-- A short explanation (2–3 sentences) that explains why the score is what it is
+- A short explanation (2–3 sentences)
 - Up to 2 bullet suggestions, using action verbs and metrics where possible.`;
 
   // We only send the minimal part of ruleBasedScores the model actually needs
@@ -276,10 +276,11 @@ Keep feedback concise. For each category, provide:
       role: 'user',
       content:
         `You are evaluating a resume for ATS readiness.\n\n` +
-        `JOB TITLE: ${jobTitle || 'Not specified'}\n\n` +
-        `RULE-BASED SCORES (use these exact scores - do not modify):\n${JSON.stringify(safeRuleScores, null, 2)}\n\n` +
+        `JOB TITLE: ${jobTitle || 'Unknown'}\n\n` +
+        `RULE-BASED SCORES (JSON): ${JSON.stringify(safeRuleScores)}\n\n` +
+        `IMPORTANT: Use the exact scores provided in RULE-BASED SCORES. Do NOT generate or modify scores. Your role is to provide feedback and suggestions only.\n\n` +
         `RESUME TEXT:\n${truncatedResume}\n\n` +
-        `Return structured feedback for each category. Use the exact scores from RULE-BASED SCORES above. Provide feedback and suggestions only - do not generate new scores.`
+        `Return structured feedback for each category. The score and max values in your response must match the rule-based scores exactly.`
     }
   ];
 
@@ -294,8 +295,14 @@ Keep feedback concise. For each category, provide:
             type: 'object',
             properties: {
               category: { type: 'string' },
-              score: { type: 'number', description: 'Must match the rule-based score for this category' },
-              max: { type: 'number', description: 'Maximum score for this category' },
+              score: { 
+                type: 'number',
+                description: 'Must match the exact score from RULE-BASED SCORES. Do NOT generate or modify this value.'
+              },
+              max: { 
+                type: 'number',
+                description: 'Must match the exact max value from RULE-BASED SCORES. Do NOT generate or modify this value.'
+              },
               feedback: { type: 'string' },
               suggestions: {
                 type: 'array',
