@@ -1360,6 +1360,8 @@
               // Continue without feedback if it fails - ATS score remains visible
             }
           } else {
+            // Hide role feedback container for free users (they don't have access to feedback)
+            hideRoleFeedback();
             // Show placeholder CTA for free users
             const placeholderCta = document.getElementById('rf-placeholder-cta');
             if (placeholderCta) placeholderCta.style.display = 'block';
