@@ -1112,40 +1112,60 @@
           
           // Convert breakdown to rubric format if available
           if (cachedScore.breakdown) {
-            // Map cached breakdown structure (flat numbers) to rubric format
-            // Cached structure: breakdown.keywordScore = number, feedback = array
+            // Map cached breakdown structure to rubric format
+            // API returns: breakdown.keywordScore = { score, max, feedback }
+            // Also supports legacy format: breakdown.keywordScore = number
             // Rubric expects: { score, max, tip }
+            
+            // Helper to extract score from either object or number
+            const getScore = (value) => {
+              if (typeof value === 'number') return value;
+              if (value && typeof value === 'object' && typeof value.score === 'number') return value.score;
+              return 0;
+            };
+            
+            // Helper to extract feedback from either object or array
+            const getFeedback = (value, index, feedbackArray) => {
+              if (value && typeof value === 'object' && typeof value.feedback === 'string') {
+                return limitFeedbackToSentences(value.feedback);
+              }
+              if (feedbackArray && feedbackArray[index]) {
+                return limitFeedbackToSentences(feedbackArray[index]);
+              }
+              return '';
+            };
+            
             const feedbackArray = cachedScore.feedback || [];
             const rubric = [
               {
                 label: 'Keyword Relevance',
-                score: typeof cachedScore.breakdown.keywordScore === 'number' ? cachedScore.breakdown.keywordScore : 0,
+                score: getScore(cachedScore.breakdown.keywordScore),
                 max: 40,
-                tip: feedbackArray[0] || ''
+                tip: getFeedback(cachedScore.breakdown.keywordScore, 0, feedbackArray)
               },
               {
                 label: 'Formatting Compliance',
-                score: typeof cachedScore.breakdown.formattingScore === 'number' ? cachedScore.breakdown.formattingScore : 0,
+                score: getScore(cachedScore.breakdown.formattingScore),
                 max: 20,
-                tip: feedbackArray[1] || ''
+                tip: getFeedback(cachedScore.breakdown.formattingScore, 1, feedbackArray)
               },
               {
                 label: 'Structure & Section Completeness',
-                score: typeof cachedScore.breakdown.structureScore === 'number' ? cachedScore.breakdown.structureScore : 0,
+                score: getScore(cachedScore.breakdown.structureScore),
                 max: 15,
-                tip: feedbackArray[2] || ''
+                tip: getFeedback(cachedScore.breakdown.structureScore, 2, feedbackArray)
               },
               {
                 label: 'Tone & Clarity',
-                score: typeof cachedScore.breakdown.toneScore === 'number' ? cachedScore.breakdown.toneScore : 0,
+                score: getScore(cachedScore.breakdown.toneScore),
                 max: 15,
-                tip: feedbackArray[3] || ''
+                tip: getFeedback(cachedScore.breakdown.toneScore, 3, feedbackArray)
               },
               {
                 label: 'Grammar & Spelling',
-                score: typeof cachedScore.breakdown.grammarScore === 'number' ? cachedScore.breakdown.grammarScore : 0,
+                score: getScore(cachedScore.breakdown.grammarScore),
                 max: 10,
-                tip: feedbackArray[4] || ''
+                tip: getFeedback(cachedScore.breakdown.grammarScore, 4, feedbackArray)
               }
             ];
             updateRubricGrid(rubric);
@@ -1195,7 +1215,10 @@
       function limitFeedbackToSentences(text, maxSentences = 2) {
         if (!text || typeof text !== 'string') return '';
         const sentences = text.split(/[.!?]+/).filter(s => s.trim().length > 0);
-        return sentences.slice(0, maxSentences).join('. ').trim() + (sentences.length > maxSentences ? '.' : '');
+        if (sentences.length === 0) return '';
+        const result = sentences.slice(0, maxSentences).join('. ').trim();
+        // Always ensure a period at the end if there's content
+        return result + (result.endsWith('.') ? '' : '.');
       }
       
       // Helper function to generate ATS score and feedback
@@ -1485,7 +1508,10 @@
     function limitFeedbackToSentences(text, maxSentences = 2) {
       if (!text || typeof text !== 'string') return '';
       const sentences = text.split(/[.!?]+/).filter(s => s.trim().length > 0);
-      return sentences.slice(0, maxSentences).join('. ').trim() + (sentences.length > maxSentences ? '.' : '');
+      if (sentences.length === 0) return '';
+      const result = sentences.slice(0, maxSentences).join('. ').trim();
+      // Always ensure a period at the end if there's content
+      return result + (result.endsWith('.') ? '' : '.');
     }
     
     // Map old field names to new labels
