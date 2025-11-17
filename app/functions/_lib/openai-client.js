@@ -253,13 +253,14 @@ export async function generateATSFeedback(resumeText, ruleBasedScores, jobTitle,
 
   const systemPrompt = `You are an ATS resume expert. Generate precise, actionable feedback based on rule-based scores.
 CRITICAL: Use the exact scores provided in RULE-BASED SCORES. Do NOT generate or modify scores. Your role is to provide feedback and suggestions only.
+IMPORTANT: Return exactly 5 categories in atsRubric: Keyword Match, ATS Formatting, Structure & Organization, Tone & Clarity, and Grammar & Spelling. Do NOT include an "overallScore" or "overall" category.
 Keep feedback concise. For each category, provide:
 - A short explanation (2–3 sentences)
 - Up to 2 bullet suggestions, using action verbs and metrics where possible.`;
 
   // We only send the minimal part of ruleBasedScores the model actually needs
+  // NOTE: Do NOT include overallScore - it should not be in the atsRubric response
   const safeRuleScores = {
-    overallScore: ruleBasedScores?.overallScore,
     keywordScore: ruleBasedScores?.keywordScore,
     formattingScore: ruleBasedScores?.formattingScore,
     structureScore: ruleBasedScores?.structureScore,
@@ -279,6 +280,7 @@ Keep feedback concise. For each category, provide:
         `JOB TITLE: ${jobTitle || 'Unknown'}\n\n` +
         `RULE-BASED SCORES (JSON): ${JSON.stringify(safeRuleScores)}\n\n` +
         `IMPORTANT: Use the exact scores provided in RULE-BASED SCORES. Do NOT generate or modify scores. Your role is to provide feedback and suggestions only.\n\n` +
+        `CRITICAL: Return exactly 5 categories in atsRubric array: "Keyword Match", "ATS Formatting", "Structure & Organization", "Tone & Clarity", and "Grammar & Spelling". Do NOT include "overallScore" or "overall" as a category.\n\n` +
         `RESUME TEXT:\n${truncatedResume}\n\n` +
         `Return structured feedback for each category. The score and max values in your response must match the rule-based scores exactly.`
     }

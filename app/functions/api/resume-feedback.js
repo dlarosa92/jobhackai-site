@@ -433,19 +433,27 @@ export async function onRequest(context) {
     // Build result with AI feedback if available, otherwise use rule-based scores
     // CRITICAL: Always use rule-based scores for score and max values to prevent AI drift
     const result = aiFeedback && aiFeedback.atsRubric ? {
-      atsRubric: aiFeedback.atsRubric.map((item, idx) => {
-        const scoreKey = ['keywordScore', 'formattingScore', 'structureScore', 'toneScore', 'grammarScore'][idx];
-        const ruleBasedScore = ruleBasedScores[scoreKey];
-        return {
-          category: item.category || ['Keyword Match', 'ATS Formatting', 'Structure & Organization', 'Tone & Clarity', 'Grammar & Spelling'][idx],
-          // Force use of rule-based scores - AI should NOT generate or override scores
-          score: ruleBasedScore?.score ?? 0,
-          max: ruleBasedScore?.max ?? 10,
-          // AI provides feedback and suggestions only
-          feedback: item.feedback || ruleBasedScore?.feedback || '',
-          suggestions: item.suggestions || []
-        };
-      }),
+      atsRubric: aiFeedback.atsRubric
+        // Filter out any "overallScore" or "overall" categories - only process the 5 expected categories
+        .filter(item => {
+          const categoryLower = (item.category || '').toLowerCase();
+          return !categoryLower.includes('overall') && categoryLower !== 'overallscore';
+        })
+        // Limit to exactly 5 items (the expected categories)
+        .slice(0, 5)
+        .map((item, idx) => {
+          const scoreKey = ['keywordScore', 'formattingScore', 'structureScore', 'toneScore', 'grammarScore'][idx];
+          const ruleBasedScore = ruleBasedScores[scoreKey];
+          return {
+            category: item.category || ['Keyword Match', 'ATS Formatting', 'Structure & Organization', 'Tone & Clarity', 'Grammar & Spelling'][idx],
+            // Force use of rule-based scores - AI should NOT generate or override scores
+            score: ruleBasedScore?.score ?? 0,
+            max: ruleBasedScore?.max ?? 10,
+            // AI provides feedback and suggestions only
+            feedback: item.feedback || ruleBasedScore?.feedback || '',
+            suggestions: item.suggestions || []
+          };
+        }),
       roleSpecificFeedback: aiFeedback.roleSpecificFeedback || [
         {
           section: 'Header & Contact',
