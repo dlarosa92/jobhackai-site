@@ -227,34 +227,6 @@
       display: block;
       pointer-events: auto;
     }
-    /* Summary & Next Steps Card */
-    .rf-summary-card {
-      background: var(--color-card-bg);
-      border-radius: var(--radius-xl);
-      box-shadow: var(--shadow-md);
-      padding: var(--space-lg);
-      margin-bottom: var(--space-lg);
-    }
-    .rf-summary-bullets {
-      list-style: none;
-      padding: 0;
-      margin: var(--space-sm) 0 0 0;
-    }
-    .rf-summary-bullets li {
-      padding: var(--space-xs) 0;
-      color: var(--color-text-main);
-      font-size: var(--font-size-base);
-      line-height: 1.6;
-      position: relative;
-      padding-left: 1.5rem;
-    }
-    .rf-summary-bullets li::before {
-      content: '•';
-      color: var(--color-cta-green);
-      font-weight: var(--font-weight-bold);
-      position: absolute;
-      left: 0;
-    }
     /* Fade Transitions */
     .fade-enter {
       opacity: 0;
@@ -1146,19 +1118,19 @@
             const feedbackArray = cachedScore.feedback || [];
             const rubric = [
               {
-                label: 'Keyword Match',
+                label: 'Keyword Relevance',
                 score: typeof cachedScore.breakdown.keywordScore === 'number' ? cachedScore.breakdown.keywordScore : 0,
                 max: 40,
                 tip: feedbackArray[0] || ''
               },
               {
-                label: 'ATS Formatting',
+                label: 'Formatting Compliance',
                 score: typeof cachedScore.breakdown.formattingScore === 'number' ? cachedScore.breakdown.formattingScore : 0,
                 max: 20,
                 tip: feedbackArray[1] || ''
               },
               {
-                label: 'Structure & Organization',
+                label: 'Structure & Section Completeness',
                 score: typeof cachedScore.breakdown.structureScore === 'number' ? cachedScore.breakdown.structureScore : 0,
                 max: 15,
                 tip: feedbackArray[2] || ''
@@ -1177,7 +1149,6 @@
               }
             ];
             updateRubricGrid(rubric);
-            updateSummaryCard(rubric);
           }
           
           // Restore job title if available
@@ -1185,6 +1156,21 @@
           if (cachedScore.jobTitle && jobTitleInput) {
             jobTitleInput.value = cachedScore.jobTitle;
             currentJobTitle = cachedScore.jobTitle;
+          }
+          
+          // Restore file name if available
+          const lastResumeName = localStorage.getItem('lastUploadedResumeName');
+          const fileNameSpan = document.getElementById('rf-file-name');
+          if (lastResumeName && fileNameSpan) {
+            fileNameSpan.textContent = lastResumeName;
+            fileNameSpan.style.color = 'var(--color-success)';
+            fileNameSpan.style.fontWeight = '600';
+            
+            // Enable generate button since we have a cached resume
+            const generateBtn = document.getElementById('rf-generate-btn');
+            if (generateBtn) {
+              generateBtn.disabled = false;
+            }
           }
         }
       }
@@ -1205,6 +1191,13 @@
         }
       });
 
+      // Helper function to limit feedback to 1-2 sentences
+      function limitFeedbackToSentences(text, maxSentences = 2) {
+        if (!text || typeof text !== 'string') return '';
+        const sentences = text.split(/[.!?]+/).filter(s => s.trim().length > 0);
+        return sentences.slice(0, maxSentences).join('. ').trim() + (sentences.length > maxSentences ? '.' : '');
+      }
+      
       // Helper function to generate ATS score and feedback
       async function generateATSAndFeedback() {
         const uploadInput = document.getElementById('rf-upload');
@@ -1240,6 +1233,9 @@
           showLoadingState('Analyzing your résumé for ATS criteria…');
           uploadInput.disabled = true;
 
+          // Store file name before upload
+          localStorage.setItem('lastUploadedResumeName', file.name);
+          
           // Upload resume
           const uploadResult = await uploadResume(file);
           currentResumeId = uploadResult.resumeId;
@@ -1275,34 +1271,34 @@
           // Convert breakdown to rubric format
           const rubric = [
             {
-              label: 'Keyword Match',
+              label: 'Keyword Relevance',
               score: scoreResult.breakdown.keywordScore.score,
-              max: scoreResult.breakdown.keywordScore.max,
-              tip: scoreResult.breakdown.keywordScore.feedback
+              max: 40,
+              tip: limitFeedbackToSentences(scoreResult.breakdown.keywordScore.feedback)
             },
             {
-              label: 'ATS Formatting',
+              label: 'Formatting Compliance',
               score: scoreResult.breakdown.formattingScore.score,
-              max: scoreResult.breakdown.formattingScore.max,
-              tip: scoreResult.breakdown.formattingScore.feedback
+              max: 20,
+              tip: limitFeedbackToSentences(scoreResult.breakdown.formattingScore.feedback)
             },
             {
-              label: 'Structure & Organization',
+              label: 'Structure & Section Completeness',
               score: scoreResult.breakdown.structureScore.score,
-              max: scoreResult.breakdown.structureScore.max,
-              tip: scoreResult.breakdown.structureScore.feedback
+              max: 15,
+              tip: limitFeedbackToSentences(scoreResult.breakdown.structureScore.feedback)
             },
             {
               label: 'Tone & Clarity',
               score: scoreResult.breakdown.toneScore.score,
-              max: scoreResult.breakdown.toneScore.max,
-              tip: scoreResult.breakdown.toneScore.feedback
+              max: 15,
+              tip: limitFeedbackToSentences(scoreResult.breakdown.toneScore.feedback)
             },
             {
               label: 'Grammar & Spelling',
               score: scoreResult.breakdown.grammarScore.score,
-              max: scoreResult.breakdown.grammarScore.max,
-              tip: scoreResult.breakdown.grammarScore.feedback
+              max: 10,
+              tip: limitFeedbackToSentences(scoreResult.breakdown.grammarScore.feedback)
             }
           ];
           updateRubricGrid(rubric);
@@ -1329,17 +1325,6 @@
                 showRoleFeedback();
               }, 100);
               
-              // Update summary card from new rubric
-              const atsRubricArray = feedbackResult.atsRubric || [];
-              if (atsRubricArray.length > 0) {
-                const rubric = atsRubricArray.map(item => ({
-                  label: item.category || item.label,
-                  score: item.score || 0,
-                  max: item.max || 100,
-                  tip: item.feedback || item.tip || ''
-                }));
-                updateSummaryCard(rubric);
-              }
             } catch (feedbackError) {
               // Log at debug level, show user-friendly modal
               if (window.console && window.console.debug) {
@@ -1410,6 +1395,9 @@
         uploadInput.addEventListener('change', function(e) {
           const file = e.target.files[0];
           if (file) {
+            // Store file name in localStorage for persistence
+            localStorage.setItem('lastUploadedResumeName', file.name);
+            
             // Update file name display
             if (fileNameSpan) {
               fileNameSpan.textContent = file.name;
@@ -1442,6 +1430,7 @@
             if (statusDiv) {
               statusDiv.style.display = 'none';
             }
+            localStorage.removeItem('lastUploadedResumeName');
           }
         });
       }
@@ -1492,16 +1481,58 @@
       attachRewriteButtonListeners();
     });
 
+    // Helper function to limit feedback to 1-2 sentences (accessible globally)
+    function limitFeedbackToSentences(text, maxSentences = 2) {
+      if (!text || typeof text !== 'string') return '';
+      const sentences = text.split(/[.!?]+/).filter(s => s.trim().length > 0);
+      return sentences.slice(0, maxSentences).join('. ').trim() + (sentences.length > maxSentences ? '.' : '');
+    }
+    
+    // Map old field names to new labels
+    const fieldNameToLabel = {
+      'keywordScore': 'Keyword Relevance',
+      'formattingScore': 'Formatting Compliance',
+      'structureScore': 'Structure & Section Completeness',
+      'toneScore': 'Tone & Clarity',
+      'grammarScore': 'Grammar & Spelling'
+    };
+    
+    const fieldNameToMax = {
+      'keywordScore': 40,
+      'formattingScore': 20,
+      'structureScore': 15,
+      'toneScore': 15,
+      'grammarScore': 10
+    };
+    
     // Update rubric grid from API response
     function updateRubricGridFromFeedback(atsRubric) {
       if (!atsRubric || !Array.isArray(atsRubric)) return;
       
-      const rubric = atsRubric.map(item => ({
-        label: item.category || item.label,
-        score: item.score || 0,
-        max: item.max || 100,
-        tip: item.feedback || item.tip || ''
-      }));
+      const rubric = atsRubric.map(item => {
+        // Try to get field name from category/label or infer from item structure
+        let fieldName = null;
+        const category = (item.category || item.label || '').toLowerCase();
+        
+        // Map common category names to field names
+        if (category.includes('keyword')) fieldName = 'keywordScore';
+        else if (category.includes('format')) fieldName = 'formattingScore';
+        else if (category.includes('structure') || category.includes('section')) fieldName = 'structureScore';
+        else if (category.includes('tone') || category.includes('clarity')) fieldName = 'toneScore';
+        else if (category.includes('grammar') || category.includes('spelling')) fieldName = 'grammarScore';
+        
+        // Use mapped label or fall back to original
+        const label = fieldName ? fieldNameToLabel[fieldName] : (item.category || item.label || '');
+        const max = fieldName ? fieldNameToMax[fieldName] : (item.max || 100);
+        const tip = limitFeedbackToSentences(item.feedback || item.tip || '');
+        
+        return {
+          label: label,
+          score: item.score || 0,
+          max: max,
+          tip: tip
+        };
+      });
       
       updateRubricGrid(rubric);
     }
@@ -1582,49 +1613,6 @@
         `;
         grid.appendChild(div);
       });
-      
-      // Update summary card with lowest-scoring categories
-      updateSummaryCard(rubric);
-    }
-    
-    function updateSummaryCard(rubric) {
-      const summaryCard = document.getElementById('rf-summary-card');
-      const summaryBullets = document.getElementById('rf-summary-bullets');
-      if (!summaryCard || !summaryBullets) return;
-      
-      // Check if we have valid resume data
-      const hasResumeData = rubric && rubric.length > 0 && rubric.some(item => 
-        item.score !== undefined && item.score !== null
-      );
-      
-      if (!hasResumeData) {
-        summaryCard.style.display = 'none';
-        return;
-      }
-      
-      // Find lowest-scoring categories (2-3 items)
-      const scoredItems = rubric
-        .filter(item => item.score !== undefined && item.score !== null)
-        .map(item => ({
-          ...item,
-          percentage: (item.score / item.max) * 100
-        }))
-        .sort((a, b) => a.percentage - b.percentage)
-        .slice(0, 3);
-      
-      if (scoredItems.length === 0) {
-        summaryCard.style.display = 'none';
-        return;
-      }
-      
-      summaryBullets.innerHTML = '';
-      scoredItems.forEach(item => {
-        const li = document.createElement('li');
-        li.textContent = `${item.label}: ${item.tip || item.feedback || 'Focus on improving this area.'}`;
-        summaryBullets.appendChild(li);
-      });
-      
-      summaryCard.style.display = 'block';
     }
 
     function updateFeedbackGrid(roleSpecificFeedback) {
@@ -2263,15 +2251,10 @@
             <div style="color:var(--color-text-secondary);font-size:0.98rem;">No major errors detected.</div>
           </div>
         </div>
-        <!-- Summary & Next Steps Card -->
-        <div class="rf-summary-card" id="rf-summary-card" style="display:none;margin-top:2rem;">
-          <div class="rf-section-title">Summary & Next Steps</div>
-          <ul class="rf-summary-bullets" id="rf-summary-bullets"></ul>
-        </div>
         </div>
         <!-- Role-Specific Feedback -->
         <div id="role-feedback-container">
-          <div class="rf-section-title" id="rf-role-title" style="margin-top:2rem;">Role-Specific Feedback</div>
+          <div class="rf-section-title" id="rf-role-title" style="margin-top:3rem;">Role-Specific Feedback</div>
           <div style="color:var(--color-text-secondary);margin-bottom:1.2rem;" id="rf-role-desc">
             Basic feedback on your resume's content and presentation for your target role. Upgrade to Pro for comprehensive analysis and unlimited suggestions.
           </div>
