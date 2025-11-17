@@ -72,16 +72,17 @@ async function updateUsageCounters(uid, resumeId, plan, env) {
 
   // Update throttles and usage (Trial)
   if (plan === 'trial') {
+    // Throttle: 1 request per minute (abuse prevention)
     const throttleKey = `feedbackThrottle:${uid}`;
     await env.JOBHACKAI_KV.put(throttleKey, String(Date.now()), {
       expirationTtl: 60 // 60 seconds - matches throttle window
     });
 
-    // Track total feedback requests during trial (3 total across entire trial)
-    const totalKey = `feedbackTrialTotal:${uid}`;
-    const currentTotal = await env.JOBHACKAI_KV.get(totalKey);
+    // Total trial feedback counter: exactly 3 total across entire trial
+    const totalTrialKey = `feedbackTotalTrial:${uid}`;
+    const currentTotal = await env.JOBHACKAI_KV.get(totalTrialKey);
     const newTotal = currentTotal ? parseInt(currentTotal, 10) + 1 : 1;
-
+    
     // Set expiration based on trial end date, or use 7 days as fallback
     let expirationTtl = 604800; // 7 days default (covers 3-day trial + buffer)
     const trialEndDate = await getTrialEndDate(uid, env);
@@ -92,9 +93,9 @@ async function updateUsageCounters(uid, resumeId, plan, env) {
       // Use trial end date + 1 day buffer, or minimum 1 day
       expirationTtl = Math.max(86400, secondsUntilTrialEnd + 86400);
     }
-
-    await env.JOBHACKAI_KV.put(totalKey, String(newTotal), {
-      expirationTtl
+    
+    await env.JOBHACKAI_KV.put(totalTrialKey, String(newTotal), {
+      expirationTtl: expirationTtl
     });
   }
 
@@ -174,10 +175,11 @@ export async function onRequest(context) {
       return json({ success: false, error: 'resumeId required' }, 400, origin, env);
     }
 
-    // Normalise job title - allow empty/optional values for better UX
+    // Job title is optional - normalize to empty string if not provided
+    // The scoring engine handles empty job titles gracefully
     const normalizedJobTitle = (jobTitle && jobTitle.trim().length > 0) ? jobTitle.trim() : '';
 
-    // Throttle & limit checks (Trial only)
+    // Throttle check (Trial only)
     if (effectivePlan === 'trial' && env.JOBHACKAI_KV) {
       const throttleKey = `feedbackThrottle:${uid}`;
       const lastRun = await env.JOBHACKAI_KV.get(throttleKey);
@@ -198,15 +200,15 @@ export async function onRequest(context) {
         }
       }
 
-      // Trial total limit check (max 3 feedbacks for entire trial)
-      const totalKey = `feedbackTrialTotal:${uid}`;
-      const totalUsed = await env.JOBHACKAI_KV.get(totalKey);
+      // Total trial limit check: exactly 3 total feedback attempts across entire trial
+      const totalTrialKey = `feedbackTotalTrial:${uid}`;
+      const totalTrialCount = await env.JOBHACKAI_KV.get(totalTrialKey);
       
-      if (totalUsed && parseInt(totalUsed, 10) >= 3) {
+      if (totalTrialCount && parseInt(totalTrialCount, 10) >= 3) {
         return json({
           success: false,
           error: 'Trial limit reached',
-          message: 'You have used all 3 feedbacks in your trial. Upgrade to Pro for unlimited feedback.',
+          message: 'You have used all 3 feedback attempts in your trial. Upgrade to Pro for unlimited feedback.',
           upgradeRequired: true
         }, 403, origin, env);
       }
@@ -417,7 +419,7 @@ export async function onRequest(context) {
         const errorKey = `feedbackError:${uid}:${Date.now()}`;
         await env.JOBHACKAI_KV.put(errorKey, JSON.stringify({
           resumeId,
-          jobTitle,
+          jobTitle: normalizedJobTitle,
           error: lastError.message,
           timestamp: Date.now()
         }), {
@@ -429,18 +431,18 @@ export async function onRequest(context) {
     }
 
     // Build result with AI feedback if available, otherwise use rule-based scores
-    // CRITICAL: Always use rule-based scores as source of truth to prevent drift
-    const scoreKeys = ['keywordScore', 'formattingScore', 'structureScore', 'toneScore', 'grammarScore'];
-    const categoryNames = ['Keyword Match', 'ATS Formatting', 'Structure & Organization', 'Tone & Clarity', 'Grammar & Spelling'];
+    // CRITICAL: Always use rule-based scores for score and max values to prevent AI drift
     const result = aiFeedback && aiFeedback.atsRubric ? {
       atsRubric: aiFeedback.atsRubric.map((item, idx) => {
-        const ruleScore = ruleBasedScores[scoreKeys[idx]];
-        // Force use of rule-based scores - never trust AI-generated scores
+        const scoreKey = ['keywordScore', 'formattingScore', 'structureScore', 'toneScore', 'grammarScore'][idx];
+        const ruleBasedScore = ruleBasedScores[scoreKey];
         return {
-          category: item.category || categoryNames[idx],
-          score: ruleScore?.score ?? 0, // Always use rule-based score
-          max: ruleScore?.max ?? 10, // Always use rule-based max
-          feedback: item.feedback || ruleScore?.feedback || '', // Prefer AI feedback, fallback to rule-based
+          category: item.category || ['Keyword Match', 'ATS Formatting', 'Structure & Organization', 'Tone & Clarity', 'Grammar & Spelling'][idx],
+          // Force use of rule-based scores - AI should NOT generate or override scores
+          score: ruleBasedScore?.score ?? 0,
+          max: ruleBasedScore?.max ?? 10,
+          // AI provides feedback and suggestions only
+          feedback: item.feedback || ruleBasedScore?.feedback || '',
           suggestions: item.suggestions || []
         };
       }),
