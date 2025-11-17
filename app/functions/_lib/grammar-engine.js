@@ -119,26 +119,38 @@ const RESUME_TERMS_WHITELIST = new Set([
 ]);
 
 let englishWordsPromise;
+let englishWordsKvBinding = null;
 
 async function loadEnglishWords(env) {
-  if (!englishWordsPromise) {
-    englishWordsPromise = (async () => {
-      const dictText = await env.JOBHACKAI_KV?.get('dictionary:english-words', 'text');
-      if (!dictText) {
-        throw new Error(
-          'english-words dictionary not found in KV. ' +
-            'Run: npm run load-dicts to bootstrap dictionaries into JOBHACKAI_KV.'
-        );
-      }
-
-      const words = dictText
-        .split('\n')
-        .map((w) => w.trim().toLowerCase())
-        .filter(Boolean);
-
-      return new Set(words);
-    })();
+  const kv = env.JOBHACKAI_KV;
+  if (!kv) {
+    throw new Error('JOBHACKAI_KV binding is not available in env');
   }
+
+  // If we have a cached dictionary for this KV binding, reuse it.
+  if (englishWordsPromise && englishWordsKvBinding === kv) {
+    return englishWordsPromise;
+  }
+
+  // Either first load or KV binding changed (different env / namespace) → reload.
+  englishWordsKvBinding = kv;
+  englishWordsPromise = (async () => {
+    const dictText = await kv.get('dictionary:english-words', 'text');
+    if (!dictText) {
+      throw new Error(
+        'english-words dictionary not found in KV. ' +
+          'Run: npm run load-dicts to bootstrap dictionaries into JOBHACKAI_KV.'
+      );
+    }
+
+    const words = dictText
+      .split('\n')
+      .map((w) => w.trim().toLowerCase())
+      .filter(Boolean);
+
+    return new Set(words);
+  })();
+
   return englishWordsPromise;
 }
 
