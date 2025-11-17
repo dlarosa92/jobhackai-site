@@ -1,6 +1,6 @@
 import assert from 'node:assert';
 import { scoreResume } from '../ats-scoring-engine.js';
-import { createTestEnv } from './test-env-helper.js';
+import { createTestEnv } from './test-env-helper.mjs';
 
 const testEnv = createTestEnv();
 
