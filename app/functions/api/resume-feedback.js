@@ -1,10 +1,9 @@
 // Resume Feedback endpoint
-// AI-powered section-by-section feedback with hybrid grammar verification
+// AI-powered section-by-section feedback with rule-based grammar scoring (no AI grammar verification)
 
 import { getBearer, verifyFirebaseIdToken } from '../_lib/firebase-auth.js';
 import { generateATSFeedback } from '../_lib/openai-client.js';
 import { scoreResume } from '../_lib/ats-scoring-engine.js';
-import { applyHybridGrammarScoring } from '../_lib/hybrid-grammar-scoring.js';
 
 function corsHeaders(origin, env) {
   const allowedOrigins = [
@@ -326,20 +325,13 @@ export async function onRequest(context) {
       }, 400, origin, env);
     }
 
-    // Get rule-based scores first (for AI context)
-    const ruleBasedScores = scoreResume(
+    // Get rule-based scores first (for AI context) - includes new grammar engine
+    const ruleBasedScores = await scoreResume(
       resumeData.text,
       normalizedJobTitle,
-      { isMultiColumn: resumeData.isMultiColumn }
+      { isMultiColumn: resumeData.isMultiColumn },
+      env
     );
-
-    // Hybrid grammar verification: AI check only if rule-based score is perfect
-    await applyHybridGrammarScoring({
-      ruleBasedScores,
-      resumeText: resumeData.text,
-      env,
-      resumeId
-    });
 
     // Generate AI feedback with exponential backoff retry
     let aiFeedback = null;

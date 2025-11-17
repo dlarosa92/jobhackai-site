@@ -1,9 +1,8 @@
 // ATS Score endpoint
-// Rule-based scoring with optional AI grammar verification
+// Rule-based scoring only (no AI grammar verification)
 
 import { getBearer, verifyFirebaseIdToken } from '../_lib/firebase-auth.js';
 import { scoreResume } from '../_lib/ats-scoring-engine.js';
-import { applyHybridGrammarScoring } from '../_lib/hybrid-grammar-scoring.js';
 
 function corsHeaders(origin, env) {
   const allowedOrigins = [
@@ -226,10 +225,11 @@ export async function onRequest(context) {
         isMultiColumn
       });
       
-      ruleBasedScores = scoreResume(
+      ruleBasedScores = await scoreResume(
         text,
         normalizedJobTitle,
-        { isMultiColumn }
+        { isMultiColumn },
+        env
       );
       
       console.log('[ATS-SCORE] Score result:', {
@@ -289,14 +289,6 @@ export async function onRequest(context) {
         message: 'Scoring engine returned invalid data. Please try again.'
       }, 500, origin, env);
     }
-
-    // Hybrid grammar verification: AI check only if rule-based score is perfect
-    await applyHybridGrammarScoring({
-      ruleBasedScores,
-      resumeText: text,
-      env,
-      resumeId
-    });
 
     // Generate AI feedback (only for narrative, not scores)
     // TODO: [OPENAI INTEGRATION POINT] - Uncomment when OpenAI is configured
