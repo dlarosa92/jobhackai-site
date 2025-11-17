@@ -72,22 +72,16 @@ async function updateUsageCounters(uid, resumeId, plan, env) {
 
   // Update throttles and usage (Trial)
   if (plan === 'trial') {
+    // Throttle: 1 request per minute (abuse prevention)
     const throttleKey = `feedbackThrottle:${uid}`;
     await env.JOBHACKAI_KV.put(throttleKey, String(Date.now()), {
       expirationTtl: 60 // 60 seconds - matches throttle window
     });
 
-    const today = new Date().toISOString().split('T')[0];
-    const dailyKey = `feedbackDaily:${uid}:${today}`;
-    const currentCount = await env.JOBHACKAI_KV.get(dailyKey);
-    const newCount = currentCount ? parseInt(currentCount, 10) + 1 : 1;
-    await env.JOBHACKAI_KV.put(dailyKey, String(newCount), {
-      expirationTtl: 86400 // 24 hours
-    });
-
-    const docPassesKey = `feedbackDocPasses:${uid}:${resumeId}`;
-    const currentPasses = await env.JOBHACKAI_KV.get(docPassesKey);
-    const newPasses = currentPasses ? parseInt(currentPasses, 10) + 1 : 1;
+    // Total trial feedback counter: exactly 3 total across entire trial
+    const totalTrialKey = `feedbackTotalTrial:${uid}`;
+    const currentTotal = await env.JOBHACKAI_KV.get(totalTrialKey);
+    const newTotal = currentTotal ? parseInt(currentTotal, 10) + 1 : 1;
     
     // Set expiration based on trial end date, or use 7 days as fallback
     let expirationTtl = 604800; // 7 days default (covers 3-day trial + buffer)
@@ -100,7 +94,7 @@ async function updateUsageCounters(uid, resumeId, plan, env) {
       expirationTtl = Math.max(86400, secondsUntilTrialEnd + 86400);
     }
     
-    await env.JOBHACKAI_KV.put(docPassesKey, String(newPasses), {
+    await env.JOBHACKAI_KV.put(totalTrialKey, String(newTotal), {
       expirationTtl: expirationTtl
     });
   }
@@ -206,38 +200,17 @@ export async function onRequest(context) {
         }
       }
 
-      // Daily limit check (Trial: max 5/day)
-      const today = new Date().toISOString().split('T')[0];
-      const dailyKey = `feedbackDaily:${uid}:${today}`;
-      const dailyCount = await env.JOBHACKAI_KV.get(dailyKey);
+      // Total trial limit check: exactly 3 total feedback attempts across entire trial
+      const totalTrialKey = `feedbackTotalTrial:${uid}`;
+      const totalTrialCount = await env.JOBHACKAI_KV.get(totalTrialKey);
       
-      if (dailyCount && parseInt(dailyCount, 10) >= 5) {
+      if (totalTrialCount && parseInt(totalTrialCount, 10) >= 3) {
         return json({
           success: false,
-          error: 'Daily limit reached',
-          message: 'You have reached the daily limit (5 feedbacks/day). Upgrade to Pro for unlimited feedback.',
+          error: 'Trial limit reached',
+          message: 'You have used all 3 feedback attempts in your trial. Upgrade to Pro for unlimited feedback.',
           upgradeRequired: true
-        }, 429, origin, env);
-      }
-
-      // Per-doc cap check (Trial: max 3 passes per resume)
-      // Only enforce if user is still on trial plan (check in case they upgraded)
-      const docPassesKey = `feedbackDocPasses:${uid}:${resumeId}`;
-      const docPasses = await env.JOBHACKAI_KV.get(docPassesKey);
-      
-      if (docPasses && parseInt(docPasses, 10) >= 3) {
-        // Check if user is still on trial (they might have upgraded)
-        const currentPlan = await getUserPlan(uid, env);
-        if (currentPlan === 'trial') {
-          return json({
-            success: false,
-            error: 'Per-document limit reached',
-            message: 'You have reached the limit for this resume (3 passes). Upgrade to Pro for unlimited passes.',
-            upgradeRequired: true
-          }, 403, origin, env);
-        }
-        // If they upgraded, clear the old limit by not returning error
-        // The limit will be reset when we update it below
+        }, 403, origin, env);
       }
     }
 
