@@ -71,9 +71,10 @@ export async function onRequest(context) {
     const body = await request.json();
     const { resumeId, resumeText, jobTitle } = body;
 
-    if (!jobTitle || jobTitle.trim().length === 0) {
-      return json({ success: false, error: 'jobTitle required' }, 400, origin, env);
-    }
+    // Normalize job title - optional for scoring
+    const normalizedJobTitle = (jobTitle && typeof jobTitle === 'string')
+      ? jobTitle.trim()
+      : '';
 
     // Get resume text - prefer resumeText from request, fall back to KV if available
     let text = resumeText;
@@ -156,8 +157,8 @@ export async function onRequest(context) {
       try {
         // Include resume text hash when resumeId is not available to prevent cache collisions
         const cacheKeyBase = resumeId 
-          ? `${resumeId}:${jobTitle}:ats`
-          : `${await hashString(text.substring(0, 1000))}:${jobTitle}:ats`; // Use first 1000 chars for hash to ensure uniqueness
+          ? `${resumeId}:${normalizedJobTitle}:ats`
+          : `${await hashString(text.substring(0, 1000))}:${normalizedJobTitle}:ats`; // Use first 1000 chars for hash to ensure uniqueness
         const cacheHash = await hashString(cacheKeyBase);
         const cacheKey = `atsCache:${cacheHash}`;
         const cached = await kv.get(cacheKey);
@@ -218,16 +219,16 @@ export async function onRequest(context) {
     // Run rule-based scoring (NO AI TOKENS)
     let ruleBasedScores;
     try {
-      console.log('[ATS-SCORE] Input length:', text.length, 'jobTitle:', jobTitle);
+      console.log('[ATS-SCORE] Input length:', text.length, 'jobTitle:', normalizedJobTitle);
       console.log('[ATS-SCORE] Starting scoring:', {
         textLength: text.length,
-        jobTitle,
+        jobTitle: normalizedJobTitle,
         isMultiColumn
       });
       
       ruleBasedScores = scoreResume(
         text,
-        jobTitle,
+        normalizedJobTitle,
         { isMultiColumn }
       );
       
