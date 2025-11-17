@@ -450,7 +450,11 @@ export async function onRequest(context) {
             score: ruleBasedScore?.score ?? 0,
             max: ruleBasedScore?.max ?? 10,
             // AI provides feedback and suggestions only
-            feedback: item.feedback || ruleBasedScore?.feedback || '',
+            // Use rule-based feedback if score is 0 or if AI feedback doesn't match score range
+            // (e.g., "No major errors detected" shouldn't appear for score 0)
+            feedback: (ruleBasedScore?.score === 0 || !item.feedback) 
+              ? (ruleBasedScore?.feedback || '') 
+              : item.feedback,
             suggestions: item.suggestions || []
           };
         }),
