@@ -338,8 +338,8 @@ export async function onRequest(context) {
       try {
         // Include resume text hash when resumeId is not available to prevent cache collisions
         const cacheKeyBase = resumeId 
-          ? `${resumeId}:${jobTitle}:ats`
-          : `${await hashString(text.substring(0, 1000))}:${jobTitle}:ats`; // Use first 1000 chars for hash to ensure uniqueness
+          ? `${resumeId}:${normalizedJobTitle}:ats`
+          : `${await hashString(text.substring(0, 1000))}:${normalizedJobTitle}:ats`; // Use first 1000 chars for hash to ensure uniqueness
         const cacheHash = await hashString(cacheKeyBase);
         const cacheKey = `atsCache:${cacheHash}`;
         await kv.put(cacheKey, JSON.stringify({
@@ -388,7 +388,7 @@ export async function onRequest(context) {
           score: result.score,
           breakdown: result.breakdown,
           summary: result.feedback?.[0] || '',
-          jobTitle: jobTitle || '',
+          jobTitle: normalizedJobTitle,
           timestamp: Date.now(),
           syncedAt: Date.now()
         };
