@@ -1178,19 +1178,19 @@
             currentJobTitle = cachedScore.jobTitle;
           }
           
-          // Restore file name if available
+          // Restore file name if available (display only - don't enable button)
+          // Browsers don't persist file inputs, so user must re-select file
           const lastResumeName = localStorage.getItem('lastUploadedResumeName');
           const fileNameSpan = document.getElementById('rf-file-name');
           if (lastResumeName && fileNameSpan) {
             fileNameSpan.textContent = lastResumeName;
-            fileNameSpan.style.color = 'var(--color-success)';
-            fileNameSpan.style.fontWeight = '600';
+            fileNameSpan.style.color = 'var(--color-text-muted)';
+            fileNameSpan.style.fontWeight = 'normal';
+            // Add indicator that file needs to be re-selected
+            fileNameSpan.textContent = lastResumeName + ' (please re-select file)';
             
-            // Enable generate button since we have a cached resume
-            const generateBtn = document.getElementById('rf-generate-btn');
-            if (generateBtn) {
-              generateBtn.disabled = false;
-            }
+            // Do NOT enable generate button - file input is empty after page reload
+            // User must select a file again before the button can be enabled
           }
         }
       }
