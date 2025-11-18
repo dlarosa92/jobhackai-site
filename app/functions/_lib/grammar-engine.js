@@ -122,9 +122,10 @@ let englishWordsPromise;
 let englishWordsKvBinding = null;
 
 async function loadEnglishWords(env) {
-  const kv = env.JOBHACKAI_KV;
+  const kv = env?.JOBHACKAI_KV;
   if (!kv) {
-    throw new Error('JOBHACKAI_KV binding is not available in env');
+    console.warn('[GRAMMAR-ENGINE] JOBHACKAI_KV binding not available, using fallback scoring');
+    return null; // Return null instead of throwing
   }
 
   // If we have a cached dictionary for this KV binding, reuse it.
@@ -135,20 +136,27 @@ async function loadEnglishWords(env) {
   // Either first load or KV binding changed (different env / namespace) → reload.
   englishWordsKvBinding = kv;
   englishWordsPromise = (async () => {
-    const dictText = await kv.get('dictionary:english-words', 'text');
-    if (!dictText) {
-      throw new Error(
-        'english-words dictionary not found in KV. ' +
-          'Run: npm run load-dicts to bootstrap dictionaries into JOBHACKAI_KV.'
-      );
+    try {
+      const dictText = await kv.get('dictionary:english-words', 'text');
+      if (!dictText) {
+        console.warn(
+          '[GRAMMAR-ENGINE] english-words dictionary not found in KV. ' +
+            'Using fallback scoring without dictionary. ' +
+            'Run: npm run load-dicts to bootstrap dictionaries into JOBHACKAI_KV.'
+        );
+        return null; // Return null instead of throwing
+      }
+
+      const words = dictText
+        .split('\n')
+        .map((w) => w.trim().toLowerCase())
+        .filter(Boolean);
+
+      return new Set(words);
+    } catch (error) {
+      console.warn('[GRAMMAR-ENGINE] Failed to load dictionary from KV:', error.message);
+      return null; // Return null instead of throwing
     }
-
-    const words = dictText
-      .split('\n')
-      .map((w) => w.trim().toLowerCase())
-      .filter(Boolean);
-
-    return new Set(words);
   })();
 
   return englishWordsPromise;
@@ -263,36 +271,44 @@ export async function getGrammarScore(env, text) {
   const allWords = tokenizeWords(text);
 
   // A) Misspellings (dictionary + whitelists + proper noun tolerance)
-  let misspellCount = 0;
-  const sentenceList = sentences.length ? sentences : [text];
+  // Only check misspellings if dictionary is available
+  if (englishWords) {
+    let misspellCount = 0;
+    const sentenceList = sentences.length ? sentences : [text];
 
-  for (const sentence of sentenceList) {
-    const sentenceWords = tokenizeWords(sentence);
-    for (let i = 0; i < sentenceWords.length; i++) {
-      const word = sentenceWords[i];
-      const isSentenceStart = i === 0;
+    for (const sentence of sentenceList) {
+      const sentenceWords = tokenizeWords(sentence);
+      for (let i = 0; i < sentenceWords.length; i++) {
+        const word = sentenceWords[i];
+        const isSentenceStart = i === 0;
 
-      const cleanedAlpha = word.replace(/[^A-Za-z]/g, '');
-      if (!cleanedAlpha) continue;
+        const cleanedAlpha = word.replace(/[^A-Za-z]/g, '');
+        if (!cleanedAlpha) continue;
 
-      if (isLikelyProperNounOrAcronym(cleanedAlpha, isSentenceStart)) continue;
+        if (isLikelyProperNounOrAcronym(cleanedAlpha, isSentenceStart)) continue;
 
-      const lower = cleanedAlpha.toLowerCase();
+        const lower = cleanedAlpha.toLowerCase();
 
-      if (
-        !englishWords.has(lower) &&
-        !TECH_TERMS_WHITELIST.has(lower) &&
-        !RESUME_TERMS_WHITELIST.has(lower)
-      ) {
-        misspellCount++;
+        if (
+          !englishWords.has(lower) &&
+          !TECH_TERMS_WHITELIST.has(lower) &&
+          !RESUME_TERMS_WHITELIST.has(lower)
+        ) {
+          misspellCount++;
+        }
       }
     }
-  }
 
-  const FREE_MISSPELLINGS = 5;
-  const misspellingsAfterFree = Math.max(0, misspellCount - FREE_MISSPELLINGS);
-  const misspellPenalty = Math.floor(misspellingsAfterFree / 5);
-  score -= misspellPenalty;
+    const FREE_MISSPELLINGS = 5;
+    const misspellingsAfterFree = Math.max(0, misspellCount - FREE_MISSPELLINGS);
+    const misspellPenalty = Math.floor(misspellingsAfterFree / 5);
+    score -= misspellPenalty;
+  } else {
+    // Dictionary unavailable - skip spelling checks but apply small penalty
+    // This ensures we still provide a score, just without dictionary-based spelling validation
+    console.warn('[GRAMMAR-ENGINE] Dictionary unavailable, skipping spelling checks');
+    score -= 0; // No penalty when dictionary is unavailable - rely on structural checks only
+  }
 
   // B) Sentence structure penalties
   if (sentences.length > 0) {
