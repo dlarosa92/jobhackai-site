@@ -90,7 +90,7 @@ export async function scoreResume(resumeText, jobTitle, metadata = {}, env) {
       // Otherwise floor at 6
       if (formattingScore.score >= 20 && structureScore.score >= 12) {
         grammarNumericScore = 7;
-      } else if (grammarNumericScore < 6) {
+      } else {
         grammarNumericScore = 6;
       }
     }
