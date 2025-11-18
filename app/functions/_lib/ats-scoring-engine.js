@@ -239,7 +239,7 @@ function detectTables(resumeText) {
     const isHeaderLine = 
       pipeCount > 0 &&
       line.length < 140 &&
-      (/@/.test(line) || /\(\d{3}[- )]\d{3}[- ]\d{4}/.test(line));
+      (/@/.test(line) || /(\(\d{3}\)\s*[- ]?|\d{3}[- ])\d{3}[- ]\d{4}/.test(line));
     
     // Only count as table if: 3+ pipes AND not a header line
     if (pipeCount >= 3 && !isHeaderLine) {
