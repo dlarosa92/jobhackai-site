@@ -1264,7 +1264,10 @@
           
           // CRITICAL: If upload failed, don't proceed to ATS scoring
           if (!uploadResult || !uploadResult.success || !uploadResult.resumeId) {
-            // Error already shown by uploadResume, just return
+            // Error already shown by uploadResume, but we need to clean up UI state
+            uploadInput.disabled = false;
+            generateBtn.disabled = false;
+            hideLoadingState();
             return;
           }
           
