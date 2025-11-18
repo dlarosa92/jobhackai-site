@@ -67,9 +67,9 @@ if (import.meta.url === `file://${process.argv[1]}`) {
       await testScoreResumeIsAsync();
       await testScoreResumeDeterministic();
       await testScoreResumeWithJobTitle();
-      console.log('\\n✅ All ATS scoring tests passed.');
+      console.log('\n✅ All ATS scoring tests passed.');
     } catch (err) {
-      console.error('\\n❌ ATS scoring tests failed:', err);
+      console.error('\n❌ ATS scoring tests failed:', err);
       process.exit(1);
     }
   })();

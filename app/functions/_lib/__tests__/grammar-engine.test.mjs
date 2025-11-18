@@ -47,7 +47,7 @@ export async function testEmptyTextReturnsMaxScore() {
 }
 
 export async function testWhitespaceOnlyReturnsMaxScore() {
-  const score = await getGrammarScore(testEnv, '   \\n\\n  ');
+  const score = await getGrammarScore(testEnv, '   \n\n  ');
   assert.ok(score >= 9 && score <= 10, 'Whitespace-only text should not be penalized heavily');
 }
 
@@ -59,9 +59,9 @@ if (import.meta.url === `file://${process.argv[1]}`) {
       await testGoodResumeHighScore();
       await testBadResumeLowerScore();
       await testTechnicalResumeToleratesProperNouns();
-      console.log('\\n✅ All grammar engine tests passed.');
+      console.log('\n✅ All grammar engine tests passed.');
     } catch (err) {
-      console.error('\\n❌ Grammar engine tests failed:', err);
+      console.error('\n❌ Grammar engine tests failed:', err);
       process.exit(1);
     }
   })();

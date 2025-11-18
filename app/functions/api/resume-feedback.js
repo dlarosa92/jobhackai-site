@@ -434,19 +434,40 @@ export async function onRequest(context) {
         // Limit to exactly 5 items (the expected categories)
         .slice(0, 5)
         .map((item, idx) => {
-          const scoreKey = ['keywordScore', 'formattingScore', 'structureScore', 'toneScore', 'grammarScore'][idx];
+          const canonicalCategories = [
+            'Keyword Match',
+            'ATS Formatting',
+            'Structure & Organization',
+            'Tone & Clarity',
+            'Grammar & Spelling'
+          ];
+          const scoreKeyByLabel = {
+            'keyword match': 'keywordScore',
+            'ats formatting': 'formattingScore',
+            'structure & organization': 'structureScore',
+            'tone & clarity': 'toneScore',
+            'grammar & spelling': 'grammarScore'
+          };
+
+          const rawCategory = (item.category || canonicalCategories[idx] || '').trim();
+          const normalizedCategory = rawCategory.toLowerCase();
+          const scoreKey =
+            scoreKeyByLabel[normalizedCategory] ||
+            ['keywordScore', 'formattingScore', 'structureScore', 'toneScore', 'grammarScore'][idx];
+
           const ruleBasedScore = ruleBasedScores[scoreKey];
           return {
-            category: item.category || ['Keyword Match', 'ATS Formatting', 'Structure & Organization', 'Tone & Clarity', 'Grammar & Spelling'][idx],
+            category: rawCategory || canonicalCategories[idx],
             // Force use of rule-based scores - AI should NOT generate or override scores
             score: ruleBasedScore?.score ?? 0,
             max: ruleBasedScore?.max ?? 10,
             // AI provides feedback and suggestions only
             // Use rule-based feedback if score is 0 or if AI feedback doesn't match score range
             // (e.g., "No major errors detected" shouldn't appear for score 0)
-            feedback: (ruleBasedScore?.score === 0 || !item.feedback) 
-              ? (ruleBasedScore?.feedback || '') 
-              : item.feedback,
+            feedback:
+              ruleBasedScore?.score === 0 || !item.feedback
+                ? ruleBasedScore?.feedback || ''
+                : item.feedback,
             suggestions: item.suggestions || []
           };
         }),
