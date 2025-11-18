@@ -162,12 +162,13 @@ async function loadEnglishWords(env) {
   return englishWordsPromise;
 }
 
-function tokenizeWords(text) {
+// Export helper functions for use in ats-scoring-engine.js
+export function tokenizeWords(text) {
   if (!text || !text.trim()) return [];
   return text.split(/\s+/).map((w) => w.trim()).filter(Boolean);
 }
 
-function splitSentences(text) {
+export function splitSentences(text) {
   return text
     .split(/(?<=[.!?])\s+/)
     .map((s) => s.trim())
@@ -221,7 +222,7 @@ function hasVerbLikeWord(words) {
   });
 }
 
-function isPassiveSentence(words) {
+export function isPassiveSentence(words) {
   const beVerbs = new Set(['is', 'was', 'were', 'are', 'been', 'being']);
   for (let i = 0; i < words.length - 1; i++) {
     const w1 = words[i].toLowerCase().replace(/[^a-z]/g, '');
@@ -233,7 +234,7 @@ function isPassiveSentence(words) {
   return false;
 }
 
-function hasRepeatedWords(words) {
+export function hasRepeatedWords(words) {
   for (let i = 0; i < words.length - 1; i++) {
     const w1 = words[i].toLowerCase().replace(/[^a-z]/g, '');
     const w2 = words[i + 1].toLowerCase().replace(/[^a-z]/g, '');
@@ -242,7 +243,7 @@ function hasRepeatedWords(words) {
   return false;
 }
 
-function countLongUnpunctuatedParagraphs(text) {
+export function countLongUnpunctuatedParagraphs(text) {
   const paragraphs = text
     .split(/\n{2,}/)
     .map((p) => p.trim())
@@ -299,10 +300,13 @@ export async function getGrammarScore(env, text) {
       }
     }
 
-    const FREE_MISSPELLINGS = 5;
+    // New penalty structure: 15 free, every 10 = -1, max -3
+    const FREE_MISSPELLINGS = 15;
     const misspellingsAfterFree = Math.max(0, misspellCount - FREE_MISSPELLINGS);
-    const misspellPenalty = Math.floor(misspellingsAfterFree / 5);
-    score -= misspellPenalty;
+    const misspellPenalty = Math.floor(misspellingsAfterFree / 10);
+    const MAX_DICTIONARY_PENALTY = 3;
+    const finalMisspellPenalty = Math.min(misspellPenalty, MAX_DICTIONARY_PENALTY);
+    score -= finalMisspellPenalty;
   } else {
     // Dictionary unavailable - skip spelling checks but apply small penalty
     // This ensures we still provide a score, just without dictionary-based spelling validation
@@ -310,7 +314,7 @@ export async function getGrammarScore(env, text) {
     score -= 0; // No penalty when dictionary is unavailable - rely on structural checks only
   }
 
-  // B) Sentence structure penalties
+  // B) Sentence structure penalties (capped at -3)
   if (sentences.length > 0) {
     let sentenceStructurePenalty = 0;
     for (const sentence of sentences) {
@@ -322,6 +326,8 @@ export async function getGrammarScore(env, text) {
         sentenceStructurePenalty++;
       }
     }
+    const MAX_STRUCTURE_PENALTY = 3;
+    sentenceStructurePenalty = Math.min(sentenceStructurePenalty, MAX_STRUCTURE_PENALTY);
     score -= sentenceStructurePenalty;
   }
 
@@ -335,7 +341,7 @@ export async function getGrammarScore(env, text) {
   }
   if (sentences.length > 0) {
     const passiveRatio = passiveCount / sentences.length;
-    if (passiveRatio > 0.15) {
+    if (passiveRatio > 0.25) {  // Changed from 0.15 to 0.25 to be less strict
       score -= 1;
     }
   }
