@@ -3,15 +3,17 @@
 // AI is used separately for narrative feedback
 
 import { calcOverallScore } from './calc-overall-score.js';
+import { getGrammarScore } from './grammar-engine.js';
 
 /**
  * Score resume using rule-based rubric
  * @param {string} resumeText - Extracted resume text
  * @param {string} jobTitle - Target job title
  * @param {Object} metadata - Resume metadata (isMultiColumn, etc.)
- * @returns {Object} Score breakdown
+ * @param {Object} env - Cloudflare environment (for KV-backed grammar engine)
+ * @returns {Promise<Object>} Score breakdown
  */
-export function scoreResume(resumeText, jobTitle, metadata = {}) {
+export async function scoreResume(resumeText, jobTitle, metadata = {}, env) {
   const { isMultiColumn = false } = metadata;
   
   // Normalize job title for keyword matching
@@ -23,7 +25,8 @@ export function scoreResume(resumeText, jobTitle, metadata = {}) {
   const formattingScore = scoreFormattingCompliance(resumeText, isMultiColumn);
   const structureScore = scoreStructureAndCompleteness(resumeText);
   const toneScore = scoreToneAndClarity(resumeText);
-  const grammarScore = scoreGrammarAndSpelling(resumeText);
+  const grammarNumericScore = await getGrammarScore(env, resumeText);
+  const grammarScore = buildGrammarScore(grammarNumericScore);
   
   // Build scores object for overall calculation
   const scores = {
@@ -61,8 +64,7 @@ export function scoreResume(resumeText, jobTitle, metadata = {}) {
     grammarScore: {
       score: grammarScore.score,
       max: 10,
-      feedback: grammarScore.feedback,
-      aiCheckRequired: grammarScore.aiCheckRequired || false
+      feedback: grammarScore.feedback
     },
     overallScore,
     recommendations: generateRecommendations({
@@ -339,40 +341,12 @@ function scoreToneAndClarity(resumeText) {
 }
 
 /**
- * Score Grammar & Spelling (10 pts)
+ * Map numeric grammar score to feedback text.
+ * 9–10: No major errors
+ * 7–8: Minor issues
+ * 0–6: Needs attention
  */
-function scoreGrammarAndSpelling(resumeText) {
-  let score = 10;
-  
-  // Basic spell check (common errors)
-  const commonErrors = [
-    { pattern: /\b(recieve|seperate|occured|existance)\b/gi, penalty: 1 },
-    { pattern: /\b(its|it's)\b.*\b(its|it's)\b/gi, penalty: 1 }, // Wrong its/it's usage
-    { pattern: /\b(their|there|they're)\b.*\b(their|there|they're)\b/gi, penalty: 1 }
-  ];
-  
-  for (const error of commonErrors) {
-    if (error.pattern.test(resumeText)) {
-      score -= error.penalty;
-    }
-  }
-  
-  // Check for consistent tense (should be past tense for past jobs)
-  // This is a simplified check
-  const presentTenseVerbs = ['develops', 'creates', 'manages', 'leads'];
-  const pastTenseVerbs = ['developed', 'created', 'managed', 'led'];
-  
-  const textLower = resumeText.toLowerCase();
-  const presentCount = presentTenseVerbs.filter(v => textLower.includes(v)).length;
-  const pastCount = pastTenseVerbs.filter(v => textLower.includes(v)).length;
-  
-  // If significantly more present tense than past, might be inconsistent
-  if (presentCount > pastCount * 1.5 && pastCount > 0) {
-    score -= 1;
-  }
-  
-  score = Math.max(0, score);
-  
+function buildGrammarScore(score) {
   let feedback = '';
   if (score >= 9) {
     feedback = 'No major errors detected.';
@@ -381,12 +355,7 @@ function scoreGrammarAndSpelling(resumeText) {
   } else {
     feedback = 'Grammar and spelling need attention. Proofread carefully.';
   }
-  
-  // Flag for AI check: only if score is perfect (max)
-  const maxScore = 10;
-  const aiCheckRequired = score === maxScore;
-  
-  return { score, feedback, aiCheckRequired };
+  return { score, feedback };
 }
 
 /**

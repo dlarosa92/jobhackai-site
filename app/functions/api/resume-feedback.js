@@ -1,10 +1,9 @@
 // Resume Feedback endpoint
-// AI-powered section-by-section feedback with hybrid grammar verification
+// AI-powered section-by-section feedback with rule-based grammar scoring (no AI grammar verification)
 
 import { getBearer, verifyFirebaseIdToken } from '../_lib/firebase-auth.js';
 import { generateATSFeedback } from '../_lib/openai-client.js';
 import { scoreResume } from '../_lib/ats-scoring-engine.js';
-import { applyHybridGrammarScoring } from '../_lib/hybrid-grammar-scoring.js';
 
 function corsHeaders(origin, env) {
   const allowedOrigins = [
@@ -326,20 +325,13 @@ export async function onRequest(context) {
       }, 400, origin, env);
     }
 
-    // Get rule-based scores first (for AI context)
-    const ruleBasedScores = scoreResume(
+    // Get rule-based scores first (for AI context) - includes new grammar engine
+    const ruleBasedScores = await scoreResume(
       resumeData.text,
       normalizedJobTitle,
-      { isMultiColumn: resumeData.isMultiColumn }
+      { isMultiColumn: resumeData.isMultiColumn },
+      env
     );
-
-    // Hybrid grammar verification: AI check only if rule-based score is perfect
-    await applyHybridGrammarScoring({
-      ruleBasedScores,
-      resumeText: resumeData.text,
-      env,
-      resumeId
-    });
 
     // Generate AI feedback with exponential backoff retry
     let aiFeedback = null;
@@ -433,19 +425,52 @@ export async function onRequest(context) {
     // Build result with AI feedback if available, otherwise use rule-based scores
     // CRITICAL: Always use rule-based scores for score and max values to prevent AI drift
     const result = aiFeedback && aiFeedback.atsRubric ? {
-      atsRubric: aiFeedback.atsRubric.map((item, idx) => {
-        const scoreKey = ['keywordScore', 'formattingScore', 'structureScore', 'toneScore', 'grammarScore'][idx];
-        const ruleBasedScore = ruleBasedScores[scoreKey];
-        return {
-          category: item.category || ['Keyword Match', 'ATS Formatting', 'Structure & Organization', 'Tone & Clarity', 'Grammar & Spelling'][idx],
-          // Force use of rule-based scores - AI should NOT generate or override scores
-          score: ruleBasedScore?.score ?? 0,
-          max: ruleBasedScore?.max ?? 10,
-          // AI provides feedback and suggestions only
-          feedback: item.feedback || ruleBasedScore?.feedback || '',
-          suggestions: item.suggestions || []
-        };
-      }),
+      atsRubric: aiFeedback.atsRubric
+        // Filter out any "overallScore" or "overall" categories - only process the 5 expected categories
+        .filter(item => {
+          const categoryLower = (item.category || '').toLowerCase();
+          return !categoryLower.includes('overall') && categoryLower !== 'overallscore';
+        })
+        // Limit to exactly 5 items (the expected categories)
+        .slice(0, 5)
+        .map((item, idx) => {
+          const canonicalCategories = [
+            'Keyword Match',
+            'ATS Formatting',
+            'Structure & Organization',
+            'Tone & Clarity',
+            'Grammar & Spelling'
+          ];
+          const scoreKeyByLabel = {
+            'keyword match': 'keywordScore',
+            'ats formatting': 'formattingScore',
+            'structure & organization': 'structureScore',
+            'tone & clarity': 'toneScore',
+            'grammar & spelling': 'grammarScore'
+          };
+
+          const rawCategory = (item.category || canonicalCategories[idx] || '').trim();
+          const normalizedCategory = rawCategory.toLowerCase();
+          const scoreKey =
+            scoreKeyByLabel[normalizedCategory] ||
+            ['keywordScore', 'formattingScore', 'structureScore', 'toneScore', 'grammarScore'][idx];
+
+          const ruleBasedScore = ruleBasedScores[scoreKey];
+          return {
+            category: rawCategory || canonicalCategories[idx],
+            // Force use of rule-based scores - AI should NOT generate or override scores
+            score: ruleBasedScore?.score ?? 0,
+            max: ruleBasedScore?.max ?? 10,
+            // AI provides feedback and suggestions only
+            // Use rule-based feedback if score is 0 or if AI feedback doesn't match score range
+            // (e.g., "No major errors detected" shouldn't appear for score 0)
+            feedback:
+              ruleBasedScore?.score === 0 || !item.feedback
+                ? ruleBasedScore?.feedback || ''
+                : item.feedback,
+            suggestions: item.suggestions || []
+          };
+        }),
       roleSpecificFeedback: aiFeedback.roleSpecificFeedback || [
         {
           section: 'Header & Contact',
