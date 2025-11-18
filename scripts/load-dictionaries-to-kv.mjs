@@ -11,11 +11,13 @@ const wordsPath = join(dictDir, 'english-words.txt');
 console.log('Loading english-words dictionary into KV...');
 
 try {
+  // Use namespace-id directly (from wrangler.local.toml)
+  // Dev namespace ID: 5237372648c34aa6880f91e1a0c9708a
+  // Preview namespace ID: 06a6323598244fc8a1b2daadeec8a043
+  const namespaceId = process.env.KV_NAMESPACE_ID || '5237372648c34aa6880f91e1a0c9708a';
+  
   execSync(
-    `cd ${join(
-      __dirname,
-      '../app'
-    )} && npx wrangler kv:key put --binding=JOBHACKAI_KV dictionary:english-words --path="${wordsPath}"`,
+    `cd ${join(__dirname, '../app')} && npx wrangler kv:key put --namespace-id=${namespaceId} dictionary:english-words --path="${wordsPath}"`,
     { stdio: 'inherit' }
   );
   console.log('✅ Dictionary loaded into KV successfully');
