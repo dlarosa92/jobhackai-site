@@ -43,12 +43,12 @@ export async function testTechnicalResumeToleratesProperNouns() {
 
 export async function testEmptyTextReturnsMaxScore() {
   const score = await getGrammarScore(testEnv, '');
-  assert.strictEqual(score, 10, 'Empty text should return max score');
+  assert.strictEqual(score, 5, 'Empty text should return neutral grammar score');
 }
 
 export async function testWhitespaceOnlyReturnsMaxScore() {
   const score = await getGrammarScore(testEnv, '   \n\n  ');
-  assert.ok(score >= 9 && score <= 10, 'Whitespace-only text should not be penalized heavily');
+  assert.strictEqual(score, 5, 'Whitespace-only text should return neutral grammar score');
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {

@@ -3,14 +3,7 @@
 // AI is used separately for narrative feedback
 
 import { calcOverallScore } from './calc-overall-score.js';
-import { 
-  getGrammarScore,
-  tokenizeWords,
-  splitSentences,
-  isPassiveSentence,
-  hasRepeatedWords,
-  countLongUnpunctuatedParagraphs
-} from './grammar-engine.js';
+import { getGrammarDiagnostics } from './grammar-engine.js';
 
 /**
  * Score resume using rule-based rubric
@@ -21,7 +14,7 @@ import {
  * @returns {Promise<Object>} Score breakdown
  */
 export async function scoreResume(resumeText, jobTitle, metadata = {}, env) {
-  const { isMultiColumn = false } = metadata;
+  const { isMultiColumn = false, extractionHint = null } = metadata;
   
   // Normalize job title for keyword matching
   const normalizedJobTitle = normalizeJobTitle(jobTitle);
@@ -33,74 +26,19 @@ export async function scoreResume(resumeText, jobTitle, metadata = {}, env) {
   const structureScore = scoreStructureAndCompleteness(resumeText);
   const toneScore = scoreToneAndClarity(resumeText);
   
-  // Get raw grammar score (before floor logic)
-  let grammarNumericScore = await getGrammarScore(env, resumeText);
+  // Get grammar diagnostics (single source of truth)
+  const grammarDiagnostics = await getGrammarDiagnostics(env, resumeText, {
+    extractionHint
+  });
+
+  // Derive band + final numeric grammar score from diagnostics and other rubric scores
+  const { band: grammarBand, finalScore: grammarNumericScore } =
+    mapGrammarDiagnosticsToScore(grammarDiagnostics, {
+      formattingScore: formattingScore.score,
+      structureScore: structureScore.score
+    });
   
-  // Apply "good resume floor" if conditions are met
-  // This must happen AFTER all penalties but BEFORE clamping
-  // Lowered structure requirement from 12 to 10 to be less strict
-  const hasSolidStructure = formattingScore.score >= 15 && structureScore.score >= 10;
-  
-  // Check for structural issues
-  const allWords = tokenizeWords(resumeText);
-  const hasNoRepeatedWords = !hasRepeatedWords(allWords);
-  const longParaCount = countLongUnpunctuatedParagraphs(resumeText);
-  const hasNoLongParas = longParaCount === 0;
-  
-  // Check passive voice ratio
-  const sentences = splitSentences(resumeText);
-  let passiveCount = 0;
-  if (sentences.length > 0) {
-    for (const sentence of sentences) {
-      const sWords = tokenizeWords(sentence);
-      if (isPassiveSentence(sWords)) {
-        passiveCount++;
-      }
-    }
-  }
-  const passiveRatio = sentences.length > 0 ? passiveCount / sentences.length : 0;
-  const hasLowPassiveVoice = passiveRatio <= 0.25;
-  
-  // Estimate penalties from current score (conservative approach)
-  // If score is already low, we know penalties were high
-  const estimatedMisspellPenalty = grammarNumericScore < 7 ? 2 : (grammarNumericScore < 8 ? 1 : 0);
-  const estimatedStructurePenalty = grammarNumericScore < 7 ? 1 : 0;
-  
-  const hasReasonableGrammarPenalties = 
-    estimatedMisspellPenalty <= 2 && estimatedStructurePenalty <= 1;
-  
-  // Allow minor structural issues (e.g., some repeated words, a few long paragraphs)
-  // Only disqualify if there are major structural problems
-  // For repeated words: allow if resume is long (500+ words) OR if no repeated words
-  // For long paragraphs: allow up to 3 long paragraphs (some resumes have longer sections)
-  const hasRepeated = hasRepeatedWords(allWords);
-  const allowRepeatedWords = !hasRepeated || allWords.length > 500;
-  const allowLongParas = longParaCount <= 3;
-  
-  const hasMinorStructuralIssues = 
-    allowRepeatedWords && allowLongParas && hasLowPassiveVoice;
-  
-  // Apply floor if all conditions are met
-  // Floor protects resumes with good structure/formatting from being nuked by dictionary noise
-  // Use floor of 7 for resumes that meet all conditions (very solid structure)
-  // Use floor of 6 for resumes that meet most conditions (good structure with minor issues)
-  if (hasSolidStructure && hasReasonableGrammarPenalties && hasMinorStructuralIssues) {
-    if (grammarNumericScore < 7) {
-      // If formatting is perfect (20/20) and structure is very good (>= 12), floor at 7
-      // Otherwise floor at 6
-      if (formattingScore.score >= 20 && structureScore.score >= 12) {
-        grammarNumericScore = 7;
-      } else {
-        grammarNumericScore = 6;
-      }
-    }
-  }
-  
-  // Clamp to valid range
-  if (grammarNumericScore < 0) grammarNumericScore = 0;
-  if (grammarNumericScore > 10) grammarNumericScore = 10;
-  
-  const grammarScore = buildGrammarScore(grammarNumericScore);
+  const grammarScore = buildGrammarScore(grammarNumericScore, grammarBand);
   
   // Build scores object for overall calculation
   const scores = {
@@ -440,10 +378,107 @@ function scoreToneAndClarity(resumeText) {
 }
 
 /**
+ * Map grammar diagnostics + rubric scores into a band and final numeric score.
+ * Higher-quality bands are checked first; the first matching rule wins.
+ */
+function mapGrammarDiagnosticsToScore(diagnostics, context) {
+  const {
+    rawScore,
+    misspellPenalty,
+    structurePenalty,
+    passiveRatio,
+    repeatedWords,
+    longParaCount,
+    dictionaryHitRate,
+    extractionStatus,
+    confidence,
+    tokenCount
+  } = diagnostics;
+
+  const { formattingScore, structureScore } = context;
+
+  const lowConfidence =
+    extractionStatus === 'empty' ||
+    extractionStatus === 'scanned_pdf' ||
+    extractionStatus === 'very_short' ||
+    extractionStatus === 'probably_non_english' ||
+    confidence < 0.5;
+
+  if (lowConfidence) {
+    return {
+      band: 'neutral_low_conf',
+      finalScore: 6
+    };
+  }
+
+  let band;
+  let finalScore = rawScore;
+  const raw = rawScore;
+
+  // Excellent (A) band
+  if (
+    formattingScore >= 18 &&
+    structureScore >= 13 &&
+    raw >= 8.5 &&
+    misspellPenalty <= 1 &&
+    structurePenalty <= 1 &&
+    dictionaryHitRate >= 0.8 &&
+    passiveRatio <= 0.25 &&
+    !repeatedWords &&
+    longParaCount <= 1
+  ) {
+    band = 'excellent';
+    if (finalScore < 9) finalScore = 9; // floor into 9–10 band
+  }
+  // Good (B) band
+  else if (
+    formattingScore >= 15 &&
+    structureScore >= 11 &&
+    raw >= 7 &&
+    misspellPenalty <= 2 &&
+    structurePenalty <= 2 &&
+    dictionaryHitRate >= 0.7
+  ) {
+    band = 'good';
+    if (finalScore < 7) finalScore = 7; // clamp into 7–8 band
+  }
+  // Fair (C) band – keep raw score in [5, 7)
+  else if (raw >= 5 && raw < 7) {
+    band = 'fair';
+    finalScore = raw;
+  }
+  // Poor (D) band
+  else if (raw >= 3) {
+    band = 'poor';
+    if (finalScore < 3) finalScore = 3;
+    if (finalScore > 5) finalScore = 5;
+  }
+  // Very poor (E) band
+  else {
+    band = 'very_poor';
+    if (finalScore > 3) finalScore = 3;
+  }
+
+  if (finalScore < 0) finalScore = 0;
+  if (finalScore > 10) finalScore = 10;
+
+  return { band, finalScore };
+}
+
+/**
  * Map numeric grammar score to feedback text (granular bands).
  * Provides distinct feedback for different score ranges.
  */
-function buildGrammarScore(score) {
+function buildGrammarScore(score, band = null) {
+  // Special feedback for low-confidence / noisy inputs.
+  if (band === 'neutral_low_conf') {
+    return {
+      score,
+      feedback:
+        'Automated grammar scoring may be unreliable for this document (for example, scanned, very short, or non-English).'
+    };
+  }
+
   let feedback = '';
   if (score >= 9) {
     feedback = 'No major errors detected.';

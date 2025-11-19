@@ -1,6 +1,6 @@
 // Grammar engine for ATS scoring (pure JS, deterministic, no AI, no WASM)
-// Uses a KV-backed English word list plus tech/resume whitelists and simple heuristics
-// Returns a 0–10 grammar score indicating overall writing quality.
+// Uses a KV-backed English word list plus tech/resume whitelists and simple heuristics.
+// Primary API exposes diagnostics; a 0–10 grammar score is derived from those diagnostics.
 
 // Tech terms whitelist – protect real-world tech résumés
 const TECH_TERMS_WHITELIST = new Set([
@@ -259,23 +259,81 @@ export function countLongUnpunctuatedParagraphs(text) {
 }
 
 /**
- * Compute a rule-based grammar score from 0–10.
- * Uses dictionary-based misspellings + structural heuristics.
+ * Compute detailed grammar diagnostics for a piece of text.
+ * This is the primary API; rawScore is derived from misspelling +
+ * structural penalties. ATS-level banding/floor logic should be
+ * implemented in ats-scoring-engine.js, not here.
+ *
+ * @param {Object} env - Cloudflare environment (for KV-backed dictionary)
+ * @param {string} text - Input text to analyze
+ * @param {Object} [options]
+ * @param {'ok'|'scanned_pdf'|'ocr_needed'|null} [options.extractionHint]
+ * @returns {Promise<{
+ *   rawScore: number,
+ *   misspellCount: number,
+ *   misspellPenalty: number,
+ *   misspellRate: number,
+ *   structurePenalty: number,
+ *   passiveRatio: number,
+ *   repeatedWords: boolean,
+ *   longParaCount: number,
+ *   dictionaryHitRate: number,
+ *   tokenCount: number,
+ *   extractionStatus: 'ok' | 'empty' | 'very_short' | 'probably_non_english' | 'scanned_pdf',
+ *   confidence: number
+ * }>}
  */
-export async function getGrammarScore(env, text) {
-  let score = 10;
-  if (!text || typeof text !== 'string' || !text.trim()) return score;
+export async function getGrammarDiagnostics(env, text, options = {}) {
+  const input = (text || '').trim();
+
+  // Empty / whitespace-only → neutral score with low confidence
+  if (!input.length) {
+    return {
+      rawScore: 5,
+      misspellCount: 0,
+      misspellPenalty: 0,
+      misspellRate: 0,
+      structurePenalty: 0,
+      passiveRatio: 0,
+      repeatedWords: false,
+      longParaCount: 0,
+      dictionaryHitRate: 0,
+      tokenCount: 0,
+      extractionStatus: 'empty',
+      confidence: 0.2
+    };
+  }
 
   const englishWords = await loadEnglishWords(env);
 
-  const sentences = splitSentences(text);
-  const allWords = tokenizeWords(text);
+  const sentences = splitSentences(input);
+  const allTokens = tokenizeWords(input);
+  const tokenCount = allTokens.length;
 
-  // A) Misspellings (dictionary + whitelists + proper noun tolerance)
-  // Only check misspellings if dictionary is available
+  if (tokenCount === 0) {
+    return {
+      rawScore: 5,
+      misspellCount: 0,
+      misspellPenalty: 0,
+      misspellRate: 0,
+      structurePenalty: 0,
+      passiveRatio: 0,
+      repeatedWords: false,
+      longParaCount: 0,
+      dictionaryHitRate: 0,
+      tokenCount: 0,
+      extractionStatus: 'empty',
+      confidence: 0.2
+    };
+  }
+
+  // A) Misspellings & dictionary coverage
+  let misspellCount = 0;
+  let knownTokens = 0;
+  let checkedTokens = 0;
+
   if (englishWords) {
-    let misspellCount = 0;
-    const sentenceList = sentences.length ? sentences : [text];
+    const sentenceList = sentences.length ? sentences : [input];
 
     for (const sentence of sentenceList) {
       const sentenceWords = tokenizeWords(sentence);
@@ -286,82 +344,159 @@ export async function getGrammarScore(env, text) {
         const cleanedAlpha = word.replace(/[^A-Za-z]/g, '');
         if (!cleanedAlpha) continue;
 
-        if (isLikelyProperNounOrAcronym(cleanedAlpha, isSentenceStart)) continue;
+        checkedTokens++;
+
+        // Proper nouns / acronyms are treated as known
+        if (isLikelyProperNounOrAcronym(cleanedAlpha, isSentenceStart)) {
+          knownTokens++;
+          continue;
+        }
 
         const lower = cleanedAlpha.toLowerCase();
 
         if (
-          !englishWords.has(lower) &&
-          !TECH_TERMS_WHITELIST.has(lower) &&
-          !RESUME_TERMS_WHITELIST.has(lower)
+          (englishWords && englishWords.has(lower)) ||
+          TECH_TERMS_WHITELIST.has(lower) ||
+          RESUME_TERMS_WHITELIST.has(lower)
         ) {
+          knownTokens++;
+        } else {
           misspellCount++;
         }
       }
     }
-
-    // New penalty structure: 15 free, every 10 = -1, max -3
-    const FREE_MISSPELLINGS = 15;
-    const misspellingsAfterFree = Math.max(0, misspellCount - FREE_MISSPELLINGS);
-    const misspellPenalty = Math.floor(misspellingsAfterFree / 10);
-    const MAX_DICTIONARY_PENALTY = 3;
-    const finalMisspellPenalty = Math.min(misspellPenalty, MAX_DICTIONARY_PENALTY);
-    score -= finalMisspellPenalty;
   } else {
-    // Dictionary unavailable - skip spelling checks but apply small penalty
-    // This ensures we still provide a score, just without dictionary-based spelling validation
+    // Dictionary unavailable - skip misspelling checks but still compute
+    // structural diagnostics. We keep misspell-related fields neutral.
     console.warn('[GRAMMAR-ENGINE] Dictionary unavailable, skipping spelling checks');
-    score -= 0; // No penalty when dictionary is unavailable - rely on structural checks only
   }
 
-  // B) Sentence structure penalties (capped at -3)
+  const dictionaryHitRate =
+    englishWords && checkedTokens > 0 ? knownTokens / Math.max(checkedTokens, 1) : 0;
+
+  const FREE_MISSPELLINGS = 15;
+  const MAX_DICTIONARY_PENALTY = 3;
+
+  const extraMisspell = Math.max(0, misspellCount - FREE_MISSPELLINGS);
+  const misspellRate = extraMisspell / Math.max(tokenCount, 1);
+
+  let misspellPenalty = 0;
+  if (englishWords && extraMisspell > 0) {
+    if (misspellRate < 0.01) {
+      misspellPenalty = 1;
+    } else if (misspellRate < 0.03) {
+      misspellPenalty = 2;
+    } else {
+      misspellPenalty = 3;
+    }
+  }
+  misspellPenalty = Math.min(misspellPenalty, MAX_DICTIONARY_PENALTY);
+
+  // B) Sentence structure penalties (long sentences, missing verbs)
+  let structurePenalty = 0;
+  let passiveCount = 0;
+
   if (sentences.length > 0) {
-    let sentenceStructurePenalty = 0;
     for (const sentence of sentences) {
       const sWords = tokenizeWords(sentence);
       if (sWords.length > 35) {
-        sentenceStructurePenalty++;
+        structurePenalty++;
       }
       if (!hasVerbLikeWord(sWords)) {
-        sentenceStructurePenalty++;
+        structurePenalty++;
+      }
+
+      if (isPassiveSentence(sWords)) {
+        passiveCount++;
       }
     }
-    const MAX_STRUCTURE_PENALTY = 3;
-    sentenceStructurePenalty = Math.min(sentenceStructurePenalty, MAX_STRUCTURE_PENALTY);
-    score -= sentenceStructurePenalty;
   }
 
-  // C) Passive voice ratio
-  let passiveCount = 0;
-  for (const sentence of sentences) {
-    const sWords = tokenizeWords(sentence);
-    if (isPassiveSentence(sWords)) {
-      passiveCount++;
-    }
-  }
-  if (sentences.length > 0) {
-    const passiveRatio = passiveCount / sentences.length;
-    if (passiveRatio > 0.25) {  // Changed from 0.15 to 0.25 to be less strict
-      score -= 1;
-    }
+  const passiveRatio =
+    sentences.length > 0 ? passiveCount / sentences.length : 0;
+
+  // C) Passive voice penalty – counted once via structurePenalty
+  if (passiveRatio > 0.25) {
+    structurePenalty += 1;
   }
 
-  // D) Repeated words
-  if (hasRepeatedWords(allWords)) {
-    score -= 1;
+  // D) Repeated words & long paragraphs – at most 1 additional point total
+  const repeatedWords = hasRepeatedWords(allTokens);
+  const longParaCount = countLongUnpunctuatedParagraphs(input);
+
+  if (repeatedWords) {
+    structurePenalty += 1;
+  }
+  if (longParaCount > 2) {
+    structurePenalty += 1;
   }
 
-  // E) Long unpunctuated paragraphs
-  const longParaCount = countLongUnpunctuatedParagraphs(text);
-  if (longParaCount > 0) {
-    score -= 1;
+  const MAX_STRUCTURE_PENALTY = 3;
+  structurePenalty = Math.min(structurePenalty, MAX_STRUCTURE_PENALTY);
+
+  // Raw score combines misspelling + structure penalties
+  let rawScore = 10;
+  rawScore -= misspellPenalty;
+  rawScore -= structurePenalty;
+
+  if (rawScore < 0) rawScore = 0;
+  if (rawScore > 10) rawScore = 10;
+
+  // Determine extractionStatus using hint + heuristics
+  const extractionHint = options.extractionHint || null;
+  let extractionStatus;
+
+  if (extractionHint === 'scanned_pdf' || extractionHint === 'ocr_needed') {
+    extractionStatus = 'scanned_pdf';
+  } else if (tokenCount < 30) {
+    extractionStatus = 'very_short';
+  } else if (dictionaryHitRate < 0.3) {
+    extractionStatus = 'probably_non_english';
+  } else {
+    extractionStatus = 'ok';
   }
 
-  if (score < 0) score = 0;
-  if (score > 10) score = 10;
+  // Confidence score – multiplicative heuristic
+  let confidence = 1.0;
 
-  return score;
+  // Penalize very short text
+  if (tokenCount < 50) confidence *= 0.7;
+  if (tokenCount < 30) confidence *= 0.6;
+
+  // Penalize low dictionary coverage when we have enough tokens
+  if (tokenCount >= 50 && dictionaryHitRate < 0.5) confidence *= 0.7;
+  if (tokenCount >= 50 && dictionaryHitRate < 0.3) confidence *= 0.5;
+
+  // Penalize extraction issues
+  if (extractionStatus !== 'ok') confidence *= 0.5;
+
+  // Note: multipliers compound intentionally.
+  // Very short + low hit rate + extraction issues → low confidence (≈0.1–0.3).
+  if (confidence < 0.1) confidence = 0.1;
+  if (confidence > 1.0) confidence = 1.0;
+
+  return {
+    rawScore,
+    misspellCount,
+    misspellPenalty,
+    misspellRate,
+    structurePenalty,
+    passiveRatio,
+    repeatedWords,
+    longParaCount,
+    dictionaryHitRate,
+    tokenCount,
+    extractionStatus,
+    confidence
+  };
 }
 
-
+/**
+ * Backwards-compatible wrapper that returns only the numeric grammar score.
+ * Prefer getGrammarDiagnostics for new code.
+ */
+export async function getGrammarScore(env, text, options = {}) {
+  const diagnostics = await getGrammarDiagnostics(env, text, options);
+  return diagnostics.rawScore;
+}
 
