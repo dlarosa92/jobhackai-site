@@ -871,7 +871,8 @@
         
         // Save job title to state persistence
         if (window.JobHackAIStatePersistence && jobTitle) {
-          const cachedScore = window.JobHackAIStatePersistence.loadATSScore();
+          // Pass current job title to validate cache match
+          const cachedScore = window.JobHackAIStatePersistence.loadATSScore(jobTitle);
           if (cachedScore) {
             window.JobHackAIStatePersistence.saveATSScore({
               ...cachedScore,
@@ -1059,8 +1060,12 @@
         let cachedScore = null;
         
         // Try state persistence first
+        // Get current job title from input field to validate cache
+        const jobTitleInput = document.getElementById('rf-job-title');
+        const currentJobTitleValue = jobTitleInput?.value?.trim() || null;
+        
         if (window.JobHackAIStatePersistence) {
-          cachedScore = window.JobHackAIStatePersistence.loadATSScore();
+          cachedScore = window.JobHackAIStatePersistence.loadATSScore(currentJobTitleValue);
         }
         
         // If no cached score, try KV fallback
@@ -1171,11 +1176,12 @@
             updateRubricGrid(rubric);
           }
           
-          // Restore job title if available
+          // Restore job title if available (only if input is empty to avoid overwriting user input)
           const jobTitleInput = document.getElementById('rf-job-title');
-          if (cachedScore.jobTitle && jobTitleInput) {
+          if (cachedScore.jobTitle && jobTitleInput && !jobTitleInput.value.trim()) {
             jobTitleInput.value = cachedScore.jobTitle;
             currentJobTitle = cachedScore.jobTitle;
+            console.log('[RESUME-FEEDBACK] Restored job title from cache:', cachedScore.jobTitle);
           }
           
           // Restore file name if available (display only - don't enable button)
@@ -1236,11 +1242,12 @@
         
         // Save job title to state persistence (even if empty)
         if (window.JobHackAIStatePersistence) {
-          const cachedScore = window.JobHackAIStatePersistence.loadATSScore();
+          // Pass current job title to validate cache match
+          const cachedScore = window.JobHackAIStatePersistence.loadATSScore(currentJobTitle || null);
           if (cachedScore) {
             window.JobHackAIStatePersistence.saveATSScore({
               ...cachedScore,
-              jobTitle: currentJobTitle
+              jobTitle: currentJobTitle || null
             });
           }
         }

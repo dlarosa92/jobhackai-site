@@ -39,8 +39,12 @@
       localStorage.setItem(STORAGE_KEYS.ATS_SCORE, score.toString());
       localStorage.setItem(STORAGE_KEYS.ATS_BREAKDOWN, JSON.stringify(breakdown));
       localStorage.setItem(STORAGE_KEYS.RESUME_ID, resumeId);
+      // Always save job title (even if empty/null) to enable proper cache validation
       if (jobTitle) {
         localStorage.setItem(STORAGE_KEYS.JOB_TITLE, jobTitle);
+      } else {
+        // Clear job title if not provided (to distinguish between "no job title" and "has job title")
+        localStorage.removeItem(STORAGE_KEYS.JOB_TITLE);
       }
       localStorage.setItem(STORAGE_KEYS.TIMESTAMP, data.timestamp.toString());
 
@@ -52,9 +56,10 @@
 
   /**
    * Load ATS score from localStorage
-   * @returns {Object|null} Score data or null if not found/expired
+   * @param {string} [currentJobTitle] - Current job title to validate against cached score
+   * @returns {Object|null} Score data or null if not found/expired/mismatched
    */
-  function loadATSScore() {
+  function loadATSScore(currentJobTitle = null) {
     try {
       const timestamp = localStorage.getItem(STORAGE_KEYS.TIMESTAMP);
       if (!timestamp) {
@@ -71,9 +76,27 @@
       const score = localStorage.getItem(STORAGE_KEYS.ATS_SCORE);
       const breakdown = localStorage.getItem(STORAGE_KEYS.ATS_BREAKDOWN);
       const resumeId = localStorage.getItem(STORAGE_KEYS.RESUME_ID);
-      const jobTitle = localStorage.getItem(STORAGE_KEYS.JOB_TITLE);
+      const cachedJobTitle = localStorage.getItem(STORAGE_KEYS.JOB_TITLE);
 
       if (!score || !breakdown || !resumeId) {
+        return null;
+      }
+
+      // Normalize job titles for comparison (handle empty strings, null, undefined)
+      const normalizeTitle = (title) => {
+        if (!title) return '';
+        return String(title).trim().toLowerCase();
+      };
+
+      const normalizedCurrent = normalizeTitle(currentJobTitle);
+      const normalizedCached = normalizeTitle(cachedJobTitle);
+
+      // Only return cached score if job titles match (both empty counts as match)
+      if (normalizedCurrent !== normalizedCached) {
+        console.log('[STATE-PERSISTENCE] Cached score job title mismatch:', {
+          cached: cachedJobTitle,
+          current: currentJobTitle
+        });
         return null;
       }
 
@@ -81,7 +104,7 @@
         score: parseFloat(score),
         breakdown: JSON.parse(breakdown),
         resumeId,
-        jobTitle: jobTitle || null,
+        jobTitle: cachedJobTitle || null,
         timestamp: parseInt(timestamp, 10),
         cached: true
       };
