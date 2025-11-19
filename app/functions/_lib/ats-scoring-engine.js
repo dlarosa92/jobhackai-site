@@ -442,10 +442,20 @@ function mapGrammarDiagnosticsToScore(diagnostics, context) {
     band = 'good';
     if (finalScore < 7) finalScore = 7; // clamp into 7–8 band
   }
-  // Fair (C) band – keep raw score in [5, 7)
-  else if (raw >= 5 && raw < 7) {
+  // Fair (C) band – catch all scores >= 5 that don't qualify for higher bands
+  // This includes scores >= 7 that don't meet Good band formatting/structure requirements
+  else if (raw >= 5) {
     band = 'fair';
-    finalScore = raw;
+    // If raw score is >= 7, preserve it in [7, 8) range (good grammar, imperfect formatting/structure)
+    // If raw score is < 7, clamp to [5, 7) range
+    // This prevents scores >= 7 from being incorrectly penalized down to 5
+    if (raw >= 7) {
+      if (finalScore < 7) finalScore = 7;
+      if (finalScore > 8) finalScore = 8;
+    } else {
+      if (finalScore < 5) finalScore = 5;
+      if (finalScore > 7) finalScore = 7;
+    }
   }
   // Poor (D) band
   else if (raw >= 3) {

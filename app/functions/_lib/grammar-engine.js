@@ -450,7 +450,9 @@ export async function getGrammarDiagnostics(env, text, options = {}) {
     extractionStatus = 'scanned_pdf';
   } else if (tokenCount < 30) {
     extractionStatus = 'very_short';
-  } else if (dictionaryHitRate < 0.3) {
+  } else if (englishWords && dictionaryHitRate < 0.3) {
+    // Only check dictionaryHitRate if we actually used the dictionary
+    // If dictionary is unavailable, dictionaryHitRate is 0 but that doesn't mean non-English
     extractionStatus = 'probably_non_english';
   } else {
     extractionStatus = 'ok';
