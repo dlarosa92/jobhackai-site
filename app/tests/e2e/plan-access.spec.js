@@ -49,10 +49,33 @@ test.describe('Plan-Based Access Control', () => {
     await page.goto('/dashboard');
     await page.waitForLoadState('domcontentloaded');
     
-    // Check for plan badge using actual selectors from dashboard.html
-    const planBadge = page.locator('.plan-badge, .user-plan-badge, [class*="plan-badge"], [data-test="plan-badge"]').first();
+    // Wait for Firebase auth to be ready (badge is rendered after auth state is loaded)
+    await page.waitForFunction(() => {
+      return window.FirebaseAuthManager !== undefined && 
+             typeof window.FirebaseAuthManager.getCurrentUser === 'function';
+    }, { timeout: 10000 });
     
-    // Plan badge might not always be visible, so check if it exists
+    // Wait for auth state to be ready
+    await page.waitForFunction(() => {
+      const user = window.FirebaseAuthManager?.getCurrentUser?.();
+      return user !== null && user !== undefined;
+    }, { timeout: 10000 }).catch(() => {
+      return page.waitForFunction(() => {
+        return localStorage.getItem('user-authenticated') === 'true';
+      }, { timeout: 5000 });
+    });
+    
+    // Wait for dashboard to finish rendering (badge is rendered dynamically via JavaScript)
+    // The badge appears in the status-action-row after the dashboard banner is rendered
+    await page.waitForSelector('.user-plan-badge, .status-action-row', { timeout: 15000 }).catch(() => {
+      // If selector not found, wait a bit more for dynamic content
+      return page.waitForTimeout(2000);
+    });
+    
+    // Check for plan badge using actual selectors from dashboard.html
+    const planBadge = page.locator('.user-plan-badge').first();
+    
+    // Plan badge should be visible after dashboard renders
     const badgeExists = await planBadge.isVisible({ timeout: 10000 }).catch(() => false);
     
     if (badgeExists) {

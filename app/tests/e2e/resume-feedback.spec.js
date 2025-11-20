@@ -23,15 +23,24 @@ test.describe('Resume Feedback', () => {
       }, { timeout: 5000 });
     });
     
-    // Wait a bit for any redirects to complete
-    await page.waitForTimeout(2000);
+    // Wait for page to fully load and any plan checks to complete
+    // The page may redirect to pricing if plan check fails, so wait for either outcome
+    await page.waitForTimeout(3000); // Give more time for redirects to complete
     
     // Check if we were redirected to pricing (user doesn't have paid plan)
     const currentURL = page.url();
     if (currentURL.includes('/pricing')) {
-      test.info().skip('User was redirected to pricing - user may not have paid plan access');
-      return;
+      // Double-check by waiting a bit more - sometimes redirects are delayed
+      await page.waitForTimeout(2000);
+      const finalURL = page.url();
+      if (finalURL.includes('/pricing')) {
+        test.info().skip('User was redirected to pricing - user may not have paid plan access');
+        return;
+      }
     }
+    
+    // Verify we're on the resume feedback page
+    await expect(page).not.toHaveURL(/\/pricing/);
     
     // Find file input using actual selector from resume-feedback-pro.html
     const fileInput = page.locator('#rf-upload');

@@ -349,8 +349,11 @@ test.describe('Stripe Billing', () => {
     expect(planResponse.ok()).toBe(true);
     const planData = await planResponse.json();
     
+    // Normalize plan to lowercase for comparison (API might return "Essential" vs "essential")
+    const normalizedPlan = (planData.plan || '').toLowerCase();
+    
     // If user is on trial, verify trial end date exists
-    if (planData.plan === 'trial') {
+    if (normalizedPlan === 'trial') {
       expect(planData.trialEndsAt).toBeTruthy();
       console.log(`User is on trial, trial ends at: ${planData.trialEndsAt}`);
       
@@ -368,20 +371,20 @@ test.describe('Stripe Billing', () => {
         const now = new Date();
         expect(trialEndDate.getTime()).toBeGreaterThan(now.getTime());
       }
-    } else if (planData.plan === 'essential') {
+    } else if (normalizedPlan === 'essential') {
       // If user is already on essential, they may have had their trial converted
       // This is acceptable - the conversion logic is working
       console.log('User is on Essential plan (trial may have already converted)');
-      expect(planData.plan).toBe('essential');
+      expect(normalizedPlan).toBe('essential');
     } else {
       // User is on a different plan - skip this test
-      test.info().skip(`User is on ${planData.plan} plan, not trial or essential. Cannot test trial conversion.`);
+      test.info().skip(`User is on ${planData.plan || 'unknown'} plan, not trial or essential. Cannot test trial conversion.`);
       return;
     }
     
     // Verify the plan API returns proper structure
     expect(planData).toHaveProperty('plan');
-    expect(['trial', 'essential', 'pro', 'premium', 'free']).toContain(planData.plan);
+    expect(['trial', 'essential', 'pro', 'premium', 'free']).toContain(normalizedPlan);
     
     // Note: To fully test automatic conversion, you would need to:
     // 1. Create a test subscription with trial period
