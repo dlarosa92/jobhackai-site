@@ -86,10 +86,54 @@ async function waitForResponseAndJson(page, predicate, options = {}) {
   return { response, data };
 }
 
+/**
+ * Call the Stripe checkout API directly using Playwright's request context.
+ * This avoids relying on page-level fetch handlers that may consume the body
+ * before tests can read it.
+ * @param {import('@playwright/test').Page} page
+ * @param {{ plan: string, startTrial?: boolean }} payload
+ * @param {{ requireAuth?: boolean }} options
+ * @returns {Promise<{ response: import('@playwright/test').APIResponse, data: any, token: string | null }>}
+ */
+async function postStripeCheckout(page, payload, options = {}) {
+  const { requireAuth = true } = options;
+  const headers = { 'Content-Type': 'application/json' };
+  
+  let token = null;
+  if (requireAuth) {
+    token = await getAuthToken(page);
+    if (!token) {
+      throw new Error('Unable to obtain auth token for Stripe checkout request');
+    }
+    headers['Authorization'] = `Bearer ${token}`;
+  } else {
+    // Try to attach token if available but don't fail if missing
+    try {
+      token = await getAuthToken(page);
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+    } catch (_) {
+      // no-op
+    }
+  }
+  
+  const response = await page.request.post('/api/stripe-checkout', {
+    headers,
+    data: {
+      plan: payload.plan,
+      startTrial: payload.startTrial || false,
+    }
+  });
+  const data = await safeJsonResponse(response);
+  return { response, data, token };
+}
+
 module.exports = {
   waitForAuthReady,
   getAuthToken,
   safeJsonResponse,
   waitForResponseAndJson,
+  postStripeCheckout,
 };
 
