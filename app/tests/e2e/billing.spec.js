@@ -349,8 +349,14 @@ test.describe('Stripe Billing', () => {
     expect(planResponse.ok()).toBe(true);
     const planData = await planResponse.json();
     
+    // DEBUG: Log actual plan data from API
+    console.log('🔍 [TEST #11] Plan data from /api/plan/me:', JSON.stringify(planData, null, 2));
+    console.log('🔍 [TEST #11] Raw plan value:', planData.plan);
+    console.log('🔍 [TEST #11] Plan type:', typeof planData.plan);
+    
     // Normalize plan to lowercase for comparison (API might return "Essential" vs "essential")
     const normalizedPlan = (planData.plan || '').toLowerCase();
+    console.log('🔍 [TEST #11] Normalized plan:', normalizedPlan);
     
     // If user is on trial, verify trial end date exists
     if (normalizedPlan === 'trial') {

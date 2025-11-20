@@ -25,6 +25,26 @@ test.describe('Plan-Based Access Control', () => {
     // Wait a bit for any redirects to complete
     await page.waitForTimeout(2000);
     
+    // DEBUG: Check plan from API before checking redirect
+    const token = await page.evaluate(async () => {
+      const user = window.FirebaseAuthManager?.getCurrentUser?.();
+      if (user) {
+        return await user.getIdToken();
+      }
+      return null;
+    });
+    
+    if (token) {
+      const planResponse = await page.request.get('/api/plan/me', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (planResponse.ok()) {
+        const planData = await planResponse.json();
+        console.log('🔍 [TEST #12] Plan data from /api/plan/me:', JSON.stringify(planData, null, 2));
+        console.log('🔍 [TEST #12] Raw plan value:', planData.plan);
+      }
+    }
+    
     // Should NOT redirect to pricing (paid users can access)
     const currentURL = page.url();
     if (currentURL.includes('/pricing')) {
@@ -34,6 +54,7 @@ test.describe('Plan-Based Access Control', () => {
       const userPlan = await page.evaluate(() => {
         return localStorage.getItem('user-plan') || 'unknown';
       });
+      console.log('🔍 [TEST #12] Redirected to pricing. localStorage user-plan:', userPlan);
       test.info().skip(`User was redirected to pricing page: ${currentURL}. User plan: ${userPlan}. Test requires paid plan (trial, essential, pro, or premium).`);
       return;
     }

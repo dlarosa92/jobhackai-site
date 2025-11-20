@@ -27,6 +27,26 @@ test.describe('Resume Feedback', () => {
     // The page may redirect to pricing if plan check fails, so wait for either outcome
     await page.waitForTimeout(3000); // Give more time for redirects to complete
     
+    // DEBUG: Check plan from API before checking redirect
+    const token = await page.evaluate(async () => {
+      const user = window.FirebaseAuthManager?.getCurrentUser?.();
+      if (user) {
+        return await user.getIdToken();
+      }
+      return null;
+    });
+    
+    if (token) {
+      const planResponse = await page.request.get('/api/plan/me', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (planResponse.ok()) {
+        const planData = await planResponse.json();
+        console.log('🔍 [TEST #14] Plan data from /api/plan/me:', JSON.stringify(planData, null, 2));
+        console.log('🔍 [TEST #14] Raw plan value:', planData.plan);
+      }
+    }
+    
     // Check if we were redirected to pricing (user doesn't have paid plan)
     const currentURL = page.url();
     if (currentURL.includes('/pricing')) {
@@ -34,6 +54,10 @@ test.describe('Resume Feedback', () => {
       await page.waitForTimeout(2000);
       const finalURL = page.url();
       if (finalURL.includes('/pricing')) {
+        const userPlan = await page.evaluate(() => {
+          return localStorage.getItem('user-plan') || 'unknown';
+        });
+        console.log('🔍 [TEST #14] Redirected to pricing. localStorage user-plan:', userPlan);
         test.info().skip('User was redirected to pricing - user may not have paid plan access');
         return;
       }

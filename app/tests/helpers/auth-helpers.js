@@ -129,11 +129,82 @@ async function postStripeCheckout(page, payload, options = {}) {
   return { response, data, token };
 }
 
+/**
+ * Sync plan from Stripe to KV store
+ * @param {import('@playwright/test').Page} page - Playwright page object
+ * @returns {Promise<{ ok: boolean, plan?: string, error?: string }>}
+ */
+async function syncStripePlan(page) {
+  const token = await getAuthToken(page);
+  if (!token) {
+    throw new Error('Unable to obtain auth token for sync-stripe-plan request');
+  }
+  
+  const baseURL = page.url().split('/').slice(0, 3).join('/');
+  const apiUrl = `${baseURL}/api/sync-stripe-plan`;
+  
+  const response = await page.request.post(apiUrl, {
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`,
+      'Origin': baseURL,
+    },
+    data: {}
+  });
+  
+  const data = await safeJsonResponse(response);
+  console.log('🔄 [SYNC] Sync-stripe-plan response:', JSON.stringify(data, null, 2));
+  
+  return { ok: response.ok(), ...data };
+}
+
+/**
+ * Get plan from API and verify it matches expected value
+ * @param {import('@playwright/test').Page} page - Playwright page object
+ * @param {string} expectedPlan - Expected plan value (optional, for verification)
+ * @returns {Promise<{ plan: string, planData: any }>}
+ */
+async function getPlanAndVerify(page, expectedPlan = null) {
+  const token = await getAuthToken(page);
+  if (!token) {
+    throw new Error('Unable to obtain auth token for plan verification');
+  }
+  
+  const baseURL = page.url().split('/').slice(0, 3).join('/');
+  const apiUrl = `${baseURL}/api/plan/me`;
+  
+  const response = await page.request.get(apiUrl, {
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Origin': baseURL,
+    }
+  });
+  
+  if (!response.ok()) {
+    const errorText = await response.text().catch(() => 'Unknown error');
+    throw new Error(`Plan API failed: ${response.status()} ${response.statusText()}. Response: ${errorText}`);
+  }
+  
+  const planData = await safeJsonResponse(response);
+  const plan = (planData.plan || 'free').toLowerCase();
+  
+  console.log('🔍 [VERIFY] Plan from KV (planByUid):', plan);
+  console.log('🔍 [VERIFY] Full plan data:', JSON.stringify(planData, null, 2));
+  
+  if (expectedPlan && plan !== expectedPlan.toLowerCase()) {
+    console.warn(`⚠️ [VERIFY] Plan mismatch! Expected: ${expectedPlan}, Got: ${plan}`);
+  }
+  
+  return { plan, planData };
+}
+
 module.exports = {
   waitForAuthReady,
   getAuthToken,
   safeJsonResponse,
   waitForResponseAndJson,
   postStripeCheckout,
+  syncStripePlan,
+  getPlanAndVerify,
 };
 
