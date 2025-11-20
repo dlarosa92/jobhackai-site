@@ -250,7 +250,7 @@ test.describe('Stripe Billing', () => {
             const cvcInput = frame.locator('input[autocomplete="cc-csc"], input[placeholder*="CVC"]').first();
             
             if (await expiryInput.isVisible({ timeout: 1000 }).catch(() => false)) {
-              await expiryInput.fill('12/34');
+              await expiryInput.fill('12/30'); // December 2030 - consistent with Approach 1
             }
             if (await cvcInput.isVisible({ timeout: 1000 }).catch(() => false)) {
               await cvcInput.fill('123');

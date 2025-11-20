@@ -134,7 +134,7 @@ async function globalSetup() {
         }
         
         const isEmailPassword = window.FirebaseAuthManager?.isEmailPasswordUser?.(user);
-        const emailVerified = user.emailVerified !== false;
+        const emailVerified = user.emailVerified === true; // Explicitly require true, not just !== false
         
         return {
           hasUser: true,
