@@ -1205,13 +1205,15 @@
             hideRoleFeedback();
           }
           
+          // Get resume name for context bar and file name restoration
+          const lastResumeName = localStorage.getItem('lastUploadedResumeName') || 'Unknown file';
+          
           // Show context bar
           const contextBar = document.getElementById('rf-context-bar');
           if (contextBar) {
             contextBar.style.display = 'block';
             
             // Update context bar details
-            const lastResumeName = localStorage.getItem('lastUploadedResumeName') || 'Unknown file';
             const fileNameEl = document.getElementById('rf-context-file-name');
             if (fileNameEl) fileNameEl.textContent = lastResumeName;
             
