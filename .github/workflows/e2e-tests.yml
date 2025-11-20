@@ -46,6 +46,7 @@ jobs:
       - name: Run E2E tests
         working-directory: app
         env:
+          CI: true
           TEST_ENV: ${{ github.base_ref == 'dev0' && 'dev' || 'qa' }}
           TEST_EMAIL: ${{ secrets.TEST_EMAIL }}
           TEST_PASSWORD: ${{ secrets.TEST_PASSWORD }}
