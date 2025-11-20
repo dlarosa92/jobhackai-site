@@ -1060,12 +1060,11 @@
         let cachedScore = null;
         
         // Try state persistence first
-        // Get current job title from input field to validate cache
-        const jobTitleInput = document.getElementById('rf-job-title');
-        const currentJobTitleValue = jobTitleInput?.value?.trim() || null;
-        
+        // On initial page load, don't validate against input field (which is empty)
+        // This allows us to restore cached scores and populate the job title field
+        // Validation only happens when user explicitly provides a job title for new analysis
         if (window.JobHackAIStatePersistence) {
-          cachedScore = window.JobHackAIStatePersistence.loadATSScore(currentJobTitleValue);
+          cachedScore = window.JobHackAIStatePersistence.loadATSScore(null);
         }
         
         // If no cached score, try KV fallback

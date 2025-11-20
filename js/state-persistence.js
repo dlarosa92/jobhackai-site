@@ -92,22 +92,27 @@
         return null;
       }
 
-      // Normalize job titles for comparison (handle empty strings, null, undefined)
-      const normalizeTitle = (title) => {
-        if (!title) return '';
-        return String(title).trim().toLowerCase();
-      };
+      // Skip validation if currentJobTitle is explicitly null (page load scenario)
+      // This allows cached scores to be restored and job titles to be populated
+      // Validation only applies when user explicitly provides a job title
+      if (currentJobTitle !== null) {
+        // Normalize job titles for comparison (handle empty strings, null, undefined)
+        const normalizeTitle = (title) => {
+          if (!title) return '';
+          return String(title).trim().toLowerCase();
+        };
 
-      const normalizedCurrent = normalizeTitle(currentJobTitle);
-      const normalizedCached = normalizeTitle(cachedJobTitle);
+        const normalizedCurrent = normalizeTitle(currentJobTitle);
+        const normalizedCached = normalizeTitle(cachedJobTitle);
 
-      // Only return cached score if job titles match (both empty counts as match)
-      if (normalizedCurrent !== normalizedCached) {
-        console.log('[STATE-PERSISTENCE] Cached score job title mismatch:', {
-          cached: cachedJobTitle,
-          current: currentJobTitle
-        });
-        return null;
+        // Only return cached score if job titles match (both empty counts as match)
+        if (normalizedCurrent !== normalizedCached) {
+          console.log('[STATE-PERSISTENCE] Cached score job title mismatch:', {
+            cached: cachedJobTitle,
+            current: currentJobTitle
+          });
+          return null;
+        }
       }
 
       return {
