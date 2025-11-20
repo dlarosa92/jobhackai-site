@@ -5,10 +5,23 @@ test.describe('Plan-Based Access Control', () => {
     await page.goto('/resume-feedback-pro.html');
     await page.waitForLoadState('domcontentloaded');
     
-    // Wait for Firebase auth to be ready and auth state to settle
+    // Wait for auth to be ready using FirebaseAuthManager or localStorage fallback
     await page.waitForFunction(() => {
-      return window.FirebaseAuthManager !== undefined && 
-             typeof window.FirebaseAuthManager.getCurrentUser === 'function';
+      // Preferred: FirebaseAuthManager
+      const mgr = window.FirebaseAuthManager;
+      if (mgr && typeof mgr.getCurrentUser === 'function') {
+        const u = mgr.getCurrentUser();
+        return u !== null && u !== undefined;
+      }
+
+      // Fallback: localStorage flags used by navigation & static-auth-guard
+      try {
+        const isAuth = localStorage.getItem('user-authenticated') === 'true';
+        const email = localStorage.getItem('user-email');
+        return isAuth && !!email;
+      } catch {
+        return false;
+      }
     }, { timeout: 10000 });
     
     // Wait for auth state to be ready (user might not be set immediately)
