@@ -51,24 +51,25 @@ test.describe('Stripe Billing', () => {
     
     const planData = await planResponse.json();
     // Only test upgrade if current plan is essential or lower
-    if (planData.plan && !['pro', 'premium'].includes(planData.plan)) {
-      const proBtn = page.locator('button[data-plan="pro"]').first();
-      await expect(proBtn).toBeVisible();
-      
-      const [response] = await Promise.all([
-        page.waitForResponse(
-          response => response.url().includes('/api/stripe-checkout') && response.status() === 200,
-          { timeout: 15000 }
-        ),
-        proBtn.click()
-      ]);
-      
-      const data = await response.json();
-      expect(data.ok).toBe(true);
-      expect(data.url).toContain('checkout.stripe.com');
-    } else {
-      test.skip(); // Skip if already on pro or premium
+    if (planData.plan && ['pro', 'premium'].includes(planData.plan)) {
+      test.info().skip('User is already on pro or premium plan');
+      return;
     }
+    
+    const proBtn = page.locator('button[data-plan="pro"]').first();
+    await expect(proBtn).toBeVisible();
+    
+    const [response] = await Promise.all([
+      page.waitForResponse(
+        response => response.url().includes('/api/stripe-checkout') && response.status() === 200,
+        { timeout: 15000 }
+      ),
+      proBtn.click()
+    ]);
+    
+    const data = await response.json();
+    expect(data.ok).toBe(true);
+    expect(data.url).toContain('checkout.stripe.com');
   });
   
   test('should allow downgrade from premium to pro', async ({ page }) => {
@@ -99,24 +100,25 @@ test.describe('Stripe Billing', () => {
     
     const planData = await planResponse.json();
     // Only test downgrade if current plan is premium
-    if (planData.plan === 'premium') {
-      const proBtn = page.locator('button[data-plan="pro"]').first();
-      await expect(proBtn).toBeVisible();
-      
-      const [response] = await Promise.all([
-        page.waitForResponse(
-          response => response.url().includes('/api/stripe-checkout') && response.status() === 200,
-          { timeout: 15000 }
-        ),
-        proBtn.click()
-      ]);
-      
-      const data = await response.json();
-      expect(data.ok).toBe(true);
-      expect(data.url).toContain('checkout.stripe.com');
-    } else {
-      test.skip(); // Skip if not on premium
+    if (planData.plan !== 'premium') {
+      test.info().skip('User is not on premium plan');
+      return;
     }
+    
+    const proBtn = page.locator('button[data-plan="pro"]').first();
+    await expect(proBtn).toBeVisible();
+    
+    const [response] = await Promise.all([
+      page.waitForResponse(
+        response => response.url().includes('/api/stripe-checkout') && response.status() === 200,
+        { timeout: 15000 }
+      ),
+      proBtn.click()
+    ]);
+    
+    const data = await response.json();
+    expect(data.ok).toBe(true);
+    expect(data.url).toContain('checkout.stripe.com');
   });
   
   test('should BLOCK trial if already used', async ({ page }) => {
