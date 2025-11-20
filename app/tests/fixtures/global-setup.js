@@ -39,20 +39,20 @@ async function globalSetup() {
   const context = await browser.newContext();
   const page = await context.newPage();
   
+  // Capture console errors and network failures (declare outside try block for catch access)
+  const consoleErrors = [];
+  page.on('console', msg => {
+    if (msg.type() === 'error') {
+      consoleErrors.push(msg.text());
+    }
+  });
+  
+  page.on('pageerror', error => {
+    consoleErrors.push(`Page error: ${error.message}`);
+  });
+  
   try {
     console.log(`🔐 Authenticating on ${BASE_URL}`);
-    
-    // Capture console errors and network failures
-    const consoleErrors = [];
-    page.on('console', msg => {
-      if (msg.type() === 'error') {
-        consoleErrors.push(msg.text());
-      }
-    });
-    
-    page.on('pageerror', error => {
-      consoleErrors.push(`Page error: ${error.message}`);
-    });
     
     await page.goto(`${BASE_URL}/login`, { waitUntil: 'networkidle' });
     
