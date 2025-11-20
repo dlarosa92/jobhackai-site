@@ -88,26 +88,38 @@ async function globalSetup() {
       throw new Error(`Login failed: ${loginResult.error || 'Unknown error'}`);
     }
     
+    // Wait a moment for auth state to update
+    await page.waitForTimeout(2000);
+    
     // After successful login, check if we need to handle email verification
-    const needsVerification = await page.evaluate(() => {
+    const authState = await page.evaluate(() => {
       const user = window.FirebaseAuthManager?.getCurrentUser?.();
-      if (user && window.FirebaseAuthManager?.isEmailPasswordUser?.(user)) {
-        return user.emailVerified === false;
+      if (!user) {
+        return { hasUser: false };
       }
-      return false;
+      
+      const isEmailPassword = window.FirebaseAuthManager?.isEmailPasswordUser?.(user);
+      const emailVerified = user.emailVerified !== false;
+      
+      return {
+        hasUser: true,
+        needsVerification: isEmailPassword && !emailVerified,
+        userEmail: user.email
+      };
     });
     
-    if (needsVerification) {
-      // Navigate to verify-email page
-      await page.goto(`${BASE_URL}/verify-email.html`);
-      console.log('⚠️ Email verification required - navigating to verify-email page');
-    } else {
-      // Navigate to dashboard
-      await page.goto(`${BASE_URL}/dashboard.html`);
+    if (!authState.hasUser) {
+      throw new Error('Login succeeded but no user found in auth state');
     }
     
-    // Wait for page to load
-    await page.waitForLoadState('networkidle');
+    if (authState.needsVerification) {
+      // Navigate to verify-email page
+      await page.goto(`${BASE_URL}/verify-email.html`, { waitUntil: 'networkidle' });
+      console.log('⚠️ Email verification required - navigating to verify-email page');
+    } else {
+      // Navigate to dashboard (the app should redirect here, but we'll do it explicitly)
+      await page.goto(`${BASE_URL}/dashboard.html`, { waitUntil: 'networkidle' });
+    }
     
     // Verify we're on the right page
     const finalURL = page.url();
