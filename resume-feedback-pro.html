@@ -871,7 +871,8 @@
         
         // Save job title to state persistence
         if (window.JobHackAIStatePersistence && jobTitle) {
-          const cachedScore = window.JobHackAIStatePersistence.loadATSScore();
+          // Pass current job title to validate cache match
+          const cachedScore = window.JobHackAIStatePersistence.loadATSScore(jobTitle);
           if (cachedScore) {
             window.JobHackAIStatePersistence.saveATSScore({
               ...cachedScore,
@@ -1059,8 +1060,11 @@
         let cachedScore = null;
         
         // Try state persistence first
+        // On initial page load, don't validate against input field (which is empty)
+        // This allows us to restore cached scores and populate the job title field
+        // Validation only happens when user explicitly provides a job title for new analysis
         if (window.JobHackAIStatePersistence) {
-          cachedScore = window.JobHackAIStatePersistence.loadATSScore();
+          cachedScore = window.JobHackAIStatePersistence.loadATSScore(null);
         }
         
         // If no cached score, try KV fallback
@@ -1109,6 +1113,17 @@
         if (cachedScore && cachedScore.score) {
           console.log('[RESUME-FEEDBACK] Loading cached ATS score:', cachedScore.score);
           updateProgressRing(cachedScore.score);
+          
+          // Hide placeholder
+          hidePlaceholder();
+          const placeholderCta = document.getElementById('rf-placeholder-cta');
+          if (placeholderCta) placeholderCta.style.display = 'none';
+          
+          // Show rubric grid
+          const rubricGrid = document.getElementById('rf-rubric-grid');
+          if (rubricGrid) {
+            rubricGrid.style.display = 'grid';
+          }
           
           // Convert breakdown to rubric format if available
           if (cachedScore.breakdown) {
@@ -1171,23 +1186,84 @@
             updateRubricGrid(rubric);
           }
           
-          // Restore job title if available
+          // Restore role-specific feedback if available
+          if (cachedScore.roleSpecificFeedback && Array.isArray(cachedScore.roleSpecificFeedback) && cachedScore.roleSpecificFeedback.length > 0) {
+            updateFeedbackGrid(cachedScore.roleSpecificFeedback);
+            // Make feedback grid visible (it starts with display:none)
+            const feedbackGrid = document.getElementById('rf-feedback-grid');
+            if (feedbackGrid) {
+              feedbackGrid.style.display = 'grid';
+            }
+            showRoleFeedback();
+            // Hide ATS-only state
+            const atsOnlyState = document.getElementById('rf-ats-only-state');
+            if (atsOnlyState) atsOnlyState.style.display = 'none';
+          } else {
+            // Show ATS-only state if we have score but no role feedback
+            const atsOnlyState = document.getElementById('rf-ats-only-state');
+            if (atsOnlyState) atsOnlyState.style.display = 'block';
+            hideRoleFeedback();
+          }
+          
+          // Get resume name for context bar and file name restoration
+          const lastResumeName = localStorage.getItem('lastUploadedResumeName') || 'Unknown file';
+          
+          // Show context bar
+          const contextBar = document.getElementById('rf-context-bar');
+          if (contextBar) {
+            contextBar.style.display = 'block';
+            
+            // Update context bar details
+            const fileNameEl = document.getElementById('rf-context-file-name');
+            if (fileNameEl) fileNameEl.textContent = lastResumeName;
+            
+            const roleNameEl = document.getElementById('rf-context-role-name');
+            if (roleNameEl) {
+              roleNameEl.textContent = cachedScore.jobTitle || 'Not specified';
+            }
+            
+            const timeEl = document.getElementById('rf-context-time-value');
+            if (timeEl && cachedScore.timestamp) {
+              const date = new Date(cachedScore.timestamp);
+              const now = new Date();
+              const diffMs = now - date;
+              const diffMins = Math.floor(diffMs / 60000);
+              const diffHours = Math.floor(diffMs / 3600000);
+              const diffDays = Math.floor(diffMs / 86400000);
+              
+              let timeText;
+              if (diffMins < 1) {
+                timeText = 'Just now';
+              } else if (diffMins < 60) {
+                timeText = `${diffMins} minute${diffMins !== 1 ? 's' : ''} ago`;
+              } else if (diffHours < 24) {
+                timeText = `${diffHours} hour${diffHours !== 1 ? 's' : ''} ago`;
+              } else if (diffDays === 1) {
+                timeText = 'Yesterday';
+              } else if (diffDays < 7) {
+                timeText = `${diffDays} days ago`;
+              } else {
+                timeText = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: date.getFullYear() !== now.getFullYear() ? 'numeric' : undefined });
+              }
+              timeEl.textContent = timeText;
+            }
+          }
+          
+          // Restore job title if available (only if input is empty to avoid overwriting user input)
           const jobTitleInput = document.getElementById('rf-job-title');
-          if (cachedScore.jobTitle && jobTitleInput) {
+          if (cachedScore.jobTitle && jobTitleInput && !jobTitleInput.value.trim()) {
             jobTitleInput.value = cachedScore.jobTitle;
             currentJobTitle = cachedScore.jobTitle;
+            console.log('[RESUME-FEEDBACK] Restored job title from cache:', cachedScore.jobTitle);
           }
           
           // Restore file name if available (display only - don't enable button)
           // Browsers don't persist file inputs, so user must re-select file
-          const lastResumeName = localStorage.getItem('lastUploadedResumeName');
           const fileNameSpan = document.getElementById('rf-file-name');
           if (lastResumeName && fileNameSpan) {
-            fileNameSpan.textContent = lastResumeName;
+            fileNameSpan.textContent = lastResumeName + ' (please re-select file)';
             fileNameSpan.style.color = 'var(--color-text-muted)';
             fileNameSpan.style.fontWeight = 'normal';
-            // Add indicator that file needs to be re-selected
-            fileNameSpan.textContent = lastResumeName + ' (please re-select file)';
             
             // Do NOT enable generate button - file input is empty after page reload
             // User must select a file again before the button can be enabled
@@ -1208,6 +1284,104 @@
           if (placeholderCta) placeholderCta.style.display = 'block';
           const regenBtn = document.getElementById('rf-regenerate-btn');
           if (regenBtn) regenBtn.style.display = 'none';
+        }
+        
+        // Attach event handlers for context bar buttons
+        const rerunBtn = document.getElementById('rf-rerun-btn');
+        if (rerunBtn) {
+          rerunBtn.addEventListener('click', function() {
+            // Scroll to top and focus on file input to encourage re-upload
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+            const fileInput = document.getElementById('rf-upload');
+            if (fileInput) {
+              fileInput.click();
+            }
+          });
+        }
+        
+        const optimizeBtn = document.getElementById('rf-optimize-btn');
+        if (optimizeBtn) {
+          optimizeBtn.addEventListener('click', async function() {
+            const currentResumeId = sessionStorage.getItem('currentResumeId') || localStorage.getItem('jh_last_resume_id');
+            if (!currentResumeId) {
+              if (window.JobHackAIToast) {
+                window.JobHackAIToast.error('Please upload a resume first');
+              }
+              return;
+            }
+            
+            const jobTitleInput = document.getElementById('rf-job-title');
+            const jobTitle = jobTitleInput?.value?.trim() || '';
+            
+            try {
+              showLoadingState('Optimizing for ATS compliance…');
+              this.disabled = true;
+              this.textContent = 'Optimizing...';
+              
+              const feedbackResult = await getResumeFeedback(currentResumeId, jobTitle);
+              updateFeedbackGrid(feedbackResult.roleSpecificFeedback);
+              updateRubricGridFromFeedback(feedbackResult.atsRubric);
+              
+              // Make grids visible (they start with display:none)
+              const rubricGrid = document.getElementById('rf-rubric-grid');
+              if (rubricGrid) {
+                rubricGrid.style.display = 'grid';
+              }
+              const feedbackGrid = document.getElementById('rf-feedback-grid');
+              if (feedbackGrid) {
+                feedbackGrid.style.display = 'grid';
+              }
+              
+              // Save role-specific feedback to persistence
+              // Load cached score without job title validation to get existing ATS score
+              // This allows updating feedback even when job title has changed
+              if (window.JobHackAIStatePersistence) {
+                const cachedScore = window.JobHackAIStatePersistence.loadATSScore(null);
+                if (cachedScore && cachedScore.resumeId === currentResumeId) {
+                  // Update existing cached score with new job title and feedback
+                  window.JobHackAIStatePersistence.saveATSScore({
+                    ...cachedScore,
+                    jobTitle: jobTitle || null,
+                    roleSpecificFeedback: feedbackResult.roleSpecificFeedback || null
+                  });
+                } else if (currentResumeId) {
+                  // If no cached score exists, we still need an ATS score to save feedback
+                  // This shouldn't happen if optimize button is shown, but handle gracefully
+                  console.warn('[RESUME-FEEDBACK] No cached ATS score found for resume:', currentResumeId);
+                }
+              }
+              
+              // Hide ATS-only state and show role feedback
+              const atsOnlyState = document.getElementById('rf-ats-only-state');
+              if (atsOnlyState) atsOnlyState.style.display = 'none';
+              showRoleFeedback();
+              
+              // Update context bar timestamp
+              if (window.JobHackAIStatePersistence) {
+                // Pass jobTitle directly (empty string is valid and should be validated)
+                const updatedScore = window.JobHackAIStatePersistence.loadATSScore(jobTitle ?? '');
+                if (updatedScore && updatedScore.timestamp) {
+                  const timeEl = document.getElementById('rf-context-time-value');
+                  if (timeEl) {
+                    timeEl.textContent = 'Just now';
+                  }
+                }
+              }
+              
+              if (window.JobHackAIToast) {
+                window.JobHackAIToast.success('Feedback generated successfully!');
+              }
+              
+              this.textContent = 'Optimize this resume';
+              this.disabled = false;
+              hideLoadingState();
+            } catch (error) {
+              handleApiError(error);
+              this.textContent = 'Optimize this resume';
+              this.disabled = false;
+              hideLoadingState();
+            }
+          });
         }
       });
 
@@ -1236,11 +1410,13 @@
         
         // Save job title to state persistence (even if empty)
         if (window.JobHackAIStatePersistence) {
-          const cachedScore = window.JobHackAIStatePersistence.loadATSScore();
+          // Pass current job title directly (empty string is valid and should be validated)
+          // Only null should skip validation (page load scenario)
+          const cachedScore = window.JobHackAIStatePersistence.loadATSScore(currentJobTitle ?? '');
           if (cachedScore) {
             window.JobHackAIStatePersistence.saveATSScore({
               ...cachedScore,
-              jobTitle: currentJobTitle
+              jobTitle: currentJobTitle || null
             });
           }
         }
@@ -1336,6 +1512,12 @@
           ];
           updateRubricGrid(rubric);
           
+          // Make rubric grid visible (it starts with display:none)
+          const rubricGrid = document.getElementById('rf-rubric-grid');
+          if (rubricGrid) {
+            rubricGrid.style.display = 'grid';
+          }
+          
           // Trigger fade transition for ATS feedback
           setTimeout(() => {
             showATSFeedback();
@@ -1352,6 +1534,23 @@
               const feedbackResult = await getResumeFeedback(uploadResult.resumeId, jobTitleForFeedback);
               updateFeedbackGrid(feedbackResult.roleSpecificFeedback);
               updateRubricGridFromFeedback(feedbackResult.atsRubric);
+              
+              // Make feedback grid visible (it starts with display:none)
+              const feedbackGrid = document.getElementById('rf-feedback-grid');
+              if (feedbackGrid) {
+                feedbackGrid.style.display = 'grid';
+              }
+              
+              // Save role-specific feedback to persistence
+              if (window.JobHackAIStatePersistence && scoreResult.success) {
+                window.JobHackAIStatePersistence.saveATSScore({
+                  score: scoreResult.score,
+                  breakdown: scoreResult.breakdown,
+                  resumeId: uploadResult.resumeId,
+                  jobTitle: jobTitleForFeedback || null,
+                  roleSpecificFeedback: feedbackResult.roleSpecificFeedback || null
+                });
+              }
             
               // Trigger fade transition for role feedback (only once, after feedback is loaded)
               setTimeout(() => {
@@ -1493,6 +1692,35 @@
             const feedbackResult = await getResumeFeedback(currentResumeId, jobTitle);
             updateFeedbackGrid(feedbackResult.roleSpecificFeedback);
             updateRubricGridFromFeedback(feedbackResult.atsRubric);
+            
+            // Make grids visible (they start with display:none)
+            const rubricGrid = document.getElementById('rf-rubric-grid');
+            if (rubricGrid) {
+              rubricGrid.style.display = 'grid';
+            }
+            const feedbackGrid = document.getElementById('rf-feedback-grid');
+            if (feedbackGrid) {
+              feedbackGrid.style.display = 'grid';
+            }
+            
+            // Save role-specific feedback to persistence
+            // Load cached score without job title validation to get existing ATS score
+            // This allows updating feedback even when job title has changed
+            if (window.JobHackAIStatePersistence) {
+              const cachedScore = window.JobHackAIStatePersistence.loadATSScore(null);
+              if (cachedScore && cachedScore.resumeId === currentResumeId) {
+                // Update existing cached score with new job title and feedback
+                window.JobHackAIStatePersistence.saveATSScore({
+                  ...cachedScore,
+                  jobTitle: jobTitle || null,
+                  roleSpecificFeedback: feedbackResult.roleSpecificFeedback || null
+                });
+              } else if (currentResumeId) {
+                // If no cached score exists, we still need an ATS score to save feedback
+                // This shouldn't happen if regenerate button is shown, but handle gracefully
+                console.warn('[RESUME-FEEDBACK] No cached ATS score found for resume:', currentResumeId);
+              }
+            }
 
             // Show success toast
             if (window.JobHackAIToast) {
@@ -2258,35 +2486,42 @@
         <div id="ats-placeholder" class="ats-placeholder-note" style="display:none;">
           Upload your résumé above to generate your ATS Score and detailed feedback.
         </div>
-        <!-- ATS Rubric -->
-        <div id="ats-feedback-container">
-          <div class="rf-rubric-grid" id="rf-rubric-grid">
-          <div class="rf-rubric-item">
-            <div class="rf-rubric-label">Keyword Match</div>
-            <div class="rf-rubric-score">27 / 35</div>
-            <div style="color:var(--color-text-secondary);font-size:0.98rem;">Add more industry keywords for your target job.</div>
-          </div>
-          <div class="rf-rubric-item">
-            <div class="rf-rubric-label">ATS Formatting</div>
-            <div class="rf-rubric-score">20 / 25</div>
-            <div style="color:var(--color-text-secondary);font-size:0.98rem;">Avoid tables, graphics, and use standard headings.</div>
-          </div>
-          <div class="rf-rubric-item">
-            <div class="rf-rubric-label">Structure & Organization</div>
-            <div class="rf-rubric-score">16 / 20</div>
-            <div style="color:var(--color-text-secondary);font-size:0.98rem;">Order sections: Contact, Experience, Education, Skills.</div>
-          </div>
-          <div class="rf-rubric-item">
-            <div class="rf-rubric-label">Tone & Clarity</div>
-            <div class="rf-rubric-score">8 / 10</div>
-            <div style="color:var(--color-text-secondary);font-size:0.98rem;">Use action verbs and concise bullet points.</div>
-          </div>
-          <div class="rf-rubric-item">
-            <div class="rf-rubric-label">Grammar & Spelling</div>
-            <div class="rf-rubric-score">7 / 10</div>
-            <div style="color:var(--color-text-secondary);font-size:0.98rem;">No major errors detected.</div>
+        <!-- Context Bar (shown when cached data exists) -->
+        <div id="rf-context-bar" style="display:none;margin-bottom:1.5rem;padding:1rem;background:var(--color-card-bg);border:1px solid var(--color-divider);border-radius:var(--radius-md);">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:1rem;">
+            <div style="flex:1;min-width:200px;">
+              <div style="font-size:0.875rem;color:var(--color-text-muted);margin-bottom:0.5rem;">📄 You're viewing your last analyzed resume</div>
+              <div id="rf-context-details" style="display:flex;flex-direction:column;gap:0.25rem;font-size:0.875rem;color:var(--color-text-secondary);">
+                <span id="rf-context-file">File: <strong id="rf-context-file-name">—</strong></span>
+                <span id="rf-context-role">Target role: <strong id="rf-context-role-name">—</strong></span>
+                <span id="rf-context-time">Last analyzed: <strong id="rf-context-time-value">—</strong></span>
+              </div>
+            </div>
+            <button id="rf-rerun-btn" class="btn-secondary" style="white-space:nowrap;">Re-run analysis</button>
           </div>
         </div>
+        <!-- ATS-only state (shown when ATS score exists but no role feedback) -->
+        <div id="rf-ats-only-state" style="display:none;margin-bottom:1.5rem;padding:1.5rem;background:rgba(5,150,105,0.08);border:1px solid rgba(5,150,105,0.2);border-radius:var(--radius-md);">
+          <div style="display:flex;align-items:flex-start;gap:1rem;">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0;margin-top:0.125rem;color:var(--color-success);">
+              <path d="M12 2L2 7l10 5 10-5-10-5z"></path>
+              <path d="M2 17l10 5 10-5"></path>
+              <path d="M2 12l10 5 10-5"></path>
+            </svg>
+            <div style="flex:1;">
+              <div style="font-weight:600;color:var(--color-text-main);margin-bottom:0.5rem;">Unlock Deeper Insights</div>
+              <div style="color:var(--color-text-secondary);margin-bottom:1rem;line-height:1.5;">
+                We've scored this resume against ATS rules.<br>
+                Run an optimization here to unlock section-by-section feedback for your target role.
+              </div>
+              <button id="rf-optimize-btn" class="btn-primary" style="white-space:nowrap;">Optimize this resume</button>
+            </div>
+          </div>
+        </div>
+        <!-- ATS Rubric -->
+        <div id="ats-feedback-container">
+          <div class="rf-rubric-grid" id="rf-rubric-grid" style="display:none;">
+          </div>
         </div>
         <!-- Role-Specific Feedback -->
         <div id="role-feedback-container">
@@ -2294,28 +2529,8 @@
           <div style="color:var(--color-text-secondary);margin-bottom:1.2rem;" id="rf-role-desc">
             Basic feedback on your resume's content and presentation for your target role. Upgrade to Pro for comprehensive analysis and unlimited suggestions.
           </div>
-          <div class="rf-feedback-grid" id="rf-feedback-grid">
-          <div class="rf-feedback-card">
-            <div class="rf-feedback-label">Header & Contact <span class="rf-feedback-score">8/10</span></div>
-            <div class="rf-feedback-tip">Clear and concise. Consider adding a custom resume URL for extra polish.</div>
+          <div class="rf-feedback-grid" id="rf-feedback-grid" style="display:none;">
           </div>
-          <div class="rf-feedback-card">
-            <div class="rf-feedback-label">Professional Summary <span class="rf-feedback-score">6/10</span></div>
-            <div class="rf-feedback-tip">Strong opening but lacks keywords for your target role (e.g. "Kubernetes", "ETL").</div>
-          </div>
-          <div class="rf-feedback-card">
-            <div class="rf-feedback-label">Experience <span class="rf-feedback-score">7/10</span></div>
-            <div class="rf-feedback-tip">Great STAR structure. Quantify impact with metrics ("improved uptime by 15%").</div>
-          </div>
-          <div class="rf-feedback-card">
-            <div class="rf-feedback-label">Skills <span class="rf-feedback-score">9/10</span></div>
-            <div class="rf-feedback-tip">Relevant and up-to-date. Group under sub-headings (Cloud, Data, Languages).</div>
-          </div>
-          <div class="rf-feedback-card">
-            <div class="rf-feedback-label">Education <span class="rf-feedback-score">10/10</span></div>
-            <div class="rf-feedback-tip">Well-formatted. No changes needed.</div>
-          </div>
-        </div>
         <button class="btn btn-primary" id="rf-regenerate-btn" style="margin-top:1.7rem;display:none;">Regenerate Feedback</button>
         <div class="rf-placeholder-cta" id="rf-placeholder-cta" style="display:none;">
           <button onclick="document.getElementById('rf-upload').click()">Upload Resume to Get Feedback</button>
