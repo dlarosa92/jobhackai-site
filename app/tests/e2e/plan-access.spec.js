@@ -40,7 +40,13 @@ test.describe('Plan-Based Access Control', () => {
       
       if (indicatorExists) {
         const planText = await planIndicator.textContent();
-        expect(planText).toBeTruthy();
+        // Apply same validation as first branch to ensure consistency
+        const normalizedPlan = planText.trim().toLowerCase();
+        const validPlans = ['trial', 'essential', 'pro', 'premium'];
+        
+        // Check if any valid plan name is contained in the text
+        const foundPlan = validPlans.find(plan => normalizedPlan.includes(plan));
+        expect(foundPlan).toBeTruthy();
       } else {
         // Fail if no plan indicator is found at all
         throw new Error('No plan badge or plan indicator found on dashboard');

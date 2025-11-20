@@ -69,14 +69,12 @@ async function globalSetup() {
     await page.fill('#loginEmail', TEST_EMAIL);
     await page.fill('#loginPassword', TEST_PASSWORD);
     
-    // Set up navigation wait BEFORE calling signIn to handle redirects gracefully
-    // Use Promise.race to handle both successful signIn and navigation
-    const navigationPromise = page.waitForURL(/\/dashboard|\/verify-email/, { timeout: 30000 }).catch(() => null);
-    
     // Call authManager.signIn directly via JavaScript to avoid form submission issues
     // This bypasses the form and directly uses the Firebase auth
     // Note: page.evaluate() requires multiple arguments to be wrapped in an object
     let loginResult;
+    let navigationAlreadyHandled = false;
+    
     try {
       loginResult = await page.evaluate(async ({ email, password }) => {
         if (!window.FirebaseAuthManager || typeof window.FirebaseAuthManager.signIn !== 'function') {
@@ -93,23 +91,37 @@ async function globalSetup() {
     } catch (evaluateError) {
       // If execution context was destroyed due to navigation, check if we navigated successfully
       if (evaluateError.message.includes('Execution context was destroyed')) {
-        // Wait a bit for navigation to complete
-        await page.waitForTimeout(2000);
-        const currentURL = page.url();
-        if (currentURL.includes('/dashboard') || currentURL.includes('/verify-email')) {
-          // Navigation happened, which means login likely succeeded
-          console.log('✅ Login succeeded (detected via navigation)');
-          loginResult = { success: true };
-        } else {
-          throw new Error(`Login failed: Execution context destroyed but no successful navigation. Current URL: ${currentURL}`);
+        // Wait for navigation to complete
+        try {
+          await page.waitForURL(/\/dashboard|\/verify-email/, { timeout: 10000 });
+          const currentURL = page.url();
+          if (currentURL.includes('/dashboard') || currentURL.includes('/verify-email')) {
+            // Navigation happened, which means login likely succeeded
+            console.log('✅ Login succeeded (detected via navigation)');
+            loginResult = { success: true };
+            navigationAlreadyHandled = true;
+          } else {
+            throw new Error(`Login failed: Execution context destroyed but no successful navigation. Current URL: ${currentURL}`);
+          }
+        } catch (navError) {
+          // Navigation didn't happen or timed out
+          const currentURL = page.url();
+          throw new Error(`Login failed: Execution context destroyed but no successful navigation. Current URL: ${currentURL}. Navigation error: ${navError.message}`);
         }
       } else {
         throw evaluateError;
       }
     }
     
-    // Wait for navigation if it hasn't happened yet
-    await navigationPromise;
+    // Wait for navigation if it hasn't happened yet (evaluate succeeded without navigation)
+    if (!navigationAlreadyHandled) {
+      try {
+        await page.waitForURL(/\/dashboard|\/verify-email/, { timeout: 30000 });
+      } catch (navError) {
+        // Navigation didn't happen, but loginResult might still be successful
+        // Continue to check auth state and navigate manually if needed
+      }
+    }
     
     if (loginResult && !loginResult.success) {
       throw new Error(`Login failed: ${loginResult.error || 'Unknown error'}`);
