@@ -1333,16 +1333,21 @@
               }
               
               // Save role-specific feedback to persistence
+              // Load cached score without job title validation to get existing ATS score
+              // This allows updating feedback even when job title has changed
               if (window.JobHackAIStatePersistence) {
-                // Pass jobTitle directly (empty string is valid and should be validated)
-                // Only null should skip validation (page load scenario)
-                const cachedScore = window.JobHackAIStatePersistence.loadATSScore(jobTitle ?? '');
-                if (cachedScore) {
+                const cachedScore = window.JobHackAIStatePersistence.loadATSScore(null);
+                if (cachedScore && cachedScore.resumeId === currentResumeId) {
+                  // Update existing cached score with new job title and feedback
                   window.JobHackAIStatePersistence.saveATSScore({
                     ...cachedScore,
                     jobTitle: jobTitle || null,
                     roleSpecificFeedback: feedbackResult.roleSpecificFeedback || null
                   });
+                } else if (currentResumeId) {
+                  // If no cached score exists, we still need an ATS score to save feedback
+                  // This shouldn't happen if optimize button is shown, but handle gracefully
+                  console.warn('[RESUME-FEEDBACK] No cached ATS score found for resume:', currentResumeId);
                 }
               }
               
@@ -1699,16 +1704,21 @@
             }
             
             // Save role-specific feedback to persistence
+            // Load cached score without job title validation to get existing ATS score
+            // This allows updating feedback even when job title has changed
             if (window.JobHackAIStatePersistence) {
-              // Pass jobTitle directly (empty string is valid and should be validated)
-              // Only null should skip validation (page load scenario)
-              const cachedScore = window.JobHackAIStatePersistence.loadATSScore(jobTitle ?? '');
-              if (cachedScore) {
+              const cachedScore = window.JobHackAIStatePersistence.loadATSScore(null);
+              if (cachedScore && cachedScore.resumeId === currentResumeId) {
+                // Update existing cached score with new job title and feedback
                 window.JobHackAIStatePersistence.saveATSScore({
                   ...cachedScore,
                   jobTitle: jobTitle || null,
                   roleSpecificFeedback: feedbackResult.roleSpecificFeedback || null
                 });
+              } else if (currentResumeId) {
+                // If no cached score exists, we still need an ATS score to save feedback
+                // This shouldn't happen if regenerate button is shown, but handle gracefully
+                console.warn('[RESUME-FEEDBACK] No cached ATS score found for resume:', currentResumeId);
               }
             }
 
