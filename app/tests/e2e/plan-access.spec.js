@@ -30,9 +30,14 @@ test.describe('Plan-Based Access Control', () => {
     } else {
       // If badge not visible, check for plan in other elements
       const planIndicator = page.locator('[class*="plan"], [data-plan]').first();
-      if (await planIndicator.isVisible().catch(() => false)) {
+      const indicatorExists = await planIndicator.isVisible().catch(() => false);
+      
+      if (indicatorExists) {
         const planText = await planIndicator.textContent();
         expect(planText).toBeTruthy();
+      } else {
+        // Fail if no plan indicator is found at all
+        throw new Error('No plan badge or plan indicator found on dashboard');
       }
     }
   });

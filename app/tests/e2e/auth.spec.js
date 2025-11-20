@@ -1,7 +1,14 @@
 const { test, expect } = require('@playwright/test');
 
 test.describe('Authentication', () => {
-  test('should login and redirect to dashboard', async ({ page }) => {
+  test('should login and redirect to dashboard', async ({ browser, baseURL }) => {
+    // Create new unauthenticated context to test actual login flow
+    // (not re-login with existing session)
+    const context = await browser.newContext({
+      baseURL: baseURL
+    });
+    const page = await context.newPage();
+    
     await page.goto('/login');
     
     // Wait for login form using actual selector
@@ -20,6 +27,8 @@ test.describe('Authentication', () => {
     // Verify dashboard loaded
     await expect(page).toHaveURL(/\/dashboard/);
     await page.waitForLoadState('networkidle');
+    
+    await context.close();
   });
   
   test('should protect dashboard from unauthenticated access', async ({ browser, baseURL }) => {

@@ -144,7 +144,7 @@ test.describe('Stripe Billing', () => {
     
     // If trial already used, API should return error
     // This test assumes the test account has already used trial
-    if (data.error && data.error.includes('Trial already used')) {
+    if (data.error && typeof data.error === 'string' && data.error.includes('Trial already used')) {
       expect(data.ok).toBe(false);
       expect(data.error).toContain('Trial already used');
     } else if (data.ok) {
