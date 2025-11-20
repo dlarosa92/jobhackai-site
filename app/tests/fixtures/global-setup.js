@@ -59,24 +59,43 @@ async function globalSetup() {
     // Wait for login form - using actual selector from login.html
     await page.waitForSelector('#loginEmail', { timeout: 15000 });
     
-    // Wait for Firebase to be ready (login form won't work until Firebase is initialized)
+    // Wait for Firebase and authManager to be ready (login form won't work until Firebase is initialized)
     await page.waitForFunction(() => {
-      return window.FirebaseAuthManager !== undefined || 
-             window.firebase !== undefined ||
-             document.querySelector('#loginEmail') !== null;
-    }, { timeout: 10000 });
+      return window.FirebaseAuthManager !== undefined && 
+             typeof window.FirebaseAuthManager.signIn === 'function';
+    }, { timeout: 15000 });
     
     // Fill login form with actual selectors
     await page.fill('#loginEmail', TEST_EMAIL);
     await page.fill('#loginPassword', TEST_PASSWORD);
     
-    // Click submit button and wait for navigation
+    // Use JavaScript to trigger login instead of form submission
+    // This ensures the event handler is called and prevents default form submission
+    const loginInitiated = await page.evaluate(async (email, password) => {
+      // Get the form and button
+      const form = document.getElementById('loginForm');
+      const submitBtn = document.getElementById('loginContinueBtn');
+      
+      if (!form || !submitBtn || !window.FirebaseAuthManager) {
+        return { success: false, error: 'Form or authManager not ready' };
+      }
+      
+      // Trigger the submit event which should call the event handler
+      // The handler has e.preventDefault() so it won't actually submit
+      const submitEvent = new Event('submit', { bubbles: true, cancelable: true });
+      form.dispatchEvent(submitEvent);
+      
+      return { success: true };
+    }, TEST_EMAIL, TEST_PASSWORD);
+    
+    if (!loginInitiated.success) {
+      throw new Error(`Failed to initiate login: ${loginInitiated.error}`);
+    }
+    
+    // Wait for navigation after login
     // Login redirects to dashboard.html (with .html extension) or verify-email.html
     try {
-      await Promise.all([
-        page.waitForURL(/\/dashboard|\/verify-email/, { timeout: 45000 }),
-        page.click('#loginContinueBtn')
-      ]);
+      await page.waitForURL(/\/dashboard|\/verify-email/, { timeout: 45000 });
       
       // Check if we're on verify-email page (email not verified)
       const currentURL = page.url();
