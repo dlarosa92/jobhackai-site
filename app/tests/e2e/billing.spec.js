@@ -191,35 +191,63 @@ test.describe('Stripe Billing', () => {
     await page.waitForURL(/checkout\.stripe\.com/, { timeout: 15000 });
     
     // Stripe Checkout uses dynamically named iframes - find them by waiting for the page to load
-    // and then locating the payment element iframe
     await page.waitForLoadState('networkidle');
     
-    // Stripe Checkout iframes are typically named with patterns like:
-    // - __privateStripeFrame* for payment elements
-    // - Or found via data-testid or specific classes
-    // Try multiple approaches to find the card input iframe
+    // Stripe Checkout iframes are dynamically named. Try multiple approaches:
+    // 1. Use frameLocator with common Stripe patterns
+    // 2. Iterate through page frames
     let cardInputFilled = false;
     
-    // Approach 1: Look for Stripe payment element iframe
-    const stripeFrames = page.locator('iframe').filter({ has: page.locator('body') });
-    const frameCount = await stripeFrames.count();
+    // Approach 1: Try frameLocator with Stripe's common iframe patterns
+    const stripeFramePatterns = [
+      'iframe[name*="__privateStripeFrame"]',
+      'iframe[name*="stripe"]',
+      'iframe[title*="Secure payment input frame"]',
+      'iframe'
+    ];
     
-    for (let i = 0; i < frameCount; i++) {
+    for (const pattern of stripeFramePatterns) {
       try {
-        const frame = stripeFrames.nth(i);
-        const frameContent = frame.contentFrame();
+        const frameLocator = page.frameLocator(pattern).first();
+        const cardNumberInput = frameLocator.locator('input[autocomplete="cc-number"], input[placeholder*="Card"], input[data-elements-stable-field-name="cardNumber"]').first();
         
-        if (frameContent) {
-          // Try to find card number input in this iframe
-          const cardNumberInput = frameContent.locator('input[autocomplete="cc-number"], input[placeholder*="Card"], input[name*="card"]').first();
+        const isVisible = await cardNumberInput.isVisible({ timeout: 3000 }).catch(() => false);
+        if (isVisible) {
+          await cardNumberInput.fill('4242 4242 4242 4242');
+          
+          // Fill expiry and CVC
+          const expiryInput = frameLocator.locator('input[autocomplete="cc-exp"], input[placeholder*="MM"], input[data-elements-stable-field-name="cardExpiry"]').first();
+          const cvcInput = frameLocator.locator('input[autocomplete="cc-csc"], input[placeholder*="CVC"], input[data-elements-stable-field-name="cardCvc"]').first();
+          
+          if (await expiryInput.isVisible({ timeout: 2000 }).catch(() => false)) {
+            await expiryInput.fill('12/34');
+          }
+          if (await cvcInput.isVisible({ timeout: 2000 }).catch(() => false)) {
+            await cvcInput.fill('123');
+          }
+          
+          cardInputFilled = true;
+          break;
+        }
+      } catch (e) {
+        // Continue to next pattern
+        continue;
+      }
+    }
+    
+    // Approach 2: If frameLocator didn't work, try iterating through page frames
+    if (!cardInputFilled) {
+      const frames = page.frames();
+      for (const frame of frames) {
+        try {
+          const cardNumberInput = frame.locator('input[autocomplete="cc-number"], input[placeholder*="Card"]').first();
           const isVisible = await cardNumberInput.isVisible({ timeout: 2000 }).catch(() => false);
           
           if (isVisible) {
             await cardNumberInput.fill('4242 4242 4242 4242');
             
-            // Fill expiry and CVC in same iframe
-            const expiryInput = frameContent.locator('input[autocomplete="cc-exp"], input[placeholder*="MM"], input[name*="exp"]').first();
-            const cvcInput = frameContent.locator('input[autocomplete="cc-csc"], input[placeholder*="CVC"], input[name*="cvc"]').first();
+            const expiryInput = frame.locator('input[autocomplete="cc-exp"], input[placeholder*="MM"]').first();
+            const cvcInput = frame.locator('input[autocomplete="cc-csc"], input[placeholder*="CVC"]').first();
             
             if (await expiryInput.isVisible({ timeout: 1000 }).catch(() => false)) {
               await expiryInput.fill('12/34');
@@ -231,16 +259,15 @@ test.describe('Stripe Billing', () => {
             cardInputFilled = true;
             break;
           }
+        } catch (e) {
+          continue;
         }
-      } catch (e) {
-        // Continue to next iframe
-        continue;
       }
     }
     
     // If we couldn't fill the form, skip the rest of the test with a note
     if (!cardInputFilled) {
-      test.info().skip('Could not locate Stripe checkout form fields - Stripe UI structure may have changed');
+      test.info().skip('Could not locate Stripe checkout form fields - Stripe UI structure may have changed or test environment issue');
       return;
     }
     
