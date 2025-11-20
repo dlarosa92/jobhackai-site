@@ -11,7 +11,10 @@
     "export": "next build && next export",
     "deploy": "wrangler pages deploy out",
     "deploy:qa": "wrangler pages deploy out --project-name=jobhackai-app-dev --branch dev0",
-    "deploy:prod": "wrangler pages deploy out --branch main"
+    "deploy:prod": "wrangler pages deploy out --branch main",
+    "test:e2e": "playwright test",
+    "test:e2e:dev": "TEST_ENV=dev playwright test",
+    "test:e2e:qa": "TEST_ENV=qa playwright test"
   },
   "dependencies": {
     "firebase": "^10.7.0",
@@ -26,6 +29,7 @@
     "tesseract.js": "^5.0.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.56.1",
     "@types/node": "^20.0.0",
     "@types/react": "^18.2.0",
     "@types/react-dom": "^18.2.0",
