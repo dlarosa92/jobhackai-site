@@ -114,15 +114,14 @@ async function globalSetup() {
     if (!finalURL.includes('/dashboard') && !finalURL.includes('/verify-email')) {
       throw new Error(`Unexpected redirect after login: ${finalURL}`);
     }
-      
-      // Check if we're on verify-email page (email not verified)
-      const currentURL = page.url();
-      if (currentURL.includes('/verify-email')) {
-        console.log('⚠️ Email verification required - this may cause test issues');
-        // For test accounts, we might need to skip email verification
-        // or handle it differently
-      }
-    } catch (error) {
+    
+    if (finalURL.includes('/verify-email')) {
+      console.log('⚠️ Email verification required - this may cause test issues');
+      // For test accounts, we might need to skip email verification
+      // or handle it differently
+    }
+    
+  } catch (error) {
       // If redirect fails, check what happened
       const currentURL = page.url();
       
