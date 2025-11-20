@@ -71,7 +71,8 @@ async function globalSetup() {
     
     // Call authManager.signIn directly via JavaScript to avoid form submission issues
     // This bypasses the form and directly uses the Firebase auth
-    const loginResult = await page.evaluate(async (email, password) => {
+    // Note: page.evaluate() requires multiple arguments to be wrapped in an object
+    const loginResult = await page.evaluate(async ({ email, password }) => {
       if (!window.FirebaseAuthManager || typeof window.FirebaseAuthManager.signIn !== 'function') {
         return { success: false, error: 'FirebaseAuthManager.signIn not available' };
       }
@@ -82,7 +83,7 @@ async function globalSetup() {
       } catch (error) {
         return { success: false, error: error.message || 'Login failed' };
       }
-    }, TEST_EMAIL, TEST_PASSWORD);
+    }, { email: TEST_EMAIL, password: TEST_PASSWORD });
     
     if (!loginResult.success) {
       throw new Error(`Login failed: ${loginResult.error || 'Unknown error'}`);
