@@ -1189,6 +1189,11 @@
           // Restore role-specific feedback if available
           if (cachedScore.roleSpecificFeedback && Array.isArray(cachedScore.roleSpecificFeedback) && cachedScore.roleSpecificFeedback.length > 0) {
             updateFeedbackGrid(cachedScore.roleSpecificFeedback);
+            // Make feedback grid visible (it starts with display:none)
+            const feedbackGrid = document.getElementById('rf-feedback-grid');
+            if (feedbackGrid) {
+              feedbackGrid.style.display = 'grid';
+            }
             showRoleFeedback();
             // Hide ATS-only state
             const atsOnlyState = document.getElementById('rf-ats-only-state');
