@@ -3,7 +3,7 @@ const { test, expect } = require('@playwright/test');
 test.describe('Stripe Billing', () => {
   test('should allow upgrade from trial to essential', async ({ page }) => {
     await page.goto('/pricing-a.html');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
     
     // Find Essential plan button using actual selector
     const essentialBtn = page.locator('button[data-plan="essential"]').first();
@@ -25,7 +25,7 @@ test.describe('Stripe Billing', () => {
   
   test('should allow upgrade from essential to pro', async ({ page }) => {
     await page.goto('/pricing-a.html');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
     
     // Get auth token for API call
     const token = await page.evaluate(async () => {
@@ -83,7 +83,7 @@ test.describe('Stripe Billing', () => {
   
   test('should allow downgrade from premium to pro', async ({ page }) => {
     await page.goto('/pricing-a.html');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
     
     // Get auth token for API call
     const token = await page.evaluate(async () => {
@@ -141,7 +141,7 @@ test.describe('Stripe Billing', () => {
   
   test('should BLOCK trial if already used', async ({ page }) => {
     await page.goto('/pricing-a.html');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
     
     const trialBtn = page.locator('button[data-plan="trial"]').first();
     
@@ -181,7 +181,7 @@ test.describe('Stripe Billing', () => {
     // Consider skipping this test in CI or adding cleanup logic.
     
     await page.goto('/pricing-a.html');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
     
     // Click Essential plan button
     const essentialBtn = page.locator('button[data-plan="essential"]').first();
@@ -191,7 +191,7 @@ test.describe('Stripe Billing', () => {
     await page.waitForURL(/checkout\.stripe\.com/, { timeout: 15000 });
     
     // Stripe Checkout uses dynamically named iframes - find them by waiting for the page to load
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
     
     // Stripe Checkout iframes are dynamically named. Try multiple approaches:
     // 1. Use frameLocator with common Stripe patterns
@@ -289,7 +289,7 @@ test.describe('Stripe Billing', () => {
     await expect(page).toHaveURL(/\/dashboard/);
     
     // Wait for page to load
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
     
     // TODO: Add cleanup logic to cancel the test subscription via Stripe API
     // This would prevent accumulating test subscriptions in Stripe test mode

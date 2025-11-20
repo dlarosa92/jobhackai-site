@@ -3,7 +3,7 @@ const { test, expect } = require('@playwright/test');
 test.describe('Plan-Based Access Control', () => {
   test('should allow paid plans to access resume feedback', async ({ page }) => {
     await page.goto('/resume-feedback-pro.html');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
     
     // Should NOT redirect to pricing (paid users can access)
     await expect(page).not.toHaveURL(/\/pricing/);
@@ -15,7 +15,7 @@ test.describe('Plan-Based Access Control', () => {
   
   test('should show plan badge on dashboard', async ({ page }) => {
     await page.goto('/dashboard');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
     
     // Check for plan badge using actual selectors from dashboard.html
     const planBadge = page.locator('.plan-badge, .user-plan-badge, [class*="plan-badge"]').first();

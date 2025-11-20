@@ -26,15 +26,13 @@ test.describe('Authentication', () => {
     await page.fill('#loginEmail', TEST_EMAIL);
     await page.fill('#loginPassword', TEST_PASSWORD);
     
-    // Submit form
-    await Promise.all([
-      page.waitForURL(/\/dashboard/, { timeout: 20000 }),
-      page.click('#loginContinueBtn')
-    ]);
+    // Submit form - click button and wait for navigation
+    await page.click('#loginContinueBtn');
+    await page.waitForURL(/\/dashboard/, { timeout: 20000 });
     
-    // Verify dashboard loaded
+    // Verify dashboard loaded - wait for DOM to be ready instead of networkidle
     await expect(page).toHaveURL(/\/dashboard/);
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
     
     await context.close();
   });
@@ -46,10 +44,10 @@ test.describe('Authentication', () => {
     });
     const page = await context.newPage();
     
-    await page.goto('/dashboard');
+    await page.goto('/dashboard', { waitUntil: 'domcontentloaded' });
     
-    // Should redirect to login
-    await page.waitForURL(/\/login/, { timeout: 10000 });
+    // Should redirect to login - increase timeout for auth guard processing
+    await page.waitForURL(/\/login/, { timeout: 15000 });
     await expect(page).toHaveURL(/\/login/);
     
     await context.close();

@@ -5,7 +5,7 @@ const fs = require('fs');
 test.describe('Resume Feedback', () => {
   test('should upload resume and receive ATS score', async ({ page }) => {
     await page.goto('/resume-feedback-pro.html');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
     
     // Find file input using actual selector from resume-feedback-pro.html
     const fileInput = page.locator('#rf-upload');
