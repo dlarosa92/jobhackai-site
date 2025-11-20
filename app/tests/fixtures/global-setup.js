@@ -42,7 +42,19 @@ async function globalSetup() {
   try {
     console.log(`🔐 Authenticating on ${BASE_URL}`);
     
-    await page.goto(`${BASE_URL}/login`);
+    // Capture console errors and network failures
+    const consoleErrors = [];
+    page.on('console', msg => {
+      if (msg.type() === 'error') {
+        consoleErrors.push(msg.text());
+      }
+    });
+    
+    page.on('pageerror', error => {
+      consoleErrors.push(`Page error: ${error.message}`);
+    });
+    
+    await page.goto(`${BASE_URL}/login`, { waitUntil: 'networkidle' });
     
     // Wait for login form - using actual selector from login.html
     await page.waitForSelector('#loginEmail', { timeout: 15000 });
@@ -51,11 +63,33 @@ async function globalSetup() {
     await page.fill('#loginEmail', TEST_EMAIL);
     await page.fill('#loginPassword', TEST_PASSWORD);
     
-    // Click submit button
-    await page.click('#loginContinueBtn');
-    
-    // Wait for redirect to dashboard
-    await page.waitForURL(/\/dashboard/, { timeout: 20000 });
+    // Click submit button and wait for navigation
+    // Login redirects to dashboard.html (with .html extension)
+    await Promise.all([
+      page.waitForURL(/\/dashboard/, { timeout: 30000 }),
+      page.click('#loginContinueBtn')
+    ]).catch(async (error) => {
+      // If redirect fails, check what happened
+      const currentURL = page.url();
+      const pageContent = await page.content().catch(() => 'Could not get page content');
+      
+      console.error('❌ Login redirect failed');
+      console.error(`Current URL: ${currentURL}`);
+      console.error(`Expected: URL containing /dashboard`);
+      
+      // Check for error messages on the page
+      const errorElement = await page.locator('#loginError, .error, [class*="error"]').first().textContent().catch(() => null);
+      if (errorElement) {
+        console.error(`Login error message: ${errorElement}`);
+      }
+      
+      // Log console errors
+      if (consoleErrors.length > 0) {
+        console.error('Console errors:', consoleErrors);
+      }
+      
+      throw new Error(`Login failed - Current URL: ${currentURL}. Console errors: ${consoleErrors.join('; ')}`);
+    });
     
     // Ensure auth directory exists
     const authDir = path.join(__dirname, '../.auth');
