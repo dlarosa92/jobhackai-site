@@ -36,36 +36,38 @@ test.describe('Stripe Billing', () => {
       return null;
     });
     
+    // Fail if token is null (authentication required)
+    expect(token).not.toBeNull();
+    
     // Verify current plan is essential (or lower) before testing upgrade
-    if (token) {
-      const planResponse = await page.request.get('/api/plan/me', {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
-      
-      if (planResponse.ok()) {
-        const planData = await planResponse.json();
-        // Only test upgrade if current plan is essential or lower
-        if (planData.plan && !['pro', 'premium'].includes(planData.plan)) {
-          const proBtn = page.locator('button[data-plan="pro"]').first();
-          await expect(proBtn).toBeVisible();
-          
-          const [response] = await Promise.all([
-            page.waitForResponse(
-              response => response.url().includes('/api/stripe-checkout') && response.status() === 200,
-              { timeout: 15000 }
-            ),
-            proBtn.click()
-          ]);
-          
-          const data = await response.json();
-          expect(data.ok).toBe(true);
-          expect(data.url).toContain('checkout.stripe.com');
-        } else {
-          test.skip(); // Skip if already on pro or premium
-        }
+    const planResponse = await page.request.get('/api/plan/me', {
+      headers: {
+        'Authorization': `Bearer ${token}`
       }
+    });
+    
+    // Fail if plan API call failed
+    expect(planResponse.ok()).toBe(true);
+    
+    const planData = await planResponse.json();
+    // Only test upgrade if current plan is essential or lower
+    if (planData.plan && !['pro', 'premium'].includes(planData.plan)) {
+      const proBtn = page.locator('button[data-plan="pro"]').first();
+      await expect(proBtn).toBeVisible();
+      
+      const [response] = await Promise.all([
+        page.waitForResponse(
+          response => response.url().includes('/api/stripe-checkout') && response.status() === 200,
+          { timeout: 15000 }
+        ),
+        proBtn.click()
+      ]);
+      
+      const data = await response.json();
+      expect(data.ok).toBe(true);
+      expect(data.url).toContain('checkout.stripe.com');
+    } else {
+      test.skip(); // Skip if already on pro or premium
     }
   });
   
@@ -82,36 +84,38 @@ test.describe('Stripe Billing', () => {
       return null;
     });
     
+    // Fail if token is null (authentication required)
+    expect(token).not.toBeNull();
+    
     // Verify current plan is premium before testing downgrade
-    if (token) {
-      const planResponse = await page.request.get('/api/plan/me', {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
-      
-      if (planResponse.ok()) {
-        const planData = await planResponse.json();
-        // Only test downgrade if current plan is premium
-        if (planData.plan === 'premium') {
-          const proBtn = page.locator('button[data-plan="pro"]').first();
-          await expect(proBtn).toBeVisible();
-          
-          const [response] = await Promise.all([
-            page.waitForResponse(
-              response => response.url().includes('/api/stripe-checkout') && response.status() === 200,
-              { timeout: 15000 }
-            ),
-            proBtn.click()
-          ]);
-          
-          const data = await response.json();
-          expect(data.ok).toBe(true);
-          expect(data.url).toContain('checkout.stripe.com');
-        } else {
-          test.skip(); // Skip if not on premium
-        }
+    const planResponse = await page.request.get('/api/plan/me', {
+      headers: {
+        'Authorization': `Bearer ${token}`
       }
+    });
+    
+    // Fail if plan API call failed
+    expect(planResponse.ok()).toBe(true);
+    
+    const planData = await planResponse.json();
+    // Only test downgrade if current plan is premium
+    if (planData.plan === 'premium') {
+      const proBtn = page.locator('button[data-plan="pro"]').first();
+      await expect(proBtn).toBeVisible();
+      
+      const [response] = await Promise.all([
+        page.waitForResponse(
+          response => response.url().includes('/api/stripe-checkout') && response.status() === 200,
+          { timeout: 15000 }
+        ),
+        proBtn.click()
+      ]);
+      
+      const data = await response.json();
+      expect(data.ok).toBe(true);
+      expect(data.url).toContain('checkout.stripe.com');
+    } else {
+      test.skip(); // Skip if not on premium
     }
   });
   
@@ -152,6 +156,10 @@ test.describe('Stripe Billing', () => {
   });
   
   test('should complete full Stripe checkout flow', async ({ page }) => {
+    // NOTE: This test creates actual subscriptions in Stripe test mode.
+    // Subscriptions should be cleaned up manually in Stripe dashboard or via API.
+    // Consider skipping this test in CI or adding cleanup logic.
+    
     await page.goto('/pricing-a.html');
     await page.waitForLoadState('networkidle');
     
@@ -202,6 +210,9 @@ test.describe('Stripe Billing', () => {
     
     // Wait for page to load
     await page.waitForLoadState('networkidle');
+    
+    // TODO: Add cleanup logic to cancel the test subscription via Stripe API
+    // This would prevent accumulating test subscriptions in Stripe test mode
   });
 });
 

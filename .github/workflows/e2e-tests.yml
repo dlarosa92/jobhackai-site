@@ -32,7 +32,7 @@ jobs:
           TEST_ENV: ${{ github.base_ref == 'dev0' && 'dev' || 'qa' }}
           TEST_EMAIL: ${{ secrets.TEST_EMAIL }}
           TEST_PASSWORD: ${{ secrets.TEST_PASSWORD }}
-        run: npx playwright test
+        run: npx playwright test --config tests/playwright.config.js
       
       - name: Upload test results
         if: always()
