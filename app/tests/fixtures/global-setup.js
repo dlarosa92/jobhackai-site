@@ -69,33 +69,51 @@ async function globalSetup() {
     await page.fill('#loginEmail', TEST_EMAIL);
     await page.fill('#loginPassword', TEST_PASSWORD);
     
-    // Use JavaScript to trigger login instead of form submission
-    // This ensures the event handler is called and prevents default form submission
-    const loginInitiated = await page.evaluate(async (email, password) => {
-      // Get the form and button
-      const form = document.getElementById('loginForm');
-      const submitBtn = document.getElementById('loginContinueBtn');
-      
-      if (!form || !submitBtn || !window.FirebaseAuthManager) {
-        return { success: false, error: 'Form or authManager not ready' };
+    // Call authManager.signIn directly via JavaScript to avoid form submission issues
+    // This bypasses the form and directly uses the Firebase auth
+    const loginResult = await page.evaluate(async (email, password) => {
+      if (!window.FirebaseAuthManager || typeof window.FirebaseAuthManager.signIn !== 'function') {
+        return { success: false, error: 'FirebaseAuthManager.signIn not available' };
       }
       
-      // Trigger the submit event which should call the event handler
-      // The handler has e.preventDefault() so it won't actually submit
-      const submitEvent = new Event('submit', { bubbles: true, cancelable: true });
-      form.dispatchEvent(submitEvent);
-      
-      return { success: true };
+      try {
+        const result = await window.FirebaseAuthManager.signIn(email, password);
+        return result;
+      } catch (error) {
+        return { success: false, error: error.message || 'Login failed' };
+      }
     }, TEST_EMAIL, TEST_PASSWORD);
     
-    if (!loginInitiated.success) {
-      throw new Error(`Failed to initiate login: ${loginInitiated.error}`);
+    if (!loginResult.success) {
+      throw new Error(`Login failed: ${loginResult.error || 'Unknown error'}`);
     }
     
-    // Wait for navigation after login
-    // Login redirects to dashboard.html (with .html extension) or verify-email.html
-    try {
-      await page.waitForURL(/\/dashboard|\/verify-email/, { timeout: 45000 });
+    // After successful login, check if we need to handle email verification
+    const needsVerification = await page.evaluate(() => {
+      const user = window.FirebaseAuthManager?.getCurrentUser?.();
+      if (user && window.FirebaseAuthManager?.isEmailPasswordUser?.(user)) {
+        return user.emailVerified === false;
+      }
+      return false;
+    });
+    
+    if (needsVerification) {
+      // Navigate to verify-email page
+      await page.goto(`${BASE_URL}/verify-email.html`);
+      console.log('⚠️ Email verification required - navigating to verify-email page');
+    } else {
+      // Navigate to dashboard
+      await page.goto(`${BASE_URL}/dashboard.html`);
+    }
+    
+    // Wait for page to load
+    await page.waitForLoadState('networkidle');
+    
+    // Verify we're on the right page
+    const finalURL = page.url();
+    if (!finalURL.includes('/dashboard') && !finalURL.includes('/verify-email')) {
+      throw new Error(`Unexpected redirect after login: ${finalURL}`);
+    }
       
       // Check if we're on verify-email page (email not verified)
       const currentURL = page.url();
