@@ -54,7 +54,7 @@ async function globalSetup() {
   try {
     console.log(`🔐 Authenticating on ${BASE_URL}`);
     
-    await page.goto(`${BASE_URL}/login`, { waitUntil: 'networkidle' });
+    await page.goto(`${BASE_URL}/login`, { waitUntil: 'domcontentloaded' });
     
     // Wait for login form - using actual selector from login.html
     await page.waitForSelector('#loginEmail', { timeout: 15000 });
@@ -161,11 +161,11 @@ async function globalSetup() {
       
       if (authState.needsVerification) {
         // Navigate to verify-email page
-        await page.goto(`${BASE_URL}/verify-email.html`, { waitUntil: 'networkidle' });
+        await page.goto(`${BASE_URL}/verify-email.html`, { waitUntil: 'domcontentloaded' });
         console.log('⚠️ Email verification required - navigating to verify-email page');
       } else {
         // Navigate to dashboard (the app should redirect here, but we'll do it explicitly)
-        await page.goto(`${BASE_URL}/dashboard.html`, { waitUntil: 'networkidle' });
+        await page.goto(`${BASE_URL}/dashboard.html`, { waitUntil: 'domcontentloaded' });
       }
       
       currentURL = page.url();
