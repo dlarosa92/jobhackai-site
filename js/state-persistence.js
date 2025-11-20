@@ -9,6 +9,7 @@
   const STORAGE_KEYS = {
     ATS_SCORE: 'jh_last_ats_score',
     ATS_BREAKDOWN: 'jh_last_ats_breakdown',
+    ROLE_FEEDBACK: 'jh_last_role_feedback',
     RESUME_ID: 'jh_last_resume_id',
     RESUME_TEXT: 'jh_last_resume_text',
     JOB_TITLE: 'jh_last_job_title',
@@ -25,8 +26,9 @@
    * @param {Object} data.breakdown - Score breakdown
    * @param {string} data.resumeId - Resume ID
    * @param {string} [data.jobTitle] - Job title
+   * @param {Array} [data.roleSpecificFeedback] - Role-specific feedback array
    */
-  function saveATSScore({ score, breakdown, resumeId, jobTitle }) {
+  function saveATSScore({ score, breakdown, resumeId, jobTitle, roleSpecificFeedback }) {
     try {
       const data = {
         score,
@@ -46,9 +48,16 @@
         // Clear job title if not provided (to distinguish between "no job title" and "has job title")
         localStorage.removeItem(STORAGE_KEYS.JOB_TITLE);
       }
+      // Save role-specific feedback if provided
+      if (roleSpecificFeedback && Array.isArray(roleSpecificFeedback)) {
+        localStorage.setItem(STORAGE_KEYS.ROLE_FEEDBACK, JSON.stringify(roleSpecificFeedback));
+      } else {
+        // Clear role feedback if not provided (to distinguish between "no feedback" and "has feedback")
+        localStorage.removeItem(STORAGE_KEYS.ROLE_FEEDBACK);
+      }
       localStorage.setItem(STORAGE_KEYS.TIMESTAMP, data.timestamp.toString());
 
-      console.log('[STATE-PERSISTENCE] Saved ATS score:', score);
+      console.log('[STATE-PERSISTENCE] Saved ATS score:', score, 'with role feedback:', !!roleSpecificFeedback);
     } catch (error) {
       console.warn('[STATE-PERSISTENCE] Failed to save ATS score:', error);
     }
@@ -77,6 +86,7 @@
       const breakdown = localStorage.getItem(STORAGE_KEYS.ATS_BREAKDOWN);
       const resumeId = localStorage.getItem(STORAGE_KEYS.RESUME_ID);
       const cachedJobTitle = localStorage.getItem(STORAGE_KEYS.JOB_TITLE);
+      const roleFeedback = localStorage.getItem(STORAGE_KEYS.ROLE_FEEDBACK);
 
       if (!score || !breakdown || !resumeId) {
         return null;
@@ -105,6 +115,7 @@
         breakdown: JSON.parse(breakdown),
         resumeId,
         jobTitle: cachedJobTitle || null,
+        roleSpecificFeedback: roleFeedback ? JSON.parse(roleFeedback) : null,
         timestamp: parseInt(timestamp, 10),
         cached: true
       };
