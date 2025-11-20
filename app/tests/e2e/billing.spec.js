@@ -220,7 +220,7 @@ test.describe('Stripe Billing', () => {
           const cvcInput = frameLocator.locator('input[autocomplete="cc-csc"], input[placeholder*="CVC"], input[data-elements-stable-field-name="cardCvc"]').first();
           
           if (await expiryInput.isVisible({ timeout: 2000 }).catch(() => false)) {
-            await expiryInput.fill('12/34');
+            await expiryInput.fill('12/30'); // December 2030 - clearly future date for Stripe test mode
           }
           if (await cvcInput.isVisible({ timeout: 2000 }).catch(() => false)) {
             await cvcInput.fill('123');

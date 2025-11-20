@@ -34,7 +34,8 @@ test.describe('Plan-Based Access Control', () => {
       expect(foundPlan).toBeTruthy();
     } else {
       // If badge not visible, check for plan in other elements
-      const planIndicator = page.locator('[class*="plan"], [data-plan]').first();
+      // Use more specific selectors to avoid false positives (e.g., "airplane", "explanation")
+      const planIndicator = page.locator('[class*="plan-badge"], [class*="user-plan"], [data-plan], [class*="subscription-plan"]').first();
       const indicatorExists = await planIndicator.isVisible().catch(() => false);
       
       if (indicatorExists) {
