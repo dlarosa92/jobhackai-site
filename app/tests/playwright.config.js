@@ -1,4 +1,5 @@
 const { defineConfig, devices } = require('@playwright/test');
+const path = require('path');
 
 const ENVIRONMENTS = {
   dev: 'https://dev.jobhackai.io',
@@ -7,6 +8,11 @@ const ENVIRONMENTS = {
 
 const ENV = process.env.TEST_ENV || 'dev';
 const BASE_URL = ENVIRONMENTS[ENV] || ENVIRONMENTS.dev;
+
+// Resolve storageState path relative to config file location
+// Config file is at app/tests/playwright.config.js
+// Auth state is saved to app/tests/.auth/user.json by global setup
+const storageStatePath = path.join(__dirname, '.auth', 'user.json');
 
 module.exports = defineConfig({
   testDir: './e2e',
@@ -31,7 +37,7 @@ module.exports = defineConfig({
       name: 'chromium',
       use: { 
         ...devices['Desktop Chrome'],
-        storageState: '.auth/user.json', // Relative to config file location (app/tests/)
+        storageState: storageStatePath, // Absolute path: app/tests/.auth/user.json
       },
     },
   ],
