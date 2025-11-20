@@ -26,9 +26,11 @@ test.describe('Authentication', () => {
     await page.fill('#loginEmail', TEST_EMAIL);
     await page.fill('#loginPassword', TEST_PASSWORD);
     
-    // Submit form - click button and wait for navigation
-    await page.click('#loginContinueBtn');
-    await page.waitForURL(/\/dashboard/, { timeout: 20000 });
+    // Submit form - click button and wait for navigation (avoid double wait deadlock)
+    await Promise.all([
+      page.waitForURL(/\/dashboard/, { timeout: 20000 }),
+      page.click('#loginContinueBtn')
+    ]);
     
     // Verify dashboard loaded - wait for DOM to be ready instead of networkidle
     await expect(page).toHaveURL(/\/dashboard/);
