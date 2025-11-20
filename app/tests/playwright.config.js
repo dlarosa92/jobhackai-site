@@ -31,7 +31,7 @@ module.exports = defineConfig({
       name: 'chromium',
       use: { 
         ...devices['Desktop Chrome'],
-        storageState: 'tests/.auth/user.json',
+        storageState: '.auth/user.json', // Relative to config file location (app/tests/)
       },
     },
   ],
