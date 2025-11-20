@@ -125,6 +125,24 @@ test.describe('Stripe Billing', () => {
     await page.goto('/pricing-a.html');
     await page.waitForLoadState('domcontentloaded');
     
+    // Wait for auth and check current plan
+    await page.waitForFunction(() => {
+      return window.FirebaseAuthManager !== undefined && 
+             typeof window.FirebaseAuthManager.getCurrentUser === 'function';
+    }, { timeout: 10000 });
+    
+    const token = await getAuthToken(page);
+    expect(token).not.toBeNull();
+    
+    const planData = await fetchPlanData(page, token);
+    const normalizedPlan = (planData.plan || '').toLowerCase();
+    
+    // Skip if user is already on Essential plan (button will be disabled)
+    if (normalizedPlan === 'essential') {
+      test.info().skip('User is already on Essential plan - cannot test checkout flow (button is disabled)');
+      return;
+    }
+    
     // Click Essential plan button
     const essentialBtn = page.locator('button[data-plan="essential"]').first();
     await essentialBtn.click();
