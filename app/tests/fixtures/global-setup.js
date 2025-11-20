@@ -133,43 +133,6 @@ async function globalSetup() {
       // or handle it differently
     }
     
-  } catch (error) {
-      // If redirect fails, check what happened
-      const currentURL = page.url();
-      
-      console.error('❌ Login redirect failed');
-      console.error(`Current URL: ${currentURL}`);
-      console.error(`Expected: URL containing /dashboard or /verify-email`);
-      
-      // Check for error messages on the page
-      const errorElement = await page.locator('#loginError, .error, [class*="error"]').first().textContent().catch(() => null);
-      if (errorElement) {
-        console.error(`Login error message: ${errorElement}`);
-        throw new Error(`Login failed with error: ${errorElement}. Current URL: ${currentURL}`);
-      }
-      
-      // Check if we're still on login page (login didn't work)
-      if (currentURL.includes('/login')) {
-        // Wait a bit more to see if redirect happens
-        await page.waitForTimeout(5000);
-        const finalURL = page.url();
-        if (finalURL.includes('/login')) {
-          // Log console errors
-          if (consoleErrors.length > 0) {
-            console.error('Console errors:', consoleErrors);
-          }
-          throw new Error(`Login failed - still on login page. Console errors: ${consoleErrors.join('; ')}`);
-        }
-      }
-      
-      // Log console errors
-      if (consoleErrors.length > 0) {
-        console.error('Console errors:', consoleErrors);
-      }
-      
-      throw error;
-    }
-    
     // Ensure auth directory exists
     const authDir = path.join(__dirname, '../.auth');
     if (!fs.existsSync(authDir)) {
@@ -182,7 +145,41 @@ async function globalSetup() {
     });
     
     console.log('✅ Authentication successful, state saved');
+    
   } catch (error) {
+    // If redirect fails, check what happened
+    const currentURL = page.url();
+    
+    console.error('❌ Login redirect failed');
+    console.error(`Current URL: ${currentURL}`);
+    console.error(`Expected: URL containing /dashboard or /verify-email`);
+    
+    // Check for error messages on the page
+    const errorElement = await page.locator('#loginError, .error, [class*="error"]').first().textContent().catch(() => null);
+    if (errorElement) {
+      console.error(`Login error message: ${errorElement}`);
+      throw new Error(`Login failed with error: ${errorElement}. Current URL: ${currentURL}`);
+    }
+    
+    // Check if we're still on login page (login didn't work)
+    if (currentURL.includes('/login')) {
+      // Wait a bit more to see if redirect happens
+      await page.waitForTimeout(5000);
+      const finalURL = page.url();
+      if (finalURL.includes('/login')) {
+        // Log console errors
+        if (consoleErrors.length > 0) {
+          console.error('Console errors:', consoleErrors);
+        }
+        throw new Error(`Login failed - still on login page. Console errors: ${consoleErrors.join('; ')}`);
+      }
+    }
+    
+    // Log console errors
+    if (consoleErrors.length > 0) {
+      console.error('Console errors:', consoleErrors);
+    }
+    
     console.error('❌ Authentication failed:', error);
     throw error;
   } finally {
