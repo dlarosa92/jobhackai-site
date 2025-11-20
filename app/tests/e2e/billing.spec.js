@@ -9,16 +9,26 @@ test.describe('Stripe Billing', () => {
     const essentialBtn = page.locator('button[data-plan="essential"]').first();
     await expect(essentialBtn).toBeVisible();
     
-    // Click and wait for API response
-    const [response] = await Promise.all([
-      page.waitForResponse(
-        response => response.url().includes('/api/stripe-checkout') && response.status() === 200,
-        { timeout: 15000 }
-      ),
-      essentialBtn.click()
-    ]);
+    // Click and wait for API response - read body immediately
+    const responsePromise = page.waitForResponse(
+      response => response.url().includes('/api/stripe-checkout') && response.status() === 200,
+      { timeout: 15000 }
+    );
     
-    const data = await response.json();
+    await essentialBtn.click();
+    const response = await responsePromise;
+    
+    // Read response body immediately before it gets consumed
+    const data = await response.json().catch(async (err) => {
+      // If json() fails, try to get the text and parse manually
+      const text = await response.text();
+      try {
+        return JSON.parse(text);
+      } catch {
+        throw new Error(`Failed to parse response: ${text.substring(0, 200)}. Original error: ${err.message}`);
+      }
+    });
+    
     expect(data.ok).toBe(true);
     expect(data.url).toContain('checkout.stripe.com');
   });
@@ -27,8 +37,29 @@ test.describe('Stripe Billing', () => {
     await page.goto('/pricing-a.html');
     await page.waitForLoadState('domcontentloaded');
     
+    // Wait for Firebase auth to be ready before getting token
+    await page.waitForFunction(() => {
+      return window.FirebaseAuthManager !== undefined && 
+             typeof window.FirebaseAuthManager.getCurrentUser === 'function';
+    }, { timeout: 10000 });
+    
+    // Wait for auth state to be ready (user might not be set immediately)
+    await page.waitForFunction(() => {
+      const user = window.FirebaseAuthManager?.getCurrentUser?.();
+      return user !== null && user !== undefined;
+    }, { timeout: 10000 }).catch(() => {
+      // If user is still null, check if auth state listener has fired
+      return page.waitForFunction(() => {
+        // Check if firebase-auth-ready event has been dispatched
+        return localStorage.getItem('user-authenticated') === 'true' || 
+               window.FirebaseAuthManager?.getCurrentUser?.() !== null;
+      }, { timeout: 5000 });
+    });
+    
     // Get auth token for API call
     const token = await page.evaluate(async () => {
+      // Wait a bit more for auth state to settle
+      await new Promise(resolve => setTimeout(resolve, 500));
       const user = window.FirebaseAuthManager?.getCurrentUser?.();
       if (user) {
         return await user.getIdToken();
@@ -60,15 +91,23 @@ test.describe('Stripe Billing', () => {
     await expect(proBtn).toBeVisible();
     
     // Wait for response without status filter to handle both success and error cases
-    const [response] = await Promise.all([
-      page.waitForResponse(
-        response => response.url().includes('/api/stripe-checkout'),
-        { timeout: 15000 }
-      ),
-      proBtn.click()
-    ]);
+    const responsePromise = page.waitForResponse(
+      response => response.url().includes('/api/stripe-checkout'),
+      { timeout: 15000 }
+    );
     
-    const data = await response.json();
+    await proBtn.click();
+    const response = await responsePromise;
+    
+    // Read response body immediately
+    const data = await response.json().catch(async (err) => {
+      const text = await response.text();
+      try {
+        return JSON.parse(text);
+      } catch {
+        throw new Error(`Failed to parse response: ${text.substring(0, 200)}. Original error: ${err.message}`);
+      }
+    });
     
     // Handle both success and error responses
     if (response.status() === 200 && data.ok) {
@@ -85,8 +124,26 @@ test.describe('Stripe Billing', () => {
     await page.goto('/pricing-a.html');
     await page.waitForLoadState('domcontentloaded');
     
+    // Wait for Firebase auth to be ready before getting token
+    await page.waitForFunction(() => {
+      return window.FirebaseAuthManager !== undefined && 
+             typeof window.FirebaseAuthManager.getCurrentUser === 'function';
+    }, { timeout: 10000 });
+    
+    // Wait for auth state to be ready
+    await page.waitForFunction(() => {
+      const user = window.FirebaseAuthManager?.getCurrentUser?.();
+      return user !== null && user !== undefined;
+    }, { timeout: 10000 }).catch(() => {
+      return page.waitForFunction(() => {
+        return localStorage.getItem('user-authenticated') === 'true' || 
+               window.FirebaseAuthManager?.getCurrentUser?.() !== null;
+      }, { timeout: 5000 });
+    });
+    
     // Get auth token for API call
     const token = await page.evaluate(async () => {
+      await new Promise(resolve => setTimeout(resolve, 500));
       const user = window.FirebaseAuthManager?.getCurrentUser?.();
       if (user) {
         return await user.getIdToken();
@@ -118,15 +175,23 @@ test.describe('Stripe Billing', () => {
     await expect(proBtn).toBeVisible();
     
     // Wait for response without status filter to handle both success and error cases
-    const [response] = await Promise.all([
-      page.waitForResponse(
-        response => response.url().includes('/api/stripe-checkout'),
-        { timeout: 15000 }
-      ),
-      proBtn.click()
-    ]);
+    const responsePromise = page.waitForResponse(
+      response => response.url().includes('/api/stripe-checkout'),
+      { timeout: 15000 }
+    );
     
-    const data = await response.json();
+    await proBtn.click();
+    const response = await responsePromise;
+    
+    // Read response body immediately
+    const data = await response.json().catch(async (err) => {
+      const text = await response.text();
+      try {
+        return JSON.parse(text);
+      } catch {
+        throw new Error(`Failed to parse response: ${text.substring(0, 200)}. Original error: ${err.message}`);
+      }
+    });
     
     // Handle both success and error responses
     if (response.status() === 200 && data.ok) {
@@ -150,15 +215,23 @@ test.describe('Stripe Billing', () => {
     expect(isVisible).toBe(true); // Fail if trial button doesn't exist
     
     // Click trial button and wait for response
-    const [response] = await Promise.all([
-      page.waitForResponse(
-        response => response.url().includes('/api/stripe-checkout'),
-        { timeout: 15000 }
-      ),
-      trialBtn.click()
-    ]);
+    const responsePromise = page.waitForResponse(
+      response => response.url().includes('/api/stripe-checkout'),
+      { timeout: 15000 }
+    );
     
-    const data = await response.json();
+    await trialBtn.click();
+    const response = await responsePromise;
+    
+    // Read response body immediately
+    const data = await response.json().catch(async (err) => {
+      const text = await response.text();
+      try {
+        return JSON.parse(text);
+      } catch {
+        throw new Error(`Failed to parse response: ${text.substring(0, 200)}. Original error: ${err.message}`);
+      }
+    });
     
     // If trial already used, API should return error
     // This test assumes the test account has already used trial
@@ -308,16 +381,24 @@ test.describe('Stripe Billing', () => {
       return;
     }
     
-    // Click trial button and wait for API response
-    const [response] = await Promise.all([
-      page.waitForResponse(
+      // Click trial button and wait for API response
+      const responsePromise = page.waitForResponse(
         response => response.url().includes('/api/stripe-checkout'),
         { timeout: 15000 }
-      ),
-      trialBtn.click()
-    ]);
-    
-    const data = await response.json();
+      );
+      
+      await trialBtn.click();
+      const response = await responsePromise;
+      
+      // Read response body immediately
+      const data = await response.json().catch(async (err) => {
+        const text = await response.text();
+        try {
+          return JSON.parse(text);
+        } catch {
+          throw new Error(`Failed to parse response: ${text.substring(0, 200)}. Original error: ${err.message}`);
+        }
+      });
     
     // If trial is blocked (already used), skip this test
     if (data.error && typeof data.error === 'string' && data.error.includes('Trial already used')) {
@@ -355,15 +436,23 @@ test.describe('Stripe Billing', () => {
       }
       
       // Click plan button and wait for API response
-      const [response] = await Promise.all([
-        page.waitForResponse(
-          response => response.url().includes('/api/stripe-checkout'),
-          { timeout: 15000 }
-        ),
-        planBtn.click()
-      ]);
+      const responsePromise = page.waitForResponse(
+        response => response.url().includes('/api/stripe-checkout'),
+        { timeout: 15000 }
+      );
       
-      const data = await response.json();
+      await planBtn.click();
+      const response = await responsePromise;
+      
+      // Read response body immediately
+      const data = await response.json().catch(async (err) => {
+        const text = await response.text();
+        try {
+          return JSON.parse(text);
+        } catch {
+          throw new Error(`Failed to parse response: ${text.substring(0, 200)}. Original error: ${err.message}`);
+        }
+      });
       
       // Handle trial-specific case (may be blocked if already used)
       if (plan === 'trial' && data.error && typeof data.error === 'string' && data.error.includes('Trial already used')) {
@@ -380,8 +469,26 @@ test.describe('Stripe Billing', () => {
   });
   
   test('should automatically convert trial to Essential when trial expires', async ({ page }) => {
+    // Wait for Firebase auth to be ready
+    await page.waitForFunction(() => {
+      return window.FirebaseAuthManager !== undefined && 
+             typeof window.FirebaseAuthManager.getCurrentUser === 'function';
+    }, { timeout: 10000 });
+    
+    // Wait for auth state to be ready
+    await page.waitForFunction(() => {
+      const user = window.FirebaseAuthManager?.getCurrentUser?.();
+      return user !== null && user !== undefined;
+    }, { timeout: 10000 }).catch(() => {
+      return page.waitForFunction(() => {
+        return localStorage.getItem('user-authenticated') === 'true' || 
+               window.FirebaseAuthManager?.getCurrentUser?.() !== null;
+      }, { timeout: 5000 });
+    });
+    
     // Get auth token for API call
     const token = await page.evaluate(async () => {
+      await new Promise(resolve => setTimeout(resolve, 500));
       const user = window.FirebaseAuthManager?.getCurrentUser?.();
       if (user) {
         return await user.getIdToken();

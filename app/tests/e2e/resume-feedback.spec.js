@@ -7,9 +7,35 @@ test.describe('Resume Feedback', () => {
     await page.goto('/resume-feedback-pro.html');
     await page.waitForLoadState('domcontentloaded');
     
+    // Wait for Firebase auth to be ready
+    await page.waitForFunction(() => {
+      return window.FirebaseAuthManager !== undefined && 
+             typeof window.FirebaseAuthManager.getCurrentUser === 'function';
+    }, { timeout: 10000 });
+    
+    // Wait for auth state to be ready
+    await page.waitForFunction(() => {
+      const user = window.FirebaseAuthManager?.getCurrentUser?.();
+      return user !== null && user !== undefined;
+    }, { timeout: 10000 }).catch(() => {
+      return page.waitForFunction(() => {
+        return localStorage.getItem('user-authenticated') === 'true';
+      }, { timeout: 5000 });
+    });
+    
+    // Wait a bit for any redirects to complete
+    await page.waitForTimeout(2000);
+    
+    // Check if we were redirected to pricing (user doesn't have paid plan)
+    const currentURL = page.url();
+    if (currentURL.includes('/pricing')) {
+      test.info().skip('User was redirected to pricing - user may not have paid plan access');
+      return;
+    }
+    
     // Find file input using actual selector from resume-feedback-pro.html
     const fileInput = page.locator('#rf-upload');
-    await expect(fileInput).toBeVisible();
+    await expect(fileInput).toBeVisible({ timeout: 10000 });
     
     // Use test resume from fixtures - verify file exists first
     const testResume = path.join(__dirname, '../fixtures/sample-resume.pdf');

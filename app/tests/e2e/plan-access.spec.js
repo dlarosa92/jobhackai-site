@@ -5,7 +5,34 @@ test.describe('Plan-Based Access Control', () => {
     await page.goto('/resume-feedback-pro.html');
     await page.waitForLoadState('domcontentloaded');
     
+    // Wait for Firebase auth to be ready and auth state to settle
+    await page.waitForFunction(() => {
+      return window.FirebaseAuthManager !== undefined && 
+             typeof window.FirebaseAuthManager.getCurrentUser === 'function';
+    }, { timeout: 10000 });
+    
+    // Wait for auth state to be ready (user might not be set immediately)
+    await page.waitForFunction(() => {
+      const user = window.FirebaseAuthManager?.getCurrentUser?.();
+      return user !== null && user !== undefined;
+    }, { timeout: 10000 }).catch(() => {
+      // Fallback: check localStorage for auth state
+      return page.waitForFunction(() => {
+        return localStorage.getItem('user-authenticated') === 'true';
+      }, { timeout: 5000 });
+    });
+    
+    // Wait a bit for any redirects to complete
+    await page.waitForTimeout(2000);
+    
     // Should NOT redirect to pricing (paid users can access)
+    const currentURL = page.url();
+    if (currentURL.includes('/pricing')) {
+      // If redirected to pricing, the plan check likely failed
+      // This could mean the user doesn't have a paid plan or plan check happened before auth was ready
+      throw new Error(`User was redirected to pricing page: ${currentURL}. This suggests plan check failed or user doesn't have paid plan.`);
+    }
+    
     await expect(page).not.toHaveURL(/\/pricing/);
     
     // Should see upload interface - check for actual file input selector
