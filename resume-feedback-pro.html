@@ -1317,7 +1317,9 @@
               
               // Save role-specific feedback to persistence
               if (window.JobHackAIStatePersistence) {
-                const cachedScore = window.JobHackAIStatePersistence.loadATSScore(jobTitle || null);
+                // Pass jobTitle directly (empty string is valid and should be validated)
+                // Only null should skip validation (page load scenario)
+                const cachedScore = window.JobHackAIStatePersistence.loadATSScore(jobTitle ?? '');
                 if (cachedScore) {
                   window.JobHackAIStatePersistence.saveATSScore({
                     ...cachedScore,
@@ -1334,7 +1336,8 @@
               
               // Update context bar timestamp
               if (window.JobHackAIStatePersistence) {
-                const updatedScore = window.JobHackAIStatePersistence.loadATSScore(jobTitle || null);
+                // Pass jobTitle directly (empty string is valid and should be validated)
+                const updatedScore = window.JobHackAIStatePersistence.loadATSScore(jobTitle ?? '');
                 if (updatedScore && updatedScore.timestamp) {
                   const timeEl = document.getElementById('rf-context-time-value');
                   if (timeEl) {
@@ -1385,8 +1388,9 @@
         
         // Save job title to state persistence (even if empty)
         if (window.JobHackAIStatePersistence) {
-          // Pass current job title to validate cache match
-          const cachedScore = window.JobHackAIStatePersistence.loadATSScore(currentJobTitle || null);
+          // Pass current job title directly (empty string is valid and should be validated)
+          // Only null should skip validation (page load scenario)
+          const cachedScore = window.JobHackAIStatePersistence.loadATSScore(currentJobTitle ?? '');
           if (cachedScore) {
             window.JobHackAIStatePersistence.saveATSScore({
               ...cachedScore,
@@ -1657,7 +1661,9 @@
             
             // Save role-specific feedback to persistence
             if (window.JobHackAIStatePersistence) {
-              const cachedScore = window.JobHackAIStatePersistence.loadATSScore(jobTitle || null);
+              // Pass jobTitle directly (empty string is valid and should be validated)
+              // Only null should skip validation (page load scenario)
+              const cachedScore = window.JobHackAIStatePersistence.loadATSScore(jobTitle ?? '');
               if (cachedScore) {
                 window.JobHackAIStatePersistence.saveATSScore({
                   ...cachedScore,
