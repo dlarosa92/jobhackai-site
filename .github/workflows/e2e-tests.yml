@@ -1,5 +1,14 @@
 name: E2E Tests
 
+# NOTE: This workflow requires GitHub Secrets to be configured:
+# - TEST_EMAIL: Test account email (e.g., jobshackai@gmail.com)
+# - TEST_PASSWORD: Test account password
+# 
+# To add secrets:
+# 1. Go to repository Settings → Secrets and variables → Actions
+# 2. Click "New repository secret"
+# 3. Add TEST_EMAIL and TEST_PASSWORD
+
 on:
   pull_request:
     branches: [dev0, develop]
@@ -25,6 +34,14 @@ jobs:
       - name: Install Playwright
         working-directory: app
         run: npx playwright install --with-deps chromium
+      
+      - name: Validate secrets are set
+        run: |
+          if [ -z "${{ secrets.TEST_EMAIL }}" ] || [ -z "${{ secrets.TEST_PASSWORD }}" ]; then
+            echo "::error::TEST_EMAIL and TEST_PASSWORD secrets must be configured in GitHub repository settings"
+            echo "Go to: Settings → Secrets and variables → Actions → New repository secret"
+            exit 1
+          fi
       
       - name: Run E2E tests
         working-directory: app

@@ -12,7 +12,27 @@ const BASE_URL = process.env.TEST_ENV === 'qa'
 async function globalSetup() {
   // Fail early if credentials are not provided
   if (!TEST_EMAIL || !TEST_PASSWORD) {
-    throw new Error('TEST_EMAIL and TEST_PASSWORD environment variables must be set');
+    const isCI = process.env.CI === 'true' || process.env.GITHUB_ACTIONS === 'true';
+    if (isCI) {
+      throw new Error(
+        'TEST_EMAIL and TEST_PASSWORD environment variables must be set.\n' +
+        'To fix this, add GitHub Secrets:\n' +
+        '1. Go to your GitHub repository\n' +
+        '2. Navigate to Settings → Secrets and variables → Actions\n' +
+        '3. Click "New repository secret"\n' +
+        '4. Add TEST_EMAIL with value: jobshackai@gmail.com\n' +
+        '5. Add TEST_PASSWORD with value: Password1234\n' +
+        '6. Re-run the workflow'
+      );
+    } else {
+      throw new Error(
+        'TEST_EMAIL and TEST_PASSWORD environment variables must be set.\n' +
+        'Set them in your shell or create a .env file:\n' +
+        '  export TEST_EMAIL=your-email@example.com\n' +
+        '  export TEST_PASSWORD=your-password\n' +
+        'Or run: TEST_EMAIL=email TEST_PASSWORD=password npm run test:e2e:dev'
+      );
+    }
   }
   
   const browser = await chromium.launch();
