@@ -18,11 +18,17 @@ test.describe('Resume Feedback', () => {
     }
     await fileInput.setInputFiles(testResume);
     
-    // Wait for upload API response
-    await page.waitForResponse(
-      response => response.url().includes('/api/resume-upload') && response.status() === 200,
+    // Wait for upload API response - handle both success and error cases
+    const uploadResponse = await page.waitForResponse(
+      response => response.url().includes('/api/resume-upload'),
       { timeout: 30000 }
     );
+    
+    // Check if upload was successful
+    if (uploadResponse.status() !== 200) {
+      const errorData = await uploadResponse.json().catch(() => ({ error: 'Unknown error' }));
+      throw new Error(`Resume upload failed with status ${uploadResponse.status()}: ${JSON.stringify(errorData)}`);
+    }
     
     // Wait for score badge to appear (check for score element)
     // The score appears in .rf-score-badge or similar elements

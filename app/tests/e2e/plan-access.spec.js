@@ -25,8 +25,13 @@ test.describe('Plan-Based Access Control', () => {
     
     if (badgeExists) {
       const planText = await planBadge.textContent();
-      // Should be one of the paid plans
-      expect(['trial', 'essential', 'pro', 'premium']).toContain(planText.toLowerCase());
+      // Trim whitespace and extract plan name (handle cases like "Trial Plan" or " essential ")
+      const normalizedPlan = planText.trim().toLowerCase();
+      const validPlans = ['trial', 'essential', 'pro', 'premium'];
+      
+      // Check if any valid plan name is contained in the text
+      const foundPlan = validPlans.find(plan => normalizedPlan.includes(plan));
+      expect(foundPlan).toBeTruthy();
     } else {
       // If badge not visible, check for plan in other elements
       const planIndicator = page.locator('[class*="plan"], [data-plan]').first();
