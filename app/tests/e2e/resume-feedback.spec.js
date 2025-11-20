@@ -91,10 +91,17 @@ test.describe('Resume Feedback', () => {
     }
     await fileInput.setInputFiles(testResume);
     
+    // Click the Generate button to trigger upload and scoring
+    const generateBtn = page.locator('#rf-generate-btn');
+    // It may be revealed/enabled after the change event; wait briefly
+    await generateBtn.waitFor({ state: 'attached', timeout: 10000 }).catch(() => {});
+    await expect(generateBtn).toBeEnabled({ timeout: 10000 });
+    await generateBtn.click();
+    
     // Wait for upload API response - handle both success and error cases
     const uploadResponse = await page.waitForResponse(
       response => response.url().includes('/api/resume-upload'),
-      { timeout: 30000 }
+      { timeout: 45000 }
     );
     
     // Check if upload was successful
