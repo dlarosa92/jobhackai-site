@@ -13,8 +13,8 @@
     "deploy:qa": "wrangler pages deploy out --project-name=jobhackai-app-dev --branch dev0",
     "deploy:prod": "wrangler pages deploy out --branch main",
     "test:e2e": "playwright test --config tests/playwright.config.js",
-    "test:e2e:dev": "TEST_ENV=dev playwright test --config tests/playwright.config.js",
-    "test:e2e:qa": "TEST_ENV=qa playwright test --config tests/playwright.config.js"
+    "test:e2e:dev": "cross-env TEST_ENV=dev playwright test --config tests/playwright.config.js",
+    "test:e2e:qa": "cross-env TEST_ENV=qa playwright test --config tests/playwright.config.js"
   },
   "dependencies": {
     "firebase": "^10.7.0",
@@ -33,6 +33,7 @@
     "@types/node": "^20.0.0",
     "@types/react": "^18.2.0",
     "@types/react-dom": "^18.2.0",
+    "cross-env": "^10.1.0",
     "typescript": "^5.0.0",
     "wrangler": "^3.0.0"
   }
