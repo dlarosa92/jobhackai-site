@@ -18,16 +18,20 @@ test.describe('Stripe Billing', () => {
     await essentialBtn.click();
     const response = await responsePromise;
     
-    // Read response body immediately before it gets consumed
-    const data = await response.json().catch(async (err) => {
-      // If json() fails, try to get the text and parse manually
-      const text = await response.text();
+    // Read response body immediately - use body() to get raw buffer if json() fails
+    let data;
+    try {
+      data = await response.json();
+    } catch (err) {
+      // If json() fails, try reading the body as buffer and parsing
       try {
-        return JSON.parse(text);
-      } catch {
-        throw new Error(`Failed to parse response: ${text.substring(0, 200)}. Original error: ${err.message}`);
+        const body = await response.body();
+        const text = body.toString('utf-8');
+        data = JSON.parse(text);
+      } catch (parseErr) {
+        throw new Error(`Failed to parse response. Status: ${response.status()}. Original error: ${err.message}. Parse error: ${parseErr.message}`);
       }
-    });
+    }
     
     expect(data.ok).toBe(true);
     expect(data.url).toContain('checkout.stripe.com');
@@ -99,15 +103,20 @@ test.describe('Stripe Billing', () => {
     await proBtn.click();
     const response = await responsePromise;
     
-    // Read response body immediately
-    const data = await response.json().catch(async (err) => {
-      const text = await response.text();
+    // Read response body immediately - use body() to get raw buffer if json() fails
+    let data;
+    try {
+      data = await response.json();
+    } catch (err) {
+      // If json() fails, try reading the body as buffer and parsing
       try {
-        return JSON.parse(text);
-      } catch {
-        throw new Error(`Failed to parse response: ${text.substring(0, 200)}. Original error: ${err.message}`);
+        const body = await response.body();
+        const text = body.toString('utf-8');
+        data = JSON.parse(text);
+      } catch (parseErr) {
+        throw new Error(`Failed to parse response. Status: ${response.status()}. Original error: ${err.message}. Parse error: ${parseErr.message}`);
       }
-    });
+    }
     
     // Handle both success and error responses
     if (response.status() === 200 && data.ok) {
@@ -183,15 +192,20 @@ test.describe('Stripe Billing', () => {
     await proBtn.click();
     const response = await responsePromise;
     
-    // Read response body immediately
-    const data = await response.json().catch(async (err) => {
-      const text = await response.text();
+    // Read response body immediately - use body() to get raw buffer if json() fails
+    let data;
+    try {
+      data = await response.json();
+    } catch (err) {
+      // If json() fails, try reading the body as buffer and parsing
       try {
-        return JSON.parse(text);
-      } catch {
-        throw new Error(`Failed to parse response: ${text.substring(0, 200)}. Original error: ${err.message}`);
+        const body = await response.body();
+        const text = body.toString('utf-8');
+        data = JSON.parse(text);
+      } catch (parseErr) {
+        throw new Error(`Failed to parse response. Status: ${response.status()}. Original error: ${err.message}. Parse error: ${parseErr.message}`);
       }
-    });
+    }
     
     // Handle both success and error responses
     if (response.status() === 200 && data.ok) {
@@ -223,15 +237,20 @@ test.describe('Stripe Billing', () => {
     await trialBtn.click();
     const response = await responsePromise;
     
-    // Read response body immediately
-    const data = await response.json().catch(async (err) => {
-      const text = await response.text();
+    // Read response body immediately - use body() to get raw buffer if json() fails
+    let data;
+    try {
+      data = await response.json();
+    } catch (err) {
+      // If json() fails, try reading the body as buffer and parsing
       try {
-        return JSON.parse(text);
-      } catch {
-        throw new Error(`Failed to parse response: ${text.substring(0, 200)}. Original error: ${err.message}`);
+        const body = await response.body();
+        const text = body.toString('utf-8');
+        data = JSON.parse(text);
+      } catch (parseErr) {
+        throw new Error(`Failed to parse response. Status: ${response.status()}. Original error: ${err.message}. Parse error: ${parseErr.message}`);
       }
-    });
+    }
     
     // If trial already used, API should return error
     // This test assumes the test account has already used trial
@@ -469,6 +488,9 @@ test.describe('Stripe Billing', () => {
   });
   
   test('should automatically convert trial to Essential when trial expires', async ({ page }) => {
+    // Navigate to a page first to ensure scripts are loaded
+    await page.goto('/dashboard', { waitUntil: 'domcontentloaded' });
+    
     // Wait for Firebase auth to be ready
     await page.waitForFunction(() => {
       return window.FirebaseAuthManager !== undefined && 

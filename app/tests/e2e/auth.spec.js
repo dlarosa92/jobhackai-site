@@ -38,11 +38,18 @@ test.describe('Authentication', () => {
   });
   
   test('should protect dashboard from unauthenticated access', async ({ browser, baseURL }) => {
-    // Create new context without auth, but with baseURL from config
+    // Create new context without auth - explicitly clear storage state
     const context = await browser.newContext({
-      baseURL: baseURL
+      baseURL: baseURL,
+      storageState: undefined // Explicitly no storage state
     });
     const page = await context.newPage();
+    
+    // Clear any localStorage that might have been set
+    await page.addInitScript(() => {
+      localStorage.clear();
+      sessionStorage.clear();
+    });
     
     // Navigate to dashboard - auth guard should redirect to login
     await page.goto('/dashboard', { waitUntil: 'domcontentloaded' });
@@ -55,7 +62,12 @@ test.describe('Authentication', () => {
       // If redirect didn't happen, check current URL and fail with helpful message
       const currentURL = page.url();
       if (currentURL.includes('/dashboard')) {
-        throw new Error(`Auth guard did not redirect. Current URL: ${currentURL}. Auth guard may not be working or page loaded before guard executed.`);
+        // Check if auth guard script is present
+        const hasAuthGuard = await page.evaluate(() => {
+          return document.querySelector('script[src*="static-auth-guard"]') !== null ||
+                 Array.from(document.scripts).some(s => s.textContent.includes('auth-pending'));
+        });
+        throw new Error(`Auth guard did not redirect. Current URL: ${currentURL}. Auth guard script present: ${hasAuthGuard}. Auth guard may not be working or page loaded before guard executed.`);
       }
       throw error;
     }
