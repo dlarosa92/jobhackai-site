@@ -1315,6 +1315,16 @@
               updateFeedbackGrid(feedbackResult.roleSpecificFeedback);
               updateRubricGridFromFeedback(feedbackResult.atsRubric);
               
+              // Make grids visible (they start with display:none)
+              const rubricGrid = document.getElementById('rf-rubric-grid');
+              if (rubricGrid) {
+                rubricGrid.style.display = 'grid';
+              }
+              const feedbackGrid = document.getElementById('rf-feedback-grid');
+              if (feedbackGrid) {
+                feedbackGrid.style.display = 'grid';
+              }
+              
               // Save role-specific feedback to persistence
               if (window.JobHackAIStatePersistence) {
                 // Pass jobTitle directly (empty string is valid and should be validated)
@@ -1490,6 +1500,12 @@
           ];
           updateRubricGrid(rubric);
           
+          // Make rubric grid visible (it starts with display:none)
+          const rubricGrid = document.getElementById('rf-rubric-grid');
+          if (rubricGrid) {
+            rubricGrid.style.display = 'grid';
+          }
+          
           // Trigger fade transition for ATS feedback
           setTimeout(() => {
             showATSFeedback();
@@ -1506,6 +1522,12 @@
               const feedbackResult = await getResumeFeedback(uploadResult.resumeId, jobTitleForFeedback);
               updateFeedbackGrid(feedbackResult.roleSpecificFeedback);
               updateRubricGridFromFeedback(feedbackResult.atsRubric);
+              
+              // Make feedback grid visible (it starts with display:none)
+              const feedbackGrid = document.getElementById('rf-feedback-grid');
+              if (feedbackGrid) {
+                feedbackGrid.style.display = 'grid';
+              }
               
               // Save role-specific feedback to persistence
               if (window.JobHackAIStatePersistence && scoreResult.success) {
@@ -1658,6 +1680,16 @@
             const feedbackResult = await getResumeFeedback(currentResumeId, jobTitle);
             updateFeedbackGrid(feedbackResult.roleSpecificFeedback);
             updateRubricGridFromFeedback(feedbackResult.atsRubric);
+            
+            // Make grids visible (they start with display:none)
+            const rubricGrid = document.getElementById('rf-rubric-grid');
+            if (rubricGrid) {
+              rubricGrid.style.display = 'grid';
+            }
+            const feedbackGrid = document.getElementById('rf-feedback-grid');
+            if (feedbackGrid) {
+              feedbackGrid.style.display = 'grid';
+            }
             
             // Save role-specific feedback to persistence
             if (window.JobHackAIStatePersistence) {
