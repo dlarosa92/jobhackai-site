@@ -178,8 +178,24 @@ export async function onRequest(context) {
 
     // Update KV with correct plan
     const timestamp = Math.floor(Date.now() / 1000);
-    await env.JOBHACKAI_KV?.put(`planByUid:${uid}`, plan);
-    await env.JOBHACKAI_KV?.put(`planTsByUid:${uid}`, String(timestamp));
+    const kvKey = `planByUid:${uid}`;
+    console.log(`✍️ [SYNC-STRIPE-PLAN] Writing to KV: ${kvKey} = ${plan}`);
+    
+    try {
+      await env.JOBHACKAI_KV?.put(kvKey, plan);
+      await env.JOBHACKAI_KV?.put(`planTsByUid:${uid}`, String(timestamp));
+      
+      // Verify write immediately
+      const verifyPlan = await env.JOBHACKAI_KV?.get(kvKey);
+      if (verifyPlan === plan) {
+        console.log(`✅ [SYNC-STRIPE-PLAN] KV write verified: ${kvKey} = ${verifyPlan}`);
+      } else {
+        console.error(`❌ [SYNC-STRIPE-PLAN] KV write verification failed! Expected: ${plan}, Got: ${verifyPlan}`);
+      }
+    } catch (kvError) {
+      console.error(`❌ [SYNC-STRIPE-PLAN] KV write error:`, kvError);
+      throw kvError;
+    }
 
     // Store cancellation data if present
     if (cancelAtPeriodEnd && cancelAt) {
