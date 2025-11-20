@@ -19,24 +19,76 @@ async function syncPlan(email, password, baseURL) {
   const page = await context.newPage();
   
   try {
-    // Navigate to login page
-    await page.goto('/login');
-    await page.waitForLoadState('domcontentloaded');
+    console.log(`🔐 Authenticating on ${baseURL}`);
     
-    // Wait for Firebase auth to be ready
+    // Navigate to login page
+    await page.goto(`${baseURL}/login`, { waitUntil: 'domcontentloaded' });
+    
+    // Wait for login form - using actual selector from login.html
+    await page.waitForSelector('#loginEmail', { timeout: 15000 });
+    
+    // Wait for Firebase and authManager to be ready
     await page.waitForFunction(() => {
       return window.FirebaseAuthManager !== undefined && 
-             typeof window.FirebaseAuthManager.getCurrentUser === 'function';
-    }, { timeout: 10000 });
+             typeof window.FirebaseAuthManager.signIn === 'function';
+    }, { timeout: 15000 });
     
-    // Login
-    await page.fill('input[type="email"]', email);
-    await page.fill('input[type="password"]', password);
-    await page.click('#loginContinueBtn');
+    // Use FirebaseAuthManager.signIn directly (same as global-setup.js)
+    let loginResult;
+    let navigationAlreadyHandled = false;
     
-    // Wait for dashboard
-    await page.waitForURL(/\/dashboard/, { timeout: 20000 });
-    console.log('✅ Login successful');
+    try {
+      loginResult = await page.evaluate(async ({ email, password }) => {
+        if (!window.FirebaseAuthManager || typeof window.FirebaseAuthManager.signIn !== 'function') {
+          return { success: false, error: 'FirebaseAuthManager.signIn not available' };
+        }
+        
+        try {
+          const result = await window.FirebaseAuthManager.signIn(email, password);
+          return result;
+        } catch (error) {
+          return { success: false, error: error.message || 'Login failed' };
+        }
+      }, { email, password });
+    } catch (evaluateError) {
+      // If execution context was destroyed due to navigation, check if we navigated successfully
+      if (evaluateError.message.includes('Execution context was destroyed')) {
+        try {
+          await page.waitForURL(/\/dashboard|\/verify-email/, { timeout: 10000 });
+          const currentURL = page.url();
+          if (currentURL.includes('/dashboard') || currentURL.includes('/verify-email')) {
+            console.log('✅ Login succeeded (detected via navigation)');
+            loginResult = { success: true };
+            navigationAlreadyHandled = true;
+          }
+        } catch (navError) {
+          const currentURL = page.url();
+          throw new Error(`Login failed: Execution context destroyed but no successful navigation. Current URL: ${currentURL}`);
+        }
+      } else {
+        throw evaluateError;
+      }
+    }
+    
+    // Wait for navigation if it hasn't happened yet
+    if (!navigationAlreadyHandled) {
+      try {
+        await page.waitForURL(/\/dashboard|\/verify-email/, { timeout: 30000 });
+        const currentURL = page.url();
+        if (currentURL.includes('/dashboard')) {
+          console.log('✅ Login successful, navigated to dashboard');
+        } else if (currentURL.includes('/verify-email')) {
+          console.log('⚠️ Login successful but email verification required');
+        }
+      } catch (navError) {
+        const currentURL = page.url();
+        throw new Error(`Login navigation timeout. Current URL: ${currentURL}`);
+      }
+    }
+    
+    if (loginResult && !loginResult.success) {
+      throw new Error(`Login failed: ${loginResult.error || 'Unknown error'}`);
+    }
     
     // Wait for auth to be ready
     await page.waitForFunction(() => {
@@ -88,22 +140,43 @@ async function syncPlan(email, password, baseURL) {
       console.error('❌ Sync failed:', syncData.error || 'Unknown error');
     }
     
-    // Verify plan after sync
+    // Verify plan after sync (with retries for eventual consistency)
     console.log('🔍 Verifying plan after sync...');
-    const verifyResponse = await page.request.get('/api/plan/me', {
-      headers: { 'Authorization': `Bearer ${token}` }
-    });
+    let verifyData = null;
+    let retries = 3;
     
-    if (verifyResponse.ok()) {
-      const verifyData = await verifyResponse.json();
-      console.log('📊 Plan in KV after sync:', JSON.stringify(verifyData, null, 2));
+    for (let i = 0; i < retries; i++) {
+      if (i > 0) {
+        console.log(`⏳ Waiting 2 seconds before retry ${i + 1}/${retries}...`);
+        await page.waitForTimeout(2000);
+      }
       
-      if (verifyData.plan === 'essential' || verifyData.plan === 'Essential') {
-        console.log('✅ Plan is correctly set to Essential in KV');
-      } else {
-        console.warn(`⚠️ Plan is ${verifyData.plan}, expected Essential`);
+      const verifyResponse = await page.request.get('/api/plan/me', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      
+      if (verifyResponse.ok()) {
+        verifyData = await verifyResponse.json();
+        console.log(`📊 Plan in KV after sync (attempt ${i + 1}):`, JSON.stringify(verifyData, null, 2));
+        
+        if (verifyData.plan === 'essential' || verifyData.plan === 'Essential') {
+          console.log('✅ Plan is correctly set to Essential in KV');
+          break;
+        } else if (i < retries - 1) {
+          console.warn(`⚠️ Plan is still ${verifyData.plan}, retrying...`);
+        } else {
+          console.warn(`⚠️ Plan is ${verifyData.plan}, expected Essential after ${retries} attempts`);
+        }
       }
     }
+    
+    // Get UID for debugging
+    const uid = await page.evaluate(() => {
+      const user = window.FirebaseAuthManager?.getCurrentUser?.();
+      return user?.uid || null;
+    });
+    console.log('🔍 User UID:', uid);
+    console.log('🔍 KV key should be: planByUid:' + uid);
     
   } catch (error) {
     console.error('❌ Error:', error.message);
@@ -116,13 +189,22 @@ async function syncPlan(email, password, baseURL) {
 // Run if called directly
 if (require.main === module) {
   const args = process.argv.slice(2);
-  if (args.length < 3) {
-    console.error('Usage: node sync-plan.js <email> <password> <base-url>');
+  
+  // Try to get from environment variables if not provided as args
+  const email = args[0] || process.env.TEST_EMAIL;
+  const password = args[1] || process.env.TEST_PASSWORD;
+  const baseURL = args[2] || (process.env.TEST_ENV === 'qa' 
+    ? 'https://qa.jobhackai.io' 
+    : 'https://dev.jobhackai.io');
+  
+  if (!email || !password) {
+    console.error('Usage: node sync-plan.js [email] [password] [base-url]');
+    console.error('Or set environment variables: TEST_EMAIL, TEST_PASSWORD, TEST_ENV');
     console.error('Example: node sync-plan.js jobshackai@gmail.com password123 https://dev.jobhackai.io');
+    console.error('Or: TEST_EMAIL=jobshackai@gmail.com TEST_PASSWORD=password123 node sync-plan.js');
     process.exit(1);
   }
   
-  const [email, password, baseURL] = args;
   syncPlan(email, password, baseURL)
     .then(() => {
       console.log('✅ Sync complete');
