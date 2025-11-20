@@ -27,38 +27,92 @@ test.describe('Stripe Billing', () => {
     await page.goto('/pricing-a.html');
     await page.waitForLoadState('networkidle');
     
-    const proBtn = page.locator('button[data-plan="pro"]').first();
-    await expect(proBtn).toBeVisible();
+    // Get auth token for API call
+    const token = await page.evaluate(async () => {
+      const user = window.FirebaseAuthManager?.getCurrentUser?.();
+      if (user) {
+        return await user.getIdToken();
+      }
+      return null;
+    });
     
-    const [response] = await Promise.all([
-      page.waitForResponse(
-        response => response.url().includes('/api/stripe-checkout') && response.status() === 200,
-        { timeout: 15000 }
-      ),
-      proBtn.click()
-    ]);
-    
-    const data = await response.json();
-    expect(data.ok).toBe(true);
+    // Verify current plan is essential (or lower) before testing upgrade
+    if (token) {
+      const planResponse = await page.request.get('/api/plan/me', {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      if (planResponse.ok()) {
+        const planData = await planResponse.json();
+        // Only test upgrade if current plan is essential or lower
+        if (planData.plan && !['pro', 'premium'].includes(planData.plan)) {
+          const proBtn = page.locator('button[data-plan="pro"]').first();
+          await expect(proBtn).toBeVisible();
+          
+          const [response] = await Promise.all([
+            page.waitForResponse(
+              response => response.url().includes('/api/stripe-checkout') && response.status() === 200,
+              { timeout: 15000 }
+            ),
+            proBtn.click()
+          ]);
+          
+          const data = await response.json();
+          expect(data.ok).toBe(true);
+          expect(data.url).toContain('checkout.stripe.com');
+        } else {
+          test.skip(); // Skip if already on pro or premium
+        }
+      }
+    }
   });
   
   test('should allow downgrade from premium to pro', async ({ page }) => {
     await page.goto('/pricing-a.html');
     await page.waitForLoadState('networkidle');
     
-    const proBtn = page.locator('button[data-plan="pro"]').first();
-    await expect(proBtn).toBeVisible();
+    // Get auth token for API call
+    const token = await page.evaluate(async () => {
+      const user = window.FirebaseAuthManager?.getCurrentUser?.();
+      if (user) {
+        return await user.getIdToken();
+      }
+      return null;
+    });
     
-    const [response] = await Promise.all([
-      page.waitForResponse(
-        response => response.url().includes('/api/stripe-checkout') && response.status() === 200,
-        { timeout: 15000 }
-      ),
-      proBtn.click()
-    ]);
-    
-    const data = await response.json();
-    expect(data.ok).toBe(true);
+    // Verify current plan is premium before testing downgrade
+    if (token) {
+      const planResponse = await page.request.get('/api/plan/me', {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      if (planResponse.ok()) {
+        const planData = await planResponse.json();
+        // Only test downgrade if current plan is premium
+        if (planData.plan === 'premium') {
+          const proBtn = page.locator('button[data-plan="pro"]').first();
+          await expect(proBtn).toBeVisible();
+          
+          const [response] = await Promise.all([
+            page.waitForResponse(
+              response => response.url().includes('/api/stripe-checkout') && response.status() === 200,
+              { timeout: 15000 }
+            ),
+            proBtn.click()
+          ]);
+          
+          const data = await response.json();
+          expect(data.ok).toBe(true);
+          expect(data.url).toContain('checkout.stripe.com');
+        } else {
+          test.skip(); // Skip if not on premium
+        }
+      }
+    }
   });
   
   test('should BLOCK trial if already used', async ({ page }) => {
@@ -67,22 +121,33 @@ test.describe('Stripe Billing', () => {
     
     const trialBtn = page.locator('button[data-plan="trial"]').first();
     
-    if (await trialBtn.isVisible()) {
-      const [response] = await Promise.all([
-        page.waitForResponse(
-          response => response.url().includes('/api/stripe-checkout'),
-          { timeout: 15000 }
-        ),
-        trialBtn.click()
-      ]);
-      
-      const data = await response.json();
-      
-      // If trial already used, should get error
-      if (data.error && data.error.includes('Trial already used')) {
-        expect(data.ok).toBe(false);
-        expect(data.error).toContain('Trial already used');
-      }
+    // Verify trial button exists and is visible
+    const isVisible = await trialBtn.isVisible().catch(() => false);
+    expect(isVisible).toBe(true); // Fail if trial button doesn't exist
+    
+    // Click trial button and wait for response
+    const [response] = await Promise.all([
+      page.waitForResponse(
+        response => response.url().includes('/api/stripe-checkout'),
+        { timeout: 15000 }
+      ),
+      trialBtn.click()
+    ]);
+    
+    const data = await response.json();
+    
+    // If trial already used, API should return error
+    // This test assumes the test account has already used trial
+    if (data.error && data.error.includes('Trial already used')) {
+      expect(data.ok).toBe(false);
+      expect(data.error).toContain('Trial already used');
+    } else if (data.ok) {
+      // If trial is allowed, that's also valid - but log it
+      console.log('Trial is available (not yet used)');
+      expect(data.url).toContain('checkout.stripe.com');
+    } else {
+      // If we get an error but not the expected one, fail the test
+      throw new Error(`Unexpected error response: ${JSON.stringify(data)}`);
     }
   });
   

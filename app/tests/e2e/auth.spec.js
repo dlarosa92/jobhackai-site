@@ -22,9 +22,11 @@ test.describe('Authentication', () => {
     await page.waitForLoadState('networkidle');
   });
   
-  test('should protect dashboard from unauthenticated access', async ({ browser }) => {
-    // Create new context without auth
-    const context = await browser.newContext();
+  test('should protect dashboard from unauthenticated access', async ({ browser, baseURL }) => {
+    // Create new context without auth, but with baseURL from config
+    const context = await browser.newContext({
+      baseURL: baseURL
+    });
     const page = await context.newPage();
     
     await page.goto('/dashboard');

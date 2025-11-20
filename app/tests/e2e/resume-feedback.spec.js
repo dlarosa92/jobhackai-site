@@ -1,5 +1,6 @@
 const { test, expect } = require('@playwright/test');
 const path = require('path');
+const fs = require('fs');
 
 test.describe('Resume Feedback', () => {
   test('should upload resume and receive ATS score', async ({ page }) => {
@@ -10,8 +11,11 @@ test.describe('Resume Feedback', () => {
     const fileInput = page.locator('#rf-upload');
     await expect(fileInput).toBeVisible();
     
-    // Use test resume from fixtures
+    // Use test resume from fixtures - verify file exists first
     const testResume = path.join(__dirname, '../fixtures/sample-resume.pdf');
+    if (!fs.existsSync(testResume)) {
+      throw new Error(`Test resume file not found at: ${testResume}`);
+    }
     await fileInput.setInputFiles(testResume);
     
     // Wait for upload API response
