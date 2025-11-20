@@ -391,7 +391,7 @@ test.describe('Stripe Billing', () => {
       
       // Verify trial end date is in the future (trial is active)
       if (planData.trialEndsAt) {
-        const trialEndDate = new Date(planData.trialEndsAt * 1000);
+        const trialEndDate = new Date(planData.trialEndsAt);
         const now = new Date();
         expect(trialEndDate.getTime()).toBeGreaterThan(now.getTime());
       }
