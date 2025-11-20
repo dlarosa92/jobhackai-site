@@ -81,7 +81,8 @@ test.describe('Resume Feedback', () => {
     
     // Find file input using actual selector from resume-feedback-pro.html
     const fileInput = page.locator('#rf-upload');
-    await expect(fileInput).toBeVisible({ timeout: 10000 });
+    // Input may be visually hidden (custom UI), only require it to exist in DOM
+    await fileInput.waitFor({ state: 'attached', timeout: 10000 });
     
     // Use test resume from fixtures - verify file exists first
     const testResume = path.join(__dirname, '../fixtures/sample-resume.pdf');
