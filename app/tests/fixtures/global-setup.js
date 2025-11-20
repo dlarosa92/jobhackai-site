@@ -69,69 +69,99 @@ async function globalSetup() {
     await page.fill('#loginEmail', TEST_EMAIL);
     await page.fill('#loginPassword', TEST_PASSWORD);
     
+    // Set up navigation wait BEFORE calling signIn to handle redirects gracefully
+    // Use Promise.race to handle both successful signIn and navigation
+    const navigationPromise = page.waitForURL(/\/dashboard|\/verify-email/, { timeout: 30000 }).catch(() => null);
+    
     // Call authManager.signIn directly via JavaScript to avoid form submission issues
     // This bypasses the form and directly uses the Firebase auth
     // Note: page.evaluate() requires multiple arguments to be wrapped in an object
-    const loginResult = await page.evaluate(async ({ email, password }) => {
-      if (!window.FirebaseAuthManager || typeof window.FirebaseAuthManager.signIn !== 'function') {
-        return { success: false, error: 'FirebaseAuthManager.signIn not available' };
+    let loginResult;
+    try {
+      loginResult = await page.evaluate(async ({ email, password }) => {
+        if (!window.FirebaseAuthManager || typeof window.FirebaseAuthManager.signIn !== 'function') {
+          return { success: false, error: 'FirebaseAuthManager.signIn not available' };
+        }
+        
+        try {
+          const result = await window.FirebaseAuthManager.signIn(email, password);
+          return result;
+        } catch (error) {
+          return { success: false, error: error.message || 'Login failed' };
+        }
+      }, { email: TEST_EMAIL, password: TEST_PASSWORD });
+    } catch (evaluateError) {
+      // If execution context was destroyed due to navigation, check if we navigated successfully
+      if (evaluateError.message.includes('Execution context was destroyed')) {
+        // Wait a bit for navigation to complete
+        await page.waitForTimeout(2000);
+        const currentURL = page.url();
+        if (currentURL.includes('/dashboard') || currentURL.includes('/verify-email')) {
+          // Navigation happened, which means login likely succeeded
+          console.log('✅ Login succeeded (detected via navigation)');
+          loginResult = { success: true };
+        } else {
+          throw new Error(`Login failed: Execution context destroyed but no successful navigation. Current URL: ${currentURL}`);
+        }
+      } else {
+        throw evaluateError;
       }
-      
-      try {
-        const result = await window.FirebaseAuthManager.signIn(email, password);
-        return result;
-      } catch (error) {
-        return { success: false, error: error.message || 'Login failed' };
-      }
-    }, { email: TEST_EMAIL, password: TEST_PASSWORD });
+    }
     
-    if (!loginResult.success) {
+    // Wait for navigation if it hasn't happened yet
+    await navigationPromise;
+    
+    if (loginResult && !loginResult.success) {
       throw new Error(`Login failed: ${loginResult.error || 'Unknown error'}`);
     }
     
     // Wait a moment for auth state to update
     await page.waitForTimeout(2000);
     
-    // After successful login, check if we need to handle email verification
-    const authState = await page.evaluate(() => {
-      const user = window.FirebaseAuthManager?.getCurrentUser?.();
-      if (!user) {
-        return { hasUser: false };
+    // Check current URL - if we already navigated, use that
+    let currentURL = page.url();
+    if (currentURL.includes('/dashboard') || currentURL.includes('/verify-email')) {
+      // Already navigated, verify we're on the right page
+      if (currentURL.includes('/verify-email')) {
+        console.log('⚠️ Email verification required - this may cause test issues');
+      }
+    } else {
+      // No navigation happened, check auth state and navigate manually
+      const authState = await page.evaluate(() => {
+        const user = window.FirebaseAuthManager?.getCurrentUser?.();
+        if (!user) {
+          return { hasUser: false };
+        }
+        
+        const isEmailPassword = window.FirebaseAuthManager?.isEmailPasswordUser?.(user);
+        const emailVerified = user.emailVerified !== false;
+        
+        return {
+          hasUser: true,
+          needsVerification: isEmailPassword && !emailVerified,
+          userEmail: user.email
+        };
+      });
+      
+      if (!authState.hasUser) {
+        throw new Error('Login succeeded but no user found in auth state');
       }
       
-      const isEmailPassword = window.FirebaseAuthManager?.isEmailPasswordUser?.(user);
-      const emailVerified = user.emailVerified !== false;
+      if (authState.needsVerification) {
+        // Navigate to verify-email page
+        await page.goto(`${BASE_URL}/verify-email.html`, { waitUntil: 'networkidle' });
+        console.log('⚠️ Email verification required - navigating to verify-email page');
+      } else {
+        // Navigate to dashboard (the app should redirect here, but we'll do it explicitly)
+        await page.goto(`${BASE_URL}/dashboard.html`, { waitUntil: 'networkidle' });
+      }
       
-      return {
-        hasUser: true,
-        needsVerification: isEmailPassword && !emailVerified,
-        userEmail: user.email
-      };
-    });
-    
-    if (!authState.hasUser) {
-      throw new Error('Login succeeded but no user found in auth state');
-    }
-    
-    if (authState.needsVerification) {
-      // Navigate to verify-email page
-      await page.goto(`${BASE_URL}/verify-email.html`, { waitUntil: 'networkidle' });
-      console.log('⚠️ Email verification required - navigating to verify-email page');
-    } else {
-      // Navigate to dashboard (the app should redirect here, but we'll do it explicitly)
-      await page.goto(`${BASE_URL}/dashboard.html`, { waitUntil: 'networkidle' });
+      currentURL = page.url();
     }
     
     // Verify we're on the right page
-    const finalURL = page.url();
-    if (!finalURL.includes('/dashboard') && !finalURL.includes('/verify-email')) {
-      throw new Error(`Unexpected redirect after login: ${finalURL}`);
-    }
-    
-    if (finalURL.includes('/verify-email')) {
-      console.log('⚠️ Email verification required - this may cause test issues');
-      // For test accounts, we might need to skip email verification
-      // or handle it differently
+    if (!currentURL.includes('/dashboard') && !currentURL.includes('/verify-email')) {
+      throw new Error(`Unexpected redirect after login: ${currentURL}`);
     }
     
     // Ensure auth directory exists
