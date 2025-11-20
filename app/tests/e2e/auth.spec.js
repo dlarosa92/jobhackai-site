@@ -14,9 +14,17 @@ test.describe('Authentication', () => {
     // Wait for login form using actual selector
     await page.waitForSelector('#loginEmail');
     
+    // Require credentials from environment variables - no hardcoded fallbacks
+    const TEST_EMAIL = process.env.TEST_EMAIL;
+    const TEST_PASSWORD = process.env.TEST_PASSWORD;
+    
+    if (!TEST_EMAIL || !TEST_PASSWORD) {
+      throw new Error('TEST_EMAIL and TEST_PASSWORD environment variables must be set');
+    }
+    
     // Fill credentials
-    await page.fill('#loginEmail', process.env.TEST_EMAIL || 'jobshackai@gmail.com');
-    await page.fill('#loginPassword', process.env.TEST_PASSWORD || 'Password1234');
+    await page.fill('#loginEmail', TEST_EMAIL);
+    await page.fill('#loginPassword', TEST_PASSWORD);
     
     // Submit form
     await Promise.all([

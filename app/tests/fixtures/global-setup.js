@@ -2,19 +2,25 @@ const { chromium } = require('@playwright/test');
 const path = require('path');
 const fs = require('fs');
 
-const TEST_EMAIL = process.env.TEST_EMAIL || 'jobshackai@gmail.com';
-const TEST_PASSWORD = process.env.TEST_PASSWORD || 'Password1234';
+// Require credentials from environment variables - no hardcoded fallbacks
+const TEST_EMAIL = process.env.TEST_EMAIL;
+const TEST_PASSWORD = process.env.TEST_PASSWORD;
 const BASE_URL = process.env.TEST_ENV === 'qa' 
   ? 'https://qa.jobhackai.io'
   : 'https://dev.jobhackai.io';
 
 async function globalSetup() {
+  // Fail early if credentials are not provided
+  if (!TEST_EMAIL || !TEST_PASSWORD) {
+    throw new Error('TEST_EMAIL and TEST_PASSWORD environment variables must be set');
+  }
+  
   const browser = await chromium.launch();
   const context = await browser.newContext();
   const page = await context.newPage();
   
   try {
-    console.log(`🔐 Authenticating as ${TEST_EMAIL} on ${BASE_URL}`);
+    console.log(`🔐 Authenticating on ${BASE_URL}`);
     
     await page.goto(`${BASE_URL}/login`);
     
