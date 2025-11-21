@@ -891,7 +891,15 @@
       const previousPlan = localStorage.getItem('previous-plan');
       if (previousPlan === 'free' && (currentPlan === 'trial' || currentPlan === 'essential' || currentPlan === 'pro' || currentPlan === 'premium')) {
         localStorage.setItem('was-free-user', 'true');
-        console.log('✅ Marked user as former free user (upgraded to', currentPlan + ')');
+        // CRITICAL: Store flag indicating user had free ATS score at upgrade time
+        // This ensures modal only shows if they had a score BEFORE upgrading
+        const hadFreeATSScore = localStorage.getItem('lastATSScore') || sessionStorage.getItem('currentAtsScore');
+        if (hadFreeATSScore) {
+          localStorage.setItem('had-free-ats-score-at-upgrade', 'true');
+          console.log('✅ Marked user as former free user with ATS score (upgraded to', currentPlan + ')');
+        } else {
+          console.log('✅ Marked user as former free user without ATS score (upgraded to', currentPlan + ')');
+        }
       }
       // Update previous plan for next check (only if it changed)
       if (previousPlan !== currentPlan) {
@@ -1264,6 +1272,42 @@
             </div>
           `}
         </div>
+        ${atsScore.percent !== null && atsScore.percent !== undefined ? `
+          ${(() => {
+            // Check if user has role-specific feedback
+            try {
+              const hasRoleFeedback = window.JobHackAIStatePersistence ? (() => {
+                const cached = window.JobHackAIStatePersistence.loadATSScore(null);
+                return cached && cached.roleSpecificFeedback && Array.isArray(cached.roleSpecificFeedback) && cached.roleSpecificFeedback.length > 0;
+              })() : false;
+              
+              // Only show "Unlock Deeper Insights" if ATS score exists but no role feedback
+              if (!hasRoleFeedback) {
+                return \`
+                  <div style="margin-top:1rem;padding:1rem;background:rgba(5,150,105,0.08);border:1px solid rgba(5,150,105,0.2);border-radius:8px;">
+                    <div style="display:flex;align-items:flex-start;gap:0.75rem;">
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0;margin-top:0.125rem;color:#00E676;">
+                        <path d="M12 2L2 7l10 5 10-5-10-5z"></path>
+                        <path d="M2 17l10 5 10-5"></path>
+                        <path d="M2 12l10 5 10-5"></path>
+                      </svg>
+                      <div style="flex:1;">
+                        <div style="font-weight:600;color:#232B36;margin-bottom:0.25rem;font-size:0.95rem;">Unlock Deeper Insights</div>
+                        <div style="color:#6B7280;margin-bottom:0.75rem;line-height:1.4;font-size:0.9rem;">
+                          We've scored this resume against ATS rules. Get detailed feedback and role-specific suggestions.
+                        </div>
+                        <a href="resume-feedback-pro.html" class="btn-primary" style="display:inline-block;padding:0.5rem 1rem;font-size:0.9rem;text-decoration:none;white-space:nowrap;">Get Detailed Feedback</a>
+                      </div>
+                    </div>
+                  </div>
+                \`;
+              }
+            } catch (e) {
+              // If state persistence not available, don't show the box
+            }
+            return '';
+          })()}
+        ` : ''}
         <div class="status-action-row">
           <span class="user-plan-badge ${user.plan}">${planIcon(user.plan)}${user.plan === 'trial' && user.trialEndsAt ? `Trial (${daysLeft(user.trialEndsAt)} days left)` : user.plan.charAt(0).toUpperCase() + user.plan.slice(1)}</span>
           ${(user.plan === 'cancelled') ? `<a href="pricing-a.html" class="upgrade-btn">Reactivate</a>` : ''}
@@ -1420,10 +1464,14 @@
         }
         
         // CRITICAL: Banner should ONLY show if user uploaded a resume for free ATS BEFORE upgrading
-        // Check if user had uploaded a resume for free ATS scoring
-        const hasATSScoreHistory = localStorage.getItem('lastATSScore') || localStorage.getItem('lastATSSummary');
+        // Check if user was previously on free plan (stored when they upgrade)
+        const wasFreeUser = localStorage.getItem('was-free-user') === 'true';
         
-        // Try to get user UID from Firebase Auth Manager to check credit usage
+        // CRITICAL: Only show if user had a free ATS score AT THE TIME OF UPGRADE
+        // This flag is set when user upgrades from free, and only if they had a score then
+        const hadFreeATSScoreAtUpgrade = localStorage.getItem('had-free-ats-score-at-upgrade') === 'true';
+        
+        // Try to get user UID from Firebase Auth Manager to check credit usage (legacy support)
         const currentUser = window.FirebaseAuthManager?.getCurrentUser?.();
         const creditKey = currentUser?.uid ? `creditsByUid:${currentUser.uid}` : null;
         let hasUsedFreeCredit = false;
@@ -1444,9 +1492,6 @@
           }
         }
         
-        // Check if user was previously on free plan (stored when they upgrade)
-        const wasFreeUser = localStorage.getItem('was-free-user') === 'true';
-        
         // Check legacy free usage data
         const hasFreeUsageData = localStorage.getItem('free-ats-usage');
         let legacyUsedFreeATS = false;
@@ -1464,18 +1509,18 @@
         
         // CRITICAL: Show popup ONLY if:
         // 1. User upgraded from free account, AND
-        // 2. User actually uploaded a resume for free ATS (used their free credit OR has ATS score history)
-        // Do NOT show if user upgraded without uploading a resume first
-        const uploadedResumeForFreeATS = hasUsedFreeCredit || legacyUsedFreeATS || hasATSScoreHistory;
+        // 2. User had a free ATS score AT THE TIME OF UPGRADE (not after)
+        // This prevents showing the modal when users upload resumes after upgrading
+        const uploadedResumeForFreeATS = hadFreeATSScoreAtUpgrade || hasUsedFreeCredit || legacyUsedFreeATS;
         const shouldShowPopup = wasFreeAccount && uploadedResumeForFreeATS;
         
         if (!shouldShowPopup) {
           console.log('ℹ️ [UPGRADE-BANNER] Not showing banner:', {
             wasFreeAccount,
             uploadedResumeForFreeATS,
+            hadFreeATSScoreAtUpgrade,
             hasUsedFreeCredit,
-            legacyUsedFreeATS,
-            hasATSScoreHistory
+            legacyUsedFreeATS
           });
           return;
         }
