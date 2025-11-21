@@ -61,15 +61,11 @@ test.describe('Plan-Based Access Control', () => {
     // Should NOT redirect to pricing (paid users can access)
     const currentURL = page.url();
     if (currentURL.includes('/pricing')) {
-      // If redirected to pricing, the plan check likely failed
-      // This could mean the user doesn't have a paid plan or plan check happened before auth was ready
-      // Check the user's actual plan to provide better error message
       const userPlan = await page.evaluate(() => {
         return localStorage.getItem('user-plan') || 'unknown';
       });
       console.log('🔍 [TEST #12] Redirected to pricing. localStorage user-plan:', userPlan);
-      test.info().skip(`User was redirected to pricing page: ${currentURL}. User plan: ${userPlan}. Test requires paid plan (trial, essential, pro, or premium).`);
-      return;
+      throw new Error(`Paid plan access blocked: redirected to pricing (${currentURL}). user-plan=${userPlan}`);
     }
     
     await expect(page).not.toHaveURL(/\/pricing/);
@@ -80,8 +76,7 @@ test.describe('Plan-Based Access Control', () => {
     if (!isVisible) {
       const userPlan = await page.evaluate(() => localStorage.getItem('user-plan') || 'unknown');
       console.log('🔍 [TEST #12] Upload input hidden on resume-feedback page. user-plan=', userPlan);
-      test.info().skip(`Upload input hidden on resume-feedback page. user-plan=${userPlan}. UI variant or gating may hide it.`);
-      return;
+      throw new Error(`Upload input hidden on resume-feedback page. user-plan=${userPlan}`);
     }
     await expect(uploadArea).toBeVisible({ timeout: 10000 });
   });
@@ -144,9 +139,8 @@ test.describe('Plan-Based Access Control', () => {
         const foundPlan = validPlans.find(plan => normalizedPlan.includes(plan));
         expect(foundPlan).toBeTruthy();
       } else {
-        // If we still can't find a badge, skip instead of failing to avoid flakiness
         const userPlan = await page.evaluate(() => localStorage.getItem('user-plan') || 'unknown');
-        test.info().skip(`No plan badge or plan indicator found on dashboard. user-plan=${userPlan}`);
+        throw new Error(`No plan badge or plan indicator found on dashboard. user-plan=${userPlan}`);
       }
     }
   });

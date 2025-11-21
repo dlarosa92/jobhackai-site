@@ -74,8 +74,7 @@ test.describe('Resume Feedback', () => {
           return localStorage.getItem('user-plan') || 'unknown';
         });
         console.log('🔍 [TEST #14] Redirected to pricing. localStorage user-plan:', userPlan);
-        test.info().skip('User was redirected to pricing - user may not have paid plan access');
-        return;
+        throw new Error(`Paid plan access blocked: redirected to pricing. user-plan=${userPlan}`);
       }
     }
     
@@ -121,26 +120,22 @@ test.describe('Resume Feedback', () => {
         { timeout: 60000 }
       );
     } catch (error) {
-      test.info().skip('ATS score API did not respond within 60s – backend may be degraded.');
-      return;
+      throw new Error('ATS score API did not respond within 60s – backend may be degraded.');
     }
     
     if (!atsResponse.ok()) {
       const errorText = await atsResponse.text().catch(() => 'Unknown error');
-      test.info().skip(`ATS score API failed (${atsResponse.status()}): ${errorText}`);
-      return;
+      throw new Error(`ATS score API failed (${atsResponse.status()}): ${errorText}`);
     }
     
     const atsData = await atsResponse.json().catch(() => null);
     if (!atsData || typeof atsData.score !== 'number') {
-      test.info().skip('ATS score API response missing numeric score – skipping UI assertion.');
-      return;
+      throw new Error('ATS score API response missing numeric score');
     }
     
     const atsScoreValue = Number(atsData.score);
     if (!Number.isFinite(atsScoreValue)) {
-      test.info().skip(`ATS score value was not numeric: ${atsData.score}`);
-      return;
+      throw new Error(`ATS score value was not numeric: ${atsData.score}`);
     }
     console.log('🔍 [TEST #15] ATS score response:', JSON.stringify(atsData, null, 2));
     

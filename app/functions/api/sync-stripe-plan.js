@@ -33,8 +33,12 @@ export async function onRequest(context) {
       return json({ ok: false, error: 'Invalid authentication token' }, 401, origin, env);
     }
 
+    if (!env.JOBHACKAI_KV) {
+      throw new Error('JOBHACKAI_KV binding is not configured on this environment');
+    }
+
     // Get customer ID from KV
-    let customerId = await env.JOBHACKAI_KV?.get(`cusByUid:${uid}`);
+    let customerId = await env.JOBHACKAI_KV.get(`cusByUid:${uid}`);
     
     // If not in KV, try to find by email (like billing-status does)
     if (!customerId) {
@@ -83,7 +87,7 @@ export async function onRequest(context) {
               if (foundCustomer) {
                 customerId = foundCustomer;
                 // Cache it for next time
-                await env.JOBHACKAI_KV?.put(`cusByUid:${uid}`, customerId);
+                await env.JOBHACKAI_KV.put(`cusByUid:${uid}`, customerId);
                 console.log('✅ [SYNC-STRIPE-PLAN] Found customer by email and cached:', customerId);
               }
             }
@@ -96,8 +100,8 @@ export async function onRequest(context) {
       // If still no customer found, return free plan (not an error)
       if (!customerId) {
         console.log('ℹ️ [SYNC-STRIPE-PLAN] No Stripe customer found - returning free plan');
-        await env.JOBHACKAI_KV?.put(`planByUid:${uid}`, 'free');
-        await env.JOBHACKAI_KV?.put(`planTsByUid:${uid}`, String(Math.floor(Date.now() / 1000)));
+        await env.JOBHACKAI_KV.put(`planByUid:${uid}`, 'free');
+        await env.JOBHACKAI_KV.put(`planTsByUid:${uid}`, String(Math.floor(Date.now() / 1000)));
         return json({ ok: true, plan: 'free', trialEndsAt: null }, 200, origin, env);
       }
     }
@@ -121,8 +125,8 @@ export async function onRequest(context) {
 
     if (subscriptions.length === 0) {
       // No active subscriptions, set to free
-      await env.JOBHACKAI_KV?.put(`planByUid:${uid}`, 'free');
-      await env.JOBHACKAI_KV?.put(`planTsByUid:${uid}`, String(Math.floor(Date.now() / 1000)));
+      await env.JOBHACKAI_KV.put(`planByUid:${uid}`, 'free');
+      await env.JOBHACKAI_KV.put(`planTsByUid:${uid}`, String(Math.floor(Date.now() / 1000)));
       return json({ ok: true, plan: 'free', trialEndsAt: null }, 200, origin, env);
     }
 
@@ -159,7 +163,7 @@ export async function onRequest(context) {
         if (latestSub.trial_end) {
           trialEndsAt = new Date(latestSub.trial_end * 1000).toISOString();
           // Store trial end in KV
-          await env.JOBHACKAI_KV?.put(`trialEndByUid:${uid}`, String(latestSub.trial_end));
+          await env.JOBHACKAI_KV.put(`trialEndByUid:${uid}`, String(latestSub.trial_end));
         }
       } else {
         // Regular subscription in trial period
@@ -182,8 +186,8 @@ export async function onRequest(context) {
     console.log(`✍️ [SYNC-STRIPE-PLAN] Writing to KV: ${kvKey} = ${plan}`);
     
     try {
-      await env.JOBHACKAI_KV?.put(kvKey, plan);
-      await env.JOBHACKAI_KV?.put(`planTsByUid:${uid}`, String(timestamp));
+      await env.JOBHACKAI_KV.put(kvKey, plan);
+      await env.JOBHACKAI_KV.put(`planTsByUid:${uid}`, String(timestamp));
       console.log(`✅ [SYNC-STRIPE-PLAN] KV write completed: ${kvKey} = ${plan}`);
       // Note: We don't verify the write immediately because Cloudflare KV uses eventual
       // consistency. A read immediately after a write may not reflect the written value
@@ -195,15 +199,15 @@ export async function onRequest(context) {
 
     // Store cancellation data if present
     if (cancelAtPeriodEnd && cancelAt) {
-      await env.JOBHACKAI_KV?.put(`cancelAtByUid:${uid}`, String(cancelAt));
+      await env.JOBHACKAI_KV.put(`cancelAtByUid:${uid}`, String(cancelAt));
       console.log(`✅ CANCELLATION STORED: cancels at ${new Date(cancelAt * 1000).toISOString()}`);
     } else {
-      await env.JOBHACKAI_KV?.delete(`cancelAtByUid:${uid}`);
+      await env.JOBHACKAI_KV.delete(`cancelAtByUid:${uid}`);
     }
 
     // Store current period end for renewal display
     if (currentPeriodEnd) {
-      await env.JOBHACKAI_KV?.put(`periodEndByUid:${uid}`, String(currentPeriodEnd));
+      await env.JOBHACKAI_KV.put(`periodEndByUid:${uid}`, String(currentPeriodEnd));
     }
 
     // Fetch and store scheduled plan change if exists
@@ -220,14 +224,14 @@ export async function onRequest(context) {
         const transitionTime = nextPhase.start_date;
         
         if (nextPlan && transitionTime) {
-          await env.JOBHACKAI_KV?.put(`scheduledPlanByUid:${uid}`, nextPlan);
-          await env.JOBHACKAI_KV?.put(`scheduledAtByUid:${uid}`, String(transitionTime));
+          await env.JOBHACKAI_KV.put(`scheduledPlanByUid:${uid}`, nextPlan);
+          await env.JOBHACKAI_KV.put(`scheduledAtByUid:${uid}`, String(transitionTime));
           console.log(`✅ SCHEDULED CHANGE STORED: ${plan} → ${nextPlan} at ${new Date(transitionTime * 1000).toISOString()}`);
         }
       }
     } else {
-      await env.JOBHACKAI_KV?.delete(`scheduledPlanByUid:${uid}`);
-      await env.JOBHACKAI_KV?.delete(`scheduledAtByUid:${uid}`);
+      await env.JOBHACKAI_KV.delete(`scheduledPlanByUid:${uid}`);
+      await env.JOBHACKAI_KV.delete(`scheduledAtByUid:${uid}`);
     }
 
     return json({ 
