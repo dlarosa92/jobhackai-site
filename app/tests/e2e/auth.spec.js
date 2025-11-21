@@ -26,10 +26,11 @@ test.describe('Authentication', () => {
     await page.fill('#loginEmail', TEST_EMAIL);
     await page.fill('#loginPassword', TEST_PASSWORD);
     
-    // Submit form - click button and wait for navigation (avoid double wait deadlock)
+    // Submit form - use form submission instead of button click to avoid element detachment
+    // The form submit handler triggers async navigation which can detach the button element
     await Promise.all([
       page.waitForURL(/\/dashboard/, { timeout: 20000 }),
-      page.click('#loginContinueBtn')
+      page.locator('#loginForm').submit()
     ]);
     
     // Verify dashboard loaded - wait for DOM to be ready instead of networkidle
