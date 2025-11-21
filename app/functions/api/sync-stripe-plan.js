@@ -184,14 +184,10 @@ export async function onRequest(context) {
     try {
       await env.JOBHACKAI_KV?.put(kvKey, plan);
       await env.JOBHACKAI_KV?.put(`planTsByUid:${uid}`, String(timestamp));
-      
-      // Verify write immediately
-      const verifyPlan = await env.JOBHACKAI_KV?.get(kvKey);
-      if (verifyPlan === plan) {
-        console.log(`✅ [SYNC-STRIPE-PLAN] KV write verified: ${kvKey} = ${verifyPlan}`);
-      } else {
-        console.error(`❌ [SYNC-STRIPE-PLAN] KV write verification failed! Expected: ${plan}, Got: ${verifyPlan}`);
-      }
+      console.log(`✅ [SYNC-STRIPE-PLAN] KV write completed: ${kvKey} = ${plan}`);
+      // Note: We don't verify the write immediately because Cloudflare KV uses eventual
+      // consistency. A read immediately after a write may not reflect the written value
+      // even if the write succeeded. The write operation will throw if it fails.
     } catch (kvError) {
       console.error(`❌ [SYNC-STRIPE-PLAN] KV write error:`, kvError);
       throw kvError;
