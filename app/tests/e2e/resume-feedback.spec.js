@@ -4,6 +4,9 @@ const fs = require('fs');
 
 test.describe('Resume Feedback', () => {
   test('should upload resume and receive ATS score', async ({ page }) => {
+    // Upload + ATS scoring can exceed default 30s timeout; allow up to 2 minutes
+    test.setTimeout(120000);
+    
     await page.goto('/resume-feedback-pro.html');
     await page.waitForLoadState('domcontentloaded');
     
