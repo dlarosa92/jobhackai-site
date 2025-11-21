@@ -1,0 +1,822 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Resume Feedback - All Plans Mockup</title>
+  <link rel="stylesheet" href="css/tokens.css">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: var(--font-family-base);
+      background: var(--color-bg-light);
+      color: var(--color-text-main);
+      padding: var(--space-lg);
+      line-height: 1.6;
+    }
+
+    .container {
+      max-width: 1900px;
+      margin: 0 auto;
+    }
+
+    .plans-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(900px, 1fr));
+      gap: var(--space-lg);
+      margin-bottom: var(--space-lg);
+    }
+
+    @media (max-width: 1900px) {
+      .plans-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .plan-section {
+      margin-bottom: var(--space-xl);
+    }
+
+    .plan-section-title {
+      font-size: var(--font-size-2xl);
+      font-weight: var(--font-weight-bold);
+      color: var(--color-text-main);
+      margin-bottom: var(--space-md);
+      padding-bottom: var(--space-xs);
+      border-bottom: 2px solid var(--color-divider);
+    }
+
+    /* Modern SaaS Card Layout */
+    .saas-card {
+      background: var(--color-card-bg);
+      border-radius: var(--radius-card);
+      box-shadow: var(--shadow-card);
+      padding: var(--space-lg);
+      width: 900px;
+      min-height: 282.38px;
+      display: flex;
+      align-items: flex-start;
+      gap: 2.5rem;
+      box-sizing: border-box;
+    }
+
+    .card-content {
+      flex: 1;
+      min-width: 220px;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .card-header {
+      margin-bottom: 0.2rem;
+    }
+
+    .card-title {
+      font-size: var(--font-size-2xl);
+      font-weight: var(--font-weight-extrabold);
+      color: var(--color-text-main);
+      margin-bottom: 0.2rem;
+      display: flex;
+      align-items: center;
+      gap: 0.7rem;
+    }
+
+    .card-subtitle {
+      font-size: var(--font-size-sm);
+      color: var(--color-text-secondary);
+      line-height: 1.4;
+      margin-bottom: 0.5rem;
+    }
+
+    .plan-badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 0.25rem 0.75rem;
+      border-radius: var(--radius-full);
+      font-size: var(--font-size-xs);
+      font-weight: var(--font-weight-semibold);
+      color: white;
+      white-space: nowrap;
+    }
+
+    .plan-badge.trial {
+      background: #FF9100;
+    }
+
+    .plan-badge.essential {
+      background: #0077B5;
+    }
+
+    .plan-badge.pro {
+      background: #388E3C;
+    }
+
+    .plan-badge.premium {
+      background: var(--color-cta-green);
+    }
+
+    /* Progress Ring */
+    .progress-ring {
+      width: 80px;
+      height: 80px;
+      flex-shrink: 0;
+      margin-top: 0.5rem;
+    }
+
+    .progress-ring svg {
+      width: 100%;
+      height: 100%;
+    }
+
+    /* Form Elements */
+    .form-section {
+      margin: 1rem 0 0 0;
+    }
+
+    .form-group {
+      margin-bottom: 0.75rem;
+    }
+
+    .form-label {
+      display: block;
+      font-size: var(--font-size-sm);
+      font-weight: var(--font-weight-semibold);
+      color: var(--color-text-main);
+      margin-bottom: 0.5rem;
+    }
+
+    .form-label-hint {
+      font-weight: var(--font-weight-regular);
+      color: var(--color-text-muted);
+      font-size: var(--font-size-xs);
+      margin-left: var(--space-xs);
+    }
+
+    .form-input {
+      width: 100%;
+      max-width: 400px;
+      padding: 0.5rem;
+      border: 1px solid var(--color-divider);
+      border-radius: var(--radius-md);
+      font-size: var(--font-size-base);
+      font-family: var(--font-family-base);
+      color: var(--color-text-main);
+      background: var(--color-card-bg);
+      transition: all var(--transition-fast);
+    }
+
+    .form-input:focus {
+      outline: none;
+      border-color: var(--color-accent-blue);
+      box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.1);
+    }
+
+    .form-input::placeholder {
+      color: var(--color-text-muted);
+    }
+
+    /* File Upload */
+    .file-upload-wrapper {
+      display: flex;
+      align-items: center;
+      gap: var(--space-sm);
+      flex-wrap: wrap;
+    }
+
+    .file-input-wrapper {
+      position: relative;
+    }
+
+    .file-input {
+      position: absolute;
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+
+    .file-button {
+      display: inline-flex;
+      align-items: center;
+      gap: var(--space-xs);
+      padding: 0.5rem 1rem;
+      background: var(--color-card-bg);
+      border: 1px solid var(--color-divider);
+      border-radius: var(--radius-md);
+      font-size: var(--font-size-sm);
+      font-weight: var(--font-weight-semibold);
+      color: var(--color-text-main);
+      cursor: pointer;
+      transition: all var(--transition-fast);
+    }
+
+    .file-button:hover {
+      border-color: var(--color-accent-blue);
+      background: var(--color-bg-light);
+    }
+
+    .file-name {
+      font-size: var(--font-size-sm);
+      color: var(--color-text-muted);
+    }
+
+    .file-name.has-file {
+      color: var(--color-success);
+      font-weight: var(--font-weight-medium);
+    }
+
+    .file-name.has-file::before {
+      content: "✓ ";
+      color: var(--color-success);
+      font-weight: var(--font-weight-bold);
+    }
+
+    /* Primary CTA Button */
+    .btn-primary {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: var(--space-xs);
+      padding: 0.75rem 1.5rem;
+      background: var(--color-cta-green);
+      color: white;
+      border: none;
+      border-radius: var(--radius-button);
+      font-size: var(--font-size-base);
+      font-weight: var(--font-weight-semibold);
+      cursor: pointer;
+      transition: all var(--transition-normal);
+      box-shadow: var(--shadow-button);
+      margin-top: 0.5rem;
+    }
+
+    .btn-primary:hover:not(:disabled) {
+      background: var(--color-cta-green-hover);
+      transform: translateY(-1px);
+      box-shadow: var(--shadow-button-hover);
+    }
+
+    .btn-primary:disabled {
+      background: var(--color-disabled);
+      cursor: not-allowed;
+      opacity: 0.6;
+    }
+
+    /* Usage Indicator Styles */
+    .usage-indicator {
+      display: flex;
+      align-items: center;
+      gap: var(--space-xs);
+      padding: 0.5rem 0.75rem;
+      background: var(--color-bg-light);
+      border-radius: var(--radius-md);
+      font-size: var(--font-size-xs);
+      color: var(--color-text-secondary);
+      margin-top: 0.5rem;
+    }
+
+    .usage-indicator__meter {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .usage-indicator__meter svg {
+      width: 36px;
+      height: 36px;
+      transform: rotate(-90deg);
+    }
+
+    /* Meter States */
+    .meter-green circle:last-child {
+      stroke: var(--color-cta-green);
+    }
+
+    .meter-yellow circle:last-child {
+      stroke: var(--color-warning);
+    }
+
+    .meter-red circle:last-child {
+      stroke: var(--color-error);
+    }
+
+    .meter-locked {
+      opacity: 0.5;
+    }
+
+    .usage-text {
+      font-size: 0.95rem;
+      color: var(--color-text-secondary);
+    }
+
+    .usage-text-green {
+      color: var(--color-success);
+    }
+
+    .usage-text-yellow {
+      color: var(--color-warning);
+    }
+
+    .usage-text-red {
+      color: var(--color-error);
+    }
+
+    /* Upgrade CTA */
+    .upgrade-cta {
+      display: inline-flex;
+      align-items: center;
+      gap: var(--space-xs);
+      padding: 0.5rem 1rem;
+      background: rgba(0, 123, 255, 0.1);
+      color: var(--color-accent-blue);
+      border-radius: var(--radius-md);
+      font-size: var(--font-size-xs);
+      font-weight: var(--font-weight-semibold);
+      margin-top: 0.5rem;
+      text-decoration: none;
+      transition: all var(--transition-fast);
+    }
+
+    .upgrade-cta:hover {
+      background: rgba(0, 123, 255, 0.15);
+    }
+
+    .helper-text {
+      font-size: var(--font-size-xs);
+      color: var(--color-text-muted);
+      margin-top: 0.25rem;
+      line-height: 1.4;
+    }
+
+    /* Trial Days Badge */
+    .trial-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.25rem;
+      padding: 0.25rem 0.5rem;
+      background: rgba(255, 145, 0, 0.1);
+      color: #FF9100;
+      border-radius: var(--radius-md);
+      font-size: var(--font-size-xs);
+      font-weight: var(--font-weight-semibold);
+      margin-left: 0.5rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1 style="font-size: var(--font-size-3xl); font-weight: var(--font-weight-bold); margin-bottom: var(--space-lg); text-align: center;">
+      Resume Feedback - All Plans Mockup
+    </h1>
+
+    <!-- 3-Day Trial Plan -->
+    <div class="plan-section">
+      <h2 class="plan-section-title">3-Day Trial Plan</h2>
+      <div class="saas-card">
+        <div class="progress-ring">
+          <svg viewBox="0 0 80 80">
+            <circle cx="40" cy="40" r="36" stroke="var(--color-divider)" stroke-width="8" fill="none"/>
+            <circle cx="40" cy="40" r="36" stroke="var(--color-cta-green)" stroke-width="8" fill="none" 
+                    stroke-dasharray="226.2" stroke-dashoffset="86" stroke-linecap="round"/>
+            <text x="40" y="48" text-anchor="middle" font-size="1.6rem" font-weight="700" fill="var(--color-text-main)">62%</text>
+          </svg>
+        </div>
+        
+        <div class="card-content">
+          <div class="card-header">
+            <div class="card-title">
+              Analyze Your Resume
+              <span class="plan-badge trial">3-Day Trial</span>
+              <span class="trial-badge">2 days left</span>
+            </div>
+            <div class="card-subtitle">
+              Get instant ATS compatibility scoring and personalized feedback to improve your resume's job application success rate.
+            </div>
+          </div>
+
+          <form class="form-section">
+            <div class="form-group">
+              <label class="form-label">
+                Target Job Title
+                <span class="form-label-hint">(Optional but recommended)</span>
+              </label>
+              <input type="text" class="form-input" placeholder="e.g., Data Engineer, Product Manager, Software Developer" value="Data Engineer" />
+              <div class="helper-text">
+                Adding a job title helps us provide role-specific keyword suggestions and tailored feedback.
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">Resume File</label>
+              <div class="file-upload-wrapper">
+                <div class="file-input-wrapper">
+                  <input type="file" class="file-input" />
+                  <label class="file-button">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                      <polyline points="17 8 12 3 7 8"/>
+                      <line x1="12" y1="3" x2="12" y2="15"/>
+                    </svg>
+                    Choose File
+                  </label>
+                </div>
+                <span class="file-name">No file selected</span>
+              </div>
+              <div class="helper-text">
+                Supported formats: PDF, DOCX, or TXT. Maximum file size: 2 MB.
+              </div>
+            </div>
+
+            <button type="button" class="btn-primary" disabled>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+              </svg>
+              Generate ATS Score & Feedback
+            </button>
+
+            <!-- Usage Indicator: 0/3 (Green) -->
+            <div class="usage-indicator">
+              <div class="usage-indicator__meter meter-green">
+                <svg viewBox="0 0 36 36">
+                  <circle cx="18" cy="18" r="16" fill="none" stroke="var(--color-divider)" stroke-width="3"/>
+                  <circle cx="18" cy="18" r="16" fill="none" stroke="var(--color-cta-green)" stroke-width="3"
+                          stroke-dasharray="100.5" stroke-dashoffset="100.5" stroke-linecap="round"/>
+                </svg>
+                <span class="usage-text usage-text-green">0 / 3 feedbacks used</span>
+              </div>
+            </div>
+            <div class="usage-indicator" style="margin-top: 0.25rem;">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"/>
+                <line x1="12" y1="16" x2="12" y2="12"/>
+                <line x1="12" y1="8" x2="12.01" y2="8"/>
+              </svg>
+              <span>Unlimited ATS scoring during trial</span>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      <!-- Trial: 2/3 State (Yellow) -->
+      <div class="saas-card" style="margin-top: var(--space-md);">
+        <div class="progress-ring">
+          <svg viewBox="0 0 80 80">
+            <circle cx="40" cy="40" r="36" stroke="var(--color-divider)" stroke-width="8" fill="none"/>
+            <circle cx="40" cy="40" r="36" stroke="var(--color-cta-green)" stroke-width="8" fill="none" 
+                    stroke-dasharray="226.2" stroke-dashoffset="86" stroke-linecap="round"/>
+            <text x="40" y="48" text-anchor="middle" font-size="1.6rem" font-weight="700" fill="var(--color-text-main)">62%</text>
+          </svg>
+        </div>
+        
+        <div class="card-content">
+          <div class="card-header">
+            <div class="card-title">
+              Analyze Your Resume
+              <span class="plan-badge trial">3-Day Trial</span>
+              <span class="trial-badge">2 days left</span>
+            </div>
+            <div class="card-subtitle">
+              Get instant ATS compatibility scoring and personalized feedback to improve your resume's job application success rate.
+            </div>
+          </div>
+
+          <form class="form-section">
+            <div class="form-group">
+              <label class="form-label">
+                Target Job Title
+                <span class="form-label-hint">(Optional but recommended)</span>
+              </label>
+              <input type="text" class="form-input" value="Data Engineer" />
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">Resume File</label>
+              <div class="file-upload-wrapper">
+                <div class="file-input-wrapper">
+                  <input type="file" class="file-input" />
+                  <label class="file-button">Choose File</label>
+                </div>
+                <span class="file-name has-file">resume.pdf</span>
+              </div>
+            </div>
+
+            <button type="button" class="btn-primary">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+              </svg>
+              Generate ATS Score & Feedback
+            </button>
+
+            <!-- Usage Indicator: 2/3 (Yellow) -->
+            <div class="usage-indicator">
+              <div class="usage-indicator__meter meter-yellow">
+                <svg viewBox="0 0 36 36">
+                  <circle cx="18" cy="18" r="16" fill="none" stroke="var(--color-divider)" stroke-width="3"/>
+                  <circle cx="18" cy="18" r="16" fill="none" stroke="var(--color-warning)" stroke-width="3"
+                          stroke-dasharray="100.5" stroke-dashoffset="33.5" stroke-linecap="round"/>
+                </svg>
+                <span class="usage-text usage-text-yellow">2 / 3 feedbacks used</span>
+              </div>
+            </div>
+            <div class="usage-indicator" style="margin-top: 0.25rem;">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"/>
+                <line x1="12" y1="16" x2="12" y2="12"/>
+                <line x1="12" y1="8" x2="12.01" y2="8"/>
+              </svg>
+              <span>1 feedback remaining in trial</span>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      <!-- Trial: 3/3 State (Red - Locked) -->
+      <div class="saas-card" style="margin-top: var(--space-md);">
+        <div class="progress-ring">
+          <svg viewBox="0 0 80 80">
+            <circle cx="40" cy="40" r="36" stroke="var(--color-divider)" stroke-width="8" fill="none"/>
+            <circle cx="40" cy="40" r="36" stroke="var(--color-cta-green)" stroke-width="8" fill="none" 
+                    stroke-dasharray="226.2" stroke-dashoffset="86" stroke-linecap="round"/>
+            <text x="40" y="48" text-anchor="middle" font-size="1.6rem" font-weight="700" fill="var(--color-text-main)">62%</text>
+          </svg>
+        </div>
+        
+        <div class="card-content">
+          <div class="card-header">
+            <div class="card-title">
+              Analyze Your Resume
+              <span class="plan-badge trial">3-Day Trial</span>
+              <span class="trial-badge">2 days left</span>
+            </div>
+            <div class="card-subtitle">
+              Get instant ATS compatibility scoring and personalized feedback to improve your resume's job application success rate.
+            </div>
+          </div>
+
+          <form class="form-section">
+            <div class="form-group">
+              <label class="form-label">
+                Target Job Title
+                <span class="form-label-hint">(Optional but recommended)</span>
+              </label>
+              <input type="text" class="form-input" value="Data Engineer" />
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">Resume File</label>
+              <div class="file-upload-wrapper">
+                <div class="file-input-wrapper">
+                  <input type="file" class="file-input" />
+                  <label class="file-button">Choose File</label>
+                </div>
+                <span class="file-name has-file">resume.pdf</span>
+              </div>
+            </div>
+
+            <button type="button" class="btn-primary" disabled>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="3" y="11" width="18" height="8" rx="2"/>
+                <path d="M7 11V7a5 5 0 0110 0v4"/>
+              </svg>
+              Feedback Limit Reached
+            </button>
+
+            <!-- Usage Indicator: 3/3 (Red - Locked) -->
+            <div class="usage-indicator">
+              <div class="usage-indicator__meter meter-red meter-locked">
+                <svg viewBox="0 0 36 36">
+                  <circle cx="18" cy="18" r="16" fill="none" stroke="var(--color-divider)" stroke-width="3"/>
+                  <circle cx="18" cy="18" r="16" fill="none" stroke="var(--color-error)" stroke-width="3"
+                          stroke-dasharray="100.5" stroke-dashoffset="0" stroke-linecap="round"/>
+                </svg>
+                <span class="usage-text usage-text-red">3 / 3 feedbacks used</span>
+              </div>
+            </div>
+            <a href="pricing-a.html" class="upgrade-cta">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M5 12h14M12 5l7 7-7 7"/>
+              </svg>
+              Upgrade to Pro for unlimited feedback
+            </a>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <!-- Essential Plan -->
+    <div class="plan-section">
+      <h2 class="plan-section-title">Essential Plan ($29/month)</h2>
+      <div class="saas-card">
+        <div class="progress-ring">
+          <svg viewBox="0 0 80 80">
+            <circle cx="40" cy="40" r="36" stroke="var(--color-divider)" stroke-width="8" fill="none"/>
+            <circle cx="40" cy="40" r="36" stroke="var(--color-cta-green)" stroke-width="8" fill="none" 
+                    stroke-dasharray="226.2" stroke-dashoffset="86" stroke-linecap="round"/>
+            <text x="40" y="48" text-anchor="middle" font-size="1.6rem" font-weight="700" fill="var(--color-text-main)">62%</text>
+          </svg>
+        </div>
+        
+        <div class="card-content">
+          <div class="card-header">
+            <div class="card-title">
+              Analyze Your Resume
+              <span class="plan-badge essential">Essential</span>
+            </div>
+            <div class="card-subtitle">
+              Get instant ATS compatibility scoring and personalized feedback to improve your resume's job application success rate.
+            </div>
+          </div>
+
+          <form class="form-section">
+            <div class="form-group">
+              <label class="form-label">
+                Target Job Title
+                <span class="form-label-hint">(Optional but recommended)</span>
+              </label>
+              <input type="text" class="form-input" value="Data Engineer" />
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">Resume File</label>
+              <div class="file-upload-wrapper">
+                <div class="file-input-wrapper">
+                  <input type="file" class="file-input" />
+                  <label class="file-button">Choose File</label>
+                </div>
+                <span class="file-name has-file">resume.pdf</span>
+              </div>
+            </div>
+
+            <button type="button" class="btn-primary">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+              </svg>
+              Generate ATS Score & Feedback
+            </button>
+
+            <!-- Usage Indicator: 2/3 (Yellow) -->
+            <div class="usage-indicator">
+              <div class="usage-indicator__meter meter-yellow">
+                <svg viewBox="0 0 36 36">
+                  <circle cx="18" cy="18" r="16" fill="none" stroke="var(--color-divider)" stroke-width="3"/>
+                  <circle cx="18" cy="18" r="16" fill="none" stroke="var(--color-warning)" stroke-width="3"
+                          stroke-dasharray="100.5" stroke-dashoffset="33.5" stroke-linecap="round"/>
+                </svg>
+                <span class="usage-text usage-text-yellow">2 / 3 feedbacks used this month</span>
+              </div>
+            </div>
+            <div class="usage-indicator" style="margin-top: 0.25rem;">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"/>
+                <line x1="12" y1="16" x2="12" y2="12"/>
+                <line x1="12" y1="8" x2="12.01" y2="8"/>
+              </svg>
+              <span>Unlimited ATS scoring • 1 feedback remaining this month</span>
+            </div>
+            <a href="pricing-a.html?plan=pro" class="upgrade-cta">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M5 12h14M12 5l7 7-7 7"/>
+              </svg>
+              Upgrade to Pro for unlimited feedback
+            </a>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <!-- Pro Plan -->
+    <div class="plan-section">
+      <h2 class="plan-section-title">Pro Plan ($59/month)</h2>
+      <div class="saas-card">
+        <div class="progress-ring">
+          <svg viewBox="0 0 80 80">
+            <circle cx="40" cy="40" r="36" stroke="var(--color-divider)" stroke-width="8" fill="none"/>
+            <circle cx="40" cy="40" r="36" stroke="var(--color-cta-green)" stroke-width="8" fill="none" 
+                    stroke-dasharray="226.2" stroke-dashoffset="86" stroke-linecap="round"/>
+            <text x="40" y="48" text-anchor="middle" font-size="1.6rem" font-weight="700" fill="var(--color-text-main)">62%</text>
+          </svg>
+        </div>
+        
+        <div class="card-content">
+          <div class="card-header">
+            <div class="card-title">
+              Analyze Your Resume
+              <span class="plan-badge pro">Pro</span>
+            </div>
+            <div class="card-subtitle">
+              Get instant ATS compatibility scoring and personalized feedback to improve your resume's job application success rate.
+            </div>
+          </div>
+
+          <form class="form-section">
+            <div class="form-group">
+              <label class="form-label">
+                Target Job Title
+                <span class="form-label-hint">(Optional but recommended)</span>
+              </label>
+              <input type="text" class="form-input" value="Data Engineer" />
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">Resume File</label>
+              <div class="file-upload-wrapper">
+                <div class="file-input-wrapper">
+                  <input type="file" class="file-input" />
+                  <label class="file-button">Choose File</label>
+                </div>
+                <span class="file-name has-file">resume.pdf</span>
+              </div>
+            </div>
+
+            <button type="button" class="btn-primary">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+              </svg>
+              Generate ATS Score & Feedback
+            </button>
+
+            <!-- Usage Indicator: Unlimited -->
+            <div class="usage-indicator">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"/>
+                <line x1="12" y1="16" x2="12" y2="12"/>
+                <line x1="12" y1="8" x2="12.01" y2="8"/>
+              </svg>
+              <span>Unlimited analyses available on Pro plan</span>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <!-- Premium Plan -->
+    <div class="plan-section">
+      <h2 class="plan-section-title">Premium Plan ($99/month)</h2>
+      <div class="saas-card">
+        <div class="progress-ring">
+          <svg viewBox="0 0 80 80">
+            <circle cx="40" cy="40" r="36" stroke="var(--color-divider)" stroke-width="8" fill="none"/>
+            <circle cx="40" cy="40" r="36" stroke="var(--color-cta-green)" stroke-width="8" fill="none" 
+                    stroke-dasharray="226.2" stroke-dashoffset="86" stroke-linecap="round"/>
+            <text x="40" y="48" text-anchor="middle" font-size="1.6rem" font-weight="700" fill="var(--color-text-main)">62%</text>
+          </svg>
+        </div>
+        
+        <div class="card-content">
+          <div class="card-header">
+            <div class="card-title">
+              Analyze Your Resume
+              <span class="plan-badge premium">Premium</span>
+            </div>
+            <div class="card-subtitle">
+              Get instant ATS compatibility scoring and personalized feedback to improve your resume's job application success rate.
+            </div>
+          </div>
+
+          <form class="form-section">
+            <div class="form-group">
+              <label class="form-label">
+                Target Job Title
+                <span class="form-label-hint">(Optional but recommended)</span>
+              </label>
+              <input type="text" class="form-input" value="Data Engineer" />
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">Resume File</label>
+              <div class="file-upload-wrapper">
+                <div class="file-input-wrapper">
+                  <input type="file" class="file-input" />
+                  <label class="file-button">Choose File</label>
+                </div>
+                <span class="file-name has-file">resume.pdf</span>
+              </div>
+            </div>
+
+            <button type="button" class="btn-primary">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+              </svg>
+              Generate ATS Score & Feedback
+            </button>
+
+            <!-- Usage Indicator: Unlimited -->
+            <div class="usage-indicator">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"/>
+                <line x1="12" y1="16" x2="12" y2="12"/>
+                <line x1="12" y1="8" x2="12.01" y2="8"/>
+              </svg>
+              <span>Unlimited analyses available on Premium plan</span>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
