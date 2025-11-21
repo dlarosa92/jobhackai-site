@@ -1,4 +1,5 @@
 const { test, expect } = require('@playwright/test');
+const { submitForm } = require('../helpers/auth-helpers');
 
 test.describe('Authentication', () => {
   test('should login and redirect to dashboard', async ({ browser, baseURL }) => {
@@ -30,7 +31,7 @@ test.describe('Authentication', () => {
     // The form submit handler triggers async navigation which can detach the button element
     await Promise.all([
       page.waitForURL(/\/dashboard/, { timeout: 20000 }),
-      page.locator('#loginForm').submit()
+      submitForm(page, '#loginForm')
     ]);
     
     // Verify dashboard loaded - wait for DOM to be ready instead of networkidle

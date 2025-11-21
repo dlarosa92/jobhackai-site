@@ -198,6 +198,30 @@ async function getPlanAndVerify(page, expectedPlan = null) {
   return { plan, planData };
 }
 
+/**
+ * Submit a form using requestSubmit when available to trigger native handlers.
+ * Falls back to form.submit() for older browsers.
+ * @param {import('@playwright/test').Page} page - Playwright page object
+ * @param {string} formSelector - Selector for the form element
+ * @param {{ timeout?: number }} options
+ */
+async function submitForm(page, formSelector, options = {}) {
+  const { timeout = 5000 } = options;
+  const formLocator = page.locator(formSelector).first();
+  await formLocator.waitFor({ state: 'attached', timeout });
+  
+  await formLocator.evaluate((form) => {
+    if (!form) {
+      throw new Error('Form element not found for submission');
+    }
+    if (typeof form.requestSubmit === 'function') {
+      form.requestSubmit();
+    } else {
+      form.submit();
+    }
+  });
+}
+
 module.exports = {
   waitForAuthReady,
   getAuthToken,
@@ -206,5 +230,6 @@ module.exports = {
   postStripeCheckout,
   syncStripePlan,
   getPlanAndVerify,
+  submitForm,
 };
 
