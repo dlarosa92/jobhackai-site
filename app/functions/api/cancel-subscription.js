@@ -24,10 +24,13 @@ export async function onRequest(context) {
     }
   }
   
-  // Clear KV
+  // Clear KV - including resume data when subscription is cancelled
   await env.JOBHACKAI_KV?.delete(`planByUid:${uid}`);
   await env.JOBHACKAI_KV?.delete(`cusByUid:${uid}`);
   await env.JOBHACKAI_KV?.delete(`trialEndByUid:${uid}`);
+  // Clean up resume data when user cancels subscription
+  await env.JOBHACKAI_KV?.delete(`user:${uid}:lastResume`);
+  await env.JOBHACKAI_KV?.delete(`usage:${uid}`);
   
   return new Response(JSON.stringify({ ok: true }), { 
     status: 200,

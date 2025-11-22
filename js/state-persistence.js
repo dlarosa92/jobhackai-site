@@ -30,36 +30,106 @@
    */
   function saveATSScore({ score, breakdown, resumeId, jobTitle, roleSpecificFeedback }) {
     try {
+      // Validate input
+      if (typeof score !== 'number' || isNaN(score)) {
+        console.warn('[STATE-PERSISTENCE] Invalid score:', score);
+        return false;
+      }
+      
+      if (!breakdown || typeof breakdown !== 'object') {
+        console.warn('[STATE-PERSISTENCE] Invalid breakdown:', breakdown);
+        return false;
+      }
+      
+      if (!resumeId || typeof resumeId !== 'string') {
+        console.warn('[STATE-PERSISTENCE] Invalid resumeId:', resumeId);
+        return false;
+      }
+      
+      // Ensure breakdown structure has feedback properties
+      const normalizedBreakdown = { ...breakdown };
+      ['keywordScore', 'formattingScore', 'structureScore', 'toneScore', 'grammarScore'].forEach(key => {
+        if (normalizedBreakdown[key]) {
+          // Ensure it's an object with feedback property
+          if (typeof normalizedBreakdown[key] === 'number') {
+            // Convert number to object
+            normalizedBreakdown[key] = {
+              score: normalizedBreakdown[key],
+              max: key === 'keywordScore' ? 40 : key === 'formattingScore' ? 20 : key === 'structureScore' ? 15 : key === 'toneScore' ? 15 : 10,
+              feedback: ''
+            };
+          } else if (typeof normalizedBreakdown[key] === 'object') {
+            // Ensure feedback property exists
+            if (!('feedback' in normalizedBreakdown[key])) {
+              normalizedBreakdown[key] = {
+                ...normalizedBreakdown[key],
+                feedback: normalizedBreakdown[key].tip || normalizedBreakdown[key].message || ''
+              };
+            }
+          }
+        }
+      });
+
       const data = {
         score,
-        breakdown,
+        breakdown: normalizedBreakdown,
         resumeId,
         jobTitle,
         timestamp: Date.now()
       };
 
-      localStorage.setItem(STORAGE_KEYS.ATS_SCORE, score.toString());
-      localStorage.setItem(STORAGE_KEYS.ATS_BREAKDOWN, JSON.stringify(breakdown));
-      localStorage.setItem(STORAGE_KEYS.RESUME_ID, resumeId);
-      // Always save job title (even if empty/null) to enable proper cache validation
-      if (jobTitle) {
-        localStorage.setItem(STORAGE_KEYS.JOB_TITLE, jobTitle);
-      } else {
-        // Clear job title if not provided (to distinguish between "no job title" and "has job title")
-        localStorage.removeItem(STORAGE_KEYS.JOB_TITLE);
-      }
-      // Save role-specific feedback if provided
-      if (roleSpecificFeedback && Array.isArray(roleSpecificFeedback)) {
-        localStorage.setItem(STORAGE_KEYS.ROLE_FEEDBACK, JSON.stringify(roleSpecificFeedback));
-      } else {
-        // Clear role feedback if not provided (to distinguish between "no feedback" and "has feedback")
-        localStorage.removeItem(STORAGE_KEYS.ROLE_FEEDBACK);
-      }
-      localStorage.setItem(STORAGE_KEYS.TIMESTAMP, data.timestamp.toString());
+      // Try to save with quota error handling
+      try {
+        localStorage.setItem(STORAGE_KEYS.ATS_SCORE, score.toString());
+        localStorage.setItem(STORAGE_KEYS.ATS_BREAKDOWN, JSON.stringify(normalizedBreakdown));
+        localStorage.setItem(STORAGE_KEYS.RESUME_ID, resumeId);
+        
+        // Always save job title (even if empty/null) to enable proper cache validation
+        if (jobTitle) {
+          localStorage.setItem(STORAGE_KEYS.JOB_TITLE, jobTitle);
+        } else {
+          // Clear job title if not provided (to distinguish between "no job title" and "has job title")
+          localStorage.removeItem(STORAGE_KEYS.JOB_TITLE);
+        }
+        
+        // Save role-specific feedback if provided
+        if (roleSpecificFeedback && Array.isArray(roleSpecificFeedback)) {
+          localStorage.setItem(STORAGE_KEYS.ROLE_FEEDBACK, JSON.stringify(roleSpecificFeedback));
+        } else {
+          // Clear role feedback if not provided (to distinguish between "no feedback" and "has feedback")
+          localStorage.removeItem(STORAGE_KEYS.ROLE_FEEDBACK);
+        }
+        localStorage.setItem(STORAGE_KEYS.TIMESTAMP, data.timestamp.toString());
 
-      console.log('[STATE-PERSISTENCE] Saved ATS score:', score, 'with role feedback:', !!roleSpecificFeedback);
+        console.log('[STATE-PERSISTENCE] Saved ATS score:', score, 'with role feedback:', !!roleSpecificFeedback, 'with breakdown feedback:', 
+          !!(normalizedBreakdown.keywordScore?.feedback || normalizedBreakdown.formattingScore?.feedback));
+        return true;
+      } catch (storageError) {
+        // Handle quota exceeded or other storage errors
+        if (storageError.name === 'QuotaExceededError' || storageError.code === 22) {
+          console.error('[STATE-PERSISTENCE] Storage quota exceeded, attempting cleanup');
+          // Try to clear old data
+          try {
+            // Clear expired cache
+            const oldTimestamp = localStorage.getItem(STORAGE_KEYS.TIMESTAMP);
+            if (oldTimestamp) {
+              const age = Date.now() - parseInt(oldTimestamp, 10);
+              if (age > CACHE_EXPIRATION) {
+                clearATSScore();
+                // Retry save
+                return saveATSScore({ score, breakdown: normalizedBreakdown, resumeId, jobTitle, roleSpecificFeedback });
+              }
+            }
+          } catch (cleanupError) {
+            console.error('[STATE-PERSISTENCE] Cleanup failed:', cleanupError);
+          }
+        }
+        console.warn('[STATE-PERSISTENCE] Failed to save ATS score:', storageError);
+        return false;
+      }
     } catch (error) {
       console.warn('[STATE-PERSISTENCE] Failed to save ATS score:', error);
+      return false;
     }
   }
 
@@ -83,14 +153,55 @@
       }
 
       const score = localStorage.getItem(STORAGE_KEYS.ATS_SCORE);
-      const breakdown = localStorage.getItem(STORAGE_KEYS.ATS_BREAKDOWN);
+      const breakdownStr = localStorage.getItem(STORAGE_KEYS.ATS_BREAKDOWN);
       const resumeId = localStorage.getItem(STORAGE_KEYS.RESUME_ID);
       const cachedJobTitle = localStorage.getItem(STORAGE_KEYS.JOB_TITLE);
       const roleFeedback = localStorage.getItem(STORAGE_KEYS.ROLE_FEEDBACK);
 
-      if (!score || !breakdown || !resumeId) {
+      if (!score || !breakdownStr || !resumeId) {
         return null;
       }
+
+      // Parse breakdown with error handling
+      let breakdown;
+      try {
+        breakdown = JSON.parse(breakdownStr);
+      } catch (parseError) {
+        console.warn('[STATE-PERSISTENCE] Failed to parse breakdown JSON:', parseError);
+        // Try to recover by clearing corrupted data
+        clearATSScore();
+        return null;
+      }
+      
+      // Validate breakdown structure
+      if (!breakdown || typeof breakdown !== 'object') {
+        console.warn('[STATE-PERSISTENCE] Invalid breakdown structure');
+        clearATSScore();
+        return null;
+      }
+      
+      // Normalize breakdown structure (ensure feedback properties exist)
+      const normalizedBreakdown = { ...breakdown };
+      ['keywordScore', 'formattingScore', 'structureScore', 'toneScore', 'grammarScore'].forEach(key => {
+        if (normalizedBreakdown[key]) {
+          if (typeof normalizedBreakdown[key] === 'number') {
+            // Convert number to object
+            normalizedBreakdown[key] = {
+              score: normalizedBreakdown[key],
+              max: key === 'keywordScore' ? 40 : key === 'formattingScore' ? 20 : key === 'structureScore' ? 15 : key === 'toneScore' ? 15 : 10,
+              feedback: ''
+            };
+          } else if (typeof normalizedBreakdown[key] === 'object') {
+            // Ensure feedback property exists
+            if (!('feedback' in normalizedBreakdown[key])) {
+              normalizedBreakdown[key] = {
+                ...normalizedBreakdown[key],
+                feedback: normalizedBreakdown[key].tip || normalizedBreakdown[key].message || ''
+              };
+            }
+          }
+        }
+      });
 
       // Skip validation if currentJobTitle is explicitly null (page load scenario)
       // This allows cached scores to be restored and job titles to be populated
@@ -115,17 +226,34 @@
         }
       }
 
+      // Parse role feedback with error handling
+      let roleSpecificFeedback = null;
+      if (roleFeedback) {
+        try {
+          roleSpecificFeedback = JSON.parse(roleFeedback);
+        } catch (parseError) {
+          console.warn('[STATE-PERSISTENCE] Failed to parse role feedback JSON:', parseError);
+          // Continue without role feedback rather than failing completely
+        }
+      }
+
       return {
         score: parseFloat(score),
-        breakdown: JSON.parse(breakdown),
+        breakdown: normalizedBreakdown,
         resumeId,
         jobTitle: cachedJobTitle || null,
-        roleSpecificFeedback: roleFeedback ? JSON.parse(roleFeedback) : null,
+        roleSpecificFeedback,
         timestamp: parseInt(timestamp, 10),
         cached: true
       };
     } catch (error) {
       console.warn('[STATE-PERSISTENCE] Failed to load ATS score:', error);
+      // Try to clear corrupted data
+      try {
+        clearATSScore();
+      } catch (clearError) {
+        console.error('[STATE-PERSISTENCE] Failed to clear corrupted data:', clearError);
+      }
       return null;
     }
   }
