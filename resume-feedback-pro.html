@@ -2429,12 +2429,20 @@
       // Only create the inner grid structure without redundant wrapper
       let summaryHtml = '<div class="rf-change-summary-grid">';
       
+      // Helper function to escape HTML to prevent XSS
+      const escapeHtml = (text) => {
+        if (typeof text !== 'string') return '';
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+      };
+      
       if (atsFixes.length > 0) {
         summaryHtml += `
           <div>
             <h4>ATS Fixes</h4>
             <ul>
-              ${atsFixes.map(fix => `<li>${fix}</li>`).join('')}
+              ${atsFixes.map(fix => `<li>${escapeHtml(fix)}</li>`).join('')}
             </ul>
           </div>
         `;
@@ -2445,7 +2453,7 @@
           <div>
             <h4>Role Tailoring</h4>
             <ul>
-              ${roleFixes.map(fix => `<li>${fix}</li>`).join('')}
+              ${roleFixes.map(fix => `<li>${escapeHtml(fix)}</li>`).join('')}
             </ul>
           </div>
         `;

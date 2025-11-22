@@ -186,7 +186,8 @@ export async function onRequest(context) {
     const validAtsIssues = (atsIssues && Array.isArray(atsIssues) && atsIssues.length > 0) ? atsIssues : null;
     const validRoleFeedback = (roleSpecificFeedback && 
                                 roleSpecificFeedback.targetRoleUsed !== undefined &&
-                                Array.isArray(roleSpecificFeedback.sections)) ? roleSpecificFeedback : null;
+                                Array.isArray(roleSpecificFeedback.sections) &&
+                                roleSpecificFeedback.sections.length > 0) ? roleSpecificFeedback : null;
 
     for (let attempt = 0; attempt < maxRetries; attempt++) {
       try {
