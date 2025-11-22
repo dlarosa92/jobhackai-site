@@ -272,6 +272,48 @@
     .rf-placeholder-cta button:hover {
       background: var(--color-cta-green-hover);
     }
+    /* Standardized Role Input Styling (matching Interview Questions) */
+    .rf-role-input {
+      width: 100%;
+      padding: 0.85rem 1.1rem;
+      border: 2px solid #E5E7EB;
+      border-radius: 10px;
+      font-size: 1.08rem;
+      margin-bottom: 0;
+      transition: border 0.18s;
+      background: #fff;
+      color: #232B36;
+      box-sizing: border-box;
+    }
+    .rf-role-input:focus {
+      border-color: #1976D2;
+      outline: none;
+    }
+    .rf-role-dropdown {
+      position: absolute;
+      left: 0;
+      right: 0;
+      background: #fff;
+      border: 1.5px solid #E5E7EB;
+      border-top: none;
+      border-radius: 0 0 10px 10px;
+      box-shadow: 0 2px 8px rgba(31,41,55,0.07);
+      z-index: 10;
+      max-height: 220px;
+      overflow-y: auto;
+      margin-top: -2px;
+    }
+    .rf-role-item {
+      padding: 0.85rem 1.1rem;
+      cursor: pointer;
+      font-size: 1.08rem;
+      color: #232B36;
+      transition: background 0.15s;
+    }
+    .rf-role-item:hover,
+    .rf-role-item.active {
+      background: #F3F4F6;
+    }
   </style>
 </head>
 <body>
@@ -988,12 +1030,25 @@
           // Check if already initialized to avoid duplicate initialization
           if (!jobTitleInput.dataset.roleSelectorInitialized) {
             try {
-              new window.RoleSelector(jobTitleInput, {
-                placeholder: 'Start typing your target role (e.g., Data Engineer, Product Manager)',
+              const roleSelector = new window.RoleSelector(jobTitleInput, {
+                placeholder: 'Start typing your target role (e.g., Software Engineer, Product Manager)',
+                minChars: 2,
+                maxResults: 8,
+                showCustomOption: true,
                 onSelect: function(roleName, isCustom) {
                   // Update currentJobTitle when role is selected
                   currentJobTitle = roleName;
                   console.log('[RESUME-FEEDBACK] Role selected:', roleName, isCustom ? '(custom)' : '');
+                  
+                  // Update the input's aria-expanded attribute
+                  jobTitleInput.setAttribute('aria-expanded', 'false');
+                  
+                  // Enable generate button if file is selected
+                  const fileInput = document.getElementById('rf-upload');
+                  const generateBtn = document.getElementById('rf-generate-btn');
+                  if (fileInput && generateBtn && fileInput.files && fileInput.files.length > 0) {
+                    generateBtn.disabled = false;
+                  }
                 }
               });
               jobTitleInput.dataset.roleSelectorInitialized = 'true';
@@ -1506,7 +1561,9 @@
 
           // Get ATS score (only if upload succeeded)
           showLoadingState('Calculating your ATS score…');
-          const scoreResult = await getAtsScore(uploadResult.resumeId, currentJobTitle);
+          // Ensure jobTitle is passed (even if empty string) - role is primary steering for ATS expectations
+          const jobTitleForScore = currentJobTitle || jobTitleInput?.value?.trim() || '';
+          const scoreResult = await getAtsScore(uploadResult.resumeId, jobTitleForScore);
           
           // Store ATS score in sessionStorage for cross-page sync
           if (scoreResult.success && scoreResult.score !== undefined) {
@@ -1598,34 +1655,86 @@
               
               // Save role-specific feedback to persistence
               if (window.JobHackAIStatePersistence && scoreResult.success) {
-                // Merge feedback text from atsRubric into breakdown before saving
-                const updatedBreakdown = { ...scoreResult.breakdown };
+                // RECONSTRUCT breakdown from atsRubric to ensure feedback is always included
+                // This is more reliable than merging into existing breakdown structure
+                let finalBreakdown = { ...scoreResult.breakdown };
+                
                 if (feedbackResult.atsRubric && Array.isArray(feedbackResult.atsRubric)) {
+                  // Reconstruct breakdown from atsRubric (ensures feedback is included)
+                  const reconstructedBreakdown = {};
+                  
                   feedbackResult.atsRubric.forEach(item => {
                     const category = (item.category || item.label || '').toLowerCase();
+                    const score = item.score || 0;
+                    const max = item.max || 0;
                     const feedback = item.feedback || item.tip || '';
                     
-                    if (category.includes('keyword') && updatedBreakdown.keywordScore) {
-                      updatedBreakdown.keywordScore.feedback = feedback;
-                    } else if (category.includes('format') && updatedBreakdown.formattingScore) {
-                      updatedBreakdown.formattingScore.feedback = feedback;
-                    } else if ((category.includes('structure') || category.includes('section')) && updatedBreakdown.structureScore) {
-                      updatedBreakdown.structureScore.feedback = feedback;
-                    } else if ((category.includes('tone') || category.includes('clarity')) && updatedBreakdown.toneScore) {
-                      updatedBreakdown.toneScore.feedback = feedback;
-                    } else if ((category.includes('grammar') || category.includes('spelling')) && updatedBreakdown.grammarScore) {
-                      updatedBreakdown.grammarScore.feedback = feedback;
+                    if (category.includes('keyword')) {
+                      reconstructedBreakdown.keywordScore = { 
+                        score, 
+                        max: 40, 
+                        feedback: feedback || finalBreakdown.keywordScore?.feedback || '' 
+                      };
+                    } else if (category.includes('format')) {
+                      reconstructedBreakdown.formattingScore = { 
+                        score, 
+                        max: 20, 
+                        feedback: feedback || finalBreakdown.formattingScore?.feedback || '' 
+                      };
+                    } else if ((category.includes('structure') || category.includes('section'))) {
+                      reconstructedBreakdown.structureScore = { 
+                        score, 
+                        max: 15, 
+                        feedback: feedback || finalBreakdown.structureScore?.feedback || '' 
+                      };
+                    } else if ((category.includes('tone') || category.includes('clarity'))) {
+                      reconstructedBreakdown.toneScore = { 
+                        score, 
+                        max: 15, 
+                        feedback: feedback || finalBreakdown.toneScore?.feedback || '' 
+                      };
+                    } else if ((category.includes('grammar') || category.includes('spelling'))) {
+                      reconstructedBreakdown.grammarScore = { 
+                        score, 
+                        max: 10, 
+                        feedback: feedback || finalBreakdown.grammarScore?.feedback || '' 
+                      };
+                    }
+                  });
+                  
+                  // Merge reconstructed breakdown with original (preserve any missing categories)
+                  finalBreakdown = {
+                    ...finalBreakdown,
+                    ...reconstructedBreakdown
+                  };
+                } else {
+                  // No atsRubric available, ensure breakdown structure has feedback properties
+                  ['keywordScore', 'formattingScore', 'structureScore', 'toneScore', 'grammarScore'].forEach(key => {
+                    if (finalBreakdown[key] && typeof finalBreakdown[key] === 'object') {
+                      if (!('feedback' in finalBreakdown[key])) {
+                        finalBreakdown[key] = {
+                          ...finalBreakdown[key],
+                          feedback: ''
+                        };
+                      }
                     }
                   });
                 }
                 
-                window.JobHackAIStatePersistence.saveATSScore({
+                // Save with reconstructed breakdown that includes feedback
+                const saveSuccess = window.JobHackAIStatePersistence.saveATSScore({
                   score: scoreResult.score,
-                  breakdown: updatedBreakdown,
+                  breakdown: finalBreakdown,
                   resumeId: uploadResult.resumeId,
                   jobTitle: jobTitleForFeedback || null,
                   roleSpecificFeedback: feedbackResult.roleSpecificFeedback || null
                 });
+                
+                if (!saveSuccess) {
+                  console.warn('[RESUME-FEEDBACK] Failed to save ATS score to persistence');
+                } else {
+                  console.log('[RESUME-FEEDBACK] Saved ATS score with breakdown including feedback');
+                }
               }
             
               // Trigger fade transition for role feedback (only once, after feedback is loaded)
@@ -1724,6 +1833,8 @@
               statusDiv.textContent = 'Ready to analyze';
               statusDiv.style.background = 'rgba(5,150,105,0.08)';
               statusDiv.style.color = 'var(--color-success)';
+              statusDiv.style.width = 'fit-content';
+              statusDiv.style.maxWidth = '100%';
             }
           } else {
             // Reset if file cleared
@@ -2254,7 +2365,7 @@
           rewriteTile.querySelector('.rf-title .rf-plan-badge').textContent = 'Pro Feature';
           rewriteTile.querySelector('.rf-title .rf-plan-badge').style.background = '#6B7280';
           rewriteTile.querySelector('.rf-upgrade-text strong').textContent = 'Upgrade to Pro';
-          rewriteTile.querySelector('.rf-upgrade-text').innerHTML = '<strong>Upgrade to Pro</strong> to unlock AI-powered resume rewriting. Essential users get 50% off Pro!';
+          rewriteTile.querySelector('.rf-upgrade-text').innerHTML = '<strong>Trial shows you what to fix. Pro fixes it now (rewrites unlocked).</strong> Upgrade to Pro to complete your resume optimization.';
           // Add special upgrade CTA for trial users
           const upgradeButton = rewriteTile.querySelector('.rf-upgrade-prompt a');
           if (upgradeButton) {
@@ -2313,7 +2424,7 @@
           rewriteTile.querySelector('.rf-title .rf-plan-badge').textContent = 'Pro Feature';
           rewriteTile.querySelector('.rf-title .rf-plan-badge').style.background = '#6B7280';
           rewriteTile.querySelector('.rf-upgrade-text strong').textContent = 'Upgrade to Pro';
-          rewriteTile.querySelector('.rf-upgrade-text').innerHTML = '<strong>Upgrade to Pro</strong> to unlock AI-powered resume rewriting. Perfect next step from Essential!';
+          rewriteTile.querySelector('.rf-upgrade-text').innerHTML = '<strong>Trial shows you what to fix. Pro fixes it now (rewrites unlocked).</strong> Upgrade to Pro to complete your resume optimization.';
           // Add special upgrade CTA for essential users
           const upgradeButton = rewriteTile.querySelector('.rf-upgrade-prompt a');
           if (upgradeButton) {
@@ -2525,9 +2636,23 @@
             <span id="rf-ats-checks">2 ATS checks remaining this month</span>
           </div>
           <form id="rf-upload-form" style="margin:1rem 0 0.7rem 0;">
-            <label for="rf-job-title" style="font-weight:600;display:block;margin-bottom:0.5rem;">Target Job Title <span style="font-weight:400;color:var(--color-text-muted);font-size:0.9em;">(Optional but recommended)</span></label>
-            <input id="rf-job-title" type="text" placeholder="e.g., Data Engineer, Product Manager, Software Developer" style="width:100%;max-width:400px;padding:0.5rem;border:1px solid var(--color-divider);border-radius:var(--radius-md);margin-bottom:1rem;" value="" autocomplete="off">
-            <div style="font-size:0.85rem;color:var(--color-text-muted);margin-bottom:1rem;line-height:1.4;">Adding a job title helps us provide role-specific keyword suggestions and tailored feedback.</div>
+            <label for="rf-job-title" style="font-weight:600;display:block;margin-bottom:0.5rem;">Target Role <span style="font-weight:400;color:var(--color-text-muted);font-size:0.9em;">(Recommended for better results)</span></label>
+            <div style="position:relative;max-width:400px;margin-bottom:1rem;">
+              <input 
+                id="rf-job-title" 
+                type="text" 
+                placeholder="Start typing your target role (e.g., Software Engineer, Product Manager)" 
+                class="rf-role-input"
+                style="width:100%;padding:0.85rem 1.1rem;border:2px solid #E5E7EB;border-radius:10px;font-size:1.08rem;margin-bottom:0;transition:border 0.18s;background:#fff;color:#232B36;box-sizing:border-box;"
+                role="combobox" 
+                aria-autocomplete="list" 
+                aria-expanded="false" 
+                aria-controls="rf-role-list"
+                autocomplete="off"
+                value="">
+              <div id="rf-role-list" class="rf-role-dropdown" role="listbox" style="display:none;position:absolute;left:0;right:0;background:#fff;border:1.5px solid #E5E7EB;border-top:none;border-radius:0 0 10px 10px;box-shadow:0 2px 8px rgba(31,41,55,0.07);z-index:10;max-height:220px;overflow-y:auto;margin-top:-2px;top:100%;"></div>
+            </div>
+            <div style="font-size:0.85rem;color:var(--color-text-muted);margin-bottom:1rem;line-height:1.4;">Adding a role helps us provide role-specific keyword suggestions, tailored feedback, and optimized resume rewriting.</div>
             <label for="rf-upload" style="font-weight:600;display:block;margin-bottom:0.5rem;">Resume File</label>
             <div style="display:flex;align-items:center;gap:0.75rem;flex-wrap:wrap;margin-bottom:0.5rem;">
               <label for="rf-upload" style="display:inline-flex;align-items:center;gap:0.5rem;padding:0.5rem 1rem;background:var(--color-card-bg);border:1px solid var(--color-divider);border-radius:var(--radius-md);font-size:0.875rem;font-weight:600;color:var(--color-text-main);cursor:pointer;transition:all 0.2s;">
@@ -2556,7 +2681,7 @@
               </svg>
               Generate ATS Score &amp; Feedback
             </button>
-            <div id="rf-generate-status" style="display:none;margin-top:0.5rem;font-size:0.85rem;padding:0.35rem 0.75rem;border-radius:var(--radius-md);background:rgba(5,150,105,0.08);color:var(--color-success);">
+            <div id="rf-generate-status" style="display:none;margin-top:0.5rem;font-size:0.85rem;padding:0.35rem 0.75rem;border-radius:var(--radius-md);background:rgba(5,150,105,0.08);color:var(--color-success);width:fit-content;max-width:100%;">
               Ready to analyze
             </div>
           </form>
@@ -2581,7 +2706,7 @@
           <span class="rf-tooltip-text">Get comprehensive feedback on keyword matching, formatting, structure, tone, and grammar to improve your resume's ATS compatibility.</span>
         </span>
       </div>
-      <div class="rf-upgrade-prompt" style="display:none;">
+      <div class="rf-upgrade-prompt" style="display:none !important;">
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M12 5v14M5 12h14"/>
         </svg>
@@ -2639,7 +2764,7 @@
         <span class="rf-plan-badge" style="background:#6B7280;">Pro Only</span>
       </div>
       <div style="color:var(--color-text-secondary);margin-bottom:1.2rem;">
-        Upgrade to Pro to unlock AI-powered resume rewriting with ATS optimization and role-specific enhancements.
+        Trial shows you what to fix. Pro fixes it now (rewrites unlocked). Upgrade to Pro to complete your resume optimization.
         <span class="rf-tooltip-trigger" tabindex="0" aria-label="More info" style="margin-left:0.4em;">
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
             <circle cx="12" cy="12" r="10"/>

@@ -204,7 +204,11 @@ export async function onRequest(context) {
       console.log(`📝 DELETION DATA: customerId=${customerId}, uid=${uid}`);
       console.log(`✍️ WRITING TO KV: planByUid:${uid} = free`);
       await setPlan(uid, 'free', event.created || Math.floor(Date.now()/1000));
-      console.log(`✅ KV WRITE SUCCESS: ${uid} → free`);
+      
+      // Clean up resume data when subscription is deleted
+      await env.JOBHACKAI_KV?.delete(`user:${uid}:lastResume`);
+      await env.JOBHACKAI_KV?.delete(`usage:${uid}`);
+      console.log(`✅ KV WRITE SUCCESS: ${uid} → free (resume data cleaned up)`);
     }
 
   } catch (err) {

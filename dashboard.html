@@ -1159,13 +1159,58 @@
                 }
                 
                 // Cache KV results back to localStorage via state persistence
+                // BUT: Only if localStorage doesn't already have data with feedback
+                // This prevents overwriting feedback that was saved from feedback page
                 if (window.JobHackAIStatePersistence && lastScore) {
-                  window.JobHackAIStatePersistence.saveATSScore({
-                    score: parseFloat(lastScore),
-                    breakdown: lastBreakdown || {},
-                    resumeId: resumeData.resumeId || '',
-                    jobTitle: lastJobTitle
-                  });
+                  // Check if localStorage already has data with feedback
+                  const existingData = window.JobHackAIStatePersistence.loadATSScore(null);
+                  const hasExistingFeedback = existingData && existingData.breakdown && 
+                    (existingData.breakdown.keywordScore?.feedback || 
+                     existingData.breakdown.formattingScore?.feedback ||
+                     existingData.breakdown.structureScore?.feedback ||
+                     existingData.breakdown.toneScore?.feedback ||
+                     existingData.breakdown.grammarScore?.feedback);
+                  
+                  // Only save from KV if:
+                  // 1. No existing data in localStorage, OR
+                  // 2. Existing data doesn't have feedback (KV might be newer or have feedback)
+                  // DO NOT save from KV if existing data already has feedback (preserve existing feedback)
+                  const kvHasFeedback = lastBreakdown && 
+                    (lastBreakdown.keywordScore?.feedback || 
+                     lastBreakdown.formattingScore?.feedback ||
+                     lastBreakdown.structureScore?.feedback ||
+                     lastBreakdown.toneScore?.feedback ||
+                     lastBreakdown.grammarScore?.feedback);
+                  
+                  // Only save from KV if no existing data OR existing doesn't have feedback
+                  // This ensures existing feedback (from feedback page) is never overwritten
+                  if (!existingData || !hasExistingFeedback) {
+                    // Merge KV breakdown with existing feedback if both exist
+                    let mergedBreakdown = lastBreakdown || {};
+                    if (existingData && existingData.breakdown && !hasExistingFeedback && kvHasFeedback) {
+                      // KV has feedback, existing doesn't - use KV feedback
+                      mergedBreakdown = { ...lastBreakdown };
+                    } else if (existingData && existingData.breakdown) {
+                      // Existing has breakdown but no feedback - merge with KV
+                      mergedBreakdown = { ...lastBreakdown };
+                      // Preserve any score data from existing if KV doesn't have it
+                      ['keywordScore', 'formattingScore', 'structureScore', 'toneScore', 'grammarScore'].forEach(key => {
+                        if (existingData.breakdown[key] && !mergedBreakdown[key]) {
+                          mergedBreakdown[key] = existingData.breakdown[key];
+                        }
+                      });
+                    }
+                    
+                    window.JobHackAIStatePersistence.saveATSScore({
+                      score: parseFloat(lastScore),
+                      breakdown: mergedBreakdown,
+                      resumeId: resumeData.resumeId || '',
+                      jobTitle: lastJobTitle
+                    });
+                  } else {
+                    // Existing data has feedback - preserve it completely (don't overwrite)
+                    console.log('[DASHBOARD] Preserving existing localStorage data with feedback, skipping KV overwrite');
+                  }
                 }
                 
                 console.log('[DASHBOARD] Loaded ATS score from KV:', lastScore);
@@ -1242,8 +1287,13 @@
             return cached && cached.roleSpecificFeedback && Array.isArray(cached.roleSpecificFeedback) && cached.roleSpecificFeedback.length > 0;
           })() : false;
           
-          // Only show "Unlock Deeper Insights" if ATS score exists but no role feedback
-          if (!hasRoleFeedback) {
+          // Show "Unlock Deeper Insights" if:
+          // 1. User is on free plan (only free users see this banner)
+          // 2. ATS score exists but no role feedback
+          // This banner should NOT show if the user already has role feedback or is on a paid plan
+          const shouldShow = user.plan === 'free' && !hasRoleFeedback && atsScore.percent !== null;
+          
+          if (shouldShow) {
             unlockInsightsHTML = '<div style="margin-top:1rem;padding:1rem;background:rgba(5,150,105,0.08);border:1px solid rgba(5,150,105,0.2);border-radius:8px;"><div style="display:flex;align-items:flex-start;gap:0.75rem;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0;margin-top:0.125rem;color:#00E676;"><path d="M12 2L2 7l10 5 10-5-10-5z"></path><path d="M2 17l10 5 10-5"></path><path d="M2 12l10 5 10-5"></path></svg><div style="flex:1;"><div style="font-weight:600;color:#232B36;margin-bottom:0.25rem;font-size:0.95rem;">Unlock Deeper Insights</div><div style="color:#6B7280;margin-bottom:0.75rem;line-height:1.4;font-size:0.9rem;">We\'ve scored this resume against ATS rules. Get detailed feedback and role-specific suggestions.</div><a href="resume-feedback-pro.html" class="btn-primary" style="display:inline-block;padding:0.5rem 1rem;font-size:0.9rem;text-decoration:none;white-space:nowrap;">Get Detailed Feedback</a></div></div></div>';
           }
         } catch (e) {

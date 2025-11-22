@@ -72,7 +72,46 @@ export async function onRequest(context) {
         return json({ success: true, data: null }, 200, origin, env);
       }
 
-      const resumeData = JSON.parse(lastResumeData);
+      let resumeData;
+      try {
+        resumeData = JSON.parse(lastResumeData);
+      } catch (parseError) {
+        console.warn('[ATS-SCORE-PERSIST] Failed to parse KV data, clearing:', parseError);
+        // Clear corrupted data
+        await kv.delete(lastResumeKey);
+        return json({ success: true, data: null }, 200, origin, env);
+      }
+      
+      // Validate that the stored data belongs to this user (double-check UID)
+      // This prevents showing data from a previous user account that was deleted
+      // and a new account created with the same email/UID
+      if (resumeData.uid && resumeData.uid !== uid) {
+        // Data belongs to a different user - don't return it
+        console.warn('[ATS-SCORE-PERSIST] UID mismatch detected, clearing stale data', {
+          storedUid: resumeData.uid,
+          currentUid: uid
+        });
+        // Delete the stale data
+        await kv.delete(lastResumeKey);
+        return json({ success: true, data: null }, 200, origin, env);
+      }
+      
+      // Ensure breakdown structure has feedback properties
+      if (resumeData.breakdown && typeof resumeData.breakdown === 'object') {
+        const normalizedBreakdown = { ...resumeData.breakdown };
+        ['keywordScore', 'formattingScore', 'structureScore', 'toneScore', 'grammarScore'].forEach(key => {
+          if (normalizedBreakdown[key] && typeof normalizedBreakdown[key] === 'object') {
+            if (!('feedback' in normalizedBreakdown[key])) {
+              normalizedBreakdown[key] = {
+                ...normalizedBreakdown[key],
+                feedback: normalizedBreakdown[key].tip || normalizedBreakdown[key].message || ''
+              };
+            }
+          }
+        });
+        resumeData.breakdown = normalizedBreakdown;
+      }
+      
       return json({ success: true, data: resumeData }, 200, origin, env);
     }
 
