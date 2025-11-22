@@ -2197,6 +2197,14 @@
       console.log('[RESUME-FEEDBACK] Updated progress ring to', percent + '%');
     }
 
+    // Helper function to escape HTML to prevent XSS (shared across functions)
+    function escapeHtml(text) {
+      if (typeof text !== 'string') return '';
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
     function updateRubricGrid(rubric) {
       const grid = document.getElementById('rf-rubric-grid');
       if (!grid) return;
@@ -2206,10 +2214,11 @@
         div.className = 'rf-rubric-item';
         // Use — / — for empty scores
         const scoreDisplay = (item.score === undefined || item.score === null) ? '— / —' : `${item.score} / ${item.max}`;
+        
         div.innerHTML = `
-          <div class="rf-rubric-label">${item.label}</div>
-          <div class="rf-rubric-score">${scoreDisplay}</div>
-          <div style="color:var(--color-text-secondary);font-size:0.98rem;">${item.tip || item.feedback || ''}</div>
+          <div class="rf-rubric-label">${escapeHtml(item.label)}</div>
+          <div class="rf-rubric-score">${escapeHtml(scoreDisplay)}</div>
+          <div style="color:var(--color-text-secondary);font-size:0.98rem;">${escapeHtml(item.tip || item.feedback || '')}</div>
         `;
         grid.appendChild(div);
       });
@@ -2286,17 +2295,17 @@
             fitChipText = 'Strong Match';
           }
           
-          // Build tips list
+          // Build tips list (escape HTML to prevent XSS)
           const tipsHtml = section.tips && Array.isArray(section.tips) && section.tips.length > 0
-            ? section.tips.map(tip => `<li>${tip}</li>`).join('')
+            ? section.tips.map(tip => `<li>${escapeHtml(tip)}</li>`).join('')
             : '<li>No specific tips available</li>';
           
           div.innerHTML = `
             <div class="rf-feedback-label" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.75rem;">
-              <span>${section.section || 'Section'}</span>
-              <span class="${fitChipClass}" style="padding:0.25rem 0.75rem;border-radius:12px;font-size:0.75rem;font-weight:600;">${fitChipText}</span>
+              <span>${escapeHtml(section.section || 'Section')}</span>
+              <span class="${fitChipClass}" style="padding:0.25rem 0.75rem;border-radius:12px;font-size:0.75rem;font-weight:600;">${escapeHtml(fitChipText)}</span>
             </div>
-            <div class="rf-feedback-diagnosis" style="color:var(--color-text-main);margin-bottom:0.75rem;font-weight:500;">${section.diagnosis || ''}</div>
+            <div class="rf-feedback-diagnosis" style="color:var(--color-text-main);margin-bottom:0.75rem;font-weight:500;">${escapeHtml(section.diagnosis || '')}</div>
             <div class="rf-feedback-tips" style="margin-bottom:0.75rem;">
               <ul style="margin:0;padding-left:1.25rem;color:var(--color-text-secondary);">
                 ${tipsHtml}
@@ -2304,7 +2313,7 @@
             </div>
             <div class="rf-rewrite-preview" style="margin-top:0.75rem;padding-top:0.75rem;border-top:1px solid var(--color-divider);">
               <div style="font-size:0.75rem;font-weight:600;color:var(--color-text-muted);margin-bottom:0.5rem;text-transform:uppercase;letter-spacing:0.5px;">AI Rewrite Preview</div>
-              <div style="color:var(--color-text-secondary);font-style:italic;font-size:0.9rem;line-height:1.5;">${section.rewritePreview || 'Preview not available'}</div>
+              <div style="color:var(--color-text-secondary);font-style:italic;font-size:0.9rem;line-height:1.5;">${escapeHtml(section.rewritePreview || 'Preview not available')}</div>
             </div>
           `;
           grid.appendChild(div);
@@ -2317,10 +2326,10 @@
         roleSpecificFeedback.forEach(item => {
           const div = document.createElement('div');
           div.className = 'rf-feedback-card';
-          const scoreDisplay = (item.score === undefined || item.score === null) ? '— / —' : item.score;
+          const scoreDisplay = (item.score === undefined || item.score === null) ? '— / —' : escapeHtml(item.score);
           div.innerHTML = `
-            <div class="rf-feedback-label">${item.section || item.label} <span class="rf-feedback-score">${scoreDisplay}</span></div>
-            <div class="rf-feedback-tip">${item.feedback || item.tip}</div>
+            <div class="rf-feedback-label">${escapeHtml(item.section || item.label || 'Section')} <span class="rf-feedback-score">${scoreDisplay}</span></div>
+            <div class="rf-feedback-tip">${escapeHtml(item.feedback || item.tip || '')}</div>
           `;
           grid.appendChild(div);
         });
@@ -2429,13 +2438,6 @@
       // Only create the inner grid structure without redundant wrapper
       let summaryHtml = '<div class="rf-change-summary-grid">';
       
-      // Helper function to escape HTML to prevent XSS
-      const escapeHtml = (text) => {
-        if (typeof text !== 'string') return '';
-        const div = document.createElement('div');
-        div.textContent = text;
-        return div.innerHTML;
-      };
       
       if (atsFixes.length > 0) {
         summaryHtml += `
