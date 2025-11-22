@@ -1340,9 +1340,31 @@
               if (window.JobHackAIStatePersistence) {
                 const cachedScore = window.JobHackAIStatePersistence.loadATSScore(null);
                 if (cachedScore && cachedScore.resumeId === currentResumeId) {
-                  // Update existing cached score with new job title and feedback
+                  // Merge feedback text from atsRubric into breakdown
+                  const updatedBreakdown = { ...cachedScore.breakdown };
+                  if (feedbackResult.atsRubric && Array.isArray(feedbackResult.atsRubric)) {
+                    feedbackResult.atsRubric.forEach(item => {
+                      const category = (item.category || item.label || '').toLowerCase();
+                      const feedback = item.feedback || item.tip || '';
+                      
+                      if (category.includes('keyword') && updatedBreakdown.keywordScore) {
+                        updatedBreakdown.keywordScore.feedback = feedback;
+                      } else if (category.includes('format') && updatedBreakdown.formattingScore) {
+                        updatedBreakdown.formattingScore.feedback = feedback;
+                      } else if ((category.includes('structure') || category.includes('section')) && updatedBreakdown.structureScore) {
+                        updatedBreakdown.structureScore.feedback = feedback;
+                      } else if ((category.includes('tone') || category.includes('clarity')) && updatedBreakdown.toneScore) {
+                        updatedBreakdown.toneScore.feedback = feedback;
+                      } else if ((category.includes('grammar') || category.includes('spelling')) && updatedBreakdown.grammarScore) {
+                        updatedBreakdown.grammarScore.feedback = feedback;
+                      }
+                    });
+                  }
+                  
+                  // Update existing cached score with new job title, feedback, and updated breakdown
                   window.JobHackAIStatePersistence.saveATSScore({
                     ...cachedScore,
+                    breakdown: updatedBreakdown,
                     jobTitle: jobTitle || null,
                     roleSpecificFeedback: feedbackResult.roleSpecificFeedback || null
                   });
@@ -1576,9 +1598,30 @@
               
               // Save role-specific feedback to persistence
               if (window.JobHackAIStatePersistence && scoreResult.success) {
+                // Merge feedback text from atsRubric into breakdown before saving
+                const updatedBreakdown = { ...scoreResult.breakdown };
+                if (feedbackResult.atsRubric && Array.isArray(feedbackResult.atsRubric)) {
+                  feedbackResult.atsRubric.forEach(item => {
+                    const category = (item.category || item.label || '').toLowerCase();
+                    const feedback = item.feedback || item.tip || '';
+                    
+                    if (category.includes('keyword') && updatedBreakdown.keywordScore) {
+                      updatedBreakdown.keywordScore.feedback = feedback;
+                    } else if (category.includes('format') && updatedBreakdown.formattingScore) {
+                      updatedBreakdown.formattingScore.feedback = feedback;
+                    } else if ((category.includes('structure') || category.includes('section')) && updatedBreakdown.structureScore) {
+                      updatedBreakdown.structureScore.feedback = feedback;
+                    } else if ((category.includes('tone') || category.includes('clarity')) && updatedBreakdown.toneScore) {
+                      updatedBreakdown.toneScore.feedback = feedback;
+                    } else if ((category.includes('grammar') || category.includes('spelling')) && updatedBreakdown.grammarScore) {
+                      updatedBreakdown.grammarScore.feedback = feedback;
+                    }
+                  });
+                }
+                
                 window.JobHackAIStatePersistence.saveATSScore({
                   score: scoreResult.score,
-                  breakdown: scoreResult.breakdown,
+                  breakdown: updatedBreakdown,
                   resumeId: uploadResult.resumeId,
                   jobTitle: jobTitleForFeedback || null,
                   roleSpecificFeedback: feedbackResult.roleSpecificFeedback || null
@@ -1742,9 +1785,31 @@
             if (window.JobHackAIStatePersistence) {
               const cachedScore = window.JobHackAIStatePersistence.loadATSScore(null);
               if (cachedScore && cachedScore.resumeId === currentResumeId) {
-                // Update existing cached score with new job title and feedback
+                // Merge feedback text from atsRubric into breakdown
+                const updatedBreakdown = { ...cachedScore.breakdown };
+                if (feedbackResult.atsRubric && Array.isArray(feedbackResult.atsRubric)) {
+                  feedbackResult.atsRubric.forEach(item => {
+                    const category = (item.category || item.label || '').toLowerCase();
+                    const feedback = item.feedback || item.tip || '';
+                    
+                    if (category.includes('keyword') && updatedBreakdown.keywordScore) {
+                      updatedBreakdown.keywordScore.feedback = feedback;
+                    } else if (category.includes('format') && updatedBreakdown.formattingScore) {
+                      updatedBreakdown.formattingScore.feedback = feedback;
+                    } else if ((category.includes('structure') || category.includes('section')) && updatedBreakdown.structureScore) {
+                      updatedBreakdown.structureScore.feedback = feedback;
+                    } else if ((category.includes('tone') || category.includes('clarity')) && updatedBreakdown.toneScore) {
+                      updatedBreakdown.toneScore.feedback = feedback;
+                    } else if ((category.includes('grammar') || category.includes('spelling')) && updatedBreakdown.grammarScore) {
+                      updatedBreakdown.grammarScore.feedback = feedback;
+                    }
+                  });
+                }
+                
+                // Update existing cached score with new job title, feedback, and updated breakdown
                 window.JobHackAIStatePersistence.saveATSScore({
                   ...cachedScore,
+                  breakdown: updatedBreakdown,
                   jobTitle: jobTitle || null,
                   roleSpecificFeedback: feedbackResult.roleSpecificFeedback || null
                 });
