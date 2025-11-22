@@ -251,12 +251,35 @@ export async function generateATSFeedback(resumeText, ruleBasedScores, jobTitle,
   const maxInputTokens = maxOutputTokens * 2; // resume + scores; still cheap with mini
   const truncatedResume = truncateToApproxTokens(resumeText || '', maxInputTokens);
 
+  const targetRoleUsed = jobTitle && jobTitle.trim().length > 0 ? jobTitle.trim() : 'general';
+  const roleContext = targetRoleUsed !== 'general' 
+    ? `The candidate is targeting: ${targetRoleUsed}. Tailor all role-specific feedback to this role.`
+    : 'No specific target role provided. Provide general tech/knowledge worker improvement guidance.';
+
   const systemPrompt = `You are an ATS resume expert. Generate precise, actionable feedback based on rule-based scores.
+
 CRITICAL: Use the exact scores provided in RULE-BASED SCORES. Do NOT generate or modify scores. Your role is to provide feedback and suggestions only.
 IMPORTANT: Return exactly 5 categories in atsRubric: Keyword Match, ATS Formatting, Structure & Organization, Tone & Clarity, and Grammar & Spelling. Do NOT include an "overallScore" or "overall" category.
 Keep feedback concise. For each category, provide:
 - A short explanation (2–3 sentences)
-- Up to 2 bullet suggestions, using action verbs and metrics where possible.`;
+- Up to 2 bullet suggestions, using action verbs and metrics where possible.
+
+ADDITIONALLY, generate Role-Specific Tailoring Tips. This is strategic, role-aware feedback that evaluates 5 sections:
+1. Header & Contact - first impression: name, headline/target title, location/remote signal, email/phone, professional links (LinkedIn, GitHub, portfolio). Focus on whether this instantly signals fit for the target role.
+2. Professional Summary - 2-4 line pitch at top: who they are, what they do, why relevant for the role, with at least one measurable outcome when possible.
+3. Experience - work history: roles, bullets, achievements; focus on outcomes and alignment with responsibilities for the target role.
+4. Skills - quick-scan tools/technologies, logically grouped; presence of must-have skills, removal of fluffy soft-skill padding.
+5. Education - degrees + certs; right-sized for seniority; highlight relevant coursework or certifications.
+
+For each section, output:
+- fitLevel: "big_impact" (major improvements needed), "tunable" (good but can improve), or "strong" (well-aligned)
+- diagnosis: one-sentence summary of main issue/opportunity
+- tips: exactly 3 clear, actionable suggestions (add X, remove Y, rephrase Z, group skills, add metrics, etc.)
+- rewritePreview: 1-2 sentence improved version WITHOUT fabricating jobs, dates, companies, or degrees.
+
+${roleContext}
+
+Also identify ATS issues as an array of structured problems with id, severity ("low"|"medium"|"high"), and details (e.g., missing keywords list).`;
 
   // We only send the minimal part of ruleBasedScores the model actually needs
   // NOTE: Do NOT include overallScore - it should not be in the atsRubric response
@@ -277,12 +300,14 @@ Keep feedback concise. For each category, provide:
       role: 'user',
       content:
         `You are evaluating a resume for ATS readiness.\n\n` +
-        `JOB TITLE: ${jobTitle || 'Unknown'}\n\n` +
+        `TARGET ROLE: ${targetRoleUsed}\n\n` +
         `RULE-BASED SCORES (JSON): ${JSON.stringify(safeRuleScores)}\n\n` +
         `IMPORTANT: Use the exact scores provided in RULE-BASED SCORES. Do NOT generate or modify scores. Your role is to provide feedback and suggestions only.\n\n` +
         `CRITICAL: Return exactly 5 categories in atsRubric array: "Keyword Match", "ATS Formatting", "Structure & Organization", "Tone & Clarity", and "Grammar & Spelling". Do NOT include "overallScore" or "overall" as a category.\n\n` +
         `RESUME TEXT:\n${truncatedResume}\n\n` +
-        `Return structured feedback for each category. The score and max values in your response must match the rule-based scores exactly.`
+        `Return structured feedback for each category. The score and max values in your response must match the rule-based scores exactly.\n\n` +
+        `Also generate Role-Specific Tailoring Tips for the 5 sections (Header & Contact, Professional Summary, Experience, Skills, Education) with fitLevel, diagnosis, tips, and rewritePreview. ` +
+        `Set targetRoleUsed to "${targetRoleUsed}" in your response.`
     }
   ];
 
@@ -315,23 +340,73 @@ Keep feedback concise. For each category, provide:
           }
         },
         roleSpecificFeedback: {
+          type: 'object',
+          properties: {
+            targetRoleUsed: { 
+              type: 'string',
+              description: 'The exact target role string used, or "general" if no role provided'
+            },
+            sections: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  section: {
+                    type: 'string',
+                    enum: ['Header & Contact', 'Professional Summary', 'Experience', 'Skills', 'Education']
+                  },
+                  fitLevel: {
+                    type: 'string',
+                    enum: ['big_impact', 'tunable', 'strong']
+                  },
+                  diagnosis: {
+                    type: 'string',
+                    description: 'One-sentence summary of main issue/opportunity'
+                  },
+                  tips: {
+                    type: 'array',
+                    items: { type: 'string' },
+                    minItems: 3,
+                    maxItems: 3,
+                    description: 'Exactly 3 actionable suggestions'
+                  },
+                  rewritePreview: {
+                    type: 'string',
+                    description: '1-2 sentence improved version without fabricating content'
+                  }
+                },
+                required: ['section', 'fitLevel', 'diagnosis', 'tips', 'rewritePreview']
+              },
+              minItems: 5,
+              maxItems: 5
+            }
+          },
+          required: ['targetRoleUsed', 'sections']
+        },
+        atsIssues: {
           type: 'array',
           items: {
             type: 'object',
             properties: {
-              section: { type: 'string' },
-              score: { type: 'string' },
-              feedback: { type: 'string' },
-              examples: {
+              id: {
+                type: 'string',
+                description: 'Stable identifier like "missing_keywords", "formatting_tables"'
+              },
+              severity: {
+                type: 'string',
+                enum: ['low', 'medium', 'high']
+              },
+              details: {
                 type: 'array',
-                items: { type: 'string' }
+                items: { type: 'string' },
+                description: 'Specific items, e.g., missing keywords list'
               }
             },
-            required: ['section', 'feedback']
+            required: ['id', 'severity', 'details']
           }
         }
       },
-      required: ['atsRubric']
+      required: ['atsRubric', 'roleSpecificFeedback', 'atsIssues']
     }
   };
 
@@ -355,8 +430,15 @@ Keep feedback concise. For each category, provide:
  * Generate resume rewrite using AI.
  * Uses gpt-4o for higher quality and structured output so UI can rely on shape.
  * This is a premium feature, so we accept a higher per-call cost but still cap it.
+ * 
+ * @param {string} resumeText - Original resume text
+ * @param {string|null} section - Optional section to rewrite (null for full resume)
+ * @param {string} jobTitle - Target job title/role
+ * @param {Array|null} atsIssues - Optional ATS issues from feedback analysis
+ * @param {Object|null} roleSpecificFeedback - Optional role-specific feedback with sections
+ * @param {Object} env - Environment variables
  */
-export async function generateResumeRewrite(resumeText, section, jobTitle, env) {
+export async function generateResumeRewrite(resumeText, section, jobTitle, atsIssues, roleSpecificFeedback, env) {
   const baseModel = env.OPENAI_MODEL_REWRITE || 'gpt-4o';
   const fallbackModel = 'gpt-4o-mini'; // cheaper fallback if 4o has issues
 
@@ -374,16 +456,59 @@ export async function generateResumeRewrite(resumeText, section, jobTitle, env) 
 
   const safeJobTitle = jobTitle || 'Professional role';
 
-  const systemPrompt = `You are an expert resume writer. Regenerate resume content to meet ATS best practices.
-Preserve all factual information. Use concise, results-oriented bullets (1–2 lines each). 
-Quantify outcomes when possible. Do not invent experience.`;
+  const systemPrompt = `You are a cautious, high-quality resume rewriter for JobHackAI.
+
+CRITICAL CONSTRAINTS - YOU MUST OBEY THESE WITHOUT EXCEPTION:
+
+1. ABSOLUTE PROHIBITIONS:
+   - DO NOT invent new jobs, positions, companies, or employers
+   - DO NOT change any dates (employment dates, education dates, certification dates)
+   - DO NOT invent degrees, certifications, licenses, or credentials
+   - DO NOT add experience that doesn't exist in the original resume
+   - DO NOT change job titles unless the original resume already implies that level (never downgrade)
+   - DO NOT alter company names, school names, or credential names
+
+2. WHAT YOU CAN DO:
+   - Improve wording, phrasing, and clarity
+   - Reorder bullet points for better impact
+   - Add metrics and quantifiable results when they are clearly implied by the original content
+   - Naturally integrate missing keywords into existing descriptions (avoid keyword stuffing)
+   - Improve formatting and structure
+   - Highlight achievements that align with the target role
+
+3. VERIFICATION REQUIRED:
+   - Every company name must match the original exactly
+   - Every date must match the original exactly
+   - Every degree and certification must match the original exactly
+   - If you cannot safely improve a section without violating these rules, make minimal edits instead of fabricating content.
+
+4. CHANGE TRACKING:
+   - For changeSummary.atsFixes → list what ATS issues were fixed (3-6 bullets)
+   - For changeSummary.roleFixes → list how tailored to the target role (3-6 bullets)
+   - Be specific but concise
+
+Your objectives:
+1. Fix ATS issues from provided analysis (if available) - add missing keywords naturally, simplify formatting, improve tone/clarity and grammar
+2. Implement Role-Specific tips from provided feedback (if available) - prioritize changes to Header & Contact, Professional Summary, Experience, and Skills
+3. Ensure the rewritten resume clearly signals fitness for the target role (when provided)
+4. Keep the resume to a sensible length (1-2 pages worth of text)`;
+
+  // Build context for ATS issues and role-specific feedback
+  let contextParts = [];
+  if (atsIssues && Array.isArray(atsIssues) && atsIssues.length > 0) {
+    contextParts.push(`ATS ISSUES TO ADDRESS:\n${JSON.stringify(atsIssues, null, 2)}`);
+  }
+  if (roleSpecificFeedback && roleSpecificFeedback.sections && Array.isArray(roleSpecificFeedback.sections)) {
+    contextParts.push(`ROLE-SPECIFIC TAILORING GUIDANCE:\nTarget Role: ${roleSpecificFeedback.targetRoleUsed || safeJobTitle}\n${JSON.stringify(roleSpecificFeedback.sections, null, 2)}`);
+  }
+  const contextText = contextParts.length > 0 ? `\n\n${contextParts.join('\n\n')}\n\n` : '';
 
   const userPrompt = section
-    ? `Rewrite ONLY the "${section}" section of this resume for a ${safeJobTitle} role.\n\n` +
-      `Return:\n- "original": the original text you received\n- "rewritten": your improved version\n- "changes": a short list of what you improved.\n\n` +
+    ? `Rewrite ONLY the "${section}" section of this resume for a ${safeJobTitle} role.${contextText}` +
+      `Return a JSON object with:\n- "rewrittenResume": your improved version of the resume text\n- "changeSummary.atsFixes": array of 3-6 strings describing ATS fixes\n- "changeSummary.roleFixes": array of 3-6 strings describing role tailoring changes\n\n` +
       `RESUME TEXT (may include other sections, but focus only on ${section}):\n${truncatedResume}`
-    : `Rewrite this resume for a ${safeJobTitle} role.\n\n` +
-      `Return:\n- "original": the original text you received\n- "rewritten": your improved version\n- "changes": a short list of what you improved.\n\n` +
+    : `Rewrite this resume for a ${safeJobTitle} role.${contextText}` +
+      `Return a JSON object with:\n- "rewrittenResume": your improved version of the full resume\n- "changeSummary.atsFixes": array of 3-6 strings describing ATS fixes\n- "changeSummary.roleFixes": array of 3-6 strings describing role tailoring changes\n\n` +
       `RESUME TEXT:\n${truncatedResume}`;
 
   const messages = [
@@ -402,21 +527,28 @@ Quantify outcomes when possible. Do not invent experience.`;
     schema: {
       type: 'object',
       properties: {
-        original: { type: 'string' },
-        rewritten: { type: 'string' },
-        changes: {
-          type: 'array',
-          items: {
-            type: 'object',
-            properties: {
-              type: { type: 'string' },
-              description: { type: 'string' }
+        rewrittenResume: {
+          type: 'string',
+          description: 'The full rewritten resume text'
+        },
+        changeSummary: {
+          type: 'object',
+          properties: {
+            atsFixes: {
+              type: 'array',
+              items: { type: 'string' },
+              description: '3-6 bullet strings describing ATS-related improvements'
             },
-            required: ['description']
-          }
+            roleFixes: {
+              type: 'array',
+              items: { type: 'string' },
+              description: '3-6 bullet strings describing role-tailoring improvements'
+            }
+          },
+          required: ['atsFixes', 'roleFixes']
         }
       },
-      required: ['original', 'rewritten']
+      required: ['rewrittenResume', 'changeSummary']
     }
   };
 

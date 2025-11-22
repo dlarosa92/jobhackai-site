@@ -109,7 +109,7 @@ export async function onRequest(context) {
     }
 
     const body = await request.json();
-    const { resumeId, section, jobTitle } = body;
+    const { resumeId, section, jobTitle, atsIssues, roleSpecificFeedback } = body;
 
     if (!resumeId) {
       return json({ success: false, error: 'resumeId required' }, 400, origin, env);
@@ -145,6 +145,7 @@ export async function onRequest(context) {
 
     let rewrittenText = '';
     let originalText = '';
+    let changeSummary = { atsFixes: [], roleFixes: [] };
     let tokenUsage = 0;
     const maxRetries = 3;
     let lastError = null;
@@ -181,12 +182,20 @@ export async function onRequest(context) {
       originalText = resumeData.text;
     }
 
+    // Validate optional parameters
+    const validAtsIssues = (atsIssues && Array.isArray(atsIssues) && atsIssues.length > 0) ? atsIssues : null;
+    const validRoleFeedback = (roleSpecificFeedback && 
+                                roleSpecificFeedback.targetRoleUsed !== undefined &&
+                                Array.isArray(roleSpecificFeedback.sections)) ? roleSpecificFeedback : null;
+
     for (let attempt = 0; attempt < maxRetries; attempt++) {
       try {
         const aiResponse = await generateResumeRewrite(
           resumeData.text,
-          section,
+          section || null,
           jobTitle.trim(),
+          validAtsIssues,
+          validRoleFeedback,
           env
         );
 
@@ -228,7 +237,9 @@ export async function onRequest(context) {
           parsed = aiResponse.content;
         }
 
-        rewrittenText = parsed.rewritten || parsed.content || '';
+        // Handle new response structure with rewrittenResume and changeSummary
+        rewrittenText = parsed.rewrittenResume || parsed.rewritten || parsed.content || '';
+        changeSummary = parsed.changeSummary || { atsFixes: [], roleFixes: [] };
 
         if (rewrittenText) {
           break;
@@ -297,6 +308,8 @@ export async function onRequest(context) {
       tokenUsage: tokenUsage,
       original: originalText,
       rewritten: rewrittenText,
+      rewrittenResume: rewrittenText, // Alias for backwards compatibility
+      changeSummary: changeSummary,
       section: section || 'full'
     }, 200, origin, env);
   } catch (error) {

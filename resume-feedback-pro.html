@@ -314,6 +314,50 @@
     .rf-role-item.active {
       background: #F3F4F6;
     }
+    /* Fit Level Chips for Role-Specific Tailoring Tips */
+    .rf-fit-chip-big-impact {
+      background: #FEF3C7;
+      color: #92400E;
+      border: 1px solid #F59E0B;
+    }
+    .rf-fit-chip-tunable {
+      background: #DBEAFE;
+      color: #1E40AF;
+      border: 1px solid #3B82F6;
+    }
+    .rf-fit-chip-strong {
+      background: #D1FAE5;
+      color: #065F46;
+      border: 1px solid #10B981;
+    }
+    /* Change Summary Styles for Rewrite UI */
+    .rf-change-summary {
+      margin-top: 1.5rem;
+      padding: 1.2rem;
+      background: #F9FAFB;
+      border-radius: var(--radius-lg);
+      border: 1px solid var(--color-divider);
+    }
+    .rf-change-summary h4 {
+      font-size: 1rem;
+      font-weight: 700;
+      color: var(--color-text-main);
+      margin: 0 0 0.75rem 0;
+    }
+    .rf-change-summary ul {
+      margin: 0;
+      padding-left: 1.25rem;
+      color: var(--color-text-secondary);
+    }
+    .rf-change-summary li {
+      margin-bottom: 0.5rem;
+      line-height: 1.5;
+    }
+    .rf-change-summary-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: 1.5rem;
+    }
   </style>
 </head>
 <body>
@@ -754,8 +798,21 @@
       return await response.json();
     }
 
-    async function rewriteResume(resumeId, section, jobTitle) {
+    // Global storage for latest feedback results to use in rewrite
+    window.latestAtsIssues = null;
+    window.latestRoleSpecific = null;
+
+    async function rewriteResume(resumeId, section, jobTitle, atsIssues, roleSpecificFeedback) {
       const token = await getAuthToken();
+      
+      // Build request body with optional ATS context
+      const requestBody = { resumeId, section, jobTitle };
+      if (atsIssues && Array.isArray(atsIssues) && atsIssues.length > 0) {
+        requestBody.atsIssues = atsIssues;
+      }
+      if (roleSpecificFeedback) {
+        requestBody.roleSpecificFeedback = roleSpecificFeedback;
+      }
       
       // Use retry logic for API call
       const response = await window.JobHackAIRetry.fetchWithRetry('/api/resume-rewrite', {
@@ -764,7 +821,7 @@
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ resumeId, section, jobTitle })
+        body: JSON.stringify(requestBody)
       }, {
         maxRetries: 3,
         initialDelay: 1000
@@ -790,7 +847,17 @@
         throw new Error(errorMessage);
       }
 
-      return await response.json();
+      const result = await response.json();
+      
+      // Store latest feedback results for rewrite calls
+      if (result.atsIssues) {
+        window.latestAtsIssues = result.atsIssues;
+      }
+      if (result.roleSpecificFeedback) {
+        window.latestRoleSpecific = result.roleSpecificFeedback;
+      }
+      
+      return result;
     }
 
     function handleApiError(error) {
@@ -902,11 +969,20 @@
         this.disabled = true;
         this.textContent = 'Regenerating...';
 
-        const result = await rewriteResume(currentResumeId, section, jobTitle);
+        // Use stored feedback context if available
+        const atsIssues = window.latestAtsIssues || null;
+        const roleSpecificFeedback = window.latestRoleSpecific || null;
+        
+        const result = await rewriteResume(currentResumeId, section, jobTitle, atsIssues, roleSpecificFeedback);
         
         const rewrittenBox = document.querySelectorAll('#rf-rewrite-content .rf-snippet-box')[1];
         if (rewrittenBox) {
-          rewrittenBox.value = result.rewritten;
+          rewrittenBox.value = result.rewritten || result.rewrittenResume || '';
+        }
+        
+        // Display change summary if available
+        if (result.changeSummary) {
+          displayChangeSummary(result.changeSummary);
         }
 
         // Show success toast
@@ -1376,6 +1452,15 @@
               this.textContent = 'Optimizing...';
               
               const feedbackResult = await getResumeFeedback(currentResumeId, jobTitle);
+              
+              // Store latest feedback results for rewrite calls
+              if (feedbackResult.atsIssues) {
+                window.latestAtsIssues = feedbackResult.atsIssues;
+              }
+              if (feedbackResult.roleSpecificFeedback) {
+                window.latestRoleSpecific = feedbackResult.roleSpecificFeedback;
+              }
+              
               updateFeedbackGrid(feedbackResult.roleSpecificFeedback);
               updateRubricGridFromFeedback(feedbackResult.atsRubric);
               
@@ -1644,6 +1729,15 @@
               
               showLoadingState('Optimizing for ATS compliance…');
               const feedbackResult = await getResumeFeedback(uploadResult.resumeId, jobTitleForFeedback);
+              
+              // Store latest feedback results for rewrite calls
+              if (feedbackResult.atsIssues) {
+                window.latestAtsIssues = feedbackResult.atsIssues;
+              }
+              if (feedbackResult.roleSpecificFeedback) {
+                window.latestRoleSpecific = feedbackResult.roleSpecificFeedback;
+              }
+              
               updateFeedbackGrid(feedbackResult.roleSpecificFeedback);
               updateRubricGridFromFeedback(feedbackResult.atsRubric);
               
@@ -2125,11 +2219,35 @@
       const grid = document.getElementById('rf-feedback-grid');
       if (!grid) return;
       
-      const hasResumeData = roleSpecificFeedback && roleSpecificFeedback.length > 0;
+      // Check if we have the new structure (object with targetRoleUsed and sections array)
+      const isNewStructure = roleSpecificFeedback && 
+                             typeof roleSpecificFeedback === 'object' &&
+                             !Array.isArray(roleSpecificFeedback) &&
+                             roleSpecificFeedback.targetRoleUsed !== undefined &&
+                             Array.isArray(roleSpecificFeedback.sections);
+      
+      // Check if we have the old structure (array of items with section/score/feedback)
+      const isOldStructure = roleSpecificFeedback && Array.isArray(roleSpecificFeedback) && roleSpecificFeedback.length > 0;
+      
+      // Update section title and subtitle if new structure
+      const roleTitleEl = document.getElementById('rf-role-title');
+      const roleDescEl = document.getElementById('rf-role-desc');
+      
+      if (isNewStructure && roleTitleEl) {
+        roleTitleEl.textContent = 'Role-Specific Tailoring Tips';
+        if (roleDescEl) {
+          const targetRoleUsed = roleSpecificFeedback.targetRoleUsed || 'general';
+          if (targetRoleUsed !== 'general') {
+            roleDescEl.textContent = `How to tune your resume for ${targetRoleUsed} roles.`;
+          } else {
+            roleDescEl.textContent = 'General improvements for tech roles. Add a target role for sharper suggestions.';
+          }
+        }
+      }
       
       grid.innerHTML = '';
       
-      if (!hasResumeData) {
+      if (!isNewStructure && !isOldStructure) {
         // Show placeholder cards
         const placeholderCards = [
           { section: 'Header & Contact', placeholder: 'Your résumé feedback will appear here once analyzed.' },
@@ -2151,17 +2269,63 @@
         return;
       }
       
-      // Use provided feedback
-      roleSpecificFeedback.forEach(item => {
-        const div = document.createElement('div');
-        div.className = 'rf-feedback-card';
-        const scoreDisplay = (item.score === undefined || item.score === null) ? '— / —' : item.score;
-        div.innerHTML = `
-          <div class="rf-feedback-label">${item.section || item.label} <span class="rf-feedback-score">${scoreDisplay}</span></div>
-          <div class="rf-feedback-tip">${item.feedback || item.tip}</div>
-        `;
-        grid.appendChild(div);
-      });
+      // Handle NEW structure with fitLevel, diagnosis, tips, rewritePreview
+      if (isNewStructure) {
+        roleSpecificFeedback.sections.forEach(section => {
+          const div = document.createElement('div');
+          div.className = 'rf-feedback-card';
+          
+          // Fit level chip styling
+          let fitChipClass = 'rf-fit-chip-tunable';
+          let fitChipText = 'Good but Tunable';
+          if (section.fitLevel === 'big_impact') {
+            fitChipClass = 'rf-fit-chip-big-impact';
+            fitChipText = 'Big Impact Opportunity';
+          } else if (section.fitLevel === 'strong') {
+            fitChipClass = 'rf-fit-chip-strong';
+            fitChipText = 'Strong Match';
+          }
+          
+          // Build tips list
+          const tipsHtml = section.tips && Array.isArray(section.tips) && section.tips.length > 0
+            ? section.tips.map(tip => `<li>${tip}</li>`).join('')
+            : '<li>No specific tips available</li>';
+          
+          div.innerHTML = `
+            <div class="rf-feedback-label" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.75rem;">
+              <span>${section.section || 'Section'}</span>
+              <span class="${fitChipClass}" style="padding:0.25rem 0.75rem;border-radius:12px;font-size:0.75rem;font-weight:600;">${fitChipText}</span>
+            </div>
+            <div class="rf-feedback-diagnosis" style="color:var(--color-text-main);margin-bottom:0.75rem;font-weight:500;">${section.diagnosis || ''}</div>
+            <div class="rf-feedback-tips" style="margin-bottom:0.75rem;">
+              <ul style="margin:0;padding-left:1.25rem;color:var(--color-text-secondary);">
+                ${tipsHtml}
+              </ul>
+            </div>
+            <div class="rf-rewrite-preview" style="margin-top:0.75rem;padding-top:0.75rem;border-top:1px solid var(--color-divider);">
+              <div style="font-size:0.75rem;font-weight:600;color:var(--color-text-muted);margin-bottom:0.5rem;text-transform:uppercase;letter-spacing:0.5px;">AI Rewrite Preview</div>
+              <div style="color:var(--color-text-secondary);font-style:italic;font-size:0.9rem;line-height:1.5;">${section.rewritePreview || 'Preview not available'}</div>
+            </div>
+          `;
+          grid.appendChild(div);
+        });
+        return;
+      }
+      
+      // Handle OLD structure (backwards compatibility)
+      if (isOldStructure) {
+        roleSpecificFeedback.forEach(item => {
+          const div = document.createElement('div');
+          div.className = 'rf-feedback-card';
+          const scoreDisplay = (item.score === undefined || item.score === null) ? '— / —' : item.score;
+          div.innerHTML = `
+            <div class="rf-feedback-label">${item.section || item.label} <span class="rf-feedback-score">${scoreDisplay}</span></div>
+            <div class="rf-feedback-tip">${item.feedback || item.tip}</div>
+          `;
+          grid.appendChild(div);
+        });
+        return;
+      }
     }
     
     // Fade transition helpers
@@ -2244,6 +2408,48 @@
           rewriteTile.parentNode.insertBefore(cta, rewriteTile.nextSibling);
         }
       }
+    }
+
+    // Display change summary from rewrite result
+    function displayChangeSummary(changeSummary) {
+      const summaryContainer = document.getElementById('rf-change-summary');
+      if (!summaryContainer || !changeSummary) return;
+      
+      const atsFixes = changeSummary.atsFixes || [];
+      const roleFixes = changeSummary.roleFixes || [];
+      
+      if (atsFixes.length === 0 && roleFixes.length === 0) {
+        summaryContainer.style.display = 'none';
+        return;
+      }
+      
+      let summaryHtml = '<div class="rf-change-summary"><div class="rf-change-summary-grid">';
+      
+      if (atsFixes.length > 0) {
+        summaryHtml += `
+          <div>
+            <h4>ATS Fixes</h4>
+            <ul>
+              ${atsFixes.map(fix => `<li>${fix}</li>`).join('')}
+            </ul>
+          </div>
+        `;
+      }
+      
+      if (roleFixes.length > 0) {
+        summaryHtml += `
+          <div>
+            <h4>Role Tailoring</h4>
+            <ul>
+              ${roleFixes.map(fix => `<li>${fix}</li>`).join('')}
+            </ul>
+          </div>
+        `;
+      }
+      
+      summaryHtml += '</div></div>';
+      summaryContainer.innerHTML = summaryHtml;
+      summaryContainer.style.display = 'block';
     }
 
     // Hide details for Free plan
@@ -2792,6 +2998,7 @@
         <textarea class="rf-snippet-box" readonly>Original resume excerpt will appear here after upload.</textarea>
         <div style="font-weight:600;margin-bottom:0.5rem;">Rewritten Snippet</div>
         <textarea class="rf-snippet-box" readonly>AI-optimized resume excerpt.</textarea>
+        <div id="rf-change-summary" style="display:none;"></div>
         <div style="margin-top:1.2rem;">
           <button class="btn btn-primary">Copy Rewritten Resume</button>
           <button class="btn btn-secondary">Regenerate Rewrite</button>
