@@ -2423,7 +2423,11 @@
         return;
       }
       
-      let summaryHtml = '<div class="rf-change-summary"><div class="rf-change-summary-grid">';
+      // Add the class to the container element itself (not a nested div)
+      summaryContainer.className = 'rf-change-summary';
+      
+      // Only create the inner grid structure without redundant wrapper
+      let summaryHtml = '<div class="rf-change-summary-grid">';
       
       if (atsFixes.length > 0) {
         summaryHtml += `
@@ -2447,7 +2451,7 @@
         `;
       }
       
-      summaryHtml += '</div></div>';
+      summaryHtml += '</div>';
       summaryContainer.innerHTML = summaryHtml;
       summaryContainer.style.display = 'block';
     }
