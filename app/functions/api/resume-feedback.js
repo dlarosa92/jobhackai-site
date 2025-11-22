@@ -38,11 +38,20 @@ function json(data, status = 200, origin, env) {
 
 async function getUserPlan(uid, env) {
   if (!env.JOBHACKAI_KV) {
+    console.warn('[RESUME-FEEDBACK] KV not available for plan lookup');
     return 'free';
   }
   
-  const plan = await env.JOBHACKAI_KV.get(`planByUid:${uid}`);
-  return plan || 'free';
+  try {
+    const plan = await env.JOBHACKAI_KV.get(`planByUid:${uid}`);
+    if (!plan) {
+      console.warn(`[RESUME-FEEDBACK] Plan not found in KV for uid: ${uid}`);
+    }
+    return plan || 'free';
+  } catch (error) {
+    console.error('[RESUME-FEEDBACK] Error fetching plan from KV:', error);
+    return 'free';
+  }
 }
 
 async function getTrialEndDate(uid, env) {
@@ -140,24 +149,68 @@ export async function onRequest(context) {
     }
 
     const { uid } = await verifyFirebaseIdToken(token, env.FIREBASE_PROJECT_ID);
-    const plan = await getUserPlan(uid, env);
     
-    // Log plan detection for debugging
-    console.log('[RESUME-FEEDBACK] Plan check:', { uid, plan, hasKV: !!env.JOBHACKAI_KV, environment: env.ENVIRONMENT, origin });
-
-    // Dev environment bypass: Allow authenticated users in dev environment
-    // This allows testing with dev plan override without requiring KV storage setup
-    // SECURITY: Use exact origin matching to prevent bypass attacks (e.g., attacker.com/dev.jobhackai.io)
+    // Dev environment detection: Use exact origin matching to prevent bypass attacks
     const allowedDevOrigins = ['https://dev.jobhackai.io', 'http://localhost:3003', 'http://localhost:8788'];
     const isDevOrigin = origin && allowedDevOrigins.includes(origin);
     const isDevEnvironment = env.ENVIRONMENT === 'dev' || isDevOrigin;
-    const effectivePlan = isDevEnvironment && plan === 'free' ? 'pro' : plan;
+    
+    const plan = await getUserPlan(uid, env);
+    
+    // Log plan detection for debugging
+    console.log('[RESUME-FEEDBACK] Plan check:', { 
+      uid, 
+      plan, 
+      hasKV: !!env.JOBHACKAI_KV, 
+      environment: env.ENVIRONMENT, 
+      origin,
+      isDevOrigin,
+      isDevEnvironment
+    });
+
+    // Dev environment bypass: Allow authenticated users in dev environment
+    // This allows testing with dev plan override without requiring KV storage setup
+    // If plan lookup fails in dev environment, try to fetch from plan/me endpoint as fallback
+    let effectivePlan = plan;
+    
+    // If plan is 'free' and we're in dev environment, upgrade to 'pro' for testing
+    if (isDevEnvironment && plan === 'free') {
+      // In dev environment, if KV lookup failed, try to fetch plan from plan/me endpoint
+      if (env.JOBHACKAI_KV) {
+        try {
+          // Try to fetch plan directly from KV one more time with better error handling
+          const directPlan = await env.JOBHACKAI_KV.get(`planByUid:${uid}`);
+          if (directPlan && directPlan !== 'free') {
+            effectivePlan = directPlan;
+            console.log('[RESUME-FEEDBACK] Found plan via direct KV lookup:', effectivePlan);
+          } else {
+            // Still 'free' after direct lookup - upgrade to 'pro' for dev testing
+            effectivePlan = 'pro';
+            console.log('[RESUME-FEEDBACK] Plan lookup returned free in dev environment, upgrading to pro for testing');
+          }
+        } catch (kvError) {
+          console.warn('[RESUME-FEEDBACK] KV lookup failed in dev environment, upgrading to pro for testing:', kvError);
+          effectivePlan = 'pro';
+        }
+      } else {
+        // KV not available in dev environment - upgrade to 'pro' for testing
+        effectivePlan = 'pro';
+        console.log('[RESUME-FEEDBACK] KV not available in dev environment, upgrading to pro for testing');
+      }
+    }
     
     console.log('[RESUME-FEEDBACK] Effective plan:', { plan, effectivePlan, isDevEnvironment });
 
     // Check plan access (Free plan locked)
     if (effectivePlan === 'free') {
-      console.log('[RESUME-FEEDBACK] Access denied - plan is free');
+      console.log('[RESUME-FEEDBACK] Access denied - plan is free', {
+        uid,
+        plan,
+        effectivePlan,
+        isDevEnvironment,
+        hasKV: !!env.JOBHACKAI_KV,
+        origin
+      });
       return json({
         success: false,
         error: 'Feature locked',
