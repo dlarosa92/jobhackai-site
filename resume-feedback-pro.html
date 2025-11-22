@@ -849,13 +849,8 @@
 
       const result = await response.json();
       
-      // Store latest feedback results for rewrite calls
-      if (result.atsIssues) {
-        window.latestAtsIssues = result.atsIssues;
-      }
-      if (result.roleSpecificFeedback) {
-        window.latestRoleSpecific = result.roleSpecificFeedback;
-      }
+      // Note: atsIssues and roleSpecificFeedback are only returned from /api/resume-feedback,
+      // not from /api/resume-rewrite. They are already stored when feedback is received.
       
       return result;
     }
