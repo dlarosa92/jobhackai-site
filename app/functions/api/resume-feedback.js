@@ -524,33 +524,77 @@ export async function onRequest(context) {
             suggestions: item.suggestions || []
           };
         }),
-      roleSpecificFeedback: aiFeedback.roleSpecificFeedback || [
-        {
-          section: 'Header & Contact',
-          score: '8/10',
-          feedback: 'Clear and concise. Consider adding a custom resume URL for extra polish.'
-        },
-        {
-          section: 'Professional Summary',
-          score: '6/10',
-          feedback: 'Strong opening but lacks keywords for your target role.'
-        },
-        {
-          section: 'Experience',
-          score: '7/10',
-          feedback: 'Great structure. Quantify impact with metrics.'
-        },
-        {
-          section: 'Skills',
-          score: '9/10',
-          feedback: 'Relevant and up-to-date. Group under sub-headings.'
-        },
-        {
-          section: 'Education',
-          score: '10/10',
-          feedback: 'Well-formatted. No changes needed.'
-        }
-      ],
+      // New role-specific feedback structure (with backwards compatibility fallback)
+      roleSpecificFeedback: (aiFeedback.roleSpecificFeedback && 
+                             aiFeedback.roleSpecificFeedback.targetRoleUsed !== undefined &&
+                             Array.isArray(aiFeedback.roleSpecificFeedback.sections)) 
+        ? aiFeedback.roleSpecificFeedback
+        : (aiFeedback.roleSpecificFeedback && Array.isArray(aiFeedback.roleSpecificFeedback))
+          ? aiFeedback.roleSpecificFeedback // Old format - pass through for backwards compatibility
+          : {
+              targetRoleUsed: normalizedJobTitle || 'general',
+              sections: [
+                {
+                  section: 'Header & Contact',
+                  fitLevel: 'tunable',
+                  diagnosis: 'Clear and concise. Consider adding a custom resume URL for extra polish.',
+                  tips: [
+                    'Add a professional headline or target title near your name',
+                    'Include LinkedIn and GitHub URLs if available',
+                    'Ensure contact information is easy to scan'
+                  ],
+                  rewritePreview: 'Professional summary headline and links placeholder.'
+                },
+                {
+                  section: 'Professional Summary',
+                  fitLevel: 'tunable',
+                  diagnosis: 'Strong opening but lacks keywords for your target role.',
+                  tips: [
+                    'Mention the target role explicitly in the first sentence',
+                    'Add 2-3 key skills relevant to the role',
+                    'Include at least one quantifiable achievement'
+                  ],
+                  rewritePreview: 'Summary placeholder with role alignment.'
+                },
+                {
+                  section: 'Experience',
+                  fitLevel: 'tunable',
+                  diagnosis: 'Great structure. Quantify impact with metrics.',
+                  tips: [
+                    'Add numbers to achievements (e.g., "increased revenue by 25%")',
+                    'Focus on outcomes, not just responsibilities',
+                    'Use action verbs to start each bullet'
+                  ],
+                  rewritePreview: 'Experience section placeholder with metrics.'
+                },
+                {
+                  section: 'Skills',
+                  fitLevel: 'tunable',
+                  diagnosis: 'Relevant and up-to-date. Group under sub-headings.',
+                  tips: [
+                    'Group technical skills by category (e.g., Languages, Frameworks)',
+                    'Remove outdated technologies if not relevant',
+                    'Prioritize skills mentioned in job descriptions'
+                  ],
+                  rewritePreview: 'Skills section placeholder with categorization.'
+                },
+                {
+                  section: 'Education',
+                  fitLevel: 'strong',
+                  diagnosis: 'Well-formatted. No changes needed.',
+                  tips: [
+                    'Keep education concise for senior roles',
+                    'Include relevant coursework only if recent graduate',
+                    'List certifications separately if applicable'
+                  ],
+                  rewritePreview: 'Education section placeholder.'
+                }
+              ]
+            },
+      // Extract ATS issues from AI response or generate from rule-based scores
+      atsIssues: aiFeedback.atsIssues && Array.isArray(aiFeedback.atsIssues) 
+        ? aiFeedback.atsIssues
+        : generateATSIssuesFromScores(ruleBasedScores, normalizedJobTitle),
       aiFeedback: aiFeedback
     } : {
       // Fallback to rule-based scores if AI fails
@@ -586,33 +630,67 @@ export async function onRequest(context) {
           feedback: ruleBasedScores.grammarScore.feedback
         }
       ],
-      roleSpecificFeedback: [
-        {
-          section: 'Header & Contact',
-          score: '8/10',
-          feedback: 'Clear and concise. Consider adding a custom resume URL for extra polish.'
-        },
-        {
-          section: 'Professional Summary',
-          score: '6/10',
-          feedback: 'Strong opening but lacks keywords for your target role.'
-        },
-        {
-          section: 'Experience',
-          score: '7/10',
-          feedback: 'Great structure. Quantify impact with metrics.'
-        },
-        {
-          section: 'Skills',
-          score: '9/10',
-          feedback: 'Relevant and up-to-date. Group under sub-headings.'
-        },
-        {
-          section: 'Education',
-          score: '10/10',
-          feedback: 'Well-formatted. No changes needed.'
-        }
-      ],
+      roleSpecificFeedback: {
+        targetRoleUsed: normalizedJobTitle || 'general',
+        sections: [
+          {
+            section: 'Header & Contact',
+            fitLevel: 'tunable',
+            diagnosis: 'Clear and concise. Consider adding a custom resume URL for extra polish.',
+            tips: [
+              'Add a professional headline or target title near your name',
+              'Include LinkedIn and GitHub URLs if available',
+              'Ensure contact information is easy to scan'
+            ],
+            rewritePreview: 'Professional summary headline and links placeholder.'
+          },
+          {
+            section: 'Professional Summary',
+            fitLevel: 'tunable',
+            diagnosis: 'Strong opening but lacks keywords for your target role.',
+            tips: [
+              'Mention the target role explicitly in the first sentence',
+              'Add 2-3 key skills relevant to the role',
+              'Include at least one quantifiable achievement'
+            ],
+            rewritePreview: 'Summary placeholder with role alignment.'
+          },
+          {
+            section: 'Experience',
+            fitLevel: 'tunable',
+            diagnosis: 'Great structure. Quantify impact with metrics.',
+            tips: [
+              'Add numbers to achievements (e.g., "increased revenue by 25%")',
+              'Focus on outcomes, not just responsibilities',
+              'Use action verbs to start each bullet'
+            ],
+            rewritePreview: 'Experience section placeholder with metrics.'
+          },
+          {
+            section: 'Skills',
+            fitLevel: 'tunable',
+            diagnosis: 'Relevant and up-to-date. Group under sub-headings.',
+            tips: [
+              'Group technical skills by category (e.g., Languages, Frameworks)',
+              'Remove outdated technologies if not relevant',
+              'Prioritize skills mentioned in job descriptions'
+            ],
+            rewritePreview: 'Skills section placeholder with categorization.'
+          },
+          {
+            section: 'Education',
+            fitLevel: 'strong',
+            diagnosis: 'Well-formatted. No changes needed.',
+            tips: [
+              'Keep education concise for senior roles',
+              'Include relevant coursework only if recent graduate',
+              'List certifications separately if applicable'
+            ],
+            rewritePreview: 'Education section placeholder.'
+          }
+        ]
+      },
+      atsIssues: generateATSIssuesFromScores(ruleBasedScores, normalizedJobTitle),
       aiFeedback: null
     };
 
@@ -645,6 +723,76 @@ export async function onRequest(context) {
       message: error.message 
     }, 500, origin, env);
   }
+}
+
+/**
+ * Generate structured ATS issues from rule-based scores
+ * Used as fallback when AI doesn't provide issues or for rule-based only responses
+ */
+function generateATSIssuesFromScores(ruleBasedScores, jobTitle) {
+  const issues = [];
+  
+  // Keyword relevance issues
+  if (ruleBasedScores.keywordScore) {
+    const keywordPercent = ruleBasedScores.keywordScore.score / ruleBasedScores.keywordScore.max;
+    if (keywordPercent < 0.7) {
+      issues.push({
+        id: 'missing_keywords',
+        severity: keywordPercent < 0.5 ? 'high' : 'medium',
+        details: jobTitle ? [`Missing role-specific keywords for ${jobTitle}`] : ['Missing industry-relevant keywords']
+      });
+    }
+  }
+  
+  // Formatting issues
+  if (ruleBasedScores.formattingScore) {
+    const formattingPercent = ruleBasedScores.formattingScore.score / ruleBasedScores.formattingScore.max;
+    if (formattingPercent < 0.7) {
+      issues.push({
+        id: 'formatting_compliance',
+        severity: formattingPercent < 0.5 ? 'high' : 'medium',
+        details: ['Resume formatting may not be fully ATS-compliant. Avoid tables, graphics, and complex layouts.']
+      });
+    }
+  }
+  
+  // Structure issues
+  if (ruleBasedScores.structureScore) {
+    const structurePercent = ruleBasedScores.structureScore.score / ruleBasedScores.structureScore.max;
+    if (structurePercent < 0.7) {
+      issues.push({
+        id: 'structure_organization',
+        severity: structurePercent < 0.5 ? 'high' : 'medium',
+        details: ['Resume structure could be improved. Ensure clear section headers and consistent formatting.']
+      });
+    }
+  }
+  
+  // Tone and clarity issues
+  if (ruleBasedScores.toneScore) {
+    const tonePercent = ruleBasedScores.toneScore.score / ruleBasedScores.toneScore.max;
+    if (tonePercent < 0.7) {
+      issues.push({
+        id: 'tone_clarity',
+        severity: 'low',
+        details: ['Improve action-oriented language and make bullet points more concise.']
+      });
+    }
+  }
+  
+  // Grammar and spelling issues
+  if (ruleBasedScores.grammarScore) {
+    const grammarPercent = ruleBasedScores.grammarScore.score / ruleBasedScores.grammarScore.max;
+    if (grammarPercent < 0.8) {
+      issues.push({
+        id: 'grammar_spelling',
+        severity: 'high',
+        details: ['Resume contains grammar or spelling errors that must be corrected.']
+      });
+    }
+  }
+  
+  return issues;
 }
 
 // Simple hash function for cache keys
