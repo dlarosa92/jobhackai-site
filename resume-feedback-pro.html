@@ -1638,6 +1638,11 @@
           }
           
           currentResumeId = uploadResult.resumeId;
+          
+          // Clear previous feedback context when uploading a new resume
+          // This prevents using feedback from the previous resume with the new one
+          window.latestAtsIssues = null;
+          window.latestRoleSpecific = null;
 
           // Get ATS score (only if upload succeeded)
           showLoadingState('Calculating your ATS score…');

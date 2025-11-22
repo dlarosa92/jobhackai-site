@@ -501,14 +501,12 @@ Your objectives:
   if (roleSpecificFeedback && roleSpecificFeedback.sections && Array.isArray(roleSpecificFeedback.sections)) {
     contextParts.push(`ROLE-SPECIFIC TAILORING GUIDANCE:\nTarget Role: ${roleSpecificFeedback.targetRoleUsed || safeJobTitle}\n${JSON.stringify(roleSpecificFeedback.sections, null, 2)}`);
   }
-  const contextText = contextParts.length > 0 ? `\n\n${contextParts.join('\n\n')}\n\n` : '';
+  const contextText = contextParts.length > 0 ? `\n\n${contextParts.join('\n\n')}\n\n` : ' ';
 
   const userPrompt = section
-    ? `Rewrite ONLY the "${section}" section of this resume for a ${safeJobTitle} role.${contextText}` +
-      `Return a JSON object with:\n- "rewrittenResume": your improved version of the resume text\n- "changeSummary.atsFixes": array of 3-6 strings describing ATS fixes\n- "changeSummary.roleFixes": array of 3-6 strings describing role tailoring changes\n\n` +
+    ? `Rewrite ONLY the "${section}" section of this resume for a ${safeJobTitle} role.${contextText}Return a JSON object with:\n- "rewrittenResume": your improved version of the resume text\n- "changeSummary.atsFixes": array of 3-6 strings describing ATS fixes\n- "changeSummary.roleFixes": array of 3-6 strings describing role tailoring changes\n\n` +
       `RESUME TEXT (may include other sections, but focus only on ${section}):\n${truncatedResume}`
-    : `Rewrite this resume for a ${safeJobTitle} role.${contextText}` +
-      `Return a JSON object with:\n- "rewrittenResume": your improved version of the full resume\n- "changeSummary.atsFixes": array of 3-6 strings describing ATS fixes\n- "changeSummary.roleFixes": array of 3-6 strings describing role tailoring changes\n\n` +
+    : `Rewrite this resume for a ${safeJobTitle} role.${contextText}Return a JSON object with:\n- "rewrittenResume": your improved version of the full resume\n- "changeSummary.atsFixes": array of 3-6 strings describing ATS fixes\n- "changeSummary.roleFixes": array of 3-6 strings describing role tailoring changes\n\n` +
       `RESUME TEXT:\n${truncatedResume}`;
 
   const messages = [
