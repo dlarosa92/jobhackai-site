@@ -103,7 +103,9 @@ export async function scoreResume(resumeText, jobTitle, metadata = {}, env) {
       matchedMustHave: keywordScore.matchedMustHave,
       matchedNiceToHave: keywordScore.matchedNiceToHave,
       missingMustHave: keywordScore.missingMustHave,
-      missingNiceToHave: keywordScore.missingNiceToHave
+      missingNiceToHave: keywordScore.missingNiceToHave,
+      stuffedMustHave: keywordScore.stuffedMustHave || [],
+      stuffedNiceToHave: keywordScore.stuffedNiceToHave || []
     },
     recommendations: generateRecommendations({
       keywordScore,
@@ -147,6 +149,7 @@ function scoreKeywordRelevanceWithTemplates(resumeText, jobTitle, expectedMustHa
   // Must-have skills (30 pts)
   let matchedMustHave = [];
   let missingMustHave = [];
+  let stuffedMustHave = []; // Track keyword stuffing separately
   
   for (const skill of expectedMustHave) {
     const skillLower = skill.toLowerCase();
@@ -177,17 +180,22 @@ function scoreKeywordRelevanceWithTemplates(resumeText, jobTitle, expectedMustHa
       matchedMustHave.push(skill);
     } else if (matches === 0) {
       missingMustHave.push(skill);
+    } else {
+      // If matches > 3, track as keyword stuffing
+      stuffedMustHave.push(skill);
     }
-    // If matches > 3, don't count it (keyword stuffing detected)
   }
   
-  const mustHaveScore = expectedMustHave.length > 0
-    ? Math.round((matchedMustHave.length / expectedMustHave.length) * 30)
+  // Calculate score using only non-stuffed skills
+  const validMustHaveCount = expectedMustHave.length - stuffedMustHave.length;
+  const mustHaveScore = validMustHaveCount > 0
+    ? Math.round((matchedMustHave.length / validMustHaveCount) * 30)
     : 0;
   
   // Nice-to-have skills (10 pts)
   let matchedNiceToHave = [];
   let missingNiceToHave = [];
+  let stuffedNiceToHave = []; // Track keyword stuffing separately
   
   for (const skill of expectedNiceToHave) {
     const skillLower = skill.toLowerCase();
@@ -213,11 +221,16 @@ function scoreKeywordRelevanceWithTemplates(resumeText, jobTitle, expectedMustHa
       matchedNiceToHave.push(skill);
     } else if (matches === 0) {
       missingNiceToHave.push(skill);
+    } else {
+      // If matches > 3, track as keyword stuffing
+      stuffedNiceToHave.push(skill);
     }
   }
   
-  const niceToHaveScore = expectedNiceToHave.length > 0
-    ? Math.round((matchedNiceToHave.length / expectedNiceToHave.length) * 10)
+  // Calculate score using only non-stuffed skills
+  const validNiceToHaveCount = expectedNiceToHave.length - stuffedNiceToHave.length;
+  const niceToHaveScore = validNiceToHaveCount > 0
+    ? Math.round((matchedNiceToHave.length / validNiceToHaveCount) * 10)
     : 0;
   
   const totalScore = Math.min(40, titleScore + mustHaveScore + niceToHaveScore);
@@ -242,8 +255,10 @@ function scoreKeywordRelevanceWithTemplates(resumeText, jobTitle, expectedMustHa
     matchedNiceToHave,
     missingMustHave,
     missingNiceToHave,
-    expectedMustHaveCount: expectedMustHave.length,
-    expectedNiceToHaveCount: expectedNiceToHave.length
+    stuffedMustHave,
+    stuffedNiceToHave,
+    expectedMustHaveCount: expectedMustHave.length - stuffedMustHave.length,
+    expectedNiceToHaveCount: expectedNiceToHave.length - stuffedNiceToHave.length
   };
 }
 
