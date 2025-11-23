@@ -4,6 +4,8 @@
 import { getBearer, verifyFirebaseIdToken } from '../_lib/firebase-auth.js';
 import { generateATSFeedback } from '../_lib/openai-client.js';
 import { scoreResume } from '../_lib/ats-scoring-engine.js';
+import { errorResponse, successResponse, generateRequestId } from '../_lib/error-handler.js';
+import { sanitizeJobTitle, sanitizeResumeText, sanitizeResumeId } from '../_lib/input-sanitizer.js';
 
 function corsHeaders(origin, env) {
   const allowedOrigins = [
@@ -132,20 +134,21 @@ async function updateUsageCounters(uid, resumeId, plan, env) {
 export async function onRequest(context) {
   const { request, env } = context;
   const origin = request.headers.get('Origin') || '';
+  const requestId = generateRequestId();
 
   if (request.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders(origin, env) });
   }
 
   if (request.method !== 'POST') {
-    return json({ success: false, error: 'Method not allowed' }, 405, origin, env);
+    return errorResponse('Method not allowed', 405, origin, env, requestId);
   }
 
   try {
     // Verify authentication
     const token = getBearer(request);
     if (!token) {
-      return json({ success: false, error: 'Unauthorized' }, 401, origin, env);
+      return errorResponse('Unauthorized', 401, origin, env, requestId);
     }
 
     const { uid } = await verifyFirebaseIdToken(token, env.FIREBASE_PROJECT_ID);
@@ -153,12 +156,15 @@ export async function onRequest(context) {
     // Dev environment detection: Use exact origin matching to prevent bypass attacks
     const allowedDevOrigins = ['https://dev.jobhackai.io', 'http://localhost:3003', 'http://localhost:8788'];
     const isDevOrigin = origin && allowedDevOrigins.includes(origin);
-    const isDevEnvironment = env.ENVIRONMENT === 'dev' || isDevOrigin;
+    // Strengthened check: require both ENVIRONMENT=dev AND valid dev origin
+    const isDevEnvironment = (env.ENVIRONMENT === 'dev' && isDevOrigin) || 
+                             (env.ENVIRONMENT === 'dev' && origin.includes('localhost'));
     
     const plan = await getUserPlan(uid, env);
     
     // Log plan detection for debugging
     console.log('[RESUME-FEEDBACK] Plan check:', { 
+      requestId,
       uid, 
       plan, 
       hasKV: !!env.JOBHACKAI_KV, 
@@ -204,6 +210,7 @@ export async function onRequest(context) {
     // Check plan access (Free plan locked)
     if (effectivePlan === 'free') {
       console.log('[RESUME-FEEDBACK] Access denied - plan is free', {
+        requestId,
         uid,
         plan,
         effectivePlan,
@@ -211,25 +218,33 @@ export async function onRequest(context) {
         hasKV: !!env.JOBHACKAI_KV,
         origin
       });
-      return json({
-        success: false,
-        error: 'Feature locked',
-        message: 'Resume Feedback is available in Trial, Essential, Pro, or Premium plans.',
-        upgradeRequired: true
-      }, 403, origin, env);
+      return errorResponse(
+        'Resume Feedback is available in Trial, Essential, Pro, or Premium plans.',
+        403,
+        origin,
+        env,
+        requestId,
+        { upgradeRequired: true }
+      );
     }
 
     // Parse request body
     const body = await request.json();
     const { resumeId, jobTitle, resumeText, isMultiColumn } = body;
 
-    if (!resumeId) {
-      return json({ success: false, error: 'resumeId required' }, 400, origin, env);
+    // Sanitize and validate inputs
+    const resumeIdValidation = sanitizeResumeId(resumeId);
+    if (!resumeIdValidation.valid) {
+      return errorResponse(resumeIdValidation.error || 'Invalid resume ID', 400, origin, env, requestId);
     }
+    const sanitizedResumeId = resumeIdValidation.sanitized;
 
-    // Job title is optional - normalize to empty string if not provided
-    // The scoring engine handles empty job titles gracefully
-    const normalizedJobTitle = (jobTitle && jobTitle.trim().length > 0) ? jobTitle.trim() : '';
+    // Job title is optional - sanitize and validate
+    const jobTitleValidation = sanitizeJobTitle(jobTitle, 200);
+    if (!jobTitleValidation.valid) {
+      return errorResponse(jobTitleValidation.error || 'Invalid job title', 400, origin, env, requestId);
+    }
+    const normalizedJobTitle = jobTitleValidation.sanitized;
 
     // Throttle check (Trial only)
     if (effectivePlan === 'trial' && env.JOBHACKAI_KV) {
@@ -243,12 +258,14 @@ export async function onRequest(context) {
         
         if (timeSinceLastRun < 60000) { // 60 seconds
           const retryAfter = Math.ceil((60000 - timeSinceLastRun) / 1000);
-          return json({
-            success: false,
-            error: 'Rate limit exceeded',
-            message: 'Please wait before requesting another feedback (1 request per minute).',
-            retryAfter
-          }, 429, origin, env);
+          return errorResponse(
+            'Rate limit exceeded. Please wait before requesting another feedback (1 request per minute).',
+            429,
+            origin,
+            env,
+            requestId,
+            { retryAfter }
+          );
         }
       }
 
@@ -257,12 +274,14 @@ export async function onRequest(context) {
       const totalTrialCount = await env.JOBHACKAI_KV.get(totalTrialKey);
       
       if (totalTrialCount && parseInt(totalTrialCount, 10) >= 3) {
-        return json({
-          success: false,
-          error: 'Trial limit reached',
-          message: 'You have used all 3 feedback attempts in your trial. Upgrade to Pro for unlimited feedback.',
-          upgradeRequired: true
-        }, 403, origin, env);
+        return errorResponse(
+          'You have used all 3 feedback attempts in your trial. Upgrade to Pro for unlimited feedback.',
+          403,
+          origin,
+          env,
+          requestId,
+          { upgradeRequired: true }
+        );
       }
     }
 
@@ -274,19 +293,21 @@ export async function onRequest(context) {
       const usage = await env.JOBHACKAI_KV.get(usageKey);
       
       if (usage && parseInt(usage, 10) >= 3) {
-        return json({
-          success: false,
-          error: 'Monthly limit reached',
-          message: 'You have used all 3 feedbacks this month. Upgrade to Pro for unlimited feedback.',
-          upgradeRequired: true
-        }, 403, origin, env);
+        return errorResponse(
+          'You have used all 3 feedbacks this month. Upgrade to Pro for unlimited feedback.',
+          403,
+          origin,
+          env,
+          requestId,
+          { upgradeRequired: true }
+        );
       }
     }
 
     // Cache check (all plans)
     let cachedResult = null;
     if (env.JOBHACKAI_KV) {
-      const cacheHash = await hashString(`${resumeId}:${normalizedJobTitle}:feedback`);
+      const cacheHash = await hashString(`${sanitizedResumeId}:${normalizedJobTitle}:feedback`);
       const cacheKey = `feedbackCache:${cacheHash}`;
       const cached = await env.JOBHACKAI_KV.get(cacheKey);
       
@@ -304,16 +325,15 @@ export async function onRequest(context) {
     // If cached, still update usage counters (user is consuming the feature)
     // Then return cached result
     if (cachedResult) {
-      console.log(`[RESUME-FEEDBACK] Cache hit for ${uid}`, { resumeId, plan: effectivePlan });
+      console.log(`[RESUME-FEEDBACK] Cache hit for ${uid}`, { requestId, resumeId: sanitizedResumeId, plan: effectivePlan });
       
       // Update throttles and usage even for cache hits (prevents bypassing limits)
-      await updateUsageCounters(uid, resumeId, effectivePlan, env);
+      await updateUsageCounters(uid, sanitizedResumeId, effectivePlan, env);
       
-      return json({
-        success: true,
+      return successResponse({
         ...cachedResult,
         cached: true
-      }, 200, origin, env);
+      }, 200, origin, env, requestId);
     }
 
     // Retrieve resume from KV or request body (dev fallback)
@@ -321,7 +341,7 @@ export async function onRequest(context) {
     
     if (env.JOBHACKAI_KV) {
       // Try to get resume from KV storage
-      const resumeKey = `resume:${resumeId}`;
+      const resumeKey = `resume:${sanitizedResumeId}`;
       const resumeDataStr = await env.JOBHACKAI_KV.get(resumeKey);
       
       if (resumeDataStr) {
@@ -329,54 +349,62 @@ export async function onRequest(context) {
         
         // Verify resume belongs to user
         if (resumeData.uid !== uid) {
-          return json({ success: false, error: 'Unauthorized' }, 403, origin, env);
+          return errorResponse('Unauthorized', 403, origin, env, requestId);
         }
       } else {
         // KV available but resume not found - allow dev fallback if resumeText provided
         if (isDevEnvironment && resumeText) {
+          // Sanitize resume text from request body
+          const resumeTextValidation = sanitizeResumeText(resumeText, 80000);
+          if (!resumeTextValidation.valid) {
+            return errorResponse(resumeTextValidation.error || 'Invalid resume text', 400, origin, env, requestId);
+          }
+          
           // Use resume text from request body (dev mode fallback when KV resume missing)
           resumeData = {
             uid,
-            text: resumeText,
+            text: resumeTextValidation.sanitized,
             isMultiColumn: isMultiColumn || false,
             fileName: 'dev-resume',
             uploadedAt: Date.now()
           };
-          console.log('[RESUME-FEEDBACK] KV resume not found, using dev fallback with resumeText from request body');
+          console.log('[RESUME-FEEDBACK] KV resume not found, using dev fallback with resumeText from request body', { requestId });
         } else {
           // KV available but resume not found and no dev fallback
-          return json({ success: false, error: 'Resume not found' }, 404, origin, env);
+          return errorResponse('Resume not found', 404, origin, env, requestId);
         }
       }
     } else {
       // KV not available - allow dev fallback with resumeText in request body
       if (isDevEnvironment && resumeText) {
+        // Sanitize resume text from request body
+        const resumeTextValidation = sanitizeResumeText(resumeText, 80000);
+        if (!resumeTextValidation.valid) {
+          return errorResponse(resumeTextValidation.error || 'Invalid resume text', 400, origin, env, requestId);
+        }
+        
         // Use resume text from request body (dev mode fallback)
         resumeData = {
           uid,
-          text: resumeText,
+          text: resumeTextValidation.sanitized,
           isMultiColumn: isMultiColumn || false,
           fileName: 'dev-resume',
           uploadedAt: Date.now()
         };
-        console.log('[RESUME-FEEDBACK] KV not available, using dev fallback: resume text from request body');
+        console.log('[RESUME-FEEDBACK] KV not available, using dev fallback: resume text from request body', { requestId });
       } else {
         // KV not available and no dev fallback provided
-        return json({ 
-          success: false, 
-          error: 'Storage not available',
-          message: 'KV storage is required for resume retrieval. In dev environments, you can pass resumeText in the request body as a fallback.'
-        }, 500, origin, env);
+        return errorResponse(
+          'Storage not available. KV storage is required for resume retrieval. In dev environments, you can pass resumeText in the request body as a fallback.',
+          500,
+          origin,
+          env,
+          requestId
+        );
       }
     }
 
-    // Cost guardrails
-    if (resumeData.text.length > 80000) {
-      return json({ 
-        success: false, 
-        error: 'Resume text exceeds 80,000 character limit' 
-      }, 400, origin, env);
-    }
+    // Resume text is already validated by sanitizeResumeText (80,000 char limit)
 
     // Get rule-based scores first (for AI context) - includes new grammar engine
     const ruleBasedScores = await scoreResume(
@@ -463,7 +491,8 @@ export async function onRequest(context) {
       try {
         const errorKey = `feedbackError:${uid}:${Date.now()}`;
         await env.JOBHACKAI_KV.put(errorKey, JSON.stringify({
-          resumeId,
+          requestId,
+          resumeId: sanitizedResumeId,
           jobTitle: normalizedJobTitle,
           error: lastError.message,
           timestamp: Date.now()
@@ -696,7 +725,7 @@ export async function onRequest(context) {
 
     // Cache result (24 hours)
     if (env.JOBHACKAI_KV) {
-      const cacheHash = await hashString(`${resumeId}:${normalizedJobTitle}:feedback`);
+      const cacheHash = await hashString(`${sanitizedResumeId}:${normalizedJobTitle}:feedback`);
       const cacheKey = `feedbackCache:${cacheHash}`;
       await env.JOBHACKAI_KV.put(cacheKey, JSON.stringify({
         result,
@@ -707,21 +736,25 @@ export async function onRequest(context) {
     }
 
     // Update throttles and usage counters (for cache misses)
-    await updateUsageCounters(uid, resumeId, effectivePlan, env);
+    await updateUsageCounters(uid, sanitizedResumeId, effectivePlan, env);
 
-    return json({
-      success: true,
+    console.log('[RESUME-FEEDBACK] Success', { requestId, uid, resumeId: sanitizedResumeId, tokenUsage });
+
+    return successResponse({
       tokenUsage: tokenUsage,
       ...result
-    }, 200, origin, env);
+    }, 200, origin, env, requestId);
 
   } catch (error) {
-    console.error('[RESUME-FEEDBACK] Error:', error);
-    return json({ 
-      success: false, 
-      error: 'Internal server error',
-      message: error.message 
-    }, 500, origin, env);
+    console.error('[RESUME-FEEDBACK] Error:', { requestId, error: error.message, stack: error.stack });
+    return errorResponse(
+      error,
+      500,
+      origin,
+      env,
+      requestId,
+      { endpoint: 'resume-feedback' }
+    );
   }
 }
 
