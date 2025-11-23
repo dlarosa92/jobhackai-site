@@ -90,11 +90,12 @@ export function sanitizeResumeId(resumeId) {
   
   const str = String(resumeId).trim();
   
-  // Resume IDs should be alphanumeric with hyphens/underscores
-  if (!/^[a-zA-Z0-9_-]+$/.test(str)) {
+  // Resume IDs should be alphanumeric with hyphens/underscores/colons
+  // Format: userId:timestamp (e.g., "bUxocN5IkahkdEnwWlPAl8NTYWm2:1763926426446")
+  if (!/^[a-zA-Z0-9_:]+$/.test(str)) {
     return {
       valid: false,
-      sanitized: str.replace(/[^a-zA-Z0-9_-]/g, ''),
+      sanitized: str.replace(/[^a-zA-Z0-9_:]/g, ''),
       error: 'Resume ID contains invalid characters'
     };
   }
