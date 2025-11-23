@@ -118,6 +118,107 @@ export async function scoreResume(resumeText, jobTitle, metadata = {}, env) {
 }
 
 /**
+ * Check if a skill phrase matches in resume text, handling alternative operators (or, /, |)
+ * @param {string} skill - Skill phrase to match (e.g., "Kubernetes or container orchestration", "ETL / ELT pipelines")
+ * @param {string} textLower - Lowercase resume text
+ * @returns {number} Number of matches found
+ */
+function matchSkillPhrase(skill, textLower) {
+  const skillLower = skill.toLowerCase();
+  
+  // Check for alternative operators: " or ", " / ", " | "
+  // Use word boundaries to ensure we match whole words/phrases
+  const alternativePattern = /\s+(?:or|\/|\|)\s+/i;
+  if (alternativePattern.test(skillLower)) {
+    // Split into alternatives and check if ANY match (OR logic)
+    const alternatives = skillLower.split(/\s+(?:or|\/|\|)\s+/i);
+    let totalMatches = 0;
+    let anyMatched = false;
+    
+    // Special handling for cases like "ETL / ELT pipelines" where alternatives share a suffix
+    // Check if the last alternative contains words that might be a shared suffix
+    if (alternatives.length === 2) {
+      const first = alternatives[0].trim();
+      const second = alternatives[1].trim();
+      
+      // If first is a single word and second is a phrase, check if first+rest matches
+      // Example: "ETL" / "ELT pipelines" -> check "ETL pipelines" and "ELT pipelines"
+      const firstWords = first.split(/\s+/);
+      const secondWords = second.split(/\s+/);
+      
+      if (firstWords.length === 1 && secondWords.length > 1) {
+        // Check if second part starts with a single word (likely an alternative)
+        // Then check both: "first + rest" and "second"
+        const secondFirstWord = secondWords[0];
+        const secondRest = secondWords.slice(1).join(' ');
+        
+        // Check "first + rest" (e.g., "ETL pipelines")
+        const firstCombined = `${first} ${secondRest}`.trim();
+        const firstMatches = matchSkillPhrase(firstCombined, textLower);
+        if (firstMatches > 0) {
+          totalMatches += firstMatches;
+          anyMatched = true;
+        }
+        
+        // Check "second" as-is (e.g., "ELT pipelines")
+        const secondMatches = matchSkillPhrase(second, textLower);
+        if (secondMatches > 0) {
+          totalMatches += secondMatches;
+          anyMatched = true;
+        }
+        
+        return anyMatched ? totalMatches : 0;
+      }
+    }
+    
+    // General case: check each alternative independently
+    for (const alternative of alternatives) {
+      const trimmed = alternative.trim();
+      if (!trimmed) continue;
+      
+      // Check if this alternative matches (recursive call for phrases within alternatives)
+      const altMatches = matchSkillPhrase(trimmed, textLower);
+      if (altMatches > 0) {
+        totalMatches += altMatches;
+        anyMatched = true;
+      }
+    }
+    
+    // Return matches if at least one alternative matched (OR logic)
+    // We sum matches to detect keyword stuffing across alternatives
+    return anyMatched ? totalMatches : 0;
+  }
+  
+  // No alternatives - use standard phrase matching (AND logic for all words)
+  const isPhrase = /[\s\-/&,()]/.test(skillLower);
+  
+  if (isPhrase) {
+    // For phrases, extract meaningful words (filter out punctuation-only tokens)
+    // Split on spaces, hyphens, slashes, and other common separators
+    const words = skillLower
+      .split(/[\s\-/&,()]+/)
+      .filter(w => w.length > 0 && /[a-z0-9]/.test(w)); // Keep only alphanumeric tokens
+    
+    if (words.length > 0) {
+      // Create regex that matches words in order with flexible separators
+      // Allows any punctuation or whitespace between words
+      // Add word boundary after each word including the final one
+      const phrasePattern = words
+        .map(w => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+        .join('[\\s\\-\\/&,()]*?\\b') + '\\b';
+      const phraseRegex = new RegExp(`\\b${phrasePattern}`, 'gi');
+      return (textLower.match(phraseRegex) || []).length;
+    }
+  } else {
+    // Single word - use word boundary
+    const regex = new RegExp(`\\b${skillLower.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'gi');
+    return (textLower.match(regex) || []).length;
+  }
+  
+  return 0;
+}
+
+/**
  * Score Keyword Relevance using role-based skill templates (40 pts)
  * @param {string} resumeText - Resume text to analyze
  * @param {string} jobTitle - Target job title
@@ -152,33 +253,8 @@ function scoreKeywordRelevanceWithTemplates(resumeText, jobTitle, expectedMustHa
   let stuffedMustHave = []; // Track keyword stuffing separately
   
   for (const skill of expectedMustHave) {
-    const skillLower = skill.toLowerCase();
-    // Check if it's a phrase (contains space, hyphen, slash, or other punctuation)
-    const isPhrase = /[\s\-/&,()]/.test(skillLower);
-    
-    let matches = 0;
-    if (isPhrase) {
-      // For phrases, extract meaningful words (filter out punctuation-only tokens)
-      // Split on spaces, hyphens, slashes, and other common separators
-      const words = skillLower
-        .split(/[\s\-/&,()]+/)
-        .filter(w => w.length > 0 && /[a-z0-9]/.test(w)); // Keep only alphanumeric tokens
-      
-      if (words.length > 0) {
-        // Create regex that matches words in order with flexible separators
-        // Allows any punctuation or whitespace between words
-        // Add word boundary after each word including the final one
-        const phrasePattern = words
-          .map(w => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
-          .join('[\\s\\-\\/&,()]*?\\b') + '\\b';
-        const phraseRegex = new RegExp(`\\b${phrasePattern}`, 'gi');
-        matches = (textLower.match(phraseRegex) || []).length;
-      }
-    } else {
-      // Single word - use word boundary
-      const regex = new RegExp(`\\b${skillLower.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'gi');
-      matches = (textLower.match(regex) || []).length;
-    }
+    // Use matchSkillPhrase to handle alternative operators (or, /, |)
+    const matches = matchSkillPhrase(skill, textLower);
     
     // Count as matched if found 1-3 times (prevent keyword stuffing)
     if (matches > 0 && matches <= 3) {
@@ -203,32 +279,8 @@ function scoreKeywordRelevanceWithTemplates(resumeText, jobTitle, expectedMustHa
   let stuffedNiceToHave = []; // Track keyword stuffing separately
   
   for (const skill of expectedNiceToHave) {
-    const skillLower = skill.toLowerCase();
-    // Check if it's a phrase (contains space, hyphen, slash, or other punctuation)
-    const isPhrase = /[\s\-/&,()]/.test(skillLower);
-    
-    let matches = 0;
-    if (isPhrase) {
-      // For phrases, extract meaningful words (filter out punctuation-only tokens)
-      // Split on spaces, hyphens, slashes, and other common separators
-      const words = skillLower
-        .split(/[\s\-/&,()]+/)
-        .filter(w => w.length > 0 && /[a-z0-9]/.test(w)); // Keep only alphanumeric tokens
-      
-      if (words.length > 0) {
-        // Create regex that matches words in order with flexible separators
-        // Allows any punctuation or whitespace between words
-        // Add word boundary after each word including the final one
-        const phrasePattern = words
-          .map(w => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
-          .join('[\\s\\-\\/&,()]*?\\b') + '\\b';
-        const phraseRegex = new RegExp(`\\b${phrasePattern}`, 'gi');
-        matches = (textLower.match(phraseRegex) || []).length;
-      }
-    } else {
-      const regex = new RegExp(`\\b${skillLower.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'gi');
-      matches = (textLower.match(regex) || []).length;
-    }
+    // Use matchSkillPhrase to handle alternative operators (or, /, |)
+    const matches = matchSkillPhrase(skill, textLower);
     
     if (matches > 0 && matches <= 3) {
       matchedNiceToHave.push(skill);
