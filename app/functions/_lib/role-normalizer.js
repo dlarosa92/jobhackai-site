@@ -25,8 +25,8 @@ export function normalizeRoleToFamily(roleLabel) {
     return "product_owner";
   }
 
-  // Full stack
-  if (cleaned.includes("full stack")) {
+  // Full stack (check both "full stack" and "fullstack" since normalizeJobTitle removes hyphens)
+  if (cleaned.includes("full stack") || cleaned.includes("fullstack")) {
     return "full_stack_developer";
   }
 
