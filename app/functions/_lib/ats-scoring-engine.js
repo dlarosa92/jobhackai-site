@@ -4,6 +4,8 @@
 
 import { calcOverallScore } from './calc-overall-score.js';
 import { getGrammarDiagnostics } from './grammar-engine.js';
+import { normalizeRoleToFamily } from './role-normalizer.js';
+import { ROLE_SKILL_TEMPLATES } from './role-skills.js';
 
 /**
  * Score resume using rule-based rubric
@@ -18,10 +20,25 @@ export async function scoreResume(resumeText, jobTitle, metadata = {}, env) {
   
   // Normalize job title for keyword matching
   const normalizedJobTitle = normalizeJobTitle(jobTitle);
-  const jobKeywords = extractJobKeywords(normalizedJobTitle);
+  const roleFamily = normalizeRoleToFamily(normalizedJobTitle);
+  
+  // Safety check for missing templates
+  const template = ROLE_SKILL_TEMPLATES[roleFamily];
+  if (!template) {
+    console.warn(`[ATS-SCORING] No template found for roleFamily: ${roleFamily}, using generic_professional`);
+  }
+  const finalTemplate = template || ROLE_SKILL_TEMPLATES.generic_professional;
+  
+  const expectedMustHave = finalTemplate.must_have || [];
+  const expectedNiceToHave = finalTemplate.nice_to_have || [];
   
   // Score each category
-  const keywordScore = scoreKeywordRelevance(resumeText, normalizedJobTitle, jobKeywords);
+  const keywordScore = scoreKeywordRelevanceWithTemplates(
+    resumeText,
+    normalizedJobTitle,
+    expectedMustHave,
+    expectedNiceToHave
+  );
   const formattingScore = scoreFormattingCompliance(resumeText, isMultiColumn);
   const structureScore = scoreStructureAndCompleteness(resumeText);
   const toneScore = scoreToneAndClarity(resumeText);
@@ -79,6 +96,17 @@ export async function scoreResume(resumeText, jobTitle, metadata = {}, env) {
       feedback: grammarScore.feedback
     },
     overallScore,
+    roleFamily,
+    roleSkillSummary: {
+      expectedMustHaveCount: keywordScore.expectedMustHaveCount,
+      expectedNiceToHaveCount: keywordScore.expectedNiceToHaveCount,
+      matchedMustHave: keywordScore.matchedMustHave,
+      matchedNiceToHave: keywordScore.matchedNiceToHave,
+      missingMustHave: keywordScore.missingMustHave,
+      missingNiceToHave: keywordScore.missingNiceToHave,
+      stuffedMustHave: keywordScore.stuffedMustHave || [],
+      stuffedNiceToHave: keywordScore.stuffedNiceToHave || []
+    },
     recommendations: generateRecommendations({
       keywordScore,
       formattingScore,
@@ -90,14 +118,119 @@ export async function scoreResume(resumeText, jobTitle, metadata = {}, env) {
 }
 
 /**
- * Score Keyword Relevance (40 pts)
+ * Check if a skill phrase matches in resume text, handling alternative operators (or, /, |)
+ * @param {string} skill - Skill phrase to match (e.g., "Kubernetes or container orchestration", "ETL / ELT pipelines")
+ * @param {string} textLower - Lowercase resume text
+ * @returns {number} Number of matches found
  */
-function scoreKeywordRelevance(resumeText, jobTitle, jobKeywords) {
+function matchSkillPhrase(skill, textLower) {
+  const skillLower = skill.toLowerCase();
+  
+  // Check for alternative operators: " or ", " / ", " | "
+  // Use word boundaries to ensure we match whole words/phrases
+  const alternativePattern = /\s+(?:or|\/|\|)\s+/i;
+  if (alternativePattern.test(skillLower)) {
+    // Split into alternatives and check if ANY match (OR logic)
+    const alternatives = skillLower.split(/\s+(?:or|\/|\|)\s+/i);
+    let totalMatches = 0;
+    let anyMatched = false;
+    
+    // Special handling for cases like "ETL / ELT pipelines" where alternatives share a suffix
+    // Check if the last alternative contains words that might be a shared suffix
+    if (alternatives.length === 2) {
+      const first = alternatives[0].trim();
+      const second = alternatives[1].trim();
+      
+      // If first is a single word and second is a phrase, check if first+rest matches
+      // Example: "ETL" / "ELT pipelines" -> check "ETL pipelines" and "ELT pipelines"
+      const firstWords = first.split(/\s+/);
+      const secondWords = second.split(/\s+/);
+      
+      if (firstWords.length === 1 && secondWords.length > 1) {
+        // Check if second part starts with a single word (likely an alternative)
+        // Then check both: "first + rest" and "second"
+        const secondFirstWord = secondWords[0];
+        const secondRest = secondWords.slice(1).join(' ');
+        
+        // Check "first + rest" (e.g., "ETL pipelines")
+        const firstCombined = `${first} ${secondRest}`.trim();
+        const firstMatches = matchSkillPhrase(firstCombined, textLower);
+        if (firstMatches > 0) {
+          totalMatches += firstMatches;
+          anyMatched = true;
+        }
+        
+        // Check "second" as-is (e.g., "ELT pipelines")
+        const secondMatches = matchSkillPhrase(second, textLower);
+        if (secondMatches > 0) {
+          totalMatches += secondMatches;
+          anyMatched = true;
+        }
+        
+        return anyMatched ? totalMatches : 0;
+      }
+    }
+    
+    // General case: check each alternative independently
+    for (const alternative of alternatives) {
+      const trimmed = alternative.trim();
+      if (!trimmed) continue;
+      
+      // Check if this alternative matches (recursive call for phrases within alternatives)
+      const altMatches = matchSkillPhrase(trimmed, textLower);
+      if (altMatches > 0) {
+        totalMatches += altMatches;
+        anyMatched = true;
+      }
+    }
+    
+    // Return matches if at least one alternative matched (OR logic)
+    // We sum matches to detect keyword stuffing across alternatives
+    return anyMatched ? totalMatches : 0;
+  }
+  
+  // No alternatives - use standard phrase matching (AND logic for all words)
+  const isPhrase = /[\s\-/&,()]/.test(skillLower);
+  
+  if (isPhrase) {
+    // For phrases, extract meaningful words (filter out punctuation-only tokens)
+    // Split on spaces, hyphens, slashes, and other common separators
+    const words = skillLower
+      .split(/[\s\-/&,()]+/)
+      .filter(w => w.length > 0 && /[a-z0-9]/.test(w)); // Keep only alphanumeric tokens
+    
+    if (words.length > 0) {
+      // Create regex that matches words in order with flexible separators
+      // Allows any punctuation or whitespace between words
+      // Add word boundary after each word including the final one
+      const phrasePattern = words
+        .map(w => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+        .join('[\\s\\-\\/&,()]*?\\b') + '\\b';
+      const phraseRegex = new RegExp(`\\b${phrasePattern}`, 'gi');
+      return (textLower.match(phraseRegex) || []).length;
+    }
+  } else {
+    // Single word - use word boundary
+    const regex = new RegExp(`\\b${skillLower.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'gi');
+    return (textLower.match(regex) || []).length;
+  }
+  
+  return 0;
+}
+
+/**
+ * Score Keyword Relevance using role-based skill templates (40 pts)
+ * @param {string} resumeText - Resume text to analyze
+ * @param {string} jobTitle - Target job title
+ * @param {string[]} expectedMustHave - Must-have skills from template
+ * @param {string[]} expectedNiceToHave - Nice-to-have skills from template
+ * @returns {Object} Score object with metadata
+ */
+function scoreKeywordRelevanceWithTemplates(resumeText, jobTitle, expectedMustHave, expectedNiceToHave) {
   const textLower = resumeText.toLowerCase();
   const jobTitleLower = (jobTitle || '').toLowerCase();
   
-  // Check for job title match (10 pts)
-  // Skip if job title is empty - don't award points for empty string match
+  // Job title match (10 pts) - keep existing logic
   let titleScore = 0;
   if (jobTitleLower && jobTitleLower.trim().length > 0) {
     if (textLower.includes(jobTitleLower)) {
@@ -114,29 +247,58 @@ function scoreKeywordRelevance(resumeText, jobTitle, jobKeywords) {
     }
   }
   
-  // Check for skill keywords (30 pts)
-  // Common skill keywords based on job title
-  const skillKeywords = getSkillKeywordsForJob(jobTitleLower);
-  let keywordMatches = 0;
-  let totalKeywords = skillKeywords.length;
+  // Must-have skills (30 pts)
+  let matchedMustHave = [];
+  let missingMustHave = [];
+  let stuffedMustHave = []; // Track keyword stuffing separately
   
-  for (const keyword of skillKeywords) {
-    // Count occurrences (but cap at 3 to prevent keyword stuffing penalty)
-    const regex = new RegExp(`\\b${keyword}\\b`, 'gi');
-    const matches = (textLower.match(regex) || []).length;
+  for (const skill of expectedMustHave) {
+    // Use matchSkillPhrase to handle alternative operators (or, /, |)
+    const matches = matchSkillPhrase(skill, textLower);
+    
+    // Count as matched if found 1-3 times (prevent keyword stuffing)
     if (matches > 0 && matches <= 3) {
-      keywordMatches++;
-    } else if (matches > 3) {
-      // Keyword stuffing detected - don't count this keyword
-      totalKeywords--;
+      matchedMustHave.push(skill);
+    } else if (matches === 0) {
+      missingMustHave.push(skill);
+    } else {
+      // If matches > 3, track as keyword stuffing
+      stuffedMustHave.push(skill);
     }
   }
   
-  const keywordScore = totalKeywords > 0 
-    ? Math.round((keywordMatches / totalKeywords) * 30)
+  // Calculate score using only non-stuffed skills
+  const validMustHaveCount = expectedMustHave.length - stuffedMustHave.length;
+  const mustHaveScore = validMustHaveCount > 0
+    ? Math.round((matchedMustHave.length / validMustHaveCount) * 30)
     : 0;
   
-  const totalScore = Math.min(40, titleScore + keywordScore);
+  // Nice-to-have skills (10 pts)
+  let matchedNiceToHave = [];
+  let missingNiceToHave = [];
+  let stuffedNiceToHave = []; // Track keyword stuffing separately
+  
+  for (const skill of expectedNiceToHave) {
+    // Use matchSkillPhrase to handle alternative operators (or, /, |)
+    const matches = matchSkillPhrase(skill, textLower);
+    
+    if (matches > 0 && matches <= 3) {
+      matchedNiceToHave.push(skill);
+    } else if (matches === 0) {
+      missingNiceToHave.push(skill);
+    } else {
+      // If matches > 3, track as keyword stuffing
+      stuffedNiceToHave.push(skill);
+    }
+  }
+  
+  // Calculate score using only non-stuffed skills
+  const validNiceToHaveCount = expectedNiceToHave.length - stuffedNiceToHave.length;
+  const niceToHaveScore = validNiceToHaveCount > 0
+    ? Math.round((matchedNiceToHave.length / validNiceToHaveCount) * 10)
+    : 0;
+  
+  const totalScore = Math.min(40, titleScore + mustHaveScore + niceToHaveScore);
   
   // Generate feedback
   let feedback = '';
@@ -150,18 +312,21 @@ function scoreKeywordRelevance(resumeText, jobTitle, jobKeywords) {
     feedback = 'Significantly improve keyword relevance by adding role-specific skills and terms.';
   }
   
-  // Check for keyword stuffing
-  const stuffingDetected = skillKeywords.some(keyword => {
-    const regex = new RegExp(`\\b${keyword}\\b`, 'gi');
-    return (textLower.match(regex) || []).length > 3;
-  });
-  
-  if (stuffingDetected) {
-    feedback += ' Avoid repeating keywords excessively.';
-  }
-  
-  return { score: totalScore, feedback };
+  // Return with metadata for roleSkillSummary
+  return { 
+    score: totalScore, 
+    feedback,
+    matchedMustHave,
+    matchedNiceToHave,
+    missingMustHave,
+    missingNiceToHave,
+    stuffedMustHave,
+    stuffedNiceToHave,
+    expectedMustHaveCount: expectedMustHave.length - stuffedMustHave.length,
+    expectedNiceToHaveCount: expectedNiceToHave.length - stuffedNiceToHave.length
+  };
 }
+
 
 /**
  * Detect tables in resume text (improved to ignore header lines)
@@ -548,71 +713,4 @@ function normalizeJobTitle(jobTitle) {
     .trim();
 }
 
-/**
- * Extract keywords from job title
- */
-function extractJobKeywords(jobTitle) {
-  const words = jobTitle.split(/\s+/).filter(w => w.length > 3);
-  return words;
-}
-
-/**
- * Get skill keywords based on job title
- */
-function getSkillKeywordsForJob(jobTitle) {
-  // Handle empty/null/undefined job titles
-  if (!jobTitle || typeof jobTitle !== 'string' || jobTitle.trim().length === 0) {
-    // Return general tech keywords for empty job titles
-    return ['collaboration', 'problem solving', 'communication', 'project management'];
-  }
-  const jobTitleLower = jobTitle.toLowerCase();
-  const keywords = [];
-  
-  // Software Engineering
-  if (jobTitleLower.includes('software') || jobTitleLower.includes('developer') || jobTitleLower.includes('engineer')) {
-    keywords.push('javascript', 'python', 'java', 'react', 'node', 'api', 'git', 'agile', 'scrum');
-  }
-  
-  // DevOps/Platform
-  if (jobTitleLower.includes('devops') || jobTitleLower.includes('platform') || jobTitleLower.includes('sre')) {
-    keywords.push('kubernetes', 'docker', 'ci/cd', 'aws', 'terraform', 'monitoring', 'automation');
-  }
-  
-  // Data Engineering/Science
-  if (jobTitleLower.includes('data')) {
-    keywords.push('sql', 'python', 'etl', 'data pipeline', 'analytics', 'machine learning');
-  }
-  
-  // AI/ML
-  if (jobTitleLower.includes('ai') || jobTitleLower.includes('ml') || jobTitleLower.includes('machine learning')) {
-    keywords.push('python', 'tensorflow', 'pytorch', 'nlp', 'deep learning', 'neural networks');
-  }
-  
-  // Product Management
-  if (jobTitleLower.includes('product')) {
-    keywords.push('roadmap', 'stakeholder', 'agile', 'scrum', 'user research', 'metrics', 'kpi');
-  }
-  
-  // UX/Design
-  if (jobTitleLower.includes('ux') || jobTitleLower.includes('design')) {
-    keywords.push('user research', 'prototyping', 'figma', 'usability', 'wireframes', 'design system');
-  }
-  
-  // QA/Testing
-  if (jobTitleLower.includes('qa') || jobTitleLower.includes('test')) {
-    keywords.push('testing', 'automation', 'selenium', 'test cases', 'quality assurance');
-  }
-  
-  // Security
-  if (jobTitleLower.includes('security') || jobTitleLower.includes('threat')) {
-    keywords.push('security', 'vulnerability', 'penetration testing', 'compliance', 'encryption');
-  }
-  
-  // If no specific match, return general tech keywords
-  if (keywords.length === 0) {
-    keywords.push('collaboration', 'problem solving', 'communication', 'project management');
-  }
-  
-  return keywords.slice(0, 10); // Limit to 10 keywords
-}
 

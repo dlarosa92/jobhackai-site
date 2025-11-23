@@ -496,7 +496,6 @@
           <div class="mi-role-autocomplete" id="mi-role-autocomplete">
             <label for="mi-role-input" class="mi-role-label">Target Role</label>
             <input id="mi-role-input" class="mi-role-input" type="text" placeholder="e.g., Software Engineer" autocomplete="off" aria-autocomplete="list" aria-haspopup="listbox" aria-expanded="false" />
-            <div id="mi-role-dropdown" class="mi-role-dropdown" role="listbox"></div>
           </div>
           <button class="clg-btn" id="mi-begin" type="button" style="width:220px;">Start Interview</button>
         </div>
@@ -657,55 +656,79 @@
     const mode = url.searchParams.get('mode') || 'current';
     const setId = url.searchParams.get('set') || '';
     const roleParam = url.searchParams.get('role') || '';
-    const roles = [
-      'Software Engineer', 'Data Analyst', 'Product Manager', 'Marketing Specialist',
-      'Sales Representative', 'Customer Success Manager', 'UX Designer', 'DevOps Engineer',
-      'Data Scientist', 'Business Analyst', 'Project Manager', 'Content Writer',
-      'Graphic Designer', 'HR Specialist', 'Financial Analyst', 'Operations Manager'
-    ];
 
     const roleInput = document.getElementById('mi-role-input');
-    const roleDropdown = document.getElementById('mi-role-dropdown');
     const beginBtn = document.getElementById('mi-begin');
     const setupDiv = document.getElementById('mi-setup');
     const sessionDiv = document.getElementById('mi-session');
 
-    // Role autocomplete
-    roleInput.addEventListener('input', function() {
-      const value = this.value.toLowerCase();
-      if (value.length < 2) {
-        roleDropdown.style.display = 'none';
+    // Initialize Role Selector
+    let roleSelectorInitAttempts = 0;
+    const MAX_ROLE_SELECTOR_ATTEMPTS = 50;
+
+    function initializeRoleSelector() {
+      if (!roleInput) {
+        if (roleSelectorInitAttempts < MAX_ROLE_SELECTOR_ATTEMPTS) {
+          roleSelectorInitAttempts++;
+          setTimeout(initializeRoleSelector, 100);
+        }
         return;
       }
-      const filteredRoles = roles.filter(role => 
-        role.toLowerCase().includes(value)
-      );
-      if (filteredRoles.length > 0) {
-        roleDropdown.innerHTML = filteredRoles.map(role => 
-          `<div class="mi-role-item" data-role="${role}">${role}</div>`
-        ).join('');
-        roleDropdown.style.display = 'block';
+
+      // Wait for RoleSelector class to be available
+      if (window.RoleSelector) {
+        try {
+          if (!roleInput.dataset.roleSelectorInitialized) {
+            const roleSelector = new window.RoleSelector(roleInput, {
+              minChars: 2,
+              maxResults: 8,
+              showCustomOption: true,
+              onSelect: function(roleName, isCustom) {
+                console.log('[MOCK-INTERVIEW] Role selected:', roleName, isCustom ? '(custom)' : '');
+              }
+            });
+            roleInput.dataset.roleSelectorInitialized = 'true';
+            console.log('[MOCK-INTERVIEW] RoleSelector initialized successfully');
+            
+            // Pre-populate role from query after initialization
+            if (roleParam) {
+              roleInput.value = roleParam;
+            }
+          }
+        } catch (error) {
+          console.error('[MOCK-INTERVIEW] Failed to initialize RoleSelector:', error);
+          if (roleSelectorInitAttempts < MAX_ROLE_SELECTOR_ATTEMPTS) {
+            roleSelectorInitAttempts++;
+            setTimeout(initializeRoleSelector, 500);
+          } else {
+            console.warn('[MOCK-INTERVIEW] RoleSelector initialization failed after max attempts - dropdown may not work');
+            // Fallback: still set roleParam if available
+            if (roleParam) {
+              roleInput.value = roleParam;
+            }
+          }
+        }
       } else {
-        roleDropdown.style.display = 'none';
+        // RoleSelector not loaded yet, wait and retry
+        if (roleSelectorInitAttempts < MAX_ROLE_SELECTOR_ATTEMPTS) {
+          roleSelectorInitAttempts++;
+          setTimeout(initializeRoleSelector, 200);
+        } else {
+          console.warn('[MOCK-INTERVIEW] RoleSelector not available after max attempts - dropdown may not work');
+          // Fallback: still set roleParam if available
+          if (roleParam) {
+            roleInput.value = roleParam;
+          }
+        }
       }
-    });
+    }
 
-    roleDropdown.addEventListener('click', function(e) {
-      if (e.target.classList.contains('mi-role-item')) {
-        const role = e.target.dataset.role;
-        roleInput.value = role;
-        roleDropdown.style.display = 'none';
-      }
-    });
-
-    document.addEventListener('click', function(e) {
-      if (!roleInput.contains(e.target) && !roleDropdown.contains(e.target)) {
-        roleDropdown.style.display = 'none';
-      }
-    });
-
-    // Pre-populate role from query
-    if (roleParam) { roleInput.value = roleParam; }
+    // Initialize role selector after DOM is ready
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', initializeRoleSelector);
+    } else {
+      setTimeout(initializeRoleSelector, 100);
+    }
 
     // Build questions from context (saved or set) with fallbacks
     function buildQuestionsFromContext(){
@@ -816,6 +839,8 @@
   <!-- Load navigation system -->
   <script src="js/navigation.js?v=20251007-2"></script>
   <script src="js/universal-logout.js?v=20251007-2"></script>
+  <!-- Load role selector -->
+  <script src="js/role-selector.js?v=20250115-1" type="module"></script>
   <script>
     // Initialize navigation system when DOM is ready
     document.addEventListener('DOMContentLoaded', function() {

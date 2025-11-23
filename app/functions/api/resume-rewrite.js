@@ -3,6 +3,8 @@
 
 import { getBearer, verifyFirebaseIdToken } from '../_lib/firebase-auth.js';
 import { generateResumeRewrite } from '../_lib/openai-client.js';
+import { errorResponse, successResponse, generateRequestId } from '../_lib/error-handler.js';
+import { sanitizeJobTitle, sanitizeResumeId, sanitizeSection } from '../_lib/input-sanitizer.js';
 
 function corsHeaders(origin, env) {
   const allowedOrigins = [
@@ -47,31 +49,34 @@ async function getUserPlan(uid, env) {
 export async function onRequest(context) {
   const { request, env } = context;
   const origin = request.headers.get('Origin') || '';
+  const requestId = generateRequestId();
 
   if (request.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders(origin, env) });
   }
 
   if (request.method !== 'POST') {
-    return json({ success: false, error: 'Method not allowed' }, 405, origin, env);
+    return errorResponse('Method not allowed', 405, origin, env, requestId);
   }
 
   try {
     const token = getBearer(request);
     if (!token) {
-      return json({ success: false, error: 'Unauthorized' }, 401, origin, env);
+      return errorResponse('Unauthorized', 401, origin, env, requestId);
     }
 
     const { uid } = await verifyFirebaseIdToken(token, env.FIREBASE_PROJECT_ID);
     const plan = await getUserPlan(uid, env);
 
     if (plan !== 'pro' && plan !== 'premium') {
-      return json({
-        success: false,
-        error: 'Feature locked',
-        message: 'Resume Rewriting is available in Pro or Premium plans only.',
-        upgradeRequired: true
-      }, 403, origin, env);
+      return errorResponse(
+        'Resume Rewriting is available in Pro or Premium plans only.',
+        403,
+        origin,
+        env,
+        requestId,
+        { upgradeRequired: true }
+      );
     }
 
     if (env.JOBHACKAI_KV) {
@@ -111,36 +116,45 @@ export async function onRequest(context) {
     const body = await request.json();
     const { resumeId, section, jobTitle, atsIssues, roleSpecificFeedback } = body;
 
-    if (!resumeId) {
-      return json({ success: false, error: 'resumeId required' }, 400, origin, env);
+    // Sanitize and validate inputs
+    const resumeIdValidation = sanitizeResumeId(resumeId);
+    if (!resumeIdValidation.valid) {
+      return errorResponse(resumeIdValidation.error || 'Invalid resume ID', 400, origin, env, requestId);
     }
+    const sanitizedResumeId = resumeIdValidation.sanitized;
 
-    if (!jobTitle || jobTitle.trim().length === 0) {
-      return json({ success: false, error: 'jobTitle required' }, 400, origin, env);
+    const jobTitleValidation = sanitizeJobTitle(jobTitle, 200);
+    if (!jobTitleValidation.valid || jobTitleValidation.sanitized.length === 0) {
+      return errorResponse('Job title is required and must be valid (max 200 characters)', 400, origin, env, requestId);
     }
+    const sanitizedJobTitle = jobTitleValidation.sanitized;
+
+    const sectionValidation = sanitizeSection(section);
+    if (!sectionValidation.valid) {
+      return errorResponse(sectionValidation.error || 'Invalid section name', 400, origin, env, requestId);
+    }
+    const sanitizedSection = sectionValidation.sanitized;
 
     if (!env.JOBHACKAI_KV) {
-      return json({ success: false, error: 'Storage not available' }, 500, origin, env);
+      return errorResponse('Storage not available', 500, origin, env, requestId);
     }
 
-    const resumeKey = `resume:${resumeId}`;
+    const resumeKey = `resume:${sanitizedResumeId}`;
     const resumeDataStr = await env.JOBHACKAI_KV.get(resumeKey);
 
     if (!resumeDataStr) {
-      return json({ success: false, error: 'Resume not found' }, 404, origin, env);
+      return errorResponse('Resume not found', 404, origin, env, requestId);
     }
 
     const resumeData = JSON.parse(resumeDataStr);
 
     if (resumeData.uid !== uid) {
-      return json({ success: false, error: 'Unauthorized' }, 403, origin, env);
+      return errorResponse('Unauthorized', 403, origin, env, requestId);
     }
 
-    if (resumeData.text.length > 80000) {
-      return json({
-        success: false,
-        error: 'Resume text exceeds 80,000 character limit'
-      }, 400, origin, env);
+    // Resume text length is validated when stored, but double-check
+    if (resumeData.text && resumeData.text.length > 80000) {
+      return errorResponse('Resume text exceeds 80,000 character limit', 400, origin, env, requestId);
     }
 
     let rewrittenText = '';
@@ -150,9 +164,9 @@ export async function onRequest(context) {
     const maxRetries = 3;
     let lastError = null;
 
-    if (section) {
+    if (sanitizedSection) {
       const lines = resumeData.text.split('\n');
-      const sectionLower = section.toLowerCase();
+      const sectionLower = sanitizedSection.toLowerCase();
       let sectionStartIndex = -1;
 
       for (let i = 0; i < lines.length; i++) {
@@ -193,8 +207,8 @@ export async function onRequest(context) {
       try {
         const aiResponse = await generateResumeRewrite(
           resumeData.text,
-          section || null,
-          jobTitle.trim(),
+          sanitizedSection || null,
+          sanitizedJobTitle,
           validAtsIssues,
           validRoleFeedback,
           env
@@ -268,9 +282,10 @@ export async function onRequest(context) {
         try {
           const errorKey = `rewriteError:${uid}:${Date.now()}`;
           await env.JOBHACKAI_KV.put(errorKey, JSON.stringify({
-            resumeId,
-            section,
-            jobTitle,
+            requestId,
+            resumeId: sanitizedResumeId,
+            section: sanitizedSection,
+            jobTitle: sanitizedJobTitle,
             error: lastError.message,
             timestamp: Date.now()
           }), {
@@ -281,12 +296,14 @@ export async function onRequest(context) {
         }
       }
 
-      return json({
-        success: false,
-        error: 'Failed to generate rewrite',
-        message: lastError?.message || 'AI rewrite timed out. Please try again.',
-        retryable: true
-      }, 500, origin, env);
+      return errorResponse(
+        lastError || new Error('AI rewrite timed out. Please try again.'),
+        500,
+        origin,
+        env,
+        requestId,
+        { retryable: true, endpoint: 'resume-rewrite' }
+      );
     }
 
     if (env.JOBHACKAI_KV) {
@@ -304,22 +321,26 @@ export async function onRequest(context) {
       });
     }
 
-    return json({
-      success: true,
+    console.log('[RESUME-REWRITE] Success', { requestId, uid, resumeId: sanitizedResumeId, tokenUsage });
+
+    return successResponse({
       tokenUsage: tokenUsage,
       original: originalText,
       rewritten: rewrittenText,
       rewrittenResume: rewrittenText, // Alias for backwards compatibility
       changeSummary: changeSummary,
-      section: section || 'full'
-    }, 200, origin, env);
+      section: sanitizedSection || 'full'
+    }, 200, origin, env, requestId);
   } catch (error) {
-    console.error('[RESUME-REWRITE] Error:', error);
-    return json({
-      success: false,
-      error: 'Internal server error',
-      message: error.message
-    }, 500, origin, env);
+    console.error('[RESUME-REWRITE] Error:', { requestId, error: error.message, stack: error.stack });
+    return errorResponse(
+      error,
+      500,
+      origin,
+      env,
+      requestId,
+      { endpoint: 'resume-rewrite' }
+    );
   }
 }
 

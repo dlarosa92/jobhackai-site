@@ -1,27 +1,10 @@
-// Dynamic Role Selector with Firestore integration
+// Dynamic Role Selector with API integration
 // Supports auto-complete, custom roles, and telemetry
-
-// Use CDN imports to match firebase-config.js
-import { app } from './firebase-config.js';
-
-// Dynamically import Firestore from CDN
-let getFirestore, collection, getDocs, query, limit, orderBy;
-async function loadFirestore() {
-  if (!getFirestore) {
-    const firestoreModule = await import('https://www.gstatic.com/firebasejs/12.1.0/firebase-firestore.js');
-    getFirestore = firestoreModule.getFirestore;
-    collection = firestoreModule.collection;
-    getDocs = firestoreModule.getDocs;
-    query = firestoreModule.query;
-    limit = firestoreModule.limit;
-    orderBy = firestoreModule.orderBy;
-  }
-  return { getFirestore, collection, getDocs, query, limit, orderBy };
-}
+// Loads roles from /api/roles endpoint (canonical 200-role list)
 
 /**
  * Role Selector Component
- * Loads roles from Firestore collection 'roles' with fallback to pre-seeded list
+ * Loads roles from /api/roles endpoint with fallback to pre-seeded list
  */
 export class RoleSelector {
   constructor(inputElement, options = {}) {
@@ -70,75 +53,57 @@ export class RoleSelector {
 
   async loadRoles() {
     try {
-      // Load Firestore module dynamically
-      const firestore = await loadFirestore();
-      const db = firestore.getFirestore(app);
-      const rolesRef = firestore.collection(db, 'roles');
-      const q = firestore.query(rolesRef, firestore.orderBy('name'), firestore.limit(100));
-      const snapshot = await firestore.getDocs(q);
-
-      if (!snapshot.empty) {
-        this.roles = snapshot.docs.map((doc) => ({
-          id: doc.id,
-          name: doc.data().name,
-          category: doc.data().category || 'general',
-          type: 'standard'
-        }));
-      } else {
-        this.roles = this.getPreSeededRoles();
+      // Try API endpoint first
+      const response = await fetch('/api/roles');
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success && data.roles) {
+          this.roles = data.roles.map(role => ({
+            id: role.id,
+            name: role.label,
+            category: role.category || 'general',
+            type: 'standard'
+          }));
+          return; // Success, exit early
+        }
       }
     } catch (error) {
-      console.warn('[RoleSelector] Firestore load failed, using fallback:', error);
-      this.roles = this.getPreSeededRoles();
+      console.warn('[RoleSelector] API load failed, using fallback:', error);
+    }
+    
+    // Fallback
+    this.roles = this.getPreSeededRoles();
+    
+    // If fallback is empty, log info that custom roles are supported
+    if (this.roles.length === 0) {
+      console.info('[RoleSelector] Using custom role mode - users can type any role');
     }
   }
 
   getPreSeededRoles() {
+    // Minimal fallback - full list comes from /api/roles
+    // Return a small subset of most common roles for offline/fallback scenarios
     return [
-      { name: 'AI Engineer', category: 'ai-ml', type: 'standard' },
-      { name: 'Machine Learning Engineer', category: 'ai-ml', type: 'standard' },
-      { name: 'Data Scientist', category: 'ai-ml', type: 'standard' },
-      { name: 'MLOps Engineer', category: 'ai-ml', type: 'standard' },
-      { name: 'Data Engineer', category: 'data', type: 'standard' },
-      { name: 'Data Analyst', category: 'data', type: 'standard' },
-      { name: 'Business Intelligence Analyst', category: 'data', type: 'standard' },
-      { name: 'Data Architect', category: 'data', type: 'standard' },
-      { name: 'Software Engineer', category: 'engineering', type: 'standard' },
-      { name: 'Senior Software Engineer', category: 'engineering', type: 'standard' },
-      { name: 'Full Stack Developer', category: 'engineering', type: 'standard' },
-      { name: 'Backend Developer', category: 'engineering', type: 'standard' },
-      { name: 'Frontend Developer', category: 'engineering', type: 'standard' },
-      { name: 'DevOps Engineer', category: 'engineering', type: 'standard' },
-      { name: 'Site Reliability Engineer', category: 'engineering', type: 'standard' },
-      { name: 'Cloud Engineer', category: 'engineering', type: 'standard' },
-      { name: 'Product Manager', category: 'product', type: 'standard' },
-      { name: 'Product Owner', category: 'product', type: 'standard' },
-      { name: 'Technical Product Manager', category: 'product', type: 'standard' },
-      { name: 'Scrum Master', category: 'agile', type: 'standard' },
-      { name: 'Project Manager', category: 'management', type: 'standard' },
-      { name: 'Engineering Manager', category: 'management', type: 'standard' },
-      { name: 'UX Designer', category: 'design', type: 'standard' },
-      { name: 'UI Designer', category: 'design', type: 'standard' },
-      { name: 'Product Designer', category: 'design', type: 'standard' },
-      { name: 'Graphic Designer', category: 'design', type: 'standard' },
-      { name: 'Digital Marketing Manager', category: 'marketing', type: 'standard' },
-      { name: 'SEO Specialist', category: 'marketing', type: 'standard' },
-      { name: 'Content Writer', category: 'marketing', type: 'standard' },
-      { name: 'Social Media Manager', category: 'marketing', type: 'standard' },
-      { name: 'Sales Representative', category: 'sales', type: 'standard' },
-      { name: 'Account Executive', category: 'sales', type: 'standard' },
-      { name: 'Business Analyst', category: 'business', type: 'standard' },
-      { name: 'Operations Manager', category: 'business', type: 'standard' },
-      { name: 'Customer Success Manager', category: 'business', type: 'standard' },
-      { name: 'HR Specialist', category: 'hr', type: 'standard' },
-      { name: 'Recruiter', category: 'hr', type: 'standard' },
-      { name: 'Financial Analyst', category: 'finance', type: 'standard' },
-      { name: 'Accountant', category: 'finance', type: 'standard' },
-      { name: 'Legal Assistant', category: 'legal', type: 'standard' },
-      { name: 'Paralegal', category: 'legal', type: 'standard' },
-      { name: 'Administrative Assistant', category: 'admin', type: 'standard' },
-      { name: 'Executive Assistant', category: 'admin', type: 'standard' },
-      { name: 'Office Manager', category: 'admin', type: 'standard' }
+      { name: 'Software Engineer', category: 'software_engineering', type: 'standard' },
+      { name: 'Product Manager', category: 'product_management', type: 'standard' },
+      { name: 'Product Owner', category: 'product_management', type: 'standard' },
+      { name: 'Data Engineer', category: 'data_engineering', type: 'standard' },
+      { name: 'Data Scientist', category: 'data_science', type: 'standard' },
+      { name: 'DevOps Engineer', category: 'devops', type: 'standard' },
+      { name: 'Cloud Engineer', category: 'cloud_engineering', type: 'standard' },
+      { name: 'Machine Learning Engineer', category: 'ml_engineering', type: 'standard' },
+      { name: 'AI Engineer', category: 'ai_ml', type: 'standard' },
+      { name: 'Full-Stack Developer', category: 'software_engineering', type: 'standard' },
+      { name: 'Front-End Engineer', category: 'software_engineering', type: 'standard' },
+      { name: 'Back-End Engineer', category: 'software_engineering', type: 'standard' },
+      { name: 'Site Reliability Engineer (SRE)', category: 'platform_engineering', type: 'standard' },
+      { name: 'Scrum Master', category: 'agile_delivery', type: 'standard' },
+      { name: 'Agile Coach', category: 'agile_delivery', type: 'standard' },
+      { name: 'Solution Architect', category: 'architecture', type: 'standard' },
+      { name: 'Security Engineer', category: 'security', type: 'standard' },
+      { name: 'QA Engineer', category: 'quality', type: 'standard' },
+      { name: 'UX Designer', category: 'ux', type: 'standard' },
+      { name: 'Business Analyst', category: 'business', type: 'standard' }
     ];
   }
 
