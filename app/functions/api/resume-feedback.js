@@ -156,9 +156,9 @@ export async function onRequest(context) {
     // Dev environment detection: Use exact origin matching to prevent bypass attacks
     const allowedDevOrigins = ['https://dev.jobhackai.io', 'http://localhost:3003', 'http://localhost:8788'];
     const isDevOrigin = origin && allowedDevOrigins.includes(origin);
-    // Strengthened check: require both ENVIRONMENT=dev AND valid dev origin
-    const isDevEnvironment = (env.ENVIRONMENT === 'dev' && isDevOrigin) || 
-                             (env.ENVIRONMENT === 'dev' && origin.includes('localhost'));
+    // Strengthened check: require both ENVIRONMENT=dev AND valid dev origin (exact match only)
+    // Using isDevOrigin alone prevents matching malicious origins like 'https://evil.com/localhost'
+    const isDevEnvironment = env.ENVIRONMENT === 'dev' && isDevOrigin;
     
     const plan = await getUserPlan(uid, env);
     
