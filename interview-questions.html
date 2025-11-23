@@ -406,8 +406,7 @@
         <div class="iq-field" style="flex:1 1 300px; min-width:280px; position:relative;">
           <label for="iq-role" style="display:block; margin-bottom:0.5rem; font-weight:600; color:#374151; font-size:0.9rem;">Role</label>
           <input id="iq-role" class="iq-role-input" type="text" placeholder="e.g. Software Engineer"
-            role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="iq-role-list" autocomplete="off">
-          <div id="iq-role-list" class="iq-role-dropdown" role="listbox" style="display:none;"></div>
+            role="combobox" aria-autocomplete="list" aria-expanded="false" autocomplete="off">
           <div id="iq-live" class="sr-only" aria-live="polite"></div>
         </div>
 
@@ -677,13 +676,7 @@
     const IQ_PER_Q_REPLACE_COOLDOWN = 5;    // seconds
     const IQ_RECENT_LIMIT = 5;
 
-    // Roles for ARIA combobox
-    const IQ_ROLES = [
-      'Software Engineer','Data Analyst','Product Manager','Marketing Specialist',
-      'Sales Representative','Customer Success Manager','UX Designer','DevOps Engineer',
-      'Data Scientist','Business Analyst','Project Manager','Content Writer',
-      'Graphic Designer','HR Specialist','Financial Analyst','Operations Manager'
-    ];
+    // Role selector will be initialized separately
 
     const $IQ = (s, r=document)=>r.querySelector(s);
     const $$IQ = (s, r=document)=>[...r.querySelectorAll(s)];
@@ -798,8 +791,65 @@
     function iqUpdateGuidanceUI(){ const t=$IQ('#toggle-guidance'); if(t){ t.setAttribute('aria-pressed', String(iqState.prefs.showGuidance)); t.textContent = iqState.prefs.showGuidance ? 'Hide Answer Guidance' : 'Show Answer Guidance'; if(iqState.prefs.showGuidance){ t.classList.add('is-pressed'); } else { t.classList.remove('is-pressed'); } } iqRenderQuestions(); }
     function iqWireRecents(){ const box=$IQ('#iq-recents'); if(!box) return; box.addEventListener('click',(e)=>{ const btn=e.target.closest('.recent-item'); if(!btn) return; const id=btn.getAttribute('data-id'); if(!id) return; iqLoadSetById(id); }); }
 
-    // ARIA combobox
-    function iqInitRoleCombobox(){ const input=$IQ('#iq-role'); const list=$IQ('#iq-role-list'); const live=$IQ('#iq-live'); if(!input||!list) return; let active=-1; function announce(msg){ if(live){ live.textContent=msg; } } function close(){ list.style.display='none'; input.setAttribute('aria-expanded','false'); active=-1;} function open(){ list.style.display='block'; input.setAttribute('aria-expanded','true'); } function render(items){ list.innerHTML=items.map((r,i)=>`<div role=\"option\" id=\"iq-opt-${i}\" class=\"iq-role-item\" data-role=\"${r}\">${r}</div>`).join(''); list.setAttribute('role','listbox'); input.setAttribute('aria-controls','iq-role-list'); } input.addEventListener('input',()=>{ const v=input.value.toLowerCase(); if(v.length<2){ close(); return; } const items=IQ_ROLES.filter(r=>r.toLowerCase().includes(v)); if(items.length===0){ announce('No results'); close(); return; } render(items); open(); announce(items.length+ ' results'); }); input.addEventListener('keydown',(e)=>{ const opts=$$IQ('.iq-role-item',list); if(list.style.display!=='block'||opts.length===0) return; if(e.key==='ArrowDown'){ e.preventDefault(); active=Math.min(active+1,opts.length-1); opts.forEach(o=>o.classList.remove('active')); opts[active].classList.add('active'); input.setAttribute('aria-activedescendant',opts[active].id);} if(e.key==='ArrowUp'){ e.preventDefault(); active=Math.max(active-1,0); opts.forEach(o=>o.classList.remove('active')); opts[active].classList.add('active'); input.setAttribute('aria-activedescendant',opts[active].id);} if(e.key==='Enter'){ e.preventDefault(); opts[active]?.click(); } if(e.key==='Escape'){ close(); } }); list.addEventListener('click',(e)=>{ const it=e.target.closest('.iq-role-item'); if(!it) return; input.value=it.dataset.role; close(); }); document.addEventListener('click',(e)=>{ if(!input.contains(e.target)&&!list.contains(e.target)) close(); }); }
+    // Initialize Role Selector for ARIA combobox
+    function iqInitRoleCombobox(){
+      const input = $IQ('#iq-role');
+      const live = $IQ('#iq-live');
+      if (!input) return;
+      
+      let roleSelectorInitAttempts = 0;
+      const MAX_ROLE_SELECTOR_ATTEMPTS = 50;
+      
+      function announce(msg) {
+        if (live) {
+          live.textContent = msg;
+        }
+      }
+      
+      function initializeRoleSelector() {
+        // Wait for RoleSelector class to be available
+        if (window.RoleSelector) {
+          try {
+            if (!input.dataset.roleSelectorInitialized) {
+              const roleSelector = new window.RoleSelector(input, {
+                minChars: 2,
+                maxResults: 8,
+                showCustomOption: true,
+                onSelect: function(roleName, isCustom) {
+                  console.log('[INTERVIEW-Q] Role selected:', roleName, isCustom ? '(custom)' : '');
+                  announce(`Selected: ${roleName}`);
+                }
+              });
+              input.dataset.roleSelectorInitialized = 'true';
+              console.log('[INTERVIEW-Q] RoleSelector initialized successfully');
+            }
+          } catch (error) {
+            console.error('[INTERVIEW-Q] Failed to initialize RoleSelector:', error);
+            if (roleSelectorInitAttempts < MAX_ROLE_SELECTOR_ATTEMPTS) {
+              roleSelectorInitAttempts++;
+              setTimeout(initializeRoleSelector, 500);
+            } else {
+              console.warn('[INTERVIEW-Q] RoleSelector initialization failed after max attempts');
+            }
+          }
+        } else {
+          // RoleSelector not loaded yet, wait and retry
+          if (roleSelectorInitAttempts < MAX_ROLE_SELECTOR_ATTEMPTS) {
+            roleSelectorInitAttempts++;
+            setTimeout(initializeRoleSelector, 200);
+          } else {
+            console.warn('[INTERVIEW-Q] RoleSelector not available after max attempts');
+          }
+        }
+      }
+      
+      // Initialize role selector
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initializeRoleSelector);
+      } else {
+        setTimeout(initializeRoleSelector, 100);
+      }
+    }
 
     // API
     const IQ_FIXED_COUNT = 10;
@@ -1231,6 +1281,8 @@ function initIQPage(){ iqLoadPrefs(); iqState.prefs.count = IQ_FIXED_COUNT; iqRe
   <!-- Load navigation system -->
   <script src="js/navigation.js?v=20251007-2"></script>
   <script src="js/universal-logout.js?v=20251007-2"></script>
+  <!-- Load role selector -->
+  <script src="js/role-selector.js?v=20250115-1" type="module"></script>
   <script>
     // Initialize navigation system when DOM is ready
     document.addEventListener('DOMContentLoaded', function() {

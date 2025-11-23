@@ -4,6 +4,8 @@
 
 import { calcOverallScore } from './calc-overall-score.js';
 import { getGrammarDiagnostics } from './grammar-engine.js';
+import { normalizeRoleToFamily } from './role-normalizer.js';
+import { ROLE_SKILL_TEMPLATES } from './role-skills.js';
 
 /**
  * Score resume using rule-based rubric
@@ -18,10 +20,25 @@ export async function scoreResume(resumeText, jobTitle, metadata = {}, env) {
   
   // Normalize job title for keyword matching
   const normalizedJobTitle = normalizeJobTitle(jobTitle);
-  const jobKeywords = extractJobKeywords(normalizedJobTitle);
+  const roleFamily = normalizeRoleToFamily(normalizedJobTitle);
+  
+  // Safety check for missing templates
+  const template = ROLE_SKILL_TEMPLATES[roleFamily];
+  if (!template) {
+    console.warn(`[ATS-SCORING] No template found for roleFamily: ${roleFamily}, using generic_professional`);
+  }
+  const finalTemplate = template || ROLE_SKILL_TEMPLATES.generic_professional;
+  
+  const expectedMustHave = finalTemplate.must_have || [];
+  const expectedNiceToHave = finalTemplate.nice_to_have || [];
   
   // Score each category
-  const keywordScore = scoreKeywordRelevance(resumeText, normalizedJobTitle, jobKeywords);
+  const keywordScore = scoreKeywordRelevanceWithTemplates(
+    resumeText,
+    normalizedJobTitle,
+    expectedMustHave,
+    expectedNiceToHave
+  );
   const formattingScore = scoreFormattingCompliance(resumeText, isMultiColumn);
   const structureScore = scoreStructureAndCompleteness(resumeText);
   const toneScore = scoreToneAndClarity(resumeText);
@@ -79,6 +96,15 @@ export async function scoreResume(resumeText, jobTitle, metadata = {}, env) {
       feedback: grammarScore.feedback
     },
     overallScore,
+    roleFamily,
+    roleSkillSummary: {
+      expectedMustHaveCount: keywordScore.expectedMustHaveCount,
+      expectedNiceToHaveCount: keywordScore.expectedNiceToHaveCount,
+      matchedMustHave: keywordScore.matchedMustHave,
+      matchedNiceToHave: keywordScore.matchedNiceToHave,
+      missingMustHave: keywordScore.missingMustHave,
+      missingNiceToHave: keywordScore.missingNiceToHave
+    },
     recommendations: generateRecommendations({
       keywordScore,
       formattingScore,
@@ -90,7 +116,138 @@ export async function scoreResume(resumeText, jobTitle, metadata = {}, env) {
 }
 
 /**
- * Score Keyword Relevance (40 pts)
+ * Score Keyword Relevance using role-based skill templates (40 pts)
+ * @param {string} resumeText - Resume text to analyze
+ * @param {string} jobTitle - Target job title
+ * @param {string[]} expectedMustHave - Must-have skills from template
+ * @param {string[]} expectedNiceToHave - Nice-to-have skills from template
+ * @returns {Object} Score object with metadata
+ */
+function scoreKeywordRelevanceWithTemplates(resumeText, jobTitle, expectedMustHave, expectedNiceToHave) {
+  const textLower = resumeText.toLowerCase();
+  const jobTitleLower = (jobTitle || '').toLowerCase();
+  
+  // Job title match (10 pts) - keep existing logic
+  let titleScore = 0;
+  if (jobTitleLower && jobTitleLower.trim().length > 0) {
+    if (textLower.includes(jobTitleLower)) {
+      titleScore = 10;
+    } else {
+      // Partial match
+      const titleWords = jobTitleLower.split(/\s+/).filter(w => w.length > 0);
+      if (titleWords.length > 0) {
+        const matchedWords = titleWords.filter(word => 
+          word.length > 3 && textLower.includes(word)
+        );
+        titleScore = Math.round((matchedWords.length / titleWords.length) * 10);
+      }
+    }
+  }
+  
+  // Must-have skills (30 pts)
+  let matchedMustHave = [];
+  let missingMustHave = [];
+  
+  for (const skill of expectedMustHave) {
+    const skillLower = skill.toLowerCase();
+    // Check if it's a phrase (contains space or hyphen)
+    const isPhrase = skillLower.includes(' ') || skillLower.includes('-');
+    
+    let matches = 0;
+    if (isPhrase) {
+      // For phrases, check if all words appear in order (flexible matching)
+      const words = skillLower.split(/[\s-]+/).filter(w => w.length > 0);
+      if (words.length > 0) {
+        // Create regex that matches words in order with flexible spacing
+        const phrasePattern = words
+          .map(w => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+          .join('.*?\\b');
+        const phraseRegex = new RegExp(`\\b${phrasePattern}`, 'gi');
+        matches = (textLower.match(phraseRegex) || []).length;
+      }
+    } else {
+      // Single word - use word boundary
+      const regex = new RegExp(`\\b${skillLower.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'gi');
+      matches = (textLower.match(regex) || []).length;
+    }
+    
+    // Count as matched if found 1-3 times (prevent keyword stuffing)
+    if (matches > 0 && matches <= 3) {
+      matchedMustHave.push(skill);
+    } else if (matches === 0) {
+      missingMustHave.push(skill);
+    }
+    // If matches > 3, don't count it (keyword stuffing detected)
+  }
+  
+  const mustHaveScore = expectedMustHave.length > 0
+    ? Math.round((matchedMustHave.length / expectedMustHave.length) * 30)
+    : 0;
+  
+  // Nice-to-have skills (10 pts)
+  let matchedNiceToHave = [];
+  let missingNiceToHave = [];
+  
+  for (const skill of expectedNiceToHave) {
+    const skillLower = skill.toLowerCase();
+    const isPhrase = skillLower.includes(' ') || skillLower.includes('-');
+    
+    let matches = 0;
+    if (isPhrase) {
+      const words = skillLower.split(/[\s-]+/).filter(w => w.length > 0);
+      if (words.length > 0) {
+        const phrasePattern = words
+          .map(w => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+          .join('.*?\\b');
+        const phraseRegex = new RegExp(`\\b${phrasePattern}`, 'gi');
+        matches = (textLower.match(phraseRegex) || []).length;
+      }
+    } else {
+      const regex = new RegExp(`\\b${skillLower.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'gi');
+      matches = (textLower.match(regex) || []).length;
+    }
+    
+    if (matches > 0 && matches <= 3) {
+      matchedNiceToHave.push(skill);
+    } else if (matches === 0) {
+      missingNiceToHave.push(skill);
+    }
+  }
+  
+  const niceToHaveScore = expectedNiceToHave.length > 0
+    ? Math.round((matchedNiceToHave.length / expectedNiceToHave.length) * 10)
+    : 0;
+  
+  const totalScore = Math.min(40, titleScore + mustHaveScore + niceToHaveScore);
+  
+  // Generate feedback
+  let feedback = '';
+  if (totalScore >= 35) {
+    feedback = 'Excellent keyword alignment with your target role.';
+  } else if (totalScore >= 25) {
+    feedback = 'Good keyword coverage. Add more industry-specific terms for your target job.';
+  } else if (totalScore >= 15) {
+    feedback = 'Add more industry keywords for your target job.';
+  } else {
+    feedback = 'Significantly improve keyword relevance by adding role-specific skills and terms.';
+  }
+  
+  // Return with metadata for roleSkillSummary
+  return { 
+    score: totalScore, 
+    feedback,
+    matchedMustHave,
+    matchedNiceToHave,
+    missingMustHave,
+    missingNiceToHave,
+    expectedMustHaveCount: expectedMustHave.length,
+    expectedNiceToHaveCount: expectedNiceToHave.length
+  };
+}
+
+/**
+ * Score Keyword Relevance (40 pts) - DEPRECATED: Use scoreKeywordRelevanceWithTemplates instead
+ * @deprecated This function is kept for backward compatibility but should not be used for new code
  */
 function scoreKeywordRelevance(resumeText, jobTitle, jobKeywords) {
   const textLower = resumeText.toLowerCase();
