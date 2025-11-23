@@ -150,6 +150,11 @@ export function normalizeRoleToFamily(roleLabel) {
     return "business_analyst";
   }
 
+  // Software Engineer (must come before generic engineer fallback)
+  if (cleaned.includes("software engineer") || cleaned.includes("softwareengineer")) {
+    return "software_engineer";
+  }
+
   // Generic fallbacks
   if (cleaned.includes("engineer")) {
     return "generic_engineer";

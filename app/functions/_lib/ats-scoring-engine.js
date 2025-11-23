@@ -159,9 +159,10 @@ function scoreKeywordRelevanceWithTemplates(resumeText, jobTitle, expectedMustHa
       const words = skillLower.split(/[\s-]+/).filter(w => w.length > 0);
       if (words.length > 0) {
         // Create regex that matches words in order with flexible spacing
+        // Add word boundary after each word including the final one
         const phrasePattern = words
           .map(w => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
-          .join('.*?\\b');
+          .join('.*?\\b') + '\\b';
         const phraseRegex = new RegExp(`\\b${phrasePattern}`, 'gi');
         matches = (textLower.match(phraseRegex) || []).length;
       }
@@ -196,9 +197,10 @@ function scoreKeywordRelevanceWithTemplates(resumeText, jobTitle, expectedMustHa
     if (isPhrase) {
       const words = skillLower.split(/[\s-]+/).filter(w => w.length > 0);
       if (words.length > 0) {
+        // Add word boundary after each word including the final one
         const phrasePattern = words
           .map(w => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
-          .join('.*?\\b');
+          .join('.*?\\b') + '\\b';
         const phraseRegex = new RegExp(`\\b${phrasePattern}`, 'gi');
         matches = (textLower.match(phraseRegex) || []).length;
       }
