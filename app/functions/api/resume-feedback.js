@@ -240,8 +240,9 @@ export async function onRequest(context) {
     const { resumeId, jobTitle, resumeText, isMultiColumn } = body;
 
     // Validate resumeId exists and is not empty before sanitizing
-    if (resumeId === null || resumeId === undefined) {
-      console.error('[RESUME-FEEDBACK] Missing resumeId:', { requestId, body: Object.keys(body) });
+    // Catch all falsy values (null, undefined, empty string, etc.) for consistent error handling
+    if (!resumeId) {
+      console.error('[RESUME-FEEDBACK] Missing resumeId:', { requestId, body: Object.keys(body), resumeId });
       return errorResponse('Resume ID is required', 400, origin, env, requestId);
     }
 
