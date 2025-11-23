@@ -743,6 +743,11 @@
     }
 
     async function getResumeFeedback(resumeId, jobTitle) {
+      // Validate resumeId before making API call
+      if (!resumeId || resumeId === null || resumeId === undefined) {
+        throw new Error('Resume ID is required. Please upload a resume first.');
+      }
+      
       const token = await getAuthToken();
       
       // Try to get resumeText from sessionStorage (fallback when KV unavailable)

@@ -229,12 +229,26 @@ export async function onRequest(context) {
     }
 
     // Parse request body
-    const body = await request.json();
+    let body;
+    try {
+      body = await request.json();
+    } catch (parseError) {
+      console.error('[RESUME-FEEDBACK] JSON parse error:', { requestId, error: parseError.message });
+      return errorResponse('Invalid JSON in request body', 400, origin, env, requestId);
+    }
+
     const { resumeId, jobTitle, resumeText, isMultiColumn } = body;
+
+    // Validate resumeId exists and is not empty before sanitizing
+    if (resumeId === null || resumeId === undefined) {
+      console.error('[RESUME-FEEDBACK] Missing resumeId:', { requestId, body: Object.keys(body) });
+      return errorResponse('Resume ID is required', 400, origin, env, requestId);
+    }
 
     // Sanitize and validate inputs
     const resumeIdValidation = sanitizeResumeId(resumeId);
     if (!resumeIdValidation.valid) {
+      console.error('[RESUME-FEEDBACK] Invalid resumeId:', { requestId, resumeId, error: resumeIdValidation.error });
       return errorResponse(resumeIdValidation.error || 'Invalid resume ID', 400, origin, env, requestId);
     }
     const sanitizedResumeId = resumeIdValidation.sanitized;
@@ -242,6 +256,7 @@ export async function onRequest(context) {
     // Job title is optional - sanitize and validate
     const jobTitleValidation = sanitizeJobTitle(jobTitle, 200);
     if (!jobTitleValidation.valid) {
+      console.error('[RESUME-FEEDBACK] Invalid jobTitle:', { requestId, jobTitle, error: jobTitleValidation.error });
       return errorResponse(jobTitleValidation.error || 'Invalid job title', 400, origin, env, requestId);
     }
     const normalizedJobTitle = jobTitleValidation.sanitized;

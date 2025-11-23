@@ -89,7 +89,20 @@
 
       // Check if response indicates retryable error
       if (!response.ok) {
-        const error = new Error(`HTTP ${response.status}: ${response.statusText}`);
+        // Try to parse error response body for better error messages
+        let errorMessage = `HTTP ${response.status}: ${response.statusText}`;
+        try {
+          const errorData = await response.clone().json();
+          if (errorData.error) {
+            errorMessage = errorData.error;
+          } else if (errorData.message) {
+            errorMessage = errorData.message;
+          }
+        } catch (e) {
+          // If parsing fails, use default message
+        }
+        
+        const error = new Error(errorMessage);
         error.status = response.status;
         error.response = response;
         throw error;
