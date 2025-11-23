@@ -1388,6 +1388,12 @@
             jobTitleInput.value = cachedScore.jobTitle;
             currentJobTitle = cachedScore.jobTitle;
             console.log('[RESUME-FEEDBACK] Restored job title from cache:', cachedScore.jobTitle);
+          } else if (!cachedScore?.jobTitle && jobTitleInput && !jobTitleInput.value.trim()) {
+            // Set default to "Software Engineer" if no cached value and input is empty
+            // This matches the behavior of Interview Questions, Cover Letter Generator, and Mock Interview
+            jobTitleInput.value = 'Software Engineer';
+            currentJobTitle = 'Software Engineer';
+            console.log('[RESUME-FEEDBACK] Set default job title to Software Engineer');
           }
           
           // Restore file name if available (display only - don't enable button)
