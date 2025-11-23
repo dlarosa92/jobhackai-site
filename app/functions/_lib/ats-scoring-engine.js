@@ -153,19 +153,24 @@ function scoreKeywordRelevanceWithTemplates(resumeText, jobTitle, expectedMustHa
   
   for (const skill of expectedMustHave) {
     const skillLower = skill.toLowerCase();
-    // Check if it's a phrase (contains space or hyphen)
-    const isPhrase = skillLower.includes(' ') || skillLower.includes('-');
+    // Check if it's a phrase (contains space, hyphen, slash, or other punctuation)
+    const isPhrase = /[\s\-/&,()]/.test(skillLower);
     
     let matches = 0;
     if (isPhrase) {
-      // For phrases, check if all words appear in order (flexible matching)
-      const words = skillLower.split(/[\s-]+/).filter(w => w.length > 0);
+      // For phrases, extract meaningful words (filter out punctuation-only tokens)
+      // Split on spaces, hyphens, slashes, and other common separators
+      const words = skillLower
+        .split(/[\s\-/&,()]+/)
+        .filter(w => w.length > 0 && /[a-z0-9]/.test(w)); // Keep only alphanumeric tokens
+      
       if (words.length > 0) {
-        // Create regex that matches words in order with flexible spacing
+        // Create regex that matches words in order with flexible separators
+        // Allows any punctuation or whitespace between words
         // Add word boundary after each word including the final one
         const phrasePattern = words
           .map(w => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
-          .join('.*?\\b') + '\\b';
+          .join('[\\s\\-\\/&,()]*?\\b') + '\\b';
         const phraseRegex = new RegExp(`\\b${phrasePattern}`, 'gi');
         matches = (textLower.match(phraseRegex) || []).length;
       }
@@ -199,16 +204,24 @@ function scoreKeywordRelevanceWithTemplates(resumeText, jobTitle, expectedMustHa
   
   for (const skill of expectedNiceToHave) {
     const skillLower = skill.toLowerCase();
-    const isPhrase = skillLower.includes(' ') || skillLower.includes('-');
+    // Check if it's a phrase (contains space, hyphen, slash, or other punctuation)
+    const isPhrase = /[\s\-/&,()]/.test(skillLower);
     
     let matches = 0;
     if (isPhrase) {
-      const words = skillLower.split(/[\s-]+/).filter(w => w.length > 0);
+      // For phrases, extract meaningful words (filter out punctuation-only tokens)
+      // Split on spaces, hyphens, slashes, and other common separators
+      const words = skillLower
+        .split(/[\s\-/&,()]+/)
+        .filter(w => w.length > 0 && /[a-z0-9]/.test(w)); // Keep only alphanumeric tokens
+      
       if (words.length > 0) {
+        // Create regex that matches words in order with flexible separators
+        // Allows any punctuation or whitespace between words
         // Add word boundary after each word including the final one
         const phrasePattern = words
           .map(w => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
-          .join('.*?\\b') + '\\b';
+          .join('[\\s\\-\\/&,()]*?\\b') + '\\b';
         const phraseRegex = new RegExp(`\\b${phrasePattern}`, 'gi');
         matches = (textLower.match(phraseRegex) || []).length;
       }
