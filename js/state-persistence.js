@@ -244,12 +244,22 @@
         try {
           roleSpecificFeedback = JSON.parse(roleFeedback);
           // Validate it's either an array (old) or object with expected structure (new)
-          if (roleSpecificFeedback && !Array.isArray(roleSpecificFeedback) && 
-              typeof roleSpecificFeedback === 'object' &&
-              roleSpecificFeedback.targetRoleUsed === undefined) {
-            // Invalid format - treat as null
-            console.warn('[STATE-PERSISTENCE] Invalid role feedback format, ignoring');
-            roleSpecificFeedback = null;
+          if (roleSpecificFeedback) {
+            const isOldFormat = Array.isArray(roleSpecificFeedback);
+            const isNewFormat = typeof roleSpecificFeedback === 'object' && 
+                               !Array.isArray(roleSpecificFeedback) &&
+                               roleSpecificFeedback.targetRoleUsed !== undefined &&
+                               Array.isArray(roleSpecificFeedback.sections);
+            
+            // If it's neither old nor new format, mark as invalid
+            if (!isOldFormat && !isNewFormat) {
+              console.warn('[STATE-PERSISTENCE] Invalid role feedback format, ignoring', {
+                isArray: Array.isArray(roleSpecificFeedback),
+                hasTargetRoleUsed: roleSpecificFeedback.targetRoleUsed !== undefined,
+                hasSectionsArray: Array.isArray(roleSpecificFeedback.sections)
+              });
+              roleSpecificFeedback = null;
+            }
           }
         } catch (parseError) {
           console.warn('[STATE-PERSISTENCE] Failed to parse role feedback JSON:', parseError);
