@@ -592,7 +592,7 @@ export async function onRequest(context) {
         ? aiFeedback.atsIssues
         : generateATSIssuesFromScores(ruleBasedScores, normalizedJobTitle),
       aiFeedback: aiFeedback
-    } : {
+    } : (() => {
       // Fallback to rule-based scores if AI fails completely
       // Log this for monitoring AI reliability
       console.warn('[RESUME-FEEDBACK] AI feedback generation failed, using rule-based fallback', {
@@ -603,6 +603,7 @@ export async function onRequest(context) {
         attempts: maxRetries
       });
       
+      return {
       atsRubric: [
         {
           category: 'Keyword Match',
@@ -640,7 +641,8 @@ export async function onRequest(context) {
       roleSpecificFeedback: null,
       atsIssues: generateATSIssuesFromScores(ruleBasedScores, normalizedJobTitle),
       aiFeedback: null
-    };
+      };
+    })();
 
     // Cache result (24 hours)
     if (env.JOBHACKAI_KV) {
