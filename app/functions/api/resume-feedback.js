@@ -569,80 +569,40 @@ export async function onRequest(context) {
             suggestions: item.suggestions || []
           };
         }),
-      // New role-specific feedback structure (with backwards compatibility fallback)
+      // Role-specific feedback structure validation
+      // If AI succeeded but didn't provide roleSpecificFeedback, log warning and return null
       roleSpecificFeedback: (aiFeedback.roleSpecificFeedback && 
                              aiFeedback.roleSpecificFeedback.targetRoleUsed !== undefined &&
                              Array.isArray(aiFeedback.roleSpecificFeedback.sections)) 
         ? aiFeedback.roleSpecificFeedback
         : (aiFeedback.roleSpecificFeedback && Array.isArray(aiFeedback.roleSpecificFeedback))
           ? aiFeedback.roleSpecificFeedback // Old format - pass through for backwards compatibility
-          : {
-              targetRoleUsed: normalizedJobTitle || 'general',
-              sections: [
-                {
-                  section: 'Header & Contact',
-                  fitLevel: 'tunable',
-                  diagnosis: 'Clear and concise. Consider adding a custom resume URL for extra polish.',
-                  tips: [
-                    'Add a professional headline or target title near your name',
-                    'Include LinkedIn and GitHub URLs if available',
-                    'Ensure contact information is easy to scan'
-                  ],
-                  rewritePreview: 'Professional summary headline and links placeholder.'
-                },
-                {
-                  section: 'Professional Summary',
-                  fitLevel: 'tunable',
-                  diagnosis: 'Strong opening but lacks keywords for your target role.',
-                  tips: [
-                    'Mention the target role explicitly in the first sentence',
-                    'Add 2-3 key skills relevant to the role',
-                    'Include at least one quantifiable achievement'
-                  ],
-                  rewritePreview: 'Summary placeholder with role alignment.'
-                },
-                {
-                  section: 'Experience',
-                  fitLevel: 'tunable',
-                  diagnosis: 'Great structure. Quantify impact with metrics.',
-                  tips: [
-                    'Add numbers to achievements (e.g., "increased revenue by 25%")',
-                    'Focus on outcomes, not just responsibilities',
-                    'Use action verbs to start each bullet'
-                  ],
-                  rewritePreview: 'Experience section placeholder with metrics.'
-                },
-                {
-                  section: 'Skills',
-                  fitLevel: 'tunable',
-                  diagnosis: 'Relevant and up-to-date. Group under sub-headings.',
-                  tips: [
-                    'Group technical skills by category (e.g., Languages, Frameworks)',
-                    'Remove outdated technologies if not relevant',
-                    'Prioritize skills mentioned in job descriptions'
-                  ],
-                  rewritePreview: 'Skills section placeholder with categorization.'
-                },
-                {
-                  section: 'Education',
-                  fitLevel: 'strong',
-                  diagnosis: 'Well-formatted. No changes needed.',
-                  tips: [
-                    'Keep education concise for senior roles',
-                    'Include relevant coursework only if recent graduate',
-                    'List certifications separately if applicable'
-                  ],
-                  rewritePreview: 'Education section placeholder.'
-                }
-              ]
-            },
+          : (() => {
+              // AI succeeded but roleSpecificFeedback is missing - log for monitoring
+              console.warn('[RESUME-FEEDBACK] AI succeeded but roleSpecificFeedback missing or invalid', {
+                requestId,
+                resumeId: sanitizedResumeId,
+                hasRoleSpecificFeedback: !!aiFeedback.roleSpecificFeedback,
+                roleSpecificFeedbackType: typeof aiFeedback.roleSpecificFeedback
+              });
+              return null; // Don't provide hardcoded fallback
+            })(),
       // Extract ATS issues from AI response or generate from rule-based scores
       atsIssues: aiFeedback.atsIssues && Array.isArray(aiFeedback.atsIssues) 
         ? aiFeedback.atsIssues
         : generateATSIssuesFromScores(ruleBasedScores, normalizedJobTitle),
       aiFeedback: aiFeedback
     } : {
-      // Fallback to rule-based scores if AI fails
+      // Fallback to rule-based scores if AI fails completely
+      // Log this for monitoring AI reliability
+      console.warn('[RESUME-FEEDBACK] AI feedback generation failed, using rule-based fallback', {
+        requestId,
+        resumeId: sanitizedResumeId,
+        jobTitle: normalizedJobTitle,
+        lastError: lastError?.message,
+        attempts: maxRetries
+      });
+      
       atsRubric: [
         {
           category: 'Keyword Match',
@@ -675,66 +635,9 @@ export async function onRequest(context) {
           feedback: ruleBasedScores.grammarScore.feedback
         }
       ],
-      roleSpecificFeedback: {
-        targetRoleUsed: normalizedJobTitle || 'general',
-        sections: [
-          {
-            section: 'Header & Contact',
-            fitLevel: 'tunable',
-            diagnosis: 'Clear and concise. Consider adding a custom resume URL for extra polish.',
-            tips: [
-              'Add a professional headline or target title near your name',
-              'Include LinkedIn and GitHub URLs if available',
-              'Ensure contact information is easy to scan'
-            ],
-            rewritePreview: 'Professional summary headline and links placeholder.'
-          },
-          {
-            section: 'Professional Summary',
-            fitLevel: 'tunable',
-            diagnosis: 'Strong opening but lacks keywords for your target role.',
-            tips: [
-              'Mention the target role explicitly in the first sentence',
-              'Add 2-3 key skills relevant to the role',
-              'Include at least one quantifiable achievement'
-            ],
-            rewritePreview: 'Summary placeholder with role alignment.'
-          },
-          {
-            section: 'Experience',
-            fitLevel: 'tunable',
-            diagnosis: 'Great structure. Quantify impact with metrics.',
-            tips: [
-              'Add numbers to achievements (e.g., "increased revenue by 25%")',
-              'Focus on outcomes, not just responsibilities',
-              'Use action verbs to start each bullet'
-            ],
-            rewritePreview: 'Experience section placeholder with metrics.'
-          },
-          {
-            section: 'Skills',
-            fitLevel: 'tunable',
-            diagnosis: 'Relevant and up-to-date. Group under sub-headings.',
-            tips: [
-              'Group technical skills by category (e.g., Languages, Frameworks)',
-              'Remove outdated technologies if not relevant',
-              'Prioritize skills mentioned in job descriptions'
-            ],
-            rewritePreview: 'Skills section placeholder with categorization.'
-          },
-          {
-            section: 'Education',
-            fitLevel: 'strong',
-            diagnosis: 'Well-formatted. No changes needed.',
-            tips: [
-              'Keep education concise for senior roles',
-              'Include relevant coursework only if recent graduate',
-              'List certifications separately if applicable'
-            ],
-            rewritePreview: 'Education section placeholder.'
-          }
-        ]
-      },
+      // Don't provide role-specific feedback when AI fails completely
+      // Frontend will handle null gracefully (hide role-specific section)
+      roleSpecificFeedback: null,
       atsIssues: generateATSIssuesFromScores(ruleBasedScores, normalizedJobTitle),
       aiFeedback: null
     };

@@ -265,7 +265,7 @@ Keep feedback concise. For each category, provide:
 - Up to 2 bullet suggestions, using action verbs and metrics where possible.
 
 ADDITIONALLY, generate Role-Specific Tailoring Tips. This is strategic, role-aware feedback that evaluates 5 sections:
-1. Header & Contact - first impression: name, headline/target title, location/remote signal, email/phone, professional links (LinkedIn, GitHub, portfolio). Focus on whether this instantly signals fit for the target role.
+1. Header & Contact - first impression: name, headline/target title, location/remote signal, email/phone, professional links (ONLY if they exist in the original resume - do not suggest adding links that aren't present). Focus on whether this instantly signals fit for the target role.
 2. Professional Summary - 2-4 line pitch at top: who they are, what they do, why relevant for the role, with at least one measurable outcome when possible.
 3. Experience - work history: roles, bullets, achievements; focus on outcomes and alignment with responsibilities for the target role.
 4. Skills - quick-scan tools/technologies, logically grouped; presence of must-have skills, removal of fluffy soft-skill padding.
@@ -273,9 +273,11 @@ ADDITIONALLY, generate Role-Specific Tailoring Tips. This is strategic, role-awa
 
 For each section, output:
 - fitLevel: "big_impact" (major improvements needed), "tunable" (good but can improve), or "strong" (well-aligned)
-- diagnosis: one-sentence summary of main issue/opportunity
-- tips: exactly 3 clear, actionable suggestions (add X, remove Y, rephrase Z, group skills, add metrics, etc.)
-- rewritePreview: 1-2 sentence improved version WITHOUT fabricating jobs, dates, companies, or degrees.
+- diagnosis: one-sentence summary of main issue/opportunity - MUST be specific to THIS resume's actual content, not generic advice
+- tips: exactly 3 clear, actionable suggestions that are SPECIFIC to what's actually in the resume. Avoid generic suggestions like "add LinkedIn URL" unless the resume already has a URL section. Focus on what's actually missing or could be improved based on the resume content.
+- rewritePreview: 1-2 sentence improved version WITHOUT fabricating jobs, dates, companies, degrees, or URLs/links.
+
+CRITICAL: Your feedback must be tailored to the ACTUAL resume content. Do not provide generic, template-like suggestions. Analyze what's actually present and what's actually missing. If a section already has strong content, acknowledge that rather than suggesting generic improvements.
 
 ${roleContext}
 
@@ -467,6 +469,8 @@ CRITICAL CONSTRAINTS - YOU MUST OBEY THESE WITHOUT EXCEPTION:
    - DO NOT add experience that doesn't exist in the original resume
    - DO NOT change job titles unless the original resume already implies that level (never downgrade)
    - DO NOT alter company names, school names, or credential names
+   - DO NOT create or add LinkedIn, GitHub, portfolio, or any other URLs/links that are not present in the original resume
+   - DO NOT invent contact information, social media profiles, or website links
 
 2. WHAT YOU CAN DO:
    - Improve wording, phrasing, and clarity
@@ -475,11 +479,13 @@ CRITICAL CONSTRAINTS - YOU MUST OBEY THESE WITHOUT EXCEPTION:
    - Naturally integrate missing keywords into existing descriptions (avoid keyword stuffing)
    - Improve formatting and structure
    - Highlight achievements that align with the target role
+   - Keep existing URLs/links exactly as they appear in the original (if any exist)
 
 3. VERIFICATION REQUIRED:
    - Every company name must match the original exactly
    - Every date must match the original exactly
    - Every degree and certification must match the original exactly
+   - Every URL, link, or contact method must match the original exactly (or be omitted if not in original)
    - If you cannot safely improve a section without violating these rules, make minimal edits instead of fabricating content.
 
 4. CHANGE TRACKING:
