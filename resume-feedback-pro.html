@@ -1222,7 +1222,8 @@
                     score: resumeData.score,
                     breakdown: resumeData.breakdown || {},
                     jobTitle: resumeData.jobTitle || null,
-                    resumeId: resumeData.resumeId || null
+                    resumeId: resumeData.resumeId || null,
+                    timestamp: resumeData.timestamp || Date.now() // Include timestamp, fallback to now if missing
                   };
                   
                   // Cache KV results back to localStorage
@@ -1324,70 +1325,101 @@
             updateRubricGrid(rubric);
           }
           
-          // Restore role-specific feedback if available
-          if (cachedScore.roleSpecificFeedback && Array.isArray(cachedScore.roleSpecificFeedback) && cachedScore.roleSpecificFeedback.length > 0) {
-            updateFeedbackGrid(cachedScore.roleSpecificFeedback);
-            // Make feedback grid visible (it starts with display:none)
-            const feedbackGrid = document.getElementById('rf-feedback-grid');
-            if (feedbackGrid) {
-              feedbackGrid.style.display = 'grid';
+          // Restore role-specific feedback if available (supports both old and new formats)
+          if (cachedScore.roleSpecificFeedback) {
+            const isOldFormat = Array.isArray(cachedScore.roleSpecificFeedback) && 
+                               cachedScore.roleSpecificFeedback.length > 0;
+            const isNewFormat = typeof cachedScore.roleSpecificFeedback === 'object' && 
+                               !Array.isArray(cachedScore.roleSpecificFeedback) &&
+                               cachedScore.roleSpecificFeedback.targetRoleUsed !== undefined &&
+                               Array.isArray(cachedScore.roleSpecificFeedback.sections) &&
+                               cachedScore.roleSpecificFeedback.sections.length > 0;
+            
+            if (isOldFormat || isNewFormat) {
+              updateFeedbackGrid(cachedScore.roleSpecificFeedback);
+              // Make feedback grid visible (it starts with display:none)
+              const feedbackGrid = document.getElementById('rf-feedback-grid');
+              if (feedbackGrid) {
+                feedbackGrid.style.display = 'grid';
+              }
+              showRoleFeedback();
+            } else {
+              // Invalid format - hide feedback section
+              console.warn('[RESUME-FEEDBACK] Invalid roleSpecificFeedback format in cache:', typeof cachedScore.roleSpecificFeedback);
+              hideRoleFeedback();
             }
-            showRoleFeedback();
           } else {
             // No role feedback available - user can use optimize button if needed
             hideRoleFeedback();
           }
           
           // Get resume name for context bar and file name restoration
-          const lastResumeName = localStorage.getItem('lastUploadedResumeName') || 'Unknown file';
+          const lastResumeName = localStorage.getItem('lastUploadedResumeName');
           
-          // Show context bar
+          // Only show context bar if we have all required data
+          const hasValidCachedData = cachedScore && 
+                                     cachedScore.score !== undefined && 
+                                     cachedScore.resumeId &&
+                                     lastResumeName && 
+                                     lastResumeName !== 'Unknown file' &&
+                                     cachedScore.timestamp;
+          
+          // Show context bar only if we have valid cached data
           const contextBar = document.getElementById('rf-context-bar');
           if (contextBar) {
-            contextBar.style.display = 'block';
-            
-            // Update context bar details
-            const fileNameEl = document.getElementById('rf-context-file-name');
-            if (fileNameEl) fileNameEl.textContent = lastResumeName;
-            
-            const roleNameEl = document.getElementById('rf-context-role-name');
-            if (roleNameEl) {
-              roleNameEl.textContent = cachedScore.jobTitle || 'Not specified';
-            }
-            
-            const timeEl = document.getElementById('rf-context-time-value');
-            if (timeEl && cachedScore.timestamp) {
-              const date = new Date(cachedScore.timestamp);
-              const now = new Date();
-              const diffMs = now - date;
-              const diffMins = Math.floor(diffMs / 60000);
-              const diffHours = Math.floor(diffMs / 3600000);
-              const diffDays = Math.floor(diffMs / 86400000);
+            if (hasValidCachedData) {
+              contextBar.style.display = 'block';
               
-              let timeText;
-              if (diffMins < 1) {
-                timeText = 'Just now';
-              } else if (diffMins < 60) {
-                timeText = `${diffMins} minute${diffMins !== 1 ? 's' : ''} ago`;
-              } else if (diffHours < 24) {
-                timeText = `${diffHours} hour${diffHours !== 1 ? 's' : ''} ago`;
-              } else if (diffDays === 1) {
-                timeText = 'Yesterday';
-              } else if (diffDays < 7) {
-                timeText = `${diffDays} days ago`;
-              } else {
-                timeText = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: date.getFullYear() !== now.getFullYear() ? 'numeric' : undefined });
+              // Update context bar details
+              const fileNameEl = document.getElementById('rf-context-file-name');
+              if (fileNameEl) fileNameEl.textContent = lastResumeName;
+              
+              const roleNameEl = document.getElementById('rf-context-role-name');
+              if (roleNameEl) {
+                roleNameEl.textContent = cachedScore.jobTitle || 'Not specified';
               }
-              timeEl.textContent = timeText;
+              
+              const timeEl = document.getElementById('rf-context-time-value');
+              if (timeEl && cachedScore.timestamp) {
+                const date = new Date(cachedScore.timestamp);
+                const now = new Date();
+                const diffMs = now - date;
+                const diffMins = Math.floor(diffMs / 60000);
+                const diffHours = Math.floor(diffMs / 3600000);
+                const diffDays = Math.floor(diffMs / 86400000);
+                
+                let timeText;
+                if (diffMins < 1) {
+                  timeText = 'Just now';
+                } else if (diffMins < 60) {
+                  timeText = `${diffMins} minute${diffMins !== 1 ? 's' : ''} ago`;
+                } else if (diffHours < 24) {
+                  timeText = `${diffHours} hour${diffHours !== 1 ? 's' : ''} ago`;
+                } else if (diffDays === 1) {
+                  timeText = 'Yesterday';
+                } else if (diffDays < 7) {
+                  timeText = `${diffDays} days ago`;
+                } else {
+                  timeText = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: date.getFullYear() !== now.getFullYear() ? 'numeric' : undefined });
+                }
+                timeEl.textContent = timeText;
+              }
+            } else {
+              // Hide context bar if data is incomplete
+              contextBar.style.display = 'none';
             }
           }
           
           // Restore job title if available (only if input is empty to avoid overwriting user input)
           const jobTitleInput = document.getElementById('rf-job-title');
           if (cachedScore.jobTitle && jobTitleInput && !jobTitleInput.value.trim()) {
-            jobTitleInput.value = cachedScore.jobTitle;
-            currentJobTitle = cachedScore.jobTitle;
-            console.log('[RESUME-FEEDBACK] Restored job title from cache:', cachedScore.jobTitle);
+            // Only restore if it's a real job title, not a placeholder
+            const jobTitle = cachedScore.jobTitle.trim();
+            if (jobTitle && jobTitle !== 'Software Engineer' && jobTitle !== 'Not specified') {
+              jobTitleInput.value = jobTitle;
+              currentJobTitle = jobTitle;
+              console.log('[RESUME-FEEDBACK] Restored job title from cache:', jobTitle);
+            }
           } else if (!cachedScore?.jobTitle && jobTitleInput && !jobTitleInput.value.trim()) {
             // Set visual placeholder to "Software Engineer" for consistency with other pages
             // BUT don't set currentJobTitle - only set it when user explicitly interacts with the field
@@ -1478,7 +1510,13 @@
               }
               const feedbackGrid = document.getElementById('rf-feedback-grid');
               if (feedbackGrid) {
-                feedbackGrid.style.display = 'grid';
+                if (feedbackResult.roleSpecificFeedback) {
+                  feedbackGrid.style.display = 'grid';
+                  showRoleFeedback();
+                } else {
+                  feedbackGrid.style.display = 'none';
+                  hideRoleFeedback();
+                }
               }
               
               // Save role-specific feedback to persistence
@@ -1753,10 +1791,16 @@
               updateFeedbackGrid(feedbackResult.roleSpecificFeedback);
               updateRubricGridFromFeedback(feedbackResult.atsRubric);
               
-              // Make feedback grid visible (it starts with display:none)
+              // Show/hide feedback grid based on whether feedback is available
               const feedbackGrid = document.getElementById('rf-feedback-grid');
               if (feedbackGrid) {
-                feedbackGrid.style.display = 'grid';
+                if (feedbackResult.roleSpecificFeedback) {
+                  feedbackGrid.style.display = 'grid';
+                  showRoleFeedback();
+                } else {
+                  feedbackGrid.style.display = 'none';
+                  hideRoleFeedback();
+                }
               }
               
               // Save role-specific feedback to persistence
@@ -1918,6 +1962,13 @@
         uploadInput.addEventListener('change', function(e) {
           const file = e.target.files[0];
           if (file) {
+            // Clear job title input when new file is selected
+            const jobTitleInput = document.getElementById('rf-job-title');
+            if (jobTitleInput) {
+              jobTitleInput.value = '';
+              currentJobTitle = null;
+            }
+            
             // Store file name in localStorage for persistence
             localStorage.setItem('lastUploadedResumeName', file.name);
             
@@ -1986,14 +2037,20 @@
             updateFeedbackGrid(feedbackResult.roleSpecificFeedback);
             updateRubricGridFromFeedback(feedbackResult.atsRubric);
             
-            // Make grids visible (they start with display:none)
+            // Show/hide grids based on whether feedback is available
             const rubricGrid = document.getElementById('rf-rubric-grid');
             if (rubricGrid) {
               rubricGrid.style.display = 'grid';
             }
             const feedbackGrid = document.getElementById('rf-feedback-grid');
             if (feedbackGrid) {
-              feedbackGrid.style.display = 'grid';
+              if (feedbackResult.roleSpecificFeedback) {
+                feedbackGrid.style.display = 'grid';
+                showRoleFeedback();
+              } else {
+                feedbackGrid.style.display = 'none';
+                hideRoleFeedback();
+              }
             }
             
             // Save role-specific feedback to persistence
@@ -2702,26 +2759,7 @@
           feedbackTile.querySelector('.rf-upgrade-text').style.display = 'none';
           if (feedbackContent) {
             feedbackContent.style.display = 'block';
-            // Add premium upsell for Pro users
-            if (isProPlan) {
-              const oldBanner = document.getElementById('rf-feedback-upgrade-banner');
-              if (oldBanner) oldBanner.remove();
-              const upgradeBanner = document.createElement('div');
-              upgradeBanner.className = 'rf-upgrade-prompt';
-              upgradeBanner.id = 'rf-feedback-upgrade-banner';
-              upgradeBanner.style.marginTop = '1.7rem';
-              upgradeBanner.style.background = '#FEF3C7';
-              upgradeBanner.innerHTML = `
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
-                </svg>
-                <div class="rf-upgrade-text">
-                  <strong>Want priority review?</strong> Upgrade to Premium for front-of-the-line analysis and VIP support
-                </div>
-                <a href="pricing-a.html" class="btn btn-secondary">Upgrade to Premium</a>
-              `;
-              feedbackTile.appendChild(upgradeBanner);
-            }
+            // Premium CTA removed - already exists at bottom of page
           }
         }
         if (rewriteTile) {

@@ -93,8 +93,19 @@
         }
         
         // Save role-specific feedback if provided
-        if (roleSpecificFeedback && Array.isArray(roleSpecificFeedback)) {
-          localStorage.setItem(STORAGE_KEYS.ROLE_FEEDBACK, JSON.stringify(roleSpecificFeedback));
+        // Support both old format (array) and new format (object with targetRoleUsed and sections)
+        if (roleSpecificFeedback) {
+          const isOldFormat = Array.isArray(roleSpecificFeedback);
+          const isNewFormat = typeof roleSpecificFeedback === 'object' && 
+                             roleSpecificFeedback.targetRoleUsed !== undefined &&
+                             Array.isArray(roleSpecificFeedback.sections);
+          
+          if (isOldFormat || isNewFormat) {
+            localStorage.setItem(STORAGE_KEYS.ROLE_FEEDBACK, JSON.stringify(roleSpecificFeedback));
+          } else {
+            // Invalid format - clear it
+            localStorage.removeItem(STORAGE_KEYS.ROLE_FEEDBACK);
+          }
         } else {
           // Clear role feedback if not provided (to distinguish between "no feedback" and "has feedback")
           localStorage.removeItem(STORAGE_KEYS.ROLE_FEEDBACK);
@@ -227,10 +238,19 @@
       }
 
       // Parse role feedback with error handling
+      // Supports both old format (array) and new format (object with targetRoleUsed and sections)
       let roleSpecificFeedback = null;
       if (roleFeedback) {
         try {
           roleSpecificFeedback = JSON.parse(roleFeedback);
+          // Validate it's either an array (old) or object with expected structure (new)
+          if (roleSpecificFeedback && !Array.isArray(roleSpecificFeedback) && 
+              typeof roleSpecificFeedback === 'object' &&
+              roleSpecificFeedback.targetRoleUsed === undefined) {
+            // Invalid format - treat as null
+            console.warn('[STATE-PERSISTENCE] Invalid role feedback format, ignoring');
+            roleSpecificFeedback = null;
+          }
         } catch (parseError) {
           console.warn('[STATE-PERSISTENCE] Failed to parse role feedback JSON:', parseError);
           // Continue without role feedback rather than failing completely
