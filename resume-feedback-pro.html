@@ -2251,35 +2251,75 @@
                 let totalScore = 0;
                 
                 // Reconstruct breakdown from atsRubric and calculate total score
-                // Use scoreResult if available and valid, otherwise calculate from atsRubric
-                if (scoreResult?.success && scoreResult.score !== undefined) {
-                  // We have a valid score from the API call (when role changed)
+                // Use scoreResult.breakdown if available to ensure consistency with totalScore
+                if (scoreResult?.success && scoreResult.score !== undefined && scoreResult.breakdown) {
+                  // We have a valid score and breakdown from the API call (when role changed)
+                  // Use breakdown from scoreResult to ensure scores match the total
                   totalScore = scoreResult.score;
-                }
-                
-                feedbackResult.atsRubric.forEach(item => {
-                  const category = (item.category || item.label || '').toLowerCase();
-                  const score = item.score || 0;
-                  const max = item.max || 0;
-                  const feedback = item.feedback || item.tip || '';
                   
-                  // Accumulate score from atsRubric items if we don't have a valid scoreResult
-                  if (!scoreResult?.success) {
+                  // Build breakdown from scoreResult.breakdown (consistent with totalScore)
+                  reconstructedBreakdown.keywordScore = {
+                    score: scoreResult.breakdown.keywordScore?.score || 0,
+                    max: 40,
+                    feedback: feedbackResult.atsRubric.find(item => 
+                      (item.category || item.label || '').toLowerCase().includes('keyword')
+                    )?.feedback || scoreResult.breakdown.keywordScore?.feedback || ''
+                  };
+                  reconstructedBreakdown.formattingScore = {
+                    score: scoreResult.breakdown.formattingScore?.score || 0,
+                    max: 20,
+                    feedback: feedbackResult.atsRubric.find(item => 
+                      (item.category || item.label || '').toLowerCase().includes('format')
+                    )?.feedback || scoreResult.breakdown.formattingScore?.feedback || ''
+                  };
+                  reconstructedBreakdown.structureScore = {
+                    score: scoreResult.breakdown.structureScore?.score || 0,
+                    max: 15,
+                    feedback: feedbackResult.atsRubric.find(item => 
+                      (item.category || item.label || '').toLowerCase().includes('structure') || 
+                      (item.category || item.label || '').toLowerCase().includes('section')
+                    )?.feedback || scoreResult.breakdown.structureScore?.feedback || ''
+                  };
+                  reconstructedBreakdown.toneScore = {
+                    score: scoreResult.breakdown.toneScore?.score || 0,
+                    max: 15,
+                    feedback: feedbackResult.atsRubric.find(item => 
+                      (item.category || item.label || '').toLowerCase().includes('tone') || 
+                      (item.category || item.label || '').toLowerCase().includes('clarity')
+                    )?.feedback || scoreResult.breakdown.toneScore?.feedback || ''
+                  };
+                  reconstructedBreakdown.grammarScore = {
+                    score: scoreResult.breakdown.grammarScore?.score || 0,
+                    max: 10,
+                    feedback: feedbackResult.atsRubric.find(item => 
+                      (item.category || item.label || '').toLowerCase().includes('grammar') || 
+                      (item.category || item.label || '').toLowerCase().includes('spelling')
+                    )?.feedback || scoreResult.breakdown.grammarScore?.feedback || ''
+                  };
+                } else {
+                  // No valid scoreResult.breakdown - use atsRubric for both scores and breakdown
+                  feedbackResult.atsRubric.forEach(item => {
+                    const category = (item.category || item.label || '').toLowerCase();
+                    const score = item.score || 0;
+                    const max = item.max || 0;
+                    const feedback = item.feedback || item.tip || '';
+                    
+                    // Accumulate score from atsRubric items
                     totalScore += score;
-                  }
-                  
-                  if (category.includes('keyword')) {
-                    reconstructedBreakdown.keywordScore = { score, max: 40, feedback };
-                  } else if (category.includes('format')) {
-                    reconstructedBreakdown.formattingScore = { score, max: 20, feedback };
-                  } else if (category.includes('structure') || category.includes('section')) {
-                    reconstructedBreakdown.structureScore = { score, max: 15, feedback };
-                  } else if (category.includes('tone') || category.includes('clarity')) {
-                    reconstructedBreakdown.toneScore = { score, max: 15, feedback };
-                  } else if (category.includes('grammar') || category.includes('spelling')) {
-                    reconstructedBreakdown.grammarScore = { score, max: 10, feedback };
-                  }
-                });
+                    
+                    if (category.includes('keyword')) {
+                      reconstructedBreakdown.keywordScore = { score, max: 40, feedback };
+                    } else if (category.includes('format')) {
+                      reconstructedBreakdown.formattingScore = { score, max: 20, feedback };
+                    } else if (category.includes('structure') || category.includes('section')) {
+                      reconstructedBreakdown.structureScore = { score, max: 15, feedback };
+                    } else if (category.includes('tone') || category.includes('clarity')) {
+                      reconstructedBreakdown.toneScore = { score, max: 15, feedback };
+                    } else if (category.includes('grammar') || category.includes('spelling')) {
+                      reconstructedBreakdown.grammarScore = { score, max: 10, feedback };
+                    }
+                  });
+                }
                 
                 // Save with reconstructed data
                 window.JobHackAIStatePersistence.saveATSScore({
