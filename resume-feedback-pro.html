@@ -435,6 +435,16 @@
         plan = localStorage.getItem('user-plan') || 'free';
       }
       
+      // FIX: Enhanced logging for plan detection debugging
+      console.log('[RESUME-FEEDBACK] Plan detection debug:', {
+        isAuthenticated,
+        plan,
+        navigationPlan: window.JobHackAINavigation?.getEffectivePlan?.(),
+        localStoragePlan: localStorage.getItem('user-plan'),
+        devPlan: localStorage.getItem('dev-plan'),
+        authState: window.JobHackAINavigation?.getAuthState?.()
+      });
+      
       const allowedPlans = ['trial', 'essential', 'pro', 'premium'];
       
       if (!isAuthenticated || !allowedPlans.includes(plan)) {
@@ -537,10 +547,34 @@
     // --- UPDATED USER PLAN LOGIC ---
     function getCurrentUserPlan() {
       // Use navigation system's plan detection for consistency
+      let plan = 'free';
       if (window.JobHackAINavigation) {
-        return window.JobHackAINavigation.getEffectivePlan();
+        plan = window.JobHackAINavigation.getEffectivePlan();
+      } else {
+        plan = localStorage.getItem('user-plan') || 'free';
       }
-      return localStorage.getItem('user-plan') || 'free';
+      
+      // FIX: Validate plan value to prevent corrupted data (e.g., "central")
+      const validPlans = ['visitor', 'free', 'trial', 'essential', 'pro', 'premium'];
+      if (!validPlans.includes(plan)) {
+        console.warn('[RESUME-FEEDBACK] Invalid plan detected:', plan, '- resetting to free');
+        plan = 'free';
+        // Clean up corrupted plan values
+        localStorage.setItem('user-plan', 'free');
+        const devPlan = localStorage.getItem('dev-plan');
+        if (devPlan && !validPlans.includes(devPlan)) {
+          localStorage.setItem('dev-plan', 'free');
+        }
+        // Log for debugging
+        console.log('[RESUME-FEEDBACK] Plan cleanup completed:', {
+          oldPlan: plan,
+          newPlan: 'free',
+          localStoragePlan: localStorage.getItem('user-plan'),
+          devPlan: localStorage.getItem('dev-plan')
+        });
+      }
+      
+      return plan;
     }
 
     // --- UPDATED USER OBJECT ---
@@ -1193,6 +1227,9 @@
       // Load cached ATS score on page load (with KV fallback)
       async function loadCachedATSScore() {
         let cachedScore = null;
+        
+        // FIX: Initialize ATS score to 0% for new users before checking cache
+        updateProgressRing(0);
         
         // Try state persistence first
         // On initial page load, don't validate against input field (which is empty)
@@ -2443,15 +2480,14 @@
         return;
       }
       
+      // FIX: Default to 0% if score is undefined or null (for new users)
       const hasResumeData = score !== undefined && score !== null;
+      const displayScore = hasResumeData ? score : 0;
       
-      if (!hasResumeData) {
-        // Hide progress ring, show placeholder
-        const progressRing = document.querySelector('#rf-ats-score-tile .rf-progress-ring');
-        if (progressRing) {
-          progressRing.style.display = 'none';
-        }
-        return;
+      // Always show progress ring (even at 0% for new users)
+      const progressRing = document.querySelector('#rf-ats-score-tile .rf-progress-ring');
+      if (progressRing) {
+        progressRing.style.display = 'inline-block';
       }
       
       // Show progress ring
@@ -3111,8 +3147,8 @@
         <div class="rf-progress-ring">
           <svg viewBox="0 0 80 80">
             <circle cx="40" cy="40" r="36" stroke="#E5E7EB" stroke-width="8" fill="none"/>
-            <circle cx="40" cy="40" r="36" stroke="#00E676" stroke-width="8" fill="none" stroke-dasharray="226.2" stroke-dashoffset="49" stroke-linecap="round"/>
-            <text x="40" y="48" text-anchor="middle" font-size="1.6rem" font-weight="700" fill="#1F2937">78%</text>
+            <circle cx="40" cy="40" r="36" stroke="#00E676" stroke-width="8" fill="none" stroke-dasharray="226.2" stroke-dashoffset="226.2" stroke-linecap="round"/>
+            <text x="40" y="48" text-anchor="middle" font-size="1.6rem" font-weight="700" fill="#1F2937">0%</text>
           </svg>
         </div>
         <div style="flex:1;min-width:220px;">
