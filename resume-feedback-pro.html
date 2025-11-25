@@ -1788,6 +1788,28 @@
                 }, 2000);
                 return;
               }
+              
+              // CRITICAL: Consume credit immediately after check passes to prevent multiple uploads
+              // This prevents race conditions where multiple uploads could pass the check
+              if (currentUser && currentUser.uid) {
+                const creditKey = `creditsByUid:${currentUser.uid}`;
+                const creditsData = localStorage.getItem(creditKey);
+                let credits = { ats_free_lifetime: 1 }; // Default for new users
+                
+                if (creditsData) {
+                  try {
+                    credits = JSON.parse(creditsData);
+                  } catch (e) {
+                    console.warn('[RESUME-FEEDBACK] Failed to parse credits data before consumption:', e);
+                    credits = { ats_free_lifetime: 1 }; // Default to available on parse error
+                  }
+                }
+                
+                // Consume credit immediately (before upload)
+                credits.ats_free_lifetime = 0;
+                localStorage.setItem(creditKey, JSON.stringify(credits));
+                console.log('[RESUME-FEEDBACK] ✅ Free ATS credit consumed in localStorage (before upload)');
+              }
             }
             
             // New file or file changed, upload it
@@ -1798,6 +1820,18 @@
           
           // CRITICAL: If upload failed, don't proceed to ATS scoring
           if (!uploadResult || !uploadResult.success || !uploadResult.resumeId) {
+            // Restore credit if upload failed (for free accounts)
+            const userPlan = getCurrentUserPlan();
+            if (userPlan === 'free') {
+              const currentUser = window.FirebaseAuthManager?.getCurrentUser?.();
+              if (currentUser && currentUser.uid) {
+                const creditKey = `creditsByUid:${currentUser.uid}`;
+                const credits = { ats_free_lifetime: 1 };
+                localStorage.setItem(creditKey, JSON.stringify(credits));
+                console.log('[RESUME-FEEDBACK] ✅ Free ATS credit restored due to upload failure');
+              }
+            }
+            
             // Error already shown by uploadResume, but we need to clean up UI state
             uploadInput.disabled = false;
             generateBtn.disabled = false;
@@ -1817,6 +1851,20 @@
           // Ensure jobTitle is passed (even if empty string) - role is primary steering for ATS expectations
           const jobTitleForScore = currentJobTitle || jobTitleInput?.value?.trim() || '';
           const scoreResult = await getAtsScore(uploadResult.resumeId, jobTitleForScore);
+          
+          // Check if scoring failed and restore credit for free accounts
+          if (!scoreResult.success) {
+            const userPlan = getCurrentUserPlan();
+            if (userPlan === 'free') {
+              const currentUser = window.FirebaseAuthManager?.getCurrentUser?.();
+              if (currentUser && currentUser.uid) {
+                const creditKey = `creditsByUid:${currentUser.uid}`;
+                const credits = { ats_free_lifetime: 1 };
+                localStorage.setItem(creditKey, JSON.stringify(credits));
+                console.log('[RESUME-FEEDBACK] ✅ Free ATS credit restored due to scoring failure');
+              }
+            }
+          }
           
           // Store ATS score in sessionStorage for cross-page sync
           if (scoreResult.success && scoreResult.score !== undefined) {
@@ -2100,6 +2148,18 @@
           generateBtn.disabled = false;
           hideLoadingState();
         } catch (error) {
+          // Restore credit if upload/scoring failed (for free accounts)
+          const userPlan = getCurrentUserPlan();
+          if (userPlan === 'free') {
+            const currentUser = window.FirebaseAuthManager?.getCurrentUser?.();
+            if (currentUser && currentUser.uid) {
+              const creditKey = `creditsByUid:${currentUser.uid}`;
+              const credits = { ats_free_lifetime: 1 };
+              localStorage.setItem(creditKey, JSON.stringify(credits));
+              console.log('[RESUME-FEEDBACK] ✅ Free ATS credit restored due to error');
+            }
+          }
+          
           // Clear state on error
           clearAtsState();
           handleApiError(error);
