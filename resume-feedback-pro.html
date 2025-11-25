@@ -1673,11 +1673,9 @@
           showLoadingState('Analyzing your résumé for ATS criteria…');
           uploadInput.disabled = true;
 
-          // Store file name before upload
-          localStorage.setItem('lastUploadedResumeName', file.name);
-          
           // Check if we already have a resumeId for this file
           // If file hasn't changed and we have a valid resumeId, skip upload
+          // IMPORTANT: Read existing filename BEFORE setting new one to compare correctly
           const existingResumeId = sessionStorage.getItem('currentResumeId') || localStorage.getItem('jh_last_resume_id');
           const existingFileName = localStorage.getItem('lastUploadedResumeName');
           
@@ -1695,8 +1693,12 @@
             currentResumeId = existingResumeId;
             // Ensure resumeId is in sessionStorage for consistency
             sessionStorage.setItem('currentResumeId', existingResumeId);
+            // Update filename in localStorage to keep state consistent
+            localStorage.setItem('lastUploadedResumeName', file.name);
           } else {
             // New file or file changed, upload it
+            // Store file name after determining we need to upload
+            localStorage.setItem('lastUploadedResumeName', file.name);
             uploadResult = await uploadResume(file);
           }
           
