@@ -2230,14 +2230,25 @@
                 // If no cached score exists, reconstruct breakdown from atsRubric to save feedback
                 // This ensures feedback is always saved even if cache is missing
                 const reconstructedBreakdown = {};
-                let totalScore = finalScore;
+                let totalScore = 0;
                 
-                // Reconstruct breakdown from atsRubric
+                // Reconstruct breakdown from atsRubric and calculate total score
+                // Use scoreResult if available and valid, otherwise calculate from atsRubric
+                if (scoreResult?.success && scoreResult.score !== undefined) {
+                  // We have a valid score from the API call (when role changed)
+                  totalScore = scoreResult.score;
+                }
+                
                 feedbackResult.atsRubric.forEach(item => {
                   const category = (item.category || item.label || '').toLowerCase();
                   const score = item.score || 0;
                   const max = item.max || 0;
                   const feedback = item.feedback || item.tip || '';
+                  
+                  // Accumulate score from atsRubric items if we don't have a valid scoreResult
+                  if (!scoreResult?.success) {
+                    totalScore += score;
+                  }
                   
                   if (category.includes('keyword')) {
                     reconstructedBreakdown.keywordScore = { score, max: 40, feedback };
