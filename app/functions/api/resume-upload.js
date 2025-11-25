@@ -118,15 +118,17 @@ export async function onRequest(context) {
       try {
         await kv.put(resumeKey, JSON.stringify(resumeData));
         
-        // FIX: Clear any cached ATS scores for this user to force fresh calculation
-        // This prevents stale cached scores from being returned for new uploads
+        // Clear persisted resume state to force fresh calculation on next score request
+        // Note: The ATS score cache uses content-based keys (atsCache:${hash}) which are
+        // automatically invalidated when content changes. This clears the persisted state
+        // (user:${uid}:lastResume) which stores the last score/breakdown for this user.
         try {
           const lastResumeKey = `user:${uid}:lastResume`;
           await kv.delete(lastResumeKey);
-          console.log('[RESUME-UPLOAD] Cleared stale ATS score cache for user:', uid);
-        } catch (cacheClearError) {
-          console.warn('[RESUME-UPLOAD] Cache cleanup failed (non-fatal):', cacheClearError);
-          // Continue even if cache cleanup fails
+          console.log('[RESUME-UPLOAD] Cleared persisted resume state for user:', uid);
+        } catch (stateClearError) {
+          console.warn('[RESUME-UPLOAD] State cleanup failed (non-fatal):', stateClearError);
+          // Continue even if state cleanup fails
         }
       } catch (kvError) {
         console.warn('[RESUME-UPLOAD] KV write failed (non-fatal):', kvError);
