@@ -614,10 +614,11 @@
             validation.warningMessage || 'This appears to be a scanned PDF. For best results, please upload a text-based PDF, DOCX, or TXT file.',
             { buttonText: 'OK' });
         } else {
-          // Informational modal for paid users about OCR processing
-          window.showErrorModal('Processing Scanned PDF', 
-            validation.warningMessage || 'We\'re scanning your résumé — this may take up to 20 seconds.',
-            { buttonText: 'OK' });
+          // Informational modal for paid users about OCR processing - use friendly messaging
+          // Note: showErrorModal is used but with friendly message to reduce alarm
+          window.showErrorModal('Processing Your Resume', 
+            validation.warningMessage || 'We\'re extracting text from your scanned PDF. This may take up to 20 seconds — please wait while we process it.',
+            { buttonText: 'Got it' });
         }
       }
 
@@ -661,11 +662,11 @@
       
       // Handle OCR status if present
       if (data.ocrUsed === true || data.ocrUsed === 'pending') {
-        // Show informational modal about OCR processing
+        // Show informational modal about OCR processing - use friendly messaging
         if (window.showErrorModal) {
-          window.showErrorModal('Processing Scanned PDF', 
-            'We\'re scanning your résumé — this may take up to 20 seconds. Please wait...',
-            { buttonText: 'OK' });
+          window.showErrorModal('Processing Your Resume', 
+            'We\'re extracting text from your scanned PDF. This may take up to 20 seconds — please wait while we process it.',
+            { buttonText: 'Got it' });
         }
       }
 
@@ -1675,8 +1676,29 @@
           // Store file name before upload
           localStorage.setItem('lastUploadedResumeName', file.name);
           
-          // Upload resume
-          const uploadResult = await uploadResume(file);
+          // Check if we already have a resumeId for this file
+          // If file hasn't changed and we have a valid resumeId, skip upload
+          const existingResumeId = sessionStorage.getItem('currentResumeId') || localStorage.getItem('jh_last_resume_id');
+          const existingFileName = localStorage.getItem('lastUploadedResumeName');
+          
+          let uploadResult;
+          if (existingResumeId && existingFileName === file.name) {
+            // File hasn't changed, reuse existing resumeId
+            console.log('[RESUME-FEEDBACK] Reusing existing resumeId:', existingResumeId);
+            const existingResumeText = sessionStorage.getItem('currentResumeText');
+            uploadResult = {
+              success: true,
+              resumeId: existingResumeId,
+              resumeText: existingResumeText || undefined,
+              textPreview: existingResumeText ? (existingResumeText.length > 200 ? existingResumeText.substring(0, 200) + '...' : existingResumeText) : undefined
+            };
+            currentResumeId = existingResumeId;
+            // Ensure resumeId is in sessionStorage for consistency
+            sessionStorage.setItem('currentResumeId', existingResumeId);
+          } else {
+            // New file or file changed, upload it
+            uploadResult = await uploadResume(file);
+          }
           
           // CRITICAL: If upload failed, don't proceed to ATS scoring
           if (!uploadResult || !uploadResult.success || !uploadResult.resumeId) {
@@ -1920,9 +1942,38 @@
           }
 
           // Update original snippet in rewrite section
+          // Use full resume text if available, otherwise use preview
           const origBox = document.querySelectorAll('#rf-rewrite-content .rf-snippet-box')[0];
-          if (origBox && uploadResult.textPreview) {
-            origBox.value = uploadResult.textPreview;
+          if (origBox) {
+            // Try to get full resume text from sessionStorage or upload result
+            const resumeText = sessionStorage.getItem('currentResumeText') || uploadResult.resumeText;
+            if (resumeText && resumeText.length > 0) {
+              // Clean up text for display - remove excessive whitespace and ensure readability
+              let cleanText = resumeText.replace(/\s+/g, ' ').trim();
+              
+              // Validate text quality - check for excessive non-alphanumeric characters (possible OCR corruption)
+              const alphanumericRatio = (cleanText.match(/[a-zA-Z0-9\s]/g) || []).length / cleanText.length;
+              if (alphanumericRatio < 0.7 && cleanText.length > 100) {
+                // Text appears corrupted - show warning message instead
+                origBox.value = '⚠️ Text extraction quality is low. For best results, please upload a text-based PDF or DOCX file.\n\nExtracted text preview:\n' + cleanText.substring(0, 200) + '...';
+              } else {
+                // Use first 500 characters for snippet display (more readable than 200)
+                // Ensure we don't cut in the middle of a word if possible
+                let snippet = cleanText.length > 500 ? cleanText.substring(0, 500) : cleanText;
+                const lastSpace = snippet.lastIndexOf(' ');
+                if (cleanText.length > 500 && lastSpace > 400) {
+                  snippet = snippet.substring(0, lastSpace) + '...';
+                } else if (cleanText.length > 500) {
+                  snippet = snippet + '...';
+                }
+                origBox.value = snippet;
+              }
+            } else if (uploadResult.textPreview) {
+              origBox.value = uploadResult.textPreview;
+            } else {
+              // If no text available, show placeholder
+              origBox.value = 'Resume text will appear here after analysis.';
+            }
           }
 
           // Update description (preserve tooltip HTML)
@@ -2026,13 +2077,92 @@
 
           const jobTitleInput = document.getElementById('rf-job-title');
           const jobTitle = jobTitleInput?.value?.trim() || '';
+          const previousJobTitle = currentJobTitle || '';
           currentJobTitle = jobTitle; // Job title is optional, so empty is OK
+
+          // Check if we need to regenerate (resume changed or role changed)
+          // If nothing changed, skip API call to save tokens
+          if (window.JobHackAIStatePersistence) {
+            const cachedScore = window.JobHackAIStatePersistence.loadATSScore(null);
+            if (cachedScore && cachedScore.resumeId === currentResumeId) {
+              const cachedJobTitle = (cachedScore.jobTitle || '').trim();
+              const newJobTitle = (jobTitle || '').trim();
+              
+              // If resume and role haven't changed, don't call API
+              if (cachedJobTitle === newJobTitle && cachedScore.roleSpecificFeedback) {
+                console.log('[RESUME-FEEDBACK] Resume and role unchanged, skipping API call');
+                if (window.JobHackAIToast) {
+                  window.JobHackAIToast.info('No changes detected. Feedback is already up to date.');
+                }
+                return;
+              }
+            }
+          }
 
           try {
             showLoadingState('Regenerating feedback...');
             this.disabled = true;
             this.textContent = 'Regenerating...';
 
+            // If role changed, also fetch updated ATS score
+            const roleChanged = previousJobTitle !== jobTitle;
+            let scoreResult = null;
+            
+            if (roleChanged) {
+              showLoadingState('Updating ATS score for new role...');
+              try {
+                scoreResult = await getAtsScore(currentResumeId, jobTitle);
+                if (scoreResult.success && scoreResult.score !== undefined) {
+                  updateProgressRing(scoreResult.score);
+                  
+                  // Convert breakdown to rubric format
+                  const rubric = [
+                    {
+                      label: 'Keyword Relevance',
+                      score: scoreResult.breakdown.keywordScore.score,
+                      max: 40,
+                      tip: limitFeedbackToSentences(scoreResult.breakdown.keywordScore.feedback)
+                    },
+                    {
+                      label: 'Formatting Compliance',
+                      score: scoreResult.breakdown.formattingScore.score,
+                      max: 20,
+                      tip: limitFeedbackToSentences(scoreResult.breakdown.formattingScore.feedback)
+                    },
+                    {
+                      label: 'Structure & Section Completeness',
+                      score: scoreResult.breakdown.structureScore.score,
+                      max: 15,
+                      tip: limitFeedbackToSentences(scoreResult.breakdown.structureScore.feedback)
+                    },
+                    {
+                      label: 'Tone & Clarity',
+                      score: scoreResult.breakdown.toneScore.score,
+                      max: 15,
+                      tip: limitFeedbackToSentences(scoreResult.breakdown.toneScore.feedback)
+                    },
+                    {
+                      label: 'Grammar & Spelling',
+                      score: scoreResult.breakdown.grammarScore.score,
+                      max: 10,
+                      tip: limitFeedbackToSentences(scoreResult.breakdown.grammarScore.feedback)
+                    }
+                  ];
+                  updateRubricGrid(rubric);
+                  
+                  // Store ATS score in sessionStorage
+                  sessionStorage.setItem('currentAtsScore', scoreResult.score.toString());
+                  if (scoreResult.breakdown) {
+                    sessionStorage.setItem('currentAtsBreakdown', JSON.stringify(scoreResult.breakdown));
+                  }
+                }
+              } catch (scoreError) {
+                console.warn('[RESUME-FEEDBACK] Failed to update ATS score:', scoreError);
+                // Continue with feedback generation even if score update fails
+              }
+            }
+
+            showLoadingState('Regenerating feedback...');
             const feedbackResult = await getResumeFeedback(currentResumeId, jobTitle);
             updateFeedbackGrid(feedbackResult.roleSpecificFeedback);
             updateRubricGridFromFeedback(feedbackResult.atsRubric);
@@ -2058,9 +2188,14 @@
             // This allows updating feedback even when job title has changed
             if (window.JobHackAIStatePersistence) {
               const cachedScore = window.JobHackAIStatePersistence.loadATSScore(null);
+              
+              // Use updated score if role changed, otherwise use cached score
+              const finalScore = scoreResult?.success ? scoreResult.score : (cachedScore?.score || 0);
+              const finalBreakdown = scoreResult?.success ? scoreResult.breakdown : (cachedScore?.breakdown || {});
+              
               if (cachedScore && cachedScore.resumeId === currentResumeId) {
                 // Merge feedback text from atsRubric into breakdown
-                const updatedBreakdown = { ...cachedScore.breakdown };
+                const updatedBreakdown = { ...finalBreakdown };
                 if (feedbackResult.atsRubric && Array.isArray(feedbackResult.atsRubric)) {
                   feedbackResult.atsRubric.forEach(item => {
                     const category = (item.category || item.label || '').toLowerCase();
@@ -2083,15 +2218,17 @@
                 // Update existing cached score with new job title, feedback, and updated breakdown
                 window.JobHackAIStatePersistence.saveATSScore({
                   ...cachedScore,
+                  score: finalScore,
                   breakdown: updatedBreakdown,
                   jobTitle: jobTitle || null,
-                  roleSpecificFeedback: feedbackResult.roleSpecificFeedback || null
+                  roleSpecificFeedback: feedbackResult.roleSpecificFeedback || null,
+                  timestamp: Date.now() // Update timestamp
                 });
               } else if (currentResumeId && feedbackResult.atsRubric) {
                 // If no cached score exists, reconstruct breakdown from atsRubric to save feedback
                 // This ensures feedback is always saved even if cache is missing
                 const reconstructedBreakdown = {};
-                let totalScore = 0;
+                let totalScore = finalScore;
                 
                 // Reconstruct breakdown from atsRubric
                 feedbackResult.atsRubric.forEach(item => {
@@ -2099,8 +2236,6 @@
                   const score = item.score || 0;
                   const max = item.max || 0;
                   const feedback = item.feedback || item.tip || '';
-                  
-                  totalScore += score;
                   
                   if (category.includes('keyword')) {
                     reconstructedBreakdown.keywordScore = { score, max: 40, feedback };
@@ -2121,15 +2256,37 @@
                   breakdown: reconstructedBreakdown,
                   resumeId: currentResumeId,
                   jobTitle: jobTitle || null,
-                  roleSpecificFeedback: feedbackResult.roleSpecificFeedback || null
+                  roleSpecificFeedback: feedbackResult.roleSpecificFeedback || null,
+                  timestamp: Date.now()
                 });
                 console.log('[RESUME-FEEDBACK] Saved feedback with reconstructed breakdown');
+              }
+              
+              // Update context bar timestamp and ensure it's visible
+              const updatedScore = window.JobHackAIStatePersistence.loadATSScore(null);
+              if (updatedScore && updatedScore.timestamp) {
+                const timeEl = document.getElementById('rf-context-time-value');
+                if (timeEl) {
+                  timeEl.textContent = 'Just now';
+                }
+                
+                // Ensure context bar is visible after update
+                const contextBar = document.getElementById('rf-context-bar');
+                if (contextBar && updatedScore.resumeId === currentResumeId) {
+                  contextBar.style.display = 'block';
+                  
+                  // Update role name if it changed
+                  const roleNameEl = document.getElementById('rf-context-role-name');
+                  if (roleNameEl) {
+                    roleNameEl.textContent = updatedScore.jobTitle || 'Not specified';
+                  }
+                }
               }
             }
 
             // Show success toast
             if (window.JobHackAIToast) {
-              window.JobHackAIToast.success('Updated feedback ready!');
+              window.JobHackAIToast.success(roleChanged ? 'ATS score and feedback updated!' : 'Feedback updated!');
             }
 
             this.textContent = 'Regenerate Feedback';
