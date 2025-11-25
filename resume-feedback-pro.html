@@ -2490,18 +2490,13 @@
         progressRing.style.display = 'inline-block';
       }
       
-      // Show progress ring
-      const progressRing = document.querySelector('#rf-ats-score-tile .rf-progress-ring');
-      if (progressRing) {
-        progressRing.style.display = 'inline-block';
-      }
-      
       const circle = svg.querySelectorAll('circle')[1];
       if (!circle) {
         console.warn('[RESUME-FEEDBACK] Progress circle not found');
         return;
       }
-      const percent = Math.max(0, Math.min(100, score));
+      // FIX: Use displayScore instead of score to ensure 0% default works correctly
+      const percent = Math.max(0, Math.min(100, displayScore));
       const radius = 36;
       const circumference = 2 * Math.PI * radius;
       const offset = circumference - (percent / 100) * circumference;
