@@ -2124,52 +2124,60 @@
               showLoadingState('Updating ATS score for new role...');
               try {
                 scoreResult = await getAtsScore(currentResumeId, jobTitle);
-                if (scoreResult.success && scoreResult.score !== undefined) {
+                // Verify both success and breakdown exist before using scoreResult
+                if (scoreResult.success && scoreResult.score !== undefined && scoreResult.breakdown) {
                   updateProgressRing(scoreResult.score);
                   
                   // Convert breakdown to rubric format
                   const rubric = [
                     {
                       label: 'Keyword Relevance',
-                      score: scoreResult.breakdown.keywordScore.score,
+                      score: scoreResult.breakdown.keywordScore?.score || 0,
                       max: 40,
-                      tip: limitFeedbackToSentences(scoreResult.breakdown.keywordScore.feedback)
+                      tip: limitFeedbackToSentences(scoreResult.breakdown.keywordScore?.feedback || '')
                     },
                     {
                       label: 'Formatting Compliance',
-                      score: scoreResult.breakdown.formattingScore.score,
+                      score: scoreResult.breakdown.formattingScore?.score || 0,
                       max: 20,
-                      tip: limitFeedbackToSentences(scoreResult.breakdown.formattingScore.feedback)
+                      tip: limitFeedbackToSentences(scoreResult.breakdown.formattingScore?.feedback || '')
                     },
                     {
                       label: 'Structure & Section Completeness',
-                      score: scoreResult.breakdown.structureScore.score,
+                      score: scoreResult.breakdown.structureScore?.score || 0,
                       max: 15,
-                      tip: limitFeedbackToSentences(scoreResult.breakdown.structureScore.feedback)
+                      tip: limitFeedbackToSentences(scoreResult.breakdown.structureScore?.feedback || '')
                     },
                     {
                       label: 'Tone & Clarity',
-                      score: scoreResult.breakdown.toneScore.score,
+                      score: scoreResult.breakdown.toneScore?.score || 0,
                       max: 15,
-                      tip: limitFeedbackToSentences(scoreResult.breakdown.toneScore.feedback)
+                      tip: limitFeedbackToSentences(scoreResult.breakdown.toneScore?.feedback || '')
                     },
                     {
                       label: 'Grammar & Spelling',
-                      score: scoreResult.breakdown.grammarScore.score,
+                      score: scoreResult.breakdown.grammarScore?.score || 0,
                       max: 10,
-                      tip: limitFeedbackToSentences(scoreResult.breakdown.grammarScore.feedback)
+                      tip: limitFeedbackToSentences(scoreResult.breakdown.grammarScore?.feedback || '')
                     }
                   ];
                   updateRubricGrid(rubric);
                   
                   // Store ATS score in sessionStorage
                   sessionStorage.setItem('currentAtsScore', scoreResult.score.toString());
-                  if (scoreResult.breakdown) {
-                    sessionStorage.setItem('currentAtsBreakdown', JSON.stringify(scoreResult.breakdown));
-                  }
+                  sessionStorage.setItem('currentAtsBreakdown', JSON.stringify(scoreResult.breakdown));
+                } else {
+                  // Score update failed or incomplete - log warning and continue
+                  console.warn('[RESUME-FEEDBACK] ATS score update incomplete:', {
+                    success: scoreResult?.success,
+                    hasScore: scoreResult?.score !== undefined,
+                    hasBreakdown: !!scoreResult?.breakdown
+                  });
+                  scoreResult = null; // Mark as failed so toast message is accurate
                 }
               } catch (scoreError) {
                 console.warn('[RESUME-FEEDBACK] Failed to update ATS score:', scoreError);
+                scoreResult = null; // Mark as failed so toast message is accurate
                 // Continue with feedback generation even if score update fails
               }
             }
@@ -2307,9 +2315,10 @@
               }
             }
 
-            // Show success toast
+            // Show success toast - only claim ATS score was updated if it actually succeeded
             if (window.JobHackAIToast) {
-              window.JobHackAIToast.success(roleChanged ? 'ATS score and feedback updated!' : 'Feedback updated!');
+              const scoreUpdated = roleChanged && scoreResult?.success && scoreResult?.breakdown;
+              window.JobHackAIToast.success(scoreUpdated ? 'ATS score and feedback updated!' : 'Feedback updated!');
             }
 
             this.textContent = 'Regenerate Feedback';
