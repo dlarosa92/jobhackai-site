@@ -1704,6 +1704,9 @@
         const generateBtn = document.getElementById('rf-generate-btn');
         const statusDiv = document.getElementById('rf-generate-status');
         
+        // Track whether ATS scoring succeeded (for credit restoration logic)
+        let atsScoringSucceeded = false;
+        
         try {
           generateBtn.disabled = true;
           if (statusDiv) {
@@ -1713,15 +1716,17 @@
           uploadInput.disabled = true;
 
           // Check if we already have a resumeId for this file
-          // If file hasn't changed and we have a valid resumeId, skip upload
-          // IMPORTANT: Read existing filename BEFORE setting new one to compare correctly
+          // IMPORTANT: Only reuse if file name AND size match to detect content changes
+          // File size is a simple content check - if user edits resume, size likely changes
           const existingResumeId = sessionStorage.getItem('currentResumeId') || localStorage.getItem('jh_last_resume_id');
           const existingFileName = localStorage.getItem('lastUploadedResumeName');
+          const existingFileSize = localStorage.getItem('lastUploadedResumeSize');
+          const currentFileSize = file.size.toString();
           
           let uploadResult;
-          if (existingResumeId && existingFileName === file.name) {
-            // File hasn't changed, reuse existing resumeId
-            console.log('[RESUME-FEEDBACK] Reusing existing resumeId:', existingResumeId);
+          if (existingResumeId && existingFileName === file.name && existingFileSize === currentFileSize) {
+            // File name and size match - likely same file, reuse existing resumeId
+            console.log('[RESUME-FEEDBACK] Reusing existing resumeId (name and size match):', existingResumeId);
             const existingResumeText = sessionStorage.getItem('currentResumeText');
             uploadResult = {
               success: true,
@@ -1732,8 +1737,9 @@
             currentResumeId = existingResumeId;
             // Ensure resumeId is in sessionStorage for consistency
             sessionStorage.setItem('currentResumeId', existingResumeId);
-            // Update filename in localStorage to keep state consistent
+            // Update filename and size in localStorage to keep state consistent
             localStorage.setItem('lastUploadedResumeName', file.name);
+            localStorage.setItem('lastUploadedResumeSize', currentFileSize);
           } else {
             // New file or file changed - check free account limits before upload
             const userPlan = getCurrentUserPlan();
@@ -1812,9 +1818,10 @@
               }
             }
             
-            // New file or file changed, upload it
-            // Store file name after determining we need to upload
+            // New file or file changed (name or size different), upload it
+            // Store file name and size after determining we need to upload
             localStorage.setItem('lastUploadedResumeName', file.name);
+            localStorage.setItem('lastUploadedResumeSize', currentFileSize);
             uploadResult = await uploadResume(file);
           }
           
@@ -1864,6 +1871,9 @@
           // Ensure jobTitle is passed (even if empty string) - role is primary steering for ATS expectations
           const jobTitleForScore = currentJobTitle || jobTitleInput?.value?.trim() || '';
           const scoreResult = await getAtsScore(uploadResult.resumeId, jobTitleForScore);
+          
+          // Mark that ATS scoring succeeded - credit should NOT be restored if scoring worked
+          atsScoringSucceeded = scoreResult.success && scoreResult.score !== undefined;
           
           // Store ATS score in sessionStorage for cross-page sync
           // Note: Credit restoration on scoring failure is handled in the catch block below
@@ -2149,9 +2159,10 @@
           generateBtn.disabled = false;
           hideLoadingState();
         } catch (error) {
-          // Restore credit if upload/scoring failed (for free accounts)
+          // Restore credit ONLY if ATS scoring failed (not for post-scoring errors)
+          // If scoring succeeded but UI/feedback generation failed, user already got value
           const userPlan = getCurrentUserPlan();
-          if (userPlan === 'free') {
+          if (userPlan === 'free' && !atsScoringSucceeded) {
             const currentUser = window.FirebaseAuthManager?.getCurrentUser?.();
             if (currentUser && currentUser.uid) {
               const creditKey = `creditsByUid:${currentUser.uid}`;
@@ -2170,8 +2181,11 @@
               // Restore only the ats_free_lifetime credit, preserving other credit types
               credits.ats_free_lifetime = 1;
               localStorage.setItem(creditKey, JSON.stringify(credits));
-              console.log('[RESUME-FEEDBACK] ✅ Free ATS credit restored due to error');
+              console.log('[RESUME-FEEDBACK] ✅ Free ATS credit restored due to scoring/upload failure');
             }
+          } else if (userPlan === 'free' && atsScoringSucceeded) {
+            // Log that credit is NOT restored because scoring succeeded
+            console.log('[RESUME-FEEDBACK] ⚠️ Error occurred but ATS scoring succeeded - credit NOT restored');
           }
           
           // Clear state on error
