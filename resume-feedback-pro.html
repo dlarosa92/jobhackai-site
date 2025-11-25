@@ -1826,7 +1826,20 @@
               const currentUser = window.FirebaseAuthManager?.getCurrentUser?.();
               if (currentUser && currentUser.uid) {
                 const creditKey = `creditsByUid:${currentUser.uid}`;
-                const credits = { ats_free_lifetime: 1 };
+                const creditsData = localStorage.getItem(creditKey);
+                let credits = { ats_free_lifetime: 1 }; // Default for new users
+                
+                if (creditsData) {
+                  try {
+                    credits = JSON.parse(creditsData);
+                  } catch (e) {
+                    console.warn('[RESUME-FEEDBACK] Failed to parse credits data during restoration:', e);
+                    credits = { ats_free_lifetime: 1 }; // Default on parse error
+                  }
+                }
+                
+                // Restore only the ats_free_lifetime credit, preserving other credit types
+                credits.ats_free_lifetime = 1;
                 localStorage.setItem(creditKey, JSON.stringify(credits));
                 console.log('[RESUME-FEEDBACK] ✅ Free ATS credit restored due to upload failure');
               }
@@ -1859,7 +1872,20 @@
               const currentUser = window.FirebaseAuthManager?.getCurrentUser?.();
               if (currentUser && currentUser.uid) {
                 const creditKey = `creditsByUid:${currentUser.uid}`;
-                const credits = { ats_free_lifetime: 1 };
+                const creditsData = localStorage.getItem(creditKey);
+                let credits = { ats_free_lifetime: 1 }; // Default for new users
+                
+                if (creditsData) {
+                  try {
+                    credits = JSON.parse(creditsData);
+                  } catch (e) {
+                    console.warn('[RESUME-FEEDBACK] Failed to parse credits data during restoration:', e);
+                    credits = { ats_free_lifetime: 1 }; // Default on parse error
+                  }
+                }
+                
+                // Restore only the ats_free_lifetime credit, preserving other credit types
+                credits.ats_free_lifetime = 1;
                 localStorage.setItem(creditKey, JSON.stringify(credits));
                 console.log('[RESUME-FEEDBACK] ✅ Free ATS credit restored due to scoring failure');
               }
@@ -2154,7 +2180,20 @@
             const currentUser = window.FirebaseAuthManager?.getCurrentUser?.();
             if (currentUser && currentUser.uid) {
               const creditKey = `creditsByUid:${currentUser.uid}`;
-              const credits = { ats_free_lifetime: 1 };
+              const creditsData = localStorage.getItem(creditKey);
+              let credits = { ats_free_lifetime: 1 }; // Default for new users
+              
+              if (creditsData) {
+                try {
+                  credits = JSON.parse(creditsData);
+                } catch (e) {
+                  console.warn('[RESUME-FEEDBACK] Failed to parse credits data during restoration:', e);
+                  credits = { ats_free_lifetime: 1 }; // Default on parse error
+                }
+              }
+              
+              // Restore only the ats_free_lifetime credit, preserving other credit types
+              credits.ats_free_lifetime = 1;
               localStorage.setItem(creditKey, JSON.stringify(credits));
               console.log('[RESUME-FEEDBACK] ✅ Free ATS credit restored due to error');
             }
