@@ -557,7 +557,10 @@
       // FIX: Validate plan value to prevent corrupted data (e.g., "central")
       const validPlans = ['visitor', 'free', 'trial', 'essential', 'pro', 'premium'];
       if (!validPlans.includes(plan)) {
-        const oldPlan = plan; // Capture original invalid plan before reassignment
+        // CRITICAL: Capture original invalid plan value BEFORE reassignment
+        // This ensures the debug log shows the actual corrupted value (e.g., 'central')
+        // instead of always showing 'free' after the variable is reassigned
+        const oldPlan = plan;
         console.warn('[RESUME-FEEDBACK] Invalid plan detected:', plan, '- resetting to free');
         plan = 'free';
         // Clean up corrupted plan values
@@ -566,9 +569,9 @@
         if (devPlan && !validPlans.includes(devPlan)) {
           localStorage.setItem('dev-plan', 'free');
         }
-        // Log for debugging
+        // Log for debugging - uses captured oldPlan, not the reassigned plan variable
         console.log('[RESUME-FEEDBACK] Plan cleanup completed:', {
-          oldPlan: oldPlan,
+          oldPlan: oldPlan, // Uses captured value, not the reassigned 'plan' variable
           newPlan: 'free',
           localStoragePlan: localStorage.getItem('user-plan'),
           devPlan: localStorage.getItem('dev-plan')
