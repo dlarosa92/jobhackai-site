@@ -1726,6 +1726,80 @@
           let uploadResult;
           if (existingResumeId && existingFileName === file.name && existingFileSize === currentFileSize) {
             // File name and size match - likely same file, reuse existing resumeId
+            // CRITICAL: Still need to check and consume credit for free accounts even when reusing
+            // This prevents free users from bypassing the limit by re-uploading the same file
+            const userPlan = getCurrentUserPlan();
+            if (userPlan === 'free') {
+              const currentUser = window.FirebaseAuthManager?.getCurrentUser?.();
+              let hasCredit = false;
+              
+              if (currentUser && currentUser.uid) {
+                const creditKey = `creditsByUid:${currentUser.uid}`;
+                const creditsData = localStorage.getItem(creditKey);
+                if (creditsData) {
+                  try {
+                    const credits = JSON.parse(creditsData);
+                    hasCredit = credits.ats_free_lifetime > 0;
+                  } catch (e) {
+                    console.warn('[RESUME-FEEDBACK] Failed to parse credits data (cached path):', e);
+                    hasCredit = true; // Default to allowing for new users or corrupted data
+                  }
+                } else {
+                  // No credits data means user hasn't used it yet - grant access
+                  hasCredit = true;
+                }
+              } else {
+                console.warn('[RESUME-FEEDBACK] No authenticated user found for free account check (cached path)');
+                hasCredit = false;
+              }
+              
+              // Also check freeAccountManager as fallback
+              if (!hasCredit && window.freeAccountManager) {
+                try {
+                  const usageCheck = window.freeAccountManager.canUseATSScoring();
+                  hasCredit = usageCheck.allowed;
+                } catch (e) {
+                  console.warn('[RESUME-FEEDBACK] Error checking free account manager (cached path):', e);
+                  hasCredit = false;
+                }
+              }
+              
+              if (!hasCredit) {
+                // Free account limit reached - show upgrade message
+                uploadInput.disabled = false;
+                generateBtn.disabled = false;
+                hideLoadingState();
+                handleApiError(new Error('You have used your 1 free lifetime ATS score. Upgrade to continue scoring unlimited resumes.'));
+                // Redirect to pricing page after showing error
+                setTimeout(() => {
+                  window.location.href = 'pricing-a.html?plan=essential';
+                }, 2000);
+                return;
+              }
+              
+              // CRITICAL: Consume credit even when reusing cached resumeId
+              // This prevents free users from bypassing the limit by re-uploading the same file
+              if (currentUser && currentUser.uid) {
+                const creditKey = `creditsByUid:${currentUser.uid}`;
+                const creditsData = localStorage.getItem(creditKey);
+                let credits = { ats_free_lifetime: 1 }; // Default for new users
+                
+                if (creditsData) {
+                  try {
+                    credits = JSON.parse(creditsData);
+                  } catch (e) {
+                    console.warn('[RESUME-FEEDBACK] Failed to parse credits data before consumption (cached path):', e);
+                    credits = { ats_free_lifetime: 1 }; // Default to available on parse error
+                  }
+                }
+                
+                // Consume credit immediately (even for cached file reuse)
+                credits.ats_free_lifetime = 0;
+                localStorage.setItem(creditKey, JSON.stringify(credits));
+                console.log('[RESUME-FEEDBACK] ✅ Free ATS credit consumed in localStorage (cached file reuse)');
+              }
+            }
+            
             console.log('[RESUME-FEEDBACK] Reusing existing resumeId (name and size match):', existingResumeId);
             const existingResumeText = sessionStorage.getItem('currentResumeText');
             uploadResult = {
