@@ -61,8 +61,8 @@ test.describe('Resume Feedback', () => {
       }, { timeout: 15000 });
     } catch (error) {
       // If wait times out, check if we were redirected
-      const currentURL = page.url();
-      if (currentURL.includes('/pricing')) {
+      const hydrationURL = page.url();
+      if (hydrationURL.includes('/pricing')) {
         const userPlan = await page.evaluate(() => localStorage.getItem('user-plan') || 'unknown');
         test.info().skip(`Page redirected to pricing during plan hydration. user-plan=${userPlan}`);
         return;
@@ -129,9 +129,9 @@ test.describe('Resume Feedback', () => {
     await generateBtn.waitFor({ state: 'attached', timeout: 15000 });
     
     // Verify we're still on the correct page before interacting
-    const currentURL = page.url();
-    if (!currentURL.includes('resume-feedback')) {
-      throw new Error(`Page navigated away from resume-feedback. Current URL: ${currentURL}`);
+    const buttonCheckURL = page.url();
+    if (!buttonCheckURL.includes('resume-feedback')) {
+      throw new Error(`Page navigated away from resume-feedback. Current URL: ${buttonCheckURL}`);
     }
     
     // Now check if button is enabled
