@@ -4,15 +4,17 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <style>html.auth-pending{visibility:hidden}</style>
+  <style>html.auth-pending,html.plan-pending{visibility:hidden}</style>
   <script src="js/static-auth-guard.js?v=20251007-2"></script>
   <script>
     // --- IMMEDIATE PAGE ACCESS CONTROL ---
     // Run immediately to prevent content flash for unauthorized users
     (function enforceAccessImmediate() {
       const isAuthenticated = localStorage.getItem('user-authenticated') === 'true' && !!localStorage.getItem('user-email');
-      const plan = localStorage.getItem('user-plan') || 'free';
       const allowedPlans = ['trial', 'essential', 'pro', 'premium'];
+      // Expose allowed plans so later scripts stay in sync
+      window.__JOBHACKAI_RF_ALLOWED_PLANS__ = allowedPlans;
+      const cachedPlan = localStorage.getItem('user-plan');
       
       // If not authenticated, redirect to login immediately
       if (!isAuthenticated) {
@@ -21,15 +23,20 @@
         return;
       }
       
-      // If authenticated but on wrong plan, redirect to pricing with upgrade modal immediately
-      if (!allowedPlans.includes(plan)) {
-        console.log('🚫 [RESUME-FEEDBACK] Access denied for plan:', plan);
-        window.location.href = 'pricing-a.html?plan=essential';
-        return;
+      if (cachedPlan) {
+        // Cached plan detected - enforce immediately
+        if (!allowedPlans.includes(cachedPlan)) {
+          console.log('🚫 [RESUME-FEEDBACK] Access denied for cached plan:', cachedPlan);
+          window.location.href = 'pricing-a.html?plan=essential';
+          return;
+        }
+        console.log('✅ [RESUME-FEEDBACK] Access granted for cached plan:', cachedPlan);
+      } else {
+        // Plan not cached yet - allow page to load and defer enforcement
+        console.log('⏳ [RESUME-FEEDBACK] Plan not cached yet. Deferring enforcement until server plan check completes.');
+        window.__JOBHACKAI_PLAN_PENDING__ = true;
+        document.documentElement.classList.add('plan-pending');
       }
-      
-      // Access granted - continue loading page
-      console.log('✅ [RESUME-FEEDBACK] Access granted for plan:', plan);
     })();
   </script>
   <title>JobHackAI</title>
@@ -540,6 +547,8 @@
       };
       
       createDemoUserIfNeeded();
+
+      hydratePlanFromServerAndEnforceAccess();
       
       // Wait for navigation system to be ready
       setTimeout(checkPlanAccess, 100);
@@ -577,6 +586,60 @@
       }
       
       return plan;
+    }
+
+    async function hydratePlanFromServerAndEnforceAccess() {
+      const allowedPlans = window.__JOBHACKAI_RF_ALLOWED_PLANS__ || ['trial', 'essential', 'pro', 'premium'];
+      const cachedPlan = localStorage.getItem('user-plan');
+      const planPending = window.__JOBHACKAI_PLAN_PENDING__;
+      
+      if (!planPending && cachedPlan && allowedPlans.includes(cachedPlan)) {
+        document.documentElement.classList.remove('plan-pending');
+        return; // Nothing to do
+      }
+      
+      try {
+        const token = await getAuthToken().catch((err) => {
+          console.warn('[RESUME-FEEDBACK] Unable to obtain auth token for plan hydration:', err);
+          return null;
+        });
+        if (!token) {
+          document.documentElement.classList.remove('plan-pending');
+          return;
+        }
+        
+        const response = await fetch('/api/plan/me', {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        });
+        
+        if (!response.ok) {
+          console.warn('[RESUME-FEEDBACK] Plan API failed during hydration:', response.status, response.statusText);
+          document.documentElement.classList.remove('plan-pending');
+          return;
+        }
+        
+        const planData = await response.json().catch(() => ({}));
+        const serverPlan = (planData.plan || 'free').toLowerCase();
+        localStorage.setItem('user-plan', serverPlan);
+        window.dispatchEvent(new CustomEvent('planChanged', { detail: serverPlan }));
+        window.__JOBHACKAI_PLAN_PENDING__ = false;
+        document.documentElement.classList.remove('plan-pending');
+        
+        if (!allowedPlans.includes(serverPlan)) {
+          console.log('🚫 [RESUME-FEEDBACK] Server plan not allowed, redirecting:', serverPlan);
+          window.location.href = 'pricing-a.html?plan=essential';
+          return;
+        }
+        
+        console.log('✅ [RESUME-FEEDBACK] Server plan confirmed:', serverPlan);
+      } catch (error) {
+        window.__JOBHACKAI_PLAN_PENDING__ = false;
+        document.documentElement.classList.remove('plan-pending');
+        console.warn('[RESUME-FEEDBACK] Failed to hydrate plan from server:', error);
+      }
     }
 
     // --- UPDATED USER OBJECT ---
