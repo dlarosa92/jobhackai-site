@@ -73,8 +73,20 @@ export async function callOpenAI({
     cachedResponse = await env.JOBHACKAI_KV.get(cacheKey);
     if (cachedResponse) {
       const cached = JSON.parse(cachedResponse);
-      console.log(`[OPENAI] Cache hit for ${feature}`, { userId, model: cached.model });
-      return cached;
+      
+      // Don't return truncated cached responses - they're invalid and will cause parse failures
+      // This prevents wasting tokens on retry loops (saves ~7,272 tokens per bad request)
+      if (cached.finishReason === 'length') {
+        console.warn(`[OPENAI] Skipping truncated cached response for ${feature}`, { 
+          userId, 
+          model: cached.model,
+          finishReason: cached.finishReason
+        });
+        cachedResponse = null; // Force fresh generation
+      } else {
+        console.log(`[OPENAI] Cache hit for ${feature}`, { userId, model: cached.model });
+        return cached;
+      }
     }
   }
 
@@ -159,10 +171,15 @@ export async function callOpenAI({
       };
 
       // Cache final response (only if we didn't hit cache earlier)
+      // Don't cache truncated responses - they're invalid and will cause retries to fail
       if (cacheKey && env.JOBHACKAI_KV && !cachedResponse) {
-        await env.JOBHACKAI_KV.put(cacheKey, JSON.stringify(result), {
-          expirationTtl: 86400 // 24 hours
-        });
+        if (result.finishReason === 'length') {
+          console.warn('[OPENAI] Skipping cache for truncated response', { feature, model: result.model });
+        } else {
+          await env.JOBHACKAI_KV.put(cacheKey, JSON.stringify(result), {
+            expirationTtl: 86400 // 24 hours
+          });
+        }
       }
 
       return result;
@@ -241,7 +258,7 @@ export async function generateATSFeedback(resumeText, ruleBasedScores, jobTitle,
   // Respect env-driven config with sensible defaults
   const maxOutputTokens = Number(env.OPENAI_MAX_TOKENS_ATS) > 0
     ? Number(env.OPENAI_MAX_TOKENS_ATS)
-    : 800;
+    : 2000; // Increased from 800 to handle full role-specific feedback structure
 
   const temperature = Number.isFinite(Number(env.OPENAI_TEMPERATURE_SCORING))
     ? Number(env.OPENAI_TEMPERATURE_SCORING)
