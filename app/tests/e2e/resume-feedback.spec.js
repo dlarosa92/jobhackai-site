@@ -43,6 +43,34 @@ test.describe('Resume Feedback', () => {
     // The page may redirect to pricing if plan check fails, so wait for either outcome
     await page.waitForTimeout(3000); // Give more time for redirects to complete
     
+    // CRITICAL: Wait for plan hydration to complete before interacting with page
+    // This prevents race condition where hydration redirects page after we find elements
+    try {
+      await page.waitForFunction(() => {
+        // Plan hydration is complete when:
+        // 1. plan-pending class is removed (page is visible)
+        // 2. Plan pending flag is cleared
+        // 3. We're still on the resume-feedback page (not redirected)
+        const planPendingRemoved = !document.documentElement.classList.contains('plan-pending');
+        const planFlagCleared = window.__JOBHACKAI_PLAN_PENDING__ === false || 
+                                window.__JOBHACKAI_PLAN_PENDING__ === undefined;
+        const stillOnPage = window.location.pathname.includes('resume-feedback-pro') || 
+                            window.location.pathname.includes('resume-feedback');
+        
+        return planPendingRemoved && planFlagCleared && stillOnPage;
+      }, { timeout: 15000 });
+    } catch (error) {
+      // If wait times out, check if we were redirected
+      const currentURL = page.url();
+      if (currentURL.includes('/pricing')) {
+        const userPlan = await page.evaluate(() => localStorage.getItem('user-plan') || 'unknown');
+        test.info().skip(`Page redirected to pricing during plan hydration. user-plan=${userPlan}`);
+        return;
+      }
+      // If not redirected, log warning but continue
+      console.log('⚠️ Plan hydration wait timed out, but page not redirected - continuing');
+    }
+    
     // DEBUG: Check plan from API before checking redirect
     const token = await page.evaluate(async () => {
       const user = window.FirebaseAuthManager?.getCurrentUser?.();
@@ -96,8 +124,17 @@ test.describe('Resume Feedback', () => {
     
     // Click the Generate button to trigger upload and scoring
     const generateBtn = page.locator('#rf-generate-btn');
-    // It may be revealed/enabled after the change event; wait briefly
-    await generateBtn.waitFor({ state: 'attached', timeout: 10000 }).catch(() => {});
+    
+    // Wait for button to exist - don't silently catch errors here
+    await generateBtn.waitFor({ state: 'attached', timeout: 15000 });
+    
+    // Verify we're still on the correct page before interacting
+    const currentURL = page.url();
+    if (!currentURL.includes('resume-feedback')) {
+      throw new Error(`Page navigated away from resume-feedback. Current URL: ${currentURL}`);
+    }
+    
+    // Now check if button is enabled
     await expect(generateBtn).toBeEnabled({ timeout: 10000 });
     await generateBtn.click();
     
