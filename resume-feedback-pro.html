@@ -2281,12 +2281,9 @@
         uploadInput.addEventListener('change', function(e) {
           const file = e.target.files[0];
           if (file) {
-            // Clear job title input when new file is selected
-            const jobTitleInput = document.getElementById('rf-job-title');
-            if (jobTitleInput) {
-              jobTitleInput.value = '';
-              currentJobTitle = null;
-            }
+            // Preserve targeted role selection when uploading a resume
+            // Don't clear job title input - user may want to analyze different resumes for the same role
+            // Only clear if explicitly needed (e.g., error handling)
             
             // Store file name in localStorage for persistence
             localStorage.setItem('lastUploadedResumeName', file.name);
