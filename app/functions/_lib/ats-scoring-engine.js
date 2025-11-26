@@ -419,21 +419,27 @@ function scoreStructureAndCompleteness(resumeText) {
   
   // Check section order (Contact, Experience, Education, Skills)
   const textLower = resumeText.toLowerCase();
-  const contactIndex = Math.min(
+  // Filter out -1 values before Math.min to avoid incorrect results when any term is missing
+  const contactIndices = [
     textLower.indexOf('email'),
     textLower.indexOf('phone'),
     textLower.indexOf('@')
-  );
-  const experienceIndex = Math.min(
+  ].filter(idx => idx !== -1);
+  const contactIndex = contactIndices.length > 0 ? Math.min(...contactIndices) : -1;
+  
+  const experienceIndices = [
     textLower.indexOf('experience'),
     textLower.indexOf('work history'),
     textLower.indexOf('employment')
-  );
-  const educationIndex = Math.min(
+  ].filter(idx => idx !== -1);
+  const experienceIndex = experienceIndices.length > 0 ? Math.min(...experienceIndices) : -1;
+  
+  const educationIndices = [
     textLower.indexOf('education'),
     textLower.indexOf('degree'),
     textLower.indexOf('university')
-  );
+  ].filter(idx => idx !== -1);
+  const educationIndex = educationIndices.length > 0 ? Math.min(...educationIndices) : -1;
   
   if (contactIndex === -1 || contactIndex > 500) {
     score -= 2;
