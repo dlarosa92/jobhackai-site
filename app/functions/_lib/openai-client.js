@@ -66,10 +66,19 @@ export async function callOpenAI({
   };
 
   // KV-based prompt+input cache (our own cache layer, not OpenAI native)
+  // Include all parameters that affect the response to prevent cache collisions
   let cachedResponse = null;
   let cacheKey = null;
   if (systemPrompt && env.JOBHACKAI_KV) {
-    cacheKey = `openai_cache:${hashString(systemPrompt + JSON.stringify(messages))}`;
+    const cacheData = {
+      systemPrompt,
+      messages,
+      model,
+      maxTokens,
+      temperature,
+      responseFormat: responseFormat ? JSON.stringify(responseFormat) : null
+    };
+    cacheKey = `openai_cache:${hashString(JSON.stringify(cacheData))}`;
     cachedResponse = await env.JOBHACKAI_KV.get(cacheKey);
     if (cachedResponse) {
       const cached = JSON.parse(cachedResponse);

@@ -653,7 +653,8 @@ function buildGrammarScore(score, band = null) {
     return {
       score,
       feedback:
-        'Automated grammar scoring may be unreliable for this document (for example, scanned, very short, or non-English).'
+        'Automated grammar scoring may be unreliable for this document (for example, scanned, very short, or non-English).',
+      aiCheckRequired: false // Don't run AI check on low-confidence inputs
     };
   }
 
@@ -671,7 +672,12 @@ function buildGrammarScore(score, band = null) {
   } else {
     feedback = 'Severe grammar and spelling issues. Professional editing is recommended.';
   }
-  return { score, feedback };
+  
+  // Set aiCheckRequired flag when rule-based score is perfect (>= 9)
+  // This triggers AI verification in hybrid-grammar-scoring.js
+  const aiCheckRequired = score >= 9;
+  
+  return { score, feedback, aiCheckRequired };
 }
 
 /**
