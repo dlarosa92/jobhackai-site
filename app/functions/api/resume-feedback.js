@@ -334,6 +334,25 @@ export async function onRequest(context) {
         // Cache valid for 24 hours
         if (cacheAge < 86400000) {
           cachedResult = cachedData.result;
+          
+          // Validate cached result - skip if incomplete when job title is provided
+          // This prevents serving incomplete results that would prompt users to regenerate
+          // (saving tokens by avoiding unnecessary user-initiated regenerations)
+          if (normalizedJobTitle && normalizedJobTitle.trim().length > 0 && 
+              normalizedJobTitle !== 'general' && 
+              (!cachedResult.roleSpecificFeedback || 
+               (cachedResult.roleSpecificFeedback && 
+                typeof cachedResult.roleSpecificFeedback !== 'string' && // Not old array format
+                !cachedResult.roleSpecificFeedback.targetRoleUsed))) {
+            console.log(`[RESUME-FEEDBACK] Skipping incomplete cached result (missing role-specific feedback)`, {
+              requestId,
+              resumeId: sanitizedResumeId,
+              jobTitle: normalizedJobTitle,
+              hasRoleSpecificFeedback: !!cachedResult.roleSpecificFeedback,
+              roleSpecificFeedbackType: typeof cachedResult.roleSpecificFeedback
+            });
+            cachedResult = null; // Force regeneration to get complete result
+          }
         }
       }
     }
@@ -448,6 +467,22 @@ export async function onRequest(context) {
         // Capture token usage from OpenAI response
         if (aiResponse && aiResponse.usage) {
           tokenUsage = aiResponse.usage.totalTokens || 0;
+        }
+        
+        // Check for truncation BEFORE parsing - truncated JSON will always fail to parse
+        if (aiResponse && aiResponse.finishReason === 'length') {
+          lastError = new Error('Response truncated at token limit');
+          console.warn(`[RESUME-FEEDBACK] Response truncated at token limit (attempt ${attempt + 1}/${maxRetries})`, {
+            requestId,
+            finishReason: aiResponse.finishReason,
+            completionTokens: aiResponse.usage?.completionTokens,
+            totalTokens: aiResponse.usage?.totalTokens
+          });
+          if (attempt < maxRetries - 1) {
+            const waitTime = Math.pow(2, attempt) * 1000;
+            await new Promise(resolve => setTimeout(resolve, waitTime));
+          }
+          continue; // Retry - don't try to parse truncated JSON
         }
         
         // Handle falsy content: treat as error and apply backoff
