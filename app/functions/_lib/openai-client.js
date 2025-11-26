@@ -197,8 +197,12 @@ export async function callOpenAI({
       // Check if this is a rate limit error
       const isRateLimit = String(error.message || '').includes('Rate limit');
 
-      // For rate limit errors, retry with exponential backoff
+      // For rate limit errors, retry with exponential backoff (same logic as 429 handler)
       if (isRateLimit && attempt < maxRetries - 1) {
+        // Use exponential backoff: 1s, 2s, 4s delays (similar to 429 handler)
+        const waitTime = Math.min(60000 * Math.pow(2, attempt), 60000);
+        console.log(`[OPENAI] Rate limited (from exception), retrying after ${waitTime}ms`, { feature, attempt, model: activeModel });
+        await sleep(waitTime);
         continue;
       }
 
