@@ -27,6 +27,15 @@ function cleanResumeForGrammarAI(text) {
 }
 
 /**
+ * Create a deep copy of the rule-based scores object
+ * @param {Object} scores - Original scores object
+ * @returns {Object} Deep copy of scores object
+ */
+function deepCopyScores(scores) {
+  return JSON.parse(JSON.stringify(scores));
+}
+
+/**
  * Apply hybrid grammar scoring with AI verification
  * Only runs AI check if rule-based score is perfect (aiCheckRequired flag)
  * Uses Bugbot's fixed deduction logic: originalScore - 3
@@ -36,12 +45,15 @@ function cleanResumeForGrammarAI(text) {
  * @param {string} params.resumeText - Resume text to check
  * @param {Object} params.env - Environment variables
  * @param {string} [params.resumeId] - Optional resume ID for logging
- * @returns {Promise<Object>} Updated ruleBasedScores object
+ * @returns {Promise<Object>} Updated ruleBasedScores object (deep copy, does not mutate input)
  */
 export async function applyHybridGrammarScoring({ ruleBasedScores, resumeText, env, resumeId }) {
+  // Create a deep copy to avoid mutating the original object
+  const scoresCopy = deepCopyScores(ruleBasedScores);
+  
   // Only proceed if AI check is required (rule-based score is perfect)
-  if (!ruleBasedScores.grammarScore?.aiCheckRequired) {
-    return ruleBasedScores;
+  if (!scoresCopy.grammarScore?.aiCheckRequired) {
+    return scoresCopy;
   }
 
   try {
@@ -50,7 +62,7 @@ export async function applyHybridGrammarScoring({ ruleBasedScores, resumeText, e
     
     if (!cleanedText || cleanedText.length < 10) {
       console.warn('[HYBRID-GRAMMAR] Cleaned text too short, skipping AI check');
-      return ruleBasedScores;
+      return scoresCopy;
     }
 
     // Call AI verification
@@ -59,16 +71,16 @@ export async function applyHybridGrammarScoring({ ruleBasedScores, resumeText, e
     if (errorsPresent) {
       // Apply Bugbot's fixed deduction logic: originalScore - 3
       const deduction = 3;
-      const originalScore = ruleBasedScores.grammarScore.score;
+      const originalScore = scoresCopy.grammarScore.score;
       const newScore = Math.max(0, originalScore - deduction);
-      ruleBasedScores.grammarScore.score = newScore;
+      scoresCopy.grammarScore.score = newScore;
       
       // Update feedback message
-      ruleBasedScores.grammarScore.feedback =
+      scoresCopy.grammarScore.feedback =
         'Some grammar or spelling inconsistencies were detected. Review and correct misspellings.';
       
       // Recalculate overall score using shared helper
-      ruleBasedScores.overallScore = calcOverallScore(ruleBasedScores);
+      scoresCopy.overallScore = calcOverallScore(scoresCopy);
       
       console.log('[GRAMMAR-AI] checked:', { 
         resumeId: resumeId || 'unknown', 
@@ -88,6 +100,6 @@ export async function applyHybridGrammarScoring({ ruleBasedScores, resumeText, e
     console.error('[GRAMMAR-AI] Grammar check error (non-fatal):', grammarCheckError);
   }
 
-  return ruleBasedScores;
+  return scoresCopy;
 }
 
