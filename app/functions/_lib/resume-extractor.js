@@ -63,18 +63,18 @@ export async function extractResumeText(file, fileName) {
       }
     }
 
-    // Validate extracted text
-    if (!text || text.trim().length < 50) {
+    // Clean up text first to ensure consistent validation
+    text = cleanText(text);
+    
+    // Validate extracted text (after cleaning for consistency)
+    if (!text || text.length < 50) {
       throw new Error('Could not extract readable text from file. Please upload a text-based résumé or use our DOCX template.');
     }
 
-    // Check if OCR output is too short (likely unreadable)
+    // Check if OCR output is too short (likely unreadable) - after cleaning for consistency
     if (ocrUsed && text.length < 500) {
       throw new Error('Unreadable scan detected. Please upload a higher-quality file or use our DOCX template.');
     }
-
-    // Clean up text
-    text = cleanText(text);
     
     // Detect multi-column layout (heuristic: many short lines)
     if (!isMultiColumn) {
