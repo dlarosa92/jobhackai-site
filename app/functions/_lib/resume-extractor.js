@@ -210,8 +210,13 @@ function cleanText(text) {
   text = text.replace(/â€™/g, "'");
   text = text.replace(/â€œ/g, '"');
   text = text.replace(/â€/g, '"');
-  text = text.replace(/â€"/g, '—');
-  text = text.replace(/â€"/g, '–');
+  // Fix em dash mojibake (UTF-8 0xE2 0x80 0x94 decoded as Latin-1)
+  // The pattern looks identical to en dash in source, but last byte differs (0x94 vs 0x93)
+  // Use hex escape \x94 to match the actual byte 0x94 (148 decimal) for em dash
+  text = text.replace(/â€\x94/g, '—');
+  // Fix en dash mojibake (UTF-8 0xE2 0x80 0x93 decoded as Latin-1)
+  // Use hex escape \x93 to match the actual byte 0x93 (147 decimal) for en dash
+  text = text.replace(/â€\x93/g, '–');
   
   // Trim
   text = text.trim();
