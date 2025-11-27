@@ -1,0 +1,50 @@
+name: ATS Scoring & Grammar Tests
+
+on:
+  push:
+    branches: [main, dev0]
+    paths:
+      - 'app/functions/_lib/**'
+      - 'app/functions/dictionaries/**'
+  pull_request:
+    branches: [main, dev0]
+    paths:
+      - 'app/functions/_lib/**'
+      - 'app/functions/dictionaries/**'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: app/package-lock.json
+
+      - name: Install dependencies
+        working-directory: app
+        run: npm ci
+
+      - name: Verify dictionary exists
+        working-directory: app/functions
+        run: |
+          if [ ! -f "dictionaries/english-words.txt" ]; then
+            echo "❌ Dictionary file not found. Please vendor it in app/functions/dictionaries/english-words.txt"
+            exit 1
+          fi
+          echo "✅ Dictionary file found"
+
+      - name: Run grammar engine tests
+        working-directory: app/functions/_lib/__tests__
+        run: node grammar-engine.test.mjs
+
+      - name: Run ATS scoring tests
+        working-directory: app/functions/_lib/__tests__
+        run: node ats-scoring-engine.test.mjs
+
+

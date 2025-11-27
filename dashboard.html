@@ -227,18 +227,6 @@
       background: #00c965;
       outline: none;
     }
-    .feature-card .included-badge {
-      color: #00C853;
-      font-size: 0.98rem;
-      font-weight: 600;
-      margin-top: 0.5rem;
-      display: flex;
-      align-items: center;
-      gap: 0.3rem;
-    }
-    .feature-card .included-badge svg {
-      vertical-align: middle;
-    }
     @media (max-width: 700px) {
       .dashboard-banner, .dashboard-features {
         padding-left: 0.5rem;
@@ -483,7 +471,7 @@
       display: block;
       pointer-events: auto;
     }
-    .feature-card .feature-action .usage-indicator {
+    .feature-card .feature-action     .usage-indicator {
       flex-basis: 100%;
       margin-top: 0.45rem;
       color: #6B7280;
@@ -662,83 +650,8 @@
     <!-- Mobile navigation will be dynamically populated by navigation.js -->
   </nav>
   <div class="mobile-nav-backdrop" id="mobileNavBackdrop"></div>
-  <script>
-    // Hamburger menu toggle with proper state management and click-outside handling
-    (function initMobileMenu() {
-      const mobileToggle = document.querySelector('.mobile-toggle');
-      const mobileNav = document.getElementById('mobileNav');
-      const backdrop = document.getElementById('mobileNavBackdrop');
-      
-      if (!mobileToggle || !mobileNav) return;
-      
-      let isMenuOpen = false;
-      
-      // Function to open menu
-      function openMenu() {
-        if (isMenuOpen) return;
-        isMenuOpen = true;
-        mobileNav.classList.add('open');
-        if (backdrop) backdrop.classList.add('show');
-        mobileToggle.setAttribute('aria-expanded', 'true');
-        // Prevent body scroll when menu is open
-        document.body.style.overflow = 'hidden';
-      }
-      
-      // Function to close menu
-      function closeMenu() {
-        if (!isMenuOpen) return;
-        isMenuOpen = false;
-        mobileNav.classList.remove('open');
-        if (backdrop) backdrop.classList.remove('show');
-        mobileToggle.setAttribute('aria-expanded', 'false');
-        // Restore body scroll
-        document.body.style.overflow = '';
-      }
-      
-      // Toggle menu on button click
-      mobileToggle.addEventListener('click', (e) => {
-        e.stopPropagation();
-        if (isMenuOpen) {
-          closeMenu();
-        } else {
-          openMenu();
-        }
-      });
-      
-      // Close menu when clicking on a link
-      mobileNav.addEventListener('click', (e) => {
-        if (e.target.tagName === 'A') {
-          closeMenu();
-        }
-      });
-      
-      // Close menu when clicking on backdrop or outside
-      if (backdrop) {
-        backdrop.addEventListener('click', closeMenu);
-      }
-      document.addEventListener('click', (e) => {
-        if (isMenuOpen && 
-            !mobileNav.contains(e.target) && 
-            !mobileToggle.contains(e.target)) {
-          closeMenu();
-        }
-      });
-      
-      // Close menu on Escape key
-      document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape' && isMenuOpen) {
-          closeMenu();
-        }
-      });
-      
-      // Close menu on window resize (if resizing to desktop)
-      window.addEventListener('resize', () => {
-        if (window.innerWidth > 900 && isMenuOpen) {
-          closeMenu();
-        }
-      });
-    })();
-  </script>
+  <!-- Centralized mobile menu handler -->
+  <script src="js/mobile-menu.js?v=20250115-1"></script>
   <!-- Main Content -->
   <main>
     <div id="dashboard-root">
@@ -773,6 +686,9 @@
   </footer>
   <script src="js/free-account-manager.js"></script>
   <script src="js/universal-logout.js?v=20251007-2"></script>
+  
+  <!-- UX Enhancement Components -->
+  <script src="js/state-persistence.js?v=20250115-1"></script>
   <script>
     // --- CROSS-TAB LOGOUT SYNC ONLY ---
     (function(){
@@ -975,7 +891,15 @@
       const previousPlan = localStorage.getItem('previous-plan');
       if (previousPlan === 'free' && (currentPlan === 'trial' || currentPlan === 'essential' || currentPlan === 'pro' || currentPlan === 'premium')) {
         localStorage.setItem('was-free-user', 'true');
-        console.log('✅ Marked user as former free user (upgraded to', currentPlan + ')');
+        // CRITICAL: Store flag indicating user had free ATS score at upgrade time
+        // This ensures modal only shows if they had a score BEFORE upgrading
+        const hadFreeATSScore = localStorage.getItem('lastATSScore') || sessionStorage.getItem('currentAtsScore');
+        if (hadFreeATSScore) {
+          localStorage.setItem('had-free-ats-score-at-upgrade', 'true');
+          console.log('✅ Marked user as former free user with ATS score (upgraded to', currentPlan + ')');
+        } else {
+          console.log('✅ Marked user as former free user without ATS score (upgraded to', currentPlan + ')');
+        }
       }
       // Update previous plan for next check (only if it changed)
       if (previousPlan !== currentPlan) {
@@ -1078,7 +1002,7 @@
         key: "ats",
         title: "ATS Resume Score",
         desc: "Receive an overall ATS compliance score for your resume, highlighting key areas to improve.",
-        action: "Upload PDF",
+        action: "Upload Resume",
         included: true
       },
       {
@@ -1157,14 +1081,166 @@
         return null;
       }
     }
-    // Example ATS score (replace with real value from backend or Google Sheets)
-    const atsScore = {
-      percent: 78, // 0-100
-      value: 78,
+    // ATS score - initialized as null, will be populated from state persistence
+    let atsScore = {
+      percent: null, // Will be set from state persistence
+      value: null,
       max: 100,
-      summary: "Your resume meets many ATS criteria and is likely to be noticed."
+      summary: null
     };
+    
+    // Load ATS score from state persistence BEFORE rendering
+    async function loadAtsScoreFromStorage() {
+      let lastScore = null;
+      let lastSummary = null;
+      let lastJobTitle = null;
+      let lastBreakdown = null;
+      
+      // Try state persistence utility first (handles cache expiration)
+      if (window.JobHackAIStatePersistence) {
+        const cachedScore = window.JobHackAIStatePersistence.loadATSScore();
+        if (cachedScore && cachedScore.score !== null && cachedScore.score !== undefined) {
+          lastScore = cachedScore.score.toString();
+          lastJobTitle = cachedScore.jobTitle || null;
+          lastBreakdown = cachedScore.breakdown || null;
+          // Generate summary from score if breakdown available
+          if (cachedScore.score > 85) {
+            lastSummary = 'Excellent! Your resume is highly ATS compatible.';
+          } else if (cachedScore.score > 70) {
+            lastSummary = 'Your resume meets many ATS criteria and is likely to be noticed.';
+          } else {
+            lastSummary = 'Your resume needs improvement for better ATS results.';
+          }
+        }
+      }
+      
+      // Fallback to sessionStorage/localStorage if state persistence not available or no cached score
+      if (!lastScore) {
+        lastScore = sessionStorage.getItem('currentAtsScore') || localStorage.getItem('lastATSScore');
+        lastSummary = localStorage.getItem('lastATSSummary');
+        const breakdownStr = sessionStorage.getItem('currentAtsBreakdown') || localStorage.getItem('lastATSBreakdown');
+        if (breakdownStr) {
+          try {
+            lastBreakdown = JSON.parse(breakdownStr);
+          } catch (e) {
+            console.warn('[DASHBOARD] Failed to parse breakdown:', e);
+          }
+        }
+      }
+      
+      // If still no score, try KV fallback via API
+      if (!lastScore) {
+        try {
+          const user = window.FirebaseAuthManager?.getCurrentUser?.();
+          if (user) {
+            const idToken = await user.getIdToken();
+            const kvResponse = await fetch('/api/ats-score-persist', {
+              method: 'GET',
+              headers: {
+                'Authorization': `Bearer ${idToken}`
+              }
+            });
+            
+            if (kvResponse.ok) {
+              const kvData = await kvResponse.json();
+              if (kvData.success && kvData.data) {
+                const resumeData = kvData.data;
+                lastScore = resumeData.score?.toString();
+                lastJobTitle = resumeData.jobTitle || null;
+                lastBreakdown = resumeData.breakdown || null;
+                
+                // Generate summary from score
+                if (resumeData.score > 85) {
+                  lastSummary = 'Excellent! Your resume is highly ATS compatible.';
+                } else if (resumeData.score > 70) {
+                  lastSummary = 'Your resume meets many ATS criteria and is likely to be noticed.';
+                } else {
+                  lastSummary = 'Your resume needs improvement for better ATS results.';
+                }
+                
+                // Cache KV results back to localStorage via state persistence
+                // BUT: Only if localStorage doesn't already have data with feedback
+                // This prevents overwriting feedback that was saved from feedback page
+                if (window.JobHackAIStatePersistence && lastScore) {
+                  // Check if localStorage already has data with feedback
+                  const existingData = window.JobHackAIStatePersistence.loadATSScore(null);
+                  const hasExistingFeedback = existingData && existingData.breakdown && 
+                    (existingData.breakdown.keywordScore?.feedback || 
+                     existingData.breakdown.formattingScore?.feedback ||
+                     existingData.breakdown.structureScore?.feedback ||
+                     existingData.breakdown.toneScore?.feedback ||
+                     existingData.breakdown.grammarScore?.feedback);
+                  
+                  // Only save from KV if:
+                  // 1. No existing data in localStorage, OR
+                  // 2. Existing data doesn't have feedback (KV might be newer or have feedback)
+                  // DO NOT save from KV if existing data already has feedback (preserve existing feedback)
+                  const kvHasFeedback = lastBreakdown && 
+                    (lastBreakdown.keywordScore?.feedback || 
+                     lastBreakdown.formattingScore?.feedback ||
+                     lastBreakdown.structureScore?.feedback ||
+                     lastBreakdown.toneScore?.feedback ||
+                     lastBreakdown.grammarScore?.feedback);
+                  
+                  // Only save from KV if no existing data OR existing doesn't have feedback
+                  // This ensures existing feedback (from feedback page) is never overwritten
+                  if (!existingData || !hasExistingFeedback) {
+                    // Merge KV breakdown with existing feedback if both exist
+                    let mergedBreakdown = lastBreakdown || {};
+                    if (existingData && existingData.breakdown && !hasExistingFeedback && kvHasFeedback) {
+                      // KV has feedback, existing doesn't - use KV feedback
+                      mergedBreakdown = { ...lastBreakdown };
+                    } else if (existingData && existingData.breakdown) {
+                      // Existing has breakdown but no feedback - merge with KV
+                      mergedBreakdown = { ...lastBreakdown };
+                      // Preserve any score data from existing if KV doesn't have it
+                      ['keywordScore', 'formattingScore', 'structureScore', 'toneScore', 'grammarScore'].forEach(key => {
+                        if (existingData.breakdown[key] && !mergedBreakdown[key]) {
+                          mergedBreakdown[key] = existingData.breakdown[key];
+                        }
+                      });
+                    }
+                    
+                    window.JobHackAIStatePersistence.saveATSScore({
+                      score: parseFloat(lastScore),
+                      breakdown: mergedBreakdown,
+                      resumeId: resumeData.resumeId || '',
+                      jobTitle: lastJobTitle
+                    });
+                  } else {
+                    // Existing data has feedback - preserve it completely (don't overwrite)
+                    console.log('[DASHBOARD] Preserving existing localStorage data with feedback, skipping KV overwrite');
+                  }
+                }
+                
+                console.log('[DASHBOARD] Loaded ATS score from KV:', lastScore);
+              }
+            }
+          }
+        } catch (kvError) {
+          console.warn('[DASHBOARD] KV fetch failed:', kvError);
+        }
+      }
+      
+      // Only update score if we have valid data (prevent reset to 0% or 78%)
+      if (lastScore) {
+        const scoreValue = parseInt(lastScore, 10);
+        // Only update if score is valid (0-100)
+        if (!isNaN(scoreValue) && scoreValue >= 0 && scoreValue <= 100) {
+          atsScore.value = scoreValue;
+          atsScore.percent = scoreValue;
+          atsScore.summary = lastSummary || 'Your resume was analyzed.';
+          atsScore.jobTitle = lastJobTitle;
+          atsScore.breakdown = lastBreakdown;
+        }
+      }
+      
+      return atsScore;
+    }
+    
     async function renderDashboard(user) {
+      // Load ATS score BEFORE rendering (now async)
+      await loadAtsScoreFromStorage();
       const root = document.getElementById('dashboard-root');
       const unlocked = featureMatrix[user.plan] || [];
       
@@ -1201,6 +1277,30 @@
             return '';
         }
       }
+      
+      // Build "Unlock Deeper Insights" HTML if needed
+      let unlockInsightsHTML = '';
+      if (atsScore.percent !== null && atsScore.percent !== undefined) {
+        try {
+          const hasRoleFeedback = window.JobHackAIStatePersistence ? (() => {
+            const cached = window.JobHackAIStatePersistence.loadATSScore(null);
+            return cached && cached.roleSpecificFeedback && Array.isArray(cached.roleSpecificFeedback) && cached.roleSpecificFeedback.length > 0;
+          })() : false;
+          
+          // Show "Unlock Deeper Insights" if:
+          // 1. User is on free plan (only free users see this banner)
+          // 2. ATS score exists but no role feedback
+          // This banner should NOT show if the user already has role feedback or is on a paid plan
+          const shouldShow = user.plan === 'free' && !hasRoleFeedback && atsScore.percent !== null;
+          
+          if (shouldShow) {
+            unlockInsightsHTML = '<div style="margin-top:1rem;padding:1rem;background:rgba(5,150,105,0.08);border:1px solid rgba(5,150,105,0.2);border-radius:8px;"><div style="display:flex;align-items:flex-start;gap:0.75rem;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0;margin-top:0.125rem;color:#00E676;"><path d="M12 2L2 7l10 5 10-5-10-5z"></path><path d="M2 17l10 5 10-5"></path><path d="M2 12l10 5 10-5"></path></svg><div style="flex:1;"><div style="font-weight:600;color:#232B36;margin-bottom:0.25rem;font-size:0.95rem;">Unlock Deeper Insights</div><div style="color:#6B7280;margin-bottom:0.75rem;line-height:1.4;font-size:0.9rem;">We\'ve scored this resume against ATS rules. Get detailed feedback and role-specific suggestions.</div><a href="resume-feedback-pro.html" class="btn-primary" style="display:inline-block;padding:0.5rem 1rem;font-size:0.9rem;text-decoration:none;white-space:nowrap;">Get Detailed Feedback</a></div></div></div>';
+          }
+        } catch (e) {
+          // If state persistence not available, don't show the box
+        }
+      }
+      
       let banner = `<div class="dashboard-banner">
         <a href="#" class="settings-link" aria-label="Account Settings">
           <svg width="20" height="20" fill="none" stroke="#6B7280" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06A1.65 1.65 0 0015 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 008.6 15a1.65 1.65 0 00-1.82-.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.6 8.6a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 008.6 4.6a1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0015 4.6a1.65 1.65 0 001.82.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 8.6a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06A1.65 1.65 0 0015 15a1.65 1.65 0 001.82.33z"/></svg>
@@ -1228,25 +1328,54 @@
           <div class="user-email">${user.email}</div>
         </div>
         <div class="ats-score-row">
-          ${atsDonut(atsScore.percent)}
-          <div class="ats-score-details">
-            <span class="ats-score-label">${atsScore.value} / ${atsScore.max}</span>
-            <span class="ats-score-summary">${atsScore.summary}</span>
-          </div>
+          ${atsScore.percent !== null && atsScore.percent !== undefined ? `
+            ${atsDonut(atsScore.percent)}
+            <div class="ats-score-details">
+              <span class="ats-score-label">${atsScore.value} / ${atsScore.max}</span>
+              <span class="ats-score-summary">${atsScore.summary}</span>
+            </div>
+          ` : `
+            <div class="ats-score-details">
+              <span class="ats-score-label" style="color:var(--color-text-muted);">— / —</span>
+              <span class="ats-score-summary" style="color:var(--color-text-muted);font-style:italic;">Upload your résumé above to generate your ATS Score and detailed feedback.</span>
+            </div>
+          `}
         </div>
+        ${unlockInsightsHTML}
         <div class="status-action-row">
           <span class="user-plan-badge ${user.plan}">${planIcon(user.plan)}${user.plan === 'trial' && user.trialEndsAt ? `Trial (${daysLeft(user.trialEndsAt)} days left)` : user.plan.charAt(0).toUpperCase() + user.plan.slice(1)}</span>
           ${(user.plan === 'cancelled') ? `<a href="pricing-a.html" class="upgrade-btn">Reactivate</a>` : ''}
         </div>
       </div>`;
-      // Always load last ATS score/result from localStorage if present
-      let lastScore = localStorage.getItem('lastATSScore');
-      let lastSummary = localStorage.getItem('lastATSSummary');
-      if (lastScore && lastSummary) {
-        atsScore.value = parseInt(lastScore, 10);
-        atsScore.percent = parseInt(lastScore, 10);
-        atsScore.summary = lastSummary;
+      // Show one-time "Carried Over ATS Score" message for migrated users
+      // Check if user has legacy score and hasn't seen the message yet
+      const hasLegacyScore = localStorage.getItem('lastATSScore') || sessionStorage.getItem('currentAtsScore');
+      const hasSeenCarriedOverMessage = localStorage.getItem('hasSeenCarriedOverAtsMessage') === 'true';
+      
+      if (hasLegacyScore && !hasSeenCarriedOverMessage && atsScore.percent !== null) {
+        // Show one-time message
+        const carriedOverBanner = document.createElement('div');
+        carriedOverBanner.style.cssText = `
+          background: #EFF6FF;
+          border-left: 4px solid #3B82F6;
+          color: #1E40AF;
+          padding: 0.8rem 1rem;
+          border-radius: 8px;
+          margin: 1rem auto;
+          max-width: 540px;
+          font-size: 0.98rem;
+        `;
+        carriedOverBanner.innerHTML = `
+          ℹ️ <strong>Carried Over ATS Score</strong> — Your previous ATS score has been loaded. Upload a new resume to get an updated score.
+        `;
+        const bannerContainer = document.querySelector('.dashboard-banner');
+        if (bannerContainer && bannerContainer.parentNode) {
+          bannerContainer.parentNode.insertBefore(carriedOverBanner, bannerContainer.nextSibling);
+        }
+        // Mark as seen
+        localStorage.setItem('hasSeenCarriedOverAtsMessage', 'true');
       }
+      
       // Features
       let featuresHtml = '<div class="dashboard-features">';
       // Always render ATS Scoring first
@@ -1261,119 +1390,98 @@
         featuresHtml += `<div class="feature-action">`;
         if (isUnlocked && feature.key === 'ats') {
           // ATS Scoring: real upload
-          featuresHtml += `<input type=\"file\" id=\"ats-upload-input\" accept=\"application/pdf\" style=\"display:none;\" />`;
+          featuresHtml += `<input type=\"file\" id=\"ats-upload-input\" accept=\".pdf,.docx,.txt\" title=\"Upload your resume in PDF, DOCX, or TXT format\" style=\"display:none;\" />`;
           featuresHtml += `<button class=\"btn-primary\" id=\"ats-upload-btn\">${feature.action}</button>`;
-          let usageText = '';
-          let tooltip = '';
-          if (user.plan === 'free') {
-            // Check lifetime credit
-            const creditKey = `creditsByUid:${user.uid}`;
-            const creditsData = localStorage.getItem(creditKey);
-            const credits = creditsData ? JSON.parse(creditsData) : { ats_free_lifetime: 1 };
-            
-            // Check if user has uploaded a resume
-            const hasUploadedResume = localStorage.getItem('hasUploadedResume') === 'true' || 
-                                      localStorage.getItem('lastUploadedResume') || 
-                                      localStorage.getItem('lastATSScore');
-            
-            if (credits.ats_free_lifetime > 0 && !hasUploadedResume) {
-              // User has credit available and hasn't uploaded yet
-              usageText = 'You have 1 free ATS score (lifetime).';
-              tooltip = `<span class="jh-tooltip-trigger" tabindex="0" aria-label="More info" style="margin-left:0.4em;vertical-align:middle;">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false" style="vertical-align:middle"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="8"/><line x1="12" y1="12" x2="12" y2="16"/></svg>
-                <span class="jh-tooltip-text">This is a one-time free score. After use, upgrade for unlimited ATS scoring.</span>
-              </span>`;
-            } else if (hasUploadedResume && credits.ats_free_lifetime > 0) {
-              // User uploaded resume but still has credit (shouldn't happen, but handle gracefully)
-              usageText = 'Resume uploaded. Upgrade to trial or paid plan for unlimited scoring.';
-              tooltip = `<span class="jh-tooltip-trigger" tabindex="0" aria-label="More info" style="margin-left:0.4em;vertical-align:middle;">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false" style="vertical-align:middle"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="8"/><line x1="12" y1="12" x2="12" y2="16"/></svg>
-                <span class="jh-tooltip-text">Upgrade to unlock unlimited ATS scoring and access all features.</span>
-              </span>`;
-            } else {
-              // Credit used - show upgrade message
-              usageText = 'Free ATS score used. Upgrade to trial or paid plan for unlimited scoring.';
-              tooltip = `<span class="jh-tooltip-trigger" tabindex="0" aria-label="More info" style="margin-left:0.4em;vertical-align:middle;">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false" style="vertical-align:middle"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="8"/><line x1="12" y1="12" x2="12" y2="16"/></svg>
-                <span class="jh-tooltip-text">Upgrade to unlock unlimited ATS scoring and access all features.</span>
-              </span>`;
-            }
-          } else if (user.plan === 'trial') {
-            usageText = 'Unlimited ATS resume scoring during your trial.';
-            tooltip = `<span class="jh-tooltip-trigger" tabindex="0" aria-label="More info" style="margin-left:0.4em;vertical-align:middle;">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false" style="vertical-align:middle"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="8"/><line x1="12" y1="12" x2="12" y2="16"/></svg>
-              <span class="jh-tooltip-text">You have unlimited ATS resume scoring during your trial.</span>
-            </span>`;
-          }
-          featuresHtml += `<div class="usage-indicator">${usageText}${tooltip}</div>`;
+          featuresHtml += `<div class="usage-indicator" data-feature="atsScans" data-plan="${user.plan}"></div>`;
         } else if (isUnlocked && feature.key === 'feedback') {
           // Resume Feedback: link to feedback page (unlocked for trial, essential, pro, premium)
           featuresHtml += `<a href=\"resume-feedback-pro.html\" class=\"btn-primary\">Get Detailed Feedback</a>`;
-          let usageText = '';
-          let tooltip = '';
-          if (user.plan === 'trial') {
-            usageText = '3 feedbacks remaining in your trial.';
-            tooltip = `<span class="jh-tooltip-trigger" tabindex="0" aria-label="More info" style="margin-left:0.4em;vertical-align:middle;">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false" style="vertical-align:middle"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="8"/><line x1="12" y1="12" x2="12" y2="16"/></svg>
-              <span class="jh-tooltip-text">You can get up to 3 detailed feedbacks during your trial. Upgrade to Pro for unlimited feedback.</span>
-            </span>`;
-          } else if (user.plan === 'essential') {
-            // For demo, assume 3 left (replace with dynamic count if available)
-            usageText = '3 resume feedbacks left this month.';
-            tooltip = `<span class="jh-tooltip-trigger" tabindex="0" aria-label="More info" style="margin-left:0.4em;vertical-align:middle;">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false" style="vertical-align:middle"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="8"/><line x1="12" y1="12" x2="12" y2="16"/></svg>
-              <span class="jh-tooltip-text">Upgrade to Pro for unlimited feedback.</span>
-            </span>`;
-          }
-          featuresHtml += `<div class="usage-indicator">${usageText}${tooltip}</div>`;
+          featuresHtml += `<div class="usage-indicator" data-feature="resumeFeedback" data-plan="${user.plan}"></div>`;
         } else if (isUnlocked && feature.key === 'interview') {
           // Interview Questions: link to interview questions page (unlocked for trial, essential, pro, premium)
           featuresHtml += `<a href=\"interview-questions.html\" class=\"btn-primary\">${feature.action}</a>`;
-          let usageText = '';
-          let tooltip = '';
-          if (user.plan === 'trial') {
-            usageText = 'Unlimited interview questions during your trial.';
-            tooltip = `<span class="jh-tooltip-trigger" tabindex="0" aria-label="More info" style="margin-left:0.4em;vertical-align:middle;">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false" style="vertical-align:middle"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="8"/><line x1="12" y1="12" x2="12" y2="16"/></svg>
-              <span class="jh-tooltip-text">Practice as much as you want during your trial.</span>
-            </span>`;
-          }
-          featuresHtml += `<div class="usage-indicator">${usageText}${tooltip}</div>`;
+          featuresHtml += `<div class="usage-indicator" data-feature="interviewQuestions" data-plan="${user.plan}"></div>`;
         } else if (isUnlocked && feature.key === 'rewriting') {
           // Resume Rewriting: link for Pro and Premium
           featuresHtml += `<a href="resume-feedback-pro.html#rewrite" class="btn-primary">Start Rewriting</a>`;
-          if (user.plan === 'pro') {
-            featuresHtml += `<div class="usage-indicator">Unlimited with your Pro plan. <span class="jh-tooltip-trigger" tabindex="0" aria-label="More info" style="margin-left:0.4em;vertical-align:middle;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false" style="vertical-align:middle"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="8"/><line x1="12" y1="12" x2="12" y2="16"/></svg><span class="jh-tooltip-text">Unlimited with your Pro plan.</span></span></div>`;
+          if (user.plan === 'pro' || user.plan === 'premium') {
+            featuresHtml += `<div class="usage-indicator" data-feature="resumeRewrite" data-plan="${user.plan}"></div>`;
           }
         } else if (isUnlocked && feature.key === 'coverLetter') {
           // Cover Letter Generator: link for Pro and Premium
           featuresHtml += `<a href="cover-letter-generator.html" class="btn-primary">Generate Cover Letter</a>`;
-          if (user.plan === 'pro') {
-            featuresHtml += `<div class="usage-indicator">Unlimited with your Pro plan. <span class="jh-tooltip-trigger" tabindex="0" aria-label="More info" style="margin-left:0.4em;vertical-align:middle;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false" style="vertical-align:middle"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="8"/><line x1="12" y1="12" x2="12" y2="16"/></svg><span class="jh-tooltip-text">Unlimited with your Pro plan.</span></span></div>`;
+          if (user.plan === 'pro' || user.plan === 'premium') {
+            featuresHtml += `<div class="usage-indicator" data-feature="coverLetters" data-plan="${user.plan}"></div>`;
           }
         } else if (isUnlocked && feature.key === 'mockInterview') {
           // Mock Interviews: link for Pro and Premium
           featuresHtml += `<a href="mock-interview.html" class="btn-primary">Start Mock Interview</a>`;
-          if (user.plan === 'pro') {
-            featuresHtml += `<div class="usage-indicator">20 mock interviews left this month. <span class="jh-tooltip-trigger" tabindex="0" aria-label="More info" style="margin-left:0.4em;vertical-align:middle;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false" style="vertical-align:middle"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="8"/><line x1="12" y1="12" x2="12" y2="16"/></svg><span class="jh-tooltip-text">Upgrade to Premium for unlimited mock interviews.</span></span></div>`;
+          if (user.plan === 'pro' || user.plan === 'premium') {
+            featuresHtml += `<div class="usage-indicator" data-feature="mockInterviews" data-plan="${user.plan}"></div>`;
           }
         } else if (isUnlocked && feature.key === 'linkedin') {
           // LinkedIn Optimizer: link for Premium
           featuresHtml += `<a href=\"linkedin-optimizer.html\" class=\"btn-primary\">Optimize LinkedIn</a>`;
+          if (user.plan === 'premium') {
+            featuresHtml += `<div class="usage-indicator" data-feature="linkedInOptimizer" data-plan="${user.plan}"></div>`;
+          }
         } else if (isUnlocked && feature.key === 'priorityReview') {
           // Priority Review: icon and text for Premium
-          featuresHtml += `<div style=\"display:flex;align-items:center;gap:0.6rem;margin:0.7rem 0 0.2rem 0;\"><svg width=\"22\" height=\"22\" fill=\"none\" stroke=\"#00E676\" stroke-width=\"2\" viewBox=\"0 0 24 24\"><circle cx=\"12\" cy=\"12\" r=\"10\"/><path d=\"M12 8v4l2.5 2.5\"/></svg><span style=\"font-weight:600;color:#00C853;\">All your AI-generated content will get priority review.</span></div>`;
+          featuresHtml += `<div class="usage-indicator" data-feature="priorityReview" data-plan="${user.plan}"></div>`;
         } else {
           featuresHtml += `<button class=\"btn-locked\" data-feature-key=\"${feature.key}\"><svg width=\"18\" height=\"18\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"#fff\" stroke-width=\"2\"><rect x=\"3\" y=\"11\" width=\"18\" height=\"8\" rx=\"2\"/><path d=\"M7 11V7a5 5 0 0110 0v4\"/></svg> ${feature.action}</button>`;
         }
         featuresHtml += `</div>`;
-        if (isUnlocked && (user.plan === 'trial' || user.plan === 'essential' || user.plan === 'pro' || user.plan === 'premium')) {
-          featuresHtml += `<div class="included-badge"><svg width="16" height="16" fill="#00C853" viewBox="0 0 24 24"><path d="M20.285 6.709a1 1 0 00-1.414-1.418l-9.192 9.192-4.242-4.242a1 1 0 00-1.414 1.414l4.949 4.95a1 1 0 001.414 0l9.899-9.896z"/></svg> Included in ${user.plan === 'trial' ? 'Trial' : user.plan.charAt(0).toUpperCase() + user.plan.slice(1)}</div>`;
-        }
         featuresHtml += `</div>`;
       }
       featuresHtml += '</div>';
       root.innerHTML = banner + featuresHtml;
+      
+      // Render usage indicators using shared component
+      (async function renderUsageIndicators() {
+        try {
+          const token = localStorage.getItem('firebase-id-token');
+          if (!token) {
+            console.warn('[DASHBOARD] No auth token available for usage fetch');
+            return;
+          }
+
+          const usageResponse = await fetch('/api/usage', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`
+            }
+          });
+
+          if (!usageResponse.ok) {
+            console.warn('[DASHBOARD] Failed to fetch usage data');
+            return;
+          }
+
+          const usageData = await usageResponse.json();
+          
+          if (usageData.success && usageData.usage && window.renderUsageIndicator) {
+            // Find all usage indicator containers and render components
+            const indicators = root.querySelectorAll('.usage-indicator[data-feature]');
+            indicators.forEach(container => {
+              const feature = container.getAttribute('data-feature');
+              const plan = container.getAttribute('data-plan') || usageData.plan;
+              
+              if (usageData.usage[feature]) {
+                window.renderUsageIndicator({
+                  feature: feature,
+                  usage: usageData.usage[feature],
+                  plan: plan,
+                  container: container
+                });
+              }
+            });
+          }
+        } catch (error) {
+          console.error('[DASHBOARD] Error loading usage indicators:', error);
+        }
+      })();
       
       // --- Upgrade Pop-up Logic ---
       function showUpgradePopup() {
@@ -1390,10 +1498,14 @@
         }
         
         // CRITICAL: Banner should ONLY show if user uploaded a resume for free ATS BEFORE upgrading
-        // Check if user had uploaded a resume for free ATS scoring
-        const hasATSScoreHistory = localStorage.getItem('lastATSScore') || localStorage.getItem('lastATSSummary');
+        // Check if user was previously on free plan (stored when they upgrade)
+        const wasFreeUser = localStorage.getItem('was-free-user') === 'true';
         
-        // Try to get user UID from Firebase Auth Manager to check credit usage
+        // CRITICAL: Only show if user had a free ATS score AT THE TIME OF UPGRADE
+        // This flag is set when user upgrades from free, and only if they had a score then
+        const hadFreeATSScoreAtUpgrade = localStorage.getItem('had-free-ats-score-at-upgrade') === 'true';
+        
+        // Try to get user UID from Firebase Auth Manager to check credit usage (legacy support)
         const currentUser = window.FirebaseAuthManager?.getCurrentUser?.();
         const creditKey = currentUser?.uid ? `creditsByUid:${currentUser.uid}` : null;
         let hasUsedFreeCredit = false;
@@ -1414,9 +1526,6 @@
           }
         }
         
-        // Check if user was previously on free plan (stored when they upgrade)
-        const wasFreeUser = localStorage.getItem('was-free-user') === 'true';
-        
         // Check legacy free usage data
         const hasFreeUsageData = localStorage.getItem('free-ats-usage');
         let legacyUsedFreeATS = false;
@@ -1434,18 +1543,18 @@
         
         // CRITICAL: Show popup ONLY if:
         // 1. User upgraded from free account, AND
-        // 2. User actually uploaded a resume for free ATS (used their free credit OR has ATS score history)
-        // Do NOT show if user upgraded without uploading a resume first
-        const uploadedResumeForFreeATS = hasUsedFreeCredit || legacyUsedFreeATS || hasATSScoreHistory;
+        // 2. User had a free ATS score AT THE TIME OF UPGRADE (not after)
+        // This prevents showing the modal when users upload resumes after upgrading
+        const uploadedResumeForFreeATS = hadFreeATSScoreAtUpgrade || hasUsedFreeCredit || legacyUsedFreeATS;
         const shouldShowPopup = wasFreeAccount && uploadedResumeForFreeATS;
         
         if (!shouldShowPopup) {
           console.log('ℹ️ [UPGRADE-BANNER] Not showing banner:', {
             wasFreeAccount,
             uploadedResumeForFreeATS,
+            hadFreeATSScoreAtUpgrade,
             hasUsedFreeCredit,
-            legacyUsedFreeATS,
-            hasATSScoreHistory
+            legacyUsedFreeATS
           });
           return;
         }
@@ -1712,13 +1821,151 @@
             }
           }
           
-          // Trigger file input
-          atsUploadInput.click();
+          // Trigger file input - ensure it works on mobile
+          // Mobile browsers require direct user interaction, so we ensure the click is properly handled
+          // The input should be positioned over the button for mobile compatibility
+          try {
+            // For mobile: ensure input is accessible and positioned correctly
+            const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+            
+            if (isMobile) {
+              // On mobile, position the input over the button area
+              const buttonRect = atsUploadBtn.getBoundingClientRect();
+              atsUploadInput.style.position = 'fixed';
+              atsUploadInput.style.top = buttonRect.top + 'px';
+              atsUploadInput.style.left = buttonRect.left + 'px';
+              atsUploadInput.style.width = buttonRect.width + 'px';
+              atsUploadInput.style.height = buttonRect.height + 'px';
+              atsUploadInput.style.opacity = '0';
+              atsUploadInput.style.zIndex = '9999';
+              atsUploadInput.style.pointerEvents = 'auto';
+              atsUploadInput.style.display = 'block';
+              
+              // Trigger click immediately while user gesture is active
+              atsUploadInput.focus();
+              atsUploadInput.click();
+              
+              // Reset after a short delay
+              setTimeout(() => {
+                atsUploadInput.style.position = '';
+                atsUploadInput.style.top = '';
+                atsUploadInput.style.left = '';
+                atsUploadInput.style.width = '';
+                atsUploadInput.style.height = '';
+                atsUploadInput.style.zIndex = '';
+                atsUploadInput.style.display = 'none';
+              }, 200);
+            } else {
+              // Desktop: simple click
+              atsUploadInput.click();
+            }
+          } catch (error) {
+            console.error('Error triggering file input:', error);
+            // Fallback: try direct click
+            atsUploadInput.click();
+          }
         });
         
+        // --- SHARED STATE MANAGEMENT HELPERS ---
+        function clearAtsState() {
+          // Clear old localStorage keys (to avoid stale 78% issues)
+          localStorage.removeItem('lastATSScore');
+          localStorage.removeItem('lastATSSummary');
+          localStorage.removeItem('lastUploadedResume');
+          localStorage.removeItem('lastUploadedResumeName');
+          
+          // Clear shared cross-page state
+          sessionStorage.removeItem('currentResumeId');
+          sessionStorage.removeItem('currentResumeText');
+          sessionStorage.removeItem('currentAtsScore');
+          sessionStorage.removeItem('currentAtsBreakdown');
+        }
+
+        function updateAtsGauge(score) {
+          const donut = document.querySelector('.ats-donut');
+          if (donut) {
+            const radius = 23;
+            const norm = 2 * Math.PI * radius;
+            const progress = (score / 100) * norm;
+            const svg = donut.querySelector('svg');
+            if (svg) {
+              const circles = svg.querySelectorAll('circle');
+              if (circles[1]) circles[1].setAttribute('stroke-dashoffset', (norm - progress));
+            }
+            const text = donut.querySelector('.ats-score-text');
+            if (text) text.textContent = score + '%';
+          }
+          const scoreLabel = document.querySelector('.ats-score-label');
+          if (scoreLabel) scoreLabel.textContent = score + ' / 100';
+        }
+
+        function resetAtsGauge() {
+          updateAtsGauge(0);
+          const scoreSummary = document.querySelector('.ats-score-summary');
+          if (scoreSummary) scoreSummary.textContent = '';
+        }
+
+        function showErrorBanner(message) {
+          // Remove any existing error banner
+          const existingBanner = document.querySelector('.ats-error-banner');
+          if (existingBanner) existingBanner.remove();
+          
+          const errorBanner = document.createElement('div');
+          errorBanner.className = 'ats-error-banner';
+          errorBanner.style.cssText = 'background:#FEE2E2;border-left:4px solid #EF4444;color:#991B1B;padding:0.75rem 1rem;border-radius:8px;margin:0.75rem 0;font-size:0.9rem;';
+          errorBanner.textContent = message || 'Upload failed. Please upload a PDF, DOCX, or TXT resume.';
+          
+          const atsCard = document.querySelector('.feature-card:has(#ats-upload-btn)');
+          if (atsCard) {
+            atsCard.insertBefore(errorBanner, atsCard.firstChild);
+            // Auto-remove after 8 seconds
+            setTimeout(() => errorBanner.remove(), 8000);
+          }
+        }
+
+        function showLoadingState() {
+          const uploadBtn = document.getElementById('ats-upload-btn');
+          if (uploadBtn) {
+            uploadBtn.disabled = true;
+            uploadBtn.textContent = 'Uploading...';
+          }
+        }
+
+        function hideLoadingState() {
+          const uploadBtn = document.getElementById('ats-upload-btn');
+          if (uploadBtn) {
+            uploadBtn.disabled = false;
+            uploadBtn.textContent = 'Upload Resume';
+          }
+        }
+
         atsUploadInput.addEventListener('change', async function(e) {
           const file = e.target.files[0];
           if (!file) return;
+
+          // Clear any previous errors
+          const existingBanner = document.querySelector('.ats-error-banner');
+          if (existingBanner) existingBanner.remove();
+
+          // Validate file type
+          const allowed = ['pdf', 'docx', 'txt'];
+          const ext = file.name.split('.').pop().toLowerCase();
+          if (!allowed.includes(ext)) {
+            showErrorBanner('Invalid file type. Please upload PDF, DOCX, or TXT.');
+            e.target.value = ''; // Reset file input
+            return;
+          }
+
+          // Validate file size (2 MB = 2 * 1024 * 1024 bytes)
+          const maxSize = 2 * 1024 * 1024; // 2 MB
+          if (file.size > maxSize) {
+            showErrorBanner('File size exceeds 2 MB limit. Please upload a smaller file.');
+            e.target.value = ''; // Reset file input
+            return;
+          }
+
+          // Show loading state
+          showLoadingState();
 
           // Check free account usage limits - skip for trial/subscription users
           const currentUser = window.FirebaseAuthManager?.getCurrentUser?.();
@@ -1802,61 +2049,61 @@
               showFreeAccountUpgradePopup();
               // Reset file input
               e.target.value = '';
+              // Hide loading state before returning (fixes stuck "Uploading..." button)
+              hideLoadingState();
               return;
             }
-          }
-
-          // Store last uploaded resume in localStorage for use on Resume Feedback page
-          const reader = new FileReader();
-          reader.onload = function(evt) {
-            // Store as base64 string (for demo; in production, use backend or secure storage)
-            localStorage.setItem('lastUploadedResume', evt.target.result);
-            // Optionally, store file name
-            localStorage.setItem('lastUploadedResumeName', file.name);
-            // Mark that user has uploaded a resume (for upgrade popup detection)
-            localStorage.setItem('hasUploadedResume', 'true');
-          };
-          reader.readAsDataURL(file);
-          
-          // Store score for upgrade popup detection
-          const score = Math.floor(Math.random() * 31) + 60; // 60-90%
-          const summary = score > 85 ? 'Excellent! Your resume is highly ATS compatible.' : score > 70 ? 'Your resume meets many ATS criteria and is likely to be noticed.' : 'Your resume needs improvement for better ATS results.';
-          localStorage.setItem('lastATSScore', score.toString());
-          localStorage.setItem('lastATSSummary', summary);
-
-          // Record usage for free accounts only (trial/subscription users have unlimited)
-          // Double-check plan before recording usage
-          if (!hasUnlimitedAccess && userPlan === 'free' && window.freeAccountManager) {
-            const usageResult = window.freeAccountManager.recordATSUsage();
-            if (!usageResult.success) {
-              alert(usageResult.message);
-              return;
-            }
-          }
-          
-          // Consume credit for free users only (trial/subscription users have unlimited)
-          // Skip credit consumption entirely for trial/paid users
-          if (!hasUnlimitedAccess && userPlan === 'free') {
-            const user = window.FirebaseAuthManager?.getCurrentUser?.();
-            if (user) {
-              // Re-check plan one more time before consuming credit
-              let finalPlan = userPlan;
-              try {
-                const idToken = await user.getIdToken();
-                const planRes = await fetch('/api/plan/me', {
-                  headers: { Authorization: `Bearer ${idToken}` }
-                });
-                if (planRes.ok) {
-                  const planData = await planRes.json();
-                  finalPlan = planData.plan || finalPlan;
+            
+            // CRITICAL: Consume credit immediately after check passes to prevent multiple uploads
+            // This prevents race conditions where multiple uploads could pass the check
+            if (currentUser && currentUser.uid) {
+              const creditKey = `creditsByUid:${currentUser.uid}`;
+              const creditsData = localStorage.getItem(creditKey);
+              let credits = { ats_free_lifetime: 1 }; // Default for new users
+              
+              if (creditsData) {
+                try {
+                  credits = JSON.parse(creditsData);
+                } catch (e) {
+                  console.warn('Failed to parse credits data before consumption:', e);
+                  credits = { ats_free_lifetime: 1 }; // Default to available on parse error
                 }
-              } catch (error) {
-                console.warn('Error re-checking plan before credit consumption:', error);
               }
               
-              // Only consume credits if still on free plan
-              if (finalPlan === 'free') {
-                const creditKey = `creditsByUid:${user.uid}`;
+              // Consume credit immediately (before upload)
+              credits.ats_free_lifetime = 0;
+              localStorage.setItem(creditKey, JSON.stringify(credits));
+              console.log('✅ Free ATS credit consumed in localStorage (before upload)');
+            }
+          }
+
+          // Real API integration: Upload resume and get ATS score
+          try {
+            const currentUser = window.FirebaseAuthManager?.getCurrentUser?.();
+            if (!currentUser) {
+              throw new Error('Please log in to use ATS scoring');
+            }
+
+            const idToken = await currentUser.getIdToken();
+            
+            // Step 1: Upload resume
+            const formData = new FormData();
+            formData.append('file', file);
+            
+            const uploadResponse = await fetch('/api/resume-upload', {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${idToken}`
+              },
+              body: formData
+            });
+
+            // Check if response is ok before parsing JSON
+            // Non-ok responses (500, 502, etc.) might return HTML error pages, not JSON
+            if (!uploadResponse.ok) {
+              // Restore credit if upload failed (for free accounts)
+              if (!hasUnlimitedAccess && userPlan === 'free' && currentUser && currentUser.uid) {
+                const creditKey = `creditsByUid:${currentUser.uid}`;
                 const creditsData = localStorage.getItem(creditKey);
                 let credits = { ats_free_lifetime: 1 }; // Default for new users
                 
@@ -1864,48 +2111,249 @@
                   try {
                     credits = JSON.parse(creditsData);
                   } catch (e) {
-                    // Handle corrupted JSON - default to consumed state (0) since validation already passed
-                    console.warn('Failed to parse credits data during consumption, defaulting to consumed:', e);
-                    credits = { ats_free_lifetime: 0 };
+                    console.warn('[DASHBOARD] Failed to parse credits data during restoration:', e);
+                    credits = { ats_free_lifetime: 1 }; // Default on parse error
                   }
                 }
                 
-                // Consume credit
-                credits.ats_free_lifetime = 0;
+                // Restore only the ats_free_lifetime credit, preserving other credit types
+                credits.ats_free_lifetime = 1;
                 localStorage.setItem(creditKey, JSON.stringify(credits));
-                console.log('✅ Free ATS credit consumed');
+                console.log('✅ Free ATS credit restored due to upload failure');
+              }
+              
+              let errorMessage = 'Upload failed. Please try again.';
+              try {
+                // Try to parse error response as JSON first
+                const errorData = await uploadResponse.json();
+                errorMessage = errorData.error || errorData.message || errorMessage;
+              } catch (parseError) {
+                // If parsing fails, it's likely an HTML error page - use status text
+                errorMessage = `Upload failed (${uploadResponse.status}): ${uploadResponse.statusText || 'Server error'}`;
+              }
+              clearAtsState();
+              resetAtsGauge();
+              showErrorBanner(errorMessage);
+              hideLoadingState();
+              e.target.value = ''; // Reset file input
+              return;
+            }
+
+            const uploadData = await uploadResponse.json();
+
+            // Handle extraction failures (success: false but HTTP 200)
+            if (!uploadData.success) {
+              // Restore credit if upload failed (for free accounts)
+              if (!hasUnlimitedAccess && userPlan === 'free' && currentUser && currentUser.uid) {
+                const creditKey = `creditsByUid:${currentUser.uid}`;
+                const creditsData = localStorage.getItem(creditKey);
+                let credits = { ats_free_lifetime: 1 }; // Default for new users
                 
-                // Update UI to show credit used with upgrade message (consistent with initial render)
-                const usageDiv = document.querySelector('.feature-card:has(#ats-upload-btn) .usage-indicator');
-                if (usageDiv) {
-                  usageDiv.innerHTML = 'Free ATS score used. Upgrade to trial or paid plan for unlimited scoring. <span class="jh-tooltip-trigger" tabindex="0" aria-label="More info" style="margin-left:0.4em;vertical-align:middle;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false" style="vertical-align:middle"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="8"/><line x1="12" y1="12" x2="12" y2="16"/></svg><span class="jh-tooltip-text">Upgrade to unlock unlimited ATS scoring and access all features.</span></span>';
+                if (creditsData) {
+                  try {
+                    credits = JSON.parse(creditsData);
+                  } catch (e) {
+                    console.warn('[DASHBOARD] Failed to parse credits data during restoration:', e);
+                    credits = { ats_free_lifetime: 1 }; // Default on parse error
+                  }
                 }
+                
+                // Restore only the ats_free_lifetime credit, preserving other credit types
+                credits.ats_free_lifetime = 1;
+                localStorage.setItem(creditKey, JSON.stringify(credits));
+                console.log('✅ Free ATS credit restored due to extraction failure');
+              }
+              
+              clearAtsState();
+              resetAtsGauge();
+              // Show user-friendly error messages
+              const errorMsg = uploadData.error === 'invalid-text' 
+                ? 'We couldn\'t read your resume. Please upload a text-based PDF, DOCX, or TXT file.'
+                : uploadData.message || 'Upload failed. Please upload a text-based PDF, DOCX, or TXT resume.';
+              showErrorBanner(errorMsg);
+              hideLoadingState();
+              e.target.value = ''; // Reset file input
+              return;
+            }
+
+            // Step 2: Store resume data in sessionStorage for cross-page sync
+            // Store both resumeId and resumeText (resumeText needed for direct scoring without KV)
+            sessionStorage.setItem('currentResumeId', uploadData.resumeId);
+            if (uploadData.resumeText) {
+              sessionStorage.setItem('currentResumeText', uploadData.resumeText);
+            }
+
+            // Step 3: Get ATS score
+            const uploadBtn = document.getElementById('ats-upload-btn');
+            if (uploadBtn) uploadBtn.textContent = 'Scoring...';
+
+            // Get job title if available (default to 'Software Engineer' for now)
+            const jobTitle = 'Software Engineer'; // TODO: Add job title input to dashboard if needed
+            
+            const scoreResponse = await fetch('/api/ats-score', {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${idToken}`,
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify({
+                resumeId: uploadData.resumeId,
+                resumeText: uploadData.resumeText, // Pass text directly to bypass KV requirement
+                jobTitle: jobTitle
+              })
+            });
+
+            if (!scoreResponse.ok) {
+              // Restore credit if scoring failed (for free accounts)
+              if (!hasUnlimitedAccess && userPlan === 'free' && currentUser && currentUser.uid) {
+                const creditKey = `creditsByUid:${currentUser.uid}`;
+                const creditsData = localStorage.getItem(creditKey);
+                let credits = { ats_free_lifetime: 1 }; // Default for new users
+                
+                if (creditsData) {
+                  try {
+                    credits = JSON.parse(creditsData);
+                  } catch (e) {
+                    console.warn('[DASHBOARD] Failed to parse credits data during restoration:', e);
+                    credits = { ats_free_lifetime: 1 }; // Default on parse error
+                  }
+                }
+                
+                // Restore only the ats_free_lifetime credit, preserving other credit types
+                credits.ats_free_lifetime = 1;
+                localStorage.setItem(creditKey, JSON.stringify(credits));
+                console.log('✅ Free ATS credit restored due to scoring failure');
+              }
+              
+              let errorMessage = 'Something went wrong scoring your resume. Please try again in a few minutes.';
+              try {
+                const errorData = await scoreResponse.json();
+                // Map error codes to user-friendly messages
+                if (errorData.error === 'invalid-text') {
+                  errorMessage = 'We couldn\'t read your resume. Please upload a text-based PDF, DOCX, or TXT file.';
+                } else if (errorData.error === 'scoring-failed' || errorData.error === 'invalid-result') {
+                  errorMessage = 'Something went wrong scoring your resume. Please try again in a few minutes.';
+                } else {
+                  errorMessage = errorData.message || errorData.error || errorMessage;
+                }
+              } catch (parseError) {
+                // If parsing fails, use default message
+              }
+              clearAtsState();
+              resetAtsGauge();
+              showErrorBanner(errorMessage);
+              hideLoadingState();
+              e.target.value = ''; // Reset file input
+              return;
+            }
+
+            const scoreData = await scoreResponse.json();
+            
+            if (!scoreData.success) {
+              // Restore credit if scoring failed (for free accounts)
+              if (!hasUnlimitedAccess && userPlan === 'free' && currentUser && currentUser.uid) {
+                const creditKey = `creditsByUid:${currentUser.uid}`;
+                const creditsData = localStorage.getItem(creditKey);
+                let credits = { ats_free_lifetime: 1 }; // Default for new users
+                
+                if (creditsData) {
+                  try {
+                    credits = JSON.parse(creditsData);
+                  } catch (e) {
+                    console.warn('[DASHBOARD] Failed to parse credits data during restoration:', e);
+                    credits = { ats_free_lifetime: 1 }; // Default on parse error
+                  }
+                }
+                
+                // Restore only the ats_free_lifetime credit, preserving other credit types
+                credits.ats_free_lifetime = 1;
+                localStorage.setItem(creditKey, JSON.stringify(credits));
+                console.log('✅ Free ATS credit restored due to scoring failure');
+              }
+              
+              // Map error codes to user-friendly messages
+              let errorMessage = 'Something went wrong scoring your resume. Please try again in a few minutes.';
+              if (scoreData.error === 'invalid-text') {
+                errorMessage = 'We couldn\'t read your resume. Please upload a text-based PDF, DOCX, or TXT file.';
+              } else if (scoreData.error === 'scoring-failed' || scoreData.error === 'invalid-result') {
+                errorMessage = 'Something went wrong scoring your resume. Please try again in a few minutes.';
               } else {
-                console.log('✅ User upgraded to', finalPlan, '- skipping credit consumption');
+                errorMessage = scoreData.message || scoreData.error || errorMessage;
+              }
+              clearAtsState();
+              resetAtsGauge();
+              showErrorBanner(errorMessage);
+              hideLoadingState();
+              e.target.value = ''; // Reset file input
+              return;
+            }
+
+            // Step 4: Update UI with real score
+            const score = scoreData.score || 0;
+            const breakdown = scoreData.breakdown || {};
+            
+            // Generate summary based on score
+            const summary = score > 85 ? 'Excellent! Your resume is highly ATS compatible.' : 
+                           score > 70 ? 'Your resume meets many ATS criteria and is likely to be noticed.' : 
+                           'Your resume needs improvement for better ATS results.';
+
+            // Update gauge
+            updateAtsGauge(score);
+            const scoreSummary = document.querySelector('.ats-score-summary');
+            if (scoreSummary) scoreSummary.textContent = summary;
+
+            // Store in sessionStorage for cross-page sync
+            sessionStorage.setItem('currentAtsScore', score.toString());
+            sessionStorage.setItem('currentAtsBreakdown', JSON.stringify(breakdown));
+
+            // Also store in localStorage for backward compatibility (but prefer sessionStorage)
+            localStorage.setItem('lastATSScore', score.toString());
+            localStorage.setItem('lastATSSummary', summary);
+            localStorage.setItem('hasUploadedResume', 'true');
+            
+            // Persist to state persistence utility (handles cache expiration)
+            if (window.JobHackAIStatePersistence) {
+              window.JobHackAIStatePersistence.saveATSScore({
+                score,
+                breakdown,
+                resumeId: uploadData.resumeId,
+                jobTitle: jobTitle
+              });
+            }
+
+            // Update UI message for free accounts (credit already consumed before upload)
+            if (!hasUnlimitedAccess && userPlan === 'free') {
+              // Update UI message to reflect credit has been used
+              const usageDiv = document.querySelector('.feature-card:has(#ats-upload-btn) .usage-indicator');
+              if (usageDiv) {
+                usageDiv.innerHTML = 'Free ATS score used. Upgrade to trial or paid plan for unlimited scoring. <span class="jh-tooltip-trigger" tabindex="0" aria-label="More info" style="margin-left:0.4em;vertical-align:middle;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false" style="vertical-align:middle"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="8"/><line x1="12" y1="12" x2="12" y2="16"/></svg><span class="jh-tooltip-text">Upgrade to unlock unlimited ATS scoring and access all features.</span></span>';
               }
             }
-          } else {
-            console.log('✅ Trial/paid user - skipping credit consumption. Plan:', userPlan);
-          }
-          // Update donut
-          const donut = document.querySelector('.ats-donut');
-          if (donut) {
-            const radius = 23;
-            const norm = 2 * Math.PI * radius;
-            const progress = (score / 100) * norm;
-            const svg = donut.querySelector('svg');
-            if (svg) {
-              const circles = svg.querySelectorAll('circle');
-              if (circles[1]) circles[1].setAttribute('stroke-dashoffset', (norm - progress));
+
+            // Reset file input and hide loading state
+            e.target.value = '';
+            hideLoadingState();
+
+          } catch (error) {
+            console.error('[ATS-UPLOAD] Error:', error);
+            clearAtsState();
+            resetAtsGauge();
+            // Show user-friendly error messages - never show KV binding errors
+            let errorMessage = 'Something went wrong scoring your resume. Please try again in a few minutes.';
+            if (error.message) {
+              // Filter out technical errors that shouldn't be shown to users
+              if (error.message.includes('KV binding') || error.message.includes('Storage service unavailable')) {
+                errorMessage = 'Something went wrong scoring your resume. Please try again in a few minutes.';
+              } else if (error.message.includes('invalid-text') || error.message.includes('couldn\'t read')) {
+                errorMessage = 'We couldn\'t read your resume. Please upload a text-based PDF, DOCX, or TXT file.';
+              } else {
+                errorMessage = error.message;
+              }
             }
-            const text = donut.querySelector('.ats-score-text');
-            if (text) text.textContent = score + '%';
+            showErrorBanner(errorMessage);
+            hideLoadingState();
+            e.target.value = ''; // Reset file input
           }
-          // Update score label and summary
-          const scoreLabel = document.querySelector('.ats-score-label');
-          if (scoreLabel) scoreLabel.textContent = score + ' / 100';
-          const scoreSummary = document.querySelector('.ats-score-summary');
-          if (scoreSummary) scoreSummary.textContent = summary;
         });
       }
       // NOTE: Resume Feedback page should read the last uploaded resume from localStorage (key: 'lastUploadedResume') if present.
@@ -2086,6 +2534,7 @@
       }
     });
   </script>
+  <script src="js/components/usage-indicator.js" type="module"></script>
   <script src="js/main.js" type="module"></script>
   <script src="js/analytics.js" type="module"></script>
   <script type="module">

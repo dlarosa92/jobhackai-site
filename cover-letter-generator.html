@@ -243,83 +243,8 @@
     <!-- Mobile navigation will be dynamically populated by navigation.js -->
   </nav>
   <div class="mobile-nav-backdrop" id="mobileNavBackdrop"></div>
-  <script>
-    // Hamburger menu toggle with proper state management and click-outside handling
-    (function initMobileMenu() {
-      const mobileToggle = document.querySelector('.mobile-toggle');
-      const mobileNav = document.getElementById('mobileNav');
-      const backdrop = document.getElementById('mobileNavBackdrop');
-      
-      if (!mobileToggle || !mobileNav) return;
-      
-      let isMenuOpen = false;
-      
-      // Function to open menu
-      function openMenu() {
-        if (isMenuOpen) return;
-        isMenuOpen = true;
-        mobileNav.classList.add('open');
-        if (backdrop) backdrop.classList.add('show');
-        mobileToggle.setAttribute('aria-expanded', 'true');
-        // Prevent body scroll when menu is open
-        document.body.style.overflow = 'hidden';
-      }
-      
-      // Function to close menu
-      function closeMenu() {
-        if (!isMenuOpen) return;
-        isMenuOpen = false;
-        mobileNav.classList.remove('open');
-        if (backdrop) backdrop.classList.remove('show');
-        mobileToggle.setAttribute('aria-expanded', 'false');
-        // Restore body scroll
-        document.body.style.overflow = '';
-      }
-      
-      // Toggle menu on button click
-      mobileToggle.addEventListener('click', (e) => {
-        e.stopPropagation();
-        if (isMenuOpen) {
-          closeMenu();
-        } else {
-          openMenu();
-        }
-      });
-      
-      // Close menu when clicking on a link
-      mobileNav.addEventListener('click', (e) => {
-        if (e.target.tagName === 'A') {
-          closeMenu();
-        }
-      });
-      
-      // Close menu when clicking on backdrop or outside
-      if (backdrop) {
-        backdrop.addEventListener('click', closeMenu);
-      }
-      document.addEventListener('click', (e) => {
-        if (isMenuOpen && 
-            !mobileNav.contains(e.target) && 
-            !mobileToggle.contains(e.target)) {
-          closeMenu();
-        }
-      });
-      
-      // Close menu on Escape key
-      document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape' && isMenuOpen) {
-          closeMenu();
-        }
-      });
-      
-      // Close menu on window resize (if resizing to desktop)
-      window.addEventListener('resize', () => {
-        if (window.innerWidth > 900 && isMenuOpen) {
-          closeMenu();
-        }
-      });
-    })();
-  </script>
+  <!-- Centralized mobile menu handler -->
+  <script src="js/mobile-menu.js?v=20250115-1"></script>
 
   <!-- page content -->
   <main class="clg-main">
@@ -335,7 +260,6 @@
         <label class="clg-label" for="clg-job">Job Title or Role</label>
         <div style="position:relative;">
           <input class="clg-input" id="clg-job" name="job" type="text" placeholder="e.g., Product Manager" autocomplete="off" aria-autocomplete="list" aria-haspopup="listbox" aria-expanded="false">
-          <div id="clg-job-dropdown" class="clg-job-dropdown" style="display:none;position:absolute;left:0;right:0;top:100%;background:#fff;border:1.5px solid #E5E7EB;border-top:none;border-radius:0 0 8px 8px;box-shadow:0 2px 8px rgba(31,41,55,0.07);z-index:10;max-height:220px;overflow-y:auto;"></div>
         </div>
         <label class="clg-label" for="clg-desc">Job Description</label>
         <textarea class="clg-textarea" id="clg-desc" name="desc" rows="5" placeholder="Paste job details here" required></textarea>
@@ -379,6 +303,8 @@
   <!-- Load navigation system -->
   <script src="js/navigation.js?v=20251007-2"></script>
   <script src="js/universal-logout.js?v=20251007-2"></script>
+  <!-- Load role selector -->
+  <script src="js/role-selector.js?v=20250115-1" type="module"></script>
   <script>
     // Initialize navigation system
     if (window.JobHackAINavigation && typeof window.JobHackAINavigation.initializeNavigation === 'function') {
@@ -481,80 +407,61 @@
       setTimeout(() => { copyBtn.textContent = 'Copy Cover Letter'; }, 1200);
     });
 
-    // --- Autocomplete for Job Title or Role ---
-    const jobRoles = [
-      'Software Engineer',
-      'Full‑stack Developer',
-      'Platform Engineer',
-      'DevOps Engineer',
-      'Data Engineer',
-      'Data Scientist',
-      'AI Engineer',
-      'Machine Learning Engineer',
-      'Product Manager',
-      'Product Owner',
-      'Scrum Master',
-      'Project Manager',
-      'Business Analyst',
-      'Data Analyst',
-      'UX Designer',
-      'UI Designer',
-      'Graphic Designer',
-      'Content Writer',
-      'Marketing Specialist',
-      'Digital Marketing Manager',
-      'SEO Specialist',
-      'Social Media Manager',
-      'Sales Representative',
-      'Account Executive',
-      'Customer Success Manager',
-      'HR Specialist',
-      'Recruiter',
-      'Operations Manager',
-      'Financial Analyst',
-      'Accountant',
-      'Legal Assistant',
-      'Paralegal',
-      'Administrative Assistant',
-      'Executive Assistant',
-      'Office Manager'
-    ];
+    // --- Initialize Role Selector for Job Title or Role ---
+    let roleSelectorInitAttempts = 0;
+    const MAX_ROLE_SELECTOR_ATTEMPTS = 50;
 
-    const jobInput = document.getElementById('clg-job');
-    const jobDropdown = document.getElementById('clg-job-dropdown');
-
-    jobInput.addEventListener('input', function() {
-      const value = this.value.toLowerCase();
-      if (value.length < 2) {
-        jobDropdown.style.display = 'none';
+    function initializeRoleSelector() {
+      const jobInput = document.getElementById('clg-job');
+      if (!jobInput) {
+        if (roleSelectorInitAttempts < MAX_ROLE_SELECTOR_ATTEMPTS) {
+          roleSelectorInitAttempts++;
+          setTimeout(initializeRoleSelector, 100);
+        }
         return;
       }
-      const filteredRoles = jobRoles.filter(role => 
-        role.toLowerCase().includes(value)
-      );
-      if (filteredRoles.length > 0) {
-        jobDropdown.innerHTML = filteredRoles.map(role => 
-          `<div class="clg-job-item" data-role="${role}">${role}</div>`
-        ).join('');
-        jobDropdown.style.display = 'block';
+
+      // Wait for RoleSelector class to be available
+      if (window.RoleSelector) {
+        try {
+          if (!jobInput.dataset.roleSelectorInitialized) {
+            const roleSelector = new window.RoleSelector(jobInput, {
+              minChars: 2,
+              maxResults: 8,
+              showCustomOption: true,
+              onSelect: function(roleName, isCustom) {
+                console.log('[COVER-LETTER] Role selected:', roleName, isCustom ? '(custom)' : '');
+              }
+            });
+            jobInput.dataset.roleSelectorInitialized = 'true';
+            console.log('[COVER-LETTER] RoleSelector initialized successfully');
+          }
+        } catch (error) {
+          console.error('[COVER-LETTER] Failed to initialize RoleSelector:', error);
+          if (roleSelectorInitAttempts < MAX_ROLE_SELECTOR_ATTEMPTS) {
+            roleSelectorInitAttempts++;
+            setTimeout(initializeRoleSelector, 500);
+          } else {
+            console.warn('[COVER-LETTER] RoleSelector initialization failed after max attempts - dropdown may not work');
+          }
+        }
       } else {
-        jobDropdown.style.display = 'none';
+        // RoleSelector not loaded yet, wait and retry
+        if (roleSelectorInitAttempts < MAX_ROLE_SELECTOR_ATTEMPTS) {
+          roleSelectorInitAttempts++;
+          setTimeout(initializeRoleSelector, 200);
+        } else {
+          console.warn('[COVER-LETTER] RoleSelector not available after max attempts - dropdown may not work');
+        }
       }
-    });
+    }
 
-    jobDropdown.addEventListener('click', function(e) {
-      if (e.target.classList.contains('clg-job-item')) {
-        const role = e.target.dataset.role;
-        jobInput.value = role;
-        jobDropdown.style.display = 'none';
-      }
-    });
-
-    document.addEventListener('click', function(e) {
-      if (!jobInput.contains(e.target) && !jobDropdown.contains(e.target)) {
-        jobDropdown.style.display = 'none';
-      }
-    });
+    // Initialize role selector after DOM is ready
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', initializeRoleSelector);
+    } else {
+      setTimeout(initializeRoleSelector, 100);
+    }
   </script>
 </body>
 </html>

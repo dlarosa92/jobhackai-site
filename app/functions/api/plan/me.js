@@ -1,4 +1,4 @@
-import { getBearer, verifyFirebaseIdToken } from '../../_lib/firebase-auth';
+import { getBearer, verifyFirebaseIdToken } from '../../_lib/firebase-auth.js';
 
 export async function onRequest(context) {
   const { request, env } = context;

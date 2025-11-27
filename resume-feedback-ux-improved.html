@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Resume Feedback - Improved SaaS Design</title>
+  <link rel="stylesheet" href="css/tokens.css">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: var(--font-family-base);
+      background: var(--color-bg-light);
+      color: var(--color-text-main);
+      padding: var(--space-lg);
+      line-height: 1.6;
+    }
+
+    .container {
+      width: 900px;
+      margin: 2.5rem auto 4rem auto;
+      padding: 0 1rem;
+    }
+
+    /* Modern SaaS Card Layout - Width matches, height auto */
+    .saas-card {
+      background: var(--color-card-bg);
+      border-radius: var(--radius-card);
+      box-shadow: var(--shadow-card);
+      padding: var(--space-lg);
+      width: 900px;
+      min-height: 282.38px;
+      display: flex;
+      align-items: flex-start;
+      gap: 2.5rem;
+      box-sizing: border-box;
+    }
+
+    .card-content {
+      flex: 1;
+      min-width: 220px;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .card-header {
+      margin-bottom: 0.2rem;
+    }
+
+    .card-title {
+      font-size: var(--font-size-2xl);
+      font-weight: var(--font-weight-extrabold);
+      color: var(--color-text-main);
+      margin-bottom: 0.2rem;
+      display: flex;
+      align-items: center;
+      gap: 0.7rem;
+    }
+
+    .card-subtitle {
+      font-size: var(--font-size-sm);
+      color: var(--color-text-secondary);
+      line-height: 1.4;
+      margin-bottom: 0.5rem;
+    }
+
+    .plan-badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 0.25rem 0.75rem;
+      border-radius: var(--radius-full);
+      font-size: var(--font-size-xs);
+      font-weight: var(--font-weight-semibold);
+      background: var(--color-cta-green);
+      color: white;
+      white-space: nowrap;
+    }
+
+    .plan-badge.premium {
+      background: var(--color-cta-green);
+    }
+
+    .plan-badge.free {
+      background: var(--color-text-muted);
+    }
+
+    /* Progress Ring - Matching original size */
+    .progress-ring {
+      width: 80px;
+      height: 80px;
+      flex-shrink: 0;
+      margin-top: 0.5rem;
+    }
+
+    .progress-ring svg {
+      width: 100%;
+      height: 100%;
+    }
+
+    /* Form Elements */
+    .form-section {
+      margin: 1rem 0 0 0;
+    }
+
+    .form-group {
+      margin-bottom: 0.75rem;
+    }
+
+    .form-label {
+      display: block;
+      font-size: var(--font-size-sm);
+      font-weight: var(--font-weight-semibold);
+      color: var(--color-text-main);
+      margin-bottom: 0.5rem;
+    }
+
+    .form-label-hint {
+      font-weight: var(--font-weight-regular);
+      color: var(--color-text-muted);
+      font-size: var(--font-size-xs);
+      margin-left: var(--space-xs);
+    }
+
+    .form-input {
+      width: 100%;
+      max-width: 400px;
+      padding: 0.5rem;
+      border: 1px solid var(--color-divider);
+      border-radius: var(--radius-md);
+      font-size: var(--font-size-base);
+      font-family: var(--font-family-base);
+      color: var(--color-text-main);
+      background: var(--color-card-bg);
+      transition: all var(--transition-fast);
+    }
+
+    .form-input:focus {
+      outline: none;
+      border-color: var(--color-accent-blue);
+      box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.1);
+    }
+
+    .form-input::placeholder {
+      color: var(--color-text-muted);
+    }
+
+    /* File Upload */
+    .file-upload-wrapper {
+      display: flex;
+      align-items: center;
+      gap: var(--space-sm);
+      flex-wrap: wrap;
+    }
+
+    .file-input-wrapper {
+      position: relative;
+    }
+
+    .file-input {
+      position: absolute;
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+
+    .file-button {
+      display: inline-flex;
+      align-items: center;
+      gap: var(--space-xs);
+      padding: 0.5rem 1rem;
+      background: var(--color-card-bg);
+      border: 1px solid var(--color-divider);
+      border-radius: var(--radius-md);
+      font-size: var(--font-size-sm);
+      font-weight: var(--font-weight-semibold);
+      color: var(--color-text-main);
+      cursor: pointer;
+      transition: all var(--transition-fast);
+    }
+
+    .file-button:hover {
+      border-color: var(--color-accent-blue);
+      background: var(--color-bg-light);
+    }
+
+    .file-name {
+      font-size: var(--font-size-sm);
+      color: var(--color-text-muted);
+    }
+
+    .file-name.has-file {
+      color: var(--color-success);
+      font-weight: var(--font-weight-medium);
+    }
+
+    .file-name.has-file::before {
+      content: "✓ ";
+      color: var(--color-success);
+      font-weight: var(--font-weight-bold);
+    }
+
+    /* Primary CTA Button */
+    .btn-primary {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: var(--space-xs);
+      padding: 0.75rem 1.5rem;
+      background: var(--color-cta-green);
+      color: white;
+      border: none;
+      border-radius: var(--radius-button);
+      font-size: var(--font-size-base);
+      font-weight: var(--font-weight-semibold);
+      cursor: pointer;
+      transition: all var(--transition-normal);
+      box-shadow: var(--shadow-button);
+      margin-top: 0.5rem;
+    }
+
+    .btn-primary:hover:not(:disabled) {
+      background: var(--color-cta-green-hover);
+      transform: translateY(-1px);
+      box-shadow: var(--shadow-button-hover);
+    }
+
+    .btn-primary:active:not(:disabled) {
+      transform: translateY(0);
+    }
+
+    .btn-primary:disabled {
+      background: var(--color-disabled);
+      cursor: not-allowed;
+      opacity: 0.6;
+      transform: none;
+    }
+
+    .btn-primary.loading {
+      position: relative;
+      color: transparent;
+    }
+
+    .btn-primary.loading::after {
+      content: "";
+      position: absolute;
+      width: 20px;
+      height: 20px;
+      top: 50%;
+      left: 50%;
+      margin-left: -10px;
+      margin-top: -10px;
+      border: 2px solid white;
+      border-radius: 50%;
+      border-top-color: transparent;
+      animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    /* Status Indicators */
+    .status-indicator {
+      display: inline-flex;
+      align-items: center;
+      gap: var(--space-xs);
+      padding: 0.5rem 0.75rem;
+      border-radius: var(--radius-md);
+      font-size: var(--font-size-xs);
+      font-weight: var(--font-weight-medium);
+      margin-top: var(--space-sm);
+    }
+
+    .status-indicator.ready {
+      background: rgba(5, 150, 105, 0.1);
+      color: var(--color-success);
+    }
+
+    .status-indicator.processing {
+      background: rgba(0, 123, 255, 0.1);
+      color: var(--color-accent-blue);
+    }
+
+    .status-indicator.complete {
+      background: rgba(5, 150, 105, 0.1);
+      color: var(--color-success);
+    }
+
+    .status-indicator::before {
+      content: "";
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: currentColor;
+    }
+
+    /* Usage Info */
+    .usage-info {
+      display: flex;
+      align-items: center;
+      gap: var(--space-xs);
+      padding: var(--space-xs) var(--space-sm);
+      background: var(--color-bg-light);
+      border-radius: var(--radius-md);
+      font-size: var(--font-size-xs);
+      color: var(--color-text-secondary);
+      margin-top: var(--space-sm);
+    }
+
+    /* Helper Text */
+    .helper-text {
+      font-size: var(--font-size-xs);
+      color: var(--color-text-muted);
+      margin-top: 0.25rem;
+      line-height: 1.4;
+    }
+
+    /* Compact layout adjustments */
+    .usage-info {
+      margin-top: 0.5rem;
+      padding: 0.35rem 0.75rem;
+      font-size: 0.875rem;
+    }
+
+    .status-indicator {
+      margin-top: 0.5rem;
+      padding: 0.35rem 0.75rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <!-- Upload & Generate Card - Exact dimensions: 900 x 282.38px -->
+    <div class="saas-card">
+      <div class="progress-ring">
+        <svg viewBox="0 0 80 80">
+          <circle cx="40" cy="40" r="36" stroke="var(--color-divider)" stroke-width="8" fill="none"/>
+          <circle cx="40" cy="40" r="36" stroke="var(--color-cta-green)" stroke-width="8" fill="none" 
+                  stroke-dasharray="226.2" stroke-dashoffset="86" stroke-linecap="round"/>
+          <text x="40" y="48" text-anchor="middle" font-size="1.6rem" font-weight="700" fill="var(--color-text-main)">62%</text>
+        </svg>
+      </div>
+      
+      <div class="card-content">
+        <div class="card-header">
+          <div class="card-title">
+            Analyze Your Resume
+            <span class="plan-badge premium">Premium</span>
+          </div>
+          <div class="card-subtitle">
+            Get instant ATS compatibility scoring and personalized feedback to improve your resume's job application success rate.
+          </div>
+        </div>
+
+        <form id="upload-form" class="form-section">
+          <div class="form-group">
+            <label for="job-title" class="form-label">
+              Target Job Title
+              <span class="form-label-hint">(Optional but recommended)</span>
+            </label>
+            <input 
+              id="job-title" 
+              type="text" 
+              class="form-input" 
+              placeholder="e.g., Data Engineer, Product Manager, Software Developer"
+              value="Data Engineer"
+            />
+            <div class="helper-text">
+              Adding a job title helps us provide role-specific keyword suggestions and tailored feedback.
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label for="resume-upload" class="form-label">
+              Resume File
+            </label>
+            <div class="file-upload-wrapper">
+              <div class="file-input-wrapper">
+                <input 
+                  type="file" 
+                  id="resume-upload" 
+                  class="file-input"
+                  accept=".pdf,.docx,.txt,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain"
+                />
+                <label for="resume-upload" class="file-button">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                    <polyline points="17 8 12 3 7 8"/>
+                    <line x1="12" y1="3" x2="12" y2="15"/>
+                  </svg>
+                  Choose File
+                </label>
+              </div>
+              <span id="file-name" class="file-name">No file selected</span>
+            </div>
+            <div class="helper-text">
+              Supported formats: PDF, DOCX, or TXT. Maximum file size: 2 MB.
+            </div>
+          </div>
+
+          <button 
+            type="button" 
+            id="generate-btn" 
+            class="btn-primary"
+            disabled
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+            </svg>
+            Generate ATS Score & Feedback
+          </button>
+
+          <div id="status-indicator" class="status-indicator ready" style="display: none;">
+            Ready to analyze
+          </div>
+
+          <div class="usage-info">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10"/>
+              <line x1="12" y1="16" x2="12" y2="12"/>
+              <line x1="12" y1="8" x2="12.01" y2="8"/>
+            </svg>
+            <span>Unlimited analyses available on Premium plan</span>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Interactive demo
+    const fileInput = document.getElementById('resume-upload');
+    const fileName = document.getElementById('file-name');
+    const generateBtn = document.getElementById('generate-btn');
+    const statusIndicator = document.getElementById('status-indicator');
+
+    fileInput.addEventListener('change', function(e) {
+      const file = e.target.files[0];
+      if (file) {
+        fileName.textContent = file.name;
+        fileName.classList.add('has-file');
+        generateBtn.disabled = false;
+        statusIndicator.textContent = 'Ready to analyze';
+        statusIndicator.className = 'status-indicator ready';
+        statusIndicator.style.display = 'inline-flex';
+      } else {
+        fileName.textContent = 'No file selected';
+        fileName.classList.remove('has-file');
+        generateBtn.disabled = true;
+        statusIndicator.style.display = 'none';
+      }
+    });
+
+    generateBtn.addEventListener('click', function() {
+      // Simulate processing
+      generateBtn.classList.add('loading');
+      generateBtn.disabled = true;
+      statusIndicator.textContent = 'Analyzing resume...';
+      statusIndicator.className = 'status-indicator processing';
+      
+      setTimeout(() => {
+        generateBtn.classList.remove('loading');
+        statusIndicator.textContent = 'Analysis complete!';
+        statusIndicator.className = 'status-indicator complete';
+        generateBtn.disabled = false;
+        generateBtn.innerHTML = `
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+            <polyline points="22 4 12 14.01 9 11.01"/>
+          </svg>
+          Regenerate Analysis
+        `;
+      }, 3000);
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,795 @@
+// Resume Feedback endpoint
+// AI-powered section-by-section feedback with rule-based grammar scoring (no AI grammar verification)
+
+import { getBearer, verifyFirebaseIdToken } from '../_lib/firebase-auth.js';
+import { generateATSFeedback } from '../_lib/openai-client.js';
+import { scoreResume } from '../_lib/ats-scoring-engine.js';
+import { errorResponse, successResponse, generateRequestId } from '../_lib/error-handler.js';
+import { sanitizeJobTitle, sanitizeResumeText, sanitizeResumeId } from '../_lib/input-sanitizer.js';
+
+function corsHeaders(origin, env) {
+  const allowedOrigins = [
+    'https://dev.jobhackai.io',
+    'https://qa.jobhackai.io',
+    'https://app.jobhackai.io',
+    'http://localhost:3003',
+    'http://localhost:8788'
+  ];
+  
+  const allowedOrigin = allowedOrigins.includes(origin) ? origin : allowedOrigins[0];
+  
+  return {
+    'Access-Control-Allow-Origin': allowedOrigin,
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    'Access-Control-Max-Age': '86400',
+    'Vary': 'Origin'
+  };
+}
+
+function json(data, status = 200, origin, env) {
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: {
+      'Content-Type': 'application/json',
+      'Cache-Control': 'no-store',
+      ...corsHeaders(origin, env)
+    }
+  });
+}
+
+async function getUserPlan(uid, env) {
+  if (!env.JOBHACKAI_KV) {
+    console.warn('[RESUME-FEEDBACK] KV not available for plan lookup');
+    return 'free';
+  }
+  
+  try {
+    const plan = await env.JOBHACKAI_KV.get(`planByUid:${uid}`);
+    if (!plan) {
+      console.warn(`[RESUME-FEEDBACK] Plan not found in KV for uid: ${uid}`);
+    }
+    return plan || 'free';
+  } catch (error) {
+    console.error('[RESUME-FEEDBACK] Error fetching plan from KV:', error);
+    return 'free';
+  }
+}
+
+async function getTrialEndDate(uid, env) {
+  if (!env.JOBHACKAI_KV) {
+    return null;
+  }
+  
+  const trialEnd = await env.JOBHACKAI_KV.get(`trialEndByUid:${uid}`);
+  if (!trialEnd) {
+    return null;
+  }
+  
+  // Trial end is stored as Unix timestamp in seconds
+  const trialEndTimestamp = parseInt(trialEnd, 10) * 1000; // Convert to milliseconds
+  return new Date(trialEndTimestamp);
+}
+
+/**
+ * Update usage counters for feedback requests
+ * Called for both cache hits and cache misses to prevent bypassing limits
+ */
+async function updateUsageCounters(uid, resumeId, plan, env) {
+  if (!env.JOBHACKAI_KV) {
+    return;
+  }
+
+  // Update throttles and usage (Trial)
+  if (plan === 'trial') {
+    // Throttle: 1 request per minute (abuse prevention)
+    const throttleKey = `feedbackThrottle:${uid}`;
+    await env.JOBHACKAI_KV.put(throttleKey, String(Date.now()), {
+      expirationTtl: 60 // 60 seconds - matches throttle window
+    });
+
+    // Total trial feedback counter: exactly 3 total across entire trial
+    const totalTrialKey = `feedbackTotalTrial:${uid}`;
+    const currentTotal = await env.JOBHACKAI_KV.get(totalTrialKey);
+    const newTotal = currentTotal ? parseInt(currentTotal, 10) + 1 : 1;
+    
+    // Set expiration based on trial end date, or use 7 days as fallback
+    let expirationTtl = 604800; // 7 days default (covers 3-day trial + buffer)
+    const trialEndDate = await getTrialEndDate(uid, env);
+    if (trialEndDate) {
+      const now = Date.now();
+      const trialEndMs = trialEndDate.getTime();
+      const secondsUntilTrialEnd = Math.max(0, Math.floor((trialEndMs - now) / 1000));
+      // Use trial end date + 1 day buffer, or minimum 1 day
+      expirationTtl = Math.max(86400, secondsUntilTrialEnd + 86400);
+    }
+    
+    await env.JOBHACKAI_KV.put(totalTrialKey, String(newTotal), {
+      expirationTtl: expirationTtl
+    });
+  }
+
+  // Track usage (Essential)
+  if (plan === 'essential') {
+    const now = new Date();
+    const monthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    const usageKey = `feedbackUsage:${uid}:${monthKey}`;
+    const currentUsage = await env.JOBHACKAI_KV.get(usageKey);
+    const newUsage = currentUsage ? parseInt(currentUsage, 10) + 1 : 1;
+    
+    // Calculate expiration: end of current month + 2 days buffer
+    // This ensures the key expires after the month boundary and doesn't interfere with next month
+    const year = now.getFullYear();
+    const month = now.getMonth();
+    const nextMonth = new Date(year, month + 1, 1); // First day of next month
+    const expirationDate = new Date(nextMonth.getTime() + (2 * 24 * 60 * 60 * 1000)); // +2 days
+    const expirationTtl = Math.max(86400, Math.floor((expirationDate.getTime() - now.getTime()) / 1000));
+    
+    await env.JOBHACKAI_KV.put(usageKey, String(newUsage), {
+      expirationTtl: expirationTtl
+    });
+  }
+}
+
+export async function onRequest(context) {
+  const { request, env } = context;
+  const origin = request.headers.get('Origin') || '';
+  const requestId = generateRequestId();
+
+  if (request.method === 'OPTIONS') {
+    return new Response(null, { headers: corsHeaders(origin, env) });
+  }
+
+  if (request.method !== 'POST') {
+    return errorResponse('Method not allowed', 405, origin, env, requestId);
+  }
+
+  try {
+    // Verify authentication
+    const token = getBearer(request);
+    if (!token) {
+      return errorResponse('Unauthorized', 401, origin, env, requestId);
+    }
+
+    const { uid } = await verifyFirebaseIdToken(token, env.FIREBASE_PROJECT_ID);
+    
+    // Dev environment detection: Use exact origin matching to prevent bypass attacks
+    const allowedDevOrigins = ['https://dev.jobhackai.io', 'http://localhost:3003', 'http://localhost:8788'];
+    const isDevOrigin = origin && allowedDevOrigins.includes(origin);
+    // Strengthened check: require both ENVIRONMENT=dev AND valid dev origin (exact match only)
+    // Using isDevOrigin alone prevents matching malicious origins like 'https://evil.com/localhost'
+    const isDevEnvironment = env.ENVIRONMENT === 'dev' && isDevOrigin;
+    
+    const plan = await getUserPlan(uid, env);
+    
+    // Log plan detection for debugging
+    console.log('[RESUME-FEEDBACK] Plan check:', { 
+      requestId,
+      uid, 
+      plan, 
+      hasKV: !!env.JOBHACKAI_KV, 
+      environment: env.ENVIRONMENT, 
+      origin,
+      isDevOrigin,
+      isDevEnvironment
+    });
+
+    // Dev environment bypass: Allow authenticated users in dev environment
+    // This allows testing with dev plan override without requiring KV storage setup
+    // If plan lookup fails in dev environment, try to fetch from plan/me endpoint as fallback
+    let effectivePlan = plan;
+    
+    // If plan is 'free' and we're in dev environment, upgrade to 'pro' for testing
+    if (isDevEnvironment && plan === 'free') {
+      // In dev environment, if KV lookup failed, try to fetch plan from plan/me endpoint
+      if (env.JOBHACKAI_KV) {
+        try {
+          // Try to fetch plan directly from KV one more time with better error handling
+          const directPlan = await env.JOBHACKAI_KV.get(`planByUid:${uid}`);
+          if (directPlan && directPlan !== 'free') {
+            effectivePlan = directPlan;
+            console.log('[RESUME-FEEDBACK] Found plan via direct KV lookup:', effectivePlan);
+          } else {
+            // Still 'free' after direct lookup - upgrade to 'pro' for dev testing
+            effectivePlan = 'pro';
+            console.log('[RESUME-FEEDBACK] Plan lookup returned free in dev environment, upgrading to pro for testing');
+          }
+        } catch (kvError) {
+          console.warn('[RESUME-FEEDBACK] KV lookup failed in dev environment, upgrading to pro for testing:', kvError);
+          effectivePlan = 'pro';
+        }
+      } else {
+        // KV not available in dev environment - upgrade to 'pro' for testing
+        effectivePlan = 'pro';
+        console.log('[RESUME-FEEDBACK] KV not available in dev environment, upgrading to pro for testing');
+      }
+    }
+    
+    console.log('[RESUME-FEEDBACK] Effective plan:', { plan, effectivePlan, isDevEnvironment });
+
+    // Check plan access (Free plan locked)
+    if (effectivePlan === 'free') {
+      console.log('[RESUME-FEEDBACK] Access denied - plan is free', {
+        requestId,
+        uid,
+        plan,
+        effectivePlan,
+        isDevEnvironment,
+        hasKV: !!env.JOBHACKAI_KV,
+        origin
+      });
+      return errorResponse(
+        'Resume Feedback is available in Trial, Essential, Pro, or Premium plans.',
+        403,
+        origin,
+        env,
+        requestId,
+        { upgradeRequired: true }
+      );
+    }
+
+    // Parse request body
+    let body;
+    try {
+      body = await request.json();
+    } catch (parseError) {
+      console.error('[RESUME-FEEDBACK] JSON parse error:', { requestId, error: parseError.message });
+      return errorResponse('Invalid JSON in request body', 400, origin, env, requestId);
+    }
+
+    const { resumeId, jobTitle, resumeText, isMultiColumn } = body;
+
+    // Validate resumeId exists and is not empty before sanitizing
+    // Catch all falsy values (null, undefined, empty string, etc.) for consistent error handling
+    if (!resumeId) {
+      console.error('[RESUME-FEEDBACK] Missing resumeId:', { requestId, body: Object.keys(body), resumeId });
+      return errorResponse('Resume ID is required', 400, origin, env, requestId);
+    }
+
+    // Sanitize and validate inputs
+    const resumeIdValidation = sanitizeResumeId(resumeId);
+    if (!resumeIdValidation.valid) {
+      console.error('[RESUME-FEEDBACK] Invalid resumeId:', { requestId, resumeId, error: resumeIdValidation.error });
+      return errorResponse(resumeIdValidation.error || 'Invalid resume ID', 400, origin, env, requestId);
+    }
+    const sanitizedResumeId = resumeIdValidation.sanitized;
+
+    // Job title is optional - sanitize and validate
+    const jobTitleValidation = sanitizeJobTitle(jobTitle, 200);
+    if (!jobTitleValidation.valid) {
+      console.error('[RESUME-FEEDBACK] Invalid jobTitle:', { requestId, jobTitle, error: jobTitleValidation.error });
+      return errorResponse(jobTitleValidation.error || 'Invalid job title', 400, origin, env, requestId);
+    }
+    const normalizedJobTitle = jobTitleValidation.sanitized;
+
+    // Throttle check (Trial only)
+    if (effectivePlan === 'trial' && env.JOBHACKAI_KV) {
+      const throttleKey = `feedbackThrottle:${uid}`;
+      const lastRun = await env.JOBHACKAI_KV.get(throttleKey);
+      
+      if (lastRun) {
+        const lastRunTime = parseInt(lastRun, 10);
+        const now = Date.now();
+        const timeSinceLastRun = now - lastRunTime;
+        
+        if (timeSinceLastRun < 60000) { // 60 seconds
+          const retryAfter = Math.ceil((60000 - timeSinceLastRun) / 1000);
+          return errorResponse(
+            'Rate limit exceeded. Please wait before requesting another feedback (1 request per minute).',
+            429,
+            origin,
+            env,
+            requestId,
+            { retryAfter }
+          );
+        }
+      }
+
+      // Total trial limit check: exactly 3 total feedback attempts across entire trial
+      const totalTrialKey = `feedbackTotalTrial:${uid}`;
+      const totalTrialCount = await env.JOBHACKAI_KV.get(totalTrialKey);
+      
+      if (totalTrialCount && parseInt(totalTrialCount, 10) >= 3) {
+        return errorResponse(
+          'You have used all 3 feedback attempts in your trial. Upgrade to Pro for unlimited feedback.',
+          403,
+          origin,
+          env,
+          requestId,
+          { upgradeRequired: true }
+        );
+      }
+    }
+
+    // Usage limits (Essential: 3/month)
+    if (effectivePlan === 'essential' && env.JOBHACKAI_KV) {
+      const now = new Date();
+      const monthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+      const usageKey = `feedbackUsage:${uid}:${monthKey}`;
+      const usage = await env.JOBHACKAI_KV.get(usageKey);
+      
+      if (usage && parseInt(usage, 10) >= 3) {
+        return errorResponse(
+          'You have used all 3 feedbacks this month. Upgrade to Pro for unlimited feedback.',
+          403,
+          origin,
+          env,
+          requestId,
+          { upgradeRequired: true }
+        );
+      }
+    }
+
+    // Cache check (all plans)
+    let cachedResult = null;
+    if (env.JOBHACKAI_KV) {
+      const cacheHash = await hashString(`${sanitizedResumeId}:${normalizedJobTitle}:feedback`);
+      const cacheKey = `feedbackCache:${cacheHash}`;
+      const cached = await env.JOBHACKAI_KV.get(cacheKey);
+      
+      if (cached) {
+        const cachedData = JSON.parse(cached);
+        const cacheAge = Date.now() - cachedData.timestamp;
+        
+        // Cache valid for 24 hours
+        if (cacheAge < 86400000) {
+          cachedResult = cachedData.result;
+          
+          // Validate cached result - skip if incomplete when job title is provided
+          // This prevents serving incomplete results that would prompt users to regenerate
+          // (saving tokens by avoiding unnecessary user-initiated regenerations)
+          if (normalizedJobTitle && normalizedJobTitle.trim().length > 0 && 
+              normalizedJobTitle !== 'general' && 
+              (!cachedResult.roleSpecificFeedback || 
+               (cachedResult.roleSpecificFeedback && 
+                typeof cachedResult.roleSpecificFeedback !== 'string' && // Not old array format
+                !cachedResult.roleSpecificFeedback.targetRoleUsed))) {
+            console.log(`[RESUME-FEEDBACK] Skipping incomplete cached result (missing role-specific feedback)`, {
+              requestId,
+              resumeId: sanitizedResumeId,
+              jobTitle: normalizedJobTitle,
+              hasRoleSpecificFeedback: !!cachedResult.roleSpecificFeedback,
+              roleSpecificFeedbackType: typeof cachedResult.roleSpecificFeedback
+            });
+            cachedResult = null; // Force regeneration to get complete result
+          }
+        }
+      }
+    }
+
+    // If cached, still update usage counters (user is consuming the feature)
+    // Then return cached result
+    if (cachedResult) {
+      console.log(`[RESUME-FEEDBACK] Cache hit for ${uid}`, { requestId, resumeId: sanitizedResumeId, plan: effectivePlan });
+      
+      // Update throttles and usage even for cache hits (prevents bypassing limits)
+      await updateUsageCounters(uid, sanitizedResumeId, effectivePlan, env);
+      
+      return successResponse({
+        ...cachedResult,
+        cached: true
+      }, 200, origin, env, requestId);
+    }
+
+    // Retrieve resume from KV or request body (dev fallback)
+    let resumeData = null;
+    
+    if (env.JOBHACKAI_KV) {
+      // Try to get resume from KV storage
+      const resumeKey = `resume:${sanitizedResumeId}`;
+      const resumeDataStr = await env.JOBHACKAI_KV.get(resumeKey);
+      
+      if (resumeDataStr) {
+        resumeData = JSON.parse(resumeDataStr);
+        
+        // Verify resume belongs to user
+        if (resumeData.uid !== uid) {
+          return errorResponse('Unauthorized', 403, origin, env, requestId);
+        }
+      } else {
+        // KV available but resume not found - allow dev fallback if resumeText provided
+        if (isDevEnvironment && resumeText) {
+          // Sanitize resume text from request body
+          const resumeTextValidation = sanitizeResumeText(resumeText, 80000);
+          if (!resumeTextValidation.valid) {
+            return errorResponse(resumeTextValidation.error || 'Invalid resume text', 400, origin, env, requestId);
+          }
+          
+          // Use resume text from request body (dev mode fallback when KV resume missing)
+          resumeData = {
+            uid,
+            text: resumeTextValidation.sanitized,
+            isMultiColumn: isMultiColumn || false,
+            fileName: 'dev-resume',
+            uploadedAt: Date.now()
+          };
+          console.log('[RESUME-FEEDBACK] KV resume not found, using dev fallback with resumeText from request body', { requestId });
+        } else {
+          // KV available but resume not found and no dev fallback
+          return errorResponse('Resume not found', 404, origin, env, requestId);
+        }
+      }
+    } else {
+      // KV not available - allow dev fallback with resumeText in request body
+      if (isDevEnvironment && resumeText) {
+        // Sanitize resume text from request body
+        const resumeTextValidation = sanitizeResumeText(resumeText, 80000);
+        if (!resumeTextValidation.valid) {
+          return errorResponse(resumeTextValidation.error || 'Invalid resume text', 400, origin, env, requestId);
+        }
+        
+        // Use resume text from request body (dev mode fallback)
+        resumeData = {
+          uid,
+          text: resumeTextValidation.sanitized,
+          isMultiColumn: isMultiColumn || false,
+          fileName: 'dev-resume',
+          uploadedAt: Date.now()
+        };
+        console.log('[RESUME-FEEDBACK] KV not available, using dev fallback: resume text from request body', { requestId });
+      } else {
+        // KV not available and no dev fallback provided
+        return errorResponse(
+          'Storage not available. KV storage is required for resume retrieval. In dev environments, you can pass resumeText in the request body as a fallback.',
+          500,
+          origin,
+          env,
+          requestId
+        );
+      }
+    }
+
+    // Resume text is already validated by sanitizeResumeText (80,000 char limit)
+
+    // Get rule-based scores first (for AI context) - includes new grammar engine
+    const ruleBasedScores = await scoreResume(
+      resumeData.text,
+      normalizedJobTitle,
+      { isMultiColumn: resumeData.isMultiColumn },
+      env
+    );
+
+    // Generate AI feedback with exponential backoff retry
+    let aiFeedback = null;
+    let tokenUsage = 0;
+    const maxRetries = 3;
+    let lastError = null;
+    
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      try {
+        const aiResponse = await generateATSFeedback(
+          resumeData.text,
+          ruleBasedScores,
+          normalizedJobTitle,
+          env
+        );
+        
+        // Capture token usage from OpenAI response
+        if (aiResponse && aiResponse.usage) {
+          tokenUsage = aiResponse.usage.totalTokens || 0;
+        }
+        
+        // Check for truncation BEFORE parsing - truncated JSON will always fail to parse
+        if (aiResponse && aiResponse.finishReason === 'length') {
+          lastError = new Error('Response truncated at token limit');
+          console.warn(`[RESUME-FEEDBACK] Response truncated at token limit (attempt ${attempt + 1}/${maxRetries})`, {
+            requestId,
+            finishReason: aiResponse.finishReason,
+            completionTokens: aiResponse.usage?.completionTokens,
+            totalTokens: aiResponse.usage?.totalTokens
+          });
+          if (attempt < maxRetries - 1) {
+            const waitTime = Math.pow(2, attempt) * 1000;
+            await new Promise(resolve => setTimeout(resolve, waitTime));
+          }
+          continue; // Retry - don't try to parse truncated JSON
+        }
+        
+        // Handle falsy content: treat as error and apply backoff
+        if (!aiResponse || !aiResponse.content) {
+          lastError = new Error('AI response missing content');
+          console.error(`[RESUME-FEEDBACK] AI response missing content (attempt ${attempt + 1}/${maxRetries})`);
+          if (attempt < maxRetries - 1) {
+            const waitTime = Math.pow(2, attempt) * 1000;
+            await new Promise(resolve => setTimeout(resolve, waitTime));
+          }
+          continue;
+        }
+        
+        // Parse AI response (structured output should be JSON)
+        try {
+          aiFeedback = typeof aiResponse.content === 'string' 
+            ? JSON.parse(aiResponse.content)
+            : aiResponse.content;
+          
+          // Validate structure
+          if (aiFeedback && aiFeedback.atsRubric) {
+            break; // Success, exit retry loop
+          } else {
+            // Invalid structure - treat as error
+            lastError = new Error('AI response missing required atsRubric structure');
+            console.error(`[RESUME-FEEDBACK] Invalid AI response structure (attempt ${attempt + 1}/${maxRetries})`);
+            if (attempt < maxRetries - 1) {
+              const waitTime = Math.pow(2, attempt) * 1000;
+              await new Promise(resolve => setTimeout(resolve, waitTime));
+            }
+          }
+        } catch (parseError) {
+          lastError = parseError;
+          console.error(`[RESUME-FEEDBACK] Failed to parse AI response (attempt ${attempt + 1}/${maxRetries}):`, parseError);
+          // Apply exponential backoff for parse errors too
+          if (attempt < maxRetries - 1) {
+            const waitTime = Math.pow(2, attempt) * 1000;
+            await new Promise(resolve => setTimeout(resolve, waitTime));
+          }
+          // Continue to next attempt if parsing fails
+          continue;
+        }
+      } catch (aiError) {
+        lastError = aiError;
+        console.error(`[RESUME-FEEDBACK] AI feedback error (attempt ${attempt + 1}/${maxRetries}):`, aiError);
+        
+        // Exponential backoff: wait 1s, 2s, 4s
+        if (attempt < maxRetries - 1) {
+          const waitTime = Math.pow(2, attempt) * 1000;
+          await new Promise(resolve => setTimeout(resolve, waitTime));
+        }
+      }
+    }
+    
+    // Log failed responses to KV for diagnostics (best effort)
+    if (!aiFeedback && lastError && env.JOBHACKAI_KV) {
+      try {
+        const errorKey = `feedbackError:${uid}:${Date.now()}`;
+        await env.JOBHACKAI_KV.put(errorKey, JSON.stringify({
+          requestId,
+          resumeId: sanitizedResumeId,
+          jobTitle: normalizedJobTitle,
+          error: lastError.message,
+          timestamp: Date.now()
+        }), {
+          expirationTtl: 604800 // 7 days
+        });
+      } catch (kvError) {
+        console.warn('[RESUME-FEEDBACK] Failed to log error to KV:', kvError);
+      }
+    }
+
+    // Build result with AI feedback if available, otherwise use rule-based scores
+    // CRITICAL: Always use rule-based scores for score and max values to prevent AI drift
+    const result = aiFeedback && aiFeedback.atsRubric ? {
+      atsRubric: aiFeedback.atsRubric
+        // Filter out any "overallScore" or "overall" categories - only process the 5 expected categories
+        .filter(item => {
+          const categoryLower = (item.category || '').toLowerCase();
+          return !categoryLower.includes('overall') && categoryLower !== 'overallscore';
+        })
+        // Limit to exactly 5 items (the expected categories)
+        .slice(0, 5)
+        .map((item, idx) => {
+          const canonicalCategories = [
+            'Keyword Match',
+            'ATS Formatting',
+            'Structure & Organization',
+            'Tone & Clarity',
+            'Grammar & Spelling'
+          ];
+          const scoreKeyByLabel = {
+            'keyword match': 'keywordScore',
+            'ats formatting': 'formattingScore',
+            'structure & organization': 'structureScore',
+            'tone & clarity': 'toneScore',
+            'grammar & spelling': 'grammarScore'
+          };
+
+          const rawCategory = (item.category || canonicalCategories[idx] || '').trim();
+          const normalizedCategory = rawCategory.toLowerCase();
+          const scoreKey =
+            scoreKeyByLabel[normalizedCategory] ||
+            ['keywordScore', 'formattingScore', 'structureScore', 'toneScore', 'grammarScore'][idx];
+
+          const ruleBasedScore = ruleBasedScores[scoreKey];
+          return {
+            category: rawCategory || canonicalCategories[idx],
+            // Force use of rule-based scores - AI should NOT generate or override scores
+            score: ruleBasedScore?.score ?? 0,
+            max: ruleBasedScore?.max ?? 10,
+            // AI provides feedback and suggestions only
+            // Use rule-based feedback if score is 0 or if AI feedback doesn't match score range
+            // (e.g., "No major errors detected" shouldn't appear for score 0)
+            feedback:
+              ruleBasedScore?.score === 0 || !item.feedback
+                ? ruleBasedScore?.feedback || ''
+                : item.feedback,
+            suggestions: item.suggestions || []
+          };
+        }),
+      // Role-specific feedback structure validation
+      // If AI succeeded but didn't provide roleSpecificFeedback, log warning and return null
+      roleSpecificFeedback: (aiFeedback.roleSpecificFeedback && 
+                             aiFeedback.roleSpecificFeedback.targetRoleUsed !== undefined &&
+                             Array.isArray(aiFeedback.roleSpecificFeedback.sections)) 
+        ? aiFeedback.roleSpecificFeedback
+        : (aiFeedback.roleSpecificFeedback && Array.isArray(aiFeedback.roleSpecificFeedback))
+          ? aiFeedback.roleSpecificFeedback // Old format - pass through for backwards compatibility
+          : (() => {
+              // AI succeeded but roleSpecificFeedback is missing - log for monitoring
+              console.warn('[RESUME-FEEDBACK] AI succeeded but roleSpecificFeedback missing or invalid', {
+                requestId,
+                resumeId: sanitizedResumeId,
+                hasRoleSpecificFeedback: !!aiFeedback.roleSpecificFeedback,
+                roleSpecificFeedbackType: typeof aiFeedback.roleSpecificFeedback
+              });
+              return null; // Don't provide hardcoded fallback
+            })(),
+      // Extract ATS issues from AI response or generate from rule-based scores
+      atsIssues: aiFeedback.atsIssues && Array.isArray(aiFeedback.atsIssues) 
+        ? aiFeedback.atsIssues
+        : generateATSIssuesFromScores(ruleBasedScores, normalizedJobTitle),
+      aiFeedback: aiFeedback
+    } : (() => {
+      // Fallback to rule-based scores if AI fails completely
+      // Log this for monitoring AI reliability
+      console.warn('[RESUME-FEEDBACK] AI feedback generation failed, using rule-based fallback', {
+        requestId,
+        resumeId: sanitizedResumeId,
+        jobTitle: normalizedJobTitle,
+        lastError: lastError?.message,
+        attempts: maxRetries
+      });
+      
+      return {
+      atsRubric: [
+        {
+          category: 'Keyword Match',
+          score: ruleBasedScores.keywordScore.score,
+          max: ruleBasedScores.keywordScore.max,
+          feedback: ruleBasedScores.keywordScore.feedback
+        },
+        {
+          category: 'ATS Formatting',
+          score: ruleBasedScores.formattingScore.score,
+          max: ruleBasedScores.formattingScore.max,
+          feedback: ruleBasedScores.formattingScore.feedback
+        },
+        {
+          category: 'Structure & Organization',
+          score: ruleBasedScores.structureScore.score,
+          max: ruleBasedScores.structureScore.max,
+          feedback: ruleBasedScores.structureScore.feedback
+        },
+        {
+          category: 'Tone & Clarity',
+          score: ruleBasedScores.toneScore.score,
+          max: ruleBasedScores.toneScore.max,
+          feedback: ruleBasedScores.toneScore.feedback
+        },
+        {
+          category: 'Grammar & Spelling',
+          score: ruleBasedScores.grammarScore.score,
+          max: ruleBasedScores.grammarScore.max,
+          feedback: ruleBasedScores.grammarScore.feedback
+        }
+      ],
+      // Don't provide role-specific feedback when AI fails completely
+      // Frontend will handle null gracefully (hide role-specific section)
+      roleSpecificFeedback: null,
+      atsIssues: generateATSIssuesFromScores(ruleBasedScores, normalizedJobTitle),
+      aiFeedback: null
+      };
+    })();
+
+    // Cache result (24 hours)
+    if (env.JOBHACKAI_KV) {
+      const cacheHash = await hashString(`${sanitizedResumeId}:${normalizedJobTitle}:feedback`);
+      const cacheKey = `feedbackCache:${cacheHash}`;
+      await env.JOBHACKAI_KV.put(cacheKey, JSON.stringify({
+        result,
+        timestamp: Date.now()
+      }), {
+        expirationTtl: 86400 // 24 hours
+      });
+    }
+
+    // Update throttles and usage counters (for cache misses)
+    await updateUsageCounters(uid, sanitizedResumeId, effectivePlan, env);
+
+    console.log('[RESUME-FEEDBACK] Success', { requestId, uid, resumeId: sanitizedResumeId, tokenUsage });
+
+    return successResponse({
+      tokenUsage: tokenUsage,
+      ...result
+    }, 200, origin, env, requestId);
+
+  } catch (error) {
+    console.error('[RESUME-FEEDBACK] Error:', { requestId, error: error.message, stack: error.stack });
+    return errorResponse(
+      error,
+      500,
+      origin,
+      env,
+      requestId,
+      { endpoint: 'resume-feedback' }
+    );
+  }
+}
+
+/**
+ * Generate structured ATS issues from rule-based scores
+ * Used as fallback when AI doesn't provide issues or for rule-based only responses
+ */
+function generateATSIssuesFromScores(ruleBasedScores, jobTitle) {
+  const issues = [];
+  
+  // Keyword relevance issues
+  if (ruleBasedScores.keywordScore) {
+    const keywordPercent = ruleBasedScores.keywordScore.score / ruleBasedScores.keywordScore.max;
+    if (keywordPercent < 0.7) {
+      issues.push({
+        id: 'missing_keywords',
+        severity: keywordPercent < 0.5 ? 'high' : 'medium',
+        details: jobTitle ? [`Missing role-specific keywords for ${jobTitle}`] : ['Missing industry-relevant keywords']
+      });
+    }
+  }
+  
+  // Formatting issues
+  if (ruleBasedScores.formattingScore) {
+    const formattingPercent = ruleBasedScores.formattingScore.score / ruleBasedScores.formattingScore.max;
+    if (formattingPercent < 0.7) {
+      issues.push({
+        id: 'formatting_compliance',
+        severity: formattingPercent < 0.5 ? 'high' : 'medium',
+        details: ['Resume formatting may not be fully ATS-compliant. Avoid tables, graphics, and complex layouts.']
+      });
+    }
+  }
+  
+  // Structure issues
+  if (ruleBasedScores.structureScore) {
+    const structurePercent = ruleBasedScores.structureScore.score / ruleBasedScores.structureScore.max;
+    if (structurePercent < 0.7) {
+      issues.push({
+        id: 'structure_organization',
+        severity: structurePercent < 0.5 ? 'high' : 'medium',
+        details: ['Resume structure could be improved. Ensure clear section headers and consistent formatting.']
+      });
+    }
+  }
+  
+  // Tone and clarity issues
+  if (ruleBasedScores.toneScore) {
+    const tonePercent = ruleBasedScores.toneScore.score / ruleBasedScores.toneScore.max;
+    if (tonePercent < 0.7) {
+      issues.push({
+        id: 'tone_clarity',
+        severity: 'low',
+        details: ['Improve action-oriented language and make bullet points more concise.']
+      });
+    }
+  }
+  
+  // Grammar and spelling issues
+  if (ruleBasedScores.grammarScore) {
+    const grammarPercent = ruleBasedScores.grammarScore.score / ruleBasedScores.grammarScore.max;
+    if (grammarPercent < 0.8) {
+      issues.push({
+        id: 'grammar_spelling',
+        severity: 'high',
+        details: ['Resume contains grammar or spelling errors that must be corrected.']
+      });
+    }
+  }
+  
+  return issues;
+}
+
+// Simple hash function for cache keys
+async function hashString(str) {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(str);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+}
+

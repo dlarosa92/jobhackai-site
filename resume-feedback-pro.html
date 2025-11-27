@@ -4,15 +4,17 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <style>html.auth-pending{visibility:hidden}</style>
+  <style>html.auth-pending,html.plan-pending{visibility:hidden}</style>
   <script src="js/static-auth-guard.js?v=20251007-2"></script>
   <script>
     // --- IMMEDIATE PAGE ACCESS CONTROL ---
     // Run immediately to prevent content flash for unauthorized users
     (function enforceAccessImmediate() {
       const isAuthenticated = localStorage.getItem('user-authenticated') === 'true' && !!localStorage.getItem('user-email');
-      const plan = localStorage.getItem('user-plan') || 'free';
       const allowedPlans = ['trial', 'essential', 'pro', 'premium'];
+      // Expose allowed plans so later scripts stay in sync
+      window.__JOBHACKAI_RF_ALLOWED_PLANS__ = allowedPlans;
+      const cachedPlan = localStorage.getItem('user-plan');
       
       // If not authenticated, redirect to login immediately
       if (!isAuthenticated) {
@@ -21,15 +23,20 @@
         return;
       }
       
-      // If authenticated but on wrong plan, redirect to pricing with upgrade modal immediately
-      if (!allowedPlans.includes(plan)) {
-        console.log('🚫 [RESUME-FEEDBACK] Access denied for plan:', plan);
-        window.location.href = 'pricing-a.html?plan=essential';
-        return;
+      if (cachedPlan) {
+        // Cached plan detected - enforce immediately
+        if (!allowedPlans.includes(cachedPlan)) {
+          console.log('🚫 [RESUME-FEEDBACK] Access denied for cached plan:', cachedPlan);
+          window.location.href = 'pricing-a.html?plan=essential';
+          return;
+        }
+        console.log('✅ [RESUME-FEEDBACK] Access granted for cached plan:', cachedPlan);
+      } else {
+        // Plan not cached yet - allow page to load and defer enforcement
+        console.log('⏳ [RESUME-FEEDBACK] Plan not cached yet. Deferring enforcement until server plan check completes.');
+        window.__JOBHACKAI_PLAN_PENDING__ = true;
+        document.documentElement.classList.add('plan-pending');
       }
-      
-      // Access granted - continue loading page
-      console.log('✅ [RESUME-FEEDBACK] Access granted for plan:', plan);
     })();
   </script>
   <title>JobHackAI</title>
@@ -96,11 +103,6 @@
       color: var(--color-text-secondary);
       font-size: 0.95rem;
       margin-top: 0.5rem;
-    }
-    .rf-plan-limit svg {
-      width: 16px;
-      height: 16px;
-      color: var(--color-text-muted);
     }
     .rf-upgrade-prompt {
       background: #F0F7FF;
@@ -193,6 +195,176 @@
       opacity: 1;
       pointer-events: auto;
     }
+    /* Tooltip style matching Resume Rewriting */
+    .rf-tooltip-trigger {
+      cursor: pointer;
+      margin-left: 0.4em;
+      vertical-align: middle;
+      position: relative;
+      display: inline-block;
+    }
+    .rf-tooltip-trigger svg {
+      width: 16px;
+      height: 16px;
+      color: #9CA3AF;
+      vertical-align: middle;
+    }
+    .rf-tooltip-text {
+      display: none;
+      position: absolute;
+      z-index: 1000;
+      padding: 0.5rem 0.8rem;
+      background-color: #333;
+      color: #fff;
+      border-radius: 4px;
+      bottom: 125%;
+      left: 50%;
+      transform: translateX(-50%);
+      min-width: 180px;
+      max-width: 260px;
+      white-space: normal;
+      word-break: break-word;
+      font-size: 0.9rem;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+      pointer-events: none;
+      text-align: left;
+    }
+    .rf-tooltip-trigger:hover .rf-tooltip-text,
+    .rf-tooltip-trigger:focus .rf-tooltip-text {
+      display: block;
+      pointer-events: auto;
+    }
+    /* Fade Transitions */
+    .fade-enter {
+      opacity: 0;
+      transform: translateY(8px);
+      transition: opacity 0.35s ease, transform 0.35s ease;
+    }
+    .fade-enter-active {
+      opacity: 1;
+      transform: translateY(0);
+    }
+    .fade-exit {
+      opacity: 1;
+      transform: translateY(0);
+      transition: opacity 0.25s ease, transform 0.25s ease;
+    }
+    .fade-exit-active {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+    /* Empty State Placeholders */
+    .ats-placeholder-note {
+      text-align: center;
+      color: var(--color-text-muted);
+      font-style: italic;
+      margin-top: var(--space-sm);
+      font-size: var(--font-size-base);
+    }
+    .rf-placeholder-cta {
+      text-align: center;
+      margin-top: var(--space-md);
+    }
+    .rf-placeholder-cta button {
+      background: var(--color-cta-green);
+      color: #fff;
+      font-weight: var(--font-weight-semibold);
+      border-radius: var(--radius-lg);
+      padding: 0.75rem 2rem;
+      border: none;
+      cursor: pointer;
+      transition: background 0.18s;
+      font-size: var(--font-size-base);
+    }
+    .rf-placeholder-cta button:hover {
+      background: var(--color-cta-green-hover);
+    }
+    /* Standardized Role Input Styling (matching Interview Questions) */
+    .rf-role-input {
+      width: 100%;
+      padding: 0.85rem 1.1rem;
+      border: 2px solid #E5E7EB;
+      border-radius: 10px;
+      font-size: 1.08rem;
+      margin-bottom: 0;
+      transition: border 0.18s;
+      background: #fff;
+      color: #232B36;
+      box-sizing: border-box;
+    }
+    .rf-role-input:focus {
+      border-color: #1976D2;
+      outline: none;
+    }
+    .rf-role-dropdown {
+      position: absolute;
+      left: 0;
+      right: 0;
+      background: #fff;
+      border: 1.5px solid #E5E7EB;
+      border-top: none;
+      border-radius: 0 0 10px 10px;
+      box-shadow: 0 2px 8px rgba(31,41,55,0.07);
+      z-index: 10;
+      max-height: 220px;
+      overflow-y: auto;
+      margin-top: -2px;
+    }
+    .rf-role-item {
+      padding: 0.85rem 1.1rem;
+      cursor: pointer;
+      font-size: 1.08rem;
+      color: #232B36;
+      transition: background 0.15s;
+    }
+    .rf-role-item:hover,
+    .rf-role-item.active {
+      background: #F3F4F6;
+    }
+    /* Fit Level Chips for Role-Specific Tailoring Tips */
+    .rf-fit-chip-big-impact {
+      background: #FEF3C7;
+      color: #92400E;
+      border: 1px solid #F59E0B;
+    }
+    .rf-fit-chip-tunable {
+      background: #DBEAFE;
+      color: #1E40AF;
+      border: 1px solid #3B82F6;
+    }
+    .rf-fit-chip-strong {
+      background: #D1FAE5;
+      color: #065F46;
+      border: 1px solid #10B981;
+    }
+    /* Change Summary Styles for Rewrite UI */
+    .rf-change-summary {
+      margin-top: 1.5rem;
+      padding: 1.2rem;
+      background: #F9FAFB;
+      border-radius: var(--radius-lg);
+      border: 1px solid var(--color-divider);
+    }
+    .rf-change-summary h4 {
+      font-size: 1rem;
+      font-weight: 700;
+      color: var(--color-text-main);
+      margin: 0 0 0.75rem 0;
+    }
+    .rf-change-summary ul {
+      margin: 0;
+      padding-left: 1.25rem;
+      color: var(--color-text-secondary);
+    }
+    .rf-change-summary li {
+      margin-bottom: 0.5rem;
+      line-height: 1.5;
+    }
+    .rf-change-summary-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: 1.5rem;
+    }
   </style>
 </head>
 <body>
@@ -224,10 +396,27 @@
   <nav class="mobile-nav" id="mobileNav">
     <!-- Mobile navigation will be dynamically populated by navigation.js -->
   </nav>
+  <div class="mobile-nav-backdrop" id="mobileNavBackdrop"></div>
+  
+  <!-- Centralized mobile menu handler -->
+  <script src="js/mobile-menu.js?v=20250115-1"></script>
+  
+  <!-- Load Firebase auth as ES module (same pattern as dashboard.html) -->
+  <script type="module" src="js/firebase-auth.js?v=20251011-1"></script>
   
   <!-- DEV-ONLY PLAN TOGGLE will be added by navigation.js -->
   <script src="js/navigation.js?v=20251007-2"></script>
   <script src="js/universal-logout.js?v=20251007-2"></script>
+  
+  <!-- UX Enhancement Components -->
+  <script src="js/modals.js?v=20250115-1" type="module"></script>
+  <script src="js/loading-overlay.js?v=20250115-1" type="module"></script>
+  <script src="js/toast.js?v=20250115-1"></script>
+  <script src="js/file-validation.js?v=20250115-1"></script>
+  <script src="js/role-selector.js?v=20250115-1" type="module"></script>
+  <script src="js/api-retry.js?v=20250115-1"></script>
+  <script src="js/state-persistence.js?v=20250115-1"></script>
+  <script src="js/free-account-manager.js?v=20250115-1"></script>
   <script>
     if (window.JobHackAINavigation && typeof window.JobHackAINavigation.initializeNavigation === 'function') {
       window.JobHackAINavigation.initializeNavigation();
@@ -253,6 +442,16 @@
         isAuthenticated = localStorage.getItem('user-authenticated') === 'true' && !!localStorage.getItem('user-email');
         plan = localStorage.getItem('user-plan') || 'free';
       }
+      
+      // FIX: Enhanced logging for plan detection debugging
+      console.log('[RESUME-FEEDBACK] Plan detection debug:', {
+        isAuthenticated,
+        plan,
+        navigationPlan: window.JobHackAINavigation?.getEffectivePlan?.(),
+        localStoragePlan: localStorage.getItem('user-plan'),
+        devPlan: localStorage.getItem('dev-plan'),
+        authState: window.JobHackAINavigation?.getAuthState?.()
+      });
       
       const allowedPlans = ['trial', 'essential', 'pro', 'premium'];
       
@@ -348,6 +547,8 @@
       };
       
       createDemoUserIfNeeded();
+
+      hydratePlanFromServerAndEnforceAccess();
       
       // Wait for navigation system to be ready
       setTimeout(checkPlanAccess, 100);
@@ -356,10 +557,89 @@
     // --- UPDATED USER PLAN LOGIC ---
     function getCurrentUserPlan() {
       // Use navigation system's plan detection for consistency
+      let plan = 'free';
       if (window.JobHackAINavigation) {
-        return window.JobHackAINavigation.getEffectivePlan();
+        plan = window.JobHackAINavigation.getEffectivePlan();
+      } else {
+        plan = localStorage.getItem('user-plan') || 'free';
       }
-      return localStorage.getItem('user-plan') || 'free';
+      
+      // FIX: Validate plan value to prevent corrupted data (e.g., "central")
+      const validPlans = ['visitor', 'free', 'trial', 'essential', 'pro', 'premium'];
+      if (!validPlans.includes(plan)) {
+        const oldPlan = plan; // Capture original invalid plan before reassignment
+        console.warn('[RESUME-FEEDBACK] Invalid plan detected:', plan, '- resetting to free');
+        plan = 'free';
+        // Clean up corrupted plan values
+        localStorage.setItem('user-plan', 'free');
+        const devPlan = localStorage.getItem('dev-plan');
+        if (devPlan && !validPlans.includes(devPlan)) {
+          localStorage.setItem('dev-plan', 'free');
+        }
+        // Log for debugging
+        console.log('[RESUME-FEEDBACK] Plan cleanup completed:', {
+          oldPlan: oldPlan,
+          newPlan: 'free',
+          localStoragePlan: localStorage.getItem('user-plan'),
+          devPlan: localStorage.getItem('dev-plan')
+        });
+      }
+      
+      return plan;
+    }
+
+    async function hydratePlanFromServerAndEnforceAccess() {
+      const allowedPlans = window.__JOBHACKAI_RF_ALLOWED_PLANS__ || ['trial', 'essential', 'pro', 'premium'];
+      const cachedPlan = localStorage.getItem('user-plan');
+      const planPending = window.__JOBHACKAI_PLAN_PENDING__;
+      
+      if (!planPending && cachedPlan && allowedPlans.includes(cachedPlan)) {
+        document.documentElement.classList.remove('plan-pending');
+        return; // Nothing to do
+      }
+      
+      try {
+        const token = await getAuthToken().catch((err) => {
+          console.warn('[RESUME-FEEDBACK] Unable to obtain auth token for plan hydration:', err);
+          return null;
+        });
+        if (!token) {
+          document.documentElement.classList.remove('plan-pending');
+          return;
+        }
+        
+        const response = await fetch('/api/plan/me', {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        });
+        
+        if (!response.ok) {
+          console.warn('[RESUME-FEEDBACK] Plan API failed during hydration:', response.status, response.statusText);
+          document.documentElement.classList.remove('plan-pending');
+          return;
+        }
+        
+        const planData = await response.json().catch(() => ({}));
+        const serverPlan = (planData.plan || 'free').toLowerCase();
+        localStorage.setItem('user-plan', serverPlan);
+        window.dispatchEvent(new CustomEvent('planChanged', { detail: serverPlan }));
+        window.__JOBHACKAI_PLAN_PENDING__ = false;
+        document.documentElement.classList.remove('plan-pending');
+        
+        if (!allowedPlans.includes(serverPlan)) {
+          console.log('🚫 [RESUME-FEEDBACK] Server plan not allowed, redirecting:', serverPlan);
+          window.location.href = 'pricing-a.html?plan=essential';
+          return;
+        }
+        
+        console.log('✅ [RESUME-FEEDBACK] Server plan confirmed:', serverPlan);
+      } catch (error) {
+        window.__JOBHACKAI_PLAN_PENDING__ = false;
+        document.documentElement.classList.remove('plan-pending');
+        console.warn('[RESUME-FEEDBACK] Failed to hydrate plan from server:', error);
+      }
     }
 
     // --- UPDATED USER OBJECT ---
@@ -371,6 +651,389 @@
       lastAtsCheckTime: null
     };
 
+    // --- GLOBAL STATE ---
+    let currentResumeId = null;
+    let currentJobTitle = null;
+
+    // --- API CLIENT FUNCTIONS ---
+    async function getAuthToken() {
+      // Wait for Firebase auth to be ready
+      if (window.FirebaseAuthManager && window.FirebaseAuthManager.waitForAuthReady) {
+        await window.FirebaseAuthManager.waitForAuthReady(3000);
+      }
+      
+      // Get Firebase ID token using FirebaseAuthManager
+      if (window.FirebaseAuthManager && window.FirebaseAuthManager.getCurrentUser) {
+        const user = window.FirebaseAuthManager.getCurrentUser();
+        if (user) {
+          return await user.getIdToken();
+        }
+      }
+      
+      // Fallback: try to get from localStorage
+      const firebaseKeys = Object.keys(localStorage).filter(k => k.startsWith('firebase:authUser:'));
+      if (firebaseKeys.length > 0) {
+        const authData = JSON.parse(localStorage.getItem(firebaseKeys[0]) || '{}');
+        if (authData.stsTokenManager?.accessToken) {
+          return authData.stsTokenManager.accessToken;
+        }
+      }
+      
+      throw new Error('Not authenticated. Please log in.');
+    }
+
+    // --- SHARED STATE MANAGEMENT HELPERS ---
+    function clearAtsState() {
+      // Clear old localStorage keys (to avoid stale state)
+      localStorage.removeItem('lastATSScore');
+      localStorage.removeItem('lastATSSummary');
+      localStorage.removeItem('lastUploadedResume');
+      localStorage.removeItem('lastUploadedResumeName');
+      
+      // Clear shared cross-page state
+      sessionStorage.removeItem('currentResumeId');
+      sessionStorage.removeItem('currentResumeText');
+      sessionStorage.removeItem('currentAtsScore');
+      sessionStorage.removeItem('currentAtsBreakdown');
+    }
+
+    async function uploadResume(file) {
+      // Validate file before upload
+      const validation = await window.JobHackAIFileValidation.validateFile(file);
+      if (!validation.valid) {
+        throw new Error(validation.error);
+      }
+      
+      // Handle warnings (e.g., scanned PDF detection)
+      if (validation.warning && window.showErrorModal) {
+        const userPlan = getCurrentUserPlan();
+        if (userPlan === 'free') {
+          // Educational modal for free users
+          window.showErrorModal('Scanned PDF Detected', 
+            validation.warningMessage || 'This appears to be a scanned PDF. For best results, please upload a text-based PDF, DOCX, or TXT file.',
+            { buttonText: 'OK' });
+        } else {
+          // Informational modal for paid users about OCR processing - use friendly messaging
+          // Note: showErrorModal is used but with friendly message to reduce alarm
+          window.showErrorModal('Processing Your Resume', 
+            validation.warningMessage || 'We\'re extracting text from your scanned PDF. This may take up to 20 seconds — please wait while we process it.',
+            { buttonText: 'Got it' });
+        }
+      }
+
+      const token = await getAuthToken();
+      const formData = new FormData();
+      formData.append('file', file);
+
+      // Use retry logic for upload
+      const response = await window.JobHackAIRetry.fetchWithRetry('/api/resume-upload', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        },
+        body: formData
+      }, {
+        maxRetries: 3,
+        initialDelay: 1000
+      });
+
+      // Handle HTTP errors
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Upload failed');
+      }
+
+      const data = await response.json();
+      
+      // Handle extraction failures (success: false but HTTP 200)
+      if (!data.success) {
+        clearAtsState();
+        // Map common error codes to user-friendly messages
+        let errorMessage = data.message || 'Resume text could not be extracted.';
+        if (data.error === 'extraction_failed' || data.error === 'invalid-text') {
+          errorMessage = 'We couldn\'t read your resume. Please upload a text-based PDF, DOCX, or TXT file.';
+        } else if (data.error && data.error.includes('OCR')) {
+          // OCR-related error - show modal with helpful message
+          errorMessage = 'This appears to be a scanned PDF. We\'re working on OCR support. For now, please upload a text-based PDF, DOCX, or TXT file.';
+        }
+        throw new Error(errorMessage);
+      }
+      
+      // Handle OCR status if present
+      if (data.ocrUsed === true || data.ocrUsed === 'pending') {
+        // Show informational modal about OCR processing - use friendly messaging
+        if (window.showErrorModal) {
+          window.showErrorModal('Processing Your Resume', 
+            'We\'re extracting text from your scanned PDF. This may take up to 20 seconds — please wait while we process it.',
+            { buttonText: 'Got it' });
+        }
+      }
+
+      currentResumeId = data.resumeId;
+      
+      // Store in sessionStorage and localStorage for cross-page sync
+      sessionStorage.setItem('currentResumeId', data.resumeId);
+      if (data.resumeText) {
+        sessionStorage.setItem('currentResumeText', data.resumeText);
+      }
+      
+      // Persist resume data
+      if (window.JobHackAIStatePersistence) {
+        window.JobHackAIStatePersistence.saveResumeData({
+          resumeId: data.resumeId,
+          resumeText: data.resumeText,
+          isMultiColumn: data.isMultiColumn
+        });
+      }
+      
+      return data;
+    }
+
+    async function getAtsScore(resumeId, jobTitle) {
+      const token = await getAuthToken();
+      
+      // Try to get resumeText from sessionStorage (fallback when KV unavailable)
+      // Use nullish coalescing to only convert null to undefined, preserving empty strings
+      const resumeText = sessionStorage.getItem('currentResumeText') ?? undefined;
+      
+      // Use retry logic for API call
+      const response = await window.JobHackAIRetry.fetchWithRetry('/api/ats-score', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ 
+          resumeId, 
+          jobTitle,
+          resumeText // Pass text directly to bypass KV requirement
+        })
+      }, {
+        maxRetries: 3,
+        initialDelay: 1000
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        // Map error codes to user-friendly messages
+        let errorMessage = error.error || 'Failed to get ATS score';
+        if (error.error === 'invalid-text') {
+          errorMessage = 'We couldn\'t read your resume. Please upload a text-based PDF, DOCX, or TXT file.';
+        } else if (error.error === 'Usage limit reached') {
+          errorMessage = error.message || 'You have used your free ATS score. Upgrade to unlock more features.';
+        } else if (error.error === 'Rate limit exceeded') {
+          errorMessage = error.message || 'Please wait before running another ATS score.';
+        }
+        throw new Error(errorMessage);
+      }
+
+      const result = await response.json();
+      
+      // Persist score to localStorage
+      if (result.success && window.JobHackAIStatePersistence) {
+        window.JobHackAIStatePersistence.saveATSScore({
+          score: result.score,
+          breakdown: result.breakdown,
+          resumeId,
+          jobTitle
+        });
+      }
+      
+      return result;
+    }
+
+    async function getResumeFeedback(resumeId, jobTitle) {
+      // Validate resumeId before making API call
+      if (!resumeId || resumeId === null || resumeId === undefined) {
+        throw new Error('Resume ID is required. Please upload a resume first.');
+      }
+      
+      const token = await getAuthToken();
+      
+      // Try to get resumeText from sessionStorage (fallback when KV unavailable)
+      // Use nullish coalescing to only convert null to undefined, preserving empty strings
+      const resumeText = sessionStorage.getItem('currentResumeText') ?? undefined;
+      
+      // Build request body with optional resumeText for dev fallback
+      const requestBody = { resumeId, jobTitle };
+      if (resumeText) {
+        requestBody.resumeText = resumeText;
+        // Also get isMultiColumn if available from state persistence
+        if (window.JobHackAIStatePersistence) {
+          const resumeData = window.JobHackAIStatePersistence.loadResumeData();
+          if (resumeData && resumeData.isMultiColumn !== undefined) {
+            requestBody.isMultiColumn = resumeData.isMultiColumn;
+          }
+        }
+      }
+      
+      // Use retry logic for API call
+      const response = await window.JobHackAIRetry.fetchWithRetry('/api/resume-feedback', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(requestBody)
+      }, {
+        maxRetries: 3,
+        initialDelay: 1000
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        // Map error codes to user-friendly messages
+        let errorMessage = error.error || 'Failed to get feedback';
+        if (error.error === 'Feature locked') {
+          errorMessage = 'This feature is available on the Pro plan. Upgrade to unlock full feedback.';
+        } else if (error.error === 'Unauthorized') {
+          errorMessage = 'Please log in to continue.';
+        } else if (response.status === 403) {
+          errorMessage = error.message || 'Access denied. Please check your plan or try logging in again.';
+        }
+        console.error('[RESUME-FEEDBACK] API error:', {
+          status: response.status,
+          error: error.error,
+          message: error.message,
+          upgradeRequired: error.upgradeRequired
+        });
+        throw new Error(errorMessage);
+      }
+
+      return await response.json();
+    }
+
+    // Global storage for latest feedback results to use in rewrite
+    window.latestAtsIssues = null;
+    window.latestRoleSpecific = null;
+
+    async function rewriteResume(resumeId, section, jobTitle, atsIssues, roleSpecificFeedback) {
+      const token = await getAuthToken();
+      
+      // Build request body with optional ATS context
+      const requestBody = { resumeId, section, jobTitle };
+      if (atsIssues && Array.isArray(atsIssues) && atsIssues.length > 0) {
+        requestBody.atsIssues = atsIssues;
+      }
+      if (roleSpecificFeedback) {
+        requestBody.roleSpecificFeedback = roleSpecificFeedback;
+      }
+      
+      // Use retry logic for API call
+      const response = await window.JobHackAIRetry.fetchWithRetry('/api/resume-rewrite', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(requestBody)
+      }, {
+        maxRetries: 3,
+        initialDelay: 1000
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        // Map error codes to user-friendly messages
+        let errorMessage = error.error || 'Failed to rewrite resume';
+        if (error.error === 'Feature locked') {
+          errorMessage = 'This feature is available on the Pro plan. Upgrade to unlock full feedback.';
+        } else if (error.error === 'Unauthorized') {
+          errorMessage = 'Please log in to continue.';
+        } else if (response.status === 403) {
+          errorMessage = error.message || 'Access denied. Please check your plan or try logging in again.';
+        }
+        console.error('[RESUME-REWRITE] API error:', {
+          status: response.status,
+          error: error.error,
+          message: error.message,
+          upgradeRequired: error.upgradeRequired
+        });
+        throw new Error(errorMessage);
+      }
+
+      const result = await response.json();
+      
+      // Note: atsIssues and roleSpecificFeedback are only returned from /api/resume-feedback,
+      // not from /api/resume-rewrite. They are already stored when feedback is received.
+      
+      return result;
+    }
+
+    function handleApiError(error) {
+      // Downgrade to debug level - user-facing errors shown via modals
+      if (window.console && window.console.debug) {
+        window.console.debug('[API Error]', error);
+      }
+      let message = error.message || 'An error occurred';
+      let modalType = 'error';
+      let action = null;
+      let actionLabel = 'OK';
+      
+      // Map error messages to user-friendly modals
+      if (message.includes('Unauthorized') || message.includes('Not authenticated')) {
+        message = 'Please log in to continue.';
+        action = () => window.location.href = 'login.html';
+        actionLabel = 'Go to Login';
+      } else if (message.includes('Usage limit') || message.includes('limit reached')) {
+        message = message + ' Upgrade to unlock more features.';
+        action = () => window.location.href = 'pricing-a.html';
+        actionLabel = 'View Pricing';
+      } else if (message.includes('Rate limit')) {
+        message = message + ' Please try again in a moment.';
+      } else if (message.includes('Feature locked') || message.includes('upgrade')) {
+        message = message;
+        action = () => window.location.href = 'pricing-a.html';
+        actionLabel = 'Upgrade Now';
+      } else if (message.includes('timeout') || message.includes('took too long')) {
+        message = 'Our AI took too long to respond. Please try again or simplify your file.';
+        action = () => window.location.reload();
+        actionLabel = 'Reload Page';
+      } else if (message.includes('couldn\'t read') || message.includes('text-based')) {
+        // File reading error - already user-friendly
+      } else if (message.includes('scanned PDF')) {
+        message = 'This appears to be a scanned PDF (image-based). Please upload a text-based PDF, DOCX, or TXT file for best results.';
+      }
+
+      // Show modal instead of inline error
+      if (window.showErrorModal) {
+        window.showErrorModal('Error', message, {
+          buttonText: actionLabel || 'Got it',
+          onClose: action || null,
+          showRetry: !!action,
+          retryCallback: action || null
+        });
+      } else {
+        // Fallback to inline error if modals not loaded
+        const errorDiv = document.createElement('div');
+        errorDiv.style.cssText = 'background:#FEE2E2;border-left:4px solid #EF4444;color:#991B1B;padding:1rem;border-radius:8px;margin:1rem 0;';
+        errorDiv.textContent = message;
+        const main = document.querySelector('main');
+        if (main) {
+          main.insertBefore(errorDiv, main.firstChild);
+          setTimeout(() => errorDiv.remove(), 5000);
+        }
+      }
+
+      return message;
+    }
+
+    // Loading overlay management
+    let currentLoadingOverlay = null;
+    
+    function showLoadingState(message = 'Loading...') {
+      if (window.JobHackAILoading) {
+        currentLoadingOverlay = window.JobHackAILoading.show(message, 'main-loading-overlay');
+      }
+    }
+
+    function hideLoadingState() {
+      if (window.JobHackAILoading) {
+        window.JobHackAILoading.hide('main-loading-overlay');
+        currentLoadingOverlay = null;
+      }
+    }
+
     // --- GLOBAL BUTTON LISTENER FUNCTIONS ---
     // Copy resume handler function
     const copyResumeHandler = function() {
@@ -379,17 +1042,75 @@
         navigator.clipboard.writeText(rewritten.value || rewritten.textContent);
         this.textContent = 'Copied!';
         setTimeout(() => { this.textContent = 'Copy Rewritten Resume'; }, 1200);
-        // [AI INTEGRATION POINT] (Optional) Log copy event or trigger analytics/Zapier webhook.
+        
+        // Show success toast
+        if (window.JobHackAIToast) {
+          window.JobHackAIToast.success('Copied to clipboard!');
+        }
       }
     };
     
     // Regenerate rewrite handler function
-    const regenerateRewriteHandler = function() {
-      // [AI INTEGRATION POINT] Regenerate Rewrite: Request new AI-optimized resume snippet.
-      // Send: original resume snippet or full resume
-      // Receive: rewritten resume snippet (string)
-      // Replace simulateRewrite with real API call and update UI with response.
-      simulateRewrite();
+    const regenerateRewriteHandler = async function() {
+      if (!currentResumeId) {
+        handleApiError(new Error('Please upload a resume first'));
+        return;
+      }
+
+      const jobTitle = document.getElementById('rf-job-title')?.value?.trim() || currentJobTitle;
+      if (!jobTitle) {
+        handleApiError(new Error('Please enter a target job title'));
+        return;
+      }
+      const section = null; // Can be enhanced to allow section-specific rewrites
+
+      try {
+        showLoadingState('Rewriting resume...');
+        this.disabled = true;
+        this.textContent = 'Regenerating...';
+
+        // Use stored feedback context if available
+        const atsIssues = window.latestAtsIssues || null;
+        const roleSpecificFeedback = window.latestRoleSpecific || null;
+        
+        const result = await rewriteResume(currentResumeId, section, jobTitle, atsIssues, roleSpecificFeedback);
+        
+        const rewrittenBox = document.querySelectorAll('#rf-rewrite-content .rf-snippet-box')[1];
+        if (rewrittenBox) {
+          rewrittenBox.value = result.rewritten || result.rewrittenResume || '';
+        }
+        
+        // Display change summary if available
+        if (result.changeSummary) {
+          displayChangeSummary(result.changeSummary);
+        }
+
+        // Show success toast
+        if (window.JobHackAIToast) {
+          window.JobHackAIToast.success('Resume rewritten successfully!');
+        }
+        
+        // Save job title to state persistence
+        if (window.JobHackAIStatePersistence && jobTitle) {
+          // Pass current job title to validate cache match
+          const cachedScore = window.JobHackAIStatePersistence.loadATSScore(jobTitle);
+          if (cachedScore) {
+            window.JobHackAIStatePersistence.saveATSScore({
+              ...cachedScore,
+              jobTitle: jobTitle
+            });
+          }
+        }
+
+        this.textContent = 'Regenerate Rewrite';
+        this.disabled = false;
+        hideLoadingState();
+      } catch (error) {
+        handleApiError(error);
+        this.textContent = 'Regenerate Rewrite';
+        this.disabled = false;
+        hideLoadingState();
+      }
     };
     
     // Resume Rewriting Buttons - Fixed selectors to match actual HTML
@@ -462,75 +1183,1611 @@
       
       // Start waiting for navigation system
       waitForNavigationAndInit();
-      // ATS Resume Upload Logic
+      
+      // Initialize role selector - ensure it's initialized after DOM and RoleSelector are ready
+      let roleSelectorInitAttempts = 0;
+      const MAX_ROLE_SELECTOR_ATTEMPTS = 50; // Try for up to 10 seconds (50 * 200ms)
+      
+      function initializeRoleSelector() {
+        const jobTitleInput = document.getElementById('rf-job-title');
+        if (!jobTitleInput) {
+          // Element not ready yet, retry
+          if (roleSelectorInitAttempts < MAX_ROLE_SELECTOR_ATTEMPTS) {
+            roleSelectorInitAttempts++;
+            setTimeout(initializeRoleSelector, 100);
+          } else {
+            console.warn('[RESUME-FEEDBACK] Job title input not found after max attempts');
+          }
+          return;
+        }
+        
+        // Wait for RoleSelector class to be available (from role-selector.js module)
+        if (window.RoleSelector) {
+          // Check if already initialized to avoid duplicate initialization
+          if (!jobTitleInput.dataset.roleSelectorInitialized) {
+            try {
+              const roleSelector = new window.RoleSelector(jobTitleInput, {
+                placeholder: 'Start typing your target role (e.g., Software Engineer, Product Manager)',
+                minChars: 2,
+                maxResults: 8,
+                showCustomOption: true,
+                onSelect: function(roleName, isCustom) {
+                  // Update currentJobTitle when role is selected
+                  currentJobTitle = roleName;
+                  console.log('[RESUME-FEEDBACK] Role selected:', roleName, isCustom ? '(custom)' : '');
+                  
+                  // Update the input's aria-expanded attribute
+                  jobTitleInput.setAttribute('aria-expanded', 'false');
+                  
+                  // Enable generate button if file is selected
+                  const fileInput = document.getElementById('rf-upload');
+                  const generateBtn = document.getElementById('rf-generate-btn');
+                  if (fileInput && generateBtn && fileInput.files && fileInput.files.length > 0) {
+                    generateBtn.disabled = false;
+                  }
+                }
+              });
+              jobTitleInput.dataset.roleSelectorInitialized = 'true';
+              console.log('[RESUME-FEEDBACK] RoleSelector initialized successfully');
+              
+              // Also listen for input changes to update currentJobTitle when user types
+              jobTitleInput.addEventListener('input', function() {
+                const value = this.value.trim();
+                if (value) {
+                  currentJobTitle = value;
+                  console.log('[RESUME-FEEDBACK] Job title updated:', value);
+                } else {
+                  // Clear currentJobTitle if input is cleared
+                  currentJobTitle = null;
+                }
+              });
+              
+              // Prevent default value from being set
+              jobTitleInput.addEventListener('focus', function() {
+                // Ensure no default value is set when focusing
+                if (this.value === 'Software Engineer' && !currentJobTitle) {
+                  this.value = '';
+                }
+              });
+              
+              // Listen for blur to capture final value even if user doesn't select from dropdown
+              jobTitleInput.addEventListener('blur', function() {
+                const value = this.value.trim();
+                if (value) {
+                  currentJobTitle = value;
+                } else {
+                  currentJobTitle = null;
+                }
+              });
+            } catch (error) {
+              console.error('[RESUME-FEEDBACK] Failed to initialize RoleSelector:', error);
+              // Retry once more after a delay
+              if (roleSelectorInitAttempts < MAX_ROLE_SELECTOR_ATTEMPTS) {
+                roleSelectorInitAttempts++;
+                setTimeout(initializeRoleSelector, 500);
+              } else {
+                console.warn('[RESUME-FEEDBACK] RoleSelector initialization failed after max attempts - dropdown may not work');
+              }
+            }
+          }
+        } else {
+          // RoleSelector not loaded yet, wait and retry
+          if (roleSelectorInitAttempts < MAX_ROLE_SELECTOR_ATTEMPTS) {
+            roleSelectorInitAttempts++;
+            setTimeout(initializeRoleSelector, 200);
+          } else {
+            console.warn('[RESUME-FEEDBACK] RoleSelector not available after max attempts - dropdown may not work');
+          }
+        }
+      }
+      
+      // Initialize role selector after DOM is ready
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initializeRoleSelector);
+      } else {
+        // DOM already ready, but wait a bit for scripts to load
+        setTimeout(initializeRoleSelector, 100);
+      }
+
+      // Load cached ATS score on page load (with KV fallback)
+      async function loadCachedATSScore() {
+        let cachedScore = null;
+        
+        // FIX: Initialize ATS score to 0% for new users before checking cache
+        updateProgressRing(0);
+        
+        // Try state persistence first
+        // On initial page load, don't validate against input field (which is empty)
+        // This allows us to restore cached scores and populate the job title field
+        // Validation only happens when user explicitly provides a job title for new analysis
+        if (window.JobHackAIStatePersistence) {
+          cachedScore = window.JobHackAIStatePersistence.loadATSScore(null);
+        }
+        
+        // If no cached score, try KV fallback
+        if (!cachedScore || !cachedScore.score) {
+          try {
+            const user = window.FirebaseAuthManager?.getCurrentUser?.();
+            if (user) {
+              const idToken = await user.getIdToken();
+              const kvResponse = await fetch('/api/ats-score-persist', {
+                method: 'GET',
+                headers: {
+                  'Authorization': `Bearer ${idToken}`
+                }
+              });
+              
+              if (kvResponse.ok) {
+                const kvData = await kvResponse.json();
+                if (kvData.success && kvData.data) {
+                  const resumeData = kvData.data;
+                  cachedScore = {
+                    score: resumeData.score,
+                    breakdown: resumeData.breakdown || {},
+                    jobTitle: resumeData.jobTitle || null,
+                    resumeId: resumeData.resumeId || null,
+                    timestamp: resumeData.timestamp || Date.now() // Include timestamp, fallback to now if missing
+                  };
+                  
+                  // Cache KV results back to localStorage
+                  if (window.JobHackAIStatePersistence) {
+                    window.JobHackAIStatePersistence.saveATSScore({
+                      score: resumeData.score,
+                      breakdown: resumeData.breakdown || {},
+                      resumeId: resumeData.resumeId || '',
+                      jobTitle: resumeData.jobTitle || null
+                    });
+                  }
+                  
+                  console.log('[RESUME-FEEDBACK] Loaded ATS score from KV:', resumeData.score);
+                }
+              }
+            }
+          } catch (kvError) {
+            console.warn('[RESUME-FEEDBACK] KV fetch failed:', kvError);
+          }
+        }
+        
+        if (cachedScore && cachedScore.score) {
+          console.log('[RESUME-FEEDBACK] Loading cached ATS score:', cachedScore.score);
+          updateProgressRing(cachedScore.score);
+          
+          // Hide placeholder
+          hidePlaceholder();
+          const placeholderCta = document.getElementById('rf-placeholder-cta');
+          if (placeholderCta) placeholderCta.style.display = 'none';
+          
+          // Show rubric grid
+          const rubricGrid = document.getElementById('rf-rubric-grid');
+          if (rubricGrid) {
+            rubricGrid.style.display = 'grid';
+          }
+          
+          // Convert breakdown to rubric format if available
+          if (cachedScore.breakdown) {
+            // Map cached breakdown structure to rubric format
+            // API returns: breakdown.keywordScore = { score, max, feedback }
+            // Also supports legacy format: breakdown.keywordScore = number
+            // Rubric expects: { score, max, tip }
+            
+            // Helper to extract score from either object or number
+            const getScore = (value) => {
+              if (typeof value === 'number') return value;
+              if (value && typeof value === 'object' && typeof value.score === 'number') return value.score;
+              return 0;
+            };
+            
+            // Helper to extract feedback from breakdown object
+            // The breakdown objects should have feedback property directly
+            const getFeedback = (value) => {
+              if (value && typeof value === 'object') {
+                // Check for feedback property first (most common)
+                if (typeof value.feedback === 'string') {
+                  return limitFeedbackToSentences(value.feedback);
+                }
+                // Fallback to tip property if feedback doesn't exist
+                if (typeof value.tip === 'string') {
+                  return limitFeedbackToSentences(value.tip);
+                }
+              }
+              return '';
+            };
+            
+            const rubric = [
+              {
+                label: 'Keyword Relevance',
+                score: getScore(cachedScore.breakdown.keywordScore),
+                max: 40,
+                tip: getFeedback(cachedScore.breakdown.keywordScore)
+              },
+              {
+                label: 'Formatting Compliance',
+                score: getScore(cachedScore.breakdown.formattingScore),
+                max: 20,
+                tip: getFeedback(cachedScore.breakdown.formattingScore)
+              },
+              {
+                label: 'Structure & Section Completeness',
+                score: getScore(cachedScore.breakdown.structureScore),
+                max: 15,
+                tip: getFeedback(cachedScore.breakdown.structureScore)
+              },
+              {
+                label: 'Tone & Clarity',
+                score: getScore(cachedScore.breakdown.toneScore),
+                max: 15,
+                tip: getFeedback(cachedScore.breakdown.toneScore)
+              },
+              {
+                label: 'Grammar & Spelling',
+                score: getScore(cachedScore.breakdown.grammarScore),
+                max: 10,
+                tip: getFeedback(cachedScore.breakdown.grammarScore)
+              }
+            ];
+            updateRubricGrid(rubric);
+          }
+          
+          // Restore role-specific feedback if available (supports both old and new formats)
+          if (cachedScore.roleSpecificFeedback) {
+            const isOldFormat = Array.isArray(cachedScore.roleSpecificFeedback) && 
+                               cachedScore.roleSpecificFeedback.length > 0;
+            const isNewFormat = typeof cachedScore.roleSpecificFeedback === 'object' && 
+                               !Array.isArray(cachedScore.roleSpecificFeedback) &&
+                               cachedScore.roleSpecificFeedback.targetRoleUsed !== undefined &&
+                               Array.isArray(cachedScore.roleSpecificFeedback.sections) &&
+                               cachedScore.roleSpecificFeedback.sections.length > 0;
+            
+            if (isOldFormat || isNewFormat) {
+              updateFeedbackGrid(cachedScore.roleSpecificFeedback);
+              // Make feedback grid visible (it starts with display:none)
+              const feedbackGrid = document.getElementById('rf-feedback-grid');
+              if (feedbackGrid) {
+                feedbackGrid.style.display = 'grid';
+              }
+              showRoleFeedback();
+            } else {
+              // Invalid format - hide feedback section
+              console.warn('[RESUME-FEEDBACK] Invalid roleSpecificFeedback format in cache:', typeof cachedScore.roleSpecificFeedback);
+              hideRoleFeedback();
+            }
+          } else {
+            // No role feedback available - user can use optimize button if needed
+            hideRoleFeedback();
+          }
+          
+          // Get resume name for context bar and file name restoration
+          const lastResumeName = localStorage.getItem('lastUploadedResumeName');
+          
+          // Only show context bar if we have all required data
+          const hasValidCachedData = cachedScore && 
+                                     cachedScore.score !== undefined && 
+                                     cachedScore.resumeId &&
+                                     lastResumeName && 
+                                     lastResumeName !== 'Unknown file' &&
+                                     cachedScore.timestamp;
+          
+          // Show context bar only if we have valid cached data
+          const contextBar = document.getElementById('rf-context-bar');
+          if (contextBar) {
+            if (hasValidCachedData) {
+              contextBar.style.display = 'block';
+              
+              // Update context bar details
+              const fileNameEl = document.getElementById('rf-context-file-name');
+              if (fileNameEl) fileNameEl.textContent = lastResumeName;
+              
+              const roleNameEl = document.getElementById('rf-context-role-name');
+              if (roleNameEl) {
+                roleNameEl.textContent = cachedScore.jobTitle || 'Not specified';
+              }
+              
+              const timeEl = document.getElementById('rf-context-time-value');
+              if (timeEl && cachedScore.timestamp) {
+                const date = new Date(cachedScore.timestamp);
+                const now = new Date();
+                const diffMs = now - date;
+                const diffMins = Math.floor(diffMs / 60000);
+                const diffHours = Math.floor(diffMs / 3600000);
+                const diffDays = Math.floor(diffMs / 86400000);
+                
+                let timeText;
+                if (diffMins < 1) {
+                  timeText = 'Just now';
+                } else if (diffMins < 60) {
+                  timeText = `${diffMins} minute${diffMins !== 1 ? 's' : ''} ago`;
+                } else if (diffHours < 24) {
+                  timeText = `${diffHours} hour${diffHours !== 1 ? 's' : ''} ago`;
+                } else if (diffDays === 1) {
+                  timeText = 'Yesterday';
+                } else if (diffDays < 7) {
+                  timeText = `${diffDays} days ago`;
+                } else {
+                  timeText = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: date.getFullYear() !== now.getFullYear() ? 'numeric' : undefined });
+                }
+                timeEl.textContent = timeText;
+              }
+            } else {
+              // Hide context bar if data is incomplete
+              contextBar.style.display = 'none';
+            }
+          }
+          
+          // Restore job title if available (only if input is empty to avoid overwriting user input)
+          const jobTitleInput = document.getElementById('rf-job-title');
+          if (cachedScore.jobTitle && jobTitleInput && !jobTitleInput.value.trim()) {
+            // Only restore if it's a real job title, not a placeholder
+            const jobTitle = cachedScore.jobTitle.trim();
+            if (jobTitle && jobTitle !== 'Software Engineer' && jobTitle !== 'Not specified') {
+              jobTitleInput.value = jobTitle;
+              currentJobTitle = jobTitle;
+              console.log('[RESUME-FEEDBACK] Restored job title from cache:', jobTitle);
+            }
+          } else if (!cachedScore?.jobTitle && jobTitleInput && !jobTitleInput.value.trim()) {
+            // Set visual placeholder to "Software Engineer" for consistency with other pages
+            // BUT don't set currentJobTitle - only set it when user explicitly interacts with the field
+            // This prevents incorrect role analysis for users in other roles
+            jobTitleInput.value = 'Software Engineer';
+            // currentJobTitle remains null until user explicitly selects/types a value
+            console.log('[RESUME-FEEDBACK] Set visual placeholder to Software Engineer (not active until user confirms)');
+          }
+          
+          // Restore file name if available (display only - don't enable button)
+          // Browsers don't persist file inputs, so user must re-select file
+          const fileNameSpan = document.getElementById('rf-file-name');
+          if (lastResumeName && fileNameSpan) {
+            fileNameSpan.textContent = lastResumeName + ' (please re-select file)';
+            fileNameSpan.style.color = 'var(--color-text-muted)';
+            fileNameSpan.style.fontWeight = 'normal';
+            
+            // Do NOT enable generate button - file input is empty after page reload
+            // User must select a file again before the button can be enabled
+          }
+        }
+      }
+      
+      // Load cached score on page load
+      loadCachedATSScore().then(() => {
+        // Check if we have resume data after loading
+        const hasResumeData = document.querySelector('#rf-rubric-grid .rf-rubric-item .rf-rubric-score')?.textContent !== '— / —';
+        
+        if (!hasResumeData) {
+          // Show placeholder note and CTA
+          const placeholder = document.getElementById('ats-placeholder');
+          if (placeholder) placeholder.style.display = 'block';
+          const placeholderCta = document.getElementById('rf-placeholder-cta');
+          if (placeholderCta) placeholderCta.style.display = 'block';
+          const regenBtn = document.getElementById('rf-regenerate-btn');
+          if (regenBtn) regenBtn.style.display = 'none';
+        }
+        
+        // Attach event handlers for context bar buttons
+        const rerunBtn = document.getElementById('rf-rerun-btn');
+        if (rerunBtn) {
+          rerunBtn.addEventListener('click', function() {
+            // Scroll to top and focus on file input to encourage re-upload
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+            const fileInput = document.getElementById('rf-upload');
+            if (fileInput) {
+              fileInput.click();
+            }
+          });
+        }
+        
+        const optimizeBtn = document.getElementById('rf-optimize-btn');
+        if (optimizeBtn) {
+          optimizeBtn.addEventListener('click', async function() {
+            const currentResumeId = sessionStorage.getItem('currentResumeId') || localStorage.getItem('jh_last_resume_id');
+            if (!currentResumeId) {
+              if (window.JobHackAIToast) {
+                window.JobHackAIToast.error('Please upload a resume first');
+              }
+              return;
+            }
+            
+            const jobTitleInput = document.getElementById('rf-job-title');
+            const jobTitle = jobTitleInput?.value?.trim() || '';
+            
+            try {
+              showLoadingState('Optimizing for ATS compliance…');
+              this.disabled = true;
+              this.textContent = 'Optimizing...';
+              
+              const feedbackResult = await getResumeFeedback(currentResumeId, jobTitle);
+              
+              // Store latest feedback results for rewrite calls
+              if (feedbackResult.atsIssues) {
+                window.latestAtsIssues = feedbackResult.atsIssues;
+              }
+              if (feedbackResult.roleSpecificFeedback) {
+                window.latestRoleSpecific = feedbackResult.roleSpecificFeedback;
+              }
+              
+              updateFeedbackGrid(feedbackResult.roleSpecificFeedback);
+              updateRubricGridFromFeedback(feedbackResult.atsRubric);
+              
+              // Make grids visible (they start with display:none)
+              const rubricGrid = document.getElementById('rf-rubric-grid');
+              if (rubricGrid) {
+                rubricGrid.style.display = 'grid';
+              }
+              const feedbackGrid = document.getElementById('rf-feedback-grid');
+              if (feedbackGrid) {
+                if (feedbackResult.roleSpecificFeedback) {
+                  feedbackGrid.style.display = 'grid';
+                  showRoleFeedback();
+                } else {
+                  feedbackGrid.style.display = 'none';
+                  hideRoleFeedback();
+                }
+              }
+              
+              // Save role-specific feedback to persistence
+              // Load cached score without job title validation to get existing ATS score
+              // This allows updating feedback even when job title has changed
+              if (window.JobHackAIStatePersistence) {
+                const cachedScore = window.JobHackAIStatePersistence.loadATSScore(null);
+                if (cachedScore && cachedScore.resumeId === currentResumeId) {
+                  // Merge feedback text from atsRubric into breakdown
+                  const updatedBreakdown = { ...cachedScore.breakdown };
+                  if (feedbackResult.atsRubric && Array.isArray(feedbackResult.atsRubric)) {
+                    feedbackResult.atsRubric.forEach(item => {
+                      const category = (item.category || item.label || '').toLowerCase();
+                      const feedback = item.feedback || item.tip || '';
+                      
+                      if (category.includes('keyword') && updatedBreakdown.keywordScore) {
+                        updatedBreakdown.keywordScore.feedback = feedback;
+                      } else if (category.includes('format') && updatedBreakdown.formattingScore) {
+                        updatedBreakdown.formattingScore.feedback = feedback;
+                      } else if ((category.includes('structure') || category.includes('section')) && updatedBreakdown.structureScore) {
+                        updatedBreakdown.structureScore.feedback = feedback;
+                      } else if ((category.includes('tone') || category.includes('clarity')) && updatedBreakdown.toneScore) {
+                        updatedBreakdown.toneScore.feedback = feedback;
+                      } else if ((category.includes('grammar') || category.includes('spelling')) && updatedBreakdown.grammarScore) {
+                        updatedBreakdown.grammarScore.feedback = feedback;
+                      }
+                    });
+                  }
+                  
+                  // Update existing cached score with new job title, feedback, and updated breakdown
+                  window.JobHackAIStatePersistence.saveATSScore({
+                    ...cachedScore,
+                    breakdown: updatedBreakdown,
+                    jobTitle: jobTitle || null,
+                    roleSpecificFeedback: feedbackResult.roleSpecificFeedback || null
+                  });
+                } else if (currentResumeId && feedbackResult.atsRubric) {
+                  // If no cached score exists, reconstruct breakdown from atsRubric to save feedback
+                  // This ensures feedback is always saved even if cache is missing
+                  const reconstructedBreakdown = {};
+                  let totalScore = 0;
+                  
+                  // Reconstruct breakdown from atsRubric
+                  feedbackResult.atsRubric.forEach(item => {
+                    const category = (item.category || item.label || '').toLowerCase();
+                    const score = item.score || 0;
+                    const max = item.max || 0;
+                    const feedback = item.feedback || item.tip || '';
+                    
+                    totalScore += score;
+                    
+                    if (category.includes('keyword')) {
+                      reconstructedBreakdown.keywordScore = { score, max: 40, feedback };
+                    } else if (category.includes('format')) {
+                      reconstructedBreakdown.formattingScore = { score, max: 20, feedback };
+                    } else if (category.includes('structure') || category.includes('section')) {
+                      reconstructedBreakdown.structureScore = { score, max: 15, feedback };
+                    } else if (category.includes('tone') || category.includes('clarity')) {
+                      reconstructedBreakdown.toneScore = { score, max: 15, feedback };
+                    } else if (category.includes('grammar') || category.includes('spelling')) {
+                      reconstructedBreakdown.grammarScore = { score, max: 10, feedback };
+                    }
+                  });
+                  
+                  // Save with reconstructed data
+                  window.JobHackAIStatePersistence.saveATSScore({
+                    score: totalScore,
+                    breakdown: reconstructedBreakdown,
+                    resumeId: currentResumeId,
+                    jobTitle: jobTitle || null,
+                    roleSpecificFeedback: feedbackResult.roleSpecificFeedback || null
+                  });
+                  console.log('[RESUME-FEEDBACK] Saved feedback with reconstructed breakdown');
+                }
+              }
+              
+              // Show role feedback
+              showRoleFeedback();
+              
+              // Update context bar timestamp
+              if (window.JobHackAIStatePersistence) {
+                // Pass jobTitle directly (empty string is valid and should be validated)
+                const updatedScore = window.JobHackAIStatePersistence.loadATSScore(jobTitle ?? '');
+                if (updatedScore && updatedScore.timestamp) {
+                  const timeEl = document.getElementById('rf-context-time-value');
+                  if (timeEl) {
+                    timeEl.textContent = 'Just now';
+                  }
+                }
+              }
+              
+              if (window.JobHackAIToast) {
+                window.JobHackAIToast.success('Feedback generated successfully!');
+              }
+              
+              this.textContent = 'Optimize this resume';
+              this.disabled = false;
+              hideLoadingState();
+            } catch (error) {
+              handleApiError(error);
+              this.textContent = 'Optimize this resume';
+              this.disabled = false;
+              hideLoadingState();
+            }
+          });
+        }
+      });
+
+      // Helper function to limit feedback to 1-2 sentences
+      function limitFeedbackToSentences(text, maxSentences = 2) {
+        if (!text || typeof text !== 'string') return '';
+        const sentences = text.split(/[.!?]+/).filter(s => s.trim().length > 0);
+        if (sentences.length === 0) return '';
+        const result = sentences.slice(0, maxSentences).join('. ').trim();
+        // Always ensure a period at the end if there's content
+        return result + (result.endsWith('.') ? '' : '.');
+      }
+      
+      // Helper function to generate ATS score and feedback
+      async function generateATSAndFeedback() {
+        const uploadInput = document.getElementById('rf-upload');
+        const file = uploadInput?.files[0];
+        if (!file) {
+          handleApiError(new Error('Please select a resume file first'));
+          return;
+        }
+
+        const jobTitleInput = document.getElementById('rf-job-title');
+        const jobTitle = jobTitleInput?.value?.trim() || '';
+        currentJobTitle = jobTitle; // Save for later use (optional, so empty is OK)
+        
+        // Save job title to state persistence (even if empty)
+        if (window.JobHackAIStatePersistence) {
+          // Pass current job title directly (empty string is valid and should be validated)
+          // Only null should skip validation (page load scenario)
+          const cachedScore = window.JobHackAIStatePersistence.loadATSScore(currentJobTitle ?? '');
+          if (cachedScore) {
+            window.JobHackAIStatePersistence.saveATSScore({
+              ...cachedScore,
+              jobTitle: currentJobTitle || null
+            });
+          }
+        }
+
+        const generateBtn = document.getElementById('rf-generate-btn');
+        const statusDiv = document.getElementById('rf-generate-status');
+        
+        // Track whether ATS scoring succeeded (for credit restoration logic)
+        let atsScoringSucceeded = false;
+        
+        try {
+          generateBtn.disabled = true;
+          if (statusDiv) {
+            statusDiv.style.display = 'none';
+          }
+          showLoadingState('Analyzing your résumé for ATS criteria…');
+          uploadInput.disabled = true;
+
+          // Check if we already have a resumeId for this file
+          // IMPORTANT: Only reuse if file name AND size match to detect content changes
+          // File size is a simple content check - if user edits resume, size likely changes
+          const existingResumeId = sessionStorage.getItem('currentResumeId') || localStorage.getItem('jh_last_resume_id');
+          const existingFileName = localStorage.getItem('lastUploadedResumeName');
+          const existingFileSize = localStorage.getItem('lastUploadedResumeSize');
+          const currentFileSize = file.size.toString();
+          
+          let uploadResult;
+          if (existingResumeId && existingFileName === file.name && existingFileSize === currentFileSize) {
+            // File name and size match - likely same file, reuse existing resumeId
+            // CRITICAL: Still need to check and consume credit for free accounts even when reusing
+            // This prevents free users from bypassing the limit by re-uploading the same file
+            const userPlan = getCurrentUserPlan();
+            if (userPlan === 'free') {
+              const currentUser = window.FirebaseAuthManager?.getCurrentUser?.();
+              let hasCredit = false;
+              
+              if (currentUser && currentUser.uid) {
+                const creditKey = `creditsByUid:${currentUser.uid}`;
+                const creditsData = localStorage.getItem(creditKey);
+                if (creditsData) {
+                  try {
+                    const credits = JSON.parse(creditsData);
+                    hasCredit = credits.ats_free_lifetime > 0;
+                  } catch (e) {
+                    console.warn('[RESUME-FEEDBACK] Failed to parse credits data (cached path):', e);
+                    hasCredit = true; // Default to allowing for new users or corrupted data
+                  }
+                } else {
+                  // No credits data means user hasn't used it yet - grant access
+                  hasCredit = true;
+                }
+              } else {
+                console.warn('[RESUME-FEEDBACK] No authenticated user found for free account check (cached path)');
+                hasCredit = false;
+              }
+              
+              // Also check freeAccountManager as fallback
+              if (!hasCredit && window.freeAccountManager) {
+                try {
+                  const usageCheck = window.freeAccountManager.canUseATSScoring();
+                  hasCredit = usageCheck.allowed;
+                } catch (e) {
+                  console.warn('[RESUME-FEEDBACK] Error checking free account manager (cached path):', e);
+                  hasCredit = false;
+                }
+              }
+              
+              if (!hasCredit) {
+                // Free account limit reached - show upgrade message
+                uploadInput.disabled = false;
+                generateBtn.disabled = false;
+                hideLoadingState();
+                handleApiError(new Error('You have used your 1 free lifetime ATS score. Upgrade to continue scoring unlimited resumes.'));
+                // Redirect to pricing page after showing error
+                setTimeout(() => {
+                  window.location.href = 'pricing-a.html?plan=essential';
+                }, 2000);
+                return;
+              }
+              
+              // CRITICAL: Consume credit even when reusing cached resumeId
+              // This prevents free users from bypassing the limit by re-uploading the same file
+              if (currentUser && currentUser.uid) {
+                const creditKey = `creditsByUid:${currentUser.uid}`;
+                const creditsData = localStorage.getItem(creditKey);
+                let credits = { ats_free_lifetime: 1 }; // Default for new users
+                
+                if (creditsData) {
+                  try {
+                    credits = JSON.parse(creditsData);
+                  } catch (e) {
+                    console.warn('[RESUME-FEEDBACK] Failed to parse credits data before consumption (cached path):', e);
+                    credits = { ats_free_lifetime: 1 }; // Default to available on parse error
+                  }
+                }
+                
+                // Consume credit immediately (even for cached file reuse)
+                credits.ats_free_lifetime = 0;
+                localStorage.setItem(creditKey, JSON.stringify(credits));
+                console.log('[RESUME-FEEDBACK] ✅ Free ATS credit consumed in localStorage (cached file reuse)');
+              }
+            }
+            
+            console.log('[RESUME-FEEDBACK] Reusing existing resumeId (name and size match):', existingResumeId);
+            const existingResumeText = sessionStorage.getItem('currentResumeText');
+            uploadResult = {
+              success: true,
+              resumeId: existingResumeId,
+              resumeText: existingResumeText || undefined,
+              textPreview: existingResumeText ? (existingResumeText.length > 200 ? existingResumeText.substring(0, 200) + '...' : existingResumeText) : undefined
+            };
+            currentResumeId = existingResumeId;
+            // Ensure resumeId is in sessionStorage for consistency
+            sessionStorage.setItem('currentResumeId', existingResumeId);
+            // Update filename and size in localStorage to keep state consistent
+            localStorage.setItem('lastUploadedResumeName', file.name);
+            localStorage.setItem('lastUploadedResumeSize', currentFileSize);
+          } else {
+            // New file or file changed - check free account limits before upload
+            const userPlan = getCurrentUserPlan();
+            if (userPlan === 'free') {
+              // Check if free account has remaining credit
+              const currentUser = window.FirebaseAuthManager?.getCurrentUser?.();
+              let hasCredit = false;
+              
+              if (currentUser && currentUser.uid) {
+                const creditKey = `creditsByUid:${currentUser.uid}`;
+                const creditsData = localStorage.getItem(creditKey);
+                if (creditsData) {
+                  try {
+                    const credits = JSON.parse(creditsData);
+                    hasCredit = credits.ats_free_lifetime > 0;
+                  } catch (e) {
+                    console.warn('[RESUME-FEEDBACK] Failed to parse credits data:', e);
+                    // Default to allowing for new users or corrupted data
+                    hasCredit = true;
+                  }
+                } else {
+                  // No credits data means user hasn't used it yet - grant access
+                  hasCredit = true;
+                }
+              } else {
+                // No authenticated user - should not reach here due to access control, but handle gracefully
+                console.warn('[RESUME-FEEDBACK] No authenticated user found for free account check');
+                hasCredit = false;
+              }
+              
+              // Also check freeAccountManager as fallback
+              if (!hasCredit && window.freeAccountManager) {
+                try {
+                  const usageCheck = window.freeAccountManager.canUseATSScoring();
+                  hasCredit = usageCheck.allowed;
+                } catch (e) {
+                  console.warn('[RESUME-FEEDBACK] Error checking free account manager:', e);
+                  // If check fails, deny access to be safe
+                  hasCredit = false;
+                }
+              }
+              
+              if (!hasCredit) {
+                // Free account limit reached - show upgrade message
+                uploadInput.disabled = false;
+                generateBtn.disabled = false;
+                hideLoadingState();
+                handleApiError(new Error('You have used your 1 free lifetime ATS score. Upgrade to continue scoring unlimited resumes.'));
+                // Redirect to pricing page after showing error
+                setTimeout(() => {
+                  window.location.href = 'pricing-a.html?plan=essential';
+                }, 2000);
+                return;
+              }
+              
+              // CRITICAL: Consume credit immediately after check passes to prevent multiple uploads
+              // This prevents race conditions where multiple uploads could pass the check
+              if (currentUser && currentUser.uid) {
+                const creditKey = `creditsByUid:${currentUser.uid}`;
+                const creditsData = localStorage.getItem(creditKey);
+                let credits = { ats_free_lifetime: 1 }; // Default for new users
+                
+                if (creditsData) {
+                  try {
+                    credits = JSON.parse(creditsData);
+                  } catch (e) {
+                    console.warn('[RESUME-FEEDBACK] Failed to parse credits data before consumption:', e);
+                    credits = { ats_free_lifetime: 1 }; // Default to available on parse error
+                  }
+                }
+                
+                // Consume credit immediately (before upload)
+                credits.ats_free_lifetime = 0;
+                localStorage.setItem(creditKey, JSON.stringify(credits));
+                console.log('[RESUME-FEEDBACK] ✅ Free ATS credit consumed in localStorage (before upload)');
+              }
+            }
+            
+            // New file or file changed (name or size different), upload it
+            // Store file name and size after determining we need to upload
+            localStorage.setItem('lastUploadedResumeName', file.name);
+            localStorage.setItem('lastUploadedResumeSize', currentFileSize);
+            uploadResult = await uploadResume(file);
+          }
+          
+          // CRITICAL: If upload failed, don't proceed to ATS scoring
+          if (!uploadResult || !uploadResult.success || !uploadResult.resumeId) {
+            // Restore credit if upload failed (for free accounts)
+            const userPlan = getCurrentUserPlan();
+            if (userPlan === 'free') {
+              const currentUser = window.FirebaseAuthManager?.getCurrentUser?.();
+              if (currentUser && currentUser.uid) {
+                const creditKey = `creditsByUid:${currentUser.uid}`;
+                const creditsData = localStorage.getItem(creditKey);
+                let credits = { ats_free_lifetime: 1 }; // Default for new users
+                
+                if (creditsData) {
+                  try {
+                    credits = JSON.parse(creditsData);
+                  } catch (e) {
+                    console.warn('[RESUME-FEEDBACK] Failed to parse credits data during restoration:', e);
+                    credits = { ats_free_lifetime: 1 }; // Default on parse error
+                  }
+                }
+                
+                // Restore only the ats_free_lifetime credit, preserving other credit types
+                credits.ats_free_lifetime = 1;
+                localStorage.setItem(creditKey, JSON.stringify(credits));
+                console.log('[RESUME-FEEDBACK] ✅ Free ATS credit restored due to upload failure');
+              }
+            }
+            
+            // Error already shown by uploadResume, but we need to clean up UI state
+            uploadInput.disabled = false;
+            generateBtn.disabled = false;
+            hideLoadingState();
+            return;
+          }
+          
+          currentResumeId = uploadResult.resumeId;
+          
+          // Clear previous feedback context when uploading a new resume
+          // This prevents using feedback from the previous resume with the new one
+          window.latestAtsIssues = null;
+          window.latestRoleSpecific = null;
+
+          // Get ATS score (only if upload succeeded)
+          showLoadingState('Calculating your ATS score…');
+          // Ensure jobTitle is passed (even if empty string) - role is primary steering for ATS expectations
+          const jobTitleForScore = currentJobTitle || jobTitleInput?.value?.trim() || '';
+          const scoreResult = await getAtsScore(uploadResult.resumeId, jobTitleForScore);
+          
+          // Mark that ATS scoring succeeded - credit should NOT be restored if scoring worked
+          atsScoringSucceeded = scoreResult.success && scoreResult.score !== undefined;
+          
+          // Store ATS score in sessionStorage for cross-page sync
+          // Note: Credit restoration on scoring failure is handled in the catch block below
+          // since getAtsScore throws exceptions rather than returning {success: false}
+          if (scoreResult.success && scoreResult.score !== undefined) {
+            sessionStorage.setItem('currentAtsScore', scoreResult.score.toString());
+            if (scoreResult.breakdown) {
+              sessionStorage.setItem('currentAtsBreakdown', JSON.stringify(scoreResult.breakdown));
+            }
+            
+            // Also store in localStorage for backward compatibility
+            const summary = scoreResult.score > 85 ? 'Excellent! Your resume is highly ATS compatible.' : 
+                           scoreResult.score > 70 ? 'Your resume meets many ATS criteria and is likely to be noticed.' : 
+                           'Your resume needs improvement for better ATS results.';
+            localStorage.setItem('lastATSScore', scoreResult.score.toString());
+            localStorage.setItem('lastATSSummary', summary);
+          }
+          
+          updateProgressRing(scoreResult.score);
+          
+          // Hide placeholder and show feedback
+          hidePlaceholder();
+          const placeholderCta = document.getElementById('rf-placeholder-cta');
+          if (placeholderCta) placeholderCta.style.display = 'none';
+          const regenBtn = document.getElementById('rf-regenerate-btn');
+          if (regenBtn) regenBtn.style.display = 'block';
+          
+          // Convert breakdown to rubric format
+          const rubric = [
+            {
+              label: 'Keyword Relevance',
+              score: scoreResult.breakdown.keywordScore.score,
+              max: 40,
+              tip: limitFeedbackToSentences(scoreResult.breakdown.keywordScore.feedback)
+            },
+            {
+              label: 'Formatting Compliance',
+              score: scoreResult.breakdown.formattingScore.score,
+              max: 20,
+              tip: limitFeedbackToSentences(scoreResult.breakdown.formattingScore.feedback)
+            },
+            {
+              label: 'Structure & Section Completeness',
+              score: scoreResult.breakdown.structureScore.score,
+              max: 15,
+              tip: limitFeedbackToSentences(scoreResult.breakdown.structureScore.feedback)
+            },
+            {
+              label: 'Tone & Clarity',
+              score: scoreResult.breakdown.toneScore.score,
+              max: 15,
+              tip: limitFeedbackToSentences(scoreResult.breakdown.toneScore.feedback)
+            },
+            {
+              label: 'Grammar & Spelling',
+              score: scoreResult.breakdown.grammarScore.score,
+              max: 10,
+              tip: limitFeedbackToSentences(scoreResult.breakdown.grammarScore.feedback)
+            }
+          ];
+          updateRubricGrid(rubric);
+          
+          // Make rubric grid visible (it starts with display:none)
+          const rubricGrid = document.getElementById('rf-rubric-grid');
+          if (rubricGrid) {
+            rubricGrid.style.display = 'grid';
+          }
+          
+          // Trigger fade transition for ATS feedback
+          setTimeout(() => {
+            showATSFeedback();
+          }, 100);
+
+          // Get feedback (if plan allows)
+          const plan = getCurrentUserPlan();
+          if (['trial', 'essential', 'pro', 'premium'].includes(plan)) {
+            try {
+              // Job title is optional - use empty string if not provided
+              const jobTitleForFeedback = jobTitleInput?.value?.trim() || '';
+              
+              showLoadingState('Optimizing for ATS compliance…');
+              const feedbackResult = await getResumeFeedback(uploadResult.resumeId, jobTitleForFeedback);
+              
+              // Store latest feedback results for rewrite calls
+              if (feedbackResult.atsIssues) {
+                window.latestAtsIssues = feedbackResult.atsIssues;
+              }
+              if (feedbackResult.roleSpecificFeedback) {
+                window.latestRoleSpecific = feedbackResult.roleSpecificFeedback;
+              }
+              
+              updateFeedbackGrid(feedbackResult.roleSpecificFeedback);
+              updateRubricGridFromFeedback(feedbackResult.atsRubric);
+              
+              // Show/hide feedback grid based on whether feedback is available
+              const feedbackGrid = document.getElementById('rf-feedback-grid');
+              if (feedbackGrid) {
+                if (feedbackResult.roleSpecificFeedback) {
+                  feedbackGrid.style.display = 'grid';
+                  showRoleFeedback();
+                } else {
+                  feedbackGrid.style.display = 'none';
+                  hideRoleFeedback();
+                }
+              }
+              
+              // Save role-specific feedback to persistence
+              if (window.JobHackAIStatePersistence && scoreResult.success) {
+                // RECONSTRUCT breakdown from atsRubric to ensure feedback is always included
+                // This is more reliable than merging into existing breakdown structure
+                let finalBreakdown = { ...scoreResult.breakdown };
+                
+                if (feedbackResult.atsRubric && Array.isArray(feedbackResult.atsRubric)) {
+                  // Reconstruct breakdown from atsRubric (ensures feedback is included)
+                  const reconstructedBreakdown = {};
+                  
+                  feedbackResult.atsRubric.forEach(item => {
+                    const category = (item.category || item.label || '').toLowerCase();
+                    const score = item.score || 0;
+                    const max = item.max || 0;
+                    const feedback = item.feedback || item.tip || '';
+                    
+                    if (category.includes('keyword')) {
+                      reconstructedBreakdown.keywordScore = { 
+                        score, 
+                        max: 40, 
+                        feedback: feedback || finalBreakdown.keywordScore?.feedback || '' 
+                      };
+                    } else if (category.includes('format')) {
+                      reconstructedBreakdown.formattingScore = { 
+                        score, 
+                        max: 20, 
+                        feedback: feedback || finalBreakdown.formattingScore?.feedback || '' 
+                      };
+                    } else if ((category.includes('structure') || category.includes('section'))) {
+                      reconstructedBreakdown.structureScore = { 
+                        score, 
+                        max: 15, 
+                        feedback: feedback || finalBreakdown.structureScore?.feedback || '' 
+                      };
+                    } else if ((category.includes('tone') || category.includes('clarity'))) {
+                      reconstructedBreakdown.toneScore = { 
+                        score, 
+                        max: 15, 
+                        feedback: feedback || finalBreakdown.toneScore?.feedback || '' 
+                      };
+                    } else if ((category.includes('grammar') || category.includes('spelling'))) {
+                      reconstructedBreakdown.grammarScore = { 
+                        score, 
+                        max: 10, 
+                        feedback: feedback || finalBreakdown.grammarScore?.feedback || '' 
+                      };
+                    }
+                  });
+                  
+                  // Merge reconstructed breakdown with original (preserve any missing categories)
+                  finalBreakdown = {
+                    ...finalBreakdown,
+                    ...reconstructedBreakdown
+                  };
+                } else {
+                  // No atsRubric available, ensure breakdown structure has feedback properties
+                  ['keywordScore', 'formattingScore', 'structureScore', 'toneScore', 'grammarScore'].forEach(key => {
+                    if (finalBreakdown[key] && typeof finalBreakdown[key] === 'object') {
+                      if (!('feedback' in finalBreakdown[key])) {
+                        finalBreakdown[key] = {
+                          ...finalBreakdown[key],
+                          feedback: ''
+                        };
+                      }
+                    }
+                  });
+                }
+                
+                // Save with reconstructed breakdown that includes feedback
+                const saveSuccess = window.JobHackAIStatePersistence.saveATSScore({
+                  score: scoreResult.score,
+                  breakdown: finalBreakdown,
+                  resumeId: uploadResult.resumeId,
+                  jobTitle: jobTitleForFeedback || null,
+                  roleSpecificFeedback: feedbackResult.roleSpecificFeedback || null
+                });
+                
+                if (!saveSuccess) {
+                  console.warn('[RESUME-FEEDBACK] Failed to save ATS score to persistence');
+                } else {
+                  console.log('[RESUME-FEEDBACK] Saved ATS score with breakdown including feedback');
+                }
+              }
+            
+              // Trigger fade transition for role feedback (only once, after feedback is loaded)
+              setTimeout(() => {
+                showRoleFeedback();
+              }, 100);
+              
+            } catch (feedbackError) {
+              // Log at debug level, show user-friendly modal
+              if (window.console && window.console.debug) {
+                window.console.debug('[FEEDBACK] Failed to get feedback:', feedbackError);
+              }
+              // Hide role feedback container since we don't have valid feedback data
+              hideRoleFeedback();
+              // Show error modal but keep ATS score visible
+              if (window.showErrorModal) {
+                const errorMsg = feedbackError.message || 'Failed to generate feedback. Your ATS score is still available.';
+                window.showErrorModal('Feedback Generation Failed', errorMsg, {
+                  buttonText: 'OK',
+                  onClose: () => {
+                    // Keep ATS score visible - don't clear state
+                  }
+                });
+              }
+              // Continue without feedback if it fails - ATS score remains visible
+            }
+          } else {
+            // Hide role feedback container for free users (they don't have access to feedback)
+            hideRoleFeedback();
+            // Show placeholder CTA for free users
+            const placeholderCta = document.getElementById('rf-placeholder-cta');
+            if (placeholderCta) placeholderCta.style.display = 'block';
+          }
+
+          // Update original snippet in rewrite section
+          // Use full resume text if available, otherwise use preview
+          const origBox = document.querySelectorAll('#rf-rewrite-content .rf-snippet-box')[0];
+          if (origBox) {
+            // Try to get full resume text from sessionStorage or upload result
+            const resumeText = sessionStorage.getItem('currentResumeText') || uploadResult.resumeText;
+            if (resumeText && resumeText.length > 0) {
+              // Clean up text for display - remove excessive whitespace and ensure readability
+              let cleanText = resumeText.replace(/\s+/g, ' ').trim();
+              
+              // Check if text became empty after cleaning (only whitespace was present)
+              if (cleanText.length === 0) {
+                // Text was only whitespace - show helpful message
+                origBox.value = '⚠️ No readable text could be extracted from this file. Please upload a text-based PDF or DOCX file.';
+              } else {
+                // Validate text quality - check for excessive non-alphanumeric characters (possible OCR corruption)
+                // Only calculate ratio if cleanText has content to avoid division by zero
+                const alphanumericRatio = cleanText.length > 0 
+                  ? (cleanText.match(/[a-zA-Z0-9\s]/g) || []).length / cleanText.length 
+                  : 0;
+                
+                if (alphanumericRatio < 0.7 && cleanText.length > 100) {
+                  // Text appears corrupted - show warning message instead
+                  origBox.value = '⚠️ Text extraction quality is low. For best results, please upload a text-based PDF or DOCX file.\n\nExtracted text preview:\n' + cleanText.substring(0, 200) + '...';
+                } else {
+                  // Use first 500 characters for snippet display (more readable than 200)
+                  // Ensure we don't cut in the middle of a word if possible
+                  let snippet = cleanText.length > 500 ? cleanText.substring(0, 500) : cleanText;
+                  const lastSpace = snippet.lastIndexOf(' ');
+                  if (cleanText.length > 500 && lastSpace > 400) {
+                    snippet = snippet.substring(0, lastSpace) + '...';
+                  } else if (cleanText.length > 500) {
+                    snippet = snippet + '...';
+                  }
+                  origBox.value = snippet;
+                }
+              }
+            } else if (uploadResult.textPreview) {
+              origBox.value = uploadResult.textPreview;
+            } else {
+              // If no text available, show placeholder
+              origBox.value = 'Resume text will appear here after analysis.';
+            }
+          }
+
+          // Update description (preserve tooltip HTML)
+          const descEl = document.getElementById('rf-score-desc');
+          if (descEl) {
+            // Preserve existing tooltip if it exists
+            const existingTooltip = descEl.querySelector('.rf-tooltip-trigger');
+            const tooltipHtml = existingTooltip ? existingTooltip.outerHTML : '';
+            descEl.innerHTML = 'Your resume was analyzed. See your ATS score and feedback below.' + (tooltipHtml ? ' ' + tooltipHtml : '');
+          }
+
+          // Show success toast
+          if (window.JobHackAIToast) {
+            window.JobHackAIToast.success('ATS score saved successfully.');
+          }
+
+          uploadInput.disabled = false;
+          generateBtn.disabled = false;
+          hideLoadingState();
+        } catch (error) {
+          // Restore credit ONLY if ATS scoring failed (not for post-scoring errors)
+          // If scoring succeeded but UI/feedback generation failed, user already got value
+          const userPlan = getCurrentUserPlan();
+          if (userPlan === 'free' && !atsScoringSucceeded) {
+            const currentUser = window.FirebaseAuthManager?.getCurrentUser?.();
+            if (currentUser && currentUser.uid) {
+              const creditKey = `creditsByUid:${currentUser.uid}`;
+              const creditsData = localStorage.getItem(creditKey);
+              let credits = { ats_free_lifetime: 1 }; // Default for new users
+              
+              if (creditsData) {
+                try {
+                  credits = JSON.parse(creditsData);
+                } catch (e) {
+                  console.warn('[RESUME-FEEDBACK] Failed to parse credits data during restoration:', e);
+                  credits = { ats_free_lifetime: 1 }; // Default on parse error
+                }
+              }
+              
+              // Restore only the ats_free_lifetime credit, preserving other credit types
+              credits.ats_free_lifetime = 1;
+              localStorage.setItem(creditKey, JSON.stringify(credits));
+              console.log('[RESUME-FEEDBACK] ✅ Free ATS credit restored due to scoring/upload failure');
+            }
+          } else if (userPlan === 'free' && atsScoringSucceeded) {
+            // Log that credit is NOT restored because scoring succeeded
+            console.log('[RESUME-FEEDBACK] ⚠️ Error occurred but ATS scoring succeeded - credit NOT restored');
+          }
+          
+          // Clear state on error
+          clearAtsState();
+          handleApiError(error);
+          uploadInput.disabled = false;
+          generateBtn.disabled = false;
+          hideLoadingState();
+        }
+      }
+
+      // ATS Resume Upload Logic - Only update UI, don't trigger processing
       const uploadInput = document.getElementById('rf-upload');
+      const fileNameSpan = document.getElementById('rf-file-name');
+      const generateBtn = document.getElementById('rf-generate-btn');
+      const statusDiv = document.getElementById('rf-generate-status');
+      
       if (uploadInput) {
         uploadInput.addEventListener('change', function(e) {
           const file = e.target.files[0];
-          if (!file) return;
-          // [AI INTEGRATION POINT] Resume Upload: Send PDF to backend/AI for ATS scoring, rubric, and feedback.
-          // Send: file (PDF)
-          // Receive: { score, rubric[], feedback[] }
-          // Replace simulateAtsScoring with real API call and update UI with response.
-          simulateAtsScoring(file, true);
+          if (file) {
+            // Preserve targeted role selection when uploading a resume
+            // Don't clear job title input - user may want to analyze different resumes for the same role
+            // Only clear if explicitly needed (e.g., error handling)
+            
+            // Store file name in localStorage for persistence
+            localStorage.setItem('lastUploadedResumeName', file.name);
+            
+            // Update file name display
+            if (fileNameSpan) {
+              fileNameSpan.textContent = file.name;
+              fileNameSpan.style.color = 'var(--color-success)';
+              fileNameSpan.style.fontWeight = '600';
+            }
+            
+            // Enable generate button
+            if (generateBtn) {
+              generateBtn.disabled = false;
+            }
+            
+            // Show ready status
+            if (statusDiv) {
+              statusDiv.style.display = 'block';
+              statusDiv.textContent = 'Ready to analyze';
+              statusDiv.style.background = 'rgba(5,150,105,0.08)';
+              statusDiv.style.color = 'var(--color-success)';
+              statusDiv.style.width = 'fit-content';
+              statusDiv.style.maxWidth = '100%';
+            }
+          } else {
+            // Reset if file cleared
+            if (fileNameSpan) {
+              fileNameSpan.textContent = 'No file selected';
+              fileNameSpan.style.color = 'var(--color-text-muted)';
+              fileNameSpan.style.fontWeight = 'normal';
+            }
+            if (generateBtn) {
+              generateBtn.disabled = true;
+            }
+            if (statusDiv) {
+              statusDiv.style.display = 'none';
+            }
+            localStorage.removeItem('lastUploadedResumeName');
+          }
         });
+      }
+
+      // Generate Button Click Handler
+      if (generateBtn) {
+        generateBtn.addEventListener('click', generateATSAndFeedback);
       }
       // Regenerate Feedback Button
       const regenBtn = document.getElementById('rf-regenerate-btn');
       if (regenBtn) {
-        regenBtn.addEventListener('click', function() {
-          // [AI INTEGRATION POINT] Regenerate Feedback: Request new ATS score, rubric, and feedback for current resume.
-          // Send: last uploaded file or resume text
-          // Receive: { score, rubric[], feedback[] }
-          // Replace simulateAtsScoring with real API call and update UI with response.
-          simulateAtsScoring(null, false);
+        regenBtn.addEventListener('click', async function() {
+          if (!currentResumeId) {
+            handleApiError(new Error('Please upload a resume first'));
+            return;
+          }
+
+          const jobTitleInput = document.getElementById('rf-job-title');
+          const jobTitle = jobTitleInput?.value?.trim() || '';
+          const previousJobTitle = currentJobTitle || '';
+          currentJobTitle = jobTitle; // Job title is optional, so empty is OK
+
+          // Check if we need to regenerate (resume changed or role changed)
+          // If nothing changed, skip API call to save tokens
+          if (window.JobHackAIStatePersistence) {
+            const cachedScore = window.JobHackAIStatePersistence.loadATSScore(null);
+            if (cachedScore && cachedScore.resumeId === currentResumeId) {
+              const cachedJobTitle = (cachedScore.jobTitle || '').trim();
+              const newJobTitle = (jobTitle || '').trim();
+              
+              // If resume and role haven't changed, don't call API
+              if (cachedJobTitle === newJobTitle && cachedScore.roleSpecificFeedback) {
+                console.log('[RESUME-FEEDBACK] Resume and role unchanged, skipping API call');
+                if (window.JobHackAIToast) {
+                  window.JobHackAIToast.info('No changes detected. Feedback is already up to date.');
+                }
+                return;
+              }
+            }
+          }
+
+          try {
+            showLoadingState('Regenerating feedback...');
+            this.disabled = true;
+            this.textContent = 'Regenerating...';
+
+            // If role changed, also fetch updated ATS score
+            const roleChanged = previousJobTitle !== jobTitle;
+            let scoreResult = null;
+            
+            if (roleChanged) {
+              showLoadingState('Updating ATS score for new role...');
+              try {
+                scoreResult = await getAtsScore(currentResumeId, jobTitle);
+                // Verify both success and breakdown exist before using scoreResult
+                if (scoreResult.success && scoreResult.score !== undefined && scoreResult.breakdown) {
+                  updateProgressRing(scoreResult.score);
+                  
+                  // Convert breakdown to rubric format
+                  const rubric = [
+                    {
+                      label: 'Keyword Relevance',
+                      score: scoreResult.breakdown.keywordScore?.score || 0,
+                      max: 40,
+                      tip: limitFeedbackToSentences(scoreResult.breakdown.keywordScore?.feedback || '')
+                    },
+                    {
+                      label: 'Formatting Compliance',
+                      score: scoreResult.breakdown.formattingScore?.score || 0,
+                      max: 20,
+                      tip: limitFeedbackToSentences(scoreResult.breakdown.formattingScore?.feedback || '')
+                    },
+                    {
+                      label: 'Structure & Section Completeness',
+                      score: scoreResult.breakdown.structureScore?.score || 0,
+                      max: 15,
+                      tip: limitFeedbackToSentences(scoreResult.breakdown.structureScore?.feedback || '')
+                    },
+                    {
+                      label: 'Tone & Clarity',
+                      score: scoreResult.breakdown.toneScore?.score || 0,
+                      max: 15,
+                      tip: limitFeedbackToSentences(scoreResult.breakdown.toneScore?.feedback || '')
+                    },
+                    {
+                      label: 'Grammar & Spelling',
+                      score: scoreResult.breakdown.grammarScore?.score || 0,
+                      max: 10,
+                      tip: limitFeedbackToSentences(scoreResult.breakdown.grammarScore?.feedback || '')
+                    }
+                  ];
+                  updateRubricGrid(rubric);
+                  
+                  // Store ATS score in sessionStorage
+                  sessionStorage.setItem('currentAtsScore', scoreResult.score.toString());
+                  sessionStorage.setItem('currentAtsBreakdown', JSON.stringify(scoreResult.breakdown));
+                } else {
+                  // Score update failed or incomplete - log warning and continue
+                  console.warn('[RESUME-FEEDBACK] ATS score update incomplete:', {
+                    success: scoreResult?.success,
+                    hasScore: scoreResult?.score !== undefined,
+                    hasBreakdown: !!scoreResult?.breakdown
+                  });
+                  scoreResult = null; // Mark as failed so toast message is accurate
+                }
+              } catch (scoreError) {
+                console.warn('[RESUME-FEEDBACK] Failed to update ATS score:', scoreError);
+                scoreResult = null; // Mark as failed so toast message is accurate
+                // Continue with feedback generation even if score update fails
+              }
+            }
+
+            showLoadingState('Regenerating feedback...');
+            const feedbackResult = await getResumeFeedback(currentResumeId, jobTitle);
+            updateFeedbackGrid(feedbackResult.roleSpecificFeedback);
+            updateRubricGridFromFeedback(feedbackResult.atsRubric);
+            
+            // Show/hide grids based on whether feedback is available
+            const rubricGrid = document.getElementById('rf-rubric-grid');
+            if (rubricGrid) {
+              rubricGrid.style.display = 'grid';
+            }
+            const feedbackGrid = document.getElementById('rf-feedback-grid');
+            if (feedbackGrid) {
+              if (feedbackResult.roleSpecificFeedback) {
+                feedbackGrid.style.display = 'grid';
+                showRoleFeedback();
+              } else {
+                feedbackGrid.style.display = 'none';
+                hideRoleFeedback();
+              }
+            }
+            
+            // Save role-specific feedback to persistence
+            // Load cached score without job title validation to get existing ATS score
+            // This allows updating feedback even when job title has changed
+            if (window.JobHackAIStatePersistence) {
+              const cachedScore = window.JobHackAIStatePersistence.loadATSScore(null);
+              
+              // Use updated score if role changed, otherwise use cached score
+              const finalScore = scoreResult?.success ? scoreResult.score : (cachedScore?.score || 0);
+              const finalBreakdown = scoreResult?.success ? scoreResult.breakdown : (cachedScore?.breakdown || {});
+              
+              if (cachedScore && cachedScore.resumeId === currentResumeId) {
+                // Merge feedback text from atsRubric into breakdown
+                const updatedBreakdown = { ...finalBreakdown };
+                if (feedbackResult.atsRubric && Array.isArray(feedbackResult.atsRubric)) {
+                  feedbackResult.atsRubric.forEach(item => {
+                    const category = (item.category || item.label || '').toLowerCase();
+                    const feedback = item.feedback || item.tip || '';
+                    
+                    if (category.includes('keyword') && updatedBreakdown.keywordScore) {
+                      updatedBreakdown.keywordScore.feedback = feedback;
+                    } else if (category.includes('format') && updatedBreakdown.formattingScore) {
+                      updatedBreakdown.formattingScore.feedback = feedback;
+                    } else if ((category.includes('structure') || category.includes('section')) && updatedBreakdown.structureScore) {
+                      updatedBreakdown.structureScore.feedback = feedback;
+                    } else if ((category.includes('tone') || category.includes('clarity')) && updatedBreakdown.toneScore) {
+                      updatedBreakdown.toneScore.feedback = feedback;
+                    } else if ((category.includes('grammar') || category.includes('spelling')) && updatedBreakdown.grammarScore) {
+                      updatedBreakdown.grammarScore.feedback = feedback;
+                    }
+                  });
+                }
+                
+                // Update existing cached score with new job title, feedback, and updated breakdown
+                window.JobHackAIStatePersistence.saveATSScore({
+                  ...cachedScore,
+                  score: finalScore,
+                  breakdown: updatedBreakdown,
+                  jobTitle: jobTitle || null,
+                  roleSpecificFeedback: feedbackResult.roleSpecificFeedback || null,
+                  timestamp: Date.now() // Update timestamp
+                });
+              } else if (currentResumeId && feedbackResult.atsRubric) {
+                // If no cached score exists, reconstruct breakdown from atsRubric to save feedback
+                // This ensures feedback is always saved even if cache is missing
+                const reconstructedBreakdown = {};
+                let totalScore = 0;
+                
+                // Reconstruct breakdown from atsRubric and calculate total score
+                // Use scoreResult.breakdown if available to ensure consistency with totalScore
+                if (scoreResult?.success && scoreResult.score !== undefined && scoreResult.breakdown) {
+                  // We have a valid score and breakdown from the API call (when role changed)
+                  // Use breakdown from scoreResult to ensure scores match the total
+                  totalScore = scoreResult.score;
+                  
+                  // Build breakdown from scoreResult.breakdown (consistent with totalScore)
+                  reconstructedBreakdown.keywordScore = {
+                    score: scoreResult.breakdown.keywordScore?.score || 0,
+                    max: 40,
+                    feedback: feedbackResult.atsRubric.find(item => 
+                      (item.category || item.label || '').toLowerCase().includes('keyword')
+                    )?.feedback || scoreResult.breakdown.keywordScore?.feedback || ''
+                  };
+                  reconstructedBreakdown.formattingScore = {
+                    score: scoreResult.breakdown.formattingScore?.score || 0,
+                    max: 20,
+                    feedback: feedbackResult.atsRubric.find(item => 
+                      (item.category || item.label || '').toLowerCase().includes('format')
+                    )?.feedback || scoreResult.breakdown.formattingScore?.feedback || ''
+                  };
+                  reconstructedBreakdown.structureScore = {
+                    score: scoreResult.breakdown.structureScore?.score || 0,
+                    max: 15,
+                    feedback: feedbackResult.atsRubric.find(item => 
+                      (item.category || item.label || '').toLowerCase().includes('structure') || 
+                      (item.category || item.label || '').toLowerCase().includes('section')
+                    )?.feedback || scoreResult.breakdown.structureScore?.feedback || ''
+                  };
+                  reconstructedBreakdown.toneScore = {
+                    score: scoreResult.breakdown.toneScore?.score || 0,
+                    max: 15,
+                    feedback: feedbackResult.atsRubric.find(item => 
+                      (item.category || item.label || '').toLowerCase().includes('tone') || 
+                      (item.category || item.label || '').toLowerCase().includes('clarity')
+                    )?.feedback || scoreResult.breakdown.toneScore?.feedback || ''
+                  };
+                  reconstructedBreakdown.grammarScore = {
+                    score: scoreResult.breakdown.grammarScore?.score || 0,
+                    max: 10,
+                    feedback: feedbackResult.atsRubric.find(item => 
+                      (item.category || item.label || '').toLowerCase().includes('grammar') || 
+                      (item.category || item.label || '').toLowerCase().includes('spelling')
+                    )?.feedback || scoreResult.breakdown.grammarScore?.feedback || ''
+                  };
+                } else {
+                  // No valid scoreResult.breakdown - use atsRubric for both scores and breakdown
+                  feedbackResult.atsRubric.forEach(item => {
+                    const category = (item.category || item.label || '').toLowerCase();
+                    const score = item.score || 0;
+                    const max = item.max || 0;
+                    const feedback = item.feedback || item.tip || '';
+                    
+                    // Accumulate score from atsRubric items
+                    totalScore += score;
+                    
+                    if (category.includes('keyword')) {
+                      reconstructedBreakdown.keywordScore = { score, max: 40, feedback };
+                    } else if (category.includes('format')) {
+                      reconstructedBreakdown.formattingScore = { score, max: 20, feedback };
+                    } else if (category.includes('structure') || category.includes('section')) {
+                      reconstructedBreakdown.structureScore = { score, max: 15, feedback };
+                    } else if (category.includes('tone') || category.includes('clarity')) {
+                      reconstructedBreakdown.toneScore = { score, max: 15, feedback };
+                    } else if (category.includes('grammar') || category.includes('spelling')) {
+                      reconstructedBreakdown.grammarScore = { score, max: 10, feedback };
+                    }
+                  });
+                }
+                
+                // Save with reconstructed data
+                window.JobHackAIStatePersistence.saveATSScore({
+                  score: totalScore,
+                  breakdown: reconstructedBreakdown,
+                  resumeId: currentResumeId,
+                  jobTitle: jobTitle || null,
+                  roleSpecificFeedback: feedbackResult.roleSpecificFeedback || null,
+                  timestamp: Date.now()
+                });
+                console.log('[RESUME-FEEDBACK] Saved feedback with reconstructed breakdown');
+              }
+              
+              // Update context bar timestamp and ensure it's visible
+              const updatedScore = window.JobHackAIStatePersistence.loadATSScore(null);
+              if (updatedScore && updatedScore.timestamp) {
+                const timeEl = document.getElementById('rf-context-time-value');
+                if (timeEl) {
+                  timeEl.textContent = 'Just now';
+                }
+                
+                // Ensure context bar is visible after update
+                const contextBar = document.getElementById('rf-context-bar');
+                if (contextBar && updatedScore.resumeId === currentResumeId) {
+                  contextBar.style.display = 'block';
+                  
+                  // Update role name if it changed
+                  const roleNameEl = document.getElementById('rf-context-role-name');
+                  if (roleNameEl) {
+                    roleNameEl.textContent = updatedScore.jobTitle || 'Not specified';
+                  }
+                }
+              }
+            }
+
+            // Show success toast - only claim ATS score was updated if it actually succeeded
+            if (window.JobHackAIToast) {
+              const scoreUpdated = roleChanged && scoreResult?.success && scoreResult?.breakdown;
+              window.JobHackAIToast.success(scoreUpdated ? 'ATS score and feedback updated!' : 'Feedback updated!');
+            }
+
+            this.textContent = 'Regenerate Feedback';
+            this.disabled = false;
+            hideLoadingState();
+          } catch (error) {
+            handleApiError(error);
+            this.textContent = 'Regenerate Feedback';
+            this.disabled = false;
+            hideLoadingState();
+          }
         });
       }
-             // Initial attachment of button listeners
-       attachRewriteButtonListeners();
-      // Initial simulated content
-      simulateAtsScoring(null, true);
-      simulateRewrite();
+      // Initial attachment of button listeners
+      attachRewriteButtonListeners();
     });
 
-    // Simulate ATS scoring and update UI
-    function simulateAtsScoring(file, isUpload) {
-      // [AI INTEGRATION POINT] This function simulates the response from the backend/AI. Replace with real API response handler.
-      // Simulate a random score and rubric for demo
-      const score = Math.floor(Math.random() * 31) + 60; // 60-90%
-      const rubric = [
-        { label: 'Keyword Match', score: Math.floor(Math.random()*8)+27, max: 35, tip: 'Add more industry keywords for your target job.' },
-        { label: 'ATS Formatting', score: Math.floor(Math.random()*6)+20, max: 25, tip: 'Avoid tables, graphics, and use standard headings.' },
-        { label: 'Structure & Organization', score: Math.floor(Math.random()*5)+16, max: 20, tip: 'Order sections: Contact, Experience, Education, Skills.' },
-        { label: 'Tone & Clarity', score: Math.floor(Math.random()*3)+8, max: 10, tip: 'Use action verbs and concise bullet points.' },
-        { label: 'Grammar & Spelling', score: Math.floor(Math.random()*4)+7, max: 10, tip: 'No major errors detected.' }
-      ];
-      // Update progress ring
-      updateProgressRing(score);
-      // Update rubric grid
+    // Helper function to limit feedback to 1-2 sentences (accessible globally)
+    function limitFeedbackToSentences(text, maxSentences = 2) {
+      if (!text || typeof text !== 'string') return '';
+      const sentences = text.split(/[.!?]+/).filter(s => s.trim().length > 0);
+      if (sentences.length === 0) return '';
+      const result = sentences.slice(0, maxSentences).join('. ').trim();
+      // Always ensure a period at the end if there's content
+      return result + (result.endsWith('.') ? '' : '.');
+    }
+    
+    // Map old field names to new labels
+    const fieldNameToLabel = {
+      'keywordScore': 'Keyword Relevance',
+      'formattingScore': 'Formatting Compliance',
+      'structureScore': 'Structure & Section Completeness',
+      'toneScore': 'Tone & Clarity',
+      'grammarScore': 'Grammar & Spelling'
+    };
+    
+    const fieldNameToMax = {
+      'keywordScore': 40,
+      'formattingScore': 20,
+      'structureScore': 15,
+      'toneScore': 15,
+      'grammarScore': 10
+    };
+    
+    // Update rubric grid from API response
+    function updateRubricGridFromFeedback(atsRubric) {
+      if (!atsRubric || !Array.isArray(atsRubric)) return;
+      
+      const rubric = atsRubric.map(item => {
+        // Try to get field name from category/label or infer from item structure
+        let fieldName = null;
+        const category = (item.category || item.label || '').toLowerCase();
+        
+        // Map common category names to field names
+        if (category.includes('keyword')) fieldName = 'keywordScore';
+        else if (category.includes('format')) fieldName = 'formattingScore';
+        else if (category.includes('structure') || category.includes('section')) fieldName = 'structureScore';
+        else if (category.includes('tone') || category.includes('clarity')) fieldName = 'toneScore';
+        else if (category.includes('grammar') || category.includes('spelling')) fieldName = 'grammarScore';
+        
+        // Use mapped label or fall back to original
+        const label = fieldName ? fieldNameToLabel[fieldName] : (item.category || item.label || '');
+        const max = fieldName ? fieldNameToMax[fieldName] : (item.max || 100);
+        const tip = limitFeedbackToSentences(item.feedback || item.tip || '');
+        
+        return {
+          label: label,
+          score: item.score || 0,
+          max: max,
+          tip: tip
+        };
+      });
+      
       updateRubricGrid(rubric);
-      // Update feedback grid (simulate)
-      updateFeedbackGrid();
-      // Optionally update other UI elements
-      document.getElementById('rf-score-desc').textContent = isUpload ? 'Your resume was analyzed. See your ATS score and feedback below.' : 'Feedback regenerated!';
-      // Simulate original snippet update on upload
-      if (isUpload) {
-        const orig = document.querySelectorAll('#rf-rewrite-content .rf-snippet-box')[0];
-        if (orig) orig.value = 'Sample original resume excerpt from uploaded file.';
-        simulateRewrite();
-      }
     }
 
     function updateProgressRing(score) {
       // Update SVG ring and text
       const svg = document.querySelector('#rf-ats-score-tile .rf-progress-ring svg');
-      if (!svg) return;
+      if (!svg) {
+        console.warn('[RESUME-FEEDBACK] SVG not found for progress ring');
+        return;
+      }
+      
+      // FIX: Default to 0% if score is undefined or null (for new users)
+      const hasResumeData = score !== undefined && score !== null;
+      const displayScore = hasResumeData ? score : 0;
+      
+      // Always show progress ring (even at 0% for new users)
+      const progressRing = document.querySelector('#rf-ats-score-tile .rf-progress-ring');
+      if (progressRing) {
+        progressRing.style.display = 'inline-block';
+      }
+      
       const circle = svg.querySelectorAll('circle')[1];
-      const percent = Math.max(0, Math.min(100, score));
+      if (!circle) {
+        console.warn('[RESUME-FEEDBACK] Progress circle not found');
+        return;
+      }
+      // FIX: Use displayScore instead of score to ensure 0% default works correctly
+      const percent = Math.max(0, Math.min(100, displayScore));
       const radius = 36;
       const circumference = 2 * Math.PI * radius;
       const offset = circumference - (percent / 100) * circumference;
+      
+      // Ensure circle is visible and green
+      circle.setAttribute('stroke', 'var(--color-cta-green)');
+      circle.setAttribute('stroke-width', '8');
+      circle.setAttribute('stroke-dasharray', String(circumference));
       circle.setAttribute('stroke-dashoffset', offset);
+      circle.setAttribute('stroke-linecap', 'round');
+      circle.setAttribute('fill', 'none');
+      
       // Update text
       let text = svg.querySelector('text');
       if (!text) {
@@ -544,6 +2801,16 @@
         svg.appendChild(text);
       }
       text.textContent = percent + '%';
+      
+      console.log('[RESUME-FEEDBACK] Updated progress ring to', percent + '%');
+    }
+
+    // Helper function to escape HTML to prevent XSS (shared across functions)
+    function escapeHtml(text) {
+      if (typeof text !== 'string') return '';
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
     }
 
     function updateRubricGrid(rubric) {
@@ -553,64 +2820,178 @@
       rubric.forEach(item => {
         const div = document.createElement('div');
         div.className = 'rf-rubric-item';
+        // Use — / — for empty scores
+        const scoreDisplay = (item.score === undefined || item.score === null) ? '— / —' : `${item.score} / ${item.max}`;
+        
         div.innerHTML = `
-          <div class="rf-rubric-label">${item.label}</div>
-          <div class="rf-rubric-score">${item.score} / ${item.max}</div>
-          <div style="color:var(--color-text-secondary);font-size:0.98rem;">${item.tip}</div>
+          <div class="rf-rubric-label">${escapeHtml(item.label)}</div>
+          <div class="rf-rubric-score">${escapeHtml(scoreDisplay)}</div>
+          <div style="color:var(--color-text-secondary);font-size:0.98rem;">${escapeHtml(item.tip || item.feedback || '')}</div>
         `;
         grid.appendChild(div);
       });
     }
 
-    function updateFeedbackGrid() {
-      // For demo, just shuffle the tips
-      const feedbacks = [
-        { label: 'Header & Contact', score: '8/10', tip: 'Clear and concise. Consider adding a custom resume URL for extra polish.' },
-        { label: 'Professional Summary', score: '6/10', tip: 'Strong opening but lacks keywords for your target role (e.g. "Kubernetes", "ETL").' },
-        { label: 'Experience', score: '7/10', tip: 'Great STAR structure. Quantify impact with metrics ("improved uptime by 15%").' },
-        { label: 'Skills', score: '9/10', tip: 'Relevant and up-to-date. Group under sub-headings (Cloud, Data, Languages).' },
-        { label: 'Education', score: '10/10', tip: 'Well-formatted. No changes needed.' }
-      ];
-      // Shuffle for demo
-      for (let i = feedbacks.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [feedbacks[i], feedbacks[j]] = [feedbacks[j], feedbacks[i]];
-      }
+    function updateFeedbackGrid(roleSpecificFeedback) {
       const grid = document.getElementById('rf-feedback-grid');
       if (!grid) return;
+      
+      // Check if we have the new structure (object with targetRoleUsed and sections array)
+      const isNewStructure = roleSpecificFeedback && 
+                             typeof roleSpecificFeedback === 'object' &&
+                             !Array.isArray(roleSpecificFeedback) &&
+                             roleSpecificFeedback.targetRoleUsed !== undefined &&
+                             Array.isArray(roleSpecificFeedback.sections);
+      
+      // Check if we have the old structure (array of items with section/score/feedback)
+      const isOldStructure = roleSpecificFeedback && Array.isArray(roleSpecificFeedback) && roleSpecificFeedback.length > 0;
+      
+      // Update section title and subtitle if new structure
+      const roleTitleEl = document.getElementById('rf-role-title');
+      const roleDescEl = document.getElementById('rf-role-desc');
+      
+      if (isNewStructure && roleTitleEl) {
+        roleTitleEl.textContent = 'Role-Specific Tailoring Tips';
+        if (roleDescEl) {
+          const targetRoleUsed = roleSpecificFeedback.targetRoleUsed || 'general';
+          if (targetRoleUsed !== 'general') {
+            roleDescEl.textContent = `How to tune your resume for ${targetRoleUsed} roles.`;
+          } else {
+            roleDescEl.textContent = 'General improvements for tech roles. Add a target role for sharper suggestions.';
+          }
+        }
+      }
+      
       grid.innerHTML = '';
-      feedbacks.forEach(item => {
-        const div = document.createElement('div');
-        div.className = 'rf-feedback-card';
-        div.innerHTML = `
-          <div class="rf-feedback-label">${item.label} <span class="rf-feedback-score">${item.score}</span></div>
-          <div class="rf-feedback-tip">${item.tip}</div>
-        `;
-        grid.appendChild(div);
-      });
+      
+      if (!isNewStructure && !isOldStructure) {
+        // Show placeholder cards
+        const placeholderCards = [
+          { section: 'Header & Contact', placeholder: 'Your résumé feedback will appear here once analyzed.' },
+          { section: 'Professional Summary', placeholder: 'We\'ll review your summary and tone for keyword alignment.' },
+          { section: 'Experience', placeholder: 'Experience feedback coming after your first analysis.' },
+          { section: 'Skills', placeholder: 'We\'ll score your technical and soft skills once you upload.' },
+          { section: 'Education', placeholder: 'Education section feedback appears here after analysis.' }
+        ];
+        
+        placeholderCards.forEach(item => {
+          const div = document.createElement('div');
+          div.className = 'rf-feedback-card';
+          div.innerHTML = `
+            <div class="rf-feedback-label">${item.section}</div>
+            <div class="rf-feedback-tip" style="color: var(--color-text-muted); font-style: italic;">${item.placeholder}</div>
+          `;
+          grid.appendChild(div);
+        });
+        return;
+      }
+      
+      // Handle NEW structure with fitLevel, diagnosis, tips, rewritePreview
+      if (isNewStructure) {
+        roleSpecificFeedback.sections.forEach(section => {
+          const div = document.createElement('div');
+          div.className = 'rf-feedback-card';
+          
+          // Fit level chip styling
+          let fitChipClass = 'rf-fit-chip-tunable';
+          let fitChipText = 'Good but Tunable';
+          if (section.fitLevel === 'big_impact') {
+            fitChipClass = 'rf-fit-chip-big-impact';
+            fitChipText = 'Big Impact Opportunity';
+          } else if (section.fitLevel === 'strong') {
+            fitChipClass = 'rf-fit-chip-strong';
+            fitChipText = 'Strong Match';
+          }
+          
+          // Build tips list (escape HTML to prevent XSS)
+          const tipsHtml = section.tips && Array.isArray(section.tips) && section.tips.length > 0
+            ? section.tips.map(tip => `<li>${escapeHtml(tip)}</li>`).join('')
+            : '<li>No specific tips available</li>';
+          
+          div.innerHTML = `
+            <div class="rf-feedback-label" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.75rem;">
+              <span>${escapeHtml(section.section || 'Section')}</span>
+              <span class="${fitChipClass}" style="padding:0.25rem 0.75rem;border-radius:12px;font-size:0.75rem;font-weight:600;">${escapeHtml(fitChipText)}</span>
+            </div>
+            <div class="rf-feedback-diagnosis" style="color:var(--color-text-main);margin-bottom:0.75rem;font-weight:500;">${escapeHtml(section.diagnosis || '')}</div>
+            <div class="rf-feedback-tips" style="margin-bottom:0.75rem;">
+              <ul style="margin:0;padding-left:1.25rem;color:var(--color-text-secondary);">
+                ${tipsHtml}
+              </ul>
+            </div>
+            <div class="rf-rewrite-preview" style="margin-top:0.75rem;padding-top:0.75rem;border-top:1px solid var(--color-divider);">
+              <div style="font-size:0.75rem;font-weight:600;color:var(--color-text-muted);margin-bottom:0.5rem;text-transform:uppercase;letter-spacing:0.5px;">AI Rewrite Preview</div>
+              <div style="color:var(--color-text-secondary);font-style:italic;font-size:0.9rem;line-height:1.5;">${escapeHtml(section.rewritePreview || 'Preview not available')}</div>
+            </div>
+          `;
+          grid.appendChild(div);
+        });
+        return;
+      }
+      
+      // Handle OLD structure (backwards compatibility)
+      if (isOldStructure) {
+        roleSpecificFeedback.forEach(item => {
+          const div = document.createElement('div');
+          div.className = 'rf-feedback-card';
+          const scoreDisplay = (item.score === undefined || item.score === null) ? '— / —' : escapeHtml(item.score);
+          div.innerHTML = `
+            <div class="rf-feedback-label">${escapeHtml(item.section || item.label || 'Section')} <span class="rf-feedback-score">${scoreDisplay}</span></div>
+            <div class="rf-feedback-tip">${escapeHtml(item.feedback || item.tip || '')}</div>
+          `;
+          grid.appendChild(div);
+        });
+        return;
+      }
+    }
+    
+    // Fade transition helpers
+    function hidePlaceholder() {
+      const ph = document.getElementById('ats-placeholder');
+      if (ph) {
+        ph.classList.add('fade-exit');
+        setTimeout(() => ph.remove(), 250);
+      }
+    }
+    
+    function showATSFeedback() {
+      const el = document.getElementById('ats-feedback-container');
+      if (!el) return;
+      // Clear animation classes first to ensure animation triggers on repeat runs
+      el.classList.remove('fade-enter', 'fade-enter-active');
+      // Force reflow to reset animation state
+      void el.offsetWidth;
+      // Re-apply animation classes
+      el.style.display = 'block';
+      el.classList.add('fade-enter');
+      requestAnimationFrame(() => el.classList.add('fade-enter-active'));
+    }
+    
+    function showRoleFeedback() {
+      const el = document.getElementById('role-feedback-container');
+      if (!el) return;
+      // Clear animation classes first to ensure animation triggers on repeat runs
+      el.classList.remove('fade-enter', 'fade-enter-active');
+      // Force reflow to reset animation state
+      void el.offsetWidth;
+      // Re-apply animation classes
+      el.style.display = 'block';
+      el.classList.add('fade-enter');
+      requestAnimationFrame(() => el.classList.add('fade-enter-active'));
     }
 
-    // Simulate resume rewrite
-    function simulateRewrite() {
-      // [AI INTEGRATION POINT] This function simulates the rewritten resume. Replace with real API response handler.
-      const rewritten = document.querySelectorAll('#rf-rewrite-content .rf-snippet-box')[1];
-      if (rewritten) {
-        const samples = [
-          'Optimized resume: Led cross-functional teams to deliver projects on time and under budget, increasing efficiency by 20%.',
-          'AI rewrite: Developed scalable cloud solutions, improving system reliability and reducing costs by 15%.',
-          'Enhanced resume: Implemented data-driven strategies, resulting in a 30% boost in customer satisfaction.',
-          'Rewritten: Streamlined workflows and automated reporting, saving 10+ hours per week for the team.',
-          'AI-optimized: Collaborated with stakeholders to define KPIs, driving measurable business outcomes.'
-        ];
-        rewritten.value = samples[Math.floor(Math.random() * samples.length)];
-      }
+    function hideRoleFeedback() {
+      const el = document.getElementById('role-feedback-container');
+      if (!el) return;
+      el.style.display = 'none';
+      el.classList.remove('fade-enter', 'fade-enter-active');
     }
 
     // --- Priority Review Tooltip (modular) ---
     function createPriorityReviewTooltip(text = 'Priority Review') {
       const wrapper = document.createElement('span');
       wrapper.className = 'priority-review-tooltip';
-      wrapper.innerHTML = `${text} <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;margin-left:4px;vertical-align:middle;color:var(--color-text-muted);"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg> <span class="tooltip-text">Premium users get their résumé analyzed first—faster results, prioritized AI review, and VIP support.</span>`;
+      wrapper.innerHTML = `${text} <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;margin-left:4px;vertical-align:middle;color:var(--color-text-muted);"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg> <span class="tooltip-text">Premium users get their resume analyzed first—faster results, prioritized AI review, and VIP support.</span>`;
       return wrapper;
     }
 
@@ -618,7 +2999,7 @@
     function renderPriorityReviewCTA() {
       const cta = document.createElement('div');
       cta.className = 'priority-review-cta';
-      cta.innerHTML = `Want your résumé reviewed first? <span id="priority-review-inline"></span> <button class="priority-btn" onclick="window.location.href='pricing-a.html'">Upgrade to Premium</button>`;
+      cta.innerHTML = `Want your resume reviewed first? <span id="priority-review-inline"></span> <button class="priority-btn" onclick="window.location.href='pricing-a.html'">Upgrade to Premium</button>`;
       // Insert tooltip
       setTimeout(() => {
         const inline = cta.querySelector('#priority-review-inline');
@@ -627,19 +3008,70 @@
       return cta;
     }
 
-    // --- Insert Priority Review CTA below ATS Score & Feedback for Essential/Pro ---
+    // --- Insert Priority Review CTA below Resume Rewriting for Essential/Pro ---
     function updatePriorityReviewCTA() {
-      // Remove any existing CTA
+      // Remove any existing CTA (only show one Premium banner per page)
       const oldCta = document.getElementById('priority-review-cta-main');
       if (oldCta) oldCta.remove();
-      if (user.plan === 'essential' || user.plan === 'pro') {
-        const feedbackTile = document.getElementById('rf-feedback-tile');
-        if (feedbackTile && feedbackTile.parentNode) {
+      
+      // Only show Priority Review CTA for Essential/Pro plans
+      const plan = getCurrentUserPlan();
+      if (plan === 'essential' || plan === 'pro') {
+        // Insert Priority Review CTA after Resume Rewriting tile
+        const rewriteTile = document.getElementById('rf-rewrite-tile');
+        if (rewriteTile && rewriteTile.parentNode) {
           const cta = renderPriorityReviewCTA();
           cta.id = 'priority-review-cta-main';
-          feedbackTile.parentNode.insertBefore(cta, feedbackTile.nextSibling);
+          rewriteTile.parentNode.insertBefore(cta, rewriteTile.nextSibling);
         }
       }
+    }
+
+    // Display change summary from rewrite result
+    function displayChangeSummary(changeSummary) {
+      const summaryContainer = document.getElementById('rf-change-summary');
+      if (!summaryContainer || !changeSummary) return;
+      
+      const atsFixes = changeSummary.atsFixes || [];
+      const roleFixes = changeSummary.roleFixes || [];
+      
+      if (atsFixes.length === 0 && roleFixes.length === 0) {
+        summaryContainer.style.display = 'none';
+        return;
+      }
+      
+      // Add the class to the container element itself (not a nested div)
+      summaryContainer.className = 'rf-change-summary';
+      
+      // Only create the inner grid structure without redundant wrapper
+      let summaryHtml = '<div class="rf-change-summary-grid">';
+      
+      
+      if (atsFixes.length > 0) {
+        summaryHtml += `
+          <div>
+            <h4>ATS Fixes</h4>
+            <ul>
+              ${atsFixes.map(fix => `<li>${escapeHtml(fix)}</li>`).join('')}
+            </ul>
+          </div>
+        `;
+      }
+      
+      if (roleFixes.length > 0) {
+        summaryHtml += `
+          <div>
+            <h4>Role Tailoring</h4>
+            <ul>
+              ${roleFixes.map(fix => `<li>${escapeHtml(fix)}</li>`).join('')}
+            </ul>
+          </div>
+        `;
+      }
+      
+      summaryHtml += '</div>';
+      summaryContainer.innerHTML = summaryHtml;
+      summaryContainer.style.display = 'block';
     }
 
     // Hide details for Free plan
@@ -669,12 +3101,33 @@
 
       resetTiles();
 
+      // Helper function to update description with tooltip preserved
+      function updateDescriptionWithTooltip(element, text, tooltipText) {
+        if (!element) return;
+        const tooltipHtml = `<span class="rf-tooltip-trigger" tabindex="0" aria-label="More info" style="margin-left:0.4em;">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+            <circle cx="12" cy="12" r="10"/>
+            <line x1="12" y1="8" x2="12" y2="8"/>
+            <line x1="12" y1="12" x2="12" y2="16"/>
+          </svg>
+          <span class="rf-tooltip-text">${tooltipText}</span>
+        </span>`;
+        element.innerHTML = text + tooltipHtml;
+      }
+
       // Free Plan Logic
       if (plan === 'free') {
         if (atsScoreTile) {
           atsScoreTile.querySelector('#rf-plan-badge').textContent = 'Free Plan';
-          atsScoreTile.querySelector('#rf-score-desc').textContent = 'Get your basic ATS compatibility score.';
-          atsScoreTile.querySelector('#rf-ats-checks').textContent = '2 ATS checks remaining this month';
+          updateDescriptionWithTooltip(
+            atsScoreTile.querySelector('#rf-score-desc'),
+            'Get your basic ATS compatibility score.',
+            'Receive an overall ATS compliance score (0-100) for your resume, highlighting key areas to improve for better job application success.'
+          );
+          // Check if free ATS score has been used
+          const usageKey = `atsUsage:${getCurrentUserPlan()}:lifetime`;
+          // For now, show message - will be updated dynamically after API call
+          atsScoreTile.querySelector('#rf-ats-checks').textContent = '1 free ATS score per account lifetime';
         }
         if (feedbackTile) {
           feedbackTile.querySelector('.rf-title .rf-plan-badge').textContent = 'Locked';
@@ -702,53 +3155,45 @@
         if (atsScoreTile) {
           atsScoreTile.querySelector('#rf-plan-badge').textContent = 'Trial Plan';
           atsScoreTile.querySelector('#rf-plan-badge').style.background = '#FF9100';
-          atsScoreTile.querySelector('#rf-score-desc').textContent = 'Enjoy unlimited ATS scoring during your trial!';
-          atsScoreTile.querySelector('#rf-ats-checks').textContent = 'Unlimited ATS checks in trial';
+          updateDescriptionWithTooltip(
+            atsScoreTile.querySelector('#rf-score-desc'),
+            'Enjoy unlimited ATS scoring during your trial!',
+            'Receive an overall ATS compliance score (0-100) for your resume, highlighting key areas to improve for better job application success.'
+          );
+          atsScoreTile.querySelector('#rf-ats-checks').textContent = 'Unlimited ATS scoring during trial (throttled: 1 per 30s)';
         }
-        const feedbackCount = user.atsChecksUsed || 0;
+        // Trial has unlimited feedback with throttles (1/min, max 5/day, per-doc cap 3)
         if (feedbackTile) {
-          if (feedbackCount >= 3) {
-            feedbackTile.querySelector('.rf-title .rf-plan-badge').textContent = 'Trial Limit Reached';
-            feedbackTile.querySelector('.rf-title .rf-plan-badge').style.background = '#6B7280';
-            feedbackTile.querySelector('.rf-upgrade-text strong').textContent = 'Upgrade to Essential';
-            feedbackTile.querySelector('.rf-upgrade-text').innerHTML = '<strong>Upgrade to Essential</strong> for unlimited ATS feedback and keep your progress';
-            feedbackTile.querySelector('.rf-upgrade-text').style.display = 'block';
-            if (feedbackContent) feedbackContent.style.display = 'none';
+          feedbackTile.querySelector('.rf-title .rf-plan-badge').textContent = 'Trial Plan';
+          feedbackTile.querySelector('.rf-title .rf-plan-badge').style.background = '#FF9100';
+          feedbackTile.querySelector('.rf-upgrade-text').style.display = 'none';
+          if (feedbackContent) {
+            feedbackContent.style.display = 'block';
             // Remove any existing upgrade banner at the bottom
             const oldBanner = document.getElementById('rf-feedback-upgrade-banner');
             if (oldBanner) oldBanner.remove();
-          } else {
-            feedbackTile.querySelector('.rf-title .rf-plan-badge').textContent = 'Trial Plan';
-            feedbackTile.querySelector('.rf-title .rf-plan-badge').style.background = '#FF9100';
-            feedbackTile.querySelector('.rf-upgrade-text').style.display = 'none';
-            if (feedbackContent) {
-              feedbackContent.style.display = 'block';
-              // Remove any existing upgrade banner at the bottom
-              const oldBanner = document.getElementById('rf-feedback-upgrade-banner');
-              if (oldBanner) oldBanner.remove();
-              // Add upgrade banner at the bottom
-              const upgradeBanner = document.createElement('div');
-              upgradeBanner.className = 'rf-upgrade-prompt';
-              upgradeBanner.id = 'rf-feedback-upgrade-banner';
-              upgradeBanner.style.marginTop = '1.7rem';
-              upgradeBanner.innerHTML = `
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M12 5v14M5 12h14"/>
-                </svg>
-                <div class="rf-upgrade-text">
-                  <strong>Loving the trial? Upgrade to Essential</strong> to keep unlimited feedback and unlock more features
-                </div>
-                <a href="pricing-a.html" class="btn btn-secondary">Upgrade to Essential</a>
-              `;
-              feedbackTile.appendChild(upgradeBanner);
-            }
+            // Add upgrade banner at the bottom
+            const upgradeBanner = document.createElement('div');
+            upgradeBanner.className = 'rf-upgrade-prompt';
+            upgradeBanner.id = 'rf-feedback-upgrade-banner';
+            upgradeBanner.style.marginTop = '1.7rem';
+            upgradeBanner.innerHTML = `
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M12 5v14M5 12h14"/>
+              </svg>
+              <div class="rf-upgrade-text">
+                <strong>Trial shows you what to fix. Pro fixes it now (rewrites unlocked).</strong> Upgrade to Pro to complete your resume optimization.
+              </div>
+              <a href="pricing-a.html" class="btn btn-secondary">Upgrade to Pro</a>
+            `;
+            feedbackTile.appendChild(upgradeBanner);
           }
         }
         if (rewriteTile) {
           rewriteTile.querySelector('.rf-title .rf-plan-badge').textContent = 'Pro Feature';
           rewriteTile.querySelector('.rf-title .rf-plan-badge').style.background = '#6B7280';
           rewriteTile.querySelector('.rf-upgrade-text strong').textContent = 'Upgrade to Pro';
-          rewriteTile.querySelector('.rf-upgrade-text').innerHTML = '<strong>Upgrade to Pro</strong> to unlock AI-powered resume rewriting. Essential users get 50% off Pro!';
+          rewriteTile.querySelector('.rf-upgrade-text').innerHTML = '<strong>Trial shows you what to fix. Pro fixes it now (rewrites unlocked).</strong> Upgrade to Pro to complete your resume optimization.';
           // Add special upgrade CTA for trial users
           const upgradeButton = rewriteTile.querySelector('.rf-upgrade-prompt a');
           if (upgradeButton) {
@@ -778,12 +3223,18 @@
         if (atsScoreTile) {
           atsScoreTile.querySelector('#rf-plan-badge').textContent = 'Essential Plan';
           atsScoreTile.querySelector('#rf-plan-badge').style.background = '#0077B5';
-          atsScoreTile.querySelector('#rf-score-desc').textContent = 'Unlimited ATS scoring - your resume is getting noticed!';
+          updateDescriptionWithTooltip(
+            atsScoreTile.querySelector('#rf-score-desc'),
+            'Receive an overall ATS compliance score for your resume, highlighting key areas to improve.',
+            'Receive an overall ATS compliance score (0-100) for your resume, highlighting key areas to improve for better job application success.'
+          );
           atsScoreTile.querySelector('#rf-ats-checks').textContent = 'Unlimited ATS checks';
         }
-        const feedbackCount = user.atsChecksUsed || 0;
+        // Essential: 3 feedbacks/month
         if (feedbackTile) {
-          if (feedbackCount >= 3) {
+          // Check monthly usage (will be updated dynamically via API)
+          const monthlyUsage = 0; // Will be fetched from /api/usage
+          if (monthlyUsage >= 3) {
             feedbackTile.querySelector('.rf-title .rf-plan-badge').textContent = 'Monthly Limit Reached';
             feedbackTile.querySelector('.rf-title .rf-plan-badge').style.background = '#6B7280';
             feedbackTile.querySelector('.rf-upgrade-text strong').textContent = 'Upgrade to Pro';
@@ -794,23 +3245,6 @@
             feedbackTile.querySelector('.rf-upgrade-text').style.display = 'none';
             if (feedbackContent) {
               feedbackContent.style.display = 'block';
-              // Add upgrade banner at the bottom
-              const oldBanner = document.getElementById('rf-feedback-upgrade-banner');
-              if (oldBanner) oldBanner.remove();
-              const upgradeBanner = document.createElement('div');
-              upgradeBanner.className = 'rf-upgrade-prompt';
-              upgradeBanner.id = 'rf-feedback-upgrade-banner';
-              upgradeBanner.style.marginTop = '1.7rem';
-              upgradeBanner.innerHTML = `
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M12 5v14M5 12h14"/>
-                </svg>
-                <div class="rf-upgrade-text">
-                  <strong>Ready for the next level?</strong> Upgrade to Pro for AI resume rewriting and unlimited everything
-                </div>
-                <a href="pricing-a.html" class="btn btn-secondary">Upgrade to Pro</a>
-              `;
-              feedbackTile.appendChild(upgradeBanner);
             }
           }
         }
@@ -818,7 +3252,7 @@
           rewriteTile.querySelector('.rf-title .rf-plan-badge').textContent = 'Pro Feature';
           rewriteTile.querySelector('.rf-title .rf-plan-badge').style.background = '#6B7280';
           rewriteTile.querySelector('.rf-upgrade-text strong').textContent = 'Upgrade to Pro';
-          rewriteTile.querySelector('.rf-upgrade-text').innerHTML = '<strong>Upgrade to Pro</strong> to unlock AI-powered resume rewriting. Perfect next step from Essential!';
+          rewriteTile.querySelector('.rf-upgrade-text').innerHTML = '<strong>Trial shows you what to fix. Pro fixes it now (rewrites unlocked).</strong> Upgrade to Pro to complete your resume optimization.';
           // Add special upgrade CTA for essential users
           const upgradeButton = rewriteTile.querySelector('.rf-upgrade-prompt a');
           if (upgradeButton) {
@@ -851,8 +3285,12 @@
         if (atsScoreTile) {
           atsScoreTile.querySelector('#rf-plan-badge').textContent = plan.charAt(0).toUpperCase() + plan.slice(1) + ' Plan';
           atsScoreTile.querySelector('#rf-plan-badge').style.background = isProPlan ? '#388E3C' : '#C62828';
-          atsScoreTile.querySelector('#rf-score-desc').textContent = 'Unlimited ATS scoring - you\'re getting maximum visibility!';
-          atsScoreTile.querySelector('#rf-ats-checks').textContent = 'Unlimited ATS scoring';
+          updateDescriptionWithTooltip(
+            atsScoreTile.querySelector('#rf-score-desc'),
+            'Unlimited ATS scoring with maximum visibility!',
+            'Receive an overall ATS compliance score (0-100) for your resume, highlighting key areas to improve for better job application success. Score as many resumes as you need with unlimited access.'
+          );
+          atsScoreTile.querySelector('#rf-ats-checks').innerHTML = '';
         }
         if (feedbackTile) {
           feedbackTile.querySelector('.rf-title .rf-plan-badge').textContent = plan.charAt(0).toUpperCase() + plan.slice(1) + ' Plan';
@@ -860,26 +3298,7 @@
           feedbackTile.querySelector('.rf-upgrade-text').style.display = 'none';
           if (feedbackContent) {
             feedbackContent.style.display = 'block';
-            // Add premium upsell for Pro users
-            if (isProPlan) {
-              const oldBanner = document.getElementById('rf-feedback-upgrade-banner');
-              if (oldBanner) oldBanner.remove();
-              const upgradeBanner = document.createElement('div');
-              upgradeBanner.className = 'rf-upgrade-prompt';
-              upgradeBanner.id = 'rf-feedback-upgrade-banner';
-              upgradeBanner.style.marginTop = '1.7rem';
-              upgradeBanner.style.background = '#FEF3C7';
-              upgradeBanner.innerHTML = `
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
-                </svg>
-                <div class="rf-upgrade-text">
-                  <strong>Want priority review?</strong> Upgrade to Premium for front-of-the-line analysis and VIP support
-                </div>
-                <a href="pricing-a.html" class="btn btn-secondary">Upgrade to Premium</a>
-              `;
-              feedbackTile.appendChild(upgradeBanner);
-            }
+            // Premium CTA removed - already exists at bottom of page
           }
         }
         if (rewriteTile) {
@@ -892,26 +3311,9 @@
             rewriteContent.style.display = 'block';
             // Re-attach button listeners when content is shown
             setTimeout(attachRewriteButtonListeners, 100);
-            // Add premium upsell for Pro users
-            if (isProPlan) {
-              const oldBanner = document.getElementById('rf-rewrite-upgrade-banner');
-              if (oldBanner) oldBanner.remove();
-              const upgradeBanner = document.createElement('div');
-              upgradeBanner.className = 'rf-upgrade-prompt';
-              upgradeBanner.id = 'rf-rewrite-upgrade-banner';
-              upgradeBanner.style.marginTop = '1.7rem';
-              upgradeBanner.style.background = '#FEF3C7';
-              upgradeBanner.innerHTML = `
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
-                </svg>
-                <div class="rf-upgrade-text">
-                  <strong>Perfect! You have everything.</strong> Consider Premium for priority support and fastest processing
-                </div>
-                <a href="pricing-a.html" class="btn btn-secondary">Upgrade to Premium</a>
-              `;
-              rewriteTile.appendChild(upgradeBanner);
-            }
+            // Remove any Premium upgrade banner from rewrite tile (only show in feedback tile)
+            const oldBanner = document.getElementById('rf-rewrite-upgrade-banner');
+            if (oldBanner) oldBanner.remove();
           }
         }
       }
@@ -919,24 +3321,60 @@
       updatePriorityReviewCTA();
     }
 
-    // Add after <main> or at the top of the main feedback section
-    document.addEventListener('DOMContentLoaded', function() {
-      // ... existing code ...
-      // Add Essential plan feedback usage indicator
+    // Add usage indicator using shared component
+    document.addEventListener('DOMContentLoaded', async function() {
       const main = document.querySelector('main');
-      if (user.plan === 'essential' && main) {
-        // For demo, assume 3 left (replace with dynamic count if available)
-        const usageDiv = document.createElement('div');
-        usageDiv.className = 'rf-plan-limit';
-        usageDiv.innerHTML = `
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false" style="vertical-align:middle"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="8"/><line x1="12" y1="12" x2="12" y2="16"/></svg>
-          <span>3 resume feedbacks left this month.</span>
-          <span class="jh-tooltip-trigger" tabindex="0" aria-label="More info" style="margin-left:0.4em;vertical-align:middle;">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false" style="vertical-align:middle"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="8"/><line x1="12" y1="12" x2="12" y2="16"/></svg>
-            <span class="jh-tooltip-text">Upgrade to Pro for unlimited feedback.</span>
-          </span>
-        `;
-        main.insertBefore(usageDiv, main.firstChild);
+      const currentPlan = getCurrentUserPlan();
+      
+      // Only show usage indicator for plans that have limits (essential, trial)
+      if (main && (currentPlan === 'essential' || currentPlan === 'trial')) {
+        try {
+          // Fetch usage data from API
+          const token = localStorage.getItem('firebase-id-token');
+          if (!token) {
+            console.warn('[RESUME-FEEDBACK] No auth token available for usage fetch');
+            return;
+          }
+
+          const usageResponse = await fetch('/api/usage', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`
+            }
+          });
+
+          if (!usageResponse.ok) {
+            console.warn('[RESUME-FEEDBACK] Failed to fetch usage data');
+            return;
+          }
+
+          const usageData = await usageResponse.json();
+          
+          if (usageData.success && usageData.usage && usageData.usage.resumeFeedback) {
+            // Create container for usage indicator
+            const usageContainer = document.createElement('div');
+            usageContainer.className = 'rf-plan-limit';
+            usageContainer.style.cssText = 'margin-top: 0.5rem; margin-bottom: 1rem;';
+            
+            // Render usage indicator using shared component
+            if (window.renderUsageIndicator) {
+              window.renderUsageIndicator({
+                feature: 'resumeFeedback',
+                usage: usageData.usage.resumeFeedback,
+                plan: usageData.plan,
+                container: usageContainer
+              });
+              
+              // Insert at the top of main content
+              main.insertBefore(usageContainer, main.firstChild);
+            } else {
+              console.warn('[RESUME-FEEDBACK] Usage indicator component not loaded');
+            }
+          }
+        } catch (error) {
+          console.error('[RESUME-FEEDBACK] Error loading usage indicator:', error);
+        }
       }
     });
 
@@ -972,6 +3410,7 @@
        });
     });
   </script>
+  <script src="js/components/usage-indicator.js" type="module"></script>
   <script src="js/main.js" type="module"></script>
 
   <!-- page content -->
@@ -982,9 +3421,9 @@
         <div class="rf-progress-ring">
           <svg viewBox="0 0 80 80">
             <circle cx="40" cy="40" r="36" stroke="#E5E7EB" stroke-width="8" fill="none"/>
-            <circle cx="40" cy="40" r="36" stroke="#00E676" stroke-width="8" fill="none" stroke-dasharray="226.2" stroke-dashoffset="49" stroke-linecap="round"/>
-            <text x="40" y="48" text-anchor="middle" font-size="1.6rem" font-weight="700" fill="#1F2937">78%</text>
-          </svg>
+            <circle cx="40" cy="40" r="36" stroke="#00E676" stroke-width="8" fill="none" stroke-dasharray="226.2" stroke-dashoffset="226.2" stroke-linecap="round"/>
+            <text x="40" y="48" text-anchor="middle" font-size="1.6rem" font-weight="700" fill="#1F2937">0%</text>
+           </svg>
         </div>
         <div style="flex:1;min-width:220px;">
           <div class="rf-title" id="rf-title" style="margin-bottom:0.2rem;">
@@ -993,16 +3432,67 @@
           </div>
           <div style="color:var(--color-text-secondary);margin-bottom:0.7rem;" id="rf-score-desc">
             Get your basic ATS compatibility score.
+            <span class="rf-tooltip-trigger" tabindex="0" aria-label="More info" style="margin-left:0.4em;">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+                <circle cx="12" cy="12" r="10"/>
+                <line x1="12" y1="8" x2="12" y2="8"/>
+                <line x1="12" y1="12" x2="12" y2="16"/>
+              </svg>
+              <span class="rf-tooltip-text">Receive an overall ATS compliance score (0-100) for your resume, highlighting key areas to improve for better job application success.</span>
+            </span>
           </div>
           <div class="rf-plan-limit" id="rf-plan-limit">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
-            </svg>
             <span id="rf-ats-checks">2 ATS checks remaining this month</span>
           </div>
           <form id="rf-upload-form" style="margin:1rem 0 0.7rem 0;">
-            <label for="rf-upload" style="font-weight:600;">Upload your resume (PDF, max 2 MB):</label><br>
-            <input id="rf-upload" type="file" accept="application/pdf" style="margin-top:0.5rem;">
+            <label for="rf-job-title" style="font-weight:600;display:block;margin-bottom:0.5rem;">Target Role <span style="font-weight:400;color:var(--color-text-muted);font-size:0.9em;">(Recommended for better results)</span></label>
+            <div style="position:relative;max-width:400px;margin-bottom:1rem;">
+              <input 
+                id="rf-job-title" 
+                type="text" 
+                placeholder="Start typing your target role (e.g., Software Engineer, Product Manager)" 
+                class="rf-role-input"
+                style="width:100%;padding:0.85rem 1.1rem;border:2px solid #E5E7EB;border-radius:10px;font-size:1.08rem;margin-bottom:0;transition:border 0.18s;background:#fff;color:#232B36;box-sizing:border-box;"
+                role="combobox" 
+                aria-autocomplete="list" 
+                aria-expanded="false" 
+                aria-controls="rf-role-list"
+                autocomplete="off"
+                value="">
+              <div id="rf-role-list" class="rf-role-dropdown" role="listbox" style="display:none;position:absolute;left:0;right:0;background:#fff;border:1.5px solid #E5E7EB;border-top:none;border-radius:0 0 10px 10px;box-shadow:0 2px 8px rgba(31,41,55,0.07);z-index:10;max-height:220px;overflow-y:auto;margin-top:-2px;top:100%;"></div>
+            </div>
+            <div style="font-size:0.85rem;color:var(--color-text-muted);margin-bottom:1rem;line-height:1.4;">Adding a role helps us provide role-specific keyword suggestions, tailored feedback, and optimized resume rewriting.</div>
+            <label for="rf-upload" style="font-weight:600;display:block;margin-bottom:0.5rem;">Resume File</label>
+            <div style="display:flex;align-items:center;gap:0.75rem;flex-wrap:wrap;margin-bottom:0.5rem;">
+              <label for="rf-upload" style="display:inline-flex;align-items:center;gap:0.5rem;padding:0.5rem 1rem;background:var(--color-card-bg);border:1px solid var(--color-divider);border-radius:var(--radius-md);font-size:0.875rem;font-weight:600;color:var(--color-text-main);cursor:pointer;transition:all 0.2s;">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                  <polyline points="17 8 12 3 7 8"></polyline>
+                  <line x1="12" y1="3" x2="12" y2="15"></line>
+                </svg>
+                Choose File
+              </label>
+              <span id="rf-file-name" style="font-size:0.875rem;color:var(--color-text-muted);">No file selected</span>
+            </div>
+            <div style="font-size:0.85rem;color:var(--color-text-muted);margin-bottom:0.75rem;line-height:1.4;">Supported formats: PDF, DOCX, or TXT. Maximum file size: 2 MB.</div>
+            <input id="rf-upload" type="file" accept=".pdf,.docx,.txt,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain" style="position:absolute;opacity:0;width:0;height:0;pointer-events:none;">
+            <button
+              type="button"
+              id="rf-generate-btn"
+              class="btn-primary"
+              style="margin-top:0.5rem;"
+              disabled
+              tabindex="0"
+              aria-label="Generate ATS Score and Feedback"
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:0.35rem;">
+                <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+              </svg>
+              Generate ATS Score &amp; Feedback
+            </button>
+            <div id="rf-generate-status" style="display:none;margin-top:0.5rem;font-size:0.85rem;padding:0.35rem 0.75rem;border-radius:var(--radius-md);background:rgba(5,150,105,0.08);color:var(--color-success);width:fit-content;max-width:100%;">
+              Ready to analyze
+            </div>
           </form>
         </div>
       </div>
@@ -1016,8 +3506,16 @@
       </div>
       <div style="color:var(--color-text-secondary);margin-bottom:1.2rem;">
         Get detailed ATS feedback and role-specific insights.
+        <span class="rf-tooltip-trigger" tabindex="0" aria-label="More info" style="margin-left:0.4em;">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+            <circle cx="12" cy="12" r="10"/>
+            <line x1="12" y1="8" x2="12" y2="8"/>
+            <line x1="12" y1="12" x2="12" y2="16"/>
+          </svg>
+          <span class="rf-tooltip-text">Get comprehensive feedback on keyword matching, formatting, structure, tone, and grammar to improve your resume's ATS compatibility.</span>
+        </span>
       </div>
-      <div class="rf-upgrade-prompt" style="display:none;">
+      <div class="rf-upgrade-prompt" style="display:none !important;">
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M12 5v14M5 12h14"/>
         </svg>
@@ -1028,62 +3526,42 @@
       </div>
       <!-- Hidden content that will be shown for unlocked plans -->
       <div id="rf-feedback-content" style="display:none;">
+        <!-- Empty state placeholder -->
+        <div id="ats-placeholder" class="ats-placeholder-note" style="display:none;">
+          Upload your résumé above to generate your ATS Score and detailed feedback.
+        </div>
+        <!-- Context Bar (shown when cached data exists) -->
+        <div id="rf-context-bar" style="display:none;margin-bottom:1.5rem;padding:1rem;background:var(--color-card-bg);border:1px solid var(--color-divider);border-radius:var(--radius-md);">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:1rem;">
+            <div style="flex:1;min-width:200px;">
+              <div style="font-size:0.875rem;color:var(--color-text-muted);margin-bottom:0.5rem;">📄 You're viewing your last analyzed resume</div>
+              <div id="rf-context-details" style="display:flex;flex-direction:column;gap:0.25rem;font-size:0.875rem;color:var(--color-text-secondary);">
+                <span id="rf-context-file">File: <strong id="rf-context-file-name">—</strong></span>
+                <span id="rf-context-role">Target role: <strong id="rf-context-role-name">—</strong></span>
+                <span id="rf-context-time">Last analyzed: <strong id="rf-context-time-value">—</strong></span>
+              </div>
+            </div>
+            <button id="rf-rerun-btn" class="btn-secondary" style="white-space:nowrap;">Re-run analysis</button>
+          </div>
+        </div>
         <!-- ATS Rubric -->
-        <div class="rf-rubric-grid" id="rf-rubric-grid">
-          <div class="rf-rubric-item">
-            <div class="rf-rubric-label">Keyword Match</div>
-            <div class="rf-rubric-score">27 / 35</div>
-            <div style="color:var(--color-text-secondary);font-size:0.98rem;">Add more industry keywords for your target job.</div>
-          </div>
-          <div class="rf-rubric-item">
-            <div class="rf-rubric-label">ATS Formatting</div>
-            <div class="rf-rubric-score">20 / 25</div>
-            <div style="color:var(--color-text-secondary);font-size:0.98rem;">Avoid tables, graphics, and use standard headings.</div>
-          </div>
-          <div class="rf-rubric-item">
-            <div class="rf-rubric-label">Structure & Organization</div>
-            <div class="rf-rubric-score">16 / 20</div>
-            <div style="color:var(--color-text-secondary);font-size:0.98rem;">Order sections: Contact, Experience, Education, Skills.</div>
-          </div>
-          <div class="rf-rubric-item">
-            <div class="rf-rubric-label">Tone & Clarity</div>
-            <div class="rf-rubric-score">8 / 10</div>
-            <div style="color:var(--color-text-secondary);font-size:0.98rem;">Use action verbs and concise bullet points.</div>
-          </div>
-          <div class="rf-rubric-item">
-            <div class="rf-rubric-label">Grammar & Spelling</div>
-            <div class="rf-rubric-score">7 / 10</div>
-            <div style="color:var(--color-text-secondary);font-size:0.98rem;">No major errors detected.</div>
+        <div id="ats-feedback-container">
+          <div class="rf-rubric-grid" id="rf-rubric-grid" style="display:none;">
           </div>
         </div>
         <!-- Role-Specific Feedback -->
-        <div class="rf-section-title" id="rf-role-title" style="margin-top:2rem;">Role-Specific Feedback</div>
-        <div style="color:var(--color-text-secondary);margin-bottom:1.2rem;" id="rf-role-desc">
-          Basic feedback on your resume's content and presentation for your target role. Upgrade to Pro for comprehensive analysis and unlimited suggestions.
+        <div id="role-feedback-container">
+          <div class="rf-section-title" id="rf-role-title" style="margin-top:3rem;">Role-Specific Feedback</div>
+          <div style="color:var(--color-text-secondary);margin-bottom:1.2rem;" id="rf-role-desc">
+            Basic feedback on your resume's content and presentation for your target role. Upgrade to Pro for comprehensive analysis and unlimited suggestions.
+          </div>
+          <div class="rf-feedback-grid" id="rf-feedback-grid" style="display:none;">
+          </div>
+        <button class="btn btn-primary" id="rf-regenerate-btn" style="margin-top:1.7rem;display:none;">Regenerate Feedback</button>
+        <div class="rf-placeholder-cta" id="rf-placeholder-cta" style="display:none;">
+          <button onclick="document.getElementById('rf-upload').click()">Upload Resume to Get Feedback</button>
         </div>
-        <div class="rf-feedback-grid" id="rf-feedback-grid">
-          <div class="rf-feedback-card">
-            <div class="rf-feedback-label">Header & Contact <span class="rf-feedback-score">8/10</span></div>
-            <div class="rf-feedback-tip">Clear and concise. Consider adding a custom resume URL for extra polish.</div>
-          </div>
-          <div class="rf-feedback-card">
-            <div class="rf-feedback-label">Professional Summary <span class="rf-feedback-score">6/10</span></div>
-            <div class="rf-feedback-tip">Strong opening but lacks keywords for your target role (e.g. "Kubernetes", "ETL").</div>
-          </div>
-          <div class="rf-feedback-card">
-            <div class="rf-feedback-label">Experience <span class="rf-feedback-score">7/10</span></div>
-            <div class="rf-feedback-tip">Great STAR structure. Quantify impact with metrics ("improved uptime by 15%").</div>
-          </div>
-          <div class="rf-feedback-card">
-            <div class="rf-feedback-label">Skills <span class="rf-feedback-score">9/10</span></div>
-            <div class="rf-feedback-tip">Relevant and up-to-date. Group under sub-headings (Cloud, Data, Languages).</div>
-          </div>
-          <div class="rf-feedback-card">
-            <div class="rf-feedback-label">Education <span class="rf-feedback-score">10/10</span></div>
-            <div class="rf-feedback-tip">Well-formatted. No changes needed.</div>
-          </div>
         </div>
-        <button class="btn btn-primary" id="rf-regenerate-btn" style="margin-top:1.7rem;">Regenerate Feedback</button>
       </div>
     </section>
 
@@ -1095,7 +3573,15 @@
         <span class="rf-plan-badge" style="background:#6B7280;">Pro Only</span>
       </div>
       <div style="color:var(--color-text-secondary);margin-bottom:1.2rem;">
-        Upgrade to Pro to unlock AI-powered resume rewriting with ATS optimization and role-specific enhancements.
+        Trial shows you what to fix. Pro fixes it now (rewrites unlocked). Upgrade to Pro to complete your resume optimization.
+        <span class="rf-tooltip-trigger" tabindex="0" aria-label="More info" style="margin-left:0.4em;">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+            <circle cx="12" cy="12" r="10"/>
+            <line x1="12" y1="8" x2="12" y2="8"/>
+            <line x1="12" y1="12" x2="12" y2="16"/>
+          </svg>
+          <span class="rf-tooltip-text">See a rewritten version of your resume tailored to your target job - ready to copy and paste. Unlimited with your Pro plan.</span>
+        </span>
       </div>
       <div class="rf-upgrade-prompt">
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -1115,6 +3601,7 @@
         <textarea class="rf-snippet-box" readonly>Original resume excerpt will appear here after upload.</textarea>
         <div style="font-weight:600;margin-bottom:0.5rem;">Rewritten Snippet</div>
         <textarea class="rf-snippet-box" readonly>AI-optimized resume excerpt.</textarea>
+        <div id="rf-change-summary" style="display:none;"></div>
         <div style="margin-top:1.2rem;">
           <button class="btn btn-primary">Copy Rewritten Resume</button>
           <button class="btn btn-secondary">Regenerate Rewrite</button>

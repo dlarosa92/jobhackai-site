@@ -1107,9 +1107,14 @@ function updateNavigation() {
         const trigger = document.createElement('button');
         trigger.className = 'mobile-nav-trigger';
         trigger.textContent = item.text;
+        trigger.setAttribute('aria-expanded', 'false');
+        trigger.setAttribute('aria-controls', `mobile-submenu-${index}`);
+        trigger.setAttribute('data-group-index', index.toString());
+        
         group.appendChild(trigger);
         const submenu = document.createElement('div');
         submenu.className = 'mobile-nav-submenu';
+        submenu.id = `mobile-submenu-${index}`;
         item.items.forEach(dropdownItem => {
           const link = document.createElement('a');
           updateLink(link, dropdownItem.href);
@@ -1291,12 +1296,64 @@ function updateNavigation() {
     }
   });
   
+  // Setup event delegation for mobile nav triggers (works even after navigation rebuilds)
+  setupMobileNavDelegation();
+  
   // Auto-detect issues after navigation update
   setTimeout(() => {
     autoEnableDebugIfNeeded();
   }, 100);
   
   navLog('info', '=== updateNavigation() COMPLETE ===');
+}
+
+// Event delegation for mobile navigation dropdowns
+// This ensures clicks work even after navigation is rebuilt
+function setupMobileNavDelegation() {
+  const mobileNav = document.getElementById('mobileNav');
+  if (!mobileNav) return;
+  
+  // Remove any existing delegation listener to avoid duplicates
+  if (mobileNav._delegationHandler) {
+    mobileNav.removeEventListener('click', mobileNav._delegationHandler);
+  }
+  
+  // Create new delegation handler
+  mobileNav._delegationHandler = function(e) {
+    // Check if click is on a mobile nav trigger button
+    const trigger = e.target.closest('.mobile-nav-trigger');
+    if (!trigger) return;
+    
+    e.preventDefault();
+    e.stopPropagation();
+    
+    const group = trigger.closest('.mobile-nav-group');
+    if (!group) return;
+    
+    const isOpen = group.classList.contains('open');
+    
+    // Close all other groups
+    document.querySelectorAll('.mobile-nav-group.open').forEach(g => {
+      if (g !== group) {
+        g.classList.remove('open');
+        const t = g.querySelector('.mobile-nav-trigger');
+        if (t) t.setAttribute('aria-expanded', 'false');
+      }
+    });
+    
+    // Toggle current group
+    if (isOpen) {
+      group.classList.remove('open');
+      trigger.setAttribute('aria-expanded', 'false');
+    } else {
+      group.classList.add('open');
+      trigger.setAttribute('aria-expanded', 'true');
+    }
+  };
+  
+  // Attach delegation listener
+  mobileNav.addEventListener('click', mobileNav._delegationHandler);
+  navLog('debug', 'Mobile nav delegation handler attached');
 }
 
 function updateQuickPlanSwitcher() {
@@ -1464,6 +1521,12 @@ async function initializeNavigation() {
   // Update navigation
   navLog('debug', 'Calling updateNavigation()');
   updateNavigation();
+  
+  // Ensure mobile nav delegation is set up (in case updateNavigation runs before mobileNav exists)
+  // This will be called again in updateNavigation, but this ensures it's ready
+  setTimeout(() => {
+    setupMobileNavDelegation();
+  }, 100);
   
   // REMOVED: Do NOT call reconcilePlanFromKV() here - it causes race condition
   // Plan reconciliation will be handled by:

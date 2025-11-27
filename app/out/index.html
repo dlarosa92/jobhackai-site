@@ -78,25 +78,9 @@
   <nav class="mobile-nav" id="mobileNav">
     <!-- Mobile navigation will be dynamically populated by navigation.js -->
   </nav>
-
-  <script>
-    // Hamburger menu toggle
-    const mobileToggle = document.querySelector('.mobile-toggle');
-    const mobileNav = document.getElementById('mobileNav');
-    if (mobileToggle && mobileNav) {
-      mobileToggle.addEventListener('click', () => {
-        const isOpen = mobileNav.classList.toggle('open');
-        mobileToggle.setAttribute('aria-expanded', isOpen);
-      });
-      // Close mobile nav on link click
-      document.querySelectorAll('.mobile-nav a').forEach(link => {
-        link.addEventListener('click', () => {
-          mobileNav.classList.remove('open');
-          mobileToggle.setAttribute('aria-expanded', 'false');
-        });
-      });
-    }
-  </script>
+  <div class="mobile-nav-backdrop" id="mobileNavBackdrop"></div>
+  <!-- Centralized mobile menu handler -->
+  <script src="js/mobile-menu.js?v=20250115-1"></script>
 
   <!-- Main Content -->
   <main>
