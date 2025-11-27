@@ -206,17 +206,18 @@ function cleanText(text) {
   // Normalize whitespace
   text = text.replace(/[ \t]+/g, ' ');
   
-  // Fix common encoding issues
-  text = text.replace(/â€™/g, "'");
-  text = text.replace(/â€œ/g, '"');
-  text = text.replace(/â€/g, '"');
+  // Fix common encoding issues (UTF-8 decoded as Latin-1 mojibake)
+  // When UTF-8 bytes are decoded as Latin-1, byte 0x80 becomes U+0080, not U+20AC (€)
+  // Pattern: UTF-8 0xE2 0x80 0x99 -> Latin-1: U+00E2 U+0080 U+0099 -> "â\x80\x99"
+  text = text.replace(/â\x80\x99/g, "'"); // Right single quotation mark
+  text = text.replace(/â\x80\x9C/g, '"'); // Left double quotation mark
+  text = text.replace(/â\x80\x9D/g, '"'); // Right double quotation mark
   // Fix em dash mojibake (UTF-8 0xE2 0x80 0x94 decoded as Latin-1)
-  // The pattern looks identical to en dash in source, but last byte differs (0x94 vs 0x93)
-  // Use hex escape \x94 to match the actual byte 0x94 (148 decimal) for em dash
-  text = text.replace(/â€\x94/g, '—');
+  // UTF-8: 0xE2 0x80 0x94 -> Latin-1: U+00E2 U+0080 U+0094 -> "â\x80\x94"
+  text = text.replace(/â\x80\x94/g, '—');
   // Fix en dash mojibake (UTF-8 0xE2 0x80 0x93 decoded as Latin-1)
-  // Use hex escape \x93 to match the actual byte 0x93 (147 decimal) for en dash
-  text = text.replace(/â€\x93/g, '–');
+  // UTF-8: 0xE2 0x80 0x93 -> Latin-1: U+00E2 U+0080 U+0093 -> "â\x80\x93"
+  text = text.replace(/â\x80\x93/g, '–');
   
   // Trim
   text = text.trim();

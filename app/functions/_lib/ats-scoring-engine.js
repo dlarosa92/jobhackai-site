@@ -143,24 +143,35 @@ function matchSkillPhrase(skill, textLower) {
       
       // If first is a single word and second is a phrase, check if first+rest matches
       // Example: "ETL" / "ELT pipelines" -> check "ETL pipelines" and "ELT pipelines"
+      // But also check "first" standalone for cases like "Kubernetes or container orchestration"
       const firstWords = first.split(/\s+/);
       const secondWords = second.split(/\s+/);
       
       if (firstWords.length === 1 && secondWords.length > 1) {
-        // Check if second part starts with a single word (likely an alternative)
-        // Then check both: "first + rest" and "second"
-        const secondFirstWord = secondWords[0];
-        const secondRest = secondWords.slice(1).join(' ');
-        
-        // Check "first + rest" (e.g., "ETL pipelines")
-        const firstCombined = `${first} ${secondRest}`.trim();
-        const firstMatches = matchSkillPhrase(firstCombined, textLower);
-        if (firstMatches > 0) {
-          totalMatches += firstMatches;
+        // Check "first" as standalone (e.g., "Kubernetes", "ETL")
+        const firstStandaloneMatches = matchSkillPhrase(first, textLower);
+        if (firstStandaloneMatches > 0) {
+          totalMatches += firstStandaloneMatches;
           anyMatched = true;
         }
         
-        // Check "second" as-is (e.g., "ELT pipelines")
+        // Check if second part starts with a single word that might be an alternative
+        // Then check "first + rest" (e.g., "ETL pipelines" when first="ETL", second="ELT pipelines")
+        const secondFirstWord = secondWords[0];
+        const secondRest = secondWords.slice(1).join(' ');
+        
+        // Only combine first+rest if it makes sense (second starts with alternative word)
+        // For "ETL / ELT pipelines", secondFirstWord="ELT" is an alternative to first="ETL"
+        // For "Kubernetes or container orchestration", secondFirstWord="container" is NOT an alternative
+        // In the latter case, we've already checked "Kubernetes" standalone above
+        const firstCombined = `${first} ${secondRest}`.trim();
+        const firstCombinedMatches = matchSkillPhrase(firstCombined, textLower);
+        if (firstCombinedMatches > 0) {
+          totalMatches += firstCombinedMatches;
+          anyMatched = true;
+        }
+        
+        // Check "second" as-is (e.g., "ELT pipelines", "container orchestration")
         const secondMatches = matchSkillPhrase(second, textLower);
         if (secondMatches > 0) {
           totalMatches += secondMatches;
@@ -615,6 +626,7 @@ function mapGrammarDiagnosticsToScore(diagnostics, context) {
   ) {
     band = 'good';
     if (finalScore < 7) finalScore = 7; // clamp into 7–8 band
+    if (finalScore > 8) finalScore = 8; // clamp into 7–8 band
   }
   // Fair (C) band – catch all scores >= 5 that don't qualify for higher bands
   // This includes scores >= 7 that don't meet Good band formatting/structure requirements
