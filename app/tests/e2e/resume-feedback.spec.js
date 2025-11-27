@@ -108,26 +108,40 @@ test.describe('Resume Feedback', () => {
     // Wait for KV fetch to complete, then check if form button exists
     await page.waitForTimeout(3000); // Give time for KV fetch to complete
     
-    // Check if KV restored cached state (button missing = results view shown)
+    // Check if form has correct structure (button exists = full form, not simplified)
     const formState = await page.evaluate(() => {
       const form = document.getElementById('rf-upload-form');
       const button = document.getElementById('rf-generate-btn');
+      const jobTitleInput = document.getElementById('rf-job-title');
       const hasCachedScore = window.JobHackAIStatePersistence ? 
         !!(window.JobHackAIStatePersistence.loadATSScore && 
            window.JobHackAIStatePersistence.loadATSScore(null)?.score) : false;
       
+      // Check if form HTML contains the button (form might have been replaced)
+      const formHasButtonInHTML = form ? form.innerHTML.includes('rf-generate-btn') : false;
+      const formHasJobTitleInHTML = form ? form.innerHTML.includes('rf-job-title') : false;
+      
       return {
+        url: window.location.href,
         formExists: !!form,
         buttonExists: !!button,
+        jobTitleInputExists: !!jobTitleInput,
         hasCachedScore,
-        formHTML: form ? form.innerHTML.substring(0, 300) : null
+        formHasButtonInHTML,
+        formHasJobTitleInHTML,
+        formHTML: form ? form.innerHTML.substring(0, 500) : null
       };
     });
     
     console.log('🔍 [FORM STATE] After KV check:', JSON.stringify(formState, null, 2));
     
-    // If button doesn't exist but cached score exists, KV restored state - clear it
-    if (!formState.buttonExists && formState.hasCachedScore) {
+    // If button doesn't exist OR form HTML doesn't contain button, form was replaced
+    // This can happen if KV restored state OR form was replaced by some other code
+    if (!formState.buttonExists || !formState.formHasButtonInHTML) {
+      console.log('⚠️ Form structure incorrect - button missing or form replaced');
+      
+      // If cached score exists, clear it and reload
+      if (formState.hasCachedScore) {
       console.log('⚠️ KV restored cached state, clearing and reloading...');
       await page.evaluate(() => {
         // Clear all state persistence
@@ -177,14 +191,56 @@ test.describe('Resume Feedback', () => {
       
       // Wait for KV check again (it will run on reload)
       await page.waitForTimeout(3000);
+      } else {
+        // Form was replaced but no cached score - might be a different issue
+        // Try reloading anyway to see if form restores
+        console.log('⚠️ Form replaced but no cached score - reloading page');
+        await page.reload({ waitUntil: 'domcontentloaded' });
+        
+        // Wait for auth again
+        await page.waitForFunction(() => {
+          const user = window.FirebaseAuthManager?.getCurrentUser?.();
+          return user !== null && user !== undefined;
+        }, { timeout: 10000 }).catch(() => {
+          return page.waitForFunction(() => {
+            return localStorage.getItem('user-authenticated') === 'true';
+          }, { timeout: 5000 });
+        });
+        
+        // Wait for plan hydration again
+        try {
+          await page.waitForFunction(() => {
+            const planPendingRemoved = !document.documentElement.classList.contains('plan-pending');
+            const planFlagCleared = window.__JOBHACKAI_PLAN_PENDING__ === false || 
+                                    window.__JOBHACKAI_PLAN_PENDING__ === undefined;
+            const stillOnPage = window.location.pathname.includes('resume-feedback-pro') || 
+                                window.location.pathname.includes('resume-feedback');
+            return planPendingRemoved && planFlagCleared && stillOnPage;
+          }, { timeout: 15000 });
+        } catch (error) {
+          const hydrationURL = page.url();
+          if (hydrationURL.includes('/pricing')) {
+            const userPlan = await page.evaluate(() => localStorage.getItem('user-plan') || 'unknown');
+            test.info().skip(`Page redirected to pricing during plan hydration. user-plan=${userPlan}`);
+            return;
+          }
+          console.log('⚠️ Plan hydration wait timed out after reload - continuing');
+        }
+        
+        await page.waitForTimeout(3000);
+      }
     }
     
-    // Now verify upload form is visible (not hidden by cached results)
+    // Now verify upload form is visible with correct structure
+    // The form should have the button - if it doesn't, the form HTML was replaced
     await page.waitForFunction(() => {
       const form = document.getElementById('rf-upload-form');
       const button = document.getElementById('rf-generate-btn');
-      // Form and button must exist and be visible
-      if (!form || !button) return false;
+      const jobTitleInput = document.getElementById('rf-job-title');
+      
+      // Form, button, and job title input must all exist (full form structure)
+      if (!form || !button || !jobTitleInput) return false;
+      
       const formStyle = window.getComputedStyle(form);
       const buttonStyle = window.getComputedStyle(button);
       return formStyle.display !== 'none' && 
@@ -195,18 +251,33 @@ test.describe('Resume Feedback', () => {
       const diagnostic = await page.evaluate(() => {
         const form = document.getElementById('rf-upload-form');
         const button = document.getElementById('rf-generate-btn');
+        const jobTitleInput = document.getElementById('rf-job-title');
+        const fileInput = document.getElementById('rf-upload');
+        
         return {
+          url: window.location.href,
           formExists: !!form,
           buttonExists: !!button,
+          jobTitleInputExists: !!jobTitleInput,
+          fileInputExists: !!fileInput,
           formDisplay: form ? window.getComputedStyle(form).display : null,
           buttonDisplay: button ? window.getComputedStyle(button).display : null,
-          formHTML: form ? form.innerHTML.substring(0, 300) : null,
+          formHTML: form ? form.innerHTML.substring(0, 500) : null,
           hasCachedScore: window.JobHackAIStatePersistence ? 
             !!(window.JobHackAIStatePersistence.loadATSScore && 
-               window.JobHackAIStatePersistence.loadATSScore(null)?.score) : false
+               window.JobHackAIStatePersistence.loadATSScore(null)?.score) : false,
+          // Check if form was replaced with simplified version
+          formHasJobTitle: form ? form.innerHTML.includes('rf-job-title') : false,
+          formHasGenerateBtn: form ? form.innerHTML.includes('rf-generate-btn') : false
         };
       });
       console.log('⚠️ Upload form not visible after all checks:', JSON.stringify(diagnostic, null, 2));
+      
+      // If form exists but button doesn't, the form HTML was replaced
+      if (diagnostic.formExists && !diagnostic.buttonExists) {
+        throw new Error(`Form HTML was replaced - button missing. Form HTML: ${diagnostic.formHTML?.substring(0, 200)}`);
+      }
+      
       throw new Error('Upload form is not visible - page may be showing cached results view');
     });
     
