@@ -125,7 +125,64 @@ test.describe('Resume Feedback', () => {
     // Wait for file change event to fire and button to be enabled
     await page.waitForTimeout(500); // Let change event fire
     
+    // DIAGNOSTIC: Check page state before looking for button
+    const diagnosticInfo = await page.evaluate(() => {
+      return {
+        url: window.location.href,
+        hasPlanPending: document.documentElement.classList.contains('plan-pending'),
+        hasAuthPending: document.documentElement.classList.contains('auth-pending'),
+        buttonExists: !!document.getElementById('rf-generate-btn'),
+        buttonVisible: (() => {
+          const btn = document.getElementById('rf-generate-btn');
+          if (!btn) return false;
+          const style = window.getComputedStyle(btn);
+          return style.display !== 'none' && style.visibility !== 'hidden';
+        })(),
+        buttonDisabled: (() => {
+          const btn = document.getElementById('rf-generate-btn');
+          return btn ? btn.disabled : null;
+        })(),
+        fileInputHasFile: (() => {
+          const input = document.getElementById('rf-upload');
+          return input ? input.files.length > 0 : false;
+        })(),
+        bodyVisibility: window.getComputedStyle(document.body).visibility,
+        htmlVisibility: window.getComputedStyle(document.documentElement).visibility
+      };
+    });
+    
+    console.log('🔍 [DIAGNOSTIC] Page state after file upload:', JSON.stringify(diagnosticInfo, null, 2));
+    
+    // If page is hidden, wait for it to become visible
+    if (diagnosticInfo.hasPlanPending || diagnosticInfo.htmlVisibility === 'hidden') {
+      console.log('⚠️ Page is still hidden (plan-pending), waiting for visibility...');
+      await page.waitForFunction(() => {
+        return !document.documentElement.classList.contains('plan-pending') &&
+               window.getComputedStyle(document.documentElement).visibility !== 'hidden';
+      }, { timeout: 10000 }).catch(() => {
+        throw new Error('Page remained hidden after file upload');
+      });
+    }
+    
     // Verify button exists in DOM after file upload
+    if (!diagnosticInfo.buttonExists) {
+      // Get more context about what's in the DOM
+      const domSnapshot = await page.evaluate(() => {
+        const form = document.getElementById('rf-upload-form');
+        return {
+          formExists: !!form,
+          formHTML: form ? form.innerHTML.substring(0, 500) : null,
+          allButtons: Array.from(document.querySelectorAll('button')).map(btn => ({
+            id: btn.id,
+            text: btn.textContent?.trim().substring(0, 50)
+          }))
+        };
+      });
+      console.log('🔍 [DIAGNOSTIC] DOM snapshot:', JSON.stringify(domSnapshot, null, 2));
+      throw new Error(`Button #rf-generate-btn not found in DOM after file upload. Form exists: ${domSnapshot.formExists}`);
+    }
+    
+    // Verify button exists in DOM after file upload (double-check with waitForFunction)
     await page.waitForFunction(() => {
       const btn = document.getElementById('rf-generate-btn');
       return btn !== null && btn !== undefined;
