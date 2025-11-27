@@ -103,23 +103,95 @@ test.describe('Resume Feedback', () => {
       console.log('⚠️ Plan hydration wait timed out, but page not redirected - continuing');
     }
     
-    // CRITICAL: Verify upload form is visible (not hidden by cached results)
-    // Wait for the upload form to be in the DOM and visible
-    try {
+    // CRITICAL: Wait for KV check to complete, then verify upload form is visible
+    // The page fetches from KV storage asynchronously, which may restore cached state
+    // Wait for KV fetch to complete, then check if form button exists
+    await page.waitForTimeout(3000); // Give time for KV fetch to complete
+    
+    // Check if KV restored cached state (button missing = results view shown)
+    const formState = await page.evaluate(() => {
+      const form = document.getElementById('rf-upload-form');
+      const button = document.getElementById('rf-generate-btn');
+      const hasCachedScore = window.JobHackAIStatePersistence ? 
+        !!(window.JobHackAIStatePersistence.loadATSScore && 
+           window.JobHackAIStatePersistence.loadATSScore(null)?.score) : false;
+      
+      return {
+        formExists: !!form,
+        buttonExists: !!button,
+        hasCachedScore,
+        formHTML: form ? form.innerHTML.substring(0, 300) : null
+      };
+    });
+    
+    console.log('🔍 [FORM STATE] After KV check:', JSON.stringify(formState, null, 2));
+    
+    // If button doesn't exist but cached score exists, KV restored state - clear it
+    if (!formState.buttonExists && formState.hasCachedScore) {
+      console.log('⚠️ KV restored cached state, clearing and reloading...');
+      await page.evaluate(() => {
+        // Clear all state persistence
+        const keysToRemove = [];
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i);
+          if (key && (key.includes('ats_score') || key.includes('resume_data') || key.includes('jobhackai'))) {
+            keysToRemove.push(key);
+          }
+        }
+        keysToRemove.forEach(key => localStorage.removeItem(key));
+        sessionStorage.clear();
+      });
+      
+      // Reload page after clearing
+      await page.reload({ waitUntil: 'domcontentloaded' });
+      
+      // Wait for auth again
       await page.waitForFunction(() => {
-        const form = document.getElementById('rf-upload-form');
-        const button = document.getElementById('rf-generate-btn');
-        // Form and button must exist and be visible
-        if (!form || !button) return false;
-        const formStyle = window.getComputedStyle(form);
-        const buttonStyle = window.getComputedStyle(button);
-        return formStyle.display !== 'none' && 
-               buttonStyle.display !== 'none' && 
-               buttonStyle.visibility !== 'hidden';
-      }, { timeout: 10000 });
-    } catch (error) {
-      // If form is not visible, it might be hidden by cached state
-      // Log diagnostic info
+        const user = window.FirebaseAuthManager?.getCurrentUser?.();
+        return user !== null && user !== undefined;
+      }, { timeout: 10000 }).catch(() => {
+        return page.waitForFunction(() => {
+          return localStorage.getItem('user-authenticated') === 'true';
+        }, { timeout: 5000 });
+      });
+      
+      // Wait for plan hydration again
+      try {
+        await page.waitForFunction(() => {
+          const planPendingRemoved = !document.documentElement.classList.contains('plan-pending');
+          const planFlagCleared = window.__JOBHACKAI_PLAN_PENDING__ === false || 
+                                  window.__JOBHACKAI_PLAN_PENDING__ === undefined;
+          const stillOnPage = window.location.pathname.includes('resume-feedback-pro') || 
+                              window.location.pathname.includes('resume-feedback');
+          return planPendingRemoved && planFlagCleared && stillOnPage;
+        }, { timeout: 15000 });
+      } catch (error) {
+        const hydrationURL = page.url();
+        if (hydrationURL.includes('/pricing')) {
+          const userPlan = await page.evaluate(() => localStorage.getItem('user-plan') || 'unknown');
+          test.info().skip(`Page redirected to pricing during plan hydration. user-plan=${userPlan}`);
+          return;
+        }
+        console.log('⚠️ Plan hydration wait timed out after reload - continuing');
+      }
+      
+      // Wait for KV check again (it will run on reload)
+      await page.waitForTimeout(3000);
+    }
+    
+    // Now verify upload form is visible (not hidden by cached results)
+    await page.waitForFunction(() => {
+      const form = document.getElementById('rf-upload-form');
+      const button = document.getElementById('rf-generate-btn');
+      // Form and button must exist and be visible
+      if (!form || !button) return false;
+      const formStyle = window.getComputedStyle(form);
+      const buttonStyle = window.getComputedStyle(button);
+      return formStyle.display !== 'none' && 
+             buttonStyle.display !== 'none' && 
+             buttonStyle.visibility !== 'hidden';
+    }, { timeout: 15000 }).catch(async (error) => {
+      // Log diagnostic info if form still not visible
       const diagnostic = await page.evaluate(() => {
         const form = document.getElementById('rf-upload-form');
         const button = document.getElementById('rf-generate-btn');
@@ -128,12 +200,15 @@ test.describe('Resume Feedback', () => {
           buttonExists: !!button,
           formDisplay: form ? window.getComputedStyle(form).display : null,
           buttonDisplay: button ? window.getComputedStyle(button).display : null,
-          formHTML: form ? form.innerHTML.substring(0, 200) : null
+          formHTML: form ? form.innerHTML.substring(0, 300) : null,
+          hasCachedScore: window.JobHackAIStatePersistence ? 
+            !!(window.JobHackAIStatePersistence.loadATSScore && 
+               window.JobHackAIStatePersistence.loadATSScore(null)?.score) : false
         };
       });
-      console.log('⚠️ Upload form not visible:', JSON.stringify(diagnostic, null, 2));
+      console.log('⚠️ Upload form not visible after all checks:', JSON.stringify(diagnostic, null, 2));
       throw new Error('Upload form is not visible - page may be showing cached results view');
-    }
+    });
     
     // DEBUG: Check plan from API before checking redirect
     const token = await page.evaluate(async () => {
