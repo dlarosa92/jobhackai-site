@@ -122,6 +122,30 @@ test.describe('Resume Feedback', () => {
     }
     await fileInput.setInputFiles(testResume);
     
+    // Wait for file change event to fire and button to be enabled
+    await page.waitForTimeout(500); // Let change event fire
+    
+    // Verify button exists in DOM after file upload
+    await page.waitForFunction(() => {
+      const btn = document.getElementById('rf-generate-btn');
+      return btn !== null && btn !== undefined;
+    }, { timeout: 10000 }).catch(() => {
+      throw new Error('Button #rf-generate-btn not found in DOM after file upload');
+    });
+    
+    // Verify page is still visible (not in plan-pending state)
+    await page.waitForFunction(() => {
+      return !document.documentElement.classList.contains('plan-pending');
+    }, { timeout: 5000 }).catch(() => {
+      console.warn('⚠️ Page still in plan-pending state after file upload');
+    });
+    
+    // Verify we're still on the correct page
+    const urlAfterUpload = page.url();
+    if (!urlAfterUpload.includes('resume-feedback')) {
+      throw new Error(`Page navigated away from resume-feedback after file upload. Current URL: ${urlAfterUpload}`);
+    }
+    
     // Click the Generate button to trigger upload and scoring
     const generateBtn = page.locator('#rf-generate-btn');
     
