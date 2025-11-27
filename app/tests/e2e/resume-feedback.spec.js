@@ -7,8 +7,40 @@ test.describe('Resume Feedback', () => {
     // Upload + ATS scoring can exceed default 30s timeout; allow up to 2 minutes
     test.setTimeout(120000);
     
+    // CRITICAL: Clear any cached state before navigating
+    // State persistence might be showing results view instead of upload form
+    // Navigate to page first to get context, then clear state
     await page.goto('/resume-feedback-pro.html');
     await page.waitForLoadState('domcontentloaded');
+    
+    // Clear state persistence data that might hide the upload form
+    await page.evaluate(() => {
+      // Clear state persistence data
+      if (window.JobHackAIStatePersistence) {
+        // Try to clear using the persistence API if available
+        try {
+          localStorage.removeItem('jobhackai_ats_score');
+          localStorage.removeItem('jobhackai_resume_data');
+        } catch (e) {
+          console.warn('Failed to clear state persistence:', e);
+        }
+      }
+      // Clear all localStorage keys related to resume feedback
+      const keysToRemove = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && (key.includes('ats_score') || key.includes('resume_data') || key.includes('jobhackai'))) {
+          keysToRemove.push(key);
+        }
+      }
+      keysToRemove.forEach(key => localStorage.removeItem(key));
+      
+      // Clear sessionStorage
+      sessionStorage.clear();
+    });
+    
+    // Reload page to reset to upload form view
+    await page.reload({ waitUntil: 'domcontentloaded' });
     
     // Wait for auth to be ready using FirebaseAuthManager or localStorage fallback
     await page.waitForFunction(() => {
@@ -69,6 +101,38 @@ test.describe('Resume Feedback', () => {
       }
       // If not redirected, log warning but continue
       console.log('⚠️ Plan hydration wait timed out, but page not redirected - continuing');
+    }
+    
+    // CRITICAL: Verify upload form is visible (not hidden by cached results)
+    // Wait for the upload form to be in the DOM and visible
+    try {
+      await page.waitForFunction(() => {
+        const form = document.getElementById('rf-upload-form');
+        const button = document.getElementById('rf-generate-btn');
+        // Form and button must exist and be visible
+        if (!form || !button) return false;
+        const formStyle = window.getComputedStyle(form);
+        const buttonStyle = window.getComputedStyle(button);
+        return formStyle.display !== 'none' && 
+               buttonStyle.display !== 'none' && 
+               buttonStyle.visibility !== 'hidden';
+      }, { timeout: 10000 });
+    } catch (error) {
+      // If form is not visible, it might be hidden by cached state
+      // Log diagnostic info
+      const diagnostic = await page.evaluate(() => {
+        const form = document.getElementById('rf-upload-form');
+        const button = document.getElementById('rf-generate-btn');
+        return {
+          formExists: !!form,
+          buttonExists: !!button,
+          formDisplay: form ? window.getComputedStyle(form).display : null,
+          buttonDisplay: button ? window.getComputedStyle(button).display : null,
+          formHTML: form ? form.innerHTML.substring(0, 200) : null
+        };
+      });
+      console.log('⚠️ Upload form not visible:', JSON.stringify(diagnostic, null, 2));
+      throw new Error('Upload form is not visible - page may be showing cached results view');
     }
     
     // DEBUG: Check plan from API before checking redirect
