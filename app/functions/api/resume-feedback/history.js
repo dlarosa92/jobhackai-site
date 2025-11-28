@@ -1,0 +1,109 @@
+/**
+ * Resume Feedback History endpoint
+ * GET /api/resume-feedback/history
+ * 
+ * Returns the user's past resume feedback sessions from D1.
+ * This is the single source of truth for resume feedback history.
+ */
+
+import { getBearer, verifyFirebaseIdToken } from '../../_lib/firebase-auth.js';
+import { errorResponse, successResponse, generateRequestId } from '../../_lib/error-handler.js';
+import { getOrCreateUserByAuthId, getResumeFeedbackHistory, isD1Available } from '../../_lib/db.js';
+
+function corsHeaders(origin, env) {
+  const allowedOrigins = [
+    'https://dev.jobhackai.io',
+    'https://qa.jobhackai.io',
+    'https://app.jobhackai.io',
+    'http://localhost:3003',
+    'http://localhost:8788'
+  ];
+  
+  const allowedOrigin = allowedOrigins.includes(origin) ? origin : allowedOrigins[0];
+  
+  return {
+    'Access-Control-Allow-Origin': allowedOrigin,
+    'Access-Control-Allow-Methods': 'GET, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    'Access-Control-Max-Age': '86400',
+    'Vary': 'Origin'
+  };
+}
+
+export async function onRequest(context) {
+  const { request, env } = context;
+  const origin = request.headers.get('Origin') || '';
+  const requestId = generateRequestId();
+
+  // Handle CORS preflight
+  if (request.method === 'OPTIONS') {
+    return new Response(null, { headers: corsHeaders(origin, env) });
+  }
+
+  // Only allow GET
+  if (request.method !== 'GET') {
+    return errorResponse('Method not allowed', 405, origin, env, requestId);
+  }
+
+  try {
+    // Verify authentication
+    const token = getBearer(request);
+    if (!token) {
+      return errorResponse('Unauthorized', 401, origin, env, requestId);
+    }
+
+    const { uid } = await verifyFirebaseIdToken(token, env.FIREBASE_PROJECT_ID);
+
+    // Check if D1 is available
+    if (!isD1Available(env)) {
+      console.warn('[RESUME-FEEDBACK-HISTORY] D1 not available');
+      return successResponse({
+        items: [],
+        message: 'History not available'
+      }, 200, origin, env, requestId);
+    }
+
+    // Get or create user
+    const d1User = await getOrCreateUserByAuthId(env, uid, null);
+    if (!d1User) {
+      console.warn('[RESUME-FEEDBACK-HISTORY] Failed to resolve user');
+      return successResponse({
+        items: [],
+        message: 'No history available yet'
+      }, 200, origin, env, requestId);
+    }
+
+    // Get limit from query params (default 20, max 50)
+    const url = new URL(request.url);
+    const limitParam = parseInt(url.searchParams.get('limit') || '20', 10);
+    const limit = Math.min(Math.max(1, limitParam), 50);
+
+    // Fetch history from D1
+    const items = await getResumeFeedbackHistory(env, d1User.id, { limit });
+
+    console.log('[RESUME-FEEDBACK-HISTORY] Retrieved history:', { 
+      requestId, 
+      uid, 
+      userId: d1User.id, 
+      count: items.length 
+    });
+
+    return successResponse({
+      items
+    }, 200, origin, env, requestId);
+
+  } catch (error) {
+    console.error('[RESUME-FEEDBACK-HISTORY] Error:', { 
+      requestId, 
+      error: error.message, 
+      stack: error.stack 
+    });
+    
+    // Return empty history on error (non-blocking)
+    return successResponse({
+      items: [],
+      message: 'No history available yet'
+    }, 200, origin, env, requestId);
+  }
+}
+
