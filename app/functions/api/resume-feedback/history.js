@@ -52,7 +52,18 @@ export async function onRequest(context) {
       return errorResponse('Unauthorized', 401, origin, env, requestId);
     }
 
-    const { uid } = await verifyFirebaseIdToken(token, env.FIREBASE_PROJECT_ID);
+    // Verify token with separate error handling for auth failures
+    let uid;
+    try {
+      const authResult = await verifyFirebaseIdToken(token, env.FIREBASE_PROJECT_ID);
+      uid = authResult.uid;
+    } catch (authError) {
+      console.error('[RESUME-FEEDBACK-HISTORY] Authentication failed:', { 
+        requestId, 
+        error: authError.message 
+      });
+      return errorResponse('Unauthorized', 401, origin, env, requestId);
+    }
 
     // Check if D1 is available
     if (!isD1Available(env)) {
@@ -100,6 +111,7 @@ export async function onRequest(context) {
     });
     
     // Return empty history on error (non-blocking)
+    // Note: Authentication errors are handled separately above
     return successResponse({
       items: [],
       message: 'No history available yet'
