@@ -617,7 +617,7 @@
           <span id="cooldown" class="cooldown-badge" aria-live="polite">0:59</span>
           <button type="button" class="cooldown-info" aria-label="Why cooldown?" tabindex="0">ⓘ</button>
           <div class="cooldown-tooltip">To keep the AI fast and affordable, we limit how often you can ask for a brand-new set. You can still save questions and run Mock Interviews with this set.</div>
-        </div>
+      </div>
       </div>
       <div id="cooldown-helper" class="cta-hint" style="display:none; color:#6B7280; font-size:0.85rem; margin-top:0.25rem;">
         Next new set available in <span id="cooldown-time">0:59</span> (you can still practice with this set).
@@ -626,12 +626,12 @@
       <!-- Action bar with left/right grouping -->
       <div class="iq-actions-bar" id="iq-actions-bar" style="display:none;">
         <div class="iq-actions-left">
-          <button id="btn-copy-all" class="btn-outline">Copy All</button>
-          <button id="btn-download" class="btn-outline">Download PDF</button>
+        <button id="btn-copy-all" class="btn-outline">Copy All</button>
+        <button id="btn-download" class="btn-outline">Download PDF</button>
           <button id="btn-save-set" class="btn-outline">Saved Questions <span id="chip-saved-count" style="margin-left:0.25rem;"></span></button>
         </div>
         <div class="iq-actions-right">
-          <button id="toggle-guidance" class="btn-outline" aria-pressed="false">Show Answer Guidance</button>
+        <button id="toggle-guidance" class="btn-outline" aria-pressed="false">Show Answer Guidance</button>
           <button id="btn-mock" class="btn-mock-cta" data-locked="false">
             Start Mock Interview
             <span class="lock" id="mock-lock-icon" aria-hidden="true" style="display:none;">
@@ -1075,17 +1075,20 @@
     const IQ_FIXED_COUNT = 10;
     
     // Get Firebase auth token for API calls
+    // Uses FirebaseAuthManager pattern (same as resume-feedback-pro.html)
     async function getFirebaseToken() {
       try {
-        if (window.firebase && firebase.auth) {
-          const user = firebase.auth().currentUser;
+        // Wait for Firebase auth to be ready
+        if (window.FirebaseAuthManager && window.FirebaseAuthManager.waitForAuthReady) {
+          await window.FirebaseAuthManager.waitForAuthReady(3000);
+        }
+        
+        // Get Firebase ID token using FirebaseAuthManager
+        if (window.FirebaseAuthManager && window.FirebaseAuthManager.getCurrentUser) {
+          const user = window.FirebaseAuthManager.getCurrentUser();
           if (user) {
             return await user.getIdToken();
           }
-        }
-        // Fallback: try to get token from JobHackAINavigation if available
-        if (window.JobHackAINavigation && typeof window.JobHackAINavigation.getIdToken === 'function') {
-          return await window.JobHackAINavigation.getIdToken();
         }
       } catch (e) {
         console.warn('[IQ] Failed to get Firebase token:', e);
@@ -1234,8 +1237,8 @@
           selSummary.style.display = '';
         }
         
-        iqUpdateActionsLayout();
-        iqStartGlobalCooldown(IQ_GLOBAL_COOLDOWN);
+      iqUpdateActionsLayout();
+      iqStartGlobalCooldown(IQ_GLOBAL_COOLDOWN);
         
       } catch (error) {
         console.error('[IQ] Generate error:', error);
@@ -1400,7 +1403,7 @@
           });
           
           // Success - redirect with D1 set ID
-          const qaMode = (new URL(window.location.href).searchParams.get('qa') || localStorage.getItem('qa_flag')) ? true : false;
+        const qaMode = (new URL(window.location.href).searchParams.get('qa') || localStorage.getItem('qa_flag')) ? true : false;
           const url = `mock-interview.html?role=${encodeURIComponent(role)}&mode=${mode}&set=${savedSet.id}${qaMode?'&qa=1':''}`;
           
           // Also save to localStorage as fallback
@@ -1415,7 +1418,7 @@
           } catch(e) { console.warn('localStorage fallback failed', e); }
           
           iqTrack('iq_mock_clicked_unlocked', { mode, savedCount: selectedIndices.length, d1SetId: savedSet.id });
-          window.location.href = url;
+        window.location.href = url;
           
         } catch (saveError) {
           console.error('[IQ] Save set failed, using localStorage fallback:', saveError);
@@ -1874,6 +1877,8 @@ function initIQPage(){
   <!-- Load navigation system -->
   <script src="js/navigation.js?v=20251007-2"></script>
   <script src="js/universal-logout.js?v=20251007-2"></script>
+  <!-- Load Firebase auth as ES module (required for API authentication) -->
+  <script type="module" src="js/firebase-auth.js?v=20251011-1"></script>
   <!-- Load role selector -->
   <script src="js/role-selector.js?v=20250115-1" type="module"></script>
   <script>

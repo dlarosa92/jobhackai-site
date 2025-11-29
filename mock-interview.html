@@ -668,16 +668,20 @@
     };
     
     // Get Firebase auth token for API calls
+    // Uses FirebaseAuthManager pattern (same as resume-feedback-pro.html)
     async function getFirebaseToken() {
       try {
-        if (window.firebase && firebase.auth) {
-          const user = firebase.auth().currentUser;
+        // Wait for Firebase auth to be ready
+        if (window.FirebaseAuthManager && window.FirebaseAuthManager.waitForAuthReady) {
+          await window.FirebaseAuthManager.waitForAuthReady(3000);
+        }
+        
+        // Get Firebase ID token using FirebaseAuthManager
+        if (window.FirebaseAuthManager && window.FirebaseAuthManager.getCurrentUser) {
+          const user = window.FirebaseAuthManager.getCurrentUser();
           if (user) {
             return await user.getIdToken();
           }
-        }
-        if (window.JobHackAINavigation && typeof window.JobHackAINavigation.getIdToken === 'function') {
-          return await window.JobHackAINavigation.getIdToken();
         }
       } catch (e) {
         console.warn('[MI] Failed to get Firebase token:', e);
@@ -982,6 +986,8 @@
   <!-- Load navigation system -->
   <script src="js/navigation.js?v=20251007-2"></script>
   <script src="js/universal-logout.js?v=20251007-2"></script>
+  <!-- Load Firebase auth as ES module (required for API authentication) -->
+  <script type="module" src="js/firebase-auth.js?v=20251011-1"></script>
   <!-- Load role selector -->
   <script src="js/role-selector.js?v=20250115-1" type="module"></script>
   <script>
