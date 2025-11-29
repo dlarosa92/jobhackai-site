@@ -11,15 +11,23 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m'
 
-# KV Namespace ID
-KV_NAMESPACE_ID="5237372648c34aa6880f91e1a0c9708a"
+# KV Namespace ID (can be overridden via environment variable)
+: "${KV_NAMESPACE_ID:?KV_NAMESPACE_ID environment variable required}"
 
 # Cloudflare credentials
 : "${CLOUDFLARE_API_TOKEN:?CLOUDFLARE_API_TOKEN required}"
 : "${CLOUDFLARE_ACCOUNT_ID:?CLOUDFLARE_ACCOUNT_ID required}"
 
-# Email addresses to clean up
-EMAILS=("sebastian.larosa@jobhackai.io" "dlarosa92@gmail.com")
+# Check for command-line arguments
+if [ $# -eq 0 ]; then
+  echo -e "${RED}❌ Error: No email addresses provided${NC}"
+  echo "Usage: $0 <email1> <email2> ..."
+  echo "Example: $0 user1@example.com user2@example.com"
+  exit 1
+fi
+
+# Email addresses to clean up (from command-line arguments)
+EMAILS=("$@")
 
 echo -e "${BLUE}🧹 KV Key Cleanup Script${NC}\n"
 echo -e "${YELLOW}This will delete all KV keys related to:${NC}"

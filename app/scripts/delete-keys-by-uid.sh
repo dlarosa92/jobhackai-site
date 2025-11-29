@@ -11,34 +11,23 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m'
 
-# KV Namespace ID
-KV_NAMESPACE_ID="5237372648c34aa6880f91e1a0c9708a"
+# KV Namespace ID (can be overridden via environment variable)
+: "${KV_NAMESPACE_ID:?KV_NAMESPACE_ID environment variable required}"
 
 # Cloudflare credentials
 : "${CLOUDFLARE_API_TOKEN:?CLOUDFLARE_API_TOKEN required}"
 : "${CLOUDFLARE_ACCOUNT_ID:?CLOUDFLARE_ACCOUNT_ID required}"
 
-# UIDs extracted from the emailByUid keys we found
-UIDS=(
-  "0U0Tn9mss2esR2pB8yG9W1mmHdB3"
-  "6BKQxodeowaupEZXvqCyTSerQ3A3"
-  "6i8gB9RbOwecbaulI7VaKTNywFI3"
-  "HhrmE5PnMaPJBiunGXaEsDaO0ND3"
-  "IxbjZ1IBOUgmMmeMJBgPPm6tPxB3"
-  "KhtIY7DDnbeot355L5JkGRC6kxl1"
-  "LA6XzS1JjFNLEp9EUZYXi3VsAL03"
-  "NQH924TETwQIAoqM2vQVrbgkRGC2"
-  "Wex4WcfIv9XT4UDcSx2H4sFl1ie2"
-  "Xzn6tr8oyucQDq8emFwaseAR9C42"
-  "aygENOJqrZaF6c6znxV4EHu1QqT2"
-  "dMMn9INOB4cmlp6KUjHoVKh6W9z1"
-  "feNputBXLodLePZLVSwGhNILrlq1"
-  "hyNeo61pH4asR3qZbOFE0sRbgKg2"
-  "jB3Epui6hlPmkx8WXkbknuT7CB53"
-  "pne2K9E9pHbUEw1tw4Wx8Xhq2CT2"
-  "8gI4FhK1EbP7e4vyuBo6sAqSNmw2"
-  "bUxocN5IkahkdEnwWlPAl8NTYWm2"
-)
+# Check for command-line arguments
+if [ $# -eq 0 ]; then
+  echo -e "${RED}❌ Error: No UIDs provided${NC}"
+  echo "Usage: $0 <uid1> <uid2> ..."
+  echo "Example: $0 abc123 def456 ghi789"
+  exit 1
+fi
+
+# UIDs from command-line arguments
+UIDS=("$@")
 
 # Key patterns to delete for each UID
 KEY_PATTERNS=(
