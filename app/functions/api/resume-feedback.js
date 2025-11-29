@@ -159,7 +159,8 @@ export async function onRequest(context) {
       return errorResponse('Unauthorized', 401, origin, env, requestId);
     }
 
-    const { uid } = await verifyFirebaseIdToken(token, env.FIREBASE_PROJECT_ID);
+    const { uid, payload } = await verifyFirebaseIdToken(token, env.FIREBASE_PROJECT_ID);
+    const userEmail = payload.email; // Get email from token payload
     
     // Dev environment detection: Use exact origin matching to prevent bypass attacks
     const allowedDevOrigins = ['https://dev.jobhackai.io', 'http://localhost:3003', 'http://localhost:8788'];
@@ -221,8 +222,8 @@ export async function onRequest(context) {
     let d1User = null;
     if (isD1Available(env)) {
       try {
-        // Note: We don't have email from Firebase token, but we can update it later if needed
-        d1User = await getOrCreateUserByAuthId(env, uid, null);
+        // Get or create user in D1 with email from Firebase token
+        d1User = await getOrCreateUserByAuthId(env, uid, userEmail);
         console.log('[RESUME-FEEDBACK] D1 user resolved:', { userId: d1User?.id, authId: uid });
       } catch (d1Error) {
         console.warn('[RESUME-FEEDBACK] D1 user resolution failed (non-blocking):', d1Error.message);
