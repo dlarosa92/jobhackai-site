@@ -87,7 +87,11 @@ export async function onRequest(context) {
     // Get limit from query params (default 20, max 50)
     const url = new URL(request.url);
     const limitParam = parseInt(url.searchParams.get('limit') || '20', 10);
-    const limit = Math.min(Math.max(1, limitParam), 50);
+    // Validate limitParam is a valid number (not NaN)
+    // parseInt returns NaN for invalid strings, which would break SQL query binding
+    const limit = isNaN(limitParam) 
+      ? 20  // Use default if invalid
+      : Math.min(Math.max(1, limitParam), 50);  // Clamp between 1 and 50
 
     // Fetch history from D1
     const items = await getResumeFeedbackHistory(env, d1User.id, { limit });
