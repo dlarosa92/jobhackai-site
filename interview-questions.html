@@ -969,6 +969,16 @@
     function iqRenderQuestions(){
       const list=$IQ('#iq-questions'); const show=iqState.prefs.showGuidance; if(!iqState.set){ if(list) list.innerHTML=''; return; }
       if (!list) return;
+      
+      // Type safety: validate questions is an array
+      if (!Array.isArray(iqState.set.questions)) {
+        console.error('[IQ] Invalid questions array:', iqState.set.questions);
+        if (list) {
+          list.innerHTML = '<div class="iq-question-card" style="text-align:center; color:#DC2626;">Invalid data. Please generate a new set.</div>';
+        }
+        return;
+      }
+      
       list.innerHTML=iqState.set.questions.map((q,i)=>{
         const qText = iqEsc(q.q);
         const qHint = q.hint ? `Hint: ${iqEsc(q.hint)}` : '';
@@ -1122,7 +1132,8 @@
         }
         
         const data = await response.json();
-        if (data.success && data.questions) {
+        // Validate questions array is present and non-empty
+        if (data.success && Array.isArray(data.questions) && data.questions.length > 0) {
           return {
             role: data.role,
             seniority: data.seniority,
@@ -1133,9 +1144,16 @@
             questions: data.questions
           };
         }
-        throw new Error('Invalid API response');
+        throw new Error('Invalid API response: questions array missing or empty');
       } catch (e) { 
-        console.warn('iqApiGenerate failed, using stub', e);
+        // Log error for monitoring (even when falling back to stub)
+        console.error('[IQ] API generation failed, falling back to stub:', {
+          error: e.message,
+          stack: e.stack,
+          role,
+          seniority,
+          types
+        });
         iqToast('Using demo questions. Sign in for AI-powered questions.');
       }
       
@@ -1213,6 +1231,12 @@
       
       try {
         const res=await iqApiGenerate({role,seniority,types,count,jd}); 
+        
+        // Validate response has questions
+        if (!res || !Array.isArray(res.questions) || res.questions.length === 0) {
+          throw new Error('No questions generated');
+        }
+        
         const seed = res.seed || `${Date.now().toString(36)}-${Math.random().toString(36).slice(2,8)}`; 
         const setObj={...res, seed, role: res.role||role, seniority, count: IQ_FIXED_COUNT, types: new Set(types), jd, replacesUsed:0}; 
         iqState.set=setObj; 
@@ -1673,7 +1697,19 @@ function initIQPage(){
       }
       
       iqUpdateActionsLayout(); 
-      window.addEventListener('resize', iqUpdateActionsLayout); 
+      window.addEventListener('resize', iqUpdateActionsLayout);
+      
+      // Cleanup timers on page unload to prevent memory leaks
+      window.addEventListener('beforeunload', () => {
+        if (iqState.timers.global) {
+          clearInterval(iqState.timers.global);
+        }
+        Object.values(iqState.timers.perQ).forEach(clearInterval);
+        if (iqState.timers.toast) {
+          clearTimeout(iqState.timers.toast);
+        }
+        Object.values(iqState.timers.notes).forEach(clearTimeout);
+      });
     }
     window.__IQ__ = { iqState, iqGenerate, iqRegenerate, iqReplaceOne };
 
