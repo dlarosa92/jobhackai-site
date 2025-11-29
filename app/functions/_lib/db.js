@@ -168,18 +168,24 @@ export async function getResumeFeedbackHistory(env, userId, { limit = 20 } = {})
   }
 
   try {
-    // Join resume_sessions with feedback_sessions to get the most recent feedback per session
-    // Group by resume session and get the latest feedback for each
+    // Get unique resume sessions with their latest feedback session (if any)
+    // Uses correlated subqueries to get the most recent feedback per resume session
+    // This ensures one row per resume_session even when multiple feedback_sessions exist
     const results = await env.DB.prepare(`
       SELECT 
         rs.id as session_id,
         rs.title,
         rs.role,
         rs.created_at,
-        fs.id as feedback_id,
-        fs.created_at as feedback_created_at
+        (SELECT id FROM feedback_sessions 
+         WHERE resume_session_id = rs.id 
+         ORDER BY created_at DESC 
+         LIMIT 1) as feedback_id,
+        (SELECT created_at FROM feedback_sessions 
+         WHERE resume_session_id = rs.id 
+         ORDER BY created_at DESC 
+         LIMIT 1) as feedback_created_at
       FROM resume_sessions rs
-      LEFT JOIN feedback_sessions fs ON fs.resume_session_id = rs.id
       WHERE rs.user_id = ?
       ORDER BY rs.created_at DESC
       LIMIT ?
