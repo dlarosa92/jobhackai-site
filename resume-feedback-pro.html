@@ -3519,12 +3519,58 @@
     let _historyItems = [];
     
     /**
+     * Normalize SQLite datetime format to ISO 8601 for Safari compatibility
+     * SQLite returns dates as 'YYYY-MM-DD HH:MM:SS' (space-separated)
+     * Safari requires ISO 8601 format 'YYYY-MM-DDTHH:MM:SSZ'
+     */
+    function normalizeDateForSafari(dateStr) {
+      if (!dateStr || typeof dateStr !== 'string') return dateStr;
+      
+      // Check if it's SQLite format (YYYY-MM-DD HH:MM:SS)
+      if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/.test(dateStr)) {
+        // Replace space with 'T' to make it ISO 8601 compliant
+        let normalized = dateStr.replace(' ', 'T');
+        // Add 'Z' if no timezone info is present (assume UTC)
+        if (!normalized.includes('Z') && !normalized.includes('+') && !normalized.includes('-', 10)) {
+          normalized += 'Z';
+        }
+        return normalized;
+      }
+      
+      return dateStr; // Already in correct format or unrecognized
+    }
+    
+    /**
+     * Parse a date string with Safari compatibility
+     * Returns a Date object or null if parsing fails
+     */
+    function parseDateSafely(dateStr) {
+      if (!dateStr) return null;
+      
+      const normalized = normalizeDateForSafari(dateStr);
+      const date = new Date(normalized);
+      
+      // Validate date is valid (Safari returns Invalid Date as NaN, not an error)
+      if (isNaN(date.getTime())) {
+        console.warn('[RESUME-FEEDBACK] Invalid date string:', dateStr);
+        return null;
+      }
+      
+      return date;
+    }
+    
+    /**
      * Format a date string for display
+     * Handles SQLite datetime format (YYYY-MM-DD HH:MM:SS) which Safari rejects
+     * by normalizing to ISO 8601 format (YYYY-MM-DDTHH:MM:SS) before parsing
      */
     function formatHistoryDate(dateStr) {
       if (!dateStr) return '';
+      
+      const date = parseDateSafely(dateStr);
+      if (!date) return dateStr; // Return original string if parsing fails
+      
       try {
-        const date = new Date(dateStr);
         const now = new Date();
         const diffMs = now - date;
         const diffMins = Math.floor(diffMs / (1000 * 60));
@@ -3542,6 +3588,7 @@
           year: date.getFullYear() !== now.getFullYear() ? 'numeric' : undefined
         });
       } catch (e) {
+        console.warn('[RESUME-FEEDBACK] Date formatting error:', e, 'for date:', dateStr);
         return dateStr;
       }
     }
@@ -3557,12 +3604,11 @@
         return `${item.role} Resume`;
       }
       // Fallback to date-based title
-      try {
-        const date = new Date(item.createdAt);
+      const date = parseDateSafely(item.createdAt);
+      if (date) {
         return `Resume from ${date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
-      } catch (e) {
-        return 'Resume Analysis';
       }
+      return 'Resume Analysis';
     }
     
     /**

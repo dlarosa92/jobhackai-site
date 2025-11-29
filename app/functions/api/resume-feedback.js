@@ -388,43 +388,13 @@ export async function onRequest(context) {
       // Update throttles and usage even for cache hits (prevents bypassing limits)
       await updateUsageCounters(uid, sanitizedResumeId, effectivePlan, env);
       
-      // D1 persistence for cached results (best effort, non-blocking)
-      let d1SessionId = null;
-      let d1CreatedAt = null;
-      if (d1User && isD1Available(env)) {
-        try {
-          const resumeSession = await createResumeSession(env, d1User.id, {
-            title: normalizedJobTitle || null,
-            role: normalizedJobTitle || null,
-            rawTextLocation: `resume:${sanitizedResumeId}`
-          });
-          
-          if (resumeSession) {
-            d1SessionId = String(resumeSession.id);
-            d1CreatedAt = resumeSession.created_at;
-            
-            await createFeedbackSession(env, resumeSession.id, cachedResult);
-            await logUsageEvent(env, d1User.id, 'resume_feedback', null, {
-              resumeSessionId: resumeSession.id,
-              plan: effectivePlan,
-              cached: true,
-              jobTitle: normalizedJobTitle || null
-            });
-          }
-        } catch (d1Error) {
-          console.warn('[RESUME-FEEDBACK] D1 persistence for cached result failed (non-blocking):', d1Error.message);
-        }
-      }
+      // Skip D1 persistence for cache hits to prevent duplicate history entries
+      // History should only show unique analyses, not every cache hit
+      // The original analysis session was already persisted when the cache was created
       
       return successResponse({
         ...cachedResult,
-        cached: true,
-        sessionId: d1SessionId,
-        meta: {
-          createdAt: d1CreatedAt || new Date().toISOString(),
-          title: normalizedJobTitle || null,
-          role: normalizedJobTitle || null
-        }
+        cached: true
       }, 200, origin, env, requestId);
     }
 
