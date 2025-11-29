@@ -1538,53 +1538,6 @@
       }
     }
 
-    // ----- REPLACE ONE (with retry + fallback) -----
-    async function iqReplaceOne(i){
-      if(!iqState.set || !Array.isArray(iqState.set.questions)) return;
-      const set = iqState.set;
-      const currentQs = set.questions.map(x=>x?.q || '').filter(Boolean);
-      const role = set.role || ($IQ('#iq-role')?.value?.trim()||'');
-      const seniority = set.seniority || iqState.prefs.seniority || '';
-      const types = Array.from(set.types || iqState.prefs.types || []);
-      const jd = set.jd || $IQ('#iq-jd')?.value || '';
-
-      iqStartPerQCooldown(i);
-
-      const stubPool = [
-        'Describe a time you simplified a complex system.',
-        'Tell me about a decision you made with incomplete data. What happened?',
-        'How do you balance speed and quality when under tight deadlines?',
-        'Share a time you influenced stakeholders without authority.',
-        'Walk me through the most impactful bug you fixed and how you found it.'
-      ];
-      const pickStub = ()=>{
-        const candidates = stubPool.filter(t=>!currentQs.includes(t));
-        return (candidates.length? candidates: stubPool)[Math.floor(Math.random()*stubPool.length)];
-      };
-
-      const payload = { role, seniority, types, jd, replaceIndex: i, avoid: currentQs };
-      const tryApi = async()=>{
-        try{
-          const res = await fetch('/questions/replace', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
-          if(!res.ok) throw new Error('bad status');
-          const data = await res.json();
-          const q = data?.question || data?.q || data?.questions?.[0]?.q;
-          return typeof q === 'string' && q.trim() ? q.trim() : null;
-        }catch{return null}
-      };
-
-      let nextQ = await tryApi();
-      if(!nextQ || currentQs.includes(nextQ)){
-        // one more attempt (retry) using API, then fallback
-        nextQ = await tryApi();
-        if(!nextQ || currentQs.includes(nextQ)) nextQ = pickStub();
-      }
-
-      set.questions[i] = { q: nextQ, hint: set.questions[i]?.hint || '', example: set.questions[i]?.example || '' };
-      iqRenderQuestions();
-      iqToast('Replaced');
-    }
-
     // ----- SAVED SET HELPERS -----
     function iqSavedKey(){ return iqState.set ? `iq_saved_${iqSetId(iqState.set.role, iqState.set.seed)}` : ''; }
     function iqGetSavedIndexes(){ if(!iqState.set) return []; try{ return JSON.parse(localStorage.getItem(iqSavedKey())||'[]'); }catch{return []} }
