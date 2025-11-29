@@ -945,6 +945,8 @@
             g.disabled = false; 
             g.removeAttribute('aria-disabled'); 
             g.classList.remove('is-disabled'); 
+            // Restore button text after cooldown ends
+            g.textContent = iqState.set ? 'New Question Set' : 'Generate 10 Questions';
           } 
           if (mi) { 
             mi.disabled = false; 
