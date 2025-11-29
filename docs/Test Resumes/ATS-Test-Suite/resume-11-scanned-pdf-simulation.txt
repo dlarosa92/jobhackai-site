@@ -1,0 +1,24 @@
+EMILY BROWN
+emily.brown@email.com | (555) 666-7777
+
+EXPERIENCE
+
+Software Engineer | TechCompany | Jan 2020 - Present
+• Developed web applications using various technologies
+• Worked on backend systems and databases
+• Collaborated with team members on projects
+• Fixed bugs and implemented new features
+• Participated in code reviews and meetings
+
+EDUCATION
+
+Computer Science Degree | University | 2020
+
+SKILLS
+JavaScript, Python, SQL, React, Node.js
+
+
+
+
+
+

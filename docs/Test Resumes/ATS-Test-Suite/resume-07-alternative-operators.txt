@@ -1,0 +1,31 @@
+LISA PARK
+lisa.park@email.com | (555) 999-0000 | Denver, CO
+
+EXPERIENCE
+
+Senior Data Engineer | DataFlow Inc | March 2020 - Present
+• Designed and implemented ETL pipelines processing 10TB daily, reducing latency by 50%
+• Built ELT pipelines using dbt and Snowflake, enabling self-service analytics
+• Developed data models using dimensional modeling techniques
+• Architected data warehousing solutions on cloud platforms
+• Implemented batch and streaming data processing using Apache Spark
+• Optimized SQL queries, improving performance by 65%
+
+Data Engineer | AnalyticsPro | June 2018 - February 2020
+• Created ETL / ELT pipelines for various data sources
+• Managed data warehouse operations and maintenance
+
+EDUCATION
+
+Master of Science in Data Engineering | Data University | May 2018
+
+SKILLS
+
+ETL / ELT Pipelines, SQL, Data Modeling, Data Warehousing, Batch and Streaming Data, Spark, Hadoop, Orchestration Tools, Cloud Data Warehouses
+Tools: Python, SQL, Apache Spark, Apache Airflow, dbt, Snowflake, BigQuery, Redshift
+
+
+
+
+
+

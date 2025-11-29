@@ -1,0 +1,26 @@
+ROBERT TAYLOR
+robert.taylor@email.com | (555) 777-8888 | Seattle, WA
+
+EXPERIENCE
+
+Platform Engineer | CloudTech Solutions | January 2021 - Present
+• Implemented infrastructure as code using Terraform, managing 50+ cloud resources
+• Built CI/CD pipelines using GitHub Actions, reducing deployment time by 70%
+• Deployed Kubernetes container orchestration for microservices, improving scalability
+• Established observability with Prometheus and Grafana, reducing MTTR by 40%
+• Automated infrastructure provisioning using shell scripting, saving 15 hours/week
+
+EDUCATION
+
+Bachelor of Science in Computer Engineering | Tech University | May 2020
+
+SKILLS
+
+Infrastructure as Code, CI/CD Pipelines, Kubernetes or Container Orchestration, Observability, Automation Scripting, Multi-tenant Platforms, SLOs and SLIs
+Tools: Kubernetes, Helm, Terraform, Argo CD, GitHub Actions, Jenkins
+
+
+
+
+
+

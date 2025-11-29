@@ -661,6 +661,75 @@
     const beginBtn = document.getElementById('mi-begin');
     const setupDiv = document.getElementById('mi-setup');
     const sessionDiv = document.getElementById('mi-session');
+    
+    // API configuration
+    const MI_API = {
+      GET_SET: '/api/interview-questions/get-set'
+    };
+    
+    // Get Firebase auth token for API calls
+    // Uses FirebaseAuthManager pattern (same as resume-feedback-pro.html)
+    async function getFirebaseToken() {
+      try {
+        // Wait for Firebase auth to be ready
+        if (window.FirebaseAuthManager && window.FirebaseAuthManager.waitForAuthReady) {
+          await window.FirebaseAuthManager.waitForAuthReady(3000);
+        }
+        
+        // Get Firebase ID token using FirebaseAuthManager
+        if (window.FirebaseAuthManager && window.FirebaseAuthManager.getCurrentUser) {
+          const user = window.FirebaseAuthManager.getCurrentUser();
+          if (user) {
+            return await user.getIdToken();
+          }
+        }
+      } catch (e) {
+        console.warn('[MI] Failed to get Firebase token:', e);
+      }
+      return null;
+    }
+    
+    // Fetch question set from D1
+    async function fetchQuestionSetFromD1(id) {
+      try {
+        const token = await getFirebaseToken();
+        if (!token) {
+          console.warn('[MI] No auth token for D1 fetch');
+          return null;
+        }
+        
+        const response = await fetch(`${MI_API.GET_SET}?id=${encodeURIComponent(id)}`, {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+        
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          console.warn('[MI] D1 fetch failed:', errorData.error || response.status);
+          return null;
+        }
+        
+        const data = await response.json();
+        if (data.success && data.questions) {
+          console.log('[MI] Loaded set from D1:', { id, questionCount: data.questions.length, selectedCount: data.selectedIndices?.length || 0 });
+          return {
+            id: data.id,
+            role: data.role,
+            seniority: data.seniority,
+            questions: data.questions,
+            selectedIndices: data.selectedIndices || [],
+            jd: data.jd,
+            createdAt: data.createdAt
+          };
+        }
+        return null;
+      } catch (e) {
+        console.error('[MI] D1 fetch error:', e);
+        return null;
+      }
+    }
 
     // Initialize Role Selector
     let roleSelectorInitAttempts = 0;
@@ -731,7 +800,8 @@
     }
 
     // Build questions from context (saved or set) with fallbacks
-    function buildQuestionsFromContext(){
+    // D1-first loading with localStorage fallback
+    async function buildQuestionsFromContext(){
       // Default bank
       const fallback = [
         'Tell me about yourself and your experience.',
@@ -745,30 +815,124 @@
         'How do you stay organized and prioritize tasks?',
         'Do you have any questions for me?'
       ];
+      
       let dyn = [];
-      if (mode === 'saved') {
+      let loadedRole = roleParam;
+      
+      // Check if setId is a D1 integer ID (numeric) vs localStorage ID (role:seed format)
+      const isD1Id = setId && /^\d+$/.test(setId);
+      
+      // Try D1 first if we have a numeric set ID
+      if (isD1Id) {
+        console.log('[MI] Attempting D1 load for set:', setId);
+        const d1Set = await fetchQuestionSetFromD1(setId);
+        
+        if (d1Set) {
+          // Use selected questions from the set
+          const selectedIndices = d1Set.selectedIndices || [];
+          const allQuestions = d1Set.questions || [];
+          
+          if (selectedIndices.length > 0) {
+            // Use only selected questions
+            dyn = selectedIndices.map(i => {
+              const q = allQuestions[i];
+              return typeof q === 'string' ? q : (q?.q || '');
+            }).filter(Boolean);
+          } else {
+            // No selection, use all questions
+            dyn = allQuestions.map(q => typeof q === 'string' ? q : (q?.q || '')).filter(Boolean);
+          }
+          
+          loadedRole = d1Set.role || loadedRole;
+          console.log('[MI] D1 load successful:', { questionCount: dyn.length, role: loadedRole });
+          
+          // Update role input if available
+          if (loadedRole && roleInput) {
+            roleInput.value = loadedRole;
+          }
+          
+          return { questions: dyn.length ? dyn : fallback, role: loadedRole };
+        } else {
+          console.log('[MI] D1 load failed, falling back to localStorage');
+        }
+      }
+      
+      // Fallback: Try localStorage mi_payload
+      let usedLocalStorageFallback = false;
+      if (mode === 'saved' || !dyn.length) {
         try {
           const p = JSON.parse(localStorage.getItem('mi_payload')||'null');
           if (p && Array.isArray(p.questions) && p.questions.length) {
             dyn = p.questions.filter(q=>typeof q==='string' && q.trim());
+            loadedRole = p.role || loadedRole;
+            usedLocalStorageFallback = true;
+            console.log('[MI] Loaded from mi_payload:', { questionCount: dyn.length, role: loadedRole });
           }
-        } catch {}
+        } catch (e) { console.warn('[MI] mi_payload parse error:', e); }
         try { localStorage.removeItem('mi_payload'); } catch {}
-      } else if (setId) {
+      }
+      
+      // Fallback: Try localStorage set by ID (role:seed format)
+      if (!dyn.length && setId && !isD1Id) {
         try {
           const raw = localStorage.getItem(`iq_set_${setId}`);
           if (raw) {
             const s = JSON.parse(raw);
             if (Array.isArray(s.questions)) {
               dyn = s.questions.map(q=> typeof q==='string'? q : (q?.q||'')).filter(Boolean);
+              loadedRole = s.role || loadedRole;
+              usedLocalStorageFallback = true;
+              console.log('[MI] Loaded from localStorage set:', { setId, questionCount: dyn.length, role: loadedRole });
             }
           }
-        } catch {}
+        } catch (e) { console.warn('[MI] localStorage set parse error:', e); }
       }
-      return (dyn && dyn.length) ? dyn : fallback;
+      
+      // Show subtle notification if localStorage fallback was used
+      if (usedLocalStorageFallback && isD1Id) {
+        // Only show if we tried D1 first (isD1Id) but fell back to localStorage
+        setTimeout(() => {
+          const toast = document.createElement('div');
+          toast.style.cssText = 'position:fixed;bottom:18px;right:18px;background:#111827;color:#fff;padding:.55rem .75rem;border-radius:10px;box-shadow:0 6px 18px rgba(0,0,0,.18);font-size:.95rem;z-index:10000;opacity:0;transform:translateY(8px);transition:opacity .18s ease, transform .18s ease;';
+          toast.textContent = 'Loaded your last saved questions from this device.';
+          document.body.appendChild(toast);
+          requestAnimationFrame(() => {
+            toast.style.opacity = '1';
+            toast.style.transform = 'translateY(0)';
+          });
+          setTimeout(() => {
+            toast.style.opacity = '0';
+            toast.style.transform = 'translateY(8px)';
+            setTimeout(() => toast.remove(), 180);
+          }, 3000);
+        }, 500);
+      }
+      
+      return { questions: dyn.length ? dyn : fallback, role: loadedRole };
     }
 
-    let questions = buildQuestionsFromContext();
+    let questions = [];
+    let loadedRole = roleParam;
+    
+    // Initialize questions asynchronously
+    (async function initQuestions() {
+      const result = await buildQuestionsFromContext();
+      questions = result.questions;
+      loadedRole = result.role;
+      
+      // Update role input
+      if (loadedRole && roleInput && !roleInput.value) {
+        roleInput.value = loadedRole;
+      }
+      
+      // Update question count display
+      const qtotalEl = document.getElementById('mi-qtotal');
+      if (qtotalEl) {
+        qtotalEl.textContent = String(questions.length);
+      }
+      
+      console.log('[MI] Questions initialized:', { count: questions.length, role: loadedRole });
+    })();
 
     // --- QA: Integration verification ---
     function miRunIntegrationQA(){
@@ -796,8 +960,14 @@
     setTimeout(miRunIntegrationQA, 50);
 
     // Start interview
-    beginBtn.addEventListener('click', function() {
+    beginBtn.addEventListener('click', async function() {
       if (roleInput.value.trim()) {
+        // Ensure questions are loaded before starting
+        if (questions.length === 0) {
+          const result = await buildQuestionsFromContext();
+          questions = result.questions;
+        }
+        
         setupDiv.style.display = 'none';
         sessionDiv.style.display = 'block';
         document.getElementById('mi-role-label').textContent = roleInput.value;
@@ -839,6 +1009,8 @@
   <!-- Load navigation system -->
   <script src="js/navigation.js?v=20251007-2"></script>
   <script src="js/universal-logout.js?v=20251007-2"></script>
+  <!-- Load Firebase auth as ES module (required for API authentication) -->
+  <script type="module" src="js/firebase-auth.js?v=20251011-1"></script>
   <!-- Load role selector -->
   <script src="js/role-selector.js?v=20250115-1" type="module"></script>
   <script>
@@ -853,3 +1025,4 @@
   <script src="js/analytics.js" type="module"></script>
 </body>
 </html>
+
