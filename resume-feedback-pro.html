@@ -3035,6 +3035,7 @@
       const feedbackGrid = document.getElementById('rf-feedback-grid');
       const regenBtn = document.getElementById('rf-regenerate-btn');
       const roleDescEl = document.getElementById('rf-role-desc');
+      const partialRoleTipsErrorText = 'We couldn’t load tailored tips for this role yet. Your ATS score is ready—try “Retry tailored tips” below.';
 
       if (roleDescEl && !roleDescEl.dataset.baseText) {
         roleDescEl.dataset.baseText = roleDescEl.textContent || '';
@@ -3063,6 +3064,8 @@
         }
         if (roleDescEl && roleDescEl.dataset.baseText) {
           roleDescEl.textContent = roleDescEl.dataset.baseText;
+          // Clear any previous partial-error state when fully resetting
+          delete roleDescEl.dataset.lastRoleState;
         }
         return;
       }
@@ -3080,10 +3083,18 @@
         if (roleDescEl && roleDescEl.dataset.baseText) {
           const currentText = roleDescEl.textContent || '';
           const baseText = roleDescEl.dataset.baseText || '';
-          // Restore baseText only if current text matches baseText (meaning no plan-specific text was set)
-          // If current text is different, it's likely plan-specific and should be preserved
-          if (currentText === baseText || !currentText.trim()) {
+          const lastState = roleDescEl.dataset.lastRoleState || '';
+          const isPartialErrorState =
+            lastState === 'partial-error' || currentText === partialRoleTipsErrorText;
+          // Restore baseText if:
+          // - we are recovering from a previous partial-error state, or
+          // - current text matches baseText (no plan-specific text was set), or
+          // - the element is effectively empty
+          if (isPartialErrorState || currentText === baseText || !currentText.trim()) {
             roleDescEl.textContent = baseText;
+          }
+          if (isPartialErrorState) {
+            delete roleDescEl.dataset.lastRoleState;
           }
         }
         return;
@@ -3093,7 +3104,8 @@
       if (feedbackGrid) feedbackGrid.style.display = 'none';
       roleContainer.style.display = 'block';
       if (roleDescEl) {
-        roleDescEl.textContent = 'We couldn’t load tailored tips for this role yet. Your ATS score is ready—try “Retry tailored tips” below.';
+        roleDescEl.textContent = partialRoleTipsErrorText;
+        roleDescEl.dataset.lastRoleState = 'partial-error';
       }
       if (regenBtn) {
         regenBtn.style.display = 'inline-flex';
@@ -3427,7 +3439,10 @@
               feedbackTile.insertBefore(essentialNote, feedbackContent);
             }
             if (roleDescEl) {
-              roleDescEl.textContent = 'Basic feedback on your resume\'s content and presentation for your target role. Upgrade to Pro for deeper analysis and richer AI suggestions.';
+              const planSpecificText = 'Basic feedback on your resume\'s content and presentation for your target role. Upgrade to Pro for deeper analysis and richer AI suggestions.';
+              roleDescEl.textContent = planSpecificText;
+              // Update baseText to plan-specific text so updateRoleTipsState restores the correct text
+              roleDescEl.dataset.baseText = planSpecificText;
             }
           }
         }
