@@ -1,0 +1,26 @@
+SARAH MARTINEZ
+sarah.martinez@email.com | (555) 987-6543 | Austin, TX
+
+WORK EXPERIENCE
+
+Software Engineer | BigTech Co | March 2019 - Current
+• Used object-oriented programming object-oriented programming object-oriented programming object-oriented programming extensively
+• Implemented software design patterns software design patterns software design patterns in all projects
+• Built RESTful APIs RESTful APIs RESTful APIs RESTful APIs RESTful APIs for client applications
+• Performed code reviews code reviews code reviews code reviews on every pull request
+• Used version control version control version control for all development work
+• Wrote unit testing unit testing unit testing unit testing unit testing for quality assurance
+• Participated in agile development agile development agile development processes
+
+EDUCATION
+
+BS Computer Science | University of Texas | 2019
+
+TECHNICAL SKILLS
+Object-oriented programming, software design patterns, RESTful APIs, version control, unit testing, debugging, code reviews, continuous integration, agile development, microservices, clean architecture
+
+
+
+
+
+

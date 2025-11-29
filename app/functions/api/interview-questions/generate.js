@@ -209,6 +209,31 @@ export async function onRequest(context) {
       );
     }
 
+    // Server-side cooldown enforcement (60 seconds)
+    if (env.JOBHACKAI_KV) {
+      const cooldownKey = `iq_cooldown:${uid}`;
+      const lastRequest = await env.JOBHACKAI_KV.get(cooldownKey);
+      const now = Date.now();
+      const cooldownMs = 60 * 1000; // 60 seconds
+
+      if (lastRequest) {
+        const lastRequestTime = parseInt(lastRequest, 10);
+        const timeSinceLastRequest = now - lastRequestTime;
+
+        if (timeSinceLastRequest < cooldownMs) {
+          const retryAfter = Math.ceil((cooldownMs - timeSinceLastRequest) / 1000);
+          return errorResponse(
+            'Please wait before generating another set. Cooldown active.',
+            429,
+            origin,
+            env,
+            requestId,
+            { retryAfter }
+          );
+        }
+      }
+    }
+
     // Parse request body
     let body;
     try {
@@ -246,6 +271,15 @@ export async function onRequest(context) {
       questionCount: result.questions?.length || 0,
       tokenUsage: result.tokenUsage
     });
+
+    // Set cooldown after successful generation
+    if (env.JOBHACKAI_KV) {
+      const cooldownKey = `iq_cooldown:${uid}`;
+      const now = Date.now();
+      await env.JOBHACKAI_KV.put(cooldownKey, String(now), {
+        expirationTtl: 60 // 60 seconds
+      });
+    }
 
     return successResponse({
       role: result.role,

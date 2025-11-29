@@ -128,22 +128,12 @@ export async function onRequest(context) {
       return errorResponse('Failed to resolve user', 500, origin, env, requestId);
     }
 
-    // Retrieve the question set
-    const questionSet = await getInterviewQuestionSetById(env, setIdInt);
+    // Retrieve the question set (SQL enforces ownership via WHERE id = ? AND user_id = ?)
+    const questionSet = await getInterviewQuestionSetById(env, setIdInt, d1User.id);
 
     if (!questionSet) {
-      return errorResponse('Question set not found', 404, origin, env, requestId);
-    }
-
-    // Verify the set belongs to the authenticated user
-    if (questionSet.userId !== d1User.id) {
-      console.warn('[IQ-GET-SET] Unauthorized access attempt:', {
-        requestId,
-        uid,
-        setId: setIdInt,
-        setUserId: questionSet.userId,
-        requestingUserId: d1User.id
-      });
+      // SQL query returns null if set doesn't exist or doesn't belong to user
+      // No need for separate JS ownership check - SQL already enforced it
       return errorResponse('Question set not found', 404, origin, env, requestId);
     }
 

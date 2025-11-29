@@ -260,14 +260,20 @@ export async function createInterviewQuestionSet(env, { userId, role, seniority 
 }
 
 /**
- * Get an interview question set by ID
+ * Get an interview question set by ID and user ID (security: enforces ownership in SQL)
  * @param {Object} env - Cloudflare environment with DB binding
  * @param {number} id - Set ID
- * @returns {Promise<Object|null>} Set with parsed JSON fields, or null if not found
+ * @param {number} userId - User ID from users table (required for security)
+ * @returns {Promise<Object|null>} Set with parsed JSON fields, or null if not found or doesn't belong to user
  */
-export async function getInterviewQuestionSetById(env, id) {
+export async function getInterviewQuestionSetById(env, id, userId) {
   if (!env.DB) {
     console.warn('[DB] D1 binding not available');
+    return null;
+  }
+
+  if (!userId || typeof userId !== 'number') {
+    console.warn('[DB] userId is required for getInterviewQuestionSetById');
     return null;
   }
 
@@ -275,8 +281,8 @@ export async function getInterviewQuestionSetById(env, id) {
     const row = await env.DB.prepare(
       `SELECT id, user_id, role, seniority, types_json, questions_json, selected_ids_json, jd, created_at
        FROM interview_question_sets
-       WHERE id = ?`
-    ).bind(id).first();
+       WHERE id = ? AND user_id = ?`
+    ).bind(id, userId).first();
 
     if (!row) {
       return null;

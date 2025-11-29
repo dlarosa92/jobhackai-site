@@ -1,0 +1,22 @@
+MICHAEL CHEN
+michael.chen@email.com | (555) 555-1234
+
+| Skill | Years | Proficiency |
+|-------|-------|-------------|
+| JavaScript | 5 | Expert |
+| Python | 3 | Advanced |
+| React | 4 | Expert |
+
+CAREER HISTORY
+
+Backend Developer | DataSystems LLC | 2018-2023
+Developed APIs and managed databases. Worked on various projects involving server infrastructure and data processing. Handled authentication systems and implemented security measures. Optimized performance of backend services.
+
+EDUCATION
+Computer Science Degree | Tech Institute | 2018
+
+
+
+
+
+

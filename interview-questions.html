@@ -187,6 +187,8 @@
     /* Stronger selectors to beat any theme overrides */
     .iq-qactions .btn-save[aria-pressed="true"] svg,
     .iq-qactions .btn-save.is-saved svg { fill:#2563EB; stroke:#2563EB; }
+    /* Highlight question card when starred */
+    .iq-question-card:has(.btn-save[aria-pressed="true"]) { background:#F0F9FF; border-color:#BFDBFE; }
     .saved-remove { padding:.2rem .5rem; font-size:.8rem; }
     .recent-item.is-active { border-color:#60A5FA; box-shadow:0 0 0 2px rgba(37,99,235,.15); background:#F8FAFF; }
 
@@ -526,15 +528,15 @@
             <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
           </button>
         </div>
-        <p style="color:#4B5563; margin:.25rem 0 1rem 0;">Practice with AI for realistic timing, structured feedback, and answer coaching. Upgrade to Pro to start mock interviews with your saved questions.</p>
+        <p style="color:#4B5563; margin:.25rem 0 1rem 0;">Your questions are saved — upgrade to Pro to run live mock interviews with these questions.</p>
         <ul style="margin:0 0 1rem 1.25rem; color:#374151;">
           <li>Unlimited mock interview sessions</li>
           <li>Answer guidance and coaching tips</li>
-          <li>Works with your Saved Questions</li>
+          <li>Works with your starred questions</li>
         </ul>
         <div style="display:flex; gap:.5rem; flex-wrap:wrap;">
-          <a id="upsell-upgrade" href="pricing-a.html" class="btn-primary" style="text-decoration:none;">See Plans</a>
-          <button id="upsell-cancel-2" class="btn-outline">Not now</button>
+          <a id="upsell-upgrade" href="pricing-a.html" class="btn-primary" style="text-decoration:none;">Upgrade to Pro</a>
+          <button id="upsell-cancel-2" class="btn-outline">Maybe later</button>
         </div>
       </div>
     </div>
@@ -555,6 +557,7 @@
   <main class="iq-main">
     <h1 class="iq-title">Interview Questions</h1>
     <p class="iq-sub">Practice your answers with AI-generated questions tailored to your job title.</p>
+    <p style="font-size:0.9rem; color:#6B7280; margin-top:-0.75rem; margin-bottom:1rem;">Step 1: Generate questions · Step 2: Star your favorites · Step 3: Run a Mock Interview</p>
 
     <!-- Plan Strip -->
     <div id="iq-plan-strip" class="iq-plan-strip" style="display:none;">
@@ -571,6 +574,7 @@
     <div id="iq-selection-summary" class="iq-selection-summary" style="display:none;">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26"/></svg>
       <span id="selection-count-text">Selected for Mock Interview: 0 of 10 questions</span>
+      <span style="font-size:0.8rem; color:#6B7280; margin-left:0.5rem;">We'll use your starred questions in your mock interview.</span>
     </div>
 
     <div class="iq-toolbar card">
@@ -604,6 +608,14 @@
         </div>
 
         
+      </div>
+
+      <!-- First-time visitor hint banner -->
+      <div id="iq-first-hint" class="iq-hint-banner" style="display:none; margin-top:1rem; padding:0.75rem 1rem; background:#EFF6FF; border:1px solid #BFDBFE; border-radius:10px; color:#1E40AF; font-size:0.9rem;">
+        <span>💡 <strong>Tip:</strong> Star the questions you care about most, then use 'Start Mock Interview' to practice them live.</span>
+        <button type="button" class="icon-btn" aria-label="Dismiss" onclick="this.parentElement.style.display='none'; try{localStorage.setItem('iq_first_visit_shown','true');}catch{}" style="float:right; margin-left:0.5rem; padding:0.25rem; background:transparent; border:none; color:#1E40AF; cursor:pointer;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
       </div>
 
       <details class="iq-advanced" style="margin-top:.5rem;">
@@ -979,7 +991,11 @@
         return;
       }
       
-      list.innerHTML=iqState.set.questions.map((q,i)=>{
+      // Show demo indicator if using stub/demo questions
+      const isDemo = iqState.set.isDemo || false;
+      const demoIndicator = isDemo ? '<div style="padding:0.75rem 1rem; background:#FEF3C7; border:1px solid #FCD34D; border-radius:10px; color:#92400E; font-size:0.9rem; margin-bottom:1rem; text-align:center;">You\'re viewing demo questions. <a href="login.html" style="color:#92400E; text-decoration:underline; font-weight:600;">Sign in</a> to get AI-generated questions for your role.</div>' : '';
+      
+      list.innerHTML= demoIndicator + iqState.set.questions.map((q,i)=>{
         const qText = iqEsc(q.q);
         const qHint = q.hint ? `Hint: ${iqEsc(q.hint)}` : '';
         const qExample = q.example ? iqEsc(q.example) : '';
@@ -998,7 +1014,7 @@
         <path d="M6 19v-4h4"/>
       </svg>
     </button>
-    <button type="button" class="icon-btn btn-save" data-idx="${i}" data-tip="Save" aria-label="Save" aria-pressed="${savedPressed}">
+    <button type="button" class="icon-btn btn-save" data-idx="${i}" data-tip="Star to include this question in your Mock Interview" aria-label="Star to include in Mock Interview" aria-pressed="${savedPressed}">
       <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><polygon points="12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26"/></svg>
     </button>
     <button type="button" class="icon-btn btn-notes" data-idx="${i}" aria-expanded="false" aria-controls="iq-notes-${i}" data-tip="Notes" aria-label="Notes">
@@ -1114,6 +1130,11 @@
       try {
         const token = await getFirebaseToken();
         if (!token) {
+          // Not logged in - show explicit message and redirect
+          iqToast('Please log in to generate AI-powered interview questions.');
+          setTimeout(() => {
+            window.location.href = 'login.html';
+          }, 2000);
           throw new Error('Not authenticated');
         }
         
@@ -1128,6 +1149,18 @@
         
         if (!response.ok) {
           const errorData = await response.json().catch(() => ({}));
+          
+          // Handle auth errors explicitly
+          if (response.status === 401 || response.status === 403) {
+            iqToast('Your session has expired. Please log in again to generate AI-powered questions.');
+            setTimeout(() => {
+              window.location.href = 'login.html';
+            }, 2000);
+            throw new Error('Authentication required');
+          }
+          
+          // Other errors (5xx, 429, etc.)
+          iqToast('Something went wrong generating questions. Please try again.');
           throw new Error(errorData.error || `API error: ${response.status}`);
         }
         
@@ -1146,6 +1179,12 @@
         }
         throw new Error('Invalid API response: questions array missing or empty');
       } catch (e) { 
+        // Only fall back to stub if it's not an auth error
+        if (e.message === 'Not authenticated' || e.message === 'Authentication required') {
+          // Auth errors already handled above - don't fall back to stub
+          return null;
+        }
+        
         // Log error for monitoring (even when falling back to stub)
         console.error('[IQ] API generation failed, falling back to stub:', {
           error: e.message,
@@ -1171,7 +1210,7 @@
         mk('Tell me about your biggest professional failure and what you learned.'),
         mk('Describe a time when you exceeded expectations.')
       ]; 
-      return { role, seniority, types, count: IQ_FIXED_COUNT, jd, seed: Math.floor(Math.random()*1e6), questions: bank.slice(0, IQ_FIXED_COUNT) }; 
+      return { role, seniority, types, count: IQ_FIXED_COUNT, jd, seed: Math.floor(Math.random()*1e6), questions: bank.slice(0, IQ_FIXED_COUNT), isDemo: true }; 
     }
     
     // Save question set to D1 for Mock Interview
@@ -1232,8 +1271,13 @@
       try {
         const res=await iqApiGenerate({role,seniority,types,count,jd}); 
         
+        // If auth error occurred, iqApiGenerate returns null - don't proceed
+        if (!res) {
+          return;
+        }
+        
         // Validate response has questions
-        if (!res || !Array.isArray(res.questions) || res.questions.length === 0) {
+        if (!Array.isArray(res.questions) || res.questions.length === 0) {
           throw new Error('No questions generated');
         }
         
@@ -1262,8 +1306,6 @@
         if (selSummary) {
           selSummary.style.display = '';
         }
-        
-      iqUpdateActionsLayout();
       iqStartGlobalCooldown(IQ_GLOBAL_COOLDOWN);
         
       } catch (error) {
@@ -1694,6 +1736,20 @@ function initIQPage(){
       const genBtn = $IQ('#btn-generate');
       if (genBtn) {
         genBtn.textContent = iqState.set ? 'New Question Set' : 'Generate 10 Questions';
+      }
+      
+      // Show first-time visitor hint if not shown before
+      const hintBanner = $IQ('#iq-first-hint');
+      if (hintBanner) {
+        try {
+          const shown = localStorage.getItem('iq_first_visit_shown');
+          const mockCompleted = localStorage.getItem('iq_mock_completed');
+          if (!shown && !mockCompleted) {
+            hintBanner.style.display = 'block';
+          }
+        } catch (e) {
+          // localStorage not available, don't show
+        }
       }
       
       iqUpdateActionsLayout(); 

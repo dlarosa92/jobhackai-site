@@ -858,12 +858,14 @@
       }
       
       // Fallback: Try localStorage mi_payload
+      let usedLocalStorageFallback = false;
       if (mode === 'saved' || !dyn.length) {
         try {
           const p = JSON.parse(localStorage.getItem('mi_payload')||'null');
           if (p && Array.isArray(p.questions) && p.questions.length) {
             dyn = p.questions.filter(q=>typeof q==='string' && q.trim());
             loadedRole = p.role || loadedRole;
+            usedLocalStorageFallback = true;
             console.log('[MI] Loaded from mi_payload:', { questionCount: dyn.length, role: loadedRole });
           }
         } catch (e) { console.warn('[MI] mi_payload parse error:', e); }
@@ -879,10 +881,31 @@
             if (Array.isArray(s.questions)) {
               dyn = s.questions.map(q=> typeof q==='string'? q : (q?.q||'')).filter(Boolean);
               loadedRole = s.role || loadedRole;
+              usedLocalStorageFallback = true;
               console.log('[MI] Loaded from localStorage set:', { setId, questionCount: dyn.length, role: loadedRole });
             }
           }
         } catch (e) { console.warn('[MI] localStorage set parse error:', e); }
+      }
+      
+      // Show subtle notification if localStorage fallback was used
+      if (usedLocalStorageFallback && isD1Id) {
+        // Only show if we tried D1 first (isD1Id) but fell back to localStorage
+        setTimeout(() => {
+          const toast = document.createElement('div');
+          toast.style.cssText = 'position:fixed;bottom:18px;right:18px;background:#111827;color:#fff;padding:.55rem .75rem;border-radius:10px;box-shadow:0 6px 18px rgba(0,0,0,.18);font-size:.95rem;z-index:10000;opacity:0;transform:translateY(8px);transition:opacity .18s ease, transform .18s ease;';
+          toast.textContent = 'Loaded your last saved questions from this device.';
+          document.body.appendChild(toast);
+          requestAnimationFrame(() => {
+            toast.style.opacity = '1';
+            toast.style.transform = 'translateY(0)';
+          });
+          setTimeout(() => {
+            toast.style.opacity = '0';
+            toast.style.transform = 'translateY(8px)';
+            setTimeout(() => toast.remove(), 180);
+          }, 3000);
+        }, 500);
       }
       
       return { questions: dyn.length ? dyn : fallback, role: loadedRole };
