@@ -217,3 +217,127 @@ export function isD1Available(env) {
   return !!env.DB;
 }
 
+// ============================================================
+// INTERVIEW QUESTION SET HELPERS
+// ============================================================
+
+/**
+ * Create an interview question set
+ * @param {Object} env - Cloudflare environment with DB binding
+ * @param {Object} options - Set options
+ * @param {number} options.userId - User ID from users table
+ * @param {string} options.role - Target role (e.g., "Software Engineer")
+ * @param {string|null} options.seniority - Level (e.g., "Senior", "Mid")
+ * @param {Array} options.types - Array of question types (e.g., ["behavioral", "technical"])
+ * @param {Array} options.questions - Array of question objects [{id, q, hint, example}, ...]
+ * @param {Array} options.selectedIndices - Array of selected question indices [0, 1, 2]
+ * @param {string|null} options.jd - Optional job description
+ * @returns {Promise<Object>} Created set { id, user_id, role, seniority, types_json, questions_json, selected_ids_json, jd, created_at }
+ */
+export async function createInterviewQuestionSet(env, { userId, role, seniority = null, types, questions, selectedIndices, jd = null }) {
+  if (!env.DB) {
+    console.warn('[DB] D1 binding not available');
+    return null;
+  }
+
+  try {
+    const typesJson = JSON.stringify(types || []);
+    const questionsJson = JSON.stringify(questions || []);
+    const selectedIdsJson = JSON.stringify(selectedIndices || []);
+
+    const result = await env.DB.prepare(
+      `INSERT INTO interview_question_sets (user_id, role, seniority, types_json, questions_json, selected_ids_json, jd)
+       VALUES (?, ?, ?, ?, ?, ?, ?)
+       RETURNING id, user_id, role, seniority, types_json, questions_json, selected_ids_json, jd, created_at`
+    ).bind(userId, role, seniority, typesJson, questionsJson, selectedIdsJson, jd).first();
+
+    console.log('[DB] Created interview question set:', { id: result.id, userId, role });
+    return result;
+  } catch (error) {
+    console.error('[DB] Error in createInterviewQuestionSet:', error);
+    throw error;
+  }
+}
+
+/**
+ * Get an interview question set by ID
+ * @param {Object} env - Cloudflare environment with DB binding
+ * @param {number} id - Set ID
+ * @returns {Promise<Object|null>} Set with parsed JSON fields, or null if not found
+ */
+export async function getInterviewQuestionSetById(env, id) {
+  if (!env.DB) {
+    console.warn('[DB] D1 binding not available');
+    return null;
+  }
+
+  try {
+    const row = await env.DB.prepare(
+      `SELECT id, user_id, role, seniority, types_json, questions_json, selected_ids_json, jd, created_at
+       FROM interview_question_sets
+       WHERE id = ?`
+    ).bind(id).first();
+
+    if (!row) {
+      return null;
+    }
+
+    // Parse JSON fields back to JS objects
+    return {
+      id: row.id,
+      userId: row.user_id,
+      role: row.role,
+      seniority: row.seniority,
+      types: JSON.parse(row.types_json || '[]'),
+      questions: JSON.parse(row.questions_json || '[]'),
+      selectedIndices: JSON.parse(row.selected_ids_json || '[]'),
+      jd: row.jd,
+      createdAt: row.created_at
+    };
+  } catch (error) {
+    console.error('[DB] Error in getInterviewQuestionSetById:', error);
+    throw error;
+  }
+}
+
+/**
+ * Get interview question sets for a user (for history/recent sets)
+ * @param {Object} env - Cloudflare environment with DB binding
+ * @param {number} userId - User ID from users table
+ * @param {Object} options - Query options
+ * @param {number} options.limit - Maximum number of results (default 10)
+ * @returns {Promise<Array>} List of sets with metadata (not full questions)
+ */
+export async function getInterviewQuestionSetsByUser(env, userId, { limit = 10 } = {}) {
+  if (!env.DB) {
+    console.warn('[DB] D1 binding not available');
+    return [];
+  }
+
+  try {
+    const results = await env.DB.prepare(
+      `SELECT id, role, seniority, types_json, selected_ids_json, created_at
+       FROM interview_question_sets
+       WHERE user_id = ?
+       ORDER BY created_at DESC
+       LIMIT ?`
+    ).bind(userId, limit).all();
+
+    // Transform to clean list items
+    const items = results.results.map(row => ({
+      id: row.id,
+      role: row.role,
+      seniority: row.seniority,
+      types: JSON.parse(row.types_json || '[]'),
+      selectedCount: JSON.parse(row.selected_ids_json || '[]').length,
+      createdAt: row.created_at
+    }));
+
+    console.log('[DB] Retrieved interview question sets:', { userId, count: items.length });
+    return items;
+  } catch (error) {
+    console.error('[DB] Error in getInterviewQuestionSetsByUser:', error);
+    return [];
+  }
+}
+
