@@ -10,7 +10,7 @@
     "start": "next start",
     "export": "next build && next export",
     "deploy": "wrangler pages deploy out",
-    "deploy:qa": "wrangler pages deploy out --project-name=jobhackai-app-dev --branch dev0",
+    "deploy:qa": "wrangler pages deploy out --project-name=jobhackai-app-qa --branch develop",
     "deploy:prod": "wrangler pages deploy out --branch main",
     "test:e2e": "playwright test --config tests/playwright.config.js",
     "test:e2e:dev": "cross-env TEST_ENV=dev playwright test --config tests/playwright.config.js",
