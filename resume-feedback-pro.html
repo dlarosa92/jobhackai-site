@@ -156,12 +156,12 @@
       background: #F9FAFB;
       border-radius: var(--radius-md);
       border: 1px solid var(--color-divider);
-      transition: all 0.18s ease;
-      cursor: pointer;
+      transition: background-color 0.18s ease, border-color 0.18s ease;
+      cursor: default;
     }
     .rf-history-item:hover {
       background: #F3F4F6;
-      border-color: var(--color-accent-blue);
+      border-color: var(--color-divider);
     }
     .rf-history-icon {
       width: 40px;
@@ -1432,7 +1432,7 @@
           }
         }
         
-        if (cachedScore && cachedScore.score) {
+          if (cachedScore && cachedScore.score) {
           console.log('[RESUME-FEEDBACK] Loading cached ATS score:', cachedScore.score);
           updateProgressRing(cachedScore.score);
           
@@ -1524,20 +1524,20 @@
             
             if (isOldFormat || isNewFormat) {
               updateFeedbackGrid(cachedScore.roleSpecificFeedback);
-              // Make feedback grid visible (it starts with display:none)
-              const feedbackGrid = document.getElementById('rf-feedback-grid');
-              if (feedbackGrid) {
-                feedbackGrid.style.display = 'grid';
-              }
-              showRoleFeedback();
             } else {
-              // Invalid format - hide feedback section
               console.warn('[RESUME-FEEDBACK] Invalid roleSpecificFeedback format in cache:', typeof cachedScore.roleSpecificFeedback);
-              hideRoleFeedback();
             }
+
+            updateRoleTipsState({
+              hasAtsScore: true,
+              roleSpecificFeedback: cachedScore.roleSpecificFeedback || null
+            });
           } else {
-            // No role feedback available - user can use optimize button if needed
-            hideRoleFeedback();
+            // No role feedback available or no score – hide tips area
+            updateRoleTipsState({
+              hasAtsScore: !!cachedScore?.score,
+              roleSpecificFeedback: null
+            });
           }
           
           // Get resume name for context bar and file name restoration
@@ -1633,7 +1633,8 @@
       // Load cached score on page load
       loadCachedATSScore().then(() => {
         // Check if we have resume data after loading
-        const hasResumeData = document.querySelector('#rf-rubric-grid .rf-rubric-item .rf-rubric-score')?.textContent !== '— / —';
+        const rubricScores = document.querySelectorAll('#rf-rubric-grid .rf-rubric-item .rf-rubric-score');
+        const hasResumeData = rubricScores.length > 0 && Array.from(rubricScores).some(el => el.textContent !== '— / —');
         
         if (!hasResumeData) {
           // Show placeholder note and CTA
@@ -1694,22 +1695,12 @@
               
               updateFeedbackGrid(feedbackResult.roleSpecificFeedback);
               updateRubricGridFromFeedback(feedbackResult.atsRubric);
-              
-              // Make grids visible (they start with display:none)
-              const rubricGrid = document.getElementById('rf-rubric-grid');
-              if (rubricGrid) {
-                rubricGrid.style.display = 'grid';
-              }
-              const feedbackGrid = document.getElementById('rf-feedback-grid');
-              if (feedbackGrid) {
-                if (feedbackResult.roleSpecificFeedback) {
-                  feedbackGrid.style.display = 'grid';
-                  showRoleFeedback();
-                } else {
-                  feedbackGrid.style.display = 'none';
-                  hideRoleFeedback();
-                }
-              }
+
+              const hasAtsScore = typeof scoreResult.score === 'number';
+              updateRoleTipsState({
+                hasAtsScore,
+                roleSpecificFeedback: feedbackResult.roleSpecificFeedback || null
+              });
               
               // Save role-specific feedback to persistence
               // Load cached score without job title validation to get existing ATS score
@@ -2124,8 +2115,6 @@
           hidePlaceholder();
           const placeholderCta = document.getElementById('rf-placeholder-cta');
           if (placeholderCta) placeholderCta.style.display = 'none';
-          const regenBtn = document.getElementById('rf-regenerate-btn');
-          if (regenBtn) regenBtn.style.display = 'block';
           
           // Convert breakdown to rubric format
           const rubric = [
@@ -2198,18 +2187,6 @@
               
               updateFeedbackGrid(feedbackResult.roleSpecificFeedback);
               updateRubricGridFromFeedback(feedbackResult.atsRubric);
-              
-              // Show/hide feedback grid based on whether feedback is available
-              const feedbackGrid = document.getElementById('rf-feedback-grid');
-              if (feedbackGrid) {
-                if (feedbackResult.roleSpecificFeedback) {
-                  feedbackGrid.style.display = 'grid';
-                  showRoleFeedback();
-                } else {
-                  feedbackGrid.style.display = 'none';
-                  hideRoleFeedback();
-                }
-              }
               
               // Save role-specific feedback to persistence
               if (window.JobHackAIStatePersistence && scoreResult.success) {
@@ -2602,22 +2579,12 @@
             
             updateFeedbackGrid(feedbackResult.roleSpecificFeedback);
             updateRubricGridFromFeedback(feedbackResult.atsRubric);
-            
-            // Show/hide grids based on whether feedback is available
-            const rubricGrid = document.getElementById('rf-rubric-grid');
-            if (rubricGrid) {
-              rubricGrid.style.display = 'grid';
-            }
-            const feedbackGrid = document.getElementById('rf-feedback-grid');
-            if (feedbackGrid) {
-              if (feedbackResult.roleSpecificFeedback) {
-                feedbackGrid.style.display = 'grid';
-                showRoleFeedback();
-              } else {
-                feedbackGrid.style.display = 'none';
-                hideRoleFeedback();
-              }
-            }
+
+            const hasAtsScore = !!(scoreResult?.success || cachedScore?.score);
+            updateRoleTipsState({
+              hasAtsScore,
+              roleSpecificFeedback: feedbackResult.roleSpecificFeedback || null
+            });
             
             // Save role-specific feedback to persistence
             // Load cached score without job title validation to get existing ATS score
@@ -2842,7 +2809,8 @@
         
         return {
           label: label,
-          score: item.score || 0,
+          // Only use a numeric score when it’s explicitly provided
+          score: (typeof item.score === 'number' ? item.score : null),
           max: max,
           tip: tip
         };
@@ -3045,6 +3013,70 @@
       }
     }
     
+    // Helper: control Role-Specific Tips state and retry button visibility
+    function updateRoleTipsState({ hasAtsScore, roleSpecificFeedback }) {
+      const roleContainer = document.getElementById('role-feedback-container');
+      const feedbackGrid = document.getElementById('rf-feedback-grid');
+      const regenBtn = document.getElementById('rf-regenerate-btn');
+      const roleDescEl = document.getElementById('rf-role-desc');
+
+      if (roleDescEl && !roleDescEl.dataset.baseText) {
+        roleDescEl.dataset.baseText = roleDescEl.textContent || '';
+      }
+
+      const rsf = roleSpecificFeedback;
+      const isNewStructure = rsf &&
+        typeof rsf === 'object' &&
+        !Array.isArray(rsf) &&
+        rsf.targetRoleUsed !== undefined &&
+        Array.isArray(rsf.sections) &&
+        rsf.sections.length > 0;
+
+      const isOldStructure = rsf && Array.isArray(rsf) && rsf.length > 0;
+      const hasRoleSpecific = !!(isNewStructure || isOldStructure);
+
+      if (!roleContainer) return;
+
+      // No ATS score – hide section and button
+      if (!hasAtsScore) {
+        if (feedbackGrid) feedbackGrid.style.display = 'none';
+        hideRoleFeedback();
+        if (regenBtn) {
+          regenBtn.style.display = 'none';
+          regenBtn.textContent = 'Regenerate Feedback';
+        }
+        if (roleDescEl && roleDescEl.dataset.baseText) {
+          roleDescEl.textContent = roleDescEl.dataset.baseText;
+        }
+        return;
+      }
+
+      // Clean success: ATS + role-specific tips present
+      if (hasRoleSpecific) {
+        if (feedbackGrid) feedbackGrid.style.display = 'grid';
+        showRoleFeedback();
+        if (regenBtn) {
+          regenBtn.style.display = 'none';
+          regenBtn.textContent = 'Regenerate Feedback';
+        }
+        if (roleDescEl && roleDescEl.dataset.baseText) {
+          roleDescEl.textContent = roleDescEl.dataset.baseText;
+        }
+        return;
+      }
+
+      // Partial success: ATS present but role-specific tips missing/invalid
+      if (feedbackGrid) feedbackGrid.style.display = 'none';
+      roleContainer.style.display = 'block';
+      if (roleDescEl) {
+        roleDescEl.textContent = 'We couldn’t load tailored tips for this role yet. Your ATS score is ready—try “Retry tailored tips” below.';
+      }
+      if (regenBtn) {
+        regenBtn.style.display = 'inline-flex';
+        regenBtn.textContent = 'Retry tailored tips';
+      }
+    }
+
     // Fade transition helpers
     function hidePlaceholder() {
       const ph = document.getElementById('ats-placeholder');
@@ -3257,36 +3289,18 @@
           atsScoreTile.querySelector('#rf-plan-badge').style.background = '#FF9100';
           updateDescriptionWithTooltip(
             atsScoreTile.querySelector('#rf-score-desc'),
-            'Enjoy unlimited ATS scoring during your trial!',
-            'Receive an overall ATS compliance score (0-100) for your resume, highlighting key areas to improve for better job application success.'
+            'Your trial includes 3 full ATS score & feedback runs.',
+            'Each run combines ATS scoring with detailed feedback so you can see exactly what to fix before you apply.'
           );
-          atsScoreTile.querySelector('#rf-ats-checks').textContent = 'Unlimited ATS scoring during trial (throttled: 1 per 30s)';
+          atsScoreTile.querySelector('#rf-ats-checks').textContent = 'Max 3 feedback runs during your 3-day trial (rate limited to 1 per minute).';
         }
-        // Trial has unlimited feedback with throttles (1/min, max 5/day, per-doc cap 3)
+        // Trial feedback: 3 full runs total during trial
         if (feedbackTile) {
           feedbackTile.querySelector('.rf-title .rf-plan-badge').textContent = 'Trial Plan';
           feedbackTile.querySelector('.rf-title .rf-plan-badge').style.background = '#FF9100';
           feedbackTile.querySelector('.rf-upgrade-text').style.display = 'none';
           if (feedbackContent) {
             feedbackContent.style.display = 'block';
-            // Remove any existing upgrade banner at the bottom
-            const oldBanner = document.getElementById('rf-feedback-upgrade-banner');
-            if (oldBanner) oldBanner.remove();
-            // Add upgrade banner at the bottom
-            const upgradeBanner = document.createElement('div');
-            upgradeBanner.className = 'rf-upgrade-prompt';
-            upgradeBanner.id = 'rf-feedback-upgrade-banner';
-            upgradeBanner.style.marginTop = '1.7rem';
-            upgradeBanner.innerHTML = `
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M12 5v14M5 12h14"/>
-              </svg>
-              <div class="rf-upgrade-text">
-                <strong>Trial shows you what to fix. Pro fixes it now (rewrites unlocked).</strong> Upgrade to Pro to complete your resume optimization.
-              </div>
-              <a href="pricing-a.html" class="btn btn-secondary">Upgrade to Pro</a>
-            `;
-            feedbackTile.appendChild(upgradeBanner);
           }
         }
         if (rewriteTile) {
@@ -3338,13 +3352,24 @@
             feedbackTile.querySelector('.rf-title .rf-plan-badge').textContent = 'Monthly Limit Reached';
             feedbackTile.querySelector('.rf-title .rf-plan-badge').style.background = '#6B7280';
             feedbackTile.querySelector('.rf-upgrade-text strong').textContent = 'Upgrade to Pro';
-            feedbackTile.querySelector('.rf-upgrade-text').innerHTML = '<strong>Upgrade to Pro</strong> for unlimited feedback and AI resume rewriting';
+            feedbackTile.querySelector('.rf-upgrade-text').innerHTML = '<strong>Upgrade to Pro</strong> for AI resume rewriting and higher feedback limits.';
           } else {
             feedbackTile.querySelector('.rf-title .rf-plan-badge').textContent = 'Essential Plan';
             feedbackTile.querySelector('.rf-title .rf-plan-badge').style.background = '#0077B5';
             feedbackTile.querySelector('.rf-upgrade-text').style.display = 'none';
             if (feedbackContent) {
               feedbackContent.style.display = 'block';
+            }
+            // Ensure Essential feedback limit is clearly communicated
+            let essentialNote = document.getElementById('rf-essential-feedback-note');
+            if (!essentialNote) {
+              essentialNote = document.createElement('div');
+              essentialNote.id = 'rf-essential-feedback-note';
+              essentialNote.style.marginTop = '0.5rem';
+              essentialNote.style.color = 'var(--color-text-secondary)';
+              essentialNote.style.fontSize = '0.9rem';
+              essentialNote.textContent = 'Your Essential plan includes 3 feedback runs per month.';
+              feedbackTile.insertBefore(essentialNote, feedbackContent);
             }
           }
         }
@@ -3423,11 +3448,12 @@
 
     // Add usage indicator using shared component
     document.addEventListener('DOMContentLoaded', async function() {
-      const main = document.querySelector('main');
+      const atsTile = document.getElementById('rf-ats-score-tile');
+      const generateBtn = document.getElementById('rf-generate-btn');
       const currentPlan = getCurrentUserPlan();
       
       // Only show usage indicator for plans that have limits (essential, trial)
-      if (main && (currentPlan === 'essential' || currentPlan === 'trial')) {
+      if (atsTile && (currentPlan === 'essential' || currentPlan === 'trial')) {
         try {
           // Fetch usage data from API
           const token = localStorage.getItem('firebase-id-token');
@@ -3452,22 +3478,38 @@
           const usageData = await usageResponse.json();
           
           if (usageData.success && usageData.usage && usageData.usage.resumeFeedback) {
+            const usage = usageData.usage.resumeFeedback;
+            const plan = usageData.plan;
+
             // Create container for usage indicator
             const usageContainer = document.createElement('div');
             usageContainer.className = 'rf-plan-limit';
-            usageContainer.style.cssText = 'margin-top: 0.5rem; margin-bottom: 1rem;';
+            usageContainer.style.cssText = 'margin-top: 0.75rem; margin-bottom: 0.25rem;';
             
+            // Build plan-specific copy focused on feedback runs
+            let customText = '';
+            if (plan === 'trial') {
+              customText = `${usage.used || 0} of ${usage.limit || 3} feedback runs used during your trial`;
+            } else if (plan === 'essential') {
+              customText = `${usage.used || 0} of ${usage.limit || 3} feedback runs used this month`;
+            }
+
             // Render usage indicator using shared component
             if (window.renderUsageIndicator) {
               window.renderUsageIndicator({
                 feature: 'resumeFeedback',
-                usage: usageData.usage.resumeFeedback,
-                plan: usageData.plan,
-                container: usageContainer
+                usage,
+                plan,
+                container: usageContainer,
+                customText
               });
               
-              // Insert at the top of main content
-              main.insertBefore(usageContainer, main.firstChild);
+              // Insert just under the main Generate ATS Score & Feedback button
+              if (generateBtn && generateBtn.parentNode) {
+                generateBtn.insertAdjacentElement('afterend', usageContainer);
+              } else {
+                atsTile.appendChild(usageContainer);
+              }
             } else {
               console.warn('[RESUME-FEEDBACK] Usage indicator component not loaded');
             }
@@ -3904,7 +3946,7 @@
       <div id="rf-feedback-content" style="display:none;">
         <!-- Empty state placeholder -->
         <div id="ats-placeholder" class="ats-placeholder-note" style="display:none;">
-          Upload your résumé above to generate your ATS Score and detailed feedback.
+          Run ATS Score &amp; Feedback to see your detailed breakdown here.
         </div>
         <!-- Context Bar (shown when cached data exists) -->
         <div id="rf-context-bar" style="display:none;margin-bottom:1.5rem;padding:1rem;background:var(--color-card-bg);border:1px solid var(--color-divider);border-radius:var(--radius-md);">
@@ -3949,7 +3991,7 @@
         <span class="rf-plan-badge" style="background:#6B7280;">Pro Only</span>
       </div>
       <div style="color:var(--color-text-secondary);margin-bottom:1.2rem;">
-        Trial shows you what to fix. Pro fixes it now (rewrites unlocked). Upgrade to Pro to complete your resume optimization.
+        AI rewrites your resume line-by-line using this ATS feedback and your target role. Upgrade to Pro to unlock resume rewriting.
         <span class="rf-tooltip-trigger" tabindex="0" aria-label="More info" style="margin-left:0.4em;">
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
             <circle cx="12" cy="12" r="10"/>
@@ -3964,7 +4006,7 @@
           <path d="M12 5v14M5 12h14"/>
         </svg>
         <div class="rf-upgrade-text">
-          <strong>Upgrade to Pro</strong> to unlock AI-powered resume rewriting with unlimited revisions
+          <strong>Upgrade to Pro</strong> to unlock resume rewriting powered by this ATS feedback and your target role.
         </div>
         <a href="pricing-a.html" class="btn btn-secondary">Upgrade Now</a>
       </div>
