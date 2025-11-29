@@ -141,6 +141,90 @@
     .rf-btn-secondary:hover {
       background: rgba(25, 118, 210, 0.05);
     }
+    /* History Section Styles */
+    .rf-history-list {
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+      margin-top: 1rem;
+    }
+    .rf-history-item {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      padding: 0.875rem 1rem;
+      background: #F9FAFB;
+      border-radius: var(--radius-md);
+      border: 1px solid var(--color-divider);
+      transition: all 0.18s ease;
+      cursor: pointer;
+    }
+    .rf-history-item:hover {
+      background: #F3F4F6;
+      border-color: var(--color-accent-blue);
+    }
+    .rf-history-icon {
+      width: 40px;
+      height: 40px;
+      border-radius: var(--radius-md);
+      background: linear-gradient(135deg, #E0E7FF 0%, #C7D2FE 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+    .rf-history-icon svg {
+      width: 20px;
+      height: 20px;
+      color: #4F46E5;
+    }
+    .rf-history-details {
+      flex: 1;
+      min-width: 0;
+    }
+    .rf-history-title {
+      font-weight: 600;
+      color: var(--color-text-main);
+      font-size: 0.95rem;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .rf-history-meta {
+      font-size: 0.8rem;
+      color: var(--color-text-muted);
+      margin-top: 0.15rem;
+    }
+    .rf-history-empty {
+      text-align: center;
+      padding: 2rem 1rem;
+      color: var(--color-text-muted);
+    }
+    .rf-history-empty svg {
+      width: 48px;
+      height: 48px;
+      margin-bottom: 0.75rem;
+      opacity: 0.4;
+    }
+    .rf-history-loading {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      padding: 1.5rem;
+      color: var(--color-text-muted);
+    }
+    .rf-history-loading .spinner {
+      width: 20px;
+      height: 20px;
+      border: 2px solid var(--color-divider);
+      border-top-color: var(--color-accent-blue);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
     .priority-review-cta {
       background: #F0F7FF;
       border-radius: var(--radius-lg);
@@ -1595,6 +1679,11 @@
               
               const feedbackResult = await getResumeFeedback(currentResumeId, jobTitle);
               
+              // Update history with new session (D1-backed)
+              if (window.JobHackAIHistory && feedbackResult.sessionId) {
+                window.JobHackAIHistory.addItem(feedbackResult.sessionId, feedbackResult.meta);
+              }
+              
               // Store latest feedback results for rewrite calls
               if (feedbackResult.atsIssues) {
                 window.latestAtsIssues = feedbackResult.atsIssues;
@@ -2094,6 +2183,11 @@
               showLoadingState('Optimizing for ATS compliance…');
               const feedbackResult = await getResumeFeedback(uploadResult.resumeId, jobTitleForFeedback);
               
+              // Update history with new session (D1-backed)
+              if (window.JobHackAIHistory && feedbackResult.sessionId) {
+                window.JobHackAIHistory.addItem(feedbackResult.sessionId, feedbackResult.meta);
+              }
+              
               // Store latest feedback results for rewrite calls
               if (feedbackResult.atsIssues) {
                 window.latestAtsIssues = feedbackResult.atsIssues;
@@ -2500,6 +2594,12 @@
 
             showLoadingState('Regenerating feedback...');
             const feedbackResult = await getResumeFeedback(currentResumeId, jobTitle);
+            
+            // Update history with new session (D1-backed)
+            if (window.JobHackAIHistory && feedbackResult.sessionId) {
+              window.JobHackAIHistory.addItem(feedbackResult.sessionId, feedbackResult.meta);
+            }
+            
             updateFeedbackGrid(feedbackResult.roleSpecificFeedback);
             updateRubricGridFromFeedback(feedbackResult.atsRubric);
             
@@ -3409,6 +3509,282 @@
          updatePlanBadge();
        });
     });
+
+    // =======================================================
+    // RESUME FEEDBACK HISTORY (D1-backed)
+    // Fetches and displays persistent feedback history from the server
+    // =======================================================
+    
+    // In-memory history cache (source of truth is always the server)
+    let _historyItems = [];
+    
+    /**
+     * Normalize SQLite datetime format to ISO 8601 for Safari compatibility
+     * SQLite returns dates as 'YYYY-MM-DD HH:MM:SS' (space-separated)
+     * Safari requires ISO 8601 format 'YYYY-MM-DDTHH:MM:SSZ'
+     */
+    function normalizeDateForSafari(dateStr) {
+      if (!dateStr || typeof dateStr !== 'string') return dateStr;
+      
+      // Check if it's SQLite format (YYYY-MM-DD HH:MM:SS)
+      if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/.test(dateStr)) {
+        // Replace space with 'T' to make it ISO 8601 compliant
+        let normalized = dateStr.replace(' ', 'T');
+        // Add 'Z' if no timezone info is present (assume UTC)
+        if (!normalized.includes('Z') && !normalized.includes('+') && !normalized.includes('-', 10)) {
+          normalized += 'Z';
+        }
+        return normalized;
+      }
+      
+      return dateStr; // Already in correct format or unrecognized
+    }
+    
+    /**
+     * Parse a date string with Safari compatibility
+     * Returns a Date object or null if parsing fails
+     */
+    function parseDateSafely(dateStr) {
+      if (!dateStr) return null;
+      
+      const normalized = normalizeDateForSafari(dateStr);
+      const date = new Date(normalized);
+      
+      // Validate date is valid (Safari returns Invalid Date as NaN, not an error)
+      if (isNaN(date.getTime())) {
+        console.warn('[RESUME-FEEDBACK] Invalid date string:', dateStr);
+        return null;
+      }
+      
+      return date;
+    }
+    
+    /**
+     * Format a date string for display
+     * Handles SQLite datetime format (YYYY-MM-DD HH:MM:SS) which Safari rejects
+     * by normalizing to ISO 8601 format (YYYY-MM-DDTHH:MM:SS) before parsing
+     */
+    function formatHistoryDate(dateStr) {
+      if (!dateStr) return '';
+      
+      const date = parseDateSafely(dateStr);
+      if (!date) return dateStr; // Return original string if parsing fails
+      
+      try {
+        const now = new Date();
+        const diffMs = now - date;
+        const diffMins = Math.floor(diffMs / (1000 * 60));
+        const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+        const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+        
+        if (diffMins < 1) return 'Just now';
+        if (diffMins < 60) return `${diffMins} min ago`;
+        if (diffHours < 24) return `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`;
+        if (diffDays < 7) return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
+        
+        return date.toLocaleDateString('en-US', { 
+          month: 'short', 
+          day: 'numeric',
+          year: date.getFullYear() !== now.getFullYear() ? 'numeric' : undefined
+        });
+      } catch (e) {
+        console.warn('[RESUME-FEEDBACK] Date formatting error:', e, 'for date:', dateStr);
+        return dateStr;
+      }
+    }
+    
+    /**
+     * Generate a display title for a history item
+     */
+    function getHistoryItemTitle(item) {
+      if (item.title && item.title.trim()) {
+        return item.title;
+      }
+      if (item.role && item.role.trim()) {
+        return `${item.role} Resume`;
+      }
+      // Fallback to date-based title
+      const date = parseDateSafely(item.createdAt);
+      if (date) {
+        return `Resume from ${date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
+      }
+      return 'Resume Analysis';
+    }
+    
+    /**
+     * Render history items to the DOM
+     */
+    function renderHistoryItems(items) {
+      const listEl = document.getElementById('rf-history-list');
+      const emptyEl = document.getElementById('rf-history-empty');
+      const loadingEl = document.getElementById('rf-history-loading');
+      
+      if (!listEl) return;
+      
+      // Hide loading
+      if (loadingEl) loadingEl.style.display = 'none';
+      
+      if (!items || items.length === 0) {
+        listEl.style.display = 'none';
+        if (emptyEl) emptyEl.style.display = 'block';
+        return;
+      }
+      
+      if (emptyEl) emptyEl.style.display = 'none';
+      
+      // Build history list HTML
+      listEl.innerHTML = items.map(item => `
+        <div class="rf-history-item" data-session-id="${item.sessionId || ''}" title="View this analysis">
+          <div class="rf-history-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
+              <polyline points="14 2 14 8 20 8"/>
+              <line x1="16" y1="13" x2="8" y2="13"/>
+              <line x1="16" y1="17" x2="8" y2="17"/>
+              <polyline points="10 9 9 9 8 9"/>
+            </svg>
+          </div>
+          <div class="rf-history-details">
+            <div class="rf-history-title">${escapeHtml(getHistoryItemTitle(item))}</div>
+            <div class="rf-history-meta">
+              ${item.role ? `<span style="margin-right:0.5rem;">📌 ${escapeHtml(item.role)}</span>` : ''}
+              <span>📅 ${formatHistoryDate(item.createdAt)}</span>
+            </div>
+          </div>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--color-text-muted);flex-shrink:0;">
+            <polyline points="9 18 15 12 9 6"/>
+          </svg>
+        </div>
+      `).join('');
+      
+      listEl.style.display = 'flex';
+    }
+    
+    /**
+     * Simple HTML escape helper
+     */
+    function escapeHtml(str) {
+      if (!str) return '';
+      const div = document.createElement('div');
+      div.textContent = str;
+      return div.innerHTML;
+    }
+    
+    /**
+     * Fetch history from the D1-backed API
+     */
+    async function fetchResumeFeedbackHistory() {
+      const loadingEl = document.getElementById('rf-history-loading');
+      const emptyEl = document.getElementById('rf-history-empty');
+      const listEl = document.getElementById('rf-history-list');
+      
+      // Show loading state
+      if (loadingEl) loadingEl.style.display = 'flex';
+      if (emptyEl) emptyEl.style.display = 'none';
+      if (listEl) listEl.style.display = 'none';
+      
+      try {
+        const token = await getAuthToken().catch(() => null);
+        if (!token) {
+          console.warn('[RESUME-FEEDBACK-HISTORY] No auth token available');
+          _historyItems = [];
+          renderHistoryItems([]);
+          return;
+        }
+        
+        const response = await fetch('/api/resume-feedback/history?limit=20', {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        });
+        
+        if (!response.ok) {
+          console.warn('[RESUME-FEEDBACK-HISTORY] API returned error:', response.status);
+          _historyItems = [];
+          renderHistoryItems([]);
+          return;
+        }
+        
+        const data = await response.json();
+        _historyItems = data.items || [];
+        
+        console.log('[RESUME-FEEDBACK-HISTORY] Loaded history:', _historyItems.length, 'items');
+        renderHistoryItems(_historyItems);
+        
+      } catch (error) {
+        console.error('[RESUME-FEEDBACK-HISTORY] Error fetching history:', error);
+        _historyItems = [];
+        renderHistoryItems([]);
+      }
+    }
+    
+    /**
+     * Add a new item to the top of the history list (optimistic update)
+     * Called after a successful feedback run
+     */
+    function addHistoryItem(sessionId, meta) {
+      if (!sessionId) return;
+      
+      const newItem = {
+        sessionId: sessionId,
+        title: meta?.title || null,
+        role: meta?.role || null,
+        createdAt: meta?.createdAt || new Date().toISOString(),
+        hasFeedback: true
+      };
+      
+      // Add to the front of the list
+      _historyItems = [newItem, ..._historyItems];
+      
+      // Re-render
+      renderHistoryItems(_historyItems);
+      
+      console.log('[RESUME-FEEDBACK-HISTORY] Added new item to history:', sessionId);
+    }
+    
+    /**
+     * Initialize history on page load
+     */
+    function initializeHistory() {
+      // Only load history if user is authenticated
+      const isAuthenticated = localStorage.getItem('user-authenticated') === 'true' && !!localStorage.getItem('user-email');
+      if (!isAuthenticated) {
+        console.log('[RESUME-FEEDBACK-HISTORY] Skipping history load - not authenticated');
+        const loadingEl = document.getElementById('rf-history-loading');
+        const emptyEl = document.getElementById('rf-history-empty');
+        if (loadingEl) loadingEl.style.display = 'none';
+        if (emptyEl) emptyEl.style.display = 'block';
+        return;
+      }
+      
+      // Load history from server
+      fetchResumeFeedbackHistory();
+      
+      // Set up refresh button
+      const refreshBtn = document.getElementById('rf-history-refresh');
+      if (refreshBtn) {
+        refreshBtn.addEventListener('click', function(e) {
+          e.preventDefault();
+          fetchResumeFeedbackHistory();
+        });
+      }
+    }
+    
+    // Initialize history when DOM is ready
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', initializeHistory);
+    } else {
+      // DOM already loaded, init after a short delay to allow other scripts
+      setTimeout(initializeHistory, 200);
+    }
+    
+    // Expose addHistoryItem globally so it can be called after feedback runs
+    window.JobHackAIHistory = {
+      addItem: addHistoryItem,
+      refresh: fetchResumeFeedbackHistory
+    };
   </script>
   <script src="js/components/usage-indicator.js" type="module"></script>
   <script src="js/main.js" type="module"></script>
@@ -3605,6 +3981,49 @@
         <div style="margin-top:1.2rem;">
           <button class="btn btn-primary">Copy Rewritten Resume</button>
           <button class="btn btn-secondary">Regenerate Rewrite</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Resume Feedback History Section -->
+    <section class="rf-card" id="rf-history-tile">
+      <div class="rf-title" style="display:flex;align-items:center;justify-content:space-between;">
+        <span>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:text-bottom;margin-right:0.5rem;">
+            <circle cx="12" cy="12" r="10"/>
+            <polyline points="12 6 12 12 16 14"/>
+          </svg>
+          Your Feedback History
+        </span>
+        <button id="rf-history-refresh" class="rf-btn-secondary" style="padding:0.4rem 0.75rem;font-size:0.85rem;" title="Refresh history">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M23 4v6h-6"/>
+            <path d="M1 20v-6h6"/>
+            <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
+          </svg>
+        </button>
+      </div>
+      <div style="color:var(--color-text-secondary);margin-bottom:1rem;">
+        View your past resume analyses. History is automatically saved for each feedback run.
+      </div>
+      <div id="rf-history-content">
+        <!-- Loading state -->
+        <div class="rf-history-loading" id="rf-history-loading">
+          <div class="spinner"></div>
+          <span>Loading history...</span>
+        </div>
+        <!-- History list (populated by JS) -->
+        <div class="rf-history-list" id="rf-history-list" style="display:none;"></div>
+        <!-- Empty state -->
+        <div class="rf-history-empty" id="rf-history-empty" style="display:none;">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+            <line x1="16" y1="2" x2="16" y2="6"/>
+            <line x1="8" y1="2" x2="8" y2="6"/>
+            <line x1="3" y1="10" x2="21" y2="10"/>
+          </svg>
+          <div style="font-weight:600;margin-bottom:0.25rem;">No history yet</div>
+          <div>Upload a resume and run feedback to see your history here.</div>
         </div>
       </div>
     </section>

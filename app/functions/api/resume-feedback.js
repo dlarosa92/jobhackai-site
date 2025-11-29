@@ -1,11 +1,19 @@
 // Resume Feedback endpoint
 // AI-powered section-by-section feedback with rule-based grammar scoring (no AI grammar verification)
+// Persists resume sessions and feedback to D1 for history
 
 import { getBearer, verifyFirebaseIdToken } from '../_lib/firebase-auth.js';
 import { generateATSFeedback } from '../_lib/openai-client.js';
 import { scoreResume } from '../_lib/ats-scoring-engine.js';
 import { errorResponse, successResponse, generateRequestId } from '../_lib/error-handler.js';
 import { sanitizeJobTitle, sanitizeResumeText, sanitizeResumeId } from '../_lib/input-sanitizer.js';
+import { 
+  getOrCreateUserByAuthId, 
+  createResumeSession, 
+  createFeedbackSession, 
+  logUsageEvent,
+  isD1Available 
+} from '../_lib/db.js';
 
 function corsHeaders(origin, env) {
   const allowedOrigins = [
@@ -207,6 +215,21 @@ export async function onRequest(context) {
     
     console.log('[RESUME-FEEDBACK] Effective plan:', { plan, effectivePlan, isDevEnvironment });
 
+    // --- D1 User Resolution (best effort, non-blocking) ---
+    // Resolve the authenticated user from D1 for session tracking
+    // This is done early so we have user_id for all D1 operations
+    let d1User = null;
+    if (isD1Available(env)) {
+      try {
+        // Note: We don't have email from Firebase token, but we can update it later if needed
+        d1User = await getOrCreateUserByAuthId(env, uid, null);
+        console.log('[RESUME-FEEDBACK] D1 user resolved:', { userId: d1User?.id, authId: uid });
+      } catch (d1Error) {
+        console.warn('[RESUME-FEEDBACK] D1 user resolution failed (non-blocking):', d1Error.message);
+        // Continue without D1 - history won't be saved but feedback will still work
+      }
+    }
+
     // Check plan access (Free plan locked)
     if (effectivePlan === 'free') {
       console.log('[RESUME-FEEDBACK] Access denied - plan is free', {
@@ -364,6 +387,10 @@ export async function onRequest(context) {
       
       // Update throttles and usage even for cache hits (prevents bypassing limits)
       await updateUsageCounters(uid, sanitizedResumeId, effectivePlan, env);
+      
+      // Skip D1 persistence for cache hits to prevent duplicate history entries
+      // History should only show unique analyses, not every cache hit
+      // The original analysis session was already persisted when the cache was created
       
       return successResponse({
         ...cachedResult,
@@ -694,11 +721,57 @@ export async function onRequest(context) {
     // Update throttles and usage counters (for cache misses)
     await updateUsageCounters(uid, sanitizedResumeId, effectivePlan, env);
 
+    // --- D1 Persistence (best effort, non-blocking) ---
+    // Persist resume session, feedback, and usage to D1 for history
+    let d1SessionId = null;
+    let d1CreatedAt = null;
+    if (d1User && isD1Available(env)) {
+      try {
+        // Create resume session
+        const resumeSession = await createResumeSession(env, d1User.id, {
+          title: normalizedJobTitle || null,  // Use job title as title for now
+          role: normalizedJobTitle || null,
+          rawTextLocation: `resume:${sanitizedResumeId}`
+        });
+        
+        if (resumeSession) {
+          d1SessionId = String(resumeSession.id);
+          d1CreatedAt = resumeSession.created_at;
+          
+          // Create feedback session with the full result
+          await createFeedbackSession(env, resumeSession.id, result);
+          
+          // Log usage event
+          await logUsageEvent(env, d1User.id, 'resume_feedback', tokenUsage || null, {
+            resumeSessionId: resumeSession.id,
+            plan: effectivePlan,
+            cached: false,
+            jobTitle: normalizedJobTitle || null
+          });
+          
+          console.log('[RESUME-FEEDBACK] D1 persistence complete:', { 
+            sessionId: d1SessionId, 
+            userId: d1User.id 
+          });
+        }
+      } catch (d1Error) {
+        console.error('[RESUME-FEEDBACK] D1 persistence failed (non-blocking):', d1Error.message);
+        // Continue - feedback still works, just won't be in history
+      }
+    }
+
     console.log('[RESUME-FEEDBACK] Success', { requestId, uid, resumeId: sanitizedResumeId, tokenUsage });
 
     return successResponse({
       tokenUsage: tokenUsage,
-      ...result
+      ...result,
+      // Add session metadata for history (additive - doesn't break existing response)
+      sessionId: d1SessionId,
+      meta: {
+        createdAt: d1CreatedAt || new Date().toISOString(),
+        title: normalizedJobTitle || null,
+        role: normalizedJobTitle || null
+      }
     }, 200, origin, env, requestId);
 
   } catch (error) {
