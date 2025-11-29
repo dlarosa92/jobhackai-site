@@ -1244,8 +1244,8 @@
         console.error('[IQ] Generate error:', error);
         if(holder) holder.innerHTML = '<div class="iq-question-card" style="text-align:center; color:#DC2626;">Something went wrong generating questions. Please try again.</div>';
         iqToast('Generation failed. Please try again.');
-      } finally {
-        // Re-enable and update button
+        // Re-enable and update button on error (cooldown not started)
+        // Note: On success, button remains disabled during cooldown (handled by iqStartGlobalCooldown)
         if (genBtn) {
           genBtn.disabled = false;
           genBtn.textContent = iqState.set ? 'New Question Set' : 'Generate 10 Questions';
