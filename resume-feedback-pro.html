@@ -1696,17 +1696,22 @@
               updateFeedbackGrid(feedbackResult.roleSpecificFeedback);
               updateRubricGridFromFeedback(feedbackResult.atsRubric);
 
-              const hasAtsScore = typeof scoreResult.score === 'number';
+              // Load cached score to check if ATS score exists
+              let cachedScore = null;
+              if (window.JobHackAIStatePersistence) {
+                cachedScore = window.JobHackAIStatePersistence.loadATSScore(null);
+              }
+              
+              const hasAtsScore = typeof cachedScore?.score === 'number';
               updateRoleTipsState({
                 hasAtsScore,
                 roleSpecificFeedback: feedbackResult.roleSpecificFeedback || null
               });
               
               // Save role-specific feedback to persistence
-              // Load cached score without job title validation to get existing ATS score
+              // Use cached score that was already loaded above
               // This allows updating feedback even when job title has changed
               if (window.JobHackAIStatePersistence) {
-                const cachedScore = window.JobHackAIStatePersistence.loadATSScore(null);
                 if (cachedScore && cachedScore.resumeId === currentResumeId) {
                   // Merge feedback text from atsRubric into breakdown
                   const updatedBreakdown = { ...cachedScore.breakdown };
@@ -2580,6 +2585,12 @@
             updateFeedbackGrid(feedbackResult.roleSpecificFeedback);
             updateRubricGridFromFeedback(feedbackResult.atsRubric);
 
+            // Load cached score to check if ATS score exists (must be loaded before use)
+            let cachedScore = null;
+            if (window.JobHackAIStatePersistence) {
+              cachedScore = window.JobHackAIStatePersistence.loadATSScore(null);
+            }
+            
             const hasAtsScore = !!(scoreResult?.success || cachedScore?.score);
             updateRoleTipsState({
               hasAtsScore,
@@ -2587,11 +2598,9 @@
             });
             
             // Save role-specific feedback to persistence
-            // Load cached score without job title validation to get existing ATS score
+            // Use cached score that was already loaded above
             // This allows updating feedback even when job title has changed
             if (window.JobHackAIStatePersistence) {
-              const cachedScore = window.JobHackAIStatePersistence.loadATSScore(null);
-              
               // Use updated score if role changed, otherwise use cached score
               const finalScore = scoreResult?.success ? scoreResult.score : (cachedScore?.score || 0);
               const finalBreakdown = scoreResult?.success ? scoreResult.breakdown : (cachedScore?.breakdown || {});
