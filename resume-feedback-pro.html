@@ -2193,6 +2193,13 @@
               updateFeedbackGrid(feedbackResult.roleSpecificFeedback);
               updateRubricGridFromFeedback(feedbackResult.atsRubric);
               
+              // Update role-specific tips state based on ATS score and feedback
+              const hasAtsScore = !!(scoreResult?.success && typeof scoreResult.score === 'number');
+              updateRoleTipsState({
+                hasAtsScore,
+                roleSpecificFeedback: feedbackResult.roleSpecificFeedback || null
+              });
+              
               // Save role-specific feedback to persistence
               if (window.JobHackAIStatePersistence && scoreResult.success) {
                 // RECONSTRUCT breakdown from atsRubric to ensure feedback is always included
