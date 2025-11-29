@@ -937,7 +937,13 @@
       // Show cooldown UI
       if (cooldownWrapper) { cooldownWrapper.style.display = 'inline-flex'; }
       if (cooldownHelper) { cooldownHelper.style.display = 'block'; }
-      if (g) { g.disabled = true; g.setAttribute('aria-disabled','true'); g.classList.add('is-disabled'); }
+      if (g) { 
+        g.disabled = true; 
+        g.setAttribute('aria-disabled','true'); 
+        g.classList.add('is-disabled');
+        // Restore button text immediately after successful generation (not wait for cooldown to end)
+        g.textContent = iqState.set ? 'New Question Set' : 'Generate 10 Questions';
+      }
       if (mi) { mi.disabled = true; mi.setAttribute('aria-disabled','true'); }
       
       clearInterval(iqState.timers.global);
@@ -1273,6 +1279,11 @@
         
         // If auth error occurred, iqApiGenerate returns null - don't proceed
         if (!res) {
+          // Restore button state before returning (auth error handling)
+          if (genBtn) {
+            genBtn.disabled = false;
+            genBtn.textContent = iqState.set ? 'New Question Set' : 'Generate 10 Questions';
+          }
           return;
         }
         
