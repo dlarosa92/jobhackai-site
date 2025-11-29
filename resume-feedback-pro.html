@@ -3135,7 +3135,7 @@
       wrapper.innerHTML = `${text} <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;margin-left:4px;vertical-align:middle;color:var(--color-text-muted);"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg> <span class="tooltip-text">Premium users get their resume analyzed first—faster results, prioritized AI review, and VIP support.</span>`;
       return wrapper;
     }
-
+    
     // --- Priority Review CTA (modular) ---
     function renderPriorityReviewCTA() {
       const cta = document.createElement('div');
@@ -3148,14 +3148,31 @@
       }, 0);
       return cta;
     }
-
-    // --- Insert Priority Review CTA below Resume Rewriting for Essential/Pro ---
+    
+    // --- Premium Priority Review note (no CTA) ---
+    function renderPremiumPriorityReviewNote() {
+      if (getCurrentUserPlan() !== 'premium') return;
+      const existing = document.getElementById('priority-review-premium-note');
+      if (existing) return;
+      
+      const rewriteTile = document.getElementById('rf-rewrite-tile');
+      if (rewriteTile && rewriteTile.parentNode) {
+        const note = document.createElement('div');
+        note.id = 'priority-review-premium-note';
+        note.style.marginTop = '0.75rem';
+        note.style.color = 'var(--color-text-secondary)';
+        note.style.fontSize = '0.9rem';
+        note.textContent = 'Priority Review is included in your Premium plan. When you request a human review, your resume is moved to the front of the queue.';
+        rewriteTile.parentNode.insertBefore(note, rewriteTile.nextSibling);
+      }
+    }
+    
+    // --- Insert Priority Review CTA / note below Resume Rewriting ---
     function updatePriorityReviewCTA() {
       // Remove any existing CTA (only show one Premium banner per page)
       const oldCta = document.getElementById('priority-review-cta-main');
       if (oldCta) oldCta.remove();
       
-      // Only show Priority Review CTA for Essential/Pro plans
       const plan = getCurrentUserPlan();
       if (plan === 'essential' || plan === 'pro') {
         // Insert Priority Review CTA after Resume Rewriting tile
@@ -3165,6 +3182,8 @@
           cta.id = 'priority-review-cta-main';
           rewriteTile.parentNode.insertBefore(cta, rewriteTile.nextSibling);
         }
+      } else if (plan === 'premium') {
+        renderPremiumPriorityReviewNote();
       }
     }
 
@@ -3223,6 +3242,12 @@
       const feedbackContent = document.getElementById('rf-feedback-content');
       const rewriteContent = document.getElementById('rf-rewrite-content');
       const plan = getCurrentUserPlan();
+      const roleDescEl = document.getElementById('rf-role-desc');
+      
+      // Cache base role description for later restores
+      if (roleDescEl && !roleDescEl.dataset.baseText) {
+        roleDescEl.dataset.baseText = roleDescEl.textContent || '';
+      }
 
       // Clean up old upgrade banners
       const cleanupOldBanners = () => {
@@ -3311,6 +3336,9 @@
           if (feedbackContent) {
             feedbackContent.style.display = 'block';
           }
+          if (roleDescEl) {
+            roleDescEl.textContent = 'Basic feedback on your resume\'s content and presentation for your target role. Upgrade to Pro for deeper analysis and richer AI suggestions.';
+          }
         }
         if (rewriteTile) {
           rewriteTile.querySelector('.rf-title .rf-plan-badge').textContent = 'Pro Feature';
@@ -3380,6 +3408,9 @@
               essentialNote.textContent = 'Your Essential plan includes 3 feedback runs per month.';
               feedbackTile.insertBefore(essentialNote, feedbackContent);
             }
+            if (roleDescEl) {
+              roleDescEl.textContent = 'Basic feedback on your resume\'s content and presentation for your target role. Upgrade to Pro for deeper analysis and richer AI suggestions.';
+            }
           }
         }
         if (rewriteTile) {
@@ -3433,6 +3464,9 @@
           if (feedbackContent) {
             feedbackContent.style.display = 'block';
             // Premium CTA removed - already exists at bottom of page
+          }
+          if (roleDescEl) {
+            roleDescEl.textContent = 'Comprehensive feedback on your resume\'s content and presentation for your target role, with AI-powered suggestions tailored to the jobs you\'re targeting.';
           }
         }
         if (rewriteTile) {
