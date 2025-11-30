@@ -1010,7 +1010,8 @@
       timers: { global:null, perQ:{}, notes:{}, toast:null },
       notes: {},
       recents: [],
-      replaceCounts: {} // Track per-question replace counts (TASK 10B)
+      replaceCounts: {}, // Track per-question replace counts (TASK 10B)
+      dailyLimitReached: false // Track if daily limit has been reached
     };
 
     // Utils & persistence
@@ -1033,6 +1034,22 @@
       iqState.timers.toast = setTimeout(()=> el.classList.remove('show'), 1600);
     }
     function iqEsc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
+    // Helper to disable all question generation buttons when daily limit is reached
+    function iqDisableAllButtons(){
+      iqState.dailyLimitReached = true;
+      // Disable generate button
+      const genBtn = $IQ('#btn-generate');
+      if (genBtn) {
+        genBtn.disabled = true;
+        genBtn.setAttribute('aria-disabled', 'true');
+      }
+      // Disable all replace buttons
+      $$IQ('.btn-replace').forEach(btn => {
+        btn.disabled = true;
+        btn.setAttribute('aria-disabled', 'true');
+        btn.setAttribute('data-tip', 'Daily limit reached for your plan.');
+      });
+    }
     function iqTrack(event, data={}){
       const payload = { event, ts: iqNow(), role: iqState?.set?.role || $IQ('#iq-role')?.value || '', seniority: iqState.prefs.seniority, types: [...iqState.prefs.types], count: iqState.prefs.count, used_jd: !!$IQ('#iq-jd')?.value?.trim(), ...data };
       console.log('[iq-analytics]', payload);
@@ -1147,19 +1164,28 @@
       }, 1000);
     }
     function iqStartPerQCooldown(i){
-      const k = `q${i}`, btn = $IQ(`.btn-replace[data-idx="${i}"]`);
-      if (!btn) return; btn.disabled = true;
+      const k = `q${i}`;
+      // Look up button initially to ensure it exists
+      const initialBtn = $IQ(`.btn-replace[data-idx="${i}"]`);
+      if (!initialBtn) return; 
+      initialBtn.disabled = true;
       clearInterval(iqState.timers.perQ[k]);
       let t = IQ_PER_Q_REPLACE_COOLDOWN;
       const tick = ()=>{ 
-        if(!btn) return; 
+        // Look up button fresh each tick to handle DOM re-renders
+        const btn = $IQ(`.btn-replace[data-idx="${i}"]`);
+        if(!btn) {
+          // Button no longer exists, clean up timer
+          clearInterval(iqState.timers.perQ[k]);
+          return;
+        }
         btn.setAttribute('data-timer', String(t)); 
         t--; 
         if(t<0){ 
           btn.removeAttribute('data-timer'); 
-          // Check if button should remain disabled due to max replace limit
+          // Check if button should remain disabled due to max replace limit or daily limit
           const replaceCount = (iqState.replaceCounts && iqState.replaceCounts[i]) || 0;
-          if (replaceCount < IQ_MAX_REPLACES) {
+          if (replaceCount < IQ_MAX_REPLACES && !iqState.dailyLimitReached) {
             btn.disabled = false;
           }
           clearInterval(iqState.timers.perQ[k]); 
@@ -1231,8 +1257,9 @@
         // Use original index for starred questions lookup
         const savedPressed = (typeof iqIsSaved === 'function' ? (iqIsSaved(origIdx) ? 'true' : 'false') : 'false');
         const replaceCount = (iqState.replaceCounts && iqState.replaceCounts[origIdx]) || 0;
-        const replaceDisabled = replaceCount >= IQ_MAX_REPLACES;
-        const replaceTip = replaceDisabled ? 'Max replacements reached for this question. Generate a new set if you\'re still not happy.' : 'New Question';
+        const replaceDisabled = replaceCount >= IQ_MAX_REPLACES || iqState.dailyLimitReached;
+        const replaceTip = iqState.dailyLimitReached ? 'Daily limit reached for your plan.' : 
+                          replaceDisabled ? 'Max replacements reached for this question. Generate a new set if you\'re still not happy.' : 'New Question';
         return `<div class="iq-question-card" data-idx="${origIdx}" data-display-idx="${displayIdx}">
   <div class="iq-qtext">${displayIdx+1}. ${qText}</div>
   <div class="iq-qactions" aria-label="Question actions">
@@ -1267,6 +1294,11 @@
   </div>
 </div>`;
       }).join('');
+      
+      // If daily limit was reached, ensure all buttons remain disabled after re-render
+      if (iqState.dailyLimitReached) {
+        iqDisableAllButtons();
+      }
     }
     function iqRenderRecents(){ const box=$IQ('#iq-recents'); if(!box) return; const recents=JSON.parse(localStorage.getItem('iq_recent_sets')||'[]'); if(recents.length===0){ box.innerHTML='<div class="empty">No recent sets yet.</div>'; return; } box.innerHTML=recents.map(r=>`<button class=\"recent-item\" data-id=\"${r.id}\"><div class=\"ri-role\">${r.role}</div><div class=\"ri-meta\">${r.count} Q • ${new Date(r.time).toLocaleString()}</div></button>`).join(''); }
     function iqUpdateGuidanceUI(){ const t=$IQ('#toggle-guidance'); if(t){ t.setAttribute('aria-pressed', String(iqState.prefs.showGuidance)); t.textContent = iqState.prefs.showGuidance ? 'Hide Answer Guidance' : 'Show Answer Guidance'; if(iqState.prefs.showGuidance){ t.classList.add('is-pressed'); } else { t.classList.remove('is-pressed'); } } iqRenderQuestions(); }
@@ -1405,12 +1437,8 @@
                            getUserPlan() === 'essential' ? 'Essential' :
                            getUserPlan() === 'pro' ? 'Pro' : 'Premium';
             iqToast(`You've reached today's Interview Questions limit for your ${planName} plan. You can still practice with your existing sets, or upgrade for higher limits.`);
-            // Disable generate button
-            const genBtn = $IQ('#btn-generate');
-            if (genBtn) {
-              genBtn.disabled = true;
-              genBtn.setAttribute('aria-disabled', 'true');
-            }
+            // Disable all buttons (generate + replace) since daily quota applies to all operations
+            iqDisableAllButtons();
             throw new Error('Daily limit reached');
           }
           
@@ -1657,12 +1685,8 @@
                            getUserPlan() === 'essential' ? 'Essential' :
                            getUserPlan() === 'pro' ? 'Pro' : 'Premium';
             iqToast(`You've reached today's Interview Questions limit for your ${planName} plan. You can still practice with your existing sets, or upgrade for higher limits.`);
-            // Disable all replace buttons
-            $$IQ('.btn-replace').forEach(btn => {
-              btn.disabled = true;
-              btn.setAttribute('aria-disabled', 'true');
-              btn.setAttribute('data-tip', 'Daily limit reached for your plan.');
-            });
+            // Disable all buttons (generate + replace) since daily quota applies to all operations
+            iqDisableAllButtons();
             return;
           }
           
