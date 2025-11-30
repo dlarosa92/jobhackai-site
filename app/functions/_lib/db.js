@@ -347,3 +347,79 @@ export async function getInterviewQuestionSetsByUser(env, userId, { limit = 10 }
   }
 }
 
+// ============================================================
+// FEATURE DAILY USAGE HELPERS
+// ============================================================
+
+/**
+ * Get daily usage count for a feature
+ * @param {Object} env - Cloudflare environment with DB binding
+ * @param {number} userId - User ID from users table
+ * @param {string} feature - Feature name (e.g., 'interview_questions')
+ * @returns {Promise<number>} Current usage count for today
+ */
+export async function getFeatureDailyUsage(env, userId, feature) {
+  if (!env.DB) {
+    console.warn('[DB] D1 binding not available');
+    return 0;
+  }
+
+  try {
+    const today = new Date().toISOString().slice(0, 10); // 'YYYY-MM-DD' UTC
+    const row = await env.DB.prepare(
+      `SELECT count FROM feature_daily_usage
+       WHERE user_id = ? AND feature = ? AND usage_date = ?`
+    ).bind(userId, feature, today).first();
+
+    return row ? row.count : 0;
+  } catch (error) {
+    console.error('[DB] Error in getFeatureDailyUsage:', error);
+    return 0;
+  }
+}
+
+/**
+ * Increment daily usage count for a feature
+ * @param {Object} env - Cloudflare environment with DB binding
+ * @param {number} userId - User ID from users table
+ * @param {string} feature - Feature name (e.g., 'interview_questions')
+ * @param {number} incrementBy - Amount to increment (default 1)
+ * @returns {Promise<number>} New total count after increment
+ */
+export async function incrementFeatureDailyUsage(env, userId, feature, incrementBy = 1) {
+  if (!env.DB) {
+    console.warn('[DB] D1 binding not available');
+    return incrementBy;
+  }
+
+  try {
+    const today = new Date().toISOString().slice(0, 10); // 'YYYY-MM-DD' UTC
+    
+    // Use INSERT ... ON CONFLICT pattern (SQLite supports this)
+    const result = await env.DB.prepare(
+      `INSERT INTO feature_daily_usage (user_id, feature, usage_date, count)
+       VALUES (?, ?, ?, ?)
+       ON CONFLICT(user_id, feature, usage_date)
+       DO UPDATE SET count = count + excluded.count,
+                     updated_at = datetime('now')
+       RETURNING count`
+    ).bind(userId, feature, today, incrementBy).first();
+
+    if (result && result.count !== undefined) {
+      return result.count;
+    }
+    
+    // Fallback: if RETURNING doesn't work, fetch separately
+    const row = await env.DB.prepare(
+      `SELECT count FROM feature_daily_usage
+       WHERE user_id = ? AND feature = ? AND usage_date = ?`
+    ).bind(userId, feature, today).first();
+
+    return row ? row.count : incrementBy;
+  } catch (error) {
+    console.error('[DB] Error in incrementFeatureDailyUsage:', error);
+    // On error, return incrementBy as a safe fallback
+    return incrementBy;
+  }
+}
+

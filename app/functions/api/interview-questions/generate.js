@@ -5,7 +5,7 @@
 import { getBearer, verifyFirebaseIdToken } from '../../_lib/firebase-auth.js';
 import { callOpenAI } from '../../_lib/openai-client.js';
 import { errorResponse, successResponse, generateRequestId } from '../../_lib/error-handler.js';
-import { getOrCreateUserByAuthId, isD1Available } from '../../_lib/db.js';
+import { getOrCreateUserByAuthId, isD1Available, getFeatureDailyUsage, incrementFeatureDailyUsage } from '../../_lib/db.js';
 
 // Fixed question count for all requests
 const IQ_FIXED_COUNT = 10;
@@ -228,7 +228,7 @@ export async function onRequest(context) {
             origin,
             env,
             requestId,
-            { retryAfter }
+            { retryAfter, reason: 'cooldown' }
           );
         }
       }
@@ -242,7 +242,7 @@ export async function onRequest(context) {
       return errorResponse('Invalid JSON in request body', 400, origin, env, requestId);
     }
 
-    const { role, seniority, types, jd } = body;
+    const { role, seniority, types, jd, mode, replaceIndex } = body;
 
     // Validate role
     if (!role || typeof role !== 'string' || role.trim().length === 0) {
@@ -255,12 +255,46 @@ export async function onRequest(context) {
       ? types.filter(t => validTypes.includes(t))
       : ['behavioral', 'technical'];
 
+    // Determine count based on mode
+    const requestedCount = mode === 'replace' ? 1 : IQ_FIXED_COUNT;
+
+    // Check D1 availability and get/create user for daily quota tracking
+    let d1User = null;
+    if (isD1Available(env)) {
+      d1User = await getOrCreateUserByAuthId(env, uid, userEmail);
+    }
+
+    // Daily quota check (D1-backed)
+    const FEATURE = 'interview_questions';
+    const PLAN_LIMITS = {
+      trial: 40,
+      essential: 80,
+      pro: 150,
+      premium: 250
+    };
+
+    if (d1User && PLAN_LIMITS[effectivePlan]) {
+      const dailyLimit = PLAN_LIMITS[effectivePlan];
+      const used = await getFeatureDailyUsage(env, d1User.id, FEATURE);
+      
+      if (used >= dailyLimit) {
+        return errorResponse(
+          'Daily Interview Questions limit reached for your plan.',
+          429,
+          origin,
+          env,
+          requestId,
+          { reason: 'daily_limit', limit: dailyLimit, used }
+        );
+      }
+    }
+
     // Generate questions
     const result = await generateQuestions({
       role: role.trim(),
       seniority: seniority || '',
       types: sanitizedTypes,
-      count: IQ_FIXED_COUNT,
+      count: requestedCount,
       jd: jd || ''
     }, env);
 
@@ -271,6 +305,11 @@ export async function onRequest(context) {
       questionCount: result.questions?.length || 0,
       tokenUsage: result.tokenUsage
     });
+
+    // Increment daily usage quota after successful generation
+    if (d1User && PLAN_LIMITS[effectivePlan]) {
+      await incrementFeatureDailyUsage(env, d1User.id, FEATURE, 1);
+    }
 
     // Set cooldown after successful generation
     if (env.JOBHACKAI_KV) {
