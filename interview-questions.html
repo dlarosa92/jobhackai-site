@@ -1151,7 +1151,20 @@
       if (!btn) return; btn.disabled = true;
       clearInterval(iqState.timers.perQ[k]);
       let t = IQ_PER_Q_REPLACE_COOLDOWN;
-      const tick = ()=>{ if(!btn) return; btn.setAttribute('data-timer', String(t)); t--; if(t<0){ btn.removeAttribute('data-timer'); btn.disabled=false; clearInterval(iqState.timers.perQ[k]); } };
+      const tick = ()=>{ 
+        if(!btn) return; 
+        btn.setAttribute('data-timer', String(t)); 
+        t--; 
+        if(t<0){ 
+          btn.removeAttribute('data-timer'); 
+          // Check if button should remain disabled due to max replace limit
+          const replaceCount = (iqState.replaceCounts && iqState.replaceCounts[i]) || 0;
+          if (replaceCount < IQ_MAX_REPLACES) {
+            btn.disabled = false;
+          }
+          clearInterval(iqState.timers.perQ[k]); 
+        } 
+      };
       tick();
       iqState.timers.perQ[k] = setInterval(tick, 1000);
     }
@@ -1427,6 +1440,11 @@
           return null;
         }
         
+        // Daily limit errors already handled above - return special marker
+        if (e.message === 'Daily limit reached') {
+          return { dailyLimitReached: true };
+        }
+        
         // Log error for monitoring
         console.error('[IQ] API generation failed:', {
           error: e.message,
@@ -1507,6 +1525,11 @@
             genBtn.disabled = false;
             genBtn.textContent = iqState.set ? 'New Question Set' : 'Generate 10 Questions';
           }
+          return;
+        }
+        
+        // If daily limit reached, button should remain disabled - don't proceed
+        if (res.dailyLimitReached) {
           return;
         }
         
