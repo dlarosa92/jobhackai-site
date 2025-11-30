@@ -169,11 +169,21 @@
     .cooldown-badge { padding:.3rem .5rem; border-radius:8px; border:1px solid #E5E7EB; font-size:.9rem; color:#4B5563; }
     .skeleton { height:56px; border-radius:16px; background:linear-gradient(90deg,#f3f4f6 25%,#eceff3 37%,#f3f4f6 63%); background-size:400% 100%; animation:sheen 1.2s ease-in-out infinite; }
     @keyframes sheen { 0%{background-position:100% 0} 100%{background-position:0 0} }
-    .iq-qactions { display:flex; gap:.4rem; visibility:hidden; pointer-events:auto; margin-bottom:.6rem; }
+    .iq-qactions { 
+      display:flex; 
+      gap:.4rem; 
+      opacity: 0.5;
+      pointer-events:auto; 
+      margin-bottom:.6rem;
+      transition: opacity 0.15s ease;
+    }
     .iq-question-card:hover .iq-qactions,
-    .iq-question-card:focus-within .iq-qactions { visibility:visible; }
+    .iq-question-card:focus-within .iq-qactions { 
+      opacity: 1;
+    }
     .iq-qactions .icon-btn { pointer-events:auto; position:relative; z-index:1; }
-    .icon-btn { border:1px solid #E5E7EB; background:#fff; border-radius:8px; padding:.3rem .45rem; cursor:pointer; }
+    .icon-btn { border:1px solid #E5E7EB; background:#fff; border-radius:8px; padding:.3rem .45rem; cursor:pointer; transition: opacity 0.15s ease; }
+    .icon-btn:disabled { opacity: 0.4; cursor: not-allowed; }
     .link-btn { background:none; border:none; color:#007BFF; cursor:pointer; text-decoration:underline; padding:0 .25rem; }
     .iq-example { margin:.5rem 0 0 0; color:#4B5563; }
     .iq-types { display:flex; gap:.4rem; flex-wrap:wrap; }
@@ -181,8 +191,6 @@
     .ri-role { font-weight:600; }
     .ri-meta { color:#6B7280; font-size:.9rem; }
     .cta-hint { flex-basis:100%; font-size:.9rem; color:#6B7280; margin-top:.25rem; }
-    #iq-toast { position:fixed; bottom:20px; left:50%; transform:translateX(-50%); background:#1F2937; color:#fff; padding:.75rem 1rem; border-radius:8px; font-size:.9rem; z-index:9999; opacity:0; pointer-events:none; transition:opacity 0.3s ease; }
-    #iq-toast.show { opacity:1; }
     .btn-save svg { fill:none; stroke:#6B7280; stroke-width:1.5; }
     /* Stronger selectors to beat any theme overrides */
     .iq-qactions .btn-save[aria-pressed="true"] svg,
@@ -255,7 +263,15 @@
     .btn-outline.is-pressed { background:#F3F4F6; }
     .btn-primary[disabled], .btn-outline[disabled] { opacity:.5; cursor:not-allowed; pointer-events:none; }
     .iq-question-card { border:1px solid #E5E7EB; box-shadow:0 1px 4px rgba(31,41,55,.05); border-radius:16px; padding:1.1rem 1.2rem; }
-    .lock { vertical-align:baseline; position:relative; top:.02em; }
+    .lock { 
+      vertical-align: middle; 
+      display: inline-flex;
+      align-items: center;
+      margin-left: 0.35rem;
+    }
+    .lock svg {
+      color: #4B5563;
+    }
 
     /* Question Type chips: clearer selected/focus states */
     .iq-types .chip { transition: background-color .15s ease, border-color .15s ease, color .15s ease; }
@@ -286,7 +302,7 @@
       .iq-field { min-width:100%; } 
       .iq-toolbar .iq-row > div:nth-child(2) { min-width:48%; } 
       .iq-types { gap:.6rem .6rem; min-width:100%; } 
-      .iq-qactions { visibility:visible; } 
+      .iq-qactions { opacity: 1; } 
       .iq-actions .btn-primary, .iq-actions .btn-outline { min-height:44px; width:auto; } 
     }
 
@@ -344,13 +360,44 @@
     .icon-btn[data-tip]:hover::before,
     .icon-btn[data-tip]:focus-visible::before { opacity: 1; }
     /* Notes section spacing */
-    .iq-notes { margin-top: .8rem; }
+    .iq-notes { 
+      margin-top: .8rem; 
+      padding-top: .75rem;
+      border-top: 1px solid #E5E7EB;
+    }
+    .iq-notes-label {
+      display: block;
+      font-size: 0.85rem;
+      font-weight: 500;
+      color: #6B7280;
+      margin-bottom: 0.4rem;
+    }
+    .iq-notes textarea {
+      width: 100%;
+      border: 1.5px solid #E5E7EB;
+      border-radius: 8px;
+      padding: 0.6rem 0.75rem;
+      font-size: 0.9rem;
+      font-family: inherit;
+      line-height: 1.5;
+      color: #1F2937;
+      background: #fff;
+      resize: vertical;
+      transition: border-color 0.15s ease;
+      box-sizing: border-box;
+    }
+    .iq-notes textarea:focus {
+      outline: none;
+      border-color: #1976D2;
+    }
 
-    /* Plan strip styling */
+    /* Plan strip styling - matches dashboard style */
     .iq-plan-strip {
       display: flex;
       align-items: center;
       justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 0.75rem;
       background: linear-gradient(135deg, #F8FAFC 0%, #EEF2FF 100%);
       border: 1px solid #E5E7EB;
       border-radius: 10px;
@@ -359,37 +406,81 @@
       font-size: 0.95rem;
       color: #374151;
     }
-    .iq-plan-strip .plan-name {
-      font-weight: 600;
-      color: #1F2937;
+    .iq-plan-strip .plan-info {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      flex-wrap: wrap;
+    }
+    /* Reuse dashboard plan badge styles */
+    .iq-plan-strip .user-plan-badge {
+      font-size: 1.05rem;
+      font-weight: 700;
+      border-radius: 999px;
+      padding: 0.22rem 1.1rem 0.22rem 0.8rem;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4em;
+      background: #FFF7E6;
+      color: #FF9100;
+      box-shadow: 0 1px 4px rgba(31,41,55,0.06);
+    }
+    .iq-plan-strip .user-plan-badge.trial {
+      color: #FF9100;
+      background: #FFF7E6;
+    }
+    .iq-plan-strip .user-plan-badge.essential {
+      color: #0077B5;
+      background: #E3F2FD;
+    }
+    .iq-plan-strip .user-plan-badge.pro {
+      color: #388E3C;
+      background: #E8F5E9;
+    }
+    .iq-plan-strip .user-plan-badge.premium {
+      color: #C62828;
+      background: #FFEBEE;
+    }
+    .iq-plan-strip .user-plan-badge.free {
+      color: #6B7280;
+      background: #F3F4F6;
     }
     .iq-plan-strip .plan-features {
       display: flex;
       align-items: center;
       gap: 0.75rem;
+      flex-wrap: wrap;
     }
     .iq-plan-strip .feature-tag {
       display: inline-flex;
       align-items: center;
-      gap: 0.25rem;
+      gap: 0.35rem;
+      font-size: 0.9rem;
+      color: #4B5563;
     }
-    .iq-plan-strip .feature-unlocked {
-      color: #059669;
-    }
-    .iq-plan-strip .feature-locked {
-      color: #DC2626;
+    .iq-plan-strip .feature-tag svg {
+      width: 16px;
+      height: 16px;
+      stroke: currentColor;
+      stroke-width: 2;
+      flex-shrink: 0;
     }
     .iq-plan-strip .upgrade-link {
       color: #007BFF;
       text-decoration: none;
       font-weight: 500;
+      cursor: pointer;
+      transition: color 0.15s ease;
     }
     .iq-plan-strip .upgrade-link:hover {
+      color: #0056b3;
       text-decoration: underline;
     }
     .iq-plan-strip .info-icon {
       cursor: help;
       color: #6B7280;
+      display: inline-flex;
+      align-items: center;
     }
 
     /* Selection summary styling */
@@ -397,8 +488,8 @@
       background: #F0FDF4;
       border: 1px solid #BBF7D0;
       border-radius: 8px;
-      padding: 0.5rem 0.75rem;
-      margin-bottom: 1rem;
+      padding: 0.75rem 1rem;
+      margin-bottom: 1.25rem;
       font-size: 0.9rem;
       color: #166534;
       display: flex;
@@ -407,8 +498,22 @@
     }
     .iq-selection-summary.no-selection {
       background: #FEF3C7;
-      border-color: #FCD34D;
+      border: 1px solid #FCD34D;
       color: #92400E;
+    }
+    /* Empty state */
+    .iq-empty-state {
+      text-align: center;
+      padding: 3rem 1.5rem;
+      color: #6B7280;
+      font-size: 1rem;
+      line-height: 1.6;
+    }
+    .iq-empty-state strong {
+      color: #1F2937;
+      display: block;
+      margin-bottom: 0.5rem;
+      font-size: 1.1rem;
     }
 
     /* Action bar layout for funnel */
@@ -561,12 +666,12 @@
 
     <!-- Plan Strip -->
     <div id="iq-plan-strip" class="iq-plan-strip" style="display:none;">
-      <span class="plan-info">
-        <span class="plan-name" id="plan-name-display">Loading...</span>
+      <div class="plan-info">
+        <span id="plan-badge-container"></span>
         <span class="plan-features" id="plan-features-display"></span>
-      </span>
+      </div>
       <a href="pricing-a.html" class="upgrade-link" id="plan-upgrade-link" style="display:none;">
-        Upgrade <span class="info-icon" title="View all plans">ⓘ</span>
+        Upgrade <span class="info-icon" title="Mock Interviews are available on Pro & Premium plans.">ⓘ</span>
       </a>
     </div>
 
@@ -611,10 +716,14 @@
       </div>
 
       <!-- First-time visitor hint banner -->
-      <div id="iq-first-hint" class="iq-hint-banner" style="display:none; margin-top:1rem; padding:0.75rem 1rem; background:#EFF6FF; border:1px solid #BFDBFE; border-radius:10px; color:#1E40AF; font-size:0.9rem;">
-        <span>💡 <strong>Tip:</strong> Star the questions you care about most, then use 'Start Mock Interview' to practice them live.</span>
-        <button type="button" class="icon-btn" aria-label="Dismiss" onclick="this.parentElement.style.display='none'; try{localStorage.setItem('iq_first_visit_shown','true');}catch{}" style="float:right; margin-left:0.5rem; padding:0.25rem; background:transparent; border:none; color:#1E40AF; cursor:pointer;">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      <div id="iq-first-hint" class="iq-hint-banner" style="display:none; margin-top:1rem; padding:0.75rem 1rem; background:#EFF6FF; border:1px solid #BFDBFE; border-radius:10px; color:#1E40AF; font-size:0.9rem; display:flex; align-items:center; gap:0.5rem;">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;">
+          <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/>
+          <circle cx="12" cy="12" r="4"/>
+        </svg>
+        <span style="flex:1;"><strong>Tip:</strong> Star the questions you care about most, then use 'Start Mock Interview' to practice them live.</span>
+        <button type="button" class="icon-btn" aria-label="Dismiss" onclick="this.parentElement.style.display='none'; try{localStorage.setItem('iq_first_visit_shown','true');}catch{}" style="flex-shrink:0; padding:0.25rem; min-width:24px; min-height:24px; display:flex; align-items:center; justify-content:center; background:transparent; border:none; color:#1E40AF; cursor:pointer; transition:opacity 0.15s ease;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
         </button>
       </div>
 
@@ -647,7 +756,10 @@
           <button id="btn-mock" class="btn-mock-cta" data-locked="false">
             Start Mock Interview
             <span class="lock" id="mock-lock-icon" aria-hidden="true" style="display:none;">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V8a4 4 0 0 1 8 0v2"/></svg>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="5" y="11" width="14" height="10" rx="2"/>
+                <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+              </svg>
             </span>
           </button>
         </div>
@@ -669,7 +781,10 @@
     </div>
 
     <div id="iq-lock" class="iq-lock" style="display:none;">
-      <svg width="20" height="20" fill="none" stroke="#1F2937" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><path d="M4 9V7a6 6 0 1112 0v2"/><rect x="4" y="9" width="12" height="9" rx="2"/></svg>
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg">
+        <rect x="5" y="11" width="14" height="10" rx="2"/>
+        <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+      </svg>
       <span>Mock Interviews are only available on the <strong>Pro</strong> plan and above</span>
     </div>
     <button id="iq-upgrade" class="iq-upgrade-btn" style="display:none;">Upgrade to Pro</button>
@@ -896,12 +1011,23 @@
       cooldown: 0,
       timers: { global:null, perQ:{}, notes:{}, toast:null },
       notes: {},
-      recents: []
+      recents: [],
+      replaceCounts: {}, // Track per-question replace counts (TASK 10B)
+      dailyLimitReached: false // Track if daily limit has been reached
     };
 
     // Utils & persistence
     const iqNow = ()=> new Date().toISOString();
     const iqSetId = (role, seed)=> `${role}:${seed}`;
+    // Helper to safely convert types (Set, Array, or empty object) to array
+    const iqTypesToArray = (types, fallback = []) => {
+      if (!types) return fallback;
+      if (types instanceof Set) return Array.from(types);
+      if (Array.isArray(types)) return types;
+      // Handle empty object case (from old serialized Sets)
+      if (typeof types === 'object' && Object.keys(types).length === 0) return fallback;
+      return fallback;
+    };
     function iqToast(msg){
       console.log('[iq-toast]', msg);
       const el = document.getElementById('iq-toast');
@@ -910,6 +1036,24 @@
       iqState.timers.toast = setTimeout(()=> el.classList.remove('show'), 1600);
     }
     function iqEsc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
+    // Helper to disable all question generation buttons when daily limit is reached
+    function iqDisableAllButtons(){
+      iqState.dailyLimitReached = true;
+      // Disable generate button
+      const genBtn = $IQ('#btn-generate');
+      if (genBtn) {
+        genBtn.disabled = true;
+        genBtn.setAttribute('aria-disabled', 'true');
+        // Update button text to indicate daily limit reached (instead of leaving "Generating...")
+        genBtn.textContent = 'Daily Limit Reached';
+      }
+      // Disable all replace buttons
+      $$IQ('.btn-replace').forEach(btn => {
+        btn.disabled = true;
+        btn.setAttribute('aria-disabled', 'true');
+        btn.setAttribute('data-tip', 'Daily limit reached for your plan.');
+      });
+    }
     function iqTrack(event, data={}){
       const payload = { event, ts: iqNow(), role: iqState?.set?.role || $IQ('#iq-role')?.value || '', seniority: iqState.prefs.seniority, types: [...iqState.prefs.types], count: iqState.prefs.count, used_jd: !!$IQ('#iq-jd')?.value?.trim(), ...data };
       console.log('[iq-analytics]', payload);
@@ -921,8 +1065,58 @@
     function iqSaveNotes(){ if (!iqState.set) return; localStorage.setItem(`iq_notes_${iqSetId(iqState.set.role, iqState.set.seed)}`, JSON.stringify(iqState.notes)); }
     function iqLoadNotes(){ if (!iqState.set) return; try{ iqState.notes=JSON.parse(localStorage.getItem(`iq_notes_${iqSetId(iqState.set.role, iqState.set.seed)}`)||'{}'); }catch{ iqState.notes={}; } }
     function iqAddRecent(meta){ iqState.recents = JSON.parse(localStorage.getItem('iq_recent_sets')||'[]'); iqState.recents.unshift(meta); iqState.recents = iqState.recents.slice(0, IQ_RECENT_LIMIT); localStorage.setItem('iq_recent_sets', JSON.stringify(iqState.recents)); }
-    function iqSaveSetFull(setObj){ try{ const id=iqSetId(setObj.role,setObj.seed); localStorage.setItem(`iq_set_${id}`, JSON.stringify(setObj)); }catch(e){ console.warn('save set failed',e);} }
-    function iqLoadSetById(id){ try{ const raw=localStorage.getItem(`iq_set_${id}`); if(!raw){ iqToast('Previous set not found'); return; } const set=JSON.parse(raw); iqState.set=set; iqLoadNotes(); iqRenderQuestions(); iqUpdateSavedChip(); iqRevealSecondaryActions(); iqUpdateActionsLayout(); const savedPanel=$IQ('#iq-saved-panel'); if(savedPanel) savedPanel.hidden=true; $$IQ('.recent-item').forEach(b=> b.classList.toggle('is-active', b.getAttribute('data-id')===id)); window.scrollTo({top:0,behavior:'smooth'}); iqToast('Loaded previous set'); iqTrack('iq_recent_loaded',{ id }); }catch(e){ console.warn('load set failed',e); iqToast('Could not load set'); } }
+    function iqSaveSetFull(setObj){ 
+      try{ 
+        const id=iqSetId(setObj.role,setObj.seed); 
+        // Convert Set to array for JSON serialization and include replaceCounts
+        const toSave = {
+          ...setObj,
+          types: Array.from(setObj.types || []),
+          replaceCounts: iqState.replaceCounts || {}
+        };
+        localStorage.setItem(`iq_set_${id}`, JSON.stringify(toSave)); 
+      }catch(e){ 
+        console.warn('save set failed',e);
+      }
+    }
+    function iqLoadSetById(id){ 
+      try{ 
+        const raw=localStorage.getItem(`iq_set_${id}`); 
+        if(!raw){ 
+          iqToast('Previous set not found'); 
+          return; 
+        } 
+        const set=JSON.parse(raw); 
+        // Convert types array back to Set and restore replaceCounts
+        // Handle both new format (array) and old format (empty object from serialized Set)
+        if(Array.isArray(set.types) && set.types.length > 0){
+          set.types = new Set(set.types);
+        } else if(!set.types || (typeof set.types === 'object' && Object.keys(set.types).length === 0)){
+          set.types = new Set(['behavioral', 'technical']);
+        } else if(set.types instanceof Set){
+          // Already a Set, keep it
+        } else {
+          // Fallback for any other case
+          set.types = new Set(['behavioral', 'technical']);
+        }
+        iqState.set=set; 
+        iqState.replaceCounts = set.replaceCounts || {}; 
+        iqLoadNotes(); 
+        iqRenderQuestions(); 
+        iqUpdateSavedChip(); 
+        iqRevealSecondaryActions(); 
+        iqUpdateActionsLayout(); 
+        const savedPanel=$IQ('#iq-saved-panel'); 
+        if(savedPanel) savedPanel.hidden=true; 
+        $$IQ('.recent-item').forEach(b=> b.classList.toggle('is-active', b.getAttribute('data-id')===id)); 
+        window.scrollTo({top:0,behavior:'smooth'}); 
+        iqToast('Loaded previous set'); 
+        iqTrack('iq_recent_loaded',{ id }); 
+      }catch(e){ 
+        console.warn('load set failed',e); 
+        iqToast('Could not load set'); 
+      } 
+    }
 
     // Cooldowns
     function iqStartGlobalCooldown(sec=IQ_GLOBAL_COOLDOWN){
@@ -974,18 +1168,65 @@
       }, 1000);
     }
     function iqStartPerQCooldown(i){
-      const k = `q${i}`, btn = $IQ(`.btn-replace[data-idx="${i}"]`);
-      if (!btn) return; btn.disabled = true;
+      const k = `q${i}`;
+      // Look up button initially to ensure it exists
+      const initialBtn = $IQ(`.btn-replace[data-idx="${i}"]`);
+      if (!initialBtn) return; 
+      initialBtn.disabled = true;
       clearInterval(iqState.timers.perQ[k]);
       let t = IQ_PER_Q_REPLACE_COOLDOWN;
-      const tick = ()=>{ if(!btn) return; btn.setAttribute('data-timer', String(t)); t--; if(t<0){ btn.removeAttribute('data-timer'); btn.disabled=false; clearInterval(iqState.timers.perQ[k]); } };
+      const tick = ()=>{ 
+        // Look up button fresh each tick to handle DOM re-renders
+        const btn = $IQ(`.btn-replace[data-idx="${i}"]`);
+        if(!btn) {
+          // Button no longer exists, clean up timer
+          clearInterval(iqState.timers.perQ[k]);
+          return;
+        }
+        btn.setAttribute('data-timer', String(t)); 
+        t--; 
+        if(t<0){ 
+          btn.removeAttribute('data-timer'); 
+          // Check if button should remain disabled due to max replace limit or daily limit
+          const replaceCount = (iqState.replaceCounts && iqState.replaceCounts[i]) || 0;
+          if (replaceCount < IQ_MAX_REPLACES && !iqState.dailyLimitReached) {
+            btn.disabled = false;
+          }
+          clearInterval(iqState.timers.perQ[k]); 
+        } 
+      };
       tick();
       iqState.timers.perQ[k] = setInterval(tick, 1000);
+    }
+    function iqStopPerQCooldown(i){
+      const k = `q${i}`, btn = $IQ(`.btn-replace[data-idx="${i}"]`);
+      if (!btn) return;
+      clearInterval(iqState.timers.perQ[k]);
+      btn.removeAttribute('data-timer');
+      btn.disabled = false;
+    }
+
+    // Helper function to get valid questions (filters out invalid ones)
+    function iqGetValidQuestions() {
+      if (!iqState.set || !Array.isArray(iqState.set.questions)) {
+        return [];
+      }
+      return iqState.set.questions.filter(question => 
+        question && 
+        typeof question.q === 'string' && 
+        question.q.trim().length > 0
+      );
     }
 
     // Rendering
     function iqRenderQuestions(){
-      const list=$IQ('#iq-questions'); const show=iqState.prefs.showGuidance; if(!iqState.set){ if(list) list.innerHTML=''; return; }
+      const list=$IQ('#iq-questions'); const show=iqState.prefs.showGuidance; 
+      if(!iqState.set){ 
+        if(list) {
+          list.innerHTML='<div class="iq-empty-state"><strong>Get Started</strong>Choose a role and question types, then generate 10 questions to get started.</div>';
+        }
+        return; 
+      }
       if (!list) return;
       
       // Type safety: validate questions is an array
@@ -997,22 +1238,39 @@
         return;
       }
       
-      // Show demo indicator if using stub/demo questions
-      const isDemo = iqState.set.isDemo || false;
-      const demoIndicator = isDemo ? '<div style="padding:0.75rem 1rem; background:#FEF3C7; border:1px solid #FCD34D; border-radius:10px; color:#92400E; font-size:0.9rem; margin-bottom:1rem; text-align:center;">You\'re viewing demo questions. <a href="login.html" style="color:#92400E; text-decoration:underline; font-weight:600;">Sign in</a> to get AI-generated questions for your role.</div>' : '';
+      // Filter out invalid questions (missing, empty, or invalid q property)
+      const validQuestions = iqState.set.questions
+        .map((q, originalIndex) => ({ question: q, originalIndex }))
+        .filter(({ question }) => 
+          question && 
+          typeof question.q === 'string' && 
+          question.q.trim().length > 0
+        );
       
-      list.innerHTML= demoIndicator + iqState.set.questions.map((q,i)=>{
+      // If all questions are invalid, show error state
+      if (validQuestions.length === 0) {
+        list.innerHTML = '<div class="iq-question-card" style="text-align:center; color:#DC2626; padding:2rem;">We couldn\'t generate this set of questions. Please try again.</div>';
+        return;
+      }
+      
+      // Render valid questions, preserving original indices for starred questions
+      list.innerHTML = validQuestions.map(({ question: q, originalIndex: origIdx }, displayIdx)=>{
         const qText = iqEsc(q.q);
         const qHint = q.hint ? `Hint: ${iqEsc(q.hint)}` : '';
         const qExample = q.example ? iqEsc(q.example) : '';
-        const savedPressed = (typeof iqIsSaved === 'function' ? (iqIsSaved(i) ? 'true' : 'false') : 'false');
-        return `<div class="iq-question-card" data-idx="${i}">
-  <div class="iq-qtext">${i+1}. ${qText}</div>
+        // Use original index for starred questions lookup
+        const savedPressed = (typeof iqIsSaved === 'function' ? (iqIsSaved(origIdx) ? 'true' : 'false') : 'false');
+        const replaceCount = (iqState.replaceCounts && iqState.replaceCounts[origIdx]) || 0;
+        const replaceDisabled = replaceCount >= IQ_MAX_REPLACES || iqState.dailyLimitReached;
+        const replaceTip = iqState.dailyLimitReached ? 'Daily limit reached for your plan.' : 
+                          replaceDisabled ? 'Max replacements reached for this question. Generate a new set if you\'re still not happy.' : 'New Question';
+        return `<div class="iq-question-card" data-idx="${origIdx}" data-display-idx="${displayIdx}">
+  <div class="iq-qtext">${displayIdx+1}. ${qText}</div>
   <div class="iq-qactions" aria-label="Question actions">
-    <button type="button" class="icon-btn btn-copy" data-idx="${i}" data-tip="Copy" aria-label="Copy">
+    <button type="button" class="icon-btn btn-copy" data-idx="${origIdx}" data-tip="Copy" aria-label="Copy">
       <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><rect x="8" y="8" width="12" height="12" rx="2"/><rect x="4" y="4" width="12" height="12" rx="2"/></svg>
     </button>
-    <button type="button" class="icon-btn btn-replace" data-idx="${i}" data-tip="New Question" aria-label="New Question">
+    <button type="button" class="icon-btn btn-replace" data-idx="${origIdx}" data-tip="${replaceTip}" aria-label="New Question" ${replaceDisabled ? 'disabled aria-disabled="true"' : ''}>
       <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
         <path d="M3 12a9 9 0 0 1 14.9-6.9"/>
         <path d="M18 5v4h-4"/>
@@ -1020,10 +1278,10 @@
         <path d="M6 19v-4h4"/>
       </svg>
     </button>
-    <button type="button" class="icon-btn btn-save" data-idx="${i}" data-tip="Star to include this question in your Mock Interview" aria-label="Star to include in Mock Interview" aria-pressed="${savedPressed}">
+    <button type="button" class="icon-btn btn-save" data-idx="${origIdx}" data-tip="Star to include this question in your Mock Interview" aria-label="Star to include in Mock Interview" aria-pressed="${savedPressed}">
       <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><polygon points="12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26"/></svg>
     </button>
-    <button type="button" class="icon-btn btn-notes" data-idx="${i}" aria-expanded="false" aria-controls="iq-notes-${i}" data-tip="Notes" aria-label="Notes">
+    <button type="button" class="icon-btn btn-notes" data-idx="${origIdx}" aria-expanded="false" aria-controls="iq-notes-${origIdx}" data-tip="Notes" aria-label="Notes">
       <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
         <path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9Z"/>
         <path d="M14 3v6h6"/>
@@ -1032,16 +1290,50 @@
       </svg>
     </button>
   </div>
-  <div class="iq-hint" ${show?'':'hidden'}>${qHint} ${q.example?`<button class="link-btn btn-example" data-idx="${i}">Example</button>`:''}</div>
-  <div id="iq-example-${i}" class="iq-example" hidden>${qExample}</div>
-  <div id="iq-notes-${i}" class="iq-notes" hidden>
-    <label class="sr-only" for="iq-notes-ta-${i}">Notes for question ${i+1}</label>
-    <textarea id="iq-notes-ta-${i}" rows="3" placeholder="S: …&#10;T: …&#10;A: …&#10;R: …">${iqState.notes[i]||''}</textarea>
+  <div class="iq-hint" ${show?'':'hidden'}>${qHint} ${q.example?`<button class="link-btn btn-example" data-idx="${origIdx}">Example</button>`:''}</div>
+  <div id="iq-example-${origIdx}" class="iq-example" hidden>${qExample}</div>
+  <div id="iq-notes-${origIdx}" class="iq-notes" hidden>
+    <label for="iq-notes-ta-${origIdx}" class="iq-notes-label">Your notes (optional)</label>
+    <textarea id="iq-notes-ta-${origIdx}" rows="3" placeholder="S: Situation&#10;T: Task&#10;A: Action&#10;R: Result">${iqState.notes[origIdx]||''}</textarea>
   </div>
 </div>`;
       }).join('');
+      
+      // If daily limit was reached, ensure all buttons remain disabled after re-render
+      if (iqState.dailyLimitReached) {
+        iqDisableAllButtons();
+      }
     }
-    function iqRenderRecents(){ const box=$IQ('#iq-recents'); if(!box) return; const recents=JSON.parse(localStorage.getItem('iq_recent_sets')||'[]'); if(recents.length===0){ box.innerHTML='<div class="empty">No recent sets yet.</div>'; return; } box.innerHTML=recents.map(r=>`<button class=\"recent-item\" data-id=\"${r.id}\"><div class=\"ri-role\">${r.role}</div><div class=\"ri-meta\">${r.count} Q • ${new Date(r.time).toLocaleString()}</div></button>`).join(''); }
+    function iqRenderRecents(){ 
+      const box=$IQ('#iq-recents'); 
+      if(!box) return; 
+      const recents=JSON.parse(localStorage.getItem('iq_recent_sets')||'[]'); 
+      if(recents.length===0){ 
+        box.innerHTML='<div class="empty">No recent sets yet.</div>'; 
+        return; 
+      } 
+      // Clear existing content
+      box.innerHTML = '';
+      // Build DOM nodes safely to prevent XSS
+      recents.forEach(r => {
+        const btn = document.createElement('button');
+        btn.className = 'recent-item';
+        btn.setAttribute('data-id', String(r.id || ''));
+        
+        const roleDiv = document.createElement('div');
+        roleDiv.className = 'ri-role';
+        roleDiv.textContent = String(r.role || '');
+        
+        const metaDiv = document.createElement('div');
+        metaDiv.className = 'ri-meta';
+        const timeStr = r.time ? new Date(r.time).toLocaleString() : '';
+        metaDiv.textContent = `${r.count || 0} Q • ${timeStr}`;
+        
+        btn.appendChild(roleDiv);
+        btn.appendChild(metaDiv);
+        box.appendChild(btn);
+      });
+    }
     function iqUpdateGuidanceUI(){ const t=$IQ('#toggle-guidance'); if(t){ t.setAttribute('aria-pressed', String(iqState.prefs.showGuidance)); t.textContent = iqState.prefs.showGuidance ? 'Hide Answer Guidance' : 'Show Answer Guidance'; if(iqState.prefs.showGuidance){ t.classList.add('is-pressed'); } else { t.classList.remove('is-pressed'); } } iqRenderQuestions(); }
     function iqWireRecents(){ const box=$IQ('#iq-recents'); if(!box) return; box.addEventListener('click',(e)=>{ const btn=e.target.closest('.recent-item'); if(!btn) return; const id=btn.getAttribute('data-id'); if(!id) return; iqLoadSetById(id); }); }
 
@@ -1165,7 +1457,25 @@
             throw new Error('Authentication required');
           }
           
-          // Other errors (5xx, 429, etc.)
+          // Handle cooldown
+          if (response.status === 429 && errorData.reason === 'cooldown') {
+            const retryAfter = errorData.retryAfter || 60;
+            iqToast(`You're generating questions too quickly. Try again in ${retryAfter} seconds.`);
+            throw new Error('Cooldown active');
+          }
+          
+          // Handle daily limit
+          if (response.status === 429 && errorData.reason === 'daily_limit') {
+            const planName = getUserPlan() === 'trial' ? 'Trial' : 
+                           getUserPlan() === 'essential' ? 'Essential' :
+                           getUserPlan() === 'pro' ? 'Pro' : 'Premium';
+            iqToast(`You've reached today's Interview Questions limit for your ${planName} plan. You can still practice with your existing sets, or upgrade for higher limits.`);
+            // Disable all buttons (generate + replace) since daily quota applies to all operations
+            iqDisableAllButtons();
+            throw new Error('Daily limit reached');
+          }
+          
+          // Other errors (5xx, etc.)
           iqToast('Something went wrong generating questions. Please try again.');
           throw new Error(errorData.error || `API error: ${response.status}`);
         }
@@ -1191,32 +1501,24 @@
           return null;
         }
         
-        // Log error for monitoring (even when falling back to stub)
-        console.error('[IQ] API generation failed, falling back to stub:', {
+        // Daily limit errors already handled above - return special marker
+        if (e.message === 'Daily limit reached') {
+          return { dailyLimitReached: true };
+        }
+        
+        // Log error for monitoring
+        console.error('[IQ] API generation failed:', {
           error: e.message,
           stack: e.stack,
           role,
           seniority,
           types
         });
-        iqToast('Using demo questions. Sign in for AI-powered questions.');
-      }
-      
-      // Fallback to stub data
-      const mk=q=>({id: `q${Math.random().toString(36).slice(2,6)}`, q, hint:'Use STAR; quantify; <90s.', example:''}); 
-      const bank=[
-        mk('Tell me about a challenging problem you solved recently.'),
-        mk('How do you ensure code quality on fast-moving teams?'),
-        mk('Describe a time you improved a process.'),
-        mk('How do you prioritize tasks under pressure?'),
-        mk('Explain a decision you made with incomplete data.'),
-        mk('Tell me about a time you had to learn something quickly.'),
-        mk('Describe a situation where you had to influence without authority.'),
-        mk('How do you handle disagreements with teammates?'),
-        mk('Tell me about your biggest professional failure and what you learned.'),
-        mk('Describe a time when you exceeded expectations.')
-      ]; 
-      return { role, seniority, types, count: IQ_FIXED_COUNT, jd, seed: Math.floor(Math.random()*1e6), questions: bank.slice(0, IQ_FIXED_COUNT), isDemo: true }; 
+        
+        // Show error toast - no fallback to demo questions
+        iqToast('We couldn\'t generate questions right now. Please try again in a moment.');
+        return null;
+      } 
     }
     
     // Save question set to D1 for Mock Interview
@@ -1251,7 +1553,6 @@
         throw e;
       }
     }
-    async function iqApiReplace({ role, seniority, types, jd, avoid, index }){ iqTrack('iq_replace_clicked',{index}); try{ if(IQ_API.PROXY_BASE){ const r=await fetch(`${IQ_API.PROXY_BASE}/interview/replace`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({role,seniority,types,jd,avoid,index})}); if(!r.ok) throw new Error('proxy'); return await r.json(); } if(IQ_API.ZAPIER_GENERATE_HOOK){ const r=await fetch(IQ_API.ZAPIER_GENERATE_HOOK,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({intent:'replace_one',role,seniority,types,jd,avoid,index})}); if(!r.ok) throw new Error('zap'); return await r.json(); } }catch(e){ console.warn('iqApiReplace failed, using stub',e);} return { q:'Describe a time you simplified a complex system.', hint:'Focus on trade-offs and impact.', example:'S: legacy… T: simplify… A: removed X, added Y… R: fewer incidents, faster dev.' } }
 
     // Actions
     async function iqGenerate(){ 
@@ -1287,6 +1588,11 @@
           return;
         }
         
+        // If daily limit reached, button should remain disabled - don't proceed
+        if (res.dailyLimitReached) {
+          return;
+        }
+        
         // Validate response has questions
         if (!Array.isArray(res.questions) || res.questions.length === 0) {
           throw new Error('No questions generated');
@@ -1294,7 +1600,11 @@
         
         const seed = res.seed || `${Date.now().toString(36)}-${Math.random().toString(36).slice(2,8)}`; 
         const setObj={...res, seed, role: res.role||role, seniority, count: IQ_FIXED_COUNT, types: new Set(types), jd, replacesUsed:0}; 
-        iqState.set=setObj; 
+        iqState.set=setObj;
+        // Reset replace counts when generating a new set
+        iqState.replaceCounts = {}; 
+        // Reset daily limit flag on successful generation
+        iqState.dailyLimitReached = false;
         iqState.prefs={...iqState.prefs,seniority,count: IQ_FIXED_COUNT,types:new Set(types)}; 
         iqSavePrefs(); 
         iqLoadNotes(); 
@@ -1338,8 +1648,11 @@
       const countText = $IQ('#selection-count-text');
       if (!summary || !countText) return;
       
-      const selectedCount = iqGetSavedIndexes().length;
-      const totalCount = iqState.set?.questions?.length || IQ_FIXED_COUNT;
+      // Use iqGetSavedItems() to get count of valid saved questions (filters out invalid ones)
+      const selectedCount = iqGetSavedItems().length;
+      // Use count of valid questions (same as what's displayed to user)
+      const validQuestions = iqGetValidQuestions();
+      const totalCount = validQuestions.length || IQ_FIXED_COUNT;
       
       if (selectedCount === 0) {
         summary.classList.add('no-selection');
@@ -1353,47 +1666,134 @@
     async function iqReplaceOne(i){
       if(!iqState.set || !Array.isArray(iqState.set.questions)) return;
       const set = iqState.set;
-      const currentQs = set.questions.map(x=>x?.q || '').filter(Boolean);
       const role = set.role || ($IQ('#iq-role')?.value?.trim()||'');
       const seniority = set.seniority || iqState.prefs.seniority || '';
-      const types = Array.from(set.types || iqState.prefs.types || []);
+      const types = iqTypesToArray(set.types || iqState.prefs.types, ['behavioral', 'technical']);
       const jd = set.jd || $IQ('#iq-jd')?.value || '';
 
-      iqStartPerQCooldown(i);
-
-      const stubPool = [
-        'Describe a time you simplified a complex system.',
-        'Tell me about a decision you made with incomplete data. What happened?',
-        'How do you balance speed and quality when under tight deadlines?',
-        'Share a time you influenced stakeholders without authority.',
-        'Walk me through the most impactful bug you fixed and how you found it.'
-      ];
-      const pickStub = ()=>{
-        const candidates = stubPool.filter(t=>!currentQs.includes(t));
-        return (candidates.length? candidates: stubPool)[Math.floor(Math.random()*stubPool.length)];
-      };
-
-      const payload = { role, seniority, types, jd, replaceIndex: i, avoid: currentQs };
-      const tryApi = async()=>{
-        try{
-          const res = await fetch('/questions/replace', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
-          if(!res.ok) throw new Error('bad status');
-          const data = await res.json();
-          const q = data?.question || data?.q || data?.questions?.[0]?.q;
-          return typeof q === 'string' && q.trim() ? q.trim() : null;
-        }catch{return null}
-      };
-
-      let nextQ = await tryApi();
-      if(!nextQ || currentQs.includes(nextQ)){
-        // one more attempt (retry) using API, then fallback
-        nextQ = await tryApi();
-        if(!nextQ || currentQs.includes(nextQ)) nextQ = pickStub();
+      // Check per-question replace limit (TASK 10B)
+      const replaceCount = (iqState.replaceCounts && iqState.replaceCounts[i]) || 0;
+      if (replaceCount >= IQ_MAX_REPLACES) {
+        iqToast('You\'ve replaced this question several times. Generate a new set if you\'re still not happy.');
+        return;
       }
 
-      set.questions[i] = { q: nextQ, hint: set.questions[i]?.hint || '', example: set.questions[i]?.example || '' };
-      iqRenderQuestions();
-      iqToast('Replaced');
+      // Get and disable the replace button immediately to prevent concurrent requests
+      const replaceBtn = $IQ(`.btn-replace[data-idx="${i}"]`);
+      const wasDisabled = replaceBtn?.disabled || false;
+      if (replaceBtn) {
+        replaceBtn.disabled = true;
+        replaceBtn.setAttribute('aria-disabled', 'true');
+      }
+
+      // Helper function to re-enable the button (unless daily limit was reached)
+      const reenableButton = () => {
+        if (replaceBtn && !iqState.dailyLimitReached) {
+          replaceBtn.disabled = wasDisabled;
+          if (!wasDisabled) {
+            replaceBtn.removeAttribute('aria-disabled');
+          }
+        }
+      };
+
+      try {
+        const token = await getFirebaseToken();
+        if (!token) {
+          iqToast('Please log in to replace questions.');
+          setTimeout(() => {
+            window.location.href = 'login.html';
+          }, 2000);
+          reenableButton();
+          return;
+        }
+
+        const response = await fetch(IQ_API.GENERATE, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({ 
+            role, 
+            seniority, 
+            types, 
+            jd,
+            mode: 'replace',
+            replaceIndex: i
+          })
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          
+          // Handle cooldown
+          if (response.status === 429 && errorData.reason === 'cooldown') {
+            const retryAfter = errorData.retryAfter || 60;
+            iqToast(`You're generating questions too quickly. Try again in ${retryAfter} seconds.`);
+            reenableButton();
+            return;
+          }
+          
+          // Handle daily limit
+          if (response.status === 429 && errorData.reason === 'daily_limit') {
+            const planName = getUserPlan() === 'trial' ? 'Trial' : 
+                           getUserPlan() === 'essential' ? 'Essential' :
+                           getUserPlan() === 'pro' ? 'Pro' : 'Premium';
+            iqToast(`You've reached today's Interview Questions limit for your ${planName} plan. You can still practice with your existing sets, or upgrade for higher limits.`);
+            // Disable all buttons (generate + replace) since daily quota applies to all operations
+            iqDisableAllButtons();
+            // Don't re-enable this button since all buttons are disabled
+            return;
+          }
+          
+          // Other errors
+          iqToast('Something went wrong replacing the question. Please try again.');
+          reenableButton();
+          throw new Error(errorData.error || `API error: ${response.status}`);
+        }
+
+        const data = await response.json();
+        if (data.success && Array.isArray(data.questions) && data.questions.length > 0) {
+          // Replace the question at index i with the new question
+          const newQuestion = data.questions[0];
+          set.questions[i] = { 
+            q: newQuestion.q, 
+            hint: newQuestion.hint || set.questions[i]?.hint || '', 
+            example: newQuestion.example || set.questions[i]?.example || '' 
+          };
+          
+          // Increment replace count for this question
+          if (!iqState.replaceCounts) iqState.replaceCounts = {};
+          iqState.replaceCounts[i] = (iqState.replaceCounts[i] || 0) + 1;
+          
+          // Persist the replaced question and replaceCounts to localStorage
+          iqSaveSetFull(set);
+          
+          // Reset daily limit flag on successful replace
+          iqState.dailyLimitReached = false;
+          
+          iqRenderQuestions();
+          iqToast('Question replaced.');
+          iqTrack('iq_replace_one', { index: i });
+          
+          // Start global 60-second cooldown after successful replacement
+          // This matches the backend cooldown enforcement for both full sets and replace operations
+          iqStartGlobalCooldown(IQ_GLOBAL_COOLDOWN);
+          
+          // Re-enable button if still under per-question limit and daily limit not reached
+          // The button will be disabled by iqRenderQuestions() if limits are hit
+          if (iqState.replaceCounts[i] < IQ_MAX_REPLACES && !iqState.dailyLimitReached) {
+            reenableButton();
+          }
+        } else {
+          reenableButton();
+          throw new Error('Invalid API response: no question returned');
+        }
+      } catch (error) {
+        console.error('[IQ] Replace error:', error);
+        iqToast('Failed to replace question. Please try again.');
+        reenableButton();
+      }
     }
 
     // Wire up toolbar and list
@@ -1406,7 +1806,14 @@
       $IQ('#btn-copy-all')?.addEventListener('click', async ()=>{
         try{
           const useSaved = !$IQ('#iq-saved-panel')?.hidden;
-          const questions = useSaved ? iqGetSavedItems().map(it=>it.q) : (iqState.set?.questions||[]).map(x=>x.q);
+          let questions;
+          if (useSaved) {
+            questions = iqGetSavedItems().map(it=>it.q);
+          } else {
+            // Filter out invalid questions (same as rendering logic)
+            const validQuestions = iqGetValidQuestions();
+            questions = validQuestions.map(x=>x.q);
+          }
           const text = questions.map((t,i)=>`${i+1}. ${t}`).join('\n');
           await navigator.clipboard.writeText(text);
           iqToast('Copied');
@@ -1459,7 +1866,7 @@
       if(['pro','premium'].includes(plan)){
         const mode = useSaved ? 'saved' : 'current';
         const seniority = iqState.set?.seniority || '';
-        const types = iqState.set?.types ? Array.from(iqState.set.types) : ['behavioral', 'technical'];
+        const types = iqTypesToArray(iqState.set?.types, ['behavioral', 'technical']);
         const jd = iqState.set?.jd || '';
         const questions = iqState.set?.questions || [];
         
@@ -1492,7 +1899,7 @@
               id: localSetId, 
               d1Id: savedSet.id,
               role, 
-              questions: selectedIndices.map(i => questions[i]?.q || questions[i]).filter(Boolean)
+              questions: selectedIndices.map(i => questions[i]?.q).filter(Boolean)
             })); 
           } catch(e) { console.warn('localStorage fallback failed', e); }
           
@@ -1508,7 +1915,7 @@
             localStorage.setItem('mi_payload', JSON.stringify({ 
               id: localSetId, 
               role, 
-              questions: selectedIndices.map(i => questions[i]?.q || questions[i]).filter(Boolean)
+              questions: selectedIndices.map(i => questions[i]?.q).filter(Boolean)
             })); 
           } catch(e) { 
             console.error('localStorage fallback also failed', e);
@@ -1544,11 +1951,22 @@
     function iqSetSavedIndexes(arr){ try{ localStorage.setItem(iqSavedKey(), JSON.stringify(arr)); }catch{} }
     function iqIsSaved(i){ return iqGetSavedIndexes().includes(i); }
     function iqToggleSaved(i){ let arr=iqGetSavedIndexes(); if(arr.includes(i)){ arr=arr.filter(x=>x!==i); }else{ arr.push(i); } iqSetSavedIndexes(arr); iqUpdateSavedChip(); iqUpdateSelectionSummary(); iqRenderSavedPanel(false); iqTrack('iq_saved_toggle',{ index:i, saved:arr.includes(i) }); }
-    function iqGetSavedItems(){ if(!iqState.set) return []; const idxs=iqGetSavedIndexes(); return idxs.map(i=>iqState.set.questions[i]).filter(Boolean); }
+    function iqGetSavedItems(){ 
+      if(!iqState.set) return []; 
+      const idxs=iqGetSavedIndexes(); 
+      return idxs
+        .map(i=>iqState.set.questions[i])
+        .filter(question => 
+          question && 
+          typeof question.q === 'string' && 
+          question.q.trim().length > 0
+        ); 
+    }
     function iqUpdateSavedChip(){ 
       const chip=$IQ('#chip-saved'); 
       const savedCountSpan = $IQ('#chip-saved-count');
-      const n=iqGetSavedIndexes().length; 
+      // Use iqGetSavedItems() to get count of valid saved questions (filters out invalid ones)
+      const n=iqGetSavedItems().length; 
       
       if (chip) {
         chip.textContent=`Saved (${n})`; 
@@ -1621,7 +2039,8 @@
       // Update saved count in button
       const savedCountSpan = $IQ('#chip-saved-count');
       if (savedCountSpan) {
-        const count = iqGetSavedIndexes().length;
+        // Use iqGetSavedItems() to get count of valid saved questions (filters out invalid ones)
+        const count = iqGetSavedItems().length;
         savedCountSpan.textContent = count > 0 ? `(${count})` : '';
       }
     }
@@ -1636,7 +2055,7 @@
           navigator.clipboard.writeText(iqState.set.questions[i].q).then(()=>{ iqToast('Copied'); iqTrack('iq_copy_one',{ index:i }); }).catch(()=> iqToast('Clipboard blocked'));
           return;
         }
-        if(actionBtn.classList.contains('btn-replace')){ iqReplaceOne(i); iqTrack('iq_replace_one',{ index:i }); return; }
+        if(actionBtn.classList.contains('btn-replace')){ iqReplaceOne(i); return; }
         if(actionBtn.classList.contains('btn-save')){ iqToggleSaved(i); const nowSaved=iqIsSaved(i); actionBtn.setAttribute('aria-pressed', String(nowSaved)); iqToast(nowSaved ? 'Added to Saved' : 'Removed from Saved'); return; }
         if(actionBtn.classList.contains('btn-example')){ const ex=$IQ(`#iq-example-${i}`); if(ex) ex.hidden=!ex.hidden; return; }
         if(actionBtn.classList.contains('btn-notes')){ const panel=$IQ(`#iq-notes-${i}`); const ta=$IQ(`#iq-notes-ta-${i}`); const wasHidden=panel.hidden; if(wasHidden && ta && !ta.value){ ta.value='S:\nT:\nA:\nR:'; } panel.hidden = !panel.hidden; actionBtn.setAttribute('aria-expanded', String(!panel.hidden)); if(!panel.hidden) ta?.focus(); if(wasHidden) iqTrack('iq_notes_opened',{ index:i }); return; }
@@ -1667,7 +2086,7 @@
           navigator.clipboard.writeText(iqState.set.questions[i].q).then(()=>{ iqToast('Copied'); iqTrack('iq_copy_one',{ index:i }); }).catch(()=> iqToast('Clipboard blocked'));
           return;
         }
-        if(actionBtn.classList.contains('btn-replace')){ iqReplaceOne(i); iqTrack('iq_replace_one',{ index:i }); return; }
+        if(actionBtn.classList.contains('btn-replace')){ iqReplaceOne(i); return; }
         if(actionBtn.classList.contains('btn-save')){ iqToggleSaved(i); const nowSaved=iqIsSaved(i); actionBtn.setAttribute('aria-pressed', String(nowSaved)); return; }
         if(actionBtn.classList.contains('btn-example')){ const ex=$IQ(`#iq-example-${i}`); if(ex) ex.hidden=!ex.hidden; return; }
         if(actionBtn.classList.contains('btn-notes')){ const panel=$IQ(`#iq-notes-${i}`); const ta=$IQ(`#iq-notes-ta-${i}`); const exp=panel.hidden; if(exp && !ta?.value){ if(ta) ta.value='S:\nT:\nA:\nR:'; } panel.hidden=!panel.hidden; actionBtn.setAttribute('aria-expanded', String(!panel.hidden)); if(!panel.hidden) ta?.focus(); if(exp) iqTrack('iq_notes_opened',{ index:i }); return; }
@@ -1676,6 +2095,8 @@
 function initIQPage(){ 
       iqLoadPrefs(); 
       iqState.prefs.count = IQ_FIXED_COUNT; 
+      // Reset daily limit flag on page initialization (quota resets daily on server)
+      iqState.dailyLimitReached = false;
       iqRenderRecents(); 
       iqWireRecents(); 
       iqInitRoleCombobox(); 
@@ -1709,7 +2130,7 @@ function initIQPage(){
           const shown = localStorage.getItem('iq_first_visit_shown');
           const mockCompleted = localStorage.getItem('iq_mock_completed');
           if (!shown && !mockCompleted) {
-            hintBanner.style.display = 'block';
+            hintBanner.style.display = 'flex';
           }
         } catch (e) {
           // localStorage not available, don't show
@@ -1821,7 +2242,7 @@ function initIQPage(){
     // Update the plan strip display
     function updatePlanStrip(plan) {
       const strip = document.getElementById('iq-plan-strip');
-      const nameDisplay = document.getElementById('plan-name-display');
+      const badgeContainer = document.getElementById('plan-badge-container');
       const featuresDisplay = document.getElementById('plan-features-display');
       const upgradeLink = document.getElementById('plan-upgrade-link');
       
@@ -1836,42 +2257,52 @@ function initIQPage(){
         'free': 'Free Plan'
       };
       
-      if (nameDisplay) {
-        nameDisplay.textContent = planNames[plan] || 'Free Plan';
+      // Create plan badge
+      if (badgeContainer) {
+        const badgeClass = plan === 'trial' ? 'trial' : 
+                          plan === 'essential' ? 'essential' :
+                          plan === 'pro' ? 'pro' :
+                          plan === 'premium' ? 'premium' :
+                          plan === 'free' ? 'free' : 'trial';
+        badgeContainer.innerHTML = `<span class="user-plan-badge ${badgeClass}">${planNames[plan] || 'Free Plan'}</span>`;
       }
+      
+      // Create feature tags with icons
+      const checkIcon = '<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M20 6L9 17l-5-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+      const lockIcon = '<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="5" y="11" width="14" height="10" rx="2" stroke="currentColor" stroke-width="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4" stroke="currentColor" stroke-width="2"/></svg>';
       
       if (featuresDisplay) {
         if (plan === 'trial') {
           featuresDisplay.innerHTML = `
-            <span class="feature-tag feature-unlocked">• Interview Questions: Full access</span>
-            <span class="feature-tag feature-locked">• Mock Interviews: Locked 🔒</span>
+            <span class="feature-tag">${checkIcon} Interview Questions: Included</span>
+            <span class="feature-tag">${lockIcon} Mock Interviews: Pro & Premium</span>
           `;
           if (upgradeLink) upgradeLink.style.display = 'inline';
         } else if (plan === 'essential') {
           featuresDisplay.innerHTML = `
-            <span class="feature-tag feature-unlocked">• Interview Questions: Unlimited</span>
-            <span class="feature-tag feature-locked">• Mock Interviews: Locked 🔒</span>
+            <span class="feature-tag">${checkIcon} Interview Questions: Included</span>
+            <span class="feature-tag">${lockIcon} Mock Interviews: Pro & Premium</span>
           `;
           if (upgradeLink) upgradeLink.style.display = 'inline';
         } else if (plan === 'pro') {
           // Get mock interview count if available
           const mockCount = localStorage.getItem('mock_interviews_remaining') || '20';
           featuresDisplay.innerHTML = `
-            <span class="feature-tag feature-unlocked">• Interview Questions + Mock Interviews: Included</span>
-            <span class="feature-tag" style="color:#6B7280;">• ${mockCount} mock interviews left this month</span>
+            <span class="feature-tag">${checkIcon} Interview Questions + Mock Interviews: Included</span>
+            <span class="feature-tag" style="color:#6B7280;">${mockCount} mock interviews left this month</span>
           `;
           if (upgradeLink) {
-            upgradeLink.textContent = 'Upgrade to Premium for unlimited';
+            upgradeLink.innerHTML = 'Upgrade to Premium for unlimited <span class="info-icon" title="Upgrade to Premium for unlimited mock interviews">ⓘ</span>';
             upgradeLink.style.display = 'inline';
           }
         } else if (plan === 'premium') {
           featuresDisplay.innerHTML = `
-            <span class="feature-tag feature-unlocked">• All features: Unlimited</span>
+            <span class="feature-tag">${checkIcon} All features: Unlimited</span>
           `;
           if (upgradeLink) upgradeLink.style.display = 'none';
         } else {
           featuresDisplay.innerHTML = `
-            <span class="feature-tag feature-locked">• Upgrade to unlock Interview Questions</span>
+            <span class="feature-tag">${lockIcon} Upgrade to unlock Interview Questions</span>
           `;
           if (upgradeLink) upgradeLink.style.display = 'inline';
         }
