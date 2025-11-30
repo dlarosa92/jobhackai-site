@@ -1648,7 +1648,8 @@
       const countText = $IQ('#selection-count-text');
       if (!summary || !countText) return;
       
-      const selectedCount = iqGetSavedIndexes().length;
+      // Use iqGetSavedItems() to get count of valid saved questions (filters out invalid ones)
+      const selectedCount = iqGetSavedItems().length;
       // Use count of valid questions (same as what's displayed to user)
       const validQuestions = iqGetValidQuestions();
       const totalCount = validQuestions.length || IQ_FIXED_COUNT;
@@ -1964,7 +1965,8 @@
     function iqUpdateSavedChip(){ 
       const chip=$IQ('#chip-saved'); 
       const savedCountSpan = $IQ('#chip-saved-count');
-      const n=iqGetSavedIndexes().length; 
+      // Use iqGetSavedItems() to get count of valid saved questions (filters out invalid ones)
+      const n=iqGetSavedItems().length; 
       
       if (chip) {
         chip.textContent=`Saved (${n})`; 
@@ -2037,7 +2039,8 @@
       // Update saved count in button
       const savedCountSpan = $IQ('#chip-saved-count');
       if (savedCountSpan) {
-        const count = iqGetSavedIndexes().length;
+        // Use iqGetSavedItems() to get count of valid saved questions (filters out invalid ones)
+        const count = iqGetSavedItems().length;
         savedCountSpan.textContent = count > 0 ? `(${count})` : '';
       }
     }
