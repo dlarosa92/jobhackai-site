@@ -1042,6 +1042,8 @@
       if (genBtn) {
         genBtn.disabled = true;
         genBtn.setAttribute('aria-disabled', 'true');
+        // Update button text to indicate daily limit reached (instead of leaving "Generating...")
+        genBtn.textContent = 'Daily Limit Reached';
       }
       // Disable all replace buttons
       $$IQ('.btn-replace').forEach(btn => {
