@@ -1097,6 +1097,18 @@
       iqState.timers.perQ[k] = setInterval(tick, 1000);
     }
 
+    // Helper function to get valid questions (filters out invalid ones)
+    function iqGetValidQuestions() {
+      if (!iqState.set || !Array.isArray(iqState.set.questions)) {
+        return [];
+      }
+      return iqState.set.questions.filter(question => 
+        question && 
+        typeof question.q === 'string' && 
+        question.q.trim().length > 0
+      );
+    }
+
     // Rendering
     function iqRenderQuestions(){
       const list=$IQ('#iq-questions'); const show=iqState.prefs.showGuidance; 
@@ -1486,7 +1498,9 @@
       if (!summary || !countText) return;
       
       const selectedCount = iqGetSavedIndexes().length;
-      const totalCount = iqState.set?.questions?.length || IQ_FIXED_COUNT;
+      // Use count of valid questions (same as what's displayed to user)
+      const validQuestions = iqGetValidQuestions();
+      const totalCount = validQuestions.length || IQ_FIXED_COUNT;
       
       if (selectedCount === 0) {
         summary.classList.add('no-selection');
@@ -1609,7 +1623,14 @@
       $IQ('#btn-copy-all')?.addEventListener('click', async ()=>{
         try{
           const useSaved = !$IQ('#iq-saved-panel')?.hidden;
-          const questions = useSaved ? iqGetSavedItems().map(it=>it.q) : (iqState.set?.questions||[]).map(x=>x.q);
+          let questions;
+          if (useSaved) {
+            questions = iqGetSavedItems().map(it=>it.q);
+          } else {
+            // Filter out invalid questions (same as rendering logic)
+            const validQuestions = iqGetValidQuestions();
+            questions = validQuestions.map(x=>x.q);
+          }
           const text = questions.map((t,i)=>`${i+1}. ${t}`).join('\n');
           await navigator.clipboard.writeText(text);
           iqToast('Copied');
