@@ -1571,6 +1571,8 @@
         iqState.set=setObj;
         // Reset replace counts when generating a new set
         iqState.replaceCounts = {}; 
+        // Reset daily limit flag on successful generation
+        iqState.dailyLimitReached = false;
         iqState.prefs={...iqState.prefs,seniority,count: IQ_FIXED_COUNT,types:new Set(types)}; 
         iqSavePrefs(); 
         iqLoadNotes(); 
@@ -1712,6 +1714,9 @@
           // Persist the replaced question and replaceCounts to localStorage
           iqSaveSetFull(set);
           
+          // Reset daily limit flag on successful replace
+          iqState.dailyLimitReached = false;
+          
           iqRenderQuestions();
           iqToast('Question replaced.');
           iqTrack('iq_replace_one', { index: i });
@@ -1832,7 +1837,7 @@
               id: localSetId, 
               d1Id: savedSet.id,
               role, 
-              questions: selectedIndices.map(i => questions[i]?.q || questions[i]).filter(Boolean)
+              questions: selectedIndices.map(i => questions[i]?.q).filter(Boolean)
             })); 
           } catch(e) { console.warn('localStorage fallback failed', e); }
           
@@ -1848,7 +1853,7 @@
             localStorage.setItem('mi_payload', JSON.stringify({ 
               id: localSetId, 
               role, 
-              questions: selectedIndices.map(i => questions[i]?.q || questions[i]).filter(Boolean)
+              questions: selectedIndices.map(i => questions[i]?.q).filter(Boolean)
             })); 
           } catch(e) { 
             console.error('localStorage fallback also failed', e);
@@ -2016,6 +2021,8 @@
 function initIQPage(){ 
       iqLoadPrefs(); 
       iqState.prefs.count = IQ_FIXED_COUNT; 
+      // Reset daily limit flag on page initialization (quota resets daily on server)
+      iqState.dailyLimitReached = false;
       iqRenderRecents(); 
       iqWireRecents(); 
       iqInitRoleCombobox(); 
