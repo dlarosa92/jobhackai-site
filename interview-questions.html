@@ -1155,6 +1155,13 @@
       tick();
       iqState.timers.perQ[k] = setInterval(tick, 1000);
     }
+    function iqStopPerQCooldown(i){
+      const k = `q${i}`, btn = $IQ(`.btn-replace[data-idx="${i}"]`);
+      if (!btn) return;
+      clearInterval(iqState.timers.perQ[k]);
+      btn.removeAttribute('data-timer');
+      btn.disabled = false;
+    }
 
     // Helper function to get valid questions (filters out invalid ones)
     function iqGetValidQuestions() {
@@ -1585,8 +1592,6 @@
         return;
       }
 
-      iqStartPerQCooldown(i);
-
       try {
         const token = await getFirebaseToken();
         if (!token) {
@@ -1663,10 +1668,15 @@
           iqRenderQuestions();
           iqToast('Question replaced.');
           iqTrack('iq_replace_one', { index: i });
+          
+          // Start cooldown only after successful replacement
+          iqStartPerQCooldown(i);
         } else {
           throw new Error('Invalid API response: no question returned');
         }
       } catch (error) {
+        // Stop cooldown if it was started (shouldn't happen, but safety check)
+        iqStopPerQCooldown(i);
         console.error('[IQ] Replace error:', error);
         iqToast('Failed to replace question. Please try again.');
       }
@@ -2124,7 +2134,8 @@ function initIQPage(){
         const badgeClass = plan === 'trial' ? 'trial' : 
                           plan === 'essential' ? 'essential' :
                           plan === 'pro' ? 'pro' :
-                          plan === 'premium' ? 'premium' : 'trial';
+                          plan === 'premium' ? 'premium' :
+                          plan === 'free' ? 'free' : 'trial';
         badgeContainer.innerHTML = `<span class="user-plan-badge ${badgeClass}">${planNames[plan] || 'Free Plan'}</span>`;
       }
       

@@ -277,7 +277,7 @@ export async function onRequest(context) {
       const dailyLimit = PLAN_LIMITS[effectivePlan];
       const used = await getFeatureDailyUsage(env, d1User.id, FEATURE);
       
-      if (used >= dailyLimit) {
+      if (used + requestedCount > dailyLimit) {
         return errorResponse(
           'Daily Interview Questions limit reached for your plan.',
           429,
