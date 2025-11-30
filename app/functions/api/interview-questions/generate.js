@@ -308,7 +308,7 @@ export async function onRequest(context) {
 
     // Increment daily usage quota after successful generation
     if (d1User && PLAN_LIMITS[effectivePlan]) {
-      await incrementFeatureDailyUsage(env, d1User.id, FEATURE, 1);
+      await incrementFeatureDailyUsage(env, d1User.id, FEATURE, requestedCount);
     }
 
     // Set cooldown after successful generation

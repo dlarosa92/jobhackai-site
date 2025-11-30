@@ -1016,6 +1016,15 @@
     // Utils & persistence
     const iqNow = ()=> new Date().toISOString();
     const iqSetId = (role, seed)=> `${role}:${seed}`;
+    // Helper to safely convert types (Set, Array, or empty object) to array
+    const iqTypesToArray = (types, fallback = []) => {
+      if (!types) return fallback;
+      if (types instanceof Set) return Array.from(types);
+      if (Array.isArray(types)) return types;
+      // Handle empty object case (from old serialized Sets)
+      if (typeof types === 'object' && Object.keys(types).length === 0) return fallback;
+      return fallback;
+    };
     function iqToast(msg){
       console.log('[iq-toast]', msg);
       const el = document.getElementById('iq-toast');
@@ -1035,8 +1044,58 @@
     function iqSaveNotes(){ if (!iqState.set) return; localStorage.setItem(`iq_notes_${iqSetId(iqState.set.role, iqState.set.seed)}`, JSON.stringify(iqState.notes)); }
     function iqLoadNotes(){ if (!iqState.set) return; try{ iqState.notes=JSON.parse(localStorage.getItem(`iq_notes_${iqSetId(iqState.set.role, iqState.set.seed)}`)||'{}'); }catch{ iqState.notes={}; } }
     function iqAddRecent(meta){ iqState.recents = JSON.parse(localStorage.getItem('iq_recent_sets')||'[]'); iqState.recents.unshift(meta); iqState.recents = iqState.recents.slice(0, IQ_RECENT_LIMIT); localStorage.setItem('iq_recent_sets', JSON.stringify(iqState.recents)); }
-    function iqSaveSetFull(setObj){ try{ const id=iqSetId(setObj.role,setObj.seed); localStorage.setItem(`iq_set_${id}`, JSON.stringify(setObj)); }catch(e){ console.warn('save set failed',e);} }
-    function iqLoadSetById(id){ try{ const raw=localStorage.getItem(`iq_set_${id}`); if(!raw){ iqToast('Previous set not found'); return; } const set=JSON.parse(raw); iqState.set=set; iqState.replaceCounts = {}; iqLoadNotes(); iqRenderQuestions(); iqUpdateSavedChip(); iqRevealSecondaryActions(); iqUpdateActionsLayout(); const savedPanel=$IQ('#iq-saved-panel'); if(savedPanel) savedPanel.hidden=true; $$IQ('.recent-item').forEach(b=> b.classList.toggle('is-active', b.getAttribute('data-id')===id)); window.scrollTo({top:0,behavior:'smooth'}); iqToast('Loaded previous set'); iqTrack('iq_recent_loaded',{ id }); }catch(e){ console.warn('load set failed',e); iqToast('Could not load set'); } }
+    function iqSaveSetFull(setObj){ 
+      try{ 
+        const id=iqSetId(setObj.role,setObj.seed); 
+        // Convert Set to array for JSON serialization and include replaceCounts
+        const toSave = {
+          ...setObj,
+          types: Array.from(setObj.types || []),
+          replaceCounts: iqState.replaceCounts || {}
+        };
+        localStorage.setItem(`iq_set_${id}`, JSON.stringify(toSave)); 
+      }catch(e){ 
+        console.warn('save set failed',e);
+      }
+    }
+    function iqLoadSetById(id){ 
+      try{ 
+        const raw=localStorage.getItem(`iq_set_${id}`); 
+        if(!raw){ 
+          iqToast('Previous set not found'); 
+          return; 
+        } 
+        const set=JSON.parse(raw); 
+        // Convert types array back to Set and restore replaceCounts
+        // Handle both new format (array) and old format (empty object from serialized Set)
+        if(Array.isArray(set.types) && set.types.length > 0){
+          set.types = new Set(set.types);
+        } else if(!set.types || (typeof set.types === 'object' && Object.keys(set.types).length === 0)){
+          set.types = new Set(['behavioral', 'technical']);
+        } else if(set.types instanceof Set){
+          // Already a Set, keep it
+        } else {
+          // Fallback for any other case
+          set.types = new Set(['behavioral', 'technical']);
+        }
+        iqState.set=set; 
+        iqState.replaceCounts = set.replaceCounts || {}; 
+        iqLoadNotes(); 
+        iqRenderQuestions(); 
+        iqUpdateSavedChip(); 
+        iqRevealSecondaryActions(); 
+        iqUpdateActionsLayout(); 
+        const savedPanel=$IQ('#iq-saved-panel'); 
+        if(savedPanel) savedPanel.hidden=true; 
+        $$IQ('.recent-item').forEach(b=> b.classList.toggle('is-active', b.getAttribute('data-id')===id)); 
+        window.scrollTo({top:0,behavior:'smooth'}); 
+        iqToast('Loaded previous set'); 
+        iqTrack('iq_recent_loaded',{ id }); 
+      }catch(e){ 
+        console.warn('load set failed',e); 
+        iqToast('Could not load set'); 
+      } 
+    }
 
     // Cooldowns
     function iqStartGlobalCooldown(sec=IQ_GLOBAL_COOLDOWN){
@@ -1516,7 +1575,7 @@
       const set = iqState.set;
       const role = set.role || ($IQ('#iq-role')?.value?.trim()||'');
       const seniority = set.seniority || iqState.prefs.seniority || '';
-      const types = Array.from(set.types || iqState.prefs.types || []);
+      const types = iqTypesToArray(set.types || iqState.prefs.types, ['behavioral', 'technical']);
       const jd = set.jd || $IQ('#iq-jd')?.value || '';
 
       // Check per-question replace limit (TASK 10B)
@@ -1598,7 +1657,7 @@
           if (!iqState.replaceCounts) iqState.replaceCounts = {};
           iqState.replaceCounts[i] = (iqState.replaceCounts[i] || 0) + 1;
           
-          // Persist the replaced question to localStorage
+          // Persist the replaced question and replaceCounts to localStorage
           iqSaveSetFull(set);
           
           iqRenderQuestions();
@@ -1683,7 +1742,7 @@
       if(['pro','premium'].includes(plan)){
         const mode = useSaved ? 'saved' : 'current';
         const seniority = iqState.set?.seniority || '';
-        const types = iqState.set?.types ? Array.from(iqState.set.types) : ['behavioral', 'technical'];
+        const types = iqTypesToArray(iqState.set?.types, ['behavioral', 'technical']);
         const jd = iqState.set?.jd || '';
         const questions = iqState.set?.questions || [];
         
