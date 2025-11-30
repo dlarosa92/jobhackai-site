@@ -1647,6 +1647,24 @@
         return;
       }
 
+      // Get and disable the replace button immediately to prevent concurrent requests
+      const replaceBtn = $IQ(`.btn-replace[data-idx="${i}"]`);
+      const wasDisabled = replaceBtn?.disabled || false;
+      if (replaceBtn) {
+        replaceBtn.disabled = true;
+        replaceBtn.setAttribute('aria-disabled', 'true');
+      }
+
+      // Helper function to re-enable the button (unless daily limit was reached)
+      const reenableButton = () => {
+        if (replaceBtn && !iqState.dailyLimitReached) {
+          replaceBtn.disabled = wasDisabled;
+          if (!wasDisabled) {
+            replaceBtn.removeAttribute('aria-disabled');
+          }
+        }
+      };
+
       try {
         const token = await getFirebaseToken();
         if (!token) {
@@ -1654,6 +1672,7 @@
           setTimeout(() => {
             window.location.href = 'login.html';
           }, 2000);
+          reenableButton();
           return;
         }
 
@@ -1680,6 +1699,7 @@
           if (response.status === 429 && errorData.reason === 'cooldown') {
             const retryAfter = errorData.retryAfter || 60;
             iqToast(`You're generating questions too quickly. Try again in ${retryAfter} seconds.`);
+            reenableButton();
             return;
           }
           
@@ -1691,11 +1711,13 @@
             iqToast(`You've reached today's Interview Questions limit for your ${planName} plan. You can still practice with your existing sets, or upgrade for higher limits.`);
             // Disable all buttons (generate + replace) since daily quota applies to all operations
             iqDisableAllButtons();
+            // Don't re-enable this button since all buttons are disabled
             return;
           }
           
           // Other errors
           iqToast('Something went wrong replacing the question. Please try again.');
+          reenableButton();
           throw new Error(errorData.error || `API error: ${response.status}`);
         }
 
@@ -1726,12 +1748,18 @@
           // Start global 60-second cooldown after successful replacement
           // This matches the backend cooldown enforcement for both full sets and replace operations
           iqStartGlobalCooldown(IQ_GLOBAL_COOLDOWN);
+          
+          // Button will be re-enabled by the cooldown system or re-rendering
+          // But we still need to re-enable it here in case cooldown doesn't affect replace buttons
+          reenableButton();
         } else {
+          reenableButton();
           throw new Error('Invalid API response: no question returned');
         }
       } catch (error) {
         console.error('[IQ] Replace error:', error);
         iqToast('Failed to replace question. Please try again.');
+        reenableButton();
       }
     }
 
