@@ -173,6 +173,7 @@ export async function onRequest(context) {
   let lockAcquired = false;
   let lockKey = null;
   let uid = null;
+  let quotaIncremented = false; // Track if quota was consumed to prevent clearing cooldown
 
   try {
     // Verify authentication
@@ -381,17 +382,9 @@ export async function onRequest(context) {
       tokenUsage: result.tokenUsage
     });
 
-    // Increment daily usage quota after successful generation
-    if (d1User && PLAN_LIMITS[effectivePlan]) {
-      await incrementFeatureDailyUsage(env, d1User.id, FEATURE, requestedCount);
-    }
-
-    // Release lock after successful completion
-    if (lockAcquired && env.JOBHACKAI_KV) {
-      await env.JOBHACKAI_KV.delete(lockKey).catch(() => {});
-    }
-
-    return successResponse({
+    // Build response first to ensure it can be created successfully
+    // Only increment quota after we confirm the response can be sent
+    const response = successResponse({
       role: result.role,
       seniority: result.seniority,
       types: result.types,
@@ -402,11 +395,25 @@ export async function onRequest(context) {
       tokenUsage: result.tokenUsage
     }, 200, origin, env, requestId);
 
+    // Increment daily usage quota only after response is successfully created
+    // This ensures quota is only consumed when user will actually receive questions
+    if (d1User && PLAN_LIMITS[effectivePlan]) {
+      await incrementFeatureDailyUsage(env, d1User.id, FEATURE, requestedCount);
+      quotaIncremented = true; // Mark quota as consumed
+    }
+
+    // Release lock after successful completion
+    if (lockAcquired && env.JOBHACKAI_KV) {
+      await env.JOBHACKAI_KV.delete(lockKey).catch(() => {});
+    }
+
+    return response;
+
   } catch (error) {
-    // If we set a cooldown but generation failed, clear it since no quota was consumed
-    // This allows users to retry immediately after legitimate API failures
-    // Only clear cooldown if uid is available (meaning we got past authentication)
-    if (uid && env.JOBHACKAI_KV) {
+    // Only clear cooldown if quota was NOT consumed
+    // If quota was consumed, user should still be subject to cooldown to prevent abuse
+    // This prevents race condition where quota is consumed but user can retry immediately
+    if (uid && env.JOBHACKAI_KV && !quotaIncremented) {
       const cooldownKey = `iq_cooldown:${uid}`;
       await env.JOBHACKAI_KV.delete(cooldownKey).catch(() => {});
     }
@@ -415,7 +422,12 @@ export async function onRequest(context) {
       await env.JOBHACKAI_KV.delete(lockKey).catch(() => {});
     }
     
-    console.error('[IQ-GENERATE] Error:', { requestId, error: error.message, stack: error.stack });
+    console.error('[IQ-GENERATE] Error:', { 
+      requestId, 
+      error: error.message, 
+      stack: error.stack,
+      quotaIncremented // Log whether quota was consumed for debugging
+    });
     return errorResponse(
       error.message || 'Failed to generate questions',
       500,
