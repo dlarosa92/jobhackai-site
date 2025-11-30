@@ -1399,6 +1399,17 @@
 
     // API
     const IQ_FIXED_COUNT = 10;
+    const IQ_API_TIMEOUT = 60000; // 60 seconds timeout for API requests
+    
+    // Helper function to add timeout to fetch requests
+    function fetchWithTimeout(url, options, timeoutMs = IQ_API_TIMEOUT) {
+      return Promise.race([
+        fetch(url, options),
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('Request timeout - the server took too long to respond. Please try again.')), timeoutMs)
+        )
+      ]);
+    }
     
     // Get Firebase auth token for API calls
     // Uses FirebaseAuthManager pattern (same as resume-feedback-pro.html)
@@ -1436,14 +1447,14 @@
           throw new Error('Not authenticated');
         }
         
-        const response = await fetch(IQ_API.GENERATE, {
+        const response = await fetchWithTimeout(IQ_API.GENERATE, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${token}`
           },
           body: JSON.stringify({ role, seniority, types, jd })
-        });
+        }, IQ_API_TIMEOUT);
         
         if (!response.ok) {
           const errorData = await response.json().catch(() => ({}));
@@ -1504,6 +1515,30 @@
         // Daily limit errors already handled above - return special marker
         if (e.message === 'Daily limit reached') {
           return { dailyLimitReached: true };
+        }
+        
+        // Handle network errors and timeouts
+        if (e.message.includes('timeout') || e.message.includes('Timeout') || e.message.includes('Request timeout')) {
+          console.error('[IQ] API request timeout:', {
+            error: e.message,
+            role,
+            seniority,
+            types
+          });
+          iqToast('The request took too long. Please check your connection and try again.');
+          return null;
+        }
+        
+        // Handle network errors (connection refused, failed to fetch, etc.)
+        if (e.message.includes('Failed to fetch') || e.message.includes('NetworkError') || e.message.includes('network')) {
+          console.error('[IQ] Network error:', {
+            error: e.message,
+            role,
+            seniority,
+            types
+          });
+          iqToast('Network error. Please check your internet connection and try again.');
+          return null;
         }
         
         // Log error for monitoring
@@ -1570,6 +1605,7 @@
       
       // Disable generate button during request
       const genBtn = $IQ('#btn-generate');
+      const originalButtonText = genBtn ? genBtn.textContent : 'Generate 10 Questions';
       if (genBtn) {
         genBtn.disabled = true;
         genBtn.textContent = 'Generating...';
@@ -1585,11 +1621,19 @@
             genBtn.disabled = false;
             genBtn.textContent = iqState.set ? 'New Question Set' : 'Generate 10 Questions';
           }
+          // Clear skeleton loaders on error
+          if (holder) {
+            holder.innerHTML = '<div class="iq-empty-state"><strong>Get Started</strong>Choose a role and question types, then generate 10 questions to get started.</div>';
+          }
           return;
         }
         
         // If daily limit reached, button should remain disabled - don't proceed
         if (res.dailyLimitReached) {
+          // Clear skeleton loaders on daily limit
+          if (holder) {
+            holder.innerHTML = '<div class="iq-empty-state"><strong>Daily Limit Reached</strong>You\'ve reached today\'s limit. You can still practice with your existing sets, or upgrade for higher limits.</div>';
+          }
           return;
         }
         
@@ -1631,9 +1675,17 @@
         
       } catch (error) {
         console.error('[IQ] Generate error:', error);
-        if(holder) holder.innerHTML = '<div class="iq-question-card" style="text-align:center; color:#DC2626;">Something went wrong generating questions. Please try again.</div>';
+        // Show user-friendly error message
+        if(holder) {
+          const errorMessage = error.message && error.message.includes('timeout') 
+            ? 'The request took too long. Please check your connection and try again.'
+            : error.message && error.message.includes('network')
+            ? 'Network error. Please check your internet connection and try again.'
+            : 'Something went wrong generating questions. Please try again.';
+          holder.innerHTML = `<div class="iq-question-card" style="text-align:center; color:#DC2626; padding:2rem;">${errorMessage}</div>`;
+        }
         iqToast('Generation failed. Please try again.');
-        // Re-enable and update button on error (cooldown not started)
+        // Always re-enable button on error (cooldown not started)
         // Note: On success, button remains disabled during cooldown (handled by iqStartGlobalCooldown)
         if (genBtn) {
           genBtn.disabled = false;
@@ -1707,7 +1759,7 @@
           return;
         }
 
-        const response = await fetch(IQ_API.GENERATE, {
+        const response = await fetchWithTimeout(IQ_API.GENERATE, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -1721,7 +1773,7 @@
             mode: 'replace',
             replaceIndex: i
           })
-        });
+        }, IQ_API_TIMEOUT);
 
         if (!response.ok) {
           const errorData = await response.json().catch(() => ({}));
@@ -1743,6 +1795,16 @@
             // Disable all buttons (generate + replace) since daily quota applies to all operations
             iqDisableAllButtons();
             // Don't re-enable this button since all buttons are disabled
+            return;
+          }
+          
+          // Handle auth errors
+          if (response.status === 401 || response.status === 403) {
+            iqToast('Your session has expired. Please log in again.');
+            setTimeout(() => {
+              window.location.href = 'login.html';
+            }, 2000);
+            reenableButton();
             return;
           }
           
@@ -1791,7 +1853,16 @@
         }
       } catch (error) {
         console.error('[IQ] Replace error:', error);
-        iqToast('Failed to replace question. Please try again.');
+        
+        // Handle network errors and timeouts
+        if (error.message && (error.message.includes('timeout') || error.message.includes('Timeout') || error.message.includes('Request timeout'))) {
+          iqToast('The request took too long. Please check your connection and try again.');
+        } else if (error.message && (error.message.includes('Failed to fetch') || error.message.includes('NetworkError') || error.message.includes('network'))) {
+          iqToast('Network error. Please check your internet connection and try again.');
+        } else {
+          iqToast('Failed to replace question. Please try again.');
+        }
+        
         reenableButton();
       }
     }
