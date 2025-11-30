@@ -209,31 +209,6 @@ export async function onRequest(context) {
       );
     }
 
-    // Server-side cooldown enforcement (60 seconds)
-    if (env.JOBHACKAI_KV) {
-      const cooldownKey = `iq_cooldown:${uid}`;
-      const lastRequest = await env.JOBHACKAI_KV.get(cooldownKey);
-      const now = Date.now();
-      const cooldownMs = 60 * 1000; // 60 seconds
-
-      if (lastRequest) {
-        const lastRequestTime = parseInt(lastRequest, 10);
-        const timeSinceLastRequest = now - lastRequestTime;
-
-        if (timeSinceLastRequest < cooldownMs) {
-          const retryAfter = Math.ceil((cooldownMs - timeSinceLastRequest) / 1000);
-          return errorResponse(
-            'Please wait before generating another set. Cooldown active.',
-            429,
-            origin,
-            env,
-            requestId,
-            { retryAfter, reason: 'cooldown' }
-          );
-        }
-      }
-    }
-
     // Parse request body
     let body;
     try {
@@ -258,13 +233,61 @@ export async function onRequest(context) {
     // Determine count based on mode
     const requestedCount = mode === 'replace' ? 1 : IQ_FIXED_COUNT;
 
+    // Server-side cooldown enforcement (60 seconds) - checked before quota to prevent race conditions
+    // Use distributed lock pattern to prevent concurrent requests from bypassing limits
+    const lockKey = `iq_lock:${uid}`;
+    const cooldownKey = `iq_cooldown:${uid}`;
+    let lockAcquired = false;
+    
+    if (env.JOBHACKAI_KV) {
+      const now = Date.now();
+      const cooldownMs = 60 * 1000; // 60 seconds
+      
+      // Check cooldown first
+      const lastRequest = await env.JOBHACKAI_KV.get(cooldownKey);
+      if (lastRequest) {
+        const lastRequestTime = parseInt(lastRequest, 10);
+        const timeSinceLastRequest = now - lastRequestTime;
+
+        if (timeSinceLastRequest < cooldownMs) {
+          const retryAfter = Math.ceil((cooldownMs - timeSinceLastRequest) / 1000);
+          return errorResponse(
+            'Please wait before generating another set. Cooldown active.',
+            429,
+            origin,
+            env,
+            requestId,
+            { retryAfter, reason: 'cooldown' }
+          );
+        }
+      }
+      
+      // Acquire distributed lock to prevent race conditions
+      // Try to acquire lock with a short TTL (5 seconds) - if it exists, another request is processing
+      const existingLock = await env.JOBHACKAI_KV.get(lockKey);
+      if (existingLock) {
+        return errorResponse(
+          'Another request is being processed. Please wait a moment.',
+          429,
+          origin,
+          env,
+          requestId,
+          { retryAfter: 2, reason: 'concurrent_request' }
+        );
+      }
+      
+      // Set lock with 5 second TTL (enough time for quota check + generation start)
+      await env.JOBHACKAI_KV.put(lockKey, String(now), { expirationTtl: 5 });
+      lockAcquired = true;
+    }
+
     // Check D1 availability and get/create user for daily quota tracking
     let d1User = null;
     if (isD1Available(env)) {
       d1User = await getOrCreateUserByAuthId(env, uid, userEmail);
     }
 
-    // Daily quota check (D1-backed)
+    // Daily quota check (D1-backed) - now protected by lock
     const FEATURE = 'interview_questions';
     const PLAN_LIMITS = {
       trial: 40,
@@ -278,6 +301,10 @@ export async function onRequest(context) {
       const used = await getFeatureDailyUsage(env, d1User.id, FEATURE);
       
       if (used + requestedCount > dailyLimit) {
+        // Release lock before returning error
+        if (lockAcquired && env.JOBHACKAI_KV) {
+          await env.JOBHACKAI_KV.delete(lockKey).catch(() => {});
+        }
         return errorResponse(
           'Daily Interview Questions limit reached for your plan.',
           429,
@@ -289,14 +316,34 @@ export async function onRequest(context) {
       }
     }
 
+    // Set cooldown BEFORE generation to prevent race conditions
+    // This ensures concurrent requests will see the cooldown immediately
+    if (env.JOBHACKAI_KV) {
+      const now = Date.now();
+      await env.JOBHACKAI_KV.put(cooldownKey, String(now), {
+        expirationTtl: 60 // 60 seconds
+      });
+    }
+
     // Generate questions
-    const result = await generateQuestions({
-      role: role.trim(),
-      seniority: seniority || '',
-      types: sanitizedTypes,
-      count: requestedCount,
-      jd: jd || ''
-    }, env);
+    let result;
+    try {
+      result = await generateQuestions({
+        role: role.trim(),
+        seniority: seniority || '',
+        types: sanitizedTypes,
+        count: requestedCount,
+        jd: jd || ''
+      }, env);
+    } catch (genError) {
+      // If generation fails, we should clear the cooldown we just set
+      // However, since we already set it, we'll leave it to prevent abuse
+      // The lock will expire naturally
+      if (lockAcquired && env.JOBHACKAI_KV) {
+        await env.JOBHACKAI_KV.delete(lockKey).catch(() => {});
+      }
+      throw genError;
+    }
 
     console.log('[IQ-GENERATE] Success:', {
       requestId,
@@ -311,13 +358,9 @@ export async function onRequest(context) {
       await incrementFeatureDailyUsage(env, d1User.id, FEATURE, requestedCount);
     }
 
-    // Set cooldown after successful generation
-    if (env.JOBHACKAI_KV) {
-      const cooldownKey = `iq_cooldown:${uid}`;
-      const now = Date.now();
-      await env.JOBHACKAI_KV.put(cooldownKey, String(now), {
-        expirationTtl: 60 // 60 seconds
-      });
+    // Release lock after successful completion
+    if (lockAcquired && env.JOBHACKAI_KV) {
+      await env.JOBHACKAI_KV.delete(lockKey).catch(() => {});
     }
 
     return successResponse({

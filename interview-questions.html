@@ -1721,14 +1721,13 @@
           iqToast('Question replaced.');
           iqTrack('iq_replace_one', { index: i });
           
-          // Start cooldown only after successful replacement
-          iqStartPerQCooldown(i);
+          // Start global 60-second cooldown after successful replacement
+          // This matches the backend cooldown enforcement for both full sets and replace operations
+          iqStartGlobalCooldown(IQ_GLOBAL_COOLDOWN);
         } else {
           throw new Error('Invalid API response: no question returned');
         }
       } catch (error) {
-        // Stop cooldown if it was started (shouldn't happen, but safety check)
-        iqStopPerQCooldown(i);
         console.error('[IQ] Replace error:', error);
         iqToast('Failed to replace question. Please try again.');
       }
