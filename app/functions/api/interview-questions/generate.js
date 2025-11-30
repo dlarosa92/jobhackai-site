@@ -257,6 +257,14 @@ export async function onRequest(context) {
 
         if (timeSinceLastRequest < cooldownMs) {
           const retryAfter = Math.ceil((cooldownMs - timeSinceLastRequest) / 1000);
+          // Log cooldown hit for monitoring (d1User may not be created yet at this point)
+          console.warn('[IQ-GENERATE] Cooldown hit:', {
+            requestId,
+            uid,
+            plan: effectivePlan,
+            reason: 'cooldown',
+            retryAfter
+          });
           return errorResponse(
             'Please wait before generating another set. Cooldown active.',
             429,
@@ -311,6 +319,17 @@ export async function onRequest(context) {
         if (lockAcquired && env.JOBHACKAI_KV) {
           await env.JOBHACKAI_KV.delete(lockKey).catch(() => {});
         }
+        // Log daily limit hit for monitoring
+        console.warn('[IQ-GENERATE] Daily limit hit:', {
+          requestId,
+          uid,
+          userId: d1User.id,
+          plan: effectivePlan,
+          reason: 'daily_limit',
+          limit: dailyLimit,
+          used,
+          requestedCount
+        });
         return errorResponse(
           'Daily Interview Questions limit reached for your plan.',
           429,

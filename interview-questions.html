@@ -191,8 +191,6 @@
     .ri-role { font-weight:600; }
     .ri-meta { color:#6B7280; font-size:.9rem; }
     .cta-hint { flex-basis:100%; font-size:.9rem; color:#6B7280; margin-top:.25rem; }
-    #iq-toast { position:fixed; bottom:20px; left:50%; transform:translateX(-50%); background:#1F2937; color:#fff; padding:.75rem 1rem; border-radius:8px; font-size:.9rem; z-index:9999; opacity:0; pointer-events:none; transition:opacity 0.3s ease; }
-    #iq-toast.show { opacity:1; }
     .btn-save svg { fill:none; stroke:#6B7280; stroke-width:1.5; }
     /* Stronger selectors to beat any theme overrides */
     .iq-qactions .btn-save[aria-pressed="true"] svg,
@@ -442,6 +440,10 @@
     .iq-plan-strip .user-plan-badge.premium {
       color: #C62828;
       background: #FFEBEE;
+    }
+    .iq-plan-strip .user-plan-badge.free {
+      color: #6B7280;
+      background: #F3F4F6;
     }
     .iq-plan-strip .plan-features {
       display: flex;
@@ -714,7 +716,7 @@
       </div>
 
       <!-- First-time visitor hint banner -->
-      <div id="iq-first-hint" class="iq-hint-banner" style="display:none; margin-top:1rem; padding:0.75rem 1rem; background:#EFF6FF; border:1px solid #BFDBFE; border-radius:10px; color:#1E40AF; font-size:0.9rem; align-items:center; gap:0.5rem;">
+      <div id="iq-first-hint" class="iq-hint-banner" style="display:none; margin-top:1rem; padding:0.75rem 1rem; background:#EFF6FF; border:1px solid #BFDBFE; border-radius:10px; color:#1E40AF; font-size:0.9rem; display:flex; align-items:center; gap:0.5rem;">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;">
           <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/>
           <circle cx="12" cy="12" r="4"/>
@@ -1302,7 +1304,36 @@
         iqDisableAllButtons();
       }
     }
-    function iqRenderRecents(){ const box=$IQ('#iq-recents'); if(!box) return; const recents=JSON.parse(localStorage.getItem('iq_recent_sets')||'[]'); if(recents.length===0){ box.innerHTML='<div class="empty">No recent sets yet.</div>'; return; } box.innerHTML=recents.map(r=>`<button class=\"recent-item\" data-id=\"${r.id}\"><div class=\"ri-role\">${r.role}</div><div class=\"ri-meta\">${r.count} Q • ${new Date(r.time).toLocaleString()}</div></button>`).join(''); }
+    function iqRenderRecents(){ 
+      const box=$IQ('#iq-recents'); 
+      if(!box) return; 
+      const recents=JSON.parse(localStorage.getItem('iq_recent_sets')||'[]'); 
+      if(recents.length===0){ 
+        box.innerHTML='<div class="empty">No recent sets yet.</div>'; 
+        return; 
+      } 
+      // Clear existing content
+      box.innerHTML = '';
+      // Build DOM nodes safely to prevent XSS
+      recents.forEach(r => {
+        const btn = document.createElement('button');
+        btn.className = 'recent-item';
+        btn.setAttribute('data-id', String(r.id || ''));
+        
+        const roleDiv = document.createElement('div');
+        roleDiv.className = 'ri-role';
+        roleDiv.textContent = String(r.role || '');
+        
+        const metaDiv = document.createElement('div');
+        metaDiv.className = 'ri-meta';
+        const timeStr = r.time ? new Date(r.time).toLocaleString() : '';
+        metaDiv.textContent = `${r.count || 0} Q • ${timeStr}`;
+        
+        btn.appendChild(roleDiv);
+        btn.appendChild(metaDiv);
+        box.appendChild(btn);
+      });
+    }
     function iqUpdateGuidanceUI(){ const t=$IQ('#toggle-guidance'); if(t){ t.setAttribute('aria-pressed', String(iqState.prefs.showGuidance)); t.textContent = iqState.prefs.showGuidance ? 'Hide Answer Guidance' : 'Show Answer Guidance'; if(iqState.prefs.showGuidance){ t.classList.add('is-pressed'); } else { t.classList.remove('is-pressed'); } } iqRenderQuestions(); }
     function iqWireRecents(){ const box=$IQ('#iq-recents'); if(!box) return; box.addEventListener('click',(e)=>{ const btn=e.target.closest('.recent-item'); if(!btn) return; const id=btn.getAttribute('data-id'); if(!id) return; iqLoadSetById(id); }); }
 
@@ -1522,7 +1553,6 @@
         throw e;
       }
     }
-    async function iqApiReplace({ role, seniority, types, jd, avoid, index }){ iqTrack('iq_replace_clicked',{index}); try{ if(IQ_API.PROXY_BASE){ const r=await fetch(`${IQ_API.PROXY_BASE}/interview/replace`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({role,seniority,types,jd,avoid,index})}); if(!r.ok) throw new Error('proxy'); return await r.json(); } if(IQ_API.ZAPIER_GENERATE_HOOK){ const r=await fetch(IQ_API.ZAPIER_GENERATE_HOOK,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({intent:'replace_one',role,seniority,types,jd,avoid,index})}); if(!r.ok) throw new Error('zap'); return await r.json(); } }catch(e){ console.warn('iqApiReplace failed, using stub',e);} return { q:'Describe a time you simplified a complex system.', hint:'Focus on trade-offs and impact.', example:'S: legacy… T: simplify… A: removed X, added Y… R: fewer incidents, faster dev.' } }
 
     // Actions
     async function iqGenerate(){ 
@@ -1749,9 +1779,11 @@
           // This matches the backend cooldown enforcement for both full sets and replace operations
           iqStartGlobalCooldown(IQ_GLOBAL_COOLDOWN);
           
-          // Button will be re-enabled by the cooldown system or re-rendering
-          // But we still need to re-enable it here in case cooldown doesn't affect replace buttons
-          reenableButton();
+          // Re-enable button if still under per-question limit and daily limit not reached
+          // The button will be disabled by iqRenderQuestions() if limits are hit
+          if (iqState.replaceCounts[i] < IQ_MAX_REPLACES && !iqState.dailyLimitReached) {
+            reenableButton();
+          }
         } else {
           reenableButton();
           throw new Error('Invalid API response: no question returned');
