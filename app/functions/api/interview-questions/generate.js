@@ -172,6 +172,7 @@ export async function onRequest(context) {
   // Declare lock variables outside try block so catch block can access them
   let lockAcquired = false;
   let lockKey = null;
+  let uid = null;
 
   try {
     // Verify authentication
@@ -180,7 +181,8 @@ export async function onRequest(context) {
       return errorResponse('Unauthorized', 401, origin, env, requestId);
     }
 
-    const { uid, payload } = await verifyFirebaseIdToken(token, env.FIREBASE_PROJECT_ID);
+    const { uid: authUid, payload } = await verifyFirebaseIdToken(token, env.FIREBASE_PROJECT_ID);
+    uid = authUid;
     const userEmail = payload.email;
 
     // Get user plan
@@ -340,9 +342,12 @@ export async function onRequest(context) {
         jd: jd || ''
       }, env);
     } catch (genError) {
-      // If generation fails, we should clear the cooldown we just set
-      // However, since we already set it, we'll leave it to prevent abuse
-      // The lock will expire naturally
+      // If generation fails, clear the cooldown since no quota was consumed
+      // This allows users to retry immediately after legitimate API failures
+      if (env.JOBHACKAI_KV) {
+        await env.JOBHACKAI_KV.delete(cooldownKey).catch(() => {});
+      }
+      // Release lock
       if (lockAcquired && env.JOBHACKAI_KV) {
         await env.JOBHACKAI_KV.delete(lockKey).catch(() => {});
       }
@@ -379,6 +384,13 @@ export async function onRequest(context) {
     }, 200, origin, env, requestId);
 
   } catch (error) {
+    // If we set a cooldown but generation failed, clear it since no quota was consumed
+    // This allows users to retry immediately after legitimate API failures
+    // Only clear cooldown if uid is available (meaning we got past authentication)
+    if (uid && env.JOBHACKAI_KV) {
+      const cooldownKey = `iq_cooldown:${uid}`;
+      await env.JOBHACKAI_KV.delete(cooldownKey).catch(() => {});
+    }
     // Release lock if it was acquired before the error
     if (lockAcquired && lockKey && env.JOBHACKAI_KV) {
       await env.JOBHACKAI_KV.delete(lockKey).catch(() => {});

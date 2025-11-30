@@ -1890,7 +1890,17 @@
     function iqSetSavedIndexes(arr){ try{ localStorage.setItem(iqSavedKey(), JSON.stringify(arr)); }catch{} }
     function iqIsSaved(i){ return iqGetSavedIndexes().includes(i); }
     function iqToggleSaved(i){ let arr=iqGetSavedIndexes(); if(arr.includes(i)){ arr=arr.filter(x=>x!==i); }else{ arr.push(i); } iqSetSavedIndexes(arr); iqUpdateSavedChip(); iqUpdateSelectionSummary(); iqRenderSavedPanel(false); iqTrack('iq_saved_toggle',{ index:i, saved:arr.includes(i) }); }
-    function iqGetSavedItems(){ if(!iqState.set) return []; const idxs=iqGetSavedIndexes(); return idxs.map(i=>iqState.set.questions[i]).filter(Boolean); }
+    function iqGetSavedItems(){ 
+      if(!iqState.set) return []; 
+      const idxs=iqGetSavedIndexes(); 
+      return idxs
+        .map(i=>iqState.set.questions[i])
+        .filter(question => 
+          question && 
+          typeof question.q === 'string' && 
+          question.q.trim().length > 0
+        ); 
+    }
     function iqUpdateSavedChip(){ 
       const chip=$IQ('#chip-saved'); 
       const savedCountSpan = $IQ('#chip-saved-count');
