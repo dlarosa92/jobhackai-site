@@ -1982,7 +1982,7 @@
           navigator.clipboard.writeText(iqState.set.questions[i].q).then(()=>{ iqToast('Copied'); iqTrack('iq_copy_one',{ index:i }); }).catch(()=> iqToast('Clipboard blocked'));
           return;
         }
-        if(actionBtn.classList.contains('btn-replace')){ iqReplaceOne(i); iqTrack('iq_replace_one',{ index:i }); return; }
+        if(actionBtn.classList.contains('btn-replace')){ iqReplaceOne(i); return; }
         if(actionBtn.classList.contains('btn-save')){ iqToggleSaved(i); const nowSaved=iqIsSaved(i); actionBtn.setAttribute('aria-pressed', String(nowSaved)); iqToast(nowSaved ? 'Added to Saved' : 'Removed from Saved'); return; }
         if(actionBtn.classList.contains('btn-example')){ const ex=$IQ(`#iq-example-${i}`); if(ex) ex.hidden=!ex.hidden; return; }
         if(actionBtn.classList.contains('btn-notes')){ const panel=$IQ(`#iq-notes-${i}`); const ta=$IQ(`#iq-notes-ta-${i}`); const wasHidden=panel.hidden; if(wasHidden && ta && !ta.value){ ta.value='S:\nT:\nA:\nR:'; } panel.hidden = !panel.hidden; actionBtn.setAttribute('aria-expanded', String(!panel.hidden)); if(!panel.hidden) ta?.focus(); if(wasHidden) iqTrack('iq_notes_opened',{ index:i }); return; }
@@ -2013,7 +2013,7 @@
           navigator.clipboard.writeText(iqState.set.questions[i].q).then(()=>{ iqToast('Copied'); iqTrack('iq_copy_one',{ index:i }); }).catch(()=> iqToast('Clipboard blocked'));
           return;
         }
-        if(actionBtn.classList.contains('btn-replace')){ iqReplaceOne(i); iqTrack('iq_replace_one',{ index:i }); return; }
+        if(actionBtn.classList.contains('btn-replace')){ iqReplaceOne(i); return; }
         if(actionBtn.classList.contains('btn-save')){ iqToggleSaved(i); const nowSaved=iqIsSaved(i); actionBtn.setAttribute('aria-pressed', String(nowSaved)); return; }
         if(actionBtn.classList.contains('btn-example')){ const ex=$IQ(`#iq-example-${i}`); if(ex) ex.hidden=!ex.hidden; return; }
         if(actionBtn.classList.contains('btn-notes')){ const panel=$IQ(`#iq-notes-${i}`); const ta=$IQ(`#iq-notes-ta-${i}`); const exp=panel.hidden; if(exp && !ta?.value){ if(ta) ta.value='S:\nT:\nA:\nR:'; } panel.hidden=!panel.hidden; actionBtn.setAttribute('aria-expanded', String(!panel.hidden)); if(!panel.hidden) ta?.focus(); if(exp) iqTrack('iq_notes_opened',{ index:i }); return; }

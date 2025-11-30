@@ -305,14 +305,6 @@ export async function onRequest(context) {
       const used = await getFeatureDailyUsage(env, d1User.id, FEATURE);
       
       if (used + requestedCount > dailyLimit) {
-        // Set cooldown before releasing lock to prevent spam requests
-        // This ensures users can't repeatedly hit the quota check after lock expires
-        if (env.JOBHACKAI_KV) {
-          const now = Date.now();
-          await env.JOBHACKAI_KV.put(cooldownKey, String(now), {
-            expirationTtl: 60 // 60 seconds
-          });
-        }
         // Release lock before returning error
         if (lockAcquired && env.JOBHACKAI_KV) {
           await env.JOBHACKAI_KV.delete(lockKey).catch(() => {});
