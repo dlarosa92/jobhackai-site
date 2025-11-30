@@ -169,6 +169,10 @@ export async function onRequest(context) {
     return errorResponse('Method not allowed', 405, origin, env, requestId);
   }
 
+  // Declare lock variables outside try block so catch block can access them
+  let lockAcquired = false;
+  let lockKey = null;
+
   try {
     // Verify authentication
     const token = getBearer(request);
@@ -235,9 +239,9 @@ export async function onRequest(context) {
 
     // Server-side cooldown enforcement (60 seconds) - checked before quota to prevent race conditions
     // Use distributed lock pattern to prevent concurrent requests from bypassing limits
-    const lockKey = `iq_lock:${uid}`;
+    lockKey = `iq_lock:${uid}`;
     const cooldownKey = `iq_cooldown:${uid}`;
-    let lockAcquired = false;
+    lockAcquired = false;
     
     if (env.JOBHACKAI_KV) {
       const now = Date.now();
@@ -375,6 +379,11 @@ export async function onRequest(context) {
     }, 200, origin, env, requestId);
 
   } catch (error) {
+    // Release lock if it was acquired before the error
+    if (lockAcquired && lockKey && env.JOBHACKAI_KV) {
+      await env.JOBHACKAI_KV.delete(lockKey).catch(() => {});
+    }
+    
     console.error('[IQ-GENERATE] Error:', { requestId, error: error.message, stack: error.stack });
     return errorResponse(
       error.message || 'Failed to generate questions',
