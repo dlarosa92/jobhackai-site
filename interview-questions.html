@@ -1403,12 +1403,17 @@
     
     // Helper function to add timeout to fetch requests
     function fetchWithTimeout(url, options, timeoutMs = IQ_API_TIMEOUT) {
-      return Promise.race([
-        fetch(url, options),
-        new Promise((_, reject) =>
-          setTimeout(() => reject(new Error('Request timeout - the server took too long to respond. Please try again.')), timeoutMs)
-        )
-      ]);
+      let timeoutId;
+      const timeoutPromise = new Promise((_, reject) => {
+        timeoutId = setTimeout(() => reject(new Error('Request timeout - the server took too long to respond. Please try again.')), timeoutMs);
+      });
+      
+      const fetchPromise = fetch(url, options).finally(() => {
+        // Clear timeout when fetch completes (success or failure)
+        if (timeoutId) clearTimeout(timeoutId);
+      });
+      
+      return Promise.race([fetchPromise, timeoutPromise]);
     }
     
     // Get Firebase auth token for API calls
