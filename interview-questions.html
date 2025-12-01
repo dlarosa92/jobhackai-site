@@ -466,24 +466,6 @@
       stroke-width: 2;
       flex-shrink: 0;
     }
-    .iq-plan-strip .upgrade-link {
-      color: #007BFF;
-      text-decoration: none;
-      font-weight: 500;
-      cursor: pointer;
-      transition: color 0.15s ease;
-    }
-    .iq-plan-strip .upgrade-link:hover {
-      color: #0056b3;
-      text-decoration: underline;
-    }
-    .iq-plan-strip .info-icon {
-      cursor: default;
-      color: #6B7280;
-      display: inline-flex;
-      align-items: center;
-      pointer-events: none;
-    }
 
     /* Selection summary styling */
     .iq-selection-summary {
@@ -672,8 +654,8 @@
         <span id="plan-badge-container"></span>
         <span class="plan-features" id="plan-features-display"></span>
       </div>
-      <a href="pricing-a.html" class="upgrade-link" id="plan-upgrade-link" style="display:none;">
-        Upgrade <span class="info-icon">ⓘ</span>
+      <a href="pricing-a.html" class="btn-outline" id="plan-upgrade-link" style="display:none; text-decoration:none;">
+        Upgrade
       </a>
     </div>
 
@@ -1654,6 +1636,8 @@
           if (genBtn) {
             genBtn.disabled = false;
             genBtn.textContent = iqState.set ? 'New Question Set' : 'Generate 10 Questions';
+            // Update button state to respect role requirement and styling
+            iqUpdateGenerateButtonState();
           }
           // Clear skeleton loaders on error
           if (holder) {
@@ -2392,13 +2376,19 @@ function initIQPage(){
             <span class="feature-tag">${checkIcon} Interview Questions: Included</span>
             <span class="feature-tag">${lockIcon} Mock Interviews: Pro & Premium</span>
           `;
-          if (upgradeLink) upgradeLink.style.display = 'inline';
+          if (upgradeLink) {
+            upgradeLink.textContent = 'Upgrade';
+            upgradeLink.style.display = 'inline-flex';
+          }
         } else if (plan === 'essential') {
           featuresDisplay.innerHTML = `
             <span class="feature-tag">${checkIcon} Interview Questions: Included</span>
             <span class="feature-tag">${lockIcon} Mock Interviews: Pro & Premium</span>
           `;
-          if (upgradeLink) upgradeLink.style.display = 'inline';
+          if (upgradeLink) {
+            upgradeLink.textContent = 'Upgrade';
+            upgradeLink.style.display = 'inline-flex';
+          }
         } else if (plan === 'pro') {
           // Get mock interview count if available
           const mockCount = localStorage.getItem('mock_interviews_remaining') || '20';
@@ -2407,8 +2397,8 @@ function initIQPage(){
             <span class="feature-tag" style="color:#6B7280;">${mockCount} mock interviews left this month</span>
           `;
           if (upgradeLink) {
-            upgradeLink.innerHTML = 'Upgrade to Premium for unlimited <span class="info-icon">ⓘ</span>';
-            upgradeLink.style.display = 'inline';
+            upgradeLink.textContent = 'Upgrade to Premium';
+            upgradeLink.style.display = 'inline-flex';
           }
         } else if (plan === 'premium') {
           featuresDisplay.innerHTML = `
@@ -2419,7 +2409,10 @@ function initIQPage(){
           featuresDisplay.innerHTML = `
             <span class="feature-tag">${lockIcon} Upgrade to unlock Interview Questions</span>
           `;
-          if (upgradeLink) upgradeLink.style.display = 'inline';
+          if (upgradeLink) {
+            upgradeLink.textContent = 'Upgrade';
+            upgradeLink.style.display = 'inline-flex';
+          }
         }
       }
     }
