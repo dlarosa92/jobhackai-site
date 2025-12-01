@@ -330,6 +330,11 @@
       font-size: 1.05rem;
       color: var(--color-text-main);
     }
+    /* Premium CTA with white background to match card tiles */
+    .priority-review-cta.premium-cta {
+      background: var(--color-card-bg);
+      box-shadow: var(--shadow-card);
+    }
     /* Standardized upgrade button - matches all other upgrade CTAs */
     .priority-review-cta .priority-btn {
       background: #1976D2;
@@ -337,7 +342,7 @@
       font-weight: 600;
       border: none;
       border-radius: var(--radius-md);
-      padding: 0.6rem 1.3rem;
+      padding: 0.7rem 2rem;
       font-size: 1rem;
       cursor: pointer;
       transition: background 0.18s;
@@ -3377,6 +3382,19 @@
       return cta;
     }
     
+    // --- Premium Priority Review CTA (white background) ---
+    function renderPremiumPriorityReviewCTA() {
+      const cta = document.createElement('div');
+      cta.className = 'priority-review-cta premium-cta';
+      cta.innerHTML = `<strong>You're on Premium!</strong> <span id="priority-review-inline-premium"></span>`;
+      // Insert tooltip
+      setTimeout(() => {
+        const inline = cta.querySelector('#priority-review-inline-premium');
+        if (inline) inline.appendChild(createPriorityReviewTooltip('Premium users get their resume analyzed first—faster results, prioritized AI review, and VIP support.'));
+      }, 0);
+      return cta;
+    }
+    
     // --- Premium Priority Review note (no CTA) ---
     function renderPremiumPriorityReviewNote() {
       // Premium should not show any Priority Review messaging
@@ -3401,8 +3419,13 @@
           rewriteTile.parentNode.insertBefore(cta, rewriteTile.nextSibling);
         }
       } else if (plan === 'premium') {
-        // No Priority Review messaging for Premium
-        return;
+        // Insert Premium CTA with white background
+        const rewriteTile = document.getElementById('rf-rewrite-tile');
+        if (rewriteTile && rewriteTile.parentNode) {
+          const cta = renderPremiumPriorityReviewCTA();
+          cta.id = 'priority-review-cta-main';
+          rewriteTile.parentNode.insertBefore(cta, rewriteTile.nextSibling);
+        }
       }
     }
 
