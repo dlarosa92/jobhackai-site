@@ -638,10 +638,34 @@
       if (!billingSection) return;
       
       try {
-        const user = window.FirebaseAuthManager?.getCurrentUser?.();
+        // Wait for Firebase auth to be ready (up to 5 seconds)
+        let user = window.FirebaseAuthManager?.getCurrentUser?.();
         if (!user) {
-          billingSection.innerHTML = '<div style="color: #6B7280;">Please log in to view subscription details.</div>';
-          return;
+          // Check if we have localStorage auth as a backup signal
+          const hasLocalStorageAuth = localStorage.getItem('user-authenticated') === 'true' && !!localStorage.getItem('user-email');
+          
+          if (hasLocalStorageAuth) {
+            // Wait for Firebase auth manager to initialize
+            console.log('🔄 [ACCOUNT-SETTINGS] Waiting for Firebase auth to be ready...');
+            for (let i = 0; i < 50 && !user; i++) { // Up to 5 seconds
+              await new Promise(r => setTimeout(r, 100));
+              user = window.FirebaseAuthManager?.getCurrentUser?.();
+            }
+            
+            if (user) {
+              console.log('✅ [ACCOUNT-SETTINGS] Firebase auth ready, user found');
+            } else {
+              console.warn('⚠️ [ACCOUNT-SETTINGS] Firebase auth timed out, but localStorage says authenticated');
+              // Show loading message instead of "please log in"
+              billingSection.innerHTML = '<div style="color: #6B7280;">Loading subscription details...</div>';
+              // Try again in a bit
+              setTimeout(renderBillingSection, 2000);
+              return;
+            }
+          } else {
+            billingSection.innerHTML = '<div style="color: #6B7280;">Please log in to view subscription details.</div>';
+            return;
+          }
         }
         
         const idToken = await user.getIdToken();
