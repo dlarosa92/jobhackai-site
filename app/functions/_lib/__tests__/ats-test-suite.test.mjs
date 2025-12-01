@@ -16,7 +16,7 @@
 import assert from 'node:assert';
 import { readFileSync, readdirSync, existsSync } from 'fs';
 import { fileURLToPath } from 'url';
-import { dirname, join } from 'path';
+import { dirname, join, resolve } from 'path';
 import { scoreResume } from '../ats-scoring-engine.js';
 import { createTestEnv } from './test-env-helper.mjs';
 
@@ -365,7 +365,9 @@ async function runTests() {
 }
 
 // Run tests when executed directly
-if (import.meta.url === `file://${process.argv[1]}`) {
+// Use fileURLToPath to convert import.meta.url to a file path for cross-platform compatibility
+// Normalize both paths to handle Windows/Unix path separator differences
+if (resolve(__filename) === resolve(process.argv[1])) {
   runTests()
     .then(success => {
       process.exit(success ? 0 : 1);
