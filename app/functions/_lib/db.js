@@ -313,12 +313,11 @@ export async function getFeedbackSessionById(env, sessionId, userId) {
     // This prevents 500 errors when D1 schema is out of date
     // Other errors (connection failures, permission issues, etc.) should still throw
     const errorMessage = error?.message || String(error);
+    // Check for schema mismatch errors (missing columns/tables)
+    // Both error types are checked directly for consistency
     const isSchemaMismatch = 
       errorMessage.includes('no such column') ||
-      errorMessage.includes('SQLITE_ERROR') && (
-        errorMessage.includes('no such table') ||
-        errorMessage.includes('no such column')
-      );
+      errorMessage.includes('no such table');
     
     if (isSchemaMismatch) {
       console.warn('[DB] Schema mismatch detected, treating as "not found"');
