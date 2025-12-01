@@ -1492,7 +1492,6 @@
           }
           
           // Other errors (5xx, etc.)
-          iqToast('Something went wrong generating questions. Please try again.');
           throw new Error(errorData.error || `API error: ${response.status}`);
         }
         
@@ -1814,8 +1813,6 @@
           }
           
           // Other errors
-          iqToast('Something went wrong replacing the question. Please try again.');
-          reenableButton();
           throw new Error(errorData.error || `API error: ${response.status}`);
         }
 
