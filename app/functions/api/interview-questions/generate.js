@@ -291,8 +291,8 @@ export async function onRequest(context) {
         );
       }
       
-      // Set lock with 5 second TTL (enough time for quota check + generation start)
-      await env.JOBHACKAI_KV.put(lockKey, String(now), { expirationTtl: 5 });
+      // Set lock with 60 second TTL (Cloudflare KV minimum - enough time for quota check + generation start)
+      await env.JOBHACKAI_KV.put(lockKey, String(now), { expirationTtl: 60 });
       lockAcquired = true;
     }
 
