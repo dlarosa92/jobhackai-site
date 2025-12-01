@@ -206,8 +206,8 @@ export async function getResumeFeedbackHistory(env, userId, { limit = 20 } = {})
         try {
           const feedback = JSON.parse(row.feedback_json);
           if (feedback.atsRubric && Array.isArray(feedback.atsRubric)) {
-            // Sum up scores from atsRubric
-            atsScore = feedback.atsRubric.reduce((sum, item) => sum + (item.score || 0), 0);
+            // Sum up scores from atsRubric and round to match calcOverallScore behavior
+            atsScore = Math.round(feedback.atsRubric.reduce((sum, item) => sum + (item.score || 0), 0));
           }
         } catch (e) {
           // Ignore parse errors
@@ -289,7 +289,8 @@ export async function getFeedbackSessionById(env, sessionId, userId) {
     // Calculate ats_score if not stored
     let atsScore = row.ats_score;
     if (atsScore === null && feedbackData && feedbackData.atsRubric) {
-      atsScore = feedbackData.atsRubric.reduce((sum, item) => sum + (item.score || 0), 0);
+      // Round to match calcOverallScore behavior for consistency
+      atsScore = Math.round(feedbackData.atsRubric.reduce((sum, item) => sum + (item.score || 0), 0));
     }
 
     return {

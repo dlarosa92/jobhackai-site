@@ -59,7 +59,11 @@ export async function extractResumeText(file, fileName) {
   } else if (file instanceof Blob) {
     arrayBuffer = await file.arrayBuffer();
   } else {
-    throw new Error('Invalid file format');
+    throw createExtractionError(
+      EXTRACTION_ERRORS.INVALID_FORMAT,
+      'Invalid file format. Expected File, Blob, or ArrayBuffer.',
+      { receivedType: typeof file, isArrayBuffer: file instanceof ArrayBuffer, isBlob: file instanceof Blob }
+    );
   }
 
   // Validate file size (2MB limit)
