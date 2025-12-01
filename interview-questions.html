@@ -432,6 +432,7 @@
     .iq-plan-strip .user-plan-badge.essential {
       color: #0077B5;
       background: #E3F2FD;
+      font-weight: 700;
     }
     .iq-plan-strip .user-plan-badge.pro {
       color: #388E3C;
@@ -477,10 +478,11 @@
       text-decoration: underline;
     }
     .iq-plan-strip .info-icon {
-      cursor: help;
+      cursor: default;
       color: #6B7280;
       display: inline-flex;
       align-items: center;
+      pointer-events: none;
     }
 
     /* Selection summary styling */
@@ -671,7 +673,7 @@
         <span class="plan-features" id="plan-features-display"></span>
       </div>
       <a href="pricing-a.html" class="upgrade-link" id="plan-upgrade-link" style="display:none;">
-        Upgrade <span class="info-icon" title="Mock Interviews are available on Pro & Premium plans.">ⓘ</span>
+        Upgrade <span class="info-icon">ⓘ</span>
       </a>
     </div>
 
@@ -1681,8 +1683,8 @@
         iqState.replaceCounts = {}; 
         // Reset daily limit flag on successful generation
         iqState.dailyLimitReached = false;
-        // Update button state after successful generation
-        iqUpdateGenerateButtonState();
+        // Note: Don't call iqUpdateGenerateButtonState() here - it's redundant
+        // because iqStartGlobalCooldown() will call it after properly setting the cooldown
         iqState.prefs={...iqState.prefs,seniority,count: IQ_FIXED_COUNT,types:new Set(types)}; 
         iqSavePrefs(); 
         iqLoadNotes(); 
@@ -2273,7 +2275,7 @@ function initIQPage(){
     const upgradeBtn = document.getElementById('iq-upgrade');
 
     // Self-tests
-    async function runIQSelfTests(){ const res=[]; const ok=(n,c)=>res.push({n,pass:!!c}); ok('Role input exists', !!document.getElementById('iq-role')); ok('Generate button exists', !!document.getElementById('btn-generate')); iqStartGlobalCooldown(1); ok('Cooldown badge shows', !$IQ('#cooldown').hidden); const gen=await iqApiGenerate({ role:'Tester', seniority:'', types:['behavioral'], count:3, jd:'' }); ok('apiGenerate returns questions', Array.isArray(gen.questions)&&gen.questions.length>0); console.log('%cInterview Questions Self-Tests','font-weight:700'); res.forEach(r=>console.log(`${r.pass?'✅':'❌'} ${r.n}`)); }
+    async function runIQSelfTests(){ const res=[]; const ok=(n,c)=>res.push({n,pass:!!c}); ok('Role input exists', !!document.getElementById('iq-role')); ok('Generate button exists', !!document.getElementById('btn-generate')); iqStartGlobalCooldown(1); ok('Cooldown helper shows', $IQ('#cooldown-helper') && $IQ('#cooldown-helper').style.display !== 'none'); const gen=await iqApiGenerate({ role:'Tester', seniority:'', types:['behavioral'], count:3, jd:'' }); ok('apiGenerate returns questions', Array.isArray(gen.questions)&&gen.questions.length>0); console.log('%cInterview Questions Self-Tests','font-weight:700'); res.forEach(r=>console.log(`${r.pass?'✅':'❌'} ${r.n}`)); }
     
     // --- QA: Integration harness ---
     function runIQIntegrationQA(){
@@ -2405,7 +2407,7 @@ function initIQPage(){
             <span class="feature-tag" style="color:#6B7280;">${mockCount} mock interviews left this month</span>
           `;
           if (upgradeLink) {
-            upgradeLink.innerHTML = 'Upgrade to Premium for unlimited <span class="info-icon" title="Upgrade to Premium for unlimited mock interviews">ⓘ</span>';
+            upgradeLink.innerHTML = 'Upgrade to Premium for unlimited <span class="info-icon">ⓘ</span>';
             upgradeLink.style.display = 'inline';
           }
         } else if (plan === 'premium') {
