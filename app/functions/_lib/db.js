@@ -308,9 +308,25 @@ export async function getFeedbackSessionById(env, sessionId, userId) {
     };
   } catch (error) {
     console.error('[DB] Error in getFeedbackSessionById:', error);
-    // On error (e.g., schema mismatch), return null so caller treats as "not found"
+    
+    // Only return null for schema mismatch errors (missing columns, etc.)
     // This prevents 500 errors when D1 schema is out of date
-    return null;
+    // Other errors (connection failures, permission issues, etc.) should still throw
+    const errorMessage = error?.message || String(error);
+    const isSchemaMismatch = 
+      errorMessage.includes('no such column') ||
+      errorMessage.includes('SQLITE_ERROR') && (
+        errorMessage.includes('no such table') ||
+        errorMessage.includes('no such column')
+      );
+    
+    if (isSchemaMismatch) {
+      console.warn('[DB] Schema mismatch detected, treating as "not found"');
+      return null;
+    }
+    
+    // Re-throw genuine database errors so they surface as 500 errors
+    throw error;
   }
 }
 
