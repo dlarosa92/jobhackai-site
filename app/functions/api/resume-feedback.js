@@ -740,11 +740,9 @@ export async function onRequest(context) {
           d1SessionId = String(resumeSession.id);
           d1CreatedAt = resumeSession.created_at;
           
-          // Calculate overall ATS score for quick history display
-          let overallAtsScore = null;
-          if (result.atsRubric && Array.isArray(result.atsRubric)) {
-            overallAtsScore = result.atsRubric.reduce((sum, item) => sum + (item.score || 0), 0);
-          }
+          // Use overallScore from ruleBasedScores (already calculated with Math.round via calcOverallScore)
+          // This ensures consistency with the score returned by the scoring engine
+          const overallAtsScore = ruleBasedScores.overallScore ?? null;
           
           // Update session with ATS score (for faster history queries)
           if (overallAtsScore !== null) {
