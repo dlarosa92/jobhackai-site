@@ -762,13 +762,23 @@
       return plan;
     }
 
+    // Guard to prevent concurrent plan syncs
+    let planSyncInProgress = false;
+    
     async function hydratePlanFromServerAndEnforceAccess() {
       const allowedPlans = window.__JOBHACKAI_RF_ALLOWED_PLANS__ || ['trial', 'essential', 'pro', 'premium'];
       const cachedPlan = localStorage.getItem('user-plan');
       const planPending = window.__JOBHACKAI_PLAN_PENDING__;
       
+      // Prevent concurrent syncs - if one is already in progress, wait for it
+      if (planSyncInProgress) {
+        console.log('⏸️ [RESUME-FEEDBACK] Plan sync already in progress, skipping duplicate call');
+        return;
+      }
+      
       // Always sync from Stripe to ensure KV is up to date
       // This fixes plan mismatch issues between KV cache and actual Stripe subscription
+      planSyncInProgress = true;
       try {
         const token = await getAuthToken().catch((err) => {
           console.warn('[RESUME-FEEDBACK] Unable to obtain auth token for plan hydration:', err);
@@ -776,6 +786,7 @@
         });
         if (!token) {
           document.documentElement.classList.remove('plan-pending');
+          planSyncInProgress = false;
           return;
         }
         
@@ -790,14 +801,19 @@
         });
         
         if (syncResponse.ok) {
-          const syncData = await syncResponse.json().catch(() => ({}));
+          const syncData = await syncResponse.json().catch((err) => {
+            console.error('❌ [RESUME-FEEDBACK] Failed to parse sync response JSON:', err);
+            return {};
+          });
           if (syncData.ok && syncData.plan) {
             const stripePlan = syncData.plan.toLowerCase();
             console.log('✅ [RESUME-FEEDBACK] Plan synced from Stripe:', stripePlan);
             
-            // Update localStorage with Stripe plan
-            localStorage.setItem('user-plan', stripePlan);
-            localStorage.setItem('dev-plan', stripePlan); // Also update dev-plan for consistency
+            // Update localStorage with Stripe plan (only if changed to avoid unnecessary writes)
+            if (localStorage.getItem('user-plan') !== stripePlan) {
+              localStorage.setItem('user-plan', stripePlan);
+              localStorage.setItem('dev-plan', stripePlan); // Also update dev-plan for consistency
+            }
             
             // Dispatch plan change event
             window.dispatchEvent(new CustomEvent('planChanged', { detail: { newPlan: stripePlan, oldPlan: cachedPlan } }));
@@ -811,9 +827,11 @@
             
             if (!allowedPlans.includes(stripePlan)) {
               console.log('🚫 [RESUME-FEEDBACK] Stripe plan not allowed, redirecting:', stripePlan);
+              planSyncInProgress = false;
               window.location.href = 'pricing-a.html?plan=essential';
               return;
             }
+            planSyncInProgress = false;
             return;
           }
         }
@@ -830,15 +848,23 @@
         if (!response.ok) {
           console.warn('[RESUME-FEEDBACK] Plan API failed during hydration:', response.status, response.statusText);
           document.documentElement.classList.remove('plan-pending');
+          planSyncInProgress = false;
           return;
         }
         
-        const planData = await response.json().catch(() => ({}));
+        const planData = await response.json().catch((err) => {
+          console.error('❌ [RESUME-FEEDBACK] Failed to parse plan/me response JSON:', err);
+          return {};
+        });
         const serverPlan = (planData.plan || 'free').toLowerCase();
-        localStorage.setItem('user-plan', serverPlan);
+        // Only update localStorage if plan changed
+        if (localStorage.getItem('user-plan') !== serverPlan) {
+          localStorage.setItem('user-plan', serverPlan);
+        }
         window.dispatchEvent(new CustomEvent('planChanged', { detail: { newPlan: serverPlan } }));
         window.__JOBHACKAI_PLAN_PENDING__ = false;
         document.documentElement.classList.remove('plan-pending');
+        planSyncInProgress = false;
         
         if (!allowedPlans.includes(serverPlan)) {
           console.log('🚫 [RESUME-FEEDBACK] Server plan not allowed, redirecting:', serverPlan);
@@ -850,6 +876,7 @@
       } catch (error) {
         window.__JOBHACKAI_PLAN_PENDING__ = false;
         document.documentElement.classList.remove('plan-pending');
+        planSyncInProgress = false;
         console.warn('[RESUME-FEEDBACK] Failed to hydrate plan from server:', error);
       }
     }
@@ -3468,6 +3495,12 @@
         return el;
       }
       
+      // Helper function to safely query an element (for passing to other functions)
+      function safeQuerySelector(parent, selector) {
+        if (!parent) return null;
+        return parent.querySelector(selector);
+      }
+      
       // Cache base role description for later restores
       if (roleDescEl && !roleDescEl.dataset.baseText) {
         roleDescEl.dataset.baseText = roleDescEl.textContent || '';
@@ -3510,7 +3543,7 @@
         if (atsScoreTile) {
           safeQueryText(atsScoreTile, '#rf-plan-badge', 'Free Plan');
           updateDescriptionWithTooltip(
-            atsScoreTile.querySelector('#rf-score-desc'),
+            safeQuerySelector(atsScoreTile, '#rf-score-desc'),
             'Get your basic ATS compatibility score.',
             'Receive an overall ATS compliance score (0-100) for your resume, highlighting key areas to improve for better job application success.'
           );
@@ -3549,7 +3582,7 @@
           safeSetText(badge, 'Trial Plan');
           safeSetStyle(badge, 'background', '#FF9100');
           updateDescriptionWithTooltip(
-            atsScoreTile.querySelector('#rf-score-desc'),
+            safeQuerySelector(atsScoreTile, '#rf-score-desc'),
             'Your trial includes 3 full ATS score & feedback runs.',
             'Each run combines ATS scoring with detailed feedback so you can see exactly what to fix before you apply.'
           );
@@ -3608,7 +3641,7 @@
           safeSetText(badge, 'Essential Plan');
           safeSetStyle(badge, 'background', '#0077B5');
           updateDescriptionWithTooltip(
-            atsScoreTile.querySelector('#rf-score-desc'),
+            safeQuerySelector(atsScoreTile, '#rf-score-desc'),
             'Receive an overall ATS compliance score for your resume, highlighting key areas to improve.',
             'Receive an overall ATS compliance score (0-100) for your resume, highlighting key areas to improve for better job application success.'
           );
@@ -3692,7 +3725,7 @@
           safeSetText(badge, planLabel);
           safeSetStyle(badge, 'background', planColor);
           updateDescriptionWithTooltip(
-            atsScoreTile.querySelector('#rf-score-desc'),
+            safeQuerySelector(atsScoreTile, '#rf-score-desc'),
             'Unlimited ATS scoring with maximum visibility!',
             'Receive an overall ATS compliance score (0-100) for your resume, highlighting key areas to improve for better job application success. Score as many resumes as you need with unlimited access.'
           );
