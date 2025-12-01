@@ -142,6 +142,12 @@
     .rf-feedback-score { display: inline-block; background: #00E676; color: #fff; font-weight: 700; border-radius: 999px; padding: 0.2em 0.8em; font-size: 1rem; margin-left: 0.5rem; }
     .rf-feedback-tip { color: var(--color-text-secondary); font-size: 1.01rem; margin-top: 0.3rem; }
     .rf-snippet-box { width: 100%; min-height: 120px; border: 2px solid var(--color-divider); border-radius: var(--radius-lg); padding: 1rem; font-size: 1.05rem; margin-bottom: 1.2rem; background: #F9FAFB; color: var(--color-text-main); resize: vertical; }
+    /* Ensure rewrite buttons are same size */
+    #rf-rewrite-content .btn-primary,
+    #rf-rewrite-content .btn-secondary {
+      padding: 0.7rem 2rem;
+      font-size: 1rem;
+    }
     @media (max-width: 700px) { .rf-rubric-grid, .rf-feedback-grid { grid-template-columns: 1fr; } }
     .rf-plan-badge {
       display: inline-block;
@@ -324,6 +330,11 @@
       font-size: 1.05rem;
       color: var(--color-text-main);
     }
+    /* Premium CTA with white background to match card tiles */
+    .priority-review-cta.premium-cta {
+      background: var(--color-card-bg);
+      box-shadow: var(--shadow-card);
+    }
     /* Standardized upgrade button - matches all other upgrade CTAs */
     .priority-review-cta .priority-btn {
       background: #1976D2;
@@ -331,7 +342,7 @@
       font-weight: 600;
       border: none;
       border-radius: var(--radius-md);
-      padding: 0.6rem 1.3rem;
+      padding: 0.7rem 2rem;
       font-size: 1rem;
       cursor: pointer;
       transition: background 0.18s;
@@ -386,7 +397,7 @@
     .rf-tooltip-text {
       display: none;
       position: absolute;
-      z-index: 1000;
+      z-index: 1070;
       padding: 0.5rem 0.8rem;
       background-color: #333;
       color: #fff;
@@ -402,6 +413,7 @@
       box-shadow: 0 2px 8px rgba(0,0,0,0.12);
       pointer-events: none;
       text-align: left;
+      margin-bottom: 0.5rem;
     }
     .rf-tooltip-trigger:hover .rf-tooltip-text,
     .rf-tooltip-trigger:focus .rf-tooltip-text {
@@ -3361,11 +3373,24 @@
     function renderPriorityReviewCTA() {
       const cta = document.createElement('div');
       cta.className = 'priority-review-cta';
-      cta.innerHTML = `Want your resume reviewed first? <span id="priority-review-inline"></span> <button class="priority-btn" onclick="window.location.href='pricing-a.html'">Upgrade to Premium</button>`;
+      cta.innerHTML = `<strong>Want your resume reviewed first?</strong> <span id="priority-review-inline"></span> <button class="priority-btn" onclick="window.location.href='pricing-a.html'">Upgrade to Premium</button>`;
       // Insert tooltip
       setTimeout(() => {
         const inline = cta.querySelector('#priority-review-inline');
-        if (inline) inline.appendChild(createPriorityReviewTooltip('<strong>Upgrade to Premium for Priority Review</strong>'));
+        if (inline) inline.appendChild(createPriorityReviewTooltip('Upgrade to Premium for Priority Review'));
+      }, 0);
+      return cta;
+    }
+    
+    // --- Premium Priority Review CTA (white background) ---
+    function renderPremiumPriorityReviewCTA() {
+      const cta = document.createElement('div');
+      cta.className = 'priority-review-cta premium-cta';
+      cta.innerHTML = `<strong>You're on Premium!</strong> <span id="priority-review-inline-premium"></span>`;
+      // Insert tooltip
+      setTimeout(() => {
+        const inline = cta.querySelector('#priority-review-inline-premium');
+        if (inline) inline.appendChild(createPriorityReviewTooltip('Priority Review included'));
       }, 0);
       return cta;
     }
@@ -3394,8 +3419,13 @@
           rewriteTile.parentNode.insertBefore(cta, rewriteTile.nextSibling);
         }
       } else if (plan === 'premium') {
-        // No Priority Review messaging for Premium
-        return;
+        // Insert Premium CTA with white background
+        const rewriteTile = document.getElementById('rf-rewrite-tile');
+        if (rewriteTile && rewriteTile.parentNode) {
+          const cta = renderPremiumPriorityReviewCTA();
+          cta.id = 'priority-review-cta-main';
+          rewriteTile.parentNode.insertBefore(cta, rewriteTile.nextSibling);
+        }
       }
     }
 
@@ -3751,6 +3781,12 @@
           const badge = rewriteTile.querySelector('.rf-title .rf-plan-badge');
           safeSetText(badge, planLabel);
           safeSetStyle(badge, 'background', planColor);
+          // Update description text for Pro/Premium users
+          const rewriteDesc = rewriteTile.querySelector('#rf-rewrite-desc');
+          if (rewriteDesc) {
+            const planName = isPremiumPlan ? 'Premium' : 'Pro';
+            rewriteDesc.innerHTML = 'AI rewrites your resume line-by-line using this ATS feedback and your target role. <span class="rf-tooltip-trigger" tabindex="0" aria-label="More info" style="margin-left:0.4em;"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="8"/><line x1="12" y1="12" x2="12" y2="16"/></svg><span class="rf-tooltip-text">See a rewritten version of your resume tailored to your target job - ready to copy and paste. Unlimited with your ' + planName + ' plan.</span></span>';
+          }
           // Hide upgrade prompt and show content
           const upgradePrompt = rewriteTile.querySelector('.rf-upgrade-prompt');
           if (upgradePrompt) upgradePrompt.style.display = 'none';
@@ -4718,7 +4754,7 @@
         Resume Rewriting
         <span class="rf-plan-badge" style="background:#6B7280;">Pro Only</span>
       </div>
-      <div style="color:var(--color-text-secondary);margin-bottom:1.2rem;">
+      <div id="rf-rewrite-desc" style="color:var(--color-text-secondary);margin-bottom:1.2rem;">
         AI rewrites your resume line-by-line using this ATS feedback and your target role. Upgrade to Pro to unlock resume rewriting.
         <span class="rf-tooltip-trigger" tabindex="0" aria-label="More info" style="margin-left:0.4em;">
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
@@ -4739,7 +4775,7 @@
         <a href="pricing-a.html" class="btn btn-secondary">Upgrade Now</a>
       </div>
       <!-- Hidden content that will be shown for Pro/Premium plans -->
-      <div id="rf-rewrite-content" style="display:none;">
+      <div id="rf-rewrite-content" style="display:none; padding: 0 0.5rem;">
         <div style="color:var(--color-text-secondary);margin-bottom:1.2rem;">
           Below is your fully optimized resume draft. We used ATS best-practice language, injected relevant keywords, and tightened formatting so it's ready to paste into your next application.
         </div>
