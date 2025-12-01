@@ -3390,7 +3390,7 @@
       // Insert tooltip
       setTimeout(() => {
         const inline = cta.querySelector('#priority-review-inline-premium');
-        if (inline) inline.appendChild(createPriorityReviewTooltip('Premium users get their resume analyzed first—faster results, prioritized AI review, and VIP support.'));
+        if (inline) inline.appendChild(createPriorityReviewTooltip('Priority Review included'));
       }, 0);
       return cta;
     }
@@ -3784,7 +3784,8 @@
           // Update description text for Pro/Premium users
           const rewriteDesc = rewriteTile.querySelector('#rf-rewrite-desc');
           if (rewriteDesc) {
-            rewriteDesc.innerHTML = 'AI rewrites your resume line-by-line using this ATS feedback and your target role. <span class="rf-tooltip-trigger" tabindex="0" aria-label="More info" style="margin-left:0.4em;"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="8"/><line x1="12" y1="12" x2="12" y2="16"/></svg><span class="rf-tooltip-text">See a rewritten version of your resume tailored to your target job - ready to copy and paste. Unlimited with your Pro plan.</span></span>';
+            const planName = isPremiumPlan ? 'Premium' : 'Pro';
+            rewriteDesc.innerHTML = 'AI rewrites your resume line-by-line using this ATS feedback and your target role. <span class="rf-tooltip-trigger" tabindex="0" aria-label="More info" style="margin-left:0.4em;"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="8"/><line x1="12" y1="12" x2="12" y2="16"/></svg><span class="rf-tooltip-text">See a rewritten version of your resume tailored to your target job - ready to copy and paste. Unlimited with your ' + planName + ' plan.</span></span>';
           }
           // Hide upgrade prompt and show content
           const upgradePrompt = rewriteTile.querySelector('.rf-upgrade-prompt');
