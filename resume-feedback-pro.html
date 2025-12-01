@@ -3372,7 +3372,7 @@
     // --- Priority Review CTA (modular) ---
     function renderPriorityReviewCTA() {
       const cta = document.createElement('div');
-      cta.className = 'priority-review-cta';
+      cta.className = 'priority-review-cta premium-cta';
       cta.innerHTML = `<strong>Want your resume reviewed first?</strong> <span id="priority-review-inline"></span> <button class="priority-btn" onclick="window.location.href='pricing-a.html'">Upgrade to Premium</button>`;
       // Insert tooltip
       setTimeout(() => {
@@ -3410,7 +3410,7 @@
       if (oldCta) oldCta.remove();
       
       const plan = getCurrentUserPlan();
-      if (plan === 'essential' || plan === 'pro') {
+      if (plan === 'essential' || plan === 'pro' || plan === 'trio') {
         // Insert Priority Review CTA after Resume Rewriting tile
         const rewriteTile = document.getElementById('rf-rewrite-tile');
         if (rewriteTile && rewriteTile.parentNode) {
@@ -4775,7 +4775,7 @@
         <a href="pricing-a.html" class="btn btn-secondary">Upgrade Now</a>
       </div>
       <!-- Hidden content that will be shown for Pro/Premium plans -->
-      <div id="rf-rewrite-content" style="display:none; padding: 0 0.5rem;">
+      <div id="rf-rewrite-content" style="display:none; padding: 0 1.5rem;">
         <div style="color:var(--color-text-secondary);margin-bottom:1.2rem;">
           Below is your fully optimized resume draft. We used ATS best-practice language, injected relevant keywords, and tightened formatting so it's ready to paste into your next application.
         </div>
