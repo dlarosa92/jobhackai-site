@@ -308,7 +308,9 @@ export async function getFeedbackSessionById(env, sessionId, userId) {
     };
   } catch (error) {
     console.error('[DB] Error in getFeedbackSessionById:', error);
-    throw error;
+    // On error (e.g., schema mismatch), return null so caller treats as "not found"
+    // This prevents 500 errors when D1 schema is out of date
+    return null;
   }
 }
 

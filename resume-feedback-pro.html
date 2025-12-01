@@ -1763,6 +1763,14 @@
               
               updateFeedbackGrid(feedbackResult.roleSpecificFeedback);
               updateRubricGridFromFeedback(feedbackResult.atsRubric);
+              
+              // CRITICAL: Ensure feedback content is visible after feedback is generated (Pro & Premium)
+              const feedbackContentEl = document.getElementById('rf-feedback-content');
+              const userPlanCheck = getCurrentUserPlan();
+              if (feedbackContentEl && ['pro', 'premium'].includes(userPlanCheck)) {
+                feedbackContentEl.style.display = 'block';
+                console.log('[RESUME-FEEDBACK] Feedback content shown after optimize for:', userPlanCheck);
+              }
 
               // Load cached score to check if ATS score exists
               let cachedScore = null;
@@ -2261,6 +2269,14 @@
               updateFeedbackGrid(feedbackResult.roleSpecificFeedback);
               updateRubricGridFromFeedback(feedbackResult.atsRubric);
               
+              // CRITICAL: Ensure feedback content is visible after feedback is generated (Pro & Premium)
+              const feedbackContentEl = document.getElementById('rf-feedback-content');
+              const userPlanCheck = getCurrentUserPlan();
+              if (feedbackContentEl && ['pro', 'premium'].includes(userPlanCheck)) {
+                feedbackContentEl.style.display = 'block';
+                console.log('[RESUME-FEEDBACK] Feedback content shown after generation for:', userPlanCheck);
+              }
+              
               // Update role-specific tips state based on ATS score and feedback
               const hasAtsScore = !!(scoreResult?.success && typeof scoreResult.score === 'number');
               updateRoleTipsState({
@@ -2659,6 +2675,13 @@
             
             updateFeedbackGrid(feedbackResult.roleSpecificFeedback);
             updateRubricGridFromFeedback(feedbackResult.atsRubric);
+            
+            // CRITICAL: Ensure feedback content is visible after feedback is generated (Pro & Premium)
+            const feedbackContentEl = document.getElementById('rf-feedback-content');
+            const userPlanCheck = getCurrentUserPlan();
+            if (feedbackContentEl && ['pro', 'premium'].includes(userPlanCheck)) {
+              feedbackContentEl.style.display = 'block';
+            }
 
             // Load cached score to check if ATS score exists (must be loaded before use)
             let cachedScore = null;
@@ -3246,20 +3269,10 @@
     
     // --- Premium Priority Review note (no CTA) ---
     function renderPremiumPriorityReviewNote() {
-      if (getCurrentUserPlan() !== 'premium') return;
+      // Premium should not show any Priority Review messaging
       const existing = document.getElementById('priority-review-premium-note');
-      if (existing) return;
-      
-      const rewriteTile = document.getElementById('rf-rewrite-tile');
-      if (rewriteTile && rewriteTile.parentNode) {
-        const note = document.createElement('div');
-        note.id = 'priority-review-premium-note';
-        note.style.marginTop = '0.75rem';
-        note.style.color = 'var(--color-text-secondary)';
-        note.style.fontSize = '0.9rem';
-        note.textContent = 'Priority Review is included in your Premium plan. When you request a human review, your resume is moved to the front of the queue.';
-        rewriteTile.parentNode.insertBefore(note, rewriteTile.nextSibling);
-      }
+      if (existing) existing.remove();
+      return;
     }
     
     // --- Insert Priority Review CTA / note below Resume Rewriting ---
@@ -3278,7 +3291,8 @@
           rewriteTile.parentNode.insertBefore(cta, rewriteTile.nextSibling);
         }
       } else if (plan === 'premium') {
-        renderPremiumPriorityReviewNote();
+        // No Priority Review messaging for Premium
+        return;
       }
     }
 
@@ -3678,7 +3692,7 @@
           // Determine badge color based on plan
           let bgColor = 'var(--color-accent-blue)'; // Trial/Essential blue
           if (userPlan === 'pro') bgColor = '#388E3C'; // Pro green
-          if (userPlan === 'premium') bgColor = '#6A1B9A'; // Premium purple
+          if (userPlan === 'premium') bgColor = '#C62828'; // Premium red
           if (userPlan === 'free') bgColor = '#6B7280'; // Free gray
           
           badge.style.background = bgColor;
@@ -3693,7 +3707,10 @@
           // Show feedback content, hide upgrade prompts
           const feedbackContent = document.getElementById('rf-feedback-content');
           const feedbackUpgradePrompt = document.querySelector('#rf-feedback-tile .rf-upgrade-prompt');
-          if (feedbackContent) feedbackContent.style.display = 'block';
+          if (feedbackContent && ['pro', 'premium'].includes(userPlan)) {
+            feedbackContent.style.display = 'block';
+            console.log('[RESUME-FEEDBACK] Showing feedback content for plan:', userPlan);
+          }
           if (feedbackUpgradePrompt) feedbackUpgradePrompt.style.display = 'none';
         }
         
@@ -3704,12 +3721,15 @@
           const rewriteBadge = document.querySelector('#rf-rewrite-tile .rf-plan-badge');
           
           // Show rewrite content, hide upgrade prompt
-          if (rewriteContent) rewriteContent.style.display = 'block';
+          if (rewriteContent) {
+            rewriteContent.style.display = 'block';
+            console.log('[RESUME-FEEDBACK] Showing rewrite content for plan:', userPlan);
+          }
           if (rewriteUpgradePrompt) rewriteUpgradePrompt.style.display = 'none';
           
           // Update rewrite badge
           if (rewriteBadge) {
-            rewriteBadge.style.background = userPlan === 'premium' ? '#6A1B9A' : '#388E3C';
+            rewriteBadge.style.background = userPlan === 'premium' ? '#C62828' : '#388E3C';
             rewriteBadge.textContent = userPlan === 'premium' ? 'Premium' : 'Pro';
           }
         } else {
@@ -4574,11 +4594,6 @@
       </div>
     </section>
         
-        <!-- Priority Review Banner -->
-        <div class="priority-review-cta" style="margin-top:var(--space-lg);">
-          <span>Need faster, deeper reviews? Priority Review is included with Premium.</span>
-          <a href="pricing-a.html?plan=premium" class="priority-btn">Upgrade to Premium</a>
-        </div>
       </div><!-- /.rf-main-column -->
 
       <!-- Sidebar Column - Sticky History -->
