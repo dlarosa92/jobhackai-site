@@ -12,7 +12,8 @@ import {
   createResumeSession, 
   createFeedbackSession, 
   logUsageEvent,
-  isD1Available 
+  isD1Available,
+  updateResumeSessionAtsScore
 } from '../_lib/db.js';
 
 function corsHeaders(origin, env) {
@@ -739,6 +740,15 @@ export async function onRequest(context) {
           d1SessionId = String(resumeSession.id);
           d1CreatedAt = resumeSession.created_at;
           
+          // Use overallScore from ruleBasedScores (already calculated with Math.round via calcOverallScore)
+          // This ensures consistency with the score returned by the scoring engine
+          const overallAtsScore = ruleBasedScores.overallScore ?? null;
+          
+          // Update session with ATS score (for faster history queries)
+          if (overallAtsScore !== null) {
+            await updateResumeSessionAtsScore(env, resumeSession.id, overallAtsScore);
+          }
+          
           // Create feedback session with the full result
           await createFeedbackSession(env, resumeSession.id, result);
           
@@ -747,12 +757,14 @@ export async function onRequest(context) {
             resumeSessionId: resumeSession.id,
             plan: effectivePlan,
             cached: false,
-            jobTitle: normalizedJobTitle || null
+            jobTitle: normalizedJobTitle || null,
+            atsScore: overallAtsScore
           });
           
           console.log('[RESUME-FEEDBACK] D1 persistence complete:', { 
             sessionId: d1SessionId, 
-            userId: d1User.id 
+            userId: d1User.id,
+            atsScore: overallAtsScore
           });
         }
       } catch (d1Error) {

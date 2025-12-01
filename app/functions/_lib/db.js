@@ -171,12 +171,14 @@ export async function getResumeFeedbackHistory(env, userId, { limit = 20 } = {})
     // Get unique resume sessions with their latest feedback session (if any)
     // Uses correlated subqueries to get the most recent feedback per resume session
     // This ensures one row per resume_session even when multiple feedback_sessions exist
+    // Also fetches ats_score from resume_sessions column or extracts from feedback_json
     const results = await env.DB.prepare(`
       SELECT 
         rs.id as session_id,
         rs.title,
         rs.role,
         rs.created_at,
+        rs.ats_score,
         (SELECT id FROM feedback_sessions 
          WHERE resume_session_id = rs.id 
          ORDER BY created_at DESC 
@@ -184,27 +186,173 @@ export async function getResumeFeedbackHistory(env, userId, { limit = 20 } = {})
         (SELECT created_at FROM feedback_sessions 
          WHERE resume_session_id = rs.id 
          ORDER BY created_at DESC 
-         LIMIT 1) as feedback_created_at
+         LIMIT 1) as feedback_created_at,
+        (SELECT feedback_json FROM feedback_sessions 
+         WHERE resume_session_id = rs.id 
+         ORDER BY created_at DESC 
+         LIMIT 1) as feedback_json
       FROM resume_sessions rs
       WHERE rs.user_id = ?
       ORDER BY rs.created_at DESC
       LIMIT ?
     `).bind(userId, limit).all();
 
-    // Transform to clean history items
-    const items = results.results.map(row => ({
-      sessionId: String(row.session_id),
-      title: row.title,
-      role: row.role,
-      createdAt: row.created_at,
-      hasFeedback: !!row.feedback_id
-    }));
+    // Transform to clean history items, extracting ats_score if needed
+    const items = results.results.map(row => {
+      let atsScore = row.ats_score;
+      
+      // If ats_score column is null, try to extract from feedback_json
+      if (atsScore === null && row.feedback_json) {
+        try {
+          const feedback = JSON.parse(row.feedback_json);
+          if (feedback.atsRubric && Array.isArray(feedback.atsRubric)) {
+            // Sum up scores from atsRubric and round to match calcOverallScore behavior
+            atsScore = Math.round(feedback.atsRubric.reduce((sum, item) => sum + (item.score || 0), 0));
+          }
+        } catch (e) {
+          // Ignore parse errors
+        }
+      }
+      
+      return {
+        sessionId: String(row.session_id),
+        title: row.title,
+        role: row.role,
+        createdAt: row.created_at,
+        atsScore: atsScore,
+        hasFeedback: !!row.feedback_id
+      };
+    });
 
     console.log('[DB] Retrieved history:', { userId, count: items.length });
     return items;
   } catch (error) {
     console.error('[DB] Error in getResumeFeedbackHistory:', error);
     return [];
+  }
+}
+
+/**
+ * Get a specific feedback session by ID with full payload
+ * Used for history detail view (D1-only, no OpenAI calls)
+ * @param {Object} env - Cloudflare environment with DB binding
+ * @param {number} sessionId - Resume session ID
+ * @param {number} userId - User ID (required for security - ownership check)
+ * @returns {Promise<Object|null>} Full feedback session or null if not found/unauthorized
+ */
+export async function getFeedbackSessionById(env, sessionId, userId) {
+  if (!env.DB) {
+    console.warn('[DB] D1 binding not available');
+    return null;
+  }
+
+  if (!userId || typeof userId !== 'number') {
+    console.warn('[DB] userId is required for getFeedbackSessionById');
+    return null;
+  }
+
+  try {
+    // Join resume_sessions and feedback_sessions, enforcing user ownership
+    const row = await env.DB.prepare(`
+      SELECT 
+        rs.id as session_id,
+        rs.user_id,
+        rs.title,
+        rs.role,
+        rs.created_at as session_created_at,
+        rs.ats_score,
+        rs.raw_text_location,
+        fs.id as feedback_id,
+        fs.feedback_json,
+        fs.created_at as feedback_created_at
+      FROM resume_sessions rs
+      LEFT JOIN feedback_sessions fs ON fs.resume_session_id = rs.id
+      WHERE rs.id = ? AND rs.user_id = ?
+      ORDER BY fs.created_at DESC
+      LIMIT 1
+    `).bind(sessionId, userId).first();
+
+    if (!row) {
+      return null;
+    }
+
+    // Parse feedback_json
+    let feedbackData = null;
+    if (row.feedback_json) {
+      try {
+        feedbackData = JSON.parse(row.feedback_json);
+      } catch (e) {
+        console.warn('[DB] Failed to parse feedback_json:', e);
+      }
+    }
+
+    // Calculate ats_score if not stored
+    let atsScore = row.ats_score;
+    if (atsScore === null && feedbackData && feedbackData.atsRubric) {
+      // Round to match calcOverallScore behavior for consistency
+      atsScore = Math.round(feedbackData.atsRubric.reduce((sum, item) => sum + (item.score || 0), 0));
+    }
+
+    return {
+      sessionId: String(row.session_id),
+      userId: row.user_id,
+      title: row.title,
+      role: row.role,
+      createdAt: row.session_created_at,
+      atsScore: atsScore,
+      rawTextLocation: row.raw_text_location,
+      feedbackId: row.feedback_id ? String(row.feedback_id) : null,
+      feedbackCreatedAt: row.feedback_created_at,
+      // Full feedback payload for UI restoration
+      feedback: feedbackData
+    };
+  } catch (error) {
+    console.error('[DB] Error in getFeedbackSessionById:', error);
+    
+    // Only return null for schema mismatch errors (missing columns, etc.)
+    // This prevents 500 errors when D1 schema is out of date
+    // Other errors (connection failures, permission issues, etc.) should still throw
+    const errorMessage = error?.message || String(error);
+    // Check for schema mismatch errors (missing columns/tables)
+    // Both error types are checked directly for consistency
+    const isSchemaMismatch = 
+      errorMessage.includes('no such column') ||
+      errorMessage.includes('no such table');
+    
+    if (isSchemaMismatch) {
+      console.warn('[DB] Schema mismatch detected, treating as "not found"');
+      return null;
+    }
+    
+    // Re-throw genuine database errors so they surface as 500 errors
+    throw error;
+  }
+}
+
+/**
+ * Update resume session with ATS score
+ * Called after feedback is generated to cache the score
+ * @param {Object} env - Cloudflare environment with DB binding
+ * @param {number} sessionId - Resume session ID
+ * @param {number} atsScore - Overall ATS score (0-100)
+ * @returns {Promise<boolean>} Success
+ */
+export async function updateResumeSessionAtsScore(env, sessionId, atsScore) {
+  if (!env.DB) {
+    console.warn('[DB] D1 binding not available');
+    return false;
+  }
+
+  try {
+    await env.DB.prepare(
+      'UPDATE resume_sessions SET ats_score = ? WHERE id = ?'
+    ).bind(atsScore, sessionId).run();
+
+    console.log('[DB] Updated ats_score:', { sessionId, atsScore });
+    return true;
+  } catch (error) {
+    console.error('[DB] Error in updateResumeSessionAtsScore:', error);
+    return false;
   }
 }
 
@@ -344,6 +492,82 @@ export async function getInterviewQuestionSetsByUser(env, userId, { limit = 10 }
   } catch (error) {
     console.error('[DB] Error in getInterviewQuestionSetsByUser:', error);
     return [];
+  }
+}
+
+// ============================================================
+// FEATURE DAILY USAGE HELPERS
+// ============================================================
+
+/**
+ * Get daily usage count for a feature
+ * @param {Object} env - Cloudflare environment with DB binding
+ * @param {number} userId - User ID from users table
+ * @param {string} feature - Feature name (e.g., 'interview_questions')
+ * @returns {Promise<number>} Current usage count for today
+ */
+export async function getFeatureDailyUsage(env, userId, feature) {
+  if (!env.DB) {
+    console.warn('[DB] D1 binding not available');
+    return 0;
+  }
+
+  try {
+    const today = new Date().toISOString().slice(0, 10); // 'YYYY-MM-DD' UTC
+    const row = await env.DB.prepare(
+      `SELECT count FROM feature_daily_usage
+       WHERE user_id = ? AND feature = ? AND usage_date = ?`
+    ).bind(userId, feature, today).first();
+
+    return row ? row.count : 0;
+  } catch (error) {
+    console.error('[DB] Error in getFeatureDailyUsage:', error);
+    return 0;
+  }
+}
+
+/**
+ * Increment daily usage count for a feature
+ * @param {Object} env - Cloudflare environment with DB binding
+ * @param {number} userId - User ID from users table
+ * @param {string} feature - Feature name (e.g., 'interview_questions')
+ * @param {number} incrementBy - Amount to increment (default 1)
+ * @returns {Promise<number>} New total count after increment
+ */
+export async function incrementFeatureDailyUsage(env, userId, feature, incrementBy = 1) {
+  if (!env.DB) {
+    console.warn('[DB] D1 binding not available');
+    return incrementBy;
+  }
+
+  try {
+    const today = new Date().toISOString().slice(0, 10); // 'YYYY-MM-DD' UTC
+    
+    // Use INSERT ... ON CONFLICT pattern (SQLite supports this)
+    const result = await env.DB.prepare(
+      `INSERT INTO feature_daily_usage (user_id, feature, usage_date, count)
+       VALUES (?, ?, ?, ?)
+       ON CONFLICT(user_id, feature, usage_date)
+       DO UPDATE SET count = count + excluded.count,
+                     updated_at = datetime('now')
+       RETURNING count`
+    ).bind(userId, feature, today, incrementBy).first();
+
+    if (result && result.count !== undefined) {
+      return result.count;
+    }
+    
+    // Fallback: if RETURNING doesn't work, fetch separately
+    const row = await env.DB.prepare(
+      `SELECT count FROM feature_daily_usage
+       WHERE user_id = ? AND feature = ? AND usage_date = ?`
+    ).bind(userId, feature, today).first();
+
+    return row ? row.count : incrementBy;
+  } catch (error) {
+    console.error('[DB] Error in incrementFeatureDailyUsage:', error);
+    // On error, return incrementBy as a safe fallback
+    return incrementBy;
   }
 }
 

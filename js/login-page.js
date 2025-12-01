@@ -9,9 +9,25 @@ console.log('🔧 login-page.js VERSION: redirect-fix-v2 - ' + new Date().toISOS
 import authManager from './firebase-auth.js';
 import { waitForAuthReady } from './firebase-auth.js';
 
-// Helper function to check if plan requires payment
+// Helper function to check if plan requires payment (only for NEW signups, not existing subscribers)
 function planRequiresPayment(plan) {
-  return ['essential', 'pro', 'premium', 'trial'].includes(plan);
+  // Only redirect to checkout if the user just selected a plan from pricing page
+  // Check if there's a fresh plan selection (within last 5 minutes)
+  try {
+    const stored = sessionStorage.getItem('selectedPlan');
+    if (stored) {
+      const data = JSON.parse(stored);
+      const timestamp = data.timestamp || 0;
+      const isFreshSelection = Date.now() - timestamp < 5 * 60 * 1000; // 5 minutes
+      if (isFreshSelection && ['essential', 'pro', 'premium', 'trial'].includes(plan)) {
+        return true;
+      }
+    }
+  } catch (e) {
+    console.warn('Error checking plan selection:', e);
+  }
+  // If no fresh selection, don't require payment (user already has subscription or is free)
+  return false;
 }
 
 // Unified post-auth redirect helper (Stripe or Dashboard)
@@ -308,17 +324,38 @@ document.addEventListener('DOMContentLoaded', async function() {
     this.textContent = 'Signing in...';
     this.disabled = true;
     
+    // Fallback redirect timeout - ensures user always gets redirected even if something fails
+    let redirected = false;
+    const fallbackRedirectTimeout = setTimeout(() => {
+      if (!redirected && authManager.getCurrentUser()) {
+        console.log('⚠️ Fallback redirect triggered - redirecting to dashboard');
+        sessionStorage.removeItem('selectedPlan');
+        window.location.href = 'dashboard.html';
+      }
+    }, 8000); // 8 second timeout
+    
     try {
       const result = await authManager.signInWithGoogle();
       
       if (result.success) {
-        // Route based on selected plan
+        redirected = true;
+        clearTimeout(fallbackRedirectTimeout);
+        
+        // Route based on selected plan (only if freshly selected from pricing page)
         let storedPlan = null;
+        let isFreshSelection = false;
         try {
           const stored = sessionStorage.getItem('selectedPlan');
-          storedPlan = stored ? JSON.parse(stored).planId : null;
+          if (stored) {
+            const data = JSON.parse(stored);
+            storedPlan = data.planId;
+            const timestamp = data.timestamp || 0;
+            isFreshSelection = Date.now() - timestamp < 5 * 60 * 1000; // 5 minutes
+          }
         } catch (e) {}
-        const plan = selectedPlan || storedPlan || 'free';
+        
+        // Only use the plan if it was freshly selected
+        const plan = isFreshSelection ? (selectedPlan || storedPlan || 'free') : 'free';
         
         // Show loading state with smooth transition
         document.body.style.opacity = '0.7';
@@ -348,22 +385,25 @@ document.addEventListener('DOMContentLoaded', async function() {
           }
           window.location.href = 'pricing-a.html';
         } else {
-          // Free (no subscription) -> take user to dashboard
+          // Existing user or free plan -> take user to dashboard
           sessionStorage.removeItem('selectedPlan');
-          console.log('🚀 Redirecting to dashboard for free plan');
+          console.log('🚀 Redirecting to dashboard (existing user or free plan)');
           window.location.href = 'dashboard.html';
         }
       } else if (result.error) {
+        clearTimeout(fallbackRedirectTimeout);
         // Show error (but not if user just closed popup)
         showError(loginError, result.error);
         this.textContent = originalText;
         this.disabled = false;
       } else {
+        clearTimeout(fallbackRedirectTimeout);
         // Silent failure (user closed popup)
         this.textContent = originalText;
         this.disabled = false;
       }
     } catch (error) {
+      clearTimeout(fallbackRedirectTimeout);
       console.error('Google sign-in error:', error);
       showError(loginError, 'An unexpected error occurred. Please try again.');
       this.textContent = originalText;

@@ -29,8 +29,13 @@ CREATE TABLE IF NOT EXISTS resume_sessions (
   role TEXT,                             -- Target role (jobTitle from request)
   created_at TEXT DEFAULT (datetime('now')),
   raw_text_location TEXT,                -- Pointer to KV key (e.g., "resume:${resumeId}") or null
+  ats_score INTEGER,                     -- Overall ATS score (0-100) for quick history display
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
+
+-- Migration: Add ats_score column if table already exists
+-- Run this on existing databases:
+-- ALTER TABLE resume_sessions ADD COLUMN ats_score INTEGER;
 
 CREATE INDEX IF NOT EXISTS idx_resume_sessions_user_id ON resume_sessions(user_id);
 CREATE INDEX IF NOT EXISTS idx_resume_sessions_created_at ON resume_sessions(created_at DESC);

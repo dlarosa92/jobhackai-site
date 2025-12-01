@@ -5,7 +5,7 @@
 import { getBearer, verifyFirebaseIdToken } from '../../_lib/firebase-auth.js';
 import { callOpenAI } from '../../_lib/openai-client.js';
 import { errorResponse, successResponse, generateRequestId } from '../../_lib/error-handler.js';
-import { getOrCreateUserByAuthId, isD1Available } from '../../_lib/db.js';
+import { getOrCreateUserByAuthId, isD1Available, getFeatureDailyUsage, incrementFeatureDailyUsage } from '../../_lib/db.js';
 
 // Fixed question count for all requests
 const IQ_FIXED_COUNT = 10;
@@ -169,6 +169,12 @@ export async function onRequest(context) {
     return errorResponse('Method not allowed', 405, origin, env, requestId);
   }
 
+  // Declare lock variables outside try block so catch block can access them
+  let lockAcquired = false;
+  let lockKey = null;
+  let uid = null;
+  let quotaIncremented = false; // Track if quota was consumed to prevent clearing cooldown
+
   try {
     // Verify authentication
     const token = getBearer(request);
@@ -176,7 +182,8 @@ export async function onRequest(context) {
       return errorResponse('Unauthorized', 401, origin, env, requestId);
     }
 
-    const { uid, payload } = await verifyFirebaseIdToken(token, env.FIREBASE_PROJECT_ID);
+    const { uid: authUid, payload } = await verifyFirebaseIdToken(token, env.FIREBASE_PROJECT_ID);
+    uid = authUid;
     const userEmail = payload.email;
 
     // Get user plan
@@ -209,31 +216,6 @@ export async function onRequest(context) {
       );
     }
 
-    // Server-side cooldown enforcement (60 seconds)
-    if (env.JOBHACKAI_KV) {
-      const cooldownKey = `iq_cooldown:${uid}`;
-      const lastRequest = await env.JOBHACKAI_KV.get(cooldownKey);
-      const now = Date.now();
-      const cooldownMs = 60 * 1000; // 60 seconds
-
-      if (lastRequest) {
-        const lastRequestTime = parseInt(lastRequest, 10);
-        const timeSinceLastRequest = now - lastRequestTime;
-
-        if (timeSinceLastRequest < cooldownMs) {
-          const retryAfter = Math.ceil((cooldownMs - timeSinceLastRequest) / 1000);
-          return errorResponse(
-            'Please wait before generating another set. Cooldown active.',
-            429,
-            origin,
-            env,
-            requestId,
-            { retryAfter }
-          );
-        }
-      }
-    }
-
     // Parse request body
     let body;
     try {
@@ -242,7 +224,7 @@ export async function onRequest(context) {
       return errorResponse('Invalid JSON in request body', 400, origin, env, requestId);
     }
 
-    const { role, seniority, types, jd } = body;
+    const { role, seniority, types, jd, mode, replaceIndex } = body;
 
     // Validate role
     if (!role || typeof role !== 'string' || role.trim().length === 0) {
@@ -255,14 +237,142 @@ export async function onRequest(context) {
       ? types.filter(t => validTypes.includes(t))
       : ['behavioral', 'technical'];
 
+    // Determine count based on mode
+    const requestedCount = mode === 'replace' ? 1 : IQ_FIXED_COUNT;
+
+    // Server-side cooldown enforcement (60 seconds) - checked before quota to prevent race conditions
+    // Use distributed lock pattern to prevent concurrent requests from bypassing limits
+    lockKey = `iq_lock:${uid}`;
+    const cooldownKey = `iq_cooldown:${uid}`;
+    lockAcquired = false;
+    
+    if (env.JOBHACKAI_KV) {
+      const now = Date.now();
+      const cooldownMs = 60 * 1000; // 60 seconds
+      
+      // Check cooldown first
+      const lastRequest = await env.JOBHACKAI_KV.get(cooldownKey);
+      if (lastRequest) {
+        const lastRequestTime = parseInt(lastRequest, 10);
+        const timeSinceLastRequest = now - lastRequestTime;
+
+        if (timeSinceLastRequest < cooldownMs) {
+          const retryAfter = Math.ceil((cooldownMs - timeSinceLastRequest) / 1000);
+          // Log cooldown hit for monitoring (d1User may not be created yet at this point)
+          console.warn('[IQ-GENERATE] Cooldown hit:', {
+            requestId,
+            uid,
+            plan: effectivePlan,
+            reason: 'cooldown',
+            retryAfter
+          });
+          return errorResponse(
+            'Please wait before generating another set. Cooldown active.',
+            429,
+            origin,
+            env,
+            requestId,
+            { retryAfter, reason: 'cooldown' }
+          );
+        }
+      }
+      
+      // Acquire distributed lock to prevent race conditions
+      // Try to acquire lock with a short TTL (5 seconds) - if it exists, another request is processing
+      const existingLock = await env.JOBHACKAI_KV.get(lockKey);
+      if (existingLock) {
+        return errorResponse(
+          'Another request is being processed. Please wait a moment.',
+          429,
+          origin,
+          env,
+          requestId,
+          { retryAfter: 2, reason: 'concurrent_request' }
+        );
+      }
+      
+      // Set lock with 60 second TTL (Cloudflare KV minimum - enough time for quota check + generation start)
+      await env.JOBHACKAI_KV.put(lockKey, String(now), { expirationTtl: 60 });
+      lockAcquired = true;
+    }
+
+    // Check D1 availability and get/create user for daily quota tracking
+    let d1User = null;
+    if (isD1Available(env)) {
+      d1User = await getOrCreateUserByAuthId(env, uid, userEmail);
+    }
+
+    // Daily quota check (D1-backed) - now protected by lock
+    const FEATURE = 'interview_questions';
+    const PLAN_LIMITS = {
+      trial: 40,
+      essential: 80,
+      pro: 150,
+      premium: 250
+    };
+
+    if (d1User && PLAN_LIMITS[effectivePlan]) {
+      const dailyLimit = PLAN_LIMITS[effectivePlan];
+      const used = await getFeatureDailyUsage(env, d1User.id, FEATURE);
+      
+      if (used + requestedCount > dailyLimit) {
+        // Release lock before returning error
+        if (lockAcquired && env.JOBHACKAI_KV) {
+          await env.JOBHACKAI_KV.delete(lockKey).catch(() => {});
+        }
+        // Log daily limit hit for monitoring
+        console.warn('[IQ-GENERATE] Daily limit hit:', {
+          requestId,
+          uid,
+          userId: d1User.id,
+          plan: effectivePlan,
+          reason: 'daily_limit',
+          limit: dailyLimit,
+          used,
+          requestedCount
+        });
+        return errorResponse(
+          'Daily Interview Questions limit reached for your plan.',
+          429,
+          origin,
+          env,
+          requestId,
+          { reason: 'daily_limit', limit: dailyLimit, used }
+        );
+      }
+    }
+
+    // Set cooldown BEFORE generation to prevent race conditions
+    // This ensures concurrent requests will see the cooldown immediately
+    if (env.JOBHACKAI_KV) {
+      const now = Date.now();
+      await env.JOBHACKAI_KV.put(cooldownKey, String(now), {
+        expirationTtl: 60 // 60 seconds
+      });
+    }
+
     // Generate questions
-    const result = await generateQuestions({
-      role: role.trim(),
-      seniority: seniority || '',
-      types: sanitizedTypes,
-      count: IQ_FIXED_COUNT,
-      jd: jd || ''
-    }, env);
+    let result;
+    try {
+      result = await generateQuestions({
+        role: role.trim(),
+        seniority: seniority || '',
+        types: sanitizedTypes,
+        count: requestedCount,
+        jd: jd || ''
+      }, env);
+    } catch (genError) {
+      // If generation fails, clear the cooldown since no quota was consumed
+      // This allows users to retry immediately after legitimate API failures
+      if (env.JOBHACKAI_KV) {
+        await env.JOBHACKAI_KV.delete(cooldownKey).catch(() => {});
+      }
+      // Release lock
+      if (lockAcquired && env.JOBHACKAI_KV) {
+        await env.JOBHACKAI_KV.delete(lockKey).catch(() => {});
+      }
+      throw genError;
+    }
 
     console.log('[IQ-GENERATE] Success:', {
       requestId,
@@ -272,16 +382,9 @@ export async function onRequest(context) {
       tokenUsage: result.tokenUsage
     });
 
-    // Set cooldown after successful generation
-    if (env.JOBHACKAI_KV) {
-      const cooldownKey = `iq_cooldown:${uid}`;
-      const now = Date.now();
-      await env.JOBHACKAI_KV.put(cooldownKey, String(now), {
-        expirationTtl: 60 // 60 seconds
-      });
-    }
-
-    return successResponse({
+    // Build response first to ensure it can be created successfully
+    // Only increment quota after we confirm the response can be sent
+    const response = successResponse({
       role: result.role,
       seniority: result.seniority,
       types: result.types,
@@ -292,8 +395,39 @@ export async function onRequest(context) {
       tokenUsage: result.tokenUsage
     }, 200, origin, env, requestId);
 
+    // Increment daily usage quota only after response is successfully created
+    // This ensures quota is only consumed when user will actually receive questions
+    if (d1User && PLAN_LIMITS[effectivePlan]) {
+      await incrementFeatureDailyUsage(env, d1User.id, FEATURE, requestedCount);
+      quotaIncremented = true; // Mark quota as consumed
+    }
+
+    // Release lock after successful completion
+    if (lockAcquired && env.JOBHACKAI_KV) {
+      await env.JOBHACKAI_KV.delete(lockKey).catch(() => {});
+    }
+
+    return response;
+
   } catch (error) {
-    console.error('[IQ-GENERATE] Error:', { requestId, error: error.message, stack: error.stack });
+    // Only clear cooldown if quota was NOT consumed
+    // If quota was consumed, user should still be subject to cooldown to prevent abuse
+    // This prevents race condition where quota is consumed but user can retry immediately
+    if (uid && env.JOBHACKAI_KV && !quotaIncremented) {
+      const cooldownKey = `iq_cooldown:${uid}`;
+      await env.JOBHACKAI_KV.delete(cooldownKey).catch(() => {});
+    }
+    // Release lock if it was acquired before the error
+    if (lockAcquired && lockKey && env.JOBHACKAI_KV) {
+      await env.JOBHACKAI_KV.delete(lockKey).catch(() => {});
+    }
+    
+    console.error('[IQ-GENERATE] Error:', { 
+      requestId, 
+      error: error.message, 
+      stack: error.stack,
+      quotaIncremented // Log whether quota was consumed for debugging
+    });
     return errorResponse(
       error.message || 'Failed to generate questions',
       500,

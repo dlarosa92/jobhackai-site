@@ -633,15 +633,58 @@
     }
     
     // --- RENDER BILLING SECTION ---
+    // Retry counter to prevent infinite retry loops
+    let billingSectionRetryCount = 0;
+    const MAX_BILLING_RETRIES = 3;
+    
     async function renderBillingSection() {
       const billingSection = document.getElementById('billing-section-dynamic');
       if (!billingSection) return;
       
       try {
-        const user = window.FirebaseAuthManager?.getCurrentUser?.();
+        // Wait for Firebase auth to be ready (up to 5 seconds)
+        let user = window.FirebaseAuthManager?.getCurrentUser?.();
         if (!user) {
-          billingSection.innerHTML = '<div style="color: #6B7280;">Please log in to view subscription details.</div>';
-          return;
+          // Check if we have localStorage auth as a backup signal
+          const hasLocalStorageAuth = localStorage.getItem('user-authenticated') === 'true' && !!localStorage.getItem('user-email');
+          
+          if (hasLocalStorageAuth) {
+            // Wait for Firebase auth manager to initialize
+            console.log('🔄 [ACCOUNT-SETTINGS] Waiting for Firebase auth to be ready...');
+            for (let i = 0; i < 50 && !user; i++) { // Up to 5 seconds
+              await new Promise(r => setTimeout(r, 100));
+              user = window.FirebaseAuthManager?.getCurrentUser?.();
+            }
+            
+            if (user) {
+              console.log('✅ [ACCOUNT-SETTINGS] Firebase auth ready, user found');
+              billingSectionRetryCount = 0; // Reset counter on success
+            } else {
+              console.warn('⚠️ [ACCOUNT-SETTINGS] Firebase auth timed out, but localStorage says authenticated');
+              // Check retry limit before attempting retry
+              if (billingSectionRetryCount < MAX_BILLING_RETRIES) {
+                billingSectionRetryCount++;
+                console.log(`🔄 [ACCOUNT-SETTINGS] Retrying billing section load (attempt ${billingSectionRetryCount}/${MAX_BILLING_RETRIES})...`);
+                // Show loading message instead of "please log in"
+                billingSection.innerHTML = '<div style="color: #6B7280;">Loading subscription details...</div>';
+                // Try again in a bit
+                setTimeout(renderBillingSection, 2000);
+                return;
+              } else {
+                // Max retries reached, show error message
+                console.error('❌ [ACCOUNT-SETTINGS] Max retries reached for billing section load');
+                billingSection.innerHTML = '<div style="color: #EF4444;">Unable to load subscription details. Please refresh the page or contact support if the issue persists.</div>';
+                billingSectionRetryCount = 0; // Reset for next page load
+                return;
+              }
+            }
+          } else {
+            billingSection.innerHTML = '<div style="color: #6B7280;">Please log in to view subscription details.</div>';
+            return;
+          }
+        } else {
+          // User found immediately, reset retry counter
+          billingSectionRetryCount = 0;
         }
         
         const idToken = await user.getIdToken();
@@ -651,12 +694,19 @@
         });
         
         if (!res.ok) {
+          console.error('❌ [ACCOUNT-SETTINGS] Billing status API failed:', res.status, res.statusText);
           billingSection.innerHTML = '<div style="color: #EF4444;">Failed to load subscription details.</div>';
           return;
         }
         
-        const data = await res.json();
-        if (!data.ok) {
+        const data = await res.json().catch((err) => {
+          console.error('❌ [ACCOUNT-SETTINGS] Failed to parse billing-status response JSON:', err);
+          billingSection.innerHTML = '<div style="color: #EF4444;">Failed to load subscription details.</div>';
+          return null;
+        });
+        
+        if (!data || !data.ok) {
+          console.error('❌ [ACCOUNT-SETTINGS] Billing status response invalid:', data);
           billingSection.innerHTML = '<div style="color: #EF4444;">Failed to load subscription details.</div>';
           return;
         }
@@ -668,7 +718,10 @@
         if (plan !== 'free') {
           console.log(`🔄 [ACCOUNT-SETTINGS] Syncing plan from billing-status: ${plan}`);
           try {
-            localStorage.setItem('user-plan', plan);
+            // Only update localStorage if plan changed
+            if (localStorage.getItem('user-plan') !== plan) {
+              localStorage.setItem('user-plan', plan);
+            }
             // Also sync to navigation system if available
             if (window.JobHackAINavigation) {
               // Trigger plan sync by calling sync-stripe-plan API
@@ -679,10 +732,16 @@
               if (syncRes.ok) {
                 console.log('✅ [ACCOUNT-SETTINGS] Plan synced to KV storage');
                 // Update navigation with new plan
-                const syncData = await syncRes.json();
+                const syncData = await syncRes.json().catch((err) => {
+                  console.error('❌ [ACCOUNT-SETTINGS] Failed to parse sync-stripe-plan response JSON:', err);
+                  return { ok: false };
+                });
                 if (syncData.ok && syncData.plan) {
-                  localStorage.setItem('user-plan', syncData.plan);
-                  localStorage.setItem('dev-plan', syncData.plan); // Also update dev-plan for consistency
+                  // Only update localStorage if plan changed
+                  if (localStorage.getItem('user-plan') !== syncData.plan) {
+                    localStorage.setItem('user-plan', syncData.plan);
+                    localStorage.setItem('dev-plan', syncData.plan); // Also update dev-plan for consistency
+                  }
                   // Trigger navigation update
                   window.dispatchEvent(new CustomEvent('planChanged', { detail: { newPlan: syncData.plan } }));
                   // CRITICAL: Re-initialize navigation to reflect new plan
