@@ -11,7 +11,7 @@
     // Run immediately to prevent content flash for unauthorized users
     (function enforceAccessImmediate() {
       const isAuthenticated = localStorage.getItem('user-authenticated') === 'true' && !!localStorage.getItem('user-email');
-      const allowedPlans = ['trial', 'essential', 'pro', 'premium'];
+      const allowedPlans = ['trial', 'essential', 'pro', 'premium', 'trio'];
       // Expose allowed plans so later scripts stay in sync
       window.__JOBHACKAI_RF_ALLOWED_PLANS__ = allowedPlans;
       const cachedPlan = localStorage.getItem('user-plan');
@@ -141,7 +141,7 @@
     .rf-feedback-label { font-weight: 700; color: var(--color-text-main); margin-bottom: 0.2rem; }
     .rf-feedback-score { display: inline-block; background: #00E676; color: #fff; font-weight: 700; border-radius: 999px; padding: 0.2em 0.8em; font-size: 1rem; margin-left: 0.5rem; }
     .rf-feedback-tip { color: var(--color-text-secondary); font-size: 1.01rem; margin-top: 0.3rem; }
-    .rf-snippet-box { width: 100%; min-height: 120px; border: 2px solid var(--color-divider); border-radius: var(--radius-lg); padding: 1rem; font-size: 1.05rem; margin-bottom: 1.2rem; background: #F9FAFB; color: var(--color-text-main); resize: vertical; }
+    .rf-snippet-box { width: 100%; min-height: 120px; border: 2px solid var(--color-divider); border-radius: var(--radius-lg); padding: 1rem; font-family: var(--font-family-base); font-size: var(--font-size-base); font-weight: var(--font-weight-regular); margin-bottom: 1.2rem; background: #F9FAFB; color: var(--color-text-main); resize: vertical; }
     /* Ensure rewrite buttons are same size */
     #rf-rewrite-content .btn-primary,
     #rf-rewrite-content .btn-secondary {
@@ -639,7 +639,7 @@
         authState: window.JobHackAINavigation?.getAuthState?.()
       });
       
-      const allowedPlans = ['trial', 'essential', 'pro', 'premium'];
+      const allowedPlans = ['trial', 'essential', 'pro', 'premium', 'trio'];
       
       if (!isAuthenticated || !allowedPlans.includes(plan)) {
         if (!isAuthenticated) {
@@ -751,7 +751,7 @@
       }
       
       // FIX: Validate plan value to prevent corrupted data (e.g., "central")
-      const validPlans = ['visitor', 'free', 'trial', 'essential', 'pro', 'premium'];
+      const validPlans = ['visitor', 'free', 'trial', 'essential', 'pro', 'premium', 'trio'];
       if (!validPlans.includes(plan)) {
         const oldPlan = plan; // Capture original invalid plan before reassignment
         console.warn('[RESUME-FEEDBACK] Invalid plan detected:', plan, '- resetting to free');
@@ -3372,7 +3372,7 @@
     // --- Priority Review CTA (modular) ---
     function renderPriorityReviewCTA() {
       const cta = document.createElement('div');
-      cta.className = 'priority-review-cta';
+      cta.className = 'priority-review-cta premium-cta';
       cta.innerHTML = `<strong>Want your resume reviewed first?</strong> <span id="priority-review-inline"></span> <button class="priority-btn" onclick="window.location.href='pricing-a.html'">Upgrade to Premium</button>`;
       // Insert tooltip
       setTimeout(() => {
@@ -3410,7 +3410,7 @@
       if (oldCta) oldCta.remove();
       
       const plan = getCurrentUserPlan();
-      if (plan === 'essential' || plan === 'pro') {
+      if (plan === 'essential' || plan === 'pro' || plan === 'trio') {
         // Insert Priority Review CTA after Resume Rewriting tile
         const rewriteTile = document.getElementById('rf-rewrite-tile');
         if (rewriteTile && rewriteTile.parentNode) {
@@ -4775,7 +4775,7 @@
         <a href="pricing-a.html" class="btn btn-secondary">Upgrade Now</a>
       </div>
       <!-- Hidden content that will be shown for Pro/Premium plans -->
-      <div id="rf-rewrite-content" style="display:none; padding: 0 0.5rem;">
+      <div id="rf-rewrite-content" style="display:none; padding: 0 1.5rem;">
         <div style="color:var(--color-text-secondary);margin-bottom:1.2rem;">
           Below is your fully optimized resume draft. We used ATS best-practice language, injected relevant keywords, and tightened formatting so it's ready to paste into your next application.
         </div>
