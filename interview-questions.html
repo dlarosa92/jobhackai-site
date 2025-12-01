@@ -1223,6 +1223,13 @@
           genBtn.removeAttribute('aria-disabled');
           genBtn.style.opacity = '1';
           genBtn.style.cursor = 'pointer';
+        } else {
+          // Role is selected but button should remain disabled (cooldown or daily limit)
+          // Apply disabled styling to override any previous enabled state
+          genBtn.disabled = true;
+          genBtn.setAttribute('aria-disabled', 'true');
+          genBtn.style.opacity = '0.5';
+          genBtn.style.cursor = 'not-allowed';
         }
       }
     }
