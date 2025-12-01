@@ -11,7 +11,7 @@
     // Run immediately to prevent content flash for unauthorized users
     (function enforceAccessImmediate() {
       const isAuthenticated = localStorage.getItem('user-authenticated') === 'true' && !!localStorage.getItem('user-email');
-      const allowedPlans = ['trial', 'essential', 'pro', 'premium'];
+      const allowedPlans = ['trial', 'essential', 'pro', 'premium', 'trio'];
       // Expose allowed plans so later scripts stay in sync
       window.__JOBHACKAI_RF_ALLOWED_PLANS__ = allowedPlans;
       const cachedPlan = localStorage.getItem('user-plan');
@@ -639,7 +639,7 @@
         authState: window.JobHackAINavigation?.getAuthState?.()
       });
       
-      const allowedPlans = ['trial', 'essential', 'pro', 'premium'];
+      const allowedPlans = ['trial', 'essential', 'pro', 'premium', 'trio'];
       
       if (!isAuthenticated || !allowedPlans.includes(plan)) {
         if (!isAuthenticated) {
@@ -751,7 +751,7 @@
       }
       
       // FIX: Validate plan value to prevent corrupted data (e.g., "central")
-      const validPlans = ['visitor', 'free', 'trial', 'essential', 'pro', 'premium'];
+      const validPlans = ['visitor', 'free', 'trial', 'essential', 'pro', 'premium', 'trio'];
       if (!validPlans.includes(plan)) {
         const oldPlan = plan; // Capture original invalid plan before reassignment
         console.warn('[RESUME-FEEDBACK] Invalid plan detected:', plan, '- resetting to free');
