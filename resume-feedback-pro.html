@@ -70,7 +70,64 @@
       width: 100%;
       background: var(--color-card-bg);
     }
-    .rf-card { background: var(--color-card-bg); border-radius: var(--radius-xl); box-shadow: var(--shadow-md); padding: var(--space-lg); margin-bottom: var(--space-lg); }
+    /* Two-pane layout for main content + sticky history sidebar */
+    .rf-layout-container {
+      display: grid;
+      grid-template-columns: 1fr 380px;
+      gap: var(--space-lg);
+      align-items: start;
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+    @media (max-width: 1024px) {
+      .rf-layout-container {
+        grid-template-columns: 1fr;
+      }
+    }
+    .rf-main-column {
+      min-width: 0;
+    }
+    .rf-sidebar-column {
+      position: sticky;
+      top: 100px;
+    }
+    @media (max-width: 1024px) {
+      .rf-sidebar-column {
+        position: static;
+      }
+    }
+    /* Historical view banner */
+    .rf-historical-banner {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      padding: 0.875rem 1.25rem;
+      background: linear-gradient(135deg, #FEF3C7 0%, #FDE68A 100%);
+      border: 1px solid #F59E0B;
+      border-radius: var(--radius-lg);
+      margin-bottom: var(--space-lg);
+      flex-wrap: wrap;
+    }
+    .rf-historical-banner-text {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      color: #92400E;
+      font-size: 0.95rem;
+      font-weight: 500;
+    }
+    .rf-historical-banner-text svg {
+      width: 18px;
+      height: 18px;
+      flex-shrink: 0;
+    }
+    .rf-historical-banner .btn-primary {
+      white-space: nowrap;
+      padding: 0.5rem 1rem;
+      font-size: 0.875rem;
+    }
+    .rf-card { background: var(--color-card-bg); border-radius: var(--radius-xl); box-shadow: var(--shadow-card); padding: var(--space-lg); margin-bottom: var(--space-lg); }
     .rf-title { font-size: var(--font-size-2xl); font-weight: var(--font-weight-extrabold); margin-bottom: var(--space-xs); color: var(--color-text-main); }
     .rf-section-title { font-size: var(--font-size-xl); font-weight: var(--font-weight-bold); margin-bottom: var(--space-xs); color: var(--color-text-main); }
     .rf-progress-ring { width: 80px; height: 80px; display: inline-block; vertical-align: middle; margin-right: 1.5rem; }
@@ -156,12 +213,23 @@
       background: #F9FAFB;
       border-radius: var(--radius-md);
       border: 1px solid var(--color-divider);
-      transition: background-color 0.18s ease, border-color 0.18s ease;
-      cursor: default;
+      transition: all 0.18s ease;
+      cursor: pointer;
     }
     .rf-history-item:hover {
       background: #F3F4F6;
-      border-color: var(--color-divider);
+      border-color: var(--color-accent-blue);
+    }
+    .rf-history-item.active {
+      background: #F0F7FF;
+      border-color: var(--color-accent-blue);
+    }
+    .rf-history-item .rf-history-score {
+      font-weight: 700;
+      color: var(--color-cta-green);
+      font-size: 1.1rem;
+      min-width: 32px;
+      text-align: right;
     }
     .rf-history-icon {
       width: 40px;
@@ -3600,35 +3668,84 @@
     });
 
     // --- PLAN LOGIC ---
-    // Update plan badge and ATS scoring section to reflect userPlan
+    // Update plan badges and unlock features based on user plan
     document.addEventListener('DOMContentLoaded', function() {
-      const updatePlanBadge = () => {
+      const updatePlanUI = () => {
         const userPlan = getCurrentUserPlan();
-        const planBadge = document.querySelector('.rf-plan-badge');
-        if (planBadge) {
-          planBadge.textContent = userPlan.charAt(0).toUpperCase() + userPlan.slice(1) + ' Plan';
-        }
-        // Unlock ATS scoring for trial and above
+        
+        // Update all plan badges
+        document.querySelectorAll('.rf-plan-badge').forEach(badge => {
+          // Determine badge color based on plan
+          let bgColor = 'var(--color-accent-blue)'; // Trial/Essential blue
+          if (userPlan === 'pro') bgColor = '#388E3C'; // Pro green
+          if (userPlan === 'premium') bgColor = '#6A1B9A'; // Premium purple
+          if (userPlan === 'free') bgColor = '#6B7280'; // Free gray
+          
+          badge.style.background = bgColor;
+          badge.textContent = userPlan.charAt(0).toUpperCase() + userPlan.slice(1) + ' Plan';
+        });
+        
+        // Unlock ATS scoring and feedback for trial and above
         if (['trial', 'essential', 'pro', 'premium'].includes(userPlan)) {
           const atsSection = document.getElementById('ats-section');
           if (atsSection) atsSection.classList.remove('locked');
+          
+          // Show feedback content, hide upgrade prompts
+          const feedbackContent = document.getElementById('rf-feedback-content');
+          const feedbackUpgradePrompt = document.querySelector('#rf-feedback-tile .rf-upgrade-prompt');
+          if (feedbackContent) feedbackContent.style.display = 'block';
+          if (feedbackUpgradePrompt) feedbackUpgradePrompt.style.display = 'none';
         }
+        
+        // Pro/Premium: Unlock resume rewriting
+        if (['pro', 'premium'].includes(userPlan)) {
+          const rewriteContent = document.getElementById('rf-rewrite-content');
+          const rewriteUpgradePrompt = document.querySelector('#rf-rewrite-tile .rf-upgrade-prompt');
+          const rewriteBadge = document.querySelector('#rf-rewrite-tile .rf-plan-badge');
+          
+          // Show rewrite content, hide upgrade prompt
+          if (rewriteContent) rewriteContent.style.display = 'block';
+          if (rewriteUpgradePrompt) rewriteUpgradePrompt.style.display = 'none';
+          
+          // Update rewrite badge
+          if (rewriteBadge) {
+            rewriteBadge.style.background = userPlan === 'premium' ? '#6A1B9A' : '#388E3C';
+            rewriteBadge.textContent = userPlan === 'premium' ? 'Premium' : 'Pro';
+          }
+        } else {
+          // Non-Pro: Show upgrade prompt, hide rewrite content
+          const rewriteContent = document.getElementById('rf-rewrite-content');
+          const rewriteUpgradePrompt = document.querySelector('#rf-rewrite-tile .rf-upgrade-prompt');
+          const rewriteBadge = document.querySelector('#rf-rewrite-tile .rf-plan-badge');
+          
+          if (rewriteContent) rewriteContent.style.display = 'none';
+          if (rewriteUpgradePrompt) rewriteUpgradePrompt.style.display = 'flex';
+          
+          // Gray out rewrite badge
+          if (rewriteBadge) {
+            rewriteBadge.style.background = '#6B7280';
+            rewriteBadge.textContent = 'Pro Only';
+          }
+        }
+        
+        // Update plan limit text
+        updatePlanLimitText();
       };
       
       // Update on load
-      updatePlanBadge();
+      updatePlanUI();
       
-             // Listen for plan changes
-       window.addEventListener('storage', function(e) {
-         if (e.key === 'dev-plan' || e.key === 'user-plan') {
-           updatePlanBadge();
-         }
-       });
+      // Listen for plan changes (cross-tab via localStorage)
+      window.addEventListener('storage', function(e) {
+        if (e.key === 'dev-plan' || e.key === 'user-plan') {
+          updatePlanUI();
+        }
+      });
        
-       // Listen for custom plan change events
-       window.addEventListener('planChanged', function(e) {
-         updatePlanBadge();
-       });
+      // Listen for custom plan change events
+      window.addEventListener('planChanged', function(e) {
+        updatePlanUI();
+      });
     });
 
     // =======================================================
@@ -3753,9 +3870,9 @@
       
       if (emptyEl) emptyEl.style.display = 'none';
       
-      // Build history list HTML
+      // Build history list HTML with clickable items and atsScore
       listEl.innerHTML = items.map(item => `
-        <div class="rf-history-item" data-session-id="${item.sessionId || ''}" title="View this analysis">
+        <div class="rf-history-item" data-session-id="${item.sessionId || ''}" title="Click to view this analysis">
           <div class="rf-history-icon">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
@@ -3772,13 +3889,340 @@
               <span>📅 ${formatHistoryDate(item.createdAt)}</span>
             </div>
           </div>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--color-text-muted);flex-shrink:0;">
-            <polyline points="9 18 15 12 9 6"/>
-          </svg>
+          ${item.atsScore !== null && item.atsScore !== undefined ? `<div class="rf-history-score">${item.atsScore}</div>` : ''}
         </div>
       `).join('');
       
       listEl.style.display = 'flex';
+      
+      // Add click handlers for history items
+      listEl.querySelectorAll('.rf-history-item').forEach(itemEl => {
+        itemEl.addEventListener('click', function() {
+          const sessionId = this.dataset.sessionId;
+          if (sessionId) {
+            loadHistoryDetail(sessionId);
+          }
+        });
+      });
+    }
+    
+    /**
+     * Track if we're viewing historical feedback (D1-only view)
+     */
+    let _isHistoricalView = false;
+    let _currentHistoricalSessionId = null;
+    
+    /**
+     * Load full feedback detail from D1 (NO OpenAI calls)
+     * Restores the entire page state from saved data
+     */
+    async function loadHistoryDetail(sessionId) {
+      console.log('[RESUME-FEEDBACK-HISTORY] Loading history detail:', sessionId);
+      
+      // Show loading state
+      const loadingOverlay = document.getElementById('loading-overlay');
+      if (loadingOverlay) {
+        loadingOverlay.style.display = 'flex';
+        const loadingText = loadingOverlay.querySelector('.loading-text');
+        if (loadingText) loadingText.textContent = 'Loading saved feedback...';
+      }
+      
+      try {
+        const token = await getAuthToken().catch(() => null);
+        if (!token) {
+          console.warn('[RESUME-FEEDBACK-HISTORY] No auth token for history detail');
+          if (window.showToast) window.showToast('Please log in to view history', 'error');
+          return;
+        }
+        
+        const response = await fetch(`/api/resume-feedback/history/${sessionId}`, {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        });
+        
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(errorData.error || `Failed to load history (${response.status})`);
+        }
+        
+        const data = await response.json();
+        console.log('[RESUME-FEEDBACK-HISTORY] Loaded detail:', data);
+        
+        // Mark as historical view
+        _isHistoricalView = true;
+        _currentHistoricalSessionId = sessionId;
+        
+        // Show historical banner
+        showHistoricalBanner(data);
+        
+        // Restore page state from D1 data
+        restorePageStateFromHistory(data);
+        
+        // Mark active history item
+        markActiveHistoryItem(sessionId);
+        
+        // Scroll to top
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+        
+      } catch (error) {
+        console.error('[RESUME-FEEDBACK-HISTORY] Error loading detail:', error);
+        if (window.showToast) window.showToast(error.message || 'Failed to load history', 'error');
+      } finally {
+        if (loadingOverlay) loadingOverlay.style.display = 'none';
+      }
+    }
+    
+    /**
+     * Show the historical view banner
+     */
+    function showHistoricalBanner(data) {
+      const banner = document.getElementById('rf-historical-banner');
+      const bannerText = document.getElementById('rf-historical-banner-text');
+      
+      if (banner && bannerText) {
+        // Format the date
+        const date = parseDateSafely(data.createdAt);
+        const dateStr = date ? date.toLocaleDateString('en-US', { 
+          month: 'short', 
+          day: 'numeric', 
+          year: 'numeric' 
+        }) : 'saved feedback';
+        
+        bannerText.textContent = `Viewing saved feedback from ${dateStr}${data.role ? ` for ${data.role}` : ''} – run a new analysis to update.`;
+        banner.style.display = 'flex';
+      }
+    }
+    
+    /**
+     * Hide the historical view banner and clear state
+     */
+    function clearHistoricalView() {
+      _isHistoricalView = false;
+      _currentHistoricalSessionId = null;
+      
+      // Hide banner
+      const banner = document.getElementById('rf-historical-banner');
+      if (banner) banner.style.display = 'none';
+      
+      // Clear active history item
+      document.querySelectorAll('.rf-history-item.active').forEach(el => el.classList.remove('active'));
+      
+      // Reset form and results
+      resetFormToDefault();
+      
+      // Scroll to upload section
+      const uploadSection = document.getElementById('rf-ats-score-tile');
+      if (uploadSection) uploadSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+    
+    /**
+     * Mark the active history item in the sidebar
+     */
+    function markActiveHistoryItem(sessionId) {
+      // Remove active from all items
+      document.querySelectorAll('.rf-history-item.active').forEach(el => el.classList.remove('active'));
+      
+      // Add active to current
+      const activeItem = document.querySelector(`.rf-history-item[data-session-id="${sessionId}"]`);
+      if (activeItem) activeItem.classList.add('active');
+    }
+    
+    /**
+     * Reset form to default state
+     */
+    function resetFormToDefault() {
+      // Reset file input
+      const fileInput = document.getElementById('rf-upload');
+      const fileName = document.getElementById('rf-file-name');
+      if (fileInput) fileInput.value = '';
+      if (fileName) fileName.textContent = 'No file selected';
+      
+      // Reset score ring
+      const scoreRing = document.querySelector('.rf-progress-ring circle:nth-child(2)');
+      const scoreText = document.querySelector('.rf-progress-ring text');
+      if (scoreRing) scoreRing.style.strokeDashoffset = '226.2';
+      if (scoreText) scoreText.textContent = '0%';
+      
+      // Hide feedback sections
+      const feedbackContent = document.getElementById('rf-feedback-content');
+      const rubricGrid = document.getElementById('rf-rubric-grid');
+      const feedbackGrid = document.getElementById('rf-feedback-grid');
+      if (feedbackContent) feedbackContent.style.display = 'none';
+      if (rubricGrid) rubricGrid.style.display = 'none';
+      if (feedbackGrid) feedbackGrid.style.display = 'none';
+    }
+    
+    /**
+     * Restore full page state from history data (D1-only, NO OpenAI)
+     */
+    function restorePageStateFromHistory(data) {
+      // Update ATS score ring
+      if (data.atsScore !== null && data.atsScore !== undefined) {
+        const score = data.atsScore;
+        const scoreText = document.querySelector('.rf-progress-ring text');
+        const scoreRing = document.querySelector('.rf-progress-ring circle:nth-child(2)');
+        
+        if (scoreText) scoreText.textContent = score + '%';
+        if (scoreRing) {
+          const circumference = 2 * Math.PI * 36;
+          const offset = circumference - (score / 100) * circumference;
+          scoreRing.style.strokeDashoffset = offset;
+        }
+        
+        // Update score description
+        const scoreDesc = document.getElementById('rf-score-desc');
+        if (scoreDesc && data.role) {
+          scoreDesc.innerHTML = `Your resume scored <strong>${score}/100</strong> for ${escapeHtml(data.role)} roles.`;
+        }
+      }
+      
+      // Show and populate feedback content
+      const feedbackContent = document.getElementById('rf-feedback-content');
+      if (feedbackContent) feedbackContent.style.display = 'block';
+      
+      // Populate ATS rubric
+      if (data.atsRubric && Array.isArray(data.atsRubric)) {
+        populateAtsRubric(data.atsRubric);
+      }
+      
+      // Populate role-specific feedback
+      if (data.roleSpecificFeedback) {
+        populateRoleSpecificFeedback(data.roleSpecificFeedback, data.role);
+      }
+      
+      // Update job title input
+      if (data.role) {
+        const jobTitleInput = document.getElementById('rf-job-title');
+        if (jobTitleInput) jobTitleInput.value = data.role;
+      }
+      
+      // Update plan limit text based on current plan
+      updatePlanLimitText();
+      
+      // Handle rewrite data if present (Pro/Premium)
+      const userPlan = getCurrentUserPlan();
+      if (['pro', 'premium'].includes(userPlan) && data.rewrittenResume) {
+        const rewriteContent = document.getElementById('rf-rewrite-content');
+        const rewritePrompt = document.querySelector('#rf-rewrite-tile .rf-upgrade-prompt');
+        
+        if (rewriteContent) {
+          rewriteContent.style.display = 'block';
+          const rewrittenTextarea = rewriteContent.querySelectorAll('.rf-snippet-box')[1];
+          if (rewrittenTextarea) rewrittenTextarea.value = data.rewrittenResume;
+        }
+        if (rewritePrompt) rewritePrompt.style.display = 'none';
+      }
+    }
+    
+    /**
+     * Populate ATS rubric grid from saved data
+     */
+    function populateAtsRubric(atsRubric) {
+      const rubricGrid = document.getElementById('rf-rubric-grid');
+      if (!rubricGrid) return;
+      
+      rubricGrid.innerHTML = atsRubric.map(item => `
+        <div class="rf-rubric-item">
+          <div class="rf-rubric-label">${escapeHtml(item.category || '')}</div>
+          <div class="rf-rubric-score">${item.score || 0} / ${item.max || 10}</div>
+          <div style="color:var(--color-text-secondary);font-size:0.95rem;margin-top:0.5rem;">${escapeHtml(item.feedback || '')}</div>
+          ${item.suggestions && item.suggestions.length > 0 ? `
+            <ul style="margin-top:0.5rem;padding-left:1.25rem;color:var(--color-text-muted);font-size:0.9rem;">
+              ${item.suggestions.map(s => `<li>${escapeHtml(s)}</li>`).join('')}
+            </ul>
+          ` : ''}
+        </div>
+      `).join('');
+      
+      rubricGrid.style.display = 'grid';
+    }
+    
+    /**
+     * Populate role-specific feedback from saved data
+     */
+    function populateRoleSpecificFeedback(roleSpecificFeedback, targetRole) {
+      const feedbackGrid = document.getElementById('rf-feedback-grid');
+      const roleTitle = document.getElementById('rf-role-title');
+      const roleDesc = document.getElementById('rf-role-desc');
+      
+      if (!feedbackGrid) return;
+      
+      // Update title
+      if (roleTitle) {
+        roleTitle.textContent = 'Role-Specific Tailoring Tips';
+      }
+      if (roleDesc && targetRole) {
+        roleDesc.textContent = `How to tune your resume for ${targetRole} roles.`;
+      }
+      
+      // Handle both old array format and new object format
+      const sections = roleSpecificFeedback.sections || (Array.isArray(roleSpecificFeedback) ? roleSpecificFeedback : []);
+      
+      if (sections.length === 0) {
+        feedbackGrid.style.display = 'none';
+        return;
+      }
+      
+      feedbackGrid.innerHTML = sections.map(section => {
+        const fitChipClass = {
+          'big_impact': 'rf-fit-chip-big-impact',
+          'tunable': 'rf-fit-chip-tunable',
+          'strong': 'rf-fit-chip-strong'
+        }[section.fitLevel] || 'rf-fit-chip-tunable';
+        
+        const fitLabel = {
+          'big_impact': 'Big Impact Opportunity',
+          'tunable': 'Good but Tunable',
+          'strong': 'Strong Match'
+        }[section.fitLevel] || 'Tunable';
+        
+        return `
+          <div class="rf-feedback-card">
+            <div class="rf-feedback-label" style="display:flex;justify-content:space-between;align-items:center;">
+              <span>${escapeHtml(section.section || '')}</span>
+              <span class="${fitChipClass}" style="padding:0.25rem 0.75rem;border-radius:12px;font-size:0.75rem;font-weight:600;">${fitLabel}</span>
+            </div>
+            <div style="color:var(--color-text-main);margin-bottom:0.75rem;font-weight:500;line-height:1.5;">
+              ${escapeHtml(section.diagnosis || '')}
+            </div>
+            ${section.tips && section.tips.length > 0 ? `
+              <ul style="margin:0 0 0.75rem 0;padding-left:1.25rem;color:var(--color-text-secondary);line-height:1.6;">
+                ${section.tips.map(tip => `<li style="margin-bottom:0.5rem;">${escapeHtml(tip)}</li>`).join('')}
+              </ul>
+            ` : ''}
+            ${section.rewritePreview ? `
+              <div style="margin-top:0.75rem;padding-top:0.75rem;border-top:1px solid var(--color-divider);">
+                <div style="font-size:0.75rem;font-weight:600;color:var(--color-text-muted);margin-bottom:0.5rem;text-transform:uppercase;letter-spacing:0.5px;">AI Rewrite Preview</div>
+                <div style="color:var(--color-text-secondary);font-style:italic;font-size:0.9rem;line-height:1.5;">${escapeHtml(section.rewritePreview)}</div>
+              </div>
+            ` : ''}
+          </div>
+        `;
+      }).join('');
+      
+      feedbackGrid.style.display = 'grid';
+    }
+    
+    /**
+     * Update plan limit text based on current plan
+     */
+    function updatePlanLimitText() {
+      const planLimit = document.getElementById('rf-plan-limit');
+      const userPlan = getCurrentUserPlan();
+      
+      if (!planLimit) return;
+      
+      const planMessages = {
+        'trial': 'Your trial includes <strong>3 total detailed feedback runs</strong>. ATS scoring is always unlimited.',
+        'essential': 'Your Essential plan includes <strong>3 detailed feedback runs per month</strong>. ATS scoring is always unlimited.',
+        'pro': 'Your Pro plan includes <strong>unlimited detailed feedback runs</strong>.',
+        'premium': 'Your Premium plan includes <strong>unlimited detailed feedback runs</strong> with priority processing.'
+      };
+      
+      planLimit.innerHTML = `<span>${planMessages[userPlan] || planMessages['trial']}</span>`;
     }
     
     /**
@@ -3901,18 +4345,42 @@
       setTimeout(initializeHistory, 200);
     }
     
-    // Expose addHistoryItem globally so it can be called after feedback runs
+    // Expose history functions globally
     window.JobHackAIHistory = {
       addItem: addHistoryItem,
-      refresh: fetchResumeFeedbackHistory
+      refresh: fetchResumeFeedbackHistory,
+      loadDetail: loadHistoryDetail,
+      clearHistoricalView: clearHistoricalView,
+      isHistoricalView: () => _isHistoricalView,
+      getCurrentSessionId: () => _currentHistoricalSessionId
     };
   </script>
   <script src="js/components/usage-indicator.js" type="module"></script>
   <script src="js/main.js" type="module"></script>
 
   <!-- page content -->
-  <main style="max-width:900px;margin:2.5rem auto 4rem auto;padding:0 1rem;">
-    <!-- ATS Score Tile -->
+  <main style="margin:2rem auto 4rem auto;padding:0 var(--space-md);">
+    <div class="rf-layout-container">
+      <!-- Main Column -->
+      <div class="rf-main-column">
+        <!-- Historical View Banner (hidden by default, shown when viewing history) -->
+        <div class="rf-historical-banner" id="rf-historical-banner" style="display:none;">
+          <div class="rf-historical-banner-text">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10"/>
+              <polyline points="12 6 12 12 16 14"/>
+            </svg>
+            <span id="rf-historical-banner-text">Viewing saved feedback from Jan 15, 2025</span>
+          </div>
+          <button class="btn-primary" id="rf-run-new-analysis-btn" onclick="window.JobHackAIHistory.clearHistoricalView()">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+            </svg>
+            Run New Analysis
+          </button>
+        </div>
+        
+        <!-- ATS Score Tile -->
     <section class="rf-card" id="rf-ats-score-tile">
       <div style="display:flex;align-items:center;gap:2.5rem;flex-wrap:wrap;">
         <div class="rf-progress-ring">
@@ -4105,49 +4573,59 @@
         </div>
       </div>
     </section>
+        
+        <!-- Priority Review Banner -->
+        <div class="priority-review-cta" style="margin-top:var(--space-lg);">
+          <span>Need faster, deeper reviews? Priority Review is included with Premium.</span>
+          <a href="pricing-a.html?plan=premium" class="priority-btn">Upgrade to Premium</a>
+        </div>
+      </div><!-- /.rf-main-column -->
 
-    <!-- Resume Feedback History Section -->
-    <section class="rf-card" id="rf-history-tile">
-      <div class="rf-title" style="display:flex;align-items:center;justify-content:space-between;">
-        <span>
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:text-bottom;margin-right:0.5rem;">
-            <circle cx="12" cy="12" r="10"/>
-            <polyline points="12 6 12 12 16 14"/>
-          </svg>
-          Your Feedback History
-        </span>
-        <button id="rf-history-refresh" class="rf-btn-secondary" style="padding:0.4rem 0.75rem;font-size:0.85rem;" title="Refresh history">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M23 4v6h-6"/>
-            <path d="M1 20v-6h6"/>
-            <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
-          </svg>
-        </button>
-      </div>
-      <div style="color:var(--color-text-secondary);margin-bottom:1rem;">
-        View your past resume analyses. History is automatically saved for each feedback run.
-      </div>
-      <div id="rf-history-content">
-        <!-- Loading state -->
-        <div class="rf-history-loading" id="rf-history-loading">
-          <div class="spinner"></div>
-          <span>Loading history...</span>
-        </div>
-        <!-- History list (populated by JS) -->
-        <div class="rf-history-list" id="rf-history-list" style="display:none;"></div>
-        <!-- Empty state -->
-        <div class="rf-history-empty" id="rf-history-empty" style="display:none;">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-            <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
-            <line x1="16" y1="2" x2="16" y2="6"/>
-            <line x1="8" y1="2" x2="8" y2="6"/>
-            <line x1="3" y1="10" x2="21" y2="10"/>
-          </svg>
-          <div style="font-weight:600;margin-bottom:0.25rem;">No history yet</div>
-          <div>Upload a resume and run feedback to see your history here.</div>
-        </div>
-      </div>
-    </section>
+      <!-- Sidebar Column - Sticky History -->
+      <aside class="rf-sidebar-column">
+        <section class="rf-card" id="rf-history-tile" style="margin-bottom:0;">
+          <div class="rf-title" style="display:flex;align-items:center;justify-content:space-between;font-size:var(--font-size-xl);">
+            <span>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:text-bottom;margin-right:0.5rem;">
+                <circle cx="12" cy="12" r="10"/>
+                <polyline points="12 6 12 12 16 14"/>
+              </svg>
+              Your Feedback History
+            </span>
+            <button id="rf-history-refresh" class="rf-btn-secondary" style="padding:0.4rem 0.75rem;font-size:0.85rem;" title="Refresh history">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M23 4v6h-6"/>
+                <path d="M1 20v-6h6"/>
+                <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
+              </svg>
+            </button>
+          </div>
+          <div style="color:var(--color-text-secondary);margin-bottom:1rem;font-size:0.95rem;">
+            We automatically save your past feedback so you can come back and compare improvements.
+          </div>
+          <div id="rf-history-content">
+            <!-- Loading state -->
+            <div class="rf-history-loading" id="rf-history-loading">
+              <div class="spinner"></div>
+              <span>Loading history...</span>
+            </div>
+            <!-- History list (populated by JS) -->
+            <div class="rf-history-list" id="rf-history-list" style="display:none;"></div>
+            <!-- Empty state -->
+            <div class="rf-history-empty" id="rf-history-empty" style="display:none;">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+                <line x1="16" y1="2" x2="16" y2="6"/>
+                <line x1="8" y1="2" x2="8" y2="6"/>
+                <line x1="3" y1="10" x2="21" y2="10"/>
+              </svg>
+              <div style="font-weight:600;margin-bottom:0.25rem;">No history yet</div>
+              <div>Upload a resume and run feedback to see your history here.</div>
+            </div>
+          </div>
+        </section>
+      </aside><!-- /.rf-sidebar-column -->
+    </div><!-- /.rf-layout-container -->
   </main>
 
   <!-- Footer -->

@@ -12,7 +12,8 @@ import {
   createResumeSession, 
   createFeedbackSession, 
   logUsageEvent,
-  isD1Available 
+  isD1Available,
+  updateResumeSessionAtsScore
 } from '../_lib/db.js';
 
 function corsHeaders(origin, env) {
@@ -739,6 +740,17 @@ export async function onRequest(context) {
           d1SessionId = String(resumeSession.id);
           d1CreatedAt = resumeSession.created_at;
           
+          // Calculate overall ATS score for quick history display
+          let overallAtsScore = null;
+          if (result.atsRubric && Array.isArray(result.atsRubric)) {
+            overallAtsScore = result.atsRubric.reduce((sum, item) => sum + (item.score || 0), 0);
+          }
+          
+          // Update session with ATS score (for faster history queries)
+          if (overallAtsScore !== null) {
+            await updateResumeSessionAtsScore(env, resumeSession.id, overallAtsScore);
+          }
+          
           // Create feedback session with the full result
           await createFeedbackSession(env, resumeSession.id, result);
           
@@ -747,12 +759,14 @@ export async function onRequest(context) {
             resumeSessionId: resumeSession.id,
             plan: effectivePlan,
             cached: false,
-            jobTitle: normalizedJobTitle || null
+            jobTitle: normalizedJobTitle || null,
+            atsScore: overallAtsScore
           });
           
           console.log('[RESUME-FEEDBACK] D1 persistence complete:', { 
             sessionId: d1SessionId, 
-            userId: d1User.id 
+            userId: d1User.id,
+            atsScore: overallAtsScore
           });
         }
       } catch (d1Error) {

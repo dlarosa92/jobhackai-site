@@ -4,6 +4,36 @@
 import mammoth from 'mammoth';
 
 /**
+ * Structured error codes for resume extraction
+ * Frontend can use these for user-friendly messages
+ */
+export const EXTRACTION_ERRORS = {
+  UNSUPPORTED_TYPE: 'unsupported_file_type',
+  EMPTY_TEXT: 'empty_text',
+  OCR_FAILED: 'ocr_failed',
+  OCR_REQUIRED: 'ocr_required',
+  TOO_LARGE: 'file_too_large',
+  TEXT_TOO_LONG: 'text_too_long',
+  PARSE_ERROR: 'parse_error',
+  INVALID_FORMAT: 'invalid_format',
+  UNREADABLE_SCAN: 'unreadable_scan'
+};
+
+/**
+ * Create a structured extraction error
+ * @param {string} code - Error code from EXTRACTION_ERRORS
+ * @param {string} message - Human-readable message
+ * @param {Object} details - Optional additional details
+ * @returns {Error} Error with code and details attached
+ */
+function createExtractionError(code, message, details = {}) {
+  const error = new Error(message);
+  error.code = code;
+  error.details = details;
+  return error;
+}
+
+/**
  * Extract text from resume file
  * @param {File|Blob|ArrayBuffer} file - The file to extract text from
  * @param {string} fileName - Original filename
@@ -15,7 +45,11 @@ export async function extractResumeText(file, fileName) {
   
   // Validate file type
   if (!['pdf', 'docx', 'txt'].includes(fileExt)) {
-    throw new Error(`Unsupported file type: ${fileExt}. Please upload PDF, DOCX, or TXT.`);
+    throw createExtractionError(
+      EXTRACTION_ERRORS.UNSUPPORTED_TYPE,
+      `Unsupported file type: ${fileExt}. Please upload PDF, DOCX, or TXT.`,
+      { fileType: fileExt, supportedTypes: ['pdf', 'docx', 'txt'] }
+    );
   }
 
   // Convert file to ArrayBuffer if needed
@@ -30,7 +64,11 @@ export async function extractResumeText(file, fileName) {
 
   // Validate file size (2MB limit)
   if (arrayBuffer.byteLength > 2 * 1024 * 1024) {
-    throw new Error('File exceeds 2MB limit. Please compress or use a smaller file.');
+    throw createExtractionError(
+      EXTRACTION_ERRORS.TOO_LARGE,
+      'File exceeds 2MB limit. Please compress or use a smaller file.',
+      { fileSize: arrayBuffer.byteLength, maxSize: 2 * 1024 * 1024 }
+    );
   }
 
   let text = '';
@@ -48,7 +86,11 @@ export async function extractResumeText(file, fileName) {
         const result = await mammoth.extractRawText({ arrayBuffer });
         text = result.value;
       } catch (docxError) {
-        throw new Error(`Failed to extract text from DOCX: ${docxError.message}`);
+        throw createExtractionError(
+          EXTRACTION_ERRORS.PARSE_ERROR,
+          `Failed to extract text from DOCX: ${docxError.message}`,
+          { originalError: docxError.message, fileType: 'docx' }
+        );
       }
     } else if (fileExt === 'pdf') {
       // PDF file - try text extraction first, fall back to OCR
@@ -68,12 +110,20 @@ export async function extractResumeText(file, fileName) {
     
     // Validate extracted text (after cleaning for consistency)
     if (!text || text.length < 50) {
-      throw new Error('Could not extract readable text from file. Please upload a text-based résumé or use our DOCX template.');
+      throw createExtractionError(
+        EXTRACTION_ERRORS.EMPTY_TEXT,
+        'Could not extract readable text from file. Please upload a text-based résumé or use our DOCX template.',
+        { extractedLength: text ? text.length : 0, minimumRequired: 50 }
+      );
     }
 
     // Check if OCR output is too short (likely unreadable) - after cleaning for consistency
     if (ocrUsed && text.length < 500) {
-      throw new Error('Unreadable scan detected. Please upload a higher-quality file or use our DOCX template.');
+      throw createExtractionError(
+        EXTRACTION_ERRORS.UNREADABLE_SCAN,
+        'Unreadable scan detected. Please upload a higher-quality file or use our DOCX template.',
+        { extractedLength: text.length, minimumRequired: 500, ocrUsed: true }
+      );
     }
     
     // Detect multi-column layout (heuristic: many short lines)
@@ -83,7 +133,11 @@ export async function extractResumeText(file, fileName) {
 
     // Validate text length (80k chars limit)
     if (text.length > 80000) {
-      throw new Error('Extracted text exceeds 80,000 character limit. Please use a shorter résumé.');
+      throw createExtractionError(
+        EXTRACTION_ERRORS.TEXT_TOO_LONG,
+        'Extracted text exceeds 80,000 character limit. Please use a shorter résumé.',
+        { extractedLength: text.length, maxLength: 80000 }
+      );
     }
 
     const wordCount = text.split(/\s+/).filter(w => w.length > 0).length;
@@ -98,10 +152,16 @@ export async function extractResumeText(file, fileName) {
     };
 
   } catch (error) {
-    if (error.message.includes('exceeds') || error.message.includes('limit') || error.message.includes('Unreadable')) {
+    // Re-throw structured errors as-is
+    if (error.code && Object.values(EXTRACTION_ERRORS).includes(error.code)) {
       throw error;
     }
-    throw new Error(`Failed to extract text: ${error.message}`);
+    // Wrap other errors in structured format
+    throw createExtractionError(
+      EXTRACTION_ERRORS.PARSE_ERROR,
+      `Failed to extract text: ${error.message}`,
+      { originalError: error.message, fileType: fileExt }
+    );
   }
 }
 
@@ -189,10 +249,22 @@ async function extractPdfWithOCR(arrayBuffer) {
     // we'll throw an error that triggers a user-facing modal
     // The frontend can handle this gracefully
     
-    throw new Error('OCR processing is required for this scanned PDF. This may take up to 20 seconds. Please wait...');
+    throw createExtractionError(
+      EXTRACTION_ERRORS.OCR_REQUIRED,
+      'OCR processing is required for this scanned PDF. This may take up to 20 seconds. Please wait...',
+      { requiresOcr: true }
+    );
   } catch (error) {
-    // Re-throw with user-friendly message
-    throw new Error(error.message || 'OCR extraction failed. Please upload a text-based PDF or try again.');
+    // Re-throw structured errors as-is
+    if (error.code && Object.values(EXTRACTION_ERRORS).includes(error.code)) {
+      throw error;
+    }
+    // Wrap other errors
+    throw createExtractionError(
+      EXTRACTION_ERRORS.OCR_FAILED,
+      error.message || 'OCR extraction failed. Please upload a text-based PDF or try again.',
+      { originalError: error.message }
+    );
   }
 }
 

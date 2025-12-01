@@ -14,7 +14,11 @@
     "deploy:prod": "wrangler pages deploy out --branch main",
     "test:e2e": "playwright test --config tests/playwright.config.js",
     "test:e2e:dev": "cross-env TEST_ENV=dev playwright test --config tests/playwright.config.js",
-    "test:e2e:qa": "cross-env TEST_ENV=qa playwright test --config tests/playwright.config.js"
+    "test:e2e:qa": "cross-env TEST_ENV=qa playwright test --config tests/playwright.config.js",
+    "test:ats": "node functions/_lib/__tests__/ats-test-suite.test.mjs",
+    "test:ats:verbose": "node functions/_lib/__tests__/ats-test-suite.test.mjs --verbose",
+    "test:ats-engine": "node functions/_lib/__tests__/ats-scoring-engine.test.mjs",
+    "test:grammar": "node functions/_lib/__tests__/grammar-engine.test.mjs"
   },
   "dependencies": {
     "firebase": "^10.7.0",

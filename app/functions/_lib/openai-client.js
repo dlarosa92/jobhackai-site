@@ -14,6 +14,39 @@ function truncateToApproxTokens(text, maxTokensApprox) {
 }
 
 /**
+ * Detect and log output truncation before JSON parsing.
+ * Returns { truncated: boolean, rawContent: string, diagnostics: object }
+ */
+function detectTruncation(result, feature) {
+  const diagnostics = {
+    feature,
+    finishReason: result.finishReason,
+    contentLength: result.content?.length || 0,
+    model: result.model,
+    completionTokens: result.usage?.completionTokens || 0
+  };
+
+  const truncated = result.finishReason === 'length';
+
+  if (truncated) {
+    // Check if JSON is likely incomplete (common truncation patterns)
+    const content = result.content || '';
+    const openBraces = (content.match(/{/g) || []).length;
+    const closeBraces = (content.match(/}/g) || []).length;
+    const openBrackets = (content.match(/\[/g) || []).length;
+    const closeBrackets = (content.match(/]/g) || []).length;
+
+    diagnostics.braceMismatch = openBraces - closeBraces;
+    diagnostics.bracketMismatch = openBrackets - closeBrackets;
+    diagnostics.likelyIncompleteJson = openBraces !== closeBraces || openBrackets !== closeBrackets;
+
+    console.warn(`[OPENAI][TRUNCATION] Output truncated for ${feature}`, diagnostics);
+  }
+
+  return { truncated, rawContent: result.content, diagnostics };
+}
+
+/**
  * Call OpenAI API with structured outputs and optional fallback model.
  * @param {Object} options - API options
  * @param {string} options.model - Primary model (gpt-4o-mini, gpt-4o, etc.)
@@ -286,32 +319,29 @@ export async function generateATSFeedback(resumeText, ruleBasedScores, jobTitle,
     ? `The candidate is targeting: ${targetRoleUsed}. Tailor all role-specific feedback to this role.`
     : 'No specific target role provided. Provide general tech/knowledge worker improvement guidance.';
 
-  const systemPrompt = `You are an ATS resume expert. Generate precise, actionable feedback based on rule-based scores.
+  // Lean system prompt: instructions only, no repetition of schema constraints
+  const systemPrompt = `You are an ATS resume expert. Analyze the provided resume and generate precise, actionable feedback.
 
-CRITICAL: Use the exact scores provided in RULE-BASED SCORES. Do NOT generate or modify scores. Your role is to provide feedback and suggestions only.
-IMPORTANT: Return exactly 5 categories in atsRubric: Keyword Match, ATS Formatting, Structure & Organization, Tone & Clarity, and Grammar & Spelling. Do NOT include an "overallScore" or "overall" category.
-Keep feedback concise. For each category, provide:
-- A short explanation (2–3 sentences)
-- Up to 2 bullet suggestions, using action verbs and metrics where possible.
+CORE RULES:
+- Use EXACT scores from RULE-BASED SCORES. Do NOT generate or modify scores.
+- Generate feedback for exactly 5 categories: Keyword Match, ATS Formatting, Structure & Organization, Tone & Clarity, Grammar & Spelling.
+- Keep feedback concise: 2-3 sentence explanation + up to 2 bullet suggestions per category.
 
-ADDITIONALLY, generate Role-Specific Tailoring Tips. This is strategic, role-aware feedback that evaluates 5 sections:
-1. Header & Contact - first impression: name, headline/target title, location/remote signal, email/phone, professional links (ONLY if they exist in the original resume - do not suggest adding links that aren't present). Focus on whether this instantly signals fit for the target role.
-2. Professional Summary - 2-4 line pitch at top: who they are, what they do, why relevant for the role, with at least one measurable outcome when possible.
-3. Experience - work history: roles, bullets, achievements; focus on outcomes and alignment with responsibilities for the target role.
-4. Skills - quick-scan tools/technologies, logically grouped; presence of must-have skills, removal of fluffy soft-skill padding.
-5. Education - degrees + certs; right-sized for seniority; highlight relevant coursework or certifications.
+RESUME-AWARE CONSTRAINT (CRITICAL):
+- Only reference features that ACTUALLY EXIST in this resume.
+- Do NOT suggest "add LinkedIn URL" unless the resume already has a Links/URLs section.
+- Do NOT suggest "add portfolio" unless one is mentioned or implied.
+- Do NOT suggest generic improvements that don't apply to the actual content.
+- If a section is already strong, say so—don't invent problems.
+- Base every diagnosis and tip on SPECIFIC text from the resume.
 
-For each section, output:
-- fitLevel: "big_impact" (major improvements needed), "tunable" (good but can improve), or "strong" (well-aligned)
-- diagnosis: one-sentence summary of main issue/opportunity - MUST be specific to THIS resume's actual content, not generic advice
-- tips: exactly 3 clear, actionable suggestions that are SPECIFIC to what's actually in the resume. Avoid generic suggestions like "add LinkedIn URL" unless the resume already has a URL section. Focus on what's actually missing or could be improved based on the resume content.
-- rewritePreview: 1-2 sentence improved version WITHOUT fabricating jobs, dates, companies, degrees, or URLs/links.
-
-CRITICAL: Your feedback must be tailored to the ACTUAL resume content. Do not provide generic, template-like suggestions. Analyze what's actually present and what's actually missing. If a section already has strong content, acknowledge that rather than suggesting generic improvements.
+ROLE-SPECIFIC FEEDBACK:
+Evaluate 5 sections for role fit: Header & Contact, Professional Summary, Experience, Skills, Education.
+For each: fitLevel (big_impact|tunable|strong), diagnosis (one sentence, specific to THIS resume), 3 tips (grounded in actual content), rewritePreview (improve what exists, never fabricate).
 
 ${roleContext}
 
-Also identify ATS issues as an array of structured problems with id, severity ("low"|"medium"|"high"), and details (e.g., missing keywords list).`;
+ATS ISSUES: Identify structured problems with id, severity (low|medium|high), and details array.`;
 
   // We only send the minimal part of ruleBasedScores the model actually needs
   // NOTE: Do NOT include overallScore - it should not be in the atsRubric response
@@ -323,6 +353,7 @@ Also identify ATS issues as an array of structured problems with id, severity ("
     grammarScore: ruleBasedScores?.grammarScore
   };
 
+  // Lean user prompt: data only, no repeated instructions
   const messages = [
     {
       role: 'system',
@@ -331,15 +362,9 @@ Also identify ATS issues as an array of structured problems with id, severity ("
     {
       role: 'user',
       content:
-        `You are evaluating a resume for ATS readiness.\n\n` +
         `TARGET ROLE: ${targetRoleUsed}\n\n` +
-        `RULE-BASED SCORES (JSON): ${JSON.stringify(safeRuleScores)}\n\n` +
-        `IMPORTANT: Use the exact scores provided in RULE-BASED SCORES. Do NOT generate or modify scores. Your role is to provide feedback and suggestions only.\n\n` +
-        `CRITICAL: Return exactly 5 categories in atsRubric array: "Keyword Match", "ATS Formatting", "Structure & Organization", "Tone & Clarity", and "Grammar & Spelling". Do NOT include "overallScore" or "overall" as a category.\n\n` +
-        `RESUME TEXT:\n${truncatedResume}\n\n` +
-        `Return structured feedback for each category. The score and max values in your response must match the rule-based scores exactly.\n\n` +
-        `Also generate Role-Specific Tailoring Tips for the 5 sections (Header & Contact, Professional Summary, Experience, Skills, Education) with fitLevel, diagnosis, tips, and rewritePreview. ` +
-        `Set targetRoleUsed to "${targetRoleUsed}" in your response.`
+        `RULE-BASED SCORES: ${JSON.stringify(safeRuleScores)}\n\n` +
+        `RESUME TEXT:\n${truncatedResume}`
     }
   ];
 
@@ -442,7 +467,7 @@ Also identify ATS issues as an array of structured problems with id, severity ("
     }
   };
 
-  return await callOpenAI(
+  const result = await callOpenAI(
     {
       model: baseModel,
       // we *could* set a fallbackModel here (e.g. another mini variant), but for now
@@ -456,6 +481,17 @@ Also identify ATS issues as an array of structured problems with id, severity ("
     },
     env
   );
+
+  // Log truncation before caller attempts to parse
+  const truncationInfo = detectTruncation(result, 'ats_feedback');
+  if (truncationInfo.truncated) {
+    console.error('[OPENAI][ats_feedback] Response truncated - JSON parse will likely fail', {
+      ...truncationInfo.diagnostics,
+      recommendation: 'Consider increasing OPENAI_MAX_TOKENS_ATS'
+    });
+  }
+
+  return result;
 }
 
 /**
@@ -586,7 +622,7 @@ Your objectives:
     }
   };
 
-  return await callOpenAI(
+  const result = await callOpenAI(
     {
       model: baseModel,
       fallbackModel, // if 4o fails for non-rate reasons, we can still give them a rewrite with mini
@@ -599,6 +635,17 @@ Your objectives:
     },
     env
   );
+
+  // Log truncation before caller attempts to parse
+  const truncationInfo = detectTruncation(result, 'resume_rewrite');
+  if (truncationInfo.truncated) {
+    console.error('[OPENAI][resume_rewrite] Response truncated - JSON parse will likely fail', {
+      ...truncationInfo.diagnostics,
+      recommendation: 'Consider increasing OPENAI_MAX_TOKENS_REWRITE'
+    });
+  }
+
+  return result;
 }
 
 /**
