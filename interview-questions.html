@@ -734,11 +734,6 @@
 
       <div class="iq-actions">
         <button id="btn-generate" class="btn-primary" aria-label="Generate 10 Questions">Generate 10 Questions</button>
-        <div class="cooldown-wrapper" id="cooldown-wrapper" style="display:none;">
-          <span id="cooldown" class="cooldown-badge" aria-live="polite">0:59</span>
-          <button type="button" class="cooldown-info" aria-label="Why cooldown?" tabindex="0">ⓘ</button>
-          <div class="cooldown-tooltip">To keep the AI fast and affordable, we limit how often you can ask for a brand-new set. You can still save questions and run Mock Interviews with this set.</div>
-      </div>
       </div>
       <div id="cooldown-helper" class="cta-hint" style="display:none; color:#6B7280; font-size:0.85rem; margin-top:0.25rem;">
         Next new set available in <span id="cooldown-time">0:59</span> (you can still practice with this set).
@@ -1044,6 +1039,8 @@
       if (genBtn) {
         genBtn.disabled = true;
         genBtn.setAttribute('aria-disabled', 'true');
+        genBtn.style.opacity = '0.5';
+        genBtn.style.cursor = 'not-allowed';
         // Update button text to indicate daily limit reached (instead of leaving "Generating...")
         genBtn.textContent = 'Daily Limit Reached';
       }
@@ -1121,15 +1118,12 @@
     // Cooldowns
     function iqStartGlobalCooldown(sec=IQ_GLOBAL_COOLDOWN){
       iqState.cooldown = sec;
-      const badge = $IQ('#cooldown'); 
-      const cooldownWrapper = $IQ('#cooldown-wrapper');
       const cooldownHelper = $IQ('#cooldown-helper');
       const cooldownTime = $IQ('#cooldown-time');
       const g = $IQ('#btn-generate'); 
       const mi=$IQ('#mi-new-set');
       
-      // Show cooldown UI
-      if (cooldownWrapper) { cooldownWrapper.style.display = 'inline-flex'; }
+      // Show cooldown UI - only show helper text below button, not badge to the right
       if (cooldownHelper) { cooldownHelper.style.display = 'block'; }
       if (g) { 
         g.disabled = true; 
@@ -1137,6 +1131,8 @@
         g.classList.add('is-disabled');
         // Restore button text immediately after successful generation (not wait for cooldown to end)
         g.textContent = iqState.set ? 'New Question Set' : 'Generate 10 Questions';
+        // Update button state to respect role requirement
+        iqUpdateGenerateButtonState();
       }
       if (mi) { mi.disabled = true; mi.setAttribute('aria-disabled','true'); }
       
@@ -1146,12 +1142,10 @@
         const mm = Math.floor(iqState.cooldown/60);
         const ss = String(iqState.cooldown%60).padStart(2,'0');
         const timeStr = `${mm}:${ss}`;
-        if (badge) badge.textContent = timeStr;
         if (cooldownTime) cooldownTime.textContent = timeStr;
         
         if (iqState.cooldown<=0) { 
           clearInterval(iqState.timers.global); 
-          if (cooldownWrapper) cooldownWrapper.style.display = 'none';
           if (cooldownHelper) cooldownHelper.style.display = 'none';
           if (g) { 
             g.disabled = false; 
@@ -1159,6 +1153,8 @@
             g.classList.remove('is-disabled'); 
             // Restore button text after cooldown ends
             g.textContent = iqState.set ? 'New Question Set' : 'Generate 10 Questions';
+            // Update button state to respect role requirement
+            iqUpdateGenerateButtonState();
           } 
           if (mi) { 
             mi.disabled = false; 
@@ -1204,6 +1200,31 @@
       clearInterval(iqState.timers.perQ[k]);
       btn.removeAttribute('data-timer');
       btn.disabled = false;
+    }
+
+    // Update generate button state based on role input and cooldown
+    function iqUpdateGenerateButtonState() {
+      const genBtn = $IQ('#btn-generate');
+      const roleInput = $IQ('#iq-role');
+      
+      if (!genBtn || !roleInput) return;
+      
+      const hasRole = roleInput.value.trim().length > 0;
+      
+      if (!hasRole) {
+        genBtn.disabled = true;
+        genBtn.setAttribute('aria-disabled', 'true');
+        genBtn.style.opacity = '0.5';
+        genBtn.style.cursor = 'not-allowed';
+      } else {
+        // Only enable if not in cooldown and daily limit not reached
+        if (iqState.cooldown <= 0 && !iqState.dailyLimitReached) {
+          genBtn.disabled = false;
+          genBtn.removeAttribute('aria-disabled');
+          genBtn.style.opacity = '1';
+          genBtn.style.cursor = 'pointer';
+        }
+      }
     }
 
     // Helper function to get valid questions (filters out invalid ones)
@@ -1653,6 +1674,8 @@
         iqState.replaceCounts = {}; 
         // Reset daily limit flag on successful generation
         iqState.dailyLimitReached = false;
+        // Update button state after successful generation
+        iqUpdateGenerateButtonState();
         iqState.prefs={...iqState.prefs,seniority,count: IQ_FIXED_COUNT,types:new Set(types)}; 
         iqSavePrefs(); 
         iqLoadNotes(); 
@@ -1694,6 +1717,8 @@
         if (genBtn) {
           genBtn.disabled = false;
           genBtn.textContent = iqState.set ? 'New Question Set' : 'Generate 10 Questions';
+          // Update button state to respect role requirement
+          iqUpdateGenerateButtonState();
         }
       }
     }
@@ -2194,6 +2219,14 @@ function initIQPage(){
       const genBtn = $IQ('#btn-generate');
       if (genBtn) {
         genBtn.textContent = iqState.set ? 'New Question Set' : 'Generate 10 Questions';
+      }
+      
+      // Initialize button state and listen for role changes
+      iqUpdateGenerateButtonState();
+      const roleInput = $IQ('#iq-role');
+      if (roleInput) {
+        roleInput.addEventListener('input', iqUpdateGenerateButtonState);
+        roleInput.addEventListener('change', iqUpdateGenerateButtonState);
       }
       
       // Show first-time visitor hint if not shown before
