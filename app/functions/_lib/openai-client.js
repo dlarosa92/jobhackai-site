@@ -153,13 +153,16 @@ export async function callOpenAI({
       });
 
       if (response.status === 429) {
-        // Rate limit - exponential backoff
+        // Rate limit - respect Retry-After header, with exponential backoff as minimum
         const retryAfter = parseInt(response.headers.get('Retry-After') || '60', 10);
-        // Cap backoff at maxBackoffMs (true maximum, not exponential base)
-        const waitTime = Math.min(retryAfter * 1000, Math.min(1000 * Math.pow(2, attempt), maxBackoffMs));
+        const retryAfterMs = retryAfter * 1000;
+        // Exponential backoff: 1s, 2s, 4s, etc. (capped at maxBackoffMs)
+        const exponentialBackoffMs = Math.min(1000 * Math.pow(2, attempt), maxBackoffMs);
+        // Use the larger of Retry-After or exponential backoff, but cap at maxBackoffMs
+        const waitTime = Math.min(Math.max(retryAfterMs, exponentialBackoffMs), maxBackoffMs);
 
         if (attempt < retryLimit - 1) {
-          console.log(`[OPENAI] Rate limited, retrying after ${waitTime}ms`, { feature, attempt, model: activeModel });
+          console.log(`[OPENAI] Rate limited, retrying after ${waitTime}ms`, { feature, attempt, model: activeModel, retryAfter, exponentialBackoff: exponentialBackoffMs });
           await sleep(waitTime);
           continue;
         } else {
