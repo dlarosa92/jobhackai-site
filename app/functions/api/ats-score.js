@@ -340,12 +340,12 @@ export async function onRequest(context) {
         grammarScore: ruleBasedScores.grammarScore.score
       },
       feedback: [
-        ruleBasedScores.keywordScore.feedback,
-        ruleBasedScores.formattingScore.feedback,
-        ruleBasedScores.structureScore.feedback,
-        ruleBasedScores.toneScore.feedback,
-        ruleBasedScores.grammarScore.feedback
-      ].filter(Boolean),
+        ruleBasedScores.keywordScore.feedback || '',
+        ruleBasedScores.formattingScore.feedback || '',
+        ruleBasedScores.structureScore.feedback || '',
+        ruleBasedScores.toneScore.feedback || '',
+        ruleBasedScores.grammarScore.feedback || ''
+      ],
       recommendations: ruleBasedScores.recommendations || []
     };
 
