@@ -2520,7 +2520,9 @@
                 showRoleFeedback();
               }, 100);
               
-              if (window.JobHackAIToast) {
+              // Only show success toast if ATS scoring also succeeded
+              // If ATS failed, user already saw an error modal - don't show conflicting success message
+              if (window.JobHackAIToast && atsScoringSucceeded) {
                 window.JobHackAIToast.success('Feedback generated successfully!');
               }
             } catch (feedbackError) {
