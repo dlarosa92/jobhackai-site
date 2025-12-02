@@ -155,7 +155,8 @@ export async function callOpenAI({
       if (response.status === 429) {
         // Rate limit - exponential backoff
         const retryAfter = parseInt(response.headers.get('Retry-After') || '60', 10);
-        const waitTime = Math.min(retryAfter * 1000, maxBackoffMs * Math.pow(2, attempt));
+        // Cap backoff at maxBackoffMs (true maximum, not exponential base)
+        const waitTime = Math.min(retryAfter * 1000, Math.min(1000 * Math.pow(2, attempt), maxBackoffMs));
 
         if (attempt < retryLimit - 1) {
           console.log(`[OPENAI] Rate limited, retrying after ${waitTime}ms`, { feature, attempt, model: activeModel });
