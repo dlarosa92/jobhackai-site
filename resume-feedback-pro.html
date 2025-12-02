@@ -2270,7 +2270,11 @@
           window.latestAtsIssues = null;
           window.latestRoleSpecific = null;
 
-          // Update progress status
+          // Show progress header immediately (moved outside rf-feedback-content)
+          const progressHeader = document.getElementById('rf-progress-header');
+          if (progressHeader) {
+            progressHeader.style.display = 'block';
+          }
           updateProgressStatus('uploading');
 
           // --- PARALLEL API CALLS: ATS Score + Feedback ---
@@ -2287,98 +2291,123 @@
             return null; // Free plan doesn't get feedback
           })();
 
-          // Wait for both with Promise.allSettled (handles partial failures gracefully)
-          const [atsSettled, feedbackSettled] = await Promise.allSettled([atsPromise, feedbackPromise]);
+          // Handle ATS result immediately without waiting for feedback (progressive display)
+          // This ensures ATS scores appear in 2-3s as claimed in the PR
+          let atsSettled;
+          let feedbackSettled;
           
-          // --- Process ATS Result (show immediately) ---
-          // Note: atsScoringSucceeded is declared in outer scope (line 2038), don't redeclare here
+          // Process ATS result as soon as it's available
+          atsPromise
+            .then((result) => {
+              // ATS succeeded - update UI immediately
+              atsScoringSucceeded = result.success && result.score !== undefined;
+              
+              if (atsScoringSucceeded) {
+                // Store ATS score in sessionStorage
+                sessionStorage.setItem('currentAtsScore', result.score.toString());
+                if (result.breakdown) {
+                  sessionStorage.setItem('currentAtsBreakdown', JSON.stringify(result.breakdown));
+                }
+                
+                // Also store in localStorage for backward compatibility
+                const summary = result.score > 85 ? 'Excellent! Your resume is highly ATS compatible.' : 
+                               result.score > 70 ? 'Your resume meets many ATS criteria and is likely to be noticed.' : 
+                               'Your resume needs improvement for better ATS results.';
+                localStorage.setItem('lastATSScore', result.score.toString());
+                localStorage.setItem('lastATSSummary', summary);
+                
+                // Show feedback content container now that we have ATS results
+                const feedbackContentEl = document.getElementById('rf-feedback-content');
+                if (feedbackContentEl) {
+                  feedbackContentEl.style.display = 'block';
+                }
+                
+                // Update UI immediately
+                updateProgressRing(result.score);
+                hidePlaceholder();
+                const placeholderCta = document.getElementById('rf-placeholder-cta');
+                if (placeholderCta) placeholderCta.style.display = 'none';
+                
+                // Convert breakdown to rubric format
+                const rubric = [
+                  {
+                    label: 'Keyword Relevance',
+                    score: result.breakdown.keywordScore.score,
+                    max: 40,
+                    tip: limitFeedbackToSentences(result.breakdown.keywordScore.feedback)
+                  },
+                  {
+                    label: 'Formatting Compliance',
+                    score: result.breakdown.formattingScore.score,
+                    max: 20,
+                    tip: limitFeedbackToSentences(result.breakdown.formattingScore.feedback)
+                  },
+                  {
+                    label: 'Structure & Section Completeness',
+                    score: result.breakdown.structureScore.score,
+                    max: 15,
+                    tip: limitFeedbackToSentences(result.breakdown.structureScore.feedback)
+                  },
+                  {
+                    label: 'Tone & Clarity',
+                    score: result.breakdown.toneScore.score,
+                    max: 15,
+                    tip: limitFeedbackToSentences(result.breakdown.toneScore.feedback)
+                  },
+                  {
+                    label: 'Grammar & Spelling',
+                    score: result.breakdown.grammarScore.score,
+                    max: 10,
+                    tip: limitFeedbackToSentences(result.breakdown.grammarScore.feedback)
+                  }
+                ];
+                updateRubricGrid(rubric);
+                
+                // Make rubric grid visible
+                const rubricGrid = document.getElementById('rf-rubric-grid');
+                if (rubricGrid) {
+                  rubricGrid.style.display = 'grid';
+                }
+                
+                // Trigger fade transition for ATS feedback
+                setTimeout(() => {
+                  showATSFeedback();
+                }, 100);
+                
+                // Update progress status
+                updateProgressStatus('ats-done');
+                
+                // Show success toast
+                if (window.JobHackAIToast) {
+                  window.JobHackAIToast.success('ATS score calculated successfully.');
+                }
+              } else {
+                // ATS scoring failed
+                handleApiError(new Error('Failed to calculate ATS score. Please try again.'));
+                hideProgressHeader();
+              }
+            })
+            .catch((error) => {
+              // ATS promise rejected
+              console.error('[RESUME-FEEDBACK] ATS scoring failed:', error);
+              handleApiError(error);
+              hideProgressHeader();
+            });
+
+          // Wait for both promises to settle (for error handling and final state)
+          [atsSettled, feedbackSettled] = await Promise.allSettled([atsPromise, feedbackPromise]);
+          
+          // --- Process ATS Result (for error handling and state management) ---
+          // Note: UI updates already happened in the .then() above for progressive display
+          // This block is only for state management and error handling
           let scoreResult = null;
           if (atsSettled.status === 'fulfilled') {
             scoreResult = atsSettled.value;
-            atsScoringSucceeded = scoreResult.success && scoreResult.score !== undefined;
-            
-            if (atsScoringSucceeded) {
-              // Store ATS score in sessionStorage
-              sessionStorage.setItem('currentAtsScore', scoreResult.score.toString());
-              if (scoreResult.breakdown) {
-                sessionStorage.setItem('currentAtsBreakdown', JSON.stringify(scoreResult.breakdown));
-              }
-              
-              // Also store in localStorage for backward compatibility
-              const summary = scoreResult.score > 85 ? 'Excellent! Your resume is highly ATS compatible.' : 
-                             scoreResult.score > 70 ? 'Your resume meets many ATS criteria and is likely to be noticed.' : 
-                             'Your resume needs improvement for better ATS results.';
-              localStorage.setItem('lastATSScore', scoreResult.score.toString());
-              localStorage.setItem('lastATSSummary', summary);
-              
-              // Update UI immediately
-              updateProgressRing(scoreResult.score);
-              hidePlaceholder();
-              const placeholderCta = document.getElementById('rf-placeholder-cta');
-              if (placeholderCta) placeholderCta.style.display = 'none';
-              
-              // Convert breakdown to rubric format
-              const rubric = [
-                {
-                  label: 'Keyword Relevance',
-                  score: scoreResult.breakdown.keywordScore.score,
-                  max: 40,
-                  tip: limitFeedbackToSentences(scoreResult.breakdown.keywordScore.feedback)
-                },
-                {
-                  label: 'Formatting Compliance',
-                  score: scoreResult.breakdown.formattingScore.score,
-                  max: 20,
-                  tip: limitFeedbackToSentences(scoreResult.breakdown.formattingScore.feedback)
-                },
-                {
-                  label: 'Structure & Section Completeness',
-                  score: scoreResult.breakdown.structureScore.score,
-                  max: 15,
-                  tip: limitFeedbackToSentences(scoreResult.breakdown.structureScore.feedback)
-                },
-                {
-                  label: 'Tone & Clarity',
-                  score: scoreResult.breakdown.toneScore.score,
-                  max: 15,
-                  tip: limitFeedbackToSentences(scoreResult.breakdown.toneScore.feedback)
-                },
-                {
-                  label: 'Grammar & Spelling',
-                  score: scoreResult.breakdown.grammarScore.score,
-                  max: 10,
-                  tip: limitFeedbackToSentences(scoreResult.breakdown.grammarScore.feedback)
-                }
-              ];
-              updateRubricGrid(rubric);
-              
-              // Make rubric grid visible
-              const rubricGrid = document.getElementById('rf-rubric-grid');
-              if (rubricGrid) {
-                rubricGrid.style.display = 'grid';
-              }
-              
-              // Trigger fade transition for ATS feedback
-              setTimeout(() => {
-                showATSFeedback();
-              }, 100);
-              
-              // Update progress status
-              updateProgressStatus('ats-done');
-              
-              // Show success toast
-              if (window.JobHackAIToast) {
-                window.JobHackAIToast.success('ATS score calculated successfully.');
-              }
-            } else {
-              // ATS scoring failed
-              handleApiError(new Error('Failed to calculate ATS score. Please try again.'));
-            }
+            // atsScoringSucceeded already set in .then() handler above
           } else {
-            // ATS promise rejected
-            const error = atsSettled.reason;
-            console.error('[RESUME-FEEDBACK] ATS scoring failed:', error);
-            handleApiError(error);
+            // ATS promise rejected - error already handled in .catch() above
+            // Hide progress header if not already hidden
+            hideProgressHeader();
           }
 
           // --- Process Feedback Result (show when ready) ---
@@ -2401,13 +2430,8 @@
               updateFeedbackGrid(feedbackResult.roleSpecificFeedback);
               updateRubricGridFromFeedback(feedbackResult.atsRubric);
               
-              // CRITICAL: Ensure feedback content is visible after feedback is generated (Pro & Premium)
-              const feedbackContentEl = document.getElementById('rf-feedback-content');
-              const userPlanCheck = getCurrentUserPlan();
-              if (feedbackContentEl && ['pro', 'premium'].includes(userPlanCheck)) {
-                feedbackContentEl.style.display = 'block';
-                console.log('[RESUME-FEEDBACK] Feedback content shown after generation for:', userPlanCheck);
-              }
+              // Feedback content container is already visible from ATS success handler
+              // This ensures progressive display: ATS first, then feedback
               
               // Update role-specific tips state
               const hasAtsScore = atsScoringSucceeded;
@@ -2521,17 +2545,36 @@
                 }
               });
             }
+            
+            // Update progress status and hide header on feedback failure
+            if (atsScoringSucceeded) {
+              updateProgressStatus('complete');
+              setTimeout(() => {
+                hideProgressHeader();
+              }, 3000);
+            } else {
+              // Both failed - hide immediately
+              hideProgressHeader();
+            }
           } else {
             // Free plan - no feedback
             hideRoleFeedback();
             const placeholderCta = document.getElementById('rf-placeholder-cta');
             if (placeholderCta) placeholderCta.style.display = 'block';
+            
+            // Update progress status for free plan
+            if (atsScoringSucceeded) {
+              updateProgressStatus('complete');
+              setTimeout(() => {
+                hideProgressHeader();
+              }, 3000);
+            }
           }
           
-          // Update progress status when both complete
-          if (atsScoringSucceeded && (feedbackSettled.status === 'fulfilled' || feedbackSettled.status === 'rejected')) {
+          // Update progress status when both complete successfully
+          if (atsScoringSucceeded && feedbackSettled.status === 'fulfilled' && feedbackSettled.value) {
             updateProgressStatus('complete');
-            // Optionally hide after 3 seconds
+            // Hide after 3 seconds
             setTimeout(() => {
               hideProgressHeader();
             }, 3000);
@@ -2595,6 +2638,9 @@
           generateBtn.disabled = false;
           hideLoadingState();
         } catch (error) {
+          // Hide progress header on any error
+          hideProgressHeader();
+          
           // Restore credit ONLY if ATS scoring failed (not for post-scoring errors)
           // If scoring succeeded but UI/feedback generation failed, user already got value
           const userPlan = getCurrentUserPlan();
@@ -4760,17 +4806,17 @@
         <a href="pricing-a.html" class="btn btn-secondary">Upgrade Now</a>
       </div>
       <!-- Hidden content that will be shown for unlocked plans -->
-      <div id="rf-feedback-content" style="display:none;">
-        <!-- Progress Header (new) -->
-        <div id="rf-progress-header" style="margin-bottom: 1.5rem; padding: 1rem; background: #F9FAFB; border-radius: var(--radius-lg); border: 1px solid var(--color-divider);">
-          <div style="font-weight: 600; color: var(--color-text-main); margin-bottom: 0.25rem;">Resume Analysis Progress</div>
-          <div style="font-size: 0.9rem; color: var(--color-text-secondary); margin-bottom: 0.5rem;">
-            We'll show your ATS score first, then AI role-specific tailoring tips as soon as they're ready.
-          </div>
-          <div id="rf-progress-status" style="font-size: 0.95rem; color: var(--color-text-main); font-weight: 500;">
-            Reading your resume and preparing it for analysis…
-          </div>
+      <!-- Progress Header (moved outside rf-feedback-content for visibility) -->
+      <div id="rf-progress-header" style="display:none; margin-bottom: 1.5rem; padding: 1rem; background: #F9FAFB; border-radius: var(--radius-lg); border: 1px solid var(--color-divider);">
+        <div style="font-weight: 600; color: var(--color-text-main); margin-bottom: 0.25rem;">Resume Analysis Progress</div>
+        <div style="font-size: 0.9rem; color: var(--color-text-secondary); margin-bottom: 0.5rem;">
+          We'll show your ATS score first, then AI role-specific tailoring tips as soon as they're ready.
         </div>
+        <div id="rf-progress-status" style="font-size: 0.95rem; color: var(--color-text-main); font-weight: 500;">
+          Reading your resume and preparing it for analysis…
+        </div>
+      </div>
+      <div id="rf-feedback-content" style="display:none;">
         <!-- Empty state placeholder -->
         <div id="ats-placeholder" class="ats-placeholder-note" style="display:none;">
           Run ATS Score &amp; Feedback to see your detailed breakdown here.

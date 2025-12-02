@@ -292,26 +292,26 @@ export async function onRequest(context) {
       }, 500, origin, env);
     }
 
-    // --- D1 Persistence: Store ruleBasedScores as source of truth (non-blocking) ---
+    // --- D1 Persistence: Store ruleBasedScores as source of truth ---
+    // CRITICAL: Await D1 write to ensure it completes before /api/resume-feedback queries
+    // This prevents race condition where parallel calls cause redundant scoring
     if (isD1Available(env) && resumeId) {
-      // Fire-and-forget: don't block response if D1 write fails
-      (async () => {
-        try {
-          const d1User = await getOrCreateUserByAuthId(env, uid, null);
-          if (d1User) {
-            await upsertResumeSessionWithScores(env, d1User.id, {
-              resumeId: resumeId,
-              role: normalizedJobTitle || null,
-              atsScore: ruleBasedScores.overallScore,
-              ruleBasedScores: ruleBasedScores
-            });
-            console.log('[ATS-SCORE] Stored ruleBasedScores in D1', { resumeId, uid });
-          }
-        } catch (d1Error) {
-          // Non-blocking: log but don't fail the request
-          console.warn('[ATS-SCORE] D1 persistence failed (non-fatal):', d1Error.message);
+      try {
+        const d1User = await getOrCreateUserByAuthId(env, uid, null);
+        if (d1User) {
+          await upsertResumeSessionWithScores(env, d1User.id, {
+            resumeId: resumeId,
+            role: normalizedJobTitle || null,
+            atsScore: ruleBasedScores.overallScore,
+            ruleBasedScores: ruleBasedScores
+          });
+          console.log('[ATS-SCORE] Stored ruleBasedScores in D1', { resumeId, uid });
         }
-      })();
+      } catch (d1Error) {
+        // Non-blocking: log but don't fail the request
+        // If D1 write fails, /api/resume-feedback will fall back to re-scoring
+        console.warn('[ATS-SCORE] D1 persistence failed (non-fatal):', d1Error.message);
+      }
     }
 
     // Generate AI feedback (only for narrative, not scores)
