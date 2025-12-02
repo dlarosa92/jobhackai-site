@@ -58,6 +58,8 @@ function detectTruncation(result, feature) {
  * @param {string} options.systemPrompt - System prompt (for caching)
  * @param {string} options.userId - User ID for logging
  * @param {string} options.feature - Feature name for logging
+ * @param {number} options.maxRetries - Maximum retry attempts (default 3)
+ * @param {number} options.maxBackoffMs - Maximum backoff time in ms (default 60000)
  * @returns {Promise<Object>} API response
  */
 export async function callOpenAI({
@@ -69,7 +71,9 @@ export async function callOpenAI({
   temperature = 0.2,
   systemPrompt = null,
   userId = null,
-  feature = 'unknown'
+  feature = 'unknown',
+  maxRetries = 3,
+  maxBackoffMs = 60000
 }, env) {
   if (!env.OPENAI_API_KEY) {
     throw new Error('OPENAI_API_KEY not configured. Please set it in Cloudflare Pages secrets.');
@@ -133,7 +137,7 @@ export async function callOpenAI({
   }
 
   let lastError = null;
-  const maxRetries = 3;
+  const retryLimit = maxRetries;
   let activeModel = model;
   let usedFallback = false;
 
@@ -151,9 +155,9 @@ export async function callOpenAI({
       if (response.status === 429) {
         // Rate limit - exponential backoff
         const retryAfter = parseInt(response.headers.get('Retry-After') || '60', 10);
-        const waitTime = Math.min(retryAfter * 1000, 60000 * Math.pow(2, attempt));
+        const waitTime = Math.min(retryAfter * 1000, maxBackoffMs * Math.pow(2, attempt));
 
-        if (attempt < maxRetries - 1) {
+        if (attempt < retryLimit - 1) {
           console.log(`[OPENAI] Rate limited, retrying after ${waitTime}ms`, { feature, attempt, model: activeModel });
           await sleep(waitTime);
           continue;
@@ -167,7 +171,7 @@ export async function callOpenAI({
         const message = errorData.error?.message || `OpenAI API error: ${response.status}`;
 
         // Non-429 error: if we have a fallback model and haven't used it yet, switch and retry
-        if (!usedFallback && fallbackModel && activeModel !== fallbackModel && attempt < maxRetries - 1) {
+        if (!usedFallback && fallbackModel && activeModel !== fallbackModel && attempt < retryLimit - 1) {
           console.warn(`[OPENAI] Error with model ${activeModel}, falling back to ${fallbackModel}`, {
             feature,
             userId,
@@ -240,9 +244,9 @@ export async function callOpenAI({
       const isRateLimit = String(error.message || '').includes('Rate limit');
 
       // For rate limit errors, retry with exponential backoff (same logic as 429 handler)
-      if (isRateLimit && attempt < maxRetries - 1) {
-        // Use exponential backoff: 1s, 2s, 4s delays (capped at 60s)
-        const waitTime = Math.min(1000 * Math.pow(2, attempt), 60000);
+      if (isRateLimit && attempt < retryLimit - 1) {
+        // Use exponential backoff: 1s, 2s, 4s delays (capped at maxBackoffMs)
+        const waitTime = Math.min(1000 * Math.pow(2, attempt), maxBackoffMs);
         console.log(`[OPENAI] Rate limited (from exception), retrying after ${waitTime}ms`, { feature, attempt, model: activeModel });
         await sleep(waitTime);
         continue;
@@ -250,7 +254,7 @@ export async function callOpenAI({
 
       // For non-rate-limit errors (network failures, timeouts, etc.):
       // Try fallback model if available and not already used
-      if (!isRateLimit && !usedFallback && fallbackModel && activeModel !== fallbackModel && attempt < maxRetries - 1) {
+      if (!isRateLimit && !usedFallback && fallbackModel && activeModel !== fallbackModel && attempt < retryLimit - 1) {
         console.warn(`[OPENAI] Network/API error with model ${activeModel}, falling back to ${fallbackModel}`, {
           feature,
           userId,
@@ -264,7 +268,7 @@ export async function callOpenAI({
 
       // After switching to fallback (or if no fallback), allow retries for transient errors
       // This handles cases where the fallback model fails due to transient issues (network, 500s, etc.)
-      if (!isRateLimit && attempt < maxRetries - 1) {
+      if (!isRateLimit && attempt < retryLimit - 1) {
         console.log(`[OPENAI] Retrying after transient error (attempt ${attempt + 1}/${maxRetries})`, {
           feature,
           userId,
@@ -477,7 +481,9 @@ ATS ISSUES: Identify structured problems with id, severity (low|medium|high), an
       maxTokens: maxOutputTokens,
       temperature,
       systemPrompt,
-      feature: 'ats_feedback'
+      feature: 'ats_feedback',
+      maxRetries: 1,  // Only 2 attempts total (initial + 1 retry) for user-facing calls
+      maxBackoffMs: 1500  // Cap backoff at 1.5s to avoid hanging users
     },
     env
   );

@@ -956,20 +956,11 @@
       }
       
       // Handle warnings (e.g., scanned PDF detection)
-      if (validation.warning && window.showErrorModal) {
-        const userPlan = getCurrentUserPlan();
-        if (userPlan === 'free') {
-          // Educational modal for free users
-          window.showErrorModal('Scanned PDF Detected', 
-            validation.warningMessage || 'This appears to be a scanned PDF. For best results, please upload a text-based PDF, DOCX, or TXT file.',
-            { buttonText: 'OK' });
-        } else {
-          // Informational modal for paid users about OCR processing - use friendly messaging
-          // Note: showErrorModal is used but with friendly message to reduce alarm
-          window.showErrorModal('Processing Your Resume', 
-            validation.warningMessage || 'We\'re extracting text from your scanned PDF. This may take up to 20 seconds — please wait while we process it.',
-            { buttonText: 'Got it' });
-        }
+      // NOTE: Removed popup modal - users see inline helper text instead
+      // Validation still runs, but no blocking modal is shown
+      if (validation.warning) {
+        console.log('[RESUME-FEEDBACK] File validation warning:', validation.warningMessage);
+        // Inline helper text will inform users about PDF processing time
       }
 
       const token = await getAuthToken();
@@ -2279,95 +2270,121 @@
           window.latestAtsIssues = null;
           window.latestRoleSpecific = null;
 
-          // Get ATS score (only if upload succeeded)
-          showLoadingState('Calculating your ATS score…');
-          // Ensure jobTitle is passed (even if empty string) - role is primary steering for ATS expectations
-          const jobTitleForScore = currentJobTitle || jobTitleInput?.value?.trim() || '';
-          const scoreResult = await getAtsScore(uploadResult.resumeId, jobTitleForScore);
-          
-          // Mark that ATS scoring succeeded - credit should NOT be restored if scoring worked
-          atsScoringSucceeded = scoreResult.success && scoreResult.score !== undefined;
-          
-          // Store ATS score in sessionStorage for cross-page sync
-          // Note: Credit restoration on scoring failure is handled in the catch block below
-          // since getAtsScore throws exceptions rather than returning {success: false}
-          if (scoreResult.success && scoreResult.score !== undefined) {
-            sessionStorage.setItem('currentAtsScore', scoreResult.score.toString());
-            if (scoreResult.breakdown) {
-              sessionStorage.setItem('currentAtsBreakdown', JSON.stringify(scoreResult.breakdown));
-            }
-            
-            // Also store in localStorage for backward compatibility
-            const summary = scoreResult.score > 85 ? 'Excellent! Your resume is highly ATS compatible.' : 
-                           scoreResult.score > 70 ? 'Your resume meets many ATS criteria and is likely to be noticed.' : 
-                           'Your resume needs improvement for better ATS results.';
-            localStorage.setItem('lastATSScore', scoreResult.score.toString());
-            localStorage.setItem('lastATSSummary', summary);
-          }
-          
-          updateProgressRing(scoreResult.score);
-          
-          // Hide placeholder and show feedback
-          hidePlaceholder();
-          const placeholderCta = document.getElementById('rf-placeholder-cta');
-          if (placeholderCta) placeholderCta.style.display = 'none';
-          
-          // Convert breakdown to rubric format
-          const rubric = [
-            {
-              label: 'Keyword Relevance',
-              score: scoreResult.breakdown.keywordScore.score,
-              max: 40,
-              tip: limitFeedbackToSentences(scoreResult.breakdown.keywordScore.feedback)
-            },
-            {
-              label: 'Formatting Compliance',
-              score: scoreResult.breakdown.formattingScore.score,
-              max: 20,
-              tip: limitFeedbackToSentences(scoreResult.breakdown.formattingScore.feedback)
-            },
-            {
-              label: 'Structure & Section Completeness',
-              score: scoreResult.breakdown.structureScore.score,
-              max: 15,
-              tip: limitFeedbackToSentences(scoreResult.breakdown.structureScore.feedback)
-            },
-            {
-              label: 'Tone & Clarity',
-              score: scoreResult.breakdown.toneScore.score,
-              max: 15,
-              tip: limitFeedbackToSentences(scoreResult.breakdown.toneScore.feedback)
-            },
-            {
-              label: 'Grammar & Spelling',
-              score: scoreResult.breakdown.grammarScore.score,
-              max: 10,
-              tip: limitFeedbackToSentences(scoreResult.breakdown.grammarScore.feedback)
-            }
-          ];
-          updateRubricGrid(rubric);
-          
-          // Make rubric grid visible (it starts with display:none)
-          const rubricGrid = document.getElementById('rf-rubric-grid');
-          if (rubricGrid) {
-            rubricGrid.style.display = 'grid';
-          }
-          
-          // Trigger fade transition for ATS feedback
-          setTimeout(() => {
-            showATSFeedback();
-          }, 100);
+          // Update progress status
+          updateProgressStatus('uploading');
 
-          // Get feedback (if plan allows)
-          const plan = getCurrentUserPlan();
-          if (['trial', 'essential', 'pro', 'premium'].includes(plan)) {
+          // --- PARALLEL API CALLS: ATS Score + Feedback ---
+          const jobTitleForScore = currentJobTitle || jobTitleInput?.value?.trim() || '';
+          const jobTitleForFeedback = jobTitleInput?.value?.trim() || '';
+
+          // Start both API calls in parallel
+          const atsPromise = getAtsScore(uploadResult.resumeId, jobTitleForScore);
+          const feedbackPromise = (async () => {
+            const plan = getCurrentUserPlan();
+            if (['trial', 'essential', 'pro', 'premium'].includes(plan)) {
+              return await getResumeFeedback(uploadResult.resumeId, jobTitleForFeedback);
+            }
+            return null; // Free plan doesn't get feedback
+          })();
+
+          // Wait for both with Promise.allSettled (handles partial failures gracefully)
+          const [atsSettled, feedbackSettled] = await Promise.allSettled([atsPromise, feedbackPromise]);
+          
+          // --- Process ATS Result (show immediately) ---
+          let atsScoringSucceeded = false;
+          let scoreResult = null;
+          if (atsSettled.status === 'fulfilled') {
+            scoreResult = atsSettled.value;
+            atsScoringSucceeded = scoreResult.success && scoreResult.score !== undefined;
+            
+            if (atsScoringSucceeded) {
+              // Store ATS score in sessionStorage
+              sessionStorage.setItem('currentAtsScore', scoreResult.score.toString());
+              if (scoreResult.breakdown) {
+                sessionStorage.setItem('currentAtsBreakdown', JSON.stringify(scoreResult.breakdown));
+              }
+              
+              // Also store in localStorage for backward compatibility
+              const summary = scoreResult.score > 85 ? 'Excellent! Your resume is highly ATS compatible.' : 
+                             scoreResult.score > 70 ? 'Your resume meets many ATS criteria and is likely to be noticed.' : 
+                             'Your resume needs improvement for better ATS results.';
+              localStorage.setItem('lastATSScore', scoreResult.score.toString());
+              localStorage.setItem('lastATSSummary', summary);
+              
+              // Update UI immediately
+              updateProgressRing(scoreResult.score);
+              hidePlaceholder();
+              const placeholderCta = document.getElementById('rf-placeholder-cta');
+              if (placeholderCta) placeholderCta.style.display = 'none';
+              
+              // Convert breakdown to rubric format
+              const rubric = [
+                {
+                  label: 'Keyword Relevance',
+                  score: scoreResult.breakdown.keywordScore.score,
+                  max: 40,
+                  tip: limitFeedbackToSentences(scoreResult.breakdown.keywordScore.feedback)
+                },
+                {
+                  label: 'Formatting Compliance',
+                  score: scoreResult.breakdown.formattingScore.score,
+                  max: 20,
+                  tip: limitFeedbackToSentences(scoreResult.breakdown.formattingScore.feedback)
+                },
+                {
+                  label: 'Structure & Section Completeness',
+                  score: scoreResult.breakdown.structureScore.score,
+                  max: 15,
+                  tip: limitFeedbackToSentences(scoreResult.breakdown.structureScore.feedback)
+                },
+                {
+                  label: 'Tone & Clarity',
+                  score: scoreResult.breakdown.toneScore.score,
+                  max: 15,
+                  tip: limitFeedbackToSentences(scoreResult.breakdown.toneScore.feedback)
+                },
+                {
+                  label: 'Grammar & Spelling',
+                  score: scoreResult.breakdown.grammarScore.score,
+                  max: 10,
+                  tip: limitFeedbackToSentences(scoreResult.breakdown.grammarScore.feedback)
+                }
+              ];
+              updateRubricGrid(rubric);
+              
+              // Make rubric grid visible
+              const rubricGrid = document.getElementById('rf-rubric-grid');
+              if (rubricGrid) {
+                rubricGrid.style.display = 'grid';
+              }
+              
+              // Trigger fade transition for ATS feedback
+              setTimeout(() => {
+                showATSFeedback();
+              }, 100);
+              
+              // Update progress status
+              updateProgressStatus('ats-done');
+              
+              // Show success toast
+              if (window.JobHackAIToast) {
+                window.JobHackAIToast.success('ATS score calculated successfully.');
+              }
+            } else {
+              // ATS scoring failed
+              handleApiError(new Error('Failed to calculate ATS score. Please try again.'));
+            }
+          } else {
+            // ATS promise rejected
+            const error = atsSettled.reason;
+            console.error('[RESUME-FEEDBACK] ATS scoring failed:', error);
+            handleApiError(error);
+          }
+
+          // --- Process Feedback Result (show when ready) ---
+          if (feedbackSettled.status === 'fulfilled' && feedbackSettled.value) {
+            const feedbackResult = feedbackSettled.value;
             try {
-              // Job title is optional - use empty string if not provided
-              const jobTitleForFeedback = jobTitleInput?.value?.trim() || '';
-              
-              showLoadingState('Optimizing for ATS compliance…');
-              const feedbackResult = await getResumeFeedback(uploadResult.resumeId, jobTitleForFeedback);
-              
               // Update history with new session (D1-backed)
               if (window.JobHackAIHistory && feedbackResult.sessionId) {
                 window.JobHackAIHistory.addItem(feedbackResult.sessionId, feedbackResult.meta);
@@ -2392,15 +2409,15 @@
                 console.log('[RESUME-FEEDBACK] Feedback content shown after generation for:', userPlanCheck);
               }
               
-              // Update role-specific tips state based on ATS score and feedback
-              const hasAtsScore = !!(scoreResult?.success && typeof scoreResult.score === 'number');
+              // Update role-specific tips state
+              const hasAtsScore = atsScoringSucceeded;
               updateRoleTipsState({
                 hasAtsScore,
                 roleSpecificFeedback: feedbackResult.roleSpecificFeedback || null
               });
               
               // Save role-specific feedback to persistence
-              if (window.JobHackAIStatePersistence && scoreResult.success) {
+              if (window.JobHackAIStatePersistence && atsScoringSucceeded) {
                 // RECONSTRUCT breakdown from atsRubric to ensure feedback is always included
                 // This is more reliable than merging into existing breakdown structure
                 let finalBreakdown = { ...scoreResult.breakdown };
@@ -2467,10 +2484,67 @@
                   });
                 }
                 
-                // Save with reconstructed breakdown that includes feedback
+                // Use ATS score result if available, otherwise reconstruct
+                const finalScore = atsScoringSucceeded ? 
+                  (atsSettled.status === 'fulfilled' ? atsSettled.value.score : 0) : 0;
+                const finalBreakdown = atsScoringSucceeded && atsSettled.status === 'fulfilled' ?
+                  atsSettled.value.breakdown : {};
+                
+                // Reconstruct breakdown from atsRubric to ensure feedback is included
+                let finalBreakdownWithFeedback = { ...finalBreakdown };
+                
+                if (feedbackResult.atsRubric && Array.isArray(feedbackResult.atsRubric)) {
+                  const reconstructedBreakdown = {};
+                  
+                  feedbackResult.atsRubric.forEach(item => {
+                    const category = (item.category || item.label || '').toLowerCase();
+                    const score = item.score || 0;
+                    const max = item.max || 0;
+                    const feedback = item.feedback || item.tip || '';
+                    
+                    if (category.includes('keyword')) {
+                      reconstructedBreakdown.keywordScore = { 
+                        score, 
+                        max: 40, 
+                        feedback: feedback || finalBreakdown.keywordScore?.feedback || '' 
+                      };
+                    } else if (category.includes('format')) {
+                      reconstructedBreakdown.formattingScore = { 
+                        score, 
+                        max: 20, 
+                        feedback: feedback || finalBreakdown.formattingScore?.feedback || '' 
+                      };
+                    } else if ((category.includes('structure') || category.includes('section'))) {
+                      reconstructedBreakdown.structureScore = { 
+                        score, 
+                        max: 15, 
+                        feedback: feedback || finalBreakdown.structureScore?.feedback || '' 
+                      };
+                    } else if ((category.includes('tone') || category.includes('clarity'))) {
+                      reconstructedBreakdown.toneScore = { 
+                        score, 
+                        max: 15, 
+                        feedback: feedback || finalBreakdown.toneScore?.feedback || '' 
+                      };
+                    } else if ((category.includes('grammar') || category.includes('spelling'))) {
+                      reconstructedBreakdown.grammarScore = { 
+                        score, 
+                        max: 10, 
+                        feedback: feedback || finalBreakdown.grammarScore?.feedback || '' 
+                      };
+                    }
+                  });
+                  
+                  finalBreakdownWithFeedback = {
+                    ...finalBreakdown,
+                    ...reconstructedBreakdown
+                  };
+                }
+                
+                // Save with reconstructed breakdown
                 const saveSuccess = window.JobHackAIStatePersistence.saveATSScore({
-                  score: scoreResult.score,
-                  breakdown: finalBreakdown,
+                  score: finalScore,
+                  breakdown: finalBreakdownWithFeedback,
                   resumeId: uploadResult.resumeId,
                   jobTitle: jobTitleForFeedback || null,
                   roleSpecificFeedback: feedbackResult.roleSpecificFeedback || null
@@ -2483,36 +2557,50 @@
                 }
               }
             
-              // Trigger fade transition for role feedback (only once, after feedback is loaded)
+              // Trigger fade transition for role feedback
               setTimeout(() => {
                 showRoleFeedback();
               }, 100);
               
+              if (window.JobHackAIToast) {
+                window.JobHackAIToast.success('Feedback generated successfully!');
+              }
             } catch (feedbackError) {
-              // Log at debug level, show user-friendly modal
-              if (window.console && window.console.debug) {
-                window.console.debug('[FEEDBACK] Failed to get feedback:', feedbackError);
-              }
-              // Hide role feedback container since we don't have valid feedback data
-              hideRoleFeedback();
-              // Show error modal but keep ATS score visible
-              if (window.showErrorModal) {
-                const errorMsg = feedbackError.message || 'Failed to generate feedback. Your ATS score is still available.';
-                window.showErrorModal('Feedback Generation Failed', errorMsg, {
-                  buttonText: 'OK',
-                  onClose: () => {
-                    // Keep ATS score visible - don't clear state
-                  }
-                });
-              }
-              // Continue without feedback if it fails - ATS score remains visible
+              console.error('[RESUME-FEEDBACK] Error processing feedback result:', feedbackError);
+              // Don't show error modal - ATS score is already visible, feedback is optional
+            }
+          } else if (feedbackSettled.status === 'rejected') {
+            // Feedback failed - log but don't block (ATS score is already shown)
+            const error = feedbackSettled.reason;
+            console.warn('[RESUME-FEEDBACK] Feedback generation failed (non-blocking):', error);
+            
+            // Hide role feedback container since we don't have valid feedback data
+            hideRoleFeedback();
+            
+            // Show error modal but keep ATS score visible
+            if (window.showErrorModal) {
+              const errorMsg = error.message || 'Failed to generate feedback. Your ATS score is still available.';
+              window.showErrorModal('Feedback Generation Failed', errorMsg, {
+                buttonText: 'OK',
+                onClose: () => {
+                  // Keep ATS score visible - don't clear state
+                }
+              });
             }
           } else {
-            // Hide role feedback container for free users (they don't have access to feedback)
+            // Free plan - no feedback
             hideRoleFeedback();
-            // Show placeholder CTA for free users
             const placeholderCta = document.getElementById('rf-placeholder-cta');
             if (placeholderCta) placeholderCta.style.display = 'block';
+          }
+          
+          // Update progress status when both complete
+          if (atsScoringSucceeded && (feedbackSettled.status === 'fulfilled' || feedbackSettled.status === 'rejected')) {
+            updateProgressStatus('complete');
+            // Optionally hide after 3 seconds
+            setTimeout(() => {
+              hideProgressHeader();
+            }, 3000);
           }
 
           // Update original snippet in rewrite section
@@ -2562,16 +2650,11 @@
 
           // Update description (preserve tooltip HTML)
           const descEl = document.getElementById('rf-score-desc');
-          if (descEl) {
+          if (descEl && atsScoringSucceeded) {
             // Preserve existing tooltip if it exists
             const existingTooltip = descEl.querySelector('.rf-tooltip-trigger');
             const tooltipHtml = existingTooltip ? existingTooltip.outerHTML : '';
             descEl.innerHTML = 'Your resume was analyzed. See your ATS score and feedback below.' + (tooltipHtml ? ' ' + tooltipHtml : '');
-          }
-
-          // Show success toast
-          if (window.JobHackAIToast) {
-            window.JobHackAIToast.success('ATS score saved successfully.');
           }
 
           uploadInput.disabled = false;
@@ -2625,7 +2708,18 @@
       if (uploadInput) {
         uploadInput.addEventListener('change', function(e) {
           const file = e.target.files[0];
+          const pdfHelper = document.getElementById('rf-pdf-helper');
+          
           if (file) {
+            // Show/hide PDF helper text based on file type
+            if (pdfHelper) {
+              if (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')) {
+                pdfHelper.style.display = 'block';
+              } else {
+                pdfHelper.style.display = 'none';
+              }
+            }
+            
             // Preserve targeted role selection when uploading a resume
             // Don't clear job title input - user may want to analyze different resumes for the same role
             // Only clear if explicitly needed (e.g., error handling)
@@ -2656,6 +2750,9 @@
             }
           } else {
             // Reset if file cleared
+            if (pdfHelper) {
+              pdfHelper.style.display = 'none';
+            }
             if (fileNameSpan) {
               fileNameSpan.textContent = 'No file selected';
               fileNameSpan.style.color = 'var(--color-text-muted)';
@@ -3359,6 +3456,28 @@
       if (!el) return;
       el.style.display = 'none';
       el.classList.remove('fade-enter', 'fade-enter-active');
+    }
+
+    // Progress state management
+    function updateProgressStatus(state) {
+      const statusEl = document.getElementById('rf-progress-status');
+      if (!statusEl) return;
+      
+      const states = {
+        'uploading': 'Reading your resume and preparing it for analysis…',
+        'ats-done': 'Step 2 of 2: Generating AI role-specific tailoring tips for your resume…',
+        'complete': 'Analysis complete. You can now review ATS results, tailoring tips, and (for Pro) request a full rewrite.'
+      };
+      
+      statusEl.textContent = states[state] || states['uploading'];
+    }
+
+    // Hide progress header when complete (optional - can keep visible)
+    function hideProgressHeader() {
+      const header = document.getElementById('rf-progress-header');
+      if (header) {
+        header.style.display = 'none';
+      }
     }
 
     // --- Priority Review Tooltip (modular) ---
@@ -4708,6 +4827,16 @@
       </div>
       <!-- Hidden content that will be shown for unlocked plans -->
       <div id="rf-feedback-content" style="display:none;">
+        <!-- Progress Header (new) -->
+        <div id="rf-progress-header" style="margin-bottom: 1.5rem; padding: 1rem; background: #F9FAFB; border-radius: var(--radius-lg); border: 1px solid var(--color-divider);">
+          <div style="font-weight: 600; color: var(--color-text-main); margin-bottom: 0.25rem;">Resume Analysis Progress</div>
+          <div style="font-size: 0.9rem; color: var(--color-text-secondary); margin-bottom: 0.5rem;">
+            We'll show your ATS score first, then AI role-specific tailoring tips as soon as they're ready.
+          </div>
+          <div id="rf-progress-status" style="font-size: 0.95rem; color: var(--color-text-main); font-weight: 500;">
+            Reading your resume and preparing it for analysis…
+          </div>
+        </div>
         <!-- Empty state placeholder -->
         <div id="ats-placeholder" class="ats-placeholder-note" style="display:none;">
           Run ATS Score &amp; Feedback to see your detailed breakdown here.

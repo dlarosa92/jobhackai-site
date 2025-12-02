@@ -13,7 +13,9 @@ import {
   createFeedbackSession, 
   logUsageEvent,
   isD1Available,
-  updateResumeSessionAtsScore
+  updateResumeSessionAtsScore,
+  getResumeSessionByResumeId,
+  upsertResumeSessionWithScores
 } from '../_lib/db.js';
 
 function corsHeaders(origin, env) {
@@ -470,13 +472,75 @@ export async function onRequest(context) {
 
     // Resume text is already validated by sanitizeResumeText (80,000 char limit)
 
-    // Get rule-based scores first (for AI context) - includes new grammar engine
-    const ruleBasedScores = await scoreResume(
-      resumeData.text,
-      normalizedJobTitle,
-      { isMultiColumn: resumeData.isMultiColumn },
-      env
-    );
+    // --- Try to load existing ruleBasedScores from D1 (source of truth) ---
+    let ruleBasedScores = null;
+    if (d1User && isD1Available(env)) {
+      try {
+        const existingSession = await getResumeSessionByResumeId(env, d1User.id, sanitizedResumeId);
+        
+        if (existingSession?.rule_based_scores_json) {
+          try {
+            const parsed = JSON.parse(existingSession.rule_based_scores_json);
+            
+            // Validate structure (must have all required fields)
+            const isValid = parsed &&
+              typeof parsed.overallScore === 'number' &&
+              parsed.keywordScore?.score !== undefined &&
+              parsed.formattingScore?.score !== undefined &&
+              parsed.structureScore?.score !== undefined &&
+              parsed.toneScore?.score !== undefined &&
+              parsed.grammarScore?.score !== undefined;
+            
+            if (isValid) {
+              ruleBasedScores = parsed;
+              console.log('[RESUME-FEEDBACK] Reusing ruleBasedScores from D1', {
+                requestId,
+                resumeId: sanitizedResumeId,
+                overallScore: ruleBasedScores.overallScore
+              });
+            } else {
+              console.warn('[RESUME-FEEDBACK] Invalid ruleBasedScores structure in D1, will re-score', { requestId });
+            }
+          } catch (parseError) {
+            console.warn('[RESUME-FEEDBACK] Failed to parse ruleBasedScores from D1, will re-score', {
+              requestId,
+              error: parseError.message
+            });
+          }
+        }
+      } catch (d1Error) {
+        // Non-blocking: continue without D1 lookup
+        console.warn('[RESUME-FEEDBACK] D1 lookup failed (non-fatal), will re-score:', d1Error.message);
+      }
+    }
+
+    // Only re-score if we didn't find valid scores in D1
+    if (!ruleBasedScores) {
+      console.log('[RESUME-FEEDBACK] Re-scoring resume (no valid D1 scores found)', { requestId });
+      
+      // Get rule-based scores first (for AI context) - includes new grammar engine
+      ruleBasedScores = await scoreResume(
+        resumeData.text,
+        normalizedJobTitle,
+        { isMultiColumn: resumeData.isMultiColumn },
+        env
+      );
+      
+      // Store in D1 for future reuse (best effort, non-blocking)
+      if (d1User && isD1Available(env)) {
+        try {
+          await upsertResumeSessionWithScores(env, d1User.id, {
+            resumeId: sanitizedResumeId,
+            role: normalizedJobTitle || null,
+            atsScore: ruleBasedScores.overallScore,
+            ruleBasedScores: ruleBasedScores
+          });
+          console.log('[RESUME-FEEDBACK] Stored re-scored ruleBasedScores in D1', { requestId });
+        } catch (d1Error) {
+          console.warn('[RESUME-FEEDBACK] Failed to store re-scored ruleBasedScores in D1 (non-fatal):', d1Error.message);
+        }
+      }
+    }
 
     // Generate AI feedback with exponential backoff retry
     let aiFeedback = null;
@@ -729,12 +793,17 @@ export async function onRequest(context) {
     let d1CreatedAt = null;
     if (d1User && isD1Available(env)) {
       try {
-        // Create resume session
-        const resumeSession = await createResumeSession(env, d1User.id, {
-          title: normalizedJobTitle || null,  // Use job title as title for now
-          role: normalizedJobTitle || null,
-          rawTextLocation: `resume:${sanitizedResumeId}`
-        });
+        // Check if session already exists (created by /api/ats-score)
+        let resumeSession = await getResumeSessionByResumeId(env, d1User.id, sanitizedResumeId);
+        
+        if (!resumeSession) {
+          // Create new session (fallback if /api/ats-score didn't create one)
+          resumeSession = await createResumeSession(env, d1User.id, {
+            title: normalizedJobTitle || null,
+            role: normalizedJobTitle || null,
+            rawTextLocation: `resume:${sanitizedResumeId}`
+          });
+        }
         
         if (resumeSession) {
           d1SessionId = String(resumeSession.id);
@@ -744,8 +813,8 @@ export async function onRequest(context) {
           // This ensures consistency with the score returned by the scoring engine
           const overallAtsScore = ruleBasedScores.overallScore ?? null;
           
-          // Update session with ATS score (for faster history queries)
-          if (overallAtsScore !== null) {
+          // Update session with ATS score if not already set
+          if (overallAtsScore !== null && !resumeSession.ats_score) {
             await updateResumeSessionAtsScore(env, resumeSession.id, overallAtsScore);
           }
           
