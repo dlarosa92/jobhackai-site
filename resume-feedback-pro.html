@@ -2328,37 +2328,62 @@
                 const placeholderCta = document.getElementById('rf-placeholder-cta');
                 if (placeholderCta) placeholderCta.style.display = 'none';
                 
+                // Helper functions to handle both number and object formats (matches existing code pattern)
+                const getScore = (value) => {
+                  if (typeof value === 'number') return value;
+                  if (value && typeof value === 'object' && typeof value.score === 'number') return value.score;
+                  return 0;
+                };
+                
+                const getFeedback = (value, feedbackArray, index) => {
+                  // First try to get feedback from the value object (if it's an object with feedback property)
+                  if (value && typeof value === 'object') {
+                    if (typeof value.feedback === 'string') {
+                      return limitFeedbackToSentences(value.feedback);
+                    }
+                    if (typeof value.tip === 'string') {
+                      return limitFeedbackToSentences(value.tip);
+                    }
+                  }
+                  // Fallback to feedback array (API returns breakdown as numbers, feedback in separate array)
+                  if (feedbackArray && Array.isArray(feedbackArray) && feedbackArray[index]) {
+                    return limitFeedbackToSentences(feedbackArray[index]);
+                  }
+                  return '';
+                };
+                
                 // Convert breakdown to rubric format
+                // Note: API returns breakdown values as numbers, feedback in separate array
                 const rubric = [
                   {
                     label: 'Keyword Relevance',
-                    score: result.breakdown.keywordScore.score,
+                    score: getScore(result.breakdown.keywordScore),
                     max: 40,
-                    tip: limitFeedbackToSentences(result.breakdown.keywordScore.feedback)
+                    tip: getFeedback(result.breakdown.keywordScore, result.feedback, 0)
                   },
                   {
                     label: 'Formatting Compliance',
-                    score: result.breakdown.formattingScore.score,
+                    score: getScore(result.breakdown.formattingScore),
                     max: 20,
-                    tip: limitFeedbackToSentences(result.breakdown.formattingScore.feedback)
+                    tip: getFeedback(result.breakdown.formattingScore, result.feedback, 1)
                   },
                   {
                     label: 'Structure & Section Completeness',
-                    score: result.breakdown.structureScore.score,
+                    score: getScore(result.breakdown.structureScore),
                     max: 15,
-                    tip: limitFeedbackToSentences(result.breakdown.structureScore.feedback)
+                    tip: getFeedback(result.breakdown.structureScore, result.feedback, 2)
                   },
                   {
                     label: 'Tone & Clarity',
-                    score: result.breakdown.toneScore.score,
+                    score: getScore(result.breakdown.toneScore),
                     max: 15,
-                    tip: limitFeedbackToSentences(result.breakdown.toneScore.feedback)
+                    tip: getFeedback(result.breakdown.toneScore, result.feedback, 3)
                   },
                   {
                     label: 'Grammar & Spelling',
-                    score: result.breakdown.grammarScore.score,
+                    score: getScore(result.breakdown.grammarScore),
                     max: 10,
-                    tip: limitFeedbackToSentences(result.breakdown.grammarScore.feedback)
+                    tip: getFeedback(result.breakdown.grammarScore, result.feedback, 4)
                   }
                 ];
                 updateRubricGrid(rubric);

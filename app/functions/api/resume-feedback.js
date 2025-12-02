@@ -814,7 +814,8 @@ export async function onRequest(context) {
           const overallAtsScore = ruleBasedScores.overallScore ?? null;
           
           // Update session with ATS score if not already set
-          if (overallAtsScore !== null && !resumeSession.ats_score) {
+          // Use strict null check to correctly handle score of 0 (falsy but valid)
+          if (overallAtsScore !== null && resumeSession.ats_score === null) {
             await updateResumeSessionAtsScore(env, resumeSession.id, overallAtsScore);
           }
           
