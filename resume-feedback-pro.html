@@ -2291,7 +2291,7 @@
           const [atsSettled, feedbackSettled] = await Promise.allSettled([atsPromise, feedbackPromise]);
           
           // --- Process ATS Result (show immediately) ---
-          let atsScoringSucceeded = false;
+          // Note: atsScoringSucceeded is declared in outer scope (line 2038), don't redeclare here
           let scoreResult = null;
           if (atsSettled.status === 'fulfilled') {
             scoreResult = atsSettled.value;
@@ -2418,72 +2418,6 @@
               
               // Save role-specific feedback to persistence
               if (window.JobHackAIStatePersistence && atsScoringSucceeded) {
-                // RECONSTRUCT breakdown from atsRubric to ensure feedback is always included
-                // This is more reliable than merging into existing breakdown structure
-                let finalBreakdown = { ...scoreResult.breakdown };
-                
-                if (feedbackResult.atsRubric && Array.isArray(feedbackResult.atsRubric)) {
-                  // Reconstruct breakdown from atsRubric (ensures feedback is included)
-                  const reconstructedBreakdown = {};
-                  
-                  feedbackResult.atsRubric.forEach(item => {
-                    const category = (item.category || item.label || '').toLowerCase();
-                    const score = item.score || 0;
-                    const max = item.max || 0;
-                    const feedback = item.feedback || item.tip || '';
-                    
-                    if (category.includes('keyword')) {
-                      reconstructedBreakdown.keywordScore = { 
-                        score, 
-                        max: 40, 
-                        feedback: feedback || finalBreakdown.keywordScore?.feedback || '' 
-                      };
-                    } else if (category.includes('format')) {
-                      reconstructedBreakdown.formattingScore = { 
-                        score, 
-                        max: 20, 
-                        feedback: feedback || finalBreakdown.formattingScore?.feedback || '' 
-                      };
-                    } else if ((category.includes('structure') || category.includes('section'))) {
-                      reconstructedBreakdown.structureScore = { 
-                        score, 
-                        max: 15, 
-                        feedback: feedback || finalBreakdown.structureScore?.feedback || '' 
-                      };
-                    } else if ((category.includes('tone') || category.includes('clarity'))) {
-                      reconstructedBreakdown.toneScore = { 
-                        score, 
-                        max: 15, 
-                        feedback: feedback || finalBreakdown.toneScore?.feedback || '' 
-                      };
-                    } else if ((category.includes('grammar') || category.includes('spelling'))) {
-                      reconstructedBreakdown.grammarScore = { 
-                        score, 
-                        max: 10, 
-                        feedback: feedback || finalBreakdown.grammarScore?.feedback || '' 
-                      };
-                    }
-                  });
-                  
-                  // Merge reconstructed breakdown with original (preserve any missing categories)
-                  finalBreakdown = {
-                    ...finalBreakdown,
-                    ...reconstructedBreakdown
-                  };
-                } else {
-                  // No atsRubric available, ensure breakdown structure has feedback properties
-                  ['keywordScore', 'formattingScore', 'structureScore', 'toneScore', 'grammarScore'].forEach(key => {
-                    if (finalBreakdown[key] && typeof finalBreakdown[key] === 'object') {
-                      if (!('feedback' in finalBreakdown[key])) {
-                        finalBreakdown[key] = {
-                          ...finalBreakdown[key],
-                          feedback: ''
-                        };
-                      }
-                    }
-                  });
-                }
-                
                 // Use ATS score result if available, otherwise reconstruct
                 const finalScore = atsScoringSucceeded ? 
                   (atsSettled.status === 'fulfilled' ? atsSettled.value.score : 0) : 0;

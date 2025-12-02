@@ -482,7 +482,7 @@ ATS ISSUES: Identify structured problems with id, severity (low|medium|high), an
       temperature,
       systemPrompt,
       feature: 'ats_feedback',
-      maxRetries: 1,  // Only 2 attempts total (initial + 1 retry) for user-facing calls
+      maxRetries: 2,  // 2 attempts total (initial + 1 retry) for user-facing calls
       maxBackoffMs: 1500  // Cap backoff at 1.5s to avoid hanging users
     },
     env
