@@ -969,12 +969,6 @@
         : null;
 
       try {
-      // Show progress indicator for text extraction
-      const hideLoading = window.showLoadingOverlay 
-        ? window.showLoadingOverlay(window.LoadingMessages?.UPLOADING_RESUME || 'Analyzing your résumé...')
-        : null;
-
-      try {
         const token = await getAuthToken();
         const formData = new FormData();
         formData.append('file', file);
@@ -1052,14 +1046,6 @@
         
         return data;
       } catch (error) {
-        // Hide loading overlay on error
-        if (hideLoading) {
-          hideLoading();
-        }
-        // Re-throw to be handled by caller
-        throw error;
-      }
-    } catch (error) {
         // Hide loading overlay on error
         if (hideLoading) {
           hideLoading();
