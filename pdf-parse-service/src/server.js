@@ -7,8 +7,20 @@ const pdfParse = require('pdf-parse');
 const app = express();
 const PORT = process.env.PORT || 3000;
 const API_KEY = process.env.API_KEY;
-const MAX_FILE_SIZE = parseInt(process.env.MAX_FILE_SIZE || '2097152', 10); // 2MB default
-const TIMEOUT_MS = parseInt(process.env.TIMEOUT_MS || '30000', 10); // 30s default
+
+// Parse and validate MAX_FILE_SIZE (default: 2MB)
+const MAX_FILE_SIZE_RAW = parseInt(process.env.MAX_FILE_SIZE || '2097152', 10);
+const MAX_FILE_SIZE = (isNaN(MAX_FILE_SIZE_RAW) || MAX_FILE_SIZE_RAW <= 0) ? 2097152 : MAX_FILE_SIZE_RAW;
+if (process.env.MAX_FILE_SIZE && isNaN(MAX_FILE_SIZE_RAW)) {
+  console.warn(`[PDF-PARSE] Invalid MAX_FILE_SIZE "${process.env.MAX_FILE_SIZE}", using default 2097152 bytes`);
+}
+
+// Parse and validate TIMEOUT_MS (default: 30s)
+const TIMEOUT_MS_RAW = parseInt(process.env.TIMEOUT_MS || '30000', 10);
+const TIMEOUT_MS = (isNaN(TIMEOUT_MS_RAW) || TIMEOUT_MS_RAW <= 0) ? 30000 : TIMEOUT_MS_RAW;
+if (process.env.TIMEOUT_MS && isNaN(TIMEOUT_MS_RAW)) {
+  console.warn(`[PDF-PARSE] Invalid TIMEOUT_MS "${process.env.TIMEOUT_MS}", using default 30000ms`);
+}
 
 if (!API_KEY) {
   console.error('ERROR: API_KEY environment variable is required');
