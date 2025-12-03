@@ -1138,7 +1138,9 @@
         const code = error && error.code;
         
         if (code === 'ocr_required' || code === 'OCR_REQUIRED' || /scanned/i.test(message)) {
-          showFileStatus('warning', 'Scanned PDF detected – may take longer');
+          showFileStatus('error', 'Scanned PDF cannot be processed');
+        } else if (code === 'parse_error' || code === 'PARSE_ERROR' || /could not be processed|corrupted|password|encrypted/i.test(message)) {
+          showFileStatus('error', 'PDF could not be processed');
         } else if (code === 'unsupported_file_type' || code === 'UNSUPPORTED_TYPE' || /unsupported|file type/i.test(message)) {
           showFileStatus('error', 'File type not supported');
         } else if (code === 'file_too_large' || code === 'FILE_TOO_LARGE' || /too large|2MB/i.test(message)) {
@@ -3345,8 +3347,8 @@
       const circumference = 2 * Math.PI * radius;
       const offset = circumference - (percent / 100) * circumference;
       
-      // Ensure circle is visible and green
-      circle.setAttribute('stroke', 'var(--color-cta-green)');
+      // Ensure circle is visible and green (use direct color value for SVG compatibility)
+      circle.setAttribute('stroke', '#00E676');
       circle.setAttribute('stroke-width', '8');
       circle.setAttribute('stroke-dasharray', String(circumference));
       circle.setAttribute('stroke-dashoffset', offset);

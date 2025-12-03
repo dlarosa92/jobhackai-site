@@ -103,6 +103,18 @@ export async function extractResumeText(file, fileName) {
       text = pdfResult.text;
       isMultiColumn = pdfResult.isMultiColumn;
       
+      // If PDF.js parse failed (corruption, encryption, password protection, etc.)
+      if (pdfResult.parseFailed) {
+        throw createExtractionError(
+          EXTRACTION_ERRORS.PARSE_ERROR,
+          'This PDF could not be processed. It may be corrupted, password-protected, or encrypted. Please try a different file or ensure the PDF is not password-protected.',
+          { 
+            parseFailed: true,
+            numPages: pdfResult.numPages || 0
+          }
+        );
+      }
+      
       // If scanned PDF detected, return helpful error (no OCR attempt)
       if (pdfResult.isScanned) {
         throw createExtractionError(
@@ -356,9 +368,10 @@ async function extractPdfText(arrayBuffer) {
       numPages
     };
   } catch (error) {
-    // Log error but don't throw - return empty to trigger scanned PDF detection
+    // PDF.js parse failure (corruption, encryption, password protection, etc.)
+    // Distinguish from scanned PDFs by setting parseFailed flag
     console.warn('[PDF] PDF.js extraction failed:', error.message);
-    return { text: '', isMultiColumn: false, numPages: 0 };
+    return { text: '', isMultiColumn: false, numPages: 0, parseFailed: true };
   }
 }
 
