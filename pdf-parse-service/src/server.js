@@ -34,7 +34,7 @@ app.get('/health', (req, res) => {
 });
 
 // PDF parsing endpoint
-app.post('/parse-pdf', verifyApiKey, express.raw({ limit: MAX_FILE_SIZE }), async (req, res) => {
+app.post('/parse-pdf', verifyApiKey, express.raw({ limit: MAX_FILE_SIZE, type: 'application/pdf' }), async (req, res) => {
   const startTime = Date.now();
   
   try {
@@ -137,11 +137,17 @@ app.post('/parse-pdf', verifyApiKey, express.raw({ limit: MAX_FILE_SIZE }), asyn
 
 // Error handling middleware
 app.use((err, req, res, next) => {
-  if (err instanceof express.error) {
+  // Check for body-parser file size limit errors
+  // Express body-parser errors have status 413 and type 'entity.too.large'
+  if (err.status === 413 || err.type === 'entity.too.large') {
     return res.status(413).json({
       success: false,
       error: 'file_too_large',
-      message: `File exceeds maximum size of ${MAX_FILE_SIZE} bytes`
+      message: `File exceeds maximum size of ${MAX_FILE_SIZE} bytes`,
+      details: {
+        fileSize: err.limit ? err.limit : MAX_FILE_SIZE,
+        maxSize: MAX_FILE_SIZE
+      }
     });
   }
   
