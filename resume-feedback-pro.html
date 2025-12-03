@@ -963,72 +963,110 @@
         // Inline helper text will inform users about PDF processing time
       }
 
-      const token = await getAuthToken();
-      const formData = new FormData();
-      formData.append('file', file);
+      // Show progress indicator for text extraction
+      const hideLoading = window.showLoadingOverlay 
+        ? window.showLoadingOverlay(window.LoadingMessages?.UPLOADING_RESUME || 'Analyzing your résumé...')
+        : null;
 
-      // Use retry logic for upload
-      const response = await window.JobHackAIRetry.fetchWithRetry('/api/resume-upload', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`
-        },
-        body: formData
-      }, {
-        maxRetries: 3,
-        initialDelay: 1000
-      });
+      try {
+      // Show progress indicator for text extraction
+      const hideLoading = window.showLoadingOverlay 
+        ? window.showLoadingOverlay(window.LoadingMessages?.UPLOADING_RESUME || 'Analyzing your résumé...')
+        : null;
 
-      // Handle HTTP errors
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Upload failed');
-      }
+      try {
+        const token = await getAuthToken();
+        const formData = new FormData();
+        formData.append('file', file);
 
-      const data = await response.json();
-      
-      // Handle extraction failures (success: false but HTTP 200)
-      if (!data.success) {
-        clearAtsState();
-        // Map common error codes to user-friendly messages
-        let errorMessage = data.message || 'Resume text could not be extracted.';
-        if (data.error === 'extraction_failed' || data.error === 'invalid-text') {
-          errorMessage = 'We couldn\'t read your resume. Please upload a text-based PDF, DOCX, or TXT file.';
-        } else if (data.error && data.error.includes('OCR')) {
-          // OCR-related error - show modal with helpful message
-          errorMessage = 'This appears to be a scanned PDF. We\'re working on OCR support. For now, please upload a text-based PDF, DOCX, or TXT file.';
-        }
-        throw new Error(errorMessage);
-      }
-      
-      // Handle OCR status if present
-      if (data.ocrUsed === true || data.ocrUsed === 'pending') {
-        // Show informational modal about OCR processing - use friendly messaging
-        if (window.showErrorModal) {
-          window.showErrorModal('Processing Your Resume', 
-            'We\'re extracting text from your scanned PDF. This may take up to 20 seconds — please wait while we process it.',
-            { buttonText: 'Got it' });
-        }
-      }
-
-      currentResumeId = data.resumeId;
-      
-      // Store in sessionStorage and localStorage for cross-page sync
-      sessionStorage.setItem('currentResumeId', data.resumeId);
-      if (data.resumeText) {
-        sessionStorage.setItem('currentResumeText', data.resumeText);
-      }
-      
-      // Persist resume data
-      if (window.JobHackAIStatePersistence) {
-        window.JobHackAIStatePersistence.saveResumeData({
-          resumeId: data.resumeId,
-          resumeText: data.resumeText,
-          isMultiColumn: data.isMultiColumn
+        // Use retry logic for upload
+        const response = await window.JobHackAIRetry.fetchWithRetry('/api/resume-upload', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`
+          },
+          body: formData
+        }, {
+          maxRetries: 3,
+          initialDelay: 1000
         });
-      }
+
+        // Handle HTTP errors
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(error.error || 'Upload failed');
+        }
+
+        const data = await response.json();
+        
+        // Hide loading overlay on success
+        if (hideLoading) {
+          hideLoading();
+        }
       
-      return data;
+        // Handle extraction failures (success: false but HTTP 200)
+        if (!data.success) {
+          clearAtsState();
+          
+          // Map structured error codes to user-friendly messages
+          const errorCode = data.errorCode || data.error;
+          let errorMessage = data.message || 'Resume text could not be extracted.';
+          
+          // Handle specific error codes with tailored messages
+          if (errorCode === 'ocr_required' || errorCode === 'OCR_REQUIRED') {
+            // Scanned PDF detected - show helpful, actionable message
+            errorMessage = 'This PDF appears to be image-based (scanned). Please upload a text-based PDF or Word document for best results. We\'re working on scan support for a future update.';
+          } else if (errorCode === 'unreadable_scan' || errorCode === 'UNREADABLE_SCAN') {
+            errorMessage = 'This scanned PDF is not readable. Please upload a higher-quality file or use our DOCX template.';
+          } else if (errorCode === 'empty_text' || errorCode === 'EMPTY_TEXT') {
+            errorMessage = 'Could not extract readable text from file. Please upload a text-based résumé or use our DOCX template.';
+          } else if (errorCode === 'unsupported_file_type' || errorCode === 'UNSUPPORTED_TYPE') {
+            errorMessage = `Unsupported file type. Please upload PDF, DOCX, or TXT.`;
+          } else if (errorCode === 'too_large' || errorCode === 'TOO_LARGE') {
+            errorMessage = 'File exceeds 2MB limit. Please compress or use a smaller file.';
+          } else if (errorCode === 'text_too_long' || errorCode === 'TEXT_TOO_LONG') {
+            errorMessage = 'Extracted text exceeds limit. Please use a shorter résumé.';
+          } else if (errorCode === 'extraction_failed' || errorCode === 'invalid-text') {
+            errorMessage = 'We couldn\'t read your resume. Please upload a text-based PDF, DOCX, or TXT file.';
+          }
+          
+          throw new Error(errorMessage);
+        }
+
+        currentResumeId = data.resumeId;
+        
+        // Store in sessionStorage and localStorage for cross-page sync
+        sessionStorage.setItem('currentResumeId', data.resumeId);
+        if (data.resumeText) {
+          sessionStorage.setItem('currentResumeText', data.resumeText);
+        }
+        
+        // Persist resume data
+        if (window.JobHackAIStatePersistence) {
+          window.JobHackAIStatePersistence.saveResumeData({
+            resumeId: data.resumeId,
+            resumeText: data.resumeText,
+            isMultiColumn: data.isMultiColumn
+          });
+        }
+        
+        return data;
+      } catch (error) {
+        // Hide loading overlay on error
+        if (hideLoading) {
+          hideLoading();
+        }
+        // Re-throw to be handled by caller
+        throw error;
+      }
+    } catch (error) {
+        // Hide loading overlay on error
+        if (hideLoading) {
+          hideLoading();
+        }
+        // Re-throw to be handled by caller
+        throw error;
+      }
     }
 
     async function getAtsScore(resumeId, jobTitle) {
@@ -1233,8 +1271,9 @@
         actionLabel = 'Reload Page';
       } else if (message.includes('couldn\'t read') || message.includes('text-based')) {
         // File reading error - already user-friendly
-      } else if (message.includes('scanned PDF')) {
-        message = 'This appears to be a scanned PDF (image-based). Please upload a text-based PDF, DOCX, or TXT file for best results.';
+      } else if (message.includes('scanned PDF') || message.includes('image-based')) {
+        // Enhanced scanned PDF message with actionable guidance
+        message = 'This PDF appears to be image-based (scanned). Please upload a text-based PDF or Word document for best results. We\'re working on scan support for a future update.';
       }
 
       // Show modal instead of inline error
