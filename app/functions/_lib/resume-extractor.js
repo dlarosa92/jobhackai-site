@@ -2,6 +2,7 @@
 // Supports OCR for image-based PDFs using Tesseract.js
 
 import mammoth from 'mammoth';
+import * as pdfjsLib from 'pdfjs-dist';
 
 /**
  * Structured error codes for resume extraction
@@ -171,64 +172,97 @@ export async function extractResumeText(file, fileName) {
 
 
 /**
- * Extract text from PDF file
- * Note: pdf-parse requires Node.js and won't work in Cloudflare Workers
- * We use a simple heuristic: try to extract text from PDF structure
- * If that fails, OCR fallback will be triggered
+ * Extract text from PDF file using PDF.js
+ * PDF.js works in Cloudflare Workers and handles text-based PDFs including:
+ * - Google Docs exports
+ * - Microsoft Word exports
+ * - Canva PDFs
+ * - LaTeX-generated PDFs
+ * - Most modern PDF generators
+ * 
+ * If extraction fails or returns minimal text, OCR fallback will be triggered
  */
 async function extractPdfText(arrayBuffer) {
   try {
-    // For Cloudflare Workers, we can't use pdf-parse directly
-    // Instead, we'll attempt basic PDF text extraction using a lightweight approach
-    // This is a simplified version that works in Workers environment
+    // Configure PDF.js worker for Cloudflare Workers environment
+    // Use CDN-hosted worker to avoid bundle size issues
+    if (typeof pdfjsLib.GlobalWorkerOptions !== 'undefined') {
+      pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.0.379/build/pdf.worker.min.mjs';
+    }
     
-    // Convert ArrayBuffer to Uint8Array for processing
-    const bytes = new Uint8Array(arrayBuffer);
+    // Load PDF document
+    const loadingTask = pdfjsLib.getDocument({
+      data: arrayBuffer,
+      useSystemFonts: true, // Reduce font loading overhead
+      disableAutoFetch: true, // Don't pre-fetch all pages
+      disableStream: false, // Allow streaming for better memory usage
+      verbosity: 0 // Suppress console warnings
+    });
     
-    // Look for text streams in PDF (basic heuristic)
-    // PDF text is typically in streams between "stream" and "endstream"
-    const decoder = new TextDecoder('latin1');
-    const pdfText = decoder.decode(bytes);
+    const pdf = await loadingTask.promise;
+    const numPages = pdf.numPages;
     
-    // Extract text between stream markers (simplified approach)
-    const streamMatches = pdfText.match(/stream[\s\S]*?endstream/g);
-    if (!streamMatches || streamMatches.length === 0) {
+    if (numPages === 0) {
+      console.warn('[PDF] PDF has no pages');
       return { text: '', isMultiColumn: false };
     }
     
-    let extractedText = '';
-    for (const stream of streamMatches) {
-      // Try to decode as text (PDFs can have compressed streams, but we try anyway)
+    // Extract text from all pages sequentially
+    let fullText = '';
+    const pageTexts = [];
+    
+    for (let pageNum = 1; pageNum <= numPages; pageNum++) {
       try {
-        // Remove stream markers
-        const content = stream.replace(/^stream[\r\n]+/, '').replace(/[\r\n]+endstream$/, '');
-        // Try to extract readable text (basic filtering)
-        const textMatch = content.match(/[A-Za-z0-9\s\.\,\!\?\:\;\(\)\-\'\"\/]{20,}/g);
-        if (textMatch) {
-          extractedText += textMatch.join(' ') + '\n';
+        const page = await pdf.getPage(pageNum);
+        const textContent = await page.getTextContent();
+        
+        // Combine text items from the page
+        // textContent.items contains text items with positioning info
+        const pageText = textContent.items
+          .map(item => {
+            // Some PDFs have text items with transform matrices
+            // We'll extract the str (text string) property
+            return item.str || '';
+          })
+          .filter(str => str.trim().length > 0) // Remove empty strings
+          .join(' '); // Join with spaces
+        
+        if (pageText.trim().length > 0) {
+          pageTexts.push(pageText);
+          fullText += pageText + '\n';
         }
-      } catch (e) {
-        // Skip compressed or binary streams
+      } catch (pageError) {
+        console.warn(`[PDF] Error extracting text from page ${pageNum}:`, pageError.message);
+        // Continue with other pages even if one fails
         continue;
       }
     }
     
-    // If we got minimal text, return empty to trigger OCR
-    if (extractedText.trim().length < 100) {
+    // If we got minimal text, return empty to trigger OCR fallback
+    const extractedText = fullText.trim();
+    if (extractedText.length < 100) {
+      console.warn('[PDF] Extracted text too short, will try OCR fallback', { length: extractedText.length });
       return { text: '', isMultiColumn: false };
     }
     
-    // Basic multi-column detection
+    // Multi-column detection using existing logic
     const lines = extractedText.split('\n');
     const avgLineLength = lines.reduce((sum, line) => sum + line.trim().length, 0) / Math.max(lines.length, 1);
     const isMultiColumn = avgLineLength < 30 && lines.length > 20;
     
+    console.log('[PDF] Successfully extracted text', { 
+      pages: numPages, 
+      textLength: extractedText.length, 
+      isMultiColumn 
+    });
+    
     return {
-      text: extractedText.trim(),
+      text: extractedText,
       isMultiColumn
     };
   } catch (error) {
-    // If extraction fails, return empty to trigger OCR fallback
+    // Log error but don't throw - return empty to trigger OCR fallback
+    console.warn('[PDF] PDF.js extraction failed, will try OCR fallback:', error.message);
     return { text: '', isMultiColumn: false };
   }
 }
