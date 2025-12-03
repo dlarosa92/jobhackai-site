@@ -2849,6 +2849,11 @@
           const pdfHelper = document.getElementById('rf-pdf-helper');
           
           if (file) {
+            // Immediately disable generate button while validating new file
+            if (generateBtn) {
+              generateBtn.disabled = true;
+            }
+            
             // Hide status pill initially while validating
             hideFileStatus();
             
