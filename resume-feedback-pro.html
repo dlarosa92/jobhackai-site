@@ -1139,11 +1139,11 @@
         
         if (code === 'ocr_required' || code === 'OCR_REQUIRED' || /scanned/i.test(message)) {
           showFileStatus('warning', 'Scanned PDF detected – may take longer');
-        } else if (/unsupported|file type/i.test(message)) {
+        } else if (code === 'unsupported_file_type' || code === 'UNSUPPORTED_TYPE' || /unsupported|file type/i.test(message)) {
           showFileStatus('error', 'File type not supported');
-        } else if (/too large|2MB/i.test(message)) {
+        } else if (code === 'file_too_large' || code === 'FILE_TOO_LARGE' || /too large|2MB/i.test(message)) {
           showFileStatus('error', 'File too large (max 2MB)');
-        } else if (/empty/i.test(message)) {
+        } else if (code === 'empty_text' || code === 'EMPTY_TEXT' || /empty/i.test(message)) {
           showFileStatus('error', 'File appears to be empty');
         } else {
           showFileStatus('error', 'File upload failed');
