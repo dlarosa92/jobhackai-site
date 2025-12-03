@@ -98,15 +98,36 @@ export async function extractResumeText(file, fileName) {
         );
       }
     } else if (fileExt === 'pdf') {
-      // PDF file - try text extraction first, fall back to OCR
+      // PDF file - try text extraction first, detect scanned PDFs
       const pdfResult = await extractPdfText(arrayBuffer);
       text = pdfResult.text;
       isMultiColumn = pdfResult.isMultiColumn;
       
-      // If no text extracted, try OCR
+      // If scanned PDF detected, return helpful error (no OCR attempt)
+      if (pdfResult.isScanned) {
+        throw createExtractionError(
+          EXTRACTION_ERRORS.OCR_REQUIRED,
+          'This PDF appears to be image-based (scanned). Please upload a text-based PDF or Word document for best results. We\'re working on scan support for a future update.',
+          { 
+            isScanned: true, 
+            requiresOcr: true,
+            numPages: pdfResult.numPages || 0
+          }
+        );
+      }
+      
+      // If no text extracted (but not necessarily scanned), try OCR detection
       if (!text || text.trim().length < 100) {
-        text = await extractPdfWithOCR(arrayBuffer);
-        ocrUsed = true;
+        // This will throw a helpful error message instead of attempting OCR
+        throw createExtractionError(
+          EXTRACTION_ERRORS.OCR_REQUIRED,
+          'This PDF appears to be image-based (scanned). Please upload a text-based PDF or Word document for best results. We\'re working on scan support for a future update.',
+          { 
+            isScanned: true, 
+            requiresOcr: true,
+            numPages: pdfResult.numPages || 0
+          }
+        );
       }
     }
 
@@ -180,15 +201,22 @@ export async function extractResumeText(file, fileName) {
  * - LaTeX-generated PDFs
  * - Most modern PDF generators
  * 
- * If extraction fails or returns minimal text, OCR fallback will be triggered
+ * Performance optimizations:
+ * - Limits to first 3 pages (most resumes are 1-2 pages)
+ * - Early exit if text exceeds 40k characters
+ * - Smart scanned PDF detection (text < 400 chars AND pages >= 1)
+ * 
+ * If extraction fails or returns minimal text, scanned PDF detection will be triggered
  */
 async function extractPdfText(arrayBuffer) {
+  const MAX_PAGES = 3; // Most resumes are 1-2 pages, limit for performance
+  const MAX_CHARS = 40000; // Reasonable character limit for early exit
+  const SCANNED_PDF_THRESHOLD = 400; // If text < 400 chars and pages >= 1, likely scanned
+  
   try {
-    // Configure PDF.js worker for Cloudflare Workers environment
-    // Use CDN-hosted worker to avoid bundle size issues
-    if (typeof pdfjsLib.GlobalWorkerOptions !== 'undefined') {
-      pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.0.379/build/pdf.worker.min.mjs';
-    }
+    // PDF.js in Cloudflare Workers doesn't need worker configuration
+    // The library will use its built-in fallback for serverless environments
+    // Setting workerSrc to a CDN URL would fail in Workers (no web workers support)
     
     // Load PDF document
     const loadingTask = pdfjsLib.getDocument({
@@ -204,32 +232,81 @@ async function extractPdfText(arrayBuffer) {
     
     if (numPages === 0) {
       console.warn('[PDF] PDF has no pages');
-      return { text: '', isMultiColumn: false };
+      return { text: '', isMultiColumn: false, numPages: 0 };
     }
     
-    // Extract text from all pages sequentially
+    // Performance optimization: Only process first N pages
+    const pagesToProcess = Math.min(numPages, MAX_PAGES);
+    
+    // Extract text from pages sequentially (with early exit)
+    // Use positioning info to preserve line structure for accurate multi-column detection
     let fullText = '';
     const pageTexts = [];
+    const startTime = Date.now();
     
-    for (let pageNum = 1; pageNum <= numPages; pageNum++) {
+    for (let pageNum = 1; pageNum <= pagesToProcess; pageNum++) {
       try {
         const page = await pdf.getPage(pageNum);
         const textContent = await page.getTextContent();
         
-        // Combine text items from the page
-        // textContent.items contains text items with positioning info
-        const pageText = textContent.items
-          .map(item => {
-            // Some PDFs have text items with transform matrices
-            // We'll extract the str (text string) property
-            return item.str || '';
-          })
-          .filter(str => str.trim().length > 0) // Remove empty strings
-          .join(' '); // Join with spaces
+        // Group text items by y-coordinate (line) to preserve line structure
+        // Items with similar y-coordinates are on the same line
+        const lineGroups = new Map();
+        const LINE_TOLERANCE = 2; // Pixels - items within 2px vertically are on same line
+        
+        for (const item of textContent.items) {
+          if (!item.str || item.str.trim().length === 0) continue;
+          
+          // Extract y-coordinate from transform matrix [a, b, c, d, e, f]
+          // Transform: [a b c d e f] where e=x, f=y
+          const y = item.transform ? item.transform[5] : 0;
+          
+          // Find existing line group with similar y-coordinate
+          let matchedLine = null;
+          for (const [lineY, lineItems] of lineGroups.entries()) {
+            if (Math.abs(y - lineY) <= LINE_TOLERANCE) {
+              matchedLine = lineY;
+              break;
+            }
+          }
+          
+          // Add to existing line or create new line
+          if (matchedLine !== null) {
+            lineGroups.get(matchedLine).push(item);
+          } else {
+            lineGroups.set(y, [item]);
+          }
+        }
+        
+        // Sort lines by y-coordinate (top to bottom) and build page text
+        const sortedLines = Array.from(lineGroups.entries())
+          .sort((a, b) => b[0] - a[0]) // Sort by y descending (top to bottom)
+          .map(([y, items]) => {
+            // Sort items within line by x-coordinate (left to right)
+            const sortedItems = items.sort((a, b) => {
+              const xA = a.transform ? a.transform[4] : 0;
+              const xB = b.transform ? b.transform[4] : 0;
+              return xA - xB;
+            });
+            // Join items on same line with spaces
+            return sortedItems.map(item => item.str).join(' ');
+          });
+        
+        const pageText = sortedLines.join('\n');
         
         if (pageText.trim().length > 0) {
           pageTexts.push(pageText);
           fullText += pageText + '\n';
+          
+          // Early exit if we've exceeded character limit
+          if (fullText.length > MAX_CHARS) {
+            console.log('[PDF] Early exit: text limit reached', { 
+              pagesProcessed: pageNum, 
+              textLength: fullText.length 
+            });
+            fullText = fullText.substring(0, MAX_CHARS);
+            break;
+          }
         }
       } catch (pageError) {
         console.warn(`[PDF] Error extracting text from page ${pageNum}:`, pageError.message);
@@ -238,72 +315,76 @@ async function extractPdfText(arrayBuffer) {
       }
     }
     
-    // If we got minimal text, return empty to trigger OCR fallback
     const extractedText = fullText.trim();
-    if (extractedText.length < 100) {
-      console.warn('[PDF] Extracted text too short, will try OCR fallback', { length: extractedText.length });
-      return { text: '', isMultiColumn: false };
+    const extractionTime = Date.now() - startTime;
+    
+    // Smart scanned PDF detection: if text is very short AND we have pages, likely scanned
+    if (extractedText.length < SCANNED_PDF_THRESHOLD && numPages >= 1) {
+      console.warn('[PDF] Scanned PDF detected', { 
+        textLength: extractedText.length, 
+        pages: numPages,
+        threshold: SCANNED_PDF_THRESHOLD
+      });
+      return { text: '', isMultiColumn: false, numPages, isScanned: true };
     }
     
-    // Multi-column detection using existing logic
-    const lines = extractedText.split('\n');
+    // If we got minimal text (but not necessarily scanned), return empty
+    if (extractedText.length < 100) {
+      console.warn('[PDF] Extracted text too short', { 
+        length: extractedText.length, 
+        pages: numPages 
+      });
+      return { text: '', isMultiColumn: false, numPages };
+    }
+    
+    // Multi-column detection: now that we preserve line structure, split by \n gives actual lines
+    const lines = extractedText.split('\n').filter(line => line.trim().length > 0);
     const avgLineLength = lines.reduce((sum, line) => sum + line.trim().length, 0) / Math.max(lines.length, 1);
     const isMultiColumn = avgLineLength < 30 && lines.length > 20;
     
     console.log('[PDF] Successfully extracted text', { 
-      pages: numPages, 
+      pages: numPages,
+      pagesProcessed: pagesToProcess,
       textLength: extractedText.length, 
-      isMultiColumn 
+      isMultiColumn,
+      extractionTimeMs: extractionTime
     });
     
     return {
       text: extractedText,
-      isMultiColumn
+      isMultiColumn,
+      numPages
     };
   } catch (error) {
-    // Log error but don't throw - return empty to trigger OCR fallback
-    console.warn('[PDF] PDF.js extraction failed, will try OCR fallback:', error.message);
-    return { text: '', isMultiColumn: false };
+    // Log error but don't throw - return empty to trigger scanned PDF detection
+    console.warn('[PDF] PDF.js extraction failed:', error.message);
+    return { text: '', isMultiColumn: false, numPages: 0 };
   }
 }
 
 /**
  * Extract text from PDF using OCR (Tesseract.js)
- * For Cloudflare Workers, we use Tesseract.js worker version
+ * 
+ * NOTE: This function is intentionally not implemented for MVP.
+ * OCR in Cloudflare Workers has compatibility issues (no OffscreenCanvas, no Web Workers).
+ * 
+ * For scanned PDFs, we return a helpful error message directing users to upload
+ * text-based PDFs or Word documents instead.
+ * 
+ * Future V2: Implement client-side OCR using Tesseract.js in the browser,
+ * or use an external OCR API service.
  */
 async function extractPdfWithOCR(arrayBuffer) {
-  try {
-    // Import Tesseract.js dynamically (Cloudflare Workers compatible)
-    // Note: Tesseract.js requires worker files to be available
-    // In production, these should be served from CDN or bundled
-    
-    // For now, we'll use a simplified OCR approach
-    // In a full implementation, you would:
-    // 1. Convert PDF pages to images
-    // 2. Use Tesseract.js to OCR each image
-    // 3. Combine results
-    
-    // Since Tesseract.js requires worker files and image processing,
-    // we'll throw an error that triggers a user-facing modal
-    // The frontend can handle this gracefully
-    
-    throw createExtractionError(
-      EXTRACTION_ERRORS.OCR_REQUIRED,
-      'OCR processing is required for this scanned PDF. This may take up to 20 seconds. Please wait...',
-      { requiresOcr: true }
-    );
-  } catch (error) {
-    // Re-throw structured errors as-is
-    if (error.code && Object.values(EXTRACTION_ERRORS).includes(error.code)) {
-      throw error;
+  // This function is kept for API compatibility but should not be called
+  // Scanned PDF detection happens in extractPdfText() and throws OCR_REQUIRED error
+  throw createExtractionError(
+    EXTRACTION_ERRORS.OCR_REQUIRED,
+    'This PDF appears to be image-based (scanned). Please upload a text-based PDF or Word document for best results. We\'re working on scan support for a future update.',
+    { 
+      isScanned: true, 
+      requiresOcr: true 
     }
-    // Wrap other errors
-    throw createExtractionError(
-      EXTRACTION_ERRORS.OCR_FAILED,
-      error.message || 'OCR extraction failed. Please upload a text-based PDF or try again.',
-      { originalError: error.message }
-    );
-  }
+  );
 }
 
 /**
