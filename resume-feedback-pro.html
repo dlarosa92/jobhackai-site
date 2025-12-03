@@ -132,6 +132,45 @@
     .rf-section-title { font-size: var(--font-size-xl); font-weight: var(--font-weight-bold); margin-bottom: var(--space-xs); color: var(--color-text-main); }
     .rf-progress-ring { width: 80px; height: 80px; display: inline-block; vertical-align: middle; margin-right: 1.5rem; }
     .rf-score-badge { display: inline-block; background: #00E676; color: #fff; font-weight: 700; border-radius: 999px; padding: 0.3em 1em; font-size: 1.2rem; margin-left: 0.7rem; }
+    /* Status pill component - matches existing .rf-score-badge pattern */
+    .rf-status-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      padding: 0.2rem 0.55rem;
+      border-radius: var(--radius-full);
+      font-size: var(--font-size-xs);
+      font-weight: var(--font-weight-medium);
+      font-family: var(--font-family-base);
+      border: 1px solid transparent;
+      line-height: 1.2;
+      margin-top: 0.5rem;
+    }
+    .rf-status-icon {
+      display: inline-flex;
+      align-items: center;
+      flex-shrink: 0;
+    }
+    .rf-status-icon svg {
+      width: 14px;
+      height: 14px;
+      stroke-width: 2;
+    }
+    .rf-status-pill--success {
+      background-color: rgba(5, 150, 105, 0.06);
+      border-color: rgba(5, 150, 105, 0.25);
+      color: var(--color-success);
+    }
+    .rf-status-pill--warning {
+      background-color: rgba(217, 119, 6, 0.08);
+      border-color: rgba(217, 119, 6, 0.3);
+      color: var(--color-warning);
+    }
+    .rf-status-pill--error {
+      background-color: rgba(220, 38, 38, 0.06);
+      border-color: rgba(220, 38, 38, 0.25);
+      color: var(--color-error);
+    }
     .rf-rubric-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1.2rem; margin-top: 1.5rem; }
     .rf-rubric-item { background: #F8FAFC; border-radius: var(--radius-lg); padding: 1rem 1.2rem; }
     .rf-rubric-label { font-weight: 600; color: var(--color-text-main); margin-bottom: 0.2rem; }
@@ -948,6 +987,49 @@
       sessionStorage.removeItem('currentAtsBreakdown');
     }
 
+    // Status icon definitions - defined once, reused
+    const RF_STATUS_ICONS = {
+      success: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="12" cy="12" r="10"/>
+      <polyline points="9 12 12 15 22 5"/>
+    </svg>`,
+      warning: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/>
+      <line x1="12" y1="9" x2="12" y2="13"/>
+      <line x1="12" y1="17" x2="12.01" y2="17"/>
+    </svg>`,
+      error: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="12" cy="12" r="10"/>
+      <line x1="12" y1="8" x2="12" y2="12"/>
+      <line x1="12" y1="16" x2="12.01" y2="16"/>
+    </svg>`
+    };
+
+    function getStatusIcon(type) {
+      return RF_STATUS_ICONS[type] || '';
+    }
+
+    // Helper function to show file status pill
+    function showFileStatus(variant, message) {
+      const statusPill = document.getElementById('rf-file-status');
+      const statusIcon = statusPill?.querySelector('.rf-status-icon');
+      const statusText = statusPill?.querySelector('.rf-status-text');
+      
+      if (!statusPill || !statusIcon || !statusText) return;
+      
+      statusPill.className = `rf-status-pill rf-status-pill--${variant}`;
+      statusIcon.innerHTML = getStatusIcon(variant);
+      statusText.textContent = message;
+      statusPill.style.display = 'inline-flex';
+    }
+
+    function hideFileStatus() {
+      const statusPill = document.getElementById('rf-file-status');
+      if (statusPill) {
+        statusPill.style.display = 'none';
+      }
+    }
+
     async function uploadResume(file) {
       // Validate file before upload
       const validation = await window.JobHackAIFileValidation.validateFile(file);
@@ -1016,7 +1098,7 @@
             errorMessage = 'Could not extract readable text from file. Please upload a text-based résumé or use our DOCX template.';
           } else if (errorCode === 'unsupported_file_type' || errorCode === 'UNSUPPORTED_TYPE') {
             errorMessage = `Unsupported file type. Please upload PDF, DOCX, or TXT.`;
-          } else if (errorCode === 'too_large' || errorCode === 'TOO_LARGE') {
+          } else if (errorCode === 'file_too_large' || errorCode === 'FILE_TOO_LARGE') {
             errorMessage = 'File exceeds 2MB limit. Please compress or use a smaller file.';
           } else if (errorCode === 'text_too_long' || errorCode === 'TEXT_TOO_LONG') {
             errorMessage = 'Extracted text exceeds limit. Please use a shorter résumé.';
@@ -1050,6 +1132,23 @@
         if (hideLoading) {
           hideLoading();
         }
+        
+        // Show error status pill based on error code/message
+        const message = (error && error.message) || '';
+        const code = error && error.code;
+        
+        if (code === 'ocr_required' || code === 'OCR_REQUIRED' || /scanned/i.test(message)) {
+          showFileStatus('warning', 'Scanned PDF detected – may take longer');
+        } else if (/unsupported|file type/i.test(message)) {
+          showFileStatus('error', 'File type not supported');
+        } else if (/too large|2MB/i.test(message)) {
+          showFileStatus('error', 'File too large (max 2MB)');
+        } else if (/empty/i.test(message)) {
+          showFileStatus('error', 'File appears to be empty');
+        } else {
+          showFileStatus('error', 'File upload failed');
+        }
+        
         // Re-throw to be handled by caller
         throw error;
       }
@@ -2738,11 +2837,14 @@
       const statusDiv = document.getElementById('rf-generate-status');
       
       if (uploadInput) {
-        uploadInput.addEventListener('change', function(e) {
+        uploadInput.addEventListener('change', async function(e) {
           const file = e.target.files[0];
           const pdfHelper = document.getElementById('rf-pdf-helper');
           
           if (file) {
+            // Hide status pill initially while validating
+            hideFileStatus();
+            
             // Show/hide PDF helper text based on file type
             if (pdfHelper) {
               if (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')) {
@@ -2752,36 +2854,80 @@
               }
             }
             
-            // Preserve targeted role selection when uploading a resume
-            // Don't clear job title input - user may want to analyze different resumes for the same role
-            // Only clear if explicitly needed (e.g., error handling)
-            
-            // Store file name in localStorage for persistence
-            localStorage.setItem('lastUploadedResumeName', file.name);
-            
-            // Update file name display
-            if (fileNameSpan) {
-              fileNameSpan.textContent = file.name;
-              fileNameSpan.style.color = 'var(--color-success)';
-              fileNameSpan.style.fontWeight = '600';
-            }
-            
-            // Enable generate button
-            if (generateBtn) {
-              generateBtn.disabled = false;
-            }
-            
-            // Show ready status
-            if (statusDiv) {
-              statusDiv.style.display = 'block';
-              statusDiv.textContent = 'Ready to analyze';
-              statusDiv.style.background = 'rgba(5,150,105,0.08)';
-              statusDiv.style.color = 'var(--color-success)';
-              statusDiv.style.width = 'fit-content';
-              statusDiv.style.maxWidth = '100%';
+            // Validate file and show status pill
+            try {
+              const validation = await window.JobHackAIFileValidation.validateFile(file);
+              
+              if (!validation.valid) {
+                // Invalid file - show error status
+                showFileStatus('error', validation.error || 'File validation failed');
+                if (fileNameSpan) {
+                  fileNameSpan.textContent = file.name;
+                  fileNameSpan.style.color = 'var(--color-error)';
+                  fileNameSpan.style.fontWeight = '600';
+                }
+                if (generateBtn) {
+                  generateBtn.disabled = true;
+                }
+                if (statusDiv) {
+                  statusDiv.style.display = 'none';
+                }
+                return;
+              }
+              
+              // Valid file - check for warnings
+              if (validation.warning && validation.isScanned) {
+                showFileStatus('warning', 'Scanned PDF detected – may take longer');
+              } else {
+                showFileStatus('success', 'Ready to analyze');
+              }
+              
+              // Preserve targeted role selection when uploading a resume
+              // Don't clear job title input - user may want to analyze different resumes for the same role
+              
+              // Store file name in localStorage for persistence
+              localStorage.setItem('lastUploadedResumeName', file.name);
+              
+              // Update file name display
+              if (fileNameSpan) {
+                fileNameSpan.textContent = file.name;
+                fileNameSpan.style.color = 'var(--color-success)';
+                fileNameSpan.style.fontWeight = '600';
+              }
+              
+              // Enable generate button
+              if (generateBtn) {
+                generateBtn.disabled = false;
+              }
+              
+              // Show ready status (legacy status div - keep for compatibility)
+              if (statusDiv) {
+                statusDiv.style.display = 'block';
+                statusDiv.textContent = 'Ready to analyze';
+                statusDiv.style.background = 'rgba(5,150,105,0.08)';
+                statusDiv.style.color = 'var(--color-success)';
+                statusDiv.style.width = 'fit-content';
+                statusDiv.style.maxWidth = '100%';
+              }
+            } catch (validationError) {
+              // Validation error - show error status
+              console.error('[RESUME-FEEDBACK] File validation error:', validationError);
+              showFileStatus('error', 'File validation failed');
+              if (fileNameSpan) {
+                fileNameSpan.textContent = file.name;
+                fileNameSpan.style.color = 'var(--color-error)';
+                fileNameSpan.style.fontWeight = '600';
+              }
+              if (generateBtn) {
+                generateBtn.disabled = true;
+              }
+              if (statusDiv) {
+                statusDiv.style.display = 'none';
+              }
             }
           } else {
             // Reset if file cleared
+            hideFileStatus();
             if (pdfHelper) {
               pdfHelper.style.display = 'none';
             }
@@ -4806,6 +4952,10 @@
                 Choose File
               </label>
               <span id="rf-file-name" style="font-size:0.875rem;color:var(--color-text-muted);">No file selected</span>
+            </div>
+            <div id="rf-file-status" class="rf-status-pill" style="display: none;">
+              <span class="rf-status-icon"></span>
+              <span class="rf-status-text"></span>
             </div>
             <div style="font-size:0.85rem;color:var(--color-text-muted);margin-bottom:0.75rem;line-height:1.4;">Supported formats: PDF, DOCX, or TXT. Maximum file size: 2 MB.</div>
             <div id="rf-pdf-helper" style="font-size: 0.85rem; color: var(--color-text-muted); margin-top: 0.5rem; line-height: 1.4; display: none;">
