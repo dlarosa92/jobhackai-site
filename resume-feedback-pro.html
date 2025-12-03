@@ -1106,7 +1106,10 @@
             errorMessage = 'We couldn\'t read your resume. Please upload a text-based PDF, DOCX, or TXT file.';
           }
           
-          throw new Error(errorMessage);
+          // Preserve error code in Error object so catch block can check error.code
+          const error = new Error(errorMessage);
+          error.code = errorCode;
+          throw error;
         }
 
         currentResumeId = data.resumeId;
@@ -1147,6 +1150,8 @@
           showFileStatus('error', 'File too large (max 2MB)');
         } else if (code === 'empty_text' || code === 'EMPTY_TEXT' || /empty/i.test(message)) {
           showFileStatus('error', 'File appears to be empty');
+        } else if (code === 'text_too_long' || code === 'TEXT_TOO_LONG' || /text.*too long|exceeds.*limit/i.test(message)) {
+          showFileStatus('error', 'Text too long');
         } else {
           showFileStatus('error', 'File upload failed');
         }

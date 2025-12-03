@@ -115,6 +115,18 @@ export async function extractResumeText(file, fileName) {
         );
       }
       
+      // If PDF is empty (zero pages), throw parse error
+      if (pdfResult.isEmpty) {
+        throw createExtractionError(
+          EXTRACTION_ERRORS.PARSE_ERROR,
+          'This PDF appears to be empty or corrupted. Please upload a valid PDF file with content.',
+          { 
+            isEmpty: true,
+            numPages: 0
+          }
+        );
+      }
+      
       // If scanned PDF detected, return helpful error (no OCR attempt)
       if (pdfResult.isScanned) {
         throw createExtractionError(
@@ -244,7 +256,7 @@ async function extractPdfText(arrayBuffer) {
     
     if (numPages === 0) {
       console.warn('[PDF] PDF has no pages');
-      return { text: '', isMultiColumn: false, numPages: 0 };
+      return { text: '', isMultiColumn: false, numPages: 0, isEmpty: true };
     }
     
     // Performance optimization: Only process first N pages
