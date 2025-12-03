@@ -38,8 +38,10 @@ app.post('/parse-pdf', verifyApiKey, express.raw({ limit: MAX_FILE_SIZE, type: '
   const startTime = Date.now();
   
   try {
-    // Validate content type
-    if (req.get('content-type') !== 'application/pdf') {
+    // Validate content type (case-insensitive, handles MIME parameters)
+    const contentType = req.get('content-type') || '';
+    const normalizedContentType = contentType.toLowerCase().split(';')[0].trim();
+    if (normalizedContentType !== 'application/pdf') {
       return res.status(400).json({
         success: false,
         error: 'invalid_content_type',
@@ -68,11 +70,20 @@ app.post('/parse-pdf', verifyApiKey, express.raw({ limit: MAX_FILE_SIZE, type: '
 
     // Parse PDF with timeout
     const parsePromise = pdfParse(req.body);
+    let timeoutId = null;
     const timeoutPromise = new Promise((_, reject) => {
-      setTimeout(() => reject(new Error('Parse timeout')), TIMEOUT_MS);
+      timeoutId = setTimeout(() => reject(new Error('Parse timeout')), TIMEOUT_MS);
     });
 
-    const pdfData = await Promise.race([parsePromise, timeoutPromise]);
+    let pdfData;
+    try {
+      pdfData = await Promise.race([parsePromise, timeoutPromise]);
+    } finally {
+      // Always clear the timeout to prevent unhandled promise rejections
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
+    }
 
     // Extract text and metadata
     const text = pdfData.text || '';
