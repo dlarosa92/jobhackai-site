@@ -105,12 +105,25 @@ export async function extractResumeText(file, fileName) {
       
       // If PDF.js parse failed (corruption, encryption, password protection, etc.)
       if (pdfResult.parseFailed) {
+        // Use more specific error message if available from PDF.js
+        let userMessage = 'This PDF could not be processed. It may be corrupted, password-protected, or encrypted. Please try a different file or ensure the PDF is not password-protected.';
+        
+        if (pdfResult.errorName === 'PasswordException' || pdfResult.errorMessage?.toLowerCase().includes('password')) {
+          userMessage = 'This PDF is password-protected. Please remove the password and try again.';
+        } else if (pdfResult.errorName === 'InvalidPDFException' || pdfResult.errorMessage?.toLowerCase().includes('invalid')) {
+          userMessage = 'This PDF appears to be corrupted or invalid. Please try re-saving the file or use a different PDF.';
+        } else if (pdfResult.errorName === 'MissingPDFException' || pdfResult.errorMessage?.toLowerCase().includes('missing')) {
+          userMessage = 'The PDF file appears to be empty or incomplete. Please check the file and try again.';
+        }
+        
         throw createExtractionError(
           EXTRACTION_ERRORS.PARSE_ERROR,
-          'This PDF could not be processed. It may be corrupted, password-protected, or encrypted. Please try a different file or ensure the PDF is not password-protected.',
+          userMessage,
           { 
             parseFailed: true,
-            numPages: pdfResult.numPages || 0
+            numPages: pdfResult.numPages || 0,
+            errorName: pdfResult.errorName || null,
+            errorMessage: pdfResult.errorMessage || null
           }
         );
       }
@@ -385,8 +398,26 @@ async function extractPdfText(arrayBuffer) {
   } catch (error) {
     // PDF.js parse failure (corruption, encryption, password protection, etc.)
     // Distinguish from scanned PDFs by setting parseFailed flag
-    console.warn('[PDF] PDF.js extraction failed:', error.message);
-    return { text: '', isMultiColumn: false, numPages: 0, parseFailed: true };
+    // Capture full error details for debugging
+    const errorName = error?.name || 'UnknownError';
+    const errorMessage = error?.message || String(error);
+    
+    console.error('[PDF] PDF.js extraction failed', {
+      errorName,
+      errorMessage,
+      stack: error?.stack,
+      code: error?.code,
+      toString: String(error)
+    });
+    
+    return { 
+      text: '', 
+      isMultiColumn: false, 
+      numPages: 0, 
+      parseFailed: true,
+      errorName,
+      errorMessage
+    };
   }
 }
 
