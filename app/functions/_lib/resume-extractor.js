@@ -2,7 +2,7 @@
 // Supports OCR for image-based PDFs using Tesseract.js
 
 import mammoth from 'mammoth';
-import * as pdfjsLib from 'pdfjs-dist';
+// Use dynamic import for pdfjs-dist to avoid top-level await bundling issues in Cloudflare Workers
 
 /**
  * Structured error codes for resume extraction
@@ -238,6 +238,9 @@ async function extractPdfText(arrayBuffer) {
   const SCANNED_PDF_THRESHOLD = 400; // If text < 400 chars and pages >= 1, likely scanned
   
   try {
+    // Dynamic import to avoid top-level await bundling issues in Cloudflare Workers
+    const pdfjsLib = await import('pdfjs-dist');
+    
     // PDF.js in Cloudflare Workers doesn't need worker configuration
     // The library will use its built-in fallback for serverless environments
     // Setting workerSrc to a CDN URL would fail in Workers (no web workers support)
