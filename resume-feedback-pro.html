@@ -1074,11 +1074,6 @@
         }
 
         const data = await response.json();
-        
-        // Hide loading overlay on success
-        if (hideLoading) {
-          hideLoading();
-        }
       
         // Handle extraction failures (success: false but HTTP 200)
         if (!data.success) {
@@ -1127,6 +1122,11 @@
             resumeText: data.resumeText,
             isMultiColumn: data.isMultiColumn
           });
+        }
+        
+        // Hide loading overlay on success (only after confirming data.success)
+        if (hideLoading) {
+          hideLoading();
         }
         
         return data;
