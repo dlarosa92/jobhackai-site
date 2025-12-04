@@ -2407,9 +2407,16 @@
           window.latestRoleSpecific = null;
 
           // Step 1 complete: "Reading your resume..." overlay is already hidden by uploadResume()
-          // Step 2: Show "Generating AI feedback..." overlay
+          // Step 2: Show appropriate message based on user plan
+          // Free users only get ATS scoring, not AI feedback, so show different message
+          const userPlan = getCurrentUserPlan();
+          const willGetFeedback = ['trial', 'essential', 'pro', 'premium'].includes(userPlan);
+          const step2Message = willGetFeedback 
+            ? (window.LoadingMessages?.GENERATING_FEEDBACK || 'Generating AI feedback...')
+            : (window.LoadingMessages?.SCORING_RESUME || 'Calculating your ATS score...');
+          
           const hideFeedbackLoading = window.showLoadingOverlay 
-            ? window.showLoadingOverlay(window.LoadingMessages?.GENERATING_FEEDBACK || 'Generating AI feedback...')
+            ? window.showLoadingOverlay(step2Message)
             : null;
           
           // Store hide function for cleanup later
