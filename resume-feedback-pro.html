@@ -2461,6 +2461,8 @@
           
           // Show skeleton loading states (replaces full-screen overlay)
           showSkeletons();
+          // Hide skeleton header since real progress header is already visible
+          hideHeaderSkeleton();
           
           // Store cleanup function for error handling (skeleton hide function)
           window._currentFeedbackLoading = () => {
@@ -3773,6 +3775,19 @@
       const skeletonContainer = document.getElementById('rf-skeleton-container');
       if (skeletonContainer) {
         skeletonContainer.style.display = 'block';
+        // Reset display properties of all skeleton elements for subsequent uses
+        const skeletonHeader = document.getElementById('rf-skeleton-header');
+        if (skeletonHeader) {
+          skeletonHeader.style.display = 'block';
+        }
+        const skeletonRubric = document.getElementById('rf-skeleton-rubric');
+        if (skeletonRubric) {
+          skeletonRubric.style.display = 'grid';
+        }
+        const skeletonFeedback = document.getElementById('rf-skeleton-feedback');
+        if (skeletonFeedback) {
+          skeletonFeedback.style.display = 'grid';
+        }
         // Ensure feedback content is hidden while skeletons show
         const feedbackContent = document.getElementById('rf-feedback-content');
         if (feedbackContent) {
@@ -3797,6 +3812,13 @@
             skeleton.classList.remove('hidden');
           });
         }, 300);
+      }
+    }
+
+    function hideHeaderSkeleton() {
+      const skeletonHeader = document.getElementById('rf-skeleton-header');
+      if (skeletonHeader) {
+        skeletonHeader.style.display = 'none';
       }
     }
 
