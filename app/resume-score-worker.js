@@ -1,9 +1,8 @@
 // JobHackAI ATS Resume Scoring Worker
-// Edge-based resume scoring with Tesseract OCR + pdf-parse
+// Edge-based resume scoring with Tesseract OCR + unpdf
 // Rule-based scoring engine (no AI tokens) - AI feedback available via OpenAI binding
 
 import Tesseract from "tesseract.js";
-import pdf from "pdf-parse";
 
 export default {
   async fetch(request, env, ctx) {
@@ -89,9 +88,11 @@ export default {
       // 1️⃣ Extract text (or fallback to OCR)
       if (mime === "application/pdf" || fileName.toLowerCase().endsWith(".pdf")) {
         try {
-          // Try pdf-parse first for text-based PDFs
-          const data = await pdf(buffer);
-          text = data.text?.trim() || "";
+          // Try unpdf first for text-based PDFs (serverless-optimized PDF.js wrapper)
+          const { extractText, getDocumentProxy } = await import('unpdf');
+          const pdf = await getDocumentProxy(buffer);
+          const { text: extractedText } = await extractText(pdf, { mergePages: true });
+          text = extractedText?.trim() || "";
           
           // Detect multi-column layout (only if we have sufficient text)
           if (text && text.length >= 200) {
@@ -111,7 +112,7 @@ export default {
             }
           }
         } catch (pdfError) {
-          // If pdf-parse fails, try OCR
+          // If unpdf fails, try OCR
           try {
             const { data: ocr } = await Tesseract.recognize(buffer, "eng", {
               logger: m => {}

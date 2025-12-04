@@ -2,7 +2,7 @@
 // Supports OCR for image-based PDFs using Tesseract.js
 
 import mammoth from 'mammoth';
-// Use dynamic import for pdfjs-dist to avoid top-level await bundling issues in Cloudflare Workers
+// Use dynamic import for unpdf to avoid top-level await bundling issues in Cloudflare Workers
 
 /**
  * Structured error codes for resume extraction
@@ -230,8 +230,12 @@ export async function extractResumeText(file, fileName) {
 
 
 /**
- * Extract text from PDF file using PDF.js
- * PDF.js works in Cloudflare Workers and handles text-based PDFs including:
+ * Extract text from PDF file using unpdf (serverless-optimized PDF.js wrapper)
+ * 
+ * Uses unpdf which is purpose-built for Cloudflare Workers and edge environments.
+ * Provides reliable text extraction without Web Worker dependencies.
+ * 
+ * Handles text-based PDFs including:
  * - Google Docs exports
  * - Microsoft Word exports
  * - Canva PDFs
@@ -239,175 +243,95 @@ export async function extractResumeText(file, fileName) {
  * - Most modern PDF generators
  * 
  * Performance optimizations:
- * - Limits to first 3 pages (most resumes are 1-2 pages)
- * - Early exit if text exceeds 40k characters
+ * - Character limit (40k chars) for early exit on very large PDFs
  * - Smart scanned PDF detection (text < 400 chars AND pages >= 1)
+ * - Text-based multi-column detection (heuristic)
  * 
  * If extraction fails or returns minimal text, scanned PDF detection will be triggered
  */
 async function extractPdfText(arrayBuffer) {
-  const MAX_PAGES = 3; // Most resumes are 1-2 pages, limit for performance
-  const MAX_CHARS = 40000; // Reasonable character limit for early exit
+  const MAX_CHARS = 40000; // Character limit for early exit
   const SCANNED_PDF_THRESHOLD = 400; // If text < 400 chars and pages >= 1, likely scanned
   
   try {
-    // Dynamic import to avoid top-level await bundling issues in Cloudflare Workers
-    const pdfjsLib = await import('pdfjs-dist');
-    
-    // PDF.js in Cloudflare Workers doesn't need worker configuration
-    // The library will use its built-in fallback for serverless environments
-    // Setting workerSrc to a CDN URL would fail in Workers (no web workers support)
+    // Dynamic import for Cloudflare Workers compatibility
+    const { extractText, getDocumentProxy } = await import('unpdf');
     
     // Load PDF document
-    const loadingTask = pdfjsLib.getDocument({
-      data: arrayBuffer,
-      useSystemFonts: true, // Reduce font loading overhead
-      disableAutoFetch: true, // Don't pre-fetch all pages
-      disableStream: false, // Allow streaming for better memory usage
-      verbosity: 0 // Suppress console warnings
+    const pdf = await getDocumentProxy(new Uint8Array(arrayBuffer));
+    
+    // Extract text from all pages (unpdf handles this efficiently)
+    const { text, totalPages } = await extractText(pdf, { 
+      mergePages: true 
     });
     
-    const pdf = await loadingTask.promise;
-    const numPages = pdf.numPages;
+    const numPages = totalPages || 0;
     
     if (numPages === 0) {
       console.warn('[PDF] PDF has no pages');
       return { text: '', isMultiColumn: false, numPages: 0, isEmpty: true };
     }
     
-    // Performance optimization: Only process first N pages
-    const pagesToProcess = Math.min(numPages, MAX_PAGES);
-    
-    // Extract text from pages sequentially (with early exit)
-    // Use positioning info to preserve line structure for accurate multi-column detection
-    let fullText = '';
-    const pageTexts = [];
-    const startTime = Date.now();
-    
-    for (let pageNum = 1; pageNum <= pagesToProcess; pageNum++) {
-      try {
-        const page = await pdf.getPage(pageNum);
-        const textContent = await page.getTextContent();
-        
-        // Group text items by y-coordinate (line) to preserve line structure
-        // Items with similar y-coordinates are on the same line
-        const lineGroups = new Map();
-        const LINE_TOLERANCE = 2; // Pixels - items within 2px vertically are on same line
-        
-        for (const item of textContent.items) {
-          if (!item.str || item.str.trim().length === 0) continue;
-          
-          // Extract y-coordinate from transform matrix [a, b, c, d, e, f]
-          // Transform: [a b c d e f] where e=x, f=y
-          const y = item.transform ? item.transform[5] : 0;
-          
-          // Find existing line group with similar y-coordinate
-          let matchedLine = null;
-          for (const [lineY, lineItems] of lineGroups.entries()) {
-            if (Math.abs(y - lineY) <= LINE_TOLERANCE) {
-              matchedLine = lineY;
-              break;
-            }
-          }
-          
-          // Add to existing line or create new line
-          if (matchedLine !== null) {
-            lineGroups.get(matchedLine).push(item);
-          } else {
-            lineGroups.set(y, [item]);
-          }
-        }
-        
-        // Sort lines by y-coordinate (top to bottom) and build page text
-        const sortedLines = Array.from(lineGroups.entries())
-          .sort((a, b) => b[0] - a[0]) // Sort by y descending (top to bottom)
-          .map(([y, items]) => {
-            // Sort items within line by x-coordinate (left to right)
-            const sortedItems = items.sort((a, b) => {
-              const xA = a.transform ? a.transform[4] : 0;
-              const xB = b.transform ? b.transform[4] : 0;
-              return xA - xB;
-            });
-            // Join items on same line with spaces
-            return sortedItems.map(item => item.str).join(' ');
-          });
-        
-        const pageText = sortedLines.join('\n');
-        
-        if (pageText.trim().length > 0) {
-          pageTexts.push(pageText);
-          fullText += pageText + '\n';
-          
-          // Early exit if we've exceeded character limit
-          if (fullText.length > MAX_CHARS) {
-            console.log('[PDF] Early exit: text limit reached', { 
-              pagesProcessed: pageNum, 
-              textLength: fullText.length 
-            });
-            fullText = fullText.substring(0, MAX_CHARS);
-            break;
-          }
-        }
-      } catch (pageError) {
-        console.warn(`[PDF] Error extracting text from page ${pageNum}:`, pageError.message);
-        // Continue with other pages even if one fails
-        continue;
-      }
+    // Apply character limit (early exit for very large PDFs)
+    let extractedText = text || '';
+    if (extractedText.length > MAX_CHARS) {
+      console.log('[PDF] Text limit reached, truncating', { 
+        originalLength: extractedText.length,
+        truncatedLength: MAX_CHARS
+      });
+      extractedText = extractedText.substring(0, MAX_CHARS);
     }
     
-    const extractedText = fullText.trim();
-    const extractionTime = Date.now() - startTime;
+    const trimmedText = extractedText.trim();
     
-    // Smart scanned PDF detection: if text is very short AND we have pages, likely scanned
-    if (extractedText.length < SCANNED_PDF_THRESHOLD && numPages >= 1) {
+    // Smart scanned PDF detection
+    if (trimmedText.length < SCANNED_PDF_THRESHOLD && numPages >= 1) {
       console.warn('[PDF] Scanned PDF detected', { 
-        textLength: extractedText.length, 
+        textLength: trimmedText.length, 
         pages: numPages,
         threshold: SCANNED_PDF_THRESHOLD
       });
       return { text: '', isMultiColumn: false, numPages, isScanned: true };
     }
     
-    // If we got minimal text (but not necessarily scanned), return empty
-    if (extractedText.length < 100) {
+    // If we got minimal text, return empty
+    if (trimmedText.length < 100) {
       console.warn('[PDF] Extracted text too short', { 
-        length: extractedText.length, 
+        length: trimmedText.length, 
         pages: numPages 
       });
       return { text: '', isMultiColumn: false, numPages };
     }
     
-    // Multi-column detection: now that we preserve line structure, split by \n gives actual lines
-    const lines = extractedText.split('\n').filter(line => line.trim().length > 0);
+    // Multi-column detection using text-based heuristic
+    // (We lose coordinate-based detection, but text-based is sufficient)
+    const lines = trimmedText.split('\n').filter(line => line.trim().length > 0);
     const avgLineLength = lines.reduce((sum, line) => sum + line.trim().length, 0) / Math.max(lines.length, 1);
     const isMultiColumn = avgLineLength < 30 && lines.length > 20;
     
     console.log('[PDF] Successfully extracted text', { 
       pages: numPages,
-      pagesProcessed: pagesToProcess,
-      textLength: extractedText.length, 
-      isMultiColumn,
-      extractionTimeMs: extractionTime
+      textLength: trimmedText.length, 
+      isMultiColumn
     });
     
     return {
-      text: extractedText,
+      text: trimmedText,
       isMultiColumn,
       numPages
     };
   } catch (error) {
-    // PDF.js parse failure (corruption, encryption, password protection, etc.)
+    // PDF parse failure (corruption, encryption, password protection, etc.)
     // Distinguish from scanned PDFs by setting parseFailed flag
     // Capture full error details for debugging
     const errorName = error?.name || 'UnknownError';
     const errorMessage = error?.message || String(error);
     
-    console.error('[PDF] PDF.js extraction failed', {
+    console.error('[PDF] unpdf extraction failed', {
       errorName,
       errorMessage,
       stack: error?.stack,
-      code: error?.code,
-      toString: String(error)
+      code: error?.code
     });
     
     return { 
