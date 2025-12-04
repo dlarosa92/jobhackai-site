@@ -17,8 +17,9 @@ export function showLoadingOverlay(message = 'Loading...', id) {
  * Show contextual loading messages for different actions
  */
 export const LoadingMessages = {
-  UPLOADING_RESUME: 'Analyzing your résumé...',
-  GENERATING_FEEDBACK: 'Optimizing for ATS compliance...',
+  READING_RESUME: 'Reading your resume...',
+  GENERATING_FEEDBACK: 'Generating AI feedback...',
+  UPLOADING_RESUME: 'Reading your resume...', // Deprecated: use READING_RESUME
   GENERATING_REWRITE: 'Generating AI-powered rewrite...',
   SCORING_RESUME: 'Calculating your ATS score...',
   PROCESSING_OCR: "We're scanning your résumé — this may take up to 20 seconds.",
