@@ -2460,7 +2460,8 @@
           updateProgressStatus(willGetFeedback ? 'generating-feedback' : 'scoring-resume');
           
           // Show skeleton loading states (replaces full-screen overlay)
-          showSkeletons();
+          // Pass willGetFeedback to conditionally show/hide feedback skeleton
+          showSkeletons(willGetFeedback);
           // Hide skeleton header since real progress header is already visible
           hideHeaderSkeleton();
           
@@ -3771,10 +3772,26 @@
     }
 
     // Skeleton loading state management (performance-optimized, non-blocking)
-    function showSkeletons() {
+    // Store timeout ID to allow cancellation
+    let skeletonHideTimeout = null;
+    
+    function showSkeletons(willGetFeedback = true) {
       const skeletonContainer = document.getElementById('rf-skeleton-container');
       if (skeletonContainer) {
+        // Cancel any pending hide timeout from previous operation
+        if (skeletonHideTimeout !== null) {
+          clearTimeout(skeletonHideTimeout);
+          skeletonHideTimeout = null;
+        }
+        
         skeletonContainer.style.display = 'block';
+        
+        // Remove hidden class from all skeletons (in case they were hidden previously)
+        const skeletons = skeletonContainer.querySelectorAll('.rf-skeleton');
+        skeletons.forEach(skeleton => {
+          skeleton.classList.remove('hidden');
+        });
+        
         // Reset display properties of all skeleton elements for subsequent uses
         const skeletonHeader = document.getElementById('rf-skeleton-header');
         if (skeletonHeader) {
@@ -3786,7 +3803,8 @@
         }
         const skeletonFeedback = document.getElementById('rf-skeleton-feedback');
         if (skeletonFeedback) {
-          skeletonFeedback.style.display = 'grid';
+          // Only show feedback skeleton if user will receive feedback
+          skeletonFeedback.style.display = willGetFeedback ? 'grid' : 'none';
         }
         // Ensure feedback content is hidden while skeletons show
         const feedbackContent = document.getElementById('rf-feedback-content');
@@ -3799,18 +3817,25 @@
     function hideSkeletons() {
       const skeletonContainer = document.getElementById('rf-skeleton-container');
       if (skeletonContainer) {
+        // Cancel any pending hide timeout
+        if (skeletonHideTimeout !== null) {
+          clearTimeout(skeletonHideTimeout);
+          skeletonHideTimeout = null;
+        }
+        
         // Fade out skeletons smoothly
         const skeletons = skeletonContainer.querySelectorAll('.rf-skeleton');
         skeletons.forEach(skeleton => {
           skeleton.classList.add('hidden');
         });
         // Remove container after fade completes
-        setTimeout(() => {
+        skeletonHideTimeout = setTimeout(() => {
           skeletonContainer.style.display = 'none';
           // Remove hidden class for next use
           skeletons.forEach(skeleton => {
             skeleton.classList.remove('hidden');
           });
+          skeletonHideTimeout = null;
         }, 300);
       }
     }
