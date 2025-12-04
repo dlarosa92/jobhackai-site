@@ -2535,13 +2535,7 @@
                 localStorage.setItem('lastATSScore', result.score.toString());
                 localStorage.setItem('lastATSSummary', summary);
                 
-                // Show feedback content container now that we have ATS results
-                const feedbackContentEl = document.getElementById('rf-feedback-content');
-                if (feedbackContentEl) {
-                  feedbackContentEl.style.display = 'block';
-                }
-                
-                // Update UI immediately
+                // Update UI immediately (progress ring, placeholder, etc.)
                 updateProgressRing(result.score);
                 hidePlaceholder();
                 const placeholderCta = document.getElementById('rf-placeholder-cta');
@@ -2607,19 +2601,47 @@
                 ];
                 updateRubricGrid(rubric);
                 
-                // Hide ATS skeleton now that real content is ready
-                hideATSSkeleton();
-                
-                // Make rubric grid visible
-                const rubricGrid = document.getElementById('rf-rubric-grid');
-                if (rubricGrid) {
-                  rubricGrid.style.display = 'grid';
-                }
-                
-                // Trigger fade transition for ATS feedback
-                setTimeout(() => {
-                  showATSFeedback();
-                }, 100);
+                // CRITICAL FIX: Hide ALL skeletons first, wait for fade to complete, THEN show content
+                // This prevents content from appearing while skeletons are still fading (overlap issue)
+                hideSkeletons().then(() => {
+                  // Verify skeleton container is actually hidden (defensive check)
+                  const skeletonContainer = document.getElementById('rf-skeleton-container');
+                  if (skeletonContainer && skeletonContainer.style.display !== 'none') {
+                    skeletonContainer.style.display = 'none';
+                  }
+                  
+                  // NOW show content container (skeletons are guaranteed to be hidden)
+                  const feedbackContentEl = document.getElementById('rf-feedback-content');
+                  if (feedbackContentEl) {
+                    feedbackContentEl.style.display = 'block';
+                  }
+                  
+                  // Make rubric grid visible
+                  const rubricGrid = document.getElementById('rf-rubric-grid');
+                  if (rubricGrid) {
+                    rubricGrid.style.display = 'grid';
+                  }
+                  
+                  // Trigger fade transition for ATS feedback
+                  setTimeout(() => {
+                    showATSFeedback();
+                  }, 100);
+                }).catch(error => {
+                  // Fallback: If something goes wrong, show content anyway to prevent blocking
+                  console.error('[RESUME-FEEDBACK] Error hiding skeletons:', error);
+                  const skeletonContainer = document.getElementById('rf-skeleton-container');
+                  if (skeletonContainer) {
+                    skeletonContainer.style.display = 'none';
+                  }
+                  const feedbackContentEl = document.getElementById('rf-feedback-content');
+                  if (feedbackContentEl) {
+                    feedbackContentEl.style.display = 'block';
+                  }
+                  const rubricGrid = document.getElementById('rf-rubric-grid');
+                  if (rubricGrid) {
+                    rubricGrid.style.display = 'grid';
+                  }
+                });
                 
                 // Update progress status (still generating feedback or scoring, depending on plan)
                 // Use the same willGetFeedback check from earlier in the function
@@ -3841,8 +3863,13 @@
     }
 
     function hideSkeletons() {
-      const skeletonContainer = document.getElementById('rf-skeleton-container');
-      if (skeletonContainer) {
+      return new Promise((resolve) => {
+        const skeletonContainer = document.getElementById('rf-skeleton-container');
+        if (!skeletonContainer) {
+          resolve();
+          return;
+        }
+        
         // Cancel any pending hide timeout
         if (skeletonHideTimeout !== null) {
           clearTimeout(skeletonHideTimeout);
@@ -3854,7 +3881,8 @@
         skeletons.forEach(skeleton => {
           skeleton.classList.add('hidden');
         });
-        // Remove container after fade completes
+        
+        // Remove container after fade completes, then resolve Promise
         skeletonHideTimeout = setTimeout(() => {
           skeletonContainer.style.display = 'none';
           // Remove hidden class for next use
@@ -3862,8 +3890,9 @@
             skeleton.classList.remove('hidden');
           });
           skeletonHideTimeout = null;
+          resolve(); // Resolve Promise when skeleton container is fully hidden
         }, 300);
-      }
+      });
     }
 
     function hideHeaderSkeleton() {
