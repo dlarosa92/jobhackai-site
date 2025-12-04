@@ -2564,6 +2564,11 @@
                 }
               } else {
                 // ATS scoring failed
+                // Clean up feedback loading overlay (consistent with .catch() handler)
+                if (window._currentFeedbackLoading) {
+                  window._currentFeedbackLoading();
+                  window._currentFeedbackLoading = null;
+                }
                 handleApiError(new Error('Failed to calculate ATS score. Please try again.'));
                 hideProgressHeader();
               }
