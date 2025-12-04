@@ -2641,6 +2641,10 @@
                   if (rubricGrid) {
                     rubricGrid.style.display = 'grid';
                   }
+                  // CRITICAL: Also trigger fade transition for ATS feedback (matches success path)
+                  setTimeout(() => {
+                    showATSFeedback();
+                  }, 100);
                 });
                 
                 // Update progress status (still generating feedback or scoring, depending on plan)
@@ -3820,17 +3824,21 @@
     }
 
     // Skeleton loading state management (performance-optimized, non-blocking)
-    // Store timeout ID to allow cancellation
+    // Track timeout ID and pending Promise resolvers to handle concurrent calls
     let skeletonHideTimeout = null;
+    let skeletonHideResolvers = []; // Array of pending Promise resolvers
     
     function showSkeletons(willGetFeedback = true) {
       const skeletonContainer = document.getElementById('rf-skeleton-container');
       if (skeletonContainer) {
-        // Cancel any pending hide timeout from previous operation
+        // Cancel any pending hide timeout and resolve all pending Promises immediately
         if (skeletonHideTimeout !== null) {
           clearTimeout(skeletonHideTimeout);
           skeletonHideTimeout = null;
         }
+        // Resolve all pending hide Promises since we're showing skeletons again
+        skeletonHideResolvers.forEach(resolve => resolve());
+        skeletonHideResolvers = [];
         
         skeletonContainer.style.display = 'block';
         
@@ -3870,11 +3878,16 @@
           return;
         }
         
-        // Cancel any pending hide timeout
+        // If a hide operation is already in progress, queue this resolver
+        // This prevents race conditions where concurrent calls cancel each other's timeouts
         if (skeletonHideTimeout !== null) {
-          clearTimeout(skeletonHideTimeout);
-          skeletonHideTimeout = null;
+          // Add this resolver to the queue - it will be resolved when the current hide completes
+          skeletonHideResolvers.push(resolve);
+          return;
         }
+        
+        // Start new hide operation - initialize resolver array with this one
+        skeletonHideResolvers = [resolve];
         
         // Fade out skeletons smoothly
         const skeletons = skeletonContainer.querySelectorAll('.rf-skeleton');
@@ -3882,15 +3895,18 @@
           skeleton.classList.add('hidden');
         });
         
-        // Remove container after fade completes, then resolve Promise
+        // Remove container after fade completes, then resolve all pending Promises
         skeletonHideTimeout = setTimeout(() => {
           skeletonContainer.style.display = 'none';
           // Remove hidden class for next use
           skeletons.forEach(skeleton => {
             skeleton.classList.remove('hidden');
           });
+          
+          // Resolve ALL pending Promises (handles concurrent calls)
+          skeletonHideResolvers.forEach(resolver => resolver());
+          skeletonHideResolvers = [];
           skeletonHideTimeout = null;
-          resolve(); // Resolve Promise when skeleton container is fully hidden
         }, 300);
       });
     }
