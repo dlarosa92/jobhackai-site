@@ -1,6 +1,6 @@
 # JobHackAI ATS Resume Scoring Worker
 
-Edge-based resume scoring Cloudflare Worker with Tesseract OCR and pdf-parse support.
+Edge-based resume scoring Cloudflare Worker with Tesseract OCR and unpdf support.
 
 ## Overview
 
@@ -30,7 +30,7 @@ This standalone Cloudflare Worker provides ATS (Applicant Tracking System) resum
 1. Install dependencies:
 ```bash
 cd app
-npm install tesseract.js pdf-parse
+npm install tesseract.js unpdf
 ```
 
 2. Deploy the worker:
@@ -128,7 +128,7 @@ Then update `wrangler-resume-worker.toml` with the namespace IDs.
  ├── Validate file size < 10MB
  ├── Detect MIME type (.pdf, .txt)
  ├── If PDF → test for selectable text
- │      ├── YES → parse via pdf-parse
+ │      ├── YES → parse via unpdf
  │      └── NO → send to OCR (Tesseract)
  ├── Sanitize text
  ├── Run rule-based scoring

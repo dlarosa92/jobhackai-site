@@ -2,7 +2,7 @@
 // Supports OCR for image-based PDFs using Tesseract.js
 
 import mammoth from 'mammoth';
-// Use dynamic import for pdfjs-dist to avoid top-level await bundling issues in Cloudflare Workers
+// Use dynamic import for unpdf to avoid top-level await bundling issues in Cloudflare Workers
 
 /**
  * Structured error codes for resume extraction

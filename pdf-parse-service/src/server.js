@@ -163,7 +163,7 @@ app.post('/parse-pdf', verifyApiKey, express.raw({ limit: MAX_FILE_SIZE, type: '
       error: errorCode,
       message,
       details: {
-        errorMessage: error.message
+        errorMessage: errorMessage
       }
     });
   }
