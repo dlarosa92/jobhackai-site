@@ -2427,7 +2427,8 @@
           if (progressHeader) {
             progressHeader.style.display = 'block';
           }
-          updateProgressStatus('generating-feedback');
+          // Update progress status based on user plan (same logic as loading overlay)
+          updateProgressStatus(willGetFeedback ? 'generating-feedback' : 'scoring-resume');
 
           // --- PARALLEL API CALLS: ATS Score + Feedback ---
           const jobTitleForScore = currentJobTitle || jobTitleInput?.value?.trim() || '';
@@ -2551,8 +2552,11 @@
                   showATSFeedback();
                 }, 100);
                 
-                // Update progress status (still generating feedback)
-                updateProgressStatus('generating-feedback');
+                // Update progress status (still generating feedback or scoring, depending on plan)
+                // Use the same willGetFeedback check from earlier in the function
+                const currentPlan = getCurrentUserPlan();
+                const willGetFeedbackCheck = ['trial', 'essential', 'pro', 'premium'].includes(currentPlan);
+                updateProgressStatus(willGetFeedbackCheck ? 'generating-feedback' : 'scoring-resume');
                 
                 // Show success toast
                 if (window.JobHackAIToast) {
@@ -3700,7 +3704,8 @@
         'reading': 'Step 1 of 2: Reading your resume...',
         'uploading': 'Step 1 of 2: Reading your resume...', // Alias for backward compatibility
         'generating-feedback': 'Step 2 of 2: Generating AI feedback...',
-        'ats-done': 'Step 2 of 2: Generating AI feedback...', // Alias for backward compatibility
+        'scoring-resume': 'Step 2 of 2: Calculating your ATS score...',
+        'ats-done': 'Step 2 of 2: Generating AI feedback...', // Alias for backward compatibility (deprecated)
         'complete': 'Analysis complete. You can now review ATS results, tailoring tips, and (for Pro) request a full rewrite.'
       };
       
