@@ -82,6 +82,13 @@ app.post('/parse-pdf', verifyApiKey, express.raw({ limit: MAX_FILE_SIZE, type: '
 
     // Parse PDF with timeout
     const parsePromise = pdfParse(req.body);
+    // Attach catch handler to suppress late rejections if timeout wins the race
+    parsePromise.catch(() => {
+      // Suppress unhandled promise rejection if parsePromise rejects after timeout
+      // This can happen when Promise.race returns due to timeout but parsePromise
+      // continues running and later rejects
+    });
+    
     let timeoutId = null;
     const timeoutPromise = new Promise((_, reject) => {
       timeoutId = setTimeout(() => reject(new Error('Parse timeout')), TIMEOUT_MS);
@@ -130,19 +137,23 @@ app.post('/parse-pdf', verifyApiKey, express.raw({ limit: MAX_FILE_SIZE, type: '
     });
 
   } catch (error) {
-    console.error('[PDF-PARSE] Error:', error.message, error.stack);
+    // Safely extract error message (handle non-Error values)
+    const errorMessage = error?.message || String(error || 'Unknown error');
+    const errorStack = error?.stack || 'No stack trace available';
+    
+    console.error('[PDF-PARSE] Error:', errorMessage, errorStack);
 
     // Handle specific error types
     let errorCode = 'parse_error';
     let message = 'PDF could not be parsed';
 
-    if (error.message.includes('timeout')) {
+    if (errorMessage.includes('timeout')) {
       errorCode = 'timeout';
       message = 'PDF parsing timed out';
-    } else if (error.message.includes('Invalid PDF')) {
+    } else if (errorMessage.includes('Invalid PDF')) {
       errorCode = 'invalid_pdf';
       message = 'Invalid or corrupted PDF file';
-    } else if (error.message.includes('password')) {
+    } else if (errorMessage.includes('password')) {
       errorCode = 'password_protected';
       message = 'PDF is password-protected';
     }
@@ -162,13 +173,14 @@ app.post('/parse-pdf', verifyApiKey, express.raw({ limit: MAX_FILE_SIZE, type: '
 app.use((err, req, res, next) => {
   // Check for body-parser file size limit errors
   // Express body-parser errors have status 413 and type 'entity.too.large'
+  // err.length contains the actual file size, err.limit contains the configured limit
   if (err.status === 413 || err.type === 'entity.too.large') {
     return res.status(413).json({
       success: false,
       error: 'file_too_large',
       message: `File exceeds maximum size of ${MAX_FILE_SIZE} bytes`,
       details: {
-        fileSize: err.limit ? err.limit : MAX_FILE_SIZE,
+        fileSize: err.length || MAX_FILE_SIZE,
         maxSize: MAX_FILE_SIZE
       }
     });
