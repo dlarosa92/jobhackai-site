@@ -249,6 +249,45 @@
     .rf-upgrade-prompt a.btn:hover {
       background: #125bb5 !important;
     }
+    /* ===== SKELETON LOADING STATES (Performance-Optimized) ===== */
+    @keyframes rf-shimmer {
+      0% { background-position: 200% 0; }
+      100% { background-position: -200% 0; }
+    }
+    .rf-skeleton {
+      background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+      background-size: 200% 100%;
+      animation: rf-shimmer 1.5s infinite;
+      border-radius: var(--radius-lg);
+      opacity: 1;
+      transition: opacity 0.3s ease;
+    }
+    .rf-skeleton.hidden {
+      opacity: 0;
+      pointer-events: none;
+    }
+    .rf-skeleton-header {
+      height: 60px;
+      margin-bottom: 1.5rem;
+    }
+    .rf-skeleton-rubric-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 1.2rem;
+      margin-top: 1.5rem;
+    }
+    .rf-skeleton-rubric-card {
+      height: 150px;
+    }
+    .rf-skeleton-feedback-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 1.2rem;
+      margin-top: 1.5rem;
+    }
+    .rf-skeleton-feedback-card {
+      height: 200px;
+    }
     .rf-btn-secondary {
       background: transparent;
       color: var(--color-accent-blue);
@@ -2407,28 +2446,26 @@
           window.latestRoleSpecific = null;
 
           // Step 1 complete: "Reading your resume..." overlay is already hidden by uploadResume()
-          // Step 2: Show appropriate message based on user plan
+          // Step 2: Show skeleton loading states instead of full-screen overlay
           // Free users only get ATS scoring, not AI feedback, so show different message
           const userPlan = getCurrentUserPlan();
           const willGetFeedback = ['trial', 'essential', 'pro', 'premium'].includes(userPlan);
-          const step2Message = willGetFeedback 
-            ? (window.LoadingMessages?.GENERATING_FEEDBACK || 'Generating AI feedback...')
-            : (window.LoadingMessages?.SCORING_RESUME || 'Calculating your ATS score...');
           
-          const hideFeedbackLoading = window.showLoadingOverlay 
-            ? window.showLoadingOverlay(step2Message)
-            : null;
-          
-          // Store hide function for cleanup later
-          window._currentFeedbackLoading = hideFeedbackLoading;
-
           // Show progress header immediately (moved outside rf-feedback-content)
           const progressHeader = document.getElementById('rf-progress-header');
           if (progressHeader) {
             progressHeader.style.display = 'block';
           }
-          // Update progress status based on user plan (same logic as loading overlay)
+          // Update progress status based on user plan
           updateProgressStatus(willGetFeedback ? 'generating-feedback' : 'scoring-resume');
+          
+          // Show skeleton loading states (replaces full-screen overlay)
+          showSkeletons();
+          
+          // Store cleanup function for error handling (skeleton hide function)
+          window._currentFeedbackLoading = () => {
+            hideSkeletons();
+          };
 
           // --- PARALLEL API CALLS: ATS Score + Feedback ---
           const jobTitleForScore = currentJobTitle || jobTitleInput?.value?.trim() || '';
@@ -2541,6 +2578,9 @@
                 ];
                 updateRubricGrid(rubric);
                 
+                // Hide ATS skeleton now that real content is ready
+                hideATSSkeleton();
+                
                 // Make rubric grid visible
                 const rubricGrid = document.getElementById('rf-rubric-grid');
                 if (rubricGrid) {
@@ -2620,6 +2660,9 @@
               
               updateFeedbackGrid(feedbackResult.roleSpecificFeedback);
               updateRubricGridFromFeedback(feedbackResult.atsRubric);
+              
+              // Hide feedback skeleton now that real content is ready
+              hideFeedbackSkeleton();
               
               // Feedback content container is already visible from ATS success handler
               // This ensures progressive display: ATS first, then feedback
@@ -3722,6 +3765,52 @@
       const header = document.getElementById('rf-progress-header');
       if (header) {
         header.style.display = 'none';
+      }
+    }
+
+    // Skeleton loading state management (performance-optimized, non-blocking)
+    function showSkeletons() {
+      const skeletonContainer = document.getElementById('rf-skeleton-container');
+      if (skeletonContainer) {
+        skeletonContainer.style.display = 'block';
+        // Ensure feedback content is hidden while skeletons show
+        const feedbackContent = document.getElementById('rf-feedback-content');
+        if (feedbackContent) {
+          feedbackContent.style.display = 'none';
+        }
+      }
+    }
+
+    function hideSkeletons() {
+      const skeletonContainer = document.getElementById('rf-skeleton-container');
+      if (skeletonContainer) {
+        // Fade out skeletons smoothly
+        const skeletons = skeletonContainer.querySelectorAll('.rf-skeleton');
+        skeletons.forEach(skeleton => {
+          skeleton.classList.add('hidden');
+        });
+        // Remove container after fade completes
+        setTimeout(() => {
+          skeletonContainer.style.display = 'none';
+          // Remove hidden class for next use
+          skeletons.forEach(skeleton => {
+            skeleton.classList.remove('hidden');
+          });
+        }, 300);
+      }
+    }
+
+    function hideATSSkeleton() {
+      const skeletonRubric = document.getElementById('rf-skeleton-rubric');
+      if (skeletonRubric) {
+        skeletonRubric.style.display = 'none';
+      }
+    }
+
+    function hideFeedbackSkeleton() {
+      const skeletonFeedback = document.getElementById('rf-skeleton-feedback');
+      if (skeletonFeedback) {
+        skeletonFeedback.style.display = 'none';
       }
     }
 
@@ -5086,6 +5175,27 @@
         </div>
         <div id="rf-progress-status" style="font-size: 0.95rem; color: var(--color-text-main); font-weight: 500;">
           Reading your resume and preparing it for analysis…
+        </div>
+      </div>
+      <!-- Skeleton Loading States (shown during Step 2) -->
+      <div id="rf-skeleton-container" style="display:none;">
+        <!-- Progress header skeleton -->
+        <div class="rf-skeleton rf-skeleton-header" id="rf-skeleton-header"></div>
+        
+        <!-- ATS Rubric skeleton - 5 cards matching grid layout -->
+        <div class="rf-skeleton-rubric-grid" id="rf-skeleton-rubric">
+          <div class="rf-skeleton rf-skeleton-rubric-card"></div>
+          <div class="rf-skeleton rf-skeleton-rubric-card"></div>
+          <div class="rf-skeleton rf-skeleton-rubric-card"></div>
+          <div class="rf-skeleton rf-skeleton-rubric-card"></div>
+          <div class="rf-skeleton rf-skeleton-rubric-card"></div>
+        </div>
+        
+        <!-- Role-Specific Feedback skeleton - 3 cards -->
+        <div class="rf-skeleton-feedback-grid" id="rf-skeleton-feedback" style="margin-top: 3rem;">
+          <div class="rf-skeleton rf-skeleton-feedback-card"></div>
+          <div class="rf-skeleton rf-skeleton-feedback-card"></div>
+          <div class="rf-skeleton rf-skeleton-feedback-card"></div>
         </div>
       </div>
       <div id="rf-feedback-content" style="display:none;">
