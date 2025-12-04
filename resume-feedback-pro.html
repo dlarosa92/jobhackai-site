@@ -1045,9 +1045,9 @@
         // Inline helper text will inform users about PDF processing time
       }
 
-      // Show progress indicator for text extraction
+      // Show progress indicator for text extraction (Step 1: Reading resume)
       const hideLoading = window.showLoadingOverlay 
-        ? window.showLoadingOverlay(window.LoadingMessages?.UPLOADING_RESUME || 'Analyzing your résumé...')
+        ? window.showLoadingOverlay(window.LoadingMessages?.READING_RESUME || 'Reading your resume...')
         : null;
 
       try {
@@ -2388,6 +2388,11 @@
             }
             
             // Error already shown by uploadResume, but we need to clean up UI state
+            // Clean up any loading overlays
+            if (window._currentFeedbackLoading) {
+              window._currentFeedbackLoading();
+              window._currentFeedbackLoading = null;
+            }
             uploadInput.disabled = false;
             generateBtn.disabled = false;
             hideLoadingState();
@@ -2401,12 +2406,29 @@
           window.latestAtsIssues = null;
           window.latestRoleSpecific = null;
 
+          // Step 1 complete: "Reading your resume..." overlay is already hidden by uploadResume()
+          // Step 2: Show appropriate message based on user plan
+          // Free users only get ATS scoring, not AI feedback, so show different message
+          const userPlan = getCurrentUserPlan();
+          const willGetFeedback = ['trial', 'essential', 'pro', 'premium'].includes(userPlan);
+          const step2Message = willGetFeedback 
+            ? (window.LoadingMessages?.GENERATING_FEEDBACK || 'Generating AI feedback...')
+            : (window.LoadingMessages?.SCORING_RESUME || 'Calculating your ATS score...');
+          
+          const hideFeedbackLoading = window.showLoadingOverlay 
+            ? window.showLoadingOverlay(step2Message)
+            : null;
+          
+          // Store hide function for cleanup later
+          window._currentFeedbackLoading = hideFeedbackLoading;
+
           // Show progress header immediately (moved outside rf-feedback-content)
           const progressHeader = document.getElementById('rf-progress-header');
           if (progressHeader) {
             progressHeader.style.display = 'block';
           }
-          updateProgressStatus('uploading');
+          // Update progress status based on user plan (same logic as loading overlay)
+          updateProgressStatus(willGetFeedback ? 'generating-feedback' : 'scoring-resume');
 
           // --- PARALLEL API CALLS: ATS Score + Feedback ---
           const jobTitleForScore = currentJobTitle || jobTitleInput?.value?.trim() || '';
@@ -2530,8 +2552,11 @@
                   showATSFeedback();
                 }, 100);
                 
-                // Update progress status
-                updateProgressStatus('ats-done');
+                // Update progress status (still generating feedback or scoring, depending on plan)
+                // Use the same willGetFeedback check from earlier in the function
+                const currentPlan = getCurrentUserPlan();
+                const willGetFeedbackCheck = ['trial', 'essential', 'pro', 'premium'].includes(currentPlan);
+                updateProgressStatus(willGetFeedbackCheck ? 'generating-feedback' : 'scoring-resume');
                 
                 // Show success toast
                 if (window.JobHackAIToast) {
@@ -2539,6 +2564,11 @@
                 }
               } else {
                 // ATS scoring failed
+                // Clean up feedback loading overlay (consistent with .catch() handler)
+                if (window._currentFeedbackLoading) {
+                  window._currentFeedbackLoading();
+                  window._currentFeedbackLoading = null;
+                }
                 handleApiError(new Error('Failed to calculate ATS score. Please try again.'));
                 hideProgressHeader();
               }
@@ -2546,6 +2576,11 @@
             .catch((error) => {
               // ATS promise rejected
               console.error('[RESUME-FEEDBACK] ATS scoring failed:', error);
+              // Clean up feedback loading overlay
+              if (window._currentFeedbackLoading) {
+                window._currentFeedbackLoading();
+                window._currentFeedbackLoading = null;
+              }
               handleApiError(error);
               hideProgressHeader();
             });
@@ -2704,6 +2739,12 @@
               });
             }
             
+            // Clean up feedback loading overlay on feedback failure
+            if (window._currentFeedbackLoading) {
+              window._currentFeedbackLoading();
+              window._currentFeedbackLoading = null;
+            }
+            
             // Update progress status and hide header on feedback failure
             if (atsScoringSucceeded) {
               updateProgressStatus('complete');
@@ -2727,6 +2768,12 @@
                 hideProgressHeader();
               }, 3000);
             }
+          }
+          
+          // Hide "Generating AI feedback..." overlay when both API calls complete
+          if (window._currentFeedbackLoading) {
+            window._currentFeedbackLoading();
+            window._currentFeedbackLoading = null;
           }
           
           // Update progress status when both complete successfully
@@ -2829,6 +2876,11 @@
           }
           
           // Clear state on error
+          // Clean up feedback loading overlay
+          if (window._currentFeedbackLoading) {
+            window._currentFeedbackLoading();
+            window._currentFeedbackLoading = null;
+          }
           clearAtsState();
           handleApiError(error);
           uploadInput.disabled = false;
@@ -3654,12 +3706,15 @@
       if (!statusEl) return;
       
       const states = {
-        'uploading': 'Reading your resume and preparing it for analysis…',
-        'ats-done': 'Step 2 of 2: Generating AI role-specific tailoring tips for your resume…',
+        'reading': 'Step 1 of 2: Reading your resume...',
+        'uploading': 'Step 1 of 2: Reading your resume...', // Alias for backward compatibility
+        'generating-feedback': 'Step 2 of 2: Generating AI feedback...',
+        'scoring-resume': 'Step 2 of 2: Calculating your ATS score...',
+        'ats-done': 'Step 2 of 2: Generating AI feedback...', // Alias for backward compatibility (deprecated)
         'complete': 'Analysis complete. You can now review ATS results, tailoring tips, and (for Pro) request a full rewrite.'
       };
       
-      statusEl.textContent = states[state] || states['uploading'];
+      statusEl.textContent = states[state] || states['reading'];
     }
 
     // Hide progress header when complete (optional - can keep visible)
