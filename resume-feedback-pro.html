@@ -1434,14 +1434,40 @@
     let currentLoadingOverlay = null;
     
     function showLoadingState(message = 'Loading...') {
-      if (window.JobHackAILoading) {
-        currentLoadingOverlay = window.JobHackAILoading.show(message, 'main-loading-overlay');
+      // For regenerate/rewrite/update/optimize operations - use lightweight overlay
+      // since content is already visible and we're just updating it
+      if (message.includes('Regenerating') || message.includes('Rewriting') || 
+          message.includes('Updating') || message.includes('Optimizing')) {
+        if (window.JobHackAILoading) {
+          currentLoadingOverlay = window.JobHackAILoading.show(message, 'main-loading-overlay');
+        }
+        return;
       }
+      
+      // For initial loads ("Analyzing") - use skeleton loading instead of overlay
+      // This provides better UX with contextual placeholders that match the final content layout
+      const userPlan = getCurrentUserPlan();
+      const willGetFeedback = ['trial', 'essential', 'pro', 'premium'].includes(userPlan);
+      
+      // Show skeletons for initial analysis
+      showSkeletons(willGetFeedback);
+      hideHeaderSkeleton();
+      
+      // Store cleanup function (skeleton hide function)
+      currentLoadingOverlay = () => {
+        hideSkeletons();
+      };
     }
 
     function hideLoadingState() {
-      if (window.JobHackAILoading) {
-        window.JobHackAILoading.hide('main-loading-overlay');
+      if (currentLoadingOverlay) {
+        if (typeof currentLoadingOverlay === 'function') {
+          // It's a skeleton cleanup function
+          currentLoadingOverlay();
+        } else if (window.JobHackAILoading) {
+          // It's an overlay element, hide it
+          window.JobHackAILoading.hide('main-loading-overlay');
+        }
         currentLoadingOverlay = null;
       }
     }
