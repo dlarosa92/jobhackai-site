@@ -312,7 +312,7 @@ export async function generateATSFeedback(resumeText, ruleBasedScores, jobTitle,
   // Respect env-driven config with sensible defaults
   const maxOutputTokens = Number(env.OPENAI_MAX_TOKENS_ATS) > 0
     ? Number(env.OPENAI_MAX_TOKENS_ATS)
-    : 2000; // Increased from 800 to handle full role-specific feedback structure
+    : 3500; // Increased from 2000 to prevent truncation - roleSpecificFeedback needs ~2000 tokens alone
 
   const temperature = Number.isFinite(Number(env.OPENAI_TEMPERATURE_SCORING))
     ? Number(env.OPENAI_TEMPERATURE_SCORING)
