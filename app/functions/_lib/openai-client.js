@@ -343,9 +343,11 @@ RESUME-AWARE CONSTRAINT (CRITICAL):
 - If a section is already strong, say so—don't invent problems.
 - Base every diagnosis and tip on SPECIFIC text from the resume.
 
-ROLE-SPECIFIC FEEDBACK:
+ROLE-SPECIFIC FEEDBACK (REQUIRED):
+You MUST generate role-specific feedback for all 5 sections. This is a required field in the response schema.
 Evaluate 5 sections for role fit: Header & Contact, Professional Summary, Experience, Skills, Education.
-For each: fitLevel (big_impact|tunable|strong), diagnosis (one sentence, specific to THIS resume), 3 tips (grounded in actual content), rewritePreview (improve what exists, never fabricate).
+For each: fitLevel (big_impact|tunable|strong), diagnosis (one sentence, specific to THIS resume), exactly 3 tips (grounded in actual content), rewritePreview (improve what exists, never fabricate).
+You MUST return all 5 sections - missing sections will cause the response to be rejected.
 
 ${roleContext}
 

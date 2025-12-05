@@ -595,13 +595,37 @@ export async function onRequest(context) {
             ? JSON.parse(aiResponse.content)
             : aiResponse.content;
           
-          // Validate structure
-          if (aiFeedback && aiFeedback.atsRubric) {
-            break; // Success, exit retry loop
+          // Validate structure - check ALL required fields before exiting retry loop
+          // This prevents accepting incomplete responses that are missing roleSpecificFeedback
+          const hasAtsRubric = aiFeedback && 
+                               Array.isArray(aiFeedback.atsRubric) && 
+                               aiFeedback.atsRubric.length > 0;
+          
+          const hasRoleSpecificFeedback = aiFeedback?.roleSpecificFeedback &&
+                                         aiFeedback.roleSpecificFeedback.targetRoleUsed !== undefined &&
+                                         Array.isArray(aiFeedback.roleSpecificFeedback.sections) &&
+                                         aiFeedback.roleSpecificFeedback.sections.length === 5;
+          
+          const hasAtsIssues = aiFeedback?.atsIssues && 
+                              Array.isArray(aiFeedback.atsIssues);
+          
+          if (hasAtsRubric && hasRoleSpecificFeedback && hasAtsIssues) {
+            // All required fields present - success, exit retry loop
+            break;
           } else {
-            // Invalid structure - treat as error
-            lastError = new Error('AI response missing required atsRubric structure');
-            console.error(`[RESUME-FEEDBACK] Invalid AI response structure (attempt ${attempt + 1}/${maxRetries})`);
+            // Invalid structure - log what's missing for diagnostics
+            lastError = new Error('AI response missing required fields');
+            console.error(`[RESUME-FEEDBACK] Invalid AI response structure (attempt ${attempt + 1}/${maxRetries})`, {
+              requestId,
+              hasAtsRubric,
+              hasRoleSpecificFeedback,
+              hasAtsIssues,
+              roleSpecificFeedbackType: typeof aiFeedback?.roleSpecificFeedback,
+              roleSpecificFeedbackKeys: aiFeedback?.roleSpecificFeedback ? Object.keys(aiFeedback.roleSpecificFeedback) : null,
+              sectionsLength: aiFeedback?.roleSpecificFeedback?.sections?.length,
+              atsRubricLength: aiFeedback?.atsRubric?.length,
+              atsIssuesLength: aiFeedback?.atsIssues?.length
+            });
             if (attempt < maxRetries - 1) {
               const waitTime = Math.pow(2, attempt) * 1000;
               await new Promise(resolve => setTimeout(resolve, waitTime));
@@ -772,16 +796,45 @@ export async function onRequest(context) {
       };
     })();
 
-    // Cache result (24 hours)
+    // Cache result (24 hours) - only cache complete results to prevent serving incomplete data
     if (env.JOBHACKAI_KV) {
-      const cacheHash = await hashString(`${sanitizedResumeId}:${normalizedJobTitle}:feedback`);
-      const cacheKey = `feedbackCache:${cacheHash}`;
-      await env.JOBHACKAI_KV.put(cacheKey, JSON.stringify({
-        result,
-        timestamp: Date.now()
-      }), {
-        expirationTtl: 86400 // 24 hours
-      });
+      // Validate result is complete before caching
+      const isComplete = result.atsRubric && 
+                        Array.isArray(result.atsRubric) &&
+                        result.atsRubric.length > 0 &&
+                        result.roleSpecificFeedback &&
+                        result.roleSpecificFeedback.targetRoleUsed !== undefined &&
+                        Array.isArray(result.roleSpecificFeedback.sections) &&
+                        result.roleSpecificFeedback.sections.length === 5 &&
+                        result.atsIssues &&
+                        Array.isArray(result.atsIssues);
+      
+      if (isComplete) {
+        const cacheHash = await hashString(`${sanitizedResumeId}:${normalizedJobTitle}:feedback`);
+        const cacheKey = `feedbackCache:${cacheHash}`;
+        await env.JOBHACKAI_KV.put(cacheKey, JSON.stringify({
+          result,
+          timestamp: Date.now()
+        }), {
+          expirationTtl: 86400 // 24 hours
+        });
+        console.log('[RESUME-FEEDBACK] Cached complete result', { 
+          requestId,
+          resumeId: sanitizedResumeId,
+          jobTitle: normalizedJobTitle
+        });
+      } else {
+        console.warn('[RESUME-FEEDBACK] Skipping cache - incomplete result', {
+          requestId,
+          resumeId: sanitizedResumeId,
+          hasAtsRubric: !!result.atsRubric,
+          atsRubricLength: result.atsRubric?.length,
+          hasRoleSpecificFeedback: !!result.roleSpecificFeedback,
+          roleSpecificFeedbackSections: result.roleSpecificFeedback?.sections?.length,
+          hasAtsIssues: !!result.atsIssues,
+          atsIssuesLength: result.atsIssues?.length
+        });
+      }
     }
 
     // Update throttles and usage counters (for cache misses)
