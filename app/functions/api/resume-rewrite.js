@@ -341,27 +341,31 @@ export async function onRequest(context) {
 
             if (latestFeedback) {
               let parsed = {};
+              let parseFailed = false;
               try {
                 parsed = latestFeedback.feedback_json ? JSON.parse(latestFeedback.feedback_json) : {};
               } catch (parseError) {
-                console.warn('[RESUME-REWRITE] Failed to parse existing feedback_json, overwriting with new structure', {
+                parseFailed = true;
+                console.warn('[RESUME-REWRITE] Failed to parse existing feedback_json; skipping rewrite update to avoid data loss', {
                   requestId,
                   error: parseError.message
                 });
               }
 
-              parsed.rewrittenResume = rewrittenText;
-              parsed.rewriteChangeSummary = changeSummary;
+              if (!parseFailed) {
+                parsed.rewrittenResume = rewrittenText;
+                parsed.rewriteChangeSummary = changeSummary;
 
-              await env.DB.prepare(
-                `UPDATE feedback_sessions SET feedback_json = ? WHERE id = ?`
-              ).bind(JSON.stringify(parsed), latestFeedback.id).run();
+                await env.DB.prepare(
+                  `UPDATE feedback_sessions SET feedback_json = ? WHERE id = ?`
+                ).bind(JSON.stringify(parsed), latestFeedback.id).run();
 
-              console.log('[RESUME-REWRITE] Updated feedback_session with rewrite fields', {
-                requestId,
-                resumeSessionId: resumeSession.id,
-                feedbackSessionId: latestFeedback.id
-              });
+                console.log('[RESUME-REWRITE] Updated feedback_session with rewrite fields', {
+                  requestId,
+                  resumeSessionId: resumeSession.id,
+                  feedbackSessionId: latestFeedback.id
+                });
+              }
             } else {
               console.log('[RESUME-REWRITE] No feedback_session found to attach rewrite (resume_session exists)', {
                 requestId,
