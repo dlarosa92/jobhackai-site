@@ -607,7 +607,18 @@ export async function onRequest(context) {
                     resumeSessionId: resumeSession.id
                   });
 
-                  return successResponse(feedback, 200, origin, env, requestId);
+                  const sessionId = resumeSession ? String(resumeSession.id) : null;
+                  const meta = {
+                    createdAt: latestFeedback?.created_at || resumeSession?.created_at || new Date().toISOString(),
+                    title: resumeSession?.title || normalizedJobTitle || null,
+                    role: resumeSession?.role || normalizedJobTitle || null
+                  };
+
+                  return successResponse({
+                    ...feedback,
+                    sessionId,
+                    meta
+                  }, 200, origin, env, requestId);
                 } else {
                   console.log('[RESUME-FEEDBACK] Ignoring D1 feedback session (role mismatch or invalid structure)', {
                     requestId,
