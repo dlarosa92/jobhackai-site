@@ -2535,13 +2535,7 @@
                 localStorage.setItem('lastATSScore', result.score.toString());
                 localStorage.setItem('lastATSSummary', summary);
                 
-                // Show feedback content container now that we have ATS results
-                const feedbackContentEl = document.getElementById('rf-feedback-content');
-                if (feedbackContentEl) {
-                  feedbackContentEl.style.display = 'block';
-                }
-                
-                // Update UI immediately
+                // Update UI immediately (progress ring, placeholder, etc.)
                 updateProgressRing(result.score);
                 hidePlaceholder();
                 const placeholderCta = document.getElementById('rf-placeholder-cta');
@@ -2607,19 +2601,64 @@
                 ];
                 updateRubricGrid(rubric);
                 
-                // Hide ATS skeleton now that real content is ready
-                hideATSSkeleton();
-                
-                // Make rubric grid visible
-                const rubricGrid = document.getElementById('rf-rubric-grid');
-                if (rubricGrid) {
-                  rubricGrid.style.display = 'grid';
-                }
-                
-                // Trigger fade transition for ATS feedback
-                setTimeout(() => {
-                  showATSFeedback();
-                }, 100);
+                // CRITICAL FIX: Hide ALL skeletons first, wait for fade to complete, THEN show content
+                // This prevents content from appearing while skeletons are still fading (overlap issue)
+                hideSkeletons().then((result) => {
+                  // CRITICAL: Check if this operation was cancelled (e.g., new upload started)
+                  // If cancelled, don't execute callback to prevent stale content from showing
+                  if (result && result.cancelled) {
+                    return; // Operation was cancelled - exit early
+                  }
+                  
+                  // Additional defensive check: verify skeleton container is not currently showing
+                  // This prevents stale callbacks from disrupting fresh loading states
+                  const skeletonContainer = document.getElementById('rf-skeleton-container');
+                  if (skeletonContainer && skeletonContainer.style.display === 'block') {
+                    // Skeletons are showing again (new upload started) - abort this stale operation
+                    return;
+                  }
+                  
+                  // Verify skeleton container is actually hidden (defensive check)
+                  if (skeletonContainer && skeletonContainer.style.display !== 'none') {
+                    skeletonContainer.style.display = 'none';
+                  }
+                  
+                  // NOW show content container (skeletons are guaranteed to be hidden)
+                  const feedbackContentEl = document.getElementById('rf-feedback-content');
+                  if (feedbackContentEl) {
+                    feedbackContentEl.style.display = 'block';
+                  }
+                  
+                  // Make rubric grid visible
+                  const rubricGrid = document.getElementById('rf-rubric-grid');
+                  if (rubricGrid) {
+                    rubricGrid.style.display = 'grid';
+                  }
+                  
+                  // Trigger fade transition for ATS feedback
+                  setTimeout(() => {
+                    showATSFeedback();
+                  }, 100);
+                }).catch(error => {
+                  // Fallback: If something goes wrong, show content anyway to prevent blocking
+                  console.error('[RESUME-FEEDBACK] Error hiding skeletons:', error);
+                  const skeletonContainer = document.getElementById('rf-skeleton-container');
+                  if (skeletonContainer) {
+                    skeletonContainer.style.display = 'none';
+                  }
+                  const feedbackContentEl = document.getElementById('rf-feedback-content');
+                  if (feedbackContentEl) {
+                    feedbackContentEl.style.display = 'block';
+                  }
+                  const rubricGrid = document.getElementById('rf-rubric-grid');
+                  if (rubricGrid) {
+                    rubricGrid.style.display = 'grid';
+                  }
+                  // CRITICAL: Also trigger fade transition for ATS feedback (matches success path)
+                  setTimeout(() => {
+                    showATSFeedback();
+                  }, 100);
+                });
                 
                 // Update progress status (still generating feedback or scoring, depending on plan)
                 // Use the same willGetFeedback check from earlier in the function
@@ -3798,17 +3837,29 @@
     }
 
     // Skeleton loading state management (performance-optimized, non-blocking)
-    // Store timeout ID to allow cancellation
+    // Track timeout ID and pending Promise resolvers to handle concurrent calls
     let skeletonHideTimeout = null;
+    let skeletonHideResolvers = []; // Array of pending Promise resolvers with generation IDs
+    let skeletonOperationGeneration = 0; // Generation counter to invalidate stale operations
     
     function showSkeletons(willGetFeedback = true) {
       const skeletonContainer = document.getElementById('rf-skeleton-container');
       if (skeletonContainer) {
-        // Cancel any pending hide timeout from previous operation
+        // CRITICAL: Increment generation to invalidate any pending hide operations
+        // This prevents stale Promise callbacks from executing when a new upload starts
+        skeletonOperationGeneration++;
+        
+        // Cancel any pending hide timeout and resolve all pending Promises as cancelled
         if (skeletonHideTimeout !== null) {
           clearTimeout(skeletonHideTimeout);
           skeletonHideTimeout = null;
         }
+        // Resolve all pending hide Promises with cancelled flag (operations are now stale)
+        // This ensures Promises complete but callbacks will check and exit early
+        skeletonHideResolvers.forEach(({ resolve, generation }) => {
+          resolve({ generation, cancelled: true });
+        });
+        skeletonHideResolvers = [];
         
         skeletonContainer.style.display = 'block';
         
@@ -3841,29 +3892,50 @@
     }
 
     function hideSkeletons() {
-      const skeletonContainer = document.getElementById('rf-skeleton-container');
-      if (skeletonContainer) {
-        // Cancel any pending hide timeout
-        if (skeletonHideTimeout !== null) {
-          clearTimeout(skeletonHideTimeout);
-          skeletonHideTimeout = null;
+      return new Promise((resolve) => {
+        const skeletonContainer = document.getElementById('rf-skeleton-container');
+        if (!skeletonContainer) {
+          resolve({ generation: skeletonOperationGeneration, cancelled: false });
+          return;
         }
+        
+        // Capture the current generation when this hide operation starts
+        const operationGeneration = skeletonOperationGeneration;
+        
+        // If a hide operation is already in progress, queue this resolver
+        // This prevents race conditions where concurrent calls cancel each other's timeouts
+        if (skeletonHideTimeout !== null) {
+          // Add this resolver to the queue with its generation ID
+          skeletonHideResolvers.push({ resolve, generation: operationGeneration });
+          return;
+        }
+        
+        // Start new hide operation - initialize resolver array with this one
+        skeletonHideResolvers = [{ resolve, generation: operationGeneration }];
         
         // Fade out skeletons smoothly
         const skeletons = skeletonContainer.querySelectorAll('.rf-skeleton');
         skeletons.forEach(skeleton => {
           skeleton.classList.add('hidden');
         });
-        // Remove container after fade completes
+        
+        // Remove container after fade completes, then resolve all pending Promises
         skeletonHideTimeout = setTimeout(() => {
           skeletonContainer.style.display = 'none';
           // Remove hidden class for next use
           skeletons.forEach(skeleton => {
             skeleton.classList.remove('hidden');
           });
+          
+          // Resolve ALL pending Promises with their generation IDs
+          // Callbacks will check if generation matches current before executing
+          skeletonHideResolvers.forEach(({ resolve: resolver, generation }) => {
+            resolver({ generation, cancelled: generation !== skeletonOperationGeneration });
+          });
+          skeletonHideResolvers = [];
           skeletonHideTimeout = null;
         }, 300);
-      }
+      });
     }
 
     function hideHeaderSkeleton() {
