@@ -2603,9 +2603,22 @@
                 
                 // CRITICAL FIX: Hide ALL skeletons first, wait for fade to complete, THEN show content
                 // This prevents content from appearing while skeletons are still fading (overlap issue)
-                hideSkeletons().then(() => {
-                  // Verify skeleton container is actually hidden (defensive check)
+                hideSkeletons().then((result) => {
+                  // CRITICAL: Check if this operation was cancelled (e.g., new upload started)
+                  // If cancelled, don't execute callback to prevent stale content from showing
+                  if (result && result.cancelled) {
+                    return; // Operation was cancelled - exit early
+                  }
+                  
+                  // Additional defensive check: verify skeleton container is not currently showing
+                  // This prevents stale callbacks from disrupting fresh loading states
                   const skeletonContainer = document.getElementById('rf-skeleton-container');
+                  if (skeletonContainer && skeletonContainer.style.display === 'block') {
+                    // Skeletons are showing again (new upload started) - abort this stale operation
+                    return;
+                  }
+                  
+                  // Verify skeleton container is actually hidden (defensive check)
                   if (skeletonContainer && skeletonContainer.style.display !== 'none') {
                     skeletonContainer.style.display = 'none';
                   }
@@ -3826,18 +3839,26 @@
     // Skeleton loading state management (performance-optimized, non-blocking)
     // Track timeout ID and pending Promise resolvers to handle concurrent calls
     let skeletonHideTimeout = null;
-    let skeletonHideResolvers = []; // Array of pending Promise resolvers
+    let skeletonHideResolvers = []; // Array of pending Promise resolvers with generation IDs
+    let skeletonOperationGeneration = 0; // Generation counter to invalidate stale operations
     
     function showSkeletons(willGetFeedback = true) {
       const skeletonContainer = document.getElementById('rf-skeleton-container');
       if (skeletonContainer) {
-        // Cancel any pending hide timeout and resolve all pending Promises immediately
+        // CRITICAL: Increment generation to invalidate any pending hide operations
+        // This prevents stale Promise callbacks from executing when a new upload starts
+        skeletonOperationGeneration++;
+        
+        // Cancel any pending hide timeout and resolve all pending Promises as cancelled
         if (skeletonHideTimeout !== null) {
           clearTimeout(skeletonHideTimeout);
           skeletonHideTimeout = null;
         }
-        // Resolve all pending hide Promises since we're showing skeletons again
-        skeletonHideResolvers.forEach(resolve => resolve());
+        // Resolve all pending hide Promises with cancelled flag (operations are now stale)
+        // This ensures Promises complete but callbacks will check and exit early
+        skeletonHideResolvers.forEach(({ resolve, generation }) => {
+          resolve({ generation, cancelled: true });
+        });
         skeletonHideResolvers = [];
         
         skeletonContainer.style.display = 'block';
@@ -3874,20 +3895,23 @@
       return new Promise((resolve) => {
         const skeletonContainer = document.getElementById('rf-skeleton-container');
         if (!skeletonContainer) {
-          resolve();
+          resolve({ generation: skeletonOperationGeneration, cancelled: false });
           return;
         }
+        
+        // Capture the current generation when this hide operation starts
+        const operationGeneration = skeletonOperationGeneration;
         
         // If a hide operation is already in progress, queue this resolver
         // This prevents race conditions where concurrent calls cancel each other's timeouts
         if (skeletonHideTimeout !== null) {
-          // Add this resolver to the queue - it will be resolved when the current hide completes
-          skeletonHideResolvers.push(resolve);
+          // Add this resolver to the queue with its generation ID
+          skeletonHideResolvers.push({ resolve, generation: operationGeneration });
           return;
         }
         
         // Start new hide operation - initialize resolver array with this one
-        skeletonHideResolvers = [resolve];
+        skeletonHideResolvers = [{ resolve, generation: operationGeneration }];
         
         // Fade out skeletons smoothly
         const skeletons = skeletonContainer.querySelectorAll('.rf-skeleton');
@@ -3903,8 +3927,11 @@
             skeleton.classList.remove('hidden');
           });
           
-          // Resolve ALL pending Promises (handles concurrent calls)
-          skeletonHideResolvers.forEach(resolver => resolver());
+          // Resolve ALL pending Promises with their generation IDs
+          // Callbacks will check if generation matches current before executing
+          skeletonHideResolvers.forEach(({ resolve: resolver, generation }) => {
+            resolver({ generation, cancelled: generation !== skeletonOperationGeneration });
+          });
           skeletonHideResolvers = [];
           skeletonHideTimeout = null;
         }, 300);
