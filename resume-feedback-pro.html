@@ -335,6 +335,27 @@
       min-width: 32px;
       text-align: right;
     }
+    .rf-history-actions {
+      display: none;
+      margin-top: 0.75rem;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+    }
+    .rf-history-count {
+      color: var(--color-text-muted);
+      font-size: 0.9rem;
+    }
+    .rf-btn-link {
+      background: none;
+      border: none;
+      color: var(--color-text-secondary);
+      text-decoration: underline;
+      padding: 0.25rem 0.15rem;
+      cursor: pointer;
+      font-size: 0.9rem;
+    }
     .rf-history-icon {
       width: 40px;
       height: 40px;
@@ -4806,10 +4827,17 @@
     /**
      * Render history items to the DOM
      */
+    const HISTORY_PAGE_SIZE = 10;
+    let _historyVisibleCount = HISTORY_PAGE_SIZE;
+    
     function renderHistoryItems(items) {
       const listEl = document.getElementById('rf-history-list');
       const emptyEl = document.getElementById('rf-history-empty');
       const loadingEl = document.getElementById('rf-history-loading');
+      const actionsEl = document.getElementById('rf-history-actions');
+      const countEl = document.getElementById('rf-history-count');
+      const showMoreBtn = document.getElementById('rf-history-show-more');
+      const showLessBtn = document.getElementById('rf-history-show-less');
       
       if (!listEl) return;
       
@@ -4819,13 +4847,17 @@
       if (!items || items.length === 0) {
         listEl.style.display = 'none';
         if (emptyEl) emptyEl.style.display = 'block';
+        if (actionsEl) actionsEl.style.display = 'none';
         return;
       }
       
       if (emptyEl) emptyEl.style.display = 'none';
       
+      // Limit visible items to current page size
+      const visibleItems = items.slice(0, _historyVisibleCount);
+      
       // Build history list HTML with clickable items and atsScore
-      listEl.innerHTML = items.map(item => `
+      listEl.innerHTML = visibleItems.map(item => `
         <div class="rf-history-item" data-session-id="${item.sessionId || ''}" title="Click to view this analysis">
           <div class="rf-history-icon">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -4858,6 +4890,29 @@
           }
         });
       });
+      
+      // Show/hide actions (Show more / Show less)
+      const hasMore = items.length > _historyVisibleCount;
+      const canShowLess = _historyVisibleCount > HISTORY_PAGE_SIZE;
+      
+      if (actionsEl) actionsEl.style.display = (hasMore || canShowLess) ? 'flex' : 'none';
+      if (countEl) countEl.textContent = `Showing ${Math.min(_historyVisibleCount, items.length)} of ${items.length}`;
+      
+      if (showMoreBtn) {
+        showMoreBtn.style.display = hasMore ? 'inline-flex' : 'none';
+        showMoreBtn.onclick = () => {
+          _historyVisibleCount = Math.min(_historyVisibleCount + HISTORY_PAGE_SIZE, _historyItems.length);
+          renderHistoryItems(_historyItems);
+        };
+      }
+      
+      if (showLessBtn) {
+        showLessBtn.style.display = canShowLess ? 'inline-flex' : 'none';
+        showLessBtn.onclick = () => {
+          _historyVisibleCount = HISTORY_PAGE_SIZE;
+          renderHistoryItems(_historyItems);
+        };
+      }
     }
     
     /**
@@ -5235,6 +5290,7 @@
         
         const data = await response.json();
         _historyItems = data.items || [];
+        _historyVisibleCount = HISTORY_PAGE_SIZE;
         
         console.log('[RESUME-FEEDBACK-HISTORY] Loaded history:', _historyItems.length, 'items');
         renderHistoryItems(_historyItems);
@@ -5615,6 +5671,14 @@
               </svg>
               <div style="font-weight:600;margin-bottom:0.25rem;">No history yet</div>
               <div>Upload a resume and run feedback to see your history here.</div>
+            </div>
+            <!-- Actions: show more/less -->
+            <div class="rf-history-actions" id="rf-history-actions">
+              <div class="rf-history-count" id="rf-history-count">Showing 0 of 0</div>
+              <div style="display:flex;gap:0.4rem;align-items:center;flex-wrap:wrap;">
+                <button class="rf-btn-secondary" id="rf-history-show-more" type="button">Show more</button>
+                <button class="rf-btn-link" id="rf-history-show-less" type="button">Show less</button>
+              </div>
             </div>
           </div>
         </section>
