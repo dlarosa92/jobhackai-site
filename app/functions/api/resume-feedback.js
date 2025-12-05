@@ -611,6 +611,8 @@ export async function onRequest(context) {
               missing: validation.missing,
               ...validation.details
             });
+            // Reset aiFeedback to null to prevent using incomplete response
+            aiFeedback = null;
             if (attempt < maxRetries - 1) {
               const waitTime = Math.pow(2, attempt) * 1000;
               await new Promise(resolve => setTimeout(resolve, waitTime));
