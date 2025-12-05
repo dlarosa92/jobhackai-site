@@ -111,8 +111,15 @@ export async function onRequest(context) {
     }
 
     let atsScore = row.ats_score;
-    if ((atsScore === null || atsScore === undefined) && feedbackData?.atsRubric) {
-      atsScore = Math.round(feedbackData.atsRubric.reduce((sum, item) => sum + (item.score || 0), 0));
+    // Do not reconstruct from rubric (category weights differ). Prefer canonical overall score if present.
+    if (atsScore === null || atsScore === undefined) {
+      if (feedbackData?.overallScore !== null && feedbackData?.overallScore !== undefined) {
+        atsScore = feedbackData.overallScore;
+      } else if (feedbackData?.aiFeedback?.overallScore !== null && feedbackData?.aiFeedback?.overallScore !== undefined) {
+        atsScore = feedbackData.aiFeedback.overallScore;
+      } else {
+        atsScore = null;
+      }
     }
 
     const plan = await getUserPlan(uid, env);

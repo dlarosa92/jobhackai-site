@@ -546,67 +546,84 @@ export async function onRequest(context) {
 
     // --- D1 feedback reuse (source of truth) ---
     if (d1User && isD1Available(env)) {
-      try {
-        if (!resumeSession) {
-          resumeSession = await getResumeSessionByResumeId(env, d1User.id, sanitizedResumeId);
-        }
+      if (!requestedRoleNormalized) {
+        console.log('[RESUME-FEEDBACK] Skipping D1 feedback reuse because no target role was provided', { requestId });
+      } else {
+        try {
+          if (!resumeSession) {
+            resumeSession = await getResumeSessionByResumeId(env, d1User.id, sanitizedResumeId);
+          }
 
-        if (resumeSession && env.DB) {
-          const latestFeedback = await env.DB.prepare(`
-            SELECT feedback_json, created_at 
-            FROM feedback_sessions 
-            WHERE resume_session_id = ? 
-            ORDER BY created_at DESC 
-            LIMIT 1
-          `).bind(resumeSession.id).first();
+          if (resumeSession && env.DB) {
+            const latestFeedback = await env.DB.prepare(`
+              SELECT feedback_json, created_at 
+              FROM feedback_sessions 
+              WHERE resume_session_id = ? 
+              ORDER BY created_at DESC 
+              LIMIT 1
+            `).bind(resumeSession.id).first();
 
-          if (latestFeedback?.feedback_json) {
-            const feedback = JSON.parse(latestFeedback.feedback_json);
-            const storedRole = normalizeRole(
-              resumeSession.role || feedback?.roleSpecificFeedback?.targetRoleUsed || null
-            );
-            const roleMatches =
-              (requestedRoleNormalized === storedRole) ||
-              (!requestedRoleNormalized && !storedRole);
-
-            const feedbackValid = isValidFeedbackResult(feedback, {
-              requireRoleSpecific: !!requestedRoleNormalized
-            });
-
-            if (roleMatches && feedbackValid) {
-              // Optionally re-seed KV for future quick hits
-              if (env.JOBHACKAI_KV) {
-                const cacheHash = await hashString(`${sanitizedResumeId}:${normalizedJobTitle}:feedback`);
-                await env.JOBHACKAI_KV.put(
-                  `feedbackCache:${cacheHash}`,
-                  JSON.stringify({ result: feedback, timestamp: Date.now() }),
-                  { expirationTtl: 86400 }
-                );
+            if (latestFeedback?.feedback_json) {
+              let feedback = null;
+              try {
+                feedback = JSON.parse(latestFeedback.feedback_json);
+              } catch (parseError) {
+                console.warn('[RESUME-FEEDBACK] Ignoring D1 feedback session due to JSON parse error', {
+                  requestId,
+                  error: parseError.message
+                });
               }
 
-              // Count usage for D1-served responses
-              await updateUsageCounters(uid, sanitizedResumeId, effectivePlan, env);
+              if (feedback) {
+                const storedRole = normalizeRole(
+                  resumeSession.role || feedback?.roleSpecificFeedback?.targetRoleUsed || null
+                );
+                const roleMatches = requestedRoleNormalized === storedRole;
 
-              console.log('[RESUME-FEEDBACK] Using D1 feedback session', {
-                requestId,
-                resumeSessionId: resumeSession.id
-              });
+                const feedbackValid = isValidFeedbackResult(feedback, {
+                  requireRoleSpecific: !!requestedRoleNormalized
+                });
 
-              return successResponse(feedback, 200, origin, env, requestId);
-            } else {
-              console.log('[RESUME-FEEDBACK] Ignoring D1 feedback session (role mismatch or invalid structure)', {
-                requestId,
-                roleMatches,
-                hasRoleSpecificFeedback: !!feedback?.roleSpecificFeedback
-              });
+                if (roleMatches && feedbackValid) {
+                  // Optionally re-seed KV for future quick hits (only if valid)
+                  if (env.JOBHACKAI_KV) {
+                    const cacheHash = await hashString(`${sanitizedResumeId}:${normalizedJobTitle}:feedback`);
+                    if (isValidFeedbackResult(feedback, { requireRoleSpecific: !!requestedRoleNormalized })) {
+                      await env.JOBHACKAI_KV.put(
+                        `feedbackCache:${cacheHash}`,
+                        JSON.stringify({ result: feedback, timestamp: Date.now() }),
+                        { expirationTtl: 86400 }
+                      );
+                    } else {
+                      console.warn('[RESUME-FEEDBACK] D1 feedback failed validation; not re-seeding KV cache', { requestId });
+                    }
+                  }
+
+                  // Count usage for D1-served responses
+                  await updateUsageCounters(uid, sanitizedResumeId, effectivePlan, env);
+
+                  console.log('[RESUME-FEEDBACK] Using D1 feedback session', {
+                    requestId,
+                    resumeSessionId: resumeSession.id
+                  });
+
+                  return successResponse(feedback, 200, origin, env, requestId);
+                } else {
+                  console.log('[RESUME-FEEDBACK] Ignoring D1 feedback session (role mismatch or invalid structure)', {
+                    requestId,
+                    roleMatches,
+                    hasRoleSpecificFeedback: !!feedback?.roleSpecificFeedback
+                  });
+                }
+              }
             }
           }
+        } catch (d1FeedbackError) {
+          console.warn('[RESUME-FEEDBACK] D1 feedback lookup failed (non-fatal)', {
+            requestId,
+            error: d1FeedbackError.message
+          });
         }
-      } catch (d1FeedbackError) {
-        console.warn('[RESUME-FEEDBACK] D1 feedback lookup failed (non-fatal)', {
-          requestId,
-          error: d1FeedbackError.message
-        });
       }
     }
 

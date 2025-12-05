@@ -2163,7 +2163,7 @@
                 roleSpecificFeedback: feedbackResult.roleSpecificFeedback || null
               });
 
-              // Clear role input after successful analysis (new data)
+              // Clear target role ONLY after a successful new analysis. History clicks must NOT change this input.
               const jobTitleInput = document.getElementById('rf-job-title');
               if (jobTitleInput) {
                 jobTitleInput.value = '';
@@ -3347,7 +3347,7 @@
               roleSpecificFeedback: feedbackResult.roleSpecificFeedback || null
             });
 
-            // Clear role input after successful analysis (new data)
+            // Clear target role ONLY after a successful new analysis. History clicks must NOT change this input.
             const jobTitleInput = document.getElementById('rf-job-title');
             if (jobTitleInput) {
               jobTitleInput.value = '';
@@ -5013,23 +5013,13 @@
      * Restore full page state from history data (D1-only, NO OpenAI)
      */
     function restorePageStateFromHistory(data) {
-      // Update ATS score ring
+      // Update ATS score ring using shared logic (clamps/guards inside)
       if (data.atsScore !== null && data.atsScore !== undefined) {
-        const score = data.atsScore;
-        const scoreText = document.querySelector('.rf-progress-ring text');
-        const scoreRing = document.querySelector('.rf-progress-ring circle:nth-child(2)');
-        
-        if (scoreText) scoreText.textContent = score + '%';
-        if (scoreRing) {
-          const circumference = 2 * Math.PI * 36;
-          const offset = circumference - (score / 100) * circumference;
-          scoreRing.style.strokeDashoffset = offset;
-        }
-        
+        updateProgressRing(data.atsScore);
         // Update score description
         const scoreDesc = document.getElementById('rf-score-desc');
         if (scoreDesc && data.role) {
-          scoreDesc.innerHTML = `Your resume scored <strong>${score}/100</strong> for ${escapeHtml(data.role)} roles.`;
+          scoreDesc.innerHTML = `Your resume scored <strong>${data.atsScore}/100</strong> for ${escapeHtml(data.role)} roles.`;
         }
       }
       
