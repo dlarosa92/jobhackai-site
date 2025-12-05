@@ -80,3 +80,40 @@ export function validateFeedbackResult(result) {
   return validateAIFeedback(result, false);
 }
 
+/**
+ * Normalize a role string for comparison
+ * @param {string|null|undefined} role 
+ * @returns {string|null}
+ */
+export function normalizeRole(role) {
+  if (!role) return null;
+  return role.trim().toLowerCase();
+}
+
+/**
+ * Lightweight validity check for full feedback result objects
+ * Used for KV/D1 reads and writes to ensure we only serve/store complete results
+ * @param {Object} result 
+ * @param {Object} opts 
+ * @param {boolean} opts.requireRoleSpecific - whether roleSpecificFeedback must be present/complete
+ * @returns {boolean}
+ */
+export function isValidFeedbackResult(result, { requireRoleSpecific = false } = {}) {
+  if (!result || typeof result !== 'object') return false;
+
+  const hasAtsRubric = Array.isArray(result.atsRubric) && result.atsRubric.length > 0;
+  const hasAtsIssues = Array.isArray(result.atsIssues);
+
+  const rsf = result.roleSpecificFeedback;
+  const rsfIsObject = rsf && typeof rsf === 'object' && !Array.isArray(rsf);
+  const hasRoleSpecificFeedback =
+    rsfIsObject &&
+    rsf.targetRoleUsed !== undefined &&
+    Array.isArray(rsf.sections) &&
+    rsf.sections.length === 5;
+
+  const roleSpecificOk = requireRoleSpecific ? hasRoleSpecificFeedback : true;
+
+  return hasAtsRubric && hasAtsIssues && roleSpecificOk;
+}
+

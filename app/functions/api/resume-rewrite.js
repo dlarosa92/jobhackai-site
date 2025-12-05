@@ -5,6 +5,7 @@ import { getBearer, verifyFirebaseIdToken } from '../_lib/firebase-auth.js';
 import { generateResumeRewrite } from '../_lib/openai-client.js';
 import { errorResponse, successResponse, generateRequestId } from '../_lib/error-handler.js';
 import { sanitizeJobTitle, sanitizeResumeId, sanitizeSection } from '../_lib/input-sanitizer.js';
+import { getOrCreateUserByAuthId, getResumeSessionByResumeId, isD1Available } from '../_lib/db.js';
 
 function corsHeaders(origin, env) {
   const allowedOrigins = [
@@ -65,7 +66,7 @@ export async function onRequest(context) {
       return errorResponse('Unauthorized', 401, origin, env, requestId);
     }
 
-    const { uid } = await verifyFirebaseIdToken(token, env.FIREBASE_PROJECT_ID);
+    const { uid, payload } = await verifyFirebaseIdToken(token, env.FIREBASE_PROJECT_ID);
     const plan = await getUserPlan(uid, env);
 
     if (plan !== 'pro' && plan !== 'premium') {
@@ -322,6 +323,65 @@ export async function onRequest(context) {
     }
 
     console.log('[RESUME-REWRITE] Success', { requestId, uid, resumeId: sanitizedResumeId, tokenUsage });
+
+    // Persist rewrite into latest feedback_session (Pro/Premium only, D1 best effort)
+    if (isD1Available(env)) {
+      try {
+        const d1User = await getOrCreateUserByAuthId(env, uid, payload?.email || null);
+        if (d1User && env.DB) {
+          const resumeSession = await getResumeSessionByResumeId(env, d1User.id, sanitizedResumeId);
+          if (resumeSession) {
+            const latestFeedback = await env.DB.prepare(`
+              SELECT id, feedback_json 
+              FROM feedback_sessions 
+              WHERE resume_session_id = ? 
+              ORDER BY created_at DESC 
+              LIMIT 1
+            `).bind(resumeSession.id).first();
+
+            if (latestFeedback) {
+              let parsed = {};
+              try {
+                parsed = latestFeedback.feedback_json ? JSON.parse(latestFeedback.feedback_json) : {};
+              } catch (parseError) {
+                console.warn('[RESUME-REWRITE] Failed to parse existing feedback_json, overwriting with new structure', {
+                  requestId,
+                  error: parseError.message
+                });
+              }
+
+              parsed.rewrittenResume = rewrittenText;
+              parsed.rewriteChangeSummary = changeSummary;
+
+              await env.DB.prepare(
+                `UPDATE feedback_sessions SET feedback_json = ? WHERE id = ?`
+              ).bind(JSON.stringify(parsed), latestFeedback.id).run();
+
+              console.log('[RESUME-REWRITE] Updated feedback_session with rewrite fields', {
+                requestId,
+                resumeSessionId: resumeSession.id,
+                feedbackSessionId: latestFeedback.id
+              });
+            } else {
+              console.log('[RESUME-REWRITE] No feedback_session found to attach rewrite (resume_session exists)', {
+                requestId,
+                resumeSessionId: resumeSession.id
+              });
+            }
+          } else {
+            console.log('[RESUME-REWRITE] No resume_session found to attach rewrite', {
+              requestId,
+              resumeId: sanitizedResumeId
+            });
+          }
+        }
+      } catch (d1Error) {
+        console.warn('[RESUME-REWRITE] Failed to persist rewrite to D1 (non-blocking)', {
+          requestId,
+          error: d1Error.message
+        });
+      }
+    }
 
     return successResponse({
       tokenUsage: tokenUsage,

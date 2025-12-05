@@ -2000,6 +2000,80 @@
         }
       }
       
+    async function fetchLatestFeedbackFromD1() {
+      try {
+        const token = await getAuthToken();
+        const resp = await fetch('/api/resume-feedback/latest', {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+        if (!resp.ok) {
+          console.warn('[RESUME-FEEDBACK] Latest endpoint returned non-200', resp.status);
+          return;
+        }
+        const data = await resp.json();
+        if (data?.latest) {
+          updateContextBarFromLatest(data.latest);
+        } else {
+          hideContextBar();
+        }
+      } catch (err) {
+        console.warn('[RESUME-FEEDBACK] Failed to fetch latest feedback from D1', err);
+      }
+    }
+
+    function updateContextBarFromLatest(latest) {
+      const contextBar = document.getElementById('rf-context-bar');
+      if (!contextBar) return;
+      if (!latest) {
+        hideContextBar();
+        return;
+      }
+
+      const fileNameEl = document.getElementById('rf-context-file-name');
+      if (fileNameEl) fileNameEl.textContent = latest.title || '—';
+
+      const roleNameEl = document.getElementById('rf-context-role-name');
+      if (roleNameEl) roleNameEl.textContent = latest.role || 'Not specified';
+
+      const timeEl = document.getElementById('rf-context-time-value');
+      if (timeEl && latest.createdAt) {
+        const date = new Date(latest.createdAt);
+        const now = new Date();
+        const diffMs = now - date;
+        const diffMins = Math.floor(diffMs / 60000);
+        const diffHours = Math.floor(diffMs / 3600000);
+        const diffDays = Math.floor(diffMs / 86400000);
+
+        let timeText;
+        if (diffMins < 1) {
+          timeText = 'Just now';
+        } else if (diffMins < 60) {
+          timeText = `${diffMins} minute${diffMins !== 1 ? 's' : ''} ago`;
+        } else if (diffHours < 24) {
+          timeText = `${diffHours} hour${diffHours !== 1 ? 's' : ''} ago`;
+        } else if (diffDays === 1) {
+          timeText = 'Yesterday';
+        } else if (diffDays < 7) {
+          timeText = `${diffDays} days ago`;
+        } else {
+          timeText = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: date.getFullYear() !== now.getFullYear() ? 'numeric' : undefined });
+        }
+        timeEl.textContent = timeText;
+      }
+
+      contextBar.style.display = 'block';
+    }
+
+    function hideContextBar() {
+      const contextBar = document.getElementById('rf-context-bar');
+      if (contextBar) {
+        contextBar.style.display = 'none';
+      }
+    }
+
       // Load cached score on page load
       loadCachedATSScore().then(() => {
         // Check if we have resume data after loading
@@ -2015,6 +2089,9 @@
           const regenBtn = document.getElementById('rf-regenerate-btn');
           if (regenBtn) regenBtn.style.display = 'none';
         }
+
+        // Always refresh Last analyzed from D1 as the source of truth
+        fetchLatestFeedbackFromD1();
         
         // Attach event handlers for context bar buttons
         const rerunBtn = document.getElementById('rf-rerun-btn');
@@ -2085,6 +2162,16 @@
                 hasAtsScore,
                 roleSpecificFeedback: feedbackResult.roleSpecificFeedback || null
               });
+
+              // Clear role input after successful analysis (new data)
+              const jobTitleInput = document.getElementById('rf-job-title');
+              if (jobTitleInput) {
+                jobTitleInput.value = '';
+                currentJobTitle = '';
+              }
+
+              // Refresh Last analyzed from D1
+              fetchLatestFeedbackFromD1();
               
               // Save role-specific feedback to persistence
               // Use cached score that was already loaded above
@@ -3259,6 +3346,16 @@
               hasAtsScore,
               roleSpecificFeedback: feedbackResult.roleSpecificFeedback || null
             });
+
+            // Clear role input after successful analysis (new data)
+            const jobTitleInput = document.getElementById('rf-job-title');
+            if (jobTitleInput) {
+              jobTitleInput.value = '';
+              currentJobTitle = '';
+            }
+
+            // Refresh Last analyzed from D1
+            fetchLatestFeedbackFromD1();
             
             // Save role-specific feedback to persistence
             // Use cached score that was already loaded above
@@ -3413,7 +3510,20 @@
             // Show success toast - only claim ATS score was updated if it actually succeeded
             if (window.JobHackAIToast) {
               const scoreUpdated = roleChanged && scoreResult?.success && scoreResult?.breakdown;
-              window.JobHackAIToast.success(scoreUpdated ? 'ATS score and feedback updated!' : 'Feedback updated!');
+              const hasValidRoleFeedback = isValidRoleSpecific(feedbackResult.roleSpecificFeedback);
+
+              if (scoreUpdated && hasValidRoleFeedback) {
+                window.JobHackAIToast.success('ATS score and tailored tips updated!');
+              } else if (scoreUpdated && !hasValidRoleFeedback) {
+                window.JobHackAIToast.success('ATS score updated!');
+              } else if (!scoreUpdated && hasValidRoleFeedback) {
+                window.JobHackAIToast.success('Tailored tips updated!');
+              } else {
+                console.warn('[RESUME-FEEDBACK] Retry completed but role-specific feedback invalid; no success toast', {
+                  hasRoleSpecificFeedback: !!feedbackResult.roleSpecificFeedback,
+                  sectionsLength: feedbackResult.roleSpecificFeedback?.sections?.length
+                });
+              }
             }
 
             this.textContent = 'Regenerate Feedback';
@@ -3501,7 +3611,11 @@
       
       // FIX: Default to 0% if score is undefined or null (for new users)
       const hasResumeData = score !== undefined && score !== null;
-      const displayScore = hasResumeData ? score : 0;
+      let displayScore = hasResumeData ? score : 0;
+      if (!Number.isFinite(displayScore) || displayScore < 0 || displayScore > 100) {
+        console.warn('[ATS-DONUT] Invalid score for donut', { score: displayScore });
+        displayScore = 0;
+      }
       
       // Always show progress ring (even at 0% for new users)
       const progressRing = document.querySelector('#rf-ats-score-tile .rf-progress-ring');
@@ -3572,19 +3686,27 @@
       });
     }
 
+    function isValidRoleSpecific(roleSpecificFeedback) {
+      return roleSpecificFeedback &&
+        typeof roleSpecificFeedback === 'object' &&
+        !Array.isArray(roleSpecificFeedback) &&
+        roleSpecificFeedback.targetRoleUsed !== undefined &&
+        Array.isArray(roleSpecificFeedback.sections) &&
+        roleSpecificFeedback.sections.length === 5;
+    }
+
     function updateFeedbackGrid(roleSpecificFeedback) {
       const grid = document.getElementById('rf-feedback-grid');
       if (!grid) return;
       
       // Check if we have the new structure (object with targetRoleUsed and sections array)
-      const isNewStructure = roleSpecificFeedback && 
-                             typeof roleSpecificFeedback === 'object' &&
-                             !Array.isArray(roleSpecificFeedback) &&
-                             roleSpecificFeedback.targetRoleUsed !== undefined &&
-                             Array.isArray(roleSpecificFeedback.sections);
+      const isNewStructure = isValidRoleSpecific(roleSpecificFeedback);
       
       // Check if we have the old structure (array of items with section/score/feedback)
       const isOldStructure = roleSpecificFeedback && Array.isArray(roleSpecificFeedback) && roleSpecificFeedback.length > 0;
+      if (isOldStructure) {
+        console.warn('[RESUME-FEEDBACK] Using legacy roleSpecificFeedback array format');
+      }
       
       // Update section title and subtitle if new structure
       const roleTitleEl = document.getElementById('rf-role-title');
@@ -3698,14 +3820,12 @@
       }
 
       const rsf = roleSpecificFeedback;
-      const isNewStructure = rsf &&
-        typeof rsf === 'object' &&
-        !Array.isArray(rsf) &&
-        rsf.targetRoleUsed !== undefined &&
-        Array.isArray(rsf.sections) &&
-        rsf.sections.length > 0;
+      const isNewStructure = isValidRoleSpecific(rsf);
 
       const isOldStructure = rsf && Array.isArray(rsf) && rsf.length > 0;
+      if (isOldStructure) {
+        console.warn('[RESUME-FEEDBACK] Using legacy roleSpecificFeedback array format');
+      }
       const hasRoleSpecific = !!(isNewStructure || isOldStructure);
 
       if (!roleContainer) return;
@@ -4908,27 +5028,41 @@
         populateRoleSpecificFeedback(data.roleSpecificFeedback, data.role);
       }
       
-      // Update job title input
-      if (data.role) {
-        const jobTitleInput = document.getElementById('rf-job-title');
-        if (jobTitleInput) jobTitleInput.value = data.role;
-      }
-      
       // Update plan limit text based on current plan
       updatePlanLimitText();
       
-      // Handle rewrite data if present (Pro/Premium)
-      const userPlan = getCurrentUserPlan();
-      if (['pro', 'premium'].includes(userPlan) && data.rewrittenResume) {
-        const rewriteContent = document.getElementById('rf-rewrite-content');
-        const rewritePrompt = document.querySelector('#rf-rewrite-tile .rf-upgrade-prompt');
-        
-        if (rewriteContent) {
-          rewriteContent.style.display = 'block';
-          const rewrittenTextarea = rewriteContent.querySelectorAll('.rf-snippet-box')[1];
-          if (rewrittenTextarea) rewrittenTextarea.value = data.rewrittenResume;
+      // Handle rewrite data based on plan gating
+      const rewriteContent = document.getElementById('rf-rewrite-content');
+      const rewritePrompt = document.querySelector('#rf-rewrite-tile .rf-upgrade-prompt');
+      const rewrittenTextarea = rewriteContent ? rewriteContent.querySelectorAll('.rf-snippet-box')[1] : null;
+      const originalTextarea = rewriteContent ? rewriteContent.querySelectorAll('.rf-snippet-box')[0] : null;
+
+      if (data.rewriteLocked) {
+        if (rewriteContent) rewriteContent.style.display = 'none';
+        if (rewritePrompt) {
+          rewritePrompt.style.display = 'block';
+          const promptText = rewritePrompt.querySelector('.rf-upgrade-text');
+          if (promptText) {
+            promptText.innerHTML = 'AI resume rewrites are a Pro/Premium feature. Upgrade to unlock your detailed rewrites for this resume.';
+          }
         }
+        if (rewrittenTextarea) rewrittenTextarea.value = '';
+        if (originalTextarea && originalTextarea.value) {
+          // keep original text if present
+        }
+      } else {
         if (rewritePrompt) rewritePrompt.style.display = 'none';
+        if (rewriteContent) rewriteContent.style.display = 'block';
+
+        if (rewrittenTextarea) {
+          if (data.rewrittenResume) {
+            rewrittenTextarea.value = data.rewrittenResume;
+          } else if (data.rewriteChangeSummary) {
+            rewrittenTextarea.value = `Summary of changes:\n${Array.isArray(data.rewriteChangeSummary) ? data.rewriteChangeSummary.join('\n') : data.rewriteChangeSummary}`;
+          } else {
+            rewrittenTextarea.value = 'No rewrite available for this run yet.';
+          }
+        }
       }
     }
     

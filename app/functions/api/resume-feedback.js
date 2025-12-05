@@ -7,7 +7,7 @@ import { generateATSFeedback } from '../_lib/openai-client.js';
 import { scoreResume } from '../_lib/ats-scoring-engine.js';
 import { errorResponse, successResponse, generateRequestId } from '../_lib/error-handler.js';
 import { sanitizeJobTitle, sanitizeResumeText, sanitizeResumeId } from '../_lib/input-sanitizer.js';
-import { validateAIFeedback, validateFeedbackResult } from '../_lib/feedback-validator.js';
+import { validateAIFeedback, validateFeedbackResult, isValidFeedbackResult, normalizeRole } from '../_lib/feedback-validator.js';
 import { 
   getOrCreateUserByAuthId, 
   createResumeSession, 
@@ -220,6 +220,9 @@ export async function onRequest(context) {
     
     console.log('[RESUME-FEEDBACK] Effective plan:', { plan, effectivePlan, isDevEnvironment });
 
+    // Track resume session for reuse across D1 reads/writes
+    let resumeSession = null;
+
     // --- D1 User Resolution (best effort, non-blocking) ---
     // Resolve the authenticated user from D1 for session tracking
     // This is done early so we have user_id for all D1 operations
@@ -289,6 +292,7 @@ export async function onRequest(context) {
       return errorResponse(jobTitleValidation.error || 'Invalid job title', 400, origin, env, requestId);
     }
     const normalizedJobTitle = jobTitleValidation.sanitized;
+    const requestedRoleNormalized = normalizeRole(normalizedJobTitle || null);
 
     // Throttle check (Trial only)
     if (effectivePlan === 'trial' && env.JOBHACKAI_KV) {
@@ -362,24 +366,18 @@ export async function onRequest(context) {
         // Cache valid for 24 hours
         if (cacheAge < 86400000) {
           cachedResult = cachedData.result;
-          
-          // Validate cached result - skip if incomplete when job title is provided
-          // This prevents serving incomplete results that would prompt users to regenerate
-          // (saving tokens by avoiding unnecessary user-initiated regenerations)
-          if (normalizedJobTitle && normalizedJobTitle.trim().length > 0 && 
-              normalizedJobTitle !== 'general' && 
-              (!cachedResult.roleSpecificFeedback || 
-               (cachedResult.roleSpecificFeedback && 
-                typeof cachedResult.roleSpecificFeedback !== 'string' && // Not old array format
-                !cachedResult.roleSpecificFeedback.targetRoleUsed))) {
-            console.log(`[RESUME-FEEDBACK] Skipping incomplete cached result (missing role-specific feedback)`, {
+
+          const cacheValid = isValidFeedbackResult(cachedResult, {
+            requireRoleSpecific: !!requestedRoleNormalized
+          });
+
+          if (!cacheValid) {
+            console.log(`[RESUME-FEEDBACK] Ignoring KV feedback cache (missing/invalid)`, {
               requestId,
               resumeId: sanitizedResumeId,
-              jobTitle: normalizedJobTitle,
-              hasRoleSpecificFeedback: !!cachedResult.roleSpecificFeedback,
-              roleSpecificFeedbackType: typeof cachedResult.roleSpecificFeedback
+              jobTitle: normalizedJobTitle
             });
-            cachedResult = null; // Force regeneration to get complete result
+            cachedResult = null;
           }
         }
       }
@@ -388,7 +386,7 @@ export async function onRequest(context) {
     // If cached, still update usage counters (user is consuming the feature)
     // Then return cached result
     if (cachedResult) {
-      console.log(`[RESUME-FEEDBACK] Cache hit for ${uid}`, { requestId, resumeId: sanitizedResumeId, plan: effectivePlan });
+      console.log(`[RESUME-FEEDBACK] Using KV feedback cache hit`, { requestId, resumeId: sanitizedResumeId, plan: effectivePlan });
       
       // Update throttles and usage even for cache hits (prevents bypassing limits)
       await updateUsageCounters(uid, sanitizedResumeId, effectivePlan, env);
@@ -478,6 +476,9 @@ export async function onRequest(context) {
     if (d1User && isD1Available(env)) {
       try {
         const existingSession = await getResumeSessionByResumeId(env, d1User.id, sanitizedResumeId);
+        if (existingSession) {
+          resumeSession = existingSession;
+        }
         
         if (existingSession?.rule_based_scores_json) {
           try {
@@ -540,6 +541,72 @@ export async function onRequest(context) {
         } catch (d1Error) {
           console.warn('[RESUME-FEEDBACK] Failed to store re-scored ruleBasedScores in D1 (non-fatal):', d1Error.message);
         }
+      }
+    }
+
+    // --- D1 feedback reuse (source of truth) ---
+    if (d1User && isD1Available(env)) {
+      try {
+        if (!resumeSession) {
+          resumeSession = await getResumeSessionByResumeId(env, d1User.id, sanitizedResumeId);
+        }
+
+        if (resumeSession && env.DB) {
+          const latestFeedback = await env.DB.prepare(`
+            SELECT feedback_json, created_at 
+            FROM feedback_sessions 
+            WHERE resume_session_id = ? 
+            ORDER BY created_at DESC 
+            LIMIT 1
+          `).bind(resumeSession.id).first();
+
+          if (latestFeedback?.feedback_json) {
+            const feedback = JSON.parse(latestFeedback.feedback_json);
+            const storedRole = normalizeRole(
+              resumeSession.role || feedback?.roleSpecificFeedback?.targetRoleUsed || null
+            );
+            const roleMatches =
+              (requestedRoleNormalized === storedRole) ||
+              (!requestedRoleNormalized && !storedRole);
+
+            const feedbackValid = isValidFeedbackResult(feedback, {
+              requireRoleSpecific: !!requestedRoleNormalized
+            });
+
+            if (roleMatches && feedbackValid) {
+              // Optionally re-seed KV for future quick hits
+              if (env.JOBHACKAI_KV) {
+                const cacheHash = await hashString(`${sanitizedResumeId}:${normalizedJobTitle}:feedback`);
+                await env.JOBHACKAI_KV.put(
+                  `feedbackCache:${cacheHash}`,
+                  JSON.stringify({ result: feedback, timestamp: Date.now() }),
+                  { expirationTtl: 86400 }
+                );
+              }
+
+              // Count usage for D1-served responses
+              await updateUsageCounters(uid, sanitizedResumeId, effectivePlan, env);
+
+              console.log('[RESUME-FEEDBACK] Using D1 feedback session', {
+                requestId,
+                resumeSessionId: resumeSession.id
+              });
+
+              return successResponse(feedback, 200, origin, env, requestId);
+            } else {
+              console.log('[RESUME-FEEDBACK] Ignoring D1 feedback session (role mismatch or invalid structure)', {
+                requestId,
+                roleMatches,
+                hasRoleSpecificFeedback: !!feedback?.roleSpecificFeedback
+              });
+            }
+          }
+        }
+      } catch (d1FeedbackError) {
+        console.warn('[RESUME-FEEDBACK] D1 feedback lookup failed (non-fatal)', {
+          requestId,
+          error: d1FeedbackError.message
+        });
       }
     }
 
@@ -786,9 +853,9 @@ export async function onRequest(context) {
     // Cache result (24 hours) - only cache complete results to prevent serving incomplete data
     if (env.JOBHACKAI_KV) {
       // Validate result is complete before caching
-      const cacheValidation = validateFeedbackResult(result);
+      const cacheValid = isValidFeedbackResult(result, { requireRoleSpecific: !!requestedRoleNormalized });
       
-      if (cacheValidation.valid) {
+      if (cacheValid) {
         const cacheHash = await hashString(`${sanitizedResumeId}:${normalizedJobTitle}:feedback`);
         const cacheKey = `feedbackCache:${cacheHash}`;
         await env.JOBHACKAI_KV.put(cacheKey, JSON.stringify({
@@ -806,8 +873,7 @@ export async function onRequest(context) {
         console.warn('[RESUME-FEEDBACK] Skipping cache - incomplete result', {
           requestId,
           resumeId: sanitizedResumeId,
-          missing: cacheValidation.missing,
-          ...cacheValidation.details
+          requireRoleSpecific: !!requestedRoleNormalized
         });
       }
     }
@@ -822,7 +888,9 @@ export async function onRequest(context) {
     if (d1User && isD1Available(env)) {
       try {
         // Check if session already exists (created by /api/ats-score)
-        let resumeSession = await getResumeSessionByResumeId(env, d1User.id, sanitizedResumeId);
+        if (!resumeSession) {
+          resumeSession = await getResumeSessionByResumeId(env, d1User.id, sanitizedResumeId);
+        }
         
         if (!resumeSession) {
           // Create new session (fallback if /api/ats-score didn't create one)
