@@ -86,8 +86,10 @@ export function validateFeedbackResult(result) {
  * @returns {string|null}
  */
 export function normalizeRole(role) {
-  if (!role) return null;
-  return role.trim().toLowerCase();
+  if (role == null) return null;
+  const trimmed = role.trim();
+  if (!trimmed) return null;
+  return trimmed.toLowerCase();
 }
 
 /**

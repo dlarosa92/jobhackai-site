@@ -589,15 +589,11 @@ export async function onRequest(context) {
               // Optionally re-seed KV for future quick hits (only if valid)
               if (env.JOBHACKAI_KV) {
                 const cacheHash = await hashString(`${sanitizedResumeId}:${normalizedJobTitle}:feedback`);
-                if (feedbackValid) {
-                  await env.JOBHACKAI_KV.put(
-                    `feedbackCache:${cacheHash}`,
-                    JSON.stringify({ result: feedback, timestamp: Date.now() }),
-                    { expirationTtl: 86400 }
-                  );
-                } else {
-                  console.warn('[RESUME-FEEDBACK] D1 feedback failed validation; not re-seeding KV cache', { requestId });
-                }
+                await env.JOBHACKAI_KV.put(
+                  `feedbackCache:${cacheHash}`,
+                  JSON.stringify({ result: feedback, timestamp: Date.now() }),
+                  { expirationTtl: 86400 }
+                );
               }
 
               // Count usage for D1-served responses
