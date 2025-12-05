@@ -5309,6 +5309,13 @@
     function addHistoryItem(sessionId, meta) {
       if (!sessionId) return;
       
+      // Skip if this session already exists in the current list
+      const alreadyExists = _historyItems.some(item => item.sessionId === sessionId);
+      if (alreadyExists) {
+        console.log('[RESUME-FEEDBACK-HISTORY] Skipping duplicate history item:', sessionId);
+        return;
+      }
+      
       const newItem = {
         sessionId: sessionId,
         title: meta?.title || null,
