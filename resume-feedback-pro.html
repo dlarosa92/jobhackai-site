@@ -3667,6 +3667,25 @@
       return div.innerHTML;
     }
 
+    function formatRewriteChangeSummary(summary) {
+      if (!summary) return '';
+      if (typeof summary === 'string') return summary;
+      if (Array.isArray(summary)) return summary.join('\n');
+      if (typeof summary === 'object') {
+        const lines = [];
+        if (Array.isArray(summary.atsFixes) && summary.atsFixes.length > 0) {
+          lines.push('ATS fixes:');
+          summary.atsFixes.forEach(item => lines.push(`- ${item}`));
+        }
+        if (Array.isArray(summary.roleFixes) && summary.roleFixes.length > 0) {
+          lines.push('Role fixes:');
+          summary.roleFixes.forEach(item => lines.push(`- ${item}`));
+        }
+        return lines.join('\n');
+      }
+      return String(summary);
+    }
+
     function updateRubricGrid(rubric) {
       const grid = document.getElementById('rf-rubric-grid');
       if (!grid) return;
@@ -5058,7 +5077,10 @@
           if (data.rewrittenResume) {
             rewrittenTextarea.value = data.rewrittenResume;
           } else if (data.rewriteChangeSummary) {
-            rewrittenTextarea.value = `Summary of changes:\n${Array.isArray(data.rewriteChangeSummary) ? data.rewriteChangeSummary.join('\n') : data.rewriteChangeSummary}`;
+            const formattedSummary = formatRewriteChangeSummary(data.rewriteChangeSummary);
+            rewrittenTextarea.value = formattedSummary
+              ? `Summary of changes:\n${formattedSummary}`
+              : 'No rewrite available for this run yet.';
           } else {
             rewrittenTextarea.value = 'No rewrite available for this run yet.';
           }
