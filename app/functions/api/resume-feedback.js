@@ -582,7 +582,7 @@ export async function onRequest(context) {
             });
 
             const canReuse = feedbackValid && (
-              requestedRoleNormalized ? roleMatches : storedRole == null
+              requestedRoleNormalized ? roleMatches : (storedRole == null || storedRole === 'general')
             );
 
             if (canReuse) {
