@@ -2077,8 +2077,10 @@
                 currentJobTitle = '';
               }
 
-              // Refresh Last analyzed from D1
-              fetchLatestFeedbackFromD1();
+              // Refresh Last analyzed from D1 (guarded to avoid ReferenceError)
+              if (typeof fetchLatestFeedbackFromD1 === 'function') {
+                fetchLatestFeedbackFromD1();
+              }
               
               // Save role-specific feedback to persistence
               // Use cached score that was already loaded above
@@ -3182,8 +3184,10 @@
               currentJobTitle = '';
             }
 
-            // Refresh Last analyzed from D1
-            fetchLatestFeedbackFromD1();
+            // Refresh Last analyzed from D1 (guarded to avoid ReferenceError)
+            if (typeof fetchLatestFeedbackFromD1 === 'function') {
+              fetchLatestFeedbackFromD1();
+            }
             
             // Save role-specific feedback to persistence
             // Use cached score that was already loaded above
@@ -4859,6 +4863,22 @@
       if (feedbackContent) feedbackContent.style.display = 'none';
       if (rubricGrid) rubricGrid.style.display = 'none';
       if (feedbackGrid) feedbackGrid.style.display = 'none';
+
+      // Restore default score description and badge when exiting history
+      const scoreDesc = document.getElementById('rf-score-desc');
+      if (scoreDesc) {
+        updateDescriptionWithTooltip(
+          scoreDesc,
+          'Get your basic ATS compatibility score.',
+          'Receive an overall ATS compliance score (0-100) for your resume, highlighting key areas to improve for better job application success.'
+        );
+      }
+      const planBadge = document.getElementById('rf-plan-badge');
+      if (planBadge) {
+        planBadge.textContent = 'Free Plan';
+        planBadge.style.background = '#E5E7EB';
+        planBadge.style.color = '#1F2937';
+      }
     }
     
     /**
@@ -5344,28 +5364,6 @@
         </div>
         <a href="pricing-a.html" class="btn btn-secondary">Upgrade Now</a>
       </div>
-      <!-- Hidden content that will be shown for unlocked plans -->
-      <!-- Skeleton Loading States (shown during Step 2) -->
-      <div id="rf-skeleton-container" style="display:none;">
-        <!-- Progress header skeleton -->
-        <div class="rf-skeleton rf-skeleton-header" id="rf-skeleton-header"></div>
-        
-        <!-- ATS Rubric skeleton - 5 cards matching grid layout -->
-        <div class="rf-skeleton-rubric-grid" id="rf-skeleton-rubric">
-          <div class="rf-skeleton rf-skeleton-rubric-card"></div>
-          <div class="rf-skeleton rf-skeleton-rubric-card"></div>
-          <div class="rf-skeleton rf-skeleton-rubric-card"></div>
-          <div class="rf-skeleton rf-skeleton-rubric-card"></div>
-          <div class="rf-skeleton rf-skeleton-rubric-card"></div>
-        </div>
-        
-        <!-- Role-Specific Feedback skeleton - 3 cards -->
-        <div class="rf-skeleton-feedback-grid" id="rf-skeleton-feedback" style="margin-top: 3rem;">
-          <div class="rf-skeleton rf-skeleton-feedback-card"></div>
-          <div class="rf-skeleton rf-skeleton-feedback-card"></div>
-          <div class="rf-skeleton rf-skeleton-feedback-card"></div>
-        </div>
-      </div>
       <div id="rf-feedback-content" style="display:none;">
         <!-- Empty state placeholder -->
         <div id="ats-placeholder" class="ats-placeholder-note" style="display:none;">
@@ -5378,6 +5376,27 @@
         </div>
         <!-- Role-Specific Feedback -->
         <div id="role-feedback-container">
+          <!-- Skeleton Loading States (shown during Step 2) -->
+          <div id="rf-skeleton-container" style="display:none;">
+            <!-- Progress header skeleton -->
+            <div class="rf-skeleton rf-skeleton-header" id="rf-skeleton-header"></div>
+            
+            <!-- ATS Rubric skeleton - 5 cards matching grid layout -->
+            <div class="rf-skeleton-rubric-grid" id="rf-skeleton-rubric">
+              <div class="rf-skeleton rf-skeleton-rubric-card"></div>
+              <div class="rf-skeleton rf-skeleton-rubric-card"></div>
+              <div class="rf-skeleton rf-skeleton-rubric-card"></div>
+              <div class="rf-skeleton rf-skeleton-rubric-card"></div>
+              <div class="rf-skeleton rf-skeleton-rubric-card"></div>
+            </div>
+            
+            <!-- Role-Specific Feedback skeleton - 3 cards -->
+            <div class="rf-skeleton-feedback-grid" id="rf-skeleton-feedback" style="margin-top: 3rem;">
+              <div class="rf-skeleton rf-skeleton-feedback-card"></div>
+              <div class="rf-skeleton rf-skeleton-feedback-card"></div>
+              <div class="rf-skeleton rf-skeleton-feedback-card"></div>
+            </div>
+          </div>
           <div class="rf-section-title" id="rf-role-title" style="margin-top:3rem;">Role-Specific Feedback</div>
           <div style="color:var(--color-text-secondary);margin-bottom:1.2rem;" id="rf-role-desc">
             Tell us your target role and we’ll tailor the advice to what hiring managers expect.
