@@ -1,5 +1,7 @@
 // OpenAI API client utility
 // Handles rate limiting, structured outputs, prompt caching, and cost tracking
+import { normalizeRoleToFamily } from './role-normalizer.js';
+import { ROLE_SKILL_TEMPLATES } from './role-skills.js';
 
 /**
  * Approximate token-aware truncation.
@@ -323,9 +325,23 @@ export async function generateATSFeedback(resumeText, ruleBasedScores, jobTitle,
   const truncatedResume = truncateToApproxTokens(resumeText || '', maxInputTokens);
 
   const targetRoleUsed = jobTitle && jobTitle.trim().length > 0 ? jobTitle.trim() : 'general';
+
+  // Derive role expectations from canonical templates to ground tips in current standards
+  const roleFamily = normalizeRoleToFamily(targetRoleUsed);
+  const roleTemplate = ROLE_SKILL_TEMPLATES[roleFamily] || ROLE_SKILL_TEMPLATES.generic_professional || {};
+  const mustHave = Array.isArray(roleTemplate.must_have) ? roleTemplate.must_have.slice(0, 8) : [];
+  const niceToHave = Array.isArray(roleTemplate.nice_to_have) ? roleTemplate.nice_to_have.slice(0, 8) : [];
+  const tools = Array.isArray(roleTemplate.tools) ? roleTemplate.tools.slice(0, 6) : [];
+
+  const roleExpectations = [
+    mustHave.length ? `Must-have: ${mustHave.join(', ')}` : null,
+    niceToHave.length ? `Nice-to-have: ${niceToHave.join(', ')}` : null,
+    tools.length ? `Common tools: ${tools.join(', ')}` : null
+  ].filter(Boolean).join(' | ') || 'Follow general professional standards for the stated role.';
+
   const roleContext = targetRoleUsed !== 'general' 
-    ? `The candidate is targeting: ${targetRoleUsed}. Tailor all role-specific feedback to this role.`
-    : 'No specific target role provided. Provide general tech/knowledge worker improvement guidance.';
+    ? `The candidate is targeting: ${targetRoleUsed}. Base all role-specific advice on current expectations for this role: ${roleExpectations}`
+    : `No specific target role provided. Provide general tech/knowledge worker guidance. ${roleExpectations}`;
 
   // Lean system prompt: instructions only, no repetition of schema constraints
   const systemPrompt = `You are an ATS resume expert. Analyze the provided resume and generate precise, actionable feedback.
@@ -344,10 +360,10 @@ RESUME-AWARE CONSTRAINT (CRITICAL):
 - Base every diagnosis and tip on SPECIFIC text from the resume.
 
 ROLE-SPECIFIC FEEDBACK (REQUIRED):
-You MUST generate role-specific feedback for all 5 sections. This is a required field in the response schema.
-Evaluate 5 sections for role fit: Header & Contact, Professional Summary, Experience, Skills, Education.
-For each: fitLevel (big_impact|tunable|strong), diagnosis (one sentence, specific to THIS resume), exactly 3 tips (grounded in actual content), rewritePreview (improve what exists, never fabricate).
-You MUST return all 5 sections - missing sections will cause the response to be rejected.
+Provide role-specific feedback for up to 5 sections. If a section lacks enough evidence, include what you can, note what is missing, and give next steps.
+Evaluate these sections for role fit: Header & Contact, Professional Summary, Experience, Skills, Education.
+For each section you can support: fitLevel (big_impact|tunable|strong), diagnosis (one sentence, specific to THIS resume), exactly 3 tips (grounded in actual content), rewritePreview (improve what exists, never fabricate).
+If resume content is too thin to complete a section, explicitly say what to add (projects, tools, metrics) rather than inventing content.
 
 ${roleContext}
 
@@ -444,7 +460,7 @@ ATS ISSUES: Identify structured problems with id, severity (low|medium|high), an
                 },
                 required: ['section', 'fitLevel', 'diagnosis', 'tips', 'rewritePreview']
               },
-              minItems: 5,
+              minItems: 1,
               maxItems: 5
             }
           },

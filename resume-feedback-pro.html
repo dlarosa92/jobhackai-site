@@ -3541,10 +3541,11 @@
       
       // Update section title and subtitle if new structure
       const roleTitleEl = document.getElementById('rf-role-title');
+      const roleTitleTextEl = document.getElementById('rf-role-title-text');
       const roleDescEl = document.getElementById('rf-role-desc');
       
-      if (isNewStructure && roleTitleEl) {
-        roleTitleEl.textContent = 'Role-Specific Tailoring Tips';
+      if (isNewStructure && roleTitleTextEl) {
+        roleTitleTextEl.textContent = 'Role-Specific Tailoring Tips';
         if (roleDescEl) {
           const targetRoleUsed = roleSpecificFeedback.targetRoleUsed || 'general';
           if (targetRoleUsed !== 'general') {
@@ -3644,6 +3645,7 @@
       const feedbackGrid = document.getElementById('rf-feedback-grid');
       const regenBtn = document.getElementById('rf-regenerate-btn');
       const roleDescEl = document.getElementById('rf-role-desc');
+      const roleInfoBar = document.getElementById('rf-role-info');
       const partialRoleTipsErrorText = 'We couldn’t load tailored tips for this role yet. Your ATS score is ready—try “Retry tailored tips” below.';
 
       if (roleDescEl && !roleDescEl.dataset.baseText) {
@@ -3658,6 +3660,9 @@
         console.warn('[RESUME-FEEDBACK] Using legacy roleSpecificFeedback array format');
       }
       const hasRoleSpecific = !!(isNewStructure || isOldStructure);
+      const sectionCount = isNewStructure
+        ? (rsf.sections || []).length
+        : (isOldStructure ? rsf.length : 0);
 
       if (!roleContainer) return;
 
@@ -3665,6 +3670,7 @@
       if (!hasAtsScore) {
         if (feedbackGrid) feedbackGrid.style.display = 'none';
         hideRoleFeedback();
+        if (roleInfoBar) roleInfoBar.style.display = 'none';
         if (regenBtn) {
           regenBtn.style.display = 'none';
           regenBtn.textContent = 'Regenerate Feedback';
@@ -3681,6 +3687,15 @@
       if (hasRoleSpecific) {
         if (feedbackGrid) feedbackGrid.style.display = 'grid';
         showRoleFeedback();
+        // Show info bar only when we have partial role tips (some sections but not all)
+        if (roleInfoBar) {
+          if (sectionCount > 0 && sectionCount < 5) {
+            roleInfoBar.style.display = 'block';
+            roleInfoBar.textContent = 'We generated tips for these sections. Add a few impact bullets to see the rest.';
+          } else {
+            roleInfoBar.style.display = 'none';
+          }
+        }
         if (regenBtn) {
           regenBtn.style.display = 'none';
           regenBtn.textContent = 'Regenerate Feedback';
@@ -3710,6 +3725,7 @@
       // Partial success: ATS present but role-specific tips missing/invalid
       if (feedbackGrid) feedbackGrid.style.display = 'none';
       roleContainer.style.display = 'block';
+      if (roleInfoBar) roleInfoBar.style.display = 'none';
       if (roleDescEl) {
         roleDescEl.textContent = partialRoleTipsErrorText;
         roleDescEl.dataset.lastRoleState = 'partial-error';
@@ -5004,13 +5020,14 @@
     function populateRoleSpecificFeedback(roleSpecificFeedback, targetRole) {
       const feedbackGrid = document.getElementById('rf-feedback-grid');
       const roleTitle = document.getElementById('rf-role-title');
+      const roleTitleText = document.getElementById('rf-role-title-text');
       const roleDesc = document.getElementById('rf-role-desc');
       
       if (!feedbackGrid) return;
       
-      // Update title
-      if (roleTitle) {
-        roleTitle.textContent = 'Role-Specific Tailoring Tips';
+      // Update title text without removing tooltip
+      if (roleTitleText) {
+        roleTitleText.textContent = 'Role-Specific Tailoring Tips';
       }
       if (roleDesc && targetRole) {
         roleDesc.textContent = `How to tune your resume for ${targetRole} roles.`;
@@ -5375,9 +5392,22 @@
         </div>
         <!-- Role-Specific Feedback -->
         <div id="role-feedback-container">
-          <div class="rf-section-title" id="rf-role-title" style="margin-top:3rem;">Role-Specific Feedback</div>
-          <div style="color:var(--color-text-secondary);margin-bottom:1.2rem;" id="rf-role-desc">
-            Tell us your target role and we’ll tailor the advice to what hiring managers expect.
+          <div class="rf-section-title" id="rf-role-title" style="margin-top:3rem; display:flex; align-items:center; gap:0.5rem;">
+            <span id="rf-role-title-text">Role-Specific Tailoring Tips</span>
+            <span class="rf-tooltip-trigger" tabindex="0" aria-label="More info">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+                <circle cx="12" cy="12" r="10"/>
+                <line x1="12" y1="8" x2="12" y2="8"/>
+                <line x1="12" y1="12" x2="12" y2="16"/>
+              </svg>
+              <span class="rf-tooltip-text">Add projects, tools, and metrics to unlock all tailored sections.</span>
+            </span>
+          </div>
+          <div style="color:var(--color-text-muted);margin-bottom:0.75rem;" id="rf-role-desc">
+            Based on current expectations for your target role.
+          </div>
+          <div id="rf-role-info" style="display:none; margin-bottom:1.2rem; padding:0.85rem 1rem; border:1px solid var(--color-divider); border-radius: var(--radius-button); background: rgba(0,123,255,0.06); color: var(--color-text-secondary);">
+            We generated tips for these sections. Add a few impact bullets to see the rest.
           </div>
           <!-- Skeleton Loading States (shown during Step 2) -->
           <div id="rf-skeleton-container" style="display:none;">
