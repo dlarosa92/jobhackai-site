@@ -1493,6 +1493,16 @@
       }
     }
 
+    function forceHideOverlays() {
+      try {
+        hideLoadingState();
+        const legacy = document.getElementById('loading-overlay');
+        if (legacy) legacy.style.display = 'none';
+      } catch (e) {
+        console.warn('[RESUME-FEEDBACK] Failed to force hide overlays', e);
+      }
+    }
+
     // --- GLOBAL BUTTON LISTENER FUNCTIONS ---
     // Copy resume handler function
     const copyResumeHandler = function() {
@@ -1988,25 +1998,7 @@
             }
           }
           
-          // Restore job title if available (only if input is empty to avoid overwriting user input)
-          const jobTitleInput = document.getElementById('rf-job-title');
-          if (cachedScore.jobTitle && jobTitleInput && !jobTitleInput.value.trim()) {
-            // Only restore if it's a real job title, not a placeholder
-            const jobTitle = cachedScore.jobTitle.trim();
-            if (jobTitle && jobTitle !== 'Software Engineer' && jobTitle !== 'Not specified') {
-              jobTitleInput.value = jobTitle;
-              currentJobTitle = jobTitle;
-              console.log('[RESUME-FEEDBACK] Restored job title from cache:', jobTitle);
-            }
-          } else if (!cachedScore?.jobTitle && jobTitleInput && !jobTitleInput.value.trim()) {
-            // Set visual placeholder to "Software Engineer" for consistency with other pages
-            // BUT don't set currentJobTitle - only set it when user explicitly interacts with the field
-            // This prevents incorrect role analysis for users in other roles
-            jobTitleInput.value = 'Software Engineer';
-            // currentJobTitle remains null until user explicitly selects/types a value
-            console.log('[RESUME-FEEDBACK] Set visual placeholder to Software Engineer (not active until user confirms)');
-          }
-          
+          // Do NOT restore job title from cache; must be explicitly provided each run
           // Restore file name if available (display only - don't enable button)
           // Browsers don't persist file inputs, so user must re-select file
           const fileNameSpan = document.getElementById('rf-file-name');
@@ -2054,10 +2046,10 @@
       }
 
       const fileNameEl = document.getElementById('rf-context-file-name');
-      if (fileNameEl) fileNameEl.textContent = latest.title || '—';
+      if (fileNameEl) fileNameEl.textContent = latest.fileName || latest.title || '—';
 
       const roleNameEl = document.getElementById('rf-context-role-name');
-      if (roleNameEl) roleNameEl.textContent = latest.role || 'Not specified';
+      if (roleNameEl) roleNameEl.textContent = latest.targetRoleUsed || latest.role || 'Not specified';
 
       const timeEl = document.getElementById('rf-context-time-value');
       if (timeEl && latest.createdAt) {
@@ -2098,6 +2090,35 @@
         contextBar.style.display = 'none';
       }
     }
+
+    function clearTargetRoleState() {
+      const jobTitleInput = document.getElementById('rf-job-title');
+      if (jobTitleInput) {
+        jobTitleInput.value = '';
+      }
+      currentJobTitle = '';
+      try {
+        sessionStorage.removeItem('currentJobTitle');
+        localStorage.removeItem('jh_last_job_title');
+      } catch (e) {
+        console.warn('[RESUME-FEEDBACK] Failed to clear job title state', e);
+      }
+    }
+
+    window.addEventListener('visibilitychange', () => {
+      if (document.hidden) {
+        forceHideOverlays();
+      }
+    });
+
+    window.addEventListener('pagehide', () => {
+      forceHideOverlays();
+      clearTargetRoleState();
+    });
+
+    window.addEventListener('beforeunload', () => {
+      clearTargetRoleState();
+    });
 
       // Load cached score on page load
       loadCachedATSScore().then(() => {
@@ -4963,6 +4984,9 @@
         
         const data = await response.json();
         console.log('[RESUME-FEEDBACK-HISTORY] Loaded detail:', data);
+      
+      // Clear role state only after we have successfully loaded history data
+      clearTargetRoleState();
         
         // Mark as historical view
         _isHistoricalView = true;
@@ -4985,6 +5009,7 @@
         if (window.showToast) window.showToast(error.message || 'Failed to load history', 'error');
       } finally {
         if (loadingOverlay) loadingOverlay.style.display = 'none';
+        forceHideOverlays();
       }
     }
     
@@ -5052,11 +5077,15 @@
       const fileName = document.getElementById('rf-file-name');
       if (fileInput) fileInput.value = '';
       if (fileName) fileName.textContent = 'No file selected';
+      clearTargetRoleState();
       
       // Reset score ring
       const scoreRing = document.querySelector('.rf-progress-ring circle:nth-child(2)');
       const scoreText = document.querySelector('.rf-progress-ring text');
-      if (scoreRing) scoreRing.style.strokeDashoffset = '226.2';
+      if (scoreRing) {
+        scoreRing.style.strokeDashoffset = '226.2';
+        scoreRing.setAttribute('stroke', '#00E676');
+      }
       if (scoreText) scoreText.textContent = '0%';
       
       // Hide feedback sections
@@ -5095,6 +5124,11 @@
       if (data.roleSpecificFeedback) {
         populateRoleSpecificFeedback(data.roleSpecificFeedback, data.role);
       }
+      
+      updateRoleTipsState({
+        hasAtsScore: typeof data.atsScore === 'number',
+        roleSpecificFeedback: data.roleSpecificFeedback || null
+      });
       
       // Update plan limit text based on current plan
       updatePlanLimitText();
