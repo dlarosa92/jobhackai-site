@@ -2050,7 +2050,7 @@
         const cachedFileName = typeof localStorage !== 'undefined'
           ? localStorage.getItem('lastUploadedResumeName')
           : null;
-        fileNameEl.textContent = latest.fileName || cachedFileName || latest.title || '—';
+        fileNameEl.textContent = latest.fileName || cachedFileName || '—';
       }
 
       const roleNameEl = document.getElementById('rf-context-role-name');
@@ -2106,7 +2106,6 @@
 
       const fileNameEl = document.getElementById('rf-context-file-name');
       const derivedFileName = data.fileName
-        || data.title
         || data.uploadFileName
         || data.originalFileName
         || data.resumeName
