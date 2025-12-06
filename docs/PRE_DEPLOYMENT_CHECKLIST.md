@@ -4,7 +4,7 @@
 
 ### Dependencies Verified
 - ✅ **Removed**: `pdfjs-dist` v4.0.379 (no longer in package.json)
-- ✅ **Removed**: `pdf-parse` from main app (only in pdf-parse-service now)
+- ✅ **Removed**: `pdf-parse` from the codebase
 - ✅ **Added**: `unpdf` v1.4.0 (serverless-optimized PDF.js wrapper)
 - ✅ **Verified**: No remaining imports of `pdfjs-dist` or `pdf-parse` in main app
 
@@ -18,11 +18,6 @@
   - Replaced `pdf-parse` import with dynamic `unpdf` import
   - Maintains OCR fallback functionality
   - Same API pattern as resume-extractor.js for consistency
-
-### Error Handling Fixed
-- ✅ **pdf-parse-service/src/server.js**: Fixed unsafe `error.message` access
-  - Now uses safe `errorMessage` variable that handles non-Error values
-  - Prevents TypeError when error.message is undefined
 
 ### Documentation Updated
 - ✅ **resume-extractor.js**: Updated comment (pdfjs-dist → unpdf)
@@ -39,15 +34,12 @@
   ```
 
 ### Files Not Requiring Changes
-- ✅ **pdf-parse-service**: Separate service with its own package.json (uses pdf-parse, which is fine)
 - ✅ **test-resume-scoring-validation.mjs**: Only tests DOCX/TXT (no PDF parsing)
-- ✅ **Documentation files**: Plan B docs left for future reference (not used in current implementation)
 
 ## ⚠️ Considerations Before Deployment
 
 ### 1. Environment Variables
 - **No new environment variables needed** - unpdf works without configuration
-- The `PDF_PARSE_SERVICE_URL` and `PDF_PARSE_API_KEY` env vars are set but not used (for future Plan B if needed)
 
 ### 2. Testing Recommendations
 Before deploying to dev, test:
