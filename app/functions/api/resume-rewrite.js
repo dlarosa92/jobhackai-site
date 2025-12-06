@@ -355,6 +355,10 @@ export async function onRequest(context) {
               if (!parseFailed) {
                 parsed.rewrittenResume = rewrittenText;
                 parsed.rewriteChangeSummary = changeSummary;
+                // Preserve originalResume if not already stored (for backwards compatibility)
+                if (!parsed.originalResume && originalText) {
+                  parsed.originalResume = originalText;
+                }
 
                 await env.DB.prepare(
                   `UPDATE feedback_sessions SET feedback_json = ? WHERE id = ?`

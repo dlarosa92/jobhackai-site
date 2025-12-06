@@ -131,6 +131,11 @@ export async function onRequest(context) {
 
     const rawRewritten = session.feedback?.rewrittenResume || null;
     const rawSummary = session.feedback?.rewriteChangeSummary || session.feedback?.changeSummary || null;
+    const originalResume =
+      session.feedback?.originalResume ||
+      session.feedback?.original ||
+      session.feedback?.originalText ||
+      null;
 
     const rewrittenResume = rewriteLocked ? null : rawRewritten;
     const rewriteChangeSummary = rewriteLocked ? null : rawSummary;
@@ -154,6 +159,7 @@ export async function onRequest(context) {
       roleSpecificFeedback: session.feedback?.roleSpecificFeedback || null,
       atsIssues: session.feedback?.atsIssues || null,
       // Include rewrite data if visible for current plan
+      originalResume,
       rewrittenResume,
       rewriteChangeSummary,
       changeSummary: rewriteChangeSummary,

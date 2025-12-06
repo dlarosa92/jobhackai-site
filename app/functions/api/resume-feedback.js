@@ -745,7 +745,9 @@ export async function onRequest(context) {
 
     // Build result with AI feedback if available, otherwise use rule-based scores
     // CRITICAL: Always use rule-based scores for score and max values to prevent AI drift
+    // Store original resume text in D1 for history restoration
     const result = aiFeedback && aiFeedback.atsRubric ? {
+      originalResume: resumeData.text,
       atsRubric: aiFeedback.atsRubric
         // Filter out any "overallScore" or "overall" categories - only process the 5 expected categories
         .filter(item => {
@@ -827,6 +829,7 @@ export async function onRequest(context) {
       });
       
       return {
+      originalResume: resumeData.text,
       atsRubric: [
         {
           category: 'Keyword Match',
