@@ -205,8 +205,13 @@ export async function getResumeFeedbackHistory(env, userId, { limit = 20 } = {})
       if (atsScore === null && row.feedback_json) {
         try {
           const feedback = JSON.parse(row.feedback_json);
-          if (feedback.atsRubric && Array.isArray(feedback.atsRubric)) {
-            // Sum up scores from atsRubric and round to match calcOverallScore behavior
+          // Prefer canonical overallScore if present
+          if (typeof feedback.overallScore === 'number') {
+            atsScore = feedback.overallScore;
+          } else if (feedback.aiFeedback && typeof feedback.aiFeedback.overallScore === 'number') {
+            atsScore = feedback.aiFeedback.overallScore;
+          } else if (feedback.atsRubric && Array.isArray(feedback.atsRubric)) {
+            // Fallback: sum rubric scores and round (matches calcOverallScore behavior)
             atsScore = Math.round(feedback.atsRubric.reduce((sum, item) => sum + (item.score || 0), 0));
           }
         } catch (e) {

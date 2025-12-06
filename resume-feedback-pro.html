@@ -2046,7 +2046,12 @@
       }
 
       const fileNameEl = document.getElementById('rf-context-file-name');
-      if (fileNameEl) fileNameEl.textContent = latest.fileName || latest.title || '—';
+      if (fileNameEl) {
+        const cachedFileName = typeof localStorage !== 'undefined'
+          ? localStorage.getItem('lastUploadedResumeName')
+          : null;
+        fileNameEl.textContent = latest.fileName || cachedFileName || latest.title || '—';
+      }
 
       const roleNameEl = document.getElementById('rf-context-role-name');
       if (roleNameEl) roleNameEl.textContent = latest.targetRoleUsed || latest.role || 'Not specified';
@@ -2669,14 +2674,6 @@
           const userPlan = getCurrentUserPlan();
           const willGetFeedback = ['trial', 'essential', 'pro', 'premium'].includes(userPlan);
           
-          // Show progress header immediately (moved outside rf-feedback-content)
-          const progressHeader = document.getElementById('rf-progress-header');
-          if (progressHeader) {
-            progressHeader.style.display = 'block';
-          }
-          // Update progress status based on user plan
-          updateProgressStatus(willGetFeedback ? 'generating-feedback' : 'scoring-resume');
-          
           // Show skeleton loading states (replaces full-screen overlay)
           // Pass willGetFeedback to conditionally show/hide feedback skeleton
           showSkeletons(willGetFeedback);
@@ -2852,12 +2849,6 @@
                   }, 100);
                 });
                 
-                // Update progress status (still generating feedback or scoring, depending on plan)
-                // Use the same willGetFeedback check from earlier in the function
-                const currentPlan = getCurrentUserPlan();
-                const willGetFeedbackCheck = ['trial', 'essential', 'pro', 'premium'].includes(currentPlan);
-                updateProgressStatus(willGetFeedbackCheck ? 'generating-feedback' : 'scoring-resume');
-                
                 // Show success toast
                 if (window.JobHackAIToast) {
                   window.JobHackAIToast.success('ATS score calculated successfully.');
@@ -2870,7 +2861,6 @@
                   window._currentFeedbackLoading = null;
                 }
                 handleApiError(new Error('Failed to calculate ATS score. Please try again.'));
-                hideProgressHeader();
               }
             })
             .catch((error) => {
@@ -2882,7 +2872,6 @@
                 window._currentFeedbackLoading = null;
               }
               handleApiError(error);
-              hideProgressHeader();
             });
 
           // Wait for both promises to settle (for error handling and final state)
@@ -2897,8 +2886,6 @@
             // atsScoringSucceeded already set in .then() handler above
           } else {
             // ATS promise rejected - error already handled in .catch() above
-            // Hide progress header if not already hidden
-            hideProgressHeader();
           }
 
           // --- Process Feedback Result (show when ready) ---
@@ -3048,29 +3035,14 @@
               window._currentFeedbackLoading = null;
             }
             
-            // Update progress status and hide header on feedback failure
-            if (atsScoringSucceeded) {
-              updateProgressStatus('complete');
-              setTimeout(() => {
-                hideProgressHeader();
-              }, 3000);
-            } else {
-              // Both failed - hide immediately
-              hideProgressHeader();
-            }
+            // Feedback failed, but ATS scoring may have succeeded
           } else {
             // Free plan - no feedback
             hideRoleFeedback();
             const placeholderCta = document.getElementById('rf-placeholder-cta');
             if (placeholderCta) placeholderCta.style.display = 'block';
             
-            // Update progress status for free plan
-            if (atsScoringSucceeded) {
-              updateProgressStatus('complete');
-              setTimeout(() => {
-                hideProgressHeader();
-              }, 3000);
-            }
+            // Free plan - ATS scoring may have succeeded
           }
           
           // Hide "Generating AI feedback..." overlay when both API calls complete
@@ -3079,14 +3051,7 @@
             window._currentFeedbackLoading = null;
           }
           
-          // Update progress status when both complete successfully
-          if (atsScoringSucceeded && feedbackSettled.status === 'fulfilled' && feedbackSettled.value) {
-            updateProgressStatus('complete');
-            // Hide after 3 seconds
-            setTimeout(() => {
-              hideProgressHeader();
-            }, 3000);
-          }
+          // Both ATS scoring and feedback completed successfully
 
           // Update original snippet in rewrite section
           // Use full resume text if available, otherwise use preview
@@ -3146,9 +3111,6 @@
           generateBtn.disabled = false;
           hideLoadingState();
         } catch (error) {
-          // Hide progress header on any error
-          hideProgressHeader();
-          
           // Restore credit ONLY if ATS scoring failed (not for post-scoring errors)
           // If scoring succeeded but UI/feedback generation failed, user already got value
           const userPlan = getCurrentUserPlan();
@@ -4053,31 +4015,6 @@
       if (!el) return;
       el.style.display = 'none';
       el.classList.remove('fade-enter', 'fade-enter-active');
-    }
-
-    // Progress state management
-    function updateProgressStatus(state) {
-      const statusEl = document.getElementById('rf-progress-status');
-      if (!statusEl) return;
-      
-      const states = {
-        'reading': 'Step 1 of 2: Reading your resume...',
-        'uploading': 'Step 1 of 2: Reading your resume...', // Alias for backward compatibility
-        'generating-feedback': 'Step 2 of 2: Generating AI feedback...',
-        'scoring-resume': 'Step 2 of 2: Calculating your ATS score...',
-        'ats-done': 'Step 2 of 2: Generating AI feedback...', // Alias for backward compatibility (deprecated)
-        'complete': 'Analysis complete. You can now review ATS results, tailoring tips, and (for Pro) request a full rewrite.'
-      };
-      
-      statusEl.textContent = states[state] || states['reading'];
-    }
-
-    // Hide progress header when complete (optional - can keep visible)
-    function hideProgressHeader() {
-      const header = document.getElementById('rf-progress-header');
-      if (header) {
-        header.style.display = 'none';
-      }
     }
 
     // Skeleton loading state management (performance-optimized, non-blocking)
@@ -5189,6 +5126,9 @@
       const rewriteSummary = data.rewriteChangeSummary || data.changeSummary || data.feedback?.rewriteChangeSummary || data.feedback?.changeSummary || null;
       const original = data.originalResume || data.feedback?.originalResume || null;
 
+      // Historical views are fully loaded; hide any in-progress UI elements
+      hideSkeletons();
+
       // Update ATS score ring using shared logic (clamps/guards inside)
       if (data.atsScore !== null && data.atsScore !== undefined) {
         updateProgressRing(data.atsScore);
@@ -5658,16 +5598,6 @@
         <a href="pricing-a.html" class="btn btn-secondary">Upgrade Now</a>
       </div>
       <!-- Hidden content that will be shown for unlocked plans -->
-      <!-- Progress Header (moved outside rf-feedback-content for visibility) -->
-      <div id="rf-progress-header" style="display:none; margin-bottom: 1.5rem; padding: 1rem; background: #F9FAFB; border-radius: var(--radius-lg); border: 1px solid var(--color-divider);">
-        <div style="font-weight: 600; color: var(--color-text-main); margin-bottom: 0.25rem;">Resume Analysis Progress</div>
-        <div style="font-size: 0.9rem; color: var(--color-text-secondary); margin-bottom: 0.5rem;">
-          We'll show your ATS score first, then AI role-specific tailoring tips as soon as they're ready.
-        </div>
-        <div id="rf-progress-status" style="font-size: 0.95rem; color: var(--color-text-main); font-weight: 500;">
-          Reading your resume and preparing it for analysis…
-        </div>
-      </div>
       <!-- Skeleton Loading States (shown during Step 2) -->
       <div id="rf-skeleton-container" style="display:none;">
         <!-- Progress header skeleton -->
