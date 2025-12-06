@@ -32,8 +32,20 @@ if [ ! -d "node_modules" ]; then
 fi
 echo "✅ Dependencies installed"
 
-# API key (hardcoded for deployment)
-API_KEY="5cc49831bff5be4d819f0da46ac2b85bc027534ae7d7155acb7fe2fc4feb91cd"
+# API key must be provided via environment variable for security
+if [ -z "$PDF_PARSE_API_KEY" ]; then
+    echo ""
+    echo "⚠️  WARNING: PDF_PARSE_API_KEY environment variable not set"
+    echo ""
+    echo "Set it before deployment:"
+    echo "  export PDF_PARSE_API_KEY='your-api-key-here'"
+    echo ""
+    echo "The API key should be stored securely and not committed to the repository."
+    echo ""
+    API_KEY="<REQUIRED-VIA-ENV-VAR>"
+else
+    API_KEY="$PDF_PARSE_API_KEY"
+fi
 
 echo ""
 echo "================================================"

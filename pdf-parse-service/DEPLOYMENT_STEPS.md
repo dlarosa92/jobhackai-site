@@ -1,10 +1,21 @@
 # PDF Parse Service - Complete Deployment Steps
 
-## 🔑 Generated API Key
+## 🔑 API Key Configuration
 
-**API Key**: `5cc49831bff5be4d819f0da46ac2b85bc027534ae7d7155acb7fe2fc4feb91cd`
+**⚠️ SECURITY IMPORTANT**: API keys must NEVER be committed to the repository.
 
-**⚠️ IMPORTANT**: Use this EXACT key for both:
+**Generate an API Key** (if not already generated):
+```bash
+# Generate a secure random API key
+openssl rand -hex 32
+```
+
+**Store the API Key Securely**:
+- Use environment variables
+- Use a secrets manager (e.g., Cloudflare Secrets, Render Secrets, etc.)
+- Never hardcode in source files or commit to git
+
+**⚠️ IMPORTANT**: Use the SAME key for both:
 1. Parse service environment variable (`API_KEY`)
 2. Cloudflare Worker environment variable (`PDF_PARSE_API_KEY`)
 
@@ -37,10 +48,12 @@
    Click "Environment" tab, then "Add Environment Variable" for each:
    ```
    PORT = 3000
-   API_KEY = 5cc49831bff5be4d819f0da46ac2b85bc027534ae7d7155acb7fe2fc4feb91cd
+   API_KEY = <your-generated-api-key>
    MAX_FILE_SIZE = 2097152
    TIMEOUT_MS = 30000
    ```
+   
+   **⚠️ Security**: Get your API key from a secure source (secrets manager, environment variable, etc.). Never commit API keys to the repository.
 
 5. **Deploy**
    - Click "Create Web Service"
@@ -94,8 +107,12 @@ cd app
 echo "https://your-service-url.onrender.com" | \
   wrangler pages secret put PDF_PARSE_SERVICE_URL --project-name=jobhackai-app-dev
 
-# Set API key
-echo "5cc49831bff5be4d819f0da46ac2b85bc027534ae7d7155acb7fe2fc4feb91cd" | \
+# Set API key (from environment variable)
+if [ -z "$PDF_PARSE_API_KEY" ]; then
+  echo "❌ Error: PDF_PARSE_API_KEY environment variable must be set"
+  exit 1
+fi
+echo "$PDF_PARSE_API_KEY" | \
   wrangler pages secret put PDF_PARSE_API_KEY --project-name=jobhackai-app-dev
 ```
 
@@ -106,8 +123,10 @@ echo "5cc49831bff5be4d819f0da46ac2b85bc027534ae7d7155acb7fe2fc4feb91cd" | \
 3. Add for **Preview** environment:
    ```
    PDF_PARSE_SERVICE_URL = https://your-service-url.onrender.com
-   PDF_PARSE_API_KEY = 5cc49831bff5be4d819f0da46ac2b85bc027534ae7d7155acb7fe2fc4feb91cd
+   PDF_PARSE_API_KEY = <your-generated-api-key>
    ```
+   
+   **⚠️ Security**: Get your API key from a secure source. Never commit API keys to the repository.
 
 ---
 
@@ -116,10 +135,10 @@ echo "5cc49831bff5be4d819f0da46ac2b85bc027534ae7d7155acb7fe2fc4feb91cd" | \
 ### Test Parse Service Directly
 
 ```bash
-# Test with a sample PDF
+# Test with a sample PDF (replace <API_KEY> with your actual key)
 curl -X POST https://your-service-url.onrender.com/parse-pdf \
   -H "Content-Type: application/pdf" \
-  -H "X-API-Key: 5cc49831bff5be4d819f0da46ac2b85bc027534ae7d7155acb7fe2fc4feb91cd" \
+  -H "X-API-Key: <API_KEY>" \
   --data-binary @../docs/Test\ Resumes/ATS-Test-Suite/resume-01-excellent-baseline.pdf
 ```
 
@@ -156,17 +175,21 @@ After deployment is verified, the next step is to integrate the Worker code to u
 
 ## Quick Reference
 
-**API Key**: `5cc49831bff5be4d819f0da46ac2b85bc027534ae7d7155acb7fe2fc4feb91cd`
+**⚠️ API Key Security**:
+- Generate: `openssl rand -hex 32`
+- Store securely (environment variables or secrets manager)
+- Never commit to repository
+- Use the same key for both service and Cloudflare
 
 **Service Environment Variables**:
 - `PORT=3000`
-- `API_KEY=<above-key>`
+- `API_KEY=<your-generated-api-key>`
 - `MAX_FILE_SIZE=2097152`
 - `TIMEOUT_MS=30000`
 
 **Cloudflare Environment Variables**:
 - `PDF_PARSE_SERVICE_URL=<your-service-url>`
-- `PDF_PARSE_API_KEY=<same-key-as-above>`
+- `PDF_PARSE_API_KEY=<same-key-as-service>`
 
 
 

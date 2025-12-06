@@ -1,8 +1,17 @@
 # Quick Start - PDF Parse Service Deployment
 
 ## 🔑 API Key
+
+**⚠️ SECURITY**: Never commit API keys to the repository. Generate and store securely.
+
+**Generate an API Key**:
+```bash
+openssl rand -hex 32
 ```
-5cc49831bff5be4d819f0da46ac2b85bc027534ae7d7155acb7fe2fc4feb91cd
+
+**Store securely** (environment variable or secrets manager):
+```bash
+export PDF_PARSE_API_KEY='your-generated-api-key-here'
 ```
 
 ## 🚀 Deploy to Render (5 minutes)
@@ -22,10 +31,11 @@
 4. **Environment Variables**:
    ```
    PORT=3000
-   API_KEY=5cc49831bff5be4d819f0da46ac2b85bc027534ae7d7155acb7fe2fc4feb91cd
+   API_KEY=<your-generated-api-key>
    MAX_FILE_SIZE=2097152
    TIMEOUT_MS=30000
    ```
+   **⚠️**: Use the API key from your secure storage (secrets manager, environment variable, etc.)
 
 5. **Deploy** → Copy service URL
 
@@ -38,7 +48,7 @@ cd pdf-parse-service
 
 Or manually via Dashboard:
 - Pages → jobhackai-app-dev → Settings → Environment Variables
-- Add `PDF_PARSE_SERVICE_URL` and `PDF_PARSE_API_KEY` (same key as above)
+- Add `PDF_PARSE_SERVICE_URL` and `PDF_PARSE_API_KEY` (use the same API key as your service)
 
 ## ✅ Test
 

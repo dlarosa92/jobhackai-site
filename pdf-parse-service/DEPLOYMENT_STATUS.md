@@ -10,10 +10,11 @@
    - ✅ Dockerfile for containerization
 
 2. **Deployment Preparation**
-   - ✅ Generated API key: `5cc49831bff5be4d819f0da46ac2b85bc027534ae7d7155acb7fe2fc4feb91cd`
+   - ✅ API key generation method documented
    - ✅ Created deployment helper scripts
    - ✅ Created comprehensive documentation
    - ✅ Validated service structure
+   - ✅ Removed hardcoded API keys from source files (security best practice)
 
 3. **Documentation**
    - ✅ `README.md` - Service overview and API docs
@@ -62,17 +63,21 @@ curl https://your-service-url.onrender.com/health
 
 ## 🔑 Key Information
 
-**API Key**: `5cc49831bff5be4d819f0da46ac2b85bc027534ae7d7155acb7fe2fc4feb91cd`
+**⚠️ API Key Security**:
+- Generate API key: `openssl rand -hex 32`
+- Store securely in environment variables or secrets manager
+- Never commit API keys to the repository
+- Use the same key for both service and Cloudflare
 
 **Service Environment Variables**:
 - `PORT=3000`
-- `API_KEY=<above-key>`
+- `API_KEY=<your-generated-api-key>`
 - `MAX_FILE_SIZE=2097152`
 - `TIMEOUT_MS=30000`
 
 **Cloudflare Environment Variables** (to be set):
 - `PDF_PARSE_SERVICE_URL=<service-url>`
-- `PDF_PARSE_API_KEY=<same-key-as-above>`
+- `PDF_PARSE_API_KEY=<same-key-as-service>`
 
 ## 📚 Documentation Files
 
