@@ -3659,6 +3659,9 @@
         console.warn('[RESUME-FEEDBACK] Using legacy roleSpecificFeedback array format');
       }
       const hasRoleSpecific = !!(isNewStructure || isOldStructure);
+      const sectionCount = isNewStructure
+        ? (rsf.sections || []).length
+        : (isOldStructure ? rsf.length : 0);
 
       if (!roleContainer) return;
 
@@ -3683,7 +3686,15 @@
       if (hasRoleSpecific) {
         if (feedbackGrid) feedbackGrid.style.display = 'grid';
         showRoleFeedback();
-        if (roleInfoBar) roleInfoBar.style.display = 'none';
+        // Show info bar only when we have partial role tips (some sections but not all)
+        if (roleInfoBar) {
+          if (sectionCount > 0 && sectionCount < 5) {
+            roleInfoBar.style.display = 'block';
+            roleInfoBar.textContent = 'We generated tips for these sections. Add a few impact bullets to see the rest.';
+          } else {
+            roleInfoBar.style.display = 'none';
+          }
+        }
         if (regenBtn) {
           regenBtn.style.display = 'none';
           regenBtn.textContent = 'Regenerate Feedback';
@@ -3713,10 +3724,7 @@
       // Partial success: ATS present but role-specific tips missing/invalid
       if (feedbackGrid) feedbackGrid.style.display = 'none';
       roleContainer.style.display = 'block';
-      if (roleInfoBar) {
-        roleInfoBar.style.display = 'block';
-        roleInfoBar.textContent = 'We generated tips for these sections. Add a few impact bullets to see the rest.';
-      }
+      if (roleInfoBar) roleInfoBar.style.display = 'none';
       if (roleDescEl) {
         roleDescEl.textContent = partialRoleTipsErrorText;
         roleDescEl.dataset.lastRoleState = 'partial-error';
