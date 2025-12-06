@@ -5065,7 +5065,12 @@
           updateContextBar(data);
         } else {
           console.warn('[RESUME-FEEDBACK-HISTORY] updateContextBarFromHistory missing; skipping context bar update');
-          hideContextBar();
+          const hideFn =
+            (typeof hideContextBar === 'function' && hideContextBar) ||
+            (typeof window !== 'undefined' && typeof window.hideContextBar === 'function' && window.hideContextBar);
+          if (hideFn) {
+            hideFn();
+          }
         }
         
         // Restore page state from D1 data
