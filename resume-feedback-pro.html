@@ -2462,6 +2462,8 @@
           // Show skeleton loading states (replaces full-screen overlay)
           // Pass willGetFeedback to conditionally show/hide feedback skeleton
           showSkeletons(willGetFeedback);
+          // Capture skeleton generation for this run to guard against stale callbacks
+          const atsRequestGeneration = skeletonOperationGeneration;
           // Hide skeleton header since real progress header is already visible
           hideHeaderSkeleton();
           
@@ -2576,7 +2578,11 @@
                 updateRubricGrid(rubric);
                 
                 // Show ATS content immediately; keep role skeleton visible until role tips arrive
-                hideATSSkeleton();
+                if (atsRequestGeneration === skeletonOperationGeneration) {
+                  hideATSSkeleton();
+                } else {
+                  console.warn('[RESUME-FEEDBACK] ATS skeleton hide skipped due to generation mismatch');
+                }
                 
                 const skeletonFeedback = document.getElementById('rf-skeleton-feedback');
                 const skeletonContainer = document.getElementById('rf-skeleton-container');
