@@ -4952,7 +4952,6 @@
      */
     async function loadHistoryDetail(sessionId) {
       console.log('[RESUME-FEEDBACK-HISTORY] Loading history detail:', sessionId);
-      clearTargetRoleState();
       
       // Show loading state
       const loadingOverlay = document.getElementById('loading-overlay');
@@ -4985,6 +4984,9 @@
         
         const data = await response.json();
         console.log('[RESUME-FEEDBACK-HISTORY] Loaded detail:', data);
+      
+      // Clear role state only after we have successfully loaded history data
+      clearTargetRoleState();
         
         // Mark as historical view
         _isHistoricalView = true;
