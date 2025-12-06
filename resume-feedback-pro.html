@@ -3817,10 +3817,14 @@
           // Only show feedback skeleton if user will receive feedback
           skeletonFeedback.style.display = willGetFeedback ? 'grid' : 'none';
         }
-        // Ensure feedback content is hidden while skeletons show
+        // Ensure feedback content is visible so skeletons render; hide real grids
         const feedbackContent = document.getElementById('rf-feedback-content');
         if (feedbackContent) {
-          feedbackContent.style.display = 'none';
+          feedbackContent.style.display = 'block';
+          const rubricGrid = document.getElementById('rf-rubric-grid');
+          const feedbackGrid = document.getElementById('rf-feedback-grid');
+          if (rubricGrid) rubricGrid.style.display = 'none';
+          if (feedbackGrid) feedbackGrid.style.display = 'none';
         }
       }
     }
@@ -4865,19 +4869,14 @@
       if (feedbackGrid) feedbackGrid.style.display = 'none';
 
       // Restore default score description and badge when exiting history
-      const scoreDesc = document.getElementById('rf-score-desc');
-      if (scoreDesc) {
-        updateDescriptionWithTooltip(
-          scoreDesc,
-          'Get your basic ATS compatibility score.',
-          'Receive an overall ATS compliance score (0-100) for your resume, highlighting key areas to improve for better job application success.'
-        );
-      }
-      const planBadge = document.getElementById('rf-plan-badge');
-      if (planBadge) {
-        planBadge.textContent = 'Free Plan';
-        planBadge.style.background = '#E5E7EB';
-        planBadge.style.color = '#1F2937';
+      if (typeof updateRfTileForPlan === 'function') {
+        updateRfTileForPlan();
+      } else {
+        // Fallback: minimally reset score description while preserving tooltip
+        const scoreDesc = document.getElementById('rf-score-desc');
+        if (scoreDesc) {
+          scoreDesc.innerHTML = 'Get your basic ATS compatibility score.';
+        }
       }
     }
     
