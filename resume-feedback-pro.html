@@ -2091,6 +2091,53 @@
       }
     }
 
+    function updateContextBarFromHistory(data) {
+      const contextBar = document.getElementById('rf-context-bar');
+      if (!contextBar) return;
+      if (!data) {
+        hideContextBar();
+        return;
+      }
+
+      const fileNameEl = document.getElementById('rf-context-file-name');
+      if (fileNameEl) fileNameEl.textContent = data.title || data.fileName || '—';
+
+      const roleNameEl = document.getElementById('rf-context-role-name');
+      if (roleNameEl) roleNameEl.textContent = data.role || data.targetRoleUsed || 'Not specified';
+
+      const timeEl = document.getElementById('rf-context-time-value');
+      if (timeEl && data.createdAt) {
+        const date = parseDateSafely(data.createdAt);
+        if (date) {
+          const now = new Date();
+          const diffMs = now - date;
+          const diffMins = Math.floor(diffMs / 60000);
+          const diffHours = Math.floor(diffMs / 3600000);
+          const diffDays = Math.floor(diffMs / 86400000);
+
+          let timeText;
+          if (diffMins < 1) {
+            timeText = 'Just now';
+          } else if (diffMins < 60) {
+            timeText = `${diffMins} minute${diffMins !== 1 ? 's' : ''} ago`;
+          } else if (diffHours < 24) {
+            timeText = `${diffHours} hour${diffHours !== 1 ? 's' : ''} ago`;
+          } else if (diffDays === 1) {
+            timeText = 'Yesterday';
+          } else if (diffDays < 7) {
+            timeText = `${diffDays} days ago`;
+          } else {
+            timeText = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: date.getFullYear() !== now.getFullYear() ? 'numeric' : undefined });
+          }
+          timeEl.textContent = timeText;
+        } else {
+          timeEl.textContent = '—';
+        }
+      }
+
+      contextBar.style.display = 'block';
+    }
+
     function clearTargetRoleState() {
       const jobTitleInput = document.getElementById('rf-job-title');
       if (jobTitleInput) {
@@ -2104,6 +2151,9 @@
         console.warn('[RESUME-FEEDBACK] Failed to clear job title state', e);
       }
     }
+
+    // Expose for history interactions
+    window.clearTargetRoleState = clearTargetRoleState;
 
     window.addEventListener('visibilitychange', () => {
       if (document.hidden) {
@@ -4986,7 +5036,10 @@
         console.log('[RESUME-FEEDBACK-HISTORY] Loaded detail:', data);
       
       // Clear role state only after we have successfully loaded history data
-      clearTargetRoleState();
+      const clearFn = window.clearTargetRoleState || clearTargetRoleState;
+      if (typeof clearFn === 'function') {
+        clearFn();
+      }
         
         // Mark as historical view
         _isHistoricalView = true;
@@ -4994,6 +5047,9 @@
         
         // Show historical banner
         showHistoricalBanner(data);
+        
+        // Update context bar details from history data
+        updateContextBarFromHistory(data);
         
         // Restore page state from D1 data
         restorePageStateFromHistory(data);
@@ -5101,6 +5157,12 @@
      * Restore full page state from history data (D1-only, NO OpenAI)
      */
     function restorePageStateFromHistory(data) {
+      const atsRubric = data.atsRubric || data.feedback?.atsRubric || null;
+      const roleSpecificFeedback = data.roleSpecificFeedback || data.feedback?.roleSpecificFeedback || null;
+      const rewritten = data.rewrittenResume || data.feedback?.rewrittenResume || null;
+      const rewriteSummary = data.rewriteChangeSummary || data.changeSummary || data.feedback?.rewriteChangeSummary || data.feedback?.changeSummary || null;
+      const original = data.originalResume || data.feedback?.originalResume || null;
+
       // Update ATS score ring using shared logic (clamps/guards inside)
       if (data.atsScore !== null && data.atsScore !== undefined) {
         updateProgressRing(data.atsScore);
@@ -5116,18 +5178,24 @@
       if (feedbackContent) feedbackContent.style.display = 'block';
       
       // Populate ATS rubric
-      if (data.atsRubric && Array.isArray(data.atsRubric)) {
-        populateAtsRubric(data.atsRubric);
+      if (atsRubric && Array.isArray(atsRubric)) {
+        populateAtsRubric(atsRubric);
+      } else {
+        const rubricGrid = document.getElementById('rf-rubric-grid');
+        if (rubricGrid) rubricGrid.style.display = 'none';
       }
       
       // Populate role-specific feedback
-      if (data.roleSpecificFeedback) {
-        populateRoleSpecificFeedback(data.roleSpecificFeedback, data.role);
+      if (roleSpecificFeedback) {
+        populateRoleSpecificFeedback(roleSpecificFeedback, data.role);
+      } else {
+        const roleContainer = document.getElementById('role-feedback-container');
+        if (roleContainer) roleContainer.style.display = 'none';
       }
       
       updateRoleTipsState({
         hasAtsScore: typeof data.atsScore === 'number',
-        roleSpecificFeedback: data.roleSpecificFeedback || null
+        roleSpecificFeedback: roleSpecificFeedback || null
       });
       
       // Update plan limit text based on current plan
@@ -5157,16 +5225,21 @@
         if (rewriteContent) rewriteContent.style.display = 'block';
 
         if (rewrittenTextarea) {
-          if (data.rewrittenResume) {
-            rewrittenTextarea.value = data.rewrittenResume;
-          } else if (data.rewriteChangeSummary) {
-            const formattedSummary = formatRewriteChangeSummary(data.rewriteChangeSummary);
+          if (rewritten) {
+            rewrittenTextarea.value = rewritten;
+          } else if (rewriteSummary) {
+            const formattedSummary = formatRewriteChangeSummary(rewriteSummary);
             rewrittenTextarea.value = formattedSummary
               ? `Summary of changes:\n${formattedSummary}`
               : 'No rewrite available for this run yet.';
           } else {
             rewrittenTextarea.value = 'No rewrite available for this run yet.';
           }
+        }
+        
+        // Also populate original snippet if available
+        if (originalTextarea && original) {
+          originalTextarea.value = original;
         }
       }
     }
