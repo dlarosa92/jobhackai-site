@@ -36,7 +36,7 @@ export function validateAIFeedback(aiFeedback, allowOldFormat = false) {
                        !Array.isArray(aiFeedback.roleSpecificFeedback) &&
                        aiFeedback.roleSpecificFeedback.targetRoleUsed !== undefined &&
                        Array.isArray(aiFeedback.roleSpecificFeedback.sections) &&
-                       aiFeedback.roleSpecificFeedback.sections.length === 5;
+                       aiFeedback.roleSpecificFeedback.sections.length > 0;
   
   // Validate roleSpecificFeedback (old format - for backwards compatibility)
   const hasOldFormat = allowOldFormat &&
@@ -112,7 +112,7 @@ export function isValidFeedbackResult(result, { requireRoleSpecific = false } = 
     rsfIsObject &&
     rsf.targetRoleUsed !== undefined &&
     Array.isArray(rsf.sections) &&
-    rsf.sections.length === 5;
+    rsf.sections.length > 0;
 
   const roleSpecificOk = requireRoleSpecific ? hasRoleSpecificFeedback : true;
 

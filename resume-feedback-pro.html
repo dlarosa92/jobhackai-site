@@ -11,7 +11,7 @@
     // Run immediately to prevent content flash for unauthorized users
     (function enforceAccessImmediate() {
       const isAuthenticated = localStorage.getItem('user-authenticated') === 'true' && !!localStorage.getItem('user-email');
-      const allowedPlans = ['trial', 'essential', 'pro', 'premium', 'trio'];
+      const allowedPlans = ['trial', 'essential', 'pro', 'premium'];
       // Expose allowed plans so later scripts stay in sync
       window.__JOBHACKAI_RF_ALLOWED_PLANS__ = allowedPlans;
       const cachedPlan = localStorage.getItem('user-plan');
@@ -529,6 +529,15 @@
       opacity: 1;
       transform: translateY(0);
     }
+    /* Subtle fade-in utility for restored content */
+    .rf-fade-in {
+      opacity: 0;
+      animation: rfFadeIn 220ms ease-out forwards;
+    }
+    @keyframes rfFadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
     .fade-exit {
       opacity: 1;
       transform: translateY(0);
@@ -738,7 +747,7 @@
         authState: window.JobHackAINavigation?.getAuthState?.()
       });
       
-      const allowedPlans = ['trial', 'essential', 'pro', 'premium', 'trio'];
+      const allowedPlans = ['trial', 'essential', 'pro', 'premium'];
       
       if (!isAuthenticated || !allowedPlans.includes(plan)) {
         if (!isAuthenticated) {
@@ -850,7 +859,7 @@
       }
       
       // FIX: Validate plan value to prevent corrupted data (e.g., "central")
-      const validPlans = ['visitor', 'free', 'trial', 'essential', 'pro', 'premium', 'trio'];
+      const validPlans = ['visitor', 'free', 'trial', 'essential', 'pro', 'premium'];
       if (!validPlans.includes(plan)) {
         const oldPlan = plan; // Capture original invalid plan before reassignment
         console.warn('[RESUME-FEEDBACK] Invalid plan detected:', plan, '- resetting to free');
@@ -2566,64 +2575,34 @@
                 ];
                 updateRubricGrid(rubric);
                 
-                // CRITICAL FIX: Hide ALL skeletons first, wait for fade to complete, THEN show content
-                // This prevents content from appearing while skeletons are still fading (overlap issue)
-                hideSkeletons().then((result) => {
-                  // CRITICAL: Check if this operation was cancelled (e.g., new upload started)
-                  // If cancelled, don't execute callback to prevent stale content from showing
-                  if (result && result.cancelled) {
-                    return; // Operation was cancelled - exit early
-                  }
-                  
-                  // Additional defensive check: verify skeleton container is not currently showing
-                  // This prevents stale callbacks from disrupting fresh loading states
-                  const skeletonContainer = document.getElementById('rf-skeleton-container');
-                  if (skeletonContainer && skeletonContainer.style.display === 'block') {
-                    // Skeletons are showing again (new upload started) - abort this stale operation
-                    return;
-                  }
-                  
-                  // Verify skeleton container is actually hidden (defensive check)
-                  if (skeletonContainer && skeletonContainer.style.display !== 'none') {
-                    skeletonContainer.style.display = 'none';
-                  }
-                  
-                  // NOW show content container (skeletons are guaranteed to be hidden)
-                  const feedbackContentEl = document.getElementById('rf-feedback-content');
-                  if (feedbackContentEl) {
-                    feedbackContentEl.style.display = 'block';
-                  }
-                  
-                  // Make rubric grid visible
-                  const rubricGrid = document.getElementById('rf-rubric-grid');
-                  if (rubricGrid) {
-                    rubricGrid.style.display = 'grid';
-                  }
-                  
-                  // Trigger fade transition for ATS feedback
-                  setTimeout(() => {
-                    showATSFeedback();
-                  }, 100);
-                }).catch(error => {
-                  // Fallback: If something goes wrong, show content anyway to prevent blocking
-                  console.error('[RESUME-FEEDBACK] Error hiding skeletons:', error);
-                  const skeletonContainer = document.getElementById('rf-skeleton-container');
-                  if (skeletonContainer) {
-                    skeletonContainer.style.display = 'none';
-                  }
-                  const feedbackContentEl = document.getElementById('rf-feedback-content');
-                  if (feedbackContentEl) {
-                    feedbackContentEl.style.display = 'block';
-                  }
-                  const rubricGrid = document.getElementById('rf-rubric-grid');
-                  if (rubricGrid) {
-                    rubricGrid.style.display = 'grid';
-                  }
-                  // CRITICAL: Also trigger fade transition for ATS feedback (matches success path)
-                  setTimeout(() => {
-                    showATSFeedback();
-                  }, 100);
-                });
+                // Show ATS content immediately; keep role skeleton visible until role tips arrive
+                hideATSSkeleton();
+                
+                const skeletonFeedback = document.getElementById('rf-skeleton-feedback');
+                const skeletonContainer = document.getElementById('rf-skeleton-container');
+                const shouldHideSkeletonContainer =
+                  skeletonFeedback &&
+                  (skeletonFeedback.style.display === 'none' || skeletonFeedback.childElementCount === 0);
+                
+                if (shouldHideSkeletonContainer && skeletonContainer) {
+                  skeletonContainer.style.display = 'none';
+                }
+                
+                // Show content container and ATS rubric
+                const feedbackContentEl = document.getElementById('rf-feedback-content');
+                if (feedbackContentEl) {
+                  feedbackContentEl.style.display = 'block';
+                }
+                
+                const rubricGrid = document.getElementById('rf-rubric-grid');
+                if (rubricGrid) {
+                  rubricGrid.style.display = 'grid';
+                }
+                
+                // Trigger fade transition for ATS feedback
+                setTimeout(() => {
+                  showATSFeedback();
+                }, 100);
                 
                 // Show success toast
                 if (window.JobHackAIToast) {
@@ -3534,7 +3513,7 @@
         !Array.isArray(roleSpecificFeedback) &&
         roleSpecificFeedback.targetRoleUsed !== undefined &&
         Array.isArray(roleSpecificFeedback.sections) &&
-        roleSpecificFeedback.sections.length === 5;
+        roleSpecificFeedback.sections.length > 0;
     }
 
     function updateFeedbackGrid(roleSpecificFeedback) {
@@ -3561,7 +3540,7 @@
           if (targetRoleUsed !== 'general') {
             roleDescEl.textContent = `How to tune your resume for ${targetRoleUsed} roles.`;
           } else {
-            roleDescEl.textContent = 'General improvements for tech roles. Add a target role for sharper suggestions.';
+            roleDescEl.textContent = 'Tell us your target role and we’ll tailor the advice to what hiring managers expect.';
           }
         }
       }
@@ -3766,6 +3745,14 @@
       requestAnimationFrame(() => el.classList.add('fade-enter-active'));
     }
 
+    function applyFadeIn(el) {
+      if (!el) return;
+      el.classList.remove('rf-fade-in');
+      // Force reflow to restart animation if applied multiple times
+      void el.offsetWidth;
+      el.classList.add('rf-fade-in');
+    }
+
     function hideRoleFeedback() {
       const el = document.getElementById('role-feedback-container');
       if (!el) return;
@@ -3887,12 +3874,22 @@
       if (skeletonRubric) {
         skeletonRubric.style.display = 'none';
       }
+      const skeletonContainer = document.getElementById('rf-skeleton-container');
+      const skeletonFeedback = document.getElementById('rf-skeleton-feedback');
+      if (skeletonContainer && skeletonFeedback && skeletonFeedback.style.display === 'none') {
+        skeletonContainer.style.display = 'none';
+      }
     }
 
     function hideFeedbackSkeleton() {
       const skeletonFeedback = document.getElementById('rf-skeleton-feedback');
       if (skeletonFeedback) {
         skeletonFeedback.style.display = 'none';
+      }
+      const skeletonContainer = document.getElementById('rf-skeleton-container');
+      const skeletonRubric = document.getElementById('rf-skeleton-rubric');
+      if (skeletonContainer && skeletonRubric && skeletonRubric.style.display === 'none') {
+        skeletonContainer.style.display = 'none';
       }
     }
 
@@ -3945,7 +3942,7 @@
       if (oldCta) oldCta.remove();
       
       const plan = getCurrentUserPlan();
-      if (plan === 'essential' || plan === 'pro' || plan === 'trio') {
+      if (plan === 'essential' || plan === 'pro') {
         // Insert Priority Review CTA after Resume Rewriting tile
         const rewriteTile = document.getElementById('rf-rewrite-tile');
         if (rewriteTile && rewriteTile.parentNode) {
@@ -4973,6 +4970,7 @@
       `).join('');
       
       rubricGrid.style.display = 'grid';
+      applyFadeIn(rubricGrid);
     }
     
     /**
@@ -5039,6 +5037,7 @@
       }).join('');
       
       feedbackGrid.style.display = 'grid';
+      applyFadeIn(feedbackGrid);
     }
     
     /**
@@ -5375,7 +5374,7 @@
         <div id="role-feedback-container">
           <div class="rf-section-title" id="rf-role-title" style="margin-top:3rem;">Role-Specific Feedback</div>
           <div style="color:var(--color-text-secondary);margin-bottom:1.2rem;" id="rf-role-desc">
-            Basic feedback on your resume's content and presentation for your target role. Upgrade to Pro for comprehensive analysis and unlimited suggestions.
+            Tell us your target role and we’ll tailor the advice to what hiring managers expect.
           </div>
           <div class="rf-feedback-grid" id="rf-feedback-grid" style="display:none;">
           </div>

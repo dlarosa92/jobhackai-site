@@ -173,7 +173,12 @@ export async function onRequest(context) {
     // Using isDevOrigin alone prevents matching malicious origins like 'https://evil.com/localhost'
     const isDevEnvironment = env.ENVIRONMENT === 'dev' && isDevOrigin;
     
-    const plan = await getUserPlan(uid, env);
+    let plan = await getUserPlan(uid, env);
+    const allowedPlans = ['free', 'trial', 'essential', 'pro', 'premium'];
+    if (!allowedPlans.includes(plan)) {
+      console.warn('[RESUME-FEEDBACK] Invalid plan detected, normalizing to free', { requestId, uid, plan });
+      plan = 'free';
+    }
     
     // Log plan detection for debugging
     console.log('[RESUME-FEEDBACK] Plan check:', { 
