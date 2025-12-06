@@ -5099,10 +5099,12 @@
       clearTargetRoleState();
       
       // Reset score ring
-      const scoreRing = document.querySelector('.rf-progress-ring circle:nth-child(2)');
-      const scoreText = document.querySelector('.rf-progress-ring text');
+      const svg = document.querySelector('#rf-ats-score-tile .rf-progress-ring svg');
+      const scoreRing = svg ? svg.querySelectorAll('circle')[1] : null;
+      const scoreText = svg ? svg.querySelector('text') : null;
       if (scoreRing) {
-        scoreRing.style.strokeDashoffset = '226.2';
+        scoreRing.style.strokeDashoffset = '';
+        scoreRing.setAttribute('stroke-dashoffset', '226.2');
         scoreRing.setAttribute('stroke', '#00E676');
       }
       if (scoreText) scoreText.textContent = '0%';
