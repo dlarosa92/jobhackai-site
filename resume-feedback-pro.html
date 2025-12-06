@@ -2100,7 +2100,14 @@
       }
 
       const fileNameEl = document.getElementById('rf-context-file-name');
-      if (fileNameEl) fileNameEl.textContent = data.title || data.fileName || '—';
+      const derivedFileName = data.fileName
+        || data.title
+        || data.uploadFileName
+        || data.originalFileName
+        || data.resumeName
+        || data.resumeId
+        || 'Unknown file';
+      if (fileNameEl) fileNameEl.textContent = derivedFileName;
 
       const roleNameEl = document.getElementById('rf-context-role-name');
       if (roleNameEl) roleNameEl.textContent = data.role || data.targetRoleUsed || 'Not specified';
@@ -2137,6 +2144,8 @@
 
       contextBar.style.display = 'block';
     }
+    // Expose for cross-scope access (history restore may call through window)
+    window.updateContextBarFromHistory = updateContextBarFromHistory;
 
     function clearTargetRoleState() {
       const jobTitleInput = document.getElementById('rf-job-title');
@@ -5049,7 +5058,20 @@
         showHistoricalBanner(data);
         
         // Update context bar details from history data
-        updateContextBarFromHistory(data);
+        const updateContextBar =
+          (typeof updateContextBarFromHistory === 'function' && updateContextBarFromHistory) ||
+          (typeof window !== 'undefined' && typeof window.updateContextBarFromHistory === 'function' && window.updateContextBarFromHistory);
+        if (updateContextBar) {
+          updateContextBar(data);
+        } else {
+          console.warn('[RESUME-FEEDBACK-HISTORY] updateContextBarFromHistory missing; skipping context bar update');
+          const hideFn =
+            (typeof hideContextBar === 'function' && hideContextBar) ||
+            (typeof window !== 'undefined' && typeof window.hideContextBar === 'function' && window.hideContextBar);
+          if (hideFn) {
+            hideFn();
+          }
+        }
         
         // Restore page state from D1 data
         restorePageStateFromHistory(data);
@@ -5062,7 +5084,11 @@
         
       } catch (error) {
         console.error('[RESUME-FEEDBACK-HISTORY] Error loading detail:', error);
-        if (window.showToast) window.showToast(error.message || 'Failed to load history', 'error');
+        if (window.JobHackAIToast) {
+          window.JobHackAIToast.error(error.message || 'Failed to load history');
+        } else if (window.showToast) {
+          window.showToast(error.message || 'Failed to load history', 'error');
+        }
       } finally {
         if (loadingOverlay) loadingOverlay.style.display = 'none';
         forceHideOverlays();
