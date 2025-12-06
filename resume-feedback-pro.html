@@ -1941,63 +1941,6 @@
             });
           }
           
-          // Get resume name for context bar and file name restoration
-          const lastResumeName = localStorage.getItem('lastUploadedResumeName');
-          
-          // Only show context bar if we have all required data
-          const hasValidCachedData = cachedScore && 
-                                     cachedScore.score !== undefined && 
-                                     cachedScore.resumeId &&
-                                     lastResumeName && 
-                                     lastResumeName !== 'Unknown file' &&
-                                     cachedScore.timestamp;
-          
-          // Show context bar only if we have valid cached data
-          const contextBar = document.getElementById('rf-context-bar');
-          if (contextBar) {
-            if (hasValidCachedData) {
-              contextBar.style.display = 'block';
-              
-              // Update context bar details
-              const fileNameEl = document.getElementById('rf-context-file-name');
-              if (fileNameEl) fileNameEl.textContent = lastResumeName;
-              
-              const roleNameEl = document.getElementById('rf-context-role-name');
-              if (roleNameEl) {
-                roleNameEl.textContent = cachedScore.jobTitle || 'Not specified';
-              }
-              
-              const timeEl = document.getElementById('rf-context-time-value');
-              if (timeEl && cachedScore.timestamp) {
-                const date = new Date(cachedScore.timestamp);
-                const now = new Date();
-                const diffMs = now - date;
-                const diffMins = Math.floor(diffMs / 60000);
-                const diffHours = Math.floor(diffMs / 3600000);
-                const diffDays = Math.floor(diffMs / 86400000);
-                
-                let timeText;
-                if (diffMins < 1) {
-                  timeText = 'Just now';
-                } else if (diffMins < 60) {
-                  timeText = `${diffMins} minute${diffMins !== 1 ? 's' : ''} ago`;
-                } else if (diffHours < 24) {
-                  timeText = `${diffHours} hour${diffHours !== 1 ? 's' : ''} ago`;
-                } else if (diffDays === 1) {
-                  timeText = 'Yesterday';
-                } else if (diffDays < 7) {
-                  timeText = `${diffDays} days ago`;
-                } else {
-                  timeText = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: date.getFullYear() !== now.getFullYear() ? 'numeric' : undefined });
-                }
-                timeEl.textContent = timeText;
-              }
-            } else {
-              // Hide context bar if data is incomplete
-              contextBar.style.display = 'none';
-            }
-          }
-          
           // Do NOT restore job title from cache; must be explicitly provided each run
           // Restore file name if available (display only - don't enable button)
           // Browsers don't persist file inputs, so user must re-select file
@@ -2013,144 +1956,6 @@
         }
       }
       
-    async function fetchLatestFeedbackFromD1() {
-      try {
-        const token = await getAuthToken();
-        const resp = await fetch('/api/resume-feedback/latest', {
-          method: 'GET',
-          headers: {
-            'Authorization': `Bearer ${token}`
-          }
-        });
-        if (!resp.ok) {
-          console.warn('[RESUME-FEEDBACK] Latest endpoint returned non-200', resp.status);
-          return;
-        }
-        const data = await resp.json();
-        if (data?.latest) {
-          updateContextBarFromLatest(data.latest);
-        } else {
-          hideContextBar();
-        }
-      } catch (err) {
-        console.warn('[RESUME-FEEDBACK] Failed to fetch latest feedback from D1', err);
-      }
-    }
-
-    function updateContextBarFromLatest(latest) {
-      const contextBar = document.getElementById('rf-context-bar');
-      if (!contextBar) return;
-      if (!latest) {
-        hideContextBar();
-        return;
-      }
-
-      const fileNameEl = document.getElementById('rf-context-file-name');
-      if (fileNameEl) {
-        const cachedFileName = typeof localStorage !== 'undefined'
-          ? localStorage.getItem('lastUploadedResumeName')
-          : null;
-        fileNameEl.textContent = latest.fileName || cachedFileName || '—';
-      }
-
-      const roleNameEl = document.getElementById('rf-context-role-name');
-      if (roleNameEl) roleNameEl.textContent = latest.targetRoleUsed || latest.role || 'Not specified';
-
-      const timeEl = document.getElementById('rf-context-time-value');
-      if (timeEl && latest.createdAt) {
-        const date = parseDateSafely(latest.createdAt);
-        if (date) {
-          const now = new Date();
-          const diffMs = now - date;
-          const diffMins = Math.floor(diffMs / 60000);
-          const diffHours = Math.floor(diffMs / 3600000);
-          const diffDays = Math.floor(diffMs / 86400000);
-
-          let timeText;
-          if (diffMins < 1) {
-            timeText = 'Just now';
-          } else if (diffMins < 60) {
-            timeText = `${diffMins} minute${diffMins !== 1 ? 's' : ''} ago`;
-          } else if (diffHours < 24) {
-            timeText = `${diffHours} hour${diffHours !== 1 ? 's' : ''} ago`;
-          } else if (diffDays === 1) {
-            timeText = 'Yesterday';
-          } else if (diffDays < 7) {
-            timeText = `${diffDays} days ago`;
-          } else {
-            timeText = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: date.getFullYear() !== now.getFullYear() ? 'numeric' : undefined });
-          }
-          timeEl.textContent = timeText;
-        } else {
-          timeEl.textContent = '—';
-        }
-      }
-
-      contextBar.style.display = 'block';
-    }
-
-    function hideContextBar() {
-      const contextBar = document.getElementById('rf-context-bar');
-      if (contextBar) {
-        contextBar.style.display = 'none';
-      }
-    }
-
-    function updateContextBarFromHistory(data) {
-      const contextBar = document.getElementById('rf-context-bar');
-      if (!contextBar) return;
-      if (!data) {
-        hideContextBar();
-        return;
-      }
-
-      const fileNameEl = document.getElementById('rf-context-file-name');
-      const derivedFileName = data.fileName
-        || data.uploadFileName
-        || data.originalFileName
-        || data.resumeName
-        || data.resumeId
-        || 'Unknown file';
-      if (fileNameEl) fileNameEl.textContent = derivedFileName;
-
-      const roleNameEl = document.getElementById('rf-context-role-name');
-      if (roleNameEl) roleNameEl.textContent = data.role || data.targetRoleUsed || 'Not specified';
-
-      const timeEl = document.getElementById('rf-context-time-value');
-      if (timeEl && data.createdAt) {
-        const date = parseDateSafely(data.createdAt);
-        if (date) {
-          const now = new Date();
-          const diffMs = now - date;
-          const diffMins = Math.floor(diffMs / 60000);
-          const diffHours = Math.floor(diffMs / 3600000);
-          const diffDays = Math.floor(diffMs / 86400000);
-
-          let timeText;
-          if (diffMins < 1) {
-            timeText = 'Just now';
-          } else if (diffMins < 60) {
-            timeText = `${diffMins} minute${diffMins !== 1 ? 's' : ''} ago`;
-          } else if (diffHours < 24) {
-            timeText = `${diffHours} hour${diffHours !== 1 ? 's' : ''} ago`;
-          } else if (diffDays === 1) {
-            timeText = 'Yesterday';
-          } else if (diffDays < 7) {
-            timeText = `${diffDays} days ago`;
-          } else {
-            timeText = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: date.getFullYear() !== now.getFullYear() ? 'numeric' : undefined });
-          }
-          timeEl.textContent = timeText;
-        } else {
-          timeEl.textContent = '—';
-        }
-      }
-
-      contextBar.style.display = 'block';
-    }
-    // Expose for cross-scope access (history restore may call through window)
-    window.updateContextBarFromHistory = updateContextBarFromHistory;
-
     function clearTargetRoleState() {
       const jobTitleInput = document.getElementById('rf-job-title');
       if (jobTitleInput) {
@@ -2199,22 +2004,6 @@
           if (regenBtn) regenBtn.style.display = 'none';
         }
 
-        // Always refresh Last analyzed from D1 as the source of truth
-        fetchLatestFeedbackFromD1();
-        
-        // Attach event handlers for context bar buttons
-        const rerunBtn = document.getElementById('rf-rerun-btn');
-        if (rerunBtn) {
-          rerunBtn.addEventListener('click', function() {
-            // Scroll to top and focus on file input to encourage re-upload
-            window.scrollTo({ top: 0, behavior: 'smooth' });
-            const fileInput = document.getElementById('rf-upload');
-            if (fileInput) {
-              fileInput.click();
-            }
-          });
-        }
-        
         const optimizeBtn = document.getElementById('rf-optimize-btn');
         if (optimizeBtn) {
           optimizeBtn.addEventListener('click', async function() {
@@ -2357,18 +2146,6 @@
               
               // Show role feedback
               showRoleFeedback();
-              
-              // Update context bar timestamp
-              if (window.JobHackAIStatePersistence) {
-                // Pass jobTitle directly (empty string is valid and should be validated)
-                const updatedScore = window.JobHackAIStatePersistence.loadATSScore(jobTitle ?? '');
-                if (updatedScore && updatedScore.timestamp) {
-                  const timeEl = document.getElementById('rf-context-time-value');
-                  if (timeEl) {
-                    timeEl.textContent = 'Just now';
-                  }
-                }
-              }
               
               if (window.JobHackAIToast) {
                 window.JobHackAIToast.success('Feedback generated successfully!');
@@ -3551,26 +3328,6 @@
                 console.log('[RESUME-FEEDBACK] Saved feedback with reconstructed breakdown');
               }
               
-              // Update context bar timestamp and ensure it's visible
-              const updatedScore = window.JobHackAIStatePersistence.loadATSScore(null);
-              if (updatedScore && updatedScore.timestamp) {
-                const timeEl = document.getElementById('rf-context-time-value');
-                if (timeEl) {
-                  timeEl.textContent = 'Just now';
-                }
-                
-                // Ensure context bar is visible after update
-                const contextBar = document.getElementById('rf-context-bar');
-                if (contextBar && updatedScore.resumeId === currentResumeId) {
-                  contextBar.style.display = 'block';
-                  
-                  // Update role name if it changed
-                  const roleNameEl = document.getElementById('rf-context-role-name');
-                  if (roleNameEl) {
-                    roleNameEl.textContent = updatedScore.jobTitle || 'Not specified';
-                  }
-                }
-              }
             }
 
             // Show success toast - only claim ATS score was updated if it actually succeeded
@@ -4993,22 +4750,6 @@
         // Show historical banner
         showHistoricalBanner(data);
         
-        // Update context bar details from history data
-        const updateContextBar =
-          (typeof updateContextBarFromHistory === 'function' && updateContextBarFromHistory) ||
-          (typeof window !== 'undefined' && typeof window.updateContextBarFromHistory === 'function' && window.updateContextBarFromHistory);
-        if (updateContextBar) {
-          updateContextBar(data);
-        } else {
-          console.warn('[RESUME-FEEDBACK-HISTORY] updateContextBarFromHistory missing; skipping context bar update');
-          const hideFn =
-            (typeof hideContextBar === 'function' && hideContextBar) ||
-            (typeof window !== 'undefined' && typeof window.hideContextBar === 'function' && window.hideContextBar);
-          if (hideFn) {
-            hideFn();
-          }
-        }
-        
         // Restore page state from D1 data
         restorePageStateFromHistory(data);
         
@@ -5624,20 +5365,6 @@
         <!-- Empty state placeholder -->
         <div id="ats-placeholder" class="ats-placeholder-note" style="display:none;">
           Run ATS Score &amp; Feedback to see your detailed breakdown here.
-        </div>
-        <!-- Context Bar (shown when cached data exists) -->
-        <div id="rf-context-bar" style="display:none;margin-bottom:1.5rem;padding:1rem;background:var(--color-card-bg);border:1px solid var(--color-divider);border-radius:var(--radius-md);">
-          <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:1rem;">
-            <div style="flex:1;min-width:200px;">
-              <div style="font-size:0.875rem;color:var(--color-text-muted);margin-bottom:0.5rem;">📄 You're viewing your last analyzed resume</div>
-              <div id="rf-context-details" style="display:flex;flex-direction:column;gap:0.25rem;font-size:0.875rem;color:var(--color-text-secondary);">
-                <span id="rf-context-file">File: <strong id="rf-context-file-name">—</strong></span>
-                <span id="rf-context-role">Target role: <strong id="rf-context-role-name">—</strong></span>
-                <span id="rf-context-time">Last analyzed: <strong id="rf-context-time-value">—</strong></span>
-              </div>
-            </div>
-            <button id="rf-rerun-btn" class="btn-secondary" style="white-space:nowrap;">Re-run analysis</button>
-          </div>
         </div>
         <!-- ATS Rubric -->
         <div id="ats-feedback-container">
