@@ -753,6 +753,8 @@ export async function onRequest(context) {
     // Store original resume text in D1 for history restoration
     const result = aiFeedback && aiFeedback.atsRubric ? {
       originalResume: resumeData.text,
+      fileName: resumeData.fileName || null,
+      resumeId: sanitizedResumeId,
       atsRubric: aiFeedback.atsRubric
         // Filter out any "overallScore" or "overall" categories - only process the 5 expected categories
         .filter(item => {
@@ -834,8 +836,10 @@ export async function onRequest(context) {
       });
       
       return {
-      originalResume: resumeData.text,
-      atsRubric: [
+        originalResume: resumeData.text,
+        fileName: resumeData.fileName || null,
+        resumeId: sanitizedResumeId,
+        atsRubric: [
         {
           category: 'Keyword Match',
           score: ruleBasedScores.keywordScore.score,
