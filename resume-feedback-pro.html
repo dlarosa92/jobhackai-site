@@ -555,24 +555,6 @@
       margin-top: var(--space-sm);
       font-size: var(--font-size-base);
     }
-    .rf-placeholder-cta {
-      text-align: center;
-      margin-top: var(--space-md);
-    }
-    .rf-placeholder-cta button {
-      background: var(--color-cta-green);
-      color: #fff;
-      font-weight: var(--font-weight-semibold);
-      border-radius: var(--radius-lg);
-      padding: 0.75rem 2rem;
-      border: none;
-      cursor: pointer;
-      transition: background 0.18s;
-      font-size: var(--font-size-base);
-    }
-    .rf-placeholder-cta button:hover {
-      background: var(--color-cta-green-hover);
-    }
     /* Standardized Role Input Styling (matching Interview Questions) */
     .rf-role-input {
       width: 100%;
@@ -1848,8 +1830,6 @@
           
           // Hide placeholder
           hidePlaceholder();
-          const placeholderCta = document.getElementById('rf-placeholder-cta');
-          if (placeholderCta) placeholderCta.style.display = 'none';
           
           // Show rubric grid
           const rubricGrid = document.getElementById('rf-rubric-grid');
@@ -2004,11 +1984,9 @@
         const hasResumeData = rubricScores.length > 0 && Array.from(rubricScores).some(el => el.textContent !== '— / —');
         
         if (!hasResumeData) {
-          // Show placeholder note and CTA
+          // Show placeholder note
           const placeholder = document.getElementById('ats-placeholder');
           if (placeholder) placeholder.style.display = 'block';
-          const placeholderCta = document.getElementById('rf-placeholder-cta');
-          if (placeholderCta) placeholderCta.style.display = 'block';
           const regenBtn = document.getElementById('rf-regenerate-btn');
           if (regenBtn) regenBtn.style.display = 'none';
         }
@@ -2516,8 +2494,6 @@
                 // Update UI immediately (progress ring, placeholder, etc.)
                 updateProgressRing(result.score);
                 hidePlaceholder();
-                const placeholderCta = document.getElementById('rf-placeholder-cta');
-                if (placeholderCta) placeholderCta.style.display = 'none';
                 
                 // Helper functions to handle both number and object formats (matches existing code pattern)
                 const getScore = (value) => {
@@ -2802,8 +2778,6 @@
           } else {
             // Free plan - no feedback
             hideRoleFeedback();
-            const placeholderCta = document.getElementById('rf-placeholder-cta');
-            if (placeholderCta) placeholderCta.style.display = 'block';
             
             // Free plan - ATS scoring may have succeeded
           }
@@ -5433,9 +5407,6 @@
           <div class="rf-feedback-grid" id="rf-feedback-grid" style="display:none;">
           </div>
         <button class="btn btn-primary" id="rf-regenerate-btn" style="margin-top:1.7rem;display:none;">Regenerate Feedback</button>
-        <div class="rf-placeholder-cta" id="rf-placeholder-cta" style="display:none;">
-          <button onclick="document.getElementById('rf-upload').click()">Upload Resume to Get Feedback</button>
-        </div>
         </div>
         <div style="color:var(--color-text-muted);font-size:0.9rem;margin-top:1rem;">
           These insights are based on how the top ATS systems filter resumes today.
