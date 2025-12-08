@@ -139,6 +139,8 @@ export async function onRequest(context) {
 
     const rewrittenResume = rewriteLocked ? null : rawRewritten;
     const rewriteChangeSummary = rewriteLocked ? null : rawSummary;
+    const fileName = session.feedback?.fileName || null;
+    const resumeId = session.feedback?.resumeId || null;
 
     // Return full session data for UI restoration
     // The frontend can use this to repopulate:
@@ -164,6 +166,8 @@ export async function onRequest(context) {
       rewriteChangeSummary,
       changeSummary: rewriteChangeSummary,
       rewriteLocked,
+      fileName,
+      resumeId,
       // Metadata for display
       meta: {
         isHistoricalView: true,

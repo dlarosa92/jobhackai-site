@@ -200,22 +200,30 @@ export async function getResumeFeedbackHistory(env, userId, { limit = 20 } = {})
     // Transform to clean history items, extracting ats_score if needed
     const items = results.results.map(row => {
       let atsScore = row.ats_score;
+      let fileName = null;
+      let resumeId = null;
+      let feedback = null;
       
-      // If ats_score column is null, try to extract from feedback_json
-      if (atsScore === null && row.feedback_json) {
+      if (row.feedback_json) {
         try {
-          const feedback = JSON.parse(row.feedback_json);
-          // Prefer canonical overallScore if present
-          if (typeof feedback.overallScore === 'number') {
-            atsScore = feedback.overallScore;
-          } else if (feedback.aiFeedback && typeof feedback.aiFeedback.overallScore === 'number') {
-            atsScore = feedback.aiFeedback.overallScore;
-          } else if (feedback.atsRubric && Array.isArray(feedback.atsRubric)) {
-            // Fallback: sum rubric scores and round (matches calcOverallScore behavior)
-            atsScore = Math.round(feedback.atsRubric.reduce((sum, item) => sum + (item.score || 0), 0));
-          }
+          feedback = JSON.parse(row.feedback_json);
+          fileName = feedback?.fileName || null;
+          resumeId = feedback?.resumeId || null;
         } catch (e) {
           // Ignore parse errors
+        }
+      }
+      
+      // If ats_score column is null, try to extract from feedback_json
+      if (atsScore === null && feedback) {
+        // Prefer canonical overallScore if present
+        if (typeof feedback.overallScore === 'number') {
+          atsScore = feedback.overallScore;
+        } else if (feedback.aiFeedback && typeof feedback.aiFeedback.overallScore === 'number') {
+          atsScore = feedback.aiFeedback.overallScore;
+        } else if (feedback.atsRubric && Array.isArray(feedback.atsRubric)) {
+          // Fallback: sum rubric scores and round (matches calcOverallScore behavior)
+          atsScore = Math.round(feedback.atsRubric.reduce((sum, item) => sum + (item.score || 0), 0));
         }
       }
       
@@ -225,7 +233,9 @@ export async function getResumeFeedbackHistory(env, userId, { limit = 20 } = {})
         role: row.role,
         createdAt: row.created_at,
         atsScore: atsScore,
-        hasFeedback: !!row.feedback_id
+        hasFeedback: !!row.feedback_id,
+        fileName,
+        resumeId
       };
     });
 
