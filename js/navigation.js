@@ -493,7 +493,6 @@ const NAVIGATION_CONFIG = {
         isDropdown: true,
         items: [
           { text: 'Resume Feedback', href: 'resume-feedback-pro.html' },
-          { text: 'Resume Rewrite', href: 'resume-feedback-pro.html#rewrite' },
           { text: 'Cover Letter', href: 'cover-letter-generator.html' },
         ]
       },
@@ -524,7 +523,6 @@ const NAVIGATION_CONFIG = {
         isDropdown: true,
         items: [
           { text: 'Resume Feedback', href: 'resume-feedback-pro.html' },
-          { text: 'Resume Rewrite', href: 'resume-feedback-pro.html#rewrite' },
           { text: 'Cover Letter', href: 'cover-letter-generator.html' },
         ]
       },

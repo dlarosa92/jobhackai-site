@@ -4318,7 +4318,7 @@
           safeSetStyle(badge, 'background', planColor);
           updateDescriptionWithTooltip(
             safeQuerySelector(atsScoreTile, '#rf-score-desc'),
-            'Unlimited ATS scoring with maximum visibility!',
+            'Upload your resume once. Improve it step-by-step with ATS insights, role-specific feedback, and AI-powered rewrites!',
             'Receive an overall ATS compliance score (0-100) for your resume, highlighting key areas to improve for better job application success. Score as many resumes as you need with unlimited access.'
           );
           safeQueryHTML(atsScoreTile, '#rf-ats-checks', '');
@@ -4333,7 +4333,7 @@
             // Premium CTA removed - already exists at bottom of page
           }
           if (roleDescEl) {
-            const planSpecificText = 'Comprehensive feedback on your resume\'s content and presentation for your target role, with AI-powered suggestions tailored to the jobs you\'re targeting.';
+            const planSpecificText = 'See how your resume aligns with what hiring managers expect for your target role.';
             roleDescEl.textContent = planSpecificText;
             // Update baseText to plan-specific text so updateRoleTipsState restores the correct text
             roleDescEl.dataset.baseText = planSpecificText;
@@ -5276,7 +5276,7 @@
         </div>
         <div style="flex:1;min-width:220px;">
           <div class="rf-title" id="rf-title" style="margin-bottom:0.2rem;">
-            ATS Resume Score
+            Smart Resume Tools
             <span class="rf-plan-badge" id="rf-plan-badge">Free Plan</span>
           </div>
           <div style="color:var(--color-text-secondary);margin-bottom:0.7rem;" id="rf-score-desc">
@@ -5361,7 +5361,7 @@
         <span class="rf-plan-badge" style="background:#6B7280;">Locked</span>
       </div>
       <div style="color:var(--color-text-secondary);margin-bottom:1.2rem;">
-        Get detailed ATS feedback and role-specific insights.
+        Run ATS Score &amp; Feedback to see your detailed breakdown here.
         <span class="rf-tooltip-trigger" tabindex="0" aria-label="More info" style="margin-left:0.4em;">
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
             <circle cx="12" cy="12" r="10"/>
@@ -5436,6 +5436,9 @@
         <div class="rf-placeholder-cta" id="rf-placeholder-cta" style="display:none;">
           <button onclick="document.getElementById('rf-upload').click()">Upload Resume to Get Feedback</button>
         </div>
+        </div>
+        <div style="color:var(--color-text-muted);font-size:0.9rem;margin-top:1rem;">
+          These insights are based on how the top ATS systems filter resumes today.
         </div>
       </div>
     </section>
