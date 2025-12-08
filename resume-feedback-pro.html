@@ -4915,6 +4915,7 @@
       
       // Reset form and results
       resetFormToDefault();
+      updateModeUI();
       
       // Reset saved filename line
       updateSavedFileLine('(file not stored)');
@@ -4964,8 +4965,16 @@
       // Reset file input
       const fileInput = document.getElementById('rf-upload');
       const fileName = document.getElementById('rf-file-name');
+      const generateBtn = document.getElementById('rf-generate-btn');
+      const statusDiv = document.getElementById('rf-generate-status');
+      const fileStatus = document.getElementById('rf-file-status');
+      const pdfHelper = document.getElementById('rf-pdf-helper');
       if (fileInput) fileInput.value = '';
       if (fileName) fileName.textContent = 'No file selected';
+      if (generateBtn) generateBtn.disabled = true;
+      if (statusDiv) statusDiv.style.display = 'none';
+      if (fileStatus) fileStatus.style.display = 'none';
+      if (pdfHelper) pdfHelper.style.display = 'none';
       clearTargetRoleState();
       
       // Reset score ring
