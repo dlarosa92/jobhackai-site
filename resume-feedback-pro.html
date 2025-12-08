@@ -4835,6 +4835,9 @@
         // Clear file input; user must choose a new file to re-run
         const fileInput = document.getElementById('rf-upload');
         const fileNameSpan = document.getElementById('rf-file-name');
+        const statusDiv = document.getElementById('rf-generate-status');
+        const fileStatus = document.getElementById('rf-file-status');
+        const pdfHelper = document.getElementById('rf-pdf-helper');
         if (fileInput) {
           fileInput.value = '';
         }
@@ -4843,6 +4846,9 @@
           fileNameSpan.style.color = 'var(--color-text-muted)';
           fileNameSpan.style.fontWeight = 'normal';
         }
+        if (statusDiv) statusDiv.style.display = 'none';
+        if (fileStatus) fileStatus.style.display = 'none';
+        if (pdfHelper) pdfHelper.style.display = 'none';
         
         // Populate target role input for clarity
         const jobTitleInput = document.getElementById('rf-job-title');
