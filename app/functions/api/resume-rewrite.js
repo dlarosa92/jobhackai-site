@@ -68,7 +68,8 @@ export async function onRequest(context) {
 
     const { uid, payload } = await verifyFirebaseIdToken(token, env.FIREBASE_PROJECT_ID);
     const plan = await getUserPlan(uid, env);
-    const cooldownSeconds = 45; // Pro/Premium only feature, short cooldown to prevent rapid-fire
+    // Cloudflare KV TTL minimum is 60s; align cooldown to 60s to avoid silent rounding
+    const cooldownSeconds = 60;
 
     if (plan !== 'pro' && plan !== 'premium') {
       return errorResponse(

@@ -140,7 +140,8 @@ export async function onRequest(context) {
       usage.resumeRewrite.used = 0;
       usage.resumeRewrite.remaining = null;
 
-      const cooldownSeconds = 45;
+      // Keep in sync with resume-rewrite.js; KV min TTL is 60s
+      const cooldownSeconds = 60;
       const cooldownKey = `rewriteCooldown:${uid}`;
       const lastTs = await env.JOBHACKAI_KV.get(cooldownKey);
       if (lastTs) {
