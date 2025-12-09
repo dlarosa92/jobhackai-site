@@ -3822,6 +3822,8 @@
       const regenBtn = document.getElementById('rf-regenerate-btn');
       const roleDescEl = document.getElementById('rf-role-desc');
       const roleInfoBar = document.getElementById('rf-role-info');
+      let roleBadge = document.getElementById('rf-role-badge');
+      let roleHelper = document.getElementById('rf-role-helper');
       const firstTryText = 'ATS score is ready. We couldn’t generate tailored tips for this role. Try again or adjust your target role.';
       const exhaustedText = 'No tailored tips available for this run. Consider adding role-specific details or trying another role.';
 
@@ -3848,6 +3850,8 @@
         if (feedbackGrid) feedbackGrid.style.display = 'none';
         hideRoleFeedback();
         if (roleInfoBar) roleInfoBar.style.display = 'none';
+        if (roleBadge) roleBadge.style.display = 'none';
+        if (roleHelper) roleHelper.style.display = 'none';
         if (regenBtn) {
           regenBtn.style.display = 'none';
           regenBtn.textContent = 'Regenerate Feedback';
@@ -3866,6 +3870,8 @@
         roleTipsFailureCount = 0;
         if (feedbackGrid) feedbackGrid.style.display = 'grid';
         showRoleFeedback();
+        if (roleBadge) roleBadge.style.display = 'none';
+        if (roleHelper) roleHelper.style.display = 'none';
         // Show info bar only when we have partial role tips (some sections but not all)
         if (roleInfoBar) {
           if (sectionCount > 0 && sectionCount < 5) {
@@ -3886,7 +3892,7 @@
           const baseText = roleDescEl.dataset.baseText || '';
           const lastState = roleDescEl.dataset.lastRoleState || '';
           const isPartialErrorState =
-            lastState === 'partial-error' || currentText === partialRoleTipsErrorText;
+            lastState === 'partial-error' || currentText === firstTryText || currentText === exhaustedText;
           // Restore baseText if:
           // - we are recovering from a previous partial-error state, or
           // - current text matches baseText (no plan-specific text was set), or
@@ -3914,9 +3920,24 @@
       }
       const statusMessage = roleTipsFailureCount > 1 ? exhaustedText : firstTryText;
       setRoleStatus(statusMessage);
+
+      // Render a lightweight guidance badge + helper text (inline)
+      roleBadge = document.getElementById('rf-role-badge');
+      if (roleBadge) {
+        roleBadge.style.display = 'inline-flex';
+        roleBadge.textContent = 'Quick suggestions (ATS-based)';
+      }
+      roleHelper = document.getElementById('rf-role-helper');
+      if (roleHelper) {
+        roleHelper.style.display = 'block';
+        roleHelper.textContent = roleTipsFailureCount > 1
+          ? 'We couldn’t generate detailed tips this time. Try adding role-specific details or adjusting the target role, then retry.'
+          : 'Here are quick suggestions from your ATS check. Add a metric and a tool you used for this role, then try again.';
+      }
+
       if (regenBtn) {
         regenBtn.style.display = 'inline-flex';
-        regenBtn.textContent = 'Retry tailored tips';
+        regenBtn.textContent = 'Try again for tailored tips';
         regenBtn.disabled = false;
       }
     }
