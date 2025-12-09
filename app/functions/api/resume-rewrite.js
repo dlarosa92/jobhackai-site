@@ -68,9 +68,7 @@ export async function onRequest(context) {
 
     const { uid, payload } = await verifyFirebaseIdToken(token, env.FIREBASE_PROJECT_ID);
     const plan = await getUserPlan(uid, env);
-    const isProPlan = plan === 'pro' || plan === 'premium';
-    // Pro/Premium: short cooldown to prevent rapid-fire; others keep hourly cooldown
-    const cooldownSeconds = isProPlan ? 45 : 3600;
+    const cooldownSeconds = 45; // Pro/Premium only feature, short cooldown to prevent rapid-fire
 
     if (plan !== 'pro' && plan !== 'premium') {
       return errorResponse(
@@ -98,22 +96,6 @@ export async function onRequest(context) {
             error: 'Rate limit exceeded',
             message: `Please wait before requesting another rewrite (~${cooldownSeconds}s cooldown).`,
             retryAfter
-          }, 429, origin, env);
-        }
-      }
-
-      // Daily cap only for non-Pro/Premium plans
-      if (!isProPlan) {
-        const today = new Date().toISOString().split('T')[0];
-        const dailyKey = `rewriteDaily:${uid}:${today}`;
-        const dailyCount = await env.JOBHACKAI_KV.get(dailyKey);
-
-        if (dailyCount && parseInt(dailyCount, 10) >= 5) {
-          return json({
-            success: false,
-            error: 'Daily limit reached',
-            message: 'You have reached the daily limit (5 rewrites/day).',
-            upgradeRequired: false
           }, 429, origin, env);
         }
       }
@@ -317,17 +299,6 @@ export async function onRequest(context) {
       await env.JOBHACKAI_KV.put(cooldownKey, String(Date.now()), {
         expirationTtl: cooldownSeconds
       });
-
-      // Only increment daily counter for non-Pro/Premium plans
-      if (!isProPlan) {
-        const today = new Date().toISOString().split('T')[0];
-        const dailyKey = `rewriteDaily:${uid}:${today}`;
-        const currentCount = await env.JOBHACKAI_KV.get(dailyKey);
-        const newCount = currentCount ? parseInt(currentCount, 10) + 1 : 1;
-        await env.JOBHACKAI_KV.put(dailyKey, String(newCount), {
-          expirationTtl: 86400
-        });
-      }
     }
 
     console.log('[RESUME-REWRITE] Success', { requestId, uid, resumeId: sanitizedResumeId, tokenUsage });
