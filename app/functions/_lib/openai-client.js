@@ -308,13 +308,14 @@ export async function moderateContent(text, apiKey) {
  * Generate ATS feedback using AI (JSON schema structured output).
  * High-frequency, low-cost endpoint → gpt-4o-mini, tightly capped tokens.
  */
-export async function generateATSFeedback(resumeText, ruleBasedScores, jobTitle, env) {
+export async function generateATSFeedback(resumeText, ruleBasedScores, jobTitle, env, options = {}) {
   const baseModel = env.OPENAI_MODEL_FEEDBACK || 'gpt-4o-mini';
 
   // Respect env-driven config with sensible defaults
-  const maxOutputTokens = Number(env.OPENAI_MAX_TOKENS_ATS) > 0
+  const defaultMaxOutputTokens = Number(env.OPENAI_MAX_TOKENS_ATS) > 0
     ? Number(env.OPENAI_MAX_TOKENS_ATS)
     : 3500; // Increased from 2000 to prevent truncation - roleSpecificFeedback needs ~2000 tokens alone
+  const maxOutputTokens = options.maxOutputTokensOverride || defaultMaxOutputTokens;
 
   const temperature = Number.isFinite(Number(env.OPENAI_TEMPERATURE_SCORING))
     ? Number(env.OPENAI_TEMPERATURE_SCORING)

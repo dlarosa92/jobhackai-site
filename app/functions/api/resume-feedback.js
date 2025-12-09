@@ -633,18 +633,26 @@ export async function onRequest(context) {
   }
 
     // Generate AI feedback with exponential backoff retry
+    // Compute base token budget once for adaptive retries
+    const defaultMaxOutputTokens = Number(env.OPENAI_MAX_TOKENS_ATS) > 0
+      ? Number(env.OPENAI_MAX_TOKENS_ATS)
+      : 3500;
     let aiFeedback = null;
     let tokenUsage = 0;
     const maxRetries = 3;
     let lastError = null;
+    let partialAIFeedback = null; // Capture rubric if tips are missing
+    let missingTipsOnly = false;
     
     for (let attempt = 0; attempt < maxRetries; attempt++) {
       try {
+        const maxTokensOverride = defaultMaxOutputTokens + (attempt > 0 ? attempt * 600 : 0);
         const aiResponse = await generateATSFeedback(
           resumeData.text,
           ruleBasedScores,
           normalizedJobTitle,
-          env
+          env,
+          { maxOutputTokensOverride: maxTokensOverride }
         );
         
         // Capture token usage from OpenAI response
@@ -693,6 +701,14 @@ export async function onRequest(context) {
             // All required fields present - success, exit retry loop
             break;
           } else {
+            // If only roleSpecificFeedback is missing, keep rubric and bail out to fallback tips
+            const missingOnlyRoleTips = validation.missing.length === 1 && validation.missing[0] === 'roleSpecificFeedback';
+            if (missingOnlyRoleTips) {
+              partialAIFeedback = aiFeedback;
+              missingTipsOnly = true;
+              break;
+            }
+
             // Invalid structure - log what's missing for diagnostics
             lastError = new Error(`AI response missing required fields: ${validation.missing.join(', ')}`);
             console.error(`[RESUME-FEEDBACK] Invalid AI response structure (attempt ${attempt + 1}/${maxRetries})`, {
@@ -730,6 +746,16 @@ export async function onRequest(context) {
       }
     }
     
+    // If we only missed role-specific tips, keep the partial AI feedback for rubric but mark to add fallback tips
+    let shouldAddFallbackTips = false;
+    if (missingTipsOnly && partialAIFeedback) {
+      aiFeedback = partialAIFeedback;
+      shouldAddFallbackTips = true;
+    } else if (!aiFeedback && normalizedJobTitle) {
+      // No AI feedback at all: we will add fallback tips later if a role was provided
+      shouldAddFallbackTips = true;
+    }
+
     // Log failed responses to KV for diagnostics (best effort)
     if (!aiFeedback && lastError && env.JOBHACKAI_KV) {
       try {
@@ -746,6 +772,38 @@ export async function onRequest(context) {
       } catch (kvError) {
         console.warn('[RESUME-FEEDBACK] Failed to log error to KV:', kvError);
       }
+    }
+
+    // Fallback role-specific tips generator (minimal, non-fabricated)
+    function buildFallbackRoleTips(targetRole) {
+      const safeRole = targetRole || 'general';
+      return {
+        targetRoleUsed: safeRole,
+        sections: [
+          {
+            section: 'Professional Summary',
+            fitLevel: 'tunable',
+            diagnosis: `Add a short summary highlighting your ${safeRole} impact, stakeholders, and tools.`,
+            tips: [
+              'State your focus areas (process, data, stakeholders) in one sentence.',
+              'Call out 2–3 core tools or methods you use in this role.',
+              'Add one measurable outcome (e.g., reduced cycle time or improved accuracy).'
+            ],
+            rewritePreview: ''
+          },
+          {
+            section: 'Experience',
+            fitLevel: 'big_impact',
+            diagnosis: 'Experience bullets need role-aligned impact and metrics.',
+            tips: [
+              'Lead with the action + outcome (e.g., “Improved reporting accuracy by 20%”).',
+              'Include stakeholders or teams you partnered with.',
+              'Name the tools or methods used (e.g., SQL, dashboards, requirements workshops).'
+            ],
+            rewritePreview: ''
+          }
+        ]
+      };
     }
 
     // Build result with AI feedback if available, otherwise use rule-based scores
@@ -803,22 +861,33 @@ export async function onRequest(context) {
         }),
       // Role-specific feedback structure validation
       // If AI succeeded but didn't provide roleSpecificFeedback, log warning and return null
-      roleSpecificFeedback: (aiFeedback.roleSpecificFeedback && 
-                             aiFeedback.roleSpecificFeedback.targetRoleUsed !== undefined &&
-                             Array.isArray(aiFeedback.roleSpecificFeedback.sections)) 
-        ? aiFeedback.roleSpecificFeedback
-        : (aiFeedback.roleSpecificFeedback && Array.isArray(aiFeedback.roleSpecificFeedback))
-          ? aiFeedback.roleSpecificFeedback // Old format - pass through for backwards compatibility
-          : (() => {
-              // AI succeeded but roleSpecificFeedback is missing - log for monitoring
-              console.warn('[RESUME-FEEDBACK] AI succeeded but roleSpecificFeedback missing or invalid', {
-                requestId,
-                resumeId: sanitizedResumeId,
-                hasRoleSpecificFeedback: !!aiFeedback.roleSpecificFeedback,
-                roleSpecificFeedbackType: typeof aiFeedback.roleSpecificFeedback
-              });
-              return null; // Don't provide hardcoded fallback
-            })(),
+      roleSpecificFeedback: (() => {
+        const rsf = aiFeedback.roleSpecificFeedback;
+        const hasNewFormat =
+          rsf &&
+          typeof rsf === 'object' &&
+          !Array.isArray(rsf) &&
+          rsf.targetRoleUsed !== undefined &&
+          Array.isArray(rsf.sections) &&
+          rsf.sections.length > 0;
+        const hasOldFormat = rsf && Array.isArray(rsf) && rsf.length > 0;
+        if (hasNewFormat || hasOldFormat) return rsf;
+        if (shouldAddFallbackTips) {
+          console.warn('[RESUME-FEEDBACK] Adding fallback role tips (missing roleSpecificFeedback)', {
+            requestId,
+            resumeId: sanitizedResumeId,
+            role: normalizedJobTitle
+          });
+          return buildFallbackRoleTips(normalizedJobTitle);
+        }
+        console.warn('[RESUME-FEEDBACK] AI succeeded but roleSpecificFeedback missing or invalid', {
+          requestId,
+          resumeId: sanitizedResumeId,
+          hasRoleSpecificFeedback: !!rsf,
+          roleSpecificFeedbackType: typeof rsf
+        });
+        return null;
+      })(),
       // Extract ATS issues from AI response or generate from rule-based scores
       atsIssues: aiFeedback.atsIssues && Array.isArray(aiFeedback.atsIssues) 
         ? aiFeedback.atsIssues
@@ -835,6 +904,8 @@ export async function onRequest(context) {
         attempts: maxRetries
       });
       
+      const fallbackRoleTips = shouldAddFallbackTips ? buildFallbackRoleTips(normalizedJobTitle) : null;
+
       return {
         originalResume: resumeData.text,
         fileName: resumeData.fileName || null,
@@ -871,9 +942,8 @@ export async function onRequest(context) {
           feedback: ruleBasedScores.grammarScore.feedback
         }
       ],
-      // Don't provide role-specific feedback when AI fails completely
-      // Frontend will handle null gracefully (hide role-specific section)
-      roleSpecificFeedback: null,
+      // Provide fallback role-specific feedback when AI fails completely (non-fabricated)
+      roleSpecificFeedback: fallbackRoleTips,
       atsIssues: generateATSIssuesFromScores(ruleBasedScores, normalizedJobTitle),
       aiFeedback: null
       };
