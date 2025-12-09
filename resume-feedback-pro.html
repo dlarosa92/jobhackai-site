@@ -1613,7 +1613,14 @@
     // Render rewrite cooldown indicator using shared usage indicator component
     async function renderRewriteCooldownIndicator() {
       const container = document.getElementById('rf-rewrite-cooldown');
-      if (!container || typeof window.renderUsageIndicator !== 'function') return;
+      const setRegenEnabled = () => {
+        const regenBtn = document.querySelector('#rf-rewrite-content .btn.btn-secondary');
+        if (regenBtn) regenBtn.disabled = false;
+      };
+      if (!container || typeof window.renderUsageIndicator !== 'function') {
+        setRegenEnabled();
+        return;
+      }
 
       // Track latest invocation to avoid overlapping intervals
       const callId = (window._rewriteCooldownCallId || 0) + 1;
@@ -1631,6 +1638,7 @@
         if (callId !== window._rewriteCooldownCallId) return;
         clearExistingInterval();
         container.innerHTML = '';
+        setRegenEnabled();
         return;
       }
 
@@ -1648,6 +1656,7 @@
         if (!resp.ok) {
           clearExistingInterval();
           container.innerHTML = '';
+          setRegenEnabled();
           return;
         }
 
@@ -1658,8 +1667,7 @@
         if (!usage || usage.cooldown === undefined) {
           clearExistingInterval();
           container.innerHTML = '';
-          const regenBtn = document.querySelector('#rf-rewrite-content .btn.btn-secondary');
-          if (regenBtn) regenBtn.disabled = false;
+          setRegenEnabled();
           return;
         }
 
@@ -1688,6 +1696,7 @@
 
           const regenBtn = document.querySelector('#rf-rewrite-content .btn.btn-secondary');
           if (regenBtn) regenBtn.disabled = cooldownValue > 0;
+          if (cooldownValue === 0) setRegenEnabled();
         };
 
         renderChip(usage.cooldown);
@@ -1711,6 +1720,8 @@
         }
       } catch (err) {
         console.warn('[RESUME-REWRITE] Failed to render cooldown indicator', err);
+        clearExistingInterval();
+        setRegenEnabled();
       }
     }
     
