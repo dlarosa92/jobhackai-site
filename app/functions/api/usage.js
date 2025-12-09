@@ -134,23 +134,19 @@ export async function onRequest(context) {
       usage.resumeFeedback.remaining = Math.max(0, 3 - usage.resumeFeedback.used);
     }
 
-    // Check rewrite usage (Pro/Premium: daily limit 5)
+    // Check rewrite usage (Pro/Premium: 45s cooldown, no daily cap)
     if ((plan === 'pro' || plan === 'premium') && env.JOBHACKAI_KV) {
-      const today = new Date().toISOString().split('T')[0];
-      const rewriteDailyKey = `rewriteDaily:${uid}:${today}`;
-      const rewriteUsed = await env.JOBHACKAI_KV.get(rewriteDailyKey);
-      usage.resumeRewrite.used = rewriteUsed ? parseInt(rewriteUsed, 10) : 0;
-      usage.resumeRewrite.limit = 5; // Daily limit
-      usage.resumeRewrite.remaining = Math.max(0, 5 - usage.resumeRewrite.used);
-      
-      // Check cooldown (1 hour throttle)
-      const hourlyKey = `rewriteThrottle:${uid}:hour`;
-      const lastHourly = await env.JOBHACKAI_KV.get(hourlyKey);
-      if (lastHourly) {
-        const lastHourlyTime = parseInt(lastHourly, 10);
-        const timeSinceLastHourly = Date.now() - lastHourlyTime;
-        if (timeSinceLastHourly < 3600000) {
-          usage.resumeRewrite.cooldown = Math.ceil((3600000 - timeSinceLastHourly) / 1000); // seconds
+      usage.resumeRewrite.limit = null; // Unlimited for Pro/Premium
+      usage.resumeRewrite.used = 0;
+      usage.resumeRewrite.remaining = null;
+
+      const cooldownSeconds = 45;
+      const cooldownKey = `rewriteCooldown:${uid}`;
+      const lastTs = await env.JOBHACKAI_KV.get(cooldownKey);
+      if (lastTs) {
+        const timeSinceLast = Date.now() - parseInt(lastTs, 10);
+        if (timeSinceLast < cooldownSeconds * 1000) {
+          usage.resumeRewrite.cooldown = Math.ceil((cooldownSeconds * 1000 - timeSinceLast) / 1000); // seconds
         }
       }
     }
