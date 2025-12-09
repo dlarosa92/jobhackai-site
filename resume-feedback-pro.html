@@ -1294,6 +1294,9 @@
       const resumeText = sessionStorage.getItem('currentResumeText') ?? undefined;
       
       // Build request body with optional resumeText for dev fallback
+      // Prompt/output shape expectation (lightweight, not a hard contract):
+      // { targetRoleUsed?: string, sections: [{ sectionId, label, priority, insights:[], rewritePreview? }] }
+      // Accept 1–5 sections; partial sections are valid.
       const requestBody = { resumeId, jobTitle };
       if (resumeText) {
         requestBody.resumeText = resumeText;
@@ -1922,13 +1925,9 @@
           if (cachedScore.roleSpecificFeedback) {
             const isOldFormat = Array.isArray(cachedScore.roleSpecificFeedback) && 
                                cachedScore.roleSpecificFeedback.length > 0;
-            const isNewFormat = typeof cachedScore.roleSpecificFeedback === 'object' && 
-                               !Array.isArray(cachedScore.roleSpecificFeedback) &&
-                               cachedScore.roleSpecificFeedback.targetRoleUsed !== undefined &&
-                               Array.isArray(cachedScore.roleSpecificFeedback.sections) &&
-                               cachedScore.roleSpecificFeedback.sections.length > 0;
-            
-            if (isOldFormat || isNewFormat) {
+          const isNewFormat = isValidRoleTips(cachedScore.roleSpecificFeedback);
+          
+          if (isOldFormat || isNewFormat) {
               updateFeedbackGrid(cachedScore.roleSpecificFeedback);
             } else {
               console.warn('[RESUME-FEEDBACK] Invalid roleSpecificFeedback format in cache:', typeof cachedScore.roleSpecificFeedback);
@@ -2458,6 +2457,11 @@
           // Show skeleton loading states (replaces full-screen overlay)
           // Pass willGetFeedback to conditionally show/hide feedback skeleton
           showSkeletons(willGetFeedback);
+          if (willGetFeedback) {
+            setRoleStatus('Generating tips…');
+          } else {
+            setRoleStatus('');
+          }
           // Capture skeleton generation for this run to guard against stale callbacks
           const atsRequestGeneration = skeletonOperationGeneration;
           // Hide skeleton header since real progress header is already visible
@@ -2756,10 +2760,15 @@
                 showRoleFeedback();
               }, 100);
               
-              // Only show success toast if ATS scoring also succeeded
-              // If ATS failed, user already saw an error modal - don't show conflicting success message
-              if (window.JobHackAIToast && atsScoringSucceeded) {
-                window.JobHackAIToast.success('Feedback generated successfully!');
+              // Truthful toast + inline status based on ATS/tips state
+              const toastStatus = toastForAtsAndTips({
+                atsOk: atsScoringSucceeded,
+                tips: feedbackResult.roleSpecificFeedback
+              });
+              if (toastStatus === 'tips_ok' || toastStatus === 'tips_only') {
+                setRoleStatus('Showing last saved tips.');
+              } else if (toastStatus === 'ats_only') {
+                setRoleStatus('ATS score is ready. Role-specific tips are still loading—retry if needed.');
               }
             } catch (feedbackError) {
               console.error('[RESUME-FEEDBACK] Error processing feedback result:', feedbackError);
@@ -2772,6 +2781,7 @@
             
             // Hide role feedback container since we don't have valid feedback data
             hideRoleFeedback();
+            setRoleStatus('Couldn’t refresh tips—retry.');
             
             // Show error modal but keep ATS score visible
             if (window.showErrorModal) {
@@ -3062,8 +3072,9 @@
               const cachedJobTitle = (cachedScore.jobTitle || '').trim();
               const newJobTitle = (jobTitle || '').trim();
               
-              // If resume and role haven't changed, don't call API
-              if (cachedJobTitle === newJobTitle && cachedScore.roleSpecificFeedback) {
+              // If resume and role haven't changed, and cached tips are valid, don't call API
+              const cachedTips = cachedScore.roleSpecificFeedback;
+              if (cachedJobTitle === newJobTitle && isValidRoleTips(cachedTips)) {
                 console.log('[RESUME-FEEDBACK] Resume and role unchanged, skipping API call');
                 if (window.JobHackAIToast) {
                   window.JobHackAIToast.info('No changes detected. Feedback is already up to date.');
@@ -3077,75 +3088,86 @@
             showLoadingState('Regenerating feedback...');
             this.disabled = true;
             this.textContent = 'Regenerating...';
-
-            // If role changed, also fetch updated ATS score
+            setRoleStatus('Generating tips…');
             const roleChanged = previousJobTitle !== jobTitle;
+
+            // Start ATS (if role changed) and feedback in parallel
+            const atsPromise = roleChanged ? getAtsScore(currentResumeId, jobTitle) : Promise.resolve(null);
+            const feedbackPromise = getResumeFeedback(currentResumeId, jobTitle);
+            const [atsSettled, feedbackSettled] = await Promise.allSettled([atsPromise, feedbackPromise]);
+
             let scoreResult = null;
-            
-            if (roleChanged) {
-              showLoadingState('Updating ATS score for new role...');
-              try {
-                scoreResult = await getAtsScore(currentResumeId, jobTitle);
-                // Verify both success and breakdown exist before using scoreResult
-                if (scoreResult.success && scoreResult.score !== undefined && scoreResult.breakdown) {
-                  updateProgressRing(scoreResult.score);
-                  
-                  // Convert breakdown to rubric format
-                  const rubric = [
-                    {
-                      label: 'Keyword Relevance',
-                      score: scoreResult.breakdown.keywordScore?.score || 0,
-                      max: 40,
-                      tip: limitFeedbackToSentences(scoreResult.breakdown.keywordScore?.feedback || '')
-                    },
-                    {
-                      label: 'Formatting Compliance',
-                      score: scoreResult.breakdown.formattingScore?.score || 0,
-                      max: 20,
-                      tip: limitFeedbackToSentences(scoreResult.breakdown.formattingScore?.feedback || '')
-                    },
-                    {
-                      label: 'Structure & Section Completeness',
-                      score: scoreResult.breakdown.structureScore?.score || 0,
-                      max: 15,
-                      tip: limitFeedbackToSentences(scoreResult.breakdown.structureScore?.feedback || '')
-                    },
-                    {
-                      label: 'Tone & Clarity',
-                      score: scoreResult.breakdown.toneScore?.score || 0,
-                      max: 15,
-                      tip: limitFeedbackToSentences(scoreResult.breakdown.toneScore?.feedback || '')
-                    },
-                    {
-                      label: 'Grammar & Spelling',
-                      score: scoreResult.breakdown.grammarScore?.score || 0,
-                      max: 10,
-                      tip: limitFeedbackToSentences(scoreResult.breakdown.grammarScore?.feedback || '')
-                    }
-                  ];
-                  updateRubricGrid(rubric);
-                  
-                  // Store ATS score in sessionStorage
-                  sessionStorage.setItem('currentAtsScore', scoreResult.score.toString());
-                  sessionStorage.setItem('currentAtsBreakdown', JSON.stringify(scoreResult.breakdown));
-                } else {
-                  // Score update failed or incomplete - log warning and continue
-                  console.warn('[RESUME-FEEDBACK] ATS score update incomplete:', {
-                    success: scoreResult?.success,
-                    hasScore: scoreResult?.score !== undefined,
-                    hasBreakdown: !!scoreResult?.breakdown
-                  });
-                  scoreResult = null; // Mark as failed so toast message is accurate
-                }
-              } catch (scoreError) {
-                console.warn('[RESUME-FEEDBACK] Failed to update ATS score:', scoreError);
-                scoreResult = null; // Mark as failed so toast message is accurate
-                // Continue with feedback generation even if score update fails
+            if (atsSettled.status === 'fulfilled' && atsSettled.value) {
+              const possibleScore = atsSettled.value;
+              if (possibleScore.success && possibleScore.score !== undefined && possibleScore.breakdown) {
+                scoreResult = possibleScore;
+                updateProgressRing(scoreResult.score);
+                const rubric = [
+                  {
+                    label: 'Keyword Relevance',
+                    score: scoreResult.breakdown.keywordScore?.score || 0,
+                    max: 40,
+                    tip: limitFeedbackToSentences(scoreResult.breakdown.keywordScore?.feedback || '')
+                  },
+                  {
+                    label: 'Formatting Compliance',
+                    score: scoreResult.breakdown.formattingScore?.score || 0,
+                    max: 20,
+                    tip: limitFeedbackToSentences(scoreResult.breakdown.formattingScore?.feedback || '')
+                  },
+                  {
+                    label: 'Structure & Section Completeness',
+                    score: scoreResult.breakdown.structureScore?.score || 0,
+                    max: 15,
+                    tip: limitFeedbackToSentences(scoreResult.breakdown.structureScore?.feedback || '')
+                  },
+                  {
+                    label: 'Tone & Clarity',
+                    score: scoreResult.breakdown.toneScore?.score || 0,
+                    max: 15,
+                    tip: limitFeedbackToSentences(scoreResult.breakdown.toneScore?.feedback || '')
+                  },
+                  {
+                    label: 'Grammar & Spelling',
+                    score: scoreResult.breakdown.grammarScore?.score || 0,
+                    max: 10,
+                    tip: limitFeedbackToSentences(scoreResult.breakdown.grammarScore?.feedback || '')
+                  }
+                ];
+                updateRubricGrid(rubric);
+                sessionStorage.setItem('currentAtsScore', scoreResult.score.toString());
+                sessionStorage.setItem('currentAtsBreakdown', JSON.stringify(scoreResult.breakdown));
+              } else {
+                console.warn('[RESUME-FEEDBACK] ATS score update incomplete:', {
+                  success: possibleScore?.success,
+                  hasScore: possibleScore?.score !== undefined,
+                  hasBreakdown: !!possibleScore?.breakdown
+                });
               }
+            } else if (atsSettled.status === 'rejected') {
+              console.warn('[RESUME-FEEDBACK] Failed to update ATS score:', atsSettled.reason);
             }
 
-            showLoadingState('Regenerating feedback...');
-            const feedbackResult = await getResumeFeedback(currentResumeId, jobTitle);
+            if (feedbackSettled.status !== 'fulfilled' || !feedbackSettled.value) {
+              // Feedback failed - log but don't block (ATS score may be shown)
+              const error = feedbackSettled.status === 'rejected' ? feedbackSettled.reason : new Error('No feedback result');
+              console.warn('[RESUME-FEEDBACK] Feedback generation failed (non-blocking):', error);
+              hideRoleFeedback();
+              setRoleStatus('Couldn’t refresh tips—retry.');
+              if (window.showErrorModal) {
+                const errorMsg = error.message || 'Failed to generate feedback. Your ATS score is still available.';
+                window.showErrorModal('Feedback Generation Failed', errorMsg, {
+                  buttonText: 'OK',
+                  onClose: () => {}
+                });
+              }
+              this.textContent = 'Regenerate Feedback';
+              this.disabled = false;
+              hideLoadingState();
+              return;
+            }
+
+            const feedbackResult = feedbackSettled.value;
             
             // Update history with new session (D1-backed)
             if (window.JobHackAIHistory && feedbackResult.sessionId) {
@@ -3316,23 +3338,14 @@
               
             }
 
-            // Show success toast - only claim ATS score was updated if it actually succeeded
-            if (window.JobHackAIToast) {
-              const scoreUpdated = roleChanged && scoreResult?.success && scoreResult?.breakdown;
-              const hasValidRoleFeedback = isValidRoleSpecific(feedbackResult.roleSpecificFeedback);
-
-              if (scoreUpdated && hasValidRoleFeedback) {
-                window.JobHackAIToast.success('ATS score and tailored tips updated!');
-              } else if (scoreUpdated && !hasValidRoleFeedback) {
-                window.JobHackAIToast.success('ATS score updated!');
-              } else if (!scoreUpdated && hasValidRoleFeedback) {
-                window.JobHackAIToast.success('Tailored tips updated!');
-              } else {
-                console.warn('[RESUME-FEEDBACK] Retry completed but role-specific feedback invalid; no success toast', {
-                  hasRoleSpecificFeedback: !!feedbackResult.roleSpecificFeedback,
-                  sectionsLength: feedbackResult.roleSpecificFeedback?.sections?.length
-                });
-              }
+            const toastStatus = toastForAtsAndTips({
+              atsOk: hasAtsScore,
+              tips: feedbackResult.roleSpecificFeedback
+            });
+            if (toastStatus === 'tips_ok' || toastStatus === 'tips_only') {
+              setRoleStatus('Showing last saved tips.');
+            } else if (toastStatus === 'ats_only') {
+              setRoleStatus('ATS score is ready. Role-specific tips are still loading—retry if needed.');
             }
 
             this.textContent = 'Regenerate Feedback';
@@ -3514,21 +3527,56 @@
       });
     }
 
-    function isValidRoleSpecific(roleSpecificFeedback) {
-      return roleSpecificFeedback &&
-        typeof roleSpecificFeedback === 'object' &&
-        !Array.isArray(roleSpecificFeedback) &&
-        roleSpecificFeedback.targetRoleUsed !== undefined &&
-        Array.isArray(roleSpecificFeedback.sections) &&
-        roleSpecificFeedback.sections.length > 0;
+    // Role-specific helpers (shared across generate, retry, regenerate, cached restore)
+    function isValidRoleTips(roleSpecificFeedback) {
+      if (!roleSpecificFeedback || typeof roleSpecificFeedback !== 'object' || Array.isArray(roleSpecificFeedback)) return false;
+      if (!Array.isArray(roleSpecificFeedback.sections)) return false;
+      return roleSpecificFeedback.sections.length > 0;
+    }
+
+    function getRoleTipsStatus({ atsOk, tips }) {
+      const validTips = isValidRoleTips(tips);
+      if (validTips && atsOk) return 'tips_ok';
+      if (validTips && !atsOk) return 'tips_only';
+      if (!validTips && atsOk) return 'ats_only';
+      return 'missing';
+    }
+
+    function toastForAtsAndTips({ atsOk, tips }) {
+      const status = getRoleTipsStatus({ atsOk, tips });
+      if (!window.JobHackAIToast) return status;
+      if (status === 'tips_ok') {
+        window.JobHackAIToast.success('ATS score and role-specific tips updated.');
+      } else if (status === 'tips_only') {
+        window.JobHackAIToast.success('Role-specific tips updated.');
+      } else if (status === 'ats_only') {
+        if (window.JobHackAIToast.info) {
+          window.JobHackAIToast.info('ATS score is ready. Role-specific tips are still loading—retry if needed.');
+        } else {
+          window.JobHackAIToast.success('ATS score is ready. Role-specific tips are still loading—retry if needed.');
+        }
+      }
+      return status;
+    }
+
+    function setRoleStatus(text) {
+      const el = document.getElementById('rf-role-status');
+      if (!el) return;
+      if (text) {
+        el.textContent = text;
+        el.style.display = 'block';
+      } else {
+        el.textContent = '';
+        el.style.display = 'none';
+      }
     }
 
     function updateFeedbackGrid(roleSpecificFeedback) {
       const grid = document.getElementById('rf-feedback-grid');
       if (!grid) return;
       
-      // Check if we have the new structure (object with targetRoleUsed and sections array)
-      const isNewStructure = isValidRoleSpecific(roleSpecificFeedback);
+      // Check if we have the new structure (object with sections array)
+      const isNewStructure = isValidRoleTips(roleSpecificFeedback);
       
       // Check if we have the old structure (array of items with section/score/feedback)
       const isOldStructure = roleSpecificFeedback && Array.isArray(roleSpecificFeedback) && roleSpecificFeedback.length > 0;
@@ -3597,7 +3645,7 @@
           // Build tips list (escape HTML to prevent XSS)
           const tipsHtml = section.tips && Array.isArray(section.tips) && section.tips.length > 0
             ? section.tips.map(tip => `<li>${escapeHtml(tip)}</li>`).join('')
-            : '<li>No specific tips available</li>';
+            : '<li>No high-impact changes detected for this section.</li>';
           
           div.innerHTML = `
             <div class="rf-feedback-label" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.75rem;">
@@ -3650,7 +3698,7 @@
       }
 
       const rsf = roleSpecificFeedback;
-      const isNewStructure = isValidRoleSpecific(rsf);
+      const isNewStructure = isValidRoleTips(rsf);
 
       const isOldStructure = rsf && Array.isArray(rsf) && rsf.length > 0;
       if (isOldStructure) {
@@ -3677,6 +3725,7 @@
           // Clear any previous partial-error state when fully resetting
           delete roleDescEl.dataset.lastRoleState;
         }
+        setRoleStatus('');
         return;
       }
 
@@ -3716,6 +3765,7 @@
             delete roleDescEl.dataset.lastRoleState;
           }
         }
+        setRoleStatus('Showing last saved tips.');
         return;
       }
 
@@ -3727,6 +3777,7 @@
         roleDescEl.textContent = partialRoleTipsErrorText;
         roleDescEl.dataset.lastRoleState = 'partial-error';
       }
+      setRoleStatus('ATS score is ready. Role-specific tips are still loading—retry if needed.');
       if (regenBtn) {
         regenBtn.style.display = 'inline-flex';
         regenBtn.textContent = 'Retry tailored tips';
@@ -5528,6 +5579,7 @@
           <div style="color:var(--color-text-muted);margin-bottom:0.75rem;" id="rf-role-desc">
             Based on current expectations for your target role.
           </div>
+          <div id="rf-role-status" style="color:var(--color-text-secondary);font-size:0.95rem;margin-bottom:0.75rem;display:none;"></div>
           <div id="rf-role-info" style="display:none; margin-bottom:1.2rem; padding:0.85rem 1rem; border:1px solid var(--color-divider); border-radius: var(--radius-button); background: rgba(0,123,255,0.06); color: var(--color-text-secondary);">
             We generated tips for these sections. Add a few impact bullets to see the rest.
           </div>
