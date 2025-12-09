@@ -2769,6 +2769,8 @@
                 setRoleStatus('Showing last saved tips.');
               } else if (toastStatus === 'ats_only') {
                 setRoleStatus('ATS score is ready. Role-specific tips are still loading—retry if needed.');
+            } else if (toastStatus === 'missing') {
+              setRoleStatus('Couldn’t refresh tips—retry.');
               }
             } catch (feedbackError) {
               console.error('[RESUME-FEEDBACK] Error processing feedback result:', feedbackError);
@@ -3097,10 +3099,12 @@
             const [atsSettled, feedbackSettled] = await Promise.allSettled([atsPromise, feedbackPromise]);
 
             let scoreResult = null;
+            let scoreUpdated = false;
             if (atsSettled.status === 'fulfilled' && atsSettled.value) {
               const possibleScore = atsSettled.value;
               if (possibleScore.success && possibleScore.score !== undefined && possibleScore.breakdown) {
                 scoreResult = possibleScore;
+                scoreUpdated = true;
                 updateProgressRing(scoreResult.score);
                 const rubric = [
                   {
@@ -3339,13 +3343,15 @@
             }
 
             const toastStatus = toastForAtsAndTips({
-              atsOk: hasAtsScore,
+              atsOk: scoreUpdated,
               tips: feedbackResult.roleSpecificFeedback
             });
             if (toastStatus === 'tips_ok' || toastStatus === 'tips_only') {
               setRoleStatus('Showing last saved tips.');
             } else if (toastStatus === 'ats_only') {
               setRoleStatus('ATS score is ready. Role-specific tips are still loading—retry if needed.');
+            } else if (toastStatus === 'missing') {
+              setRoleStatus('Couldn’t refresh tips—retry.');
             }
 
             this.textContent = 'Regenerate Feedback';
@@ -3356,6 +3362,7 @@
             this.textContent = 'Regenerate Feedback';
             this.disabled = false;
             hideLoadingState();
+            setRoleStatus('Couldn’t refresh tips—retry.');
           }
         });
       }
