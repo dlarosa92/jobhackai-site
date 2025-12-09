@@ -3585,11 +3585,9 @@
       const grid = document.getElementById('rf-feedback-grid');
       if (!grid) return;
       
-      // Check if we have the new structure (object with sections array)
-      const isNewStructure = isValidRoleTips(roleSpecificFeedback);
-      
-      // Check if we have the old structure (array of items with section/score/feedback)
+      // Distinguish new vs legacy formats to avoid crashing on arrays
       const isOldStructure = roleSpecificFeedback && Array.isArray(roleSpecificFeedback) && roleSpecificFeedback.length > 0;
+      const isNewStructure = !Array.isArray(roleSpecificFeedback) && isValidRoleTips(roleSpecificFeedback);
       if (isOldStructure) {
         console.warn('[RESUME-FEEDBACK] Using legacy roleSpecificFeedback array format');
       }
@@ -3708,9 +3706,8 @@
       }
 
       const rsf = roleSpecificFeedback;
-      const isNewStructure = isValidRoleTips(rsf);
-
       const isOldStructure = rsf && Array.isArray(rsf) && rsf.length > 0;
+      const isNewStructure = !Array.isArray(rsf) && isValidRoleTips(rsf);
       if (isOldStructure) {
         console.warn('[RESUME-FEEDBACK] Using legacy roleSpecificFeedback array format');
       }
