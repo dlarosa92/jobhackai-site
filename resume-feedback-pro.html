@@ -2000,9 +2000,9 @@
         const hasResumeData = rubricScores.length > 0 && Array.from(rubricScores).some(el => el.textContent !== '— / —');
         
         if (!hasResumeData) {
-          // Show placeholder note
+          // Keep placeholder hidden to avoid duplicate empty-state copy
           const placeholder = document.getElementById('ats-placeholder');
-          if (placeholder) placeholder.style.display = 'block';
+          if (placeholder) placeholder.style.display = 'none';
           const regenBtn = document.getElementById('rf-regenerate-btn');
           if (regenBtn) regenBtn.style.display = 'none';
         }
@@ -5483,6 +5483,17 @@
         ATS Score & Feedback
         <span class="rf-plan-badge" style="background:#6B7280;">Locked</span>
       </div>
+      <div style="color:var(--color-text-secondary);margin:0.25rem 0 1.2rem;">
+        Run ATS Score &amp; Feedback to see your detailed breakdown here.
+        <span class="rf-tooltip-trigger" tabindex="0" aria-label="More info" style="margin-left:0.35em; vertical-align:middle;">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false" style="width:18px; height:18px;">
+            <circle cx="12" cy="12" r="10"/>
+            <line x1="12" y1="8" x2="12" y2="8"/>
+            <line x1="12" y1="12" x2="12" y2="16"/>
+          </svg>
+          <span class="rf-tooltip-text">Get comprehensive feedback on keyword matching, formatting, structure, tone, and grammar to improve your resume's ATS compatibility.</span>
+        </span>
+      </div>
       <div class="rf-upgrade-prompt" style="display:none !important;">
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M12 5v14M5 12h14"/>
@@ -5495,7 +5506,6 @@
       <div id="rf-feedback-content" style="display:none;">
         <!-- Empty state placeholder -->
         <div id="ats-placeholder" class="ats-placeholder-note" style="display:none;">
-          Run ATS Score &amp; Feedback to see your detailed breakdown here.
         </div>
         <!-- ATS Rubric -->
         <div id="ats-feedback-container">
