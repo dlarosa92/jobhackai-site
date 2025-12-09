@@ -3881,6 +3881,9 @@
             roleInfoBar.style.display = 'none';
           }
         }
+        // Hide badge/helper on success
+        if (roleBadge) roleBadge.style.display = 'none';
+        if (roleHelper) roleHelper.style.display = 'none';
         if (regenBtn) {
           regenBtn.style.display = 'none';
           regenBtn.textContent = 'Regenerate Feedback';
@@ -3921,15 +3924,17 @@
       const statusMessage = roleTipsFailureCount > 1 ? exhaustedText : firstTryText;
       setRoleStatus(statusMessage);
 
-      // Render a lightweight guidance badge + helper text (inline)
+      // Render a lightweight guidance badge + helper text (above tips area)
       roleBadge = document.getElementById('rf-role-badge');
       if (roleBadge) {
         roleBadge.style.display = 'inline-flex';
+        roleBadge.style.marginBottom = '8px';
         roleBadge.textContent = 'Quick suggestions (ATS-based)';
       }
       roleHelper = document.getElementById('rf-role-helper');
       if (roleHelper) {
         roleHelper.style.display = 'block';
+        roleHelper.style.marginBottom = '12px';
         roleHelper.textContent = roleTipsFailureCount > 1
           ? 'We couldn’t generate detailed tips this time. Try adding role-specific details or adjusting the target role, then retry.'
           : 'Here are quick suggestions from your ATS check. Add a metric and a tool you used for this role, then try again.';
