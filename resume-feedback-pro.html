@@ -2766,7 +2766,7 @@
                 tips: feedbackResult.roleSpecificFeedback
               });
               if (toastStatus === 'tips_ok' || toastStatus === 'tips_only') {
-                setRoleStatus('Showing last saved tips.');
+                setRoleStatus('Role-specific tips updated.');
               } else if (toastStatus === 'ats_only') {
                 setRoleStatus('ATS score is ready. Role-specific tips are still loading—retry if needed.');
             } else if (toastStatus === 'missing') {
@@ -3347,7 +3347,7 @@
               tips: feedbackResult.roleSpecificFeedback
             });
             if (toastStatus === 'tips_ok' || toastStatus === 'tips_only') {
-              setRoleStatus('Showing last saved tips.');
+              setRoleStatus('Role-specific tips updated.');
             } else if (toastStatus === 'ats_only') {
               setRoleStatus('ATS score is ready. Role-specific tips are still loading—retry if needed.');
             } else if (toastStatus === 'missing') {
@@ -3536,7 +3536,10 @@
 
     // Role-specific helpers (shared across generate, retry, regenerate, cached restore)
     function isValidRoleTips(roleSpecificFeedback) {
-      if (!roleSpecificFeedback || typeof roleSpecificFeedback !== 'object' || Array.isArray(roleSpecificFeedback)) return false;
+      if (!roleSpecificFeedback || typeof roleSpecificFeedback !== 'object') return false;
+      // Legacy array format: treat non-empty array as valid
+      if (Array.isArray(roleSpecificFeedback)) return roleSpecificFeedback.length > 0;
+      // New format: object with sections array
       if (!Array.isArray(roleSpecificFeedback.sections)) return false;
       return roleSpecificFeedback.sections.length > 0;
     }
