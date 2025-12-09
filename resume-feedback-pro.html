@@ -1598,17 +1598,15 @@
         }
 
         this.textContent = 'Generate Rewrite';
-        this.disabled = false;
-      // Refresh cooldown UI after a successful rewrite
-      renderRewriteCooldownIndicator();
-        hideLoadingState();
+      // Let cooldown renderer own button state; await to avoid race
+      await renderRewriteCooldownIndicator();
+      hideLoadingState();
       } catch (error) {
         handleApiError(error);
         this.textContent = 'Generate Rewrite';
-        this.disabled = false;
-      // Still refresh cooldown state in case server set a cooldown
-      renderRewriteCooldownIndicator();
-        hideLoadingState();
+      // Let cooldown renderer own button state; await to avoid race
+      await renderRewriteCooldownIndicator();
+      hideLoadingState();
       }
     };
     
@@ -1617,14 +1615,21 @@
       const container = document.getElementById('rf-rewrite-cooldown');
       if (!container || typeof window.renderUsageIndicator !== 'function') return;
 
-      // Clear any existing interval to avoid stacking
-      if (window._rewriteCooldownInterval) {
-        clearInterval(window._rewriteCooldownInterval);
-        window._rewriteCooldownInterval = null;
-      }
+      // Track latest invocation to avoid overlapping intervals
+      const callId = (window._rewriteCooldownCallId || 0) + 1;
+      window._rewriteCooldownCallId = callId;
+
+      const clearExistingInterval = () => {
+        if (window._rewriteCooldownInterval) {
+          clearInterval(window._rewriteCooldownInterval);
+          window._rewriteCooldownInterval = null;
+        }
+      };
 
       const token = localStorage.getItem('firebase-id-token');
       if (!token) {
+        if (callId !== window._rewriteCooldownCallId) return;
+        clearExistingInterval();
         container.innerHTML = '';
         return;
       }
@@ -1638,7 +1643,10 @@
           }
         });
 
+        if (callId !== window._rewriteCooldownCallId) return;
+
         if (!resp.ok) {
+          clearExistingInterval();
           container.innerHTML = '';
           return;
         }
@@ -1648,13 +1656,18 @@
         const plan = data?.plan;
 
         if (!usage || usage.cooldown === undefined) {
+          clearExistingInterval();
           container.innerHTML = '';
           const regenBtn = document.querySelector('#rf-rewrite-content .btn.btn-secondary');
           if (regenBtn) regenBtn.disabled = false;
           return;
         }
 
+        // Clear any existing interval before rendering new state
+        clearExistingInterval();
+
         const renderChip = (cooldownValue) => {
+          if (callId !== window._rewriteCooldownCallId) return;
           container.innerHTML = '';
           const holder = document.createElement('div');
           container.appendChild(holder);
@@ -1682,6 +1695,10 @@
         if (usage.cooldown > 0) {
           let remaining = usage.cooldown;
           window._rewriteCooldownInterval = setInterval(() => {
+            if (callId !== window._rewriteCooldownCallId) {
+              clearExistingInterval();
+              return;
+            }
             remaining -= 1;
             if (remaining <= 0) {
               clearInterval(window._rewriteCooldownInterval);
