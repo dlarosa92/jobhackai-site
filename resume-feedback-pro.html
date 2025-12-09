@@ -1597,16 +1597,133 @@
           }
         }
 
-        this.textContent = 'Regenerate Rewrite';
-        this.disabled = false;
-        hideLoadingState();
+        this.textContent = 'Generate Rewrite';
+      // Let cooldown renderer own button state; await to avoid race
+      await renderRewriteCooldownIndicator();
+      hideLoadingState();
       } catch (error) {
         handleApiError(error);
-        this.textContent = 'Regenerate Rewrite';
-        this.disabled = false;
-        hideLoadingState();
+        this.textContent = 'Generate Rewrite';
+      // Let cooldown renderer own button state; await to avoid race
+      await renderRewriteCooldownIndicator();
+      hideLoadingState();
       }
     };
+    
+    // Render rewrite cooldown indicator using shared usage indicator component
+    async function renderRewriteCooldownIndicator() {
+      const container = document.getElementById('rf-rewrite-cooldown');
+      const setRegenEnabled = () => {
+        const regenBtn = document.querySelector('#rf-rewrite-content .btn.btn-secondary');
+        if (regenBtn) regenBtn.disabled = false;
+      };
+      if (!container || typeof window.renderUsageIndicator !== 'function') {
+        setRegenEnabled();
+        return;
+      }
+
+      // Track latest invocation to avoid overlapping intervals
+      const callId = (window._rewriteCooldownCallId || 0) + 1;
+      window._rewriteCooldownCallId = callId;
+
+      const clearExistingInterval = () => {
+        if (window._rewriteCooldownInterval) {
+          clearInterval(window._rewriteCooldownInterval);
+          window._rewriteCooldownInterval = null;
+        }
+      };
+
+      const token = localStorage.getItem('firebase-id-token');
+      if (!token) {
+        if (callId !== window._rewriteCooldownCallId) return;
+        clearExistingInterval();
+        container.innerHTML = '';
+        setRegenEnabled();
+        return;
+      }
+
+      try {
+        const resp = await fetch('/api/usage', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          }
+        });
+
+        if (callId !== window._rewriteCooldownCallId) return;
+
+        if (!resp.ok) {
+          clearExistingInterval();
+          container.innerHTML = '';
+          setRegenEnabled();
+          return;
+        }
+
+        const data = await resp.json();
+        const usage = data?.usage?.resumeRewrite;
+        const plan = data?.plan;
+
+        if (!usage || usage.cooldown === undefined) {
+          clearExistingInterval();
+          container.innerHTML = '';
+          setRegenEnabled();
+          return;
+        }
+
+        // Clear any existing interval before rendering new state
+        clearExistingInterval();
+
+        const renderChip = (cooldownValue) => {
+          if (callId !== window._rewriteCooldownCallId) return;
+          container.innerHTML = '';
+          const holder = document.createElement('div');
+          container.appendChild(holder);
+
+          window.renderUsageIndicator({
+            feature: 'resumeRewrite',
+            usage: { ...usage, cooldown: cooldownValue },
+            plan,
+            container: holder
+          });
+
+          if (cooldownValue > 0) {
+            const helper = document.createElement('div');
+            helper.style.cssText = 'margin-top:0.25rem;color:var(--color-text-secondary);font-size:0.9rem;';
+            helper.textContent = 'We’re preparing your next rewrite. You can run a new one when this ends.';
+            container.appendChild(helper);
+          }
+
+          const regenBtn = document.querySelector('#rf-rewrite-content .btn.btn-secondary');
+          if (regenBtn) regenBtn.disabled = cooldownValue > 0;
+          if (cooldownValue === 0) setRegenEnabled();
+        };
+
+        renderChip(usage.cooldown);
+
+        if (usage.cooldown > 0) {
+          let remaining = usage.cooldown;
+          window._rewriteCooldownInterval = setInterval(() => {
+            if (callId !== window._rewriteCooldownCallId) {
+              clearExistingInterval();
+              return;
+            }
+            remaining -= 1;
+            if (remaining <= 0) {
+              clearInterval(window._rewriteCooldownInterval);
+              window._rewriteCooldownInterval = null;
+              renderRewriteCooldownIndicator();
+              return;
+            }
+            renderChip(remaining);
+          }, 1000);
+        }
+      } catch (err) {
+        console.warn('[RESUME-REWRITE] Failed to render cooldown indicator', err);
+        clearExistingInterval();
+        setRegenEnabled();
+      }
+    }
     
     // Resume Rewriting Buttons - Fixed selectors to match actual HTML
     const attachRewriteButtonListeners = () => {
@@ -1624,6 +1741,9 @@
         regenRewriteBtn.removeEventListener('click', regenerateRewriteHandler);
         regenRewriteBtn.addEventListener('click', regenerateRewriteHandler);
       }
+
+      // Initial render of cooldown state on mount
+      renderRewriteCooldownIndicator();
     };
 
     // --- DEV-ONLY PLAN TOGGLE LOGIC ---
@@ -4991,6 +5111,13 @@
         rewriteTextareas[0].value = 'Original resume excerpt will appear here after upload.';
         rewriteTextareas[1].value = 'AI-optimized resume excerpt.';
       }
+
+      // Clear rewrite change summary display
+      const changeSummary = document.getElementById('rf-change-summary');
+      if (changeSummary) {
+        changeSummary.innerHTML = '';
+        changeSummary.style.display = 'none';
+      }
       
       // Clear in-memory resume state
       try {
@@ -5040,6 +5167,11 @@
       if (fileStatus) fileStatus.style.display = 'none';
       if (pdfHelper) pdfHelper.style.display = 'none';
       clearTargetRoleState();
+      const changeSummary = document.getElementById('rf-change-summary');
+      if (changeSummary) {
+        changeSummary.innerHTML = '';
+        changeSummary.style.display = 'none';
+      }
       
       // Reset score ring
       const svg = document.querySelector('#rf-ats-score-tile .rf-progress-ring svg');
@@ -5164,6 +5296,9 @@
           originalTextarea.value = original;
         }
       }
+
+      // Always display change summary (ATS Fixes / Role Tailoring) when present
+      displayChangeSummary(rewriteSummary || data.changeSummary || data.feedback?.rewriteChangeSummary || null);
     }
     
     /**
@@ -5657,7 +5792,8 @@
         <div id="rf-change-summary" style="display:none;"></div>
         <div style="margin-top:1.2rem;">
           <button class="btn btn-primary">Copy Rewritten Resume</button>
-          <button class="btn btn-secondary">Regenerate Rewrite</button>
+          <button class="btn btn-secondary">Generate Rewrite</button>
+          <div id="rf-rewrite-cooldown" style="margin-top:0.5rem;"></div>
         </div>
       </div>
     </section>

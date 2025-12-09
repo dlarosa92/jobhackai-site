@@ -68,6 +68,8 @@ export async function onRequest(context) {
 
     const { uid, payload } = await verifyFirebaseIdToken(token, env.FIREBASE_PROJECT_ID);
     const plan = await getUserPlan(uid, env);
+    // Cloudflare KV TTL minimum is 60s; align cooldown to 60s to avoid silent rounding
+    const cooldownSeconds = 60;
 
     if (plan !== 'pro' && plan !== 'premium') {
       return errorResponse(
@@ -82,35 +84,21 @@ export async function onRequest(context) {
 
     if (env.JOBHACKAI_KV) {
       const now = Date.now();
-      const hourlyKey = `rewriteThrottle:${uid}:hour`;
-      const lastHourly = await env.JOBHACKAI_KV.get(hourlyKey);
+      const cooldownKey = `rewriteCooldown:${uid}`;
+      const lastTs = await env.JOBHACKAI_KV.get(cooldownKey);
 
-      if (lastHourly) {
-        const lastHourlyTime = parseInt(lastHourly, 10);
-        const timeSinceLastHourly = now - lastHourlyTime;
+      if (lastTs) {
+        const timeSinceLast = now - parseInt(lastTs, 10);
 
-        if (timeSinceLastHourly < 3600000) {
-          const retryAfter = Math.ceil((3600000 - timeSinceLastHourly) / 1000);
+        if (timeSinceLast < cooldownSeconds * 1000) {
+          const retryAfter = Math.ceil((cooldownSeconds * 1000 - timeSinceLast) / 1000);
           return json({
             success: false,
             error: 'Rate limit exceeded',
-            message: 'Please wait before requesting another rewrite (~1 per hour).',
+            message: `Please wait before requesting another rewrite (~${cooldownSeconds}s cooldown).`,
             retryAfter
           }, 429, origin, env);
         }
-      }
-
-      const today = new Date().toISOString().split('T')[0];
-      const dailyKey = `rewriteDaily:${uid}:${today}`;
-      const dailyCount = await env.JOBHACKAI_KV.get(dailyKey);
-
-      if (dailyCount && parseInt(dailyCount, 10) >= 5) {
-        return json({
-          success: false,
-          error: 'Daily limit reached',
-          message: 'You have reached the daily limit (5 rewrites/day).',
-          upgradeRequired: false
-        }, 429, origin, env);
       }
     }
 
@@ -308,17 +296,9 @@ export async function onRequest(context) {
     }
 
     if (env.JOBHACKAI_KV) {
-      const hourlyKey = `rewriteThrottle:${uid}:hour`;
-      await env.JOBHACKAI_KV.put(hourlyKey, String(Date.now()), {
-        expirationTtl: 3600
-      });
-
-      const today = new Date().toISOString().split('T')[0];
-      const dailyKey = `rewriteDaily:${uid}:${today}`;
-      const currentCount = await env.JOBHACKAI_KV.get(dailyKey);
-      const newCount = currentCount ? parseInt(currentCount, 10) + 1 : 1;
-      await env.JOBHACKAI_KV.put(dailyKey, String(newCount), {
-        expirationTtl: 86400
+      const cooldownKey = `rewriteCooldown:${uid}`;
+      await env.JOBHACKAI_KV.put(cooldownKey, String(Date.now()), {
+        expirationTtl: cooldownSeconds
       });
     }
 
