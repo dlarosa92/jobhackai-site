@@ -5241,6 +5241,12 @@
       if (roleBadge) roleBadge.style.display = 'none';
       const roleHelper = document.getElementById('rf-role-helper');
       if (roleHelper) roleHelper.style.display = 'none';
+      const regenBtn = document.getElementById('rf-regenerate-btn');
+      if (regenBtn) {
+        regenBtn.style.display = 'none';
+        regenBtn.textContent = 'Regenerate Feedback';
+        regenBtn.disabled = false;
+      }
       const roleDescEl = document.getElementById('rf-role-desc');
       if (roleDescEl && roleDescEl.dataset.baseText) {
         roleDescEl.textContent = roleDescEl.dataset.baseText;
