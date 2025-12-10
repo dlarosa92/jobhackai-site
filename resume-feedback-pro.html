@@ -1595,7 +1595,12 @@
       }
       // Guard: require feedback context before rewriting (ATS + role tips)
       const hasAtsIssues = !!(window.latestAtsIssues && Array.isArray(window.latestAtsIssues) && window.latestAtsIssues.length);
-      const hasRoleTips = !!(window.latestRoleSpecific && window.latestRoleSpecific.sections && window.latestRoleSpecific.sections.length);
+      const hasRoleTips = !!(
+        window.latestRoleSpecific &&
+        window.latestRoleSpecific.targetRoleUsed !== undefined &&
+        Array.isArray(window.latestRoleSpecific.sections) &&
+        window.latestRoleSpecific.sections.length
+      );
       if (!hasAtsIssues && !hasRoleTips) {
         handleApiError(new Error('Run feedback first to generate ATS fixes and role tips, then try Rewrite.'));
         return;
@@ -1611,7 +1616,7 @@
 
         // Use stored feedback context if available
         const atsIssues = window.latestAtsIssues || null;
-        const roleSpecificFeedback = window.latestRoleSpecific || null;
+        const roleSpecificFeedback = hasRoleTips ? window.latestRoleSpecific : null;
         
         const result = await rewriteResume(currentResumeId, section, jobTitle, atsIssues, roleSpecificFeedback);
         
