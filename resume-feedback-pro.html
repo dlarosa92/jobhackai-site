@@ -2538,6 +2538,7 @@
                 uploadInput.disabled = false;
                 generateBtn.disabled = false;
                 hideLoadingState();
+                hideRewriteSkeleton();
                 handleApiError(new Error('You have used your 1 free lifetime ATS score. Upgrade to continue scoring unlimited resumes.'));
                 // Redirect to pricing page after showing error
                 setTimeout(() => {
@@ -2630,6 +2631,7 @@
                 uploadInput.disabled = false;
                 generateBtn.disabled = false;
                 hideLoadingState();
+                hideRewriteSkeleton();
                 handleApiError(new Error('You have used your 1 free lifetime ATS score. Upgrade to continue scoring unlimited resumes.'));
                 // Redirect to pricing page after showing error
                 setTimeout(() => {
@@ -2704,6 +2706,7 @@
             uploadInput.disabled = false;
             generateBtn.disabled = false;
             hideLoadingState();
+            hideRewriteSkeleton();
             return;
           }
           
@@ -3182,6 +3185,7 @@
           uploadInput.disabled = false;
           generateBtn.disabled = false;
           hideLoadingState();
+          hideRewriteSkeleton();
         }
       }
 
