@@ -1644,7 +1644,10 @@
       };
 
       let remaining = Math.max(0, Math.round(retryAfterSeconds || 45));
-      const originalLabel = regenBtn ? (regenBtn.dataset.originalLabel || regenBtn.textContent) : 'Generate Rewrite';
+      const defaultLabel = 'Generate Rewrite';
+      const originalLabel = regenBtn
+        ? (regenBtn.dataset.originalLabel || defaultLabel)
+        : defaultLabel;
       if (regenBtn) {
         regenBtn.dataset.originalLabel = originalLabel;
         regenBtn.disabled = true;
