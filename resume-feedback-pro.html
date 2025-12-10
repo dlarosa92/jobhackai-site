@@ -5220,13 +5220,18 @@
       }
       if (scoreText) scoreText.textContent = '0%';
       
-      // Hide feedback sections
+      // Hide feedback sections and role info
       const feedbackContent = document.getElementById('rf-feedback-content');
       const rubricGrid = document.getElementById('rf-rubric-grid');
       const feedbackGrid = document.getElementById('rf-feedback-grid');
+      const roleInfoBar = document.getElementById('rf-role-info');
       if (feedbackContent) feedbackContent.style.display = 'none';
       if (rubricGrid) rubricGrid.style.display = 'none';
       if (feedbackGrid) feedbackGrid.style.display = 'none';
+      if (roleInfoBar) {
+        roleInfoBar.style.display = 'none';
+        roleInfoBar.textContent = '';
+      }
 
       // Restore default score description and badge when exiting history
       if (typeof updateRfTileForPlan === 'function') {
