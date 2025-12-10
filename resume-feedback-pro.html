@@ -5232,12 +5232,20 @@
         roleInfoBar.style.display = 'none';
         roleInfoBar.textContent = '';
       }
-
-      // Reset role-specific tips state and inline status
-      updateRoleTipsState({
-        hasAtsScore: false,
-        roleSpecificFeedback: null
-      });
+      // Clear role-specific status but keep the tile visible for the next run
+      setRoleStatus('');
+      roleTipsFailureCount = 0;
+      const roleContainer = document.getElementById('role-feedback-container');
+      if (roleContainer) roleContainer.style.display = 'block';
+      const roleBadge = document.getElementById('rf-role-badge');
+      if (roleBadge) roleBadge.style.display = 'none';
+      const roleHelper = document.getElementById('rf-role-helper');
+      if (roleHelper) roleHelper.style.display = 'none';
+      const roleDescEl = document.getElementById('rf-role-desc');
+      if (roleDescEl && roleDescEl.dataset.baseText) {
+        roleDescEl.textContent = roleDescEl.dataset.baseText;
+        delete roleDescEl.dataset.lastRoleState;
+      }
 
       // Restore default score description and badge when exiting history
       if (typeof updateRfTileForPlan === 'function') {
