@@ -795,6 +795,55 @@
       return true;
     }
 
+    function resetRewriteUIToDefaults() {
+      const rewriteContent = document.getElementById('rf-rewrite-content');
+      const rewriteTextareas = rewriteContent ? rewriteContent.querySelectorAll('.rf-snippet-box') : [];
+      if (rewriteTextareas && rewriteTextareas.length >= 2) {
+        rewriteTextareas[0].value = 'Original resume excerpt will appear here after upload.';
+        rewriteTextareas[1].value = 'AI-optimized resume excerpt.';
+      }
+      const changeSummary = document.getElementById('rf-change-summary');
+      if (changeSummary) {
+        changeSummary.innerHTML = '';
+        changeSummary.style.display = 'none';
+      }
+    }
+
+    function resetAtsAndRoleUIToDefaults() {
+      const rubricGrid = document.getElementById('rf-rubric-grid');
+      if (rubricGrid) {
+        rubricGrid.innerHTML = '';
+        rubricGrid.style.display = 'none';
+      }
+      const feedbackGrid = document.getElementById('rf-feedback-grid');
+      if (feedbackGrid) {
+        feedbackGrid.innerHTML = '';
+        feedbackGrid.style.display = 'none';
+      }
+    }
+
+    function resetRewriteCooldownState() {
+      // Clear countdown interval
+      if (window._rewriteCountdownInterval) {
+        clearInterval(window._rewriteCountdownInterval);
+        window._rewriteCountdownInterval = null;
+      }
+      // Clear usage-interval
+      if (window._rewriteCooldownInterval) {
+        clearInterval(window._rewriteCooldownInterval);
+        window._rewriteCooldownInterval = null;
+      }
+      // Reset button label/state
+      const regenBtn = document.querySelector('#rf-rewrite-content .btn.btn-secondary');
+      if (regenBtn) {
+        regenBtn.disabled = false;
+        const defaultLabel = 'Generate Rewrite';
+        const originalLabel = regenBtn.dataset.originalLabel || defaultLabel;
+        regenBtn.textContent = originalLabel;
+        regenBtn.dataset.originalLabel = defaultLabel;
+      }
+    }
+
     // --- PLAN-BASED ACCESS CONTROL ---
     function checkPlanAccess() {
       const currentPlan = window.JobHackAINavigation ? window.JobHackAINavigation.getEffectivePlan() : 'free';
@@ -1545,6 +1594,7 @@
 
       try {
         showLoadingState('Rewriting resume...');
+        showRewriteSkeleton();
         clearInlineRewriteCountdown();
         this.disabled = true;
         this.textContent = 'Regenerating...';
@@ -1601,6 +1651,7 @@
         this.textContent = 'Generate Rewrite';
         // Let cooldown renderer own button state; await to avoid race
         await renderRewriteCooldownIndicator();
+        hideRewriteSkeleton();
         hideLoadingState();
       } catch (error) {
         if (error && error.status === 429) {
@@ -1612,6 +1663,7 @@
           this.textContent = 'Generate Rewrite';
           await renderRewriteCooldownIndicator();
         }
+        hideRewriteSkeleton();
         hideLoadingState();
       }
     };
@@ -1632,6 +1684,19 @@
         clearInterval(window._rewriteCooldownInterval);
         window._rewriteCooldownInterval = null;
       }
+    }
+
+    // Lightweight rewrite skeletons (reuse ATS skeleton styling)
+    function showRewriteSkeleton() {
+      const rewriteContent = document.getElementById('rf-rewrite-content');
+      if (!rewriteContent) return;
+      rewriteContent.classList.add('rf-skeleton');
+    }
+
+    function hideRewriteSkeleton() {
+      const rewriteContent = document.getElementById('rf-rewrite-content');
+      if (!rewriteContent) return;
+      rewriteContent.classList.remove('rf-skeleton');
     }
 
     function startInlineRewriteCountdown(retryAfterSeconds) {
@@ -2355,11 +2420,13 @@
               
               this.textContent = 'Optimize this resume';
               this.disabled = false;
+              hideRewriteSkeleton();
               hideLoadingState();
             } catch (error) {
               handleApiError(error);
               this.textContent = 'Optimize this resume';
               this.disabled = false;
+              hideRewriteSkeleton();
               hideLoadingState();
             }
           });
@@ -2413,7 +2480,8 @@
           if (statusDiv) {
             statusDiv.style.display = 'none';
           }
-          showLoadingState('Analyzing your résumé for ATS criteria…');
+        showLoadingState('Analyzing your résumé for ATS criteria…');
+        showRewriteSkeleton();
           uploadInput.disabled = true;
 
           // Check if we already have a resumeId for this file
@@ -5098,11 +5166,15 @@
         const data = await response.json();
         console.log('[RESUME-FEEDBACK-HISTORY] Loaded detail:', data);
       
-      // Clear role state only after we have successfully loaded history data
-      const clearFn = window.clearTargetRoleState || clearTargetRoleState;
-      if (typeof clearFn === 'function') {
-        clearFn();
-      }
+        // Clear role state only after we have successfully loaded history data
+        const clearFn = window.clearTargetRoleState || clearTargetRoleState;
+        if (typeof clearFn === 'function') {
+          clearFn();
+        }
+
+        // Clear UI state before repainting with history data to avoid stale content
+        resetRewriteUIToDefaults();
+        resetAtsAndRoleUIToDefaults();
         
         // Mark as historical view
         _isHistoricalView = true;
@@ -5218,20 +5290,8 @@
       // Reset saved filename line
       updateSavedFileLine('(file not stored)');
       
-      // Clear rewrite text boxes to defaults
-      const rewriteContent = document.getElementById('rf-rewrite-content');
-      const rewriteTextareas = rewriteContent ? rewriteContent.querySelectorAll('.rf-snippet-box') : [];
-      if (rewriteTextareas && rewriteTextareas.length >= 2) {
-        rewriteTextareas[0].value = 'Original resume excerpt will appear here after upload.';
-        rewriteTextareas[1].value = 'AI-optimized resume excerpt.';
-      }
-
-      // Clear rewrite change summary display
-      const changeSummary = document.getElementById('rf-change-summary');
-      if (changeSummary) {
-        changeSummary.innerHTML = '';
-        changeSummary.style.display = 'none';
-      }
+      // Clear rewrite UI to defaults
+      resetRewriteUIToDefaults();
       
       // Clear in-memory resume state
       try {
@@ -5355,6 +5415,8 @@
 
       // Historical views are fully loaded; hide any in-progress UI elements
       hideSkeletons();
+      // Reset cooldown/timers and button labels for history view
+      resetRewriteCooldownState();
 
       // Update ATS score ring using shared logic (clamps/guards inside)
       if (data.atsScore !== null && data.atsScore !== undefined) {
@@ -5375,7 +5437,10 @@
         populateAtsRubric(atsRubric);
       } else {
         const rubricGrid = document.getElementById('rf-rubric-grid');
-        if (rubricGrid) rubricGrid.style.display = 'none';
+        if (rubricGrid) {
+          rubricGrid.innerHTML = '<div style="color:var(--color-text-secondary);font-size:0.95rem;">No ATS fixes saved for this run.</div>';
+          rubricGrid.style.display = 'grid';
+        }
       }
       
       // Populate role-specific feedback
@@ -5383,7 +5448,12 @@
         populateRoleSpecificFeedback(roleSpecificFeedback, data.role);
       } else {
         const roleContainer = document.getElementById('role-feedback-container');
-        if (roleContainer) roleContainer.style.display = 'none';
+        const feedbackGrid = document.getElementById('rf-feedback-grid');
+        if (feedbackGrid) {
+          feedbackGrid.innerHTML = '<div style="color:var(--color-text-secondary);font-size:0.95rem;">No role tips saved for this run.</div>';
+          feedbackGrid.style.display = 'grid';
+        }
+        if (roleContainer) roleContainer.style.display = 'block';
       }
       
       updateRoleTipsState({
