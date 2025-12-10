@@ -1624,11 +1624,21 @@
       }
     }
 
+    function clearAllRewriteCooldownTimers() {
+      // Clear inline countdown
+      clearInlineRewriteCountdown();
+      // Clear usage-indicator-based interval
+      if (window._rewriteCooldownInterval) {
+        clearInterval(window._rewriteCooldownInterval);
+        window._rewriteCooldownInterval = null;
+      }
+    }
+
     function startInlineRewriteCountdown(retryAfterSeconds) {
       const regenBtn = document.querySelector('#rf-rewrite-content .btn.btn-secondary');
       const container = document.getElementById('rf-rewrite-cooldown');
 
-      clearInlineRewriteCountdown();
+      clearAllRewriteCooldownTimers();
 
       const helperId = 'rf-rewrite-inline-helper';
       const ensureHelper = () => {
@@ -1766,6 +1776,10 @@
         renderChip(usage.cooldown);
 
         if (usage.cooldown > 0) {
+          // Avoid overlapping with the inline countdown; let the inline timer own the UI if active
+          if (window._rewriteCountdownInterval) {
+            return;
+          }
           let remaining = usage.cooldown;
           window._rewriteCooldownInterval = setInterval(() => {
             if (callId !== window._rewriteCooldownCallId) {
