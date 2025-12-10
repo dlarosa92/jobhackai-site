@@ -197,6 +197,18 @@ export async function onRequest(context) {
                                 Array.isArray(roleSpecificFeedback.sections) &&
                                 roleSpecificFeedback.sections.length > 0) ? roleSpecificFeedback : null;
 
+    // Require feedback context before rewrite (ATS or role-specific)
+    if (!validAtsIssues && !validRoleFeedback) {
+      return errorResponse(
+        'Feedback required before rewrite. Please run ATS Feedback first.',
+        400,
+        origin,
+        env,
+        requestId,
+        { retryable: true, needsFeedback: true }
+      );
+    }
+
     for (let attempt = 0; attempt < maxRetries; attempt++) {
       try {
         const aiResponse = await generateResumeRewrite(
