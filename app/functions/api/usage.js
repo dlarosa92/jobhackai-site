@@ -134,14 +134,14 @@ export async function onRequest(context) {
       usage.resumeFeedback.remaining = Math.max(0, 3 - usage.resumeFeedback.used);
     }
 
-    // Check rewrite usage (Pro/Premium: 45s cooldown, no daily cap)
+    // Check rewrite usage (Pro/Premium: 45s cooldown, KV TTL minimum is 60s)
     if ((plan === 'pro' || plan === 'premium') && env.JOBHACKAI_KV) {
       usage.resumeRewrite.limit = null; // Unlimited for Pro/Premium
       usage.resumeRewrite.used = 0;
       usage.resumeRewrite.remaining = null;
 
-      // Keep in sync with resume-rewrite.js; KV min TTL is 60s
-      const cooldownSeconds = 60;
+      // Keep in sync with resume-rewrite.js: enforce 45s but stored TTL >= 60s
+      const cooldownSeconds = 45;
       const cooldownKey = `rewriteCooldown:${uid}`;
       const lastTs = await env.JOBHACKAI_KV.get(cooldownKey);
       if (lastTs) {

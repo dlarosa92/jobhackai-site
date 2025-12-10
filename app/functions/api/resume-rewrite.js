@@ -27,13 +27,14 @@ function corsHeaders(origin, env) {
   };
 }
 
-function json(data, status = 200, origin, env) {
+function json(data, status = 200, origin, env, extraHeaders = {}) {
   return new Response(JSON.stringify(data), {
     status,
     headers: {
       'Content-Type': 'application/json',
       'Cache-Control': 'no-store',
-      ...corsHeaders(origin, env)
+      ...corsHeaders(origin, env),
+      ...extraHeaders
     }
   });
 }
@@ -68,8 +69,10 @@ export async function onRequest(context) {
 
     const { uid, payload } = await verifyFirebaseIdToken(token, env.FIREBASE_PROJECT_ID);
     const plan = await getUserPlan(uid, env);
-    // Cloudflare KV TTL minimum is 60s; align cooldown to 60s to avoid silent rounding
-    const cooldownSeconds = 60;
+    // Effective cooldown is 45s, but KV requires a minimum TTL of 60s.
+    // We store the timestamp with a slightly longer TTL for safety, and enforce 45s in code.
+    const cooldownSeconds = 45;
+    const kvTtlSeconds = 75;
 
     if (plan !== 'pro' && plan !== 'premium') {
       return errorResponse(
@@ -97,7 +100,9 @@ export async function onRequest(context) {
             error: 'Rate limit exceeded',
             message: `Please wait before requesting another rewrite (~${cooldownSeconds}s cooldown).`,
             retryAfter
-          }, 429, origin, env);
+          }, 429, origin, env, {
+            'Retry-After': String(retryAfter)
+          });
         }
       }
     }
@@ -298,7 +303,7 @@ export async function onRequest(context) {
     if (env.JOBHACKAI_KV) {
       const cooldownKey = `rewriteCooldown:${uid}`;
       await env.JOBHACKAI_KV.put(cooldownKey, String(Date.now()), {
-        expirationTtl: cooldownSeconds
+        expirationTtl: kvTtlSeconds
       });
     }
 

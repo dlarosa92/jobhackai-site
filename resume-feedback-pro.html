@@ -1545,6 +1545,7 @@
 
       try {
         showLoadingState('Rewriting resume...');
+        clearInlineRewriteCountdown();
         this.disabled = true;
         this.textContent = 'Regenerating...';
 
@@ -1598,18 +1599,78 @@
         }
 
         this.textContent = 'Generate Rewrite';
-      // Let cooldown renderer own button state; await to avoid race
-      await renderRewriteCooldownIndicator();
-      hideLoadingState();
+        // Let cooldown renderer own button state; await to avoid race
+        await renderRewriteCooldownIndicator();
+        hideLoadingState();
       } catch (error) {
-        handleApiError(error);
-        this.textContent = 'Generate Rewrite';
-      // Let cooldown renderer own button state; await to avoid race
-      await renderRewriteCooldownIndicator();
-      hideLoadingState();
+        if (error && error.status === 429) {
+          const retryAfter = Number(error.retryAfter) || 45;
+          await renderRewriteCooldownIndicator();
+          startInlineRewriteCountdown(retryAfter);
+        } else {
+          handleApiError(error);
+          this.textContent = 'Generate Rewrite';
+          await renderRewriteCooldownIndicator();
+        }
+        hideLoadingState();
       }
     };
     
+    // Inline rewrite cooldown countdown (driven directly from /api/resume-rewrite 429 responses)
+    function clearInlineRewriteCountdown() {
+      if (window._rewriteCountdownInterval) {
+        clearInterval(window._rewriteCountdownInterval);
+        window._rewriteCountdownInterval = null;
+      }
+    }
+
+    function startInlineRewriteCountdown(retryAfterSeconds) {
+      const regenBtn = document.querySelector('#rf-rewrite-content .btn.btn-secondary');
+      const container = document.getElementById('rf-rewrite-cooldown');
+
+      clearInlineRewriteCountdown();
+
+      const helperId = 'rf-rewrite-inline-helper';
+      const ensureHelper = () => {
+        if (!container) return null;
+        let helper = document.getElementById(helperId);
+        if (!helper) {
+          helper = document.createElement('div');
+          helper.id = helperId;
+          helper.style.cssText = 'margin-top:0.25rem;color:var(--color-text-secondary);font-size:0.9rem;';
+          container.appendChild(helper);
+        }
+        return helper;
+      };
+
+      let remaining = Math.max(0, Math.round(retryAfterSeconds || 45));
+      const originalLabel = regenBtn ? (regenBtn.dataset.originalLabel || regenBtn.textContent) : 'Generate Rewrite';
+      if (regenBtn) {
+        regenBtn.dataset.originalLabel = originalLabel;
+        regenBtn.disabled = true;
+        regenBtn.textContent = `Retry in ${remaining}s`;
+      }
+
+      const helper = ensureHelper();
+      if (helper) {
+        helper.textContent = 'We’re preparing your next rewrite. You can run a new one when this ends.';
+      }
+
+      window._rewriteCountdownInterval = setInterval(() => {
+        remaining -= 1;
+        if (remaining > 0) {
+          if (regenBtn) regenBtn.textContent = `Retry in ${remaining}s`;
+        } else {
+          clearInlineRewriteCountdown();
+          if (regenBtn) {
+            regenBtn.disabled = false;
+            regenBtn.textContent = originalLabel || 'Generate Rewrite';
+          }
+          if (helper) helper.textContent = '';
+        }
+      }, 1000);
+    }
+
     // Render rewrite cooldown indicator using shared usage indicator component
     async function renderRewriteCooldownIndicator() {
       const container = document.getElementById('rf-rewrite-cooldown');
