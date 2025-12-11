@@ -5317,6 +5317,10 @@
      * Hide the historical view banner and clear state
      */
     function resetSession() {
+      let storageCleared = false;
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/a6e4922a-fede-4605-9463-39adc6a617fc',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'initial',hypothesisId:'H1',location:'resume-feedback-pro.html:resetSession',message:'resetSession invoked',data:{},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
       // Reset high-level state flags (UI only; never touches usage counters)
       _isHistoricalView = false;
       _currentHistoricalSessionId = null;
@@ -5345,12 +5349,22 @@
         sessionStorage.removeItem('currentResumeText');
         sessionStorage.removeItem('currentResumeId');
         localStorage.removeItem('jh_last_resume_id');
-        currentResumeId = null;
-        window.latestAtsIssues = null;
-        window.latestRoleSpecific = null;
+        storageCleared = true;
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/a6e4922a-fede-4605-9463-39adc6a617fc',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'initial',hypothesisId:'H1',location:'resume-feedback-pro.html:resetSession:storageCleared',message:'Storage cleared',data:{},timestamp:Date.now()})}).catch(()=>{});
+        // #endregion
       } catch (e) {
         console.warn('[RESUME-FEEDBACK] Failed to clear session state', e);
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/a6e4922a-fede-4605-9463-39adc6a617fc',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'initial',hypothesisId:'H1',location:'resume-feedback-pro.html:resetSession:storageError',message:'Storage clear failed',data:{error:String(e)},timestamp:Date.now()})}).catch(()=>{});
+        // #endregion
       }
+      currentResumeId = null;
+      window.latestAtsIssues = null;
+      window.latestRoleSpecific = null;
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/a6e4922a-fede-4605-9463-39adc6a617fc',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'initial',hypothesisId:'H1',location:'resume-feedback-pro.html:resetSession:contextCleared',message:'Context cleared',data:{storageCleared},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
     }
     
     function clearHistoricalView() {
