@@ -1432,7 +1432,7 @@
       const desired = state.savedSetId || state.prefillSetId || '';
       els.savedSetSelect.innerHTML = [
         '<option value="">Select a saved set...</option>',
-        ...options.map(opt => `<option value="${opt.id}">${opt.label}</option>`)
+        ...options.map(opt => `<option value="${escapeHtml(opt.id || '')}">${opt.label}</option>`)
       ].join('');
       
       if (desired && options.some(o => o.id === desired)) {
