@@ -1,5 +1,5 @@
 // Mock Interview Scoring Endpoint
-// Scores all 10 answers in a single OpenAI call
+// Scores a set of Q&A pairs (up to 20) in a single OpenAI call
 // Persists session to D1 for history
 // Only available for Pro/Premium plans
 
@@ -311,8 +311,8 @@ export async function onRequest(context) {
       return errorResponse('role, seniority, and interviewStyle are required', 400, origin, env, requestId);
     }
 
-    if (!Array.isArray(qaPairs) || qaPairs.length !== 10) {
-      return errorResponse('qaPairs must be an array of exactly 10 question/answer pairs', 400, origin, env, requestId);
+    if (!Array.isArray(qaPairs) || qaPairs.length < 1 || qaPairs.length > 20) {
+      return errorResponse('qaPairs must be an array of 1 to 20 question/answer pairs', 400, origin, env, requestId);
     }
 
     // Validate each Q&A pair
