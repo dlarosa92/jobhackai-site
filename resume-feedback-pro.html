@@ -5342,6 +5342,8 @@
       
       // Clear rewrite UI to defaults
       resetRewriteUIToDefaults();
+      // Clear any rewrite cooldown timers/labels when leaving history view
+      resetRewriteCooldownState();
       
       // Clear in-memory resume state
       try {
