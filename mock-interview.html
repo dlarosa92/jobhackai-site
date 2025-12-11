@@ -1550,10 +1550,12 @@
           if (localPayload && setId === localPayload.id) {
             const localQs = Array.isArray(localPayload.questions) ? localPayload.questions : [];
             const selectedIdx = Array.isArray(localPayload.selectedIndices) ? localPayload.selectedIndices : [];
-            const useSelected = selectedIdx.length > 0;
+            // Guard against legacy payloads where questions were already filtered but indices were not
+            const useSelected =
+              selectedIdx.length > 0 &&
+              selectedIdx.every(idx => Number.isInteger(idx) && idx >= 0 && idx < localQs.length);
             const picked = useSelected
               ? selectedIdx
-                  .filter(idx => Number.isInteger(idx) && idx >= 0 && idx < localQs.length)
                   .map(idx => localQs[idx])
               : localQs;
             state.role = state.role || localPayload.role || '';
