@@ -1483,7 +1483,15 @@
           if (!res.ok) throw new Error('Failed to load saved questions');
           
           const data = await res.json();
-          state.questions = (data.questions || []).map(q => ({ text: typeof q === 'string' ? q : q.q }));
+          const rawQuestions = data.questions || [];
+          const selectedIdx = Array.isArray(data.selectedIndices) ? data.selectedIndices : [];
+          const useSelected = selectedIdx.length > 0;
+          const picked = useSelected
+            ? selectedIdx
+                .filter(idx => Number.isInteger(idx) && idx >= 0 && idx < rawQuestions.length)
+                .map(idx => rawQuestions[idx])
+            : rawQuestions;
+          state.questions = picked.map(q => ({ text: typeof q === 'string' ? q : q?.q }));
           state.savedSetId = setId;
         }
         
