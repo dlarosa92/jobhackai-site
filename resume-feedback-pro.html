@@ -288,6 +288,14 @@
     .rf-skeleton-feedback-card {
       height: 200px;
     }
+    /* Skeleton state for rewrite textareas (inside the boxes, not overlaying the card) */
+    .rf-snippet-box.rf-snippet-skeleton {
+      color: transparent !important;
+      caret-color: transparent;
+      border-color: #E5E7EB;
+      background-clip: padding-box;
+      pointer-events: none;
+    }
     .rf-btn-secondary {
       background: transparent;
       color: var(--color-accent-blue);
@@ -1707,13 +1715,27 @@
     function showRewriteSkeleton() {
       const rewriteContent = document.getElementById('rf-rewrite-content');
       if (!rewriteContent) return;
-      rewriteContent.classList.add('rf-skeleton');
+
+      // Ensure the overlay isn't applied to the whole card
+      rewriteContent.classList.remove('rf-skeleton');
+
+      const snippetBoxes = rewriteContent.querySelectorAll('.rf-snippet-box');
+      snippetBoxes.forEach((box) => {
+        box.classList.add('rf-skeleton', 'rf-snippet-skeleton');
+      });
     }
 
     function hideRewriteSkeleton() {
       const rewriteContent = document.getElementById('rf-rewrite-content');
       if (!rewriteContent) return;
+
+      // Clean up any legacy overlay class on the container
       rewriteContent.classList.remove('rf-skeleton');
+
+      const snippetBoxes = rewriteContent.querySelectorAll('.rf-snippet-box');
+      snippetBoxes.forEach((box) => {
+        box.classList.remove('rf-skeleton', 'rf-snippet-skeleton');
+      });
     }
 
     function startInlineRewriteCountdown(retryAfterSeconds) {
