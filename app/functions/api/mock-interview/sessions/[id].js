@@ -123,9 +123,29 @@ export async function onRequest(context) {
       overallScore: session.overallScore
     });
 
-    // Get user plan for Premium features
+    // Get user plan and enforce access
     const plan = await getUserPlan(uid, env);
-    const isPremium = plan === 'premium';
+    const allowedDevOrigins = ['https://dev.jobhackai.io', 'http://localhost:3003', 'http://localhost:8788'];
+    const isDevOrigin = origin && allowedDevOrigins.includes(origin);
+    const isDevEnvironment = env.ENVIRONMENT === 'dev' && isDevOrigin;
+    let effectivePlan = plan;
+    if (isDevEnvironment && plan === 'free') {
+      effectivePlan = 'pro';
+    }
+
+    const allowedPlans = ['pro', 'premium'];
+    if (!allowedPlans.includes(effectivePlan)) {
+      return errorResponse(
+        'Mock Interviews are available on Pro and Premium plans.',
+        403,
+        origin,
+        env,
+        requestId,
+        { upgradeRequired: true }
+      );
+    }
+
+    const isPremium = effectivePlan === 'premium';
 
     // If not premium, strip premium_rewrite from per_question feedback
     const feedback = session.feedback || {};

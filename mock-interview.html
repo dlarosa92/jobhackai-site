@@ -1527,6 +1527,7 @@
     function updateInterviewUI() {
       const q = state.questions[state.currentQuestionIndex];
       const isLast = state.currentQuestionIndex === state.questions.length - 1;
+      els.shortNudge.classList.remove('visible');
       
       els.qPill.textContent = `Question ${state.currentQuestionIndex + 1} of ${state.questions.length}`;
       els.qMeta.textContent = `Role: ${state.role} · ${state.seniority} · ${state.interviewStyle}`;
@@ -1572,6 +1573,8 @@
             updateInterviewUI();
           }, 0);
         }
+        // Last question: keep user on the question so they can expand their answer
+        return;
       }
       
       if (isLast) {

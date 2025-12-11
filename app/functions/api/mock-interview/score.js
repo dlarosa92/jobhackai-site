@@ -335,7 +335,23 @@ export async function onRequest(context) {
       d1User = await getOrCreateUserByAuthId(env, uid, userEmail);
     }
 
-    // Check monthly usage limit
+    // Acquire lock to prevent concurrent scoring (reduce race with token verification)
+    lockKey = `mi_score_lock:${uid}`;
+    const { acquired, token } = await acquireKvLock(env, lockKey, 60);
+    if (!acquired) {
+      return errorResponse(
+        'Another interview is being scored. Please wait.',
+        429,
+        origin,
+        env,
+        requestId,
+        { retryAfter: 5 }
+      );
+    }
+    lockAcquired = true;
+    lockToken = token;
+
+    // Re-check monthly usage limit inside lock to avoid races
     if (d1User) {
       const monthlyUsage = await getMockInterviewMonthlyUsage(env, d1User.id);
       const limit = SESSION_LIMITS[effectivePlan] || 20;
@@ -361,22 +377,6 @@ export async function onRequest(context) {
         );
       }
     }
-
-    // Acquire lock to prevent concurrent scoring (reduce race with token verification)
-    lockKey = `mi_score_lock:${uid}`;
-    const { acquired, token } = await acquireKvLock(env, lockKey, 60);
-    if (!acquired) {
-      return errorResponse(
-        'Another interview is being scored. Please wait.',
-        429,
-        origin,
-        env,
-        requestId,
-        { retryAfter: 5 }
-      );
-    }
-    lockAcquired = true;
-    lockToken = token;
 
     // Score the interview
     const isPremium = effectivePlan === 'premium';
