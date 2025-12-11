@@ -1536,7 +1536,6 @@
       els.nextBtn.textContent = isLast ? 'Finish' : 'Next';
       
       updateWordCounter();
-      els.shortNudge.classList.remove('visible');
     }
     
     // Update word counter
@@ -1563,6 +1562,14 @@
       if (wordCount < 20 && wordCount > 0) {
         els.shortNudge.classList.add('visible');
         // Allow continuing after showing nudge once
+        // Do not immediately redraw UI here; let nudge render first.
+        if (!isLast) {
+          // Give the browser a tick to render the nudge, then advance
+          return setTimeout(() => {
+            state.currentQuestionIndex++;
+            updateInterviewUI();
+          }, 0);
+        }
       }
       
       const isLast = state.currentQuestionIndex === state.questions.length - 1;
