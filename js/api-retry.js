@@ -26,11 +26,16 @@
         if (error instanceof TypeError && error.message.includes('fetch')) {
           return true; // Network error
         }
-        if (error.status >= 500) {
-          return true; // Server error
-        }
-        if (error.status === 408) {
-          return true; // Request timeout
+        if (typeof error.status === 'number') {
+          if (error.status >= 500) {
+            return true; // Server error
+          }
+          if (error.status === 408) {
+            return true; // Request timeout
+          }
+          if (error.status === 429) {
+            return true; // Rate limit (respecting retryAfter when present)
+          }
         }
         return false;
       }

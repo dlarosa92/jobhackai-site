@@ -330,6 +330,17 @@ export async function onRequest(context) {
     // }
 
     // For now, use rule-based scores only (AI integration pending)
+    // Build feedback array while preserving legacy behavior:
+    // - Only include categories that actually have feedback (non-empty strings)
+    // - Avoid emitting bare empty-string placeholders that can confuse consumers
+    const feedback = [
+      ruleBasedScores.keywordScore.feedback,
+      ruleBasedScores.formattingScore.feedback,
+      ruleBasedScores.structureScore.feedback,
+      ruleBasedScores.toneScore.feedback,
+      ruleBasedScores.grammarScore.feedback
+    ].filter((item) => typeof item === 'string' && item.trim().length > 0);
+
     const result = {
       score: ruleBasedScores.overallScore,
       breakdown: {
@@ -339,13 +350,7 @@ export async function onRequest(context) {
         toneScore: ruleBasedScores.toneScore.score,
         grammarScore: ruleBasedScores.grammarScore.score
       },
-      feedback: [
-        ruleBasedScores.keywordScore.feedback || '',
-        ruleBasedScores.formattingScore.feedback || '',
-        ruleBasedScores.structureScore.feedback || '',
-        ruleBasedScores.toneScore.feedback || '',
-        ruleBasedScores.grammarScore.feedback || ''
-      ],
+      feedback,
       recommendations: ruleBasedScores.recommendations || []
     };
 
