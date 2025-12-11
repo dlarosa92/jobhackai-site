@@ -3981,7 +3981,7 @@
     let roleTipsFailureCount = 0;
 
     // Helper: control Role-Specific Tips state and retry button visibility
-    function updateRoleTipsState({ hasAtsScore, roleSpecificFeedback }) {
+    function updateRoleTipsState({ hasAtsScore, roleSpecificFeedback, allowPlaceholder = false }) {
       const roleContainer = document.getElementById('role-feedback-container');
       const feedbackGrid = document.getElementById('rf-feedback-grid');
       const regenBtn = document.getElementById('rf-regenerate-btn');
@@ -4077,6 +4077,32 @@
       }
 
       // Partial success: ATS present but role-specific tips missing/invalid
+      const hasPlaceholder =
+        allowPlaceholder &&
+        feedbackGrid &&
+        feedbackGrid.dataset &&
+        feedbackGrid.dataset.placeholder === 'role-none';
+
+      if (hasPlaceholder) {
+        // Keep placeholder visible instead of hiding the grid
+        roleTipsFailureCount = 0;
+        if (feedbackGrid) feedbackGrid.style.display = 'grid';
+        roleContainer.style.display = 'block';
+        if (roleInfoBar) roleInfoBar.style.display = 'none';
+        if (roleDescEl && roleDescEl.dataset.baseText) {
+          roleDescEl.textContent = roleDescEl.dataset.baseText;
+          delete roleDescEl.dataset.lastRoleState;
+        }
+        if (roleBadge) roleBadge.style.display = 'none';
+        if (roleHelper) roleHelper.style.display = 'none';
+        if (regenBtn) {
+          regenBtn.style.display = 'none';
+          regenBtn.textContent = 'Regenerate Feedback';
+        }
+        setRoleStatus('No role tips saved for this run.');
+        return;
+      }
+
       roleTipsFailureCount += 1;
       if (feedbackGrid) feedbackGrid.style.display = 'none';
       roleContainer.style.display = 'block';
@@ -5464,6 +5490,10 @@
       
       // Populate role-specific feedback
       if (roleSpecificFeedback) {
+        const feedbackGrid = document.getElementById('rf-feedback-grid');
+        if (feedbackGrid && feedbackGrid.dataset) {
+          delete feedbackGrid.dataset.placeholder;
+        }
         populateRoleSpecificFeedback(roleSpecificFeedback, data.role);
       } else {
         const roleContainer = document.getElementById('role-feedback-container');
@@ -5471,13 +5501,17 @@
         if (feedbackGrid) {
           feedbackGrid.innerHTML = '<div style="color:var(--color-text-secondary);font-size:0.95rem;">No role tips saved for this run.</div>';
           feedbackGrid.style.display = 'grid';
+          if (feedbackGrid.dataset) {
+            feedbackGrid.dataset.placeholder = 'role-none';
+          }
         }
         if (roleContainer) roleContainer.style.display = 'block';
       }
       
       updateRoleTipsState({
         hasAtsScore: typeof data.atsScore === 'number',
-        roleSpecificFeedback: roleSpecificFeedback || null
+        roleSpecificFeedback: roleSpecificFeedback || null,
+        allowPlaceholder: !roleSpecificFeedback
       });
       
       // Update plan limit text based on current plan
