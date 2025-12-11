@@ -1164,6 +1164,8 @@
       interviewStyle: 'mixed',
       questionSource: 'ai',
       savedSetId: null,
+      savedSets: [],
+      savedSetsLoaded: false,
       questions: [],
       answers: [],
       currentQuestionIndex: 0,
@@ -1327,6 +1329,45 @@
           </li>
         `;
       }
+    }
+    
+    // Fetch saved question sets for dropdown
+    async function fetchSavedSets() {
+      try {
+        const token = await getToken();
+        if (!token) return;
+        
+        const res = await fetch(`${API.savedSets}?list=1`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        
+        if (!res.ok) throw new Error('Failed to load saved sets');
+        
+        const data = await res.json();
+        const sets = data.sets || [];
+        state.savedSets = sets;
+        state.savedSetsLoaded = true;
+        renderSavedSets(sets);
+      } catch (e) {
+        console.error('[MI] Saved sets fetch error:', e);
+        state.savedSetsLoaded = true;
+        renderSavedSets([]);
+      }
+    }
+    
+    function renderSavedSets(sets) {
+      if (!sets.length) {
+        els.savedSetSelect.innerHTML = '<option value="">No saved sets yet</option>';
+        return;
+      }
+      
+      els.savedSetSelect.innerHTML = [
+        '<option value="">Select a saved set...</option>',
+        ...sets.map(s => {
+          const count = typeof s.selectedCount === 'number' ? s.selectedCount : (Array.isArray(s.selectedIndices) ? s.selectedIndices.length : (Array.isArray(s.questions) ? s.questions.length : 0));
+          return `<option value="${s.id}">${escapeHtml(s.role || 'Saved set')} (${count || 0} questions)</option>`;
+        })
+      ].join('');
     }
     
     function renderHistory(sessions) {
@@ -1774,6 +1815,9 @@
         radio.addEventListener('change', () => {
           state.questionSource = radio.value;
           els.savedSetSelect.classList.toggle('hidden', radio.value !== 'saved');
+          if (radio.value === 'saved' && !state.savedSetsLoaded) {
+            fetchSavedSets();
+          }
         });
       });
       
@@ -1802,6 +1846,7 @@
       setupEventListeners();
       initRoleSelector();
       await fetchHistory();
+      await fetchSavedSets();
       checkCanStart();
     }
     

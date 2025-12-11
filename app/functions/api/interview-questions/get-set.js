@@ -7,6 +7,7 @@ import { errorResponse, successResponse, generateRequestId } from '../../_lib/er
 import { 
   getOrCreateUserByAuthId, 
   getInterviewQuestionSetById,
+  getInterviewQuestionSetsByUser,
   isD1Available 
 } from '../../_lib/db.js';
 
@@ -108,9 +109,22 @@ export async function onRequest(context) {
       );
     }
 
-    // Get set ID from URL params
+    // Get params
     const url = new URL(request.url);
     const setId = url.searchParams.get('id');
+    const listMode = url.searchParams.get('list');
+
+    // Get or create user in D1 to verify ownership
+    const d1User = await getOrCreateUserByAuthId(env, uid, userEmail);
+    if (!d1User) {
+      return errorResponse('Failed to resolve user', 500, origin, env, requestId);
+    }
+
+    // List recent sets for dropdown
+    if (listMode) {
+      const sets = await getInterviewQuestionSetsByUser(env, d1User.id, { limit: 20 });
+      return successResponse({ sets }, 200, origin, env, requestId);
+    }
 
     if (!setId) {
       return errorResponse('Set ID is required', 400, origin, env, requestId);
@@ -120,12 +134,6 @@ export async function onRequest(context) {
     const setIdInt = parseInt(setId, 10);
     if (isNaN(setIdInt) || setIdInt <= 0) {
       return errorResponse('Invalid set ID', 400, origin, env, requestId);
-    }
-
-    // Get or create user in D1 to verify ownership
-    const d1User = await getOrCreateUserByAuthId(env, uid, userEmail);
-    if (!d1User) {
-      return errorResponse('Failed to resolve user', 500, origin, env, requestId);
     }
 
     // Retrieve the question set (SQL enforces ownership via WHERE id = ? AND user_id = ?)
