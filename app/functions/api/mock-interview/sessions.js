@@ -1,15 +1,21 @@
-// Interview Questions Get Set endpoint
-// Retrieves a question set from D1 for Mock Interview
-// Called by mock-interview.html when loading a set by ID
+// Mock Interview Sessions Endpoint
+// GET: List session history for the user
+// Only available for Pro/Premium plans
 
 import { getBearer, verifyFirebaseIdToken } from '../../_lib/firebase-auth.js';
 import { errorResponse, successResponse, generateRequestId } from '../../_lib/error-handler.js';
 import { 
   getOrCreateUserByAuthId, 
-  getInterviewQuestionSetById,
-  getInterviewQuestionSetsByUser,
-  isD1Available 
+  isD1Available,
+  getMockInterviewHistory,
+  getMockInterviewMonthlyUsage
 } from '../../_lib/db.js';
+
+// Session limits by plan
+const SESSION_LIMITS = {
+  pro: 20,
+  premium: 999
+};
 
 function corsHeaders(origin) {
   const allowedOrigins = [
@@ -40,7 +46,7 @@ async function getUserPlan(uid, env) {
     const plan = await env.JOBHACKAI_KV.get(`planByUid:${uid}`);
     return plan || 'free';
   } catch (error) {
-    console.error('[IQ-GET-SET] Error fetching plan from KV:', error);
+    console.error('[MI-SESSIONS] Error fetching plan from KV:', error);
     return 'free';
   }
 }
@@ -77,19 +83,16 @@ export async function onRequest(context) {
     const isDevOrigin = origin && allowedDevOrigins.includes(origin);
     const isDevEnvironment = env.ENVIRONMENT === 'dev' && isDevOrigin;
 
-    // Effective plan
     let effectivePlan = plan;
     if (isDevEnvironment && plan === 'free') {
       effectivePlan = 'pro';
     }
 
-    console.log('[IQ-GET-SET] Plan check:', { requestId, uid, plan, effectivePlan });
-
-    // Get set requires pro or premium (Mock Interview access)
+    // Mock Interview only available for Pro/Premium
     const allowedPlans = ['pro', 'premium'];
     if (!allowedPlans.includes(effectivePlan)) {
       return errorResponse(
-        'Accessing question sets for Mock Interviews requires Pro or Premium plan.',
+        'Mock Interviews are available on Pro and Premium plans.',
         403,
         origin,
         env,
@@ -98,77 +101,62 @@ export async function onRequest(context) {
       );
     }
 
-    // Check D1 availability
-    if (!isD1Available(env)) {
-      return errorResponse(
-        'Database not available',
-        503,
-        origin,
-        env,
-        requestId
-      );
-    }
-
-    // Get params
+    // Parse query params
     const url = new URL(request.url);
-    const setId = url.searchParams.get('id');
-    const listMode = url.searchParams.get('list');
+    const limit = Math.min(parseInt(url.searchParams.get('limit') || '10', 10), 50);
 
-    // Get or create user in D1 to verify ownership
-    const d1User = await getOrCreateUserByAuthId(env, uid, userEmail);
+    // Get or create D1 user
+    let d1User = null;
+    if (isD1Available(env)) {
+      d1User = await getOrCreateUserByAuthId(env, uid, userEmail);
+    }
+
     if (!d1User) {
-      return errorResponse('Failed to resolve user', 500, origin, env, requestId);
+      // No D1 user, return empty history
+      return successResponse({
+        sessions: [],
+        usage: {
+          sessionsUsed: 0,
+          sessionLimit: SESSION_LIMITS[effectivePlan] || 20,
+          plan: effectivePlan
+        }
+      }, 200, origin, env, requestId);
     }
 
-    // List recent sets for dropdown
-    if (listMode) {
-      const sets = await getInterviewQuestionSetsByUser(env, d1User.id, { limit: 20 });
-      return successResponse({ sets }, 200, origin, env, requestId);
-    }
+    // Get session history
+    const sessions = await getMockInterviewHistory(env, d1User.id, { limit });
 
-    if (!setId) {
-      return errorResponse('Set ID is required', 400, origin, env, requestId);
-    }
+    // Get monthly usage
+    const sessionsUsed = await getMockInterviewMonthlyUsage(env, d1User.id);
+    const sessionLimit = SESSION_LIMITS[effectivePlan] || 20;
 
-    // Parse ID as integer
-    const setIdInt = parseInt(setId, 10);
-    if (isNaN(setIdInt) || setIdInt <= 0) {
-      return errorResponse('Invalid set ID', 400, origin, env, requestId);
-    }
+    // Calculate next reset date
+    const now = new Date();
+    const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+    const resetDate = nextMonth.toISOString().slice(0, 10);
 
-    // Retrieve the question set (SQL enforces ownership via WHERE id = ? AND user_id = ?)
-    const questionSet = await getInterviewQuestionSetById(env, setIdInt, d1User.id);
-
-    if (!questionSet) {
-      // SQL query returns null if set doesn't exist or doesn't belong to user
-      // No need for separate JS ownership check - SQL already enforced it
-      return errorResponse('Question set not found', 404, origin, env, requestId);
-    }
-
-    console.log('[IQ-GET-SET] Success:', {
+    console.log('[MI-SESSIONS] Retrieved history:', {
       requestId,
       uid,
-      setId: setIdInt,
-      role: questionSet.role,
-      questionCount: questionSet.questions?.length || 0,
-      selectedCount: questionSet.selectedIndices?.length || 0
+      sessionCount: sessions.length,
+      sessionsUsed,
+      sessionLimit
     });
 
     return successResponse({
-      id: questionSet.id,
-      role: questionSet.role,
-      seniority: questionSet.seniority,
-      types: questionSet.types,
-      questions: questionSet.questions,
-      selectedIndices: questionSet.selectedIndices,
-      jd: questionSet.jd,
-      createdAt: questionSet.createdAt
+      sessions,
+      usage: {
+        sessionsUsed,
+        sessionLimit,
+        plan: effectivePlan,
+        resetDate
+      }
     }, 200, origin, env, requestId);
 
   } catch (error) {
-    console.error('[IQ-GET-SET] Error:', { requestId, error: error.message, stack: error.stack });
+    console.error('[MI-SESSIONS] Error:', { requestId, error: error.message, stack: error.stack });
     return errorResponse(
-      error.message || 'Failed to retrieve question set',
+      error.message || 'Failed to retrieve sessions',
       500,
       origin,
       env,

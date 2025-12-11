@@ -673,3 +673,245 @@ export async function incrementFeatureDailyUsage(env, userId, feature, increment
   }
 }
 
+// ============================================================
+// MOCK INTERVIEW SESSION HELPERS
+// ============================================================
+
+/**
+ * Create a mock interview session
+ * @param {Object} env - Cloudflare environment with DB binding
+ * @param {Object} options - Session options
+ * @param {number} options.userId - User ID from users table
+ * @param {string} options.role - Target role
+ * @param {string} options.seniority - Level (e.g., "Senior", "Mid")
+ * @param {string} options.interviewStyle - Style: "mixed", "behavioral", "technical", "leadership"
+ * @param {number|null} options.questionSetId - FK to interview_question_sets.id (nullable)
+ * @param {string|null} options.questionSetName - Display name for the set
+ * @param {number} options.overallScore - Total score 0-100
+ * @param {Object} options.rubricScores - { relevance, structure, clarity, insight, grammar }
+ * @param {Object} options.saoBreakdown - { situationPct, actionPct, outcomePct }
+ * @param {Array} options.qaPairs - Array of { q, a } pairs
+ * @param {Object} options.feedback - Full AI feedback JSON
+ * @returns {Promise<Object>} Created session
+ */
+export async function createMockInterviewSession(env, {
+  userId,
+  role,
+  seniority,
+  interviewStyle,
+  questionSetId = null,
+  questionSetName = null,
+  overallScore,
+  rubricScores,
+  saoBreakdown,
+  qaPairs,
+  feedback
+}) {
+  if (!env.DB) {
+    console.warn('[DB] D1 binding not available');
+    return null;
+  }
+
+  try {
+    const qaPairsJson = JSON.stringify(qaPairs || []);
+    const feedbackJson = JSON.stringify(feedback || {});
+    const setName = questionSetName || (questionSetId ? null : 'AI-generated');
+
+    const result = await env.DB.prepare(
+      `INSERT INTO mock_interview_sessions (
+        user_id, role, seniority, interview_style, question_set_id, question_set_name,
+        overall_score, relevance_score, structure_score, clarity_score, insight_score, grammar_score,
+        situation_pct, action_pct, outcome_pct, qa_pairs_json, feedback_json
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      RETURNING id, user_id, role, seniority, interview_style, question_set_id, question_set_name,
+        overall_score, relevance_score, structure_score, clarity_score, insight_score, grammar_score,
+        situation_pct, action_pct, outcome_pct, created_at`
+    ).bind(
+      userId,
+      role,
+      seniority,
+      interviewStyle,
+      questionSetId,
+      setName,
+      overallScore,
+      rubricScores.relevance,
+      rubricScores.structure,
+      rubricScores.clarity,
+      rubricScores.insight,
+      rubricScores.grammar,
+      saoBreakdown.situationPct,
+      saoBreakdown.actionPct,
+      saoBreakdown.outcomePct,
+      qaPairsJson,
+      feedbackJson
+    ).first();
+
+    console.log('[DB] Created mock interview session:', { id: result.id, userId, role, score: overallScore });
+    return result;
+  } catch (error) {
+    console.error('[DB] Error in createMockInterviewSession:', error);
+    throw error;
+  }
+}
+
+/**
+ * Get mock interview session by ID (enforces ownership)
+ * @param {Object} env - Cloudflare environment with DB binding
+ * @param {number} sessionId - Session ID
+ * @param {number} userId - User ID (required for security)
+ * @returns {Promise<Object|null>} Full session with parsed JSON, or null
+ */
+export async function getMockInterviewSessionById(env, sessionId, userId) {
+  if (!env.DB) {
+    console.warn('[DB] D1 binding not available');
+    return null;
+  }
+
+  if (!userId || typeof userId !== 'number') {
+    console.warn('[DB] userId is required for getMockInterviewSessionById');
+    return null;
+  }
+
+  try {
+    const row = await env.DB.prepare(
+      `SELECT id, user_id, role, seniority, interview_style, question_set_id, question_set_name,
+        overall_score, relevance_score, structure_score, clarity_score, insight_score, grammar_score,
+        situation_pct, action_pct, outcome_pct, qa_pairs_json, feedback_json, created_at
+      FROM mock_interview_sessions
+      WHERE id = ? AND user_id = ?`
+    ).bind(sessionId, userId).first();
+
+    if (!row) {
+      return null;
+    }
+
+    return {
+      id: row.id,
+      userId: row.user_id,
+      role: row.role,
+      seniority: row.seniority,
+      interviewStyle: row.interview_style,
+      questionSetId: row.question_set_id,
+      questionSetName: row.question_set_name || 'AI-generated',
+      overallScore: row.overall_score,
+      rubricScores: {
+        relevance: row.relevance_score,
+        structure: row.structure_score,
+        clarity: row.clarity_score,
+        insight: row.insight_score,
+        grammar: row.grammar_score
+      },
+      saoBreakdown: {
+        situationPct: row.situation_pct,
+        actionPct: row.action_pct,
+        outcomePct: row.outcome_pct
+      },
+      qaPairs: JSON.parse(row.qa_pairs_json || '[]'),
+      feedback: JSON.parse(row.feedback_json || '{}'),
+      createdAt: row.created_at
+    };
+  } catch (error) {
+    console.error('[DB] Error in getMockInterviewSessionById:', error);
+    return null;
+  }
+}
+
+/**
+ * Get mock interview session history for a user
+ * @param {Object} env - Cloudflare environment with DB binding
+ * @param {number} userId - User ID
+ * @param {Object} options - Query options
+ * @param {number} options.limit - Max results (default 10)
+ * @returns {Promise<Array>} List of session summaries (not full feedback)
+ */
+export async function getMockInterviewHistory(env, userId, { limit = 10 } = {}) {
+  if (!env.DB) {
+    console.warn('[DB] D1 binding not available');
+    return [];
+  }
+
+  try {
+    const results = await env.DB.prepare(
+      `SELECT id, role, seniority, interview_style, question_set_name, overall_score, created_at
+      FROM mock_interview_sessions
+      WHERE user_id = ?
+      ORDER BY created_at DESC
+      LIMIT ?`
+    ).bind(userId, limit).all();
+
+    const items = results.results.map(row => ({
+      id: row.id,
+      role: row.role,
+      seniority: row.seniority,
+      interviewStyle: row.interview_style,
+      questionSetName: row.question_set_name || 'AI-generated',
+      overallScore: row.overall_score,
+      createdAt: row.created_at
+    }));
+
+    console.log('[DB] Retrieved mock interview history:', { userId, count: items.length });
+    return items;
+  } catch (error) {
+    console.error('[DB] Error in getMockInterviewHistory:', error);
+    return [];
+  }
+}
+
+/**
+ * Get mock interview monthly usage for a user
+ * @param {Object} env - Cloudflare environment with DB binding
+ * @param {number} userId - User ID
+ * @param {string|null} month - Month string "YYYY-MM" (default: current month)
+ * @returns {Promise<number>} Sessions used this month
+ */
+export async function getMockInterviewMonthlyUsage(env, userId, month = null) {
+  if (!env.DB) {
+    console.warn('[DB] D1 binding not available');
+    return 0;
+  }
+
+  try {
+    const targetMonth = month || new Date().toISOString().slice(0, 7); // "YYYY-MM"
+    
+    const row = await env.DB.prepare(
+      `SELECT sessions_used FROM mock_interview_usage
+      WHERE user_id = ? AND month = ?`
+    ).bind(userId, targetMonth).first();
+
+    return row ? row.sessions_used : 0;
+  } catch (error) {
+    console.error('[DB] Error in getMockInterviewMonthlyUsage:', error);
+    return 0;
+  }
+}
+
+/**
+ * Increment mock interview monthly usage
+ * @param {Object} env - Cloudflare environment with DB binding
+ * @param {number} userId - User ID
+ * @returns {Promise<number>} New total for the month
+ */
+export async function incrementMockInterviewMonthlyUsage(env, userId) {
+  if (!env.DB) {
+    console.warn('[DB] D1 binding not available');
+    return 1;
+  }
+
+  try {
+    const targetMonth = new Date().toISOString().slice(0, 7); // "YYYY-MM"
+    
+    const result = await env.DB.prepare(
+      `INSERT INTO mock_interview_usage (user_id, month, sessions_used, last_reset_at)
+      VALUES (?, ?, 1, datetime('now'))
+      ON CONFLICT(user_id, month)
+      DO UPDATE SET sessions_used = sessions_used + 1, last_reset_at = datetime('now')
+      RETURNING sessions_used`
+    ).bind(userId, targetMonth).first();
+
+    return result ? result.sessions_used : 1;
+  } catch (error) {
+    console.error('[DB] Error in incrementMockInterviewMonthlyUsage:', error);
+    return 1;
+  }
+}
+

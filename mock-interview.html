@@ -6,7 +6,27 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <style>html.auth-pending{visibility:hidden}</style>
   <script src="js/static-auth-guard.js?v=20251007-2"></script>
-  <title>JobHackAI</title>
+  <script>
+    // Canonical plan/auth check using JobHackAINavigation
+    function ensureMockInterviewAccess() {
+      const nav = window.JobHackAINavigation;
+      if (!nav || !nav.getEffectivePlan || !nav.getAuthState) {
+        return false; // wait until navigation is ready
+      }
+      const plan = nav.getEffectivePlan();
+      const auth = nav.getAuthState();
+      const allowed = ['pro', 'premium'];
+      if (!auth.isAuthenticated || !allowed.includes(plan)) {
+        window.location.href = 'interview-questions.html?upgrade=mock-interview';
+        return false;
+      }
+      return true;
+    }
+
+    document.addEventListener('navigationReady', ensureMockInterviewAccess);
+    document.addEventListener('DOMContentLoaded', ensureMockInterviewAccess);
+  </script>
+  <title>Mock Interviews with AI - JobHackAI</title>
   <link rel="icon" type="image/png" href="assets/jobhackai_icon_only_128.png">
   <link rel="apple-touch-icon" href="assets/jobhackai_icon_only_128.png">
   <script src="js/dynamic-favicon.js?v=20250111-1"></script>
@@ -15,227 +35,850 @@
   <link rel="stylesheet" href="css/header.css">
   <link rel="stylesheet" href="css/footer.css">
   <style>
+    /* Mock Interview Styles */
     .mi-main {
-      max-width: 900px;
-      margin: 2.5rem auto 4rem auto;
+      max-width: 1100px;
+      margin: 2rem auto 4rem auto;
       padding: 0 1rem;
     }
+    
+    .mi-layout {
+      display: grid;
+      grid-template-columns: 1fr 280px;
+      gap: 1.5rem;
+      align-items: start;
+    }
+    
+    @media (max-width: 900px) {
+      .mi-layout {
+        grid-template-columns: 1fr;
+      }
+    }
+    
     .mi-card {
-      background: #fff;
-      border-radius: 16px;
-      box-shadow: 0 2px 12px rgba(31,41,55,0.07);
-      padding: 2rem;
-      margin-bottom: 2rem;
+      background: var(--color-card-bg);
+      border-radius: var(--radius-xl);
+      box-shadow: var(--shadow-card);
+      padding: 1.75rem;
     }
-    .mi-locked {
-      display: flex;
-      align-items: center;
-      gap: 0.8rem;
-      background: #FFF7E6;
-      border: 1px solid #F59E0B;
-      border-radius: 12px;
-      padding: 1rem 1.25rem;
-      font-size: 1.04rem;
-      color: #92400E;
+    
+    .mi-title {
+      font-size: 1.75rem;
+      font-weight: var(--font-weight-extrabold);
+      color: var(--color-text-main);
+      margin: 0 0 0.5rem 0;
     }
-    .mi-locked-message {
-      flex: 1;
-    }
-    .mi-upgrade-btn {
-      background: #F59E0B;
-      color: #fff;
-      border: none;
-      border-radius: 8px;
-      padding: 0.5rem 1rem;
-      font-size: 0.9rem;
-      font-weight: 600;
-      cursor: pointer;
-      transition: background 0.18s;
-    }
-    .mi-upgrade-btn:hover,
-    .mi-upgrade-btn:focus {
-      background: #D97706;
-    }
-    .mi-role-autocomplete {
-      position: relative;
-      width: 100%;
-      max-width: 300px;
-      margin-bottom: 1.5rem;
-    }
-    .mi-role-label {
-      display: block;
-      font-weight: 600;
-      margin-bottom: 0.5rem;
-      color: #232B36;
-    }
-    .mi-role-input {
-      width: 100%;
-      padding: 0.85rem 1.1rem;
-      border: 2px solid #E5E7EB;
-      border-radius: 10px;
-      font-size: 1.08rem;
-      transition: border 0.18s;
-      background: #fff;
-      color: #232B36;
-      box-sizing: border-box;
-    }
-    .mi-role-input:focus {
-      border-color: #1976D2;
-      outline: none;
-    }
-    .mi-role-dropdown {
-      position: absolute;
-      left: 0;
-      right: 0;
-      top: 100%;
-      background: #fff;
-      border: 1.5px solid #E5E7EB;
-      border-top: none;
-      border-radius: 0 0 10px 10px;
-      box-shadow: 0 2px 8px rgba(31,41,55,0.07);
-      z-index: 10;
-      max-height: 220px;
-      overflow-y: auto;
-      display: none;
-    }
-    .mi-role-item {
-      padding: 0.85rem 1.1rem;
-      cursor: pointer;
-      font-size: 1.08rem;
-      color: #232B36;
-      transition: background 0.15s;
-    }
-    .mi-role-item:hover,
-    .mi-role-item.active {
-      background: #F3F4F6;
-    }
-    .mi-question {
-      font-size: 1.2rem;
-      font-weight: 600;
-      color: #232B36;
-      line-height: 1.4;
-    }
-    .mi-answer-input {
-      width: 100%;
-      min-height: 120px;
-      padding: 1rem;
-      border: 2px solid #E5E7EB;
-      border-radius: 10px;
-      font-size: 1rem;
-      background: #fff;
-      color: #232B36;
-      resize: vertical;
-      box-sizing: border-box;
-      font-family: inherit;
+    
+    .mi-subtitle {
+      font-size: 1.05rem;
+      color: var(--color-text-secondary);
+      margin: 0 0 1.5rem 0;
       line-height: 1.5;
     }
-    .mi-answer-input:focus {
-      border-color: #1976D2;
+    
+    /* AI Coach Icon */
+    .mi-coach-icon {
+      width: 80px;
+      height: 80px;
+      margin: 0 auto 1.5rem auto;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: linear-gradient(135deg, #E3F2FD 0%, #BBDEFB 100%);
+      border-radius: 50%;
+      border: 3px solid var(--color-accent-blue);
+    }
+    
+    .mi-coach-icon svg {
+      width: 44px;
+      height: 44px;
+    }
+    
+    /* Form Fields */
+    .mi-form-group {
+      margin-bottom: 1.25rem;
+    }
+    
+    .mi-label {
+      display: block;
+      font-weight: var(--font-weight-semibold);
+      color: var(--color-text-main);
+      margin-bottom: 0.5rem;
+      font-size: 0.95rem;
+    }
+    
+    .mi-input, .mi-select {
+      width: 100%;
+      padding: 0.75rem 1rem;
+      border: 2px solid var(--color-divider);
+      border-radius: var(--radius-lg);
+      font-size: 1rem;
+      background: var(--color-card-bg);
+      color: var(--color-text-main);
+      transition: border-color var(--transition-fast);
+      box-sizing: border-box;
+    }
+    
+    .mi-input:focus, .mi-select:focus {
+      border-color: var(--color-accent-blue);
       outline: none;
     }
+    
+    /* Segmented Control */
+    .mi-segmented {
+      display: flex;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+    }
+    
+    .mi-segment {
+      flex: 1;
+      min-width: 80px;
+      padding: 0.6rem 0.75rem;
+      border: 2px solid var(--color-divider);
+      border-radius: var(--radius-lg);
+      background: var(--color-card-bg);
+      color: var(--color-text-secondary);
+      font-size: 0.9rem;
+      font-weight: var(--font-weight-medium);
+      cursor: pointer;
+      text-align: center;
+      transition: all var(--transition-fast);
+    }
+    
+    .mi-segment:hover {
+      border-color: var(--color-accent-blue);
+    }
+    
+    .mi-segment.active {
+      background: #E3F2FD;
+      border-color: var(--color-accent-blue);
+      color: var(--color-accent-blue);
+    }
+    
+    /* Radio Options */
+    .mi-radio-group {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+    
+    .mi-radio-option {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      cursor: pointer;
+      font-size: 0.95rem;
+      color: var(--color-text-main);
+    }
+    
+    .mi-radio-option input[type="radio"] {
+      width: 18px;
+      height: 18px;
+      accent-color: var(--color-accent-blue);
+    }
+    
+    /* Checklist */
+    .mi-checklist {
+      background: #F8FAFC;
+      border-radius: var(--radius-lg);
+      padding: 1rem 1.25rem;
+      margin-bottom: 1.5rem;
+    }
+    
+    .mi-checklist-title {
+      font-weight: var(--font-weight-semibold);
+      color: var(--color-text-main);
+      margin-bottom: 0.75rem;
+      font-size: 0.9rem;
+    }
+    
+    .mi-checklist-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 0.5rem;
+      font-size: 0.9rem;
+      color: var(--color-text-secondary);
+      margin-bottom: 0.5rem;
+      line-height: 1.4;
+    }
+    
+    .mi-checklist-item:last-child {
+      margin-bottom: 0;
+    }
+    
+    .mi-checklist-item svg {
+      flex-shrink: 0;
+      margin-top: 2px;
+      color: var(--color-cta-green);
+    }
+    
+    /* Primary CTA Button */
+    .mi-btn-primary {
+      width: 100%;
+      background: var(--color-cta-green);
+      color: #fff;
+      border: none;
+      border-radius: var(--radius-lg);
+      font-size: 1.1rem;
+      padding: 1rem;
+      font-weight: var(--font-weight-bold);
+      cursor: pointer;
+      transition: background var(--transition-fast);
+      box-shadow: var(--shadow-button);
+    }
+    
+    .mi-btn-primary:hover:not(:disabled) {
+      background: var(--color-cta-green-hover);
+    }
+    
+    .mi-btn-primary:disabled {
+      background: var(--color-disabled);
+      cursor: not-allowed;
+    }
+    
+    /* Session Meter */
+    .mi-meter {
+      background: #F8FAFC;
+      border: 1px solid var(--color-divider);
+      border-radius: var(--radius-lg);
+      padding: 1rem;
+      margin-top: 1rem;
+    }
+    
+    .mi-meter-text {
+      font-size: 0.9rem;
+      color: var(--color-text-secondary);
+      margin-bottom: 0.5rem;
+    }
+    
+    .mi-meter-bar {
+      width: 100%;
+      height: 8px;
+      background: var(--color-divider);
+      border-radius: var(--radius-full);
+      overflow: hidden;
+    }
+    
+    .mi-meter-progress {
+      height: 100%;
+      background: var(--color-cta-green);
+      transition: width var(--transition-normal);
+    }
+    
+    .mi-meter-progress.warning {
+      background: var(--color-warning);
+    }
+    
+    .mi-meter-progress.danger {
+      background: var(--color-error);
+    }
+    
+    .mi-meter-warning {
+      font-size: 0.85rem;
+      color: var(--color-warning);
+      margin-top: 0.5rem;
+      font-weight: var(--font-weight-medium);
+    }
+    
+    /* Session History Sidebar */
+    .mi-history {
+      position: sticky;
+      top: 1rem;
+    }
+    
+    .mi-history-title {
+      font-weight: var(--font-weight-bold);
+      color: var(--color-text-main);
+      font-size: 1.1rem;
+      margin-bottom: 1rem;
+    }
+    
     .mi-history-list {
       list-style: none;
       padding: 0;
       margin: 0;
     }
+    
     .mi-history-item {
       padding: 0.75rem;
-      border-radius: 8px;
+      border: 1px solid var(--color-divider);
+      border-radius: var(--radius-md);
       margin-bottom: 0.5rem;
-      background: #fff;
-      border: 1px solid #E5E7EB;
       cursor: pointer;
-      transition: background 0.15s;
+      transition: all var(--transition-fast);
     }
+    
     .mi-history-item:hover {
-      background: #F9FAFB;
+      background: #F8FAFC;
+      border-color: var(--color-accent-blue);
     }
+    
+    .mi-history-date {
+      font-size: 0.8rem;
+      color: var(--color-text-muted);
+    }
+    
+    .mi-history-role {
+      font-weight: var(--font-weight-semibold);
+      color: var(--color-text-main);
+      font-size: 0.95rem;
+      margin: 0.25rem 0;
+    }
+    
+    .mi-history-score {
+      font-size: 0.9rem;
+      color: var(--color-accent-blue);
+      font-weight: var(--font-weight-bold);
+    }
+    
     .mi-history-empty {
-      color: #6B7280;
+      color: var(--color-text-muted);
       font-style: italic;
       text-align: center;
       padding: 1rem;
-    }
-    .mi-usage-meter {
-      background: #F8FAFC;
-      border-radius: 8px;
-      padding: 1rem;
-      border: 1px solid #E5E7EB;
-    }
-    .mi-usage-text {
       font-size: 0.9rem;
-      color: #6B7280;
-      margin-bottom: 0.5rem;
     }
-    .mi-usage-bar {
-      width: 100%;
-      height: 8px;
-      background: #E5E7EB;
-      border-radius: 4px;
-      overflow: hidden;
-      margin-bottom: 0.5rem;
+    
+    .mi-history-error {
+      color: var(--color-error);
+      text-align: center;
+      padding: 1rem;
+      font-size: 0.9rem;
     }
-    .mi-usage-progress {
-      height: 100%;
-      background: #00E676;
-      transition: width 0.3s ease;
-    }
-    .mi-usage-warning {
+    
+    .mi-history-retry {
+      background: none;
+      border: 1px solid var(--color-error);
+      color: var(--color-error);
+      padding: 0.4rem 0.8rem;
+      border-radius: var(--radius-md);
+      cursor: pointer;
       font-size: 0.85rem;
-      color: #F59E0B;
-      font-weight: 600;
+      margin-top: 0.5rem;
     }
-    .mi-usage-upsell {
-      font-size: 0.85rem;
-      color: #DC2626;
-      font-weight: 600;
-    }
-    .mi-score-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-      gap: 1rem;
+    
+    /* Interview In-Progress */
+    .mi-progress-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
       margin-bottom: 1rem;
+      flex-wrap: wrap;
+      gap: 0.5rem;
     }
-    .mi-score-item {
-      background: #F8FAFC;
-      border-radius: 8px;
-      padding: 1rem;
-      text-align: center;
+    
+    .mi-progress-pill {
+      background: var(--color-accent-blue);
+      color: #fff;
+      padding: 0.4rem 0.8rem;
+      border-radius: var(--radius-full);
+      font-size: 0.85rem;
+      font-weight: var(--font-weight-semibold);
     }
-    .mi-score-label {
+    
+    .mi-progress-meta {
       font-size: 0.9rem;
-      color: #6B7280;
-      margin-bottom: 0.5rem;
+      color: var(--color-text-secondary);
     }
-    .mi-score-value {
-      font-size: 1.5rem;
-      font-weight: 700;
-      color: #1976D2;
+    
+    .mi-question-container {
+      margin-bottom: 1.25rem;
     }
-    .mi-total-score {
+    
+    .mi-question-text {
+      font-size: 1.25rem;
+      font-weight: var(--font-weight-semibold);
+      color: var(--color-text-main);
+      line-height: 1.4;
+      display: flex;
+      align-items: flex-start;
+      gap: 0.75rem;
+    }
+    
+    .mi-ai-badge {
+      flex-shrink: 0;
+      width: 36px;
+      height: 36px;
+      background: var(--color-accent-blue);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #fff;
+      font-weight: var(--font-weight-bold);
+      font-size: 0.85rem;
+    }
+    
+    .mi-answer-area {
+      width: 100%;
+      min-height: 150px;
+      padding: 1rem;
+      border: 2px solid var(--color-divider);
+      border-radius: var(--radius-lg);
+      font-size: 1rem;
+      font-family: inherit;
+      line-height: 1.6;
+      resize: vertical;
+      transition: border-color var(--transition-fast);
+    }
+    
+    .mi-answer-area:focus {
+      border-color: var(--color-accent-blue);
+      outline: none;
+    }
+    
+    /* S+A=O Helper Strip */
+    .mi-sao-strip {
+      display: flex;
+      justify-content: space-between;
+      background: #F0F9FF;
+      border: 1px solid #BFDBFE;
+      border-radius: var(--radius-md);
+      padding: 0.6rem 1rem;
+      margin-top: 0.75rem;
+      font-size: 0.85rem;
+    }
+    
+    .mi-sao-item {
       text-align: center;
-      font-size: 1.2rem;
-      font-weight: 700;
-      color: #232B36;
+      color: var(--color-text-secondary);
     }
-    .clg-btn {
-      background: #00E676;
+    
+    .mi-sao-label {
+      font-weight: var(--font-weight-semibold);
+      color: var(--color-accent-blue);
+    }
+    
+    /* Word Counter */
+    .mi-word-counter {
+      text-align: right;
+      font-size: 0.85rem;
+      color: var(--color-text-muted);
+      margin-top: 0.5rem;
+    }
+    
+    .mi-word-counter.short {
+      color: var(--color-warning);
+    }
+    
+    /* Low word nudge */
+    .mi-short-nudge {
+      background: #FEF3C7;
+      border: 1px solid var(--color-warning);
+      border-radius: var(--radius-md);
+      padding: 0.6rem 0.8rem;
+      font-size: 0.9rem;
+      color: #92400E;
+      margin-top: 0.75rem;
+      display: none;
+    }
+    
+    .mi-short-nudge.visible {
+      display: block;
+    }
+    
+    /* Navigation Buttons */
+    .mi-nav-buttons {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 1.25rem;
+      gap: 1rem;
+    }
+    
+    .mi-btn-secondary {
+      background: none;
+      border: 2px solid var(--color-divider);
+      color: var(--color-text-secondary);
+      padding: 0.75rem 1.5rem;
+      border-radius: var(--radius-lg);
+      font-size: 1rem;
+      font-weight: var(--font-weight-semibold);
+      cursor: pointer;
+      transition: all var(--transition-fast);
+    }
+    
+    .mi-btn-secondary:hover:not(:disabled) {
+      border-color: var(--color-accent-blue);
+      color: var(--color-accent-blue);
+    }
+    
+    .mi-btn-secondary:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    
+    .mi-btn-next {
+      background: var(--color-cta-green);
       color: #fff;
       border: none;
-      border-radius: 12px;
-      font-size: 1.13rem;
-      padding: 1rem 2rem;
-      font-weight: 700;
+      padding: 0.75rem 2rem;
+      border-radius: var(--radius-lg);
+      font-size: 1rem;
+      font-weight: var(--font-weight-bold);
       cursor: pointer;
-      transition: background 0.18s;
+      transition: background var(--transition-fast);
     }
-    .clg-btn:hover,
-    .clg-btn:focus {
-      background: #00c965;
+    
+    .mi-btn-next:hover {
+      background: var(--color-cta-green-hover);
     }
-    .clg-btn:disabled {
-      background: #9CA3AF;
-      cursor: not-allowed;
+    
+    /* Scoring Overlay */
+    .mi-scoring-overlay {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.5);
+      z-index: var(--z-modal-backdrop);
+      align-items: center;
+      justify-content: center;
+    }
+    
+    .mi-scoring-overlay.visible {
+      display: flex;
+    }
+    
+    .mi-scoring-modal {
+      background: var(--color-card-bg);
+      border-radius: var(--radius-xl);
+      padding: 2rem;
+      max-width: 400px;
+      width: 90%;
+      text-align: center;
+    }
+    
+    .mi-scoring-title {
+      font-size: 1.25rem;
+      font-weight: var(--font-weight-bold);
+      color: var(--color-text-main);
+      margin-bottom: 0.75rem;
+    }
+    
+    .mi-scoring-text {
+      font-size: 0.95rem;
+      color: var(--color-text-secondary);
+      line-height: 1.5;
+    }
+    
+    .mi-scoring-spinner {
+      width: 48px;
+      height: 48px;
+      border: 4px solid var(--color-divider);
+      border-top-color: var(--color-accent-blue);
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      margin: 1.5rem auto 0;
+    }
+    
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+    
+    /* Summary View */
+    .mi-summary {
+      display: none;
+    }
+    
+    .mi-summary.visible {
+      display: block;
+    }
+    
+    .mi-score-hero {
+      text-align: center;
+      padding: 1.5rem;
+      background: linear-gradient(135deg, #F0F9FF 0%, #E0F2FE 100%);
+      border-radius: var(--radius-xl);
+      margin-bottom: 1.5rem;
+    }
+    
+    .mi-score-value {
+      font-size: 3rem;
+      font-weight: var(--font-weight-extrabold);
+      line-height: 1;
+      margin-bottom: 0.5rem;
+    }
+    
+    .mi-score-value.score-red { color: var(--color-error); }
+    .mi-score-value.score-yellow { color: var(--color-warning); }
+    .mi-score-value.score-green { color: var(--color-success); }
+    .mi-score-value.score-blue { color: var(--color-accent-blue); }
+    
+    .mi-score-label {
+      font-size: 1rem;
+      color: var(--color-text-secondary);
+      margin-bottom: 0.75rem;
+    }
+    
+    .mi-score-coaching {
+      font-size: 0.95rem;
+      color: var(--color-text-main);
+      line-height: 1.5;
+    }
+    
+    .mi-score-badge {
+      font-size: 0.8rem;
+      color: var(--color-text-muted);
+      margin-top: 0.75rem;
+    }
+    
+    /* Rubric Grid */
+    .mi-rubric-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+    }
+    
+    .mi-rubric-card {
+      background: #F8FAFC;
+      border-radius: var(--radius-lg);
+      padding: 1rem;
+      text-align: center;
+    }
+    
+    .mi-rubric-label {
+      font-size: 0.85rem;
+      color: var(--color-text-secondary);
+      margin-bottom: 0.5rem;
+    }
+    
+    .mi-rubric-score {
+      font-size: 1.5rem;
+      font-weight: var(--font-weight-bold);
+      color: var(--color-accent-blue);
+    }
+    
+    .mi-rubric-note {
+      font-size: 0.8rem;
+      color: var(--color-text-muted);
+      margin-top: 0.5rem;
+      line-height: 1.4;
+    }
+    
+    /* S+A=O Analysis Card */
+    .mi-sao-card {
+      background: #F0F9FF;
+      border: 1px solid #BFDBFE;
+      border-radius: var(--radius-lg);
+      padding: 1.25rem;
+      margin-bottom: 1.5rem;
+    }
+    
+    .mi-sao-title {
+      font-weight: var(--font-weight-semibold);
+      color: var(--color-text-main);
+      margin-bottom: 1rem;
+    }
+    
+    .mi-sao-breakdown {
+      display: flex;
+      justify-content: space-around;
+      margin-bottom: 1rem;
+      flex-wrap: wrap;
+      gap: 1rem;
+    }
+    
+    .mi-sao-stat {
+      text-align: center;
+    }
+    
+    .mi-sao-pct {
+      font-size: 1.5rem;
+      font-weight: var(--font-weight-bold);
+      color: var(--color-accent-blue);
+    }
+    
+    .mi-sao-name {
+      font-size: 0.85rem;
+      color: var(--color-text-secondary);
+    }
+    
+    .mi-sao-target {
+      font-size: 0.75rem;
+      color: var(--color-text-muted);
+    }
+    
+    .mi-sao-coaching {
+      list-style: disc;
+      padding-left: 1.25rem;
+      margin: 0;
+    }
+    
+    .mi-sao-coaching li {
+      font-size: 0.9rem;
+      color: var(--color-text-secondary);
+      margin-bottom: 0.5rem;
+      line-height: 1.4;
+    }
+    
+    /* Improvements Section */
+    .mi-section-title {
+      font-weight: var(--font-weight-semibold);
+      color: var(--color-text-main);
+      margin-bottom: 0.75rem;
+      font-size: 1rem;
+    }
+    
+    .mi-improvements-list {
+      list-style: decimal;
+      padding-left: 1.5rem;
+      margin: 0 0 1.5rem 0;
+    }
+    
+    .mi-improvements-list li {
+      font-size: 0.95rem;
+      color: var(--color-text-secondary);
+      margin-bottom: 0.5rem;
+      line-height: 1.4;
+    }
+    
+    /* Per-Question Accordion */
+    .mi-accordion {
+      border: 1px solid var(--color-divider);
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+      margin-bottom: 1.5rem;
+    }
+    
+    .mi-accordion-item {
+      border-bottom: 1px solid var(--color-divider);
+    }
+    
+    .mi-accordion-item:last-child {
+      border-bottom: none;
+    }
+    
+    .mi-accordion-header {
+      width: 100%;
+      background: none;
+      border: none;
+      padding: 1rem;
+      text-align: left;
+      cursor: pointer;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 0.95rem;
+      color: var(--color-text-main);
+      transition: background var(--transition-fast);
+    }
+    
+    .mi-accordion-header:hover {
+      background: #F8FAFC;
+    }
+    
+    .mi-accordion-header svg {
+      transition: transform var(--transition-fast);
+    }
+    
+    .mi-accordion-item.open .mi-accordion-header svg {
+      transform: rotate(180deg);
+    }
+    
+    .mi-accordion-q-score {
+      font-weight: var(--font-weight-bold);
+      color: var(--color-accent-blue);
+      margin-left: auto;
+      margin-right: 0.5rem;
+    }
+    
+    .mi-accordion-content {
+      display: none;
+      padding: 0 1rem 1rem;
+    }
+    
+    .mi-accordion-item.open .mi-accordion-content {
+      display: block;
+    }
+    
+    .mi-accordion-answer {
+      background: #F8FAFC;
+      border-radius: var(--radius-md);
+      padding: 0.75rem;
+      font-size: 0.9rem;
+      color: var(--color-text-secondary);
+      margin-bottom: 0.75rem;
+      line-height: 1.5;
+      max-height: 100px;
+      overflow-y: auto;
+    }
+    
+    .mi-accordion-notes {
+      list-style: disc;
+      padding-left: 1.25rem;
+      margin: 0;
+    }
+    
+    .mi-accordion-notes li {
+      font-size: 0.85rem;
+      color: var(--color-text-secondary);
+      margin-bottom: 0.35rem;
+    }
+    
+    /* Summary Actions */
+    .mi-summary-actions {
+      display: flex;
+      gap: 1rem;
+      flex-wrap: wrap;
+      margin-top: 1.5rem;
+    }
+    
+    .mi-summary-actions .mi-btn-primary {
+      flex: 1;
+      min-width: 200px;
+    }
+    
+    .mi-summary-actions .mi-btn-secondary {
+      flex: 1;
+      min-width: 150px;
+    }
+    
+    /* Hidden state */
+    .hidden {
+      display: none !important;
+    }
+    
+    /* Role Autocomplete */
+    .mi-role-autocomplete {
+      position: relative;
+    }
+    
+    .mi-role-dropdown {
+      position: absolute;
+      left: 0;
+      right: 0;
+      top: 100%;
+      background: var(--color-card-bg);
+      border: 2px solid var(--color-divider);
+      border-top: none;
+      border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+      box-shadow: var(--shadow-dropdown);
+      z-index: var(--z-dropdown);
+      max-height: 220px;
+      overflow-y: auto;
+      display: none;
+    }
+    
+    .mi-role-item {
+      padding: 0.75rem 1rem;
+      cursor: pointer;
+      font-size: 0.95rem;
+      color: var(--color-text-main);
+      transition: background var(--transition-fast);
+    }
+    
+    .mi-role-item:hover, .mi-role-item.active {
+      background: #F3F4F6;
+    }
+    
+    .mi-role-item-sub {
+      font-size: 0.8rem;
+      color: var(--color-text-muted);
     }
   </style>
 </head>
@@ -251,9 +894,7 @@
         <span>JOBHACKAI</span>
       </a>
       <div class="nav-group">
-        <nav class="nav-links" role="navigation">
-          <!-- Navigation will be dynamically populated by navigation.js -->
-        </nav>
+        <nav class="nav-links" role="navigation"></nav>
       </div>
       <button class="mobile-toggle" aria-label="Open navigation menu" aria-expanded="false" aria-controls="mobileNav">
         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -264,292 +905,231 @@
       </button>
     </div>
   </header>
-  <nav class="mobile-nav" id="mobileNav">
-    <!-- Mobile navigation will be dynamically populated by navigation.js -->
-  </nav>
+  <nav class="mobile-nav" id="mobileNav"></nav>
   <div class="mobile-nav-backdrop" id="mobileNavBackdrop"></div>
-  <script>
-    // Hamburger menu toggle with proper state management and click-outside handling
-    (function initMobileMenu() {
-      const mobileToggle = document.querySelector('.mobile-toggle');
-      const mobileNav = document.getElementById('mobileNav');
-      const backdrop = document.getElementById('mobileNavBackdrop');
-      
-      if (!mobileToggle || !mobileNav) return;
-      
-      let isMenuOpen = false;
-      
-      // Function to open menu
-      function openMenu() {
-        if (isMenuOpen) return;
-        isMenuOpen = true;
-        mobileNav.classList.add('open');
-        if (backdrop) backdrop.classList.add('show');
-        mobileToggle.setAttribute('aria-expanded', 'true');
-        // Prevent body scroll when menu is open
-        document.body.style.overflow = 'hidden';
-      }
-      
-      // Function to close menu
-      function closeMenu() {
-        if (!isMenuOpen) return;
-        isMenuOpen = false;
-        mobileNav.classList.remove('open');
-        if (backdrop) backdrop.classList.remove('show');
-        mobileToggle.setAttribute('aria-expanded', 'false');
-        // Restore body scroll
-        document.body.style.overflow = '';
-      }
-      
-      // Toggle menu on button click
-      mobileToggle.addEventListener('click', (e) => {
-        e.stopPropagation();
-        if (isMenuOpen) {
-          closeMenu();
-        } else {
-          openMenu();
-        }
-      });
-      
-      // Close menu when clicking on a link
-      mobileNav.addEventListener('click', (e) => {
-        if (e.target.tagName === 'A') {
-          closeMenu();
-        }
-      });
-      
-      // Close menu when clicking on backdrop or outside
-      if (backdrop) {
-        backdrop.addEventListener('click', closeMenu);
-      }
-      document.addEventListener('click', (e) => {
-        if (isMenuOpen && 
-            !mobileNav.contains(e.target) && 
-            !mobileToggle.contains(e.target)) {
-          closeMenu();
-        }
-      });
-      
-      // Close menu on Escape key
-      document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape' && isMenuOpen) {
-          closeMenu();
-        }
-      });
-      
-      // Close menu on window resize (if resizing to desktop)
-      window.addEventListener('resize', () => {
-        if (window.innerWidth > 900 && isMenuOpen) {
-          closeMenu();
-        }
-      });
-    })();
-
-    // --- AUTHENTICATION CHECK ---
-    function checkAuthentication() {
-      // Use navigation system's authentication check for consistency
-      if (window.JobHackAINavigation) {
-        const authState = window.JobHackAINavigation.getAuthState();
-        if (!authState.isAuthenticated) {
-          const mainContent = document.querySelector('main');
-          mainContent.innerHTML = `
-            <div style="max-width: 600px; margin: 4rem auto; text-align: center; padding: 2rem;">
-              <div style="font-size: 4rem; margin-bottom: 1rem;">🔒</div>
-              <h1 style="font-size: 2rem; font-weight: 700; color: var(--color-text-main); margin-bottom: 1rem;">
-                Login Required
-              </h1>
-              <p style="font-size: 1.1rem; color: var(--color-text-secondary); margin-bottom: 2rem; line-height: 1.6;">
-                Mock Interviews requires you to be logged in to access this tool. 
-                Please sign in to get started.
-              </p>
-              <div style="display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap;">
-                <a href="login.html" class="btn-primary" style="text-decoration: none;">
-                  Sign In
-                </a>
-                <a href="pricing-a.html" class="btn-outline" style="text-decoration: none;">
-                  View Pricing
-                </a>
-              </div>
-            </div>
-          `;
-          return false;
-        }
-        return true;
-      } else {
-        // Fallback to localStorage check if navigation system not available
-        const isAuthenticated = localStorage.getItem('user-authenticated') === 'true' && !!localStorage.getItem('user-email');
-        if (!isAuthenticated) {
-          const mainContent = document.querySelector('main');
-          mainContent.innerHTML = `
-            <div style="max-width: 600px; margin: 4rem auto; text-align: center; padding: 2rem;">
-              <div style="font-size: 4rem; margin-bottom: 1rem;">🔒</div>
-              <h1 style="font-size: 2rem; font-weight: 700; color: var(--color-text-main); margin-bottom: 1rem;">
-                Login Required
-              </h1>
-              <p style="font-size: 1.1rem; color: var(--color-text-secondary); margin-bottom: 2rem; line-height: 1.6;">
-                Mock Interviews requires you to be logged in to access this tool. 
-                Please sign in to get started.
-              </p>
-              <div style="display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap;">
-                <a href="login.html" class="btn-primary" style="text-decoration: none;">
-                  Sign In
-                </a>
-                <a href="pricing-a.html" class="btn-outline" style="text-decoration: none;">
-                  View Pricing
-                </a>
-              </div>
-            </div>
-          `;
-          return false;
-        }
-        return true;
-      }
-    }
-
-    // --- USER PLAN LOGIC ---
-    function getUserPlan() {
-      // Use navigation system's plan detection for consistency
-      if (window.JobHackAINavigation) {
-        return window.JobHackAINavigation.getEffectivePlan();
-      } else {
-        return localStorage.getItem('user-plan') || 'free';
-      }
-    }
-
-    // --- PLAN LOGIC ---
-    function updateMockInterviewUIForPlan() {
-      const userPlan = getUserPlan();
-      
-      // Show/hide locked content based on plan
-      if (['pro', 'premium'].includes(userPlan)) {
-        // Show mock interview functionality
-        document.getElementById('mi-locked').style.display = 'none';
-        document.getElementById('mi-setup').style.display = 'block';
-      } else {
-        // Show locked message
-        document.getElementById('mi-locked').style.display = 'flex';
-        document.getElementById('mi-setup').style.display = 'none';
-      }
-    }
-    
-    // --- PAGE ACCESS CONTROL ---
-    function enforceAccess() {
-      const authState = window.JobHackAINavigation ? 
-        window.JobHackAINavigation.getAuthState() : 
-        { isAuthenticated: localStorage.getItem('user-authenticated') === 'true' };
-      
-      const userPlan = getUserPlan();
-      const allowedPlans = ['pro', 'premium'];
-      
-      if (!authState.isAuthenticated || !allowedPlans.includes(userPlan)) {
-        window.location.href = 'login.html';
-      }
-    }
-    
-    // Initialize page when DOM is ready
-    document.addEventListener('DOMContentLoaded', function() {
-      // Wait for navigation system to be ready
-      const initPage = () => {
-        // Check authentication first
-        if (!checkAuthentication()) {
-          return; // Stop here if not authenticated
-        }
-        
-        // Update UI based on plan
-        updateMockInterviewUIForPlan();
-        checkPlanAccess();
-        
-        // Enforce access control
-        enforceAccess();
-      };
-      
-      // Try to initialize immediately, then retry after a short delay
-      initPage();
-      setTimeout(initPage, 100);
-      
-      // Listen for plan changes from navigation system
-      window.addEventListener('planChanged', function(event) {
-        updateMockInterviewUIForPlan();
-        checkPlanAccess();
-      });
-    });
-  </script>
 
   <!-- Main Content -->
   <main class="mi-main">
-    <div class="mi-card mi-locked" id="mi-locked" style="display:none;">
-      <svg width="22" height="22" fill="none" stroke="#b59f00" stroke-width="2" style="flex-shrink:0;" viewBox="0 0 24 24"><path d="M6 10V7a5 5 0 1110 0v3"/><rect x="5" y="10" width="12" height="8" rx="2"/></svg>
-      <span class="mi-locked-message">This feature is only available on <strong>Pro</strong> and <strong>Premium</strong> plans.</span>
-      <button class="mi-upgrade-btn" onclick="window.location.href='pricing-a.html'">Upgrade</button>
-    </div>
-    <div class="mi-card" id="mi-setup">
-      <div style="display:flex;align-items:flex-start;gap:2.5rem;">
-        <div style="flex:1;display:flex;flex-direction:column;align-items:center;">
-          <div style="margin-bottom:1.5rem;">
-            <svg width="120" height="120" viewBox="0 0 120 120" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <circle cx="60" cy="60" r="60" fill="#E5F0FF"/>
-              <ellipse cx="60" cy="52" rx="28" ry="28" fill="#1976D2"/>
-              <ellipse cx="60" cy="52" rx="20" ry="20" fill="#FFD6A0"/>
-              <rect x="40" y="80" width="40" height="20" rx="10" fill="#1976D2"/>
+    <div class="mi-layout">
+      <!-- Left Column: Main Content Area -->
+      <div>
+        <!-- Setup Screen -->
+        <div class="mi-card" id="mi-setup">
+          <div class="mi-coach-icon">
+            <svg viewBox="0 0 64 64" aria-hidden="true">
+              <!-- Outer ring (blue outline) -->
+              <circle cx="32" cy="32" r="30" fill="#E5F0FF" stroke="#1976D2" stroke-width="3"/>
+              <!-- Head (blue) -->
+              <circle cx="32" cy="26" r="12" fill="#1976D2"/>
+              <!-- Face (neutral tone) -->
+              <circle cx="32" cy="26" r="8" fill="#FFD6A0"/>
+              <!-- Shoulders (blue) -->
+              <rect x="18" y="38" width="28" height="12" rx="6" fill="#1976D2"/>
+              <!-- Chat/mic accent (green) -->
+              <g transform="translate(40 38)">
+                <rect x="-2" y="-2" width="14" height="12" rx="3" fill="#00E676" opacity="0.9"/>
+                <circle cx="2" cy="4" r="2" fill="#fff"/>
+                <rect x="6" y="3" width="4" height="2" rx="1" fill="#fff"/>
+              </g>
             </svg>
           </div>
-          <div class="mi-role-autocomplete" id="mi-role-autocomplete">
-            <label for="mi-role-input" class="mi-role-label">Target Role</label>
-            <input id="mi-role-input" class="mi-role-input" type="text" placeholder="e.g., Software Engineer" autocomplete="off" aria-autocomplete="list" aria-haspopup="listbox" aria-expanded="false" />
-          </div>
-          <button class="clg-btn" id="mi-begin" type="button" style="width:220px;">Start Interview</button>
-        </div>
-        <aside style="min-width:220px;max-width:260px;width:100%;background:#F8FAFC;border-radius:var(--radius-card);box-shadow:var(--shadow-card);padding:1.2rem 1.2rem 1rem 1.2rem;">
-          <div style="font-weight:700;font-size:1.1rem;margin-bottom:1.1rem;color:var(--color-text-main);">Session History</div>
-          <ul id="mi-history-list" class="mi-history-list">
-            <li class="mi-history-empty">No previous sessions yet.</li>
-          </ul>
-        </aside>
-      </div>
-    </div>
-    <div class="mi-card" id="mi-session" style="display:none;">
-      <div style="display:flex;align-items:flex-start;gap:2.5rem;">
-        <div style="flex:1;">
-          <div style="display:flex;align-items:center;gap:0.7rem;margin-bottom:1.2rem;">
-            <div style="width:44px;height:44px;border-radius:50%;background:#1976D2;display:flex;align-items:center;justify-content:center;">
-              <span style="color:#fff;font-weight:700;font-size:1.2rem;">AI</span>
+          
+          <h1 class="mi-title">Mock Interviews with AI</h1>
+          <p class="mi-subtitle">Practice 10 real interview questions, then get scored and coached on how to improve.</p>
+          
+          <!-- Target Role -->
+          <div class="mi-form-group">
+            <label class="mi-label" for="mi-role">Target Role</label>
+            <div class="mi-role-autocomplete">
+              <input type="text" id="mi-role" class="mi-input" placeholder="Start typing a role..." autocomplete="off">
+              <div class="mi-role-dropdown" id="mi-role-dropdown"></div>
             </div>
-            <div id="mi-question" class="mi-question">Tell me about yourself and your experience.</div>
           </div>
-          <textarea class="mi-answer-input" id="mi-answer" placeholder="Type your response..."></textarea>
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-top:0.5rem;">
-            <div id="mi-role-qcount" style="color:var(--color-text-secondary);font-size:1.01rem;font-weight:500;">Role: <span id="mi-role-label">Software Engineer</span> | Question <span id="mi-qnum">1</span> of <span id="mi-qtotal">10</span></div>
-            <button class="clg-btn" id="mi-next" type="button" style="min-width:120px;">Next</button>
+          
+          <!-- Seniority -->
+          <div class="mi-form-group">
+            <label class="mi-label" for="mi-seniority">Seniority</label>
+            <select id="mi-seniority" class="mi-select">
+              <option value="">Select level...</option>
+              <option value="intern">Intern</option>
+              <option value="junior">Junior</option>
+              <option value="mid">Mid</option>
+              <option value="senior">Senior</option>
+              <option value="lead">Lead</option>
+              <option value="director">Director+</option>
+            </select>
           </div>
-          <div class="mi-usage-meter" id="mi-usage-meter" style="display:none;margin-top:1.2rem;">
-            <div class="mi-usage-text">Sessions used this month: <span id="mi-sessions-used">0</span>/20</div>
-            <div class="mi-usage-bar"><div class="mi-usage-progress" id="mi-usage-progress" style="width:0%"></div></div>
-            <div id="mi-usage-warning" class="mi-usage-warning" style="display:none;">You've used over half your monthly interviews.</div>
-            <div id="mi-usage-upsell" class="mi-usage-upsell" style="display:none;">Almost out! <b>Upgrade to Premium</b> for unlimited interviews.</div>
-          </div>
-          <div id="mi-score-breakdown" style="display:none;margin-top:2rem;">
-            <div class="mi-score-grid">
-              <div class="mi-score-item"><div class="mi-score-label">Relevance of Answer</div><div class="mi-score-value" id="score-relevance">0</div></div>
-              <div class="mi-score-item"><div class="mi-score-label">Structure & Delivery</div><div class="mi-score-value" id="score-structure">0</div></div>
-              <div class="mi-score-item"><div class="mi-score-label">Confidence & Clarity</div><div class="mi-score-value" id="score-confidence">0</div></div>
-              <div class="mi-score-item"><div class="mi-score-label">Depth & Insight</div><div class="mi-score-value" id="score-depth">0</div></div>
-              <div class="mi-score-item"><div class="mi-score-label">Grammar & Pace</div><div class="mi-score-value" id="score-grammar">0</div></div>
+          
+          <!-- Interview Style -->
+          <div class="mi-form-group">
+            <label class="mi-label">Interview Style</label>
+            <div class="mi-segmented" id="mi-style">
+              <button type="button" class="mi-segment active" data-value="mixed">Mixed</button>
+              <button type="button" class="mi-segment" data-value="behavioral">Behavioral</button>
+              <button type="button" class="mi-segment" data-value="technical">Technical</button>
+              <button type="button" class="mi-segment" data-value="leadership">Leadership</button>
             </div>
-            <div class="mi-total-score">Total: <span id="score-total">0</span> / 100</div>
+          </div>
+          
+          <!-- Question Source -->
+          <div class="mi-form-group">
+            <label class="mi-label">Question Source</label>
+            <div class="mi-radio-group">
+              <label class="mi-radio-option">
+                <input type="radio" name="mi-source" value="ai" checked>
+                Use AI-generated questions
+              </label>
+              <label class="mi-radio-option">
+                <input type="radio" name="mi-source" value="saved">
+                Use my saved set
+              </label>
+            </div>
+            <select id="mi-saved-set" class="mi-select hidden" style="margin-top: 0.5rem;">
+              <option value="">Select a saved set...</option>
+            </select>
+          </div>
+          
+          <!-- What to Expect -->
+          <div class="mi-checklist">
+            <div class="mi-checklist-title">What to expect</div>
+            <div class="mi-checklist-item">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20,6 9,17 4,12"/></svg>
+              <span>10 questions, about 10–15 minutes.</span>
+            </div>
+            <div class="mi-checklist-item">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20,6 9,17 4,12"/></svg>
+              <span>Use Situation → Action → Outcome to structure your answers.</span>
+            </div>
+            <div class="mi-checklist-item">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20,6 9,17 4,12"/></svg>
+              <span>We'll score you out of 100 and save this session to your history.</span>
+            </div>
+          </div>
+          
+          <!-- Start Button -->
+          <button type="button" class="mi-btn-primary" id="mi-start" disabled>Start Mock Interview</button>
+          
+          <!-- Session Meter -->
+          <div class="mi-meter" id="mi-meter">
+            <div class="mi-meter-text">Sessions used this month: <span id="mi-sessions-used">0</span> / <span id="mi-sessions-limit">20</span></div>
+            <div class="mi-meter-bar">
+              <div class="mi-meter-progress" id="mi-meter-progress" style="width: 0%"></div>
+            </div>
+            <div class="mi-meter-warning hidden" id="mi-meter-warning"></div>
           </div>
         </div>
-        <aside style="min-width:220px;max-width:260px;width:100%;background:#F8FAFC;border-radius:var(--radius-card);box-shadow:var(--shadow-card);padding:1.2rem 1.2rem 1rem 1.2rem;">
-          <div style="font-weight:700;font-size:1.1rem;margin-bottom:1.1rem;color:var(--color-text-main);">Session History</div>
-          <ul id="mi-history-list-session" class="mi-history-list">
-            <li class="mi-history-empty">No previous sessions yet.</li>
-          </ul>
-        </aside>
+        
+        <!-- Interview In-Progress -->
+        <div class="mi-card hidden" id="mi-interview">
+          <div class="mi-progress-header">
+            <span class="mi-progress-pill" id="mi-q-pill">Question 1 of 10</span>
+            <span class="mi-progress-meta" id="mi-q-meta">Role: Software Engineer · Senior · Mixed</span>
+          </div>
+          
+          <div class="mi-question-container">
+            <div class="mi-question-text">
+              <span class="mi-ai-badge">AI</span>
+              <span id="mi-question">Loading question...</span>
+            </div>
+          </div>
+          
+          <textarea id="mi-answer" class="mi-answer-area" placeholder="Use Situation → Action → Outcome. Focus most on what changed because of your work."></textarea>
+          
+          <!-- S+A=O Helper Strip -->
+          <div class="mi-sao-strip">
+            <div class="mi-sao-item"><span class="mi-sao-label">Situation</span><br>goal ≈ 5%</div>
+            <div class="mi-sao-item"><span class="mi-sao-label">Action</span><br>goal ≈ 10%</div>
+            <div class="mi-sao-item"><span class="mi-sao-label">Outcome</span><br>goal ≈ 85%</div>
+          </div>
+          
+          <div class="mi-word-counter" id="mi-word-counter">0 words · Aim for 150–250 words (≈ 60–90 seconds)</div>
+          
+          <div class="mi-short-nudge" id="mi-short-nudge">
+            This answer is quite short. Consider adding more detail before moving on.
+          </div>
+          
+          <div class="mi-nav-buttons">
+            <button type="button" class="mi-btn-secondary" id="mi-back" disabled>Back</button>
+            <button type="button" class="mi-btn-next" id="mi-next">Next</button>
+          </div>
+          
+          <!-- Meter during interview -->
+          <div class="mi-meter" style="margin-top: 1.5rem;">
+            <div class="mi-meter-text">Sessions used this month: <span id="mi-sessions-used-2">0</span> / <span id="mi-sessions-limit-2">20</span></div>
+            <div class="mi-meter-bar">
+              <div class="mi-meter-progress" id="mi-meter-progress-2" style="width: 0%"></div>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Summary View -->
+        <div class="mi-card mi-summary hidden" id="mi-summary">
+          <div class="mi-score-hero">
+            <div class="mi-score-value score-blue" id="mi-final-score">74 / 100</div>
+            <div class="mi-score-label">Mock Interview Score</div>
+            <div class="mi-score-coaching" id="mi-score-coaching">Loading feedback...</div>
+            <div class="mi-score-badge" id="mi-score-badge">Saved to history · Today · Data Engineer · Senior</div>
+          </div>
+          
+          <!-- Rubric Breakdown -->
+          <div class="mi-rubric-grid" id="mi-rubric-grid">
+            <!-- Populated by JS -->
+          </div>
+          
+          <!-- S+A=O Analysis -->
+          <div class="mi-sao-card">
+            <div class="mi-sao-title">How you balanced Situation, Action, and Outcome</div>
+            <div class="mi-sao-breakdown" id="mi-sao-breakdown">
+              <!-- Populated by JS -->
+            </div>
+            <ul class="mi-sao-coaching" id="mi-sao-coaching-list">
+              <!-- Populated by JS -->
+            </ul>
+          </div>
+          
+          <!-- Top Improvements -->
+          <div>
+            <div class="mi-section-title">Next time, focus on:</div>
+            <ol class="mi-improvements-list" id="mi-improvements-list">
+              <!-- Populated by JS -->
+            </ol>
+          </div>
+          
+          <!-- Per-Question Accordion -->
+          <div class="mi-accordion" id="mi-accordion">
+            <!-- Populated by JS -->
+          </div>
+          
+          <!-- Summary Actions -->
+          <div class="mi-summary-actions">
+            <button type="button" class="mi-btn-primary" id="mi-retake">Retake this interview</button>
+            <button type="button" class="mi-btn-secondary" id="mi-new-questions">Practice new questions</button>
+            <a href="dashboard.html" class="mi-btn-secondary" style="text-decoration: none; text-align: center;">Back to Dashboard</a>
+          </div>
+        </div>
       </div>
+      
+      <!-- Right Column: Session History -->
+      <aside class="mi-card mi-history">
+        <div class="mi-history-title">Session History</div>
+        <ul class="mi-history-list" id="mi-history-list">
+          <li class="mi-history-empty">No previous mock interviews yet. Once you finish a session, your score and date will appear here.</li>
+        </ul>
+      </aside>
     </div>
   </main>
+  
+  <!-- Scoring Overlay -->
+  <div class="mi-scoring-overlay" id="mi-scoring-overlay">
+    <div class="mi-scoring-modal">
+      <div class="mi-scoring-title">Scoring your interview…</div>
+      <div class="mi-scoring-text">We're reviewing your 10 answers using our S + A = O formula and interview rubric. This usually takes a few seconds.</div>
+      <div class="mi-scoring-spinner"></div>
+    </div>
+  </div>
 
   <!-- Footer -->
-  <footer class="site-footer" style="position:sticky;bottom:0;width:100%;background:var(--color-card-bg);">
+  <footer class="site-footer">
     <div class="footer-container">
       <div class="footer-brand">
         <svg class="footer-logo" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -569,114 +1149,84 @@
     </div>
   </footer>
 
-  <script>
-    // --- AUTHENTICATION CHECK ---
-    function checkAuthentication() {
-      const isAuthenticated = localStorage.getItem('user-authenticated') === 'true' && !!localStorage.getItem('user-email');
-      const mainContent = document.querySelector('main');
-      
-      if (!isAuthenticated) {
-        mainContent.innerHTML = `
-          <div style="max-width: 600px; margin: 4rem auto; text-align: center; padding: 2rem;">
-            <div style="font-size: 4rem; margin-bottom: 1rem;">🔒</div>
-            <h1 style="font-size: 2rem; font-weight: 700; color: var(--color-text-main); margin-bottom: 1rem;">
-              Login Required
-            </h1>
-            <p style="font-size: 1.1rem; color: var(--color-text-secondary); margin-bottom: 2rem; line-height: 1.6;">
-              Mock Interviews requires you to be logged in to access this tool. 
-              Please sign in to get started.
-            </p>
-            <div style="display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap;">
-              <a href="login.html" class="btn-primary" style="text-decoration: none;">
-                Sign In
-              </a>
-              <a href="pricing-a.html" class="btn-outline" style="text-decoration: none;">
-                View Pricing
-              </a>
-            </div>
-          </div>
-        `;
-        return false;
-      }
-      return true;
-    }
-
-    // --- PLAN-BASED ACCESS CONTROL ---
-    function checkPlanAccess() {
-      const currentPlan = getUserPlan();
-      const lockedDiv = document.getElementById('mi-locked');
-      const setupDiv = document.getElementById('mi-setup');
-      const sessionDiv = document.getElementById('mi-session');
-      const historySidebar = document.getElementById('mi-history-sidebar');
-      const usageMeter = document.getElementById('mi-usage-meter');
-      
-      if (!lockedDiv || !setupDiv || !sessionDiv) return;
-      
-      const locked = (currentPlan === 'trial' || currentPlan === 'essential' || currentPlan === 'free');
-      lockedDiv.style.display = locked ? 'flex' : 'none';
-      setupDiv.style.display = locked ? 'none' : '';
-      sessionDiv.style.display = 'none';
-      
-      if (historySidebar) historySidebar.style.display = (currentPlan === 'pro' || currentPlan === 'premium') ? 'block' : 'none';
-      if (usageMeter) usageMeter.style.display = (currentPlan === 'pro' || currentPlan === 'premium') ? '' : 'none';
-    }
-
-    // --- Initialize on load ---
-    document.addEventListener('DOMContentLoaded', function() {
-      // Check authentication first
-      if (!checkAuthentication()) {
-        return; // Stop here if not authenticated
-      }
-      
-      // Wait for navigation system to be ready
-      setTimeout(checkPlanAccess, 100);
-
-      // Add Pro plan mock interview usage indicator
-      const main = document.querySelector('main');
-      const userPlan = getUserPlan();
-      if (userPlan === 'pro' && main) {
-        // For demo, assume 20 left (replace with dynamic count if available)
-        const usageDiv = document.createElement('div');
-        usageDiv.className = 'mi-plan-limit';
-        usageDiv.innerHTML = `
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false" style="vertical-align:middle"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="8"/><line x1="12" y1="12" x2="12" y2="16"/></svg>
-          <span style="margin-left:0.4em;vertical-align:middle;">20 mock interviews left this month.</span>
-          <span class="jh-tooltip-trigger" tabindex="0" aria-label="More info" style="margin-left:0.4em;vertical-align:middle;">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false" style="vertical-align:middle"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="8"/><line x1="12" y1="12" x2="12" y2="16"/></svg>
-            <span class="jh-tooltip-text">Upgrade to Premium for unlimited mock interviews.</span>
-          </span>
-        `;
-        main.prepend(usageDiv);
-      }
-    });
-
-    // --- Mock Interview Logic ---
-    // Read context from Interview Questions page
-    const url = new URL(window.location.href);
-    const mode = url.searchParams.get('mode') || 'current';
-    const setId = url.searchParams.get('set') || '';
-    const roleParam = url.searchParams.get('role') || '';
-
-    const roleInput = document.getElementById('mi-role-input');
-    const beginBtn = document.getElementById('mi-begin');
-    const setupDiv = document.getElementById('mi-setup');
-    const sessionDiv = document.getElementById('mi-session');
+  <!-- Scripts -->
+  <script src="js/navigation.js?v=20251007-2"></script>
+  <script src="js/universal-logout.js?v=20251007-2"></script>
+  <script type="module" src="js/firebase-auth.js?v=20251011-1"></script>
+  <script src="js/role-selector.js?v=20250115-1" type="module"></script>
+  <script src="js/main.js" type="module"></script>
+  <script src="js/analytics.js" type="module"></script>
+  
+  <script type="module">
+    // ============================================================
+    // MOCK INTERVIEW PAGE LOGIC
+    // ============================================================
     
-    // API configuration
-    const MI_API = {
-      GET_SET: '/api/interview-questions/get-set'
+    // State
+    const state = {
+      currentScreen: 'setup', // 'setup' | 'interview' | 'summary'
+      role: '',
+      seniority: '',
+      interviewStyle: 'mixed',
+      questionSource: 'ai',
+      savedSetId: null,
+      savedSets: [],
+      savedSetsLoaded: false,
+      questions: [],
+      answers: [],
+      currentQuestionIndex: 0,
+      sessionsUsed: 0,
+      sessionLimit: 20,
+      scoringResult: null,
+      sessionId: null,
+      shortNudgeAcknowledged: false
     };
     
-    // Get Firebase auth token for API calls
-    // Uses FirebaseAuthManager pattern (same as resume-feedback-pro.html)
-    async function getFirebaseToken() {
+    // DOM Elements
+    const els = {
+      setup: document.getElementById('mi-setup'),
+      interview: document.getElementById('mi-interview'),
+      summary: document.getElementById('mi-summary'),
+      scoringOverlay: document.getElementById('mi-scoring-overlay'),
+      roleInput: document.getElementById('mi-role'),
+      senioritySelect: document.getElementById('mi-seniority'),
+      styleSegments: document.querySelectorAll('#mi-style .mi-segment'),
+      sourceRadios: document.querySelectorAll('input[name="mi-source"]'),
+      savedSetSelect: document.getElementById('mi-saved-set'),
+      startBtn: document.getElementById('mi-start'),
+      meterProgress: document.getElementById('mi-meter-progress'),
+      meterProgress2: document.getElementById('mi-meter-progress-2'),
+      sessionsUsed: document.getElementById('mi-sessions-used'),
+      sessionsUsed2: document.getElementById('mi-sessions-used-2'),
+      sessionsLimit: document.getElementById('mi-sessions-limit'),
+      sessionsLimit2: document.getElementById('mi-sessions-limit-2'),
+      meterWarning: document.getElementById('mi-meter-warning'),
+      qPill: document.getElementById('mi-q-pill'),
+      qMeta: document.getElementById('mi-q-meta'),
+      questionText: document.getElementById('mi-question'),
+      answerArea: document.getElementById('mi-answer'),
+      wordCounter: document.getElementById('mi-word-counter'),
+      shortNudge: document.getElementById('mi-short-nudge'),
+      backBtn: document.getElementById('mi-back'),
+      nextBtn: document.getElementById('mi-next'),
+      historyList: document.getElementById('mi-history-list')
+    };
+    
+    // API endpoints
+    const API = {
+      generateQuestions: '/api/mock-interview/generate-questions',
+      score: '/api/mock-interview/score',
+      sessions: '/api/mock-interview/sessions',
+      sessionDetail: (id) => `/api/mock-interview/sessions/${id}`,
+      savedSets: '/api/interview-questions/get-set'
+    };
+    
+    // Get Firebase token
+    async function getToken() {
       try {
-        // Wait for Firebase auth to be ready
         if (window.FirebaseAuthManager && window.FirebaseAuthManager.waitForAuthReady) {
           await window.FirebaseAuthManager.waitForAuthReady(3000);
         }
-        
-        // Get Firebase ID token using FirebaseAuthManager
         if (window.FirebaseAuthManager && window.FirebaseAuthManager.getCurrentUser) {
           const user = window.FirebaseAuthManager.getCurrentUser();
           if (user) {
@@ -689,340 +1239,643 @@
       return null;
     }
     
-    // Fetch question set from D1
-    async function fetchQuestionSetFromD1(id) {
-      try {
-        const token = await getFirebaseToken();
-        if (!token) {
-          console.warn('[MI] No auth token for D1 fetch');
-          return null;
+    // Initialize Role Selector
+    function initRoleSelector() {
+      if (window.RoleSelector && !els.roleInput.dataset.roleSelectorInitialized) {
+        try {
+          new window.RoleSelector(els.roleInput, {
+            minChars: 2,
+            maxResults: 8,
+            showCustomOption: true,
+            onSelect: (roleName) => {
+              state.role = roleName;
+              checkCanStart();
+            }
+          });
+          els.roleInput.dataset.roleSelectorInitialized = 'true';
+        } catch (e) {
+          console.warn('[MI] RoleSelector init failed:', e);
         }
+      } else {
+        // Retry
+        setTimeout(initRoleSelector, 200);
+      }
+    }
+    
+    // Check if user can start interview
+    function checkCanStart() {
+      const roleValid = els.roleInput.value.trim().length > 0;
+      const seniorityValid = els.senioritySelect.value !== '';
+      const canStart = roleValid && seniorityValid && state.sessionsUsed < state.sessionLimit;
+      els.startBtn.disabled = !canStart;
+    }
+    
+    // Update session meter
+    function updateMeter() {
+      const pct = Math.min(100, (state.sessionsUsed / state.sessionLimit) * 100);
+      const progressClass = pct >= 100 ? 'danger' : pct >= 75 ? 'warning' : '';
+      
+      els.meterProgress.style.width = `${pct}%`;
+      els.meterProgress.className = 'mi-meter-progress ' + progressClass;
+      els.sessionsUsed.textContent = state.sessionsUsed;
+      els.sessionsLimit.textContent = state.sessionLimit;
+      
+      if (els.meterProgress2) {
+        els.meterProgress2.style.width = `${pct}%`;
+        els.meterProgress2.className = 'mi-meter-progress ' + progressClass;
+        els.sessionsUsed2.textContent = state.sessionsUsed;
+        els.sessionsLimit2.textContent = state.sessionLimit;
+      }
+      
+      if (pct >= 100) {
+        els.meterWarning.textContent = 'Monthly session limit reached. Next reset: ' + getNextResetDate();
+        els.meterWarning.classList.remove('hidden');
+        els.startBtn.disabled = true;
+        els.startBtn.textContent = 'Monthly session limit reached';
+      } else if (pct >= 75) {
+        els.meterWarning.textContent = "You're nearing your monthly limit. Focus on your top roles.";
+        els.meterWarning.classList.remove('hidden');
+      } else {
+        els.meterWarning.classList.add('hidden');
+      }
+    }
+    
+    function getNextResetDate() {
+      const now = new Date();
+      const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+      return nextMonth.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    }
+    
+    // Fetch session history
+    async function fetchHistory() {
+      try {
+        const token = await getToken();
+        if (!token) return;
         
-        const response = await fetch(`${MI_API.GET_SET}?id=${encodeURIComponent(id)}`, {
-          method: 'GET',
-          headers: {
-            'Authorization': `Bearer ${token}`
-          }
+        const res = await fetch(`${API.sessions}?limit=3`, {
+          headers: { 'Authorization': `Bearer ${token}` }
         });
         
-        if (!response.ok) {
-          const errorData = await response.json().catch(() => ({}));
-          console.warn('[MI] D1 fetch failed:', errorData.error || response.status);
-          return null;
+        if (!res.ok) throw new Error('Failed to fetch history');
+        
+        const data = await res.json();
+        
+        if (data.usage) {
+          state.sessionsUsed = data.usage.sessionsUsed || 0;
+          state.sessionLimit = data.usage.sessionLimit || 20;
+          updateMeter();
         }
         
-        const data = await response.json();
-        if (data.success && data.questions) {
-          console.log('[MI] Loaded set from D1:', { id, questionCount: data.questions.length, selectedCount: data.selectedIndices?.length || 0 });
-          return {
-            id: data.id,
-            role: data.role,
-            seniority: data.seniority,
-            questions: data.questions,
-            selectedIndices: data.selectedIndices || [],
-            jd: data.jd,
-            createdAt: data.createdAt
-          };
-        }
-        return null;
+        renderHistory(data.sessions || []);
       } catch (e) {
-        console.error('[MI] D1 fetch error:', e);
-        return null;
+        console.error('[MI] History fetch error:', e);
+        els.historyList.innerHTML = `
+          <li class="mi-history-error">
+            We couldn't load your previous sessions.
+            <button class="mi-history-retry" onclick="location.reload()">Try again</button>
+          </li>
+        `;
       }
     }
-
-    // Initialize Role Selector
-    let roleSelectorInitAttempts = 0;
-    const MAX_ROLE_SELECTOR_ATTEMPTS = 50;
-
-    function initializeRoleSelector() {
-      if (!roleInput) {
-        if (roleSelectorInitAttempts < MAX_ROLE_SELECTOR_ATTEMPTS) {
-          roleSelectorInitAttempts++;
-          setTimeout(initializeRoleSelector, 100);
-        }
+    
+    // Fetch saved question sets for dropdown
+    async function fetchSavedSets() {
+      try {
+        const token = await getToken();
+        if (!token) return;
+        
+        const res = await fetch(`${API.savedSets}?list=1`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        
+        if (!res.ok) throw new Error('Failed to load saved sets');
+        
+        const data = await res.json();
+        const sets = data.sets || [];
+        state.savedSets = sets;
+        state.savedSetsLoaded = true;
+        renderSavedSets(sets);
+      } catch (e) {
+        console.error('[MI] Saved sets fetch error:', e);
+        state.savedSetsLoaded = true;
+        renderSavedSets([]);
+      }
+    }
+    
+    function renderSavedSets(sets) {
+      if (!sets.length) {
+        els.savedSetSelect.innerHTML = '<option value="">No saved sets yet</option>';
         return;
       }
-
-      // Wait for RoleSelector class to be available
-      if (window.RoleSelector) {
-        try {
-          if (!roleInput.dataset.roleSelectorInitialized) {
-            const roleSelector = new window.RoleSelector(roleInput, {
-              minChars: 2,
-              maxResults: 8,
-              showCustomOption: true,
-              onSelect: function(roleName, isCustom) {
-                console.log('[MOCK-INTERVIEW] Role selected:', roleName, isCustom ? '(custom)' : '');
-              }
-            });
-            roleInput.dataset.roleSelectorInitialized = 'true';
-            console.log('[MOCK-INTERVIEW] RoleSelector initialized successfully');
-            
-            // Pre-populate role from query after initialization
-            if (roleParam) {
-              roleInput.value = roleParam;
-            }
-          }
-        } catch (error) {
-          console.error('[MOCK-INTERVIEW] Failed to initialize RoleSelector:', error);
-          if (roleSelectorInitAttempts < MAX_ROLE_SELECTOR_ATTEMPTS) {
-            roleSelectorInitAttempts++;
-            setTimeout(initializeRoleSelector, 500);
-          } else {
-            console.warn('[MOCK-INTERVIEW] RoleSelector initialization failed after max attempts - dropdown may not work');
-            // Fallback: still set roleParam if available
-            if (roleParam) {
-              roleInput.value = roleParam;
-            }
-          }
-        }
-      } else {
-        // RoleSelector not loaded yet, wait and retry
-        if (roleSelectorInitAttempts < MAX_ROLE_SELECTOR_ATTEMPTS) {
-          roleSelectorInitAttempts++;
-          setTimeout(initializeRoleSelector, 200);
-        } else {
-          console.warn('[MOCK-INTERVIEW] RoleSelector not available after max attempts - dropdown may not work');
-          // Fallback: still set roleParam if available
-          if (roleParam) {
-            roleInput.value = roleParam;
-          }
-        }
-      }
+      
+      els.savedSetSelect.innerHTML = [
+        '<option value="">Select a saved set...</option>',
+        ...sets.map(s => {
+          const count = typeof s.selectedCount === 'number' ? s.selectedCount : (Array.isArray(s.selectedIndices) ? s.selectedIndices.length : (Array.isArray(s.questions) ? s.questions.length : 0));
+          return `<option value="${s.id}">${escapeHtml(s.role || 'Saved set')} (${count || 0} questions)</option>`;
+        })
+      ].join('');
     }
-
-    // Initialize role selector after DOM is ready
-    if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', initializeRoleSelector);
-    } else {
-      setTimeout(initializeRoleSelector, 100);
-    }
-
-    // Build questions from context (saved or set) with fallbacks
-    // D1-first loading with localStorage fallback
-    async function buildQuestionsFromContext(){
-      // Default bank
-      const fallback = [
-        'Tell me about yourself and your experience.',
-        'What are your biggest strengths and weaknesses?',
-        'Why are you interested in this position?',
-        'Where do you see yourself in 5 years?',
-        'Tell me about a challenging project you worked on.',
-        'How do you handle stress and pressure?',
-        'Describe a time when you had to learn something quickly.',
-        'What is your leadership style?',
-        'How do you stay organized and prioritize tasks?',
-        'Do you have any questions for me?'
-      ];
-      
-      let dyn = [];
-      let loadedRole = roleParam;
-      
-      // Check if setId is a D1 integer ID (numeric) vs localStorage ID (role:seed format)
-      const isD1Id = setId && /^\d+$/.test(setId);
-      
-      // Try D1 first if we have a numeric set ID
-      if (isD1Id) {
-        console.log('[MI] Attempting D1 load for set:', setId);
-        const d1Set = await fetchQuestionSetFromD1(setId);
-        
-        if (d1Set) {
-          // Use selected questions from the set
-          const selectedIndices = d1Set.selectedIndices || [];
-          const allQuestions = d1Set.questions || [];
-          
-          if (selectedIndices.length > 0) {
-            // Use only selected questions
-            dyn = selectedIndices.map(i => {
-              const q = allQuestions[i];
-              return typeof q === 'string' ? q : (q?.q || '');
-            }).filter(Boolean);
-          } else {
-            // No selection, use all questions
-            dyn = allQuestions.map(q => typeof q === 'string' ? q : (q?.q || '')).filter(Boolean);
-          }
-          
-          loadedRole = d1Set.role || loadedRole;
-          console.log('[MI] D1 load successful:', { questionCount: dyn.length, role: loadedRole });
-          
-          // Update role input if available
-          if (loadedRole && roleInput) {
-            roleInput.value = loadedRole;
-          }
-          
-          return { questions: dyn.length ? dyn : fallback, role: loadedRole };
-        } else {
-          console.log('[MI] D1 load failed, falling back to localStorage');
-        }
-      }
-      
-      // Fallback: Try localStorage mi_payload
-      let usedLocalStorageFallback = false;
-      if (mode === 'saved' || !dyn.length) {
-        try {
-          const p = JSON.parse(localStorage.getItem('mi_payload')||'null');
-          if (p && Array.isArray(p.questions) && p.questions.length) {
-            dyn = p.questions.filter(q=>typeof q==='string' && q.trim());
-            loadedRole = p.role || loadedRole;
-            usedLocalStorageFallback = true;
-            console.log('[MI] Loaded from mi_payload:', { questionCount: dyn.length, role: loadedRole });
-          }
-        } catch (e) { console.warn('[MI] mi_payload parse error:', e); }
-        try { localStorage.removeItem('mi_payload'); } catch {}
-      }
-      
-      // Fallback: Try localStorage set by ID (role:seed format)
-      if (!dyn.length && setId && !isD1Id) {
-        try {
-          const raw = localStorage.getItem(`iq_set_${setId}`);
-          if (raw) {
-            const s = JSON.parse(raw);
-            if (Array.isArray(s.questions)) {
-              dyn = s.questions.map(q=> typeof q==='string'? q : (q?.q||'')).filter(Boolean);
-              loadedRole = s.role || loadedRole;
-              usedLocalStorageFallback = true;
-              console.log('[MI] Loaded from localStorage set:', { setId, questionCount: dyn.length, role: loadedRole });
-            }
-          }
-        } catch (e) { console.warn('[MI] localStorage set parse error:', e); }
-      }
-      
-      // Show subtle notification if localStorage fallback was used
-      if (usedLocalStorageFallback && isD1Id) {
-        // Only show if we tried D1 first (isD1Id) but fell back to localStorage
-        setTimeout(() => {
-          const toast = document.createElement('div');
-          toast.style.cssText = 'position:fixed;bottom:18px;right:18px;background:#111827;color:#fff;padding:.55rem .75rem;border-radius:10px;box-shadow:0 6px 18px rgba(0,0,0,.18);font-size:.95rem;z-index:10000;opacity:0;transform:translateY(8px);transition:opacity .18s ease, transform .18s ease;';
-          toast.textContent = 'Loaded your last saved questions from this device.';
-          document.body.appendChild(toast);
-          requestAnimationFrame(() => {
-            toast.style.opacity = '1';
-            toast.style.transform = 'translateY(0)';
-          });
-          setTimeout(() => {
-            toast.style.opacity = '0';
-            toast.style.transform = 'translateY(8px)';
-            setTimeout(() => toast.remove(), 180);
-          }, 3000);
-        }, 500);
-      }
-      
-      return { questions: dyn.length ? dyn : fallback, role: loadedRole };
-    }
-
-    let questions = [];
-    let loadedRole = roleParam;
     
-    // Initialize questions asynchronously
-    (async function initQuestions() {
-      const result = await buildQuestionsFromContext();
-      questions = result.questions;
-      loadedRole = result.role;
-      
-      // Update role input
-      if (loadedRole && roleInput && !roleInput.value) {
-        roleInput.value = loadedRole;
+    function renderHistory(sessions) {
+      if (!sessions.length) {
+        els.historyList.innerHTML = '<li class="mi-history-empty">No previous mock interviews yet. Once you finish a session, your score and date will appear here.</li>';
+        return;
       }
       
-      // Update question count display
-      const qtotalEl = document.getElementById('mi-qtotal');
-      if (qtotalEl) {
-        qtotalEl.textContent = String(questions.length);
-      }
+      els.historyList.innerHTML = sessions.map(s => {
+        const date = new Date(s.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        return `
+          <li class="mi-history-item" data-session-id="${s.id}">
+            <div class="mi-history-date">${date}</div>
+            <div class="mi-history-role">${escapeHtml(s.role || '')}</div>
+            <div class="mi-history-score">${s.overallScore} / 100</div>
+          </li>
+        `;
+      }).join('');
       
-      console.log('[MI] Questions initialized:', { count: questions.length, role: loadedRole });
-    })();
-
-    // --- QA: Integration verification ---
-    function miRunIntegrationQA(){
-      const qa = new URL(window.location.href).searchParams.get('qa');
-      if(!qa) return;
-      try { localStorage.setItem('qa_flag','1'); } catch {}
-      const expectMode = sessionStorage.getItem('qa_expect_mode') || '';
-      const expectCount = Number(sessionStorage.getItem('qa_expect_count') || '0');
-      const expectRole = sessionStorage.getItem('qa_expect_role') || '';
-      const actualMode = (mode || '');
-      const actualCount = Array.isArray(questions)? questions.length : 0;
-      const actualRole = roleParam || (roleInput?.value || '');
-      const results = {
-        mode: expectMode ? (expectMode === actualMode ? 'pass' : 'fail') : 'n/a',
-        count: expectCount ? (expectCount === actualCount ? 'pass' : 'fail') : 'n/a',
-        role: expectRole ? (expectRole === actualRole ? 'pass' : 'fail') : 'n/a',
-        payloadCleared: (actualMode === 'saved') ? (localStorage.getItem('mi_payload') ? 'fail' : 'pass') : 'n/a'
-      };
-      try {
-        Object.entries(results).forEach(([k,v])=> sessionStorage.setItem(`qa_mi_${k}`, String(v)));
-      } catch {}
-      console.log('[QA] Mock Interview integration', { expectMode, expectCount, expectRole, actualMode, actualCount, actualRole, results });
+      // Add click handlers
+      els.historyList.querySelectorAll('.mi-history-item').forEach(item => {
+        item.addEventListener('click', () => loadHistoricalSession(item.dataset.sessionId));
+      });
     }
-    // Run shortly after load so DOM is ready
-    setTimeout(miRunIntegrationQA, 50);
-
+    
+    // Load a historical session
+    async function loadHistoricalSession(sessionId) {
+      try {
+        const token = await getToken();
+        if (!token) return;
+        
+        els.scoringOverlay.classList.add('visible');
+        
+        const res = await fetch(API.sessionDetail(sessionId), {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        
+        if (!res.ok) throw new Error('Failed to load session');
+        
+        const data = await res.json();
+        
+        // Populate state from loaded session
+        state.role = data.role;
+        state.seniority = data.seniority;
+        state.interviewStyle = data.interviewStyle;
+        state.questions = data.qaPairs.map(qa => ({ text: qa.q }));
+        state.answers = data.qaPairs.map(qa => qa.a);
+        state.scoringResult = {
+          overallScore: data.overallScore,
+          rubric: data.rubric,
+          saoOverall: data.saoOverall,
+          strengths: data.strengths,
+          improvements: data.improvements,
+          perQuestion: data.perQuestion
+        };
+        state.sessionId = data.sessionId;
+        
+        els.scoringOverlay.classList.remove('visible');
+        showSummary();
+      } catch (e) {
+        console.error('[MI] Load session error:', e);
+        els.scoringOverlay.classList.remove('visible');
+        alert('Failed to load session. Please try again.');
+      }
+    }
+    
     // Start interview
-    beginBtn.addEventListener('click', async function() {
-      if (roleInput.value.trim()) {
-        // Ensure questions are loaded before starting
-        if (questions.length === 0) {
-          const result = await buildQuestionsFromContext();
-          questions = result.questions;
+    async function startInterview() {
+      state.role = els.roleInput.value.trim();
+      state.seniority = els.senioritySelect.value;
+      state.answers = [];
+      state.currentQuestionIndex = 0;
+      state.savedSetId = null;
+      
+      els.startBtn.disabled = true;
+      els.startBtn.textContent = 'Loading questions...';
+      
+      try {
+        const token = await getToken();
+        if (!token) throw new Error('Not authenticated');
+        
+        // Check question source
+        if (state.questionSource === 'ai') {
+          // Generate questions via API
+          const res = await fetch(API.generateQuestions, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({
+              role: state.role,
+              seniority: state.seniority,
+              interviewStyle: state.interviewStyle
+            })
+          });
+          
+          if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            throw new Error(err.error || 'Failed to generate questions');
+          }
+          
+          const data = await res.json();
+          state.questions = data.questions || [];
+        } else {
+          // Use saved set - fetch from API
+          const setId = els.savedSetSelect.value;
+          if (!setId) throw new Error('Please select a saved question set');
+          
+          const res = await fetch(`${API.savedSets}?id=${setId}`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+          });
+          
+          if (!res.ok) throw new Error('Failed to load saved questions');
+          
+          const data = await res.json();
+          const rawQuestions = data.questions || [];
+          const selectedIdx = Array.isArray(data.selectedIndices) ? data.selectedIndices : [];
+          const useSelected = selectedIdx.length > 0;
+          const picked = useSelected
+            ? selectedIdx
+                .filter(idx => Number.isInteger(idx) && idx >= 0 && idx < rawQuestions.length)
+                .map(idx => rawQuestions[idx])
+            : rawQuestions;
+          state.questions = picked.map(q => ({ text: typeof q === 'string' ? q : q?.q }));
+          state.savedSetId = setId;
         }
         
-        setupDiv.style.display = 'none';
-        sessionDiv.style.display = 'block';
-        document.getElementById('mi-role-label').textContent = roleInput.value;
-        document.getElementById('mi-qtotal').textContent = String(questions.length);
-        // Initialize first question explicitly
-        currentQuestion = 0;
-        questionEl.textContent = questions[currentQuestion];
-        qnumEl.textContent = currentQuestion + 1;
+        if (!state.questions.length) throw new Error('No questions available');
+        
+        // Initialize answers array
+        state.answers = new Array(state.questions.length).fill('');
+        
+        // Show interview screen
+        showInterview();
+      } catch (e) {
+        console.error('[MI] Start error:', e);
+        alert(e.message || 'Failed to start interview. Please try again.');
+      } finally {
+        els.startBtn.disabled = false;
+        els.startBtn.textContent = 'Start Mock Interview';
+        checkCanStart();
       }
-    });
-
-    // Question navigation uses `questions` built from context
-
-    let currentQuestion = 0;
-    const questionEl = document.getElementById('mi-question');
-    const qnumEl = document.getElementById('mi-qnum');
-    const nextBtn = document.getElementById('mi-next');
-
-    nextBtn.addEventListener('click', function() {
-      if (currentQuestion < questions.length - 1) {
-        currentQuestion++;
-        questionEl.textContent = questions[currentQuestion];
-        qnumEl.textContent = currentQuestion + 1;
-        
-        // Clear answer input
-        document.getElementById('mi-answer').value = '';
-        
-        // Show score breakdown on last question
-        if (currentQuestion === questions.length - 1) {
-          document.getElementById('mi-score-breakdown').style.display = 'block';
-          nextBtn.textContent = 'Finish';
+    }
+    
+    // Show interview screen
+    function showInterview() {
+      state.currentScreen = 'interview';
+      els.setup.classList.add('hidden');
+      els.summary.classList.add('hidden');
+      els.interview.classList.remove('hidden');
+      
+      updateInterviewUI();
+    }
+    
+    // Update interview UI for current question
+    function updateInterviewUI() {
+      const q = state.questions[state.currentQuestionIndex];
+      const isLast = state.currentQuestionIndex === state.questions.length - 1;
+      els.shortNudge.classList.remove('visible');
+      state.shortNudgeAcknowledged = false;
+      
+      els.qPill.textContent = `Question ${state.currentQuestionIndex + 1} of ${state.questions.length}`;
+      els.qMeta.textContent = `Role: ${state.role} · ${state.seniority} · ${state.interviewStyle}`;
+      els.questionText.textContent = q.text;
+      els.answerArea.value = state.answers[state.currentQuestionIndex] || '';
+      
+      els.backBtn.disabled = state.currentQuestionIndex === 0;
+      els.nextBtn.textContent = isLast ? 'Finish' : 'Next';
+      
+      updateWordCounter();
+    }
+    
+    // Update word counter
+    function updateWordCounter() {
+      const text = els.answerArea.value.trim();
+      const words = text ? text.split(/\s+/).length : 0;
+      els.wordCounter.textContent = `${words} words · Aim for 150–250 words (≈ 60–90 seconds)`;
+      els.wordCounter.classList.toggle('short', words > 0 && words < 50);
+    }
+    
+    // Save current answer and navigate
+    function saveCurrentAnswer() {
+      state.answers[state.currentQuestionIndex] = els.answerArea.value;
+    }
+    
+    // Go to next question or finish
+    async function handleNext() {
+      saveCurrentAnswer();
+      
+      const answer = state.answers[state.currentQuestionIndex];
+      const wordCount = answer.trim() ? answer.trim().split(/\s+/).length : 0;
+      const isLast = state.currentQuestionIndex === state.questions.length - 1;
+      
+      // Show short nudge if < 20 words
+      if (wordCount < 20 && wordCount > 0) {
+        els.shortNudge.classList.add('visible');
+        // Require one acknowledgement click, then allow navigation/finish
+        if (!state.shortNudgeAcknowledged) {
+          state.shortNudgeAcknowledged = true;
+          return;
         }
+      }
+      
+      if (isLast) {
+        // Finish interview - score it
+        await scoreInterview();
       } else {
-        // Interview complete
-        alert('Interview completed! Check your scores above.');
+        state.currentQuestionIndex++;
+        updateInterviewUI();
       }
-    });
-  </script>
-  <!-- Load navigation system -->
-  <script src="js/navigation.js?v=20251007-2"></script>
-  <script src="js/universal-logout.js?v=20251007-2"></script>
-  <!-- Load Firebase auth as ES module (required for API authentication) -->
-  <script type="module" src="js/firebase-auth.js?v=20251011-1"></script>
-  <!-- Load role selector -->
-  <script src="js/role-selector.js?v=20250115-1" type="module"></script>
-  <script>
-    // Initialize navigation system when DOM is ready
-    document.addEventListener('DOMContentLoaded', function() {
-      if (window.JobHackAINavigation && window.JobHackAINavigation.initializeNavigation) {
-        window.JobHackAINavigation.initializeNavigation();
+    }
+    
+    // Go to previous question
+    function handleBack() {
+      if (state.currentQuestionIndex > 0) {
+        saveCurrentAnswer();
+        state.currentQuestionIndex--;
+        updateInterviewUI();
       }
-    });
+    }
+    
+    // Score the interview
+    async function scoreInterview() {
+      els.scoringOverlay.classList.add('visible');
+      
+      try {
+        const token = await getToken();
+        if (!token) throw new Error('Not authenticated');
+        
+        // Build Q&A pairs
+        const qaPairs = state.questions.map((q, i) => ({
+          q: q.text,
+          a: state.answers[i] || ''
+        }));
+        
+        const res = await fetch(API.score, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            role: state.role,
+            seniority: state.seniority,
+            interviewStyle: state.interviewStyle,
+            questionSetId: state.savedSetId,
+            questionSetName: state.questionSource === 'saved' ? els.savedSetSelect.options[els.savedSetSelect.selectedIndex]?.text : null,
+            qaPairs
+          })
+        });
+        
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.error || 'Failed to score interview');
+        }
+        
+        const data = await res.json();
+        state.scoringResult = data;
+        state.sessionId = data.sessionId;
+        
+        // Update usage
+        state.sessionsUsed++;
+        updateMeter();
+        
+        // Refresh history
+        fetchHistory();
+        
+        // Show summary
+        showSummary();
+      } catch (e) {
+        console.error('[MI] Scoring error:', e);
+        alert(e.message || 'Failed to score interview. Please try again.');
+      } finally {
+        els.scoringOverlay.classList.remove('visible');
+      }
+    }
+    
+    // Show summary screen
+    function showSummary() {
+      state.currentScreen = 'summary';
+      els.setup.classList.add('hidden');
+      els.interview.classList.add('hidden');
+      els.summary.classList.remove('hidden');
+      
+      const r = state.scoringResult;
+      if (!r) return;
+      
+      // Score hero
+      const scoreEl = document.getElementById('mi-final-score');
+      scoreEl.textContent = `${r.overallScore} / 100`;
+      scoreEl.className = 'mi-score-value ' + getScoreColorClass(r.overallScore);
+      
+      // Coaching
+      const coaching = r.improvements?.[0] || 'Great job completing the interview!';
+      document.getElementById('mi-score-coaching').textContent = coaching;
+      
+      // Badge
+      const date = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      document.getElementById('mi-score-badge').textContent = `Saved to history · ${date} · ${state.role} · ${state.seniority}`;
+      
+      // Rubric grid
+      const rubricGrid = document.getElementById('mi-rubric-grid');
+      const rubricItems = [
+        { label: 'Relevance of Answer', score: r.rubric?.relevance?.score || 0, of: 30, note: r.rubric?.relevance?.note || '' },
+        { label: 'Structure & Delivery', score: r.rubric?.structure?.score || 0, of: 25, note: r.rubric?.structure?.note || '' },
+        { label: 'Confidence & Clarity', score: r.rubric?.clarity?.score || 0, of: 20, note: r.rubric?.clarity?.note || '' },
+        { label: 'Depth & Insight', score: r.rubric?.insight?.score || 0, of: 15, note: r.rubric?.insight?.note || '' },
+        { label: 'Grammar & Pace', score: r.rubric?.grammar?.score || 0, of: 10, note: r.rubric?.grammar?.note || '' }
+      ];
+      rubricGrid.innerHTML = rubricItems.map(item => `
+        <div class="mi-rubric-card">
+          <div class="mi-rubric-label">${item.label}</div>
+          <div class="mi-rubric-score">${item.score} / ${item.of}</div>
+          <div class="mi-rubric-note">${escapeHtml(item.note || '')}</div>
+        </div>
+      `).join('');
+      
+      // S+A=O breakdown
+      const saoBreakdown = document.getElementById('mi-sao-breakdown');
+      const sao = r.saoOverall || { situationPct: 0, actionPct: 0, outcomePct: 0 };
+      saoBreakdown.innerHTML = `
+        <div class="mi-sao-stat">
+          <div class="mi-sao-pct">${Math.round(sao.situationPct || sao.situation_pct || 0)}%</div>
+          <div class="mi-sao-name">Situation</div>
+          <div class="mi-sao-target">target ≈ 5%</div>
+        </div>
+        <div class="mi-sao-stat">
+          <div class="mi-sao-pct">${Math.round(sao.actionPct || sao.action_pct || 0)}%</div>
+          <div class="mi-sao-name">Action</div>
+          <div class="mi-sao-target">target ≈ 10%</div>
+        </div>
+        <div class="mi-sao-stat">
+          <div class="mi-sao-pct">${Math.round(sao.outcomePct || sao.outcome_pct || 0)}%</div>
+          <div class="mi-sao-name">Outcome</div>
+          <div class="mi-sao-target">target ≈ 85%</div>
+        </div>
+      `;
+      
+      // S+A=O coaching
+      const saoCoachingList = document.getElementById('mi-sao-coaching-list');
+      const saoCoaching = sao.coaching || [];
+      saoCoachingList.innerHTML = saoCoaching.map(c => `<li>${escapeHtml(c || '')}</li>`).join('');
+      
+      // Improvements
+      const improvementsList = document.getElementById('mi-improvements-list');
+      const improvements = r.improvements || [];
+      improvementsList.innerHTML = improvements.map(i => `<li>${escapeHtml(i || '')}</li>`).join('');
+      
+      // Per-question accordion
+      const accordion = document.getElementById('mi-accordion');
+      const perQRaw = r.perQuestion || [];
+      // Normalize per-question feedback using q_index so we don't rely on array order
+      const perQByIndex = {};
+      perQRaw.forEach((item, idx) => {
+        const qIdx = typeof item.q_index === 'number' ? item.q_index : idx;
+        if (perQByIndex[qIdx] === undefined) {
+          perQByIndex[qIdx] = item;
+        }
+      });
+      accordion.innerHTML = state.questions.map((q, i) => {
+        const pq = perQByIndex[i] || {};
+        const notes = pq.notes || [];
+        return `
+          <div class="mi-accordion-item">
+            <button class="mi-accordion-header" type="button">
+              <span>Q${i + 1} · "${escapeHtml(truncate(q.text, 50))}"</span>
+              <span class="mi-accordion-q-score">${pq.score || 0}/10</span>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
+            </button>
+            <div class="mi-accordion-content">
+              <div class="mi-accordion-answer">${escapeHtml(state.answers[i] || '(No answer)')}</div>
+              <ul class="mi-accordion-notes">
+                ${notes.map(n => `<li>${escapeHtml(n || '')}</li>`).join('')}
+              </ul>
+            </div>
+          </div>
+        `;
+      }).join('');
+      
+      // Accordion toggle
+      accordion.querySelectorAll('.mi-accordion-header').forEach(btn => {
+        btn.addEventListener('click', () => {
+          btn.parentElement.classList.toggle('open');
+        });
+      });
+    }
+    
+    function getScoreColorClass(score) {
+      if (score >= 85) return 'score-blue';
+      if (score >= 70) return 'score-green';
+      if (score >= 50) return 'score-yellow';
+      return 'score-red';
+    }
+    
+    function truncate(str, len) {
+      if (!str) return '';
+      return str.length > len ? str.slice(0, len) + '...' : str;
+    }
+    
+    function escapeHtml(str) {
+      const div = document.createElement('div');
+      div.textContent = str;
+      return div.innerHTML;
+    }
+    
+    // Reset to setup
+    function resetToSetup() {
+      state.currentScreen = 'setup';
+      state.questions = [];
+      state.answers = [];
+      state.currentQuestionIndex = 0;
+      state.scoringResult = null;
+      state.sessionId = null;
+      
+      els.setup.classList.remove('hidden');
+      els.interview.classList.add('hidden');
+      els.summary.classList.add('hidden');
+      
+      checkCanStart();
+    }
+    
+    // Retake interview (same questions)
+    function retakeInterview() {
+      state.answers = new Array(state.questions.length).fill('');
+      state.currentQuestionIndex = 0;
+      state.scoringResult = null;
+      state.sessionId = null;
+      
+      showInterview();
+    }
+    
+    // Event Listeners
+    function setupEventListeners() {
+      // Role input
+      els.roleInput.addEventListener('input', () => {
+        state.role = els.roleInput.value.trim();
+        checkCanStart();
+      });
+      
+      // Seniority select
+      els.senioritySelect.addEventListener('change', () => {
+        state.seniority = els.senioritySelect.value;
+        checkCanStart();
+      });
+      
+      // Style segments
+      els.styleSegments.forEach(seg => {
+        seg.addEventListener('click', () => {
+          els.styleSegments.forEach(s => s.classList.remove('active'));
+          seg.classList.add('active');
+          state.interviewStyle = seg.dataset.value;
+        });
+      });
+      
+      // Source radios
+      els.sourceRadios.forEach(radio => {
+        radio.addEventListener('change', () => {
+          state.questionSource = radio.value;
+          els.savedSetSelect.classList.toggle('hidden', radio.value !== 'saved');
+          if (radio.value === 'saved' && !state.savedSetsLoaded) {
+            fetchSavedSets();
+          }
+        });
+      });
+      
+      // Start button
+      els.startBtn.addEventListener('click', startInterview);
+      
+      // Answer area
+      els.answerArea.addEventListener('input', () => {
+        updateWordCounter();
+        els.shortNudge.classList.remove('visible');
+      });
+      
+      // Navigation buttons
+      els.nextBtn.addEventListener('click', handleNext);
+      els.backBtn.addEventListener('click', handleBack);
+      
+      // Summary actions
+      document.getElementById('mi-retake')?.addEventListener('click', retakeInterview);
+      document.getElementById('mi-new-questions')?.addEventListener('click', () => {
+        window.location.href = `interview-questions.html?role=${encodeURIComponent(state.role)}`;
+      });
+    }
+    
+    // Initialize
+    async function init() {
+      setupEventListeners();
+      initRoleSelector();
+      await fetchHistory();
+      await fetchSavedSets();
+      checkCanStart();
+    }
+    
+    // Wait for DOM and Firebase
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', init);
+    } else {
+      init();
+    }
   </script>
-  <script src="js/main.js" type="module"></script>
-  <script src="js/analytics.js" type="module"></script>
 </body>
 </html>
-
