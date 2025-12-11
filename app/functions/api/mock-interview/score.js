@@ -102,8 +102,12 @@ Use Situation + Action = Outcome (S + A = O) as coaching guidance, not a hard pe
 Be concise, specific, role-aware, and actionable. Prefer brief bullet points.
 Do not invent facts; base all feedback solely on the provided answers. Always output valid JSON.`;
 
-  // Format Q&A pairs for the prompt
-  const qaText = qaPairs.map((qa, i) => `{ "q": "${qa.q.replace(/"/g, '\\"')}", "a": "${truncateToWords(qa.a, 250).replace(/"/g, '\\"')}" }`).join(',\n    ');
+  // Format Q&A pairs for the prompt using JSON.stringify to safely escape
+  const qaText = qaPairs.map((qa) => {
+    const qSafe = JSON.stringify(qa.q ?? '');
+    const aSafe = JSON.stringify(truncateToWords(qa.a, 250) ?? '');
+    return `{ "q": ${qSafe}, "a": ${aSafe} }`;
+  }).join(',\n    ');
 
   const userPrompt = `Score this mock interview. Answers are truncated to ~250 words max.
 
