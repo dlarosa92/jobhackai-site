@@ -825,6 +825,7 @@
       if (rewriteDescInline) {
         rewriteDescInline.style.display = 'none';
       }
+      setCopyRewriteVisibility(false);
     }
 
     function resetAtsAndRoleUIToDefaults() {
@@ -1598,6 +1599,15 @@
         }
       }
     };
+
+    // Controls when the copy button is shown (only after we have rewrite content)
+    const setCopyRewriteVisibility = (isVisible) => {
+      const copyBtn = document.querySelector('#rf-rewrite-content .btn.btn-primary');
+      if (!copyBtn) return;
+      copyBtn.style.display = isVisible ? 'inline-block' : 'none';
+      copyBtn.disabled = !isVisible;
+      if (!isVisible) copyBtn.textContent = 'Copy Rewritten Resume';
+    };
     
     // Regenerate rewrite handler function
     const regenerateRewriteHandler = async function() {
@@ -1629,6 +1639,7 @@
         showLoadingState('Rewriting resume...');
         showRewriteSkeleton();
         clearInlineRewriteCountdown();
+        setCopyRewriteVisibility(false);
         this.disabled = true;
         this.textContent = 'Regenerating...';
 
@@ -1655,6 +1666,7 @@
         if (rewriteDescInline) {
           rewriteDescInline.style.display = hasRewriteContent ? 'block' : 'none';
         }
+        setCopyRewriteVisibility(hasRewriteContent);
         
         // Also populate the original snippet box
         const originalBox = document.querySelectorAll('#rf-rewrite-content .rf-snippet-box')[0];
@@ -1702,6 +1714,7 @@
           this.textContent = 'Generate Rewrite';
           await renderRewriteCooldownIndicator();
         }
+        setCopyRewriteVisibility(false);
         hideRewriteSkeleton();
         hideLoadingState();
       }
@@ -5590,6 +5603,7 @@
         }
         if (rewrittenTextarea) rewrittenTextarea.value = '';
         if (rewriteDescInline) rewriteDescInline.style.display = 'none';
+        setCopyRewriteVisibility(false);
         if (originalTextarea && originalTextarea.value) {
           // keep original text if present
         }
@@ -5615,6 +5629,7 @@
         if (rewriteDescInline) {
           rewriteDescInline.style.display = hasRewriteContent ? 'block' : 'none';
         }
+        setCopyRewriteVisibility(hasRewriteContent);
         
         // Also populate original snippet if available
         if (originalTextarea && original) {
@@ -6116,7 +6131,7 @@
         <textarea class="rf-snippet-box" readonly>AI-optimized resume excerpt.</textarea>
         <div id="rf-change-summary" style="display:none;"></div>
         <div style="margin-top:1.2rem;">
-          <button class="btn btn-primary">Copy Rewritten Resume</button>
+          <button class="btn btn-primary" style="display:none;">Copy Rewritten Resume</button>
           <button class="btn btn-secondary">Generate Rewrite</button>
           <div id="rf-rewrite-cooldown" style="margin-top:0.5rem;"></div>
         </div>
