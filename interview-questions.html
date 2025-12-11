@@ -1980,8 +1980,8 @@
           });
           
           // Success - redirect with D1 set ID
-        const qaMode = (new URL(window.location.href).searchParams.get('qa') || localStorage.getItem('qa_flag')) ? true : false;
-          const url = `mock-interview.html?role=${encodeURIComponent(role)}&mode=${mode}&set=${savedSet.id}${qaMode?'&qa=1':''}`;
+          const qaMode = (new URL(window.location.href).searchParams.get('qa') || localStorage.getItem('qa_flag')) ? true : false;
+          const url = `mock-interview.html?role=${encodeURIComponent(role)}&seniority=${encodeURIComponent(seniority||'')}&mode=${mode}&set=${savedSet.id}&source=d1${qaMode?'&qa=1':''}`;
           
           // Also save to localStorage as fallback
           const localSetId = iqSetId(role, iqState.set?.seed || Date.now());
@@ -1990,12 +1990,16 @@
               id: localSetId, 
               d1Id: savedSet.id,
               role, 
+              seniority,
+              types,
+              selectedIndices,
+              mode,
               questions: selectedIndices.map(i => questions[i]?.q).filter(Boolean)
             })); 
           } catch(e) { console.warn('localStorage fallback failed', e); }
           
           iqTrack('iq_mock_clicked_unlocked', { mode, savedCount: selectedIndices.length, d1SetId: savedSet.id });
-        window.location.href = url;
+          window.location.href = url;
           
         } catch (saveError) {
           console.error('[IQ] Save set failed, using localStorage fallback:', saveError);
@@ -2006,6 +2010,10 @@
             localStorage.setItem('mi_payload', JSON.stringify({ 
               id: localSetId, 
               role, 
+              seniority,
+              types,
+              selectedIndices,
+              mode,
               questions: selectedIndices.map(i => questions[i]?.q).filter(Boolean)
             })); 
           } catch(e) { 
@@ -2019,7 +2027,7 @@
           }
           
           const qaMode = (new URL(window.location.href).searchParams.get('qa') || localStorage.getItem('qa_flag')) ? true : false;
-          const url = `mock-interview.html?role=${encodeURIComponent(role)}&mode=${mode}&set=${encodeURIComponent(localSetId)}${qaMode?'&qa=1':''}`;
+          const url = `mock-interview.html?role=${encodeURIComponent(role)}&seniority=${encodeURIComponent(seniority||'')}&mode=${mode}&set=${encodeURIComponent(localSetId)}&source=local${qaMode?'&qa=1':''}`;
           
           iqTrack('iq_mock_clicked_unlocked', { mode, savedCount: selectedIndices.length, fallback: true });
           window.location.href = url;
@@ -2259,7 +2267,7 @@ function initIQPage(){
     const upgradeBtn = document.getElementById('iq-upgrade');
 
     // Self-tests
-    async function runIQSelfTests(){ const res=[]; const ok=(n,c)=>res.push({n,pass:!!c}); ok('Role input exists', !!document.getElementById('iq-role')); ok('Generate button exists', !!document.getElementById('btn-generate')); iqStartGlobalCooldown(1); ok('Cooldown helper shows', $IQ('#cooldown-helper') && $IQ('#cooldown-helper').style.display !== 'none'); const gen=await iqApiGenerate({ role:'Tester', seniority:'', types:['behavioral'], count:3, jd:'' }); ok('apiGenerate returns questions', Array.isArray(gen.questions)&&gen.questions.length>0); console.log('%cInterview Questions Self-Tests','font-weight:700'); res.forEach(r=>console.log(`${r.pass?'✅':'❌'} ${r.n}`)); }
+    async function runIQSelfTests(){ const res=[]; const ok=(n,c)=>res.push({n,pass:!!c}); ok('Role input exists', !!document.getElementById('iq-role')); ok('Generate button exists', !!document.getElementById('btn-generate')); iqStartGlobalCooldown(1); ok('Cooldown helper shows', $IQ('#cooldown-helper') && $IQ('#cooldown-helper').style.display !== 'none'); const gen=await iqApiGenerate({ role:'Tester', seniority:'', types:['behavioral'], count:3, jd:'' }); const hasQuestions = !!(gen && Array.isArray(gen.questions) && gen.questions.length>0); ok('apiGenerate returns questions', hasQuestions); if(!hasQuestions && gen && gen.dailyLimitReached){ console.warn('[IQ] Self-test skipped due to daily limit'); } console.log('%cInterview Questions Self-Tests','font-weight:700'); res.forEach(r=>console.log(`${r.pass?'✅':'❌'} ${r.n}`)); }
     
     // --- QA: Integration harness ---
     function runIQIntegrationQA(){

@@ -1,0 +1,21 @@
+name = "jobhackai-site"
+account_id = "fabf4409ef32f8c64354a1a099bef2a2"
+compatibility_date = "2024-12-11"
+
+[env.dev]
+name = "jobhackai-site-dev"
+d1_databases = [
+  { binding = "INTERVIEW_QUESTIONS_DB", database_id = "c5c0eee5-a223-4ea2-974e-f4aee5a28bab" }
+]
+
+[env.qa]
+name = "jobhackai-site-qa"
+d1_databases = [
+  { binding = "INTERVIEW_QUESTIONS_DB", database_id = "80d87a73-6615-4823-b7a4-19a8821b4f87" }
+]
+
+[env.production]
+name = "jobhackai-site-prod"
+d1_databases = [
+  { binding = "INTERVIEW_QUESTIONS_DB", database_id = "f9b709fd-56c3-4a0b-8141-4542327c9d4d" }
+]

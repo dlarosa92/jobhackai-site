@@ -1179,7 +1179,9 @@
       sessionLimit: 20,
       scoringResult: null,
       sessionId: null,
-      shortNudgeAcknowledged: false
+      shortNudgeAcknowledged: false,
+      prefillSetId: null,
+      prefillSource: null
     };
     
     // DOM Elements
@@ -1220,6 +1222,8 @@
       sessionDetail: (id) => `/api/mock-interview/sessions/${id}`,
       savedSets: '/api/interview-questions/get-set'
     };
+
+    let localPayload = null;
     
     // Get Firebase token
     async function getToken() {
@@ -1237,6 +1241,40 @@
         console.warn('[MI] Failed to get Firebase token:', e);
       }
       return null;
+    }
+    
+    function readLocalPayload() {
+      try {
+        const raw = localStorage.getItem('mi_payload');
+        if (!raw) return null;
+        const parsed = JSON.parse(raw);
+        return parsed && typeof parsed === 'object' ? parsed : null;
+      } catch {
+        return null;
+      }
+    }
+    
+    function hydrateFromParams() {
+      const params = new URL(window.location.href).searchParams;
+      const roleParam = params.get('role');
+      const seniorityParam = params.get('seniority');
+      const setParam = params.get('set');
+      const sourceParam = params.get('source') || null;
+      
+      if (roleParam) {
+        state.role = roleParam;
+        if (els.roleInput) els.roleInput.value = roleParam;
+      }
+      if (seniorityParam && els.senioritySelect?.querySelector(`option[value="${seniorityParam}"]`)) {
+        els.senioritySelect.value = seniorityParam;
+        state.seniority = seniorityParam;
+      }
+      if (setParam) {
+        state.questionSource = 'saved';
+        state.savedSetId = setParam;
+        state.prefillSetId = setParam;
+        state.prefillSource = sourceParam;
+      }
     }
     
     // Initialize Role Selector
@@ -1363,18 +1401,43 @@
     }
     
     function renderSavedSets(sets) {
-      if (!sets.length) {
+      const options = [];
+      if (localPayload && Array.isArray(localPayload.questions) && localPayload.questions.length > 0) {
+        const count = Array.isArray(localPayload.selectedIndices) && localPayload.selectedIndices.length
+          ? localPayload.selectedIndices.length
+          : localPayload.questions.length;
+        options.push({
+          id: localPayload.id,
+          label: `${escapeHtml(localPayload.role || 'Saved set (local)')} (${count} questions)`,
+          source: 'local'
+        });
+      }
+      
+      sets.forEach(s => {
+        const count = typeof s.selectedCount === 'number'
+          ? s.selectedCount
+          : (Array.isArray(s.selectedIndices) ? s.selectedIndices.length : (Array.isArray(s.questions) ? s.questions.length : 0));
+        options.push({
+          id: s.id,
+          label: `${escapeHtml(s.role || 'Saved set')} (${count || 0} questions)`,
+          source: 'd1'
+        });
+      });
+      
+      if (!options.length) {
         els.savedSetSelect.innerHTML = '<option value="">No saved sets yet</option>';
         return;
       }
       
+      const desired = state.savedSetId || state.prefillSetId || '';
       els.savedSetSelect.innerHTML = [
         '<option value="">Select a saved set...</option>',
-        ...sets.map(s => {
-          const count = typeof s.selectedCount === 'number' ? s.selectedCount : (Array.isArray(s.selectedIndices) ? s.selectedIndices.length : (Array.isArray(s.questions) ? s.questions.length : 0));
-          return `<option value="${s.id}">${escapeHtml(s.role || 'Saved set')} (${count || 0} questions)</option>`;
-        })
+        ...options.map(opt => `<option value="${opt.id}">${opt.label}</option>`)
       ].join('');
+      
+      if (desired && options.some(o => o.id === desired)) {
+        els.savedSetSelect.value = desired;
+      }
     }
     
     function renderHistory(sessions) {
@@ -1480,27 +1543,49 @@
           const data = await res.json();
           state.questions = data.questions || [];
         } else {
-          // Use saved set - fetch from API
+          // Use saved set - prefer local payload if matching, otherwise fetch
           const setId = els.savedSetSelect.value;
           if (!setId) throw new Error('Please select a saved question set');
           
-          const res = await fetch(`${API.savedSets}?id=${setId}`, {
-            headers: { 'Authorization': `Bearer ${token}` }
-          });
-          
-          if (!res.ok) throw new Error('Failed to load saved questions');
-          
-          const data = await res.json();
-          const rawQuestions = data.questions || [];
-          const selectedIdx = Array.isArray(data.selectedIndices) ? data.selectedIndices : [];
-          const useSelected = selectedIdx.length > 0;
-          const picked = useSelected
-            ? selectedIdx
-                .filter(idx => Number.isInteger(idx) && idx >= 0 && idx < rawQuestions.length)
-                .map(idx => rawQuestions[idx])
-            : rawQuestions;
-          state.questions = picked.map(q => ({ text: typeof q === 'string' ? q : q?.q }));
-          state.savedSetId = setId;
+          if (localPayload && setId === localPayload.id) {
+            const localQs = Array.isArray(localPayload.questions) ? localPayload.questions : [];
+            const selectedIdx = Array.isArray(localPayload.selectedIndices) ? localPayload.selectedIndices : [];
+            const useSelected = selectedIdx.length > 0;
+            const picked = useSelected
+              ? selectedIdx
+                  .filter(idx => Number.isInteger(idx) && idx >= 0 && idx < localQs.length)
+                  .map(idx => localQs[idx])
+              : localQs;
+            state.role = state.role || localPayload.role || '';
+            state.seniority = state.seniority || localPayload.seniority || '';
+            state.questions = picked
+              .map(q => {
+                if (typeof q === 'string') return { text: q };
+                if (q && typeof q.q === 'string') return { text: q.q };
+                if (q && typeof q.text === 'string') return { text: q.text };
+                return null;
+              })
+              .filter(Boolean);
+            state.savedSetId = setId;
+          } else {
+            const res = await fetch(`${API.savedSets}?id=${setId}`, {
+              headers: { 'Authorization': `Bearer ${token}` }
+            });
+            
+            if (!res.ok) throw new Error('Failed to load saved questions');
+            
+            const data = await res.json();
+            const rawQuestions = data.questions || [];
+            const selectedIdx = Array.isArray(data.selectedIndices) ? data.selectedIndices : [];
+            const useSelected = selectedIdx.length > 0;
+            const picked = useSelected
+              ? selectedIdx
+                  .filter(idx => Number.isInteger(idx) && idx >= 0 && idx < rawQuestions.length)
+                  .map(idx => rawQuestions[idx])
+              : rawQuestions;
+            state.questions = picked.map(q => ({ text: typeof q === 'string' ? q : q?.q }));
+            state.savedSetId = setId;
+          }
         }
         
         if (!state.questions.length) throw new Error('No questions available');
@@ -1863,10 +1948,24 @@
     
     // Initialize
     async function init() {
+      localPayload = readLocalPayload();
+      hydrateFromParams();
       setupEventListeners();
       initRoleSelector();
       await fetchHistory();
       await fetchSavedSets();
+      
+      // Sync source controls if prefilled
+      els.sourceRadios.forEach(radio => {
+        if (radio.value === state.questionSource) {
+          radio.checked = true;
+        }
+      });
+      els.savedSetSelect.classList.toggle('hidden', state.questionSource !== 'saved');
+      if (state.savedSetId && els.savedSetSelect.value !== state.savedSetId) {
+        els.savedSetSelect.value = state.savedSetId;
+      }
+      
       checkCanStart();
     }
     
