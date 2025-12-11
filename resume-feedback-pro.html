@@ -2300,6 +2300,7 @@
             
             try {
               showLoadingState('Optimizing for ATS compliance…');
+              showRewriteSkeleton();
               this.disabled = true;
               this.textContent = 'Optimizing...';
               
@@ -5453,6 +5454,7 @@
      */
     function restorePageStateFromHistory(data) {
       const atsRubric = data.atsRubric || data.feedback?.atsRubric || null;
+      const atsIssues = data.atsIssues || data.feedback?.atsIssues || null;
       const roleSpecificFeedback = data.roleSpecificFeedback || data.feedback?.roleSpecificFeedback || null;
       const rewritten = data.rewrittenResume || data.feedback?.rewrittenResume || null;
       const rewriteSummary = data.rewriteChangeSummary || data.changeSummary || data.feedback?.rewriteChangeSummary || data.feedback?.changeSummary || null;
@@ -5462,6 +5464,10 @@
       hideSkeletons();
       // Reset cooldown/timers and button labels for history view
       resetRewriteCooldownState();
+
+      // Sync rewrite context to match the historical record (D1 as source of truth)
+      window.latestAtsIssues = atsIssues || null;
+      window.latestRoleSpecific = roleSpecificFeedback || null;
 
       // Update ATS score ring using shared logic (clamps/guards inside)
       if (data.atsScore !== null && data.atsScore !== undefined) {
