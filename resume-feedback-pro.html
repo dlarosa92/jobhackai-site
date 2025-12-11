@@ -5345,6 +5345,9 @@
         sessionStorage.removeItem('currentResumeText');
         sessionStorage.removeItem('currentResumeId');
         localStorage.removeItem('jh_last_resume_id');
+        currentResumeId = null;
+        window.latestAtsIssues = null;
+        window.latestRoleSpecific = null;
       } catch (e) {
         console.warn('[RESUME-FEEDBACK] Failed to clear session state', e);
       }
