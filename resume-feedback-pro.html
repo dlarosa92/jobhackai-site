@@ -3160,6 +3160,7 @@
           uploadInput.disabled = false;
           generateBtn.disabled = false;
           hideLoadingState();
+          hideRewriteSkeleton();
         } catch (error) {
           // Restore credit ONLY if ATS scoring failed (not for post-scoring errors)
           // If scoring succeeded but UI/feedback generation failed, user already got value
