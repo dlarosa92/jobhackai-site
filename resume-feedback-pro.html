@@ -796,6 +796,8 @@
     }
 
     function resetRewriteUIToDefaults() {
+      // Ensure any inline rewrite loader is cleared when resetting UI
+      hideRewriteSkeleton();
       const rewriteContent = document.getElementById('rf-rewrite-content');
       const rewriteTextareas = rewriteContent ? rewriteContent.querySelectorAll('.rf-snippet-box') : [];
       if (rewriteTextareas && rewriteTextareas.length >= 2) {
@@ -5467,6 +5469,7 @@
       const original = data.originalResume || data.feedback?.originalResume || null;
 
       // Historical views are fully loaded; hide any in-progress UI elements
+      hideRewriteSkeleton();
       hideSkeletons();
       // Reset cooldown/timers and button labels for history view
       resetRewriteCooldownState();
