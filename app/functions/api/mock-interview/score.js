@@ -362,6 +362,8 @@ export async function onRequest(context) {
         const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
         const resetDate = nextMonth.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 
+        await releaseKvLock(env, lockKey, lockToken);
+        lockAcquired = false;
         return errorResponse(
           `Monthly session limit reached. Next reset: ${resetDate}`,
           429,

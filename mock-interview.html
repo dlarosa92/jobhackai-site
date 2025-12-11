@@ -1172,7 +1172,8 @@
       sessionsUsed: 0,
       sessionLimit: 20,
       scoringResult: null,
-      sessionId: null
+      sessionId: null,
+      shortNudgeAcknowledged: false
     };
     
     // DOM Elements
@@ -1528,6 +1529,7 @@
       const q = state.questions[state.currentQuestionIndex];
       const isLast = state.currentQuestionIndex === state.questions.length - 1;
       els.shortNudge.classList.remove('visible');
+      state.shortNudgeAcknowledged = false;
       
       els.qPill.textContent = `Question ${state.currentQuestionIndex + 1} of ${state.questions.length}`;
       els.qMeta.textContent = `Role: ${state.role} · ${state.seniority} · ${state.interviewStyle}`;
@@ -1573,8 +1575,11 @@
             updateInterviewUI();
           }, 0);
         }
-        // Last question: keep user on the question so they can expand their answer
-        return;
+        // Last question: require one acknowledgement click, then allow finish
+        if (!state.shortNudgeAcknowledged) {
+          state.shortNudgeAcknowledged = true;
+          return;
+        }
       }
       
       if (isLast) {
