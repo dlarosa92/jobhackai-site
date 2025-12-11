@@ -25,3 +25,9 @@ SQL, Python, data pipelines
 
 
 
+
+
+
+
+
+

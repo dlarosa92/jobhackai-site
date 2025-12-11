@@ -1,5 +1,7 @@
 // OpenAI API client utility
 // Handles rate limiting, structured outputs, prompt caching, and cost tracking
+import { normalizeRoleToFamily } from './role-normalizer.js';
+import { ROLE_SKILL_TEMPLATES } from './role-skills.js';
 
 /**
  * Approximate token-aware truncation.
@@ -58,6 +60,8 @@ function detectTruncation(result, feature) {
  * @param {string} options.systemPrompt - System prompt (for caching)
  * @param {string} options.userId - User ID for logging
  * @param {string} options.feature - Feature name for logging
+ * @param {number} options.maxRetries - Maximum retry attempts (default 3)
+ * @param {number} options.maxBackoffMs - Maximum backoff time in ms (default 60000)
  * @returns {Promise<Object>} API response
  */
 export async function callOpenAI({
@@ -69,7 +73,9 @@ export async function callOpenAI({
   temperature = 0.2,
   systemPrompt = null,
   userId = null,
-  feature = 'unknown'
+  feature = 'unknown',
+  maxRetries = 3,
+  maxBackoffMs = 60000
 }, env) {
   if (!env.OPENAI_API_KEY) {
     throw new Error('OPENAI_API_KEY not configured. Please set it in Cloudflare Pages secrets.');
@@ -133,7 +139,7 @@ export async function callOpenAI({
   }
 
   let lastError = null;
-  const maxRetries = 3;
+  const retryLimit = maxRetries;
   let activeModel = model;
   let usedFallback = false;
 
@@ -149,12 +155,16 @@ export async function callOpenAI({
       });
 
       if (response.status === 429) {
-        // Rate limit - exponential backoff
+        // Rate limit - respect Retry-After header, with exponential backoff as minimum
         const retryAfter = parseInt(response.headers.get('Retry-After') || '60', 10);
-        const waitTime = Math.min(retryAfter * 1000, 60000 * Math.pow(2, attempt));
+        const retryAfterMs = retryAfter * 1000;
+        // Exponential backoff: 1s, 2s, 4s, etc. (capped at maxBackoffMs)
+        const exponentialBackoffMs = Math.min(1000 * Math.pow(2, attempt), maxBackoffMs);
+        // Use the larger of Retry-After or exponential backoff, but cap at maxBackoffMs
+        const waitTime = Math.min(Math.max(retryAfterMs, exponentialBackoffMs), maxBackoffMs);
 
-        if (attempt < maxRetries - 1) {
-          console.log(`[OPENAI] Rate limited, retrying after ${waitTime}ms`, { feature, attempt, model: activeModel });
+        if (attempt < retryLimit - 1) {
+          console.log(`[OPENAI] Rate limited, retrying after ${waitTime}ms`, { feature, attempt, model: activeModel, retryAfter, exponentialBackoff: exponentialBackoffMs });
           await sleep(waitTime);
           continue;
         } else {
@@ -167,7 +177,7 @@ export async function callOpenAI({
         const message = errorData.error?.message || `OpenAI API error: ${response.status}`;
 
         // Non-429 error: if we have a fallback model and haven't used it yet, switch and retry
-        if (!usedFallback && fallbackModel && activeModel !== fallbackModel && attempt < maxRetries - 1) {
+        if (!usedFallback && fallbackModel && activeModel !== fallbackModel && attempt < retryLimit - 1) {
           console.warn(`[OPENAI] Error with model ${activeModel}, falling back to ${fallbackModel}`, {
             feature,
             userId,
@@ -240,9 +250,9 @@ export async function callOpenAI({
       const isRateLimit = String(error.message || '').includes('Rate limit');
 
       // For rate limit errors, retry with exponential backoff (same logic as 429 handler)
-      if (isRateLimit && attempt < maxRetries - 1) {
-        // Use exponential backoff: 1s, 2s, 4s delays (capped at 60s)
-        const waitTime = Math.min(1000 * Math.pow(2, attempt), 60000);
+      if (isRateLimit && attempt < retryLimit - 1) {
+        // Use exponential backoff: 1s, 2s, 4s delays (capped at maxBackoffMs)
+        const waitTime = Math.min(1000 * Math.pow(2, attempt), maxBackoffMs);
         console.log(`[OPENAI] Rate limited (from exception), retrying after ${waitTime}ms`, { feature, attempt, model: activeModel });
         await sleep(waitTime);
         continue;
@@ -250,7 +260,7 @@ export async function callOpenAI({
 
       // For non-rate-limit errors (network failures, timeouts, etc.):
       // Try fallback model if available and not already used
-      if (!isRateLimit && !usedFallback && fallbackModel && activeModel !== fallbackModel && attempt < maxRetries - 1) {
+      if (!isRateLimit && !usedFallback && fallbackModel && activeModel !== fallbackModel && attempt < retryLimit - 1) {
         console.warn(`[OPENAI] Network/API error with model ${activeModel}, falling back to ${fallbackModel}`, {
           feature,
           userId,
@@ -264,7 +274,7 @@ export async function callOpenAI({
 
       // After switching to fallback (or if no fallback), allow retries for transient errors
       // This handles cases where the fallback model fails due to transient issues (network, 500s, etc.)
-      if (!isRateLimit && attempt < maxRetries - 1) {
+      if (!isRateLimit && attempt < retryLimit - 1) {
         console.log(`[OPENAI] Retrying after transient error (attempt ${attempt + 1}/${maxRetries})`, {
           feature,
           userId,
@@ -298,13 +308,14 @@ export async function moderateContent(text, apiKey) {
  * Generate ATS feedback using AI (JSON schema structured output).
  * High-frequency, low-cost endpoint → gpt-4o-mini, tightly capped tokens.
  */
-export async function generateATSFeedback(resumeText, ruleBasedScores, jobTitle, env) {
+export async function generateATSFeedback(resumeText, ruleBasedScores, jobTitle, env, options = {}) {
   const baseModel = env.OPENAI_MODEL_FEEDBACK || 'gpt-4o-mini';
 
   // Respect env-driven config with sensible defaults
-  const maxOutputTokens = Number(env.OPENAI_MAX_TOKENS_ATS) > 0
+  const defaultMaxOutputTokens = Number(env.OPENAI_MAX_TOKENS_ATS) > 0
     ? Number(env.OPENAI_MAX_TOKENS_ATS)
-    : 2000; // Increased from 800 to handle full role-specific feedback structure
+    : 3500; // Increased from 2000 to prevent truncation - roleSpecificFeedback needs ~2000 tokens alone
+  const maxOutputTokens = options.maxOutputTokensOverride || defaultMaxOutputTokens;
 
   const temperature = Number.isFinite(Number(env.OPENAI_TEMPERATURE_SCORING))
     ? Number(env.OPENAI_TEMPERATURE_SCORING)
@@ -315,9 +326,23 @@ export async function generateATSFeedback(resumeText, ruleBasedScores, jobTitle,
   const truncatedResume = truncateToApproxTokens(resumeText || '', maxInputTokens);
 
   const targetRoleUsed = jobTitle && jobTitle.trim().length > 0 ? jobTitle.trim() : 'general';
+
+  // Derive role expectations from canonical templates to ground tips in current standards
+  const roleFamily = normalizeRoleToFamily(targetRoleUsed);
+  const roleTemplate = ROLE_SKILL_TEMPLATES[roleFamily] || ROLE_SKILL_TEMPLATES.generic_professional || {};
+  const mustHave = Array.isArray(roleTemplate.must_have) ? roleTemplate.must_have.slice(0, 8) : [];
+  const niceToHave = Array.isArray(roleTemplate.nice_to_have) ? roleTemplate.nice_to_have.slice(0, 8) : [];
+  const tools = Array.isArray(roleTemplate.tools) ? roleTemplate.tools.slice(0, 6) : [];
+
+  const roleExpectations = [
+    mustHave.length ? `Must-have: ${mustHave.join(', ')}` : null,
+    niceToHave.length ? `Nice-to-have: ${niceToHave.join(', ')}` : null,
+    tools.length ? `Common tools: ${tools.join(', ')}` : null
+  ].filter(Boolean).join(' | ') || 'Follow general professional standards for the stated role.';
+
   const roleContext = targetRoleUsed !== 'general' 
-    ? `The candidate is targeting: ${targetRoleUsed}. Tailor all role-specific feedback to this role.`
-    : 'No specific target role provided. Provide general tech/knowledge worker improvement guidance.';
+    ? `The candidate is targeting: ${targetRoleUsed}. Base all role-specific advice on current expectations for this role: ${roleExpectations}`
+    : `No specific target role provided. Provide general tech/knowledge worker guidance. ${roleExpectations}`;
 
   // Lean system prompt: instructions only, no repetition of schema constraints
   const systemPrompt = `You are an ATS resume expert. Analyze the provided resume and generate precise, actionable feedback.
@@ -335,9 +360,11 @@ RESUME-AWARE CONSTRAINT (CRITICAL):
 - If a section is already strong, say so—don't invent problems.
 - Base every diagnosis and tip on SPECIFIC text from the resume.
 
-ROLE-SPECIFIC FEEDBACK:
-Evaluate 5 sections for role fit: Header & Contact, Professional Summary, Experience, Skills, Education.
-For each: fitLevel (big_impact|tunable|strong), diagnosis (one sentence, specific to THIS resume), 3 tips (grounded in actual content), rewritePreview (improve what exists, never fabricate).
+ROLE-SPECIFIC FEEDBACK (REQUIRED):
+Provide role-specific feedback for up to 5 sections. If a section lacks enough evidence, include what you can, note what is missing, and give next steps.
+Evaluate these sections for role fit: Header & Contact, Professional Summary, Experience, Skills, Education.
+For each section you can support: fitLevel (big_impact|tunable|strong), diagnosis (one sentence, specific to THIS resume), exactly 3 tips (grounded in actual content), rewritePreview (improve what exists, never fabricate).
+If resume content is too thin to complete a section, explicitly say what to add (projects, tools, metrics) rather than inventing content.
 
 ${roleContext}
 
@@ -434,7 +461,7 @@ ATS ISSUES: Identify structured problems with id, severity (low|medium|high), an
                 },
                 required: ['section', 'fitLevel', 'diagnosis', 'tips', 'rewritePreview']
               },
-              minItems: 5,
+              minItems: 1,
               maxItems: 5
             }
           },
@@ -477,7 +504,9 @@ ATS ISSUES: Identify structured problems with id, severity (low|medium|high), an
       maxTokens: maxOutputTokens,
       temperature,
       systemPrompt,
-      feature: 'ats_feedback'
+      feature: 'ats_feedback',
+      maxRetries: 2,  // 2 attempts total (initial + 1 retry) for user-facing calls
+      maxBackoffMs: 1500  // Cap backoff at 1.5s to avoid hanging users
     },
     env
   );

@@ -38,6 +38,13 @@ export function errorResponse(error, statusCode, origin, env, requestId = null, 
     success: false,
     error: errorMessage,
     ...(requestId && { requestId }),
+    // Expose select additional fields for clients (e.g., upgradeRequired, needsFeedback)
+    ...(['upgradeRequired', 'needsFeedback', 'retryable'].reduce((acc, key) => {
+      if (Object.prototype.hasOwnProperty.call(additionalData, key)) {
+        acc[key] = additionalData[key];
+      }
+      return acc;
+    }, {})),
     ...(env.ENVIRONMENT === 'dev' && { stack: errorStack, context: additionalData })
   };
   

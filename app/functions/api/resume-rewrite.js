@@ -5,6 +5,7 @@ import { getBearer, verifyFirebaseIdToken } from '../_lib/firebase-auth.js';
 import { generateResumeRewrite } from '../_lib/openai-client.js';
 import { errorResponse, successResponse, generateRequestId } from '../_lib/error-handler.js';
 import { sanitizeJobTitle, sanitizeResumeId, sanitizeSection } from '../_lib/input-sanitizer.js';
+import { getOrCreateUserByAuthId, getResumeSessionByResumeId, isD1Available } from '../_lib/db.js';
 
 function corsHeaders(origin, env) {
   const allowedOrigins = [
@@ -26,13 +27,14 @@ function corsHeaders(origin, env) {
   };
 }
 
-function json(data, status = 200, origin, env) {
+function json(data, status = 200, origin, env, extraHeaders = {}) {
   return new Response(JSON.stringify(data), {
     status,
     headers: {
       'Content-Type': 'application/json',
       'Cache-Control': 'no-store',
-      ...corsHeaders(origin, env)
+      ...corsHeaders(origin, env),
+      ...extraHeaders
     }
   });
 }
@@ -65,8 +67,12 @@ export async function onRequest(context) {
       return errorResponse('Unauthorized', 401, origin, env, requestId);
     }
 
-    const { uid } = await verifyFirebaseIdToken(token, env.FIREBASE_PROJECT_ID);
+    const { uid, payload } = await verifyFirebaseIdToken(token, env.FIREBASE_PROJECT_ID);
     const plan = await getUserPlan(uid, env);
+    // Effective cooldown is 45s, but KV requires a minimum TTL of 60s.
+    // We store the timestamp with a slightly longer TTL for safety, and enforce 45s in code.
+    const cooldownSeconds = 45;
+    const kvTtlSeconds = 75;
 
     if (plan !== 'pro' && plan !== 'premium') {
       return errorResponse(
@@ -81,35 +87,23 @@ export async function onRequest(context) {
 
     if (env.JOBHACKAI_KV) {
       const now = Date.now();
-      const hourlyKey = `rewriteThrottle:${uid}:hour`;
-      const lastHourly = await env.JOBHACKAI_KV.get(hourlyKey);
+      const cooldownKey = `rewriteCooldown:${uid}`;
+      const lastTs = await env.JOBHACKAI_KV.get(cooldownKey);
 
-      if (lastHourly) {
-        const lastHourlyTime = parseInt(lastHourly, 10);
-        const timeSinceLastHourly = now - lastHourlyTime;
+      if (lastTs) {
+        const timeSinceLast = now - parseInt(lastTs, 10);
 
-        if (timeSinceLastHourly < 3600000) {
-          const retryAfter = Math.ceil((3600000 - timeSinceLastHourly) / 1000);
+        if (timeSinceLast < cooldownSeconds * 1000) {
+          const retryAfter = Math.ceil((cooldownSeconds * 1000 - timeSinceLast) / 1000);
           return json({
             success: false,
             error: 'Rate limit exceeded',
-            message: 'Please wait before requesting another rewrite (~1 per hour).',
+            message: `Please wait before requesting another rewrite (~${cooldownSeconds}s cooldown).`,
             retryAfter
-          }, 429, origin, env);
+          }, 429, origin, env, {
+            'Retry-After': String(retryAfter)
+          });
         }
-      }
-
-      const today = new Date().toISOString().split('T')[0];
-      const dailyKey = `rewriteDaily:${uid}:${today}`;
-      const dailyCount = await env.JOBHACKAI_KV.get(dailyKey);
-
-      if (dailyCount && parseInt(dailyCount, 10) >= 5) {
-        return json({
-          success: false,
-          error: 'Daily limit reached',
-          message: 'You have reached the daily limit (5 rewrites/day).',
-          upgradeRequired: false
-        }, 429, origin, env);
       }
     }
 
@@ -202,6 +196,18 @@ export async function onRequest(context) {
                                 roleSpecificFeedback.targetRoleUsed !== undefined &&
                                 Array.isArray(roleSpecificFeedback.sections) &&
                                 roleSpecificFeedback.sections.length > 0) ? roleSpecificFeedback : null;
+
+    // Require feedback context before rewrite (ATS or role-specific)
+    if (!validAtsIssues && !validRoleFeedback) {
+      return errorResponse(
+        'Feedback required before rewrite. Please run ATS Feedback first.',
+        400,
+        origin,
+        env,
+        requestId,
+        { retryable: true, needsFeedback: true }
+      );
+    }
 
     for (let attempt = 0; attempt < maxRetries; attempt++) {
       try {
@@ -307,21 +313,80 @@ export async function onRequest(context) {
     }
 
     if (env.JOBHACKAI_KV) {
-      const hourlyKey = `rewriteThrottle:${uid}:hour`;
-      await env.JOBHACKAI_KV.put(hourlyKey, String(Date.now()), {
-        expirationTtl: 3600
-      });
-
-      const today = new Date().toISOString().split('T')[0];
-      const dailyKey = `rewriteDaily:${uid}:${today}`;
-      const currentCount = await env.JOBHACKAI_KV.get(dailyKey);
-      const newCount = currentCount ? parseInt(currentCount, 10) + 1 : 1;
-      await env.JOBHACKAI_KV.put(dailyKey, String(newCount), {
-        expirationTtl: 86400
+      const cooldownKey = `rewriteCooldown:${uid}`;
+      await env.JOBHACKAI_KV.put(cooldownKey, String(Date.now()), {
+        expirationTtl: kvTtlSeconds
       });
     }
 
     console.log('[RESUME-REWRITE] Success', { requestId, uid, resumeId: sanitizedResumeId, tokenUsage });
+
+    // Persist rewrite into latest feedback_session (Pro/Premium only, D1 best effort)
+    if (isD1Available(env)) {
+      try {
+        const d1User = await getOrCreateUserByAuthId(env, uid, payload?.email || null);
+        if (d1User && env.DB) {
+          const resumeSession = await getResumeSessionByResumeId(env, d1User.id, sanitizedResumeId);
+          if (resumeSession) {
+            const latestFeedback = await env.DB.prepare(`
+              SELECT id, feedback_json 
+              FROM feedback_sessions 
+              WHERE resume_session_id = ? 
+              ORDER BY created_at DESC 
+              LIMIT 1
+            `).bind(resumeSession.id).first();
+
+            if (latestFeedback) {
+              let parsed = {};
+              let parseFailed = false;
+              try {
+                parsed = latestFeedback.feedback_json ? JSON.parse(latestFeedback.feedback_json) : {};
+              } catch (parseError) {
+                parseFailed = true;
+                console.warn('[RESUME-REWRITE] Failed to parse existing feedback_json; skipping rewrite update to avoid data loss', {
+                  requestId,
+                  error: parseError.message
+                });
+              }
+
+              if (!parseFailed) {
+                parsed.rewrittenResume = rewrittenText;
+                parsed.rewriteChangeSummary = changeSummary;
+                // Preserve originalResume if not already stored (for backwards compatibility)
+                if (!parsed.originalResume && originalText) {
+                  parsed.originalResume = originalText;
+                }
+
+                await env.DB.prepare(
+                  `UPDATE feedback_sessions SET feedback_json = ? WHERE id = ?`
+                ).bind(JSON.stringify(parsed), latestFeedback.id).run();
+
+                console.log('[RESUME-REWRITE] Updated feedback_session with rewrite fields', {
+                  requestId,
+                  resumeSessionId: resumeSession.id,
+                  feedbackSessionId: latestFeedback.id
+                });
+              }
+            } else {
+              console.log('[RESUME-REWRITE] No feedback_session found to attach rewrite (resume_session exists)', {
+                requestId,
+                resumeSessionId: resumeSession.id
+              });
+            }
+          } else {
+            console.log('[RESUME-REWRITE] No resume_session found to attach rewrite', {
+              requestId,
+              resumeId: sanitizedResumeId
+            });
+          }
+        }
+      } catch (d1Error) {
+        console.warn('[RESUME-REWRITE] Failed to persist rewrite to D1 (non-blocking)', {
+          requestId,
+          error: d1Error.message
+        });
+      }
+    }
 
     return successResponse({
       tokenUsage: tokenUsage,

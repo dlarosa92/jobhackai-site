@@ -3,6 +3,7 @@
 
 import { getBearer, verifyFirebaseIdToken } from '../_lib/firebase-auth.js';
 import { scoreResume } from '../_lib/ats-scoring-engine.js';
+import { getOrCreateUserByAuthId, upsertResumeSessionWithScores, isD1Available } from '../_lib/db.js';
 
 function corsHeaders(origin, env) {
   const allowedOrigins = [
@@ -291,6 +292,28 @@ export async function onRequest(context) {
       }, 500, origin, env);
     }
 
+    // --- D1 Persistence: Store ruleBasedScores as source of truth ---
+    // CRITICAL: Await D1 write to ensure it completes before /api/resume-feedback queries
+    // This prevents race condition where parallel calls cause redundant scoring
+    if (isD1Available(env) && resumeId) {
+      try {
+        const d1User = await getOrCreateUserByAuthId(env, uid, null);
+        if (d1User) {
+          await upsertResumeSessionWithScores(env, d1User.id, {
+            resumeId: resumeId,
+            role: normalizedJobTitle || null,
+            atsScore: ruleBasedScores.overallScore,
+            ruleBasedScores: ruleBasedScores
+          });
+          console.log('[ATS-SCORE] Stored ruleBasedScores in D1', { resumeId, uid });
+        }
+      } catch (d1Error) {
+        // Non-blocking: log but don't fail the request
+        // If D1 write fails, /api/resume-feedback will fall back to re-scoring
+        console.warn('[ATS-SCORE] D1 persistence failed (non-fatal):', d1Error.message);
+      }
+    }
+
     // Generate AI feedback (only for narrative, not scores)
     // TODO: [OPENAI INTEGRATION POINT] - Uncomment when OpenAI is configured
     // let aiFeedback = null;
@@ -307,6 +330,17 @@ export async function onRequest(context) {
     // }
 
     // For now, use rule-based scores only (AI integration pending)
+    // Build feedback array while preserving legacy behavior:
+    // - Only include categories that actually have feedback (non-empty strings)
+    // - Avoid emitting bare empty-string placeholders that can confuse consumers
+    const feedback = [
+      ruleBasedScores.keywordScore.feedback,
+      ruleBasedScores.formattingScore.feedback,
+      ruleBasedScores.structureScore.feedback,
+      ruleBasedScores.toneScore.feedback,
+      ruleBasedScores.grammarScore.feedback
+    ].filter((item) => typeof item === 'string' && item.trim().length > 0);
+
     const result = {
       score: ruleBasedScores.overallScore,
       breakdown: {
@@ -316,13 +350,7 @@ export async function onRequest(context) {
         toneScore: ruleBasedScores.toneScore.score,
         grammarScore: ruleBasedScores.grammarScore.score
       },
-      feedback: [
-        ruleBasedScores.keywordScore.feedback,
-        ruleBasedScores.formattingScore.feedback,
-        ruleBasedScores.structureScore.feedback,
-        ruleBasedScores.toneScore.feedback,
-        ruleBasedScores.grammarScore.feedback
-      ].filter(Boolean),
+      feedback,
       recommendations: ruleBasedScores.recommendations || []
     };
 

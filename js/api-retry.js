@@ -26,14 +26,16 @@
         if (error instanceof TypeError && error.message.includes('fetch')) {
           return true; // Network error
         }
-        if (error.status >= 500) {
-          return true; // Server error
-        }
-        if (error.status === 429) {
-          return true; // Rate limit
-        }
-        if (error.status === 408) {
-          return true; // Request timeout
+        if (typeof error.status === 'number') {
+          if (error.status >= 500) {
+            return true; // Server error
+          }
+          if (error.status === 408) {
+            return true; // Request timeout
+          }
+          if (error.status === 429) {
+            return true; // Rate limit (respecting retryAfter when present)
+          }
         }
         return false;
       }
@@ -91,6 +93,7 @@
       if (!response.ok) {
         // Try to parse error response body for better error messages
         let errorMessage = `HTTP ${response.status}: ${response.statusText}`;
+        let retryAfter = null;
         try {
           const errorData = await response.clone().json();
           if (errorData.error) {
@@ -98,13 +101,25 @@
           } else if (errorData.message) {
             errorMessage = errorData.message;
           }
+          if (errorData.retryAfter !== undefined) {
+            retryAfter = Number(errorData.retryAfter);
+          }
         } catch (e) {
           // If parsing fails, use default message
+        }
+        // Also try header-based retry-after
+        if (!retryAfter && response.headers?.get) {
+          const headerVal = response.headers.get('Retry-After');
+          if (headerVal) {
+            const parsed = Number(headerVal);
+            if (!Number.isNaN(parsed)) retryAfter = parsed;
+          }
         }
         
         const error = new Error(errorMessage);
         error.status = response.status;
         error.response = response;
+        if (retryAfter) error.retryAfter = retryAfter;
         throw error;
       }
 

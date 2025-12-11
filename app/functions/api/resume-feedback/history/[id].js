@@ -31,6 +31,20 @@ function corsHeaders(origin, env) {
   };
 }
 
+async function getUserPlan(uid, env) {
+  if (!env.JOBHACKAI_KV) {
+    return 'free';
+  }
+
+  try {
+    const plan = await env.JOBHACKAI_KV.get(`planByUid:${uid}`);
+    return plan || 'free';
+  } catch (error) {
+    console.warn('[RESUME-FEEDBACK-HISTORY-DETAIL] Failed to fetch plan from KV:', error);
+    return 'free';
+  }
+}
+
 export async function onRequest(context) {
   const { request, env, params } = context;
   const origin = request.headers.get('Origin') || '';
@@ -110,6 +124,24 @@ export async function onRequest(context) {
       hasFeedback: !!session.feedback
     });
 
+    // Plan-based rewrite visibility
+    const plan = await getUserPlan(uid, env);
+    const isPaidRewrite = plan === 'pro' || plan === 'premium';
+    const rewriteLocked = !isPaidRewrite;
+
+    const rawRewritten = session.feedback?.rewrittenResume || null;
+    const rawSummary = session.feedback?.rewriteChangeSummary || session.feedback?.changeSummary || null;
+    const originalResume =
+      session.feedback?.originalResume ||
+      session.feedback?.original ||
+      session.feedback?.originalText ||
+      null;
+
+    const rewrittenResume = rewriteLocked ? null : rawRewritten;
+    const rewriteChangeSummary = rewriteLocked ? null : rawSummary;
+    const fileName = session.feedback?.fileName || null;
+    const resumeId = session.feedback?.resumeId || null;
+
     // Return full session data for UI restoration
     // The frontend can use this to repopulate:
     // - ATS score gauge
@@ -128,9 +160,14 @@ export async function onRequest(context) {
       atsRubric: session.feedback?.atsRubric || null,
       roleSpecificFeedback: session.feedback?.roleSpecificFeedback || null,
       atsIssues: session.feedback?.atsIssues || null,
-      // Include rewrite data if it was saved
-      rewrittenResume: session.feedback?.rewrittenResume || null,
-      changeSummary: session.feedback?.changeSummary || null,
+      // Include rewrite data if visible for current plan
+      originalResume,
+      rewrittenResume,
+      rewriteChangeSummary,
+      changeSummary: rewriteChangeSummary,
+      rewriteLocked,
+      fileName,
+      resumeId,
       // Metadata for display
       meta: {
         isHistoricalView: true,

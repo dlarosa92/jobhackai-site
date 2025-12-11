@@ -2,6 +2,7 @@
 // Supports OCR for image-based PDFs using Tesseract.js
 
 import mammoth from 'mammoth';
+// Use dynamic import for unpdf to avoid top-level await bundling issues in Cloudflare Workers
 
 /**
  * Structured error codes for resume extraction
@@ -97,15 +98,73 @@ export async function extractResumeText(file, fileName) {
         );
       }
     } else if (fileExt === 'pdf') {
-      // PDF file - try text extraction first, fall back to OCR
+      // PDF file - try text extraction first, detect scanned PDFs
       const pdfResult = await extractPdfText(arrayBuffer);
       text = pdfResult.text;
       isMultiColumn = pdfResult.isMultiColumn;
       
-      // If no text extracted, try OCR
+      // If PDF.js parse failed (corruption, encryption, password protection, etc.)
+      if (pdfResult.parseFailed) {
+        // Use more specific error message if available from PDF.js
+        let userMessage = 'This PDF could not be processed. It may be corrupted, password-protected, or encrypted. Please try a different file or ensure the PDF is not password-protected.';
+        
+        if (pdfResult.errorName === 'PasswordException' || pdfResult.errorMessage?.toLowerCase().includes('password')) {
+          userMessage = 'This PDF is password-protected. Please remove the password and try again.';
+        } else if (pdfResult.errorName === 'InvalidPDFException' || pdfResult.errorMessage?.toLowerCase().includes('invalid')) {
+          userMessage = 'This PDF appears to be corrupted or invalid. Please try re-saving the file or use a different PDF.';
+        } else if (pdfResult.errorName === 'MissingPDFException' || pdfResult.errorMessage?.toLowerCase().includes('missing')) {
+          userMessage = 'The PDF file appears to be empty or incomplete. Please check the file and try again.';
+        }
+        
+        throw createExtractionError(
+          EXTRACTION_ERRORS.PARSE_ERROR,
+          userMessage,
+          { 
+            parseFailed: true,
+            numPages: pdfResult.numPages || 0,
+            errorName: pdfResult.errorName || null,
+            errorMessage: pdfResult.errorMessage || null
+          }
+        );
+      }
+      
+      // If PDF is empty (zero pages), throw parse error
+      if (pdfResult.isEmpty) {
+        throw createExtractionError(
+          EXTRACTION_ERRORS.PARSE_ERROR,
+          'This PDF appears to be empty or corrupted. Please upload a valid PDF file with content.',
+          { 
+            isEmpty: true,
+            numPages: 0
+          }
+        );
+      }
+      
+      // If scanned PDF detected, return helpful error (no OCR attempt)
+      if (pdfResult.isScanned) {
+        throw createExtractionError(
+          EXTRACTION_ERRORS.OCR_REQUIRED,
+          'This PDF appears to be image-based (scanned). Please upload a text-based PDF or Word document for best results. We\'re working on scan support for a future update.',
+          { 
+            isScanned: true, 
+            requiresOcr: true,
+            numPages: pdfResult.numPages || 0
+          }
+        );
+      }
+      
+      // If no text extracted (but not necessarily scanned), try OCR detection
       if (!text || text.trim().length < 100) {
-        text = await extractPdfWithOCR(arrayBuffer);
-        ocrUsed = true;
+        // This will throw a helpful error message instead of attempting OCR
+        throw createExtractionError(
+          EXTRACTION_ERRORS.OCR_REQUIRED,
+          'This PDF appears to be image-based (scanned). Please upload a text-based PDF or Word document for best results. We\'re working on scan support for a future update.',
+          { 
+            isScanned: true, 
+            requiresOcr: true,
+            numPages: pdfResult.numPages || 0
+          }
+        );
       }
     }
 
@@ -171,105 +230,144 @@ export async function extractResumeText(file, fileName) {
 
 
 /**
- * Extract text from PDF file
- * Note: pdf-parse requires Node.js and won't work in Cloudflare Workers
- * We use a simple heuristic: try to extract text from PDF structure
- * If that fails, OCR fallback will be triggered
+ * Extract text from PDF file using unpdf (serverless-optimized PDF.js wrapper)
+ * 
+ * Uses unpdf which is purpose-built for Cloudflare Workers and edge environments.
+ * Provides reliable text extraction without Web Worker dependencies.
+ * 
+ * Handles text-based PDFs including:
+ * - Google Docs exports
+ * - Microsoft Word exports
+ * - Canva PDFs
+ * - LaTeX-generated PDFs
+ * - Most modern PDF generators
+ * 
+ * Performance optimizations:
+ * - Character limit (40k chars) for early exit on very large PDFs
+ * - Smart scanned PDF detection (text < 400 chars AND pages >= 1)
+ * - Text-based multi-column detection (heuristic)
+ * 
+ * If extraction fails or returns minimal text, scanned PDF detection will be triggered
  */
 async function extractPdfText(arrayBuffer) {
+  const MAX_CHARS = 40000; // Character limit for early exit
+  const SCANNED_PDF_THRESHOLD = 400; // If text < 400 chars and pages >= 1, likely scanned
+  
   try {
-    // For Cloudflare Workers, we can't use pdf-parse directly
-    // Instead, we'll attempt basic PDF text extraction using a lightweight approach
-    // This is a simplified version that works in Workers environment
+    // Dynamic import for Cloudflare Workers compatibility
+    const { extractText, getDocumentProxy } = await import('unpdf');
     
-    // Convert ArrayBuffer to Uint8Array for processing
-    const bytes = new Uint8Array(arrayBuffer);
+    // Load PDF document
+    const pdf = await getDocumentProxy(new Uint8Array(arrayBuffer));
     
-    // Look for text streams in PDF (basic heuristic)
-    // PDF text is typically in streams between "stream" and "endstream"
-    const decoder = new TextDecoder('latin1');
-    const pdfText = decoder.decode(bytes);
+    // Extract text from all pages (unpdf handles this efficiently)
+    const { text, totalPages } = await extractText(pdf, { 
+      mergePages: true 
+    });
     
-    // Extract text between stream markers (simplified approach)
-    const streamMatches = pdfText.match(/stream[\s\S]*?endstream/g);
-    if (!streamMatches || streamMatches.length === 0) {
-      return { text: '', isMultiColumn: false };
+    const numPages = totalPages || 0;
+    
+    if (numPages === 0) {
+      console.warn('[PDF] PDF has no pages');
+      return { text: '', isMultiColumn: false, numPages: 0, isEmpty: true };
     }
     
-    let extractedText = '';
-    for (const stream of streamMatches) {
-      // Try to decode as text (PDFs can have compressed streams, but we try anyway)
-      try {
-        // Remove stream markers
-        const content = stream.replace(/^stream[\r\n]+/, '').replace(/[\r\n]+endstream$/, '');
-        // Try to extract readable text (basic filtering)
-        const textMatch = content.match(/[A-Za-z0-9\s\.\,\!\?\:\;\(\)\-\'\"\/]{20,}/g);
-        if (textMatch) {
-          extractedText += textMatch.join(' ') + '\n';
-        }
-      } catch (e) {
-        // Skip compressed or binary streams
-        continue;
-      }
+    // Apply character limit (early exit for very large PDFs)
+    let extractedText = text || '';
+    if (extractedText.length > MAX_CHARS) {
+      console.log('[PDF] Text limit reached, truncating', { 
+        originalLength: extractedText.length,
+        truncatedLength: MAX_CHARS
+      });
+      extractedText = extractedText.substring(0, MAX_CHARS);
     }
     
-    // If we got minimal text, return empty to trigger OCR
-    if (extractedText.trim().length < 100) {
-      return { text: '', isMultiColumn: false };
+    const trimmedText = extractedText.trim();
+    
+    // Smart scanned PDF detection
+    if (trimmedText.length < SCANNED_PDF_THRESHOLD && numPages >= 1) {
+      console.warn('[PDF] Scanned PDF detected', { 
+        textLength: trimmedText.length, 
+        pages: numPages,
+        threshold: SCANNED_PDF_THRESHOLD
+      });
+      return { text: '', isMultiColumn: false, numPages, isScanned: true };
     }
     
-    // Basic multi-column detection
-    const lines = extractedText.split('\n');
+    // If we got minimal text, return empty
+    if (trimmedText.length < 100) {
+      console.warn('[PDF] Extracted text too short', { 
+        length: trimmedText.length, 
+        pages: numPages 
+      });
+      return { text: '', isMultiColumn: false, numPages };
+    }
+    
+    // Multi-column detection using text-based heuristic
+    // (We lose coordinate-based detection, but text-based is sufficient)
+    const lines = trimmedText.split('\n').filter(line => line.trim().length > 0);
     const avgLineLength = lines.reduce((sum, line) => sum + line.trim().length, 0) / Math.max(lines.length, 1);
     const isMultiColumn = avgLineLength < 30 && lines.length > 20;
     
-    return {
-      text: extractedText.trim(),
+    console.log('[PDF] Successfully extracted text', { 
+      pages: numPages,
+      textLength: trimmedText.length, 
       isMultiColumn
+    });
+    
+    return {
+      text: trimmedText,
+      isMultiColumn,
+      numPages
     };
   } catch (error) {
-    // If extraction fails, return empty to trigger OCR fallback
-    return { text: '', isMultiColumn: false };
+    // PDF parse failure (corruption, encryption, password protection, etc.)
+    // Distinguish from scanned PDFs by setting parseFailed flag
+    // Capture full error details for debugging
+    const errorName = error?.name || 'UnknownError';
+    const errorMessage = error?.message || String(error);
+    
+    console.error('[PDF] unpdf extraction failed', {
+      errorName,
+      errorMessage,
+      stack: error?.stack,
+      code: error?.code
+    });
+    
+    return { 
+      text: '', 
+      isMultiColumn: false, 
+      numPages: 0, 
+      parseFailed: true,
+      errorName,
+      errorMessage
+    };
   }
 }
 
 /**
  * Extract text from PDF using OCR (Tesseract.js)
- * For Cloudflare Workers, we use Tesseract.js worker version
+ * 
+ * NOTE: This function is intentionally not implemented for MVP.
+ * OCR in Cloudflare Workers has compatibility issues (no OffscreenCanvas, no Web Workers).
+ * 
+ * For scanned PDFs, we return a helpful error message directing users to upload
+ * text-based PDFs or Word documents instead.
+ * 
+ * Future V2: Implement client-side OCR using Tesseract.js in the browser,
+ * or use an external OCR API service.
  */
 async function extractPdfWithOCR(arrayBuffer) {
-  try {
-    // Import Tesseract.js dynamically (Cloudflare Workers compatible)
-    // Note: Tesseract.js requires worker files to be available
-    // In production, these should be served from CDN or bundled
-    
-    // For now, we'll use a simplified OCR approach
-    // In a full implementation, you would:
-    // 1. Convert PDF pages to images
-    // 2. Use Tesseract.js to OCR each image
-    // 3. Combine results
-    
-    // Since Tesseract.js requires worker files and image processing,
-    // we'll throw an error that triggers a user-facing modal
-    // The frontend can handle this gracefully
-    
-    throw createExtractionError(
-      EXTRACTION_ERRORS.OCR_REQUIRED,
-      'OCR processing is required for this scanned PDF. This may take up to 20 seconds. Please wait...',
-      { requiresOcr: true }
-    );
-  } catch (error) {
-    // Re-throw structured errors as-is
-    if (error.code && Object.values(EXTRACTION_ERRORS).includes(error.code)) {
-      throw error;
+  // This function is kept for API compatibility but should not be called
+  // Scanned PDF detection happens in extractPdfText() and throws OCR_REQUIRED error
+  throw createExtractionError(
+    EXTRACTION_ERRORS.OCR_REQUIRED,
+    'This PDF appears to be image-based (scanned). Please upload a text-based PDF or Word document for best results. We\'re working on scan support for a future update.',
+    { 
+      isScanned: true, 
+      requiresOcr: true 
     }
-    // Wrap other errors
-    throw createExtractionError(
-      EXTRACTION_ERRORS.OCR_FAILED,
-      error.message || 'OCR extraction failed. Please upload a text-based PDF or try again.',
-      { originalError: error.message }
-    );
-  }
+  );
 }
 
 /**

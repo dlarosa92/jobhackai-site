@@ -200,17 +200,30 @@ export async function getResumeFeedbackHistory(env, userId, { limit = 20 } = {})
     // Transform to clean history items, extracting ats_score if needed
     const items = results.results.map(row => {
       let atsScore = row.ats_score;
+      let fileName = null;
+      let resumeId = null;
+      let feedback = null;
       
-      // If ats_score column is null, try to extract from feedback_json
-      if (atsScore === null && row.feedback_json) {
+      if (row.feedback_json) {
         try {
-          const feedback = JSON.parse(row.feedback_json);
-          if (feedback.atsRubric && Array.isArray(feedback.atsRubric)) {
-            // Sum up scores from atsRubric and round to match calcOverallScore behavior
-            atsScore = Math.round(feedback.atsRubric.reduce((sum, item) => sum + (item.score || 0), 0));
-          }
+          feedback = JSON.parse(row.feedback_json);
+          fileName = feedback?.fileName || null;
+          resumeId = feedback?.resumeId || null;
         } catch (e) {
           // Ignore parse errors
+        }
+      }
+      
+      // If ats_score column is null, try to extract from feedback_json
+      if (atsScore === null && feedback) {
+        // Prefer canonical overallScore if present
+        if (typeof feedback.overallScore === 'number') {
+          atsScore = feedback.overallScore;
+        } else if (feedback.aiFeedback && typeof feedback.aiFeedback.overallScore === 'number') {
+          atsScore = feedback.aiFeedback.overallScore;
+        } else if (feedback.atsRubric && Array.isArray(feedback.atsRubric)) {
+          // Fallback: sum rubric scores and round (matches calcOverallScore behavior)
+          atsScore = Math.round(feedback.atsRubric.reduce((sum, item) => sum + (item.score || 0), 0));
         }
       }
       
@@ -220,7 +233,9 @@ export async function getResumeFeedbackHistory(env, userId, { limit = 20 } = {})
         role: row.role,
         createdAt: row.created_at,
         atsScore: atsScore,
-        hasFeedback: !!row.feedback_id
+        hasFeedback: !!row.feedback_id,
+        fileName,
+        resumeId
       };
     });
 
@@ -353,6 +368,93 @@ export async function updateResumeSessionAtsScore(env, sessionId, atsScore) {
   } catch (error) {
     console.error('[DB] Error in updateResumeSessionAtsScore:', error);
     return false;
+  }
+}
+
+/**
+ * Get resume session by resumeId (looks up by raw_text_location)
+ * Simple lookup: one table, one query, returns session or null
+ * @param {Object} env - Cloudflare environment with DB binding
+ * @param {number} userId - User ID from users table
+ * @param {string} resumeId - Resume ID (e.g., "uid:timestamp")
+ * @returns {Promise<Object|null>} Resume session with rule_based_scores_json or null
+ */
+export async function getResumeSessionByResumeId(env, userId, resumeId) {
+  if (!env.DB) {
+    return null;
+  }
+
+  try {
+    const rawTextLocation = `resume:${resumeId}`;
+    const result = await env.DB.prepare(
+      `SELECT id, user_id, title, role, created_at, raw_text_location, ats_score, rule_based_scores_json
+       FROM resume_sessions 
+       WHERE user_id = ? AND raw_text_location = ?
+       ORDER BY created_at DESC
+       LIMIT 1`
+    ).bind(userId, rawTextLocation).first();
+
+    return result || null;
+  } catch (error) {
+    console.error('[DB] Error in getResumeSessionByResumeId:', error);
+    return null;
+  }
+}
+
+/**
+ * Upsert resume session with rule-based scores
+ * Simple pattern: INSERT OR UPDATE, one table, one JSON field
+ * @param {Object} env - Cloudflare environment with DB binding
+ * @param {number} userId - User ID
+ * @param {Object} options - Session data
+ * @param {string} options.resumeId - Resume ID
+ * @param {string|null} options.role - Target role
+ * @param {number|null} options.atsScore - Overall ATS score
+ * @param {Object|null} options.ruleBasedScores - Full rule-based scores object
+ * @returns {Promise<Object|null>} Resume session or null
+ */
+export async function upsertResumeSessionWithScores(env, userId, {
+  resumeId,
+  role = null,
+  atsScore = null,
+  ruleBasedScores = null
+}) {
+  if (!env.DB) {
+    return null;
+  }
+
+  try {
+    const rawTextLocation = `resume:${resumeId}`;
+    const ruleBasedScoresJson = ruleBasedScores ? JSON.stringify(ruleBasedScores) : null;
+
+    // Check if exists
+    const existing = await getResumeSessionByResumeId(env, userId, resumeId);
+
+    if (existing) {
+      // Update existing
+      const result = await env.DB.prepare(
+        `UPDATE resume_sessions 
+         SET ats_score = COALESCE(?, ats_score),
+             rule_based_scores_json = COALESCE(?, rule_based_scores_json),
+             role = COALESCE(?, role)
+         WHERE id = ?
+         RETURNING id, user_id, title, role, created_at, raw_text_location, ats_score, rule_based_scores_json`
+      ).bind(atsScore, ruleBasedScoresJson, role, existing.id).first();
+
+      return result || null;
+    } else {
+      // Insert new
+      const result = await env.DB.prepare(
+        `INSERT INTO resume_sessions (user_id, title, role, raw_text_location, ats_score, rule_based_scores_json)
+         VALUES (?, ?, ?, ?, ?, ?)
+         RETURNING id, user_id, title, role, created_at, raw_text_location, ats_score, rule_based_scores_json`
+      ).bind(userId, role, role, rawTextLocation, atsScore, ruleBasedScoresJson).first();
+
+      return result || null;
+    }
+  } catch (error) {
+    console.error('[DB] Error in upsertResumeSessionWithScores:', error);
+    return null;
   }
 }
 

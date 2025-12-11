@@ -83,11 +83,14 @@ export async function onRequest(context) {
     } catch (extractError) {
       // Return HTTP 200 with success: false for extraction failures (graceful error)
       // This allows frontend to handle errors without treating them as HTTP errors
+      // Pass through structured error codes for better frontend handling
       // Note: resumeText is NOT included (even as null) for consistency and security
       return json({ 
         success: false,
         message: extractError.message || 'Resume text could not be extracted. Please upload a text-based PDF or DOCX file.',
-        error: 'extraction_failed'
+        error: extractError.code || 'extraction_failed',
+        errorCode: extractError.code, // Explicit error code for frontend
+        errorDetails: extractError.details || {} // Additional context
       }, 200, origin, env);
     }
 

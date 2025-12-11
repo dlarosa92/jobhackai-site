@@ -11,7 +11,7 @@
     // Run immediately to prevent content flash for unauthorized users
     (function enforceAccessImmediate() {
       const isAuthenticated = localStorage.getItem('user-authenticated') === 'true' && !!localStorage.getItem('user-email');
-      const allowedPlans = ['trial', 'essential', 'pro', 'premium', 'trio'];
+      const allowedPlans = ['trial', 'essential', 'pro', 'premium'];
       // Expose allowed plans so later scripts stay in sync
       window.__JOBHACKAI_RF_ALLOWED_PLANS__ = allowedPlans;
       const cachedPlan = localStorage.getItem('user-plan');
@@ -132,6 +132,45 @@
     .rf-section-title { font-size: var(--font-size-xl); font-weight: var(--font-weight-bold); margin-bottom: var(--space-xs); color: var(--color-text-main); }
     .rf-progress-ring { width: 80px; height: 80px; display: inline-block; vertical-align: middle; margin-right: 1.5rem; }
     .rf-score-badge { display: inline-block; background: #00E676; color: #fff; font-weight: 700; border-radius: 999px; padding: 0.3em 1em; font-size: 1.2rem; margin-left: 0.7rem; }
+    /* Status pill component - matches existing .rf-score-badge pattern */
+    .rf-status-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      padding: 0.2rem 0.55rem;
+      border-radius: var(--radius-full);
+      font-size: var(--font-size-xs);
+      font-weight: var(--font-weight-medium);
+      font-family: var(--font-family-base);
+      border: 1px solid transparent;
+      line-height: 1.2;
+      margin-top: 0.5rem;
+    }
+    .rf-status-icon {
+      display: inline-flex;
+      align-items: center;
+      flex-shrink: 0;
+    }
+    .rf-status-icon svg {
+      width: 14px;
+      height: 14px;
+      stroke-width: 2;
+    }
+    .rf-status-pill--success {
+      background-color: rgba(5, 150, 105, 0.06);
+      border-color: rgba(5, 150, 105, 0.25);
+      color: var(--color-success);
+    }
+    .rf-status-pill--warning {
+      background-color: rgba(217, 119, 6, 0.08);
+      border-color: rgba(217, 119, 6, 0.3);
+      color: var(--color-warning);
+    }
+    .rf-status-pill--error {
+      background-color: rgba(220, 38, 38, 0.06);
+      border-color: rgba(220, 38, 38, 0.25);
+      color: var(--color-error);
+    }
     .rf-rubric-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1.2rem; margin-top: 1.5rem; }
     .rf-rubric-item { background: #F8FAFC; border-radius: var(--radius-lg); padding: 1rem 1.2rem; }
     .rf-rubric-label { font-weight: 600; color: var(--color-text-main); margin-bottom: 0.2rem; }
@@ -210,6 +249,53 @@
     .rf-upgrade-prompt a.btn:hover {
       background: #125bb5 !important;
     }
+    /* ===== SKELETON LOADING STATES (Performance-Optimized) ===== */
+    @keyframes rf-shimmer {
+      0% { background-position: 200% 0; }
+      100% { background-position: -200% 0; }
+    }
+    .rf-skeleton {
+      background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+      background-size: 200% 100%;
+      animation: rf-shimmer 1.5s infinite;
+      border-radius: var(--radius-lg);
+      opacity: 1;
+      transition: opacity 0.3s ease;
+    }
+    .rf-skeleton.hidden {
+      opacity: 0;
+      pointer-events: none;
+    }
+    .rf-skeleton-header {
+      height: 60px;
+      margin-bottom: 1.5rem;
+    }
+    .rf-skeleton-rubric-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 1.2rem;
+      margin-top: 1.5rem;
+    }
+    .rf-skeleton-rubric-card {
+      height: 150px;
+    }
+    .rf-skeleton-feedback-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 1.2rem;
+      margin-top: 1.5rem;
+    }
+    .rf-skeleton-feedback-card {
+      height: 200px;
+    }
+    /* Skeleton state for rewrite textareas (inside the boxes, not overlaying the card) */
+    .rf-snippet-box.rf-snippet-skeleton {
+      color: transparent !important;
+      caret-color: transparent;
+      border-color: #E5E7EB;
+      background-clip: padding-box;
+      pointer-events: none;
+    }
     .rf-btn-secondary {
       background: transparent;
       color: var(--color-accent-blue);
@@ -223,6 +309,22 @@
     }
     .rf-btn-secondary:hover {
       background: rgba(25, 118, 210, 0.05);
+    }
+    .rf-btn-ghost {
+      background: transparent;
+      color: #4B5563;
+      border: 1px solid #E5E7EB;
+      border-radius: 8px;
+      padding: 0.65rem 1.1rem;
+      font-size: 0.95rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.18s ease;
+    }
+    .rf-btn-ghost:hover {
+      background: #F9FAFB;
+      color: #374151;
+      border-color: #D1D5DB;
     }
     /* History Section Styles */
     .rf-history-list {
@@ -256,6 +358,27 @@
       font-size: 1.1rem;
       min-width: 32px;
       text-align: right;
+    }
+    .rf-history-actions {
+      display: none;
+      margin-top: 0.75rem;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+    }
+    .rf-history-count {
+      color: var(--color-text-muted);
+      font-size: 0.9rem;
+    }
+    .rf-btn-link {
+      background: none;
+      border: none;
+      color: var(--color-text-secondary);
+      text-decoration: underline;
+      padding: 0.25rem 0.15rem;
+      cursor: pointer;
+      font-size: 0.9rem;
     }
     .rf-history-icon {
       width: 40px;
@@ -430,6 +553,15 @@
       opacity: 1;
       transform: translateY(0);
     }
+    /* Subtle fade-in utility for restored content */
+    .rf-fade-in {
+      opacity: 0;
+      animation: rfFadeIn 220ms ease-out forwards;
+    }
+    @keyframes rfFadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
     .fade-exit {
       opacity: 1;
       transform: translateY(0);
@@ -446,24 +578,6 @@
       font-style: italic;
       margin-top: var(--space-sm);
       font-size: var(--font-size-base);
-    }
-    .rf-placeholder-cta {
-      text-align: center;
-      margin-top: var(--space-md);
-    }
-    .rf-placeholder-cta button {
-      background: var(--color-cta-green);
-      color: #fff;
-      font-weight: var(--font-weight-semibold);
-      border-radius: var(--radius-lg);
-      padding: 0.75rem 2rem;
-      border: none;
-      cursor: pointer;
-      transition: background 0.18s;
-      font-size: var(--font-size-base);
-    }
-    .rf-placeholder-cta button:hover {
-      background: var(--color-cta-green-hover);
     }
     /* Standardized Role Input Styling (matching Interview Questions) */
     .rf-role-input {
@@ -550,6 +664,10 @@
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
       gap: 1.5rem;
+    }
+    .rf-rewrite-desc-inline {
+      color: var(--color-text-secondary);
+      margin: 0 0 1rem 0;
     }
   </style>
 </head>
@@ -639,7 +757,7 @@
         authState: window.JobHackAINavigation?.getAuthState?.()
       });
       
-      const allowedPlans = ['trial', 'essential', 'pro', 'premium', 'trio'];
+      const allowedPlans = ['trial', 'essential', 'pro', 'premium'];
       
       if (!isAuthenticated || !allowedPlans.includes(plan)) {
         if (!isAuthenticated) {
@@ -687,6 +805,62 @@
         return false;
       }
       return true;
+    }
+
+    function resetRewriteUIToDefaults() {
+      // Ensure any inline rewrite loader is cleared when resetting UI
+      hideRewriteSkeleton();
+      const rewriteContent = document.getElementById('rf-rewrite-content');
+      const rewriteTextareas = rewriteContent ? rewriteContent.querySelectorAll('.rf-snippet-box') : [];
+      const rewriteDescInline = document.getElementById('rf-rewrite-desc-inline');
+      if (rewriteTextareas && rewriteTextareas.length >= 2) {
+        rewriteTextareas[0].value = 'Original resume excerpt will appear here after upload.';
+        rewriteTextareas[1].value = 'AI-optimized resume excerpt.';
+      }
+      const changeSummary = document.getElementById('rf-change-summary');
+      if (changeSummary) {
+        changeSummary.innerHTML = '';
+        changeSummary.style.display = 'none';
+      }
+      if (rewriteDescInline) {
+        rewriteDescInline.style.display = 'none';
+      }
+      setCopyRewriteVisibility(false);
+    }
+
+    function resetAtsAndRoleUIToDefaults() {
+      const rubricGrid = document.getElementById('rf-rubric-grid');
+      if (rubricGrid) {
+        rubricGrid.innerHTML = '';
+        rubricGrid.style.display = 'none';
+      }
+      const feedbackGrid = document.getElementById('rf-feedback-grid');
+      if (feedbackGrid) {
+        feedbackGrid.innerHTML = '';
+        feedbackGrid.style.display = 'none';
+      }
+    }
+
+    function resetRewriteCooldownState() {
+      // Clear countdown interval
+      if (window._rewriteCountdownInterval) {
+        clearInterval(window._rewriteCountdownInterval);
+        window._rewriteCountdownInterval = null;
+      }
+      // Clear usage-interval
+      if (window._rewriteCooldownInterval) {
+        clearInterval(window._rewriteCooldownInterval);
+        window._rewriteCooldownInterval = null;
+      }
+      // Reset button label/state
+      const regenBtn = document.querySelector('#rf-rewrite-content .btn.btn-secondary');
+      if (regenBtn) {
+        regenBtn.disabled = false;
+        const defaultLabel = 'Generate Rewrite';
+        const originalLabel = regenBtn.dataset.originalLabel || defaultLabel;
+        regenBtn.textContent = originalLabel;
+        regenBtn.dataset.originalLabel = defaultLabel;
+      }
     }
 
     // --- PLAN-BASED ACCESS CONTROL ---
@@ -751,7 +925,7 @@
       }
       
       // FIX: Validate plan value to prevent corrupted data (e.g., "central")
-      const validPlans = ['visitor', 'free', 'trial', 'essential', 'pro', 'premium', 'trio'];
+      const validPlans = ['visitor', 'free', 'trial', 'essential', 'pro', 'premium'];
       if (!validPlans.includes(plan)) {
         const oldPlan = plan; // Capture original invalid plan before reassignment
         console.warn('[RESUME-FEEDBACK] Invalid plan detected:', plan, '- resetting to free');
@@ -948,6 +1122,49 @@
       sessionStorage.removeItem('currentAtsBreakdown');
     }
 
+    // Status icon definitions - defined once, reused
+    const RF_STATUS_ICONS = {
+      success: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="12" cy="12" r="10"/>
+      <polyline points="9 12 12 15 22 5"/>
+    </svg>`,
+      warning: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/>
+      <line x1="12" y1="9" x2="12" y2="13"/>
+      <line x1="12" y1="17" x2="12.01" y2="17"/>
+    </svg>`,
+      error: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="12" cy="12" r="10"/>
+      <line x1="12" y1="8" x2="12" y2="12"/>
+      <line x1="12" y1="16" x2="12.01" y2="16"/>
+    </svg>`
+    };
+
+    function getStatusIcon(type) {
+      return RF_STATUS_ICONS[type] || '';
+    }
+
+    // Helper function to show file status pill
+    function showFileStatus(variant, message) {
+      const statusPill = document.getElementById('rf-file-status');
+      const statusIcon = statusPill?.querySelector('.rf-status-icon');
+      const statusText = statusPill?.querySelector('.rf-status-text');
+      
+      if (!statusPill || !statusIcon || !statusText) return;
+      
+      statusPill.className = `rf-status-pill rf-status-pill--${variant}`;
+      statusIcon.innerHTML = getStatusIcon(variant);
+      statusText.textContent = message;
+      statusPill.style.display = 'inline-flex';
+    }
+
+    function hideFileStatus() {
+      const statusPill = document.getElementById('rf-file-status');
+      if (statusPill) {
+        statusPill.style.display = 'none';
+      }
+    }
+
     async function uploadResume(file) {
       // Validate file before upload
       const validation = await window.JobHackAIFileValidation.validateFile(file);
@@ -956,88 +1173,127 @@
       }
       
       // Handle warnings (e.g., scanned PDF detection)
-      if (validation.warning && window.showErrorModal) {
-        const userPlan = getCurrentUserPlan();
-        if (userPlan === 'free') {
-          // Educational modal for free users
-          window.showErrorModal('Scanned PDF Detected', 
-            validation.warningMessage || 'This appears to be a scanned PDF. For best results, please upload a text-based PDF, DOCX, or TXT file.',
-            { buttonText: 'OK' });
-        } else {
-          // Informational modal for paid users about OCR processing - use friendly messaging
-          // Note: showErrorModal is used but with friendly message to reduce alarm
-          window.showErrorModal('Processing Your Resume', 
-            validation.warningMessage || 'We\'re extracting text from your scanned PDF. This may take up to 20 seconds — please wait while we process it.',
-            { buttonText: 'Got it' });
-        }
+      // NOTE: Removed popup modal - users see inline helper text instead
+      // Validation still runs, but no blocking modal is shown
+      if (validation.warning) {
+        console.log('[RESUME-FEEDBACK] File validation warning:', validation.warningMessage);
+        // Inline helper text will inform users about PDF processing time
       }
 
-      const token = await getAuthToken();
-      const formData = new FormData();
-      formData.append('file', file);
+      // Show progress indicator for text extraction (Step 1: Reading resume)
+      const hideLoading = window.showLoadingOverlay 
+        ? window.showLoadingOverlay(window.LoadingMessages?.READING_RESUME || 'Reading your resume...')
+        : null;
 
-      // Use retry logic for upload
-      const response = await window.JobHackAIRetry.fetchWithRetry('/api/resume-upload', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`
-        },
-        body: formData
-      }, {
-        maxRetries: 3,
-        initialDelay: 1000
-      });
+      try {
+        const token = await getAuthToken();
+        const formData = new FormData();
+        formData.append('file', file);
 
-      // Handle HTTP errors
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Upload failed');
-      }
-
-      const data = await response.json();
-      
-      // Handle extraction failures (success: false but HTTP 200)
-      if (!data.success) {
-        clearAtsState();
-        // Map common error codes to user-friendly messages
-        let errorMessage = data.message || 'Resume text could not be extracted.';
-        if (data.error === 'extraction_failed' || data.error === 'invalid-text') {
-          errorMessage = 'We couldn\'t read your resume. Please upload a text-based PDF, DOCX, or TXT file.';
-        } else if (data.error && data.error.includes('OCR')) {
-          // OCR-related error - show modal with helpful message
-          errorMessage = 'This appears to be a scanned PDF. We\'re working on OCR support. For now, please upload a text-based PDF, DOCX, or TXT file.';
-        }
-        throw new Error(errorMessage);
-      }
-      
-      // Handle OCR status if present
-      if (data.ocrUsed === true || data.ocrUsed === 'pending') {
-        // Show informational modal about OCR processing - use friendly messaging
-        if (window.showErrorModal) {
-          window.showErrorModal('Processing Your Resume', 
-            'We\'re extracting text from your scanned PDF. This may take up to 20 seconds — please wait while we process it.',
-            { buttonText: 'Got it' });
-        }
-      }
-
-      currentResumeId = data.resumeId;
-      
-      // Store in sessionStorage and localStorage for cross-page sync
-      sessionStorage.setItem('currentResumeId', data.resumeId);
-      if (data.resumeText) {
-        sessionStorage.setItem('currentResumeText', data.resumeText);
-      }
-      
-      // Persist resume data
-      if (window.JobHackAIStatePersistence) {
-        window.JobHackAIStatePersistence.saveResumeData({
-          resumeId: data.resumeId,
-          resumeText: data.resumeText,
-          isMultiColumn: data.isMultiColumn
+        // Use retry logic for upload
+        const response = await window.JobHackAIRetry.fetchWithRetry('/api/resume-upload', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`
+          },
+          body: formData
+        }, {
+          maxRetries: 3,
+          initialDelay: 1000
         });
-      }
+
+        // Handle HTTP errors
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(error.error || 'Upload failed');
+        }
+
+        const data = await response.json();
       
-      return data;
+        // Handle extraction failures (success: false but HTTP 200)
+        if (!data.success) {
+          clearAtsState();
+          
+          // Map structured error codes to user-friendly messages
+          const errorCode = data.errorCode || data.error;
+          let errorMessage = data.message || 'Resume text could not be extracted.';
+          
+          // Handle specific error codes with tailored messages
+          if (errorCode === 'ocr_required' || errorCode === 'OCR_REQUIRED') {
+            // Scanned PDF detected - show helpful, actionable message
+            errorMessage = 'This PDF appears to be image-based (scanned). Please upload a text-based PDF or Word document for best results. We\'re working on scan support for a future update.';
+          } else if (errorCode === 'unreadable_scan' || errorCode === 'UNREADABLE_SCAN') {
+            errorMessage = 'This scanned PDF is not readable. Please upload a higher-quality file or use our DOCX template.';
+          } else if (errorCode === 'empty_text' || errorCode === 'EMPTY_TEXT') {
+            errorMessage = 'Could not extract readable text from file. Please upload a text-based résumé or use our DOCX template.';
+          } else if (errorCode === 'unsupported_file_type' || errorCode === 'UNSUPPORTED_TYPE') {
+            errorMessage = `Unsupported file type. Please upload PDF, DOCX, or TXT.`;
+          } else if (errorCode === 'file_too_large' || errorCode === 'FILE_TOO_LARGE') {
+            errorMessage = 'File exceeds 2MB limit. Please compress or use a smaller file.';
+          } else if (errorCode === 'text_too_long' || errorCode === 'TEXT_TOO_LONG') {
+            errorMessage = 'Extracted text exceeds limit. Please use a shorter résumé.';
+          } else if (errorCode === 'extraction_failed' || errorCode === 'invalid-text') {
+            errorMessage = 'We couldn\'t read your resume. Please upload a text-based PDF, DOCX, or TXT file.';
+          }
+          
+          // Preserve error code in Error object so catch block can check error.code
+          const error = new Error(errorMessage);
+          error.code = errorCode;
+          throw error;
+        }
+
+        currentResumeId = data.resumeId;
+        
+        // Store in sessionStorage and localStorage for cross-page sync
+        sessionStorage.setItem('currentResumeId', data.resumeId);
+        if (data.resumeText) {
+          sessionStorage.setItem('currentResumeText', data.resumeText);
+        }
+        
+        // Persist resume data
+        if (window.JobHackAIStatePersistence) {
+          window.JobHackAIStatePersistence.saveResumeData({
+            resumeId: data.resumeId,
+            resumeText: data.resumeText,
+            isMultiColumn: data.isMultiColumn
+          });
+        }
+        
+        // Hide loading overlay on success (only after confirming data.success)
+        if (hideLoading) {
+          hideLoading();
+        }
+        
+        return data;
+      } catch (error) {
+        // Hide loading overlay on error
+        if (hideLoading) {
+          hideLoading();
+        }
+        
+        // Show error status pill based on error code/message
+        const message = (error && error.message) || '';
+        const code = error && error.code;
+        
+        if (code === 'ocr_required' || code === 'OCR_REQUIRED' || /scanned/i.test(message)) {
+          showFileStatus('error', 'Scanned PDF cannot be processed');
+        } else if (code === 'parse_error' || code === 'PARSE_ERROR' || /could not be processed|corrupted|password|encrypted/i.test(message)) {
+          showFileStatus('error', 'PDF could not be processed');
+        } else if (code === 'unsupported_file_type' || code === 'UNSUPPORTED_TYPE' || /unsupported|file type/i.test(message)) {
+          showFileStatus('error', 'File type not supported');
+        } else if (code === 'file_too_large' || code === 'FILE_TOO_LARGE' || /too large|2MB/i.test(message)) {
+          showFileStatus('error', 'File too large (max 2MB)');
+        } else if (code === 'empty_text' || code === 'EMPTY_TEXT' || /empty/i.test(message)) {
+          showFileStatus('error', 'File appears to be empty');
+        } else if (code === 'text_too_long' || code === 'TEXT_TOO_LONG' || /text.*too long|exceeds.*limit/i.test(message)) {
+          showFileStatus('error', 'Text too long');
+        } else {
+          showFileStatus('error', 'File upload failed');
+        }
+        
+        // Re-throw to be handled by caller
+        throw error;
+      }
     }
 
     async function getAtsScore(resumeId, jobTitle) {
@@ -1106,6 +1362,9 @@
       const resumeText = sessionStorage.getItem('currentResumeText') ?? undefined;
       
       // Build request body with optional resumeText for dev fallback
+      // Prompt/output shape expectation (lightweight, not a hard contract):
+      // { targetRoleUsed?: string, sections: [{ sectionId, label, priority, insights:[], rewritePreview? }] }
+      // Accept 1–5 sections; partial sections are valid.
       const requestBody = { resumeId, jobTitle };
       if (resumeText) {
         requestBody.resumeText = resumeText;
@@ -1193,12 +1452,15 @@
           errorMessage = 'Please log in to continue.';
         } else if (response.status === 403) {
           errorMessage = error.message || 'Access denied. Please check your plan or try logging in again.';
+        } else if (error.needsFeedback) {
+          errorMessage = 'Run feedback first to generate ATS fixes and role tips, then try Rewrite.';
         }
         console.error('[RESUME-REWRITE] API error:', {
           status: response.status,
           error: error.error,
           message: error.message,
-          upgradeRequired: error.upgradeRequired
+          upgradeRequired: error.upgradeRequired,
+          needsFeedback: error.needsFeedback
         });
         throw new Error(errorMessage);
       }
@@ -1242,8 +1504,9 @@
         actionLabel = 'Reload Page';
       } else if (message.includes('couldn\'t read') || message.includes('text-based')) {
         // File reading error - already user-friendly
-      } else if (message.includes('scanned PDF')) {
-        message = 'This appears to be a scanned PDF (image-based). Please upload a text-based PDF, DOCX, or TXT file for best results.';
+      } else if (message.includes('scanned PDF') || message.includes('image-based')) {
+        // Enhanced scanned PDF message with actionable guidance
+        message = 'This PDF appears to be image-based (scanned). Please upload a text-based PDF or Word document for best results. We\'re working on scan support for a future update.';
       }
 
       // Show modal instead of inline error
@@ -1273,15 +1536,51 @@
     let currentLoadingOverlay = null;
     
     function showLoadingState(message = 'Loading...') {
-      if (window.JobHackAILoading) {
-        currentLoadingOverlay = window.JobHackAILoading.show(message, 'main-loading-overlay');
+      // For regenerate/rewrite/update/optimize operations - use lightweight overlay
+      // since content is already visible and we're just updating it
+      if (message.includes('Regenerating') || message.includes('Rewriting') || 
+          message.includes('Updating') || message.includes('Optimizing')) {
+        if (window.JobHackAILoading) {
+          currentLoadingOverlay = window.JobHackAILoading.show(message, 'main-loading-overlay');
+        }
+        return;
       }
+      
+      // For initial loads ("Analyzing") - use skeleton loading instead of overlay
+      // This provides better UX with contextual placeholders that match the final content layout
+      const userPlan = getCurrentUserPlan();
+      const willGetFeedback = ['trial', 'essential', 'pro', 'premium'].includes(userPlan);
+      
+      // Show skeletons for initial analysis
+      showSkeletons(willGetFeedback);
+      hideHeaderSkeleton();
+      
+      // Store cleanup function (skeleton hide function)
+      currentLoadingOverlay = () => {
+        hideSkeletons();
+      };
     }
 
     function hideLoadingState() {
-      if (window.JobHackAILoading) {
-        window.JobHackAILoading.hide('main-loading-overlay');
+      if (currentLoadingOverlay) {
+        if (typeof currentLoadingOverlay === 'function') {
+          // It's a skeleton cleanup function
+          currentLoadingOverlay();
+        } else if (window.JobHackAILoading) {
+          // It's an overlay element, hide it
+          window.JobHackAILoading.hide('main-loading-overlay');
+        }
         currentLoadingOverlay = null;
+      }
+    }
+
+    function forceHideOverlays() {
+      try {
+        hideLoadingState();
+        const legacy = document.getElementById('loading-overlay');
+        if (legacy) legacy.style.display = 'none';
+      } catch (e) {
+        console.warn('[RESUME-FEEDBACK] Failed to force hide overlays', e);
       }
     }
 
@@ -1300,6 +1599,15 @@
         }
       }
     };
+
+    // Controls when the copy button is shown (only after we have rewrite content)
+    const setCopyRewriteVisibility = (isVisible) => {
+      const copyBtn = document.querySelector('#rf-rewrite-content .btn.btn-primary');
+      if (!copyBtn) return;
+      copyBtn.style.display = isVisible ? 'inline-block' : 'none';
+      copyBtn.disabled = !isVisible;
+      if (!isVisible) copyBtn.textContent = 'Copy Rewritten Resume';
+    };
     
     // Regenerate rewrite handler function
     const regenerateRewriteHandler = async function() {
@@ -1313,16 +1621,31 @@
         handleApiError(new Error('Please enter a target job title'));
         return;
       }
+      // Guard: require feedback context before rewriting (ATS + role tips)
+      const hasAtsIssues = !!(window.latestAtsIssues && Array.isArray(window.latestAtsIssues) && window.latestAtsIssues.length);
+      const hasRoleTips = !!(
+        window.latestRoleSpecific &&
+        window.latestRoleSpecific.targetRoleUsed !== undefined &&
+        Array.isArray(window.latestRoleSpecific.sections) &&
+        window.latestRoleSpecific.sections.length
+      );
+      if (!hasAtsIssues && !hasRoleTips) {
+        handleApiError(new Error('Run feedback first to generate ATS fixes and role tips, then try Rewrite.'));
+        return;
+      }
       const section = null; // Can be enhanced to allow section-specific rewrites
 
       try {
         showLoadingState('Rewriting resume...');
+        showRewriteSkeleton();
+        clearInlineRewriteCountdown();
+        setCopyRewriteVisibility(false);
         this.disabled = true;
         this.textContent = 'Regenerating...';
 
         // Use stored feedback context if available
         const atsIssues = window.latestAtsIssues || null;
-        const roleSpecificFeedback = window.latestRoleSpecific || null;
+        const roleSpecificFeedback = hasRoleTips ? window.latestRoleSpecific : null;
         
         const result = await rewriteResume(currentResumeId, section, jobTitle, atsIssues, roleSpecificFeedback);
         
@@ -1334,9 +1657,16 @@
         });
         
         const rewrittenBox = document.querySelectorAll('#rf-rewrite-content .rf-snippet-box')[1];
+        const rewriteDescInline = document.getElementById('rf-rewrite-desc-inline');
+        const resolvedRewrite = result.rewritten || result.rewrittenResume || '';
+        const hasRewriteContent = typeof resolvedRewrite === 'string' && resolvedRewrite.trim().length > 0;
         if (rewrittenBox) {
-          rewrittenBox.value = result.rewritten || result.rewrittenResume || '';
+          rewrittenBox.value = resolvedRewrite;
         }
+        if (rewriteDescInline) {
+          rewriteDescInline.style.display = hasRewriteContent ? 'block' : 'none';
+        }
+        setCopyRewriteVisibility(hasRewriteContent);
         
         // Also populate the original snippet box
         const originalBox = document.querySelectorAll('#rf-rewrite-content .rf-snippet-box')[0];
@@ -1369,16 +1699,240 @@
           }
         }
 
-        this.textContent = 'Regenerate Rewrite';
-        this.disabled = false;
+        this.textContent = 'Generate Rewrite';
+        // Let cooldown renderer own button state; await to avoid race
+        await renderRewriteCooldownIndicator();
+        hideRewriteSkeleton();
         hideLoadingState();
       } catch (error) {
-        handleApiError(error);
-        this.textContent = 'Regenerate Rewrite';
-        this.disabled = false;
+        if (error && error.status === 429) {
+          const retryAfter = Number(error.retryAfter) || 45;
+          await renderRewriteCooldownIndicator();
+          startInlineRewriteCountdown(retryAfter);
+        } else {
+          handleApiError(error);
+          this.textContent = 'Generate Rewrite';
+          await renderRewriteCooldownIndicator();
+        }
+        setCopyRewriteVisibility(false);
+        hideRewriteSkeleton();
         hideLoadingState();
       }
     };
+    
+    // Inline rewrite cooldown countdown (driven directly from /api/resume-rewrite 429 responses)
+    function clearInlineRewriteCountdown() {
+      if (window._rewriteCountdownInterval) {
+        clearInterval(window._rewriteCountdownInterval);
+        window._rewriteCountdownInterval = null;
+      }
+    }
+
+    function clearAllRewriteCooldownTimers() {
+      // Clear inline countdown
+      clearInlineRewriteCountdown();
+      // Clear usage-indicator-based interval
+      if (window._rewriteCooldownInterval) {
+        clearInterval(window._rewriteCooldownInterval);
+        window._rewriteCooldownInterval = null;
+      }
+    }
+
+    // Lightweight rewrite skeletons (reuse ATS skeleton styling)
+    function showRewriteSkeleton() {
+      const rewriteContent = document.getElementById('rf-rewrite-content');
+      if (!rewriteContent) return;
+
+      // Ensure the overlay isn't applied to the whole card
+      rewriteContent.classList.remove('rf-skeleton');
+
+      const snippetBoxes = rewriteContent.querySelectorAll('.rf-snippet-box');
+      snippetBoxes.forEach((box) => {
+        box.classList.add('rf-skeleton', 'rf-snippet-skeleton');
+      });
+    }
+
+    function hideRewriteSkeleton() {
+      const rewriteContent = document.getElementById('rf-rewrite-content');
+      if (!rewriteContent) return;
+
+      // Clean up any legacy overlay class on the container
+      rewriteContent.classList.remove('rf-skeleton');
+
+      const snippetBoxes = rewriteContent.querySelectorAll('.rf-snippet-box');
+      snippetBoxes.forEach((box) => {
+        box.classList.remove('rf-skeleton', 'rf-snippet-skeleton');
+      });
+    }
+
+    function startInlineRewriteCountdown(retryAfterSeconds) {
+      const regenBtn = document.querySelector('#rf-rewrite-content .btn.btn-secondary');
+      const container = document.getElementById('rf-rewrite-cooldown');
+
+      clearAllRewriteCooldownTimers();
+
+      const helperId = 'rf-rewrite-inline-helper';
+      const ensureHelper = () => {
+        if (!container) return null;
+        let helper = document.getElementById(helperId);
+        if (!helper) {
+          helper = document.createElement('div');
+          helper.id = helperId;
+          helper.style.cssText = 'margin-top:0.25rem;color:var(--color-text-secondary);font-size:0.9rem;';
+          container.appendChild(helper);
+        }
+        return helper;
+      };
+
+      let remaining = Math.max(0, Math.round(retryAfterSeconds || 45));
+      const defaultLabel = 'Generate Rewrite';
+      const originalLabel = regenBtn
+        ? (regenBtn.dataset.originalLabel || defaultLabel)
+        : defaultLabel;
+      if (regenBtn) {
+        regenBtn.dataset.originalLabel = originalLabel;
+        regenBtn.disabled = true;
+        regenBtn.textContent = `Retry in ${remaining}s`;
+      }
+
+      const helper = ensureHelper();
+      if (helper) {
+        helper.textContent = 'We’re preparing your next rewrite. You can run a new one when this ends.';
+      }
+
+      window._rewriteCountdownInterval = setInterval(() => {
+        remaining -= 1;
+        if (remaining > 0) {
+          if (regenBtn) regenBtn.textContent = `Retry in ${remaining}s`;
+        } else {
+          clearInlineRewriteCountdown();
+          if (regenBtn) {
+            regenBtn.disabled = false;
+            regenBtn.textContent = originalLabel || 'Generate Rewrite';
+          }
+          if (helper) helper.textContent = '';
+        }
+      }, 1000);
+    }
+
+    // Render rewrite cooldown indicator using shared usage indicator component
+    async function renderRewriteCooldownIndicator() {
+      const container = document.getElementById('rf-rewrite-cooldown');
+      const setRegenEnabled = () => {
+        const regenBtn = document.querySelector('#rf-rewrite-content .btn.btn-secondary');
+        if (regenBtn) regenBtn.disabled = false;
+      };
+      if (!container || typeof window.renderUsageIndicator !== 'function') {
+        setRegenEnabled();
+        return;
+      }
+
+      // Track latest invocation to avoid overlapping intervals
+      const callId = (window._rewriteCooldownCallId || 0) + 1;
+      window._rewriteCooldownCallId = callId;
+
+      const clearExistingInterval = () => {
+        if (window._rewriteCooldownInterval) {
+          clearInterval(window._rewriteCooldownInterval);
+          window._rewriteCooldownInterval = null;
+        }
+      };
+
+      const token = localStorage.getItem('firebase-id-token');
+      if (!token) {
+        if (callId !== window._rewriteCooldownCallId) return;
+        clearExistingInterval();
+        container.innerHTML = '';
+        setRegenEnabled();
+        return;
+      }
+
+      try {
+        const resp = await fetch('/api/usage', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          }
+        });
+
+        if (callId !== window._rewriteCooldownCallId) return;
+
+        if (!resp.ok) {
+          clearExistingInterval();
+          container.innerHTML = '';
+          setRegenEnabled();
+          return;
+        }
+
+        const data = await resp.json();
+        const usage = data?.usage?.resumeRewrite;
+        const plan = data?.plan;
+
+        if (!usage || usage.cooldown === undefined) {
+          clearExistingInterval();
+          container.innerHTML = '';
+          setRegenEnabled();
+          return;
+        }
+
+        // Clear any existing interval before rendering new state
+        clearExistingInterval();
+
+        const renderChip = (cooldownValue) => {
+          if (callId !== window._rewriteCooldownCallId) return;
+          container.innerHTML = '';
+          const holder = document.createElement('div');
+          container.appendChild(holder);
+
+          window.renderUsageIndicator({
+            feature: 'resumeRewrite',
+            usage: { ...usage, cooldown: cooldownValue },
+            plan,
+            container: holder
+          });
+
+          if (cooldownValue > 0) {
+            const helper = document.createElement('div');
+            helper.style.cssText = 'margin-top:0.25rem;color:var(--color-text-secondary);font-size:0.9rem;';
+            helper.textContent = 'We’re preparing your next rewrite. You can run a new one when this ends.';
+            container.appendChild(helper);
+          }
+
+          const regenBtn = document.querySelector('#rf-rewrite-content .btn.btn-secondary');
+          if (regenBtn) regenBtn.disabled = cooldownValue > 0;
+          if (cooldownValue === 0) setRegenEnabled();
+        };
+
+        renderChip(usage.cooldown);
+
+        if (usage.cooldown > 0) {
+          // Avoid overlapping with the inline countdown; let the inline timer own the UI if active
+          if (window._rewriteCountdownInterval) {
+            return;
+          }
+          let remaining = usage.cooldown;
+          window._rewriteCooldownInterval = setInterval(() => {
+            if (callId !== window._rewriteCooldownCallId) {
+              clearExistingInterval();
+              return;
+            }
+            remaining -= 1;
+            if (remaining <= 0) {
+              clearInterval(window._rewriteCooldownInterval);
+              window._rewriteCooldownInterval = null;
+              renderRewriteCooldownIndicator();
+              return;
+            }
+            renderChip(remaining);
+          }, 1000);
+        }
+      } catch (err) {
+        console.warn('[RESUME-REWRITE] Failed to render cooldown indicator', err);
+        clearExistingInterval();
+        setRegenEnabled();
+      }
+    }
     
     // Resume Rewriting Buttons - Fixed selectors to match actual HTML
     const attachRewriteButtonListeners = () => {
@@ -1396,6 +1950,9 @@
         regenRewriteBtn.removeEventListener('click', regenerateRewriteHandler);
         regenRewriteBtn.addEventListener('click', regenerateRewriteHandler);
       }
+
+      // Initial render of cooldown state on mount
+      renderRewriteCooldownIndicator();
     };
 
     // --- DEV-ONLY PLAN TOGGLE LOGIC ---
@@ -1621,8 +2178,6 @@
           
           // Hide placeholder
           hidePlaceholder();
-          const placeholderCta = document.getElementById('rf-placeholder-cta');
-          if (placeholderCta) placeholderCta.style.display = 'none';
           
           // Show rubric grid
           const rubricGrid = document.getElementById('rf-rubric-grid');
@@ -1699,13 +2254,9 @@
           if (cachedScore.roleSpecificFeedback) {
             const isOldFormat = Array.isArray(cachedScore.roleSpecificFeedback) && 
                                cachedScore.roleSpecificFeedback.length > 0;
-            const isNewFormat = typeof cachedScore.roleSpecificFeedback === 'object' && 
-                               !Array.isArray(cachedScore.roleSpecificFeedback) &&
-                               cachedScore.roleSpecificFeedback.targetRoleUsed !== undefined &&
-                               Array.isArray(cachedScore.roleSpecificFeedback.sections) &&
-                               cachedScore.roleSpecificFeedback.sections.length > 0;
-            
-            if (isOldFormat || isNewFormat) {
+          const isNewFormat = isValidRoleTips(cachedScore.roleSpecificFeedback);
+          
+          if (isOldFormat || isNewFormat) {
               updateFeedbackGrid(cachedScore.roleSpecificFeedback);
             } else {
               console.warn('[RESUME-FEEDBACK] Invalid roleSpecificFeedback format in cache:', typeof cachedScore.roleSpecificFeedback);
@@ -1723,82 +2274,7 @@
             });
           }
           
-          // Get resume name for context bar and file name restoration
-          const lastResumeName = localStorage.getItem('lastUploadedResumeName');
-          
-          // Only show context bar if we have all required data
-          const hasValidCachedData = cachedScore && 
-                                     cachedScore.score !== undefined && 
-                                     cachedScore.resumeId &&
-                                     lastResumeName && 
-                                     lastResumeName !== 'Unknown file' &&
-                                     cachedScore.timestamp;
-          
-          // Show context bar only if we have valid cached data
-          const contextBar = document.getElementById('rf-context-bar');
-          if (contextBar) {
-            if (hasValidCachedData) {
-              contextBar.style.display = 'block';
-              
-              // Update context bar details
-              const fileNameEl = document.getElementById('rf-context-file-name');
-              if (fileNameEl) fileNameEl.textContent = lastResumeName;
-              
-              const roleNameEl = document.getElementById('rf-context-role-name');
-              if (roleNameEl) {
-                roleNameEl.textContent = cachedScore.jobTitle || 'Not specified';
-              }
-              
-              const timeEl = document.getElementById('rf-context-time-value');
-              if (timeEl && cachedScore.timestamp) {
-                const date = new Date(cachedScore.timestamp);
-                const now = new Date();
-                const diffMs = now - date;
-                const diffMins = Math.floor(diffMs / 60000);
-                const diffHours = Math.floor(diffMs / 3600000);
-                const diffDays = Math.floor(diffMs / 86400000);
-                
-                let timeText;
-                if (diffMins < 1) {
-                  timeText = 'Just now';
-                } else if (diffMins < 60) {
-                  timeText = `${diffMins} minute${diffMins !== 1 ? 's' : ''} ago`;
-                } else if (diffHours < 24) {
-                  timeText = `${diffHours} hour${diffHours !== 1 ? 's' : ''} ago`;
-                } else if (diffDays === 1) {
-                  timeText = 'Yesterday';
-                } else if (diffDays < 7) {
-                  timeText = `${diffDays} days ago`;
-                } else {
-                  timeText = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: date.getFullYear() !== now.getFullYear() ? 'numeric' : undefined });
-                }
-                timeEl.textContent = timeText;
-              }
-            } else {
-              // Hide context bar if data is incomplete
-              contextBar.style.display = 'none';
-            }
-          }
-          
-          // Restore job title if available (only if input is empty to avoid overwriting user input)
-          const jobTitleInput = document.getElementById('rf-job-title');
-          if (cachedScore.jobTitle && jobTitleInput && !jobTitleInput.value.trim()) {
-            // Only restore if it's a real job title, not a placeholder
-            const jobTitle = cachedScore.jobTitle.trim();
-            if (jobTitle && jobTitle !== 'Software Engineer' && jobTitle !== 'Not specified') {
-              jobTitleInput.value = jobTitle;
-              currentJobTitle = jobTitle;
-              console.log('[RESUME-FEEDBACK] Restored job title from cache:', jobTitle);
-            }
-          } else if (!cachedScore?.jobTitle && jobTitleInput && !jobTitleInput.value.trim()) {
-            // Set visual placeholder to "Software Engineer" for consistency with other pages
-            // BUT don't set currentJobTitle - only set it when user explicitly interacts with the field
-            // This prevents incorrect role analysis for users in other roles
-            jobTitleInput.value = 'Software Engineer';
-            // currentJobTitle remains null until user explicitly selects/types a value
-            console.log('[RESUME-FEEDBACK] Set visual placeholder to Software Engineer (not active until user confirms)');
-          }
-          
+          // Do NOT restore job title from cache; must be explicitly provided each run
           // Restore file name if available (display only - don't enable button)
           // Browsers don't persist file inputs, so user must re-select file
           const fileNameSpan = document.getElementById('rf-file-name');
@@ -1813,6 +2289,38 @@
         }
       }
       
+    function clearTargetRoleState() {
+      const jobTitleInput = document.getElementById('rf-job-title');
+      if (jobTitleInput) {
+        jobTitleInput.value = '';
+      }
+      currentJobTitle = '';
+      try {
+        sessionStorage.removeItem('currentJobTitle');
+        localStorage.removeItem('jh_last_job_title');
+      } catch (e) {
+        console.warn('[RESUME-FEEDBACK] Failed to clear job title state', e);
+      }
+    }
+
+    // Expose for history interactions
+    window.clearTargetRoleState = clearTargetRoleState;
+
+    window.addEventListener('visibilitychange', () => {
+      if (document.hidden) {
+        forceHideOverlays();
+      }
+    });
+
+    window.addEventListener('pagehide', () => {
+      forceHideOverlays();
+      clearTargetRoleState();
+    });
+
+    window.addEventListener('beforeunload', () => {
+      clearTargetRoleState();
+    });
+
       // Load cached score on page load
       loadCachedATSScore().then(() => {
         // Check if we have resume data after loading
@@ -1820,28 +2328,13 @@
         const hasResumeData = rubricScores.length > 0 && Array.from(rubricScores).some(el => el.textContent !== '— / —');
         
         if (!hasResumeData) {
-          // Show placeholder note and CTA
+          // Keep placeholder hidden to avoid duplicate empty-state copy
           const placeholder = document.getElementById('ats-placeholder');
-          if (placeholder) placeholder.style.display = 'block';
-          const placeholderCta = document.getElementById('rf-placeholder-cta');
-          if (placeholderCta) placeholderCta.style.display = 'block';
+          if (placeholder) placeholder.style.display = 'none';
           const regenBtn = document.getElementById('rf-regenerate-btn');
           if (regenBtn) regenBtn.style.display = 'none';
         }
-        
-        // Attach event handlers for context bar buttons
-        const rerunBtn = document.getElementById('rf-rerun-btn');
-        if (rerunBtn) {
-          rerunBtn.addEventListener('click', function() {
-            // Scroll to top and focus on file input to encourage re-upload
-            window.scrollTo({ top: 0, behavior: 'smooth' });
-            const fileInput = document.getElementById('rf-upload');
-            if (fileInput) {
-              fileInput.click();
-            }
-          });
-        }
-        
+
         const optimizeBtn = document.getElementById('rf-optimize-btn');
         if (optimizeBtn) {
           optimizeBtn.addEventListener('click', async function() {
@@ -1858,6 +2351,7 @@
             
             try {
               showLoadingState('Optimizing for ATS compliance…');
+              showRewriteSkeleton();
               this.disabled = true;
               this.textContent = 'Optimizing...';
               
@@ -1898,6 +2392,18 @@
                 hasAtsScore,
                 roleSpecificFeedback: feedbackResult.roleSpecificFeedback || null
               });
+
+              // Clear target role ONLY after a successful new analysis. History clicks must NOT change this input.
+              const jobTitleInput = document.getElementById('rf-job-title');
+              if (jobTitleInput) {
+                jobTitleInput.value = '';
+                currentJobTitle = '';
+              }
+
+              // Refresh Last analyzed from D1 (guarded to avoid ReferenceError)
+              if (typeof fetchLatestFeedbackFromD1 === 'function') {
+                fetchLatestFeedbackFromD1();
+              }
               
               // Save role-specific feedback to persistence
               // Use cached score that was already loaded above
@@ -1975,29 +2481,19 @@
               // Show role feedback
               showRoleFeedback();
               
-              // Update context bar timestamp
-              if (window.JobHackAIStatePersistence) {
-                // Pass jobTitle directly (empty string is valid and should be validated)
-                const updatedScore = window.JobHackAIStatePersistence.loadATSScore(jobTitle ?? '');
-                if (updatedScore && updatedScore.timestamp) {
-                  const timeEl = document.getElementById('rf-context-time-value');
-                  if (timeEl) {
-                    timeEl.textContent = 'Just now';
-                  }
-                }
-              }
-              
               if (window.JobHackAIToast) {
                 window.JobHackAIToast.success('Feedback generated successfully!');
               }
               
               this.textContent = 'Optimize this resume';
               this.disabled = false;
+              hideRewriteSkeleton();
               hideLoadingState();
             } catch (error) {
               handleApiError(error);
               this.textContent = 'Optimize this resume';
               this.disabled = false;
+              hideRewriteSkeleton();
               hideLoadingState();
             }
           });
@@ -2051,7 +2547,8 @@
           if (statusDiv) {
             statusDiv.style.display = 'none';
           }
-          showLoadingState('Analyzing your résumé for ATS criteria…');
+        showLoadingState('Analyzing your résumé for ATS criteria…');
+        showRewriteSkeleton();
           uploadInput.disabled = true;
 
           // Check if we already have a resumeId for this file
@@ -2108,6 +2605,7 @@
                 uploadInput.disabled = false;
                 generateBtn.disabled = false;
                 hideLoadingState();
+                hideRewriteSkeleton();
                 handleApiError(new Error('You have used your 1 free lifetime ATS score. Upgrade to continue scoring unlimited resumes.'));
                 // Redirect to pricing page after showing error
                 setTimeout(() => {
@@ -2200,6 +2698,7 @@
                 uploadInput.disabled = false;
                 generateBtn.disabled = false;
                 hideLoadingState();
+                hideRewriteSkeleton();
                 handleApiError(new Error('You have used your 1 free lifetime ATS score. Upgrade to continue scoring unlimited resumes.'));
                 // Redirect to pricing page after showing error
                 setTimeout(() => {
@@ -2266,9 +2765,15 @@
             }
             
             // Error already shown by uploadResume, but we need to clean up UI state
+            // Clean up any loading overlays
+            if (window._currentFeedbackLoading) {
+              window._currentFeedbackLoading();
+              window._currentFeedbackLoading = null;
+            }
             uploadInput.disabled = false;
             generateBtn.disabled = false;
             hideLoadingState();
+            hideRewriteSkeleton();
             return;
           }
           
@@ -2279,95 +2784,209 @@
           window.latestAtsIssues = null;
           window.latestRoleSpecific = null;
 
-          // Get ATS score (only if upload succeeded)
-          showLoadingState('Calculating your ATS score…');
-          // Ensure jobTitle is passed (even if empty string) - role is primary steering for ATS expectations
-          const jobTitleForScore = currentJobTitle || jobTitleInput?.value?.trim() || '';
-          const scoreResult = await getAtsScore(uploadResult.resumeId, jobTitleForScore);
+          // Step 1 complete: "Reading your resume..." overlay is already hidden by uploadResume()
+          // Step 2: Show skeleton loading states instead of full-screen overlay
+          // Free users only get ATS scoring, not AI feedback, so show different message
+          const userPlan = getCurrentUserPlan();
+          const willGetFeedback = ['trial', 'essential', 'pro', 'premium'].includes(userPlan);
           
-          // Mark that ATS scoring succeeded - credit should NOT be restored if scoring worked
-          atsScoringSucceeded = scoreResult.success && scoreResult.score !== undefined;
-          
-          // Store ATS score in sessionStorage for cross-page sync
-          // Note: Credit restoration on scoring failure is handled in the catch block below
-          // since getAtsScore throws exceptions rather than returning {success: false}
-          if (scoreResult.success && scoreResult.score !== undefined) {
-            sessionStorage.setItem('currentAtsScore', scoreResult.score.toString());
-            if (scoreResult.breakdown) {
-              sessionStorage.setItem('currentAtsBreakdown', JSON.stringify(scoreResult.breakdown));
-            }
-            
-            // Also store in localStorage for backward compatibility
-            const summary = scoreResult.score > 85 ? 'Excellent! Your resume is highly ATS compatible.' : 
-                           scoreResult.score > 70 ? 'Your resume meets many ATS criteria and is likely to be noticed.' : 
-                           'Your resume needs improvement for better ATS results.';
-            localStorage.setItem('lastATSScore', scoreResult.score.toString());
-            localStorage.setItem('lastATSSummary', summary);
+          // Show skeleton loading states (replaces full-screen overlay)
+          // Pass willGetFeedback to conditionally show/hide feedback skeleton
+          showSkeletons(willGetFeedback);
+          if (willGetFeedback) {
+            setRoleStatus('Generating tips…');
+          } else {
+            setRoleStatus('');
           }
+          // Capture skeleton generation for this run to guard against stale callbacks
+          const atsRequestGeneration = skeletonOperationGeneration;
+          // Hide skeleton header since real progress header is already visible
+          hideHeaderSkeleton();
           
-          updateProgressRing(scoreResult.score);
-          
-          // Hide placeholder and show feedback
-          hidePlaceholder();
-          const placeholderCta = document.getElementById('rf-placeholder-cta');
-          if (placeholderCta) placeholderCta.style.display = 'none';
-          
-          // Convert breakdown to rubric format
-          const rubric = [
-            {
-              label: 'Keyword Relevance',
-              score: scoreResult.breakdown.keywordScore.score,
-              max: 40,
-              tip: limitFeedbackToSentences(scoreResult.breakdown.keywordScore.feedback)
-            },
-            {
-              label: 'Formatting Compliance',
-              score: scoreResult.breakdown.formattingScore.score,
-              max: 20,
-              tip: limitFeedbackToSentences(scoreResult.breakdown.formattingScore.feedback)
-            },
-            {
-              label: 'Structure & Section Completeness',
-              score: scoreResult.breakdown.structureScore.score,
-              max: 15,
-              tip: limitFeedbackToSentences(scoreResult.breakdown.structureScore.feedback)
-            },
-            {
-              label: 'Tone & Clarity',
-              score: scoreResult.breakdown.toneScore.score,
-              max: 15,
-              tip: limitFeedbackToSentences(scoreResult.breakdown.toneScore.feedback)
-            },
-            {
-              label: 'Grammar & Spelling',
-              score: scoreResult.breakdown.grammarScore.score,
-              max: 10,
-              tip: limitFeedbackToSentences(scoreResult.breakdown.grammarScore.feedback)
-            }
-          ];
-          updateRubricGrid(rubric);
-          
-          // Make rubric grid visible (it starts with display:none)
-          const rubricGrid = document.getElementById('rf-rubric-grid');
-          if (rubricGrid) {
-            rubricGrid.style.display = 'grid';
-          }
-          
-          // Trigger fade transition for ATS feedback
-          setTimeout(() => {
-            showATSFeedback();
-          }, 100);
+          // Store cleanup function for error handling (skeleton hide function)
+          window._currentFeedbackLoading = () => {
+            hideSkeletons();
+          };
 
-          // Get feedback (if plan allows)
-          const plan = getCurrentUserPlan();
-          if (['trial', 'essential', 'pro', 'premium'].includes(plan)) {
+          // --- PARALLEL API CALLS: ATS Score + Feedback ---
+          const jobTitleForScore = currentJobTitle || jobTitleInput?.value?.trim() || '';
+          const jobTitleForFeedback = jobTitleInput?.value?.trim() || '';
+
+          // Start both API calls in parallel
+          const atsPromise = getAtsScore(uploadResult.resumeId, jobTitleForScore);
+          const feedbackPromise = (async () => {
+            const plan = getCurrentUserPlan();
+            if (['trial', 'essential', 'pro', 'premium'].includes(plan)) {
+              return await getResumeFeedback(uploadResult.resumeId, jobTitleForFeedback);
+            }
+            return null; // Free plan doesn't get feedback
+          })();
+
+          // Handle ATS result immediately without waiting for feedback (progressive display)
+          // This ensures ATS scores appear in 2-3s as claimed in the PR
+          let atsSettled;
+          let feedbackSettled;
+          
+          // Process ATS result as soon as it's available
+          atsPromise
+            .then((result) => {
+              // ATS succeeded - update UI immediately
+              atsScoringSucceeded = result.success && result.score !== undefined;
+              
+              if (atsScoringSucceeded) {
+                // Store ATS score in sessionStorage
+                sessionStorage.setItem('currentAtsScore', result.score.toString());
+                if (result.breakdown) {
+                  sessionStorage.setItem('currentAtsBreakdown', JSON.stringify(result.breakdown));
+                }
+                
+                // Also store in localStorage for backward compatibility
+                const summary = result.score > 85 ? 'Excellent! Your resume is highly ATS compatible.' : 
+                               result.score > 70 ? 'Your resume meets many ATS criteria and is likely to be noticed.' : 
+                               'Your resume needs improvement for better ATS results.';
+                localStorage.setItem('lastATSScore', result.score.toString());
+                localStorage.setItem('lastATSSummary', summary);
+                
+                // Update UI immediately (progress ring, placeholder, etc.)
+                updateProgressRing(result.score);
+                hidePlaceholder();
+                
+                // Helper functions to handle both number and object formats (matches existing code pattern)
+                const getScore = (value) => {
+                  if (typeof value === 'number') return value;
+                  if (value && typeof value === 'object' && typeof value.score === 'number') return value.score;
+                  return 0;
+                };
+                
+                const getFeedback = (value, feedbackArray, index) => {
+                  // First try to get feedback from the value object (if it's an object with feedback property)
+                  if (value && typeof value === 'object') {
+                    if (typeof value.feedback === 'string') {
+                      return limitFeedbackToSentences(value.feedback);
+                    }
+                    if (typeof value.tip === 'string') {
+                      return limitFeedbackToSentences(value.tip);
+                    }
+                  }
+                  // Fallback to feedback array (API returns breakdown as numbers, feedback in separate array)
+                  if (feedbackArray && Array.isArray(feedbackArray) && feedbackArray[index]) {
+                    return limitFeedbackToSentences(feedbackArray[index]);
+                  }
+                  return '';
+                };
+                
+                // Convert breakdown to rubric format
+                // Note: API returns breakdown values as numbers, feedback in separate array
+                const rubric = [
+                  {
+                    label: 'Keyword Relevance',
+                    score: getScore(result.breakdown.keywordScore),
+                    max: 40,
+                    tip: getFeedback(result.breakdown.keywordScore, result.feedback, 0)
+                  },
+                  {
+                    label: 'Formatting Compliance',
+                    score: getScore(result.breakdown.formattingScore),
+                    max: 20,
+                    tip: getFeedback(result.breakdown.formattingScore, result.feedback, 1)
+                  },
+                  {
+                    label: 'Structure & Section Completeness',
+                    score: getScore(result.breakdown.structureScore),
+                    max: 15,
+                    tip: getFeedback(result.breakdown.structureScore, result.feedback, 2)
+                  },
+                  {
+                    label: 'Tone & Clarity',
+                    score: getScore(result.breakdown.toneScore),
+                    max: 15,
+                    tip: getFeedback(result.breakdown.toneScore, result.feedback, 3)
+                  },
+                  {
+                    label: 'Grammar & Spelling',
+                    score: getScore(result.breakdown.grammarScore),
+                    max: 10,
+                    tip: getFeedback(result.breakdown.grammarScore, result.feedback, 4)
+                  }
+                ];
+                updateRubricGrid(rubric);
+                
+                // Show ATS content immediately; keep role skeleton visible until role tips arrive
+                if (atsRequestGeneration === skeletonOperationGeneration) {
+                  hideATSSkeleton();
+                } else {
+                  console.warn('[RESUME-FEEDBACK] ATS skeleton hide skipped due to generation mismatch');
+                }
+                
+                const skeletonFeedback = document.getElementById('rf-skeleton-feedback');
+                const skeletonContainer = document.getElementById('rf-skeleton-container');
+                const shouldHideSkeletonContainer =
+                  skeletonFeedback &&
+                  (skeletonFeedback.style.display === 'none' || skeletonFeedback.childElementCount === 0);
+                
+                if (shouldHideSkeletonContainer && skeletonContainer) {
+                  skeletonContainer.style.display = 'none';
+                }
+                
+                // Show content container and ATS rubric
+                const feedbackContentEl = document.getElementById('rf-feedback-content');
+                if (feedbackContentEl) {
+                  feedbackContentEl.style.display = 'block';
+                }
+                
+                const rubricGrid = document.getElementById('rf-rubric-grid');
+                if (rubricGrid) {
+                  rubricGrid.style.display = 'grid';
+                }
+                
+                // Trigger fade transition for ATS feedback
+                setTimeout(() => {
+                  showATSFeedback();
+                }, 100);
+                
+                // Show success toast
+                if (window.JobHackAIToast) {
+                  window.JobHackAIToast.success('ATS score calculated successfully.');
+                }
+              } else {
+                // ATS scoring failed
+                // Clean up feedback loading overlay (consistent with .catch() handler)
+                if (window._currentFeedbackLoading) {
+                  window._currentFeedbackLoading();
+                  window._currentFeedbackLoading = null;
+                }
+                handleApiError(new Error('Failed to calculate ATS score. Please try again.'));
+              }
+            })
+            .catch((error) => {
+              // ATS promise rejected
+              console.error('[RESUME-FEEDBACK] ATS scoring failed:', error);
+              // Clean up feedback loading overlay
+              if (window._currentFeedbackLoading) {
+                window._currentFeedbackLoading();
+                window._currentFeedbackLoading = null;
+              }
+              handleApiError(error);
+            });
+
+          // Wait for both promises to settle (for error handling and final state)
+          [atsSettled, feedbackSettled] = await Promise.allSettled([atsPromise, feedbackPromise]);
+          
+          // --- Process ATS Result (for error handling and state management) ---
+          // Note: UI updates already happened in the .then() above for progressive display
+          // This block is only for state management and error handling
+          let scoreResult = null;
+          if (atsSettled.status === 'fulfilled') {
+            scoreResult = atsSettled.value;
+            // atsScoringSucceeded already set in .then() handler above
+          } else {
+            // ATS promise rejected - error already handled in .catch() above
+          }
+
+          // --- Process Feedback Result (show when ready) ---
+          if (feedbackSettled.status === 'fulfilled' && feedbackSettled.value) {
+            const feedbackResult = feedbackSettled.value;
             try {
-              // Job title is optional - use empty string if not provided
-              const jobTitleForFeedback = jobTitleInput?.value?.trim() || '';
-              
-              showLoadingState('Optimizing for ATS compliance…');
-              const feedbackResult = await getResumeFeedback(uploadResult.resumeId, jobTitleForFeedback);
-              
               // Update history with new session (D1-backed)
               if (window.JobHackAIHistory && feedbackResult.sessionId) {
                 window.JobHackAIHistory.addItem(feedbackResult.sessionId, feedbackResult.meta);
@@ -2384,29 +3003,31 @@
               updateFeedbackGrid(feedbackResult.roleSpecificFeedback);
               updateRubricGridFromFeedback(feedbackResult.atsRubric);
               
-              // CRITICAL: Ensure feedback content is visible after feedback is generated (Pro & Premium)
-              const feedbackContentEl = document.getElementById('rf-feedback-content');
-              const userPlanCheck = getCurrentUserPlan();
-              if (feedbackContentEl && ['pro', 'premium'].includes(userPlanCheck)) {
-                feedbackContentEl.style.display = 'block';
-                console.log('[RESUME-FEEDBACK] Feedback content shown after generation for:', userPlanCheck);
-              }
+              // Hide feedback skeleton now that real content is ready
+              hideFeedbackSkeleton();
               
-              // Update role-specific tips state based on ATS score and feedback
-              const hasAtsScore = !!(scoreResult?.success && typeof scoreResult.score === 'number');
+              // Feedback content container is already visible from ATS success handler
+              // This ensures progressive display: ATS first, then feedback
+              
+              // Update role-specific tips state
+              const hasAtsScore = atsScoringSucceeded;
               updateRoleTipsState({
                 hasAtsScore,
                 roleSpecificFeedback: feedbackResult.roleSpecificFeedback || null
               });
               
               // Save role-specific feedback to persistence
-              if (window.JobHackAIStatePersistence && scoreResult.success) {
-                // RECONSTRUCT breakdown from atsRubric to ensure feedback is always included
-                // This is more reliable than merging into existing breakdown structure
-                let finalBreakdown = { ...scoreResult.breakdown };
+              if (window.JobHackAIStatePersistence && atsScoringSucceeded) {
+                // Use ATS score result if available, otherwise reconstruct
+                const finalScore = atsScoringSucceeded ? 
+                  (atsSettled.status === 'fulfilled' ? atsSettled.value.score : 0) : 0;
+                const finalBreakdown = atsScoringSucceeded && atsSettled.status === 'fulfilled' ?
+                  atsSettled.value.breakdown : {};
+                
+                // Reconstruct breakdown from atsRubric to ensure feedback is included
+                let finalBreakdownWithFeedback = { ...finalBreakdown };
                 
                 if (feedbackResult.atsRubric && Array.isArray(feedbackResult.atsRubric)) {
-                  // Reconstruct breakdown from atsRubric (ensures feedback is included)
                   const reconstructedBreakdown = {};
                   
                   feedbackResult.atsRubric.forEach(item => {
@@ -2448,29 +3069,16 @@
                     }
                   });
                   
-                  // Merge reconstructed breakdown with original (preserve any missing categories)
-                  finalBreakdown = {
+                  finalBreakdownWithFeedback = {
                     ...finalBreakdown,
                     ...reconstructedBreakdown
                   };
-                } else {
-                  // No atsRubric available, ensure breakdown structure has feedback properties
-                  ['keywordScore', 'formattingScore', 'structureScore', 'toneScore', 'grammarScore'].forEach(key => {
-                    if (finalBreakdown[key] && typeof finalBreakdown[key] === 'object') {
-                      if (!('feedback' in finalBreakdown[key])) {
-                        finalBreakdown[key] = {
-                          ...finalBreakdown[key],
-                          feedback: ''
-                        };
-                      }
-                    }
-                  });
                 }
                 
-                // Save with reconstructed breakdown that includes feedback
+                // Save with reconstructed breakdown
                 const saveSuccess = window.JobHackAIStatePersistence.saveATSScore({
-                  score: scoreResult.score,
-                  breakdown: finalBreakdown,
+                  score: finalScore,
+                  breakdown: finalBreakdownWithFeedback,
                   resumeId: uploadResult.resumeId,
                   jobTitle: jobTitleForFeedback || null,
                   roleSpecificFeedback: feedbackResult.roleSpecificFeedback || null
@@ -2483,37 +3091,68 @@
                 }
               }
             
-              // Trigger fade transition for role feedback (only once, after feedback is loaded)
+              // Trigger fade transition for role feedback
               setTimeout(() => {
                 showRoleFeedback();
               }, 100);
               
+              // Truthful toast + inline status based on ATS/tips state
+              const toastStatus = toastForAtsAndTips({
+                atsOk: atsScoringSucceeded,
+                tips: feedbackResult.roleSpecificFeedback
+              });
+              if (toastStatus === 'tips_ok' || toastStatus === 'tips_only') {
+                setRoleStatus('Role-specific tips updated.');
+              } else if (toastStatus === 'ats_only') {
+                setRoleStatus('ATS score is ready. Role-specific tips are still loading—retry if needed.');
+            } else if (toastStatus === 'missing') {
+              setRoleStatus('Couldn’t refresh tips—retry.');
+              }
             } catch (feedbackError) {
-              // Log at debug level, show user-friendly modal
-              if (window.console && window.console.debug) {
-                window.console.debug('[FEEDBACK] Failed to get feedback:', feedbackError);
-              }
-              // Hide role feedback container since we don't have valid feedback data
-              hideRoleFeedback();
-              // Show error modal but keep ATS score visible
-              if (window.showErrorModal) {
-                const errorMsg = feedbackError.message || 'Failed to generate feedback. Your ATS score is still available.';
-                window.showErrorModal('Feedback Generation Failed', errorMsg, {
-                  buttonText: 'OK',
-                  onClose: () => {
-                    // Keep ATS score visible - don't clear state
-                  }
-                });
-              }
-              // Continue without feedback if it fails - ATS score remains visible
+              console.error('[RESUME-FEEDBACK] Error processing feedback result:', feedbackError);
+              // Don't show error modal - ATS score is already visible, feedback is optional
             }
-          } else {
-            // Hide role feedback container for free users (they don't have access to feedback)
+          } else if (feedbackSettled.status === 'rejected') {
+            // Feedback failed - log but don't block (ATS score is already shown)
+            const error = feedbackSettled.reason;
+            console.warn('[RESUME-FEEDBACK] Feedback generation failed (non-blocking):', error);
+            
+            // Hide role feedback container since we don't have valid feedback data
             hideRoleFeedback();
-            // Show placeholder CTA for free users
-            const placeholderCta = document.getElementById('rf-placeholder-cta');
-            if (placeholderCta) placeholderCta.style.display = 'block';
+            setRoleStatus('Couldn’t refresh tips—retry.');
+            
+            // Show error modal but keep ATS score visible
+            if (window.showErrorModal) {
+              const errorMsg = error.message || 'Failed to generate feedback. Your ATS score is still available.';
+              window.showErrorModal('Feedback Generation Failed', errorMsg, {
+                buttonText: 'OK',
+                onClose: () => {
+                  // Keep ATS score visible - don't clear state
+                }
+              });
+            }
+            
+            // Clean up feedback loading overlay on feedback failure
+            if (window._currentFeedbackLoading) {
+              window._currentFeedbackLoading();
+              window._currentFeedbackLoading = null;
+            }
+            
+            // Feedback failed, but ATS scoring may have succeeded
+          } else {
+            // Free plan - no feedback
+            hideRoleFeedback();
+            
+            // Free plan - ATS scoring may have succeeded
           }
+          
+          // Hide "Generating AI feedback..." overlay when both API calls complete
+          if (window._currentFeedbackLoading) {
+            window._currentFeedbackLoading();
+            window._currentFeedbackLoading = null;
+          }
+          
+          // Both ATS scoring and feedback completed successfully
 
           // Update original snippet in rewrite section
           // Use full resume text if available, otherwise use preview
@@ -2562,21 +3201,17 @@
 
           // Update description (preserve tooltip HTML)
           const descEl = document.getElementById('rf-score-desc');
-          if (descEl) {
+          if (descEl && atsScoringSucceeded) {
             // Preserve existing tooltip if it exists
             const existingTooltip = descEl.querySelector('.rf-tooltip-trigger');
             const tooltipHtml = existingTooltip ? existingTooltip.outerHTML : '';
             descEl.innerHTML = 'Your resume was analyzed. See your ATS score and feedback below.' + (tooltipHtml ? ' ' + tooltipHtml : '');
           }
 
-          // Show success toast
-          if (window.JobHackAIToast) {
-            window.JobHackAIToast.success('ATS score saved successfully.');
-          }
-
           uploadInput.disabled = false;
           generateBtn.disabled = false;
           hideLoadingState();
+          hideRewriteSkeleton();
         } catch (error) {
           // Restore credit ONLY if ATS scoring failed (not for post-scoring errors)
           // If scoring succeeded but UI/feedback generation failed, user already got value
@@ -2608,11 +3243,17 @@
           }
           
           // Clear state on error
+          // Clean up feedback loading overlay
+          if (window._currentFeedbackLoading) {
+            window._currentFeedbackLoading();
+            window._currentFeedbackLoading = null;
+          }
           clearAtsState();
           handleApiError(error);
           uploadInput.disabled = false;
           generateBtn.disabled = false;
           hideLoadingState();
+          hideRewriteSkeleton();
         }
       }
 
@@ -2621,41 +3262,114 @@
       const fileNameSpan = document.getElementById('rf-file-name');
       const generateBtn = document.getElementById('rf-generate-btn');
       const statusDiv = document.getElementById('rf-generate-status');
+      const startFreshBtn = document.getElementById('rf-start-fresh-btn');
+      
+      if (startFreshBtn) {
+        startFreshBtn.addEventListener('click', function() {
+          resetSession();
+        });
+      }
       
       if (uploadInput) {
-        uploadInput.addEventListener('change', function(e) {
+        uploadInput.addEventListener('change', async function(e) {
           const file = e.target.files[0];
+          const pdfHelper = document.getElementById('rf-pdf-helper');
+          
           if (file) {
-            // Preserve targeted role selection when uploading a resume
-            // Don't clear job title input - user may want to analyze different resumes for the same role
-            // Only clear if explicitly needed (e.g., error handling)
-            
-            // Store file name in localStorage for persistence
-            localStorage.setItem('lastUploadedResumeName', file.name);
-            
-            // Update file name display
-            if (fileNameSpan) {
-              fileNameSpan.textContent = file.name;
-              fileNameSpan.style.color = 'var(--color-success)';
-              fileNameSpan.style.fontWeight = '600';
-            }
-            
-            // Enable generate button
+            // Immediately disable generate button while validating new file
             if (generateBtn) {
-              generateBtn.disabled = false;
+              generateBtn.disabled = true;
             }
             
-            // Show ready status
-            if (statusDiv) {
-              statusDiv.style.display = 'block';
-              statusDiv.textContent = 'Ready to analyze';
-              statusDiv.style.background = 'rgba(5,150,105,0.08)';
-              statusDiv.style.color = 'var(--color-success)';
-              statusDiv.style.width = 'fit-content';
-              statusDiv.style.maxWidth = '100%';
+            // Hide status pill initially while validating
+            hideFileStatus();
+            
+            // Show/hide PDF helper text based on file type
+            if (pdfHelper) {
+              if (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')) {
+                pdfHelper.style.display = 'block';
+              } else {
+                pdfHelper.style.display = 'none';
+              }
+            }
+            
+            // Validate file and show status pill
+            try {
+              const validation = await window.JobHackAIFileValidation.validateFile(file);
+              
+              if (!validation.valid) {
+                // Invalid file - show error status
+                showFileStatus('error', validation.error || 'File validation failed');
+                if (fileNameSpan) {
+                  fileNameSpan.textContent = file.name;
+                  fileNameSpan.style.color = 'var(--color-error)';
+                  fileNameSpan.style.fontWeight = '600';
+                }
+                if (generateBtn) {
+                  generateBtn.disabled = true;
+                }
+                if (statusDiv) {
+                  statusDiv.style.display = 'none';
+                }
+                return;
+              }
+              
+              // Valid file - check for warnings
+              if (validation.warning && validation.isScanned) {
+                showFileStatus('warning', 'Scanned PDF detected – may take longer');
+              } else {
+                showFileStatus('success', 'Ready to analyze');
+              }
+              
+              // Preserve targeted role selection when uploading a resume
+              // Don't clear job title input - user may want to analyze different resumes for the same role
+              
+              // Store file name in localStorage for persistence
+              localStorage.setItem('lastUploadedResumeName', file.name);
+              
+              // Update file name display
+              if (fileNameSpan) {
+                fileNameSpan.textContent = file.name;
+                fileNameSpan.style.color = 'var(--color-success)';
+                fileNameSpan.style.fontWeight = '600';
+              }
+              
+              // Enable generate button
+              if (generateBtn) {
+                generateBtn.disabled = false;
+              }
+              
+              // Show ready status (legacy status div - keep for compatibility)
+              if (statusDiv) {
+                statusDiv.style.display = 'block';
+                statusDiv.textContent = 'Ready to analyze';
+                statusDiv.style.background = 'rgba(5,150,105,0.08)';
+                statusDiv.style.color = 'var(--color-success)';
+                statusDiv.style.width = 'fit-content';
+                statusDiv.style.maxWidth = '100%';
+              }
+            } catch (validationError) {
+              // Validation error - show error status
+              console.error('[RESUME-FEEDBACK] File validation error:', validationError);
+              showFileStatus('error', 'File validation failed');
+              if (fileNameSpan) {
+                fileNameSpan.textContent = file.name;
+                fileNameSpan.style.color = 'var(--color-error)';
+                fileNameSpan.style.fontWeight = '600';
+              }
+              if (generateBtn) {
+                generateBtn.disabled = true;
+              }
+              if (statusDiv) {
+                statusDiv.style.display = 'none';
+              }
             }
           } else {
             // Reset if file cleared
+            hideFileStatus();
+            if (pdfHelper) {
+              pdfHelper.style.display = 'none';
+            }
             if (fileNameSpan) {
               fileNameSpan.textContent = 'No file selected';
               fileNameSpan.style.color = 'var(--color-text-muted)';
@@ -2698,8 +3412,9 @@
               const cachedJobTitle = (cachedScore.jobTitle || '').trim();
               const newJobTitle = (jobTitle || '').trim();
               
-              // If resume and role haven't changed, don't call API
-              if (cachedJobTitle === newJobTitle && cachedScore.roleSpecificFeedback) {
+              // If resume and role haven't changed, and cached tips are valid, don't call API
+              const cachedTips = cachedScore.roleSpecificFeedback;
+              if (cachedJobTitle === newJobTitle && isValidRoleTips(cachedTips)) {
                 console.log('[RESUME-FEEDBACK] Resume and role unchanged, skipping API call');
                 if (window.JobHackAIToast) {
                   window.JobHackAIToast.info('No changes detected. Feedback is already up to date.');
@@ -2713,75 +3428,88 @@
             showLoadingState('Regenerating feedback...');
             this.disabled = true;
             this.textContent = 'Regenerating...';
-
-            // If role changed, also fetch updated ATS score
+            setRoleStatus('Generating tips…');
             const roleChanged = previousJobTitle !== jobTitle;
+
+            // Start ATS (if role changed) and feedback in parallel
+            const atsPromise = roleChanged ? getAtsScore(currentResumeId, jobTitle) : Promise.resolve(null);
+            const feedbackPromise = getResumeFeedback(currentResumeId, jobTitle);
+            const [atsSettled, feedbackSettled] = await Promise.allSettled([atsPromise, feedbackPromise]);
+
             let scoreResult = null;
-            
-            if (roleChanged) {
-              showLoadingState('Updating ATS score for new role...');
-              try {
-                scoreResult = await getAtsScore(currentResumeId, jobTitle);
-                // Verify both success and breakdown exist before using scoreResult
-                if (scoreResult.success && scoreResult.score !== undefined && scoreResult.breakdown) {
-                  updateProgressRing(scoreResult.score);
-                  
-                  // Convert breakdown to rubric format
-                  const rubric = [
-                    {
-                      label: 'Keyword Relevance',
-                      score: scoreResult.breakdown.keywordScore?.score || 0,
-                      max: 40,
-                      tip: limitFeedbackToSentences(scoreResult.breakdown.keywordScore?.feedback || '')
-                    },
-                    {
-                      label: 'Formatting Compliance',
-                      score: scoreResult.breakdown.formattingScore?.score || 0,
-                      max: 20,
-                      tip: limitFeedbackToSentences(scoreResult.breakdown.formattingScore?.feedback || '')
-                    },
-                    {
-                      label: 'Structure & Section Completeness',
-                      score: scoreResult.breakdown.structureScore?.score || 0,
-                      max: 15,
-                      tip: limitFeedbackToSentences(scoreResult.breakdown.structureScore?.feedback || '')
-                    },
-                    {
-                      label: 'Tone & Clarity',
-                      score: scoreResult.breakdown.toneScore?.score || 0,
-                      max: 15,
-                      tip: limitFeedbackToSentences(scoreResult.breakdown.toneScore?.feedback || '')
-                    },
-                    {
-                      label: 'Grammar & Spelling',
-                      score: scoreResult.breakdown.grammarScore?.score || 0,
-                      max: 10,
-                      tip: limitFeedbackToSentences(scoreResult.breakdown.grammarScore?.feedback || '')
-                    }
-                  ];
-                  updateRubricGrid(rubric);
-                  
-                  // Store ATS score in sessionStorage
-                  sessionStorage.setItem('currentAtsScore', scoreResult.score.toString());
-                  sessionStorage.setItem('currentAtsBreakdown', JSON.stringify(scoreResult.breakdown));
-                } else {
-                  // Score update failed or incomplete - log warning and continue
-                  console.warn('[RESUME-FEEDBACK] ATS score update incomplete:', {
-                    success: scoreResult?.success,
-                    hasScore: scoreResult?.score !== undefined,
-                    hasBreakdown: !!scoreResult?.breakdown
-                  });
-                  scoreResult = null; // Mark as failed so toast message is accurate
-                }
-              } catch (scoreError) {
-                console.warn('[RESUME-FEEDBACK] Failed to update ATS score:', scoreError);
-                scoreResult = null; // Mark as failed so toast message is accurate
-                // Continue with feedback generation even if score update fails
+            let scoreUpdated = false;
+            if (atsSettled.status === 'fulfilled' && atsSettled.value) {
+              const possibleScore = atsSettled.value;
+              if (possibleScore.success && possibleScore.score !== undefined && possibleScore.breakdown) {
+                scoreResult = possibleScore;
+                scoreUpdated = true;
+                updateProgressRing(scoreResult.score);
+                const rubric = [
+                  {
+                    label: 'Keyword Relevance',
+                    score: scoreResult.breakdown.keywordScore?.score || 0,
+                    max: 40,
+                    tip: limitFeedbackToSentences(scoreResult.breakdown.keywordScore?.feedback || '')
+                  },
+                  {
+                    label: 'Formatting Compliance',
+                    score: scoreResult.breakdown.formattingScore?.score || 0,
+                    max: 20,
+                    tip: limitFeedbackToSentences(scoreResult.breakdown.formattingScore?.feedback || '')
+                  },
+                  {
+                    label: 'Structure & Section Completeness',
+                    score: scoreResult.breakdown.structureScore?.score || 0,
+                    max: 15,
+                    tip: limitFeedbackToSentences(scoreResult.breakdown.structureScore?.feedback || '')
+                  },
+                  {
+                    label: 'Tone & Clarity',
+                    score: scoreResult.breakdown.toneScore?.score || 0,
+                    max: 15,
+                    tip: limitFeedbackToSentences(scoreResult.breakdown.toneScore?.feedback || '')
+                  },
+                  {
+                    label: 'Grammar & Spelling',
+                    score: scoreResult.breakdown.grammarScore?.score || 0,
+                    max: 10,
+                    tip: limitFeedbackToSentences(scoreResult.breakdown.grammarScore?.feedback || '')
+                  }
+                ];
+                updateRubricGrid(rubric);
+                sessionStorage.setItem('currentAtsScore', scoreResult.score.toString());
+                sessionStorage.setItem('currentAtsBreakdown', JSON.stringify(scoreResult.breakdown));
+              } else {
+                console.warn('[RESUME-FEEDBACK] ATS score update incomplete:', {
+                  success: possibleScore?.success,
+                  hasScore: possibleScore?.score !== undefined,
+                  hasBreakdown: !!possibleScore?.breakdown
+                });
               }
+            } else if (atsSettled.status === 'rejected') {
+              console.warn('[RESUME-FEEDBACK] Failed to update ATS score:', atsSettled.reason);
             }
 
-            showLoadingState('Regenerating feedback...');
-            const feedbackResult = await getResumeFeedback(currentResumeId, jobTitle);
+            if (feedbackSettled.status !== 'fulfilled' || !feedbackSettled.value) {
+              // Feedback failed - log but don't block (ATS score may be shown)
+              const error = feedbackSettled.status === 'rejected' ? feedbackSettled.reason : new Error('No feedback result');
+              console.warn('[RESUME-FEEDBACK] Feedback generation failed (non-blocking):', error);
+              hideRoleFeedback();
+              setRoleStatus('Couldn’t refresh tips—retry.');
+              if (window.showErrorModal) {
+                const errorMsg = error.message || 'Failed to generate feedback. Your ATS score is still available.';
+                window.showErrorModal('Feedback Generation Failed', errorMsg, {
+                  buttonText: 'OK',
+                  onClose: () => {}
+                });
+              }
+              this.textContent = 'Regenerate Feedback';
+              this.disabled = false;
+              hideLoadingState();
+              return;
+            }
+
+            const feedbackResult = feedbackSettled.value;
             
             // Update history with new session (D1-backed)
             if (window.JobHackAIHistory && feedbackResult.sessionId) {
@@ -2809,6 +3537,18 @@
               hasAtsScore,
               roleSpecificFeedback: feedbackResult.roleSpecificFeedback || null
             });
+
+            // Clear target role ONLY after a successful new analysis. History clicks must NOT change this input.
+            const jobTitleInput = document.getElementById('rf-job-title');
+            if (jobTitleInput) {
+              jobTitleInput.value = '';
+              currentJobTitle = '';
+            }
+
+            // Refresh Last analyzed from D1 (guarded to avoid ReferenceError)
+            if (typeof fetchLatestFeedbackFromD1 === 'function') {
+              fetchLatestFeedbackFromD1();
+            }
             
             // Save role-specific feedback to persistence
             // Use cached score that was already loaded above
@@ -2938,32 +3678,18 @@
                 console.log('[RESUME-FEEDBACK] Saved feedback with reconstructed breakdown');
               }
               
-              // Update context bar timestamp and ensure it's visible
-              const updatedScore = window.JobHackAIStatePersistence.loadATSScore(null);
-              if (updatedScore && updatedScore.timestamp) {
-                const timeEl = document.getElementById('rf-context-time-value');
-                if (timeEl) {
-                  timeEl.textContent = 'Just now';
-                }
-                
-                // Ensure context bar is visible after update
-                const contextBar = document.getElementById('rf-context-bar');
-                if (contextBar && updatedScore.resumeId === currentResumeId) {
-                  contextBar.style.display = 'block';
-                  
-                  // Update role name if it changed
-                  const roleNameEl = document.getElementById('rf-context-role-name');
-                  if (roleNameEl) {
-                    roleNameEl.textContent = updatedScore.jobTitle || 'Not specified';
-                  }
-                }
-              }
             }
 
-            // Show success toast - only claim ATS score was updated if it actually succeeded
-            if (window.JobHackAIToast) {
-              const scoreUpdated = roleChanged && scoreResult?.success && scoreResult?.breakdown;
-              window.JobHackAIToast.success(scoreUpdated ? 'ATS score and feedback updated!' : 'Feedback updated!');
+            const toastStatus = toastForAtsAndTips({
+              atsOk: scoreUpdated,
+              tips: feedbackResult.roleSpecificFeedback
+            });
+            if (toastStatus === 'tips_ok' || toastStatus === 'tips_only') {
+              setRoleStatus('Role-specific tips updated.');
+            } else if (toastStatus === 'ats_only') {
+              setRoleStatus('ATS score is ready. Role-specific tips are still loading—retry if needed.');
+            } else if (toastStatus === 'missing') {
+              setRoleStatus('Couldn’t refresh tips—retry.');
             }
 
             this.textContent = 'Regenerate Feedback';
@@ -2974,6 +3700,7 @@
             this.textContent = 'Regenerate Feedback';
             this.disabled = false;
             hideLoadingState();
+            setRoleStatus('Couldn’t refresh tips—retry.');
           }
         });
       }
@@ -3051,7 +3778,11 @@
       
       // FIX: Default to 0% if score is undefined or null (for new users)
       const hasResumeData = score !== undefined && score !== null;
-      const displayScore = hasResumeData ? score : 0;
+      let displayScore = hasResumeData ? score : 0;
+      if (!Number.isFinite(displayScore) || displayScore < 0 || displayScore > 100) {
+        console.warn('[ATS-DONUT] Invalid score for donut', { score: displayScore });
+        displayScore = 0;
+      }
       
       // Always show progress ring (even at 0% for new users)
       const progressRing = document.querySelector('#rf-ats-score-tile .rf-progress-ring');
@@ -3070,8 +3801,8 @@
       const circumference = 2 * Math.PI * radius;
       const offset = circumference - (percent / 100) * circumference;
       
-      // Ensure circle is visible and green
-      circle.setAttribute('stroke', 'var(--color-cta-green)');
+      // Ensure circle is visible and green (use direct color value for SVG compatibility)
+      circle.setAttribute('stroke', '#00E676');
       circle.setAttribute('stroke-width', '8');
       circle.setAttribute('stroke-dasharray', String(circumference));
       circle.setAttribute('stroke-dashoffset', offset);
@@ -3103,6 +3834,25 @@
       return div.innerHTML;
     }
 
+    function formatRewriteChangeSummary(summary) {
+      if (!summary) return '';
+      if (typeof summary === 'string') return summary;
+      if (Array.isArray(summary)) return summary.join('\n');
+      if (typeof summary === 'object') {
+        const lines = [];
+        if (Array.isArray(summary.atsFixes) && summary.atsFixes.length > 0) {
+          lines.push('ATS fixes:');
+          summary.atsFixes.forEach(item => lines.push(`- ${item}`));
+        }
+        if (Array.isArray(summary.roleFixes) && summary.roleFixes.length > 0) {
+          lines.push('Role fixes:');
+          summary.roleFixes.forEach(item => lines.push(`- ${item}`));
+        }
+        return lines.join('\n');
+      }
+      return String(summary);
+    }
+
     function updateRubricGrid(rubric) {
       const grid = document.getElementById('rf-rubric-grid');
       if (!grid) return;
@@ -3122,32 +3872,77 @@
       });
     }
 
+    // Role-specific helpers (shared across generate, retry, regenerate, cached restore)
+    function isValidRoleTips(roleSpecificFeedback) {
+      if (!roleSpecificFeedback || typeof roleSpecificFeedback !== 'object') return false;
+      // Legacy array format: treat non-empty array as valid
+      if (Array.isArray(roleSpecificFeedback)) return roleSpecificFeedback.length > 0;
+      // New format: object with sections array
+      if (!Array.isArray(roleSpecificFeedback.sections)) return false;
+      return roleSpecificFeedback.sections.length > 0;
+    }
+
+    function getRoleTipsStatus({ atsOk, tips }) {
+      const validTips = isValidRoleTips(tips);
+      if (validTips && atsOk) return 'tips_ok';
+      if (validTips && !atsOk) return 'tips_only';
+      if (!validTips && atsOk) return 'ats_only';
+      return 'missing';
+    }
+
+    function toastForAtsAndTips({ atsOk, tips }) {
+      const status = getRoleTipsStatus({ atsOk, tips });
+      if (!window.JobHackAIToast) return status;
+      if (status === 'tips_ok') {
+        window.JobHackAIToast.success('ATS score and role-specific tips updated.');
+      } else if (status === 'tips_only') {
+        window.JobHackAIToast.success('Role-specific tips updated.');
+      } else if (status === 'ats_only') {
+        if (window.JobHackAIToast.info) {
+          window.JobHackAIToast.info('ATS score is ready. Role-specific tips are still loading—retry if needed.');
+        } else {
+          window.JobHackAIToast.success('ATS score is ready. Role-specific tips are still loading—retry if needed.');
+        }
+      }
+      return status;
+    }
+
+    function setRoleStatus(text) {
+      const el = document.getElementById('rf-role-status');
+      if (!el) return;
+      if (text) {
+        el.textContent = text;
+        el.style.display = 'block';
+      } else {
+        el.textContent = '';
+        el.style.display = 'none';
+      }
+    }
+
     function updateFeedbackGrid(roleSpecificFeedback) {
       const grid = document.getElementById('rf-feedback-grid');
       if (!grid) return;
       
-      // Check if we have the new structure (object with targetRoleUsed and sections array)
-      const isNewStructure = roleSpecificFeedback && 
-                             typeof roleSpecificFeedback === 'object' &&
-                             !Array.isArray(roleSpecificFeedback) &&
-                             roleSpecificFeedback.targetRoleUsed !== undefined &&
-                             Array.isArray(roleSpecificFeedback.sections);
-      
-      // Check if we have the old structure (array of items with section/score/feedback)
+      // Distinguish new vs legacy formats to avoid crashing on arrays
       const isOldStructure = roleSpecificFeedback && Array.isArray(roleSpecificFeedback) && roleSpecificFeedback.length > 0;
+      const isNewStructure = !Array.isArray(roleSpecificFeedback) && isValidRoleTips(roleSpecificFeedback);
+      if (isOldStructure) {
+        console.warn('[RESUME-FEEDBACK] Using legacy roleSpecificFeedback array format');
+      }
       
       // Update section title and subtitle if new structure
       const roleTitleEl = document.getElementById('rf-role-title');
+      const roleTitleTextEl = document.getElementById('rf-role-title-text');
       const roleDescEl = document.getElementById('rf-role-desc');
       
-      if (isNewStructure && roleTitleEl) {
-        roleTitleEl.textContent = 'Role-Specific Tailoring Tips';
+      if (isNewStructure && roleTitleTextEl) {
+        roleTitleTextEl.textContent = 'Role-Specific Tailoring Tips';
         if (roleDescEl) {
           const targetRoleUsed = roleSpecificFeedback.targetRoleUsed || 'general';
           if (targetRoleUsed !== 'general') {
             roleDescEl.textContent = `How to tune your resume for ${targetRoleUsed} roles.`;
           } else {
-            roleDescEl.textContent = 'General improvements for tech roles. Add a target role for sharper suggestions.';
+            roleDescEl.textContent = 'Tell us your target role and we’ll tailor the advice to what hiring managers expect.';
           }
         }
       }
@@ -3196,7 +3991,7 @@
           // Build tips list (escape HTML to prevent XSS)
           const tipsHtml = section.tips && Array.isArray(section.tips) && section.tips.length > 0
             ? section.tips.map(tip => `<li>${escapeHtml(tip)}</li>`).join('')
-            : '<li>No specific tips available</li>';
+            : '<li>No high-impact changes detected for this section.</li>';
           
           div.innerHTML = `
             <div class="rf-feedback-label" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.75rem;">
@@ -3235,35 +4030,46 @@
       }
     }
     
+    // Track consecutive role-tip failures to adjust messaging
+    let roleTipsFailureCount = 0;
+
     // Helper: control Role-Specific Tips state and retry button visibility
-    function updateRoleTipsState({ hasAtsScore, roleSpecificFeedback }) {
+    function updateRoleTipsState({ hasAtsScore, roleSpecificFeedback, allowPlaceholder = false }) {
       const roleContainer = document.getElementById('role-feedback-container');
       const feedbackGrid = document.getElementById('rf-feedback-grid');
       const regenBtn = document.getElementById('rf-regenerate-btn');
       const roleDescEl = document.getElementById('rf-role-desc');
-      const partialRoleTipsErrorText = 'We couldn’t load tailored tips for this role yet. Your ATS score is ready—try “Retry tailored tips” below.';
+      const roleInfoBar = document.getElementById('rf-role-info');
+      let roleBadge = document.getElementById('rf-role-badge');
+      let roleHelper = document.getElementById('rf-role-helper');
+      const firstTryText = 'ATS score is ready. We couldn’t generate tailored tips for this role. Try again or adjust your target role.';
+      const exhaustedText = 'No tailored tips available for this run. Consider adding role-specific details or trying another role.';
 
       if (roleDescEl && !roleDescEl.dataset.baseText) {
         roleDescEl.dataset.baseText = roleDescEl.textContent || '';
       }
 
       const rsf = roleSpecificFeedback;
-      const isNewStructure = rsf &&
-        typeof rsf === 'object' &&
-        !Array.isArray(rsf) &&
-        rsf.targetRoleUsed !== undefined &&
-        Array.isArray(rsf.sections) &&
-        rsf.sections.length > 0;
-
       const isOldStructure = rsf && Array.isArray(rsf) && rsf.length > 0;
+      const isNewStructure = !Array.isArray(rsf) && isValidRoleTips(rsf);
+      if (isOldStructure) {
+        console.warn('[RESUME-FEEDBACK] Using legacy roleSpecificFeedback array format');
+      }
       const hasRoleSpecific = !!(isNewStructure || isOldStructure);
+      const sectionCount = isNewStructure
+        ? (rsf.sections || []).length
+        : (isOldStructure ? rsf.length : 0);
 
       if (!roleContainer) return;
 
       // No ATS score – hide section and button
       if (!hasAtsScore) {
+        roleTipsFailureCount = 0;
         if (feedbackGrid) feedbackGrid.style.display = 'none';
         hideRoleFeedback();
+        if (roleInfoBar) roleInfoBar.style.display = 'none';
+        if (roleBadge) roleBadge.style.display = 'none';
+        if (roleHelper) roleHelper.style.display = 'none';
         if (regenBtn) {
           regenBtn.style.display = 'none';
           regenBtn.textContent = 'Regenerate Feedback';
@@ -3273,13 +4079,29 @@
           // Clear any previous partial-error state when fully resetting
           delete roleDescEl.dataset.lastRoleState;
         }
+        setRoleStatus('');
         return;
       }
 
       // Clean success: ATS + role-specific tips present
       if (hasRoleSpecific) {
+        roleTipsFailureCount = 0;
         if (feedbackGrid) feedbackGrid.style.display = 'grid';
         showRoleFeedback();
+        if (roleBadge) roleBadge.style.display = 'none';
+        if (roleHelper) roleHelper.style.display = 'none';
+        // Show info bar only when we have partial role tips (some sections but not all)
+        if (roleInfoBar) {
+          if (sectionCount > 0 && sectionCount < 5) {
+            roleInfoBar.style.display = 'block';
+            roleInfoBar.textContent = 'We generated tips for these sections. Add a few impact bullets to see the rest.';
+          } else {
+            roleInfoBar.style.display = 'none';
+          }
+        }
+        // Hide badge/helper on success
+        if (roleBadge) roleBadge.style.display = 'none';
+        if (roleHelper) roleHelper.style.display = 'none';
         if (regenBtn) {
           regenBtn.style.display = 'none';
           regenBtn.textContent = 'Regenerate Feedback';
@@ -3291,7 +4113,7 @@
           const baseText = roleDescEl.dataset.baseText || '';
           const lastState = roleDescEl.dataset.lastRoleState || '';
           const isPartialErrorState =
-            lastState === 'partial-error' || currentText === partialRoleTipsErrorText;
+            lastState === 'partial-error' || currentText === firstTryText || currentText === exhaustedText;
           // Restore baseText if:
           // - we are recovering from a previous partial-error state, or
           // - current text matches baseText (no plan-specific text was set), or
@@ -3303,19 +4125,69 @@
             delete roleDescEl.dataset.lastRoleState;
           }
         }
+        setRoleStatus('Showing last saved tips.');
         return;
       }
 
       // Partial success: ATS present but role-specific tips missing/invalid
+      const hasPlaceholder =
+        allowPlaceholder &&
+        feedbackGrid &&
+        feedbackGrid.dataset &&
+        feedbackGrid.dataset.placeholder === 'role-none';
+
+      if (hasPlaceholder) {
+        // Keep placeholder visible instead of hiding the grid
+        roleTipsFailureCount = 0;
+        if (feedbackGrid) feedbackGrid.style.display = 'grid';
+        roleContainer.style.display = 'block';
+        if (roleInfoBar) roleInfoBar.style.display = 'none';
+        if (roleDescEl && roleDescEl.dataset.baseText) {
+          roleDescEl.textContent = roleDescEl.dataset.baseText;
+          delete roleDescEl.dataset.lastRoleState;
+        }
+        if (roleBadge) roleBadge.style.display = 'none';
+        if (roleHelper) roleHelper.style.display = 'none';
+        if (regenBtn) {
+          regenBtn.style.display = 'none';
+          regenBtn.textContent = 'Regenerate Feedback';
+        }
+        setRoleStatus('No role tips saved for this run.');
+        return;
+      }
+
+      roleTipsFailureCount += 1;
       if (feedbackGrid) feedbackGrid.style.display = 'none';
       roleContainer.style.display = 'block';
+      if (roleInfoBar) roleInfoBar.style.display = 'none';
       if (roleDescEl) {
-        roleDescEl.textContent = partialRoleTipsErrorText;
+        const message = roleTipsFailureCount > 1 ? exhaustedText : firstTryText;
+        roleDescEl.textContent = message;
         roleDescEl.dataset.lastRoleState = 'partial-error';
       }
+      const statusMessage = roleTipsFailureCount > 1 ? exhaustedText : firstTryText;
+      setRoleStatus(statusMessage);
+
+      // Render a lightweight guidance badge + helper text (above tips area)
+      roleBadge = document.getElementById('rf-role-badge');
+      if (roleBadge) {
+        roleBadge.style.display = 'inline-flex';
+        roleBadge.style.marginBottom = '8px';
+        roleBadge.textContent = 'Quick suggestions (ATS-based)';
+      }
+      roleHelper = document.getElementById('rf-role-helper');
+      if (roleHelper) {
+        roleHelper.style.display = 'block';
+        roleHelper.style.marginBottom = '12px';
+        roleHelper.textContent = roleTipsFailureCount > 1
+          ? 'We couldn’t generate detailed tips this time. Try adding role-specific details or adjusting the target role, then retry.'
+          : 'Here are quick suggestions from your ATS check. Add a metric and a tool you used for this role, then try again.';
+      }
+
       if (regenBtn) {
         regenBtn.style.display = 'inline-flex';
-        regenBtn.textContent = 'Retry tailored tips';
+        regenBtn.textContent = 'Try again for tailored tips';
+        regenBtn.disabled = false;
       }
     }
 
@@ -3354,11 +4226,156 @@
       requestAnimationFrame(() => el.classList.add('fade-enter-active'));
     }
 
+    function applyFadeIn(el) {
+      if (!el) return;
+      el.classList.remove('rf-fade-in');
+      // Force reflow to restart animation if applied multiple times
+      void el.offsetWidth;
+      el.classList.add('rf-fade-in');
+    }
+
     function hideRoleFeedback() {
       const el = document.getElementById('role-feedback-container');
       if (!el) return;
       el.style.display = 'none';
       el.classList.remove('fade-enter', 'fade-enter-active');
+    }
+
+    // Skeleton loading state management (performance-optimized, non-blocking)
+    // Track timeout ID and pending Promise resolvers to handle concurrent calls
+    let skeletonHideTimeout = null;
+    let skeletonHideResolvers = []; // Array of pending Promise resolvers with generation IDs
+    let skeletonOperationGeneration = 0; // Generation counter to invalidate stale operations
+    
+    function showSkeletons(willGetFeedback = true) {
+      const skeletonContainer = document.getElementById('rf-skeleton-container');
+      if (skeletonContainer) {
+        // CRITICAL: Increment generation to invalidate any pending hide operations
+        // This prevents stale Promise callbacks from executing when a new upload starts
+        skeletonOperationGeneration++;
+        
+        // Cancel any pending hide timeout and resolve all pending Promises as cancelled
+        if (skeletonHideTimeout !== null) {
+          clearTimeout(skeletonHideTimeout);
+          skeletonHideTimeout = null;
+        }
+        // Resolve all pending hide Promises with cancelled flag (operations are now stale)
+        // This ensures Promises complete but callbacks will check and exit early
+        skeletonHideResolvers.forEach(({ resolve, generation }) => {
+          resolve({ generation, cancelled: true });
+        });
+        skeletonHideResolvers = [];
+        
+        skeletonContainer.style.display = 'block';
+        
+        // Remove hidden class from all skeletons (in case they were hidden previously)
+        const skeletons = skeletonContainer.querySelectorAll('.rf-skeleton');
+        skeletons.forEach(skeleton => {
+          skeleton.classList.remove('hidden');
+        });
+        
+        // Reset display properties of all skeleton elements for subsequent uses
+        const skeletonHeader = document.getElementById('rf-skeleton-header');
+        if (skeletonHeader) {
+          skeletonHeader.style.display = 'block';
+        }
+        const skeletonRubric = document.getElementById('rf-skeleton-rubric');
+        if (skeletonRubric) {
+          skeletonRubric.style.display = 'grid';
+        }
+        const skeletonFeedback = document.getElementById('rf-skeleton-feedback');
+        if (skeletonFeedback) {
+          // Only show feedback skeleton if user will receive feedback
+          skeletonFeedback.style.display = willGetFeedback ? 'grid' : 'none';
+        }
+        // Ensure feedback content is visible so skeletons render; hide real grids
+        const feedbackContent = document.getElementById('rf-feedback-content');
+        if (feedbackContent) {
+          feedbackContent.style.display = 'block';
+          const rubricGrid = document.getElementById('rf-rubric-grid');
+          const feedbackGrid = document.getElementById('rf-feedback-grid');
+          if (rubricGrid) rubricGrid.style.display = 'none';
+          if (feedbackGrid) feedbackGrid.style.display = 'none';
+        }
+      }
+    }
+
+    function hideSkeletons() {
+      return new Promise((resolve) => {
+        const skeletonContainer = document.getElementById('rf-skeleton-container');
+        if (!skeletonContainer) {
+          resolve({ generation: skeletonOperationGeneration, cancelled: false });
+          return;
+        }
+        
+        // Capture the current generation when this hide operation starts
+        const operationGeneration = skeletonOperationGeneration;
+        
+        // If a hide operation is already in progress, queue this resolver
+        // This prevents race conditions where concurrent calls cancel each other's timeouts
+        if (skeletonHideTimeout !== null) {
+          // Add this resolver to the queue with its generation ID
+          skeletonHideResolvers.push({ resolve, generation: operationGeneration });
+          return;
+        }
+        
+        // Start new hide operation - initialize resolver array with this one
+        skeletonHideResolvers = [{ resolve, generation: operationGeneration }];
+        
+        // Fade out skeletons smoothly
+        const skeletons = skeletonContainer.querySelectorAll('.rf-skeleton');
+        skeletons.forEach(skeleton => {
+          skeleton.classList.add('hidden');
+        });
+        
+        // Remove container after fade completes, then resolve all pending Promises
+        skeletonHideTimeout = setTimeout(() => {
+          skeletonContainer.style.display = 'none';
+          // Remove hidden class for next use
+          skeletons.forEach(skeleton => {
+            skeleton.classList.remove('hidden');
+          });
+          
+          // Resolve ALL pending Promises with their generation IDs
+          // Callbacks will check if generation matches current before executing
+          skeletonHideResolvers.forEach(({ resolve: resolver, generation }) => {
+            resolver({ generation, cancelled: generation !== skeletonOperationGeneration });
+          });
+          skeletonHideResolvers = [];
+          skeletonHideTimeout = null;
+        }, 300);
+      });
+    }
+
+    function hideHeaderSkeleton() {
+      const skeletonHeader = document.getElementById('rf-skeleton-header');
+      if (skeletonHeader) {
+        skeletonHeader.style.display = 'none';
+      }
+    }
+
+    function hideATSSkeleton() {
+      const skeletonRubric = document.getElementById('rf-skeleton-rubric');
+      if (skeletonRubric) {
+        skeletonRubric.style.display = 'none';
+      }
+      const skeletonContainer = document.getElementById('rf-skeleton-container');
+      const skeletonFeedback = document.getElementById('rf-skeleton-feedback');
+      if (skeletonContainer && skeletonFeedback && skeletonFeedback.style.display === 'none') {
+        skeletonContainer.style.display = 'none';
+      }
+    }
+
+    function hideFeedbackSkeleton() {
+      const skeletonFeedback = document.getElementById('rf-skeleton-feedback');
+      if (skeletonFeedback) {
+        skeletonFeedback.style.display = 'none';
+      }
+      const skeletonContainer = document.getElementById('rf-skeleton-container');
+      const skeletonRubric = document.getElementById('rf-skeleton-rubric');
+      if (skeletonContainer && skeletonRubric && skeletonRubric.style.display === 'none') {
+        skeletonContainer.style.display = 'none';
+      }
     }
 
     // --- Priority Review Tooltip (modular) ---
@@ -3410,7 +4427,7 @@
       if (oldCta) oldCta.remove();
       
       const plan = getCurrentUserPlan();
-      if (plan === 'essential' || plan === 'pro' || plan === 'trio') {
+      if (plan === 'essential' || plan === 'pro') {
         // Insert Priority Review CTA after Resume Rewriting tile
         const rewriteTile = document.getElementById('rf-rewrite-tile');
         if (rewriteTile && rewriteTile.parentNode) {
@@ -3640,24 +4657,25 @@
           safeSetStyle(badge, 'background', '#6B7280');
           safeQueryText(rewriteTile, '.rf-upgrade-text strong', 'Upgrade to Pro');
           safeQueryHTML(rewriteTile, '.rf-upgrade-text', '<strong>Trial shows you what to fix. Pro fixes it now (rewrites unlocked).</strong> Upgrade to Pro to complete your resume optimization.');
+          const upgradePrompt = rewriteTile.querySelector('.rf-upgrade-prompt');
+          if (upgradePrompt) {
+            upgradePrompt.style.display = 'flex';
+          }
           // Add special upgrade CTA for trial users
           const upgradeButton = rewriteTile.querySelector('.rf-upgrade-prompt a');
-          if (upgradeButton) {
+          if (upgradeButton && upgradeButton.parentNode) {
             upgradeButton.textContent = 'Upgrade to Pro';
-            // Use standard btn-secondary styling - ensure proper class and remove conflicting styles
             upgradeButton.className = 'btn btn-secondary';
-            // Remove any inline styles and ensure proper styling
-            upgradeButton.removeAttribute('style');
-            // Force the correct colors to override any conflicting CSS
-            upgradeButton.style.setProperty('background', '#1976D2', 'important');
-            upgradeButton.style.setProperty('color', '#fff', 'important');
-            upgradeButton.style.setProperty('border', 'none', 'important');
-            
-            // Add hover effect to match other buttons
-            upgradeButton.addEventListener('mouseenter', function() {
+            const freshButton = upgradeButton.cloneNode(true);
+            upgradeButton.parentNode.replaceChild(freshButton, upgradeButton);
+            freshButton.style.setProperty('background', '#1976D2', 'important');
+            freshButton.style.setProperty('color', '#fff', 'important');
+            freshButton.style.setProperty('border', 'none', 'important');
+            freshButton.style.setProperty('display', 'inline-block', 'important');
+            freshButton.addEventListener('mouseenter', function() {
               this.style.setProperty('background', '#125bb5', 'important');
             });
-            upgradeButton.addEventListener('mouseleave', function() {
+            freshButton.addEventListener('mouseleave', function() {
               this.style.setProperty('background', '#1976D2', 'important');
             });
           }
@@ -3719,24 +4737,25 @@
           safeSetStyle(badge, 'background', '#6B7280');
           safeQueryText(rewriteTile, '.rf-upgrade-text strong', 'Upgrade to Pro');
           safeQueryHTML(rewriteTile, '.rf-upgrade-text', '<strong>Trial shows you what to fix. Pro fixes it now (rewrites unlocked).</strong> Upgrade to Pro to complete your resume optimization.');
+          const upgradePrompt = rewriteTile.querySelector('.rf-upgrade-prompt');
+          if (upgradePrompt) {
+            upgradePrompt.style.display = 'flex';
+          }
           // Add special upgrade CTA for essential users
           const upgradeButton = rewriteTile.querySelector('.rf-upgrade-prompt a');
-          if (upgradeButton) {
+          if (upgradeButton && upgradeButton.parentNode) {
             upgradeButton.textContent = 'Upgrade to Pro';
-            // Use standard btn-secondary styling - ensure proper class and remove conflicting styles
             upgradeButton.className = 'btn btn-secondary';
-            // Remove any inline styles and ensure proper styling
-            upgradeButton.removeAttribute('style');
-            // Force the correct colors to override any conflicting CSS
-            upgradeButton.style.setProperty('background', '#1976D2', 'important');
-            upgradeButton.style.setProperty('color', '#fff', 'important');
-            upgradeButton.style.setProperty('border', 'none', 'important');
-            
-            // Add hover effect to match other buttons
-            upgradeButton.addEventListener('mouseenter', function() {
+            const freshButton = upgradeButton.cloneNode(true);
+            upgradeButton.parentNode.replaceChild(freshButton, upgradeButton);
+            freshButton.style.setProperty('background', '#1976D2', 'important');
+            freshButton.style.setProperty('color', '#fff', 'important');
+            freshButton.style.setProperty('border', 'none', 'important');
+            freshButton.style.setProperty('display', 'inline-block', 'important');
+            freshButton.addEventListener('mouseenter', function() {
               this.style.setProperty('background', '#125bb5', 'important');
             });
-            upgradeButton.addEventListener('mouseleave', function() {
+            freshButton.addEventListener('mouseleave', function() {
               this.style.setProperty('background', '#1976D2', 'important');
             });
           }
@@ -3756,7 +4775,7 @@
           safeSetStyle(badge, 'background', planColor);
           updateDescriptionWithTooltip(
             safeQuerySelector(atsScoreTile, '#rf-score-desc'),
-            'Unlimited ATS scoring with maximum visibility!',
+            'Upload your resume once. Improve it step-by-step with ATS insights, role-specific feedback, and AI-powered rewrites!',
             'Receive an overall ATS compliance score (0-100) for your resume, highlighting key areas to improve for better job application success. Score as many resumes as you need with unlimited access.'
           );
           safeQueryHTML(atsScoreTile, '#rf-ats-checks', '');
@@ -3771,7 +4790,7 @@
             // Premium CTA removed - already exists at bottom of page
           }
           if (roleDescEl) {
-            const planSpecificText = 'Comprehensive feedback on your resume\'s content and presentation for your target role, with AI-powered suggestions tailored to the jobs you\'re targeting.';
+            const planSpecificText = 'See how your resume aligns with what hiring managers expect for your target role.';
             roleDescEl.textContent = planSpecificText;
             // Update baseText to plan-specific text so updateRoleTipsState restores the correct text
             roleDescEl.dataset.baseText = planSpecificText;
@@ -4069,10 +5088,17 @@
     /**
      * Render history items to the DOM
      */
+    const HISTORY_PAGE_SIZE = 10;
+    let _historyVisibleCount = HISTORY_PAGE_SIZE;
+    
     function renderHistoryItems(items) {
       const listEl = document.getElementById('rf-history-list');
       const emptyEl = document.getElementById('rf-history-empty');
       const loadingEl = document.getElementById('rf-history-loading');
+      const actionsEl = document.getElementById('rf-history-actions');
+      const countEl = document.getElementById('rf-history-count');
+      const showMoreBtn = document.getElementById('rf-history-show-more');
+      const showLessBtn = document.getElementById('rf-history-show-less');
       
       if (!listEl) return;
       
@@ -4082,13 +5108,17 @@
       if (!items || items.length === 0) {
         listEl.style.display = 'none';
         if (emptyEl) emptyEl.style.display = 'block';
+        if (actionsEl) actionsEl.style.display = 'none';
         return;
       }
       
       if (emptyEl) emptyEl.style.display = 'none';
       
+      // Limit visible items to current page size
+      const visibleItems = items.slice(0, _historyVisibleCount);
+      
       // Build history list HTML with clickable items and atsScore
-      listEl.innerHTML = items.map(item => `
+      listEl.innerHTML = visibleItems.map(item => `
         <div class="rf-history-item" data-session-id="${item.sessionId || ''}" title="Click to view this analysis">
           <div class="rf-history-icon">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -4121,6 +5151,29 @@
           }
         });
       });
+      
+      // Show/hide actions (Show more / Show less)
+      const hasMore = items.length > _historyVisibleCount;
+      const canShowLess = _historyVisibleCount > HISTORY_PAGE_SIZE;
+      
+      if (actionsEl) actionsEl.style.display = (hasMore || canShowLess) ? 'flex' : 'none';
+      if (countEl) countEl.textContent = `Showing ${Math.min(_historyVisibleCount, items.length)} of ${items.length}`;
+      
+      if (showMoreBtn) {
+        showMoreBtn.style.display = hasMore ? 'inline-flex' : 'none';
+        showMoreBtn.onclick = () => {
+          _historyVisibleCount = Math.min(_historyVisibleCount + HISTORY_PAGE_SIZE, _historyItems.length);
+          renderHistoryItems(_historyItems);
+        };
+      }
+      
+      if (showLessBtn) {
+        showLessBtn.style.display = canShowLess ? 'inline-flex' : 'none';
+        showLessBtn.onclick = () => {
+          _historyVisibleCount = HISTORY_PAGE_SIZE;
+          renderHistoryItems(_historyItems);
+        };
+      }
     }
     
     /**
@@ -4128,6 +5181,51 @@
      */
     let _isHistoricalView = false;
     let _currentHistoricalSessionId = null;
+    let _mode = 'new';
+    let _selectedHistoryItem = null;
+
+    function setMode(mode) {
+      _mode = mode === 'saved' ? 'saved' : 'new';
+      updateModeUI();
+    }
+
+    function updateModeUI() {
+      const generateLabel = document.getElementById('rf-generate-label');
+      const generateBtn = document.getElementById('rf-generate-btn');
+      const fileInput = document.getElementById('rf-upload');
+      const savedLine = document.getElementById('rf-saved-file-line');
+      
+      if (generateLabel) {
+        generateLabel.textContent = _mode === 'saved'
+          ? 'Re-run with new file'
+          : 'Generate ATS Score & Feedback';
+      }
+      
+      if (generateBtn) {
+        const hasFile = fileInput && fileInput.files && fileInput.files.length > 0;
+        if (_mode === 'saved' && !hasFile) {
+          generateBtn.disabled = true;
+        }
+      }
+      
+      if (savedLine) {
+        savedLine.style.display = _mode === 'saved' ? 'block' : 'none';
+      }
+    }
+
+    function updateSavedFileLine(fileName) {
+      const savedLine = document.getElementById('rf-saved-file-line');
+      const savedName = document.getElementById('rf-saved-file-name');
+      if (!savedLine || !savedName) return;
+      savedName.textContent = fileName || '(file not stored)';
+    }
+
+    // Initialize mode UI on load
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', updateModeUI);
+    } else {
+      updateModeUI();
+    }
     
     /**
      * Load full feedback detail from D1 (NO OpenAI calls)
@@ -4167,6 +5265,16 @@
         
         const data = await response.json();
         console.log('[RESUME-FEEDBACK-HISTORY] Loaded detail:', data);
+      
+        // Clear role state only after we have successfully loaded history data
+        const clearFn = window.clearTargetRoleState || clearTargetRoleState;
+        if (typeof clearFn === 'function') {
+          clearFn();
+        }
+
+        // Clear UI state before repainting with history data to avoid stale content
+        resetRewriteUIToDefaults();
+        resetAtsAndRoleUIToDefaults();
         
         // Mark as historical view
         _isHistoricalView = true;
@@ -4178,6 +5286,46 @@
         // Restore page state from D1 data
         restorePageStateFromHistory(data);
         
+        // Update mode/state for saved view
+        _selectedHistoryItem = {
+          sessionId,
+          role: data.role || null,
+          fileName: data.fileName || data.file_name || null,
+          resumeId: data.resumeId || data.resume_id || null
+        };
+        updateSavedFileLine(_selectedHistoryItem.fileName);
+        setMode('saved');
+        
+        // Clear file input; user must choose a new file to re-run
+        const fileInput = document.getElementById('rf-upload');
+        const fileNameSpan = document.getElementById('rf-file-name');
+        const statusDiv = document.getElementById('rf-generate-status');
+        const fileStatus = document.getElementById('rf-file-status');
+        const pdfHelper = document.getElementById('rf-pdf-helper');
+        if (fileInput) {
+          fileInput.value = '';
+        }
+        if (fileNameSpan) {
+          fileNameSpan.textContent = 'No file selected';
+          fileNameSpan.style.color = 'var(--color-text-muted)';
+          fileNameSpan.style.fontWeight = 'normal';
+        }
+        if (statusDiv) statusDiv.style.display = 'none';
+        if (fileStatus) fileStatus.style.display = 'none';
+        if (pdfHelper) pdfHelper.style.display = 'none';
+        
+        // Populate target role input for clarity
+        const jobTitleInput = document.getElementById('rf-job-title');
+        if (jobTitleInput && data.role) {
+          jobTitleInput.value = data.role;
+        }
+        
+        // Require a new file before re-running
+        const generateBtn = document.getElementById('rf-generate-btn');
+        if (generateBtn) {
+          generateBtn.disabled = true;
+        }
+        
         // Mark active history item
         markActiveHistoryItem(sessionId);
         
@@ -4186,9 +5334,14 @@
         
       } catch (error) {
         console.error('[RESUME-FEEDBACK-HISTORY] Error loading detail:', error);
-        if (window.showToast) window.showToast(error.message || 'Failed to load history', 'error');
+        if (window.JobHackAIToast) {
+          window.JobHackAIToast.error(error.message || 'Failed to load history');
+        } else if (window.showToast) {
+          window.showToast(error.message || 'Failed to load history', 'error');
+        }
       } finally {
         if (loadingOverlay) loadingOverlay.style.display = 'none';
+        forceHideOverlays();
       }
     }
     
@@ -4216,9 +5369,13 @@
     /**
      * Hide the historical view banner and clear state
      */
-    function clearHistoricalView() {
+    function resetSession() {
+      let storageCleared = false;
+      // Reset high-level state flags (UI only; never touches usage counters)
       _isHistoricalView = false;
       _currentHistoricalSessionId = null;
+      _selectedHistoryItem = null;
+      setMode('new');
       
       // Hide banner
       const banner = document.getElementById('rf-historical-banner');
@@ -4229,6 +5386,32 @@
       
       // Reset form and results
       resetFormToDefault();
+      updateModeUI();
+      
+      // Reset saved filename line
+      updateSavedFileLine('(file not stored)');
+      
+      // Clear rewrite UI to defaults
+      resetRewriteUIToDefaults();
+      // Clear any rewrite cooldown timers/labels when leaving history view
+      resetRewriteCooldownState();
+      
+      // Clear in-memory resume state
+      try {
+        sessionStorage.removeItem('currentResumeText');
+        sessionStorage.removeItem('currentResumeId');
+        localStorage.removeItem('jh_last_resume_id');
+        storageCleared = true;
+      } catch (e) {
+        console.warn('[RESUME-FEEDBACK] Failed to clear session state', e);
+      }
+      currentResumeId = null;
+      window.latestAtsIssues = null;
+      window.latestRoleSpecific = null;
+    }
+    
+    function clearHistoricalView() {
+      resetSession();
       
       // Scroll to upload section
       const uploadSection = document.getElementById('rf-ats-score-tile');
@@ -4254,45 +5437,109 @@
       // Reset file input
       const fileInput = document.getElementById('rf-upload');
       const fileName = document.getElementById('rf-file-name');
+      const generateBtn = document.getElementById('rf-generate-btn');
+      const statusDiv = document.getElementById('rf-generate-status');
+      const fileStatus = document.getElementById('rf-file-status');
+      const pdfHelper = document.getElementById('rf-pdf-helper');
       if (fileInput) fileInput.value = '';
       if (fileName) fileName.textContent = 'No file selected';
+      if (generateBtn) generateBtn.disabled = true;
+      if (statusDiv) statusDiv.style.display = 'none';
+      if (fileStatus) fileStatus.style.display = 'none';
+      if (pdfHelper) pdfHelper.style.display = 'none';
+      clearTargetRoleState();
+      const changeSummary = document.getElementById('rf-change-summary');
+      if (changeSummary) {
+        changeSummary.innerHTML = '';
+        changeSummary.style.display = 'none';
+      }
       
       // Reset score ring
-      const scoreRing = document.querySelector('.rf-progress-ring circle:nth-child(2)');
-      const scoreText = document.querySelector('.rf-progress-ring text');
-      if (scoreRing) scoreRing.style.strokeDashoffset = '226.2';
+      const svg = document.querySelector('#rf-ats-score-tile .rf-progress-ring svg');
+      const scoreRing = svg ? svg.querySelectorAll('circle')[1] : null;
+      const scoreText = svg ? svg.querySelector('text') : null;
+      if (scoreRing) {
+        scoreRing.style.strokeDashoffset = '';
+        scoreRing.setAttribute('stroke-dashoffset', '226.2');
+        scoreRing.setAttribute('stroke', '#00E676');
+      }
       if (scoreText) scoreText.textContent = '0%';
       
-      // Hide feedback sections
+      // Hide feedback sections and role info
       const feedbackContent = document.getElementById('rf-feedback-content');
       const rubricGrid = document.getElementById('rf-rubric-grid');
       const feedbackGrid = document.getElementById('rf-feedback-grid');
+      const roleInfoBar = document.getElementById('rf-role-info');
       if (feedbackContent) feedbackContent.style.display = 'none';
       if (rubricGrid) rubricGrid.style.display = 'none';
       if (feedbackGrid) feedbackGrid.style.display = 'none';
+      if (roleInfoBar) {
+        roleInfoBar.style.display = 'none';
+        roleInfoBar.textContent = '';
+      }
+      // Clear role-specific status but keep the tile visible for the next run
+      setRoleStatus('');
+      roleTipsFailureCount = 0;
+      const roleContainer = document.getElementById('role-feedback-container');
+      if (roleContainer) roleContainer.style.display = 'block';
+      const roleBadge = document.getElementById('rf-role-badge');
+      if (roleBadge) roleBadge.style.display = 'none';
+      const roleHelper = document.getElementById('rf-role-helper');
+      if (roleHelper) roleHelper.style.display = 'none';
+      const regenBtn = document.getElementById('rf-regenerate-btn');
+      if (regenBtn) {
+        regenBtn.style.display = 'none';
+        regenBtn.textContent = 'Regenerate Feedback';
+        regenBtn.disabled = false;
+      }
+      const roleDescEl = document.getElementById('rf-role-desc');
+      if (roleDescEl && roleDescEl.dataset.baseText) {
+        roleDescEl.textContent = roleDescEl.dataset.baseText;
+        delete roleDescEl.dataset.lastRoleState;
+      }
+
+      // Restore default score description and badge when exiting history
+      if (typeof updateRfTileForPlan === 'function') {
+        updateRfTileForPlan();
+      } else {
+        // Fallback: minimally reset score description while preserving tooltip
+        const scoreDesc = document.getElementById('rf-score-desc');
+        if (scoreDesc) {
+          scoreDesc.innerHTML = 'Get your basic ATS compatibility score.';
+        }
+      }
     }
     
     /**
      * Restore full page state from history data (D1-only, NO OpenAI)
      */
     function restorePageStateFromHistory(data) {
-      // Update ATS score ring
+      const atsRubric = data.atsRubric || data.feedback?.atsRubric || null;
+      const atsIssues = data.atsIssues || data.feedback?.atsIssues || null;
+      const roleSpecificFeedback = data.roleSpecificFeedback || data.feedback?.roleSpecificFeedback || null;
+      const rewritten = data.rewrittenResume || data.feedback?.rewrittenResume || null;
+      const rewriteSummary = data.rewriteChangeSummary || data.changeSummary || data.feedback?.rewriteChangeSummary || data.feedback?.changeSummary || null;
+      const original = data.originalResume || data.feedback?.originalResume || null;
+
+      // Historical views are fully loaded; hide any in-progress UI elements
+      hideRewriteSkeleton();
+      hideSkeletons();
+      // Reset cooldown/timers and button labels for history view
+      resetRewriteCooldownState();
+
+      // Sync rewrite context to match the historical record (D1 as source of truth)
+      window.latestAtsIssues = atsIssues || null;
+      window.latestRoleSpecific = roleSpecificFeedback || null;
+      // Ensure rewrite actions reference the historical resume, not the last uploaded one
+      currentResumeId = data.resumeId || data.resume_id || currentResumeId;
+
+      // Update ATS score ring using shared logic (clamps/guards inside)
       if (data.atsScore !== null && data.atsScore !== undefined) {
-        const score = data.atsScore;
-        const scoreText = document.querySelector('.rf-progress-ring text');
-        const scoreRing = document.querySelector('.rf-progress-ring circle:nth-child(2)');
-        
-        if (scoreText) scoreText.textContent = score + '%';
-        if (scoreRing) {
-          const circumference = 2 * Math.PI * 36;
-          const offset = circumference - (score / 100) * circumference;
-          scoreRing.style.strokeDashoffset = offset;
-        }
-        
+        updateProgressRing(data.atsScore);
         // Update score description
         const scoreDesc = document.getElementById('rf-score-desc');
         if (scoreDesc && data.role) {
-          scoreDesc.innerHTML = `Your resume scored <strong>${score}/100</strong> for ${escapeHtml(data.role)} roles.`;
+          scoreDesc.innerHTML = `Your resume scored <strong>${data.atsScore}/100</strong> for ${escapeHtml(data.role)} roles.`;
         }
       }
       
@@ -4301,37 +5548,99 @@
       if (feedbackContent) feedbackContent.style.display = 'block';
       
       // Populate ATS rubric
-      if (data.atsRubric && Array.isArray(data.atsRubric)) {
-        populateAtsRubric(data.atsRubric);
+      if (atsRubric && Array.isArray(atsRubric)) {
+        populateAtsRubric(atsRubric);
+      } else {
+        const rubricGrid = document.getElementById('rf-rubric-grid');
+        if (rubricGrid) {
+          rubricGrid.innerHTML = '<div style="color:var(--color-text-secondary);font-size:0.95rem;">No ATS fixes saved for this run.</div>';
+          rubricGrid.style.display = 'grid';
+        }
       }
       
       // Populate role-specific feedback
-      if (data.roleSpecificFeedback) {
-        populateRoleSpecificFeedback(data.roleSpecificFeedback, data.role);
+      if (roleSpecificFeedback) {
+        const feedbackGrid = document.getElementById('rf-feedback-grid');
+        if (feedbackGrid && feedbackGrid.dataset) {
+          delete feedbackGrid.dataset.placeholder;
+        }
+        populateRoleSpecificFeedback(roleSpecificFeedback, data.role);
+      } else {
+        const roleContainer = document.getElementById('role-feedback-container');
+        const feedbackGrid = document.getElementById('rf-feedback-grid');
+        if (feedbackGrid) {
+          feedbackGrid.innerHTML = '<div style="color:var(--color-text-secondary);font-size:0.95rem;">No role tips saved for this run.</div>';
+          feedbackGrid.style.display = 'grid';
+          if (feedbackGrid.dataset) {
+            feedbackGrid.dataset.placeholder = 'role-none';
+          }
+        }
+        if (roleContainer) roleContainer.style.display = 'block';
       }
       
-      // Update job title input
-      if (data.role) {
-        const jobTitleInput = document.getElementById('rf-job-title');
-        if (jobTitleInput) jobTitleInput.value = data.role;
-      }
+      updateRoleTipsState({
+        hasAtsScore: typeof data.atsScore === 'number',
+        roleSpecificFeedback: roleSpecificFeedback || null,
+        allowPlaceholder: !roleSpecificFeedback
+      });
       
       // Update plan limit text based on current plan
       updatePlanLimitText();
       
-      // Handle rewrite data if present (Pro/Premium)
-      const userPlan = getCurrentUserPlan();
-      if (['pro', 'premium'].includes(userPlan) && data.rewrittenResume) {
-        const rewriteContent = document.getElementById('rf-rewrite-content');
-        const rewritePrompt = document.querySelector('#rf-rewrite-tile .rf-upgrade-prompt');
-        
-        if (rewriteContent) {
-          rewriteContent.style.display = 'block';
-          const rewrittenTextarea = rewriteContent.querySelectorAll('.rf-snippet-box')[1];
-          if (rewrittenTextarea) rewrittenTextarea.value = data.rewrittenResume;
+      // Handle rewrite data based on plan gating
+      const rewriteContent = document.getElementById('rf-rewrite-content');
+      const rewritePrompt = document.querySelector('#rf-rewrite-tile .rf-upgrade-prompt');
+      const rewrittenTextarea = rewriteContent ? rewriteContent.querySelectorAll('.rf-snippet-box')[1] : null;
+      const originalTextarea = rewriteContent ? rewriteContent.querySelectorAll('.rf-snippet-box')[0] : null;
+      const rewriteDescInline = document.getElementById('rf-rewrite-desc-inline');
+
+      if (data.rewriteLocked) {
+        if (rewriteContent) rewriteContent.style.display = 'none';
+        if (rewritePrompt) {
+          rewritePrompt.style.display = 'block';
+          const promptText = rewritePrompt.querySelector('.rf-upgrade-text');
+          if (promptText) {
+            promptText.innerHTML = 'AI resume rewrites are a Pro/Premium feature. Upgrade to unlock your detailed rewrites for this resume.';
+          }
         }
+        if (rewrittenTextarea) rewrittenTextarea.value = '';
+        if (rewriteDescInline) rewriteDescInline.style.display = 'none';
+        setCopyRewriteVisibility(false);
+        if (originalTextarea && originalTextarea.value) {
+          // keep original text if present
+        }
+      } else {
         if (rewritePrompt) rewritePrompt.style.display = 'none';
+        if (rewriteContent) rewriteContent.style.display = 'block';
+
+        const resolvedRewrite = rewritten || data.rewrittenResume || data.rewritten || data.feedback?.rewrittenResume || '';
+        const hasRewriteContent = typeof resolvedRewrite === 'string' && resolvedRewrite.trim().length > 0;
+
+        if (rewrittenTextarea) {
+          if (rewritten) {
+            rewrittenTextarea.value = rewritten;
+          } else if (rewriteSummary) {
+            const formattedSummary = formatRewriteChangeSummary(rewriteSummary);
+            rewrittenTextarea.value = formattedSummary
+              ? `Summary of changes:\n${formattedSummary}`
+              : 'No rewrite available for this run yet.';
+          } else {
+            rewrittenTextarea.value = 'No rewrite available for this run yet.';
+          }
+        }
+        if (rewriteDescInline) {
+          rewriteDescInline.style.display = hasRewriteContent ? 'block' : 'none';
+        }
+        setCopyRewriteVisibility(hasRewriteContent);
+        
+        // Also populate original snippet if available
+        if (originalTextarea && original) {
+          originalTextarea.value = original;
+        }
       }
+
+      // Always display change summary (ATS Fixes / Role Tailoring) when present
+      displayChangeSummary(rewriteSummary || data.changeSummary || data.feedback?.rewriteChangeSummary || null);
     }
     
     /**
@@ -4355,6 +5664,7 @@
       `).join('');
       
       rubricGrid.style.display = 'grid';
+      applyFadeIn(rubricGrid);
     }
     
     /**
@@ -4363,13 +5673,14 @@
     function populateRoleSpecificFeedback(roleSpecificFeedback, targetRole) {
       const feedbackGrid = document.getElementById('rf-feedback-grid');
       const roleTitle = document.getElementById('rf-role-title');
+      const roleTitleText = document.getElementById('rf-role-title-text');
       const roleDesc = document.getElementById('rf-role-desc');
       
       if (!feedbackGrid) return;
       
-      // Update title
-      if (roleTitle) {
-        roleTitle.textContent = 'Role-Specific Tailoring Tips';
+      // Update title text without removing tooltip
+      if (roleTitleText) {
+        roleTitleText.textContent = 'Role-Specific Tailoring Tips';
       }
       if (roleDesc && targetRole) {
         roleDesc.textContent = `How to tune your resume for ${targetRole} roles.`;
@@ -4421,6 +5732,7 @@
       }).join('');
       
       feedbackGrid.style.display = 'grid';
+      applyFadeIn(feedbackGrid);
     }
     
     /**
@@ -4491,6 +5803,7 @@
         
         const data = await response.json();
         _historyItems = data.items || [];
+        _historyVisibleCount = HISTORY_PAGE_SIZE;
         
         console.log('[RESUME-FEEDBACK-HISTORY] Loaded history:', _historyItems.length, 'items');
         renderHistoryItems(_historyItems);
@@ -4508,6 +5821,13 @@
      */
     function addHistoryItem(sessionId, meta) {
       if (!sessionId) return;
+      
+      // Skip if this session already exists in the current list
+      const alreadyExists = _historyItems.some(item => item.sessionId === sessionId);
+      if (alreadyExists) {
+        console.log('[RESUME-FEEDBACK-HISTORY] Skipping duplicate history item:', sessionId);
+        return;
+      }
       
       const newItem = {
         sessionId: sessionId,
@@ -4609,7 +5929,7 @@
         </div>
         <div style="flex:1;min-width:220px;">
           <div class="rf-title" id="rf-title" style="margin-bottom:0.2rem;">
-            ATS Resume Score
+            Smart Resume Tools
             <span class="rf-plan-badge" id="rf-plan-badge">Free Plan</span>
           </div>
           <div style="color:var(--color-text-secondary);margin-bottom:0.7rem;" id="rf-score-desc">
@@ -4645,6 +5965,9 @@
             </div>
             <div style="font-size:0.85rem;color:var(--color-text-muted);margin-bottom:1rem;line-height:1.4;">Adding a role helps us provide role-specific keyword suggestions, tailored feedback, and optimized resume rewriting.</div>
             <label for="rf-upload" style="font-weight:600;display:block;margin-bottom:0.5rem;">Resume File</label>
+            <div id="rf-saved-file-line" style="display:none;font-size:0.9rem;color:var(--color-text-muted);margin-bottom:0.35rem;">
+              Resume used in this run: <span id="rf-saved-file-name">(file not stored)</span>
+            </div>
             <div style="display:flex;align-items:center;gap:0.75rem;flex-wrap:wrap;margin-bottom:0.5rem;">
               <label for="rf-upload" style="display:inline-flex;align-items:center;gap:0.5rem;padding:0.5rem 1rem;background:var(--color-card-bg);border:1px solid var(--color-divider);border-radius:var(--radius-md);font-size:0.875rem;font-weight:600;color:var(--color-text-main);cursor:pointer;transition:all 0.2s;">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -4656,24 +5979,33 @@
               </label>
               <span id="rf-file-name" style="font-size:0.875rem;color:var(--color-text-muted);">No file selected</span>
             </div>
+            <div id="rf-file-status" class="rf-status-pill" style="display: none;">
+              <span class="rf-status-icon"></span>
+              <span class="rf-status-text"></span>
+            </div>
             <div style="font-size:0.85rem;color:var(--color-text-muted);margin-bottom:0.75rem;line-height:1.4;">Supported formats: PDF, DOCX, or TXT. Maximum file size: 2 MB.</div>
+            <div id="rf-pdf-helper" style="font-size: 0.85rem; color: var(--color-text-muted); margin-top: 0.5rem; line-height: 1.4; display: none;">
+              PDF resumes may take around 10–15 seconds to fully analyze.
+            </div>
             <input id="rf-upload" type="file" accept=".pdf,.docx,.txt,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain" style="position:absolute;opacity:0;width:0;height:0;pointer-events:none;">
-            <button
-              type="button"
-              id="rf-generate-btn"
-              class="btn-primary"
-              style="margin-top:0.5rem;"
-              disabled
-              tabindex="0"
-              aria-label="Generate ATS Score and Feedback"
-            >
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:0.35rem;">
-                <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
-              </svg>
-              Generate ATS Score &amp; Feedback
-            </button>
-            <div id="rf-generate-status" style="display:none;margin-top:0.5rem;font-size:0.85rem;padding:0.35rem 0.75rem;border-radius:var(--radius-md);background:rgba(5,150,105,0.08);color:var(--color-success);width:fit-content;max-width:100%;">
-              Ready to analyze
+            <div id="rf-button-row" style="display:flex;align-items:center;gap:0.65rem;flex-wrap:wrap;margin-top:0.5rem;">
+              <button
+                type="button"
+                id="rf-generate-btn"
+                class="btn-primary"
+                disabled
+                tabindex="0"
+                aria-label="Generate ATS Score and Feedback"
+                style="min-height:44px;"
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:0.35rem;">
+                  <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+                </svg>
+                <span id="rf-generate-label">Generate ATS Score &amp; Feedback</span>
+              </button>
+              <button type="button" id="rf-start-fresh-btn" class="rf-btn-ghost" style="min-height:44px;">
+                Start Fresh
+              </button>
             </div>
           </form>
         </div>
@@ -4686,10 +6018,10 @@
         ATS Score & Feedback
         <span class="rf-plan-badge" style="background:#6B7280;">Locked</span>
       </div>
-      <div style="color:var(--color-text-secondary);margin-bottom:1.2rem;">
-        Get detailed ATS feedback and role-specific insights.
-        <span class="rf-tooltip-trigger" tabindex="0" aria-label="More info" style="margin-left:0.4em;">
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+      <div style="color:var(--color-text-secondary);margin:0.25rem 0 1.2rem;">
+        Run ATS Score &amp; Feedback to see your detailed breakdown here.
+        <span class="rf-tooltip-trigger" tabindex="0" aria-label="More info" style="margin-left:0.35em; vertical-align:middle;">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false" style="width:18px; height:18px;">
             <circle cx="12" cy="12" r="10"/>
             <line x1="12" y1="8" x2="12" y2="8"/>
             <line x1="12" y1="12" x2="12" y2="16"/>
@@ -4706,25 +6038,9 @@
         </div>
         <a href="pricing-a.html" class="btn btn-secondary">Upgrade Now</a>
       </div>
-      <!-- Hidden content that will be shown for unlocked plans -->
       <div id="rf-feedback-content" style="display:none;">
         <!-- Empty state placeholder -->
         <div id="ats-placeholder" class="ats-placeholder-note" style="display:none;">
-          Run ATS Score &amp; Feedback to see your detailed breakdown here.
-        </div>
-        <!-- Context Bar (shown when cached data exists) -->
-        <div id="rf-context-bar" style="display:none;margin-bottom:1.5rem;padding:1rem;background:var(--color-card-bg);border:1px solid var(--color-divider);border-radius:var(--radius-md);">
-          <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:1rem;">
-            <div style="flex:1;min-width:200px;">
-              <div style="font-size:0.875rem;color:var(--color-text-muted);margin-bottom:0.5rem;">📄 You're viewing your last analyzed resume</div>
-              <div id="rf-context-details" style="display:flex;flex-direction:column;gap:0.25rem;font-size:0.875rem;color:var(--color-text-secondary);">
-                <span id="rf-context-file">File: <strong id="rf-context-file-name">—</strong></span>
-                <span id="rf-context-role">Target role: <strong id="rf-context-role-name">—</strong></span>
-                <span id="rf-context-time">Last analyzed: <strong id="rf-context-time-value">—</strong></span>
-              </div>
-            </div>
-            <button id="rf-rerun-btn" class="btn-secondary" style="white-space:nowrap;">Re-run analysis</button>
-          </div>
         </div>
         <!-- ATS Rubric -->
         <div id="ats-feedback-container">
@@ -4733,16 +6049,48 @@
         </div>
         <!-- Role-Specific Feedback -->
         <div id="role-feedback-container">
-          <div class="rf-section-title" id="rf-role-title" style="margin-top:3rem;">Role-Specific Feedback</div>
-          <div style="color:var(--color-text-secondary);margin-bottom:1.2rem;" id="rf-role-desc">
-            Basic feedback on your resume's content and presentation for your target role. Upgrade to Pro for comprehensive analysis and unlimited suggestions.
+          <div class="rf-section-title" id="rf-role-title" style="margin-top:3rem; display:flex; align-items:center; gap:0.5rem;">
+            <span id="rf-role-title-text">Role-Specific Tailoring Tips</span>
+            <span class="rf-tooltip-trigger" tabindex="0" aria-label="More info">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+                <circle cx="12" cy="12" r="10"/>
+                <line x1="12" y1="8" x2="12" y2="8"/>
+                <line x1="12" y1="12" x2="12" y2="16"/>
+              </svg>
+              <span class="rf-tooltip-text">Add projects, tools, and metrics to unlock all tailored sections.</span>
+            </span>
+          </div>
+          <div style="color:var(--color-text-muted);margin-bottom:0.75rem;" id="rf-role-desc">
+            Based on current expectations for your target role.
+          </div>
+          <div id="rf-role-status" style="color:var(--color-text-secondary);font-size:0.95rem;margin-bottom:0.75rem;display:none;"></div>
+          <div id="rf-role-info" style="display:none; margin-bottom:1.2rem; padding:0.85rem 1rem; border:1px solid var(--color-divider); border-radius: var(--radius-button); background: rgba(0,123,255,0.06); color: var(--color-text-secondary);">
+            We generated tips for these sections. Add a few impact bullets to see the rest.
+          </div>
+          <!-- Skeleton Loading States (shown during Step 2) -->
+          <div id="rf-skeleton-container" style="display:none;">
+            <!-- Progress header skeleton -->
+            <div class="rf-skeleton rf-skeleton-header" id="rf-skeleton-header"></div>
+            
+            <!-- ATS Rubric skeleton - 5 cards matching grid layout -->
+            <div class="rf-skeleton-rubric-grid" id="rf-skeleton-rubric">
+              <div class="rf-skeleton rf-skeleton-rubric-card"></div>
+              <div class="rf-skeleton rf-skeleton-rubric-card"></div>
+              <div class="rf-skeleton rf-skeleton-rubric-card"></div>
+              <div class="rf-skeleton rf-skeleton-rubric-card"></div>
+              <div class="rf-skeleton rf-skeleton-rubric-card"></div>
+            </div>
+            
+            <!-- Role-Specific Feedback skeleton - 3 cards -->
+            <div class="rf-skeleton-feedback-grid" id="rf-skeleton-feedback" style="margin-top: 3rem;">
+              <div class="rf-skeleton rf-skeleton-feedback-card"></div>
+              <div class="rf-skeleton rf-skeleton-feedback-card"></div>
+              <div class="rf-skeleton rf-skeleton-feedback-card"></div>
+            </div>
           </div>
           <div class="rf-feedback-grid" id="rf-feedback-grid" style="display:none;">
           </div>
         <button class="btn btn-primary" id="rf-regenerate-btn" style="margin-top:1.7rem;display:none;">Regenerate Feedback</button>
-        <div class="rf-placeholder-cta" id="rf-placeholder-cta" style="display:none;">
-          <button onclick="document.getElementById('rf-upload').click()">Upload Resume to Get Feedback</button>
-        </div>
         </div>
       </div>
     </section>
@@ -4776,17 +6124,18 @@
       </div>
       <!-- Hidden content that will be shown for Pro/Premium plans -->
       <div id="rf-rewrite-content" style="display:none; padding: 0 1.5rem;">
-        <div style="color:var(--color-text-secondary);margin-bottom:1.2rem;">
-          Below is your fully optimized resume draft. We used ATS best-practice language, injected relevant keywords, and tightened formatting so it's ready to paste into your next application.
-        </div>
         <div style="font-weight:600;margin-bottom:0.5rem;">Your Original Snippet</div>
         <textarea class="rf-snippet-box" readonly>Original resume excerpt will appear here after upload.</textarea>
         <div style="font-weight:600;margin-bottom:0.5rem;">Rewritten Snippet</div>
+        <div id="rf-rewrite-desc-inline" class="rf-rewrite-desc-inline" style="display:none;">
+          Below is your fully optimized resume draft. We used ATS best-practice language, injected relevant keywords, and tightened formatting so it's ready to paste into your next application.
+        </div>
         <textarea class="rf-snippet-box" readonly>AI-optimized resume excerpt.</textarea>
         <div id="rf-change-summary" style="display:none;"></div>
         <div style="margin-top:1.2rem;">
-          <button class="btn btn-primary">Copy Rewritten Resume</button>
-          <button class="btn btn-secondary">Regenerate Rewrite</button>
+          <button class="btn btn-primary" style="display:none;">Copy Rewritten Resume</button>
+          <button class="btn btn-secondary">Generate Rewrite</button>
+          <div id="rf-rewrite-cooldown" style="margin-top:0.5rem;"></div>
         </div>
       </div>
     </section>
@@ -4833,6 +6182,14 @@
               </svg>
               <div style="font-weight:600;margin-bottom:0.25rem;">No history yet</div>
               <div>Upload a resume and run feedback to see your history here.</div>
+            </div>
+            <!-- Actions: show more/less -->
+            <div class="rf-history-actions" id="rf-history-actions">
+              <div class="rf-history-count" id="rf-history-count">Showing 0 of 0</div>
+              <div style="display:flex;gap:0.4rem;align-items:center;flex-wrap:wrap;">
+                <button class="rf-btn-secondary" id="rf-history-show-more" type="button">Show more</button>
+                <button class="rf-btn-link" id="rf-history-show-less" type="button">Show less</button>
+              </div>
             </div>
           </div>
         </section>
