@@ -178,10 +178,10 @@ export async function onRequest(context) {
     const totalCount = Number(totalRow?.c || 0);
     const dailyCount = Number(dailyRow?.c || 0);
 
-    if (limits.maxSets > 0 && totalCount >= limits.maxSets) {
+    if (Number.isFinite(limits.maxSets) && (limits.maxSets <= 0 || totalCount >= limits.maxSets)) {
       return jsonResponse(env, { error: 'limit', reason: 'max_sets' }, 429);
     }
-    if (limits.dailySaves > 0 && dailyCount >= limits.dailySaves) {
+    if (Number.isFinite(limits.dailySaves) && (limits.dailySaves <= 0 || dailyCount >= limits.dailySaves)) {
       return jsonResponse(env, { error: 'limit', reason: 'daily_limit' }, 429);
     }
 
