@@ -1628,7 +1628,7 @@
         <div class="mi-rubric-card">
           <div class="mi-rubric-label">${item.label}</div>
           <div class="mi-rubric-score">${item.score} / ${item.of}</div>
-          <div class="mi-rubric-note">${item.note}</div>
+          <div class="mi-rubric-note">${escapeHtml(item.note || '')}</div>
         </div>
       `).join('');
       
@@ -1656,12 +1656,12 @@
       // S+A=O coaching
       const saoCoachingList = document.getElementById('mi-sao-coaching-list');
       const saoCoaching = sao.coaching || [];
-      saoCoachingList.innerHTML = saoCoaching.map(c => `<li>${c}</li>`).join('');
+      saoCoachingList.innerHTML = saoCoaching.map(c => `<li>${escapeHtml(c || '')}</li>`).join('');
       
       // Improvements
       const improvementsList = document.getElementById('mi-improvements-list');
       const improvements = r.improvements || [];
-      improvementsList.innerHTML = improvements.map(i => `<li>${i}</li>`).join('');
+      improvementsList.innerHTML = improvements.map(i => `<li>${escapeHtml(i || '')}</li>`).join('');
       
       // Per-question accordion
       const accordion = document.getElementById('mi-accordion');
@@ -1680,14 +1680,14 @@
         return `
           <div class="mi-accordion-item">
             <button class="mi-accordion-header" type="button">
-              <span>Q${i + 1} · "${truncate(q.text, 50)}"</span>
+              <span>Q${i + 1} · "${escapeHtml(truncate(q.text, 50))}"</span>
               <span class="mi-accordion-q-score">${pq.score || 0}/10</span>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
             </button>
             <div class="mi-accordion-content">
               <div class="mi-accordion-answer">${escapeHtml(state.answers[i] || '(No answer)')}</div>
               <ul class="mi-accordion-notes">
-                ${notes.map(n => `<li>${n}</li>`).join('')}
+                ${notes.map(n => `<li>${escapeHtml(n || '')}</li>`).join('')}
               </ul>
             </div>
           </div>
