@@ -1340,7 +1340,7 @@
         return `
           <li class="mi-history-item" data-session-id="${s.id}">
             <div class="mi-history-date">${date}</div>
-            <div class="mi-history-role">${s.role}</div>
+            <div class="mi-history-role">${escapeHtml(s.role || '')}</div>
             <div class="mi-history-score">${s.overallScore} / 100</div>
           </li>
         `;
