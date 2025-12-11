@@ -1647,11 +1647,13 @@
         
         const rewrittenBox = document.querySelectorAll('#rf-rewrite-content .rf-snippet-box')[1];
         const rewriteDescInline = document.getElementById('rf-rewrite-desc-inline');
+        const resolvedRewrite = result.rewritten || result.rewrittenResume || '';
+        const hasRewriteContent = typeof resolvedRewrite === 'string' && resolvedRewrite.trim().length > 0;
         if (rewrittenBox) {
-          rewrittenBox.value = result.rewritten || result.rewrittenResume || '';
+          rewrittenBox.value = resolvedRewrite;
         }
         if (rewriteDescInline) {
-          rewriteDescInline.style.display = (result.rewritten || result.rewrittenResume || result.changeSummary) ? 'block' : 'none';
+          rewriteDescInline.style.display = hasRewriteContent ? 'block' : 'none';
         }
         
         // Also populate the original snippet box
@@ -5595,6 +5597,9 @@
         if (rewritePrompt) rewritePrompt.style.display = 'none';
         if (rewriteContent) rewriteContent.style.display = 'block';
 
+        const resolvedRewrite = rewritten || data.rewrittenResume || data.rewritten || data.feedback?.rewrittenResume || '';
+        const hasRewriteContent = typeof resolvedRewrite === 'string' && resolvedRewrite.trim().length > 0;
+
         if (rewrittenTextarea) {
           if (rewritten) {
             rewrittenTextarea.value = rewritten;
@@ -5608,8 +5613,7 @@
           }
         }
         if (rewriteDescInline) {
-          const hasRewrite = !!rewritten || !!rewriteSummary || !!data.changeSummary || !!data.feedback?.rewriteChangeSummary;
-          rewriteDescInline.style.display = hasRewrite ? 'block' : 'none';
+          rewriteDescInline.style.display = hasRewriteContent ? 'block' : 'none';
         }
         
         // Also populate original snippet if available
