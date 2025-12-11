@@ -20,6 +20,32 @@ const SESSION_LIMITS = {
   premium: 999  // Effectively unlimited but capped for abuse prevention
 };
 
+// Lightweight KV lock with token verification to reduce race window
+async function acquireKvLock(env, key, ttlSeconds = 60) {
+  if (!env.JOBHACKAI_KV) return { acquired: true, token: null };
+
+  // Early-exit if a lock is already present
+  const existing = await env.JOBHACKAI_KV.get(key);
+  if (existing) return { acquired: false, token: null };
+
+  const token = crypto.randomUUID();
+  await env.JOBHACKAI_KV.put(key, token, { expirationTtl: ttlSeconds });
+
+  // Verify we still own the lock (in case another request overwrote us)
+  const stored = await env.JOBHACKAI_KV.get(key);
+  if (stored !== token) return { acquired: false, token: null };
+
+  return { acquired: true, token };
+}
+
+async function releaseKvLock(env, key, token) {
+  if (!env.JOBHACKAI_KV || !token) return;
+  const stored = await env.JOBHACKAI_KV.get(key);
+  if (stored === token) {
+    await env.JOBHACKAI_KV.delete(key).catch(() => {});
+  }
+}
+
 function corsHeaders(origin) {
   const allowedOrigins = [
     'https://dev.jobhackai.io',
@@ -230,6 +256,7 @@ export async function onRequest(context) {
 
   let uid = null;
   let lockKey = null;
+  let lockToken = null;
   let lockAcquired = false;
 
   try {
@@ -329,23 +356,21 @@ export async function onRequest(context) {
       }
     }
 
-    // Acquire lock to prevent concurrent scoring
-    if (env.JOBHACKAI_KV) {
-      lockKey = `mi_score_lock:${uid}`;
-      const existingLock = await env.JOBHACKAI_KV.get(lockKey);
-      if (existingLock) {
-        return errorResponse(
-          'Another interview is being scored. Please wait.',
-          429,
-          origin,
-          env,
-          requestId,
-          { retryAfter: 5 }
-        );
-      }
-      await env.JOBHACKAI_KV.put(lockKey, String(Date.now()), { expirationTtl: 60 });
-      lockAcquired = true;
+    // Acquire lock to prevent concurrent scoring (reduce race with token verification)
+    lockKey = `mi_score_lock:${uid}`;
+    const { acquired, token } = await acquireKvLock(env, lockKey, 60);
+    if (!acquired) {
+      return errorResponse(
+        'Another interview is being scored. Please wait.',
+        429,
+        origin,
+        env,
+        requestId,
+        { retryAfter: 5 }
+      );
     }
+    lockAcquired = true;
+    lockToken = token;
 
     // Score the interview
     const isPremium = effectivePlan === 'premium';
@@ -406,8 +431,8 @@ export async function onRequest(context) {
     }
 
     // Release lock
-    if (lockAcquired && env.JOBHACKAI_KV) {
-      await env.JOBHACKAI_KV.delete(lockKey).catch(() => {});
+    if (lockAcquired) {
+      await releaseKvLock(env, lockKey, lockToken);
     }
 
     // Format response
@@ -430,8 +455,8 @@ export async function onRequest(context) {
 
   } catch (error) {
     // Release lock on error
-    if (lockAcquired && lockKey && env.JOBHACKAI_KV) {
-      await env.JOBHACKAI_KV.delete(lockKey).catch(() => {});
+    if (lockAcquired && lockKey) {
+      await releaseKvLock(env, lockKey, lockToken);
     }
 
     console.error('[MI-SCORE] Error:', { requestId, error: error.message, stack: error.stack });
