@@ -17,6 +17,8 @@ function jsonResponse(env, data, status = 200) {
       'Content-Type': 'application/json',
       'Cache-Control': 'no-store',
       'Access-Control-Allow-Origin': origin,
+      'Access-Control-Allow-Methods': 'POST, OPTIONS',
+      'Access-Control-Allow-Headers': 'Authorization, Content-Type',
       Vary: 'Origin'
     }
   });
@@ -94,8 +96,28 @@ function safeArray(raw, limit = 10, maxLen = 40) {
 export async function onRequest(context) {
   const { request, env } = context;
 
+  if (request.method === 'OPTIONS') {
+    return new Response(null, {
+      status: 204,
+      headers: {
+        'Access-Control-Allow-Origin': env.FRONTEND_URL || 'https://dev.jobhackai.io',
+        'Access-Control-Allow-Methods': 'POST, OPTIONS',
+        'Access-Control-Allow-Headers': 'Authorization, Content-Type',
+        Vary: 'Origin'
+      }
+    });
+  }
+
   if (request.method !== 'POST') {
-    return new Response('Method Not Allowed', { status: 405 });
+    return new Response('Method Not Allowed', {
+      status: 405,
+      headers: {
+        'Access-Control-Allow-Origin': env.FRONTEND_URL || 'https://dev.jobhackai.io',
+        'Access-Control-Allow-Methods': 'POST, OPTIONS',
+        'Access-Control-Allow-Headers': 'Authorization, Content-Type',
+        Vary: 'Origin'
+      }
+    });
   }
 
   const db = getDb(env);
@@ -137,7 +159,8 @@ export async function onRequest(context) {
     return jsonResponse(env, { error: 'invalid_questions', reason: 'too_many' }, 400);
   }
 
-  const plan = PLAN_LIMITS[(await getPlan(env, uid))] ? await getPlan(env, uid) : 'free';
+  const fetchedPlan = await getPlan(env, uid);
+  const plan = PLAN_LIMITS[fetchedPlan] ? fetchedPlan : 'free';
   const limits = PLAN_LIMITS[plan] || PLAN_LIMITS.free;
 
   try {

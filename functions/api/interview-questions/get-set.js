@@ -10,6 +10,8 @@ function jsonResponse(env, data, status = 200) {
       'Content-Type': 'application/json',
       'Cache-Control': 'no-store',
       'Access-Control-Allow-Origin': origin,
+      'Access-Control-Allow-Methods': 'GET, OPTIONS',
+      'Access-Control-Allow-Headers': 'Authorization, Content-Type',
       Vary: 'Origin'
     }
   });
@@ -60,8 +62,28 @@ function parseJsonArray(raw) {
 export async function onRequest(context) {
   const { request, env } = context;
 
+  if (request.method === 'OPTIONS') {
+    return new Response(null, {
+      status: 204,
+      headers: {
+        'Access-Control-Allow-Origin': env.FRONTEND_URL || 'https://dev.jobhackai.io',
+        'Access-Control-Allow-Methods': 'GET, OPTIONS',
+        'Access-Control-Allow-Headers': 'Authorization, Content-Type',
+        Vary: 'Origin'
+      }
+    });
+  }
+
   if (request.method !== 'GET') {
-    return new Response('Method Not Allowed', { status: 405 });
+    return new Response('Method Not Allowed', {
+      status: 405,
+      headers: {
+        'Access-Control-Allow-Origin': env.FRONTEND_URL || 'https://dev.jobhackai.io',
+        'Access-Control-Allow-Methods': 'GET, OPTIONS',
+        'Access-Control-Allow-Headers': 'Authorization, Content-Type',
+        Vary: 'Origin'
+      }
+    });
   }
 
   const db = getDb(env);

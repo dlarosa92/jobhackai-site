@@ -1265,9 +1265,12 @@
         state.role = roleParam;
         if (els.roleInput) els.roleInput.value = roleParam;
       }
-      if (seniorityParam && els.senioritySelect?.querySelector(`option[value="${seniorityParam}"]`)) {
-        els.senioritySelect.value = seniorityParam;
-        state.seniority = seniorityParam;
+      if (seniorityParam) {
+        const safeSeniority = (typeof CSS !== 'undefined' && CSS.escape) ? CSS.escape(seniorityParam) : seniorityParam.replace(/["\\]/g, '');
+        if (els.senioritySelect?.querySelector(`option[value="${safeSeniority}"]`)) {
+          els.senioritySelect.value = seniorityParam;
+          state.seniority = seniorityParam;
+        }
       }
       if (setParam) {
         state.questionSource = 'saved';
@@ -1570,7 +1573,7 @@
               .filter(Boolean);
             state.savedSetId = setId;
           } else {
-            const res = await fetch(`${API.savedSets}?id=${setId}`, {
+            const res = await fetch(`${API.savedSets}?id=${encodeURIComponent(setId)}`, {
               headers: { 'Authorization': `Bearer ${token}` }
             });
             
