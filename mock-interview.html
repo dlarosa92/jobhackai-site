@@ -1665,9 +1665,17 @@
       
       // Per-question accordion
       const accordion = document.getElementById('mi-accordion');
-      const perQ = r.perQuestion || [];
+      const perQRaw = r.perQuestion || [];
+      // Normalize per-question feedback using q_index so we don't rely on array order
+      const perQByIndex = {};
+      perQRaw.forEach((item, idx) => {
+        const qIdx = typeof item.q_index === 'number' ? item.q_index : idx;
+        if (perQByIndex[qIdx] === undefined) {
+          perQByIndex[qIdx] = item;
+        }
+      });
       accordion.innerHTML = state.questions.map((q, i) => {
-        const pq = perQ[i] || {};
+        const pq = perQByIndex[i] || {};
         const notes = pq.notes || [];
         return `
           <div class="mi-accordion-item">
