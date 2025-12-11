@@ -1558,6 +1558,7 @@
       
       const answer = state.answers[state.currentQuestionIndex];
       const wordCount = answer.trim() ? answer.trim().split(/\s+/).length : 0;
+      const isLast = state.currentQuestionIndex === state.questions.length - 1;
       
       // Show short nudge if < 20 words
       if (wordCount < 20 && wordCount > 0) {
@@ -1572,8 +1573,6 @@
           }, 0);
         }
       }
-      
-      const isLast = state.currentQuestionIndex === state.questions.length - 1;
       
       if (isLast) {
         // Finish interview - score it
