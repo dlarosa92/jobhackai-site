@@ -5469,6 +5469,8 @@
       // Sync rewrite context to match the historical record (D1 as source of truth)
       window.latestAtsIssues = atsIssues || null;
       window.latestRoleSpecific = roleSpecificFeedback || null;
+      // Ensure rewrite actions reference the historical resume, not the last uploaded one
+      currentResumeId = data.resumeId || data.resume_id || currentResumeId;
 
       // Update ATS score ring using shared logic (clamps/guards inside)
       if (data.atsScore !== null && data.atsScore !== undefined) {
