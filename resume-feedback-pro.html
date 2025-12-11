@@ -665,6 +665,10 @@
       grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
       gap: 1.5rem;
     }
+    .rf-rewrite-desc-inline {
+      color: var(--color-text-secondary);
+      margin: 0 0 1rem 0;
+    }
   </style>
 </head>
 <body>
@@ -808,6 +812,7 @@
       hideRewriteSkeleton();
       const rewriteContent = document.getElementById('rf-rewrite-content');
       const rewriteTextareas = rewriteContent ? rewriteContent.querySelectorAll('.rf-snippet-box') : [];
+      const rewriteDescInline = document.getElementById('rf-rewrite-desc-inline');
       if (rewriteTextareas && rewriteTextareas.length >= 2) {
         rewriteTextareas[0].value = 'Original resume excerpt will appear here after upload.';
         rewriteTextareas[1].value = 'AI-optimized resume excerpt.';
@@ -816,6 +821,9 @@
       if (changeSummary) {
         changeSummary.innerHTML = '';
         changeSummary.style.display = 'none';
+      }
+      if (rewriteDescInline) {
+        rewriteDescInline.style.display = 'none';
       }
     }
 
@@ -1638,8 +1646,14 @@
         });
         
         const rewrittenBox = document.querySelectorAll('#rf-rewrite-content .rf-snippet-box')[1];
+        const rewriteDescInline = document.getElementById('rf-rewrite-desc-inline');
+        const resolvedRewrite = result.rewritten || result.rewrittenResume || '';
+        const hasRewriteContent = typeof resolvedRewrite === 'string' && resolvedRewrite.trim().length > 0;
         if (rewrittenBox) {
-          rewrittenBox.value = result.rewritten || result.rewrittenResume || '';
+          rewrittenBox.value = resolvedRewrite;
+        }
+        if (rewriteDescInline) {
+          rewriteDescInline.style.display = hasRewriteContent ? 'block' : 'none';
         }
         
         // Also populate the original snippet box
@@ -5563,6 +5577,7 @@
       const rewritePrompt = document.querySelector('#rf-rewrite-tile .rf-upgrade-prompt');
       const rewrittenTextarea = rewriteContent ? rewriteContent.querySelectorAll('.rf-snippet-box')[1] : null;
       const originalTextarea = rewriteContent ? rewriteContent.querySelectorAll('.rf-snippet-box')[0] : null;
+      const rewriteDescInline = document.getElementById('rf-rewrite-desc-inline');
 
       if (data.rewriteLocked) {
         if (rewriteContent) rewriteContent.style.display = 'none';
@@ -5574,12 +5589,16 @@
           }
         }
         if (rewrittenTextarea) rewrittenTextarea.value = '';
+        if (rewriteDescInline) rewriteDescInline.style.display = 'none';
         if (originalTextarea && originalTextarea.value) {
           // keep original text if present
         }
       } else {
         if (rewritePrompt) rewritePrompt.style.display = 'none';
         if (rewriteContent) rewriteContent.style.display = 'block';
+
+        const resolvedRewrite = rewritten || data.rewrittenResume || data.rewritten || data.feedback?.rewrittenResume || '';
+        const hasRewriteContent = typeof resolvedRewrite === 'string' && resolvedRewrite.trim().length > 0;
 
         if (rewrittenTextarea) {
           if (rewritten) {
@@ -5592,6 +5611,9 @@
           } else {
             rewrittenTextarea.value = 'No rewrite available for this run yet.';
           }
+        }
+        if (rewriteDescInline) {
+          rewriteDescInline.style.display = hasRewriteContent ? 'block' : 'none';
         }
         
         // Also populate original snippet if available
@@ -6085,12 +6107,12 @@
       </div>
       <!-- Hidden content that will be shown for Pro/Premium plans -->
       <div id="rf-rewrite-content" style="display:none; padding: 0 1.5rem;">
-        <div style="color:var(--color-text-secondary);margin-bottom:1.2rem;">
-          Below is your fully optimized resume draft. We used ATS best-practice language, injected relevant keywords, and tightened formatting so it's ready to paste into your next application.
-        </div>
         <div style="font-weight:600;margin-bottom:0.5rem;">Your Original Snippet</div>
         <textarea class="rf-snippet-box" readonly>Original resume excerpt will appear here after upload.</textarea>
         <div style="font-weight:600;margin-bottom:0.5rem;">Rewritten Snippet</div>
+        <div id="rf-rewrite-desc-inline" class="rf-rewrite-desc-inline" style="display:none;">
+          Below is your fully optimized resume draft. We used ATS best-practice language, injected relevant keywords, and tightened formatting so it's ready to paste into your next application.
+        </div>
         <textarea class="rf-snippet-box" readonly>AI-optimized resume excerpt.</textarea>
         <div id="rf-change-summary" style="display:none;"></div>
         <div style="margin-top:1.2rem;">
