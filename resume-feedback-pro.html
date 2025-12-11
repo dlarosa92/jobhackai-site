@@ -4657,24 +4657,25 @@
           safeSetStyle(badge, 'background', '#6B7280');
           safeQueryText(rewriteTile, '.rf-upgrade-text strong', 'Upgrade to Pro');
           safeQueryHTML(rewriteTile, '.rf-upgrade-text', '<strong>Trial shows you what to fix. Pro fixes it now (rewrites unlocked).</strong> Upgrade to Pro to complete your resume optimization.');
+          const upgradePrompt = rewriteTile.querySelector('.rf-upgrade-prompt');
+          if (upgradePrompt) {
+            upgradePrompt.style.display = 'flex';
+          }
           // Add special upgrade CTA for trial users
           const upgradeButton = rewriteTile.querySelector('.rf-upgrade-prompt a');
-          if (upgradeButton) {
+          if (upgradeButton && upgradeButton.parentNode) {
             upgradeButton.textContent = 'Upgrade to Pro';
-            // Use standard btn-secondary styling - ensure proper class and remove conflicting styles
             upgradeButton.className = 'btn btn-secondary';
-            // Remove any inline styles and ensure proper styling
-            upgradeButton.removeAttribute('style');
-            // Force the correct colors to override any conflicting CSS
-            upgradeButton.style.setProperty('background', '#1976D2', 'important');
-            upgradeButton.style.setProperty('color', '#fff', 'important');
-            upgradeButton.style.setProperty('border', 'none', 'important');
-            
-            // Add hover effect to match other buttons
-            upgradeButton.addEventListener('mouseenter', function() {
+            const freshButton = upgradeButton.cloneNode(true);
+            upgradeButton.parentNode.replaceChild(freshButton, upgradeButton);
+            freshButton.style.setProperty('background', '#1976D2', 'important');
+            freshButton.style.setProperty('color', '#fff', 'important');
+            freshButton.style.setProperty('border', 'none', 'important');
+            freshButton.style.setProperty('display', 'inline-block', 'important');
+            freshButton.addEventListener('mouseenter', function() {
               this.style.setProperty('background', '#125bb5', 'important');
             });
-            upgradeButton.addEventListener('mouseleave', function() {
+            freshButton.addEventListener('mouseleave', function() {
               this.style.setProperty('background', '#1976D2', 'important');
             });
           }
@@ -4736,24 +4737,25 @@
           safeSetStyle(badge, 'background', '#6B7280');
           safeQueryText(rewriteTile, '.rf-upgrade-text strong', 'Upgrade to Pro');
           safeQueryHTML(rewriteTile, '.rf-upgrade-text', '<strong>Trial shows you what to fix. Pro fixes it now (rewrites unlocked).</strong> Upgrade to Pro to complete your resume optimization.');
+          const upgradePrompt = rewriteTile.querySelector('.rf-upgrade-prompt');
+          if (upgradePrompt) {
+            upgradePrompt.style.display = 'flex';
+          }
           // Add special upgrade CTA for essential users
           const upgradeButton = rewriteTile.querySelector('.rf-upgrade-prompt a');
-          if (upgradeButton) {
+          if (upgradeButton && upgradeButton.parentNode) {
             upgradeButton.textContent = 'Upgrade to Pro';
-            // Use standard btn-secondary styling - ensure proper class and remove conflicting styles
             upgradeButton.className = 'btn btn-secondary';
-            // Remove any inline styles and ensure proper styling
-            upgradeButton.removeAttribute('style');
-            // Force the correct colors to override any conflicting CSS
-            upgradeButton.style.setProperty('background', '#1976D2', 'important');
-            upgradeButton.style.setProperty('color', '#fff', 'important');
-            upgradeButton.style.setProperty('border', 'none', 'important');
-            
-            // Add hover effect to match other buttons
-            upgradeButton.addEventListener('mouseenter', function() {
+            const freshButton = upgradeButton.cloneNode(true);
+            upgradeButton.parentNode.replaceChild(freshButton, upgradeButton);
+            freshButton.style.setProperty('background', '#1976D2', 'important');
+            freshButton.style.setProperty('color', '#fff', 'important');
+            freshButton.style.setProperty('border', 'none', 'important');
+            freshButton.style.setProperty('display', 'inline-block', 'important');
+            freshButton.addEventListener('mouseenter', function() {
               this.style.setProperty('background', '#125bb5', 'important');
             });
-            upgradeButton.addEventListener('mouseleave', function() {
+            freshButton.addEventListener('mouseleave', function() {
               this.style.setProperty('background', '#1976D2', 'important');
             });
           }
