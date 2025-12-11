@@ -7,27 +7,24 @@
   <style>html.auth-pending{visibility:hidden}</style>
   <script src="js/static-auth-guard.js?v=20251007-2"></script>
   <script>
-    // --- IMMEDIATE PAGE ACCESS CONTROL (Pro/Premium only) ---
-    (function enforceAccessImmediate() {
-      const isAuthenticated = localStorage.getItem('user-authenticated') === 'true' && !!localStorage.getItem('user-email');
-      const plan = localStorage.getItem('user-plan') || 'free';
-      const allowedPlans = ['pro', 'premium'];
-      
-      if (!isAuthenticated) {
-        console.log('🚫 [MOCK-INT] Not authenticated, redirecting to login');
-        window.location.href = 'login.html';
-        return;
+    // Canonical plan/auth check using JobHackAINavigation
+    function ensureMockInterviewAccess() {
+      const nav = window.JobHackAINavigation;
+      if (!nav || !nav.getEffectivePlan || !nav.getAuthState) {
+        return false; // wait until navigation is ready
       }
-      
-      if (!allowedPlans.includes(plan)) {
-        console.log('🚫 [MOCK-INT] Access denied for plan:', plan);
-        // Redirect with upgrade message
+      const plan = nav.getEffectivePlan();
+      const auth = nav.getAuthState();
+      const allowed = ['pro', 'premium'];
+      if (!auth.isAuthenticated || !allowed.includes(plan)) {
         window.location.href = 'interview-questions.html?upgrade=mock-interview';
-        return;
+        return false;
       }
-      
-      console.log('✅ [MOCK-INT] Access granted for plan:', plan);
-    })();
+      return true;
+    }
+
+    document.addEventListener('navigationReady', ensureMockInterviewAccess);
+    document.addEventListener('DOMContentLoaded', ensureMockInterviewAccess);
   </script>
   <title>Mock Interviews with AI - JobHackAI</title>
   <link rel="icon" type="image/png" href="assets/jobhackai_icon_only_128.png">
@@ -919,12 +916,21 @@
         <!-- Setup Screen -->
         <div class="mi-card" id="mi-setup">
           <div class="mi-coach-icon">
-            <svg viewBox="0 0 24 24" fill="none" stroke="#1976D2" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M12 8V4H8"/>
-              <rect x="4" y="4" width="16" height="16" rx="2"/>
-              <path d="M8 12h8"/>
-              <path d="M8 16h5"/>
-              <circle cx="16" cy="16" r="2"/>
+            <svg viewBox="0 0 64 64" aria-hidden="true">
+              <!-- Outer ring (blue outline) -->
+              <circle cx="32" cy="32" r="30" fill="#E5F0FF" stroke="#1976D2" stroke-width="3"/>
+              <!-- Head (blue) -->
+              <circle cx="32" cy="26" r="12" fill="#1976D2"/>
+              <!-- Face (neutral tone) -->
+              <circle cx="32" cy="26" r="8" fill="#FFD6A0"/>
+              <!-- Shoulders (blue) -->
+              <rect x="18" y="38" width="28" height="12" rx="6" fill="#1976D2"/>
+              <!-- Chat/mic accent (green) -->
+              <g transform="translate(40 38)">
+                <rect x="-2" y="-2" width="14" height="12" rx="3" fill="#00E676" opacity="0.9"/>
+                <circle cx="2" cy="4" r="2" fill="#fff"/>
+                <rect x="6" y="3" width="4" height="2" rx="1" fill="#fff"/>
+              </g>
             </svg>
           </div>
           
