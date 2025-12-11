@@ -318,7 +318,9 @@ export async function onRequest(context) {
     // Validate each Q&A pair
     for (let i = 0; i < qaPairs.length; i++) {
       const qa = qaPairs[i];
-      if (!qa.q || typeof qa.q !== 'string' || !qa.a || typeof qa.a !== 'string') {
+      const invalidQuestion = !qa || typeof qa.q !== 'string' || qa.q.trim() === '';
+      const invalidAnswer = !qa || typeof qa.a !== 'string'; // allow empty string answers
+      if (invalidQuestion || invalidAnswer) {
         return errorResponse(`Invalid Q&A pair at index ${i}`, 400, origin, env, requestId);
       }
     }
