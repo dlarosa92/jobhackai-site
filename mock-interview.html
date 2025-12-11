@@ -1550,12 +1550,20 @@
           const setId = els.savedSetSelect.value;
           if (!setId) throw new Error('Please select a saved question set');
           
-          if (localPayload && setId === localPayload.id) {
+          const matchesLocal =
+            localPayload &&
+            (setId === localPayload.id || setId === localPayload.d1Id);
+          
+          if (matchesLocal) {
             const localQs = Array.isArray(localPayload.questions) ? localPayload.questions : [];
             const selectedIdx = Array.isArray(localPayload.selectedIndices) ? localPayload.selectedIndices : [];
+            const looksFiltered =
+              Boolean(localPayload?.questionsFiltered) ||
+              (selectedIdx.length > 0 && localQs.length === selectedIdx.length);
             // Guard against legacy payloads where questions were already filtered but indices were not
             const useSelected =
               selectedIdx.length > 0 &&
+              !looksFiltered &&
               selectedIdx.every(idx => Number.isInteger(idx) && idx >= 0 && idx < localQs.length);
             const picked = useSelected
               ? selectedIdx
