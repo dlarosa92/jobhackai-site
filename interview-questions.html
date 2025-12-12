@@ -278,6 +278,44 @@
     .iq-types .chip.is-on { background:#E8F1FF; border-color:#93C5FD; color:#1D4ED8; box-shadow:0 0 0 2px rgba(29,78,216,.18) inset; }
     .iq-types .chip:focus-visible { box-shadow:0 0 0 2px rgba(25,118,210,.30); }
 
+    /* Question Type segmented control (match Resume Rewrite "Generate Rewrite" UX standard) */
+    .iq-segmented {
+      display: flex;
+      gap: 0.6rem;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+    .iq-segment {
+      background: #fff;
+      color: #007BFF;
+      font-weight: 700;
+      border: 2px solid #007BFF;
+      border-radius: 12px;
+      padding: 0.7rem 1.25rem;
+      font-size: 1rem;
+      cursor: pointer;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+      transition: background 0.18s, color 0.18s, box-shadow 0.18s;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 44px;
+    }
+    .iq-segment:hover {
+      background: #F0F8FF;
+      color: #0056b3;
+      box-shadow: 0 4px 16px rgba(0,123,255,0.10);
+    }
+    .iq-segment.active {
+      background: #F0F8FF;
+      color: #0056b3;
+      box-shadow: 0 4px 16px rgba(0,123,255,0.10);
+    }
+    .iq-segment:focus-visible {
+      outline: none;
+      box-shadow: 0 0 0 3px rgba(0,123,255,0.25);
+    }
+
     /* Actions layout and cooldown badge text */
     .iq-actions { display:flex; align-items:center; gap:.5rem; flex-wrap:wrap; }
     .iq-actions-sec { display:flex; align-items:center; gap:.5rem; flex-wrap:wrap; margin-top:.5rem; }
@@ -684,16 +722,14 @@
           </select>
         </div>
 
-        <div class="iq-types" aria-label="Question Types" style="min-width:400px;" aria-labelledby="iq-types-label">
-          <div id="iq-types-label" style="margin-bottom:0.5rem; font-weight:600; color:#374151; font-size:0.9rem;">Question Types</div>
-          <button type="button" class="chip is-on" data-type="behavioral">Behavioral</button>
-          <button type="button" class="chip is-on" data-type="technical">Technical</button>
-          <button type="button" id="types-more" class="chip chip-expand" aria-expanded="false" aria-controls="types-advanced" style="margin-left:.25rem;">More types</button>
-          <span id="types-advanced" hidden>
-            <button type="button" class="chip" data-type="system" data-adv="1">System Design</button>
-            <button type="button" class="chip" data-type="leadership" data-adv="1">Leadership</button>
-            <button type="button" class="chip" data-type="culture" data-adv="1">Culture</button>
-          </span>
+        <div class="iq-types" aria-label="Question Type" style="min-width:400px;" aria-labelledby="iq-types-label">
+          <div id="iq-types-label" style="margin-bottom:0.5rem; font-weight:600; color:#374151; font-size:0.9rem;">Question Type</div>
+          <div class="iq-segmented" id="iq-type" role="tablist" aria-label="Question type">
+            <button type="button" class="iq-segment active" data-value="mixed" role="tab" aria-selected="true">Mixed</button>
+            <button type="button" class="iq-segment" data-value="behavioral" role="tab" aria-selected="false">Behavioral</button>
+            <button type="button" class="iq-segment" data-value="technical" role="tab" aria-selected="false">Technical</button>
+            <button type="button" class="iq-segment" data-value="leadership" role="tab" aria-selected="false">Leadership</button>
+          </div>
         </div>
 
         
@@ -985,7 +1021,7 @@
 
     // State
     const iqState = {
-      prefs: { seniority:'', count:10, types:new Set(['behavioral','technical']), showGuidance:false },
+      prefs: { seniority:'', count:10, type:'mixed', showGuidance:false },
       set: null,
       cooldown: 0,
       timers: { global:null, perQ:{}, notes:{}, toast:null },
@@ -998,14 +1034,27 @@
     // Utils & persistence
     const iqNow = ()=> new Date().toISOString();
     const iqSetId = (role, seed)=> `${role}:${seed}`;
-    // Helper to safely convert types (Set, Array, or empty object) to array
-    const iqTypesToArray = (types, fallback = []) => {
-      if (!types) return fallback;
-      if (types instanceof Set) return Array.from(types);
-      if (Array.isArray(types)) return types;
-      // Handle empty object case (from old serialized Sets)
-      if (typeof types === 'object' && Object.keys(types).length === 0) return fallback;
-      return fallback;
+    const IQ_VALID_TYPES = new Set(['mixed','behavioral','technical','leadership']);
+    const iqSanitizeType = (raw, fallback = 'mixed') => {
+      const t = String(raw || '').trim().toLowerCase();
+      return IQ_VALID_TYPES.has(t) ? t : fallback;
+    };
+    // Legacy compatibility: infer a single `type` from older `types[]` representations
+    const iqInferTypeFromLegacyTypes = (legacyTypes) => {
+      if (!legacyTypes) return 'mixed';
+      let arr = [];
+      if (legacyTypes instanceof Set) arr = Array.from(legacyTypes);
+      else if (Array.isArray(legacyTypes)) arr = legacyTypes;
+      else if (typeof legacyTypes === 'object' && Object.keys(legacyTypes).length === 0) arr = [];
+      arr = arr.map(v => String(v || '').toLowerCase()).filter(Boolean);
+      if (!arr.length) return 'mixed';
+      if (arr.includes('mixed')) return 'mixed';
+      // If legacy had multiple selected types, map to mixed
+      if (arr.length > 1) return 'mixed';
+      // Map removed legacy types to nearest bucket
+      if (arr[0] === 'system') return 'technical';
+      if (arr[0] === 'culture') return 'behavioral';
+      return iqSanitizeType(arr[0], 'mixed');
     };
     function iqToast(msg){
       console.log('[iq-toast]', msg);
@@ -1036,22 +1085,34 @@
       });
     }
     function iqTrack(event, data={}){
-      const payload = { event, ts: iqNow(), role: iqState?.set?.role || $IQ('#iq-role')?.value || '', seniority: iqState.prefs.seniority, types: [...iqState.prefs.types], count: iqState.prefs.count, used_jd: !!$IQ('#iq-jd')?.value?.trim(), ...data };
+      const payload = { event, ts: iqNow(), role: iqState?.set?.role || $IQ('#iq-role')?.value || '', seniority: iqState.prefs.seniority, type: iqState.prefs.type, count: iqState.prefs.count, used_jd: !!$IQ('#iq-jd')?.value?.trim(), ...data };
       console.log('[iq-analytics]', payload);
       if (!IQ_ANALYTICS_HOOK) return;
       fetch(IQ_ANALYTICS_HOOK, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) }).catch(()=>{});
     }
-    function iqSavePrefs(){ localStorage.setItem('iq_prefs', JSON.stringify({ seniority: iqState.prefs.seniority, count: iqState.prefs.count, types: [...iqState.prefs.types], showGuidance: iqState.prefs.showGuidance })); }
-    function iqLoadPrefs(){ try{ const p=JSON.parse(localStorage.getItem('iq_prefs')||'{}'); if(p.seniority) iqState.prefs.seniority=p.seniority; if(p.count) iqState.prefs.count=p.count; if(Array.isArray(p.types)) iqState.prefs.types=new Set(p.types); if(typeof p.showGuidance==='boolean') iqState.prefs.showGuidance=p.showGuidance; }catch{} }
+    function iqSavePrefs(){ localStorage.setItem('iq_prefs', JSON.stringify({ seniority: iqState.prefs.seniority, count: iqState.prefs.count, type: iqState.prefs.type, showGuidance: iqState.prefs.showGuidance })); }
+    function iqLoadPrefs(){
+      try{
+        const p=JSON.parse(localStorage.getItem('iq_prefs')||'{}');
+        if(p.seniority) iqState.prefs.seniority=p.seniority;
+        if(p.count) iqState.prefs.count=p.count;
+        // New format
+        if(p.type) iqState.prefs.type = iqSanitizeType(p.type, 'mixed');
+        // Legacy format
+        if(!p.type && Array.isArray(p.types)) iqState.prefs.type = iqInferTypeFromLegacyTypes(p.types);
+        if(typeof p.showGuidance==='boolean') iqState.prefs.showGuidance=p.showGuidance;
+      }catch{}
+    }
     function iqSaveNotes(){ if (!iqState.set) return; localStorage.setItem(`iq_notes_${iqSetId(iqState.set.role, iqState.set.seed)}`, JSON.stringify(iqState.notes)); }
     function iqLoadNotes(){ if (!iqState.set) return; try{ iqState.notes=JSON.parse(localStorage.getItem(`iq_notes_${iqSetId(iqState.set.role, iqState.set.seed)}`)||'{}'); }catch{ iqState.notes={}; } }
     function iqAddRecent(meta){ iqState.recents = JSON.parse(localStorage.getItem('iq_recent_sets')||'[]'); iqState.recents.unshift(meta); iqState.recents = iqState.recents.slice(0, IQ_RECENT_LIMIT); localStorage.setItem('iq_recent_sets', JSON.stringify(iqState.recents)); }
     function iqSaveSetFull(setObj){ 
       try{ 
         const id=iqSetId(setObj.role,setObj.seed); 
-        // Convert Set to array for JSON serialization and include replaceCounts
+        // Include replaceCounts and persist selected type (legacy types[] supported on load)
         const toSave = {
           ...setObj,
+          type: setObj.type || iqInferTypeFromLegacyTypes(setObj.types),
           types: Array.from(setObj.types || []),
           replaceCounts: iqState.replaceCounts || {}
         };
@@ -1068,18 +1129,8 @@
           return; 
         } 
         const set=JSON.parse(raw); 
-        // Convert types array back to Set and restore replaceCounts
-        // Handle both new format (array) and old format (empty object from serialized Set)
-        if(Array.isArray(set.types) && set.types.length > 0){
-          set.types = new Set(set.types);
-        } else if(!set.types || (typeof set.types === 'object' && Object.keys(set.types).length === 0)){
-          set.types = new Set(['behavioral', 'technical']);
-        } else if(set.types instanceof Set){
-          // Already a Set, keep it
-        } else {
-          // Fallback for any other case
-          set.types = new Set(['behavioral', 'technical']);
-        }
+        // Normalize legacy/new type fields
+        set.type = iqSanitizeType(set.type, iqInferTypeFromLegacyTypes(set.types));
         iqState.set=set; 
         iqState.replaceCounts = set.replaceCounts || {}; 
         iqLoadNotes(); 
@@ -1450,8 +1501,8 @@
       return null;
     }
     
-    async function iqApiGenerate({ role, seniority, types, count, jd }){ 
-      iqTrack('iq_generate_clicked',{count: IQ_FIXED_COUNT,types}); 
+    async function iqApiGenerate({ role, seniority, type, count, jd }){ 
+      iqTrack('iq_generate_clicked',{count: IQ_FIXED_COUNT,type: iqSanitizeType(type, iqState.prefs.type || 'mixed')}); 
       
       try {
         const token = await getFirebaseToken();
@@ -1470,7 +1521,7 @@
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${token}`
           },
-          body: JSON.stringify({ role, seniority, types, jd })
+          body: JSON.stringify({ role, seniority, type, jd })
         }, IQ_API_TIMEOUT);
         
         if (!response.ok) {
@@ -1513,7 +1564,7 @@
           return {
             role: data.role,
             seniority: data.seniority,
-            types: data.types,
+            type: iqSanitizeType(data.type, iqInferTypeFromLegacyTypes(data.types)),
             count: data.count || IQ_FIXED_COUNT,
             seed: data.seed,
             jd: data.jd || '',
@@ -1539,7 +1590,7 @@
             error: e.message,
             role,
             seniority,
-            types
+            type
           });
           iqToast('The request took too long. Please check your connection and try again.');
           return null;
@@ -1551,7 +1602,7 @@
             error: e.message,
             role,
             seniority,
-            types
+            type
           });
           iqToast('Network error. Please check your internet connection and try again.');
           return null;
@@ -1563,7 +1614,7 @@
           stack: e.stack,
           role,
           seniority,
-          types
+          type
         });
         
         // Show error toast - no fallback to demo questions
@@ -1573,7 +1624,7 @@
     }
     
     // Save question set to D1 for Mock Interview
-    async function iqApiSaveSet({ role, seniority, types, questions, selectedIndices, jd }) {
+    async function iqApiSaveSet({ role, seniority, type, questions, selectedIndices, jd }) {
       try {
         const token = await getFirebaseToken();
         if (!token) {
@@ -1586,7 +1637,7 @@
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${token}`
           },
-          body: JSON.stringify({ role, seniority, types, questions, selectedIndices, jd })
+          body: JSON.stringify({ role, seniority, type, questions, selectedIndices, jd })
         });
         
         if (!response.ok) {
@@ -1612,7 +1663,8 @@
       if(!role){ iqToast('Select a role first'); return; } 
       const seniority=$IQ('#iq-seniority')?.value||''; 
       const count=IQ_FIXED_COUNT; 
-      const types=[...$$IQ('.iq-types .chip.is-on')].map(b=>b.dataset.type).filter(Boolean); 
+      const activeTypeBtn = $IQ('#iq-type .iq-segment.active');
+      const type = iqSanitizeType(activeTypeBtn?.dataset?.value, iqState.prefs.type || 'mixed');
       const jd=$IQ('#iq-jd')?.value?.trim()||''; 
       
       // Show skeleton loaders
@@ -1628,7 +1680,7 @@
       }
       
       try {
-        const res=await iqApiGenerate({role,seniority,types,count,jd}); 
+        const res=await iqApiGenerate({role,seniority,type,count,jd}); 
         
         // If auth error occurred, iqApiGenerate returns null - don't proceed
         if (!res) {
@@ -1661,7 +1713,7 @@
         }
         
         const seed = res.seed || `${Date.now().toString(36)}-${Math.random().toString(36).slice(2,8)}`; 
-        const setObj={...res, seed, role: res.role||role, seniority, count: IQ_FIXED_COUNT, types: new Set(types), jd, replacesUsed:0}; 
+        const setObj={...res, seed, role: res.role||role, seniority, count: IQ_FIXED_COUNT, type: iqSanitizeType(res.type, type), jd, replacesUsed:0}; 
         iqState.set=setObj;
         // Reset replace counts when generating a new set
         iqState.replaceCounts = {}; 
@@ -1669,7 +1721,7 @@
         iqState.dailyLimitReached = false;
         // Note: Don't call iqUpdateGenerateButtonState() here - it's redundant
         // because iqStartGlobalCooldown() will call it after properly setting the cooldown
-        iqState.prefs={...iqState.prefs,seniority,count: IQ_FIXED_COUNT,types:new Set(types)}; 
+        iqState.prefs={...iqState.prefs,seniority,count: IQ_FIXED_COUNT,type: iqSanitizeType(res.type, type)}; 
         iqSavePrefs(); 
         iqLoadNotes(); 
         iqRenderQuestions(); 
@@ -1742,7 +1794,7 @@
       const set = iqState.set;
       const role = set.role || ($IQ('#iq-role')?.value?.trim()||'');
       const seniority = set.seniority || iqState.prefs.seniority || '';
-      const types = iqTypesToArray(set.types || iqState.prefs.types, ['behavioral', 'technical']);
+      const type = iqSanitizeType(set.type, iqState.prefs.type || 'mixed');
       const jd = set.jd || $IQ('#iq-jd')?.value || '';
 
       // Check per-question replace limit (TASK 10B)
@@ -1790,7 +1842,7 @@
           body: JSON.stringify({ 
             role, 
             seniority, 
-            types, 
+            type, 
             jd,
             mode: 'replace',
             replaceIndex: i
@@ -1933,12 +1985,28 @@
       $IQ('#upsell-upgrade')?.addEventListener('click', ()=>{ iqTrack('iq_upsell_upgrade_clicked'); });
       const overlay=$IQ('#iq-upsell'); const dialogEl=$IQ('#iq-upsell > div[role="dialog"]'); dialogEl?.addEventListener('click', (e)=> e.stopPropagation()); overlay?.addEventListener('click', (e)=>{ if(e.target===overlay){ overlay.hidden=true; }}); document.addEventListener('keydown', (e)=>{ if(e.key==='Escape' && overlay && !overlay.hidden){ overlay.hidden=true; }});
       
-      // More types one-time reveal
-      const more=$IQ('#types-more'); if(more){ const adv=$IQ('#types-advanced'); more.addEventListener('click', ()=>{ if(adv){ adv.hidden=false; } more.setAttribute('aria-expanded','true'); more.remove(); }, { once:true }); }
-      
-      // Chips a11y (only for selectable chips with data-type, not "More types")
-      $$IQ('.iq-types .chip[data-type]').forEach(b=> b.addEventListener('click', ()=>{ b.classList.toggle('is-on'); b.setAttribute('aria-pressed', b.classList.contains('is-on') ? 'true' : 'false'); iqSavePrefs(); }));
-      $$IQ('.iq-types .chip[data-type]').forEach(b=>{ b.setAttribute('role','button'); b.setAttribute('aria-pressed', b.classList.contains('is-on') ? 'true' : 'false'); b.addEventListener('keydown', (ke)=>{ if(ke.key==='Enter'||ke.key===' '){ ke.preventDefault(); b.click(); } }); });
+      // Question Type segmented control (single-select)
+      const typeBtns = $$IQ('#iq-type .iq-segment');
+      const setActiveType = (nextType) => {
+        const t = iqSanitizeType(nextType, 'mixed');
+        typeBtns.forEach(btn => {
+          const isActive = btn.dataset.value === t;
+          btn.classList.toggle('active', isActive);
+          btn.setAttribute('aria-selected', isActive ? 'true' : 'false');
+        });
+        iqState.prefs.type = t;
+        iqSavePrefs();
+      };
+      if (typeBtns.length) {
+        typeBtns.forEach(btn => {
+          btn.addEventListener('click', () => setActiveType(btn.dataset.value));
+          btn.addEventListener('keydown', (ke) => {
+            if (ke.key === 'Enter' || ke.key === ' ') { ke.preventDefault(); btn.click(); }
+          });
+        });
+        // Hydrate from prefs on load
+        setActiveType(iqState.prefs.type || 'mixed');
+      }
     }
     async function iqHandleMock(useSaved){
       const plan=(window.JobHackAINavigation?.getEffectivePlan?.()||localStorage.getItem('user-plan')||'free');
@@ -1957,7 +2025,7 @@
       if(['pro','premium'].includes(plan)){
         const mode = useSaved ? 'saved' : 'current';
         const seniority = iqState.set?.seniority || '';
-        const types = iqTypesToArray(iqState.set?.types, ['behavioral', 'technical']);
+        const type = iqSanitizeType(iqState.set?.type, iqState.prefs.type || 'mixed');
         const jd = iqState.set?.jd || '';
         const questions = iqState.set?.questions || [];
         
@@ -1973,7 +2041,7 @@
           const savedSet = await iqApiSaveSet({
             role,
             seniority,
-            types,
+            type,
             questions,
             selectedIndices,
             jd
@@ -1991,7 +2059,7 @@
               d1Id: savedSet.id,
               role, 
               seniority,
-              types,
+              type,
               selectedIndices,
               mode,
               questionsFiltered: true,
@@ -2012,7 +2080,7 @@
               id: localSetId, 
               role, 
               seniority,
-              types,
+              type,
               selectedIndices,
               mode,
               questionsFiltered: true,
@@ -2269,7 +2337,7 @@ function initIQPage(){
     const upgradeBtn = document.getElementById('iq-upgrade');
 
     // Self-tests
-    async function runIQSelfTests(){ const res=[]; const ok=(n,c)=>res.push({n,pass:!!c}); ok('Role input exists', !!document.getElementById('iq-role')); ok('Generate button exists', !!document.getElementById('btn-generate')); iqStartGlobalCooldown(1); ok('Cooldown helper shows', $IQ('#cooldown-helper') && $IQ('#cooldown-helper').style.display !== 'none'); const gen=await iqApiGenerate({ role:'Tester', seniority:'', types:['behavioral'], count:3, jd:'' }); const hasQuestions = !!(gen && Array.isArray(gen.questions) && gen.questions.length>0); ok('apiGenerate returns questions', hasQuestions); if(!hasQuestions && gen && gen.dailyLimitReached){ console.warn('[IQ] Self-test skipped due to daily limit'); } console.log('%cInterview Questions Self-Tests','font-weight:700'); res.forEach(r=>console.log(`${r.pass?'✅':'❌'} ${r.n}`)); }
+    async function runIQSelfTests(){ const res=[]; const ok=(n,c)=>res.push({n,pass:!!c}); ok('Role input exists', !!document.getElementById('iq-role')); ok('Generate button exists', !!document.getElementById('btn-generate')); iqStartGlobalCooldown(1); ok('Cooldown helper shows', $IQ('#cooldown-helper') && $IQ('#cooldown-helper').style.display !== 'none'); const gen=await iqApiGenerate({ role:'Tester', seniority:'', type:'behavioral', count:3, jd:'' }); const hasQuestions = !!(gen && Array.isArray(gen.questions) && gen.questions.length>0); ok('apiGenerate returns questions', hasQuestions); if(!hasQuestions && gen && gen.dailyLimitReached){ console.warn('[IQ] Self-test skipped due to daily limit'); } console.log('%cInterview Questions Self-Tests','font-weight:700'); res.forEach(r=>console.log(`${r.pass?'✅':'❌'} ${r.n}`)); }
     
     // --- QA: Integration harness ---
     function runIQIntegrationQA(){
@@ -2281,7 +2349,7 @@ function initIQPage(){
         const role='QA Engineer';
         const seed=String(Date.now());
         const questions = Array.from({length: IQ_FIXED_COUNT}, (_,i)=>({ q:`QA auto Q${i+1}` }));
-        iqState.set = { role, seed, seniority:'', types:['behavioral'], jd:'', questions };
+        iqState.set = { role, seed, seniority:'', type:'behavioral', jd:'', questions };
         iqState.notes = {};
         iqSaveSetFull(iqState.set);
         iqRenderQuestions();

@@ -48,8 +48,16 @@ async function getUserPlan(uid, env) {
 /**
  * Generate cutting-edge interview questions using OpenAI
  */
-async function generateQuestions({ role, seniority, types, count, jd }, env) {
-  const typesStr = types && types.length > 0 ? types.join(', ') : 'behavioral, technical';
+async function generateQuestions({ role, seniority, type, count, jd }, env) {
+  const normalizedType = String(type || 'mixed').toLowerCase();
+  const expandedTypes =
+    normalizedType === 'mixed'
+      ? ['behavioral', 'technical', 'leadership']
+      : [normalizedType];
+  const typesStr =
+    normalizedType === 'mixed'
+      ? 'mixed (behavioral, technical, leadership)'
+      : expandedTypes.join(', ');
   const jdContext = jd && jd.trim() ? jd.trim() : 'none provided';
   const seed = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 
@@ -71,7 +79,7 @@ Return ONLY a JSON object with this exact shape:
 {
   "role": "${role}",
   "seniority": "${seniority || ''}",
-  "types": ${JSON.stringify(types || ['behavioral', 'technical'])},
+  "type": "${normalizedType}",
   "count": ${count},
   "seed": "${seed}",
   "jd": "${jd ? 'provided' : ''}",
@@ -99,10 +107,7 @@ CRITICAL:
       properties: {
         role: { type: 'string' },
         seniority: { type: 'string' },
-        types: {
-          type: 'array',
-          items: { type: 'string' }
-        },
+        type: { type: 'string' },
         count: { type: 'number' },
         seed: { type: 'string' },
         jd: { type: 'string' },
@@ -120,7 +125,7 @@ CRITICAL:
           }
         }
       },
-      required: ['role', 'seniority', 'types', 'count', 'seed', 'questions']
+      required: ['role', 'seniority', 'type', 'count', 'seed', 'questions']
     }
   };
 
@@ -148,6 +153,10 @@ CRITICAL:
 
   // Ensure seed is set
   parsed.seed = parsed.seed || seed;
+  // Ensure type is set (and sanitize to our contract)
+  parsed.type = String(parsed.type || normalizedType || 'mixed').toLowerCase();
+  // Backwards compatibility for older clients expecting `types[]`
+  parsed.types = [parsed.type];
 
   return {
     ...parsed,
@@ -224,18 +233,29 @@ export async function onRequest(context) {
       return errorResponse('Invalid JSON in request body', 400, origin, env, requestId);
     }
 
-    const { role, seniority, types, jd, mode, replaceIndex } = body;
+    const { role, seniority, type, types, jd, mode, replaceIndex } = body;
 
     // Validate role
     if (!role || typeof role !== 'string' || role.trim().length === 0) {
       return errorResponse('Role is required', 400, origin, env, requestId);
     }
 
-    // Validate types
-    const validTypes = ['behavioral', 'technical', 'system', 'leadership', 'culture'];
-    const sanitizedTypes = Array.isArray(types)
-      ? types.filter(t => validTypes.includes(t))
-      : ['behavioral', 'technical'];
+    // Validate type (single string). Keep legacy `types[]` support.
+    const validTypes = ['mixed', 'behavioral', 'technical', 'leadership'];
+    const inferTypeFromLegacy = (rawTypes) => {
+      if (!Array.isArray(rawTypes)) return null;
+      const cleaned = rawTypes.map(t => String(t || '').toLowerCase()).filter(Boolean);
+      if (!cleaned.length) return null;
+      if (cleaned.includes('mixed')) return 'mixed';
+      // Legacy multi-select becomes mixed
+      if (cleaned.length > 1) return 'mixed';
+      // Map removed legacy values
+      if (cleaned[0] === 'system') return 'technical';
+      if (cleaned[0] === 'culture') return 'behavioral';
+      return cleaned[0];
+    };
+    const requestedType = String(type || inferTypeFromLegacy(types) || 'mixed').toLowerCase();
+    const sanitizedType = validTypes.includes(requestedType) ? requestedType : 'mixed';
 
     // Determine count based on mode
     const requestedCount = mode === 'replace' ? 1 : IQ_FIXED_COUNT;
@@ -357,7 +377,7 @@ export async function onRequest(context) {
       result = await generateQuestions({
         role: role.trim(),
         seniority: seniority || '',
-        types: sanitizedTypes,
+        type: sanitizedType,
         count: requestedCount,
         jd: jd || ''
       }, env);
@@ -387,6 +407,8 @@ export async function onRequest(context) {
     const response = successResponse({
       role: result.role,
       seniority: result.seniority,
+      type: result.type,
+      // Backwards compatibility
       types: result.types,
       count: result.count,
       seed: result.seed,

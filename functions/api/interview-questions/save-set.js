@@ -93,6 +93,22 @@ function safeArray(raw, limit = 10, maxLen = 40) {
     .map((v) => v.slice(0, maxLen));
 }
 
+function sanitizeType(rawType, legacyTypes) {
+  const valid = new Set(['mixed', 'behavioral', 'technical', 'leadership']);
+  const t = String(rawType || '').trim().toLowerCase();
+  if (valid.has(t)) return t;
+  // Legacy support: infer from types[]
+  if (Array.isArray(legacyTypes)) {
+    const cleaned = legacyTypes.map((x) => String(x || '').trim().toLowerCase()).filter(Boolean);
+    if (cleaned.includes('mixed')) return 'mixed';
+    if (cleaned.length > 1) return 'mixed';
+    if (cleaned[0] === 'system') return 'technical';
+    if (cleaned[0] === 'culture') return 'behavioral';
+    if (valid.has(cleaned[0])) return cleaned[0];
+  }
+  return 'mixed';
+}
+
 export async function onRequest(context) {
   const { request, env } = context;
 
@@ -149,7 +165,7 @@ export async function onRequest(context) {
   const seniority = String(payload?.seniority || '').trim().slice(0, 40);
   const jd = String(payload?.jd || '').trim().slice(0, 4000);
   const questions = normalizeQuestions(payload?.questions);
-  const types = safeArray(payload?.types, 10, 40);
+  const type = sanitizeType(payload?.type, payload?.types);
   const selectedIndices = normalizeSelectedIndices(payload?.selectedIndices, questions.length);
 
   if (!questions.length) {
@@ -189,7 +205,7 @@ export async function onRequest(context) {
     const now = Date.now();
     const selectedJson = JSON.stringify(selectedIndices);
     const questionsJson = JSON.stringify(questions);
-    const typesJson = JSON.stringify(types);
+    const typesJson = JSON.stringify([type]);
 
     await db
       .prepare(

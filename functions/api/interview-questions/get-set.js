@@ -59,6 +59,20 @@ function parseJsonArray(raw) {
   }
 }
 
+function inferType(typesArr) {
+  const valid = new Set(['mixed', 'behavioral', 'technical', 'leadership']);
+  const cleaned = Array.isArray(typesArr)
+    ? typesArr.map((t) => String(t || '').trim().toLowerCase()).filter(Boolean)
+    : [];
+  if (!cleaned.length) return 'mixed';
+  if (cleaned.includes('mixed')) return 'mixed';
+  if (cleaned.length > 1) return 'mixed';
+  if (cleaned[0] === 'system') return 'technical';
+  if (cleaned[0] === 'culture') return 'behavioral';
+  if (valid.has(cleaned[0])) return cleaned[0];
+  return 'mixed';
+}
+
 export async function onRequest(context) {
   const { request, env } = context;
 
@@ -160,12 +174,14 @@ export async function onRequest(context) {
     const questions = parseJsonArray(row.questions);
     const selectedIndices = parseJsonArray(row.selected_indices);
     const types = parseJsonArray(row.types);
+    const type = inferType(types);
 
     return jsonResponse(env, {
       success: true,
       id: row.id,
       role: row.role || '',
       seniority: row.seniority || '',
+      type,
       types,
       jd: row.jd || '',
       questions,
