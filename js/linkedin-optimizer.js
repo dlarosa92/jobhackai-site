@@ -287,7 +287,8 @@ function renderHistory() {
     row.classList.toggle('is-selected', selectedHistoryId === item.id);
 
     const when = timeAgo(item.createdAt);
-    const score = Number.isFinite(Number(item.overallScore)) ? `${Math.round(Number(item.overallScore))}/100` : '';
+    // Explicitly check for null/undefined before treating as valid score (Number(null) === 0, which is finite)
+    const score = item.overallScore != null && Number.isFinite(Number(item.overallScore)) ? `${Math.round(Number(item.overallScore))}/100` : '';
     row.innerHTML = `
       <div class="lo-history-line1">${escapeHtml(item.role || 'LinkedIn Optimization')}</div>
       <div class="lo-history-line2">${escapeHtml([when, score].filter(Boolean).join(' • '))}</div>
@@ -644,12 +645,13 @@ function initRoleSelector() {
 
 function bindEvents() {
   els.form?.addEventListener('submit', (e) => {
-    // Check HTML5 validation before preventing default
-    if (!els.form?.checkValidity()) {
+    // Always prevent default to avoid page reload in edge cases (e.g., if els.form becomes null/stale)
+    e.preventDefault();
+    // Check HTML5 validation - if form is null/stale, checkValidity() returns undefined, which is falsy
+    if (els.form && !els.form.checkValidity()) {
       // Let browser show validation messages
       return;
     }
-    e.preventDefault();
     analyze();
   });
 
