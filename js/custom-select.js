@@ -121,6 +121,32 @@
     select.classList.add('jh-select-native');
     select.tabIndex = -1;
 
+    function syncSelected() {
+      const selectedValue = select.value;
+      const selected = getSelectedOption(select);
+      buttonText.textContent = (selected && selected.textContent) ? selected.textContent : 'Select…';
+
+      menu.querySelectorAll('.jh-dropdown__option').forEach((el) => {
+        const isSelected = el.dataset.value === selectedValue;
+        el.setAttribute('aria-selected', String(isSelected));
+      });
+    }
+
+    // Override the value property to sync visual display when set programmatically
+    let _value = select.value;
+    Object.defineProperty(select, 'value', {
+      get() {
+        return _value;
+      },
+      set(newValue) {
+        const oldValue = _value;
+        _value = newValue;
+        if (oldValue !== newValue) {
+          syncSelected();
+        }
+      }
+    });
+
     function renderOptions() {
       // Clear menu
       menu.innerHTML = '';
@@ -177,17 +203,6 @@
 
       // Ensure aria-selected stays accurate.
       syncSelected();
-    }
-
-    function syncSelected() {
-      const selectedValue = select.value;
-      const selected = getSelectedOption(select);
-      buttonText.textContent = (selected && selected.textContent) ? selected.textContent : 'Select…';
-
-      menu.querySelectorAll('.jh-dropdown__option').forEach((el) => {
-        const isSelected = el.dataset.value === selectedValue;
-        el.setAttribute('aria-selected', String(isSelected));
-      });
     }
 
     function open() {
