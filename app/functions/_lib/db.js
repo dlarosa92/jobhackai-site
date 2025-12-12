@@ -839,6 +839,8 @@ export async function getMockInterviewSessionById(env, sessionId, userId) {
   }
 
   try {
+    await ensureMockInterviewSchema(env);
+
     const row = await env.DB.prepare(
       `SELECT id, user_id, role, seniority, interview_style, question_set_id, question_set_name,
         overall_score, relevance_score, structure_score, clarity_score, insight_score, grammar_score,
