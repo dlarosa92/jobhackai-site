@@ -652,6 +652,10 @@ async function init() {
   updatePlanBadge();
   window.addEventListener('planChanged', updatePlanBadge);
 
+  // Safety: ensure delete modal/backdrop are never stuck visible on cold load
+  // (CSS may override the browser's default [hidden] behavior).
+  closeDeleteModal();
+
   bindEvents();
   initRoleSelector();
 

@@ -443,6 +443,10 @@
   z-index: var(--z-modal-backdrop);
 }
 
+.cl-modal-backdrop[hidden] {
+  display: none !important;
+}
+
 .cl-modal {
   position: fixed;
   inset: 0;
@@ -451,6 +455,10 @@
   justify-content: center;
   z-index: var(--z-modal);
   padding: var(--space-md);
+}
+
+.cl-modal[hidden] {
+  display: none !important;
 }
 
 .cl-modal-card {
