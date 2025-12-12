@@ -137,10 +137,17 @@ export async function onRequest(context) {
         .bind(now, id, uid)
         .run();
 
-      if (!res || res.success === false || (typeof res.changes === 'number' && res.changes === 0)) {
-        // D1 returns changes on meta sometimes; fallback check with get
+      const changes =
+        typeof res?.meta?.changes === 'number'
+          ? res.meta.changes
+          : typeof res?.changes === 'number'
+            ? res.changes
+            : null;
+
+      if (!res || res.success === false || changes === 0) {
+        // If nothing was updated, verify the item still exists and is not deleted.
         const row = await db
-          .prepare(`SELECT id FROM cover_letter_history WHERE id = ? AND user_id = ?`)
+          .prepare(`SELECT id FROM cover_letter_history WHERE id = ? AND user_id = ? AND is_deleted = 0`)
           .bind(id, uid)
           .first();
         if (!row) return jsonResponse(env, { error: 'not_found' }, 404);

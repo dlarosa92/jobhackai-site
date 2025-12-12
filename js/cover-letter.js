@@ -411,32 +411,32 @@ async function generateCoverLetter() {
   }
 }
 
-const autosave = debounce(async () => {
-  const item = getSelectedItem();
-  if (!item || !selectedId) return;
-  if (!els.preview) return;
+const autosave = debounce(async (id, text) => {
+  const targetId = String(id || '').trim();
+  if (!targetId) return;
 
-  const text = String(els.preview.value || '');
-  setSaveIndicator('saving', 'Saving…');
+  const nextText = String(text || '');
+
+  // Only update the UI indicator for the currently selected item.
+  if (selectedId === targetId) setSaveIndicator('saving', 'Saving…');
 
   try {
-    const data = await apiFetch(`/api/cover-letter/history/${encodeURIComponent(selectedId)}`, {
+    const data = await apiFetch(`/api/cover-letter/history/${encodeURIComponent(targetId)}`, {
       method: 'PATCH',
-      body: JSON.stringify({ coverLetterText: text })
+      body: JSON.stringify({ coverLetterText: nextText })
     });
 
     const updated = data?.item;
     if (updated?.id) {
       const idx = historyItems.findIndex((x) => x.id === updated.id);
       if (idx >= 0) historyItems[idx] = updated;
-      setSaveIndicator('saved', 'Saved');
       renderHistory();
-    } else {
-      setSaveIndicator('saved', 'Saved');
     }
+
+    if (selectedId === targetId) setSaveIndicator('saved', 'Saved');
   } catch (e) {
     console.warn('[COVER-LETTER] Autosave failed:', e);
-    setSaveIndicator('error', 'Couldn’t save');
+    if (selectedId === targetId) setSaveIndicator('error', 'Couldn’t save');
   }
 }, 800);
 
@@ -602,7 +602,7 @@ function bindEvents() {
 
   els.preview?.addEventListener('input', () => {
     if (!selectedId) return;
-    autosave();
+    autosave(selectedId, els.preview?.value || '');
   });
 
   els.copy?.addEventListener('click', copyPreview);
