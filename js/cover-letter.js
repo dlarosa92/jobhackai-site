@@ -490,6 +490,9 @@ function startInlineRename(rowEl, item) {
       commit();
     } else if (e.key === 'Escape') {
       e.preventDefault();
+      // Cancel rename: prevent blur-triggered commit when we re-render and remove the input.
+      committed = true;
+      input.removeEventListener('blur', commit);
       renderHistory();
     }
   });
