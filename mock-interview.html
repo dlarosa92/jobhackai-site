@@ -1748,8 +1748,8 @@
         
         const data = await res.json();
         
-        // Handle wrapped response from successResponse (data may have success: true wrapper)
-        const result = data.success !== undefined ? data : data;
+        // successResponse spreads data at the top level, so data is already in the correct format
+        const result = data;
         
         state.scoringResult = result;
         state.sessionId = result.sessionId;
