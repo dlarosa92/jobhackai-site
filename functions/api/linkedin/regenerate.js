@@ -262,19 +262,31 @@ export async function onRequest(context) {
       .bind(requestId, uid)
       .first();
 
-    if (existingByRequest && existingByRequest.output_json) {
-      const full = safeJsonParse(existingByRequest.output_json);
-      if (existingByRequest.status === 'ok' && full) {
-        const sec = full?.sections?.[section];
+    if (existingByRequest) {
+      const output = safeJsonParse(existingByRequest.output_json);
+      if (existingByRequest.status === 'ok' && output) {
+        const sec = output?.sections?.[section];
         return jsonResponse(env, {
           run_id: existingByRequest.id,
           updated_at: existingByRequest.updated_at,
-          overallScore: full?.overallScore ?? null,
+          overallScore: output?.overallScore ?? null,
           section,
           data: sec || null,
           deduped: true
         });
       }
+      // Return early for processing/error states to avoid UNIQUE constraint violation
+      return jsonResponse(
+        env,
+        {
+          run_id: existingByRequest.id,
+          created_at: existingByRequest.created_at,
+          updated_at: existingByRequest.updated_at,
+          role: existingByRequest.role,
+          status: existingByRequest.status || 'processing'
+        },
+        202
+      );
     }
 
     // Load the source run (must belong to user)
