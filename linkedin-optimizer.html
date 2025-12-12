@@ -1,964 +1,249 @@
+<!-- DO NOT EDIT HEADER OR FOOTER PER-PAGE. Use canonical snippet from docs/snippets.md. -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <style>html.auth-pending{visibility:hidden}</style>
-  <script src="js/static-auth-guard.js?v=20251007-2"></script>
-  <script>
-    // --- IMMEDIATE PAGE ACCESS CONTROL ---
-    // Run immediately to prevent content flash for unauthorized users
-    (function enforceAccessImmediate() {
-      const isAuthenticated = localStorage.getItem('user-authenticated') === 'true' && !!localStorage.getItem('user-email');
-      const plan = localStorage.getItem('user-plan') || 'free';
-      const allowedPlans = ['premium'];
-
-      // If not authenticated, redirect to login immediately
-      if (!isAuthenticated) {
-        console.log('🚫 [LINKEDIN-OPT] Not authenticated, redirecting to login');
-        window.location.href = 'login.html';
-        return;
-      }
-
-      // If authenticated but on wrong plan, redirect to pricing with upgrade modal immediately
-      if (!allowedPlans.includes(plan)) {
-        console.log('🚫 [LINKEDIN-OPT] Access denied for plan:', plan);
-        window.location.href = 'pricing-a.html?plan=premium';
-        return;
-      }
-
-      // Access granted - continue loading page
-      console.log('✅ [LINKEDIN-OPT] Access granted for plan:', plan);
-    })();
-  </script>
   <title>JobHackAI</title>
   <link rel="icon" type="image/png" href="assets/jobhackai_icon_only_128.png">
   <link rel="apple-touch-icon" href="assets/jobhackai_icon_only_128.png">
   <script src="js/dynamic-favicon.js?v=20250111-1"></script>
+
   <!-- Design tokens & global styles -->
   <link rel="stylesheet" href="css/tokens.css">
   <link rel="stylesheet" href="css/main.css">
+
   <!-- Component overrides -->
   <link rel="stylesheet" href="css/header.css">
   <link rel="stylesheet" href="css/footer.css">
-  <style>
-    html, body {
-      height: 100%;
-    }
-    body {
-      min-height: 100vh;
-      display: flex;
-      flex-direction: column;
-    }
-    main {
-      flex: 1 0 auto;
-    }
-    .site-footer {
-      flex-shrink: 0;
-      position: relative;
-      bottom: 0;
-      width: 100%;
-      background: var(--color-card-bg);
-    }
-    
-    /* LinkedIn Optimizer Specific Styles */
-    .lo-card { 
-      background: var(--color-card-bg); 
-      border-radius: var(--radius-xl); 
-      box-shadow: var(--shadow-md); 
-      padding: var(--space-lg); 
-      margin-bottom: var(--space-lg); 
-    }
-    .lo-title { 
-      font-size: var(--font-size-3xl); 
-      font-weight: var(--font-weight-extrabold); 
-      margin-bottom: var(--space-sm); 
-      color: var(--color-text-main); 
-    }
-    .lo-section-title { 
-      font-size: var(--font-size-xl); 
-      font-weight: var(--font-weight-bold); 
-      margin-bottom: var(--space-xs); 
-      color: var(--color-text-main); 
-    }
-    .lo-progress-ring { 
-      width: 80px; 
-      height: 80px; 
-      display: inline-block; 
-      vertical-align: middle; 
-      margin-right: var(--space-md); 
-    }
-    .lo-score-badge { 
-      display: inline-block; 
-      background: var(--color-cta-green); 
-      color: #fff; 
-      font-weight: var(--font-weight-bold); 
-      border-radius: var(--radius-full); 
-      padding: 0.3em 1em; 
-      font-size: var(--font-size-lg); 
-      margin-left: var(--space-xs); 
-    }
-    .lo-metrics-grid { 
-      display: grid; 
-      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); 
-      gap: var(--space-md); 
-      margin-top: var(--space-md); 
-    }
-    .lo-metric-card { 
-      background: var(--color-card-bg); 
-      border-radius: var(--radius-lg); 
-      box-shadow: var(--shadow-sm); 
-      padding: var(--space-md); 
-      border: 1px solid var(--color-divider);
-    }
-    .lo-metric-label { 
-      font-weight: var(--font-weight-bold); 
-      color: var(--color-text-main); 
-      margin-bottom: var(--space-xs); 
-      display: flex;
-      align-items: center;
-      gap: var(--space-xs);
-    }
-    .lo-metric-score { 
-      font-size: var(--font-size-xl); 
-      font-weight: var(--font-weight-bold); 
-      color: var(--color-cta-green); 
-      margin-bottom: var(--space-xs);
-    }
-    .lo-metric-tip { 
-      color: var(--color-text-secondary); 
-      font-size: var(--font-size-sm); 
-    }
-    .lo-btn-primary { 
-      background: var(--color-accent-blue); 
-      color: #fff; 
-      font-weight: var(--font-weight-semibold); 
-      border: none; 
-      border-radius: var(--radius-md); 
-      padding: 6px 12px; 
-      font-size: 0.875rem; 
-      cursor: pointer; 
-      transition: all var(--transition-normal);
-      white-space: nowrap;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      min-width: 90px;
-      height: 32px;
-      box-sizing: border-box;
-      position: relative;
-    }
-
-    .lo-btn-primary.loading {
-      color: transparent;
-      pointer-events: none;
-    }
-
-    .lo-btn-primary.loading::after {
-      content: '';
-      position: absolute;
-      left: calc(50% - 8px);
-      top: calc(50% - 8px);
-      width: 16px;
-      height: 16px;
-      border: 2px solid var(--color-divider);
-      border-top: 2px solid #fff;
-      border-radius: 50%;
-      animation: spin 1s linear infinite;
-    }
-    
-    /* Specific width for regenerate buttons */
-    .lo-metric-actions .lo-btn-primary {
-      width: 90px;
-    }
-    .lo-btn-primary.loading {
-      opacity: 0.8;
-    }
-    .lo-btn-primary:hover { 
-      background: #005bb5; 
-    }
-    .lo-metric-actions { 
-      display: flex;
-      gap: 0.5rem;
-      margin: 0.75rem 0;
-    }
-    .lo-metric-actions .lo-btn-primary {
-      min-width: 90px;
-    }
-    .lo-btn-green { 
-      background: var(--color-cta-green); 
-      color: #fff; 
-      font-weight: var(--font-weight-semibold); 
-      border: none; 
-      border-radius: var(--radius-md); 
-      padding: 0.4rem 0.8rem; 
-      font-size: 0.875rem; 
-      cursor: pointer; 
-      transition: background var(--transition-normal);
-      min-width: 70px;
-    }
-    .lo-btn-green:hover { 
-      background: #00c965; 
-    }
-    .lo-textarea { 
-      width: 100%; 
-      box-sizing: border-box;
-      min-height: 120px; 
-      border: 2px solid var(--color-divider); 
-      border-radius: var(--radius-lg); 
-      padding: var(--space-md); 
-      font-size: var(--font-size-base); 
-      margin-bottom: var(--space-md); 
-      background: var(--color-bg-light); 
-      color: var(--color-text-main); 
-      resize: vertical; 
-      font-family: var(--font-family-base);
-      transition: border-color var(--transition-normal), box-shadow var(--transition-normal);
-    }
-    .lo-textarea:focus {
-      outline: none;
-      border-color: var(--color-accent-blue);
-      box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.1);
-    }
-    .lo-label { 
-      font-weight: var(--font-weight-semibold); 
-      font-size: var(--font-size-lg); 
-      color: var(--color-text-main);
-      margin-bottom: var(--space-sm);
-      display: block;
-    }
-    .lo-plan-badge {
-      display: inline-block;
-      background: var(--color-card-bg);
-      color: var(--color-text-main);
-      font-weight: var(--font-weight-bold);
-      border-radius: var(--radius-full);
-      padding: 0.3em 1em;
-      font-size: var(--font-size-sm);
-      margin-left: var(--space-xs);
-      border: 1px solid var(--color-divider);
-    }
-    .lo-input {
-      width: 100%;
-      box-sizing: border-box;
-      border: 2px solid var(--color-divider);
-      border-radius: var(--radius-lg);
-      padding: var(--space-md);
-      font-size: var(--font-size-base);
-      margin-bottom: var(--space-md);
-      background: var(--color-bg-light);
-      color: var(--color-text-main);
-      font-family: var(--font-family-base);
-      transition: border-color var(--transition-normal), box-shadow var(--transition-normal);
-    }
-    .lo-input:focus {
-      outline: none;
-      border-color: var(--color-accent-blue);
-      box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.1);
-    }
-    .lo-tooltip {
-      position: relative;
-      display: inline-block;
-      cursor: help;
-    }
-    .tooltip-text {
-      visibility: hidden;
-      width: 280px;
-      background-color: var(--color-text-main);
-      color: #fff;
-      text-align: center;
-      border-radius: var(--radius-md);
-      padding: var(--space-sm);
-      position: absolute;
-      z-index: 1;
-      bottom: 125%;
-      left: 50%;
-      margin-left: -140px;
-      opacity: 0;
-      transition: opacity var(--transition-normal);
-      font-size: var(--font-size-sm);
-      font-weight: var(--font-weight-normal);
-      line-height: 1.4;
-    }
-    .tooltip-text::after {
-      content: "";
-      position: absolute;
-      top: 100%;
-      left: 50%;
-      margin-left: -5px;
-      border-width: 5px;
-      border-style: solid;
-      border-color: var(--color-text-main) transparent transparent transparent;
-    }
-    .lo-tooltip:hover .tooltip-text {
-      visibility: visible;
-      opacity: 1;
-    }
-    .lo-loading {
-      display: none;
-      text-align: center;
-      padding: var(--space-xl);
-    }
-    .lo-spinner {
-      width: 40px;
-      height: 40px;
-      border: 4px solid var(--color-divider);
-      border-top: 4px solid var(--color-accent-blue);
-      border-radius: 50%;
-      animation: spin 1s linear infinite;
-      margin: 0 auto var(--space-md);
-    }
-    .lo-loading-steps {
-      display: flex;
-      flex-direction: column;
-      gap: var(--space-md);
-      margin-top: var(--space-lg);
-      max-width: 400px;
-      margin-left: auto;
-      margin-right: auto;
-    }
-    .lo-loading-step {
-      display: flex;
-      align-items: center;
-      gap: var(--space-md);
-      opacity: 0.5;
-      transition: opacity var(--transition-normal);
-    }
-    .lo-loading-step.active {
-      opacity: 1;
-    }
-    .lo-loading-step-icon {
-      width: 40px;
-      height: 40px;
-      border-radius: 50%;
-      background: var(--color-bg-light);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      color: var(--color-text-secondary);
-    }
-    .lo-loading-step.active .lo-loading-step-icon {
-      background: var(--color-accent-blue);
-      color: #fff;
-    }
-    .lo-loading-step-text {
-      font-weight: var(--font-weight-semibold);
-      color: var(--color-text-main);
-    }
-    .lo-results {
-      display: none;
-    }
-    .lo-upgrade-prompt {
-      text-align: center;
-      padding: var(--space-xl);
-      background: var(--color-card-bg);
-      border-radius: var(--radius-xl);
-      box-shadow: var(--shadow-md);
-      margin: var(--space-xl) auto;
-      max-width: 500px;
-    }
-    .lo-upgrade-prompt svg {
-      width: 48px;
-      height: 48px;
-      color: var(--color-text-muted);
-      margin-bottom: var(--space-md);
-    }
-    .lo-upgrade-text {
-      font-size: var(--font-size-lg);
-      color: var(--color-text-main);
-      margin-bottom: var(--space-lg);
-      line-height: 1.5;
-    }
-    .lo-btn-secondary {
-      background: var(--color-accent-blue);
-      color: #fff;
-      border: none;
-      border-radius: var(--radius-md);
-      padding: var(--space-sm) var(--space-lg);
-      font-size: var(--font-size-base);
-      font-weight: var(--font-weight-semibold);
-      cursor: pointer;
-      transition: background var(--transition-normal);
-    }
-    .lo-btn-secondary:hover {
-      background: #005bb5;
-    }
-    @keyframes spin {
-      0% { transform: rotate(0deg); }
-      100% { transform: rotate(360deg); }
-    }
-    .lo-download-section {
-      border-top: 1px solid var(--color-divider);
-      padding-top: var(--space-lg);
-      margin-top: var(--space-lg);
-    }
-    .lo-download-section .lo-btn-green {
-      width: 100%;
-      padding: var(--space-md);
-      font-size: var(--font-size-base);
-      margin-top: var(--space-md);
-    }
-  </style>
+  <link rel="stylesheet" href="css/linkedin-optimizer.css">
 </head>
 <body>
-<!-- HEADER (canonical) -->
-<header class="site-header">
-  <div class="container">
-    <a href="index.html" class="nav-logo" aria-label="Go to homepage">
-      <svg width="24" height="24" fill="none" stroke="#1F2937" stroke-width="2" xmlns="http://www.w3.org/2000/svg">
-        <rect x="3" y="7" width="18" height="13" rx="2"/>
-        <path d="M8 7V5a2 2 0 012-2h4a2 2 0 012 2v2"/>
-      </svg>
-      <span>JOBHACKAI</span>
-    </a>
-    <div class="nav-group">
-      <nav class="nav-links" role="navigation">
-        <!-- Navigation will be dynamically populated by navigation.js -->
-      </nav>
-    </div>
-    <button class="mobile-toggle" aria-label="Open navigation menu" aria-expanded="false" aria-controls="mobileNav">
-      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <line x1="3" y1="12" x2="21" y2="12"></line>
-        <line x1="3" y1="6" x2="21" y2="6"></line>
-        <line x1="3" y1="18" x2="21" y2="18"></line>
-      </svg>
-    </button>
-  </div>
-</header>
-<nav class="mobile-nav" id="mobileNav">
-  <!-- Mobile navigation will be dynamically populated by navigation.js -->
-</nav>
-<div class="mobile-nav-backdrop" id="mobileNavBackdrop"></div>
-<script>
-  // Hamburger menu toggle with proper state management and click-outside handling
-  (function initMobileMenu() {
-    const mobileToggle = document.querySelector('.mobile-toggle');
-    const mobileNav = document.getElementById('mobileNav');
-    const backdrop = document.getElementById('mobileNavBackdrop');
-    
-    if (!mobileToggle || !mobileNav) return;
-    
-    let isMenuOpen = false;
-    
-    // Function to open menu
-    function openMenu() {
-      if (isMenuOpen) return;
-      isMenuOpen = true;
-      mobileNav.classList.add('open');
-      if (backdrop) backdrop.classList.add('show');
-      mobileToggle.setAttribute('aria-expanded', 'true');
-      // Prevent body scroll when menu is open
-      document.body.style.overflow = 'hidden';
-    }
-    
-    // Function to close menu
-    function closeMenu() {
-      if (!isMenuOpen) return;
-      isMenuOpen = false;
-      mobileNav.classList.remove('open');
-      if (backdrop) backdrop.classList.remove('show');
-      mobileToggle.setAttribute('aria-expanded', 'false');
-      // Restore body scroll
-      document.body.style.overflow = '';
-    }
-    
-    // Toggle menu on button click
-    mobileToggle.addEventListener('click', (e) => {
-      e.stopPropagation();
-      if (isMenuOpen) {
-        closeMenu();
-      } else {
-        openMenu();
-      }
-    });
-    
-    // Close menu when clicking on a link
-    mobileNav.addEventListener('click', (e) => {
-      if (e.target.tagName === 'A') {
-        closeMenu();
-      }
-    });
-    
-    // Close menu when clicking on backdrop or outside
-    if (backdrop) {
-      backdrop.addEventListener('click', closeMenu);
-    }
-    document.addEventListener('click', (e) => {
-      if (isMenuOpen && 
-          !mobileNav.contains(e.target) && 
-          !mobileToggle.contains(e.target)) {
-        closeMenu();
-      }
-    });
-    
-    // Close menu on Escape key
-    document.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape' && isMenuOpen) {
-        closeMenu();
-      }
-    });
-    
-    // Close menu on window resize (if resizing to desktop)
-    window.addEventListener('resize', () => {
-      if (window.innerWidth > 900 && isMenuOpen) {
-        closeMenu();
-      }
-    });
-  })();
-</script>
-
-<main style="max-width:900px;margin:2.5rem auto 4rem auto;padding:0 1rem;">
-  <div id="lo-locked-free" class="lo-upgrade-prompt" style="display:none;max-width:600px;margin:4rem auto 0 auto;">
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-      <path d="M6 10V7a5 5 0 1110 0v3"/>
-      <rect x="5" y="10" width="12" height="8" rx="2"/>
-    </svg>
-    <div class="lo-upgrade-text">
-      <strong>Upgrade to Premium</strong> to unlock the LinkedIn Optimizer and get unlimited AI-powered profile analysis and rewriting.
-    </div>
-    <button class="lo-btn-secondary" onclick="window.location.href='pricing-a.html'">Upgrade Now</button>
-  </div>
-  <div id="lo-main-content">
-    <h1 class="lo-title">
-      LinkedIn Profile Optimizer 
-      <span class="lo-tooltip">
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:20px;height:20px;vertical-align:middle;color:var(--color-text-muted);">
-          <circle cx="12" cy="12" r="10"/>
-          <path d="M12 16v-4M12 8h.01"/>
+  <!-- Header -->
+  <header class="site-header">
+    <div class="container">
+      <a href="index.html" class="nav-logo" aria-label="Go to homepage">
+        <svg width="24" height="24" fill="none" stroke="#1F2937" stroke-width="2" xmlns="http://www.w3.org/2000/svg">
+          <rect x="3" y="7" width="18" height="13" rx="2"/>
+          <path d="M8 7V5a2 2 0 012-2h4a2 2 0 012 2v2"/>
         </svg>
-        <span class="tooltip-text">Section-by-section LinkedIn review with AI-powered scoring and optimization suggestions for maximum recruiter visibility.</span>
-      </span>
-    </h1>
-    <!-- Multi-section Input for Premium -->
-    <section class="lo-card" id="lo-input-section">
-      <form id="lo-profile-form" autocomplete="off">
-        <div style="margin-bottom:var(--space-md);">
-          <label for="lo-headline" class="lo-label">Headline
-            <span class="lo-tooltip">
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;vertical-align:middle;color:var(--color-text-muted);"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
-              <span class="tooltip-text">Your LinkedIn headline (e.g. Product Manager | AI & FinTech Enthusiast)</span>
-            </span>
-          </label>
-          <input id="lo-headline" class="lo-input" type="text" maxlength="120" placeholder="e.g. Senior Product Manager | AI & FinTech Enthusiast" required />
-        </div>
-        <div style="margin-bottom:var(--space-md);">
-          <label for="lo-summary" class="lo-label">Summary
-            <span class="lo-tooltip">
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;vertical-align:middle;color:var(--color-text-muted);"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
-              <span class="tooltip-text">2-3 sentences about you, your value, and your goals.</span>
-            </span>
-          </label>
-          <textarea id="lo-summary" class="lo-textarea" rows="3" maxlength="400" placeholder="e.g. Results-driven product leader with 6+ years at top-tier financial institutions..." required></textarea>
-        </div>
-        <div style="margin-bottom:var(--space-md);">
-          <label for="lo-experience" class="lo-label">Experience
-            <span class="lo-tooltip">
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;vertical-align:middle;color:var(--color-text-muted);"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
-              <span class="tooltip-text">List your most recent roles, one per line. Use action verbs and quantify results.</span>
-            </span>
-          </label>
-          <textarea id="lo-experience" class="lo-textarea" rows="4" maxlength="800" placeholder="e.g.\n• Led cross-functional teams...\n• Increased user engagement by 30%..." required></textarea>
-        </div>
-        <div style="margin-bottom:var(--space-md);">
-          <label for="lo-skills" class="lo-label">Skills
-            <span class="lo-tooltip">
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;vertical-align:middle;color:var(--color-text-muted);"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
-              <span class="tooltip-text">Comma-separated or one per line (e.g. Python, Product Management, AI, FinTech)</span>
-            </span>
-          </label>
-          <textarea id="lo-skills" class="lo-textarea" rows="2" maxlength="300" placeholder="e.g. Python, Product Management, AI, FinTech" required></textarea>
-        </div>
-        <button id="lo-analyze" class="lo-btn-primary" type="submit">Analyze Profile</button>
-      </form>
-    </section>
-    <!-- Loading State -->
-    <div id="lo-loading" class="lo-loading">
-      <div class="lo-spinner"></div>
-      <p>Optimizing your LinkedIn profile...</p>
-      <div class="lo-loading-steps">
-        <div class="lo-loading-step" data-step="analyze">
-          <div class="lo-loading-step-icon">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/>
-            </svg>
-          </div>
-          <div class="lo-loading-step-text">Analyzing profile content...</div>
-        </div>
-        <div class="lo-loading-step" data-step="score">
-          <div class="lo-loading-step-icon">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M22 11.08V12a10 10 0 11-5.93-9.14"/>
-              <path d="M22 4L12 14.01l-3-3"/>
-            </svg>
-          </div>
-          <div class="lo-loading-step-text">Calculating section scores...</div>
-        </div>
-        <div class="lo-loading-step" data-step="optimize">
-          <div class="lo-loading-step-icon">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
-            </svg>
-          </div>
-          <div class="lo-loading-step-text">Generating optimized content...</div>
+        <span>JOBHACKAI</span>
+      </a>
+      <div class="nav-group">
+        <nav class="nav-links" role="navigation">
+          <!-- Navigation will be dynamically populated by navigation.js -->
+        </nav>
+      </div>
+      <button class="mobile-toggle" aria-label="Open navigation menu" aria-expanded="false" aria-controls="mobileNav">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="3" y1="12" x2="21" y2="12"></line>
+          <line x1="3" y1="6" x2="21" y2="6"></line>
+          <line x1="3" y1="18" x2="21" y2="18"></line>
+        </svg>
+      </button>
+    </div>
+  </header>
+  <nav class="mobile-nav" id="mobileNav">
+    <!-- Mobile navigation will be dynamically populated by navigation.js -->
+  </nav>
+  <div class="mobile-nav-backdrop" id="mobileNavBackdrop"></div>
+  <!-- Centralized mobile menu handler -->
+  <script src="js/mobile-menu.js?v=20250115-1"></script>
+
+  <!-- page content -->
+  <main class="lo-main">
+    <div class="lo-container">
+      <div class="lo-header">
+        <h1 class="lo-title">LinkedIn Optimizer</h1>
+        <div class="lo-subtitle">
+          Section-by-section LinkedIn review with scoring, keywords, and paste-ready rewrites.
         </div>
       </div>
-    </div>
-    <!-- Results Section -->
-    <div id="lo-results" class="lo-results">
-      <!-- Overall Score -->
-      <section class="lo-card">
-        <div style="display:flex;align-items:center;gap:2.5rem;flex-wrap:wrap;">
-          <div class="lo-progress-ring">
-            <svg viewBox="0 0 80 80">
-              <circle cx="40" cy="40" r="36" stroke="#E5E7EB" stroke-width="8" fill="none"/>
-              <circle id="lo-score-ring" cx="40" cy="40" r="36" stroke="#00E676" stroke-width="8" fill="none" stroke-dasharray="226.2" stroke-dashoffset="49" stroke-linecap="round"/>
-              <text id="lo-score-text" x="40" y="48" text-anchor="middle" font-size="1.6rem" font-weight="700" fill="#1F2937">85</text>
-            </svg>
+
+      <!-- Locked states (no redirects) -->
+      <div id="lo-locked" class="lo-locked">
+        <section id="lo-login" class="lo-card lo-login-card" hidden>
+          <div class="lo-card-title">Login Required</div>
+          <div class="lo-subtitle" style="margin-bottom: var(--space-md);">
+            Please sign in to use the LinkedIn Optimizer.
           </div>
-          <div style="flex:1;min-width:220px;">
-            <div class="lo-section-title">
-              Overall LinkedIn Score 
-              <span class="lo-tooltip">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;vertical-align:middle;color:var(--color-text-muted);">
-                  <circle cx="12" cy="12" r="10"/>
-                  <path d="M12 16v-4M12 8h.01"/>
-                </svg>
-                <span class="tooltip-text">Score is out of 100. Each section is scored and weighted for recruiter impact.</span>
-              </span>
+          <div class="lo-actions">
+            <a class="btn-primary" href="login.html" style="text-decoration:none;">Sign In</a>
+            <a class="btn-outline" href="pricing-a.html" style="text-decoration:none;">View Pricing</a>
+          </div>
+        </section>
+
+        <section id="lo-upgrade" class="lo-card lo-upgrade-card" hidden>
+          <div class="lo-card-title">Premium Required</div>
+          <div class="lo-subtitle" style="margin-bottom: var(--space-md);">
+            Upgrade to Premium to unlock the LinkedIn Optimizer.
+          </div>
+          <div class="lo-actions">
+            <a class="btn-primary" href="pricing-a.html?plan=premium" style="text-decoration:none;">Upgrade to Premium</a>
+            <a class="btn-outline" href="pricing-a.html" style="text-decoration:none;">See Plans</a>
+          </div>
+        </section>
+      </div>
+
+      <div class="lo-layout" id="lo-app">
+        <!-- LEFT: Inputs + Results -->
+        <div class="lo-left">
+          <section class="lo-card" aria-labelledby="lo-form-title">
+            <div class="lo-card-title" id="lo-form-title">Profile Inputs</div>
+
+            <form id="lo-form" autocomplete="off">
+              <div class="lo-field">
+                <label class="lo-label" for="lo-role">Target Role <span class="lo-required">*</span></label>
+                <div class="lo-role-wrap">
+                  <input
+                    id="lo-role"
+                    class="lo-input"
+                    type="text"
+                    placeholder="Start typing your target role (e.g., Product Manager, Data Engineer)"
+                    autocomplete="off"
+                    role="combobox"
+                    aria-autocomplete="list"
+                    aria-expanded="false">
+                </div>
+              </div>
+
+              <div class="lo-field">
+                <label class="lo-label" for="lo-headline">Headline <span class="lo-required">*</span></label>
+                <input id="lo-headline" class="lo-input" type="text" maxlength="120" required>
+              </div>
+
+              <div class="lo-field">
+                <label class="lo-label" for="lo-summary">Summary <span class="lo-required">*</span></label>
+                <textarea id="lo-summary" class="lo-textarea" rows="3" maxlength="400" required></textarea>
+              </div>
+
+              <div class="lo-field">
+                <label class="lo-label" for="lo-experience">Experience <span class="lo-required">*</span></label>
+                <textarea id="lo-experience" class="lo-textarea" rows="4" maxlength="800" required></textarea>
+              </div>
+
+              <div class="lo-field">
+                <label class="lo-label" for="lo-skills">Skills <span class="lo-required">*</span></label>
+                <textarea id="lo-skills" class="lo-textarea" rows="2" maxlength="300" required></textarea>
+              </div>
+
+              <div class="lo-field">
+                <label class="lo-label" for="lo-recommendations">Recommendations <span class="lo-optional">(optional)</span></label>
+                <textarea id="lo-recommendations" class="lo-textarea" rows="2" maxlength="400"></textarea>
+              </div>
+
+              <div class="lo-actions">
+                <button id="lo-analyze" class="btn-primary" type="submit">Boost My LinkedIn Profile</button>
+              </div>
+
+              <div id="lo-loading" class="lo-loading" aria-live="polite">
+                <div class="lo-spinner" aria-hidden="true"></div>
+                <div id="lo-loading-text">Analyzing your profile…</div>
+              </div>
+            </form>
+          </section>
+
+          <section class="lo-card lo-results" id="lo-results" aria-labelledby="lo-results-title">
+            <div class="lo-score-row">
+              <div class="lo-score-left">
+                <div class="lo-progress-ring" aria-hidden="true">
+                  <svg viewBox="0 0 80 80">
+                    <circle cx="40" cy="40" r="36" stroke="#E5E7EB" stroke-width="8" fill="none"/>
+                    <circle id="lo-score-ring" cx="40" cy="40" r="36" stroke="#00E676" stroke-width="8" fill="none" stroke-linecap="round"/>
+                    <text id="lo-score-text" x="40" y="48" text-anchor="middle" font-size="1.6rem" font-weight="700" fill="#1F2937">0</text>
+                  </svg>
+                </div>
+                <div>
+                  <div class="lo-card-title" id="lo-results-title" style="margin:0;">Overall LinkedIn Score</div>
+                  <div class="lo-meta" id="lo-score-meta"></div>
+                </div>
+              </div>
+              <div>
+                <button id="lo-download" class="btn-outline" type="button">Download PDF</button>
+              </div>
             </div>
-            <div style="color:var(--color-text-secondary);margin-bottom:var(--space-sm);">
-              See how your profile stacks up and where to improve.
+
+            <div style="margin-top: var(--space-md);">
+              <div class="lo-card-title" style="margin-bottom: var(--space-xs);">Quick Wins</div>
+              <ul class="lo-quickwins" id="lo-quickwins"></ul>
             </div>
-          </div>
-        </div>
-      </section>
-      <!-- Section Scores & Tips -->
-      <section class="lo-metrics-grid">
-        <!-- Headline -->
-        <div class="lo-metric-card">
-          <div class="lo-metric-label">
-            Headline
-            <span class="lo-score-badge">92/100</span>
-          </div>
-          <div class="lo-metric-score">Excellent</div>
-          <div class="lo-metric-tip">Your headline effectively communicates your role and expertise. Consider adding industry keywords for better search visibility.</div>
-          <div class="lo-metric-actions">
-            <button class="lo-btn-primary" onclick="regenerateSection('headline')">Regenerate</button>
-            <button class="lo-btn-green" onclick="copyToClipboard('headline-optimized')">Copy</button>
-          </div>
-          <div id="headline-optimized" style="display:none;margin-top:var(--space-sm);padding:var(--space-sm);background:var(--color-bg-light);border-radius:var(--radius-md);font-size:var(--font-size-sm);">
-            <strong>Optimized Headline:</strong><br>
-            Senior Product Manager | AI & FinTech | Driving 40% Revenue Growth | Cross-functional Leadership
-          </div>
-        </div>
-        <!-- Summary -->
-        <div class="lo-metric-card">
-          <div class="lo-metric-label">
-            Summary
-            <span class="lo-score-badge">78/100</span>
-          </div>
-          <div class="lo-metric-score">Good</div>
-          <div class="lo-metric-tip">Your summary is well-written but could benefit from more specific achievements and industry keywords.</div>
-          <div class="lo-metric-actions">
-            <button class="lo-btn-primary" onclick="regenerateSection('summary')">Regenerate</button>
-            <button class="lo-btn-green" onclick="copyToClipboard('summary-optimized')">Copy</button>
-          </div>
-          <div id="summary-optimized" style="display:none;margin-top:var(--space-sm);padding:var(--space-sm);background:var(--color-bg-light);border-radius:var(--radius-md);font-size:var(--font-size-sm);">
-            <strong>Optimized Summary:</strong><br>
-            Results-driven product leader with 6+ years at top-tier financial institutions, specializing in AI-powered solutions and fintech innovation. Led cross-functional teams of 15+ members, driving 40% revenue growth and 60% user engagement improvement. Expert in agile methodologies, stakeholder management, and data-driven decision making.
-          </div>
-        </div>
-        <!-- Experience -->
-        <div class="lo-metric-card">
-          <div class="lo-metric-label">
-            Experience
-            <span class="lo-score-badge">85/100</span>
-          </div>
-          <div class="lo-metric-score">Very Good</div>
-          <div class="lo-metric-tip">Strong experience descriptions with good use of action verbs. Consider adding more quantifiable results.</div>
-          <div class="lo-metric-actions">
-            <button class="lo-btn-primary" onclick="regenerateSection('experience')">Regenerate</button>
-            <button class="lo-btn-green" onclick="copyToClipboard('experience-optimized')">Copy</button>
-          </div>
-          <div id="experience-optimized" style="display:none;margin-top:var(--space-sm);padding:var(--space-sm);background:var(--color-bg-light);border-radius:var(--radius-md);font-size:var(--font-size-sm);">
-            <strong>Optimized Experience:</strong><br>
-            • Led cross-functional teams of 15+ members across engineering, design, and marketing<br>
-            • Increased user engagement by 30% through data-driven product optimization<br>
-            • Reduced customer churn by 25% by implementing AI-powered retention strategies<br>
-            • Managed $2M+ product budget and delivered 40% revenue growth
-          </div>
-        </div>
-        <!-- Skills -->
-        <div class="lo-metric-card">
-          <div class="lo-metric-label">
-            Skills
-            <span class="lo-score-badge">88/100</span>
-          </div>
-          <div class="lo-metric-score">Excellent</div>
-          <div class="lo-metric-tip">Well-rounded skill set with good mix of technical and soft skills. Consider adding emerging technologies.</div>
-          <div class="lo-metric-actions">
-            <button class="lo-btn-primary" onclick="regenerateSection('skills')">Regenerate</button>
-            <button class="lo-btn-green" onclick="copyToClipboard('skills-optimized')">Copy</button>
-          </div>
-          <div id="skills-optimized" style="display:none;margin-top:var(--space-sm);padding:var(--space-sm);background:var(--color-bg-light);border-radius:var(--radius-md);font-size:var(--font-size-sm);">
-            <strong>Optimized Skills:</strong><br>
-            Product Management, AI/ML, FinTech, Agile/Scrum, Stakeholder Management, Data Analysis, User Research, A/B Testing, Cross-functional Leadership, Strategic Planning, Python, SQL, Figma, JIRA
-          </div>
-        </div>
-      </section>
-      <!-- Download Section -->
-      <section class="lo-card lo-download-section">
-        <h3 class="lo-section-title">Download All Optimized Content</h3>
-        <p style="color:var(--color-text-secondary);margin-bottom:var(--space-md);">
-          Get all your optimized LinkedIn sections in one convenient text file.
-        </p>
-        <button class="lo-btn-green" onclick="downloadAllContent()">Download All as Text File</button>
-      </section>
-    </div>
-  </div>
-</main>
 
-<!-- Footer (canonical) -->
-<footer class="site-footer">
-  <div class="footer-container">
-    <div class="footer-brand">
-      <svg class="footer-logo" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <rect x="3" y="7" width="18" height="13" rx="2" stroke="#1F2937" stroke-width="2"/>
-        <path d="M8 7V5a2 2 0 012-2h4a2 2 0 012 2v2" stroke="#1F2937" stroke-width="2"/>
-      </svg>
-      <span class="footer-name">JOBHACKAI</span>
-    </div>
-    <div class="footer-legal">
-      <p>© 2025 JobHackAI. All rights reserved.</p>
-    </div>
-    <div class="footer-links">
-      <a href="index.html">Home</a>
-      <a href="support.html">Support</a>
-      <a href="privacy.html">Privacy</a>
-    </div>
-  </div>
-</footer>
-
-<script>
-  // --- AUTHENTICATION CHECK ---
-  function checkAuthentication() {
-    // Use navigation system's authentication check for consistency
-    if (window.JobHackAINavigation) {
-      const authState = window.JobHackAINavigation.getAuthState();
-      if (!authState.isAuthenticated) {
-        const mainContent = document.querySelector('main');
-        mainContent.innerHTML = `
-          <div style="max-width: 600px; margin: 4rem auto; text-align: center; padding: 2rem;">
-            <div style="font-size: 4rem; margin-bottom: 1rem;">🔒</div>
-            <h1 style="font-size: 2rem; font-weight: 700; color: var(--color-text-main); margin-bottom: 1rem;">
-              Login Required
-            </h1>
-            <p style="font-size: 1.1rem; color: var(--color-text-secondary); margin-bottom: 2rem; line-height: 1.6;">
-              LinkedIn Profile Optimizer requires you to be logged in to access this tool. 
-              Please sign in to get started.
-            </p>
-            <div style="display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap;">
-              <a href="login.html" class="btn-primary" style="text-decoration: none;">
-                Sign In
-              </a>
-              <a href="pricing-a.html" class="btn-outline" style="text-decoration: none;">
-                View Pricing
-              </a>
+            <div style="margin-top: var(--space-md);">
+              <div class="lo-card-title" style="margin-bottom: var(--space-xs);">Keywords to Add (click to copy)</div>
+              <div class="lo-chip-row" id="lo-keywords"></div>
             </div>
-          </div>
-        `;
-        return false;
-      }
-      return true;
-    } else {
-      // Fallback to localStorage check if navigation system not available
-      const isAuthenticated = localStorage.getItem('user-authenticated') === 'true';
-      if (!isAuthenticated) {
-        const mainContent = document.querySelector('main');
-        mainContent.innerHTML = `
-          <div style="max-width: 600px; margin: 4rem auto; text-align: center; padding: 2rem;">
-            <div style="font-size: 4rem; margin-bottom: 1rem;">🔒</div>
-            <h1 style="font-size: 2rem; font-weight: 700; color: var(--color-text-main); margin-bottom: 1rem;">
-              Login Required
-            </h1>
-            <p style="font-size: 1.1rem; color: var(--color-text-secondary); margin-bottom: 2rem; line-height: 1.6;">
-              LinkedIn Profile Optimizer requires you to be logged in to access this tool. 
-              Please sign in to get started.
-            </p>
-            <div style="display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap;">
-              <a href="login.html" class="btn-primary" style="text-decoration: none;">
-                Sign In
-              </a>
-              <a href="pricing-a.html" class="btn-outline" style="text-decoration: none;">
-                View Pricing
-              </a>
+
+            <div style="margin-top: var(--space-lg);">
+              <div class="lo-card-title" style="margin-bottom: var(--space-sm);">Sections</div>
+              <div class="lo-sections" id="lo-sections"></div>
             </div>
-          </div>
-        `;
-        return false;
-      }
-      return true;
-    }
-  }
+          </section>
+        </div>
 
-  // --- USER PLAN LOGIC ---
-  function getUserPlan() {
-    // Use navigation system's plan detection for consistency
-    if (window.JobHackAINavigation) {
-      return window.JobHackAINavigation.getEffectivePlan();
-    } else {
-      return localStorage.getItem('user-plan') || 'free';
-    }
-  }
+        <!-- RIGHT: History -->
+        <aside class="lo-right">
+          <section class="lo-card" aria-labelledby="lo-history-title">
+            <div class="lo-card-title" id="lo-history-title">History</div>
+            <div class="lo-history-subtitle">Last 10 optimizations</div>
+            <div id="lo-history-empty" class="lo-history-subtitle" hidden>No history yet. Run your first optimization.</div>
+            <div class="lo-history-list" id="lo-history-list"></div>
+            <div class="lo-retention">
+              Data retention: JobHackAI shows your last 10 LinkedIn optimizations. Runs are automatically deleted after 90 days.
+              <a href="privacy.html">Learn more</a>.
+            </div>
+          </section>
+        </aside>
+      </div>
+    </div>
 
-  // --- PLAN-BASED ACCESS CONTROL ---
-  function checkPlanAccess() {
-    const currentPlan = getUserPlan();
-    const lockedDiv = document.getElementById('lo-locked-free');
-    const formDiv = document.getElementById('lo-input-section');
-    const resultsDiv = document.getElementById('lo-results');
-    const mainContentDiv = document.getElementById('lo-main-content');
-    
-    // LinkedIn Optimizer is Premium-only
-    const locked = (currentPlan !== 'premium');
-    
-    if (lockedDiv) {
-    lockedDiv.style.display = locked ? 'flex' : 'none';
-    }
-    
-    if (mainContentDiv) {
-      mainContentDiv.style.display = locked ? 'none' : '';
-    }
-    
-    if (formDiv) {
-    formDiv.style.display = locked ? 'none' : '';
-    }
-    
-    if (resultsDiv) {
-    resultsDiv.style.display = 'none';
-    }
-  }
+    <!-- Print-only container (populated on Download PDF) -->
+    <div id="lo-print"></div>
+  </main>
 
-  // --- PAGE ACCESS CONTROL ---
-  function enforceAccess() {
-    const authState = window.JobHackAINavigation ? 
-      window.JobHackAINavigation.getAuthState() : 
-      { isAuthenticated: localStorage.getItem('user-authenticated') === 'true' };
-    
-    const userPlan = getUserPlan();
-    const allowedPlans = ['premium'];
-    
-    if (!authState.isAuthenticated || !allowedPlans.includes(userPlan)) {
-      window.location.href = 'login.html';
-    }
-  }
+  <!-- Footer -->
+  <footer class="site-footer">
+    <div class="footer-container">
+      <div class="footer-brand">
+        <svg class="footer-logo" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect x="3" y="7" width="18" height="13" rx="2" stroke="#1F2937" stroke-width="2"/>
+          <path d="M8 7V5a2 2 0 012-2h4a2 2 0 012 2v2" stroke="#1F2937" stroke-width="2"/>
+        </svg>
+        <span class="footer-name">JOBHACKAI</span>
+      </div>
+      <div class="footer-legal">
+        <p>© 2025 JobHackAI. All rights reserved.</p>
+      </div>
+      <div class="footer-links">
+        <a href="index.html">Home</a>
+        <a href="support.html">Support</a>
+        <a href="privacy.html">Privacy</a>
+      </div>
+    </div>
+  </footer>
 
-  // --- Initialize on load ---
-  document.addEventListener('DOMContentLoaded', function() {
-    // Wait for navigation system to be ready
-    const initPage = () => {
-      // Check authentication first
-      if (!checkAuthentication()) {
-        return; // Stop here if not authenticated
-      }
-      
-      // Update UI based on plan
-      checkPlanAccess();
-      
-      // Note: Access control is enforced immediately in <head> script
-      // This function only handles UI updates for authorized users
-    };
-    
-    // Try to initialize immediately, then retry after a short delay
-    initPage();
-    setTimeout(initPage, 100);
-    
-    // Listen for plan changes from navigation system
-    window.addEventListener('planChanged', function(event) {
-      checkPlanAccess();
-    });
-  });
-
-  // Regenerate section content
-  function regenerateSection(section) {
-    const button = event.target;
-    const originalText = button.textContent;
-    
-    button.classList.add('loading');
-    button.textContent = '';
-    
-    setTimeout(() => {
-      button.classList.remove('loading');
-      button.textContent = originalText;
-      
-      // Show optimized content
-      const optimizedDiv = document.getElementById(section + '-optimized');
-      if (optimizedDiv) {
-        optimizedDiv.style.display = 'block';
-      }
-    }, 2000);
-  }
-
-  // Copy to clipboard
-  function copyToClipboard(elementId) {
-    const element = document.getElementById(elementId);
-    if (element) {
-      const text = element.textContent.replace(/Optimized [^:]+:\s*/, '');
-      navigator.clipboard.writeText(text).then(() => {
-        // Show success feedback
-        const button = event.target;
-        const originalText = button.textContent;
-        button.textContent = 'Copied!';
-        button.style.background = '#00C853';
-        
-        setTimeout(() => {
-          button.textContent = originalText;
-          button.style.background = '';
-        }, 2000);
-      });
-    }
-  }
-
-  // Download all content
-  function downloadAllContent() {
-    const sections = ['headline', 'summary', 'experience', 'skills'];
-    let content = 'LinkedIn Profile Optimization Results\n';
-    content += 'Generated by JobHackAI\n';
-    content += 'Date: ' + new Date().toLocaleDateString() + '\n\n';
-    
-    sections.forEach(section => {
-      const element = document.getElementById(section + '-optimized');
-      if (element) {
-        const sectionText = element.textContent.replace(/Optimized [^:]+:\s*/, '');
-        content += section.toUpperCase() + ':\n';
-        content += sectionText + '\n\n';
-      }
-    });
-    
-    const blob = new Blob([content], { type: 'text/plain' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'linkedin-optimization-' + new Date().toISOString().split('T')[0] + '.txt';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  }
-</script>
-
-<!-- Load navigation system -->
+  <!-- scripts -->
+  <script src="js/main.js" type="module"></script>
+  <script src="js/analytics.js" type="module"></script>
+  <!-- Load Firebase auth for token retrieval -->
+  <script type="module" src="js/firebase-auth.js?v=20251011-1"></script>
+  <!-- Load navigation system -->
   <script src="js/navigation.js?v=20251007-2"></script>
   <script src="js/universal-logout.js?v=20251007-2"></script>
-<script>
-  // Initialize navigation system when DOM is ready
-  document.addEventListener('DOMContentLoaded', function() {
-    if (window.JobHackAINavigation && window.JobHackAINavigation.initializeNavigation) {
+  <!-- Load role selector -->
+  <script src="js/role-selector.js?v=20250115-1" type="module"></script>
+  <!-- LinkedIn Optimizer page logic -->
+  <script src="js/linkedin-optimizer.js?v=20251212-1" type="module"></script>
+  <script>
+    // Initialize navigation system
+    if (window.JobHackAINavigation && typeof window.JobHackAINavigation.initializeNavigation === 'function') {
       window.JobHackAINavigation.initializeNavigation();
+    } else {
+      window.addEventListener('DOMContentLoaded', function() {
+        if (window.JobHackAINavigation && typeof window.JobHackAINavigation.initializeNavigation === 'function') {
+          window.JobHackAINavigation.initializeNavigation();
+        }
+      });
     }
-  });
-</script>
-<script src="js/main.js" type="module"></script>
-<script src="js/analytics.js" type="module"></script>
+  </script>
 </body>
-</html> 
+</html>
