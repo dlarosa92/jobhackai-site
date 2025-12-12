@@ -151,8 +151,13 @@
         } else {
           optEl.addEventListener('click', () => {
             if (select.disabled) return;
-            select.value = opt.value;
-            select.dispatchEvent(new Event('change', { bubbles: true }));
+            const oldValue = select.value;
+            const newValue = opt.value;
+            if (oldValue !== newValue) {
+              select.value = newValue;
+              // Match native <select>: only fire "change" when value changes.
+              select.dispatchEvent(new Event('change', { bubbles: true }));
+            }
             close();
           });
         }
@@ -253,8 +258,13 @@
         const value = current.dataset.value;
         const opt = Array.from(select.options).find(o => o.value === value);
         if (opt && !opt.disabled && !select.disabled) {
-          select.value = value;
-          select.dispatchEvent(new Event('change', { bubbles: true }));
+          const oldValue = select.value;
+          const newValue = value;
+          if (oldValue !== newValue) {
+            select.value = newValue;
+            // Match native <select>: only fire "change" when value changes.
+            select.dispatchEvent(new Event('change', { bubbles: true }));
+          }
           close();
           button.focus();
         }
@@ -262,9 +272,10 @@
     });
 
     // Keep in sync with select changes
-    select.addEventListener('change', () => {
+    const onSelectChange = () => {
       syncSelected();
-    });
+    };
+    select.addEventListener('change', onSelectChange);
 
     // Observe option list changes (dynamic dropdowns)
     const mo = new MutationObserver(() => {
@@ -283,6 +294,7 @@
       refresh: renderOptions,
       destroy: () => {
         mo.disconnect();
+        select.removeEventListener('change', onSelectChange);
         close();
         // unwrap: move select back
         const p = wrapper.parentNode;
