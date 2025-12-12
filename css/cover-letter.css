@@ -287,6 +287,12 @@
   margin: var(--space-sm) 0;
 }
 
+/* Ensure hidden history states always work (some global CSS may override UA [hidden]) */
+.cl-history-loading[hidden],
+.cl-history-empty[hidden] {
+  display: none !important;
+}
+
 .cl-spinner {
   width: 18px;
   height: 18px;
