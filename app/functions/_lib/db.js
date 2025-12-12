@@ -467,6 +467,70 @@ export function isD1Available(env) {
   return !!env.DB;
 }
 
+const MOCK_INTERVIEW_SESSIONS_TABLE_SQL = `
+CREATE TABLE IF NOT EXISTS mock_interview_sessions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL,
+  role TEXT NOT NULL,
+  seniority TEXT NOT NULL,
+  interview_style TEXT NOT NULL,
+  question_set_id INTEGER,
+  question_set_name TEXT,
+  overall_score INTEGER NOT NULL,
+  relevance_score INTEGER NOT NULL,
+  structure_score INTEGER NOT NULL,
+  clarity_score INTEGER NOT NULL,
+  insight_score INTEGER NOT NULL,
+  grammar_score INTEGER NOT NULL,
+  situation_pct REAL NOT NULL,
+  action_pct REAL NOT NULL,
+  outcome_pct REAL NOT NULL,
+  qa_pairs_json TEXT NOT NULL,
+  feedback_json TEXT NOT NULL,
+  created_at TEXT DEFAULT (datetime('now')),
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+  FOREIGN KEY (question_set_id) REFERENCES interview_question_sets(id) ON DELETE SET NULL
+);`;
+
+const MOCK_INTERVIEW_USAGE_TABLE_SQL = `
+CREATE TABLE IF NOT EXISTS mock_interview_usage (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL,
+  month TEXT NOT NULL,
+  sessions_used INTEGER NOT NULL DEFAULT 0,
+  last_reset_at TEXT,
+  UNIQUE(user_id, month),
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);`;
+
+async function ensureMockInterviewIndexes(db) {
+  await db
+    .prepare('CREATE INDEX IF NOT EXISTS idx_mock_interview_sessions_user_id ON mock_interview_sessions(user_id)')
+    .run();
+  await db
+    .prepare('CREATE INDEX IF NOT EXISTS idx_mock_interview_sessions_created_at ON mock_interview_sessions(created_at DESC)')
+    .run();
+  await db
+    .prepare('CREATE INDEX IF NOT EXISTS idx_mock_interview_sessions_role ON mock_interview_sessions(role)')
+    .run();
+  await db
+    .prepare('CREATE INDEX IF NOT EXISTS idx_mock_interview_usage_user_month ON mock_interview_usage(user_id, month)')
+    .run();
+}
+
+export async function ensureMockInterviewSchema(env) {
+  if (!env.DB) return;
+
+  try {
+    await env.DB.prepare(MOCK_INTERVIEW_SESSIONS_TABLE_SQL).run();
+    await env.DB.prepare(MOCK_INTERVIEW_USAGE_TABLE_SQL).run();
+    await ensureMockInterviewIndexes(env.DB);
+  } catch (error) {
+    console.error('[DB] Error ensuring mock interview schema:', error);
+    throw error;
+  }
+}
+
 // ============================================================
 // INTERVIEW QUESTION SET HELPERS
 // ============================================================
@@ -713,6 +777,8 @@ export async function createMockInterviewSession(env, {
   }
 
   try {
+    await ensureMockInterviewSchema(env);
+
     const qaPairsJson = JSON.stringify(qaPairs || []);
     const feedbackJson = JSON.stringify(feedback || {});
     const setName = questionSetName || (questionSetId ? null : 'AI-generated');
@@ -831,6 +897,8 @@ export async function getMockInterviewHistory(env, userId, { limit = 10 } = {}) 
   }
 
   try {
+    await ensureMockInterviewSchema(env);
+
     const results = await env.DB.prepare(
       `SELECT id, role, seniority, interview_style, question_set_name, overall_score, created_at
       FROM mock_interview_sessions
@@ -871,6 +939,8 @@ export async function getMockInterviewMonthlyUsage(env, userId, month = null) {
   }
 
   try {
+    await ensureMockInterviewSchema(env);
+
     const targetMonth = month || new Date().toISOString().slice(0, 7); // "YYYY-MM"
     
     const row = await env.DB.prepare(
@@ -898,6 +968,8 @@ export async function incrementMockInterviewMonthlyUsage(env, userId) {
   }
 
   try {
+    await ensureMockInterviewSchema(env);
+
     const targetMonth = new Date().toISOString().slice(0, 7); // "YYYY-MM"
     
     const result = await env.DB.prepare(
