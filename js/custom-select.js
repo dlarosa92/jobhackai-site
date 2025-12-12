@@ -111,6 +111,12 @@
     wrapper.appendChild(button);
     wrapper.appendChild(menu);
 
+    // Prevent clicks inside the dropdown from bubbling to the global "click outside" handler.
+    // Without this, clicks on disabled options or menu padding can close the dropdown unexpectedly.
+    wrapper.addEventListener('click', (e) => {
+      e.stopPropagation();
+    });
+
     // Hide native select but keep it functional for existing JS.
     select.classList.add('jh-select-native');
     select.tabIndex = -1;
