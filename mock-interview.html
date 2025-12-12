@@ -1639,6 +1639,7 @@
       state.currentScreen = 'interview';
       els.setup.classList.add('hidden');
       els.summary.classList.add('hidden');
+      els.summary.classList.remove('visible');
       els.interview.classList.remove('hidden');
       
       updateInterviewUI();
@@ -1784,6 +1785,7 @@
         els.setup.classList.add('hidden');
         els.interview.classList.add('hidden');
         els.summary.classList.remove('hidden');
+        els.summary.classList.add('visible');
         
         const r = state.scoringResult;
         if (!r) {
@@ -1966,6 +1968,7 @@
       els.setup.classList.remove('hidden');
       els.interview.classList.add('hidden');
       els.summary.classList.add('hidden');
+      els.summary.classList.remove('visible');
       
       checkCanStart();
     }
