@@ -496,14 +496,17 @@ async function analyze() {
 async function regenerate(section) {
   if (!currentRun?.run_id || !section) return;
   if (regenBusy.has(section)) return;
+  // Capture run_id at click time to prevent new analysis from changing which run gets regenerated
+  const baseRunId = currentRun.run_id;
   regenBusy.add(section);
   renderSections(currentRun.sections || {});
 
   // Enqueue so each regen uses the latest currentRun (which may have been updated by a prior regen).
+  // Note: baseRunId is captured before enqueueing to ensure we regenerate the run the user clicked on,
+  // not a different run that may have become currentRun if a new analysis completed in the meantime.
   regenQueue = regenQueue.then(async () => {
     try {
-      if (!currentRun?.run_id) throw new Error('missing_run');
-      const baseRunId = currentRun.run_id;
+      if (!baseRunId) throw new Error('missing_run');
 
       const resp = await apiFetch('/api/linkedin/regenerate', {
         method: 'POST',
