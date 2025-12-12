@@ -249,6 +249,10 @@ function closeDeleteModal() {
 
 function renderHistory() {
   if (!els.historyList) return;
+  
+  // Always hide loading indicator when rendering history
+  showHistoryLoading(false);
+  
   els.historyList.innerHTML = '';
 
   if (!historyItems.length) {
