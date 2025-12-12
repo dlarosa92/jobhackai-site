@@ -133,6 +133,9 @@
     }
 
     // Override the value property to sync visual display when set programmatically
+    // Store the original descriptor to restore it later
+    const originalValueDescriptor = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(select), 'value') ||
+                                    Object.getOwnPropertyDescriptor(select, 'value');
     let _value = select.value;
     Object.defineProperty(select, 'value', {
       get() {
@@ -316,6 +319,12 @@
       destroy: () => {
         mo.disconnect();
         select.removeEventListener('change', onSelectChange);
+        // Restore the original value property
+        if (originalValueDescriptor) {
+          Object.defineProperty(select, 'value', originalValueDescriptor);
+        } else {
+          delete select.value; // Fallback if no original descriptor
+        }
         close();
         // unwrap: move select back
         const p = wrapper.parentNode;
