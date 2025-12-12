@@ -325,6 +325,23 @@ async function loadRun(id) {
   setLoading(true, 'Loading saved run…');
   try {
     const data = await apiFetch(`/api/linkedin/run?id=${encodeURIComponent(id)}`, { method: 'GET' });
+    // Check if run is in error or processing state (HTTP 202 response without output_json)
+    if (data?.status === 'error') {
+      alert('This run failed to complete. Please try analyzing again.');
+      setLoading(false);
+      return;
+    }
+    if (data?.status === 'processing') {
+      alert('This run is still processing. Please wait a moment and try again.');
+      setLoading(false);
+      return;
+    }
+    // Check if essential data is missing (shouldn't happen for completed runs, but guard anyway)
+    if (!data?.sections || data?.overallScore === undefined) {
+      alert('This run is incomplete or still processing. Please try analyzing again.');
+      setLoading(false);
+      return;
+    }
     // data shape from API: {run_id, created_at, updated_at, role, overallScore, keywordsToAdd, quickWins, sections}
     renderResults({
       run_id: data.run_id,
@@ -377,8 +394,30 @@ async function pollRunUntilReady(runId, maxMs = 15000) {
 async function analyze() {
   if (isAnalyzing) return;
   const payload = readForm();
+  // Validate all required fields
   if (!payload.role) {
     alert('Please select a Target Role.');
+    els.role?.focus();
+    return;
+  }
+  if (!payload.headline) {
+    alert('Please enter a Headline.');
+    els.headline?.focus();
+    return;
+  }
+  if (!payload.summary) {
+    alert('Please enter a Summary.');
+    els.summary?.focus();
+    return;
+  }
+  if (!payload.experience) {
+    alert('Please enter your Experience.');
+    els.experience?.focus();
+    return;
+  }
+  if (!payload.skills) {
+    alert('Please enter your Skills.');
+    els.skills?.focus();
     return;
   }
 
@@ -431,7 +470,7 @@ async function analyze() {
     const code = e?.data?.error || e?.message || 'server_error';
     if (e?.status === 403 && code === 'premium_required') {
       setLockedView('upgrade');
-    } else if (e?.status === 401 && code === 'unauthorized') {
+    } else if ((e?.status === 401 && code === 'unauthorized') || e?.message === 'not_authenticated') {
       setLockedView('login');
     } else {
       alert('Could not analyze your profile. Please try again.');
@@ -594,6 +633,11 @@ function initRoleSelector() {
 
 function bindEvents() {
   els.form?.addEventListener('submit', (e) => {
+    // Check HTML5 validation before preventing default
+    if (!els.form?.checkValidity()) {
+      // Let browser show validation messages
+      return;
+    }
     e.preventDefault();
     analyze();
   });
