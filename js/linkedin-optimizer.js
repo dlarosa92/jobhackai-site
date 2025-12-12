@@ -363,7 +363,14 @@ async function loadRun(id) {
     console.warn('[LINKEDIN] load run failed', e);
     // Only show error if this is still the selected item
     if (selectedHistoryId === id) {
-      alert('Could not load this run. Please try again.');
+      const errorMsg = e?.data?.error || e?.message || 'unknown_error';
+      if (errorMsg === 'not_found') {
+        alert('This run was not found. It may have been deleted.');
+      } else if (errorMsg === 'timeout') {
+        alert('The request timed out. Please try again.');
+      } else {
+        alert('Could not load this run. Please try again.');
+      }
     }
   } finally {
     // Only clear loading state if this is still the selected item
@@ -464,6 +471,11 @@ async function analyze() {
       data = await pollRunUntilReady(data.run_id);
     }
 
+    // Validate that we have the required data before rendering
+    if (!data || !data.run_id || data.overallScore === undefined || !data.sections) {
+      throw new Error('Incomplete data received from server');
+    }
+
     const run = {
       run_id: data.run_id,
       created_at: data.created_at,
@@ -484,6 +496,10 @@ async function analyze() {
       setLockedView('upgrade');
     } else if ((e?.status === 401 && code === 'unauthorized') || e?.message === 'not_authenticated') {
       setLockedView('login');
+    } else if (code === 'timeout') {
+      alert('The analysis timed out. Please try again.');
+    } else if (code === 'Incomplete data received from server') {
+      alert('Received incomplete data from the server. Please try again.');
     } else {
       alert('Could not analyze your profile. Please try again.');
     }
