@@ -143,6 +143,9 @@ let historyItems = [];
 let selectedHistoryId = null;
 let isAnalyzing = false;
 const regenBusy = new Set(); // section keys
+// Serialize regenerations across sections to avoid branching from the same base run_id
+// and overwriting each other's changes when responses return out of order.
+let regenQueue = Promise.resolve();
 let unlockedInitialized = false;
 
 function setLockedView(kind) {
@@ -356,6 +359,15 @@ async function pollRunUntilReady(runId, maxMs = 15000) {
   const deadline = Date.now() + maxMs;
   while (Date.now() < deadline) {
     const data = await apiFetch(`/api/linkedin/run?id=${encodeURIComponent(runId)}`, { method: 'GET' });
+    // If the backend run has entered an error state, fail fast instead of waiting for timeout.
+    // Note: /api/linkedin/run can return HTTP 202 with { status: 'error', ... }.
+    if (data?.status === 'error') {
+      const err = new Error(data?.error || data?.reason || 'generation_failed');
+      // Shape the thrown error similarly to apiFetch() errors so upstream handling can inspect it.
+      err.status = 500;
+      err.data = { ...(data || {}), error: data?.error || 'generation_failed' };
+      throw err;
+    }
     if (data?.sections && data?.overallScore !== undefined) return data;
     await new Promise((r) => setTimeout(r, 900));
   }
@@ -436,27 +448,36 @@ async function regenerate(section) {
   regenBusy.add(section);
   renderSections(currentRun.sections || {});
 
-  try {
-    const resp = await apiFetch('/api/linkedin/regenerate', {
-      method: 'POST',
-      body: JSON.stringify({
-        request_id: crypto.randomUUID(),
-        run_id: currentRun.run_id,
-        section
-      })
-    });
+  // Enqueue so each regen uses the latest currentRun (which may have been updated by a prior regen).
+  regenQueue = regenQueue.then(async () => {
+    try {
+      if (!currentRun?.run_id) throw new Error('missing_run');
+      const baseRunId = currentRun.run_id;
 
-    if (resp?.run_id) {
-      await loadRun(resp.run_id);
-      await fetchHistory();
+      const resp = await apiFetch('/api/linkedin/regenerate', {
+        method: 'POST',
+        body: JSON.stringify({
+          request_id: crypto.randomUUID(),
+          run_id: baseRunId,
+          section
+        })
+      });
+
+      if (resp?.run_id) {
+        await loadRun(resp.run_id);
+        await fetchHistory();
+      }
+    } catch (e) {
+      console.warn('[LINKEDIN] regenerate failed', e);
+      alert('Could not regenerate this section. Please try again.');
+    } finally {
+      regenBusy.delete(section);
+      renderSections(currentRun?.sections || {});
     }
-  } catch (e) {
-    console.warn('[LINKEDIN] regenerate failed', e);
-    alert('Could not regenerate this section. Please try again.');
-  } finally {
-    regenBusy.delete(section);
-    renderSections(currentRun?.sections || {});
-  }
+  });
+
+  // Wait for this regen (and any earlier queued ones) to finish.
+  await regenQueue;
 }
 
 async function copyOptimized(section) {
