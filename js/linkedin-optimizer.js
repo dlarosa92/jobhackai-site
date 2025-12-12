@@ -325,6 +325,11 @@ async function loadRun(id) {
   setLoading(true, 'Loading saved run…');
   try {
     const data = await apiFetch(`/api/linkedin/run?id=${encodeURIComponent(id)}`, { method: 'GET' });
+    // Verify this is still the selected item after async fetch (prevents race condition from rapid clicks)
+    if (selectedHistoryId !== id) {
+      // User clicked a different item while this request was in flight, ignore this response
+      return;
+    }
     // Check if run is in error or processing state (HTTP 202 response without output_json)
     if (data?.status === 'error') {
       alert('This run failed to complete. Please try analyzing again.');
@@ -355,9 +360,15 @@ async function loadRun(id) {
     });
   } catch (e) {
     console.warn('[LINKEDIN] load run failed', e);
-    alert('Could not load this run. Please try again.');
+    // Only show error if this is still the selected item
+    if (selectedHistoryId === id) {
+      alert('Could not load this run. Please try again.');
+    }
   } finally {
-    setLoading(false);
+    // Only clear loading state if this is still the selected item
+    if (selectedHistoryId === id) {
+      setLoading(false);
+    }
   }
 }
 
