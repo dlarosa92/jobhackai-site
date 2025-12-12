@@ -150,6 +150,11 @@ export async function onRequest(context) {
         .bind(now, id, uid)
         .run();
 
+      // If D1 reports an operation failure, return an error immediately
+      if (!res || res.success === false) {
+        return json(origin, { error: 'operation_failed', reason: 'database_error' }, 500);
+      }
+
       const changes =
         typeof res?.meta?.changes === 'number'
           ? res.meta.changes
@@ -157,12 +162,15 @@ export async function onRequest(context) {
             ? res.changes
             : null;
 
-      if (!res || res.success === false || changes === 0) {
+      // If UPDATE succeeded but matched 0 rows, check if row exists to determine if it's 404
+      if (changes === 0) {
         const row = await db
           .prepare(`SELECT id FROM cover_letter_history WHERE id = ? AND user_id = ? AND is_deleted = 0`)
           .bind(id, uid)
           .first();
         if (!row) return json(origin, { error: 'not_found' }, 404);
+        // If row exists but wasn't updated, something unexpected happened
+        return json(origin, { error: 'operation_failed', reason: 'update_mismatch' }, 500);
       }
 
       return json(origin, { success: true });
