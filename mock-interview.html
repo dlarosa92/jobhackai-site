@@ -1747,15 +1747,25 @@
         }
         
         const data = await res.json();
-        state.scoringResult = data;
-        state.sessionId = data.sessionId;
+        
+        // Handle wrapped response from successResponse (data may have success: true wrapper)
+        const result = data.success !== undefined ? data : data;
+        
+        state.scoringResult = result;
+        state.sessionId = result.sessionId;
+        
+        console.log('[MI] Scoring response received:', { 
+          sessionId: result.sessionId, 
+          overallScore: result.overallScore,
+          savedToHistory: result.savedToHistory 
+        });
         
         // Update usage
         state.sessionsUsed++;
         updateMeter();
         
-        // Refresh history
-        fetchHistory();
+        // Refresh history (await to ensure it completes)
+        await fetchHistory();
         
         // Show summary
         showSummary();
@@ -1769,29 +1779,56 @@
     
     // Show summary screen
     function showSummary() {
-      state.currentScreen = 'summary';
-      els.setup.classList.add('hidden');
-      els.interview.classList.add('hidden');
-      els.summary.classList.remove('hidden');
-      
-      const r = state.scoringResult;
-      if (!r) return;
-      
-      // Score hero
-      const scoreEl = document.getElementById('mi-final-score');
-      scoreEl.textContent = `${r.overallScore} / 100`;
-      scoreEl.className = 'mi-score-value ' + getScoreColorClass(r.overallScore);
-      
-      // Coaching
-      const coaching = r.improvements?.[0] || 'Great job completing the interview!';
-      document.getElementById('mi-score-coaching').textContent = coaching;
-      
-      // Badge
-      const date = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-      document.getElementById('mi-score-badge').textContent = `Saved to history · ${date} · ${state.role} · ${state.seniority}`;
-      
-      // Rubric grid
-      const rubricGrid = document.getElementById('mi-rubric-grid');
+      try {
+        state.currentScreen = 'summary';
+        els.setup.classList.add('hidden');
+        els.interview.classList.add('hidden');
+        els.summary.classList.remove('hidden');
+        
+        const r = state.scoringResult;
+        if (!r) {
+          console.error('[MI] No scoring result available');
+          alert('No scoring data available. Please try again.');
+          return;
+        }
+        
+        console.log('[MI] Showing summary with result:', r);
+        
+        // Score hero
+        const scoreEl = document.getElementById('mi-final-score');
+        if (!scoreEl) {
+          console.error('[MI] Score element not found');
+          return;
+        }
+        
+        const overallScore = r.overallScore ?? r.overall_score ?? 0;
+        scoreEl.textContent = `${overallScore} / 100`;
+        scoreEl.className = 'mi-score-value ' + getScoreColorClass(overallScore);
+        
+        // Coaching
+        const coaching = r.improvements?.[0] || 'Great job completing the interview!';
+        const coachingEl = document.getElementById('mi-score-coaching');
+        if (coachingEl) {
+          coachingEl.textContent = coaching;
+        } else {
+          console.warn('[MI] Coaching element not found');
+        }
+        
+        // Badge
+        const date = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        const badgeEl = document.getElementById('mi-score-badge');
+        if (badgeEl) {
+          badgeEl.textContent = `Saved to history · ${date} · ${state.role} · ${state.seniority}`;
+        } else {
+          console.warn('[MI] Badge element not found');
+        }
+        
+        // Rubric grid
+        const rubricGrid = document.getElementById('mi-rubric-grid');
+        if (!rubricGrid) {
+          console.error('[MI] Rubric grid element not found');
+          return;
+        }
       const rubricItems = [
         { label: 'Relevance of Answer', score: r.rubric?.relevance?.score || 0, of: 30, note: r.rubric?.relevance?.note || '' },
         { label: 'Structure & Delivery', score: r.rubric?.structure?.score || 0, of: 25, note: r.rubric?.structure?.note || '' },
@@ -1809,7 +1846,12 @@
       
       // S+A=O breakdown
       const saoBreakdown = document.getElementById('mi-sao-breakdown');
-      const sao = r.saoOverall || { situationPct: 0, actionPct: 0, outcomePct: 0 };
+      if (!saoBreakdown) {
+        console.error('[MI] SAO breakdown element not found');
+        return;
+      }
+      
+      const sao = r.saoOverall || r.sao_overall || { situationPct: 0, actionPct: 0, outcomePct: 0 };
       saoBreakdown.innerHTML = `
         <div class="mi-sao-stat">
           <div class="mi-sao-pct">${Math.round(sao.situationPct || sao.situation_pct || 0)}%</div>
@@ -1830,16 +1872,28 @@
       
       // S+A=O coaching
       const saoCoachingList = document.getElementById('mi-sao-coaching-list');
-      const saoCoaching = sao.coaching || [];
-      saoCoachingList.innerHTML = saoCoaching.map(c => `<li>${escapeHtml(c || '')}</li>`).join('');
+      if (saoCoachingList) {
+        const saoCoaching = sao.coaching || [];
+        saoCoachingList.innerHTML = saoCoaching.map(c => `<li>${escapeHtml(c || '')}</li>`).join('');
+      } else {
+        console.warn('[MI] SAO coaching list element not found');
+      }
       
       // Improvements
       const improvementsList = document.getElementById('mi-improvements-list');
-      const improvements = r.improvements || [];
-      improvementsList.innerHTML = improvements.map(i => `<li>${escapeHtml(i || '')}</li>`).join('');
+      if (improvementsList) {
+        const improvements = r.improvements || [];
+        improvementsList.innerHTML = improvements.map(i => `<li>${escapeHtml(i || '')}</li>`).join('');
+      } else {
+        console.warn('[MI] Improvements list element not found');
+      }
       
       // Per-question accordion
       const accordion = document.getElementById('mi-accordion');
+      if (!accordion) {
+        console.error('[MI] Accordion element not found');
+        return;
+      }
       const perQRaw = r.perQuestion || [];
       // Normalize per-question feedback using q_index so we don't rely on array order
       const perQByIndex = {};
@@ -1875,6 +1929,11 @@
           btn.parentElement.classList.toggle('open');
         });
       });
+      
+      } catch (error) {
+        console.error('[MI] Error in showSummary:', error);
+        alert('Failed to display summary. Please try again.');
+      }
     }
     
     function getScoreColorClass(score) {

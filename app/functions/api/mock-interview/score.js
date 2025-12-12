@@ -429,8 +429,11 @@ export async function onRequest(context) {
 
         if (session) {
           sessionId = session.id;
+          console.log('[MI-SCORE] Session saved successfully:', { sessionId, userId: d1User.id });
           // Increment monthly usage
           await incrementMockInterviewMonthlyUsage(env, d1User.id);
+        } else {
+          console.warn('[MI-SCORE] Session creation returned null');
         }
       } catch (dbError) {
         console.error('[MI-SCORE] D1 persistence error:', dbError);
