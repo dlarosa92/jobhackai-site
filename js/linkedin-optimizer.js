@@ -293,7 +293,10 @@ function renderHistory() {
     row.classList.toggle('is-selected', selectedHistoryId === item.id);
 
     const when = timeAgo(item.createdAt);
-    const normalizedScore = Number.isFinite(Number(item.overallScore)) ? Number(item.overallScore) : null;
+    // Guard against null scores because Number(null) === 0 and would be treated as valid.
+    const normalizedScore = item.overallScore != null && Number.isFinite(Number(item.overallScore))
+      ? Number(item.overallScore)
+      : null;
     const scoreHtml = normalizedScore !== null
       ? `<div class="history-score ${getScoreTone(normalizedScore)}">${Math.round(normalizedScore)}</div>`
       : '';

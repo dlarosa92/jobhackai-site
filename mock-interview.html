@@ -1216,7 +1216,7 @@
           We automatically save your past mock interviews so you can come back and review your scores.
         </div>
         <ul class="history-list mi-history-list" id="mi-history-list">
-          <li class="mi-history-empty history-item">No previous mock interviews yet. Once you finish a session, your score and date will appear here.</li>
+          <li class="mi-history-empty">No previous mock interviews yet. Once you finish a session, your score and date will appear here.</li>
         </ul>
       </aside>
     </div>
@@ -1576,7 +1576,10 @@
         const createdAt = s.createdAt ? (typeof s.createdAt === 'string' ? new Date(s.createdAt).getTime() : Number(s.createdAt)) : null;
         const when = createdAt ? timeAgo(createdAt) : '';
         const role = escapeHtml(s.role || 'Unknown role');
-        const normalizedScore = Number.isFinite(Number(s.overallScore)) ? Number(s.overallScore) : null;
+        // Avoid treating null as 0 because Number(null) is 0 and should be hidden.
+        const normalizedScore = s.overallScore != null && Number.isFinite(Number(s.overallScore))
+          ? Number(s.overallScore)
+          : null;
         const scoreDisplay = normalizedScore !== null ? `${Math.round(normalizedScore)} / 100` : 'N/A';
         const scoreClass = normalizedScore !== null ? getScoreTone(normalizedScore) : 'history-score';
           const sessionId = s.id || `missing-${idx}`;

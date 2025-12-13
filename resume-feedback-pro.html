@@ -5135,7 +5135,10 @@
     };
 
     listEl.innerHTML = visibleItems.map(item => {
-      const normalizedScore = Number.isFinite(Number(item.atsScore)) ? Number(item.atsScore) : null;
+      // Prevent null from being coerced into a valid 0 score.
+      const normalizedScore = item.atsScore != null && Number.isFinite(Number(item.atsScore))
+        ? Number(item.atsScore)
+        : null;
       const scoreHtml = normalizedScore !== null
         ? `<div class="rf-history-score history-score ${getAtsScoreTone(normalizedScore)}">${Math.round(normalizedScore)}</div>`
         : '';
