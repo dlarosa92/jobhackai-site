@@ -487,6 +487,20 @@ export function isD1Available(env) {
   return !!getDb(env);
 }
 
+const INTERVIEW_QUESTION_SETS_TABLE_SQL = `
+CREATE TABLE IF NOT EXISTS interview_question_sets (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL,
+  role TEXT NOT NULL,
+  seniority TEXT,
+  types_json TEXT NOT NULL,
+  questions_json TEXT NOT NULL,
+  selected_ids_json TEXT NOT NULL,
+  jd TEXT,
+  created_at TEXT DEFAULT (datetime('now')),
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);`;
+
 const MOCK_INTERVIEW_SESSIONS_TABLE_SQL = `
 CREATE TABLE IF NOT EXISTS mock_interview_sessions (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -543,6 +557,10 @@ export async function ensureMockInterviewSchema(env) {
   if (!db) return;
 
   try {
+    await db.prepare(INTERVIEW_QUESTION_SETS_TABLE_SQL).run();
+    await db.prepare('CREATE INDEX IF NOT EXISTS idx_interview_question_sets_user_id ON interview_question_sets(user_id)').run();
+    await db.prepare('CREATE INDEX IF NOT EXISTS idx_interview_question_sets_created_at ON interview_question_sets(created_at DESC)').run();
+    await db.prepare('CREATE INDEX IF NOT EXISTS idx_interview_question_sets_role ON interview_question_sets(role)').run();
     await db.prepare(MOCK_INTERVIEW_SESSIONS_TABLE_SQL).run();
     await db.prepare(MOCK_INTERVIEW_USAGE_TABLE_SQL).run();
     await ensureMockInterviewIndexes(db);
