@@ -251,29 +251,7 @@
     .mi-meter-text {
       font-size: 0.9rem;
       color: var(--color-text-secondary);
-      margin-bottom: 0.5rem;
-    }
-    
-    .mi-meter-bar {
-      width: 100%;
-      height: 8px;
-      background: var(--color-divider);
-      border-radius: var(--radius-full);
-      overflow: hidden;
-    }
-    
-    .mi-meter-progress {
-      height: 100%;
-      background: var(--color-cta-green);
-      transition: width var(--transition-normal);
-    }
-    
-    .mi-meter-progress.warning {
-      background: var(--color-warning);
-    }
-    
-    .mi-meter-progress.danger {
-      background: var(--color-error);
+      margin-bottom: 0;
     }
     
     .mi-meter-warning {
@@ -1063,10 +1041,7 @@
           
           <!-- Session Meter -->
           <div class="mi-meter" id="mi-meter">
-            <div class="mi-meter-text">Sessions used this month: <span id="mi-sessions-used">0</span> / <span id="mi-sessions-limit">20</span></div>
-            <div class="mi-meter-bar">
-              <div class="mi-meter-progress" id="mi-meter-progress" style="width: 0%"></div>
-            </div>
+            <div class="mi-meter-text">Sessions used this month: <span id="mi-sessions-used">0</span></div>
             <div class="mi-meter-warning hidden" id="mi-meter-warning"></div>
           </div>
         </div>
@@ -1107,10 +1082,7 @@
           
           <!-- Meter during interview -->
           <div class="mi-meter" style="margin-top: 1.5rem;">
-            <div class="mi-meter-text">Sessions used this month: <span id="mi-sessions-used-2">0</span> / <span id="mi-sessions-limit-2">20</span></div>
-            <div class="mi-meter-bar">
-              <div class="mi-meter-progress" id="mi-meter-progress-2" style="width: 0%"></div>
-            </div>
+            <div class="mi-meter-text">Sessions used this month: <span id="mi-sessions-used-2">0</span></div>
           </div>
         </div>
         
@@ -1266,12 +1238,8 @@
       sourceRadios: document.querySelectorAll('input[name="mi-source"]'),
       savedSetSelect: document.getElementById('mi-saved-set'),
       startBtn: document.getElementById('mi-start'),
-      meterProgress: document.getElementById('mi-meter-progress'),
-      meterProgress2: document.getElementById('mi-meter-progress-2'),
       sessionsUsed: document.getElementById('mi-sessions-used'),
       sessionsUsed2: document.getElementById('mi-sessions-used-2'),
-      sessionsLimit: document.getElementById('mi-sessions-limit'),
-      sessionsLimit2: document.getElementById('mi-sessions-limit-2'),
       meterWarning: document.getElementById('mi-meter-warning'),
       qPill: document.getElementById('mi-q-pill'),
       qMeta: document.getElementById('mi-q-meta'),
@@ -1384,31 +1352,23 @@
     
     // Update session meter
     function updateMeter() {
-      const pct = Math.min(100, (state.sessionsUsed / state.sessionLimit) * 100);
-      const progressClass = pct >= 100 ? 'danger' : pct >= 75 ? 'warning' : '';
-      
-      els.meterProgress.style.width = `${pct}%`;
-      els.meterProgress.className = 'mi-meter-progress ' + progressClass;
+      // Update session count displays
       els.sessionsUsed.textContent = state.sessionsUsed;
-      els.sessionsLimit.textContent = state.sessionLimit;
-      
-      if (els.meterProgress2) {
-        els.meterProgress2.style.width = `${pct}%`;
-        els.meterProgress2.className = 'mi-meter-progress ' + progressClass;
+      if (els.sessionsUsed2) {
         els.sessionsUsed2.textContent = state.sessionsUsed;
-        els.sessionsLimit2.textContent = state.sessionLimit;
       }
+      
+      // Check if limit reached (still need to disable button if limit hit)
+      const pct = Math.min(100, (state.sessionsUsed / state.sessionLimit) * 100);
       
       if (pct >= 100) {
         els.meterWarning.textContent = 'Monthly session limit reached. Next reset: ' + getNextResetDate();
         els.meterWarning.classList.remove('hidden');
         els.startBtn.disabled = true;
         els.startBtn.textContent = 'Monthly session limit reached';
-      } else if (pct >= 75) {
-        els.meterWarning.textContent = "You're nearing your monthly limit. Focus on your top roles.";
-        els.meterWarning.classList.remove('hidden');
       } else {
         els.meterWarning.classList.add('hidden');
+        checkCanStart();
       }
     }
     
