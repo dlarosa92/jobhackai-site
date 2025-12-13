@@ -1368,7 +1368,11 @@
         els.startBtn.textContent = 'Monthly session limit reached';
       } else {
         els.meterWarning.classList.add('hidden');
-        els.startBtn.textContent = 'Start Mock Interview';
+        // Only reset button text if it's currently showing the limit-reached message
+        // This prevents overriding other states like "Loading questions..."
+        if (els.startBtn.textContent === 'Monthly session limit reached') {
+          els.startBtn.textContent = 'Start Mock Interview';
+        }
         checkCanStart();
       }
     }
