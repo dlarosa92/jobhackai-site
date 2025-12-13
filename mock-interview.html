@@ -302,11 +302,53 @@
       top: 1rem;
     }
     
+    .mi-history-title-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--space-sm);
+      margin-bottom: var(--space-xs);
+    }
+    
     .mi-history-title {
       font-weight: var(--font-weight-bold);
       color: var(--color-text-main);
-      font-size: 1.1rem;
-      margin-bottom: 1rem;
+      font-size: var(--font-size-xl);
+      display: flex;
+      align-items: center;
+      gap: var(--space-xs);
+    }
+    
+    .mi-history-icon {
+      vertical-align: text-bottom;
+      color: var(--color-text-muted);
+    }
+    
+    .mi-icon-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border: 1px solid var(--color-divider);
+      background: transparent;
+      color: var(--color-text-secondary);
+      border-radius: var(--radius-md);
+      padding: 0.4rem 0.55rem;
+      cursor: pointer;
+      transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
+    }
+    
+    .mi-icon-btn:hover,
+    .mi-icon-btn:focus-visible {
+      background: rgba(0, 123, 255, 0.06);
+      border-color: rgba(0, 123, 255, 0.25);
+      color: var(--color-text-main);
+      outline: none;
+    }
+    
+    .mi-history-subtitle {
+      color: var(--color-text-secondary);
+      font-size: var(--font-size-sm);
+      margin-bottom: var(--space-md);
     }
     
     .mi-history-list {
@@ -1127,7 +1169,25 @@
       
       <!-- Right Column: Session History -->
       <aside class="mi-card mi-history">
-        <div class="mi-history-title">Session History</div>
+        <div class="mi-history-title-row">
+          <div class="mi-history-title">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="mi-history-icon" aria-hidden="true">
+              <circle cx="12" cy="12" r="10"/>
+              <polyline points="12 6 12 12 16 14"/>
+            </svg>
+            Session History
+          </div>
+          <button id="mi-history-refresh" class="mi-icon-btn" type="button" title="Refresh history" aria-label="Refresh history">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <path d="M23 4v6h-6"/>
+              <path d="M1 20v-6h6"/>
+              <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
+            </svg>
+          </button>
+        </div>
+        <div class="mi-history-subtitle">
+          We automatically save your past mock interviews so you can come back and review your scores.
+        </div>
         <ul class="mi-history-list" id="mi-history-list">
           <li class="mi-history-empty">No previous mock interviews yet. Once you finish a session, your score and date will appear here.</li>
         </ul>
@@ -1227,7 +1287,8 @@
       shortNudge: document.getElementById('mi-short-nudge'),
       backBtn: document.getElementById('mi-back'),
       nextBtn: document.getElementById('mi-next'),
-      historyList: document.getElementById('mi-history-list')
+      historyList: document.getElementById('mi-history-list'),
+      historyRefresh: document.getElementById('mi-history-refresh')
     };
     
     // API endpoints
@@ -2062,6 +2123,11 @@
       document.getElementById('mi-retake')?.addEventListener('click', retakeInterview);
       document.getElementById('mi-new-questions')?.addEventListener('click', () => {
         window.location.href = `interview-questions.html?role=${encodeURIComponent(state.role)}`;
+      });
+      
+      // History refresh button
+      els.historyRefresh?.addEventListener('click', () => {
+        fetchHistory();
       });
     }
     
