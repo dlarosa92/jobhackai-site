@@ -1573,7 +1573,8 @@
 
     const htmlItems = sessions.map((s, idx) => {
         try {
-        const year = s.createdAt ? new Date(s.createdAt).getFullYear().toString() : '';
+        const createdAt = s.createdAt ? (typeof s.createdAt === 'string' ? new Date(s.createdAt).getTime() : Number(s.createdAt)) : null;
+        const when = createdAt ? timeAgo(createdAt) : '';
         const role = escapeHtml(s.role || 'Unknown role');
         const normalizedScore = Number.isFinite(Number(s.overallScore)) ? Number(s.overallScore) : null;
         const scoreDisplay = normalizedScore !== null ? `${Math.round(normalizedScore)} / 100` : 'N/A';
@@ -1589,7 +1590,7 @@
               </svg>
               <div class="mi-history-text history-text">
                 <div class="mi-history-line1 history-line1">${role}</div>
-                <div class="mi-history-line2 history-line2">${year ? `• ${year}` : ''}</div>
+                <div class="mi-history-line2 history-line2">${when ? `• ${escapeHtml(when)}` : ''}</div>
               </div>
             </div>
             <div class="${scoreClass}">${scoreDisplay}</div>
@@ -2086,6 +2087,24 @@
       const div = document.createElement('div');
       div.textContent = str;
       return div.innerHTML;
+    }
+    
+    function timeAgo(tsMs) {
+      const ts = Number(tsMs || 0);
+      if (!ts || !Number.isFinite(ts)) return '';
+      const diff = Date.now() - ts;
+      const s = Math.floor(diff / 1000);
+      if (s < 60) return 'just now';
+      const m = Math.floor(s / 60);
+      if (m < 60) return `${m}m ago`;
+      const h = Math.floor(m / 60);
+      if (h < 24) return `${h}h ago`;
+      const d = Math.floor(h / 24);
+      if (d < 30) return `${d}d ago`;
+      const mo = Math.floor(d / 30);
+      if (mo < 12) return `${mo}mo ago`;
+      const y = Math.floor(mo / 12);
+      return `${y}y ago`;
     }
     
     // Reset to setup
