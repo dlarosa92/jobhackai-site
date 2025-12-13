@@ -1178,6 +1178,9 @@
     // MOCK INTERVIEW PAGE LOGIC
     // ============================================================
     
+    // Debug mode - set to true to enable comprehensive logging
+    const DEBUG_MODE = true;
+    
     // State
     const state = {
       currentScreen: 'setup', // 'setup' | 'interview' | 'summary'
@@ -1365,27 +1368,94 @@
     
     // Fetch session history
     async function fetchHistory() {
+      const debugLog = (...args) => DEBUG_MODE && console.log('[MI-DEBUG]', ...args);
+      const debugError = (...args) => DEBUG_MODE && console.error('[MI-DEBUG-ERROR]', ...args);
+      
       try {
-        const token = await getToken();
-        if (!token) return;
+        debugLog('=== fetchHistory() START ===');
+        debugLog('1. Getting Firebase token...');
         
-        const res = await fetch(`${API.sessions}?limit=3`, {
+        const token = await getToken();
+        if (!token) {
+          debugError('No Firebase token available');
+          return;
+        }
+        debugLog('2. Token obtained:', token.substring(0, 20) + '...');
+        
+        const url = `${API.sessions}?limit=3`;
+        debugLog('3. Making request to:', url);
+        debugLog('4. Request headers:', { 'Authorization': `Bearer ${token.substring(0, 20)}...` });
+        
+        const res = await fetch(url, {
           headers: { 'Authorization': `Bearer ${token}` }
         });
         
-        if (!res.ok) throw new Error('Failed to fetch history');
+        debugLog('5. Response received:', {
+          status: res.status,
+          statusText: res.statusText,
+          ok: res.ok,
+          headers: Object.fromEntries(res.headers.entries())
+        });
         
+        if (!res.ok) {
+          const errorText = await res.text().catch(() => 'Unable to read error response');
+          debugError('6. Response not OK. Status:', res.status, 'Body:', errorText);
+          throw new Error(`Failed to fetch history: ${res.status} ${res.statusText}`);
+        }
+        
+        debugLog('6. Parsing JSON response...');
         const data = await res.json();
+        debugLog('7. Parsed response data:', JSON.stringify(data, null, 2));
+        debugLog('8. Data structure check:', {
+          hasSessions: 'sessions' in data,
+          sessionsType: Array.isArray(data.sessions) ? 'array' : typeof data.sessions,
+          sessionsLength: Array.isArray(data.sessions) ? data.sessions.length : 'N/A',
+          hasUsage: 'usage' in data,
+          usageType: typeof data.usage
+        });
         
         if (data.usage) {
+          debugLog('9. Updating usage state:', {
+            sessionsUsed: data.usage.sessionsUsed,
+            sessionLimit: data.usage.sessionLimit
+          });
           state.sessionsUsed = data.usage.sessionsUsed || 0;
           state.sessionLimit = data.usage.sessionLimit || 20;
           updateMeter();
+        } else {
+          debugError('9. No usage data in response');
         }
         
-        renderHistory(data.sessions || []);
+        const sessions = data.sessions || [];
+        debugLog('10. Sessions array to render:', {
+          length: sessions.length,
+          items: sessions.map(s => ({
+            id: s.id,
+            role: s.role,
+            score: s.overallScore,
+            createdAt: s.createdAt
+          }))
+        });
+        
+        debugLog('11. Calling renderHistory() with', sessions.length, 'sessions');
+        renderHistory(sessions);
+        debugLog('12. renderHistory() completed');
+        
+        // Verify DOM state after rendering
+        setTimeout(() => {
+          debugLog('13. DOM verification (after 100ms):', {
+            historyListExists: !!els.historyList,
+            historyListChildren: els.historyList ? els.historyList.children.length : 0,
+            historyListInnerHTML: els.historyList ? els.historyList.innerHTML.substring(0, 200) + '...' : 'N/A',
+            historyListVisible: els.historyList ? window.getComputedStyle(els.historyList).display !== 'none' : false
+          });
+        }, 100);
+        
+        debugLog('=== fetchHistory() END ===');
       } catch (e) {
+        debugError('=== fetchHistory() ERROR ===', e);
         console.error('[MI] History fetch error:', e);
+        console.error('[MI] Error stack:', e.stack);
         els.historyList.innerHTML = `
           <li class="mi-history-error">
             We couldn't load your previous sessions.
@@ -1460,26 +1530,131 @@
     }
     
     function renderHistory(sessions) {
-      if (!sessions.length) {
-        els.historyList.innerHTML = '<li class="mi-history-empty">No previous mock interviews yet. Once you finish a session, your score and date will appear here.</li>';
+      const debugLog = (...args) => DEBUG_MODE && console.log('[MI-DEBUG-RENDER]', ...args);
+      const debugError = (...args) => DEBUG_MODE && console.error('[MI-DEBUG-RENDER-ERROR]', ...args);
+      
+      debugLog('=== renderHistory() START ===');
+      debugLog('1. Input sessions:', {
+        isArray: Array.isArray(sessions),
+        length: Array.isArray(sessions) ? sessions.length : 'N/A',
+        type: typeof sessions,
+        value: sessions
+      });
+      
+      // Validate DOM element
+      if (!els.historyList) {
+        debugError('2. historyList element not found!');
+        console.error('[MI] historyList element is null/undefined');
+        return;
+      }
+      debugLog('2. historyList element found:', {
+        tagName: els.historyList.tagName,
+        id: els.historyList.id,
+        className: els.historyList.className,
+        currentInnerHTML: els.historyList.innerHTML.substring(0, 100) + '...'
+      });
+      
+      if (!sessions || !Array.isArray(sessions) || !sessions.length) {
+        debugLog('3. No sessions to render, showing empty state');
+        const emptyHTML = '<li class="mi-history-empty">No previous mock interviews yet. Once you finish a session, your score and date will appear here.</li>';
+        els.historyList.innerHTML = emptyHTML;
+        debugLog('4. Empty state HTML set:', emptyHTML);
+        debugLog('=== renderHistory() END (empty) ===');
         return;
       }
       
-      els.historyList.innerHTML = sessions.map(s => {
-        const date = new Date(s.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-        return `
-          <li class="mi-history-item" data-session-id="${s.id}">
+      debugLog('3. Processing', sessions.length, 'sessions');
+      
+      // Validate session data structure
+      const validatedSessions = sessions.map((s, idx) => {
+        const validation = {
+          index: idx,
+          hasId: 'id' in s,
+          hasRole: 'role' in s,
+          hasOverallScore: 'overallScore' in s,
+          hasCreatedAt: 'createdAt' in s,
+          id: s.id,
+          role: s.role,
+          overallScore: s.overallScore,
+          createdAt: s.createdAt
+        };
+        debugLog(`   Session ${idx}:`, validation);
+        
+        if (!s.id) {
+          debugError(`   Session ${idx} missing id!`);
+        }
+        if (!s.createdAt) {
+          debugError(`   Session ${idx} missing createdAt!`);
+        }
+        
+        return s;
+      });
+      
+      debugLog('4. Generating HTML for', validatedSessions.length, 'sessions');
+      const htmlItems = validatedSessions.map((s, idx) => {
+        try {
+          const date = s.createdAt ? new Date(s.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : 'Unknown date';
+          const role = escapeHtml(s.role || 'Unknown role');
+          const score = s.overallScore !== undefined && s.overallScore !== null ? s.overallScore : 'N/A';
+          const sessionId = s.id || `missing-${idx}`;
+          
+          debugLog(`   HTML for session ${idx}:`, { date, role, score, sessionId });
+          
+          return `
+          <li class="mi-history-item" data-session-id="${sessionId}">
             <div class="mi-history-date">${date}</div>
-            <div class="mi-history-role">${escapeHtml(s.role || '')}</div>
-            <div class="mi-history-score">${s.overallScore} / 100</div>
+            <div class="mi-history-role">${role}</div>
+            <div class="mi-history-score">${score} / 100</div>
           </li>
         `;
-      }).join('');
-      
-      // Add click handlers
-      els.historyList.querySelectorAll('.mi-history-item').forEach(item => {
-        item.addEventListener('click', () => loadHistoricalSession(item.dataset.sessionId));
+        } catch (e) {
+          debugError(`   Error generating HTML for session ${idx}:`, e);
+          return '';
+        }
       });
+      
+      const finalHTML = htmlItems.join('');
+      debugLog('5. Generated HTML (first 500 chars):', finalHTML.substring(0, 500));
+      debugLog('6. Full HTML length:', finalHTML.length);
+      
+      debugLog('7. Setting innerHTML...');
+      els.historyList.innerHTML = finalHTML;
+      debugLog('8. innerHTML set. New children count:', els.historyList.children.length);
+      
+      // Verify what was actually rendered
+      const renderedItems = els.historyList.querySelectorAll('.mi-history-item');
+      debugLog('9. Rendered items found:', {
+        count: renderedItems.length,
+        items: Array.from(renderedItems).map((item, idx) => ({
+          index: idx,
+          sessionId: item.dataset.sessionId,
+          textContent: item.textContent.substring(0, 50),
+          hasClickHandler: 'onclick' in item || item.onclick !== null
+        }))
+      });
+      
+      debugLog('10. Adding click handlers...');
+      let handlerCount = 0;
+      renderedItems.forEach((item, idx) => {
+        try {
+          const sessionId = item.dataset.sessionId;
+          if (!sessionId) {
+            debugError(`   Item ${idx} has no session-id attribute!`);
+            return;
+          }
+          item.addEventListener('click', () => {
+            debugLog(`   Click handler triggered for session ${sessionId}`);
+            loadHistoricalSession(sessionId);
+          });
+          handlerCount++;
+          debugLog(`   Click handler added to item ${idx} (sessionId: ${sessionId})`);
+        } catch (e) {
+          debugError(`   Error adding click handler to item ${idx}:`, e);
+        }
+      });
+      debugLog('11. Click handlers added:', handlerCount, 'of', renderedItems.length);
+      
+      debugLog('=== renderHistory() END ===');
     }
     
     // Load a historical session
@@ -2039,6 +2214,16 @@
     
     // Initialize
     async function init() {
+      if (DEBUG_MODE) {
+        console.log('[MI-DEBUG] === INIT START ===');
+        console.log('[MI-DEBUG] DOM elements check:', {
+          historyList: !!els.historyList,
+          historyListId: els.historyList?.id,
+          historyListParent: els.historyList?.parentElement?.tagName,
+          historyListVisible: els.historyList ? window.getComputedStyle(els.historyList).display !== 'none' : false
+        });
+      }
+      
       localPayload = readLocalPayload();
       hydrateFromParams();
       setupEventListeners();
@@ -2058,6 +2243,44 @@
       }
       
       checkCanStart();
+    }
+    
+    // Expose debug helpers to window for manual debugging
+    if (typeof window !== 'undefined') {
+      window.MockInterviewDebug = {
+        fetchHistory: async () => {
+          console.log('[MI-DEBUG-MANUAL] Manually triggering fetchHistory()');
+          await fetchHistory();
+        },
+        renderHistory: (sessions) => {
+          console.log('[MI-DEBUG-MANUAL] Manually triggering renderHistory() with:', sessions);
+          renderHistory(sessions);
+        },
+        checkDOM: () => {
+          console.log('[MI-DEBUG-MANUAL] DOM State:', {
+            historyList: !!els.historyList,
+            historyListElement: els.historyList,
+            historyListHTML: els.historyList?.innerHTML?.substring(0, 200),
+            historyListChildren: els.historyList?.children?.length,
+            historyListVisible: els.historyList ? window.getComputedStyle(els.historyList).display : 'N/A',
+            state: {
+              sessionsUsed: state.sessionsUsed,
+              sessionLimit: state.sessionLimit
+            }
+          });
+        },
+        testRender: () => {
+          console.log('[MI-DEBUG-MANUAL] Testing render with mock data');
+          renderHistory([
+            { id: 'test-1', role: 'Software Engineer', overallScore: 85, createdAt: new Date().toISOString() },
+            { id: 'test-2', role: 'Product Manager', overallScore: 72, createdAt: new Date().toISOString() }
+          ]);
+        },
+        getState: () => state,
+        getElements: () => els
+      };
+      console.log('[MI-DEBUG] Debug helpers available at window.MockInterviewDebug');
+      console.log('[MI-DEBUG] Try: MockInterviewDebug.checkDOM() or MockInterviewDebug.fetchHistory()');
     }
     
     // Wait for DOM and Firebase
