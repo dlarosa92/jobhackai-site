@@ -264,7 +264,7 @@ function renderHistory() {
 
   for (const item of historyItems) {
     const row = document.createElement('div');
-    row.className = 'cl-history-item';
+    row.className = 'cl-history-item history-item';
     row.dataset.id = item.id;
     row.tabIndex = 0;
     if (selectedId === item.id) row.classList.add('is-selected');
@@ -274,24 +274,24 @@ function renderHistory() {
     const meta = [companyPart, when].filter(Boolean).join(' ');
 
     row.innerHTML = `
-      <div class="cl-history-main">
-        <svg class="cl-doc-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+      <div class="cl-history-main history-main">
+        <svg class="cl-doc-icon history-doc-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
           <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
           <polyline points="14 2 14 8 20 8"></polyline>
         </svg>
-        <div class="cl-history-text">
-          <div class="cl-history-line1" data-title>${escapeHtml(item.title || item.role || 'Cover Letter')}</div>
-          <div class="cl-history-line2">${escapeHtml(item.role || '')} <span style="color:var(--color-text-muted);">${escapeHtml(meta)}</span></div>
+        <div class="cl-history-text history-text">
+          <div class="cl-history-line1 history-line1" data-title>${escapeHtml(item.title || item.role || 'Cover Letter')}</div>
+          <div class="cl-history-line2 history-line2">${escapeHtml(item.role || '')} <span style="color:var(--color-text-muted);">${escapeHtml(meta)}</span></div>
         </div>
       </div>
-      <div class="cl-history-actions" aria-label="Row actions">
-        <button class="cl-action-btn" type="button" data-action="rename" title="Rename" aria-label="Rename">
+      <div class="cl-history-actions history-actions" aria-label="Row actions">
+        <button class="cl-action-btn history-actions__btn" type="button" data-action="rename" title="Rename" aria-label="Rename">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
             <path d="M12 20h9"></path>
             <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z"></path>
           </svg>
         </button>
-        <button class="cl-action-btn cl-action-btn--danger" type="button" data-action="delete" title="Delete" aria-label="Delete">
+        <button class="cl-action-btn cl-action-btn--danger history-actions__danger" type="button" data-action="delete" title="Delete" aria-label="Delete">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
             <polyline points="3 6 5 6 21 6"></polyline>
             <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path>

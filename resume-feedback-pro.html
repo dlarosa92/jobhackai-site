@@ -51,6 +51,7 @@
   <!-- Component overrides -->
   <link rel="stylesheet" href="css/header.css">
   <link rel="stylesheet" href="css/footer.css">
+  <link rel="stylesheet" href="css/history-tile.css">
   <style>
     html, body {
       height: 100%;
@@ -5092,7 +5093,7 @@
     let _historyVisibleCount = HISTORY_PAGE_SIZE;
     
     function renderHistoryItems(items) {
-      const listEl = document.getElementById('rf-history-list');
+    const listEl = document.getElementById('rf-history-list');
       const emptyEl = document.getElementById('rf-history-empty');
       const loadingEl = document.getElementById('rf-history-loading');
       const actionsEl = document.getElementById('rf-history-actions');
@@ -5117,28 +5118,49 @@
       // Limit visible items to current page size
       const visibleItems = items.slice(0, _historyVisibleCount);
       
-      // Build history list HTML with clickable items and atsScore
-      listEl.innerHTML = visibleItems.map(item => `
-        <div class="rf-history-item" data-session-id="${item.sessionId || ''}" title="Click to view this analysis">
-          <div class="rf-history-icon">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
-              <polyline points="14 2 14 8 20 8"/>
-              <line x1="16" y1="13" x2="8" y2="13"/>
-              <line x1="16" y1="17" x2="8" y2="17"/>
-              <polyline points="10 9 9 9 8 9"/>
-            </svg>
-          </div>
-          <div class="rf-history-details">
-            <div class="rf-history-title">${escapeHtml(getHistoryItemTitle(item))}</div>
-            <div class="rf-history-meta">
-              ${item.role ? `<span style="margin-right:0.5rem;">📌 ${escapeHtml(item.role)}</span>` : ''}
-              <span>📅 ${formatHistoryDate(item.createdAt)}</span>
+    const getAtsScoreTone = (score) => {
+      if (score >= 80) return 'history-score high';
+      if (score >= 60) return 'history-score medium';
+      return 'history-score low';
+    };
+
+    const formatMetaLine = (item) => {
+      const parts = [];
+      if (item.role) {
+        parts.push(`<span>${escapeHtml(item.role)}</span>`);
+      }
+      const formattedDate = formatHistoryDate(item.createdAt);
+      if (formattedDate) parts.push(`<span>• ${escapeHtml(formattedDate)}</span>`);
+      return parts.join(' ');
+    };
+
+    listEl.innerHTML = visibleItems.map(item => {
+      const normalizedScore = Number.isFinite(Number(item.atsScore)) ? Number(item.atsScore) : null;
+      const scoreHtml = normalizedScore !== null
+        ? `<div class="rf-history-score history-score ${getAtsScoreTone(normalizedScore)}">${Math.round(normalizedScore)}</div>`
+        : '';
+
+      return `
+        <div class="rf-history-item history-item" data-session-id="${item.sessionId || ''}" title="Click to view this analysis">
+          <div class="history-main">
+            <div class="rf-history-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
+                <polyline points="14 2 14 8 20 8"/>
+                <line x1="16" y1="13" x2="8" y2="13"/>
+                <line x1="16" y1="17" x2="8" y2="17"/>
+                <polyline points="10 9 9 9 8 9"/>
+              </svg>
+            </div>
+            <div class="history-text">
+              <div class="history-line1">${escapeHtml(getHistoryItemTitle(item))}</div>
+              <div class="history-line2">${formatMetaLine(item)}</div>
             </div>
           </div>
-          ${item.atsScore !== null && item.atsScore !== undefined ? `<div class="rf-history-score">${item.atsScore}</div>` : ''}
+          ${scoreHtml}
         </div>
-      `).join('');
+      `;
+    }).join('');
       
       listEl.style.display = 'flex';
       
@@ -6144,16 +6166,16 @@
 
       <!-- Sidebar Column - Sticky History -->
       <aside class="rf-sidebar-column">
-        <section class="rf-card" id="rf-history-tile" style="margin-bottom:0;">
-          <div class="rf-title" style="display:flex;align-items:center;justify-content:space-between;font-size:var(--font-size-xl);">
-            <span>
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:text-bottom;margin-right:0.5rem;">
+        <section class="rf-card history-card" id="rf-history-tile" style="margin-bottom:0;">
+          <div class="history-title-row">
+            <div class="history-title">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="history-icon-clock" aria-hidden="true">
                 <circle cx="12" cy="12" r="10"/>
                 <polyline points="12 6 12 12 16 14"/>
               </svg>
-              Your Feedback History
-            </span>
-            <button id="rf-history-refresh" class="rf-btn-secondary" style="padding:0.4rem 0.75rem;font-size:0.85rem;" title="Refresh history">
+              <span>Your Feedback History</span>
+            </div>
+            <button id="rf-history-refresh" class="history-refresh-btn rf-btn-secondary" title="Refresh history" aria-label="Refresh history">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M23 4v6h-6"/>
                 <path d="M1 20v-6h6"/>
@@ -6161,7 +6183,7 @@
               </svg>
             </button>
           </div>
-          <div style="color:var(--color-text-secondary);margin-bottom:1rem;font-size:0.95rem;">
+          <div class="history-subtitle">
             We automatically save your past feedback so you can come back and compare improvements.
           </div>
           <div id="rf-history-content">
@@ -6171,7 +6193,7 @@
               <span>Loading history...</span>
             </div>
             <!-- History list (populated by JS) -->
-            <div class="rf-history-list" id="rf-history-list" style="display:none;"></div>
+            <div class="history-list rf-history-list" id="rf-history-list" style="display:none;"></div>
             <!-- Empty state -->
             <div class="rf-history-empty" id="rf-history-empty" style="display:none;">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
@@ -6184,7 +6206,7 @@
               <div>Upload a resume and run feedback to see your history here.</div>
             </div>
             <!-- Actions: show more/less -->
-            <div class="rf-history-actions" id="rf-history-actions">
+            <div class="rf-history-actions history-actions" id="rf-history-actions">
               <div class="rf-history-count" id="rf-history-count">Showing 0 of 0</div>
               <div style="display:flex;gap:0.4rem;align-items:center;flex-wrap:wrap;">
                 <button class="rf-btn-secondary" id="rf-history-show-more" type="button">Show more</button>

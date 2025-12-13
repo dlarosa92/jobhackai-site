@@ -17,6 +17,7 @@
   <link rel="stylesheet" href="css/header.css">
   <link rel="stylesheet" href="css/footer.css">
   <link rel="stylesheet" href="css/linkedin-optimizer.css">
+  <link rel="stylesheet" href="css/history-tile.css">
 </head>
 <body>
   <!-- Header -->
@@ -183,16 +184,31 @@
 
         <!-- RIGHT: History -->
         <aside class="lo-right">
-          <section class="lo-card" aria-labelledby="lo-history-title">
-            <div class="lo-card-title" id="lo-history-title">History</div>
-            <div class="lo-history-subtitle">Last 10 optimizations</div>
-            <div id="lo-history-empty" class="lo-history-subtitle" hidden>No history yet. Run your first optimization.</div>
-            <div class="lo-history-list" id="lo-history-list"></div>
-            <div class="lo-retention">
-              Data retention: JobHackAI shows your last 10 LinkedIn optimizations. Runs are automatically deleted after 90 days.
-              <a href="privacy.html">Learn more</a>.
+        <section class="lo-card history-card" aria-labelledby="lo-history-title">
+          <div class="history-title-row">
+            <div class="history-title">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="history-icon-clock" aria-hidden="true">
+                <circle cx="12" cy="12" r="10"/>
+                <polyline points="12 6 12 12 16 14"/>
+              </svg>
+              <span class="lo-card-title" id="lo-history-title">History</span>
             </div>
-          </section>
+            <button id="lo-history-refresh" class="history-refresh-btn" type="button" title="Refresh history" aria-label="Refresh history">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <path d="M23 4v6h-6"/>
+                <path d="M1 20v-6h6"/>
+                <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
+              </svg>
+            </button>
+          </div>
+          <div class="lo-history-subtitle history-subtitle">Last 10 optimizations</div>
+          <div id="lo-history-empty" class="lo-history-subtitle" hidden>No history yet. Run your first optimization.</div>
+          <div class="history-list lo-history-list" id="lo-history-list"></div>
+          <div class="lo-retention">
+            Data retention: JobHackAI shows your last 10 LinkedIn optimizations. Runs are automatically deleted after 90 days.
+            <a href="privacy.html">Learn more</a>.
+          </div>
+        </section>
         </aside>
       </div>
     </div>

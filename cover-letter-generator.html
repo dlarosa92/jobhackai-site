@@ -19,6 +19,7 @@
   <link rel="stylesheet" href="css/header.css">
   <link rel="stylesheet" href="css/footer.css">
   <link rel="stylesheet" href="css/cover-letter.css?v=20251212-2">
+  <link rel="stylesheet" href="css/history-tile.css">
 </head>
 <body>
   <!-- Header -->
@@ -155,39 +156,39 @@
 
         <!-- RIGHT: History -->
         <aside class="cl-right">
-          <section class="cl-card" aria-labelledby="cl-history-title" id="cl-history-tile">
-            <div class="cl-history-title-row">
-              <div class="cl-card-title" id="cl-history-title">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="cl-history-icon" aria-hidden="true">
-                  <circle cx="12" cy="12" r="10"/>
-                  <polyline points="12 6 12 12 16 14"/>
-                </svg>
-                Your Cover Letter History
-              </div>
-              <button id="cl-history-refresh" class="cl-icon-btn" type="button" title="Refresh history" aria-label="Refresh history">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-                  <path d="M23 4v6h-6"/>
-                  <path d="M1 20v-6h6"/>
-                  <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
-                </svg>
-              </button>
+        <section class="cl-card history-card" aria-labelledby="cl-history-title" id="cl-history-tile">
+          <div class="history-title-row">
+            <div class="history-title">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="history-icon-clock" aria-hidden="true">
+                <circle cx="12" cy="12" r="10"/>
+                <polyline points="12 6 12 12 16 14"/>
+              </svg>
+              <span class="cl-card-title" id="cl-history-title">Your Cover Letter History</span>
             </div>
-            <div class="cl-history-subtitle">
-              We automatically save your past cover letters so you can come back and reuse or refine them.
-            </div>
+            <button id="cl-history-refresh" class="history-refresh-btn cl-icon-btn" type="button" title="Refresh history" aria-label="Refresh history">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <path d="M23 4v6h-6"/>
+                <path d="M1 20v-6h6"/>
+                <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
+              </svg>
+            </button>
+          </div>
+          <div class="cl-history-subtitle history-subtitle">
+            We automatically save your past cover letters so you can come back and reuse or refine them.
+          </div>
 
-            <div id="cl-history-loading" class="cl-history-loading" hidden>
-              <div class="cl-spinner" aria-hidden="true"></div>
-              <span>Loading history…</span>
-            </div>
+          <div id="cl-history-loading" class="cl-history-loading" hidden>
+            <div class="cl-spinner" aria-hidden="true"></div>
+            <span>Loading history…</span>
+          </div>
 
-            <div id="cl-history-empty" class="cl-history-empty" hidden>
-              <div class="cl-empty-title">No history yet</div>
-              <div class="cl-empty-subtitle">Generate a cover letter to see it saved here.</div>
-            </div>
+          <div id="cl-history-empty" class="cl-history-empty" hidden>
+            <div class="cl-empty-title">No history yet</div>
+            <div class="cl-empty-subtitle">Generate a cover letter to see it saved here.</div>
+          </div>
 
-            <div id="cl-history-list" class="cl-history-list" role="list"></div>
-          </section>
+          <div id="cl-history-list" class="history-list cl-history-list" role="list"></div>
+        </section>
         </aside>
       </div>
     </div>

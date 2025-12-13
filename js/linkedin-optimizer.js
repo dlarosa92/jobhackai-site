@@ -279,19 +279,37 @@ function renderHistory() {
   els.historyList.innerHTML = '';
   els.historyEmpty.hidden = historyItems.length > 0;
 
+  const getScoreTone = (score) => {
+    if (score >= 80) return 'history-score high';
+    if (score >= 60) return 'history-score medium';
+    return 'history-score low';
+  };
+
   for (const item of historyItems) {
     const row = document.createElement('div');
-    row.className = 'lo-history-item';
+    row.className = 'lo-history-item history-item';
     row.dataset.id = item.id;
     row.tabIndex = 0;
     row.classList.toggle('is-selected', selectedHistoryId === item.id);
 
     const when = timeAgo(item.createdAt);
-    // Explicitly check for null/undefined before treating as valid score (Number(null) === 0, which is finite)
-    const score = item.overallScore != null && Number.isFinite(Number(item.overallScore)) ? `${Math.round(Number(item.overallScore))}/100` : '';
+    const normalizedScore = Number.isFinite(Number(item.overallScore)) ? Number(item.overallScore) : null;
+    const scoreHtml = normalizedScore !== null
+      ? `<div class="history-score ${getScoreTone(normalizedScore)}">${Math.round(normalizedScore)}</div>`
+      : '';
+
     row.innerHTML = `
-      <div class="lo-history-line1">${escapeHtml(item.role || 'LinkedIn Optimization')}</div>
-      <div class="lo-history-line2">${escapeHtml([when, score].filter(Boolean).join(' • '))}</div>
+      <div class="history-main">
+        <svg class="history-doc-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+          <polyline points="14 2 14 8 20 8"></polyline>
+        </svg>
+        <div class="history-text">
+          <div class="history-line1">${escapeHtml(item.role || 'LinkedIn Optimization')}</div>
+          <div class="history-line2">${escapeHtml(when)}</div>
+        </div>
+      </div>
+      ${scoreHtml}
     `;
 
     const onSelect = () => loadRun(item.id);
@@ -692,6 +710,11 @@ function bindEvents() {
   els.btnDownload?.addEventListener('click', (e) => {
     e.preventDefault();
     downloadPdf();
+  });
+
+  document.getElementById('lo-history-refresh')?.addEventListener('click', (e) => {
+    e.preventDefault();
+    fetchHistory();
   });
 }
 

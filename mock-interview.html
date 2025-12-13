@@ -35,6 +35,7 @@
   <link rel="stylesheet" href="css/components.css">
   <link rel="stylesheet" href="css/header.css">
   <link rel="stylesheet" href="css/footer.css">
+  <link rel="stylesheet" href="css/history-tile.css">
   <script src="js/custom-select.js?v=20251212-1" defer></script>
   <style>
     /* Mock Interview Styles */
@@ -1194,16 +1195,16 @@
       </div>
       
       <!-- Right Column: Session History -->
-      <aside class="mi-card mi-history">
-        <div class="mi-history-title-row">
-          <div class="mi-history-title">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="mi-history-icon" aria-hidden="true">
+      <aside class="mi-card mi-history history-card">
+        <div class="history-title-row">
+          <div class="history-title">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="history-icon-clock mi-history-icon" aria-hidden="true">
               <circle cx="12" cy="12" r="10"/>
               <polyline points="12 6 12 12 16 14"/>
             </svg>
-            Session History
+            <span class="mi-history-title">Session History</span>
           </div>
-          <button id="mi-history-refresh" class="mi-icon-btn" type="button" title="Refresh history" aria-label="Refresh history">
+          <button id="mi-history-refresh" class="history-refresh-btn mi-icon-btn" type="button" title="Refresh history" aria-label="Refresh history">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
               <path d="M23 4v6h-6"/>
               <path d="M1 20v-6h6"/>
@@ -1211,11 +1212,11 @@
             </svg>
           </button>
         </div>
-        <div class="mi-history-subtitle">
+        <div class="mi-history-subtitle history-subtitle">
           We automatically save your past mock interviews so you can come back and review your scores.
         </div>
-        <ul class="mi-history-list" id="mi-history-list">
-          <li class="mi-history-empty">No previous mock interviews yet. Once you finish a session, your score and date will appear here.</li>
+        <ul class="history-list mi-history-list" id="mi-history-list">
+          <li class="mi-history-empty history-item">No previous mock interviews yet. Once you finish a session, your score and date will appear here.</li>
         </ul>
       </aside>
     </div>
@@ -1563,26 +1564,35 @@
         els.historyList.innerHTML = emptyHTML;
         return;
       }
-      
-      const htmlItems = sessions.map((s, idx) => {
+    
+    function getScoreTone(score) {
+      if (score >= 80) return 'history-score high';
+      if (score >= 60) return 'history-score medium';
+      return 'history-score low';
+    }
+
+    const htmlItems = sessions.map((s, idx) => {
         try {
-          const year = s.createdAt ? new Date(s.createdAt).getFullYear().toString() : '';
-          const role = escapeHtml(s.role || 'Unknown role');
-          const score = s.overallScore !== undefined && s.overallScore !== null ? s.overallScore : 'N/A';
+        const year = s.createdAt ? new Date(s.createdAt).getFullYear().toString() : '';
+        const role = escapeHtml(s.role || 'Unknown role');
+        const normalizedScore = Number.isFinite(Number(s.overallScore)) ? Number(s.overallScore) : null;
+        const scoreDisplay = normalizedScore !== null ? `${Math.round(normalizedScore)} / 100` : 'N/A';
+        const scoreClass = normalizedScore !== null ? getScoreTone(normalizedScore) : 'history-score';
           const sessionId = s.id || `missing-${idx}`;
           
           return `
-          <li class="mi-history-item" data-session-id="${sessionId}">
-            <div class="mi-history-main">
-              <svg class="mi-doc-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <li class="mi-history-item history-item" data-session-id="${sessionId}">
+            <div class="history-main">
+              <svg class="mi-doc-icon history-doc-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
                 <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
                 <polyline points="14 2 14 8 20 8"></polyline>
               </svg>
-              <div class="mi-history-text">
-                <div class="mi-history-line1">${role}</div>
-                <div class="mi-history-line2">${score} / 100 <span style="color:var(--color-text-muted);">${year ? `• ${year}` : ''}</span></div>
+              <div class="mi-history-text history-text">
+                <div class="mi-history-line1 history-line1">${role}</div>
+                <div class="mi-history-line2 history-line2">${year ? `• ${year}` : ''}</div>
               </div>
             </div>
+            <div class="${scoreClass}">${scoreDisplay}</div>
           </li>
         `;
         } catch (e) {
