@@ -1179,7 +1179,8 @@
     // ============================================================
     
     // Debug mode - set to true to enable comprehensive logging
-    const DEBUG_MODE = true;
+    // Only enable in development/local environments, never in production
+    const DEBUG_MODE = false; // Set to true for local debugging only
     
     // State
     const state = {
@@ -1380,11 +1381,11 @@
           debugError('No Firebase token available');
           return;
         }
-        debugLog('2. Token obtained:', token.substring(0, 20) + '...');
+        debugLog('2. Token obtained: [REDACTED]');
         
         const url = `${API.sessions}?limit=3`;
         debugLog('3. Making request to:', url);
-        debugLog('4. Request headers:', { 'Authorization': `Bearer ${token.substring(0, 20)}...` });
+        debugLog('4. Request headers: Authorization header set [REDACTED]');
         
         const res = await fetch(url, {
           headers: { 'Authorization': `Bearer ${token}` }
@@ -2245,8 +2246,8 @@
       checkCanStart();
     }
     
-    // Expose debug helpers to window for manual debugging
-    if (typeof window !== 'undefined') {
+    // Expose debug helpers to window for manual debugging (only in debug mode)
+    if (DEBUG_MODE && typeof window !== 'undefined') {
       window.MockInterviewDebug = {
         fetchHistory: async () => {
           console.log('[MI-DEBUG-MANUAL] Manually triggering fetchHistory()');
