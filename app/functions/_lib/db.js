@@ -15,6 +15,25 @@
  */
 
 /**
+ * Resolve the D1 binding from the environment.
+ *
+ * Some environments bind D1 under a name other than `DB` (e.g. `JOBHACKAI_DB`).
+ * To prevent silent persistence failures, we resolve from a small allowlist.
+ */
+const DB_BINDING_NAMES = ['DB', 'JOBHACKAI_DB', 'INTERVIEW_QUESTIONS_DB', 'IQ_D1'];
+
+function getDb(env) {
+  if (!env) return null;
+  const direct = env.DB;
+  if (direct && typeof direct.prepare === 'function') return direct;
+  for (const name of DB_BINDING_NAMES) {
+    const candidate = env[name];
+    if (candidate && typeof candidate.prepare === 'function') return candidate;
+  }
+  return null;
+}
+
+/**
  * Get or create a user by Firebase auth ID
  * @param {Object} env - Cloudflare environment with DB binding
  * @param {string} authId - Firebase UID
@@ -22,21 +41,22 @@
  * @returns {Promise<Object>} User record { id, auth_id, email, created_at, updated_at }
  */
 export async function getOrCreateUserByAuthId(env, authId, email = null) {
-  if (!env.DB) {
+  const db = getDb(env);
+  if (!db) {
     console.warn('[DB] D1 binding not available');
     return null;
   }
 
   try {
     // Try to find existing user
-    const existing = await env.DB.prepare(
+    const existing = await db.prepare(
       'SELECT id, auth_id, email, created_at, updated_at FROM users WHERE auth_id = ?'
     ).bind(authId).first();
 
     if (existing) {
       // Update email if provided and different
       if (email && email !== existing.email) {
-        await env.DB.prepare(
+        await db.prepare(
           'UPDATE users SET email = ?, updated_at = datetime(\'now\') WHERE id = ?'
         ).bind(email, existing.id).run();
         existing.email = email;
@@ -46,7 +66,7 @@ export async function getOrCreateUserByAuthId(env, authId, email = null) {
     }
 
     // Create new user
-    const result = await env.DB.prepare(
+    const result = await db.prepare(
       'INSERT INTO users (auth_id, email) VALUES (?, ?) RETURNING id, auth_id, email, created_at, updated_at'
     ).bind(authId, email).first();
 
@@ -464,7 +484,7 @@ export async function upsertResumeSessionWithScores(env, userId, {
  * @returns {boolean}
  */
 export function isD1Available(env) {
-  return !!env.DB;
+  return !!getDb(env);
 }
 
 const MOCK_INTERVIEW_SESSIONS_TABLE_SQL = `
@@ -519,12 +539,13 @@ async function ensureMockInterviewIndexes(db) {
 }
 
 export async function ensureMockInterviewSchema(env) {
-  if (!env.DB) return;
+  const db = getDb(env);
+  if (!db) return;
 
   try {
-    await env.DB.prepare(MOCK_INTERVIEW_SESSIONS_TABLE_SQL).run();
-    await env.DB.prepare(MOCK_INTERVIEW_USAGE_TABLE_SQL).run();
-    await ensureMockInterviewIndexes(env.DB);
+    await db.prepare(MOCK_INTERVIEW_SESSIONS_TABLE_SQL).run();
+    await db.prepare(MOCK_INTERVIEW_USAGE_TABLE_SQL).run();
+    await ensureMockInterviewIndexes(db);
   } catch (error) {
     console.error('[DB] Error ensuring mock interview schema:', error);
     throw error;
@@ -771,7 +792,8 @@ export async function createMockInterviewSession(env, {
   qaPairs,
   feedback
 }) {
-  if (!env.DB) {
+  const db = getDb(env);
+  if (!db) {
     console.warn('[DB] D1 binding not available');
     return null;
   }
@@ -783,7 +805,7 @@ export async function createMockInterviewSession(env, {
     const feedbackJson = JSON.stringify(feedback || {});
     const setName = questionSetName || (questionSetId ? null : 'AI-generated');
 
-    const result = await env.DB.prepare(
+    const result = await db.prepare(
       `INSERT INTO mock_interview_sessions (
         user_id, role, seniority, interview_style, question_set_id, question_set_name,
         overall_score, relevance_score, structure_score, clarity_score, insight_score, grammar_score,
@@ -828,7 +850,8 @@ export async function createMockInterviewSession(env, {
  * @returns {Promise<Object|null>} Full session with parsed JSON, or null
  */
 export async function getMockInterviewSessionById(env, sessionId, userId) {
-  if (!env.DB) {
+  const db = getDb(env);
+  if (!db) {
     console.warn('[DB] D1 binding not available');
     return null;
   }
@@ -841,7 +864,7 @@ export async function getMockInterviewSessionById(env, sessionId, userId) {
   try {
     await ensureMockInterviewSchema(env);
 
-    const row = await env.DB.prepare(
+    const row = await db.prepare(
       `SELECT id, user_id, role, seniority, interview_style, question_set_id, question_set_name,
         overall_score, relevance_score, structure_score, clarity_score, insight_score, grammar_score,
         situation_pct, action_pct, outcome_pct, qa_pairs_json, feedback_json, created_at
@@ -893,7 +916,8 @@ export async function getMockInterviewSessionById(env, sessionId, userId) {
  * @returns {Promise<Array>} List of session summaries (not full feedback)
  */
 export async function getMockInterviewHistory(env, userId, { limit = 10 } = {}) {
-  if (!env.DB) {
+  const db = getDb(env);
+  if (!db) {
     console.warn('[DB] D1 binding not available');
     return [];
   }
@@ -901,7 +925,7 @@ export async function getMockInterviewHistory(env, userId, { limit = 10 } = {}) 
   try {
     await ensureMockInterviewSchema(env);
 
-    const results = await env.DB.prepare(
+    const results = await db.prepare(
       `SELECT id, role, seniority, interview_style, question_set_name, overall_score, created_at
       FROM mock_interview_sessions
       WHERE user_id = ?
@@ -935,7 +959,8 @@ export async function getMockInterviewHistory(env, userId, { limit = 10 } = {}) 
  * @returns {Promise<number>} Sessions used this month
  */
 export async function getMockInterviewMonthlyUsage(env, userId, month = null) {
-  if (!env.DB) {
+  const db = getDb(env);
+  if (!db) {
     console.warn('[DB] D1 binding not available');
     return 0;
   }
@@ -945,7 +970,7 @@ export async function getMockInterviewMonthlyUsage(env, userId, month = null) {
 
     const targetMonth = month || new Date().toISOString().slice(0, 7); // "YYYY-MM"
     
-    const row = await env.DB.prepare(
+    const row = await db.prepare(
       `SELECT sessions_used FROM mock_interview_usage
       WHERE user_id = ? AND month = ?`
     ).bind(userId, targetMonth).first();
@@ -964,7 +989,8 @@ export async function getMockInterviewMonthlyUsage(env, userId, month = null) {
  * @returns {Promise<number>} New total for the month
  */
 export async function incrementMockInterviewMonthlyUsage(env, userId) {
-  if (!env.DB) {
+  const db = getDb(env);
+  if (!db) {
     console.warn('[DB] D1 binding not available');
     return 1;
   }
@@ -974,7 +1000,7 @@ export async function incrementMockInterviewMonthlyUsage(env, userId) {
 
     const targetMonth = new Date().toISOString().slice(0, 7); // "YYYY-MM"
     
-    const result = await env.DB.prepare(
+    const result = await db.prepare(
       `INSERT INTO mock_interview_usage (user_id, month, sessions_used, last_reset_at)
       VALUES (?, ?, 1, datetime('now'))
       ON CONFLICT(user_id, month)
