@@ -355,38 +355,64 @@
       list-style: none;
       padding: 0;
       margin: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
     }
     
     .mi-history-item {
-      padding: 0.75rem;
       border: 1px solid var(--color-divider);
-      border-radius: var(--radius-md);
-      margin-bottom: 0.5rem;
+      border-radius: var(--radius-lg);
+      background: var(--color-card-bg);
+      padding: 0.75rem 0.85rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--space-sm);
       cursor: pointer;
-      transition: all var(--transition-fast);
+      transition: border-color var(--transition-fast), background var(--transition-fast);
     }
     
     .mi-history-item:hover {
-      background: #F8FAFC;
-      border-color: var(--color-accent-blue);
+      background: rgba(0, 123, 255, 0.04);
+      border-color: rgba(0, 123, 255, 0.22);
     }
     
-    .mi-history-date {
-      font-size: 0.8rem;
+    .mi-history-main {
+      display: flex;
+      align-items: flex-start;
+      gap: 0.6rem;
+      min-width: 0;
+      flex: 1;
+    }
+    
+    .mi-doc-icon {
+      width: 18px;
+      height: 18px;
+      flex: 0 0 18px;
       color: var(--color-text-muted);
+      margin-top: 2px;
     }
     
-    .mi-history-role {
+    .mi-history-text {
+      min-width: 0;
+    }
+    
+    .mi-history-line1 {
       font-weight: var(--font-weight-semibold);
       color: var(--color-text-main);
-      font-size: 0.95rem;
-      margin: 0.25rem 0;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
     
-    .mi-history-score {
-      font-size: 0.9rem;
-      color: var(--color-accent-blue);
-      font-weight: var(--font-weight-bold);
+    .mi-history-line2 {
+      color: var(--color-text-muted);
+      font-size: var(--font-size-sm);
+      margin-top: 0.15rem;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
     
     .mi-history-empty {
@@ -1540,16 +1566,23 @@
       
       const htmlItems = sessions.map((s, idx) => {
         try {
-          const date = s.createdAt ? new Date(s.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : 'Unknown date';
+          const year = s.createdAt ? new Date(s.createdAt).getFullYear().toString() : '';
           const role = escapeHtml(s.role || 'Unknown role');
           const score = s.overallScore !== undefined && s.overallScore !== null ? s.overallScore : 'N/A';
           const sessionId = s.id || `missing-${idx}`;
           
           return `
           <li class="mi-history-item" data-session-id="${sessionId}">
-            <div class="mi-history-date">${date}</div>
-            <div class="mi-history-role">${role}</div>
-            <div class="mi-history-score">${score} / 100</div>
+            <div class="mi-history-main">
+              <svg class="mi-doc-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                <polyline points="14 2 14 8 20 8"></polyline>
+              </svg>
+              <div class="mi-history-text">
+                <div class="mi-history-line1">${role}</div>
+                <div class="mi-history-line2">${score} / 100 <span style="color:var(--color-text-muted);">${year ? `• ${year}` : ''}</span></div>
+              </div>
+            </div>
           </li>
         `;
         } catch (e) {
