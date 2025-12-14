@@ -184,6 +184,19 @@
       opacity: 1;
     }
     .iq-qactions .icon-btn { pointer-events:auto; position:relative; z-index:1; }
+    .iq-replace-cooldown {
+      margin-left: auto;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.25rem;
+      padding: 0.15rem 0.4rem;
+      font-size: 0.75rem;
+      font-weight: 500;
+      color: var(--color-accent-blue, #0ea5e9);
+      background: rgba(14, 165, 233, 0.1);
+      border-radius: 6px;
+      border: 1px solid rgba(14, 165, 233, 0.2);
+    }
     .icon-btn { border:1px solid #E5E7EB; background:#fff; border-radius:8px; padding:.3rem .45rem; cursor:pointer; transition: opacity 0.15s ease; }
     .icon-btn:disabled { opacity: 0.4; cursor: not-allowed; }
     .link-btn { background:none; border:none; color:#007BFF; cursor:pointer; text-decoration:underline; padding:0 .25rem; }
@@ -193,6 +206,26 @@
     .ri-role { font-weight:600; }
     .ri-meta { color:#6B7280; font-size:.9rem; }
     .cta-hint { flex-basis:100%; font-size:.9rem; color:#6B7280; margin-top:.25rem; }
+    .iq-global-cooldown {
+      display:flex;
+      flex-direction:column;
+      gap:0.2rem;
+    }
+    .iq-global-cooldown-chip {
+      display:inline-flex;
+      align-items:center;
+      gap:0.35rem;
+      padding:0.3rem 0.75rem;
+      border-radius:999px;
+      background: rgba(37,99,235,0.1);
+      border: 1px solid rgba(37,99,235,0.35);
+      color: #2563EB;
+      font-weight:600;
+      font-size:0.87rem;
+    }
+    .iq-global-cooldown-chip svg {
+      flex-shrink:0;
+    }
     .btn-save svg { fill:none; stroke:#6B7280; stroke-width:1.5; }
     /* Stronger selectors to beat any theme overrides */
     .iq-qactions .btn-save[aria-pressed="true"] svg,
@@ -399,38 +432,6 @@
     .icon-btn[data-tip]:focus-visible::after,
     .icon-btn[data-tip]:hover::before,
     .icon-btn[data-tip]:focus-visible::before { opacity: 1; }
-    /* Notes section spacing */
-    .iq-notes { 
-      margin-top: .8rem; 
-      padding-top: .75rem;
-      border-top: 1px solid #E5E7EB;
-    }
-    .iq-notes-label {
-      display: block;
-      font-size: 0.85rem;
-      font-weight: 500;
-      color: #6B7280;
-      margin-bottom: 0.4rem;
-    }
-    .iq-notes textarea {
-      width: 100%;
-      border: 1.5px solid #E5E7EB;
-      border-radius: 8px;
-      padding: 0.6rem 0.75rem;
-      font-size: 0.9rem;
-      font-family: inherit;
-      line-height: 1.5;
-      color: #1F2937;
-      background: #fff;
-      resize: vertical;
-      transition: border-color 0.15s ease;
-      box-sizing: border-box;
-    }
-    .iq-notes textarea:focus {
-      outline: none;
-      border-color: #1976D2;
-    }
-
     /* Plan strip styling - matches dashboard style */
     .iq-plan-strip {
       display: flex;
@@ -757,9 +758,7 @@
       <div class="iq-actions">
         <button id="btn-generate" class="btn-primary" aria-label="Generate 10 Questions">Generate 10 Questions</button>
       </div>
-      <div id="cooldown-helper" class="cta-hint" style="display:none; color:#6B7280; font-size:0.85rem; margin-top:0.25rem;">
-        Next new set available in <span id="cooldown-time">0:59</span> (you can still practice with this set).
-      </div>
+      <div id="iq-generate-cooldown" class="iq-global-cooldown" aria-live="polite" style="margin-top:0.25rem;"></div>
       
       <!-- Action bar with left/right grouping -->
       <div class="iq-actions-bar" id="iq-actions-bar" style="display:none;">
@@ -1011,7 +1010,7 @@
     const IQ_ANALYTICS_HOOK = '';
 
     // Limits
-    const IQ_GLOBAL_COOLDOWN = 60;          // seconds
+    const IQ_GLOBAL_COOLDOWN = 45;          // seconds
     const IQ_MAX_REPLACES = 3;              // hard cap per set
     const IQ_PER_Q_REPLACE_COOLDOWN = 5;    // seconds
     const IQ_RECENT_LIMIT = 5;
@@ -1026,10 +1025,10 @@
       prefs: { seniority:'', count:10, type:'mixed', showGuidance:false },
       set: null,
       cooldown: 0,
-      timers: { global:null, perQ:{}, notes:{}, toast:null },
-      notes: {},
+      timers: { global:null, perQ:{}, toast:null },
       recents: [],
       replaceCounts: {}, // Track per-question replace counts (TASK 10B)
+      replaceCooldowns: {}, // Track per-question cooldowns
       dailyLimitReached: false // Track if daily limit has been reached
     };
 
@@ -1105,8 +1104,6 @@
         if(typeof p.showGuidance==='boolean') iqState.prefs.showGuidance=p.showGuidance;
       }catch{}
     }
-    function iqSaveNotes(){ if (!iqState.set) return; localStorage.setItem(`iq_notes_${iqSetId(iqState.set.role, iqState.set.seed)}`, JSON.stringify(iqState.notes)); }
-    function iqLoadNotes(){ if (!iqState.set) return; try{ iqState.notes=JSON.parse(localStorage.getItem(`iq_notes_${iqSetId(iqState.set.role, iqState.set.seed)}`)||'{}'); }catch{ iqState.notes={}; } }
     function iqAddRecent(meta){ iqState.recents = JSON.parse(localStorage.getItem('iq_recent_sets')||'[]'); iqState.recents.unshift(meta); iqState.recents = iqState.recents.slice(0, IQ_RECENT_LIMIT); localStorage.setItem('iq_recent_sets', JSON.stringify(iqState.recents)); }
     function iqSaveSetFull(setObj){ 
       try{ 
@@ -1135,7 +1132,6 @@
         set.type = iqSanitizeType(set.type, iqInferTypeFromLegacyTypes(set.types));
         iqState.set=set; 
         iqState.replaceCounts = set.replaceCounts || {}; 
-        iqLoadNotes(); 
         iqRenderQuestions(); 
         iqUpdateSavedChip(); 
         iqRevealSecondaryActions(); 
@@ -1155,88 +1151,117 @@
     // Cooldowns
     function iqStartGlobalCooldown(sec=IQ_GLOBAL_COOLDOWN){
       iqState.cooldown = sec;
-      const cooldownHelper = $IQ('#cooldown-helper');
-      const cooldownTime = $IQ('#cooldown-time');
       const g = $IQ('#btn-generate'); 
       const mi=$IQ('#mi-new-set');
       
-      // Show cooldown UI - only show helper text below button, not badge to the right
-      if (cooldownHelper) { cooldownHelper.style.display = 'block'; }
       if (g) { 
         g.disabled = true; 
         g.setAttribute('aria-disabled','true'); 
         g.classList.add('is-disabled');
-        // Restore button text immediately after successful generation (not wait for cooldown to end)
         g.textContent = iqState.set ? 'New Question Set' : 'Generate 10 Questions';
-        // Update button state to respect role requirement
         iqUpdateGenerateButtonState();
       }
       if (mi) { mi.disabled = true; mi.setAttribute('aria-disabled','true'); }
+      renderGenerateCooldownIndicator();
       
       clearInterval(iqState.timers.global);
       iqState.timers.global = setInterval(()=>{
         iqState.cooldown--;
-        const mm = Math.floor(iqState.cooldown/60);
-        const ss = String(iqState.cooldown%60).padStart(2,'0');
-        const timeStr = `${mm}:${ss}`;
-        if (cooldownTime) cooldownTime.textContent = timeStr;
+        renderGenerateCooldownIndicator();
         
         if (iqState.cooldown<=0) { 
           clearInterval(iqState.timers.global); 
-          if (cooldownHelper) cooldownHelper.style.display = 'none';
           if (g) { 
             g.disabled = false; 
             g.removeAttribute('aria-disabled'); 
             g.classList.remove('is-disabled'); 
-            // Restore button text after cooldown ends
             g.textContent = iqState.set ? 'New Question Set' : 'Generate 10 Questions';
-            // Update button state to respect role requirement
             iqUpdateGenerateButtonState();
           } 
           if (mi) { 
             mi.disabled = false; 
             mi.removeAttribute('aria-disabled'); 
           } 
+          renderGenerateCooldownIndicator();
         }
       }, 1000);
     }
+    function iqUpdateReplaceCooldown(i, seconds) {
+      if (!iqState.replaceCooldowns) iqState.replaceCooldowns = {};
+      if (seconds > 0) {
+        iqState.replaceCooldowns[i] = seconds;
+      } else {
+        delete iqState.replaceCooldowns[i];
+      }
+      iqRenderQuestions();
+    }
+
     function iqStartPerQCooldown(i){
       const k = `q${i}`;
-      // Look up button initially to ensure it exists
-      const initialBtn = $IQ(`.btn-replace[data-idx="${i}"]`);
-      if (!initialBtn) return; 
-      initialBtn.disabled = true;
       clearInterval(iqState.timers.perQ[k]);
-      let t = IQ_PER_Q_REPLACE_COOLDOWN;
-      const tick = ()=>{ 
-        // Look up button fresh each tick to handle DOM re-renders
+      let remaining = IQ_PER_Q_REPLACE_COOLDOWN;
+
+      const cleanup = () => {
+        clearInterval(iqState.timers.perQ[k]);
+        delete iqState.timers.perQ[k];
+        iqUpdateReplaceCooldown(i, 0);
         const btn = $IQ(`.btn-replace[data-idx="${i}"]`);
-        if(!btn) {
-          // Button no longer exists, clean up timer
-          clearInterval(iqState.timers.perQ[k]);
-          return;
-        }
-        btn.setAttribute('data-timer', String(t)); 
-        t--; 
-        if(t<0){ 
-          btn.removeAttribute('data-timer'); 
-          // Check if button should remain disabled due to max replace limit or daily limit
+        if (btn) {
+          btn.removeAttribute('aria-disabled');
           const replaceCount = (iqState.replaceCounts && iqState.replaceCounts[i]) || 0;
           if (replaceCount < IQ_MAX_REPLACES && !iqState.dailyLimitReached) {
             btn.disabled = false;
           }
-          clearInterval(iqState.timers.perQ[k]); 
-        } 
+        }
       };
+
+      const tick = () => {
+        if (remaining <= 0) {
+          cleanup();
+          return;
+        }
+        iqUpdateReplaceCooldown(i, remaining);
+        const btn = $IQ(`.btn-replace[data-idx="${i}"]`);
+        if (btn) {
+          btn.disabled = true;
+          btn.setAttribute('aria-disabled', 'true');
+        }
+        remaining--;
+      };
+
       tick();
       iqState.timers.perQ[k] = setInterval(tick, 1000);
     }
-    function iqStopPerQCooldown(i){
-      const k = `q${i}`, btn = $IQ(`.btn-replace[data-idx="${i}"]`);
-      if (!btn) return;
-      clearInterval(iqState.timers.perQ[k]);
-      btn.removeAttribute('data-timer');
-      btn.disabled = false;
+
+    function formatCooldownSeconds(seconds) {
+      if (typeof seconds !== 'number' || seconds <= 0) return '0s';
+      const minutes = Math.floor(seconds / 60);
+      const secs = seconds % 60;
+      if (minutes > 0) {
+        return `${minutes}:${String(secs).padStart(2, '0')}`;
+      }
+      return `${secs}s`;
+    }
+
+    function renderGenerateCooldownIndicator() {
+      const container = $IQ('#iq-generate-cooldown');
+      if (!container) return;
+      container.innerHTML = '';
+      if (iqState.cooldown <= 0) return;
+      const chip = document.createElement('span');
+      chip.className = 'iq-global-cooldown-chip';
+      chip.innerHTML = `
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <circle cx="12" cy="12" r="10"/>
+          <path d="M12 6v6l4 2"/>
+        </svg>
+        ${formatCooldownSeconds(iqState.cooldown)} cooldown
+      `;
+      container.appendChild(chip);
+      const helper = document.createElement('div');
+      helper.className = 'cta-hint';
+      helper.textContent = 'You can still replace individual questions while this cooldown runs.';
+      container.appendChild(helper);
     }
 
     // Update generate button state based on role input and cooldown
@@ -1329,6 +1354,14 @@
         const replaceDisabled = replaceCount >= IQ_MAX_REPLACES || iqState.dailyLimitReached;
         const replaceTip = iqState.dailyLimitReached ? 'Daily limit reached for your plan.' : 
                           replaceDisabled ? 'Max replacements reached for this question. Generate a new set if you\'re still not happy.' : 'New Question';
+        const replaceCooldown = (iqState.replaceCooldowns && iqState.replaceCooldowns[origIdx]) || 0;
+        const replaceCooldownBadge = replaceCooldown > 0 ? `<span class="iq-replace-cooldown" data-idx="${origIdx}">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <circle cx="12" cy="12" r="10"/>
+          <path d="M12 6v6l4 2"/>
+        </svg>
+        ${replaceCooldown}s
+      </span>` : '';
         return `<div class="iq-question-card" data-idx="${origIdx}" data-display-idx="${displayIdx}">
   <div class="iq-qtext">${displayIdx+1}. ${qText}</div>
   <div class="iq-qactions" aria-label="Question actions">
@@ -1346,21 +1379,10 @@
     <button type="button" class="icon-btn btn-save" data-idx="${origIdx}" data-tip="Star to include this question in your Mock Interview" aria-label="Star to include in Mock Interview" aria-pressed="${savedPressed}">
       <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><polygon points="12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26"/></svg>
     </button>
-    <button type="button" class="icon-btn btn-notes" data-idx="${origIdx}" aria-expanded="false" aria-controls="iq-notes-${origIdx}" data-tip="Notes" aria-label="Notes">
-      <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-        <path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9Z"/>
-        <path d="M14 3v6h6"/>
-        <path d="M8 13h8"/>
-        <path d="M8 17h8"/>
-      </svg>
-    </button>
+    ${replaceCooldownBadge}
   </div>
   <div class="iq-hint" ${show?'':'hidden'}>${qHint} ${q.example?`<button class="link-btn btn-example" data-idx="${origIdx}">Example</button>`:''}</div>
   <div id="iq-example-${origIdx}" class="iq-example" hidden>${qExample}</div>
-  <div id="iq-notes-${origIdx}" class="iq-notes" hidden>
-    <label for="iq-notes-ta-${origIdx}" class="iq-notes-label">Your notes (optional)</label>
-    <textarea id="iq-notes-ta-${origIdx}" rows="3" placeholder="S: Situation&#10;T: Task&#10;A: Action&#10;R: Result">${iqState.notes[origIdx]||''}</textarea>
-  </div>
 </div>`;
       }).join('');
       
@@ -1540,8 +1562,11 @@
           
           // Handle cooldown
           if (response.status === 429 && errorData.reason === 'cooldown') {
-            const retryAfter = errorData.retryAfter || 60;
-            iqToast(`You're generating questions too quickly. Try again in ${retryAfter} seconds.`);
+            const retryAfter = errorData.retryAfter || (errorData.mode === 'replace' ? IQ_PER_Q_REPLACE_COOLDOWN : IQ_GLOBAL_COOLDOWN);
+            const message = errorData.mode === 'replace'
+              ? `Please wait ${retryAfter} seconds before replacing another question.`
+              : `You're generating questions too quickly. Try again in ${retryAfter} seconds.`;
+            iqToast(message);
             throw new Error('Cooldown active');
           }
           
@@ -1725,7 +1750,6 @@
         // because iqStartGlobalCooldown() will call it after properly setting the cooldown
         iqState.prefs={...iqState.prefs,seniority,count: IQ_FIXED_COUNT,type: iqSanitizeType(res.type, type)}; 
         iqSavePrefs(); 
-        iqLoadNotes(); 
         iqRenderQuestions(); 
         iqUpdateSavedChip(); 
         iqUpdateSelectionSummary();
@@ -1856,8 +1880,8 @@
           
           // Handle cooldown
           if (response.status === 429 && errorData.reason === 'cooldown') {
-            const retryAfter = errorData.retryAfter || 60;
-            iqToast(`You're generating questions too quickly. Try again in ${retryAfter} seconds.`);
+            const retryAfter = errorData.retryAfter || IQ_PER_Q_REPLACE_COOLDOWN;
+            iqToast(`Please wait ${retryAfter} seconds before replacing another question.`);
             reenableButton();
             return;
           }
@@ -1912,15 +1936,8 @@
           iqToast('Question replaced.');
           iqTrack('iq_replace_one', { index: i });
           
-          // Start global 60-second cooldown after successful replacement
-          // This matches the backend cooldown enforcement for both full sets and replace operations
-          iqStartGlobalCooldown(IQ_GLOBAL_COOLDOWN);
-          
-          // Re-enable button if still under per-question limit and daily limit not reached
-          // The button will be disabled by iqRenderQuestions() if limits are hit
-          if (iqState.replaceCounts[i] < IQ_MAX_REPLACES && !iqState.dailyLimitReached) {
-            reenableButton();
-          }
+          // Start per-question 5-second cooldown (no global cooldown).
+          iqStartPerQCooldown(i);
         } else {
           reenableButton();
           throw new Error('Invalid API response: no question returned');
@@ -2218,7 +2235,7 @@
     function iqWireQuestionList(){
       const box=$IQ('#iq-questions'); if(!box) return;
       box.addEventListener('click',(e)=>{
-        const actionBtn = e.target.closest('.btn-copy, .btn-replace, .btn-save, .btn-example, .btn-notes');
+        const actionBtn = e.target.closest('.btn-copy, .btn-replace, .btn-save, .btn-example');
         if(!actionBtn) return;
         const i=parseInt(actionBtn.dataset.idx || actionBtn.closest('[data-idx]')?.dataset?.idx || -1, 10);
         if(i<0) return;
@@ -2229,16 +2246,14 @@
         if(actionBtn.classList.contains('btn-replace')){ iqReplaceOne(i); return; }
         if(actionBtn.classList.contains('btn-save')){ iqToggleSaved(i); const nowSaved=iqIsSaved(i); actionBtn.setAttribute('aria-pressed', String(nowSaved)); iqToast(nowSaved ? 'Added to Saved' : 'Removed from Saved'); return; }
         if(actionBtn.classList.contains('btn-example')){ const ex=$IQ(`#iq-example-${i}`); if(ex) ex.hidden=!ex.hidden; return; }
-        if(actionBtn.classList.contains('btn-notes')){ const panel=$IQ(`#iq-notes-${i}`); const ta=$IQ(`#iq-notes-ta-${i}`); const wasHidden=panel.hidden; if(wasHidden && ta && !ta.value){ ta.value='S:\nT:\nA:\nR:'; } panel.hidden = !panel.hidden; actionBtn.setAttribute('aria-expanded', String(!panel.hidden)); if(!panel.hidden) ta?.focus(); if(wasHidden) iqTrack('iq_notes_opened',{ index:i }); return; }
-      });
-      box.addEventListener('input',(e)=>{
-        const m=e.target.id?.match(/^iq-notes-ta-(\d+)$/); if(!m) return; const idx=parseInt(m[1],10);
-        clearTimeout(iqState.timers.notes[idx]);
-        iqState.timers.notes[idx]=setTimeout(()=>{ iqState.notes[idx]=e.target.value; iqSaveNotes(); },300);
       });
       // Keyboard activation for action buttons
       box.addEventListener('keydown', (e)=>{
-        if(e.key!=='Enter' && e.key!==' ') return; const b=e.target.closest('.btn-copy, .btn-replace, .btn-save, .btn-example, .btn-notes'); if(!b) return; e.preventDefault(); b.click();
+        if(e.key!=='Enter' && e.key!==' ') return; 
+        const b=e.target.closest('.btn-copy, .btn-replace, .btn-save, .btn-example'); 
+        if(!b) return; 
+        e.preventDefault(); 
+        b.click();
       });
     }
 
@@ -2246,9 +2261,8 @@
     (function(){
       let wired=false; if(wired) return; wired=true;
       document.addEventListener('click', (e)=>{
-        // If the click occurred inside the questions list, let the local delegate handle it (avoid double toggles)
         if(e.target.closest('#iq-questions')) return;
-        const actionBtn = e.target.closest('.btn-copy, .btn-replace, .btn-save, .btn-example, .btn-notes');
+        const actionBtn = e.target.closest('.btn-copy, .btn-replace, .btn-save, .btn-example');
         if(!actionBtn) return;
         const card = actionBtn.closest('[data-idx]');
         const i=parseInt(actionBtn.dataset.idx || card?.dataset?.idx || -1, 10);
@@ -2260,7 +2274,6 @@
         if(actionBtn.classList.contains('btn-replace')){ iqReplaceOne(i); return; }
         if(actionBtn.classList.contains('btn-save')){ iqToggleSaved(i); const nowSaved=iqIsSaved(i); actionBtn.setAttribute('aria-pressed', String(nowSaved)); return; }
         if(actionBtn.classList.contains('btn-example')){ const ex=$IQ(`#iq-example-${i}`); if(ex) ex.hidden=!ex.hidden; return; }
-        if(actionBtn.classList.contains('btn-notes')){ const panel=$IQ(`#iq-notes-${i}`); const ta=$IQ(`#iq-notes-ta-${i}`); const exp=panel.hidden; if(exp && !ta?.value){ if(ta) ta.value='S:\nT:\nA:\nR:'; } panel.hidden=!panel.hidden; actionBtn.setAttribute('aria-expanded', String(!panel.hidden)); if(!panel.hidden) ta?.focus(); if(exp) iqTrack('iq_notes_opened',{ index:i }); return; }
       }, true);
     })();
 function initIQPage(){ 
@@ -2318,6 +2331,7 @@ function initIQPage(){
       
       iqUpdateActionsLayout(); 
       window.addEventListener('resize', iqUpdateActionsLayout);
+      renderGenerateCooldownIndicator();
       
       // Cleanup timers on page unload to prevent memory leaks
       window.addEventListener('beforeunload', () => {
@@ -2328,7 +2342,6 @@ function initIQPage(){
         if (iqState.timers.toast) {
           clearTimeout(iqState.timers.toast);
         }
-        Object.values(iqState.timers.notes).forEach(clearTimeout);
       });
     }
     window.__IQ__ = { iqState, iqGenerate, iqRegenerate, iqReplaceOne };
@@ -2352,7 +2365,6 @@ function initIQPage(){
         const seed=String(Date.now());
         const questions = Array.from({length: IQ_FIXED_COUNT}, (_,i)=>({ q:`QA auto Q${i+1}` }));
         iqState.set = { role, seed, seniority:'', type:'behavioral', jd:'', questions };
-        iqState.notes = {};
         iqSaveSetFull(iqState.set);
         iqRenderQuestions();
         iqWireQuestionList();
@@ -2382,7 +2394,21 @@ function initIQPage(){
         return;
       }
     }
-    document.addEventListener('DOMContentLoaded', ()=>{ initIQPage(); setTimeout(runIQSelfTests,200); setTimeout(runIQIntegrationQA,300); });
+    document.addEventListener('DOMContentLoaded', ()=>{
+      initIQPage();
+      
+      // Only run self-tests when QA is explicitly enabled
+      // This prevents automatic API calls on page load that trigger cooldowns
+      const qaParam = new URL(window.location.href).searchParams.get('qa');
+      const qaFlag = localStorage.getItem('qa_flag');
+      const qaEnabled = !!qaParam || qaFlag === '1';
+      
+      if (qaEnabled) {
+        setTimeout(runIQSelfTests, 200);
+      }
+      
+      setTimeout(runIQIntegrationQA, 300);
+    });
     /* ==== End MVP+ module ==== */
 
     // --- PLAN LOGIC ---
