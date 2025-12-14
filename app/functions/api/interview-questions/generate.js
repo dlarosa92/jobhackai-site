@@ -185,6 +185,7 @@ export async function onRequest(context) {
   let lockKey = null;
   let uid = null;
   let quotaIncremented = false; // Track if quota was consumed to prevent clearing cooldown
+  let isReplaceMode = false; // Track if this is a replace operation (must be declared outside try block)
 
   try {
     // Verify authentication
@@ -236,7 +237,7 @@ export async function onRequest(context) {
     }
 
     const { role, seniority, type, types, jd, mode, replaceIndex } = body;
-    const isReplaceMode = mode === 'replace';
+    isReplaceMode = mode === 'replace';
 
     // Validate role
     if (!role || typeof role !== 'string' || role.trim().length === 0) {
