@@ -372,7 +372,7 @@ export async function onRequest(context) {
     if (env.JOBHACKAI_KV) {
       const now = Date.now();
       await env.JOBHACKAI_KV.put(cooldownKey, String(now), {
-        expirationTtl: Math.ceil(cooldownMs / 1000)
+        expirationTtl: Math.max(60, Math.ceil(cooldownMs / 1000))
       });
     }
 
