@@ -2445,9 +2445,14 @@ function initIQPage(){
       const qaParam = new URL(window.location.href).searchParams.get('qa');
       const qaFlag = localStorage.getItem('qa_flag');
       const qaEnabled = !!qaParam || qaFlag === '1';
-      
+
       if (qaEnabled) {
         setTimeout(runIQSelfTests, 200);
+      }
+
+      // Clear qa_flag if no qa param is present to prevent persistent QA mode
+      if (!qaParam && qaFlag === '1') {
+        try { localStorage.removeItem('qa_flag'); } catch {}
       }
       
       setTimeout(runIQIntegrationQA, 300);
