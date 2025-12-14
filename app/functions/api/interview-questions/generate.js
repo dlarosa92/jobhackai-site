@@ -9,6 +9,8 @@ import { getOrCreateUserByAuthId, isD1Available, getFeatureDailyUsage, increment
 
 // Fixed question count for all requests
 const IQ_FIXED_COUNT = 10;
+const FULL_COOLDOWN_MS = 45 * 1000;
+const REPLACE_COOLDOWN_MS = 5 * 1000;
 
 function corsHeaders(origin) {
   const allowedOrigins = [
@@ -183,6 +185,7 @@ export async function onRequest(context) {
   let lockKey = null;
   let uid = null;
   let quotaIncremented = false; // Track if quota was consumed to prevent clearing cooldown
+  let isReplaceMode = false; // Track if this is a replace operation (must be declared outside try block)
 
   try {
     // Verify authentication
@@ -234,6 +237,7 @@ export async function onRequest(context) {
     }
 
     const { role, seniority, type, types, jd, mode, replaceIndex } = body;
+    isReplaceMode = mode === 'replace';
 
     // Validate role
     if (!role || typeof role !== 'string' || role.trim().length === 0) {
@@ -260,15 +264,15 @@ export async function onRequest(context) {
     // Determine count based on mode
     const requestedCount = mode === 'replace' ? 1 : IQ_FIXED_COUNT;
 
-    // Server-side cooldown enforcement (60 seconds) - checked before quota to prevent race conditions
-    // Use distributed lock pattern to prevent concurrent requests from bypassing limits
+    // Server-side cooldown enforcement - checked before quota
+    // Mode-specific cooldown keys allow replacements during the global cooldown window
     lockKey = `iq_lock:${uid}`;
-    const cooldownKey = `iq_cooldown:${uid}`;
+    const cooldownKey = isReplaceMode ? `iq_replace_cooldown:${uid}` : `iq_cooldown:${uid}`;
+    const cooldownMs = isReplaceMode ? REPLACE_COOLDOWN_MS : FULL_COOLDOWN_MS;
     lockAcquired = false;
     
     if (env.JOBHACKAI_KV) {
       const now = Date.now();
-      const cooldownMs = 60 * 1000; // 60 seconds
       
       // Check cooldown first
       const lastRequest = await env.JOBHACKAI_KV.get(cooldownKey);
@@ -278,27 +282,28 @@ export async function onRequest(context) {
 
         if (timeSinceLastRequest < cooldownMs) {
           const retryAfter = Math.ceil((cooldownMs - timeSinceLastRequest) / 1000);
-          // Log cooldown hit for monitoring (d1User may not be created yet at this point)
           console.warn('[IQ-GENERATE] Cooldown hit:', {
             requestId,
             uid,
             plan: effectivePlan,
             reason: 'cooldown',
-            retryAfter
+            retryAfter,
+            mode: isReplaceMode ? 'replace' : 'full'
           });
           return errorResponse(
-            'Please wait before generating another set. Cooldown active.',
+            isReplaceMode
+              ? 'Please wait before replacing another question. Cooldown active.'
+              : 'Please wait before generating another set. Cooldown active.',
             429,
             origin,
             env,
             requestId,
-            { retryAfter, reason: 'cooldown' }
+            { retryAfter, reason: 'cooldown', mode: isReplaceMode ? 'replace' : 'full' }
           );
         }
       }
       
       // Acquire distributed lock to prevent race conditions
-      // Try to acquire lock with a short TTL (5 seconds) - if it exists, another request is processing
       const existingLock = await env.JOBHACKAI_KV.get(lockKey);
       if (existingLock) {
         return errorResponse(
@@ -367,7 +372,7 @@ export async function onRequest(context) {
     if (env.JOBHACKAI_KV) {
       const now = Date.now();
       await env.JOBHACKAI_KV.put(cooldownKey, String(now), {
-        expirationTtl: 60 // 60 seconds
+        expirationTtl: Math.ceil(cooldownMs / 1000)
       });
     }
 
@@ -434,9 +439,9 @@ export async function onRequest(context) {
   } catch (error) {
     // Only clear cooldown if quota was NOT consumed
     // If quota was consumed, user should still be subject to cooldown to prevent abuse
-    // This prevents race condition where quota is consumed but user can retry immediately
+    // Respect mode-specific cooldowns so a replace failure does not clear a full-set cooldown (and vice versa)
     if (uid && env.JOBHACKAI_KV && !quotaIncremented) {
-      const cooldownKey = `iq_cooldown:${uid}`;
+      const cooldownKey = isReplaceMode ? `iq_replace_cooldown:${uid}` : `iq_cooldown:${uid}`;
       await env.JOBHACKAI_KV.delete(cooldownKey).catch(() => {});
     }
     // Release lock if it was acquired before the error
