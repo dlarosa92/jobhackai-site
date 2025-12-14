@@ -14,6 +14,7 @@
   <!-- Design tokens & global styles -->
   <link rel="stylesheet" href="css/tokens.css">
   <link rel="stylesheet" href="css/main.css">
+  <link rel="stylesheet" href="css/components.css">
 
   <!-- Component overrides -->
   <link rel="stylesheet" href="css/header.css">
@@ -99,14 +100,14 @@
 
                 <div class="cl-field">
                   <label class="cl-label" for="cl-seniority">Seniority <span class="cl-required">*</span></label>
-                  <select id="cl-seniority" class="cl-select" required>
-                    <option value="" disabled selected hidden></option>
-                    <option>Intern</option>
-                    <option>Junior</option>
-                    <option>Mid</option>
-                    <option>Senior</option>
-                    <option>Lead</option>
-                    <option>Director</option>
+                  <select id="cl-seniority" class="cl-select" required aria-label="Seniority">
+                    <option value="" disabled selected hidden>Select level...</option>
+                    <option value="intern">Intern</option>
+                    <option value="junior">Junior</option>
+                    <option value="mid">Mid</option>
+                    <option value="senior">Senior</option>
+                    <option value="lead">Lead</option>
+                    <option value="director">Director</option>
                   </select>
                 </div>
 
