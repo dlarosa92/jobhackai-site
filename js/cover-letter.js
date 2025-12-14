@@ -199,10 +199,16 @@ function getSelectedItem() {
 }
 
 function readFormInputs() {
+  // Capitalize seniority to match backend expectations (dropdown uses lowercase values)
+  const seniorityRaw = String(els.seniority?.value || '').trim();
+  const seniority = seniorityRaw 
+    ? seniorityRaw.charAt(0).toUpperCase() + seniorityRaw.slice(1).toLowerCase()
+    : '';
+  
   return {
     role: String(els.role?.value || '').trim(),
     company: String(els.company?.value || '').trim(),
-    seniority: String(els.seniority?.value || '').trim(),
+    seniority,
     tone: String(els.tone?.value || '').trim() || 'Confident + Professional',
     jobDescription: String(els.jobDescription?.value || '').trim(),
     resumeText: String(els.resumeText?.value || '').trim()
@@ -213,7 +219,11 @@ function restoreFromItem(item) {
   if (!item) return;
   if (els.role) els.role.value = item.role || '';
   if (els.company) els.company.value = item.company || '';
-  if (els.seniority) els.seniority.value = item.seniority || '';
+  // Normalize seniority to lowercase to match dropdown values (handles old capitalized values)
+  if (els.seniority) {
+    const seniority = String(item.seniority || '').trim().toLowerCase();
+    els.seniority.value = seniority;
+  }
   if (els.tone) els.tone.value = item.tone || 'Confident + Professional';
   if (els.jobDescription) els.jobDescription.value = item.jobDescription || '';
   if (els.resumeText) els.resumeText.value = item.resumeText || '';
