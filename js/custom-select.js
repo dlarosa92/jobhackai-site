@@ -144,6 +144,14 @@
       set(newValue) {
         const oldValue = _value;
         _value = newValue;
+        // Update the native select's actual selectedIndex so the native select reflects the change
+        const option = Array.from(select.options).find(opt => opt.value === newValue);
+        if (option) {
+          select.selectedIndex = Array.from(select.options).indexOf(option);
+        } else if (newValue === '') {
+          // Handle empty value case
+          select.selectedIndex = -1;
+        }
         if (oldValue !== newValue) {
           syncSelected();
         }
