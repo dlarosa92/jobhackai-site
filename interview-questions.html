@@ -1025,10 +1025,11 @@
       prefs: { seniority:'', count:10, type:'mixed', showGuidance:false },
       set: null,
       cooldown: 0,
-      timers: { global:null, perQ:{}, toast:null },
+      timers: { global:null, perQ:{}, replaceGlobal:null, toast:null },
       recents: [],
       replaceCounts: {}, // Track per-question replace counts (TASK 10B)
       replaceCooldowns: {}, // Track per-question cooldowns
+      replaceGlobalCooldown: 0, // Track user-level replace cooldown (matches backend)
       dailyLimitReached: false // Track if daily limit has been reached
     };
 
@@ -1191,6 +1192,10 @@
       Object.values(iqState.timers.perQ).forEach(clearInterval);
       iqState.timers.perQ = {};
       iqState.replaceCooldowns = {};
+      if (iqState.timers.replaceGlobal) {
+        clearInterval(iqState.timers.replaceGlobal);
+      }
+      iqState.replaceGlobalCooldown = 0;
     }
 
     function iqUpdateReplaceCooldown(i, seconds) {
@@ -1201,6 +1206,25 @@
         delete iqState.replaceCooldowns[i];
       }
       iqRenderQuestions();
+    }
+
+    function iqStartReplaceGlobalCooldown() {
+      // Enforce backend's user-level replace cooldown key on the client
+      iqState.replaceGlobalCooldown = IQ_PER_Q_REPLACE_COOLDOWN;
+      if (iqState.timers.replaceGlobal) {
+        clearInterval(iqState.timers.replaceGlobal);
+      }
+      const tick = () => {
+        iqRenderQuestions();
+        if (iqState.replaceGlobalCooldown <= 0) {
+          iqState.replaceGlobalCooldown = 0;
+          clearInterval(iqState.timers.replaceGlobal);
+          return;
+        }
+        iqState.replaceGlobalCooldown -= 1;
+      };
+      tick();
+      iqState.timers.replaceGlobal = setInterval(tick, 1000);
     }
 
     function iqStartPerQCooldown(i){
@@ -1215,21 +1239,21 @@
       };
 
       const tick = () => {
-        if (remaining <= 0) {
-          cleanup();
-          return;
-        }
         iqUpdateReplaceCooldown(i, remaining);
         const btn = $IQ(`.btn-replace[data-idx="${i}"]`);
         if (btn) {
           btn.disabled = true;
           btn.setAttribute('aria-disabled', 'true');
         }
-        remaining--;
+        remaining -= 1;
+        if (remaining < 0) {
+          cleanup();
+        }
       };
 
       tick();
       iqState.timers.perQ[k] = setInterval(tick, 1000);
+      iqStartReplaceGlobalCooldown();
     }
 
     function formatCooldownSeconds(seconds) {
@@ -1351,17 +1375,21 @@
         const savedPressed = (typeof iqIsSaved === 'function' ? (iqIsSaved(origIdx) ? 'true' : 'false') : 'false');
         const replaceCount = (iqState.replaceCounts && iqState.replaceCounts[origIdx]) || 0;
         const replaceCooldown = (iqState.replaceCooldowns && iqState.replaceCooldowns[origIdx]) || 0;
+        const replaceGlobalCooldown = iqState.replaceGlobalCooldown || 0;
         const hasDailyLimit = iqState.dailyLimitReached;
         const hasMaxReplacements = replaceCount >= IQ_MAX_REPLACES;
         const hasActiveCooldown = replaceCooldown > 0;
-        const replaceDisabled = hasDailyLimit || hasMaxReplacements || hasActiveCooldown;
+        const hasGlobalReplaceCooldown = replaceGlobalCooldown > 0;
+        const replaceDisabled = hasDailyLimit || hasMaxReplacements || hasActiveCooldown || hasGlobalReplaceCooldown;
         const replaceTip = hasDailyLimit
           ? 'Daily limit reached for your plan.'
-          : hasActiveCooldown
-            ? `Please wait ${replaceCooldown}s before replacing this question.`
-            : hasMaxReplacements
-              ? 'Max replacements reached for this question. Generate a new set if you\'re still not happy.'
-              : 'New Question';
+          : hasGlobalReplaceCooldown
+            ? `Please wait ${replaceGlobalCooldown}s before replacing another question.`
+            : hasActiveCooldown
+              ? `Please wait ${replaceCooldown}s before replacing this question.`
+              : hasMaxReplacements
+                ? 'Max replacements reached for this question. Generate a new set if you\'re still not happy.'
+                : 'New Question';
         const replaceCooldownBadge = replaceCooldown > 0 ? `<span class="iq-replace-cooldown" data-idx="${origIdx}">
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
           <circle cx="12" cy="12" r="10"/>
