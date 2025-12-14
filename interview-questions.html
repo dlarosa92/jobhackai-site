@@ -1208,9 +1208,10 @@
       iqRenderQuestions();
     }
 
-    function iqStartReplaceGlobalCooldown() {
+    function iqStartReplaceGlobalCooldown(seconds) {
       // Enforce backend's user-level replace cooldown key on the client
-      iqState.replaceGlobalCooldown = IQ_PER_Q_REPLACE_COOLDOWN;
+      // Use provided seconds (e.g., from server retryAfter) or default to IQ_PER_Q_REPLACE_COOLDOWN
+      iqState.replaceGlobalCooldown = seconds !== undefined ? seconds : IQ_PER_Q_REPLACE_COOLDOWN;
       if (iqState.timers.replaceGlobal) {
         clearInterval(iqState.timers.replaceGlobal);
       }
@@ -1918,7 +1919,10 @@
           if (response.status === 429 && errorData.reason === 'cooldown') {
             const retryAfter = errorData.retryAfter || IQ_PER_Q_REPLACE_COOLDOWN;
             iqToast(`Please wait ${retryAfter} seconds before replacing another question.`);
-            reenableButton();
+            // Start global replace cooldown to prevent rapid re-clicks and match backend enforcement
+            // Use server's retryAfter value to sync UI with actual remaining cooldown time
+            iqStartReplaceGlobalCooldown(retryAfter);
+            // Don't re-enable button - it will be enabled when cooldown expires via render logic
             return;
           }
           
@@ -2375,6 +2379,9 @@ function initIQPage(){
           clearInterval(iqState.timers.global);
         }
         Object.values(iqState.timers.perQ).forEach(clearInterval);
+        if (iqState.timers.replaceGlobal) {
+          clearInterval(iqState.timers.replaceGlobal);
+        }
         if (iqState.timers.toast) {
           clearTimeout(iqState.timers.toast);
         }
