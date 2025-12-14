@@ -1131,6 +1131,7 @@
         // Normalize legacy/new type fields
         set.type = iqSanitizeType(set.type, iqInferTypeFromLegacyTypes(set.types));
         iqState.set=set; 
+        iqResetPerQuestionCooldowns();
         iqState.replaceCounts = set.replaceCounts || {}; 
         iqRenderQuestions(); 
         iqUpdateSavedChip(); 
@@ -1186,6 +1187,12 @@
         }
       }, 1000);
     }
+    function iqResetPerQuestionCooldowns() {
+      Object.values(iqState.timers.perQ).forEach(clearInterval);
+      iqState.timers.perQ = {};
+      iqState.replaceCooldowns = {};
+    }
+
     function iqUpdateReplaceCooldown(i, seconds) {
       if (!iqState.replaceCooldowns) iqState.replaceCooldowns = {};
       if (seconds > 0) {
@@ -1205,14 +1212,6 @@
         clearInterval(iqState.timers.perQ[k]);
         delete iqState.timers.perQ[k];
         iqUpdateReplaceCooldown(i, 0);
-        const btn = $IQ(`.btn-replace[data-idx="${i}"]`);
-        if (btn) {
-          btn.removeAttribute('aria-disabled');
-          const replaceCount = (iqState.replaceCounts && iqState.replaceCounts[i]) || 0;
-          if (replaceCount < IQ_MAX_REPLACES && !iqState.dailyLimitReached) {
-            btn.disabled = false;
-          }
-        }
       };
 
       const tick = () => {
@@ -1351,10 +1350,18 @@
         // Use original index for starred questions lookup
         const savedPressed = (typeof iqIsSaved === 'function' ? (iqIsSaved(origIdx) ? 'true' : 'false') : 'false');
         const replaceCount = (iqState.replaceCounts && iqState.replaceCounts[origIdx]) || 0;
-        const replaceDisabled = replaceCount >= IQ_MAX_REPLACES || iqState.dailyLimitReached;
-        const replaceTip = iqState.dailyLimitReached ? 'Daily limit reached for your plan.' : 
-                          replaceDisabled ? 'Max replacements reached for this question. Generate a new set if you\'re still not happy.' : 'New Question';
         const replaceCooldown = (iqState.replaceCooldowns && iqState.replaceCooldowns[origIdx]) || 0;
+        const hasDailyLimit = iqState.dailyLimitReached;
+        const hasMaxReplacements = replaceCount >= IQ_MAX_REPLACES;
+        const hasActiveCooldown = replaceCooldown > 0;
+        const replaceDisabled = hasDailyLimit || hasMaxReplacements || hasActiveCooldown;
+        const replaceTip = hasDailyLimit
+          ? 'Daily limit reached for your plan.'
+          : hasActiveCooldown
+            ? `Please wait ${replaceCooldown}s before replacing this question.`
+            : hasMaxReplacements
+              ? 'Max replacements reached for this question. Generate a new set if you\'re still not happy.'
+              : 'New Question';
         const replaceCooldownBadge = replaceCooldown > 0 ? `<span class="iq-replace-cooldown" data-idx="${origIdx}">
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
           <circle cx="12" cy="12" r="10"/>
@@ -1742,6 +1749,7 @@
         const seed = res.seed || `${Date.now().toString(36)}-${Math.random().toString(36).slice(2,8)}`; 
         const setObj={...res, seed, role: res.role||role, seniority, count: IQ_FIXED_COUNT, type: iqSanitizeType(res.type, type), jd, replacesUsed:0}; 
         iqState.set=setObj;
+        iqResetPerQuestionCooldowns();
         // Reset replace counts when generating a new set
         iqState.replaceCounts = {}; 
         // Reset daily limit flag on successful generation

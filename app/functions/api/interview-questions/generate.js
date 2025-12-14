@@ -440,8 +440,13 @@ export async function onRequest(context) {
     // If quota was consumed, user should still be subject to cooldown to prevent abuse
     // This prevents race condition where quota is consumed but user can retry immediately
     if (uid && env.JOBHACKAI_KV && !quotaIncremented) {
-      const cooldownKey = `iq_cooldown:${uid}`;
-      await env.JOBHACKAI_KV.delete(cooldownKey).catch(() => {});
+      const cooldownKeys = [
+        `iq_cooldown:${uid}`,
+        `iq_replace_cooldown:${uid}`,
+      ];
+      for (const key of cooldownKeys) {
+        await env.JOBHACKAI_KV.delete(key).catch(() => {});
+      }
     }
     // Release lock if it was acquired before the error
     if (lockAcquired && lockKey && env.JOBHACKAI_KV) {
