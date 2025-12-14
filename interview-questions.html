@@ -1976,7 +1976,7 @@
           iqToast('Question replaced.');
           iqTrack('iq_replace_one', { index: i });
           
-          // Start per-question 5-second cooldown (no global cooldown).
+          // Start per-question cooldown (with global replace cooldown enforcement)
           iqStartPerQCooldown(i);
         } else {
           reenableButton();
