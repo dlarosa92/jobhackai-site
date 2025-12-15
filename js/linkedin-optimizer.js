@@ -260,11 +260,13 @@ function sectionTitle(key) {
   return key;
 }
 
-function renderSections(sections) {
+function renderSections(sections, originalInputsOverride) {
   if (!els.sections) return;
   const keys = ['headline', 'summary', 'experience', 'skills', 'recommendations'];
   const present = keys.filter((k) => sections && sections[k]);
-  const originalInputs = currentRun?.originalInputs || {};
+  // Use provided originalInputs if available, otherwise fall back to currentRun
+  // This prevents race conditions where currentRun changes between capture and render
+  const originalInputs = originalInputsOverride || currentRun?.originalInputs || {};
 
   els.sections.innerHTML = present
     .map((k) => {
@@ -632,9 +634,12 @@ async function regenerate(section) {
   if (regenBusy.has(section)) return;
   // Capture run_id at click time to prevent new analysis from changing which run gets regenerated
   const baseRunId = currentRun.run_id;
+  // Also capture the original inputs at click time so "Before" text remains consistent
+  // even if a new analysis completes before this regeneration finishes.
+  const originalInputsAtClick = currentRun.originalInputs || {};
   regenCounts.set(section, (regenCounts.get(section) || 0) + 1);
   regenBusy.add(section);
-  renderSections(currentRun.sections || {});
+  renderSections(currentRun.sections || {}, originalInputsAtClick);
 
   // Enqueue so each regen uses the latest currentRun (which may have been updated by a prior regen).
   // Note: baseRunId is captured before enqueueing to ensure we regenerate the run the user clicked on,
@@ -654,7 +659,7 @@ async function regenerate(section) {
       });
 
       if (resp?.run_id) {
-        await loadRun(resp.run_id, { originalInputs: currentRun.originalInputs });
+        await loadRun(resp.run_id, { originalInputs: originalInputsAtClick });
         regenCompleted = true;
       }
     } catch (e) {
@@ -662,7 +667,7 @@ async function regenerate(section) {
       alert('Could not regenerate this section. Please try again.');
     } finally {
       regenBusy.delete(section);
-      renderSections(currentRun?.sections || {});
+      renderSections(currentRun?.sections || {}, originalInputsAtClick);
     }
   });
 
