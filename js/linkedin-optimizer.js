@@ -175,15 +175,27 @@ function setLoading(on, text) {
 }
 
 function setResultsVisible(on) {
+  // #region agent log
+  console.log('[LINKEDIN DEBUG] setResultsVisible called', { on, hasElsResults: !!els.results });
+  fetch('http://127.0.0.1:7242/ingest/a6e4922a-fede-4605-9463-39adc6a617fc',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'linkedin-optimizer.js:177',message:'setResultsVisible called',data:{on,hasElsResults:!!els.results},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+  // #endregion
   // Ensure results element is available even if init() hasn't wired els.results yet
   if (!els.results) {
     els.results = document.querySelector('#lo-results');
   }
   if (!els.results) {
     console.warn('[LINKEDIN] setResultsVisible: #lo-results element not found in DOM');
+    // #region agent log
+    console.log('[LINKEDIN DEBUG] setResultsVisible: element not found');
+    fetch('http://127.0.0.1:7242/ingest/a6e4922a-fede-4605-9463-39adc6a617fc',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'linkedin-optimizer.js:183',message:'setResultsVisible: element not found',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+    // #endregion
     return;
   }
   els.results.style.display = on ? '' : 'none';
+  // #region agent log
+  console.log('[LINKEDIN DEBUG] setResultsVisible: display set', { on, displayValue: els.results.style.display });
+  fetch('http://127.0.0.1:7242/ingest/a6e4922a-fede-4605-9463-39adc6a617fc',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'linkedin-optimizer.js:186',message:'setResultsVisible: display set',data:{on,displayValue:els.results.style.display},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+  // #endregion
 }
 
 function setScoreRing(score) {
@@ -268,9 +280,23 @@ function sectionTitle(key) {
 }
 
 function renderSections(sections, originalInputsOverride) {
-  if (!els.sections) return;
+  // #region agent log
+  console.log('[LINKEDIN DEBUG] renderSections called', { hasElsSections: !!els.sections, sectionsKeys: Object.keys(sections || {}), sectionsType: typeof sections, sections });
+  fetch('http://127.0.0.1:7242/ingest/a6e4922a-fede-4605-9463-39adc6a617fc',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'linkedin-optimizer.js:270',message:'renderSections called',data:{hasElsSections:!!els.sections,sectionsKeys:Object.keys(sections||{}),sectionsType:typeof sections},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B,C,G'})}).catch(()=>{});
+  // #endregion
+  if (!els.sections) {
+    // #region agent log
+    console.log('[LINKEDIN DEBUG] renderSections: els.sections is null');
+    fetch('http://127.0.0.1:7242/ingest/a6e4922a-fede-4605-9463-39adc6a617fc',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'linkedin-optimizer.js:271',message:'renderSections: els.sections is null',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'G'})}).catch(()=>{});
+    // #endregion
+    return;
+  }
   const keys = ['headline', 'summary', 'experience', 'skills', 'recommendations'];
   const present = keys.filter((k) => sections && sections[k]);
+  // #region agent log
+  console.log('[LINKEDIN DEBUG] renderSections: filtered present keys', { presentKeys: present, allKeys: keys, sectionsCheck: keys.map(k => ({ key: k, exists: !!(sections && sections[k]) })) });
+  fetch('http://127.0.0.1:7242/ingest/a6e4922a-fede-4605-9463-39adc6a617fc',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'linkedin-optimizer.js:273',message:'renderSections: filtered present keys',data:{presentKeys:present,allKeys:keys,sectionsCheck:keys.map(k=>({key:k,exists:!!(sections&&sections[k])}))},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+  // #endregion
   // Use provided originalInputs if available, otherwise fall back to currentRun
   // This prevents race conditions where currentRun changes between capture and render
   const originalInputs = originalInputsOverride || currentRun?.originalInputs || {};
@@ -338,15 +364,27 @@ function renderSections(sections, originalInputsOverride) {
       `;
     })
     .join('');
+  // #region agent log
+  console.log('[LINKEDIN DEBUG] renderSections: innerHTML assignment', { presentCount: present.length, htmlLength: els.sections.innerHTML.length });
+  fetch('http://127.0.0.1:7242/ingest/a6e4922a-fede-4605-9463-39adc6a617fc',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'linkedin-optimizer.js:341',message:'renderSections: innerHTML assignment',data:{presentCount:present.length,htmlLength:els.sections.innerHTML.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'G'})}).catch(()=>{});
+  // #endregion
 }
 
 function renderResults(run) {
+  // #region agent log
+  console.log('[LINKEDIN DEBUG] renderResults called', { hasRun: !!run, runId: run?.run_id, hasSections: !!run?.sections, sectionsKeys: Object.keys(run?.sections || {}), sectionsType: typeof run?.sections, sections: run?.sections });
+  fetch('http://127.0.0.1:7242/ingest/a6e4922a-fede-4605-9463-39adc6a617fc',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'linkedin-optimizer.js:343',message:'renderResults called',data:{hasRun:!!run,runId:run?.run_id,hasSections:!!run?.sections,sectionsKeys:Object.keys(run?.sections||{}),sectionsType:typeof run?.sections},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A,B'})}).catch(()=>{});
+  // #endregion
   const prevRunId = currentRun?.run_id;
   currentRun = run;
   if (prevRunId !== run?.run_id) {
     regenCounts.clear();
   }
   if (!run) {
+    // #region agent log
+    console.log('[LINKEDIN DEBUG] renderResults: run is null, hiding results');
+    fetch('http://127.0.0.1:7242/ingest/a6e4922a-fede-4605-9463-39adc6a617fc',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'linkedin-optimizer.js:349',message:'renderResults: run is null, hiding results',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+    // #endregion
     setResultsVisible(false);
     return;
   }
@@ -357,7 +395,15 @@ function renderResults(run) {
   }
   renderQuickWins(run.quickWins);
   renderKeywordChips(run.keywordsToAdd);
+  // #region agent log
+  console.log('[LINKEDIN DEBUG] renderResults: about to call renderSections', { sectionsKeys: Object.keys(run.sections || {}), sectionsValue: run.sections });
+  fetch('http://127.0.0.1:7242/ingest/a6e4922a-fede-4605-9463-39adc6a617fc',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'linkedin-optimizer.js:360',message:'renderResults: about to call renderSections',data:{sectionsKeys:Object.keys(run.sections||{}),sectionsValue:run.sections},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+  // #endregion
   renderSections(run.sections || {});
+  // #region agent log
+  console.log('[LINKEDIN DEBUG] renderResults: completed');
+  fetch('http://127.0.0.1:7242/ingest/a6e4922a-fede-4605-9463-39adc6a617fc',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'linkedin-optimizer.js:361',message:'renderResults: completed',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+  // #endregion
 }
 
 function renderHistory() {
@@ -529,6 +575,10 @@ async function pollRunUntilReady(runId, maxMs = 15000) {
 }
 
 async function analyze() {
+  // #region agent log
+  console.log('[LINKEDIN DEBUG] analyze: function called', { isAnalyzing });
+  fetch('http://127.0.0.1:7242/ingest/a6e4922a-fede-4605-9463-39adc6a617fc',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'linkedin-optimizer.js:531',message:'analyze: function called',data:{isAnalyzing},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+  // #endregion
   if (isAnalyzing) return;
   const payload = readForm();
   // Validate all required fields
@@ -576,7 +626,15 @@ async function analyze() {
     let data;
     try {
       data = await apiFetch('/api/linkedin/analyze', { method: 'POST', body: JSON.stringify(req) });
+      // #region agent log
+      console.log('[LINKEDIN DEBUG] analyze: API response received', { hasData: !!data, hasRunId: !!data?.run_id, hasSections: !!data?.sections, status: data?.status, sectionsKeys: Object.keys(data?.sections || {}), sectionsType: typeof data?.sections, data });
+      fetch('http://127.0.0.1:7242/ingest/a6e4922a-fede-4605-9463-39adc6a617fc',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'linkedin-optimizer.js:578',message:'analyze: API response received',data:{hasData:!!data,hasRunId:!!data?.run_id,hasSections:!!data?.sections,status:data?.status,sectionsKeys:Object.keys(data?.sections||{}),sectionsType:typeof data?.sections},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
+      // #endregion
     } catch (e) {
+      // #region agent log
+      console.log('[LINKEDIN DEBUG] analyze: API fetch error', { status: e?.status, error: e?.message, errorCode: e?.data?.error });
+      fetch('http://127.0.0.1:7242/ingest/a6e4922a-fede-4605-9463-39adc6a617fc',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'linkedin-optimizer.js:579',message:'analyze: API fetch error',data:{status:e?.status,error:e?.message,errorCode:e?.data?.error},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+      // #endregion
       if (e?.status === 403 && e?.data?.error === 'premium_required') {
         setLockedView('upgrade');
         return;
@@ -587,10 +645,18 @@ async function analyze() {
     if (data?.status === 'processing' && data?.run_id) {
       setLoading(true, 'Finishing up…');
       data = await pollRunUntilReady(data.run_id);
+      // #region agent log
+      console.log('[LINKEDIN DEBUG] analyze: pollRunUntilReady completed', { hasData: !!data, hasSections: !!data?.sections, sectionsKeys: Object.keys(data?.sections || {}), data });
+      fetch('http://127.0.0.1:7242/ingest/a6e4922a-fede-4605-9463-39adc6a617fc',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'linkedin-optimizer.js:589',message:'analyze: pollRunUntilReady completed',data:{hasData:!!data,hasSections:!!data?.sections,sectionsKeys:Object.keys(data?.sections||{})},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
+      // #endregion
     }
 
     // Validate that we have the required data before rendering
     if (!data || !data.run_id || data.overallScore === undefined || !data.sections) {
+      // #region agent log
+      console.log('[LINKEDIN DEBUG] analyze: validation failed - incomplete data', { hasData: !!data, hasRunId: !!data?.run_id, hasScore: data?.overallScore !== undefined, hasSections: !!data?.sections, sectionsValue: data?.sections });
+      fetch('http://127.0.0.1:7242/ingest/a6e4922a-fede-4605-9463-39adc6a617fc',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'linkedin-optimizer.js:593',message:'analyze: validation failed - incomplete data',data:{hasData:!!data,hasRunId:!!data?.run_id,hasScore:data?.overallScore!==undefined,hasSections:!!data?.sections,sectionsValue:data?.sections},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
+      // #endregion
       throw new Error('Incomplete data received from server');
     }
 
@@ -613,6 +679,10 @@ async function analyze() {
       skills: payload.skills,
       recommendations: payload.recommendations
     };
+    // #region agent log
+    console.log('[LINKEDIN DEBUG] analyze: constructed run object, about to call renderResults', { runId: run.run_id, hasSections: !!run.sections, sectionsKeys: Object.keys(run.sections || {}), sectionsStructure: Object.keys(run.sections || {}).reduce((acc, k) => { acc[k] = { hasScore: !!run.sections[k]?.score, hasOptimizedText: !!run.sections[k]?.optimizedText }; return acc; }, {}), run });
+    fetch('http://127.0.0.1:7242/ingest/a6e4922a-fede-4605-9463-39adc6a617fc',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'linkedin-optimizer.js:616',message:'analyze: constructed run object, about to call renderResults',data:{runId:run.run_id,hasSections:!!run.sections,sectionsKeys:Object.keys(run.sections||{}),sectionsStructure:Object.keys(run.sections||{}).reduce((acc,k)=>{acc[k]={hasScore:!!run.sections[k]?.score,hasOptimizedText:!!run.sections[k]?.optimizedText};return acc},{})},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
+    // #endregion
     renderResults(run);
     showToast('LinkedIn optimization ready. Scroll down to review each section.');
     await fetchHistory();
