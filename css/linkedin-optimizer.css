@@ -74,6 +74,38 @@
   gap: var(--space-xs);
 }
 
+.lo-card-title-row {
+  margin-bottom: var(--space-sm);
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  justify-content: space-between;
+  flex-wrap: wrap;
+}
+
+.lo-card-subtitle {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  line-height: 1.5;
+  margin-bottom: var(--space-md);
+}
+
+.lo-plan-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.25rem 0.85rem;
+  border-radius: var(--radius-full);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  white-space: nowrap;
+}
+
+.lo-plan-pill--premium {
+  background: var(--color-cta-green);
+  color: #fff;
+}
+
 .lo-field {
   margin-bottom: var(--space-md);
 }
