@@ -175,7 +175,14 @@ function setLoading(on, text) {
 }
 
 function setResultsVisible(on) {
-  if (!els.results) return;
+  // Ensure results element is available even if init() hasn't wired els.results yet
+  if (!els.results) {
+    els.results = document.querySelector('#lo-results');
+  }
+  if (!els.results) {
+    console.warn('[LINKEDIN] setResultsVisible: #lo-results element not found in DOM');
+    return;
+  }
   els.results.style.display = on ? '' : 'none';
 }
 
