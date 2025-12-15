@@ -407,7 +407,7 @@ export async function onRequest(context) {
           temperature: Number.isFinite(Number(env.OPENAI_TEMPERATURE_LINKEDIN_ANALYZE))
             ? Number(env.OPENAI_TEMPERATURE_LINKEDIN_ANALYZE)
             : 0.2,
-          systemPrompt: 'linkedin_optimizer_analyze_v2', // Bumped to v2 to invalidate old cached responses with different schema
+          systemPrompt: 'linkedin_optimizer_analyze_v1',
           userId: uid,
           feature: 'linkedin_optimizer_analyze'
         },
@@ -427,27 +427,6 @@ export async function onRequest(context) {
     }
 
     const output = safeJsonParse(aiResult?.content);
-    
-    // Debug logging when validation fails to understand what's wrong with cached responses
-    if (!output || !validateAnalyzeOutput(output)) {
-      console.error('[LINKEDIN ANALYZE] Validation failed', {
-        hasOutput: !!output,
-        outputType: typeof output,
-        outputKeys: output ? Object.keys(output) : null,
-        hasOverallScore: output?.overallScore !== undefined,
-        overallScoreType: typeof output?.overallScore,
-        hasSections: !!output?.sections,
-        sectionsKeys: output?.sections ? Object.keys(output.sections) : null,
-        rawContentPreview: aiResult?.content?.substring(0, 500),
-        contentLength: aiResult?.content?.length,
-        finishReason: aiResult?.finishReason,
-        model: aiResult?.model,
-        userId: uid,
-        runId: runId,
-        isCached: aiResult?.cached || false // Check if this was from cache
-      });
-    }
-    
     if (!validateAnalyzeOutput(output)) {
       const msg = 'invalid_ai_json';
       await db
