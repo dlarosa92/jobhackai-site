@@ -1,3 +1,5 @@
+import { showToast } from './modals.js';
+
 // LinkedIn Optimizer (MVP) - Premium-only, D1-backed history
 // - Left: Inputs + Results
 // - Right: History (last 10)
@@ -129,6 +131,7 @@ const els = {
   scoreText: null,
   scoreRing: null,
   meta: null,
+  planPill: null,
   quickWins: null,
   keywords: null,
   sections: null,
@@ -143,6 +146,7 @@ let historyItems = [];
 let selectedHistoryId = null;
 let isAnalyzing = false;
 const regenBusy = new Set(); // section keys
+const regenCounts = new Map();
 // Serialize regenerations across sections to avoid branching from the same base run_id
 // and overwriting each other's changes when responses return out of order.
 let regenQueue = Promise.resolve();
@@ -188,15 +192,60 @@ function setScoreRing(score) {
   }
 }
 
+function getRecruiterBoostLabel(score) {
+  const s = Math.max(0, Math.min(100, Number(score || 0)));
+  if (s >= 80) return 'High recruiter visibility';
+  if (s >= 60) return 'Moderate recruiter visibility';
+  return 'Limited recruiter visibility';
+}
+
+function setPlanPill(plan) {
+  if (!els.planPill) return;
+  const normalized = String(plan || 'free').toLowerCase();
+  const label = normalized === 'premium' ? 'Premium' : normalized === 'free' ? 'Free' : normalized;
+  els.planPill.textContent = label;
+  els.planPill.dataset.plan = normalized;
+  els.planPill.classList.toggle('lo-plan-pill--premium', normalized === 'premium');
+  els.planPill.classList.toggle('lo-plan-pill--free', normalized !== 'premium');
+}
+
+function buildScoreMeta(run) {
+  if (!run) return '';
+  const when = run.created_at ? timeAgo(run.created_at) : '';
+  const parts = [
+    getRecruiterBoostLabel(run.overallScore),
+    run.role || '',
+    when
+  ].filter(Boolean);
+  let meta = escapeHtml(parts.join(' • '));
+  if (run.deduped) {
+    meta += ' <span class="lo-dedupe-note" title="We found a previous run with the same inputs, so we reused that result.">Loaded from history</span>';
+  } else if (run.loadedFromHistory) {
+    meta += ' <span class="lo-dedupe-note" title="Loaded from your saved runs.">Loaded from your saved runs</span>';
+  }
+  return meta;
+}
+
 function renderQuickWins(arr) {
   if (!els.quickWins) return;
   const wins = Array.isArray(arr) ? arr.slice(0, 3) : [];
-  els.quickWins.innerHTML = wins.map((w) => `<li>${escapeHtml(w)}</li>`).join('');
+  const labels = ['Biggest win', 'Biggest weakness', 'Fastest improvement'];
+  if (!wins.length) {
+    els.quickWins.innerHTML = '<li class="lo-quickwin-placeholder">No quick wins available yet.</li>';
+    return;
+  }
+  els.quickWins.innerHTML = wins
+    .map((w, idx) => `<li><strong>${labels[idx]}:</strong> ${escapeHtml(w)}</li>`)
+    .join('');
 }
 
 function renderKeywordChips(arr) {
   if (!els.keywords) return;
   const keywords = Array.isArray(arr) ? arr.slice(0, 10) : [];
+  if (!keywords.length) {
+    els.keywords.innerHTML = '<span class="lo-chip-placeholder">No additional keywords recommended for this run.</span>';
+    return;
+  }
   els.keywords.innerHTML = keywords
     .map((k) => `<span class="lo-chip" data-keyword="${escapeHtml(k)}" title="Click to copy">${escapeHtml(k)}</span>`)
     .join('');
@@ -215,6 +264,7 @@ function renderSections(sections) {
   if (!els.sections) return;
   const keys = ['headline', 'summary', 'experience', 'skills', 'recommendations'];
   const present = keys.filter((k) => sections && sections[k]);
+  const originalInputs = currentRun?.originalInputs || {};
 
   els.sections.innerHTML = present
     .map((k) => {
@@ -224,31 +274,55 @@ function renderSections(sections) {
       const bullets = Array.isArray(s.feedbackBullets) ? s.feedbackBullets.slice(0, 3) : [];
       const optimized = String(s.optimizedText || '').trim();
       const busy = regenBusy.has(k);
+      const original = String(originalInputs[k] || '').trim();
+      const hasBefore = Boolean(original);
+      const beforeBlock = hasBefore
+        ? `
+            <div>
+              <div class="lo-before-after-label">Before</div>
+              <div class="lo-before-text">${escapeHtml(original)}</div>
+            </div>
+          `
+        : '';
+      const regenCount = regenCounts.get(k) || 0;
+      const showTip = regenCount >= 3 && !busy;
 
       return `
         <section class="lo-card" data-section="${k}">
           <div class="lo-section-header">
-            <div class="lo-card-title" style="margin:0;">
-              ${escapeHtml(sectionTitle(k))}
-              <span class="lo-badge">${score}/100</span>
+            <div>
+              <div class="lo-section-header-row">
+                <span class="lo-card-title lo-section-title">${escapeHtml(sectionTitle(k))}</span>
+                <span class="lo-badge">${score}/100</span>
+              </div>
+              <div class="lo-section-label">${escapeHtml(label)}</div>
             </div>
-            <div class="lo-meta">${escapeHtml(label)}</div>
           </div>
 
+          <div class="lo-helper-text">Why this section matters</div>
           <ul class="lo-feedback">
             ${bullets.map((b) => `<li>${escapeHtml(b)}</li>`).join('')}
           </ul>
 
           <details class="lo-details">
-            <summary>Optimized Text</summary>
+            <summary>View optimized (Before & After)</summary>
             <div class="lo-details-body">
-              <div class="lo-optimized" id="lo-optimized-${k}">${escapeHtml(optimized)}</div>
+              <div class="lo-before-after">
+                ${beforeBlock}
+                <div>
+                  <div class="lo-before-after-label">After (paste-ready)</div>
+                  <div class="lo-after-text" id="lo-optimized-${k}">${escapeHtml(optimized)}</div>
+                </div>
+              </div>
               <div class="lo-section-actions">
-                <button class="btn-outline" type="button" data-action="copy" data-section="${k}">Copy Optimized</button>
+                <button class="btn-outline" type="button" data-action="copy" data-section="${k}" data-copy-target="lo-optimized-${k}">
+                  Copy Optimized
+                </button>
                 <button class="btn-outline ${busy ? 'lo-btn-loading' : ''}" type="button" data-action="regen" data-section="${k}">
                   ${busy ? 'Regenerating…' : 'Regenerate'}
                 </button>
               </div>
+              ${showTip ? '<div class="lo-section-tip">Tip: For a bigger change, tweak the original text above and regenerate.</div>' : ''}
             </div>
           </details>
         </section>
@@ -258,7 +332,11 @@ function renderSections(sections) {
 }
 
 function renderResults(run) {
+  const prevRunId = currentRun?.run_id;
   currentRun = run;
+  if (prevRunId !== run?.run_id) {
+    regenCounts.clear();
+  }
   if (!run) {
     setResultsVisible(false);
     return;
@@ -266,8 +344,7 @@ function renderResults(run) {
   setResultsVisible(true);
   setScoreRing(run.overallScore);
   if (els.meta) {
-    const when = run.created_at ? timeAgo(run.created_at) : '';
-    els.meta.textContent = run.role ? `${run.role}${when ? ` • ${when}` : ''}` : when;
+    els.meta.innerHTML = buildScoreMeta(run);
   }
   renderQuickWins(run.quickWins);
   renderKeywordChips(run.keywordsToAdd);
@@ -300,6 +377,10 @@ function renderHistory() {
     const scoreHtml = normalizedScore !== null
       ? `<div class="history-score ${getScoreTone(normalizedScore)}">${Math.round(normalizedScore)}</div>`
       : '';
+    const scorePart = normalizedScore !== null ? `${Math.round(normalizedScore)}/100` : '';
+    const visibilityMeta = normalizedScore !== null ? getRecruiterBoostLabel(normalizedScore) : '';
+    const metaParts = [scorePart, visibilityMeta, when].filter(Boolean);
+    const metaText = metaParts.join(' • ');
 
     row.innerHTML = `
       <div class="history-main">
@@ -309,13 +390,13 @@ function renderHistory() {
         </svg>
         <div class="history-text">
           <div class="history-line1">${escapeHtml(item.role || 'LinkedIn Optimization')}</div>
-          <div class="history-line2">${escapeHtml(when)}</div>
+          <div class="history-line2">${escapeHtml(metaText)}</div>
         </div>
       </div>
       ${scoreHtml}
     `;
 
-    const onSelect = () => loadRun(item.id);
+    const onSelect = () => loadRun(item.id, { fromHistory: true });
     row.addEventListener('click', onSelect);
     row.addEventListener('keydown', (e) => {
       if (e.key === 'Enter' || e.key === ' ') {
@@ -340,7 +421,7 @@ async function fetchHistory() {
   }
 }
 
-async function loadRun(id) {
+async function loadRun(id, options = {}) {
   if (!id) return;
   selectedHistoryId = id;
   renderHistory();
@@ -370,7 +451,7 @@ async function loadRun(id) {
       return;
     }
     // data shape from API: {run_id, created_at, updated_at, role, overallScore, keywordsToAdd, quickWins, sections}
-    renderResults({
+    const run = {
       run_id: data.run_id,
       created_at: data.created_at,
       updated_at: data.updated_at,
@@ -378,8 +459,15 @@ async function loadRun(id) {
       overallScore: data.overallScore,
       keywordsToAdd: data.keywordsToAdd || [],
       quickWins: data.quickWins || [],
-      sections: data.sections || {}
-    });
+      sections: data.sections || {},
+      loadedFromHistory: Boolean(options.fromHistory),
+      originalInputs: options.originalInputs || {}
+    };
+    renderResults(run);
+    if (options.fromHistory) {
+      showToast('Loaded from history — no new credits used.');
+    }
+    await fetchHistory();
   } catch (e) {
     console.warn('[LINKEDIN] load run failed', e);
     // Only show error if this is still the selected item
@@ -508,7 +596,16 @@ async function analyze() {
       sections: data.sections || {}
     };
 
+    run.deduped = Boolean(data?.deduped);
+    run.originalInputs = {
+      headline: payload.headline,
+      summary: payload.summary,
+      experience: payload.experience,
+      skills: payload.skills,
+      recommendations: payload.recommendations
+    };
     renderResults(run);
+    showToast('LinkedIn optimization ready. Scroll down to review each section.');
     await fetchHistory();
   } catch (e) {
     console.error('[LINKEDIN] analyze failed', e);
@@ -535,12 +632,14 @@ async function regenerate(section) {
   if (regenBusy.has(section)) return;
   // Capture run_id at click time to prevent new analysis from changing which run gets regenerated
   const baseRunId = currentRun.run_id;
+  regenCounts.set(section, (regenCounts.get(section) || 0) + 1);
   regenBusy.add(section);
   renderSections(currentRun.sections || {});
 
   // Enqueue so each regen uses the latest currentRun (which may have been updated by a prior regen).
   // Note: baseRunId is captured before enqueueing to ensure we regenerate the run the user clicked on,
   // not a different run that may have become currentRun if a new analysis completed in the meantime.
+  let regenCompleted = false;
   regenQueue = regenQueue.then(async () => {
     try {
       if (!baseRunId) throw new Error('missing_run');
@@ -555,8 +654,8 @@ async function regenerate(section) {
       });
 
       if (resp?.run_id) {
-        await loadRun(resp.run_id);
-        await fetchHistory();
+        await loadRun(resp.run_id, { originalInputs: currentRun.originalInputs });
+        regenCompleted = true;
       }
     } catch (e) {
       console.warn('[LINKEDIN] regenerate failed', e);
@@ -569,6 +668,9 @@ async function regenerate(section) {
 
   // Wait for this regen (and any earlier queued ones) to finish.
   await regenQueue;
+  if (regenCompleted) {
+    showToast('New version ready — review and copy if you prefer it.');
+  }
 }
 
 async function copyOptimized(section) {
@@ -611,9 +713,12 @@ function buildPrintHtml(run) {
     <div class="lo-container">
       <section class="lo-card">
         <div style="display:flex; align-items:center; justify-content:space-between; gap:1rem; flex-wrap:wrap;">
-          <div>
-            <div style="font-size:1.4rem; font-weight:800; color:var(--color-text-main);">JobHackAI — LinkedIn Optimizer</div>
-            <div style="margin-top:.25rem; color:var(--color-text-secondary);">Role: ${escapeHtml(run.role || '')} • Date: ${escapeHtml(date)}</div>
+          <div style="display:flex; align-items:center; gap:0.75rem;">
+            <img src="assets/Offical-JobHackAI-Logo.svg" alt="JobHackAI logo" style="height:32px; width:auto;">
+            <div>
+              <div style="font-size:1.4rem; font-weight:800; color:var(--color-text-main);">JobHackAI — LinkedIn Optimizer</div>
+              <div style="margin-top:.25rem; color:var(--color-text-secondary);">Role: ${escapeHtml(run.role || '')} • Date: ${escapeHtml(date)}</div>
+            </div>
           </div>
           <div style="font-size:1.1rem; font-weight:700; color:var(--color-text-main);">Overall Score: ${escapeHtml(Math.round(Number(run.overallScore || 0)))} / 100</div>
         </div>
@@ -740,6 +845,7 @@ async function init() {
   els.scoreText = $('#lo-score-text');
   els.scoreRing = $('#lo-score-ring');
   els.meta = $('#lo-score-meta');
+  els.planPill = $('#lo-plan-pill');
   els.quickWins = $('#lo-quickwins');
   els.keywords = $('#lo-keywords');
   els.sections = $('#lo-sections');
@@ -762,6 +868,7 @@ async function init() {
     }
 
     setLockedView('none');
+    setPlanPill(plan);
     if (unlockedInitialized) return;
     unlockedInitialized = true;
 

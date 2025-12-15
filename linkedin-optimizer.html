@@ -53,8 +53,8 @@
 
   <!-- page content -->
   <main class="lo-main">
-    <div class="lo-container">
-      <!-- Locked states (no redirects) -->
+      <div class="lo-container">
+        <!-- Locked states (no redirects) -->
       <div id="lo-locked" class="lo-locked">
         <section id="lo-login" class="lo-card lo-login-card" hidden>
           <div class="lo-card-title">Login Required</div>
@@ -83,12 +83,14 @@
         <!-- LEFT: Inputs + Results -->
         <div class="lo-left">
           <section class="lo-card" aria-labelledby="lo-form-title">
-            <div class="lo-card-title-row">
-              <h1 class="lo-card-title" id="lo-form-title">LinkedIn Optimizer</h1>
-              <span class="lo-plan-pill lo-plan-pill--premium">Premium</span>
-            </div>
-            <div class="lo-card-subtitle">
-              Section-by-section LinkedIn review with scoring, keywords, and paste-ready rewrites.
+            <div class="lo-card-header">
+              <div class="lo-card-title-row">
+                <h1 class="lo-card-main-title" id="lo-form-title">LinkedIn Optimizer</h1>
+                <span class="lo-plan-pill" id="lo-plan-pill">Premium</span>
+              </div>
+              <p class="lo-card-subtitle">
+                Section-by-section LinkedIn review with scoring, keywords, and paste-ready rewrites.
+              </p>
             </div>
 
             <form id="lo-form" autocomplete="off">
@@ -200,7 +202,7 @@
               </svg>
             </button>
           </div>
-          <div class="lo-history-subtitle history-subtitle">Last 10 optimizations</div>
+          <div class="lo-history-subtitle history-subtitle">Last 10 optimizations • Auto-saved</div>
           <div id="lo-history-empty" class="lo-history-subtitle" hidden>No history yet. Run your first optimization.</div>
           <div class="history-list lo-history-list" id="lo-history-list"></div>
           <div class="lo-retention">
