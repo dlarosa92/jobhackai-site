@@ -341,6 +341,17 @@ function renderSections(sections, originalInputsOverride) {
 }
 
 function renderResults(run) {
+  console.info('[LINKEDIN DEBUG] renderResults payload', {
+    runId: run?.run_id,
+    sectionsKeys: run?.sections ? Object.keys(run.sections) : null,
+    sectionSamples: run?.sections
+      ? Object.fromEntries(
+          Object.entries(run.sections)
+            .slice(0, 3)
+            .map(([k, v]) => [k, { score: v?.score, optimizedText: String(v?.optimizedText || '').slice(0, 80) }])
+        )
+      : null
+  });
   const prevRunId = currentRun?.run_id;
   currentRun = run;
   if (prevRunId !== run?.run_id) {
@@ -576,6 +587,17 @@ async function analyze() {
     let data;
     try {
       data = await apiFetch('/api/linkedin/analyze', { method: 'POST', body: JSON.stringify(req) });
+      console.info('[LINKEDIN DEBUG] analyze API response', {
+        overallScore: data?.overallScore,
+        sectionsKeys: data?.sections ? Object.keys(data.sections) : null,
+        sectionsSample: data?.sections
+          ? Object.fromEntries(
+              Object.entries(data.sections)
+                .slice(0, 3)
+                .map(([k, v]) => [k, { score: v?.score, optimizedText: String(v?.optimizedText || '').slice(0, 80) }])
+            )
+          : null
+      });
     } catch (e) {
       if (e?.status === 403 && e?.data?.error === 'premium_required') {
         setLockedView('upgrade');
