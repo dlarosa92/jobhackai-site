@@ -407,7 +407,7 @@ export async function onRequest(context) {
           temperature: Number.isFinite(Number(env.OPENAI_TEMPERATURE_LINKEDIN_ANALYZE))
             ? Number(env.OPENAI_TEMPERATURE_LINKEDIN_ANALYZE)
             : 0.2,
-          systemPrompt: 'linkedin_optimizer_analyze_v1',
+          systemPrompt: 'linkedin_optimizer_analyze_v2', // Bumped to v2 to invalidate old cached responses with incompatible schema
           userId: uid,
           feature: 'linkedin_optimizer_analyze'
         },
@@ -427,6 +427,45 @@ export async function onRequest(context) {
     }
 
     const output = safeJsonParse(aiResult?.content);
+    
+    // Detailed validation logging to diagnose schema mismatches
+    if (!validateAnalyzeOutput(output)) {
+      console.error('[LINKEDIN ANALYZE] Validation failed - inspecting response structure:', {
+        hasOutput: !!output,
+        outputType: typeof output,
+        outputKeys: output ? Object.keys(output) : null,
+        // Check each validation requirement
+        hasOverallScore: output?.overallScore !== undefined,
+        overallScoreType: typeof output?.overallScore,
+        overallScoreValue: output?.overallScore,
+        hasKeywordsToAdd: Array.isArray(output?.keywordsToAdd),
+        keywordsToAddType: typeof output?.keywordsToAdd,
+        keywordsToAddLength: Array.isArray(output?.keywordsToAdd) ? output.keywordsToAdd.length : null,
+        hasQuickWins: Array.isArray(output?.quickWins),
+        quickWinsType: typeof output?.quickWins,
+        quickWinsLength: Array.isArray(output?.quickWins) ? output.quickWins.length : null,
+        hasSections: !!output?.sections,
+        sectionsType: typeof output?.sections,
+        sectionsKeys: output?.sections ? Object.keys(output.sections) : null,
+        // Check each required section
+        headlineValid: output?.sections?.headline ? {
+          isObject: typeof output.sections.headline === 'object',
+          hasScore: typeof output.sections.headline.score === 'number',
+          scoreValue: output.sections.headline.score,
+          hasLabel: typeof output.sections.headline.label === 'string',
+          hasFeedbackBullets: Array.isArray(output.sections.headline.feedbackBullets),
+          hasOptimizedText: typeof output.sections.headline.optimizedText === 'string'
+        } : 'missing',
+        // Raw content preview for debugging
+        rawContentPreview: aiResult?.content?.substring(0, 1000),
+        contentLength: aiResult?.content?.length,
+        finishReason: aiResult?.finishReason,
+        model: aiResult?.model,
+        userId: uid,
+        runId: runId
+      });
+    }
+    
     if (!validateAnalyzeOutput(output)) {
       const msg = 'invalid_ai_json';
       await db
