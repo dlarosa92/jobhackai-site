@@ -581,13 +581,18 @@
       gap: 12px;
       justify-content: space-between;
       align-items: center;
-      flex-wrap: wrap;
+      flex-wrap: nowrap;
+    }
+    .rf-history-manage-actions__select {
+      display: flex;
+      align-items: center;
     }
     .rf-history-manage-actions__actions {
       display: flex;
       gap: 10px;
       align-items: center;
       flex-wrap: wrap;
+      margin-left: auto;
     }
     .rf-history-panel--manage .rf-history-manage-actions { 
       display: flex;
@@ -6892,7 +6897,9 @@
           </div>
 
             <div class="rf-history-manage-actions" id="rf-history-manage-actions" data-history-manage-controls>
-              <button id="rf-history-select-all" class="rf-history-link-btn" type="button">Select all</button>
+              <div class="rf-history-manage-actions__select">
+                <button id="rf-history-select-all" class="rf-history-link-btn" type="button">Select all</button>
+              </div>
               <div class="rf-history-manage-actions__actions">
                 <button id="rf-history-delete-selected" class="rf-history-danger-btn" type="button" disabled>Delete selected</button>
                 <button id="rf-history-cancel-manage" class="rf-history-neutral-btn" type="button">Cancel</button>
