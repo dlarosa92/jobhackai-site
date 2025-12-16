@@ -206,6 +206,8 @@ function resetForm() {
   // Cancel any in-flight analysis by clearing the analysis ID
   // This prevents stale analyze() responses from rendering results after reset
   currentAnalysisId = null;
+  // Reset analyzing flag to allow new analysis to start immediately
+  isAnalyzing = false;
   
   // Re-render history to remove active state
   renderHistory();
