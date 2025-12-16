@@ -126,6 +126,7 @@ const els = {
   skills: null,
   recommendations: null,
   btnAnalyze: null,
+  btnStartFresh: null,
   loading: null,
   results: null,
   scoreText: null,
@@ -184,6 +185,35 @@ function setResultsVisible(on) {
     return;
   }
   els.results.style.display = on ? 'block' : 'none';
+}
+
+function resetForm() {
+  // Clear all form fields
+  if (els.role) els.role.value = '';
+  if (els.headline) els.headline.value = '';
+  if (els.summary) els.summary.value = '';
+  if (els.experience) els.experience.value = '';
+  if (els.skills) els.skills.value = '';
+  if (els.recommendations) els.recommendations.value = '';
+  
+  // Hide results
+  setResultsVisible(false);
+  
+  // Clear state
+  currentRun = null;
+  selectedHistoryId = null;
+  
+  // Re-render history to remove active state
+  renderHistory();
+  
+  // Clear any loading state
+  setLoading(false);
+  
+  // Reset score ring to 0
+  setScoreRing(0);
+  
+  // Focus on role field for better UX
+  els.role?.focus();
 }
 
 function setScoreRing(score) {
@@ -872,6 +902,11 @@ function bindEvents() {
     analyze();
   });
 
+  els.btnStartFresh?.addEventListener('click', (e) => {
+    e.preventDefault();
+    resetForm();
+  });
+
   els.keywords?.addEventListener('click', (e) => {
     const chip = e.target.closest('[data-keyword]');
     if (!chip) return;
@@ -923,6 +958,7 @@ async function init() {
   els.skills = $('#lo-skills');
   els.recommendations = $('#lo-recommendations');
   els.btnAnalyze = $('#lo-analyze');
+  els.btnStartFresh = $('#lo-start-fresh');
   els.loading = $('#lo-loading');
   els.results = $('#lo-results');
   els.scoreText = $('#lo-score-text');
