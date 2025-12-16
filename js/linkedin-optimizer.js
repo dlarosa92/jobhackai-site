@@ -267,26 +267,29 @@ function sectionTitle(key) {
   return key;
 }
 
-function updateSummaryText(details, summary) {
-  if (details.open) {
-    summary.textContent = 'Hide optimized';
+function updateSummaryText(button, isVisible) {
+  if (isVisible) {
+    button.textContent = 'Hide optimized';
   } else {
-    summary.textContent = 'View optimized (Before & After)';
+    button.textContent = 'View optimized (Before & After)';
   }
 }
 
 function attachDetailsListeners() {
-  const detailsElements = document.querySelectorAll('.lo-details');
-  detailsElements.forEach(details => {
-    const summary = details.querySelector('summary');
-    if (!summary) return;
+  const toggleButtons = document.querySelectorAll('[data-action="toggle-optimized"]');
+  toggleButtons.forEach(button => {
+    const section = button.dataset.section;
+    const content = document.querySelector(`[data-optimized-content="${section}"]`);
+    if (!content) return;
     
-    // Set initial text based on open state
-    updateSummaryText(details, summary);
+    // Set initial text based on visibility
+    const isVisible = !content.hidden;
+    updateSummaryText(button, isVisible);
     
-    // Update text when toggled
-    details.addEventListener('toggle', () => {
-      updateSummaryText(details, summary);
+    // Toggle visibility and update text
+    button.addEventListener('click', () => {
+      content.hidden = !content.hidden;
+      updateSummaryText(button, !content.hidden);
     });
   });
 }
@@ -337,27 +340,28 @@ function renderSections(sections, originalInputsOverride) {
             ${bullets.map((b) => `<li>${escapeHtml(b)}</li>`).join('')}
           </ul>
 
-          <details class="lo-details">
-            <summary>View optimized (Before & After)</summary>
-            <div class="lo-details-body">
-              <div class="lo-before-after">
-                ${beforeBlock}
-                <div>
-                  <div class="lo-before-after-label">After (paste-ready)</div>
-                  <div class="lo-after-text" id="lo-optimized-${k}">${escapeHtml(optimized)}</div>
-                </div>
+          <div class="lo-optimized-content" data-optimized-content="${k}" hidden>
+            <div class="lo-before-after">
+              ${beforeBlock}
+              <div>
+                <div class="lo-before-after-label">After (paste-ready)</div>
+                <div class="lo-after-text" id="lo-optimized-${k}">${escapeHtml(optimized)}</div>
               </div>
-              <div class="lo-section-actions">
-                <button class="btn-outline" type="button" data-action="copy" data-section="${k}" data-copy-target="lo-optimized-${k}">
-                  Copy Optimized
-                </button>
-                <button class="btn-outline ${busy ? 'lo-btn-loading' : ''}" type="button" data-action="regen" data-section="${k}">
-                  ${busy ? 'Regenerating…' : 'Regenerate'}
-                </button>
-              </div>
-              ${showTip ? '<div class="lo-section-tip">Tip: For a bigger change, tweak the original text above and regenerate.</div>' : ''}
             </div>
-          </details>
+          </div>
+          
+          <div class="lo-section-actions">
+            <button class="btn-outline" type="button" data-action="toggle-optimized" data-section="${k}">
+              View optimized (Before & After)
+            </button>
+            <button class="btn-outline" type="button" data-action="copy" data-section="${k}" data-copy-target="lo-optimized-${k}">
+              Copy Optimized
+            </button>
+            <button class="btn-outline ${busy ? 'lo-btn-loading' : ''}" type="button" data-action="regen" data-section="${k}">
+              ${busy ? 'Regenerating…' : 'Regenerate'}
+            </button>
+          </div>
+          ${showTip ? '<div class="lo-section-tip">Tip: For a bigger change, tweak the original text above and regenerate.</div>' : ''}
         </section>
       `;
     })
@@ -878,12 +882,18 @@ function bindEvents() {
     const btn = e.target.closest('button[data-action]');
     if (!btn) return;
     
-    // Prevent event from bubbling to details element and stop default behavior
+    const action = btn.dataset.action;
+    const section = btn.dataset.section;
+    
+    // Don't prevent default for toggle-optimized, let attachDetailsListeners handle it
+    if (action === 'toggle-optimized') {
+      // Handled by attachDetailsListeners
+      return;
+    }
+    
     e.preventDefault();
     e.stopPropagation();
     
-    const action = btn.dataset.action;
-    const section = btn.dataset.section;
     if (action === 'copy') return void copyOptimized(section);
     if (action === 'regen') return void regenerate(section);
   });
