@@ -146,6 +146,7 @@ let currentRun = null; // { run_id, created_at, updated_at, role, overallScore, 
 let historyItems = [];
 let selectedHistoryId = null;
 let isAnalyzing = false;
+let currentAnalysisId = null; // Unique ID for in-flight analysis, used to guard against stale responses
 const regenBusy = new Set(); // section keys
 const regenCounts = new Map();
 // Serialize regenerations across sections to avoid branching from the same base run_id
@@ -202,6 +203,9 @@ function resetForm() {
   // Clear state
   currentRun = null;
   selectedHistoryId = null;
+  // Cancel any in-flight analysis by clearing the analysis ID
+  // This prevents stale analyze() responses from rendering results after reset
+  currentAnalysisId = null;
   
   // Re-render history to remove active state
   renderHistory();
@@ -631,6 +635,10 @@ async function analyze() {
   }
 
   isAnalyzing = true;
+  // Generate unique ID for this analysis to guard against stale responses
+  // (e.g., if user clicks "Start Fresh" while this analysis is in flight)
+  const analysisId = crypto.randomUUID();
+  currentAnalysisId = analysisId;
   setResultsVisible(false);
   setLoading(true, 'Analyzing your profile…');
 
@@ -648,6 +656,11 @@ async function analyze() {
     let data;
     try {
       data = await apiFetch('/api/linkedin/analyze', { method: 'POST', body: JSON.stringify(req) });
+      // Verify this analysis is still current after async fetch (prevents race condition from "Start Fresh")
+      if (currentAnalysisId !== analysisId) {
+        // User clicked "Start Fresh" while this request was in flight, ignore this response
+        return;
+      }
       console.info('[LINKEDIN DEBUG] analyze API response', {
         overallScore: data?.overallScore,
         sectionsKeys: data?.sections ? Object.keys(data.sections) : null,
@@ -660,6 +673,11 @@ async function analyze() {
           : null
       });
     } catch (e) {
+      // Verify this analysis is still current before handling errors
+      if (currentAnalysisId !== analysisId) {
+        // User clicked "Start Fresh" while this request was in flight, ignore this error
+        return;
+      }
       if (e?.status === 403 && e?.data?.error === 'premium_required') {
         setLockedView('upgrade');
         return;
@@ -670,6 +688,17 @@ async function analyze() {
     if (data?.status === 'processing' && data?.run_id) {
       setLoading(true, 'Finishing up…');
       data = await pollRunUntilReady(data.run_id);
+      // Verify this analysis is still current after polling (prevents race condition from "Start Fresh")
+      if (currentAnalysisId !== analysisId) {
+        // User clicked "Start Fresh" while this request was in flight, ignore this response
+        return;
+      }
+    }
+
+    // Verify this analysis is still current before rendering (double-check after all async operations)
+    if (currentAnalysisId !== analysisId) {
+      // User clicked "Start Fresh" while this request was in flight, ignore this response
+      return;
     }
 
     // Validate that we have the required data before rendering
@@ -700,22 +729,31 @@ async function analyze() {
     showToast('LinkedIn optimization ready. Scroll down to review each section.');
     await fetchHistory();
   } catch (e) {
-    console.error('[LINKEDIN] analyze failed', e);
-    const code = e?.data?.error || e?.message || 'server_error';
-    if (e?.status === 403 && code === 'premium_required') {
-      setLockedView('upgrade');
-    } else if ((e?.status === 401 && code === 'unauthorized') || e?.message === 'not_authenticated') {
-      setLockedView('login');
-    } else if (code === 'timeout') {
-      alert('The analysis timed out. Please try again.');
-    } else if (code === 'Incomplete data received from server') {
-      alert('Received incomplete data from the server. Please try again.');
-    } else {
-      alert('Could not analyze your profile. Please try again.');
+    // Only show error if this analysis is still current (don't show errors for cancelled analyses)
+    if (currentAnalysisId === analysisId) {
+      console.error('[LINKEDIN] analyze failed', e);
+      const code = e?.data?.error || e?.message || 'server_error';
+      if (e?.status === 403 && code === 'premium_required') {
+        setLockedView('upgrade');
+      } else if ((e?.status === 401 && code === 'unauthorized') || e?.message === 'not_authenticated') {
+        setLockedView('login');
+      } else if (code === 'timeout') {
+        alert('The analysis timed out. Please try again.');
+      } else if (code === 'Incomplete data received from server') {
+        alert('Received incomplete data from the server. Please try again.');
+      } else {
+        alert('Could not analyze your profile. Please try again.');
+      }
     }
   } finally {
-    isAnalyzing = false;
-    setLoading(false);
+    // Only clear loading state if this analysis is still current
+    if (currentAnalysisId === analysisId) {
+      isAnalyzing = false;
+      setLoading(false);
+    } else {
+      // Analysis was cancelled, ensure isAnalyzing is false anyway
+      isAnalyzing = false;
+    }
   }
 }
 
