@@ -267,6 +267,30 @@ function sectionTitle(key) {
   return key;
 }
 
+function updateSummaryText(details, summary) {
+  if (details.open) {
+    summary.textContent = 'Hide optimized';
+  } else {
+    summary.textContent = 'View optimized (Before & After)';
+  }
+}
+
+function attachDetailsListeners() {
+  const detailsElements = document.querySelectorAll('.lo-details');
+  detailsElements.forEach(details => {
+    const summary = details.querySelector('summary');
+    if (!summary) return;
+    
+    // Set initial text based on open state
+    updateSummaryText(details, summary);
+    
+    // Update text when toggled
+    details.addEventListener('toggle', () => {
+      updateSummaryText(details, summary);
+    });
+  });
+}
+
 function renderSections(sections, originalInputsOverride) {
   if (!els.sections) return;
   const keys = ['headline', 'summary', 'experience', 'skills', 'recommendations'];
@@ -338,6 +362,9 @@ function renderSections(sections, originalInputsOverride) {
       `;
     })
     .join('');
+  
+  // Attach listeners after rendering
+  attachDetailsListeners();
 }
 
 function renderResults(run) {
