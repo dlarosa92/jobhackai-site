@@ -6410,6 +6410,8 @@
             // Standard error state (also provides retry)
           const failureMessage = 'Some selected entries could not be deleted. History refreshed to reflect the current state.';
           await fetchResumeFeedbackHistory().catch(() => {});
+          _historySelectedIds.clear();
+          syncBulkDeleteState();
           setHistoryErrorVisible(true, failureMessage);
           } finally {
             modalConfirm.disabled = false;
