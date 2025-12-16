@@ -591,7 +591,7 @@
     }
     .rf-history-panel--manage .rf-history-manage-actions { 
       display: flex;
-      justify-content: space-between;
+      justify-content: flex-end;
       align-items: center;
     }
     .rf-history-panel--manage .rf-history-row-actions { display: none; }
@@ -6377,17 +6377,6 @@
         });
       }
 
-      const selectAllBtn = document.getElementById('rf-history-select-all');
-      if (selectAllBtn) {
-        selectAllBtn.addEventListener('click', function(e) {
-          e.preventDefault();
-          const ids = getVisibleHistoryIds();
-          ids.forEach((id) => _historySelectedIds.add(id));
-          syncBulkDeleteState();
-          renderHistoryItems(_historyItems);
-        });
-      }
-
       const deleteSelectedBtn = document.getElementById('rf-history-delete-selected');
       if (deleteSelectedBtn) {
         deleteSelectedBtn.addEventListener('click', function(e) {
@@ -6892,7 +6881,6 @@
           </div>
 
             <div class="rf-history-manage-actions" id="rf-history-manage-actions" data-history-manage-controls>
-              <button id="rf-history-select-all" class="rf-history-link-btn" type="button">Select all</button>
               <div class="rf-history-manage-actions__actions">
                 <button id="rf-history-delete-selected" class="rf-history-danger-btn" type="button" disabled>Delete selected</button>
                 <button id="rf-history-cancel-manage" class="rf-history-neutral-btn" type="button">Cancel</button>
