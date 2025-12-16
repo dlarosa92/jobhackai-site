@@ -748,13 +748,16 @@ async function analyze() {
       }
     }
   } finally {
-    // Only clear loading state if this analysis is still current
+    // Only clear loading state and isAnalyzing if this analysis is still current
     if (currentAnalysisId === analysisId) {
       isAnalyzing = false;
       setLoading(false);
     } else {
-      // Analysis was cancelled, ensure isAnalyzing is false anyway
-      isAnalyzing = false;
+      // Analysis was cancelled (user clicked "Start Fresh" or started new analysis)
+      // Don't modify isAnalyzing or loading state here:
+      // - If cancelled via resetForm(), it already set isAnalyzing = false and setLoading(false)
+      // - If new analysis started, isAnalyzing should remain true and loading should remain visible
+      // Do nothing - let the current analysis (or resetForm) manage the state
     }
   }
 }
