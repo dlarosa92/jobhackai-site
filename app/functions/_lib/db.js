@@ -365,6 +365,62 @@ export async function getFeedbackSessionById(env, sessionId, userId) {
 }
 
 /**
+ * Delete a resume feedback session by ID (with ownership check)
+ * Cascades to delete related feedback_sessions (via FK) and optionally removes KV data
+ * @param {Object} env - Cloudflare environment with DB binding
+ * @param {number} sessionId - Resume session ID
+ * @param {number} userId - User ID (required for security - ownership check)
+ * @returns {Promise<boolean>} True if deleted, false if not found/unauthorized
+ */
+export async function deleteResumeFeedbackSession(env, sessionId, userId) {
+  if (!env.DB) {
+    console.warn('[DB] D1 binding not available');
+    return false;
+  }
+
+  if (!userId || typeof userId !== 'number') {
+    console.warn('[DB] userId is required for deleteResumeFeedbackSession');
+    return false;
+  }
+
+  try {
+    const session = await env.DB.prepare(`
+      SELECT id, user_id, raw_text_location
+      FROM resume_sessions
+      WHERE id = ? AND user_id = ?
+    `).bind(sessionId, userId).first();
+
+    if (!session) {
+      return false;
+    }
+
+    const result = await env.DB.prepare(`
+      DELETE FROM resume_sessions
+      WHERE id = ? AND user_id = ?
+    `).bind(sessionId, userId).run();
+
+    if ((result.meta?.rows_written || 0) === 0) {
+      return false;
+    }
+
+    if (session.raw_text_location && env.JOBHACKAI_KV) {
+      try {
+        await env.JOBHACKAI_KV.delete(session.raw_text_location);
+        console.log('[DB] Deleted KV entry:', session.raw_text_location);
+      } catch (kvError) {
+        console.warn('[DB] Failed to delete KV entry (non-fatal):', kvError);
+      }
+    }
+
+    console.log('[DB] Deleted resume session:', { sessionId, userId });
+    return true;
+  } catch (error) {
+    console.error('[DB] Error in deleteResumeFeedbackSession:', error);
+    return false;
+  }
+}
+
+/**
  * Update resume session with ATS score
  * Called after feedback is generated to cache the score
  * @param {Object} env - Cloudflare environment with DB binding

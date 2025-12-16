@@ -9,7 +9,12 @@
 
 import { getBearer, verifyFirebaseIdToken } from '../../../_lib/firebase-auth.js';
 import { errorResponse, successResponse, generateRequestId } from '../../../_lib/error-handler.js';
-import { getOrCreateUserByAuthId, getFeedbackSessionById, isD1Available } from '../../../_lib/db.js';
+import {
+  getOrCreateUserByAuthId,
+  getFeedbackSessionById,
+  isD1Available,
+  deleteResumeFeedbackSession
+} from '../../../_lib/db.js';
 
 function corsHeaders(origin, env) {
   const allowedOrigins = [
@@ -24,7 +29,7 @@ function corsHeaders(origin, env) {
   
   return {
     'Access-Control-Allow-Origin': allowedOrigin,
-    'Access-Control-Allow-Methods': 'GET, OPTIONS',
+    'Access-Control-Allow-Methods': 'GET, DELETE, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     'Access-Control-Max-Age': '86400',
     'Vary': 'Origin'
@@ -56,7 +61,7 @@ export async function onRequest(context) {
   }
 
   // Only allow GET
-  if (request.method !== 'GET') {
+  if (request.method !== 'GET' && request.method !== 'DELETE') {
     return errorResponse('Method not allowed', 405, origin, env, requestId);
   }
 
@@ -103,6 +108,30 @@ export async function onRequest(context) {
     if (!d1User) {
       console.warn('[RESUME-FEEDBACK-HISTORY-DETAIL] Failed to resolve user');
       return errorResponse('User not found', 404, origin, env, requestId);
+    }
+
+    if (request.method === 'DELETE') {
+      const deleted = await deleteResumeFeedbackSession(env, sessionIdNum, d1User.id);
+      if (!deleted) {
+        console.warn('[RESUME-FEEDBACK-HISTORY-DELETE] Session not found or not authorized:', { 
+          requestId, 
+          sessionId: sessionIdNum, 
+          userId: d1User.id 
+        });
+        return errorResponse('Session not found', 404, origin, env, requestId);
+      }
+
+      console.log('[RESUME-FEEDBACK-HISTORY-DELETE] Deleted session:', { 
+        requestId, 
+        sessionId: sessionIdNum,
+        userId: d1User.id
+      });
+
+      return successResponse({
+        success: true,
+        sessionId: sessionIdNum,
+        message: 'Session deleted successfully'
+      }, 200, origin, env, requestId);
     }
 
     // Fetch the full feedback session (ownership enforced in SQL)
