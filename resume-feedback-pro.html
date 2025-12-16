@@ -5368,6 +5368,10 @@
 
     function openDeleteModalFor(ids) {
       const unique = Array.from(new Set((ids || []).map(String).filter(Boolean)));
+      if (!unique.length) {
+        _historyPendingDeleteIds = [];
+        return;
+      }
       _historyPendingDeleteIds = unique;
 
       const backdrop = document.getElementById('rf-history-modal-backdrop');
@@ -6357,9 +6361,11 @@
       if (clearBtn) {
         clearBtn.addEventListener('click', function(e) {
           e.preventDefault();
-          // Requirement: enter Manage mode, select all visible, open modal immediately.
-          if (!_historyManageMode) setHistoryManageMode(true);
           const ids = getVisibleHistoryIds();
+          if (!ids.length) {
+            return;
+          }
+          if (!_historyManageMode) setHistoryManageMode(true);
           _historySelectedIds = new Set(ids);
           syncBulkDeleteState();
           renderHistoryItems(_historyItems);
