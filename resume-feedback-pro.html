@@ -5343,9 +5343,17 @@
       loadingEl.classList.toggle('is-visible', !!isLoading);
     }
 
-    function setHistoryErrorVisible(isVisible) {
+    function setHistoryErrorVisible(isVisible, message) {
       const errEl = document.getElementById('rf-history-error');
       if (!errEl) return;
+      const textEl = errEl.querySelector('span[data-default-message]') || errEl.querySelector('span');
+      if (textEl) {
+        if (message) {
+          textEl.textContent = message;
+        } else if (textEl.dataset.defaultMessage) {
+          textEl.textContent = textEl.dataset.defaultMessage;
+        }
+      }
       errEl.hidden = !isVisible;
     }
 
@@ -6384,17 +6392,19 @@
           // Keep Manage mode; destructive action only after confirm.
           modalConfirm.disabled = true;
           try {
-            await deleteResumeFeedbackHistoryItems(ids);
-            // Clear selection + close modal, then refresh
-            ids.forEach((id) => _historySelectedIds.delete(id));
-            syncBulkDeleteState();
-            closeDeleteModal();
-            await fetchResumeFeedbackHistory();
+          await deleteResumeFeedbackHistoryItems(ids);
+          // Clear selection + close modal, then refresh
+          ids.forEach((id) => _historySelectedIds.delete(id));
+          syncBulkDeleteState();
+          closeDeleteModal();
+          await fetchResumeFeedbackHistory();
           } catch (err) {
             console.warn('[RESUME-FEEDBACK-HISTORY] Delete failed:', err);
             closeDeleteModal();
             // Standard error state (also provides retry)
-            setHistoryErrorVisible(true);
+          const failureMessage = 'Some selected entries could not be deleted. History refreshed to reflect the current state.';
+          await fetchResumeFeedbackHistory().catch(() => {});
+          setHistoryErrorVisible(true, failureMessage);
           } finally {
             modalConfirm.disabled = false;
           }
@@ -6870,7 +6880,7 @@
             </div>
 
             <div class="rf-history-error" id="rf-history-error" data-history-error hidden>
-              <span>Couldn’t load history. </span>
+            <span data-default-message="Couldn’t load history.">Couldn’t load history. </span>
               <button id="rf-history-retry" class="rf-history-link-btn" type="button">Retry.</button>
             </div>
 
