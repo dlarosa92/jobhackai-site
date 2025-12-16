@@ -353,9 +353,18 @@
 .lo-details > summary {
   cursor: pointer;
   padding: 0.65rem 0.85rem;
-  font-weight: var(--font-weight-semibold);
-  color: var(--color-text-main);
+  font-weight: 600;
+  color: #1976D2 !important;
   list-style: none;
+  border: 1.5px solid #1976D2;
+  border-radius: var(--radius-md);
+  background: #fff;
+  transition: background 0.18s, color 0.18s, border-color 0.18s;
+}
+
+.lo-details > summary:hover {
+  background: rgba(25, 118, 210, 0.04);
+  border-color: #125bb5;
 }
 
 .lo-details > summary::-webkit-details-marker {
