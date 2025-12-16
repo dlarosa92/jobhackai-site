@@ -374,13 +374,11 @@ export async function getFeedbackSessionById(env, sessionId, userId) {
  */
 export async function deleteResumeFeedbackSession(env, sessionId, userId) {
   if (!env.DB) {
-    console.warn('[DB] D1 binding not available');
-    return false;
+    throw new Error('[DB] D1 binding not available');
   }
 
   if (!userId || typeof userId !== 'number') {
-    console.warn('[DB] userId is required for deleteResumeFeedbackSession');
-    return false;
+    throw new Error('userId is required for deleteResumeFeedbackSession');
   }
 
   try {
@@ -423,7 +421,7 @@ export async function deleteResumeFeedbackSession(env, sessionId, userId) {
     return true;
   } catch (error) {
     console.error('[DB] Error in deleteResumeFeedbackSession:', error);
-    return false;
+    throw error;
   }
 }
 
