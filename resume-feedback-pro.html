@@ -5300,6 +5300,7 @@
     let _historySelectedIds = new Set();
     let _historyPendingDeleteIds = [];
     let _historyMenuOpenForSessionId = null;
+    let _historyHasError = false;
 
     function getVisibleHistoryItems(items) {
       // UI spec: show last 10
@@ -5355,6 +5356,7 @@
         }
       }
       errEl.hidden = !isVisible;
+      _historyHasError = isVisible;
     }
 
     function closeAllHistoryMenus() {
@@ -5413,12 +5415,21 @@
 
     async function deleteResumeFeedbackHistoryItems(sessionIds) {
       const ids = Array.from(new Set((sessionIds || []).map(String).filter(Boolean)));
-      if (!ids.length) return;
+      if (!ids.length) return { success: [], failures: [] };
       const results = await Promise.allSettled(ids.map((id) => deleteResumeFeedbackHistoryItem(id)));
-      const failed = results.filter((r) => r.status === 'rejected');
-      if (failed.length) {
-        throw failed[0].reason || new Error('Delete failed');
+      const successIds = results
+        .filter((r) => r.status === 'fulfilled')
+        .map((r, index) => ids[index]);
+      const failures = results
+        .map((result, index) => ({ result, id: ids[index] }))
+        .filter(({ result }) => result.status === 'rejected');
+
+      if (successIds.length) {
+        _historyItems = _historyItems.filter(item => !successIds.includes(String(item.sessionId)));
+        renderHistoryItems(_historyItems);
       }
+
+      return { success: successIds, failures };
     }
     
     /**
@@ -5518,7 +5529,7 @@
      * Render history items to the DOM
      */
     function renderHistoryItems(items) {
-      const listEl = document.getElementById('rf-history-list');
+    const listEl = document.getElementById('rf-history-list');
       const emptyEl = document.getElementById('rf-history-empty');
       
       if (!listEl) return;
@@ -5528,7 +5539,9 @@
       
       if (!items || items.length === 0) {
         listEl.innerHTML = '';
-        if (emptyEl) emptyEl.hidden = false;
+        if (emptyEl) {
+          emptyEl.hidden = _historyHasError ? true : false;
+        }
         return;
       }
       
@@ -5536,27 +5549,27 @@
       
       const visibleItems = getVisibleHistoryItems(items);
 
-      listEl.innerHTML = visibleItems.map(item => {
+    listEl.innerHTML = visibleItems.map(item => {
         const sessionId = String(item?.sessionId || '');
         const roleName = String(item?.role || '').trim() || 'Untitled role';
         const when = formatHistoryDate(item?.createdAt) || '—';
 
-        // Prevent null from being coerced into a valid 0 score.
+      // Prevent null from being coerced into a valid 0 score.
         const normalizedScore = item?.atsScore != null && Number.isFinite(Number(item.atsScore))
-          ? Number(item.atsScore)
-          : null;
+        ? Number(item.atsScore)
+        : null;
 
         const isCurrent = !_historyManageMode && _currentHistoricalSessionId && String(_currentHistoricalSessionId) === sessionId;
         const isSelected = isCurrent ? 'is-selected' : '';
         const isChecked = _historySelectedIds.has(sessionId);
 
-        const scoreHtml = normalizedScore !== null
+      const scoreHtml = normalizedScore !== null
           ? `<div class="rf-history-score" aria-label="Score ${Math.round(normalizedScore)}">${Math.round(normalizedScore)}</div>`
-          : '';
+        : '';
 
         const menuHidden = _historyMenuOpenForSessionId !== sessionId;
 
-        return `
+      return `
           <div class="rf-history-item ${isSelected}" data-session-id="${escapeHtml(sessionId)}" tabindex="0" data-history-row>
             <span class="rf-history-checkbox-wrap" aria-hidden="${_historyManageMode ? 'false' : 'true'}">
               <input
@@ -5583,7 +5596,7 @@
               <div class="rf-history-line2">ATS feedback • ${escapeHtml(when)}</div>
             </div>
 
-            ${scoreHtml}
+          ${scoreHtml}
 
             <div class="rf-history-row-actions" aria-label="Row actions">
               <button
@@ -5604,9 +5617,9 @@
                 <button class="rf-history-menu-item rf-history-menu-item--danger" type="button" data-action="delete" data-session-id="${escapeHtml(sessionId)}">Delete</button>
               </div>
             </div>
-          </div>
-        `;
-      }).join('');
+        </div>
+      `;
+    }).join('');
     }
     
     /**
@@ -6231,7 +6244,7 @@
           console.warn('[RESUME-FEEDBACK-HISTORY] API returned error:', response.status);
           _historyItems = [];
           setHistoryLoading(false);
-          setHistoryErrorVisible(true);
+          setHistoryErrorVisible(true, 'Couldn’t load history.');
           renderHistoryItems([]);
           return;
         }
@@ -6246,7 +6259,7 @@
         console.error('[RESUME-FEEDBACK-HISTORY] Error fetching history:', error);
         _historyItems = [];
         setHistoryLoading(false);
-        setHistoryErrorVisible(true);
+        setHistoryErrorVisible(true, 'Couldn’t load history.');
         renderHistoryItems([]);
       }
     }
@@ -6395,24 +6408,29 @@
           e.preventDefault();
           const ids = Array.from(new Set(_historyPendingDeleteIds));
           if (!ids.length) return;
-          // Keep Manage mode; destructive action only after confirm.
           modalConfirm.disabled = true;
           try {
-          await deleteResumeFeedbackHistoryItems(ids);
-          // Clear selection + close modal, then refresh
-          ids.forEach((id) => _historySelectedIds.delete(id));
-          syncBulkDeleteState();
-          closeDeleteModal();
-          await fetchResumeFeedbackHistory();
+            const { failures } = await deleteResumeFeedbackHistoryItems(ids);
+            ids.forEach((id) => _historySelectedIds.delete(id));
+            syncBulkDeleteState();
+            closeDeleteModal();
+            await fetchResumeFeedbackHistory();
+            if (failures.length) {
+              const failureReason = failures[0].result?.reason;
+              const failureMessage = failureReason?.message
+                || 'Some selected entries could not be deleted. History refreshed to reflect the current state.';
+              setHistoryErrorVisible(true, failureMessage);
+            } else {
+              setHistoryErrorVisible(false);
+            }
           } catch (err) {
             console.warn('[RESUME-FEEDBACK-HISTORY] Delete failed:', err);
             closeDeleteModal();
-            // Standard error state (also provides retry)
-          const failureMessage = 'Some selected entries could not be deleted. History refreshed to reflect the current state.';
-          await fetchResumeFeedbackHistory().catch(() => {});
-          _historySelectedIds.clear();
-          syncBulkDeleteState();
-          setHistoryErrorVisible(true, failureMessage);
+            const failureMessage = err?.message || 'Failed to delete selected history.';
+            setHistoryErrorVisible(true, failureMessage);
+            await fetchResumeFeedbackHistory().catch(() => {});
+            _historySelectedIds.clear();
+            syncBulkDeleteState();
           } finally {
             modalConfirm.disabled = false;
           }
@@ -6837,26 +6855,26 @@
             <div class="rf-history-header-actions" data-history-header-actions>
               <button id="rf-history-refresh" class="rf-history-icon-btn" title="Refresh history" aria-label="Refresh history" type="button">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-                  <path d="M23 4v6h-6"/>
-                  <path d="M1 20v-6h6"/>
-                  <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
-                </svg>
-              </button>
+                <path d="M23 4v6h-6"/>
+                <path d="M1 20v-6h6"/>
+                <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
+              </svg>
+            </button>
               <button id="rf-history-manage" class="rf-history-manage-btn" type="button">Manage</button>
-            </div>
+          </div>
 
             <div class="rf-history-manage-actions" id="rf-history-manage-actions" data-history-manage-controls>
               <button id="rf-history-select-all" class="rf-history-link-btn" type="button">Select all</button>
               <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
                 <button id="rf-history-delete-selected" class="rf-history-danger-btn" type="button" disabled>Delete selected</button>
                 <button id="rf-history-cancel-manage" class="rf-history-neutral-btn" type="button">Cancel</button>
-              </div>
-            </div>
           </div>
+            </div>
+            </div>
 
           <div class="rf-history-subtitle" data-history-subtitle>
             Last 10 feedback runs • Auto-saved
-          </div>
+              </div>
 
           <div class="rf-history-body" data-history-body>
             <div class="rf-history-loading" id="rf-history-loading" data-history-loading>
@@ -6865,7 +6883,7 @@
                 <div style="flex:1;min-width:0;">
                   <div class="rf-skeleton rf-history-skeleton-pill"></div>
                   <div class="rf-skeleton rf-history-skeleton-pill sm" style="margin-top:8px;"></div>
-                </div>
+            </div>
                 <div class="rf-skeleton rf-history-skeleton-score"></div>
               </div>
               <div class="rf-history-skeleton-row">
