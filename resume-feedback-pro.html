@@ -6516,10 +6516,17 @@
           loadHistoryDetail(sessionId);
         });
 
+        function isInteractiveKeyTarget(element) {
+          if (!element) return false;
+          const interactiveSelector = 'button, input, textarea, select, a, [role="button"], [role="link"], [contenteditable="true"]';
+          return Boolean(element.closest && element.closest(interactiveSelector));
+        }
+
         listEl.addEventListener('keydown', function(e) {
           const rowEl = e.target.closest('.rf-history-item');
           if (!rowEl) return;
           if (e.key !== 'Enter' && e.key !== ' ') return;
+          if (isInteractiveKeyTarget(e.target)) return;
           e.preventDefault();
           const sessionId = rowEl.dataset.sessionId;
           if (!sessionId) return;
