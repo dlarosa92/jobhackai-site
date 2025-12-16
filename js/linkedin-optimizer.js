@@ -659,8 +659,15 @@ async function analyze() {
 }
 
 async function regenerate(section) {
-  if (!currentRun?.run_id || !section) return;
-  if (regenBusy.has(section)) return;
+  console.log('[LINKEDIN] regenerate called', { section, runId: currentRun?.run_id });
+  if (!currentRun?.run_id || !section) {
+    console.warn('[LINKEDIN] regenerate aborted: missing run_id or section', { runId: currentRun?.run_id, section });
+    return;
+  }
+  if (regenBusy.has(section)) {
+    console.log('[LINKEDIN] regenerate aborted: already in progress', { section });
+    return;
+  }
   // Capture run_id at click time to prevent new analysis from changing which run gets regenerated
   const baseRunId = currentRun.run_id;
   // Also capture the original inputs at click time so "Before" text remains consistent
@@ -843,6 +850,11 @@ function bindEvents() {
   els.sections?.addEventListener('click', (e) => {
     const btn = e.target.closest('button[data-action]');
     if (!btn) return;
+    
+    // Prevent event from bubbling to details element and stop default behavior
+    e.preventDefault();
+    e.stopPropagation();
+    
     const action = btn.dataset.action;
     const section = btn.dataset.section;
     if (action === 'copy') return void copyOptimized(section);
