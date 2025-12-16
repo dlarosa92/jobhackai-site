@@ -152,6 +152,7 @@ const regenCounts = new Map();
 // Serialize regenerations across sections to avoid branching from the same base run_id
 // and overwriting each other's changes when responses return out of order.
 let regenQueue = Promise.resolve();
+let currentRegenRunId = null; // Run ID for in-flight regeneration, used to guard against stale regeneration responses
 let unlockedInitialized = false;
 
 function setLockedView(kind) {
@@ -208,6 +209,13 @@ function resetForm() {
   currentAnalysisId = null;
   // Reset analyzing flag to allow new analysis to start immediately
   isAnalyzing = false;
+  
+  // Cancel any in-flight regenerations
+  // Clear regeneration tracking to prevent stale regeneration responses from reappearing
+  regenBusy.clear();
+  currentRegenRunId = null;
+  // Reset regenQueue to a fresh promise to cancel any queued regenerations
+  regenQueue = Promise.resolve();
   
   // Re-render history to remove active state
   renderHistory();
@@ -520,6 +528,12 @@ async function loadRun(id, options = {}) {
       // User clicked a different item while this request was in flight, ignore this response
       return;
     }
+    // If called from a regeneration, verify the regeneration wasn't cancelled
+    // (prevents race condition from "Start Fresh" while regeneration is in flight)
+    if (options.fromRegeneration && currentRegenRunId === null) {
+      // User clicked "Start Fresh" while this regeneration was in flight, ignore this response
+      return;
+    }
     // Check if run is in error or processing state (HTTP 202 response without output_json)
     if (data?.status === 'error') {
       alert('This run failed to complete. Please try analyzing again.');
@@ -779,6 +793,9 @@ async function regenerate(section) {
   const originalInputsAtClick = currentRun.originalInputs || {};
   regenCounts.set(section, (regenCounts.get(section) || 0) + 1);
   regenBusy.add(section);
+  // Set currentRegenRunId to guard against stale regeneration responses
+  // (e.g., if user clicks "Start Fresh" while regeneration is in flight)
+  currentRegenRunId = baseRunId;
   renderSections(currentRun.sections || {}, originalInputsAtClick);
 
   // Enqueue so each regen uses the latest currentRun (which may have been updated by a prior regen).
@@ -787,6 +804,11 @@ async function regenerate(section) {
   let regenCompleted = false;
   regenQueue = regenQueue.then(async () => {
     try {
+      // Verify this regeneration is still current before proceeding (prevents race condition from "Start Fresh")
+      if (currentRegenRunId !== baseRunId) {
+        // User clicked "Start Fresh" while this regeneration was in flight, ignore this response
+        return;
+      }
       if (!baseRunId) throw new Error('missing_run');
 
       const resp = await apiFetch('/api/linkedin/regenerate', {
@@ -798,22 +820,41 @@ async function regenerate(section) {
         })
       });
 
+      // Verify this regeneration is still current after async fetch (prevents race condition from "Start Fresh")
+      if (currentRegenRunId !== baseRunId) {
+        // User clicked "Start Fresh" while this request was in flight, ignore this response
+        return;
+      }
+
       if (resp?.run_id) {
-        await loadRun(resp.run_id, { originalInputs: originalInputsAtClick });
-        regenCompleted = true;
+        await loadRun(resp.run_id, { originalInputs: originalInputsAtClick, fromRegeneration: true });
+        // Verify this regeneration is still current after loadRun (double-check before marking complete)
+        if (currentRegenRunId === baseRunId) {
+          regenCompleted = true;
+        }
       }
     } catch (e) {
-      console.warn('[LINKEDIN] regenerate failed', e);
-      alert('Could not regenerate this section. Please try again.');
+      // Only show error if this regeneration is still current (don't show errors for cancelled regenerations)
+      if (currentRegenRunId === baseRunId) {
+        console.warn('[LINKEDIN] regenerate failed', e);
+        alert('Could not regenerate this section. Please try again.');
+      }
     } finally {
-      regenBusy.delete(section);
-      renderSections(currentRun?.sections || {}, originalInputsAtClick);
+      // Only update UI state if this regeneration is still current
+      if (currentRegenRunId === baseRunId) {
+        regenBusy.delete(section);
+        renderSections(currentRun?.sections || {}, originalInputsAtClick);
+      } else {
+        // Regeneration was cancelled, just remove from busy set
+        regenBusy.delete(section);
+      }
     }
   });
 
   // Wait for this regen (and any earlier queued ones) to finish.
   await regenQueue;
-  if (regenCompleted) {
+  // Only show toast if regeneration is still current and completed
+  if (regenCompleted && currentRegenRunId === baseRunId) {
     showToast('New version ready — review and copy if you prefer it.');
   }
 }
