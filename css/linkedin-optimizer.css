@@ -360,6 +360,9 @@
   border-radius: var(--radius-md);
   background: #fff;
   transition: background 0.18s, color 0.18s, border-color 0.18s;
+  display: inline-flex;
+  align-items: center;
+  width: auto;
 }
 
 .lo-details > summary:hover {
