@@ -583,6 +583,12 @@
       align-items: center;
       flex-wrap: wrap;
     }
+    .rf-history-manage-actions__actions {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
     .rf-history-panel--manage .rf-history-manage-actions { display: flex; }
     .rf-history-panel--manage .rf-history-row-actions { display: none; }
 
@@ -688,13 +694,31 @@
     .rf-history-footer button {
       font-size: inherit;
     }
+    .rf-history-footer-links {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+      margin-left: 4px;
+    }
     .rf-history-footer-link {
       color: var(--color-accent-blue);
       text-decoration: underline;
-      margin-left: 4px;
+    }
+    .rf-history-footer-separator {
+      color: var(--color-text-muted);
+      font-weight: 600;
     }
     .rf-history-footer-link--danger {
       color: var(--color-error);
+      background: transparent;
+      border: none;
+      padding: 0;
+      font-weight: 600;
+      cursor: pointer;
+      text-decoration: none;
+    }
+    .rf-history-footer-link--danger:hover {
+      text-decoration: underline;
     }
 
     /* Delete confirmation modal */
@@ -5593,7 +5617,7 @@
 
             <div class="rf-history-text">
               <div class="rf-history-line1">${escapeHtml(roleName)}</div>
-              <div class="rf-history-line2">ATS feedback • ${escapeHtml(when)}</div>
+              <div class="rf-history-line2">${escapeHtml(when)}</div>
             </div>
 
           ${scoreHtml}
@@ -6865,10 +6889,10 @@
 
             <div class="rf-history-manage-actions" id="rf-history-manage-actions" data-history-manage-controls>
               <button id="rf-history-select-all" class="rf-history-link-btn" type="button">Select all</button>
-              <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+              <div class="rf-history-manage-actions__actions">
                 <button id="rf-history-delete-selected" class="rf-history-danger-btn" type="button" disabled>Delete selected</button>
                 <button id="rf-history-cancel-manage" class="rf-history-neutral-btn" type="button">Cancel</button>
-          </div>
+              </div>
             </div>
             </div>
 
@@ -6927,8 +6951,11 @@
 
           <div class="rf-history-footer" data-history-footer>
             <span>Data retention: JobHackAI shows your last 10 resume feedback runs. Runs are automatically deleted after 90 days.</span>
-            <a class="rf-history-footer-link" href="#" data-history-learn-more>Learn more.</a>
-            <button id="rf-history-clear" class="rf-history-footer-link rf-history-footer-link--danger" type="button">Clear history.</button>
+            <div class="rf-history-footer-links">
+              <a class="rf-history-footer-link" href="#" data-history-learn-more>Learn more</a>
+              <span class="rf-history-footer-separator" aria-hidden="true">·</span>
+              <button id="rf-history-clear" class="rf-history-footer-link rf-history-footer-link--danger" type="button">Clear history</button>
+            </div>
           </div>
         </section>
 
