@@ -183,7 +183,7 @@ function setResultsVisible(on) {
     console.warn('[LINKEDIN] setResultsVisible: #lo-results element not found in DOM');
     return;
   }
-  els.results.style.display = on ? '' : 'none';
+  els.results.style.display = on ? 'block' : 'none';
 }
 
 function setScoreRing(score) {
