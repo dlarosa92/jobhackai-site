@@ -126,6 +126,7 @@ const els = {
   skills: null,
   recommendations: null,
   btnAnalyze: null,
+  btnStartFresh: null,
   loading: null,
   results: null,
   scoreText: null,
@@ -145,11 +146,13 @@ let currentRun = null; // { run_id, created_at, updated_at, role, overallScore, 
 let historyItems = [];
 let selectedHistoryId = null;
 let isAnalyzing = false;
+let currentAnalysisId = null; // Unique ID for in-flight analysis, used to guard against stale responses
 const regenBusy = new Set(); // section keys
 const regenCounts = new Map();
 // Serialize regenerations across sections to avoid branching from the same base run_id
 // and overwriting each other's changes when responses return out of order.
 let regenQueue = Promise.resolve();
+let currentRegenRunId = null; // Run ID for in-flight regeneration, used to guard against stale regeneration responses
 let unlockedInitialized = false;
 
 function setLockedView(kind) {
@@ -184,6 +187,47 @@ function setResultsVisible(on) {
     return;
   }
   els.results.style.display = on ? 'block' : 'none';
+}
+
+function resetForm() {
+  // Clear all form fields
+  if (els.role) els.role.value = '';
+  if (els.headline) els.headline.value = '';
+  if (els.summary) els.summary.value = '';
+  if (els.experience) els.experience.value = '';
+  if (els.skills) els.skills.value = '';
+  if (els.recommendations) els.recommendations.value = '';
+  
+  // Hide results
+  setResultsVisible(false);
+  
+  // Clear state
+  currentRun = null;
+  selectedHistoryId = null;
+  // Cancel any in-flight analysis by clearing the analysis ID
+  // This prevents stale analyze() responses from rendering results after reset
+  currentAnalysisId = null;
+  // Reset analyzing flag to allow new analysis to start immediately
+  isAnalyzing = false;
+  
+  // Cancel any in-flight regenerations
+  // Clear regeneration tracking to prevent stale regeneration responses from reappearing
+  regenBusy.clear();
+  currentRegenRunId = null;
+  // Reset regenQueue to a fresh promise to cancel any queued regenerations
+  regenQueue = Promise.resolve();
+  
+  // Re-render history to remove active state
+  renderHistory();
+  
+  // Clear any loading state
+  setLoading(false);
+  
+  // Reset score ring to 0
+  setScoreRing(0);
+  
+  // Focus on role field for better UX
+  els.role?.focus();
 }
 
 function setScoreRing(score) {
@@ -484,6 +528,12 @@ async function loadRun(id, options = {}) {
       // User clicked a different item while this request was in flight, ignore this response
       return;
     }
+    // If called from a regeneration, verify the regeneration wasn't cancelled
+    // (prevents race condition from "Start Fresh" while regeneration is in flight)
+    if (options.fromRegeneration && currentRegenRunId === null) {
+      // User clicked "Start Fresh" while this regeneration was in flight, ignore this response
+      return;
+    }
     // Check if run is in error or processing state (HTTP 202 response without output_json)
     if (data?.status === 'error') {
       alert('This run failed to complete. Please try analyzing again.');
@@ -601,6 +651,10 @@ async function analyze() {
   }
 
   isAnalyzing = true;
+  // Generate unique ID for this analysis to guard against stale responses
+  // (e.g., if user clicks "Start Fresh" while this analysis is in flight)
+  const analysisId = crypto.randomUUID();
+  currentAnalysisId = analysisId;
   setResultsVisible(false);
   setLoading(true, 'Analyzing your profile…');
 
@@ -618,6 +672,11 @@ async function analyze() {
     let data;
     try {
       data = await apiFetch('/api/linkedin/analyze', { method: 'POST', body: JSON.stringify(req) });
+      // Verify this analysis is still current after async fetch (prevents race condition from "Start Fresh")
+      if (currentAnalysisId !== analysisId) {
+        // User clicked "Start Fresh" while this request was in flight, ignore this response
+        return;
+      }
       console.info('[LINKEDIN DEBUG] analyze API response', {
         overallScore: data?.overallScore,
         sectionsKeys: data?.sections ? Object.keys(data.sections) : null,
@@ -630,6 +689,11 @@ async function analyze() {
           : null
       });
     } catch (e) {
+      // Verify this analysis is still current before handling errors
+      if (currentAnalysisId !== analysisId) {
+        // User clicked "Start Fresh" while this request was in flight, ignore this error
+        return;
+      }
       if (e?.status === 403 && e?.data?.error === 'premium_required') {
         setLockedView('upgrade');
         return;
@@ -640,6 +704,17 @@ async function analyze() {
     if (data?.status === 'processing' && data?.run_id) {
       setLoading(true, 'Finishing up…');
       data = await pollRunUntilReady(data.run_id);
+      // Verify this analysis is still current after polling (prevents race condition from "Start Fresh")
+      if (currentAnalysisId !== analysisId) {
+        // User clicked "Start Fresh" while this request was in flight, ignore this response
+        return;
+      }
+    }
+
+    // Verify this analysis is still current before rendering (double-check after all async operations)
+    if (currentAnalysisId !== analysisId) {
+      // User clicked "Start Fresh" while this request was in flight, ignore this response
+      return;
     }
 
     // Validate that we have the required data before rendering
@@ -670,22 +745,34 @@ async function analyze() {
     showToast('LinkedIn optimization ready. Scroll down to review each section.');
     await fetchHistory();
   } catch (e) {
-    console.error('[LINKEDIN] analyze failed', e);
-    const code = e?.data?.error || e?.message || 'server_error';
-    if (e?.status === 403 && code === 'premium_required') {
-      setLockedView('upgrade');
-    } else if ((e?.status === 401 && code === 'unauthorized') || e?.message === 'not_authenticated') {
-      setLockedView('login');
-    } else if (code === 'timeout') {
-      alert('The analysis timed out. Please try again.');
-    } else if (code === 'Incomplete data received from server') {
-      alert('Received incomplete data from the server. Please try again.');
-    } else {
-      alert('Could not analyze your profile. Please try again.');
+    // Only show error if this analysis is still current (don't show errors for cancelled analyses)
+    if (currentAnalysisId === analysisId) {
+      console.error('[LINKEDIN] analyze failed', e);
+      const code = e?.data?.error || e?.message || 'server_error';
+      if (e?.status === 403 && code === 'premium_required') {
+        setLockedView('upgrade');
+      } else if ((e?.status === 401 && code === 'unauthorized') || e?.message === 'not_authenticated') {
+        setLockedView('login');
+      } else if (code === 'timeout') {
+        alert('The analysis timed out. Please try again.');
+      } else if (code === 'Incomplete data received from server') {
+        alert('Received incomplete data from the server. Please try again.');
+      } else {
+        alert('Could not analyze your profile. Please try again.');
+      }
     }
   } finally {
-    isAnalyzing = false;
-    setLoading(false);
+    // Only clear loading state and isAnalyzing if this analysis is still current
+    if (currentAnalysisId === analysisId) {
+      isAnalyzing = false;
+      setLoading(false);
+    } else {
+      // Analysis was cancelled (user clicked "Start Fresh" or started new analysis)
+      // Don't modify isAnalyzing or loading state here:
+      // - If cancelled via resetForm(), it already set isAnalyzing = false and setLoading(false)
+      // - If new analysis started, isAnalyzing should remain true and loading should remain visible
+      // Do nothing - let the current analysis (or resetForm) manage the state
+    }
   }
 }
 
@@ -706,6 +793,9 @@ async function regenerate(section) {
   const originalInputsAtClick = currentRun.originalInputs || {};
   regenCounts.set(section, (regenCounts.get(section) || 0) + 1);
   regenBusy.add(section);
+  // Set currentRegenRunId to guard against stale regeneration responses
+  // (e.g., if user clicks "Start Fresh" while regeneration is in flight)
+  currentRegenRunId = baseRunId;
   renderSections(currentRun.sections || {}, originalInputsAtClick);
 
   // Enqueue so each regen uses the latest currentRun (which may have been updated by a prior regen).
@@ -714,6 +804,11 @@ async function regenerate(section) {
   let regenCompleted = false;
   regenQueue = regenQueue.then(async () => {
     try {
+      // Verify this regeneration is still current before proceeding (prevents race condition from "Start Fresh")
+      if (currentRegenRunId !== baseRunId) {
+        // User clicked "Start Fresh" while this regeneration was in flight, ignore this response
+        return;
+      }
       if (!baseRunId) throw new Error('missing_run');
 
       const resp = await apiFetch('/api/linkedin/regenerate', {
@@ -725,22 +820,41 @@ async function regenerate(section) {
         })
       });
 
+      // Verify this regeneration is still current after async fetch (prevents race condition from "Start Fresh")
+      if (currentRegenRunId !== baseRunId) {
+        // User clicked "Start Fresh" while this request was in flight, ignore this response
+        return;
+      }
+
       if (resp?.run_id) {
-        await loadRun(resp.run_id, { originalInputs: originalInputsAtClick });
-        regenCompleted = true;
+        await loadRun(resp.run_id, { originalInputs: originalInputsAtClick, fromRegeneration: true });
+        // Verify this regeneration is still current after loadRun (double-check before marking complete)
+        if (currentRegenRunId === baseRunId) {
+          regenCompleted = true;
+        }
       }
     } catch (e) {
-      console.warn('[LINKEDIN] regenerate failed', e);
-      alert('Could not regenerate this section. Please try again.');
+      // Only show error if this regeneration is still current (don't show errors for cancelled regenerations)
+      if (currentRegenRunId === baseRunId) {
+        console.warn('[LINKEDIN] regenerate failed', e);
+        alert('Could not regenerate this section. Please try again.');
+      }
     } finally {
-      regenBusy.delete(section);
-      renderSections(currentRun?.sections || {}, originalInputsAtClick);
+      // Only update UI state if this regeneration is still current
+      if (currentRegenRunId === baseRunId) {
+        regenBusy.delete(section);
+        renderSections(currentRun?.sections || {}, originalInputsAtClick);
+      } else {
+        // Regeneration was cancelled, just remove from busy set
+        regenBusy.delete(section);
+      }
     }
   });
 
   // Wait for this regen (and any earlier queued ones) to finish.
   await regenQueue;
-  if (regenCompleted) {
+  // Only show toast if regeneration is still current and completed
+  if (regenCompleted && currentRegenRunId === baseRunId) {
     showToast('New version ready — review and copy if you prefer it.');
   }
 }
@@ -872,6 +986,11 @@ function bindEvents() {
     analyze();
   });
 
+  els.btnStartFresh?.addEventListener('click', (e) => {
+    e.preventDefault();
+    resetForm();
+  });
+
   els.keywords?.addEventListener('click', (e) => {
     const chip = e.target.closest('[data-keyword]');
     if (!chip) return;
@@ -923,6 +1042,7 @@ async function init() {
   els.skills = $('#lo-skills');
   els.recommendations = $('#lo-recommendations');
   els.btnAnalyze = $('#lo-analyze');
+  els.btnStartFresh = $('#lo-start-fresh');
   els.loading = $('#lo-loading');
   els.results = $('#lo-results');
   els.scoreText = $('#lo-score-text');
