@@ -399,7 +399,14 @@ export async function deleteResumeFeedbackSession(env, sessionId, userId) {
       WHERE id = ? AND user_id = ?
     `).bind(sessionId, userId).run();
 
-    if ((result.meta?.rows_written || 0) === 0) {
+    const rowsAffected =
+      typeof result?.meta?.changes === 'number'
+        ? result.meta.changes
+        : typeof result?.changes === 'number'
+          ? result.changes
+          : 0;
+
+    if (rowsAffected === 0) {
       return false;
     }
 
