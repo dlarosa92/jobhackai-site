@@ -486,20 +486,22 @@
   gap: 12px;
   justify-content: space-between;
   align-items: center;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
 }
 .cl-history-manage-actions__actions {
   display: flex;
   flex-direction: row;
   gap: 10px;
   align-items: center;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
 }
 .cl-history-panel--manage .cl-history-manage-actions { 
   display: flex;
   flex-direction: row;
   justify-content: flex-end;
   align-items: center;
+  gap: 12px;
+  flex-wrap: nowrap;
 }
 .cl-history-panel--manage .cl-history-row-actions { display: none; }
 
@@ -546,6 +548,9 @@
   #cl-history-delete-selected,
   #cl-history-cancel-manage {
     width: 100%;
+  }
+  .cl-history-manage-actions__actions {
+    flex-wrap: wrap;
   }
 }
 
