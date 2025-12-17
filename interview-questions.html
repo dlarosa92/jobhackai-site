@@ -44,7 +44,7 @@
   <script src="js/custom-select.js?v=20251212-1" defer></script>
   <style>
     .iq-main {
-      max-width: 1100px;
+      max-width: 1200px;
       margin: 2.5rem auto 4rem auto;
       padding: 0 1rem;
       width: 100%;
@@ -152,7 +152,7 @@
       .iq-upgrade-btn { font-size: 1.01rem; padding: 0.8rem 0; }
     }
     /* ---- IQ MVP+ additions (append only) ---- */
-    .card { background:#fff; border-radius:16px; box-shadow:0 2px 6px rgba(31,41,55,.07); padding:1rem; margin-bottom:1rem; }
+    .card { background:#fff; border-radius:16px; box-shadow:var(--shadow-card, 0 4px 24px rgba(31,41,55,0.07)); padding:1rem; margin-bottom:1rem; }
     .iq-toolbar .iq-row { display:flex; gap:.75rem; flex-wrap:wrap; align-items:center; }
     .iq-select, .chip, textarea#iq-jd { 
       border:1.5px solid #E5E7EB; 
@@ -366,9 +366,9 @@
     .icon-btn { display:inline-flex; align-items:center; justify-content:center; }
 
     /* Two-column responsive layout for top section + history */
-    .iq-top-grid { display:grid; grid-template-columns: minmax(0,1fr) minmax(260px,320px); gap:1.25rem; align-items:start; margin-bottom:1.5rem; }
+    .iq-top-grid { display:grid; grid-template-columns: minmax(0,1fr) 380px; gap:2rem; align-items:start; margin-bottom:1.5rem; }
     .iq-top-grid aside.card { position:sticky; top:8px; max-height:70vh; overflow:auto; }
-    @media (max-width: 900px) { .iq-top-grid { grid-template-columns: 1fr; } .iq-top-grid aside.card { position:static; max-height:70vh; } }
+    @media (max-width: 900px) { .iq-top-grid { grid-template-columns: 1fr; } .iq-top-grid aside.card { position:static; max-height:none; } }
     .iq-questions-section { margin-bottom:160px; }
     @media (max-width: 600px) { 
       .iq-main { padding: 0 .75rem 120px .75rem; } 
@@ -614,25 +614,20 @@
     .rf-history-panel--manage .rf-history-header-actions { display: none; }
     .rf-history-manage-actions {
       display: none;
-      width: 100%;
-      margin-top: 12px;
-      gap: 12px;
-      justify-content: space-between;
+      flex-shrink: 0;
       align-items: center;
-      flex-wrap: wrap;
     }
     .rf-history-manage-actions__actions {
       display: flex;
       gap: 10px;
       align-items: center;
-      flex-wrap: wrap;
-      justify-content: flex-end;
-      width: 100%;
     }
     .rf-history-panel--manage .rf-history-manage-actions {
       display: flex;
       justify-content: flex-end;
       align-items: center;
+      margin-top: 0;
+      width: auto;
     }
     .rf-history-panel--manage .rf-history-row-actions { display: none; }
 
@@ -664,8 +659,18 @@
     .rf-history-neutral-btn:hover { background: #F9FAFB; border-color: #D1D5DB; }
 
     @media (max-width: 520px) {
-      .rf-history-panel--manage .rf-history-manage-actions { flex-direction: column; align-items: stretch; }
-      .rf-history-panel--manage .rf-history-manage-actions__actions > button { width: 100%; }
+      .rf-history-panel--manage .rf-history-manage-actions {
+        flex-direction: column;
+        align-items: stretch;
+      }
+      .rf-history-manage-actions__actions {
+        flex-direction: column;
+        align-items: stretch;
+      }
+      #iq-history-delete-selected,
+      #iq-history-cancel-manage {
+        width: 100%;
+      }
     }
 
     .rf-history-loading { display: none; }
@@ -1210,7 +1215,6 @@
 
           <div class="rf-history-manage-actions" id="iq-history-manage-actions" data-history-manage-controls>
             <div class="rf-history-manage-actions__actions">
-              <button id="iq-history-select-all" class="rf-history-link-btn" type="button">Select all</button>
               <button id="iq-history-delete-selected" class="rf-history-danger-btn" type="button" disabled>Delete selected</button>
               <button id="iq-history-cancel-manage" class="rf-history-neutral-btn" type="button">Cancel</button>
             </div>
