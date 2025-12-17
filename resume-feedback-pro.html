@@ -397,8 +397,17 @@
       text-decoration: none;
       color: var(--color-text-secondary);
       font-weight: 700;
+      border: 1px solid var(--color-divider);
+      border-radius: var(--radius-md);
+      padding: 0.5rem 1rem;
+      background: transparent;
+      transition: background 0.18s ease, border-color 0.18s ease;
     }
-    .rf-history-manage-btn:hover { color: var(--color-text-main); }
+    .rf-history-manage-btn:hover { 
+      color: var(--color-text-main);
+      background: #F9FAFB;
+      border-color: #D1D5DB;
+    }
 
     .rf-history-subtitle {
       margin-top: 10px;
