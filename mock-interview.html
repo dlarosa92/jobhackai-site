@@ -261,149 +261,475 @@
       font-weight: var(--font-weight-medium);
     }
     
-    /* Session History Sidebar */
+    /* Session History Sidebar - HistoryPanel v1 */
     .mi-history {
       position: sticky;
       top: 1rem;
     }
-    
-    .mi-history-title-row {
+
+    .mi-history-header {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+
+    .mi-history-title-wrap {
       display: flex;
       align-items: center;
-      justify-content: space-between;
-      gap: var(--space-sm);
-      margin-bottom: var(--space-xs);
+      gap: 10px;
+      min-width: 0;
     }
-    
-    .mi-history-title {
-      font-weight: var(--font-weight-bold);
+
+    .mi-history-title-text {
+      font-weight: 800;
       color: var(--color-text-main);
-      font-size: var(--font-size-xl);
+      font-size: 1.05rem;
+      line-height: 1.2;
+    }
+
+    .mi-history-header-actions {
       display: flex;
       align-items: center;
-      gap: var(--space-xs);
+      gap: 10px;
+      flex-shrink: 0;
     }
-    
-    .mi-history-icon {
-      vertical-align: text-bottom;
-      color: var(--color-text-muted);
-    }
-    
-    .mi-icon-btn {
+
+    .mi-history-icon-btn {
+      width: 40px;
+      height: 40px;
       display: inline-flex;
       align-items: center;
       justify-content: center;
       border: 1px solid var(--color-divider);
-      background: transparent;
-      color: var(--color-text-secondary);
       border-radius: var(--radius-md);
-      padding: 0.4rem 0.55rem;
+      background: transparent;
       cursor: pointer;
-      transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
+      transition: background 0.18s ease, border-color 0.18s ease;
     }
-    
-    .mi-icon-btn:hover,
-    .mi-icon-btn:focus-visible {
-      background: rgba(0, 123, 255, 0.06);
-      border-color: rgba(0, 123, 255, 0.25);
-      color: var(--color-text-main);
-      outline: none;
+    .mi-history-icon-btn:hover {
+      background: #F9FAFB;
+      border-color: #D1D5DB;
     }
-    
-    .mi-history-subtitle {
+
+    .mi-history-manage-btn {
+      text-decoration: none;
       color: var(--color-text-secondary);
-      font-size: var(--font-size-sm);
-      margin-bottom: var(--space-md);
+      font-weight: 700;
+      border: 1px solid var(--color-divider);
+      border-radius: var(--radius-md);
+      padding: 0.5rem 1rem;
+      background: transparent;
+      transition: background 0.18s ease, border-color 0.18s ease;
+      cursor: pointer;
     }
-    
+    .mi-history-manage-btn:hover { 
+      color: var(--color-text-main);
+      background: #F9FAFB;
+      border-color: #D1D5DB;
+    }
+
+    .mi-history-panel--manage .mi-history-header-actions { display: none; }
+    .mi-history-manage-actions {
+      display: none;
+      width: 100%;
+      margin-top: 12px;
+      gap: 12px;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    .mi-history-manage-actions__actions {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    .mi-history-panel--manage .mi-history-manage-actions { 
+      display: flex;
+      justify-content: flex-end;
+      align-items: center;
+    }
+    .mi-history-panel--manage .mi-history-row-actions { display: none; }
+
+    .mi-history-danger-btn {
+      background: rgba(220, 38, 38, 0.10);
+      border: 1px solid rgba(220, 38, 38, 0.25);
+      color: var(--color-error);
+      font-weight: 800;
+      border-radius: var(--radius-md);
+      padding: 0.7rem 1rem;
+      cursor: pointer;
+      transition: background 0.18s ease, border-color 0.18s ease, opacity 0.18s ease;
+    }
+    .mi-history-danger-btn:disabled {
+      opacity: 0.55;
+      cursor: not-allowed;
+    }
+    .mi-history-danger-btn:hover:not(:disabled) {
+      background: rgba(220, 38, 38, 0.14);
+      border-color: rgba(220, 38, 38, 0.35);
+    }
+
+    .mi-history-neutral-btn {
+      background: #fff;
+      border: 1px solid var(--color-divider);
+      color: var(--color-text-main);
+      font-weight: 700;
+      border-radius: var(--radius-md);
+      padding: 0.7rem 1rem;
+      cursor: pointer;
+      transition: background 0.18s ease, border-color 0.18s ease;
+    }
+    .mi-history-neutral-btn:hover {
+      background: #F9FAFB;
+      border-color: #D1D5DB;
+    }
+
+    @media (max-width: 520px) {
+      .mi-history-panel--manage .mi-history-manage-actions {
+        flex-direction: column;
+        align-items: stretch;
+      }
+      #mi-history-delete-selected,
+      #mi-history-cancel-manage {
+        width: 100%;
+      }
+    }
+
+    .mi-history-subtitle {
+      margin-top: 10px;
+      font-size: 0.875rem; /* ~14px */
+      color: var(--color-text-muted);
+    }
+
+    .mi-history-body {
+      margin-top: 16px;
+    }
+
     .mi-history-list {
-      list-style: none;
-      padding: 0;
-      margin: 0;
       display: flex;
       flex-direction: column;
-      gap: 0.5rem;
+      gap: 12px;
     }
-    
+
     .mi-history-item {
-      border: 1px solid var(--color-divider);
-      border-radius: var(--radius-lg);
-      background: var(--color-card-bg);
-      padding: 0.75rem 0.85rem;
+      position: relative;
       display: flex;
       align-items: center;
-      justify-content: space-between;
-      gap: var(--space-sm);
+      gap: 12px;
+      padding: 0.875rem 1rem;
+      background: #fff;
+      border-radius: var(--radius-md);
+      border: 1px solid #E5E7EB;
+      transition: background 0.18s ease, border-color 0.18s ease, outline 0.18s ease;
       cursor: pointer;
-      transition: border-color var(--transition-fast), background var(--transition-fast);
+      min-height: 56px;
     }
-    
     .mi-history-item:hover {
-      background: rgba(0, 123, 255, 0.04);
-      border-color: rgba(0, 123, 255, 0.22);
+      background: #F9FAFB;
+      border-color: #D1D5DB;
     }
-    
-    .mi-history-main {
-      display: flex;
-      align-items: flex-start;
-      gap: 0.6rem;
-      min-width: 0;
-      flex: 1;
+    .mi-history-item.is-selected {
+      outline: 2px solid var(--color-accent-blue);
+      outline-offset: 0;
+      border-color: var(--color-divider);
+      background: #fff;
     }
-    
-    .mi-doc-icon {
+
+    .mi-history-checkbox-wrap {
+      display: none;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+    .mi-history-checkbox {
       width: 18px;
       height: 18px;
-      flex: 0 0 18px;
-      color: var(--color-text-muted);
-      margin-top: 2px;
+      accent-color: var(--color-accent-blue);
+      cursor: pointer;
     }
-    
+    .mi-history-panel--manage .mi-history-checkbox-wrap {
+      display: inline-flex;
+    }
+
+    .mi-history-icon {
+      width: 40px;
+      height: 40px;
+      border-radius: var(--radius-md);
+      background: linear-gradient(135deg, #E0E7FF 0%, #C7D2FE 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+    .mi-history-icon svg {
+      width: 20px;
+      height: 20px;
+      color: #4F46E5;
+    }
+
     .mi-history-text {
+      flex: 1;
       min-width: 0;
     }
-    
     .mi-history-line1 {
-      font-weight: var(--font-weight-semibold);
+      font-weight: 700;
       color: var(--color-text-main);
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
+      font-size: 0.95rem;
+      line-height: 1.25;
     }
-    
     .mi-history-line2 {
+      margin-top: 2px;
+      font-size: 0.85rem;
       color: var(--color-text-muted);
-      font-size: var(--font-size-sm);
-      margin-top: 0.15rem;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
     }
-    
-    .mi-history-empty {
-      color: var(--color-text-muted);
-      font-style: italic;
-      text-align: center;
-      padding: 1rem;
-      font-size: 0.9rem;
+
+    .mi-history-score {
+      font-weight: 800;
+      color: var(--color-text-main);
+      font-size: 0.95rem;
+      flex-shrink: 0;
+      min-width: fit-content;
     }
-    
-    .mi-history-error {
-      color: var(--color-error);
-      text-align: center;
-      padding: 1rem;
-      font-size: 0.9rem;
+
+    .mi-history-row-actions {
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      margin-left: 2px;
     }
-    
-    .mi-history-retry {
-      background: none;
-      border: 1px solid var(--color-error);
-      color: var(--color-error);
-      padding: 0.4rem 0.8rem;
+
+    .mi-history-kebab {
+      width: 40px;
+      height: 40px;
+      border: 1px solid transparent;
       border-radius: var(--radius-md);
+      background: transparent;
       cursor: pointer;
-      font-size: 0.85rem;
-      margin-top: 0.5rem;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.18s ease, border-color 0.18s ease, opacity 0.18s ease;
+      opacity: 0;
+    }
+    .mi-history-item:hover .mi-history-kebab,
+    .mi-history-item:focus-within .mi-history-kebab {
+      opacity: 1;
+    }
+    .mi-history-kebab:hover {
+      background: #F3F4F6;
+      border-color: #E5E7EB;
+    }
+
+    /* Mobile (no hover): kebab always visible */
+    @media (hover: none), (pointer: coarse) {
+      .mi-history-kebab { opacity: 1; }
+    }
+
+    .mi-history-menu {
+      position: absolute;
+      right: 0;
+      top: calc(100% + 6px);
+      min-width: 170px;
+      background: #fff;
+      border: 1px solid var(--color-divider);
+      border-radius: 12px;
+      box-shadow: var(--shadow-dropdown);
+      padding: 6px;
+      z-index: var(--z-popover);
+    }
+    .mi-history-menu[hidden] { display: none; }
+    .mi-history-menu-item {
+      width: 100%;
+      text-align: left;
+      background: transparent;
+      border: none;
+      padding: 10px 10px;
+      border-radius: 10px;
+      cursor: pointer;
+      font-weight: 600;
+      color: var(--color-text-main);
+    }
+    .mi-history-menu-item:hover {
+      background: #F9FAFB;
+    }
+    .mi-history-menu-item--danger {
+      color: var(--color-error);
+    }
+    .mi-history-menu-item--danger:hover {
+      background: rgba(220, 38, 38, 0.06);
+    }
+
+    .mi-history-loading {
+      display: none;
+    }
+    .mi-history-loading.is-visible {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .mi-history-skeleton-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 0.875rem 1rem;
+      border-radius: var(--radius-md);
+      border: 1px solid var(--color-divider);
+      background: #fff;
+      min-height: 56px;
+    }
+    .mi-history-skeleton-pill {
+      height: 16px;
+      border-radius: 8px;
+      width: 60%;
+    }
+    .mi-history-skeleton-pill.sm {
+      width: 40%;
+    }
+    .mi-history-skeleton-score {
+      width: 32px;
+      height: 20px;
+      border-radius: 4px;
+    }
+
+    .mi-history-error {
+      padding: 10px 12px;
+      border: 1px solid rgba(220, 38, 38, 0.22);
+      background: rgba(220, 38, 38, 0.06);
+      border-radius: 12px;
+      color: var(--color-text-main);
+      font-size: 0.95rem;
+      margin-bottom: 12px;
+    }
+    .mi-history-error[hidden] { display: none; }
+    .mi-history-link-btn {
+      background: transparent;
+      border: none;
+      padding: 0;
+      cursor: pointer;
+      font-weight: 600;
+      color: var(--color-accent-blue);
+      text-decoration: underline;
+      font-size: inherit;
+    }
+
+    .mi-history-empty {
+      text-align: center;
+      padding: 20px 12px;
+      color: var(--color-text-muted);
+      border: 1px dashed var(--color-divider);
+      border-radius: 12px;
+    }
+    .mi-history-empty[hidden] { display: none; }
+
+    .mi-history-footer {
+      margin-top: 16px;
+      font-size: 0.875rem; /* 13–14px */
+      color: var(--color-text-muted);
+      line-height: 1.45;
+    }
+    .mi-history-footer a,
+    .mi-history-footer button {
+      font-size: inherit;
+    }
+    .mi-history-footer-links {
+      display: inline-flex;
+      gap: 6px;
+      align-items: center;
+      margin-left: 4px;
+    }
+    .mi-history-footer-link {
+      color: var(--color-accent-blue);
+      text-decoration: underline;
+      background: transparent;
+      border: none;
+      padding: 0;
+      cursor: pointer;
+    }
+    .mi-history-footer-separator {
+      color: var(--color-text-muted);
+      font-weight: 600;
+    }
+    .mi-history-footer-link--danger {
+      color: var(--color-error);
+      font-weight: 600;
+    }
+    .mi-history-footer-link--danger:hover {
+      text-decoration: underline;
+    }
+
+    /* Modal */
+    .mi-history-modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(17, 24, 39, 0.45);
+      z-index: var(--z-modal-backdrop);
+    }
+
+    .mi-history-modal-backdrop[hidden] {
+      display: none !important;
+    }
+
+    .mi-history-delete-modal {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: min(520px, calc(100vw - 32px));
+      background: #fff;
+      border: 1px solid var(--color-divider);
+      border-radius: var(--radius-xl);
+      box-shadow: var(--shadow-xl);
+      padding: 20px;
+      z-index: var(--z-modal);
+    }
+
+    .mi-history-delete-modal[hidden] {
+      display: none !important;
+    }
+
+    .mi-history-delete-modal-content {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .mi-history-delete-modal-title {
+      font-size: 1.15rem;
+      font-weight: 800;
+      margin: 0 0 8px 0;
+      color: var(--color-text-main);
+    }
+
+    .mi-history-delete-modal-body {
+      margin: 6px 0;
+      color: var(--color-text-secondary);
+      line-height: 1.5;
+    }
+
+    .mi-history-delete-modal-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+      margin-top: 16px;
+      flex-wrap: wrap;
+    }
+    .mi-history-delete-modal-actions button {
+      min-height: 44px;
+    }
+    @media (max-width: 520px) {
+      .mi-history-delete-modal-actions {
+        flex-direction: column;
+        align-items: stretch;
+      }
     }
     
     /* Interview In-Progress */
@@ -1134,30 +1460,103 @@
       </div>
       
       <!-- Right Column: Session History -->
-      <aside class="mi-card mi-history history-card">
-        <div class="history-title-row">
-          <div class="history-title">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="history-icon-clock mi-history-icon" aria-hidden="true">
+      <aside class="mi-card mi-history history-card" id="mi-history-panel" data-history-panel="v1">
+        <div class="mi-history-header" data-history-header>
+          <div class="mi-history-title-wrap">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
               <circle cx="12" cy="12" r="10"/>
               <polyline points="12 6 12 12 16 14"/>
             </svg>
-            <span class="mi-history-title">Session History</span>
+            <span class="mi-history-title-text" id="mi-history-header-title">History</span>
           </div>
-          <button id="mi-history-refresh" class="history-refresh-btn mi-icon-btn" type="button" title="Refresh history" aria-label="Refresh history">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-              <path d="M23 4v6h-6"/>
-              <path d="M1 20v-6h6"/>
-              <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
-            </svg>
-          </button>
+
+          <div class="mi-history-header-actions" data-history-header-actions>
+            <button id="mi-history-refresh" class="mi-history-icon-btn" title="Refresh history" aria-label="Refresh history" type="button">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <path d="M23 4v6h-6"/>
+                <path d="M1 20v-6h6"/>
+                <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
+              </svg>
+            </button>
+            <button id="mi-history-manage" class="mi-history-manage-btn" type="button">Manage</button>
+          </div>
+
+          <div class="mi-history-manage-actions" id="mi-history-manage-actions" data-history-manage-controls>
+            <div class="mi-history-manage-actions__actions">
+              <button id="mi-history-delete-selected" class="mi-history-danger-btn" type="button" disabled>Delete selected</button>
+              <button id="mi-history-cancel-manage" class="mi-history-neutral-btn" type="button">Cancel</button>
+            </div>
+          </div>
         </div>
-        <div class="mi-history-subtitle history-subtitle">
-          We automatically save your past mock interviews so you can come back and review your scores.
+
+        <div class="mi-history-subtitle" data-history-subtitle>
+          Last 10 sessions • Auto-saved
         </div>
-        <ul class="history-list mi-history-list" id="mi-history-list">
-          <li class="mi-history-empty">No previous mock interviews yet. Once you finish a session, your score and date will appear here.</li>
-        </ul>
+
+        <div class="mi-history-body" data-history-body>
+          <div class="mi-history-loading" id="mi-history-loading" data-history-loading>
+            <div class="mi-history-skeleton-row">
+              <div class="rf-skeleton" style="width:40px;height:40px;border-radius:var(--radius-md);"></div>
+              <div style="flex:1;min-width:0;">
+                <div class="rf-skeleton mi-history-skeleton-pill"></div>
+                <div class="rf-skeleton mi-history-skeleton-pill sm" style="margin-top:8px;"></div>
+              </div>
+              <div class="rf-skeleton mi-history-skeleton-score"></div>
+            </div>
+            <div class="mi-history-skeleton-row">
+              <div class="rf-skeleton" style="width:40px;height:40px;border-radius:var(--radius-md);"></div>
+              <div style="flex:1;min-width:0;">
+                <div class="rf-skeleton mi-history-skeleton-pill"></div>
+                <div class="rf-skeleton mi-history-skeleton-pill sm" style="margin-top:8px;"></div>
+              </div>
+              <div class="rf-skeleton mi-history-skeleton-score"></div>
+            </div>
+            <div class="mi-history-skeleton-row">
+              <div class="rf-skeleton" style="width:40px;height:40px;border-radius:var(--radius-md);"></div>
+              <div style="flex:1;min-width:0;">
+                <div class="rf-skeleton mi-history-skeleton-pill"></div>
+                <div class="rf-skeleton mi-history-skeleton-pill sm" style="margin-top:8px;"></div>
+              </div>
+              <div class="rf-skeleton mi-history-skeleton-score"></div>
+            </div>
+          </div>
+
+          <div class="mi-history-error" id="mi-history-error" data-history-error hidden>
+            <span data-default-message="Couldn't load history.">Couldn't load history. </span>
+            <button id="mi-history-retry" class="mi-history-link-btn" type="button">Retry.</button>
+          </div>
+
+          <div class="mi-history-list" id="mi-history-list" data-history-list></div>
+
+          <div class="mi-history-empty" id="mi-history-empty" data-history-empty hidden>
+            <div style="font-weight:800;margin-bottom:0.25rem;color:var(--color-text-main);">No history yet</div>
+            <div>Your last 10 mock interview sessions will appear here automatically.</div>
+          </div>
+        </div>
+
+        <div class="mi-history-footer" data-history-footer>
+          <span>Data retention: JobHackAI shows your last 10 mock interview sessions. Runs are automatically deleted after 90 days.</span>
+          <div class="mi-history-footer-links">
+            <a class="mi-history-footer-link" href="#" data-history-learn-more>Learn more</a>
+            <span class="mi-history-footer-separator" aria-hidden="true">·</span>
+            <button id="mi-history-clear" class="mi-history-footer-link mi-history-footer-link--danger" type="button">Clear history</button>
+          </div>
+        </div>
       </aside>
+
+      <!-- Delete confirmation modal -->
+      <div class="mi-history-modal-backdrop" id="mi-history-modal-backdrop" hidden></div>
+      <div class="mi-history-delete-modal" id="mi-history-delete-modal" role="dialog" aria-labelledby="mi-history-delete-modal-title" aria-modal="true" hidden>
+        <div class="mi-history-delete-modal-content">
+          <h3 class="mi-history-delete-modal-title" id="mi-history-delete-modal-title">Permanently delete history?</h3>
+          <p class="mi-history-delete-modal-body">This will remove the selected items from your account.</p>
+          <p class="mi-history-delete-modal-body">This cannot be undone.</p>
+          <div class="mi-history-delete-modal-actions">
+            <button id="mi-history-delete-cancel" class="mi-history-neutral-btn" type="button">Cancel</button>
+            <button id="mi-history-delete-confirm" class="mi-history-danger-btn" type="button">Delete permanently</button>
+          </div>
+        </div>
+      </div>
     </div>
   </main>
   
@@ -1226,6 +1625,15 @@
       prefillSource: null
     };
     
+    // HistoryPanel v1 state
+    let _historyManageMode = false;
+    let _historySelectedIds = new Set();
+    let _historyPendingDeleteIds = [];
+    let _historyMenuOpenForId = null;
+    let _historyHasError = false;
+    let historyItems = [];
+    let isLoadingHistory = false;
+    
     // DOM Elements
     const els = {
       setup: document.getElementById('mi-setup'),
@@ -1250,7 +1658,19 @@
       backBtn: document.getElementById('mi-back'),
       nextBtn: document.getElementById('mi-next'),
       historyList: document.getElementById('mi-history-list'),
-      historyRefresh: document.getElementById('mi-history-refresh')
+      historyRefresh: document.getElementById('mi-history-refresh'),
+      historyLoading: document.getElementById('mi-history-loading'),
+      historyEmpty: document.getElementById('mi-history-empty'),
+      historyError: document.getElementById('mi-history-error'),
+      historyManage: document.getElementById('mi-history-manage'),
+      historyCancelManage: document.getElementById('mi-history-cancel-manage'),
+      historyDeleteSelected: document.getElementById('mi-history-delete-selected'),
+      historyClear: document.getElementById('mi-history-clear'),
+      historyRetry: document.getElementById('mi-history-retry'),
+      modalBackdrop: document.getElementById('mi-history-modal-backdrop'),
+      deleteModal: document.getElementById('mi-history-delete-modal'),
+      deleteCancel: document.getElementById('mi-history-delete-cancel'),
+      deleteConfirm: document.getElementById('mi-history-delete-confirm')
     };
     
     // API endpoints
@@ -1383,15 +1803,198 @@
       return nextMonth.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
     }
     
+    // HistoryPanel v1 helper functions
+    function getVisibleHistoryItems(items) {
+      return (items || []).slice(0, 10);
+    }
+
+    function getVisibleHistoryIds() {
+      return getVisibleHistoryItems(historyItems)
+        .map((x) => String(x?.id || ''))
+        .filter(Boolean);
+    }
+
+    function setHistoryLoading(isLoading) {
+      const loadingEl = els.historyLoading;
+      if (!loadingEl) return;
+      loadingEl.classList.toggle('is-visible', !!isLoading);
+    }
+
+    function showHistoryEmpty(show) {
+      if (!els.historyEmpty) return;
+      els.historyEmpty.hidden = !show;
+    }
+
+    function setHistoryErrorVisible(isVisible, message) {
+      const errEl = els.historyError;
+      if (!errEl) return;
+      const textEl = errEl.querySelector('span[data-default-message]') || errEl.querySelector('span');
+      if (textEl) {
+        if (message) {
+          textEl.textContent = message;
+        } else if (textEl.dataset.defaultMessage) {
+          textEl.textContent = textEl.dataset.defaultMessage;
+        }
+      }
+      errEl.hidden = !isVisible;
+      _historyHasError = isVisible;
+    }
+
+    function setHistoryManageMode(next) {
+      const panel = document.getElementById('mi-history-panel');
+      const titleEl = document.getElementById('mi-history-header-title');
+      _historyManageMode = !!next;
+      if (panel) {
+        panel.classList.toggle('mi-history-panel--manage', _historyManageMode);
+      }
+      if (titleEl) {
+        titleEl.textContent = _historyManageMode ? 'Select items' : 'History';
+      }
+      if (!_historyManageMode) {
+        _historySelectedIds.clear();
+        _historyMenuOpenForId = null;
+      }
+      syncBulkDeleteState();
+      renderHistory();
+    }
+
+    function syncBulkDeleteState() {
+      const btn = els.historyDeleteSelected;
+      if (!btn) return;
+      btn.disabled = _historySelectedIds.size < 1;
+    }
+
+    function closeAllHistoryMenus() {
+      const listEl = els.historyList;
+      if (!listEl) return;
+      listEl.querySelectorAll('.mi-history-menu').forEach((menu) => {
+        menu.hidden = true;
+      });
+      _historyMenuOpenForId = null;
+    }
+
+    function openDeleteModalFor(ids) {
+      const unique = Array.from(new Set((ids || []).map(String).filter(Boolean)));
+      if (!unique.length) {
+        _historyPendingDeleteIds = [];
+        return;
+      }
+      _historyPendingDeleteIds = unique;
+
+      const backdrop = els.modalBackdrop;
+      const modal = els.deleteModal;
+      const cancelBtn = els.deleteCancel;
+      if (backdrop) backdrop.hidden = false;
+      if (modal) modal.hidden = false;
+      setTimeout(() => cancelBtn?.focus?.(), 0);
+    }
+
+    function closeDeleteModal() {
+      _historyPendingDeleteIds = [];
+      if (els.modalBackdrop) els.modalBackdrop.hidden = true;
+      if (els.deleteModal) els.deleteModal.hidden = true;
+    }
+
+    async function deleteMockInterviewSession(id) {
+      // TODO: DELETE endpoint doesn't exist yet - fail gracefully
+      const token = await getToken();
+      if (!token) throw new Error('Unauthorized');
+
+      const res = await fetch(`/api/mock-interview/sessions/${encodeURIComponent(String(id))}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (!res.ok) {
+        if (res.status === 404 || res.status === 405) {
+          throw new Error('Delete functionality coming soon');
+        }
+        throw new Error(`Delete failed (${res.status})`);
+      }
+      return true;
+    }
+
+    async function deleteMockInterviewSessions(ids) {
+      const uniqueIds = Array.from(new Set((ids || []).map(String).filter(Boolean)));
+      if (!uniqueIds.length) return { success: [], failures: [] };
+      const results = await Promise.allSettled(uniqueIds.map((id) => deleteMockInterviewSession(id)));
+      const successIds = results.reduce((acc, result, index) => {
+        if (result.status === 'fulfilled') {
+          acc.push(uniqueIds[index]);
+        }
+        return acc;
+      }, []);
+      const failures = results
+        .map((result, index) => ({ result, id: uniqueIds[index] }))
+        .filter(({ result }) => result.status === 'rejected');
+
+      if (successIds.length) {
+        historyItems = historyItems.filter(item => !successIds.includes(String(item.id)));
+        renderHistory();
+      }
+
+      return { success: successIds, failures };
+    }
+
+    async function handleDeleteConfirm() {
+      const ids = Array.from(new Set(_historyPendingDeleteIds));
+      if (!ids.length) return;
+
+      const confirmBtn = els.deleteConfirm;
+      if (confirmBtn) confirmBtn.disabled = true;
+
+      try {
+        const { failures } = await deleteMockInterviewSessions(ids);
+        ids.forEach((id) => {
+          _historySelectedIds.delete(id);
+        });
+        syncBulkDeleteState();
+        closeDeleteModal();
+        const hadErrorBeforeFetch = _historyHasError;
+        await fetchHistory();
+        if (failures.length) {
+          const failureReason = failures[0].result?.reason;
+          const failureMessage = failureReason?.message
+            || 'Some selected entries could not be deleted. History refreshed to reflect the current state.';
+          setHistoryErrorVisible(true, failureMessage);
+        } else if (!_historyHasError) {
+          setHistoryErrorVisible(false);
+        }
+      } catch (e) {
+        console.warn('[MI] Delete failed:', e);
+        closeDeleteModal();
+        const failureMessage = e?.message || 'Failed to delete selected history.';
+        setHistoryErrorVisible(true, failureMessage);
+        await fetchHistory().catch(() => {});
+        _historySelectedIds.clear();
+        syncBulkDeleteState();
+      } finally {
+        if (confirmBtn) confirmBtn.disabled = false;
+      }
+    }
+    
     // Fetch session history
     async function fetchHistory() {
+      if (isLoadingHistory) return;
+      isLoadingHistory = true;
+      setHistoryLoading(true);
+      setHistoryErrorVisible(false);
+      showHistoryEmpty(false);
+      if (els.historyList) els.historyList.innerHTML = '';
+
       try {
         const token = await getToken();
         if (!token) {
+          historyItems = [];
+          setHistoryLoading(false);
+          renderHistory();
           return;
         }
         
-        const url = `${API.sessions}?limit=3`;
+        const url = `${API.sessions}?limit=10`;
         const res = await fetch(url, {
           headers: { 'Authorization': `Bearer ${token}` }
         });
@@ -1408,16 +2011,17 @@
           updateMeter();
         }
         
-        const sessions = data.sessions || [];
-        renderHistory(sessions);
+        historyItems = data.sessions || [];
+        setHistoryLoading(false);
+        renderHistory();
       } catch (e) {
         console.error('[MI] History fetch error:', e);
-        els.historyList.innerHTML = `
-          <li class="mi-history-error">
-            We couldn't load your previous sessions.
-            <button class="mi-history-retry" onclick="location.reload()">Try again</button>
-          </li>
-        `;
+        historyItems = [];
+        setHistoryLoading(false);
+        setHistoryErrorVisible(true, "Couldn't load history.");
+        renderHistory();
+      } finally {
+        isLoadingHistory = false;
       }
     }
     
@@ -1485,68 +2089,192 @@
       }
     }
     
-    function renderHistory(sessions) {
-      if (!els.historyList) {
-        console.error('[MI] historyList element is null/undefined');
+    function renderHistory() {
+      const listEl = els.historyList;
+      const emptyEl = els.historyEmpty;
+      
+      if (!listEl) return;
+      
+      // Always hide loading when rendering
+      setHistoryLoading(false);
+      
+      if (!historyItems || historyItems.length === 0) {
+        listEl.innerHTML = '';
+        if (emptyEl) {
+          emptyEl.hidden = _historyHasError ? true : false;
+        }
         return;
       }
       
-      if (!sessions || !Array.isArray(sessions) || !sessions.length) {
-        const emptyHTML = '<li class="mi-history-empty">No previous mock interviews yet. Once you finish a session, your score and date will appear here.</li>';
-        els.historyList.innerHTML = emptyHTML;
-        return;
-      }
-    
-    function getScoreTone(score) {
-      if (score >= 80) return 'history-score high';
-      if (score >= 60) return 'history-score medium';
-      return 'history-score low';
-    }
+      if (emptyEl) emptyEl.hidden = true;
+      
+      const visibleItems = getVisibleHistoryItems(historyItems);
 
-    const htmlItems = sessions.map((s, idx) => {
-        try {
-        const createdAt = s.createdAt ? (typeof s.createdAt === 'string' ? new Date(s.createdAt).getTime() : Number(s.createdAt)) : null;
-        const when = createdAt ? timeAgo(createdAt) : '';
-        const role = escapeHtml(s.role || 'Unknown role');
-        // Avoid treating null as 0 because Number(null) is 0 and should be hidden.
-        const normalizedScore = s.overallScore != null && Number.isFinite(Number(s.overallScore))
-          ? Number(s.overallScore)
+      listEl.innerHTML = visibleItems.map(item => {
+        const itemId = String(item?.id || '');
+        const roleName = String(item?.role || '').trim() || 'Untitled role';
+        const createdAt = item.createdAt ? (typeof item.createdAt === 'string' ? new Date(item.createdAt).getTime() : Number(item.createdAt)) : null;
+        const when = createdAt ? timeAgo(createdAt) : '—';
+        const secondaryLine = `Mock interview • ${when}`;
+
+        const normalizedScore = item?.overallScore != null && Number.isFinite(Number(item.overallScore))
+          ? Number(item.overallScore)
           : null;
-        const scoreDisplay = normalizedScore !== null ? `${Math.round(normalizedScore)} / 100` : 'N/A';
-        const scoreClass = normalizedScore !== null ? getScoreTone(normalizedScore) : 'history-score';
-          const sessionId = s.id || `missing-${idx}`;
-          
-          return `
-          <li class="mi-history-item history-item" data-session-id="${sessionId}">
-            <div class="history-main">
-              <svg class="mi-doc-icon history-doc-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-                <polyline points="14 2 14 8 20 8"></polyline>
+
+        const isSelected = _historySelectedIds.has(itemId);
+        const isChecked = isSelected;
+
+        const menuHidden = _historyMenuOpenForId !== itemId;
+
+        const scoreHtml = normalizedScore !== null
+          ? `<div class="mi-history-score" aria-label="Score ${Math.round(normalizedScore)}">${Math.round(normalizedScore)}</div>`
+          : '';
+
+        return `
+          <div class="mi-history-item ${isSelected ? 'is-selected' : ''}" data-id="${escapeHtml(itemId)}" tabindex="0" data-history-row>
+            <span class="mi-history-checkbox-wrap" aria-hidden="${_historyManageMode ? 'false' : 'true'}">
+              <input
+                class="mi-history-checkbox"
+                type="checkbox"
+                data-action="toggle-select"
+                data-id="${escapeHtml(itemId)}"
+                aria-label="Select ${escapeHtml(roleName)}"
+                ${isChecked ? 'checked' : ''}
+              />
+            </span>
+
+            <div class="mi-history-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
+                <polyline points="14 2 14 8 20 8"/>
+                <line x1="16" y1="13" x2="8" y2="13"/>
+                <line x1="16" y1="17" x2="8" y2="17"/>
               </svg>
-              <div class="mi-history-text history-text">
-                <div class="mi-history-line1 history-line1">${role}</div>
-                <div class="mi-history-line2 history-line2">${when ? `• ${escapeHtml(when)}` : ''}</div>
+            </div>
+
+            <div class="mi-history-text">
+              <div class="mi-history-line1">${escapeHtml(roleName)}</div>
+              <div class="mi-history-line2">${escapeHtml(secondaryLine)}</div>
+            </div>
+
+            ${scoreHtml}
+
+            <div class="mi-history-row-actions" aria-label="Row actions">
+              <button
+                class="mi-history-kebab"
+                type="button"
+                aria-label="Row actions"
+                data-action="menu-toggle"
+                data-id="${escapeHtml(itemId)}"
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                  <circle cx="5" cy="12" r="2"></circle>
+                  <circle cx="12" cy="12" r="2"></circle>
+                  <circle cx="19" cy="12" r="2"></circle>
+                </svg>
+              </button>
+              <div class="mi-history-menu" role="menu" ${menuHidden ? 'hidden' : ''} data-action="menu-container">
+                <button class="mi-history-menu-item" type="button" data-action="open" data-id="${escapeHtml(itemId)}">Open / Restore</button>
+                <button class="mi-history-menu-item mi-history-menu-item--danger" type="button" data-action="delete" data-id="${escapeHtml(itemId)}">Delete</button>
               </div>
             </div>
-            <div class="${scoreClass}">${scoreDisplay}</div>
-          </li>
+          </div>
         `;
-        } catch (e) {
-          console.error('[MI] Error generating HTML for session:', e);
-          return '';
-        }
-      });
-      
-      els.historyList.innerHTML = htmlItems.join('');
-      
-      const renderedItems = els.historyList.querySelectorAll('.mi-history-item');
-      renderedItems.forEach((item) => {
-        const sessionId = item.dataset.sessionId;
-        if (sessionId) {
-          item.addEventListener('click', () => {
-            loadHistoricalSession(sessionId);
-          });
-        }
+      }).join('');
+
+      // Attach event listeners
+      listEl.querySelectorAll('[data-history-row]').forEach((row) => {
+        const itemId = row.dataset.id;
+        const item = historyItems.find((x) => String(x.id) === itemId);
+        if (!item) return;
+
+        const onSelect = () => {
+          if (_historyManageMode) return;
+          loadHistoricalSession(itemId);
+        };
+
+        row.addEventListener('click', (e) => {
+          const actionEl = e.target.closest('[data-action]');
+          if (actionEl) {
+            const action = actionEl.dataset.action;
+            if (action === 'menu-container') {
+              e.stopPropagation();
+              return;
+            }
+            if (action === 'toggle-select') {
+              e.stopPropagation();
+              const checkbox = actionEl;
+              if ((checkbox instanceof HTMLInputElement) && checkbox.type === 'checkbox') {
+                if (checkbox.checked) {
+                  _historySelectedIds.add(itemId);
+                } else {
+                  _historySelectedIds.delete(itemId);
+                }
+                syncBulkDeleteState();
+                renderHistory();
+              }
+              return;
+            }
+            if (action === 'menu-toggle') {
+              e.stopPropagation();
+              const previouslyOpen = _historyMenuOpenForId;
+              closeAllHistoryMenus();
+              _historyMenuOpenForId = previouslyOpen === itemId ? null : itemId;
+              renderHistory();
+              return;
+            }
+            if (action === 'open') {
+              e.stopPropagation();
+              closeAllHistoryMenus();
+              onSelect();
+              return;
+            }
+            if (action === 'delete') {
+              e.stopPropagation();
+              closeAllHistoryMenus();
+              openDeleteModalFor([itemId]);
+              return;
+            }
+            return;
+          }
+          if (_historyManageMode) {
+            // In manage mode, clicking row toggles checkbox
+            const checkbox = row.querySelector('.mi-history-checkbox');
+            if (checkbox) {
+              checkbox.checked = !checkbox.checked;
+              if (checkbox.checked) {
+                _historySelectedIds.add(itemId);
+              } else {
+                _historySelectedIds.delete(itemId);
+              }
+              syncBulkDeleteState();
+              renderHistory();
+            }
+          } else {
+            onSelect();
+          }
+        });
+
+        row.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            if (_historyManageMode) {
+              const checkbox = row.querySelector('.mi-history-checkbox');
+              if (checkbox) {
+                checkbox.checked = !checkbox.checked;
+                if (checkbox.checked) {
+                  _historySelectedIds.add(itemId);
+                } else {
+                  _historySelectedIds.delete(itemId);
+                }
+                syncBulkDeleteState();
+                renderHistory();
+              }
+            } else {
+              onSelect();
+            }
+          }
+        });
       });
     }
     
@@ -2123,8 +2851,99 @@
       });
       
       // History refresh button
-      els.historyRefresh?.addEventListener('click', () => {
+      els.historyRefresh?.addEventListener('click', (e) => {
+        e.preventDefault();
+        if (_historyManageMode) return;
         fetchHistory();
+      });
+
+      // History manage mode controls
+      els.historyManage?.addEventListener('click', (e) => {
+        e.preventDefault();
+        setHistoryManageMode(true);
+      });
+
+      els.historyCancelManage?.addEventListener('click', (e) => {
+        e.preventDefault();
+        setHistoryManageMode(false);
+      });
+
+      els.historyDeleteSelected?.addEventListener('click', (e) => {
+        e.preventDefault();
+        if (_historySelectedIds.size < 1) return;
+        openDeleteModalFor(Array.from(_historySelectedIds));
+      });
+
+      // Retention footer: Clear history
+      els.historyClear?.addEventListener('click', (e) => {
+        e.preventDefault();
+        const ids = getVisibleHistoryIds();
+        if (!ids.length) {
+          return;
+        }
+        if (!_historyManageMode) setHistoryManageMode(true);
+        _historySelectedIds = new Set(ids);
+        syncBulkDeleteState();
+        renderHistory();
+        openDeleteModalFor(ids);
+      });
+
+      // Retry link
+      els.historyRetry?.addEventListener('click', (e) => {
+        e.preventDefault();
+        fetchHistory();
+      });
+
+      // Modal handlers
+      els.modalBackdrop?.addEventListener('click', closeDeleteModal);
+      els.deleteCancel?.addEventListener('click', closeDeleteModal);
+      els.deleteConfirm?.addEventListener('click', handleDeleteConfirm);
+
+      // Focus trap + ESC close for modal
+      const modal = els.deleteModal;
+      if (modal && !modal.dataset.bound) {
+        modal.dataset.bound = '1';
+        modal.addEventListener('keydown', function(e) {
+          if (e.key === 'Escape') {
+            e.preventDefault();
+            closeDeleteModal();
+            return;
+          }
+          if (e.key !== 'Tab') return;
+          const focusables = modal.querySelectorAll('button,[href],input,select,textarea,[tabindex]:not([tabindex="-1"])');
+          const list = Array.from(focusables).filter((el) => !el.disabled && el.offsetParent !== null);
+          if (!list.length) return;
+          const first = list[0];
+          const last = list[list.length - 1];
+          const active = document.activeElement;
+          if (e.shiftKey && active === first) {
+            e.preventDefault();
+            last.focus();
+          } else if (!e.shiftKey && active === last) {
+            e.preventDefault();
+            first.focus();
+          }
+        });
+      }
+
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+          const backdropEl = els.modalBackdrop;
+          if (backdropEl && !backdropEl.hidden) {
+            closeDeleteModal();
+          }
+        }
+      });
+
+      // Close menus when clicking outside
+      document.addEventListener('click', (e) => {
+        if (!_historyManageMode && _historyMenuOpenForId) {
+          const menu = els.historyList?.querySelector('.mi-history-menu:not([hidden])');
+          if (menu && !menu.contains(e.target)) {
+            closeAllHistoryMenus();
+            renderHistory();
+          }
+        }
       });
     }
     
@@ -2134,6 +2953,10 @@
       hydrateFromParams();
       setupEventListeners();
       initRoleSelector();
+      
+      // Safety: ensure delete modal/backdrop are never stuck visible on cold load
+      closeDeleteModal();
+      
       await fetchHistory();
       await fetchSavedSets();
       
