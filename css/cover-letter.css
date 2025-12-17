@@ -490,12 +490,14 @@
 }
 .cl-history-manage-actions__actions {
   display: flex;
+  flex-direction: row;
   gap: 10px;
   align-items: center;
   flex-wrap: wrap;
 }
 .cl-history-panel--manage .cl-history-manage-actions { 
   display: flex;
+  flex-direction: row;
   justify-content: flex-end;
   align-items: center;
 }
