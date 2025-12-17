@@ -16,9 +16,14 @@ import {
   ensureMockInterviewSchema
 } from '../../../_lib/db.js';
 
-const DB_BINDING_NAMES = ['JOBHACKAI_DB', 'INTERVIEW_QUESTIONS_DB', 'IQ_D1', 'DB'];
+// Match binding resolution order used by the shared D1 helper (`app/functions/_lib/db.js`)
+// to prevent reading from one binding and deleting from another when multiple bindings exist.
+const DB_BINDING_NAMES = ['DB', 'JOBHACKAI_DB', 'INTERVIEW_QUESTIONS_DB', 'IQ_D1'];
 
 function getDb(env) {
+  if (!env) return null;
+  const direct = env.DB;
+  if (direct && typeof direct.prepare === 'function') return direct;
   for (const name of DB_BINDING_NAMES) {
     const candidate = env[name];
     if (candidate && typeof candidate.prepare === 'function') return candidate;
