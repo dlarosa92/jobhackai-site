@@ -755,19 +755,8 @@ function closeDeleteModal() {
 }
 
 async function deleteLinkedInHistoryItem(id) {
-  // NOTE: backend may not support DELETE yet; we fail gracefully if it doesn't.
-  try {
-    await apiFetch(`/api/linkedin/history/${encodeURIComponent(String(id))}`, { method: 'DELETE' });
-    return true;
-  } catch (e) {
-    // If backend doesn't support DELETE, return a rejected promise with clear message
-    if (e?.status === 405 || e?.message?.includes('method_not_allowed')) {
-      const err = new Error('Delete API not yet implemented');
-      err.status = 405;
-      throw err;
-    }
-    throw e;
-  }
+  await apiFetch(`/api/linkedin/history/${encodeURIComponent(String(id))}`, { method: 'DELETE' });
+  return true;
 }
 
 async function deleteLinkedInHistoryItems(ids) {
