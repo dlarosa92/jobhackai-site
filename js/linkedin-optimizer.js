@@ -155,6 +155,13 @@ let regenQueue = Promise.resolve();
 let currentRegenRunId = null; // Run ID for in-flight regeneration, used to guard against stale regeneration responses
 let unlockedInitialized = false;
 
+// HistoryPanel v1 state
+let _historyManageMode = false;
+let _historySelectedIds = new Set();
+let _historyPendingDeleteIds = [];
+let _historyMenuOpenForId = null;
+let _historyHasError = false;
+
 function setLockedView(kind) {
   // kind: 'none'|'login'|'upgrade'
   if (!els.locked || !els.app) return;
@@ -446,80 +453,393 @@ function renderResults(run) {
   renderSections(run.sections || {});
 }
 
+function getVisibleHistoryItems(items) {
+  // UI spec: show last 10
+  return (items || []).slice(0, 10);
+}
+
+function setHistoryLoading(on) {
+  const loadingEl = document.getElementById('lo-history-loading');
+  if (loadingEl) {
+    loadingEl.classList.toggle('is-visible', !!on);
+  }
+}
+
+function setHistoryErrorVisible(on, message) {
+  const errorEl = document.getElementById('lo-history-error');
+  _historyHasError = !!on;
+  if (errorEl) {
+    errorEl.hidden = !on;
+    const defaultMsg = errorEl.querySelector('[data-default-message]');
+    if (defaultMsg && message) {
+      defaultMsg.textContent = message;
+    }
+  }
+}
+
+function setHistoryManageMode(next) {
+  const panel = document.getElementById('lo-history-panel');
+  const titleEl = document.getElementById('lo-history-header-title');
+  _historyManageMode = !!next;
+  if (panel) {
+    panel.classList.toggle('lo-history-panel--manage', _historyManageMode);
+  }
+  if (titleEl) {
+    titleEl.textContent = _historyManageMode ? 'Select items' : 'History';
+  }
+  if (!_historyManageMode) {
+    _historySelectedIds.clear();
+    _historyMenuOpenForId = null;
+  }
+  syncBulkDeleteState();
+  // Re-render list so checkboxes/menus match mode
+  renderHistory();
+}
+
+function syncBulkDeleteState() {
+  const deleteBtn = document.getElementById('lo-history-delete-selected');
+  if (deleteBtn) {
+    deleteBtn.disabled = _historySelectedIds.size === 0;
+  }
+}
+
+function closeAllHistoryMenus() {
+  _historyMenuOpenForId = null;
+}
+
 function renderHistory() {
-  if (!els.historyList || !els.historyEmpty) return;
-  els.historyList.innerHTML = '';
-  els.historyEmpty.hidden = historyItems.length > 0;
+  const listEl = document.getElementById('lo-history-list');
+  const emptyEl = document.getElementById('lo-history-empty');
+  
+  if (!listEl) return;
+  
+  // Always hide loading when rendering
+  setHistoryLoading(false);
+  
+  if (!historyItems || historyItems.length === 0) {
+    listEl.innerHTML = '';
+    if (emptyEl) {
+      emptyEl.hidden = _historyHasError ? true : false;
+    }
+    return;
+  }
+  
+  if (emptyEl) emptyEl.hidden = true;
+  
+  const visibleItems = getVisibleHistoryItems(historyItems);
 
-  const getScoreTone = (score) => {
-    if (score >= 80) return 'history-score high';
-    if (score >= 60) return 'history-score medium';
-    return 'history-score low';
-  };
+  listEl.innerHTML = visibleItems.map(item => {
+    const itemId = String(item?.id || '');
+    const roleName = String(item?.role || '').trim() || 'LinkedIn optimization';
+    const when = timeAgo(item?.createdAt) || '—';
 
-  for (const item of historyItems) {
-    const row = document.createElement('div');
-    row.className = 'lo-history-item history-item';
-    row.dataset.id = item.id;
-    row.tabIndex = 0;
-    row.classList.toggle('is-selected', selectedHistoryId === item.id);
-
-    const when = timeAgo(item.createdAt);
-    // Guard against null scores because Number(null) === 0 and would be treated as valid.
-    const normalizedScore = item.overallScore != null && Number.isFinite(Number(item.overallScore))
+    // Prevent null from being coerced into a valid 0 score.
+    const normalizedScore = item?.overallScore != null && Number.isFinite(Number(item.overallScore))
       ? Number(item.overallScore)
       : null;
-    const scoreHtml = normalizedScore !== null
-      ? `<div class="history-score ${getScoreTone(normalizedScore)}">${Math.round(normalizedScore)}</div>`
-      : '';
-    const scorePart = normalizedScore !== null ? `${Math.round(normalizedScore)}/100` : '';
-    const visibilityMeta = normalizedScore !== null ? getRecruiterBoostLabel(normalizedScore) : '';
-    const metaParts = [scorePart, visibilityMeta, when].filter(Boolean);
-    const metaText = metaParts.join(' • ');
 
-    row.innerHTML = `
-      <div class="history-main">
-        <svg class="history-doc-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-          <polyline points="14 2 14 8 20 8"></polyline>
-        </svg>
-        <div class="history-text">
-          <div class="history-line1">${escapeHtml(item.role || 'LinkedIn Optimization')}</div>
-          <div class="history-line2">${escapeHtml(metaText)}</div>
+    const isCurrent = !_historyManageMode && selectedHistoryId && String(selectedHistoryId) === itemId;
+    const isSelected = isCurrent ? 'is-selected' : '';
+    const isChecked = _historySelectedIds.has(itemId);
+
+    const scoreHtml = normalizedScore !== null
+      ? `<div class="lo-history-score" aria-label="Score ${Math.round(normalizedScore)}">${Math.round(normalizedScore)}</div>`
+      : '';
+
+    const menuHidden = _historyMenuOpenForId !== itemId;
+
+    // Row secondary template: "{visibilityLabel} • {relativeDate}" or fallback "LinkedIn optimization • {relativeDate}"
+    const visibilityLabel = normalizedScore !== null ? getRecruiterBoostLabel(normalizedScore) : '';
+    const secondaryLine = visibilityLabel 
+      ? `${escapeHtml(visibilityLabel)} • ${escapeHtml(when)}`
+      : `LinkedIn optimization • ${escapeHtml(when)}`;
+
+    return `
+      <div class="lo-history-item ${isSelected}" data-id="${escapeHtml(itemId)}" tabindex="0" data-history-row>
+        <span class="lo-history-checkbox-wrap" aria-hidden="${_historyManageMode ? 'false' : 'true'}">
+          <input
+            class="lo-history-checkbox"
+            type="checkbox"
+            data-action="toggle-select"
+            data-id="${escapeHtml(itemId)}"
+            aria-label="Select ${escapeHtml(roleName)}"
+            ${isChecked ? 'checked' : ''}
+          />
+        </span>
+
+        <div class="lo-history-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
+            <polyline points="14 2 14 8 20 8"/>
+            <line x1="16" y1="13" x2="8" y2="13"/>
+            <line x1="16" y1="17" x2="8" y2="17"/>
+          </svg>
+        </div>
+
+        <div class="lo-history-text">
+          <div class="lo-history-line1">${escapeHtml(roleName)}</div>
+          <div class="lo-history-line2">${secondaryLine}</div>
+        </div>
+
+        ${scoreHtml}
+
+        <div class="lo-history-row-actions" aria-label="Row actions">
+          <button
+            class="lo-history-kebab"
+            type="button"
+            aria-label="Row actions"
+            data-action="menu-toggle"
+            data-id="${escapeHtml(itemId)}"
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <circle cx="5" cy="12" r="2"></circle>
+              <circle cx="12" cy="12" r="2"></circle>
+              <circle cx="19" cy="12" r="2"></circle>
+            </svg>
+          </button>
+          <div class="lo-history-menu" role="menu" ${menuHidden ? 'hidden' : ''}>
+            <button class="lo-history-menu-item" type="button" data-action="open" data-id="${escapeHtml(itemId)}">Open / Restore</button>
+            <button class="lo-history-menu-item lo-history-menu-item--danger" type="button" data-action="delete" data-id="${escapeHtml(itemId)}">Delete</button>
+          </div>
         </div>
       </div>
-      ${scoreHtml}
     `;
+  }).join('');
 
-    const onSelect = () => loadRun(item.id, { fromHistory: true });
-    row.addEventListener('click', onSelect);
-    row.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' || e.key === ' ') {
-        e.preventDefault();
+  // Attach event listeners
+  listEl.querySelectorAll('[data-history-row]').forEach((row) => {
+    const itemId = row.dataset.id;
+    const item = historyItems.find((x) => String(x.id) === itemId);
+    if (!item) return;
+
+    const onSelect = () => {
+      if (_historyManageMode) return;
+      const chosen = historyItems.find((x) => String(x.id) === itemId);
+      if (!chosen) return;
+      // Use chosen.id instead of item.id to ensure we use the fresh lookup result
+      selectedHistoryId = chosen.id;
+      loadRun(chosen.id, { fromHistory: true });
+    };
+
+    row.addEventListener('click', (e) => {
+      const actionEl = e.target.closest('[data-action]');
+      if (actionEl) {
+        const action = actionEl.dataset.action;
+        if (action === 'toggle-select') {
+          e.stopPropagation();
+          const checkbox = actionEl;
+          if ((checkbox instanceof HTMLInputElement) && checkbox.type === 'checkbox') {
+            if (checkbox.checked) {
+              _historySelectedIds.add(itemId);
+            } else {
+              _historySelectedIds.delete(itemId);
+            }
+            syncBulkDeleteState();
+            renderHistory();
+          }
+          return;
+        }
+        if (action === 'menu-toggle') {
+          e.stopPropagation();
+          const previouslyOpen = _historyMenuOpenForId;
+          closeAllHistoryMenus();
+          _historyMenuOpenForId = previouslyOpen === itemId ? null : itemId;
+          renderHistory();
+          return;
+        }
+        if (action === 'open') {
+          e.stopPropagation();
+          closeAllHistoryMenus();
+          onSelect();
+          return;
+        }
+        if (action === 'delete') {
+          e.stopPropagation();
+          closeAllHistoryMenus();
+          // Re-render to close menu in DOM before opening modal
+          renderHistory();
+          openDeleteModalFor([itemId]);
+          return;
+        }
+        return;
+      }
+      if (_historyManageMode) {
+        // In manage mode, clicking row toggles checkbox
+        const checkbox = row.querySelector('.lo-history-checkbox');
+        if (checkbox && checkbox instanceof HTMLInputElement) {
+          checkbox.checked = !checkbox.checked;
+          if (checkbox.checked) {
+            _historySelectedIds.add(itemId);
+          } else {
+            _historySelectedIds.delete(itemId);
+          }
+          syncBulkDeleteState();
+          renderHistory();
+        }
+      } else {
+        closeAllHistoryMenus();
         onSelect();
       }
     });
 
-    els.historyList.appendChild(row);
-  }
+    row.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        if (_historyManageMode) {
+          const checkbox = row.querySelector('.lo-history-checkbox');
+          if (checkbox && checkbox instanceof HTMLInputElement) {
+            checkbox.checked = !checkbox.checked;
+            if (checkbox.checked) {
+              _historySelectedIds.add(itemId);
+            } else {
+              _historySelectedIds.delete(itemId);
+            }
+            syncBulkDeleteState();
+            renderHistory();
+          }
+        } else {
+          closeAllHistoryMenus();
+          onSelect();
+        }
+      }
+    });
+  });
 }
 
 async function fetchHistory() {
+  const emptyEl = document.getElementById('lo-history-empty');
+  const listEl = document.getElementById('lo-history-list');
+  // Show loading skeleton, hide error + empty
+  setHistoryErrorVisible(false);
+  setHistoryLoading(true);
+  if (emptyEl) emptyEl.hidden = true;
+  if (listEl) listEl.innerHTML = '';
+  
   try {
     const data = await apiFetch('/api/linkedin/history', { method: 'GET' });
     historyItems = Array.isArray(data?.items) ? data.items : [];
+    setHistoryLoading(false);
     renderHistory();
   } catch (e) {
     console.warn('[LINKEDIN] history failed', e);
     historyItems = [];
+    setHistoryLoading(false);
+    setHistoryErrorVisible(true, 'Couldn\'t load history.');
     renderHistory();
+  }
+}
+
+function openDeleteModalFor(ids) {
+  _historyPendingDeleteIds = Array.from(new Set(ids.map(String).filter(Boolean)));
+  const backdrop = document.getElementById('lo-history-modal-backdrop');
+  const modal = document.getElementById('lo-history-delete-modal');
+  if (backdrop) backdrop.hidden = false;
+  if (modal) {
+    modal.hidden = false;
+    modal.setAttribute('aria-hidden', 'false');
+    // Focus cancel button for accessibility
+    const cancelBtn = document.getElementById('lo-history-modal-cancel');
+    setTimeout(() => cancelBtn?.focus?.(), 0);
+  }
+}
+
+function closeDeleteModal() {
+  const backdrop = document.getElementById('lo-history-modal-backdrop');
+  const modal = document.getElementById('lo-history-delete-modal');
+  if (backdrop) backdrop.hidden = true;
+  if (modal) {
+    modal.hidden = true;
+    modal.setAttribute('aria-hidden', 'true');
+  }
+  _historyPendingDeleteIds = [];
+}
+
+async function deleteLinkedInHistoryItem(id) {
+  // NOTE: backend may not support DELETE yet; we fail gracefully if it doesn't.
+  try {
+    await apiFetch(`/api/linkedin/history/${encodeURIComponent(String(id))}`, { method: 'DELETE' });
+    return true;
+  } catch (e) {
+    // If backend doesn't support DELETE, return a rejected promise with clear message
+    if (e?.status === 405 || e?.message?.includes('method_not_allowed')) {
+      const err = new Error('Delete API not yet implemented');
+      err.status = 405;
+      throw err;
+    }
+    throw e;
+  }
+}
+
+async function deleteLinkedInHistoryItems(ids) {
+  const idArray = Array.from(new Set((ids || []).map(String).filter(Boolean)));
+  if (!idArray.length) return { success: [], failures: [] };
+  const results = await Promise.allSettled(idArray.map((id) => deleteLinkedInHistoryItem(id)));
+  // Map first to preserve original index, then filter (same pattern as failures below)
+  const successIds = results
+    .map((result, index) => ({ result, id: idArray[index] }))
+    .filter(({ result }) => result.status === 'fulfilled')
+    .map(({ id }) => id);
+  const failures = results
+    .map((result, index) => ({ result, id: idArray[index] }))
+    .filter(({ result }) => result.status === 'rejected');
+
+  if (successIds.length) {
+    historyItems = historyItems.filter(item => !successIds.includes(String(item.id)));
+    if (selectedHistoryId && successIds.includes(String(selectedHistoryId))) {
+      selectedHistoryId = null;
+      setResultsVisible(false);
+    }
+    renderHistory();
+  }
+
+  return { success: successIds, failures };
+}
+
+async function handleDeleteConfirm() {
+  const ids = Array.from(new Set(_historyPendingDeleteIds));
+  if (!ids.length) return;
+
+  const confirmBtn = document.getElementById('lo-history-modal-confirm');
+  if (confirmBtn) confirmBtn.disabled = true;
+
+  try {
+    const { failures } = await deleteLinkedInHistoryItems(ids);
+    ids.forEach((id) => {
+      _historySelectedIds.delete(id);
+    });
+    syncBulkDeleteState();
+    closeDeleteModal();
+    // Store error state before fetchHistory (which may set its own error)
+    const hadErrorBeforeFetch = _historyHasError;
+    await fetchHistory();
+    // Only show error if there were delete failures
+    if (failures.length) {
+      const failureReason = failures[0].result?.reason;
+      const failureMessage = failureReason?.message || failureReason || 'Some selected entries could not be deleted. History refreshed to reflect the current state.';
+      setHistoryErrorVisible(true, failureMessage);
+    } else if (!_historyHasError) {
+      // Only clear error if fetchHistory didn't encounter an error
+      setHistoryErrorVisible(false);
+    }
+  } catch (e) {
+    console.warn('[LINKEDIN] Delete failed:', e);
+    closeDeleteModal();
+    const failureMessage = e?.message || 'Failed to delete selected history.';
+    setHistoryErrorVisible(true, failureMessage);
+    await fetchHistory().catch(() => {});
+    _historySelectedIds.clear();
+    syncBulkDeleteState();
+  } finally {
+    if (confirmBtn) confirmBtn.disabled = false;
   }
 }
 
 async function loadRun(id, options = {}) {
   if (!id) return;
   selectedHistoryId = id;
-  renderHistory();
+  if (!_historyManageMode) {
+    renderHistory();
+  }
   setLoading(true, 'Loading saved run…');
   try {
     const data = await apiFetch(`/api/linkedin/run?id=${encodeURIComponent(id)}`, { method: 'GET' });
@@ -568,6 +888,7 @@ async function loadRun(id, options = {}) {
     if (options.fromHistory) {
       showToast('Loaded from history — no new credits used.');
     }
+    // Refresh history to update selected state
     await fetchHistory();
   } catch (e) {
     console.warn('[LINKEDIN] load run failed', e);
@@ -1022,9 +1343,106 @@ function bindEvents() {
     downloadPdf();
   });
 
-  document.getElementById('lo-history-refresh')?.addEventListener('click', (e) => {
-    e.preventDefault();
-    fetchHistory();
+  // History panel event handlers
+  const refreshBtn = document.getElementById('lo-history-refresh');
+  if (refreshBtn) {
+    refreshBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      if (_historyManageMode) return;
+      fetchHistory();
+    });
+  }
+
+  // Retry link
+  const retryBtn = document.getElementById('lo-history-retry');
+  if (retryBtn) {
+    retryBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      fetchHistory();
+    });
+  }
+
+  // Manage mode controls
+  const manageBtn = document.getElementById('lo-history-manage');
+  if (manageBtn) {
+    manageBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      setHistoryManageMode(true);
+    });
+  }
+
+  const cancelManageBtn = document.getElementById('lo-history-cancel-manage');
+  if (cancelManageBtn) {
+    cancelManageBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      setHistoryManageMode(false);
+    });
+  }
+
+  const deleteSelectedBtn = document.getElementById('lo-history-delete-selected');
+  if (deleteSelectedBtn) {
+    deleteSelectedBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      const ids = Array.from(_historySelectedIds);
+      if (ids.length) {
+        openDeleteModalFor(ids);
+      }
+    });
+  }
+
+  // Clear history handler
+  const clearHistoryBtn = document.getElementById('lo-history-clear');
+  if (clearHistoryBtn) {
+    clearHistoryBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      // Enter manage mode
+      setHistoryManageMode(true);
+      // Auto-select all visible items
+      const visibleIds = getVisibleHistoryItems(historyItems).map(item => String(item.id));
+      visibleIds.forEach(id => _historySelectedIds.add(id));
+      syncBulkDeleteState();
+      renderHistory();
+      // Open modal immediately
+      if (visibleIds.length) {
+        openDeleteModalFor(visibleIds);
+      }
+    });
+  }
+
+  // Modal handlers
+  const modalBackdrop = document.getElementById('lo-history-modal-backdrop');
+  if (modalBackdrop) {
+    modalBackdrop.addEventListener('click', (e) => {
+      if (e.target === modalBackdrop) {
+        closeDeleteModal();
+      }
+    });
+  }
+
+  const modalCancelBtn = document.getElementById('lo-history-modal-cancel');
+  if (modalCancelBtn) {
+    modalCancelBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      closeDeleteModal();
+    });
+  }
+
+  const modalConfirmBtn = document.getElementById('lo-history-modal-confirm');
+  if (modalConfirmBtn) {
+    modalConfirmBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      handleDeleteConfirm();
+    });
+  }
+
+  // ESC key to close modal
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      const modal = document.getElementById('lo-history-delete-modal');
+      if (modal && !modal.hidden) {
+        closeDeleteModal();
+      }
+    }
   });
 }
 
