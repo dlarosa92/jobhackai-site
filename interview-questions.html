@@ -365,10 +365,11 @@
     .icon-btn svg { width:20px; height:20px; stroke:#1F2937; stroke-width:2.25; stroke-linecap:round; stroke-linejoin:round; fill:none; }
     .icon-btn { display:inline-flex; align-items:center; justify-content:center; }
 
-    /* Two-column responsive layout */
-    .iq-two-col { display:grid; grid-template-columns: minmax(0,1fr) minmax(260px,320px); gap:1.25rem; align-items:start; margin-bottom:160px; }
-    .iq-two-col aside.card { position:sticky; top:8px; max-height:70vh; overflow:auto; }
-    @media (max-width: 900px) { .iq-two-col { grid-template-columns: 1fr; } .iq-two-col aside.card { position:static; max-height:70vh; } }
+    /* Two-column responsive layout for top section + history */
+    .iq-top-grid { display:grid; grid-template-columns: minmax(0,1fr) minmax(260px,320px); gap:1.25rem; align-items:start; margin-bottom:1.5rem; }
+    .iq-top-grid aside.card { position:sticky; top:8px; max-height:70vh; overflow:auto; }
+    @media (max-width: 900px) { .iq-top-grid { grid-template-columns: 1fr; } .iq-top-grid aside.card { position:static; max-height:70vh; } }
+    .iq-questions-section { margin-bottom:160px; }
     @media (max-width: 600px) { 
       .iq-main { padding: 0 .75rem 120px .75rem; } 
       .iq-toolbar .iq-row { align-items: stretch; gap: 1rem; } 
@@ -1105,6 +1106,8 @@
       <span style="font-size:0.8rem; color:#6B7280; margin-left:0.5rem;">We'll use your starred questions in your mock interview.</span>
     </div>
 
+    <div class="iq-top-grid">
+      <div>
     <div class="iq-toolbar card">
       <div class="iq-row">
         <div class="iq-field" style="flex:1 1 300px; min-width:280px; position:relative;">
@@ -1182,13 +1185,8 @@
       <div class="iq-actions-sec" id="iq-actions-sec" hidden style="display:none;">
         <button id="chip-saved" class="chip" hidden aria-hidden="true">Saved (0)</button>
       </div>
-    </div>
-
-<div class="iq-two-col">
-      <div>
-    <div id="iq-questions" class="iq-questions"></div>
       </div>
-      <aside class="card history-card rf-history" id="iq-history-panel" data-history-panel="v1" style="align-self:start;">
+      <aside class="card history-card rf-history" id="iq-history-panel" data-history-panel="v1">
         <div class="rf-history-header" data-history-header>
           <div class="rf-history-title-wrap">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
@@ -1292,6 +1290,10 @@
           </div>
         </div>
       </aside>
+    </div>
+
+    <div class="iq-questions-section">
+      <div id="iq-questions" class="iq-questions"></div>
     </div>
 
     <div id="iq-lock" class="iq-lock" style="display:none;">
