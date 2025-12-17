@@ -769,9 +769,11 @@ async function deleteLinkedInHistoryItems(ids) {
   const idArray = Array.from(new Set((ids || []).map(String).filter(Boolean)));
   if (!idArray.length) return { success: [], failures: [] };
   const results = await Promise.allSettled(idArray.map((id) => deleteLinkedInHistoryItem(id)));
+  // Map first to preserve original index, then filter (same pattern as failures below)
   const successIds = results
-    .filter((r) => r.status === 'fulfilled')
-    .map((r, index) => idArray[index]);
+    .map((result, index) => ({ result, id: idArray[index] }))
+    .filter(({ result }) => result.status === 'fulfilled')
+    .map(({ id }) => id);
   const failures = results
     .map((result, index) => ({ result, id: idArray[index] }))
     .filter(({ result }) => result.status === 'rejected');
