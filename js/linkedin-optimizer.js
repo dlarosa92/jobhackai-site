@@ -674,6 +674,7 @@ function renderHistory() {
           renderHistory();
         }
       } else {
+        closeAllHistoryMenus();
         onSelect();
       }
     });
@@ -694,6 +695,7 @@ function renderHistory() {
             renderHistory();
           }
         } else {
+          closeAllHistoryMenus();
           onSelect();
         }
       }
