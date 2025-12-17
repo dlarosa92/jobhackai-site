@@ -186,7 +186,6 @@ const els = {
   historyManage: null,
   historyCancelManage: null,
   historyDeleteSelected: null,
-  historySelectAll: null,
   historyClear: null,
   historyRetry: null
 };
@@ -825,14 +824,6 @@ function bindEvents() {
     openDeleteModalFor(Array.from(_historySelectedIds));
   });
 
-  els.historySelectAll?.addEventListener('click', (e) => {
-    e.preventDefault();
-    const ids = getVisibleHistoryIds();
-    ids.forEach((id) => _historySelectedIds.add(id));
-    syncBulkDeleteState();
-    renderHistory();
-  });
-
   // Retention footer: Clear history
   els.historyClear?.addEventListener('click', (e) => {
     e.preventDefault();
@@ -928,7 +919,6 @@ function initElements() {
   els.historyManage = $('#cl-history-manage');
   els.historyCancelManage = $('#cl-history-cancel-manage');
   els.historyDeleteSelected = $('#cl-history-delete-selected');
-  els.historySelectAll = $('#cl-history-select-all');
   els.historyClear = $('#cl-history-clear');
   els.historyRetry = $('#cl-history-retry');
 }
