@@ -261,12 +261,30 @@
       font-weight: var(--font-weight-medium);
     }
     
+    /* Skeleton Loading Animation */
+    @keyframes rf-shimmer {
+      0% { background-position: 200% 0; }
+      100% { background-position: -200% 0; }
+    }
+    .rf-skeleton {
+      background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+      background-size: 200% 100%;
+      animation: rf-shimmer 1.5s infinite;
+      border-radius: var(--radius-lg);
+      opacity: 1;
+      transition: opacity 0.3s ease;
+    }
+    .rf-skeleton.hidden {
+      opacity: 0;
+      pointer-events: none;
+    }
+    
     /* Session History Sidebar - HistoryPanel v1 */
     .mi-history {
       position: sticky;
       top: 1rem;
     }
-
+    
     .mi-history-header {
       display: flex;
       align-items: center;
@@ -274,7 +292,7 @@
       gap: 12px;
       margin-bottom: 12px;
     }
-
+    
     .mi-history-title-wrap {
       display: flex;
       align-items: center;
@@ -333,12 +351,7 @@
     .mi-history-panel--manage .mi-history-header-actions { display: none; }
     .mi-history-manage-actions {
       display: none;
-      width: 100%;
-      margin-top: 12px;
-      gap: 12px;
-      justify-content: space-between;
-      align-items: center;
-      flex-wrap: wrap;
+      flex-shrink: 0;
     }
     .mi-history-manage-actions__actions {
       display: flex;
@@ -397,7 +410,7 @@
         width: 100%;
       }
     }
-
+    
     .mi-history-subtitle {
       margin-top: 10px;
       font-size: 0.875rem; /* ~14px */
@@ -407,13 +420,13 @@
     .mi-history-body {
       margin-top: 16px;
     }
-
+    
     .mi-history-list {
       display: flex;
       flex-direction: column;
       gap: 12px;
     }
-
+    
     .mi-history-item {
       position: relative;
       display: flex;
@@ -469,7 +482,7 @@
       height: 20px;
       color: #4F46E5;
     }
-
+    
     .mi-history-text {
       flex: 1;
       min-width: 0;
@@ -491,7 +504,7 @@
       overflow: hidden;
       text-overflow: ellipsis;
     }
-
+    
     .mi-history-score {
       font-weight: 800;
       color: var(--color-text-main);
@@ -1473,20 +1486,20 @@
 
           <div class="mi-history-header-actions" data-history-header-actions>
             <button id="mi-history-refresh" class="mi-history-icon-btn" title="Refresh history" aria-label="Refresh history" type="button">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-                <path d="M23 4v6h-6"/>
-                <path d="M1 20v-6h6"/>
-                <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
-              </svg>
-            </button>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <path d="M23 4v6h-6"/>
+              <path d="M1 20v-6h6"/>
+              <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
+            </svg>
+          </button>
             <button id="mi-history-manage" class="mi-history-manage-btn" type="button">Manage</button>
-          </div>
         </div>
 
-        <div class="mi-history-manage-actions" id="mi-history-manage-actions" data-history-manage-controls>
-          <div class="mi-history-manage-actions__actions">
-            <button id="mi-history-delete-selected" class="mi-history-danger-btn" type="button" disabled>Delete selected</button>
-            <button id="mi-history-cancel-manage" class="mi-history-neutral-btn" type="button">Cancel</button>
+          <div class="mi-history-manage-actions" id="mi-history-manage-actions" data-history-manage-controls>
+            <div class="mi-history-manage-actions__actions">
+              <button id="mi-history-delete-selected" class="mi-history-danger-btn" type="button" disabled>Delete selected</button>
+              <button id="mi-history-cancel-manage" class="mi-history-neutral-btn" type="button">Cancel</button>
+        </div>
           </div>
         </div>
 
@@ -2106,7 +2119,7 @@
         }
         return;
       }
-      
+    
       if (emptyEl) emptyEl.hidden = true;
       
       const visibleItems = getVisibleHistoryItems(historyItems);
@@ -2130,8 +2143,8 @@
         const scoreHtml = normalizedScore !== null
           ? `<div class="mi-history-score" aria-label="Score ${Math.round(normalizedScore)}">${Math.round(normalizedScore)}</div>`
           : '';
-
-        return `
+          
+          return `
           <div class="mi-history-item ${isSelected ? 'is-selected' : ''}" data-id="${escapeHtml(itemId)}" tabindex="0" data-history-row>
             <span class="mi-history-checkbox-wrap" aria-hidden="${_historyManageMode ? 'false' : 'true'}">
               <input
@@ -2151,7 +2164,7 @@
                 <line x1="16" y1="13" x2="8" y2="13"/>
                 <line x1="16" y1="17" x2="8" y2="17"/>
               </svg>
-            </div>
+              </div>
 
             <div class="mi-history-text">
               <div class="mi-history-line1">${escapeHtml(roleName)}</div>
