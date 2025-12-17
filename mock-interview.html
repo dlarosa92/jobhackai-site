@@ -269,9 +269,10 @@
 
     .mi-history-header {
       display: flex;
-      flex-direction: column;
+      align-items: center;
+      justify-content: space-between;
       gap: 12px;
-      margin-bottom: 16px;
+      margin-bottom: 12px;
     }
 
     .mi-history-title-wrap {
@@ -1480,12 +1481,12 @@
             </button>
             <button id="mi-history-manage" class="mi-history-manage-btn" type="button">Manage</button>
           </div>
+        </div>
 
-          <div class="mi-history-manage-actions" id="mi-history-manage-actions" data-history-manage-controls>
-            <div class="mi-history-manage-actions__actions">
-              <button id="mi-history-delete-selected" class="mi-history-danger-btn" type="button" disabled>Delete selected</button>
-              <button id="mi-history-cancel-manage" class="mi-history-neutral-btn" type="button">Cancel</button>
-            </div>
+        <div class="mi-history-manage-actions" id="mi-history-manage-actions" data-history-manage-controls>
+          <div class="mi-history-manage-actions__actions">
+            <button id="mi-history-delete-selected" class="mi-history-danger-btn" type="button" disabled>Delete selected</button>
+            <button id="mi-history-cancel-manage" class="mi-history-neutral-btn" type="button">Cancel</button>
           </div>
         </div>
 
