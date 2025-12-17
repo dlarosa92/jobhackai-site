@@ -616,8 +616,9 @@ function renderHistory() {
       if (_historyManageMode) return;
       const chosen = historyItems.find((x) => String(x.id) === itemId);
       if (!chosen) return;
-      selectedHistoryId = item.id;
-      loadRun(item.id, { fromHistory: true });
+      // Use chosen.id instead of item.id to ensure we use the fresh lookup result
+      selectedHistoryId = chosen.id;
+      loadRun(chosen.id, { fromHistory: true });
     };
 
     row.addEventListener('click', (e) => {
@@ -655,6 +656,8 @@ function renderHistory() {
         if (action === 'delete') {
           e.stopPropagation();
           closeAllHistoryMenus();
+          // Re-render to close menu in DOM before opening modal
+          renderHistory();
           openDeleteModalFor([itemId]);
           return;
         }
