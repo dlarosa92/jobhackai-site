@@ -506,6 +506,11 @@
 .cl-history-panel--manage .cl-history-row-actions { display: none; }
 
 .cl-history-danger-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  white-space: nowrap;
+  flex-shrink: 0;
   background: rgba(220, 38, 38, 0.10);
   border: 1px solid rgba(220, 38, 38, 0.25);
   color: var(--color-error);
@@ -525,6 +530,11 @@
 }
 
 .cl-history-neutral-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  white-space: nowrap;
+  flex-shrink: 0;
   background: #fff;
   border: 1px solid var(--color-divider);
   color: var(--color-text-main);
