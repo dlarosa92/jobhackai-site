@@ -1511,7 +1511,7 @@
     const IQ_GLOBAL_COOLDOWN = 45;          // seconds
     const IQ_MAX_REPLACES = 3;              // hard cap per set
     const IQ_PER_Q_REPLACE_COOLDOWN = 5;    // seconds
-    const IQ_RECENT_LIMIT = 5;
+    const IQ_RECENT_LIMIT = 10;
 
     // Role selector will be initialized separately
 
@@ -1999,8 +1999,8 @@
       const unique = Array.from(new Set((ids || []).map(String).filter(Boolean)));
       if (!unique.length) {
         _iqHistoryPendingDeleteIds = [];
-        return;
-      }
+        return; 
+      } 
       _iqHistoryPendingDeleteIds = unique;
       const backdrop = document.getElementById('iq-history-modal-backdrop');
       const modal = document.getElementById('iq-history-delete-modal');
@@ -2034,7 +2034,9 @@
     }
 
     function iqHistoryFormatRelativeTime(ts) {
-      const n = Number(ts);
+      if (!ts) return '—';
+      const d = new Date(ts);
+      const n = d.getTime();
       if (!Number.isFinite(n)) return '—';
       const diffMs = Date.now() - n;
       if (diffMs < 30 * 1000) return 'just now';
