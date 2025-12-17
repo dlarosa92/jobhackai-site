@@ -379,6 +379,404 @@
       .iq-actions .btn-primary, .iq-actions .btn-outline { min-height:44px; width:auto; } 
     }
 
+    /* ============================================================
+       HistoryPanel v1 (Interview Questions)
+       Matches Resume Feedback History panel structure/UX
+       ============================================================ */
+    @keyframes rf-shimmer {
+      0% { background-position: 200% 0; }
+      100% { background-position: -200% 0; }
+    }
+    .rf-skeleton {
+      background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+      background-size: 200% 100%;
+      animation: rf-shimmer 1.5s infinite;
+      border-radius: var(--radius-lg, 14px);
+      opacity: 1;
+      transition: opacity 0.3s ease;
+    }
+
+    .history-card {
+      border: 1px solid var(--color-divider, #E5E7EB);
+      padding: 24px;
+      margin-bottom: 0;
+    }
+
+    .rf-history-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+    .rf-history-title-wrap {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 0;
+    }
+    .rf-history-title-text {
+      font-weight: 800;
+      color: var(--color-text-main, #111827);
+      font-size: 1.05rem;
+      line-height: 1.2;
+    }
+    .rf-history-header-actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-shrink: 0;
+    }
+    .rf-history-icon-btn {
+      width: 40px;
+      height: 40px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border: 1px solid var(--color-divider, #E5E7EB);
+      border-radius: var(--radius-md, 12px);
+      background: transparent;
+      cursor: pointer;
+      transition: background 0.18s ease, border-color 0.18s ease;
+    }
+    .rf-history-icon-btn:hover {
+      background: #F9FAFB;
+      border-color: #D1D5DB;
+    }
+    .rf-history-manage-btn,
+    .rf-history-link-btn {
+      background: transparent;
+      border: none;
+      padding: 0.25rem 0;
+      cursor: pointer;
+      font-weight: 600;
+      color: var(--color-text-secondary, #374151);
+      text-decoration: underline;
+      font-size: 0.95rem;
+    }
+    .rf-history-manage-btn {
+      text-decoration: none;
+      color: var(--color-text-secondary, #374151);
+      font-weight: 700;
+      border: 1px solid var(--color-divider, #E5E7EB);
+      border-radius: var(--radius-md, 12px);
+      padding: 0.5rem 1rem;
+      background: transparent;
+      transition: background 0.18s ease, border-color 0.18s ease;
+    }
+    .rf-history-manage-btn:hover {
+      color: var(--color-text-main, #111827);
+      background: #F9FAFB;
+      border-color: #D1D5DB;
+    }
+    .rf-history-subtitle {
+      margin-top: 10px;
+      font-size: 0.875rem;
+      color: var(--color-text-muted, #6B7280);
+    }
+    .rf-history-body { margin-top: 16px; }
+    .rf-history-list {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .rf-history-item {
+      position: relative;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 0.875rem 1rem;
+      background: #fff;
+      border-radius: var(--radius-md, 12px);
+      border: 1px solid var(--color-divider, #E5E7EB);
+      transition: background 0.18s ease, border-color 0.18s ease, outline 0.18s ease;
+      cursor: pointer;
+      min-height: 56px;
+    }
+    .rf-history-item:hover {
+      background: #F9FAFB;
+      border-color: #D1D5DB;
+    }
+    .rf-history-item.is-selected {
+      outline: 2px solid var(--color-accent-blue, #2563EB);
+      outline-offset: 0;
+      border-color: var(--color-divider, #E5E7EB);
+      background: #fff;
+    }
+    .rf-history-checkbox-wrap {
+      display: none;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+    .rf-history-checkbox {
+      width: 18px;
+      height: 18px;
+      accent-color: var(--color-accent-blue, #2563EB);
+      cursor: pointer;
+    }
+    .rf-history-panel--manage .rf-history-checkbox-wrap { display: inline-flex; }
+    .rf-history-icon {
+      width: 40px;
+      height: 40px;
+      border-radius: var(--radius-md, 12px);
+      background: linear-gradient(135deg, #E0E7FF 0%, #C7D2FE 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+    .rf-history-icon svg { width: 20px; height: 20px; color: #4F46E5; }
+    .rf-history-text { flex: 1; min-width: 0; }
+    .rf-history-line1 {
+      font-weight: 700;
+      color: var(--color-text-main, #111827);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      font-size: 0.95rem;
+      line-height: 1.25;
+    }
+    .rf-history-line2 {
+      margin-top: 2px;
+      font-size: 0.85rem;
+      color: var(--color-text-muted, #6B7280);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .rf-history-score {
+      font-weight: 800;
+      color: var(--color-text-main, #111827);
+      font-size: 1.05rem;
+      min-width: 32px;
+      text-align: right;
+      flex-shrink: 0;
+    }
+    .rf-history-row-actions {
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      margin-left: 2px;
+    }
+    .rf-history-kebab {
+      width: 40px;
+      height: 40px;
+      border: 1px solid transparent;
+      border-radius: var(--radius-md, 12px);
+      background: transparent;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.18s ease, border-color 0.18s ease, opacity 0.18s ease;
+      opacity: 0;
+    }
+    .rf-history-item:hover .rf-history-kebab,
+    .rf-history-item:focus-within .rf-history-kebab { opacity: 1; }
+    .rf-history-kebab:hover {
+      background: #F3F4F6;
+      border-color: #E5E7EB;
+    }
+    @media (hover: none), (pointer: coarse) {
+      .rf-history-kebab { opacity: 1; }
+    }
+    .rf-history-menu {
+      position: absolute;
+      right: 0;
+      top: calc(100% + 6px);
+      min-width: 170px;
+      background: #fff;
+      border: 1px solid var(--color-divider, #E5E7EB);
+      border-radius: 12px;
+      box-shadow: var(--shadow-dropdown, 0 12px 28px rgba(0,0,0,0.12));
+      padding: 6px;
+      z-index: var(--z-popover, 40);
+    }
+    .rf-history-menu[hidden] { display: none; }
+    .rf-history-menu-item {
+      width: 100%;
+      text-align: left;
+      background: transparent;
+      border: none;
+      padding: 10px 10px;
+      border-radius: 10px;
+      cursor: pointer;
+      font-weight: 600;
+      color: var(--color-text-main, #111827);
+    }
+    .rf-history-menu-item:hover { background: #F9FAFB; }
+    .rf-history-menu-item--danger { color: var(--color-error, #DC2626); }
+    .rf-history-menu-item--danger:hover { background: rgba(220, 38, 38, 0.06); }
+
+    .rf-history-panel--manage .rf-history-header-actions { display: none; }
+    .rf-history-manage-actions {
+      display: none;
+      width: 100%;
+      margin-top: 12px;
+      gap: 12px;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    .rf-history-manage-actions__actions {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+      width: 100%;
+    }
+    .rf-history-panel--manage .rf-history-manage-actions {
+      display: flex;
+      justify-content: flex-end;
+      align-items: center;
+    }
+    .rf-history-panel--manage .rf-history-row-actions { display: none; }
+
+    .rf-history-danger-btn {
+      background: rgba(220, 38, 38, 0.10);
+      border: 1px solid rgba(220, 38, 38, 0.25);
+      color: var(--color-error, #DC2626);
+      font-weight: 800;
+      border-radius: var(--radius-md, 12px);
+      padding: 0.7rem 1rem;
+      cursor: pointer;
+      transition: background 0.18s ease, border-color 0.18s ease, opacity 0.18s ease;
+    }
+    .rf-history-danger-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+    .rf-history-danger-btn:hover:not(:disabled) {
+      background: rgba(220, 38, 38, 0.14);
+      border-color: rgba(220, 38, 38, 0.35);
+    }
+    .rf-history-neutral-btn {
+      background: #fff;
+      border: 1px solid var(--color-divider, #E5E7EB);
+      color: var(--color-text-main, #111827);
+      font-weight: 700;
+      border-radius: var(--radius-md, 12px);
+      padding: 0.7rem 1rem;
+      cursor: pointer;
+      transition: background 0.18s ease, border-color 0.18s ease;
+    }
+    .rf-history-neutral-btn:hover { background: #F9FAFB; border-color: #D1D5DB; }
+
+    @media (max-width: 520px) {
+      .rf-history-panel--manage .rf-history-manage-actions { flex-direction: column; align-items: stretch; }
+      .rf-history-panel--manage .rf-history-manage-actions__actions > button { width: 100%; }
+    }
+
+    .rf-history-loading { display: none; }
+    .rf-history-loading.is-visible {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .rf-history-skeleton-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 0.875rem 1rem;
+      border-radius: var(--radius-md, 12px);
+      border: 1px solid var(--color-divider, #E5E7EB);
+      background: #fff;
+      min-height: 56px;
+    }
+    .rf-history-skeleton-pill { height: 12px; width: 160px; border-radius: 999px; }
+    .rf-history-skeleton-pill.sm { width: 120px; }
+    .rf-history-skeleton-score { height: 16px; width: 32px; border-radius: 6px; }
+
+    .rf-history-error {
+      padding: 10px 12px;
+      border: 1px solid rgba(220, 38, 38, 0.22);
+      background: rgba(220, 38, 38, 0.06);
+      border-radius: 12px;
+      color: var(--color-text-main, #111827);
+      font-size: 0.95rem;
+      margin-bottom: 12px;
+    }
+    .rf-history-error[hidden] { display: none; }
+    .rf-history-empty {
+      text-align: center;
+      padding: 20px 12px;
+      color: var(--color-text-muted, #6B7280);
+      border: 1px dashed var(--color-divider, #E5E7EB);
+      border-radius: 12px;
+    }
+    .rf-history-empty[hidden] { display: none; }
+
+    .rf-history-footer {
+      margin-top: 16px;
+      font-size: 0.875rem;
+      color: var(--color-text-muted, #6B7280);
+      line-height: 1.45;
+    }
+    .rf-history-footer a,
+    .rf-history-footer button { font-size: inherit; }
+    .rf-history-footer-links {
+      display: inline-flex;
+      gap: 6px;
+      align-items: center;
+      margin-left: 4px;
+    }
+    .rf-history-footer-link { color: var(--color-accent-blue, #2563EB); text-decoration: underline; }
+    .rf-history-footer-separator { color: var(--color-text-muted, #6B7280); font-weight: 600; }
+    .rf-history-footer-link--danger {
+      color: var(--color-error, #DC2626);
+      background: transparent;
+      border: none;
+      padding: 0;
+      font-weight: 600;
+      cursor: pointer;
+      text-decoration: none;
+    }
+    .rf-history-footer-link--danger:hover { text-decoration: underline; }
+
+    .rf-history-modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(17, 24, 39, 0.55);
+      z-index: var(--z-modal-backdrop, 90);
+    }
+    .rf-history-modal-backdrop[hidden] { display: none; }
+    .rf-history-modal {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: min(520px, calc(100vw - 32px));
+      background: #fff;
+      border: 1px solid var(--color-divider, #E5E7EB);
+      border-radius: var(--radius-xl, 18px);
+      box-shadow: var(--shadow-xl, 0 20px 50px rgba(0,0,0,0.18));
+      padding: 20px;
+      z-index: var(--z-modal, 100);
+    }
+    .rf-history-modal[hidden] { display: none; }
+    .rf-history-modal h3 {
+      margin: 0 0 8px 0;
+      font-size: 1.15rem;
+      font-weight: 800;
+      color: var(--color-text-main, #111827);
+    }
+    .rf-history-modal p {
+      margin: 6px 0;
+      color: var(--color-text-secondary, #374151);
+      line-height: 1.5;
+    }
+    .rf-history-modal-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+      margin-top: 16px;
+      flex-wrap: wrap;
+    }
+    .rf-history-modal-actions button { min-height: 44px; }
+    @media (max-width: 520px) {
+      .rf-history-modal-actions { flex-direction: column; align-items: stretch; }
+    }
+
     /* (Reverted) No overflow menu styles */
 
     /* Combobox active item */
@@ -790,9 +1188,109 @@
       <div>
     <div id="iq-questions" class="iq-questions"></div>
       </div>
-      <aside class="card" style="align-self:start;">
-        <h3 style="margin:0 0 .5rem 0;">Recent Sets</h3>
-        <div id="iq-recents"></div>
+      <aside class="card history-card rf-history" id="iq-history-panel" data-history-panel="v1" style="align-self:start;">
+        <div class="rf-history-header" data-history-header>
+          <div class="rf-history-title-wrap">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <circle cx="12" cy="12" r="10"/>
+              <polyline points="12 6 12 12 16 14"/>
+            </svg>
+            <span class="rf-history-title-text" id="iq-history-header-title">History</span>
+          </div>
+
+          <div class="rf-history-header-actions" data-history-header-actions>
+            <button id="iq-history-refresh" class="rf-history-icon-btn" title="Refresh history" aria-label="Refresh history" type="button">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <path d="M23 4v6h-6"/>
+                <path d="M1 20v-6h6"/>
+                <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
+              </svg>
+            </button>
+            <button id="iq-history-manage" class="rf-history-manage-btn" type="button">Manage</button>
+          </div>
+
+          <div class="rf-history-manage-actions" id="iq-history-manage-actions" data-history-manage-controls>
+            <div class="rf-history-manage-actions__actions">
+              <button id="iq-history-select-all" class="rf-history-link-btn" type="button">Select all</button>
+              <button id="iq-history-delete-selected" class="rf-history-danger-btn" type="button" disabled>Delete selected</button>
+              <button id="iq-history-cancel-manage" class="rf-history-neutral-btn" type="button">Cancel</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="rf-history-subtitle" data-history-subtitle>
+          Last 10 question sets • Auto-saved
+        </div>
+
+        <div class="rf-history-body" data-history-body>
+          <div class="rf-history-loading" id="iq-history-loading" data-history-loading>
+            <div class="rf-history-skeleton-row">
+              <div class="rf-skeleton" style="width:40px;height:40px;border-radius:var(--radius-md, 12px);"></div>
+              <div style="flex:1;min-width:0;">
+                <div class="rf-skeleton rf-history-skeleton-pill"></div>
+                <div class="rf-skeleton rf-history-skeleton-pill sm" style="margin-top:8px;"></div>
+              </div>
+              <div class="rf-skeleton rf-history-skeleton-score"></div>
+            </div>
+            <div class="rf-history-skeleton-row">
+              <div class="rf-skeleton" style="width:40px;height:40px;border-radius:var(--radius-md, 12px);"></div>
+              <div style="flex:1;min-width:0;">
+                <div class="rf-skeleton rf-history-skeleton-pill"></div>
+                <div class="rf-skeleton rf-history-skeleton-pill sm" style="margin-top:8px;"></div>
+              </div>
+              <div class="rf-skeleton rf-history-skeleton-score"></div>
+            </div>
+            <div class="rf-history-skeleton-row">
+              <div class="rf-skeleton" style="width:40px;height:40px;border-radius:var(--radius-md, 12px);"></div>
+              <div style="flex:1;min-width:0;">
+                <div class="rf-skeleton rf-history-skeleton-pill"></div>
+                <div class="rf-skeleton rf-history-skeleton-pill sm" style="margin-top:8px;"></div>
+              </div>
+              <div class="rf-skeleton rf-history-skeleton-score"></div>
+            </div>
+          </div>
+
+          <div class="rf-history-error" id="iq-history-error" data-history-error hidden>
+            <span data-default-message="Couldn’t load history.">Couldn’t load history. </span>
+            <button id="iq-history-retry" class="rf-history-link-btn" type="button">Retry.</button>
+          </div>
+
+          <div class="rf-history-list" id="iq-history-list" data-history-list></div>
+
+          <div class="rf-history-empty" id="iq-history-empty" data-history-empty hidden>
+            <div style="font-weight:800;margin-bottom:0.25rem;color:var(--color-text-main, #111827);">No history yet</div>
+            <div>Your last 10 question sets will appear here automatically.</div>
+          </div>
+        </div>
+
+        <div class="rf-history-footer" data-history-footer>
+          <span>Data retention: JobHackAI shows your last 10 question sets. Sets are automatically deleted after 90 days.</span>
+          <div class="rf-history-footer-links">
+            <a class="rf-history-footer-link" href="#" data-history-learn-more>Learn more</a>
+            <span class="rf-history-footer-separator" aria-hidden="true">·</span>
+            <button id="iq-history-clear" class="rf-history-footer-link rf-history-footer-link--danger" type="button">Clear history</button>
+          </div>
+        </div>
+
+        <!-- Delete confirmation modal -->
+        <div class="rf-history-modal-backdrop" id="iq-history-modal-backdrop" hidden></div>
+        <div
+          class="rf-history-modal"
+          id="iq-history-delete-modal"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="iq-history-modal-title"
+          hidden
+          data-history-modal
+        >
+          <h3 id="iq-history-modal-title">Permanently delete history?</h3>
+          <p>This will remove the selected items from your account.</p>
+          <p>This cannot be undone.</p>
+          <div class="rf-history-modal-actions">
+            <button id="iq-history-modal-cancel" class="rf-history-neutral-btn" type="button">Cancel</button>
+            <button id="iq-history-modal-confirm" class="rf-history-danger-btn" type="button">Delete permanently</button>
+          </div>
+        </div>
       </aside>
     </div>
 
@@ -1140,7 +1638,10 @@
         iqUpdateActionsLayout(); 
         const savedPanel=$IQ('#iq-saved-panel'); 
         if(savedPanel) savedPanel.hidden=true; 
-        $$IQ('.recent-item').forEach(b=> b.classList.toggle('is-active', b.getAttribute('data-id')===id)); 
+        // History panel selection highlight (standard panel uses .is-selected)
+        document.querySelectorAll('.rf-history-item').forEach(el => {
+          el.classList.toggle('is-selected', el.getAttribute('data-session-id') === id);
+        });
         window.scrollTo({top:0,behavior:'smooth'}); 
         iqToast('Loaded previous set'); 
         iqTrack('iq_recent_loaded',{ id }); 
@@ -1427,38 +1928,457 @@
         iqDisableAllButtons();
       }
     }
-    function iqRenderRecents(){ 
-      const box=$IQ('#iq-recents'); 
-      if(!box) return; 
-      const recents=JSON.parse(localStorage.getItem('iq_recent_sets')||'[]'); 
-      if(recents.length===0){ 
-        box.innerHTML='<div class="empty">No recent sets yet.</div>'; 
-        return; 
-      } 
-      // Clear existing content
-      box.innerHTML = '';
-      // Build DOM nodes safely to prevent XSS
-      recents.forEach(r => {
-        const btn = document.createElement('button');
-        btn.className = 'recent-item';
-        btn.setAttribute('data-id', String(r.id || ''));
-        
-        const roleDiv = document.createElement('div');
-        roleDiv.className = 'ri-role';
-        roleDiv.textContent = String(r.role || '');
-        
-        const metaDiv = document.createElement('div');
-        metaDiv.className = 'ri-meta';
-        const timeStr = r.time ? new Date(r.time).toLocaleString() : '';
-        metaDiv.textContent = `${r.count || 0} Q • ${timeStr}`;
-        
-        btn.appendChild(roleDiv);
-        btn.appendChild(metaDiv);
-        box.appendChild(btn);
+    // =======================================================
+    // Interview Questions History (localStorage-backed)
+    // UI/UX matches Resume Feedback History panel
+    // Source of truth: localStorage iq_recent_sets + iq_set_${id}
+    // =======================================================
+    let _iqHistoryManageMode = false;
+    let _iqHistorySelectedIds = new Set();
+    let _iqHistoryPendingDeleteIds = [];
+    let _iqHistoryMenuOpenForId = null;
+    let _iqHistoryHasError = false;
+    let _iqHistoryWired = false;
+
+    function iqHistoryEscapeHtml(str) {
+      return String(str ?? '')
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#039;');
+    }
+
+    function iqHistoryGetVisibleItems(items) {
+      return (items || []).slice(0, IQ_RECENT_LIMIT);
+    }
+
+    function iqHistoryGetVisibleIds(items) {
+      return iqHistoryGetVisibleItems(items)
+        .map((x) => String(x?.id || ''))
+        .filter(Boolean);
+    }
+
+    function iqHistorySetLoading(isLoading) {
+      const loadingEl = document.getElementById('iq-history-loading');
+      if (!loadingEl) return;
+      loadingEl.classList.toggle('is-visible', !!isLoading);
+    }
+
+    function iqHistorySetErrorVisible(isVisible, message) {
+      const errEl = document.getElementById('iq-history-error');
+      if (!errEl) return;
+      const textEl = errEl.querySelector('span[data-default-message]') || errEl.querySelector('span');
+      if (textEl) {
+        if (message) {
+          textEl.textContent = message;
+        } else if (textEl.dataset.defaultMessage) {
+          textEl.textContent = textEl.dataset.defaultMessage;
+        }
+      }
+      errEl.hidden = !isVisible;
+      _iqHistoryHasError = isVisible;
+    }
+
+    function iqHistorySyncBulkDeleteState() {
+      const btn = document.getElementById('iq-history-delete-selected');
+      if (!btn) return;
+      btn.disabled = _iqHistorySelectedIds.size < 1;
+    }
+
+    function iqHistoryCloseAllMenus() {
+      const listEl = document.getElementById('iq-history-list');
+      if (!listEl) return;
+      listEl.querySelectorAll('.rf-history-menu').forEach((menu) => {
+        menu.hidden = true;
       });
+      _iqHistoryMenuOpenForId = null;
+    }
+
+    function iqHistoryOpenDeleteModalFor(ids) {
+      const unique = Array.from(new Set((ids || []).map(String).filter(Boolean)));
+      if (!unique.length) {
+        _iqHistoryPendingDeleteIds = [];
+        return;
+      }
+      _iqHistoryPendingDeleteIds = unique;
+      const backdrop = document.getElementById('iq-history-modal-backdrop');
+      const modal = document.getElementById('iq-history-delete-modal');
+      const cancelBtn = document.getElementById('iq-history-modal-cancel');
+      if (backdrop) backdrop.hidden = false;
+      if (modal) modal.hidden = false;
+      setTimeout(() => cancelBtn?.focus?.(), 0);
+    }
+
+    function iqHistoryCloseDeleteModal() {
+      const backdrop = document.getElementById('iq-history-modal-backdrop');
+      const modal = document.getElementById('iq-history-delete-modal');
+      if (backdrop) backdrop.hidden = true;
+      if (modal) modal.hidden = true;
+      _iqHistoryPendingDeleteIds = [];
+    }
+
+    function iqHistorySetManageMode(next, itemsForRender) {
+      const panel = document.getElementById('iq-history-panel');
+      const titleEl = document.getElementById('iq-history-header-title');
+      _iqHistoryManageMode = !!next;
+      if (panel) panel.classList.toggle('rf-history-panel--manage', _iqHistoryManageMode);
+      if (titleEl) titleEl.textContent = _iqHistoryManageMode ? 'Select items' : 'History';
+      if (!_iqHistoryManageMode) {
+        _iqHistorySelectedIds.clear();
+        _iqHistoryMenuOpenForId = null;
+        iqHistoryCloseAllMenus();
+      }
+      iqHistorySyncBulkDeleteState();
+      iqHistoryRenderItems(itemsForRender || iqHistoryLoadItems());
+    }
+
+    function iqHistoryFormatRelativeTime(ts) {
+      const n = Number(ts);
+      if (!Number.isFinite(n)) return '—';
+      const diffMs = Date.now() - n;
+      if (diffMs < 30 * 1000) return 'just now';
+      const diffMin = Math.floor(diffMs / (60 * 1000));
+      if (diffMin < 60) return `${diffMin}m ago`;
+      const diffHr = Math.floor(diffMin / 60);
+      if (diffHr < 24) return `${diffHr}h ago`;
+      const diffDay = Math.floor(diffHr / 24);
+      if (diffDay < 14) return `${diffDay}d ago`;
+      try {
+        return new Date(n).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      } catch {
+        return '—';
+      }
+    }
+
+    function iqHistoryLoadItems() {
+      try {
+        const raw = localStorage.getItem('iq_recent_sets') || '[]';
+        const parsed = JSON.parse(raw);
+        if (!Array.isArray(parsed)) return [];
+        return parsed
+          .map((x) => ({
+            id: String(x?.id || ''),
+            role: String(x?.role || ''),
+            count: Number(x?.count || 0),
+            time: x?.time
+          }))
+          .filter((x) => x.id);
+      } catch (e) {
+        console.warn('[IQ-HISTORY] Failed to load history:', e);
+        iqHistorySetErrorVisible(true);
+        return [];
+      }
+    }
+
+    function iqHistorySaveItems(items) {
+      try {
+        localStorage.setItem('iq_recent_sets', JSON.stringify(items || []));
+      } catch (e) {
+        console.warn('[IQ-HISTORY] Failed to save history:', e);
+      }
+    }
+
+    function iqHistoryDeleteIds(ids) {
+      const del = new Set((ids || []).map(String).filter(Boolean));
+      if (!del.size) return;
+      const items = iqHistoryLoadItems();
+      const next = items.filter((x) => !del.has(String(x.id)));
+      iqHistorySaveItems(next);
+      // Best-effort cleanup of stored full payloads
+      del.forEach((id) => {
+        try { localStorage.removeItem(`iq_set_${id}`); } catch {}
+      });
+      // Exit manage mode after deletion
+      _iqHistorySelectedIds.clear();
+      iqHistorySyncBulkDeleteState();
+      iqHistoryRenderItems(next);
+    }
+
+    function iqHistoryRenderItems(items) {
+      const listEl = document.getElementById('iq-history-list');
+      const emptyEl = document.getElementById('iq-history-empty');
+      if (!listEl) return;
+
+      iqHistorySetLoading(false);
+
+      if (!items || items.length === 0) {
+        listEl.innerHTML = '';
+        if (emptyEl) emptyEl.hidden = _iqHistoryHasError ? true : false;
+        return;
+      }
+
+      if (emptyEl) emptyEl.hidden = true;
+
+      const visible = iqHistoryGetVisibleItems(items);
+      let currentId = null;
+      try {
+        if (iqState?.set?.role && iqState?.set?.seed) {
+          currentId = String(iqSetId(iqState.set.role, iqState.set.seed));
+        }
+      } catch {}
+
+      listEl.innerHTML = visible.map((item) => {
+        const id = String(item?.id || '');
+        const roleName = String(item?.role || '').trim() || 'Untitled role';
+        const when = iqHistoryFormatRelativeTime(item?.time);
+        const count = Number.isFinite(Number(item?.count)) ? Number(item.count) : 0;
+        const isCurrent = !_iqHistoryManageMode && currentId && currentId === id;
+        const isSelected = isCurrent ? 'is-selected' : '';
+        const isChecked = _iqHistorySelectedIds.has(id);
+        const menuHidden = _iqHistoryMenuOpenForId !== id;
+
+        return `
+          <div class="rf-history-item ${isSelected}" data-session-id="${iqHistoryEscapeHtml(id)}" tabindex="0" data-history-row>
+            <span class="rf-history-checkbox-wrap" aria-hidden="${_iqHistoryManageMode ? 'false' : 'true'}">
+              <input
+                class="rf-history-checkbox"
+                type="checkbox"
+                data-action="toggle-select"
+                data-session-id="${iqHistoryEscapeHtml(id)}"
+                aria-label="Select ${iqHistoryEscapeHtml(roleName)}"
+                ${isChecked ? 'checked' : ''}
+              />
+            </span>
+
+            <div class="rf-history-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
+                <polyline points="14 2 14 8 20 8"/>
+                <line x1="16" y1="13" x2="8" y2="13"/>
+                <line x1="16" y1="17" x2="8" y2="17"/>
+              </svg>
+            </div>
+
+            <div class="rf-history-text">
+              <div class="rf-history-line1">${iqHistoryEscapeHtml(roleName)}</div>
+              <div class="rf-history-line2">Question set • ${iqHistoryEscapeHtml(when)}</div>
+            </div>
+
+            <div class="rf-history-score" aria-label="${count} questions">${iqHistoryEscapeHtml(count)} Q</div>
+
+            <div class="rf-history-row-actions" aria-label="Row actions">
+              <button
+                class="rf-history-kebab"
+                type="button"
+                aria-label="Row actions"
+                data-action="menu-toggle"
+                data-session-id="${iqHistoryEscapeHtml(id)}"
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                  <circle cx="5" cy="12" r="2"></circle>
+                  <circle cx="12" cy="12" r="2"></circle>
+                  <circle cx="19" cy="12" r="2"></circle>
+                </svg>
+              </button>
+              <div class="rf-history-menu" role="menu" ${menuHidden ? 'hidden' : ''}>
+                <button class="rf-history-menu-item" type="button" data-action="open" data-session-id="${iqHistoryEscapeHtml(id)}">Open / Restore</button>
+                <button class="rf-history-menu-item rf-history-menu-item--danger" type="button" data-action="delete" data-session-id="${iqHistoryEscapeHtml(id)}">Delete</button>
+              </div>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    // Backwards-compatible entry point: re-render the history panel
+    function iqRenderRecents(){
+      const panel = document.getElementById('iq-history-panel');
+      if (!panel) return;
+      iqHistorySetErrorVisible(false);
+      const items = iqHistoryLoadItems();
+      iqHistoryRenderItems(items);
     }
     function iqUpdateGuidanceUI(){ const t=$IQ('#toggle-guidance'); if(t){ t.setAttribute('aria-pressed', String(iqState.prefs.showGuidance)); t.textContent = iqState.prefs.showGuidance ? 'Hide Answer Guidance' : 'Show Answer Guidance'; if(iqState.prefs.showGuidance){ t.classList.add('is-pressed'); } else { t.classList.remove('is-pressed'); } } iqRenderQuestions(); }
-    function iqWireRecents(){ const box=$IQ('#iq-recents'); if(!box) return; box.addEventListener('click',(e)=>{ const btn=e.target.closest('.recent-item'); if(!btn) return; const id=btn.getAttribute('data-id'); if(!id) return; iqLoadSetById(id); }); }
+    // Backwards-compatible entry point: wire the new History panel interactions
+    function iqWireRecents(){
+      if (_iqHistoryWired) return;
+      const panel = document.getElementById('iq-history-panel');
+      const listEl = document.getElementById('iq-history-list');
+      if (!panel || !listEl) return;
+      _iqHistoryWired = true;
+
+      const btnRefresh = document.getElementById('iq-history-refresh');
+      const btnManage = document.getElementById('iq-history-manage');
+      const btnCancel = document.getElementById('iq-history-cancel-manage');
+      const btnDeleteSelected = document.getElementById('iq-history-delete-selected');
+      const btnSelectAll = document.getElementById('iq-history-select-all');
+      const btnClear = document.getElementById('iq-history-clear');
+      const btnRetry = document.getElementById('iq-history-retry');
+      const modalBackdrop = document.getElementById('iq-history-modal-backdrop');
+      const modal = document.getElementById('iq-history-delete-modal');
+      const modalCancel = document.getElementById('iq-history-modal-cancel');
+      const modalConfirm = document.getElementById('iq-history-modal-confirm');
+
+      function refreshFromStorage(withSkeleton = false) {
+        if (withSkeleton) iqHistorySetLoading(true);
+        setTimeout(() => {
+          iqHistorySetErrorVisible(false);
+          const items = iqHistoryLoadItems();
+          iqHistoryRenderItems(items);
+        }, withSkeleton ? 80 : 0);
+      }
+
+      btnRefresh?.addEventListener('click', () => refreshFromStorage(true));
+      btnRetry?.addEventListener('click', () => refreshFromStorage(true));
+
+      btnManage?.addEventListener('click', () => {
+        const items = iqHistoryLoadItems();
+        iqHistorySetManageMode(true, items);
+      });
+      btnCancel?.addEventListener('click', () => {
+        const items = iqHistoryLoadItems();
+        iqHistorySetManageMode(false, items);
+      });
+
+      btnSelectAll?.addEventListener('click', () => {
+        const items = iqHistoryLoadItems();
+        iqHistoryGetVisibleIds(items).forEach((id) => _iqHistorySelectedIds.add(id));
+        iqHistorySyncBulkDeleteState();
+        iqHistoryRenderItems(items);
+      });
+
+      btnDeleteSelected?.addEventListener('click', () => {
+        iqHistoryOpenDeleteModalFor(Array.from(_iqHistorySelectedIds));
+      });
+
+      btnClear?.addEventListener('click', () => {
+        const items = iqHistoryLoadItems();
+        iqHistorySetManageMode(true, items);
+        iqHistoryGetVisibleIds(items).forEach((id) => _iqHistorySelectedIds.add(id));
+        iqHistorySyncBulkDeleteState();
+        iqHistoryRenderItems(items);
+        iqHistoryOpenDeleteModalFor(Array.from(_iqHistorySelectedIds));
+      });
+
+      // "Learn more" link - keep behavior consistent (no nav change requested)
+      panel.querySelectorAll('[data-history-learn-more]').forEach((a) => {
+        a.addEventListener('click', (e) => {
+          e.preventDefault();
+          // TODO: wire to canonical retention/help article when available.
+          iqToast('Learn more coming soon.');
+        });
+      });
+
+      function handleOpenRestore(id) {
+        if (!id) return;
+        iqHistoryCloseAllMenus();
+        iqLoadSetById(String(id));
+      }
+
+      listEl.addEventListener('click', (e) => {
+        const actionEl = e.target.closest('[data-action]');
+        const rowEl = e.target.closest('.rf-history-item');
+        const id = actionEl?.getAttribute('data-session-id') || rowEl?.getAttribute('data-session-id');
+
+        if (actionEl) {
+          const action = actionEl.getAttribute('data-action');
+          if (action === 'toggle-select') {
+            e.stopPropagation();
+            const sid = String(actionEl.getAttribute('data-session-id') || '');
+            if (!sid) return;
+            if (_iqHistorySelectedIds.has(sid)) _iqHistorySelectedIds.delete(sid);
+            else _iqHistorySelectedIds.add(sid);
+            iqHistorySyncBulkDeleteState();
+            // Keep list rendering stable (checkbox state + row selection rules)
+            iqHistoryRenderItems(iqHistoryLoadItems());
+            return;
+          }
+          if (action === 'menu-toggle') {
+            e.stopPropagation();
+            const sid = String(actionEl.getAttribute('data-session-id') || '');
+            if (!sid) return;
+            const isAlreadyOpen = _iqHistoryMenuOpenForId === sid;
+            iqHistoryCloseAllMenus();
+            if (!isAlreadyOpen) {
+              _iqHistoryMenuOpenForId = sid;
+              const menu = rowEl?.querySelector('.rf-history-menu');
+              if (menu) menu.hidden = false;
+            }
+            return;
+          }
+          if (action === 'open') {
+            e.stopPropagation();
+            handleOpenRestore(id);
+            return;
+          }
+          if (action === 'delete') {
+            e.stopPropagation();
+            iqHistoryOpenDeleteModalFor([id]);
+            return;
+          }
+        }
+
+        if (!rowEl || !id) return;
+        if (_iqHistoryManageMode) {
+          // Toggle selection on row click in manage mode
+          if (_iqHistorySelectedIds.has(id)) _iqHistorySelectedIds.delete(id);
+          else _iqHistorySelectedIds.add(id);
+          iqHistorySyncBulkDeleteState();
+          iqHistoryRenderItems(iqHistoryLoadItems());
+          return;
+        }
+
+        handleOpenRestore(id);
+      });
+
+      listEl.addEventListener('keydown', (e) => {
+        if (e.key !== 'Enter' && e.key !== ' ') return;
+        const rowEl = e.target.closest('.rf-history-item');
+        if (!rowEl) return;
+        e.preventDefault();
+        const id = rowEl.getAttribute('data-session-id');
+        if (!id) return;
+        if (_iqHistoryManageMode) {
+          if (_iqHistorySelectedIds.has(id)) _iqHistorySelectedIds.delete(id);
+          else _iqHistorySelectedIds.add(id);
+          iqHistorySyncBulkDeleteState();
+          iqHistoryRenderItems(iqHistoryLoadItems());
+          return;
+        }
+        handleOpenRestore(id);
+      });
+
+      // Close menus when clicking outside
+      document.addEventListener('click', (e) => {
+        if (e.target.closest('#iq-history-panel')) return;
+        iqHistoryCloseAllMenus();
+      });
+
+      // Modal interactions
+      modalCancel?.addEventListener('click', iqHistoryCloseDeleteModal);
+      modalBackdrop?.addEventListener('click', iqHistoryCloseDeleteModal);
+      modalConfirm?.addEventListener('click', () => {
+        const ids = Array.from(_iqHistoryPendingDeleteIds || []).map(String).filter(Boolean);
+        iqHistoryCloseDeleteModal();
+        if (!ids.length) return;
+        iqHistoryDeleteIds(ids);
+        // Exit manage mode if we deleted everything visible
+        if (_iqHistoryManageMode) {
+          const remaining = iqHistoryLoadItems();
+          if (!remaining.length) {
+            iqHistorySetManageMode(false, remaining);
+          } else {
+            // Keep manage mode, but clear selection
+            _iqHistorySelectedIds.clear();
+            iqHistorySyncBulkDeleteState();
+            iqHistoryRenderItems(remaining);
+          }
+        }
+      });
+
+      document.addEventListener('keydown', (e) => {
+        if (e.key !== 'Escape') return;
+        if (modal && modal.hidden === false) {
+          iqHistoryCloseDeleteModal();
+        } else {
+          iqHistoryCloseAllMenus();
+        }
+      });
+
+      // Initial render (avoid skeleton flash after initIQPage already rendered once)
+      refreshFromStorage(false);
+    }
 
     // Initialize Role Selector for ARIA combobox
     function iqInitRoleCombobox(){
