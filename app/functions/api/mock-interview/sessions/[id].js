@@ -9,7 +9,27 @@
 
 import { getBearer, verifyFirebaseIdToken } from '../../../_lib/firebase-auth.js';
 import { errorResponse, successResponse, generateRequestId } from '../../../_lib/error-handler.js';
-import { getOrCreateUserByAuthId, getMockInterviewSessionById, isD1Available } from '../../../_lib/db.js';
+import {
+  getOrCreateUserByAuthId,
+  getMockInterviewSessionById,
+  isD1Available,
+  ensureMockInterviewSchema
+} from '../../../_lib/db.js';
+
+// Match binding resolution order used by the shared D1 helper (`app/functions/_lib/db.js`)
+// to prevent reading from one binding and deleting from another when multiple bindings exist.
+const DB_BINDING_NAMES = ['DB', 'JOBHACKAI_DB', 'INTERVIEW_QUESTIONS_DB', 'IQ_D1'];
+
+function getDb(env) {
+  if (!env) return null;
+  const direct = env.DB;
+  if (direct && typeof direct.prepare === 'function') return direct;
+  for (const name of DB_BINDING_NAMES) {
+    const candidate = env[name];
+    if (candidate && typeof candidate.prepare === 'function') return candidate;
+  }
+  return null;
+}
 
 function corsHeaders(origin) {
   const allowedOrigins = [
@@ -24,7 +44,7 @@ function corsHeaders(origin) {
   
   return {
     'Access-Control-Allow-Origin': allowedOrigin,
-    'Access-Control-Allow-Methods': 'GET, OPTIONS',
+    'Access-Control-Allow-Methods': 'GET, DELETE, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     'Access-Control-Max-Age': '86400',
     'Vary': 'Origin'
@@ -55,8 +75,8 @@ export async function onRequest(context) {
     return new Response(null, { headers: corsHeaders(origin) });
   }
 
-  // Only allow GET
-  if (request.method !== 'GET') {
+  // Only allow GET or DELETE
+  if (request.method !== 'GET' && request.method !== 'DELETE') {
     return errorResponse('Method not allowed', 405, origin, env, requestId);
   }
 
@@ -114,6 +134,39 @@ export async function onRequest(context) {
         userId: d1User.id 
       });
       return errorResponse('Session not found', 404, origin, env, requestId);
+    }
+
+    if (request.method === 'DELETE') {
+      const db = getDb(env);
+      if (!db) {
+        console.warn('[MI-SESSION-DELETE] D1 binding not available');
+        return errorResponse('History not available', 503, origin, env, requestId);
+      }
+      await ensureMockInterviewSchema(env);
+
+      const result = await db
+        .prepare(`DELETE FROM mock_interview_sessions WHERE id = ? AND user_id = ?`)
+        .bind(sessionIdNum, d1User.id)
+        .run();
+
+      const changes =
+        typeof result?.meta?.changes === 'number'
+          ? result.meta.changes
+          : typeof result?.changes === 'number'
+            ? result.changes
+            : 0;
+
+      if (changes === 0) {
+        return errorResponse('Session not found', 404, origin, env, requestId);
+      }
+
+      console.log('[MI-SESSION-DELETE] Deleted session:', {
+        requestId,
+        sessionId: sessionIdNum,
+        userId: d1User.id
+      });
+
+      return successResponse({ success: true }, 200, origin, env, requestId);
     }
 
     console.log('[MI-SESSION-DETAIL] Retrieved session:', { 
