@@ -42,6 +42,7 @@
   <link rel="stylesheet" href="css/header.css">
   <link rel="stylesheet" href="css/footer.css">
   <script src="js/custom-select.js?v=20251212-1" defer></script>
+  <script type="module" src="js/components/usage-indicator.js"></script>
   <style>
     .iq-main {
       max-width: 1200px;
@@ -50,41 +51,45 @@
       width: 100%;
     }
     .iq-title {
-      font-size: 2.3rem;
-      font-weight: 800;
+      font-size: var(--font-size-3xl, 2.3rem);
+      font-weight: var(--font-weight-extrabold, 800);
       margin-bottom: 0.5rem;
-      color: #232B36;
+      color: var(--color-text-main, #1F2937);
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      flex-wrap: wrap;
     }
     .iq-sub {
-      color: #4B5563;
+      color: var(--color-text-secondary, #4B5563);
       margin-bottom: 1.5rem;
-      font-size: 1.13rem;
+      font-size: var(--font-size-lg, 1.13rem);
     }
     .iq-role-input {
       width: 100%;
       padding: 0.85rem 1.1rem;
-      border: 2px solid #E5E7EB;
-      border-radius: 10px;
+      border: 2px solid var(--color-divider, #E5E7EB);
+      border-radius: var(--radius-md, 10px);
       font-size: 1.08rem;
       margin-bottom: 0;
       transition: border 0.18s;
-      background: #fff;
-      color: #232B36;
+      background: var(--color-card-bg, #fff);
+      color: var(--color-text-main, #1F2937);
       box-sizing: border-box;
     }
     .iq-role-input:focus {
-      border-color: #1976D2;
+      border-color: var(--color-accent-blue, #007BFF);
       outline: none;
     }
     .iq-role-dropdown {
       position: absolute;
       left: 0; right: 0;
-      background: #fff;
-      border: 1.5px solid #E5E7EB;
+      background: var(--color-card-bg, #fff);
+      border: 1.5px solid var(--color-divider, #E5E7EB);
       border-top: none;
-      border-radius: 0 0 10px 10px;
-      box-shadow: 0 2px 8px rgba(31,41,55,0.07);
-      z-index: 10;
+      border-radius: 0 0 var(--radius-md, 10px) var(--radius-md, 10px);
+      box-shadow: var(--shadow-md);
+      z-index: var(--z-dropdown, 1000);
       max-height: 220px;
       overflow-y: auto;
       margin-top: -2px;
@@ -93,83 +98,84 @@
       padding: 0.85rem 1.1rem;
       cursor: pointer;
       font-size: 1.08rem;
-      color: #232B36;
+      color: var(--color-text-main, #1F2937);
       transition: background 0.15s;
     }
     .iq-role-item:hover, .iq-role-item.active {
-      background: #F3F4F6;
+      background: var(--color-bg-light, #F9FAFB);
     }
     .iq-questions {
       margin-bottom: 1.5rem;
     }
     .iq-question-card {
-      background: #fff;
-      border-radius: 16px;
-      box-shadow: 0 2px 6px rgba(31,41,55,0.07);
+      background: var(--color-card-bg, #fff);
+      border-radius: var(--radius-xl, 16px);
+      box-shadow: var(--shadow-sm);
       padding: 1.1rem 1.3rem;
       margin-bottom: 1rem;
       font-size: 1.08rem;
-      color: #232B36;
+      color: var(--color-text-main, #1F2937);
       line-height: 1.45;
     }
     .iq-lock {
-      background: #fff;
-      border: 1.5px solid #E5E7EB;
-      border-radius: 16px;
+      background: var(--color-card-bg, #fff);
+      border: 1.5px solid var(--color-divider, #E5E7EB);
+      border-radius: var(--radius-xl, 16px);
       padding: 1rem 1.25rem;
       display: flex;
       align-items: center;
       gap: 0.8rem;
       margin-top: 1.2rem;
       font-size: 1.04rem;
-      color: #232B36;
-      box-shadow: 0 1px 4px rgba(31,41,55,0.04);
+      color: var(--color-text-main, #1F2937);
+      box-shadow: var(--shadow-sm);
     }
     .iq-upgrade-btn {
       display: block;
       width: 100%;
       margin: 1.7rem 0 0 0;
-      background: #00E676;
+      background: var(--color-cta-green, #00E676);
       color: #fff;
       border: none;
-      border-radius: 12px;
+      border-radius: var(--radius-lg, 12px);
       font-size: 1.13rem;
       padding: 1rem 0;
-      font-weight: 700;
+      font-weight: var(--font-weight-bold, 700);
       cursor: pointer;
       transition: background 0.18s;
       text-align: center;
-      box-shadow: 0 2px 8px rgba(31,41,55,0.07);
+      box-shadow: var(--shadow-md);
     }
     .iq-upgrade-btn:hover,
     .iq-upgrade-btn:focus {
-      background: #00c965;
+      background: var(--color-cta-green-hover, #00c965);
     }
     @media (max-width: 600px) {
       .iq-main { padding: 0 0.3rem; }
-      .iq-title { font-size: 1.5rem; }
+      .iq-title { font-size: var(--font-size-2xl, 1.5rem); }
       .iq-question-card { font-size: 1rem; padding: 1rem 0.7rem; }
       .iq-upgrade-btn { font-size: 1.01rem; padding: 0.8rem 0; }
     }
     /* ---- IQ MVP+ additions (append only) ---- */
-    .card { background:#fff; border-radius:16px; box-shadow:var(--shadow-card, 0 4px 24px rgba(31,41,55,0.07)); padding:1rem; margin-bottom:1rem; }
-    .iq-toolbar .iq-row { display:flex; gap:.75rem; flex-wrap:wrap; align-items:center; }
+    .card { background: var(--color-card-bg, #fff); border-radius: var(--radius-xl, 16px); box-shadow: var(--shadow-card); padding: 1rem; margin-bottom: 1rem; }
+    .iq-toolbar .iq-row { display: flex; gap: 0.75rem; flex-wrap: wrap; align-items: center; }
     .iq-select, .chip, textarea#iq-jd { 
-      border:1.5px solid #E5E7EB; 
-      border-radius:10px; 
-      padding:.6rem .8rem; 
-      background:#fff; 
+      border: 1.5px solid var(--color-divider, #E5E7EB); 
+      border-radius: var(--radius-md, 10px); 
+      padding: 0.6rem 0.8rem; 
+      background: var(--color-card-bg, #fff); 
       box-sizing: border-box;
+      color: var(--color-text-main, #1F2937);
     }
-    .chip { cursor:pointer; user-select:none; transition: all 0.2s ease; }
-    .chip.is-on { box-shadow:0 0 0 3px rgba(0,123,255,.15); background:#EBF4FF; border-color:#60A5FA; }
-    .chip:hover { border-color:#94A3B8; }
-    .chip.is-on:hover { border-color:#3B82F6; }
-    .chip-expand { background:#F8FAFC; border-color:#CBD5E1; color:#64748B; font-weight:500; }
-    .chip-expand:hover { background:#F1F5F9; border-color:#94A3B8; }
-    .iq-actions { display:flex; gap:.5rem; flex-wrap:wrap; align-items:center; margin-top:.75rem; }
-    .cooldown-badge { padding:.3rem .5rem; border-radius:8px; border:1px solid #E5E7EB; font-size:.9rem; color:#4B5563; }
-    .skeleton { height:56px; border-radius:16px; background:linear-gradient(90deg,#f3f4f6 25%,#eceff3 37%,#f3f4f6 63%); background-size:400% 100%; animation:sheen 1.2s ease-in-out infinite; }
+    .chip { cursor: pointer; user-select: none; transition: all 0.2s ease; }
+    .chip.is-on { box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.15); background: #EBF4FF; border-color: #60A5FA; }
+    .chip:hover { border-color: #94A3B8; }
+    .chip.is-on:hover { border-color: #3B82F6; }
+    .chip-expand { background: var(--color-bg-light, #F8FAFC); border-color: #CBD5E1; color: var(--color-text-muted, #6B7280); font-weight: var(--font-weight-medium, 500); }
+    .chip-expand:hover { background: #F1F5F9; border-color: #94A3B8; }
+    .iq-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; margin-top: 0.75rem; }
+    .cooldown-badge { padding: 0.3rem 0.5rem; border-radius: var(--radius-md, 8px); border: 1px solid var(--color-divider, #E5E7EB); font-size: 0.9rem; color: var(--color-text-secondary, #4B5563); }
+    .skeleton { height: 56px; border-radius: var(--radius-xl, 16px); background: linear-gradient(90deg, #f3f4f6 25%, #eceff3 37%, #f3f4f6 63%); background-size: 400% 100%; animation: sheen 1.2s ease-in-out infinite; }
     @keyframes sheen { 0%{background-position:100% 0} 100%{background-position:0 0} }
     .iq-qactions { 
       display:flex; 
@@ -197,15 +203,15 @@
       border-radius: 6px;
       border: 1px solid rgba(14, 165, 233, 0.2);
     }
-    .icon-btn { border:1px solid #E5E7EB; background:#fff; border-radius:8px; padding:.3rem .45rem; cursor:pointer; transition: opacity 0.15s ease; }
+    .icon-btn { border: 1px solid var(--color-divider, #E5E7EB); background: var(--color-card-bg, #fff); border-radius: 8px; padding: 0.3rem 0.45rem; cursor: pointer; transition: opacity 0.15s ease; }
     .icon-btn:disabled { opacity: 0.4; cursor: not-allowed; }
-    .link-btn { background:none; border:none; color:#007BFF; cursor:pointer; text-decoration:underline; padding:0 .25rem; }
-    .iq-example { margin:.5rem 0 0 0; color:#4B5563; }
-    .iq-types { display:flex; gap:.4rem; flex-wrap:wrap; }
-    .recent-item { width:100%; text-align:left; padding:.6rem .7rem; border:1.5px solid #E5E7EB; border-radius:10px; background:#fff; cursor:pointer; }
-    .ri-role { font-weight:600; }
-    .ri-meta { color:#6B7280; font-size:.9rem; }
-    .cta-hint { flex-basis:100%; font-size:.9rem; color:#6B7280; margin-top:.25rem; }
+    .link-btn { background: none; border: none; color: var(--color-accent-blue, #007BFF); cursor: pointer; text-decoration: underline; padding: 0 0.25rem; }
+    .iq-example { margin: 0.5rem 0 0 0; color: var(--color-text-secondary, #4B5563); }
+    .iq-types { display: flex; gap: 0.4rem; flex-wrap: wrap; }
+    .recent-item { width: 100%; text-align: left; padding: 0.6rem 0.7rem; border: 1.5px solid var(--color-divider, #E5E7EB); border-radius: var(--radius-md, 10px); background: var(--color-card-bg, #fff); cursor: pointer; }
+    .ri-role { font-weight: 600; }
+    .ri-meta { color: var(--color-text-muted, #6B7280); font-size: 0.9rem; }
+    .cta-hint { flex-basis: 100%; font-size: 0.9rem; color: var(--color-text-muted, #6B7280); margin-top: 0.25rem; }
     .iq-global-cooldown {
       display:flex;
       flex-direction:column;
@@ -293,9 +299,9 @@
     .iq-toolbar .iq-row > div:not(:last-child) { 
       margin-right: 0; 
     }
-    .btn-outline { border:1px solid #E5E7EB; background:#fff; box-shadow:none; }
-    .btn-outline:hover, .btn-outline:focus-visible { box-shadow:0 0 0 2px rgba(25,118,210,.22); }
-    .btn-outline.is-pressed { background:#F3F4F6; }
+    .btn-outline { border: 1px solid var(--color-divider, #E5E7EB); background: var(--color-card-bg, #fff); box-shadow: none; color: var(--color-text-main, #1F2937); font-weight: 600; border-radius: 8px; padding: 0.6rem 1rem; cursor: pointer; transition: all 0.2s; display: inline-flex; align-items: center; gap: 0.4rem; }
+    .btn-outline:hover, .btn-outline:focus-visible { background: var(--color-bg-light, #F9FAFB); border-color: #D1D5DB; }
+    .btn-outline.is-pressed { background: var(--color-bg-light, #F3F4F6); }
     .btn-primary[disabled], .btn-outline[disabled] { opacity:.5; cursor:not-allowed; pointer-events:none; }
     .iq-question-card { border:1px solid #E5E7EB; box-shadow:0 1px 4px rgba(31,41,55,.05); border-radius:16px; padding:1.1rem 1.2rem; }
     .lock { 
@@ -440,7 +446,7 @@
       transition: background 0.18s ease, border-color 0.18s ease;
     }
     .rf-history-icon-btn:hover {
-      background: #F9FAFB;
+      background: var(--color-bg-light, #F9FAFB);
       border-color: #D1D5DB;
     }
     .rf-history-manage-btn,
@@ -466,7 +472,7 @@
     }
     .rf-history-manage-btn:hover {
       color: var(--color-text-main, #111827);
-      background: #F9FAFB;
+      background: var(--color-bg-light, #F9FAFB);
       border-color: #D1D5DB;
     }
     .rf-history-subtitle {
@@ -486,7 +492,7 @@
       align-items: center;
       gap: 12px;
       padding: 0.875rem 1rem;
-      background: #fff;
+      background: var(--color-card-bg, #fff);
       border-radius: var(--radius-md, 12px);
       border: 1px solid var(--color-divider, #E5E7EB);
       transition: background 0.18s ease, border-color 0.18s ease, outline 0.18s ease;
@@ -494,14 +500,14 @@
       min-height: 56px;
     }
     .rf-history-item:hover {
-      background: #F9FAFB;
+      background: var(--color-bg-light, #F9FAFB);
       border-color: #D1D5DB;
     }
     .rf-history-item.is-selected {
       outline: 2px solid var(--color-accent-blue, #2563EB);
       outline-offset: 0;
       border-color: var(--color-divider, #E5E7EB);
-      background: #fff;
+      background: var(--color-card-bg, #fff);
     }
     .rf-history-checkbox-wrap {
       display: none;
@@ -520,13 +526,13 @@
       width: 40px;
       height: 40px;
       border-radius: var(--radius-md, 12px);
-      background: linear-gradient(135deg, #E0E7FF 0%, #C7D2FE 100%);
+      background: var(--color-bg-light, #E0E7FF);
       display: flex;
       align-items: center;
       justify-content: center;
       flex-shrink: 0;
     }
-    .rf-history-icon svg { width: 20px; height: 20px; color: #4F46E5; }
+    .rf-history-icon svg { width: 20px; height: 20px; color: var(--color-accent-blue, #4F46E5); }
     .rf-history-text { flex: 1; min-width: 0; }
     .rf-history-line1 {
       font-weight: 700;
@@ -577,8 +583,8 @@
     .rf-history-item:hover .rf-history-kebab,
     .rf-history-item:focus-within .rf-history-kebab { opacity: 1; }
     .rf-history-kebab:hover {
-      background: #F3F4F6;
-      border-color: #E5E7EB;
+      background: var(--color-bg-light, #F3F4F6);
+      border-color: var(--color-divider, #E5E7EB);
     }
     @media (hover: none), (pointer: coarse) {
       .rf-history-kebab { opacity: 1; }
@@ -588,12 +594,12 @@
       right: 0;
       top: calc(100% + 6px);
       min-width: 170px;
-      background: #fff;
+      background: var(--color-card-bg, #fff);
       border: 1px solid var(--color-divider, #E5E7EB);
       border-radius: 12px;
       box-shadow: var(--shadow-dropdown, 0 12px 28px rgba(0,0,0,0.12));
       padding: 6px;
-      z-index: var(--z-popover, 40);
+      z-index: var(--z-popover, 1060);
     }
     .rf-history-menu[hidden] { display: none; }
     .rf-history-menu-item {
@@ -607,7 +613,7 @@
       font-weight: 600;
       color: var(--color-text-main, #111827);
     }
-    .rf-history-menu-item:hover { background: #F9FAFB; }
+    .rf-history-menu-item:hover { background: var(--color-bg-light, #F9FAFB); }
     .rf-history-menu-item--danger { color: var(--color-error, #DC2626); }
     .rf-history-menu-item--danger:hover { background: rgba(220, 38, 38, 0.06); }
 
@@ -647,7 +653,7 @@
       border-color: rgba(220, 38, 38, 0.35);
     }
     .rf-history-neutral-btn {
-      background: #fff;
+      background: var(--color-card-bg, #fff);
       border: 1px solid var(--color-divider, #E5E7EB);
       color: var(--color-text-main, #111827);
       font-weight: 700;
@@ -656,7 +662,7 @@
       cursor: pointer;
       transition: background 0.18s ease, border-color 0.18s ease;
     }
-    .rf-history-neutral-btn:hover { background: #F9FAFB; border-color: #D1D5DB; }
+    .rf-history-neutral-btn:hover { background: var(--color-bg-light, #F9FAFB); border-color: #D1D5DB; }
 
     @media (max-width: 520px) {
       .rf-history-panel--manage .rf-history-manage-actions {
@@ -838,97 +844,51 @@
     .icon-btn[data-tip]:focus-visible::before { opacity: 1; }
     /* Plan strip styling - matches dashboard style */
     .iq-plan-strip {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      flex-wrap: wrap;
-      gap: 0.75rem;
-      background: linear-gradient(135deg, #F8FAFC 0%, #EEF2FF 100%);
-      border: 1px solid #E5E7EB;
-      border-radius: 10px;
-      padding: 0.75rem 1rem;
-      margin-bottom: 1.25rem;
-      font-size: 0.95rem;
-      color: #374151;
+      display: none; /* Hide the old plan strip, we move it inline */
     }
-    .iq-plan-strip .plan-info {
-      display: flex;
-      align-items: center;
-      gap: 1rem;
-      flex-wrap: wrap;
-    }
-    /* Reuse dashboard plan badge styles */
-    .iq-plan-strip .user-plan-badge {
-      font-size: 1.05rem;
-      font-weight: 700;
-      border-radius: 999px;
-      padding: 0.22rem 1.1rem 0.22rem 0.8rem;
-      display: inline-flex;
-      align-items: center;
-      gap: 0.4em;
-      background: #FFF7E6;
-      color: #FF9100;
-      box-shadow: 0 1px 4px rgba(31,41,55,0.06);
-    }
-    .iq-plan-strip .user-plan-badge.trial {
-      color: #FF9100;
-      background: #FFF7E6;
-    }
-    .iq-plan-strip .user-plan-badge.essential {
-      color: #0077B5;
-      background: #E3F2FD;
-      font-weight: 700;
-    }
-    .iq-plan-strip .user-plan-badge.pro {
-      color: #388E3C;
-      background: #E8F5E9;
-    }
-    .iq-plan-strip .user-plan-badge.premium {
-      color: #C62828;
-      background: #FFEBEE;
-    }
-    .iq-plan-strip .user-plan-badge.free {
-      color: #6B7280;
-      background: #F3F4F6;
-    }
-    .iq-plan-strip .plan-features {
-      display: flex;
-      align-items: center;
-      gap: 0.75rem;
-      flex-wrap: wrap;
-    }
-    .iq-plan-strip .feature-tag {
-      display: inline-flex;
-      align-items: center;
-      gap: 0.35rem;
+    /* Standard plan badge styling - matches resume feedback */
+    .user-plan-badge {
+      display: inline-block;
+      background: var(--color-accent-blue, #007BFF);
+      color: #fff;
+      font-weight: var(--font-weight-semibold, 600);
+      border-radius: var(--radius-full, 999px);
+      padding: 0.2em 0.8em;
       font-size: 0.9rem;
-      color: #4B5563;
+      vertical-align: middle;
+      box-shadow: var(--shadow-sm);
     }
-    .iq-plan-strip .feature-tag svg {
-      width: 16px;
-      height: 16px;
-      stroke: currentColor;
-      stroke-width: 2;
-      flex-shrink: 0;
+    .iq-usage-container {
+      margin-bottom: 1.5rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+    .usage-indicator {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.95rem;
+      color: var(--color-text-secondary, #4B5563);
     }
 
     /* Selection summary styling */
     .iq-selection-summary {
-      background: #F0FDF4;
-      border: 1px solid #BBF7D0;
-      border-radius: 8px;
+      background: rgba(5, 150, 105, 0.06);
+      border: 1px solid rgba(5, 150, 105, 0.25);
+      border-radius: var(--radius-md, 8px);
       padding: 0.75rem 1rem;
       margin-bottom: 1.25rem;
       font-size: 0.9rem;
-      color: #166534;
+      color: var(--color-success, #059669);
       display: flex;
       align-items: center;
       gap: 0.5rem;
     }
     .iq-selection-summary.no-selection {
-      background: #FEF3C7;
-      border: 1px solid #FCD34D;
-      color: #92400E;
+      background: rgba(217, 119, 6, 0.08);
+      border: 1px solid rgba(217, 119, 6, 0.3);
+      color: var(--color-warning, #D97706);
     }
     /* Empty state */
     .iq-empty-state {
@@ -1089,20 +1049,13 @@
   </nav>
   <div class="mobile-nav-backdrop" id="mobileNavBackdrop"></div>
   <main class="iq-main">
-    <h1 class="iq-title">Interview Questions</h1>
+    <h1 class="iq-title">
+      Interview Questions
+      <span id="plan-badge-container"></span>
+    </h1>
     <p class="iq-sub">Practice your answers with AI-generated questions tailored to your job title.</p>
-    <p style="font-size:0.9rem; color:#6B7280; margin-top:-0.75rem; margin-bottom:1rem;">Step 1: Generate questions · Step 2: Star your favorites · Step 3: Run a Mock Interview</p>
-
-    <!-- Plan Strip -->
-    <div id="iq-plan-strip" class="iq-plan-strip" style="display:none;">
-      <div class="plan-info">
-        <span id="plan-badge-container"></span>
-        <span class="plan-features" id="plan-features-display"></span>
-      </div>
-      <a href="pricing-a.html" class="btn-outline" id="plan-upgrade-link" style="display:none; text-decoration:none;">
-        Upgrade
-      </a>
-    </div>
+    <div class="iq-usage-container" id="iq-usage-container"></div>
+    <p style="font-size:0.9rem; color:var(--color-text-muted); margin-top:-0.75rem; margin-bottom:1rem;">Step 1: Generate questions · Step 2: Star your favorites · Step 3: Run a Mock Interview</p>
 
     <!-- Selection Summary -->
     <div id="iq-selection-summary" class="iq-selection-summary" style="display:none;">
@@ -3412,19 +3365,14 @@ function initIQPage(){
         mockBtn?.setAttribute('data-locked','true');
       }
       
-      // Update plan strip
-      updatePlanStrip(userPlan);
+      // Update plan UI
+      updatePlanUI(userPlan);
     }
     
-    // Update the plan strip display
-    function updatePlanStrip(plan) {
-      const strip = document.getElementById('iq-plan-strip');
+    // Standardized plan UI update - matches resume feedback
+    async function updatePlanUI(plan) {
       const badgeContainer = document.getElementById('plan-badge-container');
-      const featuresDisplay = document.getElementById('plan-features-display');
-      const upgradeLink = document.getElementById('plan-upgrade-link');
-      
-      if (!strip) return;
-      strip.style.display = 'flex';
+      const usageContainer = document.getElementById('iq-usage-container');
       
       const planNames = {
         'trial': 'Trial Plan',
@@ -3434,63 +3382,49 @@ function initIQPage(){
         'free': 'Free Plan'
       };
       
-      // Create plan badge
+      // Update plan badge
       if (badgeContainer) {
-        const badgeClass = plan === 'trial' ? 'trial' : 
-                          plan === 'essential' ? 'essential' :
-                          plan === 'pro' ? 'pro' :
-                          plan === 'premium' ? 'premium' :
-                          plan === 'free' ? 'free' : 'trial';
-        badgeContainer.innerHTML = `<span class="user-plan-badge ${badgeClass}">${planNames[plan] || 'Free Plan'}</span>`;
+        badgeContainer.innerHTML = `<span class="user-plan-badge">${planNames[plan] || 'Free Plan'}</span>`;
       }
       
-      // Create feature tags with icons
-      const checkIcon = '<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M20 6L9 17l-5-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
-      const lockIcon = '<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="5" y="11" width="14" height="10" rx="2" stroke="currentColor" stroke-width="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4" stroke="currentColor" stroke-width="2"/></svg>';
-      
-      if (featuresDisplay) {
-        if (plan === 'trial') {
-          featuresDisplay.innerHTML = `
-            <span class="feature-tag">${checkIcon} Interview Questions: Included</span>
-            <span class="feature-tag">${lockIcon} Mock Interviews: Pro & Premium</span>
-          `;
-          if (upgradeLink) {
-            upgradeLink.textContent = 'Upgrade';
-            upgradeLink.style.display = 'inline-flex';
+      // Update usage indicator
+      if (usageContainer) {
+        // Fetch real usage data
+        try {
+          const token = await getFirebaseToken();
+          if (token) {
+            const response = await fetch('/api/usage', {
+              headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (response.ok) {
+              const data = await response.json();
+              if (data.usage && window.renderUsageIndicator) {
+                // Render Interview Questions usage
+                window.renderUsageIndicator({
+                  feature: 'interviewQuestions',
+                  usage: data.usage.interviewQuestions,
+                  plan: plan,
+                  container: usageContainer
+                });
+                
+                // If Pro/Premium, also show Mock Interview usage
+                if (['pro', 'premium'].includes(plan)) {
+                  const mockUsageDiv = document.createElement('div');
+                  mockUsageDiv.style.marginTop = '0.5rem';
+                  usageContainer.appendChild(mockUsageDiv);
+                  window.renderUsageIndicator({
+                    feature: 'mockInterviews',
+                    usage: data.usage.mockInterviews,
+                    plan: plan,
+                    container: mockUsageDiv
+                  });
+                }
+              }
+            }
           }
-        } else if (plan === 'essential') {
-          featuresDisplay.innerHTML = `
-            <span class="feature-tag">${checkIcon} Interview Questions: Included</span>
-            <span class="feature-tag">${lockIcon} Mock Interviews: Pro & Premium</span>
-          `;
-          if (upgradeLink) {
-            upgradeLink.textContent = 'Upgrade';
-            upgradeLink.style.display = 'inline-flex';
-          }
-        } else if (plan === 'pro') {
-          // Get mock interview count if available
-          const mockCount = localStorage.getItem('mock_interviews_remaining') || '20';
-          featuresDisplay.innerHTML = `
-            <span class="feature-tag">${checkIcon} Interview Questions + Mock Interviews: Included</span>
-            <span class="feature-tag" style="color:#6B7280;">${mockCount} mock interviews left this month</span>
-          `;
-          if (upgradeLink) {
-            upgradeLink.textContent = 'Upgrade to Premium';
-            upgradeLink.style.display = 'inline-flex';
-          }
-        } else if (plan === 'premium') {
-          featuresDisplay.innerHTML = `
-            <span class="feature-tag">${checkIcon} All features: Unlimited</span>
-          `;
-          if (upgradeLink) upgradeLink.style.display = 'none';
-        } else {
-          featuresDisplay.innerHTML = `
-            <span class="feature-tag">${lockIcon} Upgrade to unlock Interview Questions</span>
-          `;
-          if (upgradeLink) {
-            upgradeLink.textContent = 'Upgrade';
-            upgradeLink.style.display = 'inline-flex';
-          }
+        } catch (e) {
+          console.warn('[IQ] Failed to fetch usage for UI:', e);
+          usageContainer.innerHTML = `<div class="usage-indicator">Unlimited with your ${planNames[plan] || 'plan'}.</div>`;
         }
       }
     }
