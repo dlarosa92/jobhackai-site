@@ -2733,6 +2733,12 @@
         }
       iqStartGlobalCooldown(IQ_GLOBAL_COOLDOWN);
         
+        // Refresh usage counter after successful generation
+        const currentPlan = getUserPlan();
+        if (currentPlan) {
+          updatePlanUI(currentPlan);
+        }
+        
       } catch (error) {
         console.error('[IQ] Generate error:', error);
         // Show user-friendly error message
