@@ -50,20 +50,51 @@
       padding: 0 1rem;
       width: 100%;
     }
-    .iq-title {
-      font-size: var(--font-size-3xl, 2.3rem);
+    /* Canonical feature-tile pattern (matches resume-feedback-pro.html) */
+    .rf-card {
+      background: var(--color-card-bg, #fff);
+      border-radius: var(--radius-xl, 16px);
+      box-shadow: var(--shadow-card, 0 6px 24px rgba(0,0,0,0.08));
+      padding: var(--space-lg, 1.5rem);
+      margin-bottom: var(--space-lg, 1.5rem);
+    }
+    .rf-title {
+      font-size: var(--font-size-2xl, 1.85rem);
       font-weight: var(--font-weight-extrabold, 800);
-      margin-bottom: 0.5rem;
+      margin-bottom: var(--space-xs, 0.35rem);
       color: var(--color-text-main, #1F2937);
       display: flex;
       align-items: center;
       gap: 0.75rem;
       flex-wrap: wrap;
     }
-    .iq-sub {
+    .rf-plan-badge {
+      display: inline-block;
+      /* Default to neutral so premium never shows blue if JS fails */
+      background: var(--color-text-muted, #6B7280);
+      color: #fff;
+      font-weight: 600;
+      border-radius: 999px;
+      padding: 0.2em 0.8em;
+      font-size: 0.9rem;
+      margin-left: 0.1rem;
+      vertical-align: middle;
+      box-shadow: var(--shadow-sm);
+    }
+    .rf-plan-limit {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
       color: var(--color-text-secondary, #4B5563);
-      margin-bottom: 1.5rem;
-      font-size: var(--font-size-lg, 1.13rem);
+      font-size: 0.95rem;
+      margin-top: 0.5rem;
+    }
+    /* IQ usage stack: allow multiple usage indicators inside the plan-limit row */
+    #iq-usage-container {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+      width: 100%;
     }
     .iq-role-input {
       width: 100%;
@@ -152,7 +183,7 @@
     }
     @media (max-width: 600px) {
       .iq-main { padding: 0 0.3rem; }
-      .iq-title { font-size: var(--font-size-2xl, 1.5rem); }
+      .rf-title { font-size: var(--font-size-2xl, 1.5rem); }
       .iq-question-card { font-size: 1rem; padding: 1rem 0.7rem; }
       .iq-upgrade-btn { font-size: 1.01rem; padding: 0.8rem 0; }
     }
@@ -846,24 +877,6 @@
     .iq-plan-strip {
       display: none; /* Hide the old plan strip, we move it inline */
     }
-    /* Standard plan badge styling - matches resume feedback */
-    .user-plan-badge {
-      display: inline-block;
-      background: var(--color-accent-blue, #007BFF);
-      color: #fff;
-      font-weight: var(--font-weight-semibold, 600);
-      border-radius: var(--radius-full, 999px);
-      padding: 0.2em 0.8em;
-      font-size: 0.9rem;
-      vertical-align: middle;
-      box-shadow: var(--shadow-sm);
-    }
-    .iq-usage-container {
-      margin-bottom: 1.5rem;
-      display: flex;
-      flex-direction: column;
-      gap: 0.5rem;
-    }
     .usage-indicator {
       display: inline-flex;
       align-items: center;
@@ -1049,19 +1062,27 @@
   </nav>
   <div class="mobile-nav-backdrop" id="mobileNavBackdrop"></div>
   <main class="iq-main">
-    <h1 class="iq-title">
-      Interview Questions
-      <span id="plan-badge-container"></span>
-    </h1>
-    <p class="iq-sub">Practice your answers with AI-generated questions tailored to your job title.</p>
-    <div class="iq-usage-container" id="iq-usage-container"></div>
-    <p style="font-size:0.9rem; color:var(--color-text-muted); margin-top:-0.75rem; margin-bottom:1rem;">Step 1: Generate questions · Step 2: Star your favorites · Step 3: Run a Mock Interview</p>
+    <section class="rf-card" id="iq-feature-tile">
+      <div class="rf-title" style="margin-bottom:0.2rem;">
+        Interview Questions
+        <span id="plan-badge-container"></span>
+      </div>
+      <div style="color:var(--color-text-secondary);margin:0.35rem 0 0.7rem;">
+        Practice your answers with AI-generated questions tailored to your job title.
+      </div>
+      <div class="rf-plan-limit">
+        <div id="iq-usage-container"></div>
+      </div>
+    </section>
+    <p style="font-size:0.9rem; color:var(--color-text-muted); margin-top:1rem; margin-bottom:1rem;">
+      Step 1: Generate questions · Step 2: Star your favorites · Step 3: Run a Mock Interview
+    </p>
 
     <!-- Selection Summary -->
     <div id="iq-selection-summary" class="iq-selection-summary" style="display:none;">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26"/></svg>
       <span id="selection-count-text">Selected for Mock Interview: 0 of 10 questions</span>
-      <span style="font-size:0.8rem; color:#6B7280; margin-left:0.5rem;">We'll use your starred questions in your mock interview.</span>
+      <span style="font-size:0.8rem; color:var(--color-text-muted, #6B7280); margin-left:0.5rem;">We'll use your starred questions in your mock interview.</span>
     </div>
 
     <div class="iq-top-grid">
@@ -3381,10 +3402,19 @@ function initIQPage(){
         'premium': 'Premium Plan',
         'free': 'Free Plan'
       };
+      const planColors = {
+        trial: '#FF9100',
+        essential: '#0077B5',
+        pro: '#388E3C',
+        premium: '#C62828',
+        free: '#6B7280'
+      };
       
       // Update plan badge
       if (badgeContainer) {
-        badgeContainer.innerHTML = `<span class="user-plan-badge">${planNames[plan] || 'Free Plan'}</span>`;
+        const planLabel = planNames[plan] || 'Free Plan';
+        const planColor = planColors[plan] || planColors.free;
+        badgeContainer.innerHTML = `<span class="rf-plan-badge" style="background:${planColor};">${planLabel}</span>`;
       }
       
       // Update usage indicator
@@ -3416,13 +3446,21 @@ function initIQPage(){
             return;
           }
 
+          const buildUnlimitedText = (usageObj) => {
+            if (!usageObj) return undefined;
+            if (usageObj.limit !== null) return undefined;
+            if (usageObj.used === null || usageObj.used === undefined) return undefined;
+            return `${usageObj.used} used this month (unlimited)`;
+          };
+
           // Render Interview Questions usage when available
           if (data.usage.interviewQuestions) {
             window.renderUsageIndicator({
               feature: 'interviewQuestions',
               usage: data.usage.interviewQuestions,
               plan: plan,
-              container: usageContainer
+              container: usageContainer,
+              customText: buildUnlimitedText(data.usage.interviewQuestions)
             });
           } else {
             usageContainer.innerHTML = `<div class="usage-indicator">Usage information unavailable for Interview Questions.</div>`;
@@ -3431,7 +3469,6 @@ function initIQPage(){
           // If Pro/Premium, also show Mock Interview usage (only when present)
           if (['pro', 'premium'].includes(plan)) {
             const mockUsageDiv = document.createElement('div');
-            mockUsageDiv.style.marginTop = '0.5rem';
             usageContainer.appendChild(mockUsageDiv);
 
             if (data.usage.mockInterviews) {
@@ -3439,7 +3476,8 @@ function initIQPage(){
                 feature: 'mockInterviews',
                 usage: data.usage.mockInterviews,
                 plan: plan,
-                container: mockUsageDiv
+                container: mockUsageDiv,
+                customText: buildUnlimitedText(data.usage.mockInterviews)
               });
             } else {
               mockUsageDiv.innerHTML = `<div class="usage-indicator">Usage information unavailable for Mock Interviews.</div>`;
