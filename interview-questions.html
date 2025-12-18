@@ -3394,7 +3394,11 @@ function initIQPage(){
           const token = await getFirebaseToken();
           if (token) {
             const response = await fetch('/api/usage', {
-              headers: { 'Authorization': `Bearer ${token}` }
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+              }
             });
             if (response.ok) {
               const data = await response.json();
