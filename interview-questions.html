@@ -3392,43 +3392,62 @@ function initIQPage(){
         // Fetch real usage data
         try {
           const token = await getFirebaseToken();
-          if (token) {
-            const response = await fetch('/api/usage', {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`
-              }
+          if (!token) {
+            usageContainer.innerHTML = `<div class="usage-indicator">Sign in to see your usage limits.</div>`;
+            return;
+          }
+
+          const response = await fetch('/api/usage', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`
+            }
+          });
+
+          if (!response.ok) {
+            usageContainer.innerHTML = `<div class="usage-indicator">Usage information unavailable. Please refresh or try again.</div>`;
+            return;
+          }
+
+          const data = await response.json();
+          if (!data?.usage || !window.renderUsageIndicator) {
+            usageContainer.innerHTML = `<div class="usage-indicator">Usage information unavailable. Please try again.</div>`;
+            return;
+          }
+
+          // Render Interview Questions usage when available
+          if (data.usage.interviewQuestions) {
+            window.renderUsageIndicator({
+              feature: 'interviewQuestions',
+              usage: data.usage.interviewQuestions,
+              plan: plan,
+              container: usageContainer
             });
-            if (response.ok) {
-              const data = await response.json();
-              if (data.usage && window.renderUsageIndicator) {
-                // Render Interview Questions usage
-                window.renderUsageIndicator({
-                  feature: 'interviewQuestions',
-                  usage: data.usage.interviewQuestions,
-                  plan: plan,
-                  container: usageContainer
-                });
-                
-                // If Pro/Premium, also show Mock Interview usage
-                if (['pro', 'premium'].includes(plan)) {
-                  const mockUsageDiv = document.createElement('div');
-                  mockUsageDiv.style.marginTop = '0.5rem';
-                  usageContainer.appendChild(mockUsageDiv);
-                  window.renderUsageIndicator({
-                    feature: 'mockInterviews',
-                    usage: data.usage.mockInterviews,
-                    plan: plan,
-                    container: mockUsageDiv
-                  });
-                }
-              }
+          } else {
+            usageContainer.innerHTML = `<div class="usage-indicator">Usage information unavailable for Interview Questions.</div>`;
+          }
+
+          // If Pro/Premium, also show Mock Interview usage (only when present)
+          if (['pro', 'premium'].includes(plan)) {
+            const mockUsageDiv = document.createElement('div');
+            mockUsageDiv.style.marginTop = '0.5rem';
+            usageContainer.appendChild(mockUsageDiv);
+
+            if (data.usage.mockInterviews) {
+              window.renderUsageIndicator({
+                feature: 'mockInterviews',
+                usage: data.usage.mockInterviews,
+                plan: plan,
+                container: mockUsageDiv
+              });
+            } else {
+              mockUsageDiv.innerHTML = `<div class="usage-indicator">Usage information unavailable for Mock Interviews.</div>`;
             }
           }
         } catch (e) {
           console.warn('[IQ] Failed to fetch usage for UI:', e);
-          usageContainer.innerHTML = `<div class="usage-indicator">Unlimited with your ${planNames[plan] || 'plan'}.</div>`;
+          usageContainer.innerHTML = `<div class="usage-indicator">Usage information unavailable. Please refresh and try again.</div>`;
         }
       }
     }
