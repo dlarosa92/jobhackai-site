@@ -1,4 +1,5 @@
 import { getBearer, verifyFirebaseIdToken } from '../_lib/firebase-auth.js';
+import { getOrCreateUserByAuthId, isD1Available } from '../_lib/db.js';
 
 function corsHeaders(origin, env) {
   const allowedOrigins = [
@@ -56,8 +57,9 @@ export async function onRequest(context) {
       });
     }
 
-    const { uid } = await verifyFirebaseIdToken(token, env.FIREBASE_PROJECT_ID);
+    const { uid, payload } = await verifyFirebaseIdToken(token, env.FIREBASE_PROJECT_ID);
     const plan = await getUserPlan(uid, env);
+    const userEmail = payload.email || null;
 
     // Get usage data from KV
     const usage = {
@@ -179,6 +181,32 @@ export async function onRequest(context) {
         if (timeSinceLastHourly < 3600000) {
           usage.mockInterviews.cooldown = Math.ceil((3600000 - timeSinceLastHourly) / 1000); // seconds
         }
+      }
+    }
+
+    // Get Interview Questions monthly usage from database
+    if ((plan === 'trial' || plan === 'essential' || plan === 'pro' || plan === 'premium') && isD1Available(env)) {
+      try {
+        const d1User = await getOrCreateUserByAuthId(env, uid, userEmail);
+        if (d1User && d1User.id) {
+          // Get current month's usage by summing all daily counts for the month
+          const now = new Date();
+          const year = now.getFullYear();
+          const month = String(now.getMonth() + 1).padStart(2, '0');
+          const monthStart = `${year}-${month}-01`;
+          const monthEnd = `${year}-${month}-31`;
+          
+          const result = await env.DB.prepare(
+            `SELECT SUM(count) as total FROM feature_daily_usage
+             WHERE user_id = ? AND feature = 'interview_questions'
+             AND usage_date >= ? AND usage_date <= ?`
+          ).bind(d1User.id, monthStart, monthEnd).first();
+          
+          usage.interviewQuestions.used = result && result.total ? result.total : 0;
+        }
+      } catch (error) {
+        console.error('[USAGE] Error getting interview questions usage:', error);
+        // Keep default 0 on error
       }
     }
 
