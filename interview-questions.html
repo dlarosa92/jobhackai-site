@@ -3418,9 +3418,18 @@ function initIQPage(){
     }
     
     // Standardized plan UI update - matches resume feedback
+    let isUpdatingPlanUI = false;
     async function updatePlanUI(plan) {
-      const badgeContainer = document.getElementById('plan-badge-container');
-      const usageContainer = document.getElementById('iq-usage-container');
+      // Prevent duplicate concurrent executions
+      if (isUpdatingPlanUI) {
+        return;
+      }
+      
+      isUpdatingPlanUI = true;
+      
+      try {
+        const badgeContainer = document.getElementById('plan-badge-container');
+        const usageContainer = document.getElementById('iq-usage-container');
       
       const planNames = {
         'trial': 'Trial Plan',
@@ -3528,6 +3537,9 @@ function initIQPage(){
           console.warn('[IQ] Failed to fetch usage for UI:', e);
           usageContainer.innerHTML = `<div class="usage-indicator">Usage information unavailable. Please refresh and try again.</div>`;
         }
+      }
+      } finally {
+        isUpdatingPlanUI = false;
       }
     }
     

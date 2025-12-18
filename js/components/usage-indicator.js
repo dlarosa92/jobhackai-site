@@ -191,10 +191,10 @@ export function renderUsageIndicator({ feature, usage, plan, container, customTe
         ">
           <svg width="36" height="36" viewBox="0 0 36 36" aria-hidden="true" style="flex-shrink: 0;">
             <path
-              d="M10 18 C10 14, 12 10, 18 10 C22 10, 26 14, 26 18 C26 22, 28 26, 28 26 C28 26, 26 22, 26 18 C26 14, 22 10, 18 10 C14 10, 10 14, 10 18 C10 22, 8 26, 8 26 C8 26, 10 22, 10 18"
+              d="M 6 18 C 6 12, 14 12, 18 18 C 22 24, 30 24, 30 18 C 30 12, 22 12, 18 18 C 14 24, 6 24, 6 18"
               fill="none"
               stroke="var(--color-cta-green)"
-              stroke-width="3"
+              stroke-width="2.5"
               stroke-linecap="round"
               stroke-linejoin="round"
             />
