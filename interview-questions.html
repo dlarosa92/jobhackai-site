@@ -100,13 +100,14 @@
       width: 100%;
       padding: 0.85rem 1.1rem;
       border: 2px solid var(--color-divider, #E5E7EB);
-      border-radius: var(--radius-md, 10px);
+      border-radius: var(--radius-button, 8px);
       font-size: 1.08rem;
       margin-bottom: 0;
       transition: border 0.18s;
       background: var(--color-card-bg, #fff);
       color: var(--color-text-main, #1F2937);
       box-sizing: border-box;
+      height: 48px;
     }
     .iq-role-input:focus {
       border-color: var(--color-accent-blue, #007BFF);
@@ -118,7 +119,7 @@
       background: var(--color-card-bg, #fff);
       border: 1.5px solid var(--color-divider, #E5E7EB);
       border-top: none;
-      border-radius: 0 0 var(--radius-md, 10px) var(--radius-md, 10px);
+      border-radius: 0 0 var(--radius-button, 8px) var(--radius-button, 8px);
       box-shadow: var(--shadow-md);
       z-index: var(--z-dropdown, 1000);
       max-height: 220px;
@@ -168,7 +169,7 @@
       background: var(--color-cta-green, #00E676);
       color: #fff;
       border: none;
-      border-radius: var(--radius-lg, 12px);
+      border-radius: var(--radius-button, 8px);
       font-size: 1.13rem;
       padding: 1rem 0;
       font-weight: var(--font-weight-bold, 700);
@@ -176,6 +177,7 @@
       transition: background 0.18s;
       text-align: center;
       box-shadow: var(--shadow-md);
+      min-height: 48px;
     }
     .iq-upgrade-btn:hover,
     .iq-upgrade-btn:focus {
@@ -192,16 +194,16 @@
     .iq-toolbar .iq-row { display: flex; gap: 0.75rem; flex-wrap: wrap; align-items: center; }
     .iq-select, .chip, textarea#iq-jd { 
       border: 1.5px solid var(--color-divider, #E5E7EB); 
-      border-radius: var(--radius-md, 10px); 
+      border-radius: var(--radius-button, 8px); 
       padding: 0.6rem 0.8rem; 
       background: var(--color-card-bg, #fff); 
       box-sizing: border-box;
       color: var(--color-text-main, #1F2937);
     }
     .chip { cursor: pointer; user-select: none; transition: all 0.2s ease; }
-    .chip.is-on { box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.15); background: #EBF4FF; border-color: #60A5FA; }
+    .chip.is-on { box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.15); background: rgba(0, 123, 255, 0.1); border-color: var(--color-accent-blue, #007BFF); }
     .chip:hover { border-color: #94A3B8; }
-    .chip.is-on:hover { border-color: #3B82F6; }
+    .chip.is-on:hover { border-color: var(--color-accent-blue, #007BFF); }
     .chip-expand { background: var(--color-bg-light, #F8FAFC); border-color: #CBD5E1; color: var(--color-text-muted, #6B7280); font-weight: var(--font-weight-medium, 500); }
     .chip-expand:hover { background: #F1F5F9; border-color: #94A3B8; }
     .iq-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; margin-top: 0.75rem; }
@@ -228,18 +230,18 @@
       gap: 0.25rem;
       padding: 0.15rem 0.4rem;
       font-size: 0.75rem;
-      font-weight: 500;
-      color: var(--color-accent-blue, #0ea5e9);
-      background: rgba(14, 165, 233, 0.1);
-      border-radius: 6px;
-      border: 1px solid rgba(14, 165, 233, 0.2);
+      font-weight: 600;
+      color: var(--color-accent-blue, #007BFF);
+      background: rgba(0, 123, 255, 0.1);
+      border-radius: var(--radius-sm, 4px);
+      border: 1px solid rgba(0, 123, 255, 0.25);
     }
     .icon-btn { border: 1px solid var(--color-divider, #E5E7EB); background: var(--color-card-bg, #fff); border-radius: 8px; padding: 0.3rem 0.45rem; cursor: pointer; transition: opacity 0.15s ease; }
     .icon-btn:disabled { opacity: 0.4; cursor: not-allowed; }
     .link-btn { background: none; border: none; color: var(--color-accent-blue, #007BFF); cursor: pointer; text-decoration: underline; padding: 0 0.25rem; }
     .iq-example { margin: 0.5rem 0 0 0; color: var(--color-text-secondary, #4B5563); }
     .iq-types { display: flex; gap: 0.4rem; flex-wrap: wrap; }
-    .recent-item { width: 100%; text-align: left; padding: 0.6rem 0.7rem; border: 1.5px solid var(--color-divider, #E5E7EB); border-radius: var(--radius-md, 10px); background: var(--color-card-bg, #fff); cursor: pointer; }
+    .recent-item { width: 100%; text-align: left; padding: 0.6rem 0.7rem; border: 1.5px solid var(--color-divider, #E5E7EB); border-radius: var(--radius-button, 8px); background: var(--color-card-bg, #fff); cursor: pointer; }
     .ri-role { font-weight: 600; }
     .ri-meta { color: var(--color-text-muted, #6B7280); font-size: 0.9rem; }
     .cta-hint { flex-basis: 100%; font-size: 0.9rem; color: var(--color-text-muted, #6B7280); margin-top: 0.25rem; }
@@ -254,9 +256,9 @@
       gap:0.35rem;
       padding:0.3rem 0.75rem;
       border-radius:999px;
-      background: rgba(37,99,235,0.1);
-      border: 1px solid rgba(37,99,235,0.35);
-      color: #2563EB;
+      background: rgba(0, 123, 255, 0.1);
+      border: 1px solid rgba(0, 123, 255, 0.25);
+      color: var(--color-accent-blue, #007BFF);
       font-weight:600;
       font-size:0.87rem;
     }
@@ -266,22 +268,22 @@
     .btn-save svg { fill:none; stroke:#6B7280; stroke-width:1.5; }
     /* Stronger selectors to beat any theme overrides */
     .iq-qactions .btn-save[aria-pressed="true"] svg,
-    .iq-qactions .btn-save.is-saved svg { fill:#2563EB; stroke:#2563EB; }
+    .iq-qactions .btn-save.is-saved svg { fill:var(--color-accent-blue, #007BFF); stroke:var(--color-accent-blue, #007BFF); }
     /* Highlight question card when starred */
-    .iq-question-card:has(.btn-save[aria-pressed="true"]) { background:#F0F9FF; border-color:#BFDBFE; }
+    .iq-question-card:has(.btn-save[aria-pressed="true"]) { background:rgba(0, 123, 255, 0.05); border-color:rgba(0, 123, 255, 0.2); }
     .saved-remove { padding:.2rem .5rem; font-size:.8rem; }
-    .recent-item.is-active { border-color:#60A5FA; box-shadow:0 0 0 2px rgba(37,99,235,.15); background:#F8FAFF; }
+    .recent-item.is-active { border-color:var(--color-accent-blue, #007BFF); box-shadow:0 0 0 2px rgba(0, 123, 255, 0.15); background:rgba(0, 123, 255, 0.05); }
 
     /* Fixed question count display (hardcoded 10) */
-    .iq-count-display { padding:.6rem .8rem; color:#4B5563; font-size:.9rem; background:#F9FAFB; border:1px solid #E5E7EB; border-radius:10px; }
+    .iq-count-display { padding:.6rem .8rem; color:#4B5563; font-size:.9rem; background:#F9FAFB; border:1px solid #E5E7EB; border-radius:var(--radius-md, 8px); }
 
     /* Accessibility utility */
     .sr-only { position:absolute !important; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0; }
 
     /* --- Visual polish & overrides --- */
     .iq-main { padding-bottom: 16px; }
-    .card { border-radius:16px; padding:1.25rem; }
-    .iq-select, .chip, textarea#iq-jd { border-radius:12px; }
+    .card { border-radius:var(--radius-xl, 16px); padding:1.25rem; }
+    .iq-select, .chip, textarea#iq-jd { border-radius:var(--radius-button, 8px); }
     .chip { border:1px solid #E5E7EB; padding:.5rem .75rem; line-height:1; background:#fff; min-height:36px; }
     .chip:hover { box-shadow:0 0 0 2px rgba(25,118,210,.10); }
     .chip:focus-visible { outline:none; box-shadow:0 0 0 2px rgba(25,118,210,.12); }
@@ -320,7 +322,7 @@
     .iq-advanced { margin:.75rem 0 1rem 0; }
     .iq-advanced summary { cursor:pointer; padding:.25rem 0; }
     .iq-advanced[open] #iq-jd { margin-top:.5rem; }
-    #iq-jd { width:100%; border:1.5px solid #E5E7EB; border-radius:12px; padding:.75rem .9rem; }
+    #iq-jd { width:100%; border:1.5px solid #E5E7EB; border-radius:var(--radius-button, 8px); padding:.75rem .9rem; }
     .iq-toolbar .iq-field .iq-role-input { margin-bottom:0; }
     .iq-toolbar .iq-row > div { 
       margin-bottom: 0; 
@@ -330,11 +332,11 @@
     .iq-toolbar .iq-row > div:not(:last-child) { 
       margin-right: 0; 
     }
-    .btn-outline { border: 1px solid var(--color-divider, #E5E7EB); background: var(--color-card-bg, #fff); box-shadow: none; color: var(--color-text-main, #1F2937); font-weight: 600; border-radius: 8px; padding: 0.6rem 1rem; cursor: pointer; transition: all 0.2s; display: inline-flex; align-items: center; gap: 0.4rem; }
+    .btn-outline { border: 1px solid var(--color-divider, #E5E7EB); background: var(--color-card-bg, #fff); box-shadow: none; color: var(--color-text-main, #1F2937); font-weight: 600; border-radius: var(--radius-button, 8px); padding: 0.6rem 1rem; cursor: pointer; transition: all 0.2s; display: inline-flex; align-items: center; gap: 0.4rem; min-height: 48px; }
     .btn-outline:hover, .btn-outline:focus-visible { background: var(--color-bg-light, #F9FAFB); border-color: #D1D5DB; }
     .btn-outline.is-pressed { background: var(--color-bg-light, #F3F4F6); }
     .btn-primary[disabled], .btn-outline[disabled] { opacity:.5; cursor:not-allowed; pointer-events:none; }
-    .iq-question-card { border:1px solid #E5E7EB; box-shadow:0 1px 4px rgba(31,41,55,.05); border-radius:16px; padding:1.1rem 1.2rem; }
+    .iq-question-card { border:1px solid #E5E7EB; box-shadow:0 1px 4px rgba(31,41,55,.05); border-radius:var(--radius-xl, 16px); padding:1.1rem 1.2rem; }
     .lock { 
       vertical-align: middle; 
       display: inline-flex;
@@ -471,7 +473,7 @@
       align-items: center;
       justify-content: center;
       border: 1px solid var(--color-divider, #E5E7EB);
-      border-radius: var(--radius-md, 12px);
+      border-radius: var(--radius-md);
       background: transparent;
       cursor: pointer;
       transition: background 0.18s ease, border-color 0.18s ease;
@@ -496,7 +498,7 @@
       color: var(--color-text-secondary, #374151);
       font-weight: 700;
       border: 1px solid var(--color-divider, #E5E7EB);
-      border-radius: var(--radius-md, 12px);
+      border-radius: var(--radius-md);
       padding: 0.5rem 1rem;
       background: transparent;
       transition: background 0.18s ease, border-color 0.18s ease;
@@ -524,7 +526,7 @@
       gap: 12px;
       padding: 0.875rem 1rem;
       background: var(--color-card-bg, #fff);
-      border-radius: var(--radius-md, 12px);
+      border-radius: var(--radius-md);
       border: 1px solid var(--color-divider, #E5E7EB);
       transition: background 0.18s ease, border-color 0.18s ease, outline 0.18s ease;
       cursor: pointer;
@@ -535,7 +537,7 @@
       border-color: #D1D5DB;
     }
     .rf-history-item.is-selected {
-      outline: 2px solid var(--color-accent-blue, #2563EB);
+      outline: 2px solid var(--color-accent-blue);
       outline-offset: 0;
       border-color: var(--color-divider, #E5E7EB);
       background: var(--color-card-bg, #fff);
@@ -549,21 +551,21 @@
     .rf-history-checkbox {
       width: 18px;
       height: 18px;
-      accent-color: var(--color-accent-blue, #2563EB);
+      accent-color: var(--color-accent-blue);
       cursor: pointer;
     }
     .rf-history-panel--manage .rf-history-checkbox-wrap { display: inline-flex; }
     .rf-history-icon {
       width: 40px;
       height: 40px;
-      border-radius: var(--radius-md, 12px);
-      background: var(--color-bg-light, #E0E7FF);
+      border-radius: var(--radius-md);
+      background: linear-gradient(135deg, #E0E7FF 0%, #C7D2FE 100%);
       display: flex;
       align-items: center;
       justify-content: center;
       flex-shrink: 0;
     }
-    .rf-history-icon svg { width: 20px; height: 20px; color: var(--color-accent-blue, #4F46E5); }
+    .rf-history-icon svg { width: 20px; height: 20px; color: #4F46E5; }
     .rf-history-text { flex: 1; min-width: 0; }
     .rf-history-line1 {
       font-weight: 700;
@@ -602,7 +604,7 @@
       width: 40px;
       height: 40px;
       border: 1px solid transparent;
-      border-radius: var(--radius-md, 12px);
+      border-radius: var(--radius-md);
       background: transparent;
       cursor: pointer;
       display: inline-flex;
@@ -673,7 +675,7 @@
       border: 1px solid rgba(220, 38, 38, 0.25);
       color: var(--color-error, #DC2626);
       font-weight: 800;
-      border-radius: var(--radius-md, 12px);
+      border-radius: var(--radius-md);
       padding: 0.7rem 1rem;
       cursor: pointer;
       transition: background 0.18s ease, border-color 0.18s ease, opacity 0.18s ease;
@@ -688,7 +690,7 @@
       border: 1px solid var(--color-divider, #E5E7EB);
       color: var(--color-text-main, #111827);
       font-weight: 700;
-      border-radius: var(--radius-md, 12px);
+      border-radius: var(--radius-md);
       padding: 0.7rem 1rem;
       cursor: pointer;
       transition: background 0.18s ease, border-color 0.18s ease;
@@ -721,7 +723,7 @@
       align-items: center;
       gap: 12px;
       padding: 0.875rem 1rem;
-      border-radius: var(--radius-md, 12px);
+      border-radius: var(--radius-md);
       border: 1px solid var(--color-divider, #E5E7EB);
       background: #fff;
       min-height: 56px;
@@ -791,7 +793,7 @@
       width: min(520px, calc(100vw - 32px));
       background: #fff;
       border: 1px solid var(--color-divider, #E5E7EB);
-      border-radius: var(--radius-xl, 18px);
+      border-radius: var(--radius-xl);
       box-shadow: var(--shadow-xl, 0 20px 50px rgba(0,0,0,0.18));
       padding: 20px;
       z-index: var(--z-modal, 100);
@@ -830,7 +832,7 @@
     .iq-main::after { content:""; display:block; height:0; }
 
     /* Lightweight snackbar toast */
-    #iq-toast { position:fixed; bottom:18px; right:18px; background:#111827; color:#fff; padding:.55rem .75rem; border-radius:10px; box-shadow:0 6px 18px rgba(0,0,0,.18); font-size:.95rem; z-index:10000; opacity:0; transform:translateY(8px); transition:opacity .18s ease, transform .18s ease; }
+    #iq-toast { position:fixed; bottom:18px; right:18px; background:#111827; color:#fff; padding:.55rem .75rem; border-radius:var(--radius-md, 8px); box-shadow:0 6px 18px rgba(0,0,0,.18); font-size:.95rem; z-index:10000; opacity:0; transform:translateY(8px); transition:opacity .18s ease, transform .18s ease; }
     #iq-toast.show { opacity:1; transform:translateY(0); }
     /* Ensure overlay respects hidden state regardless of inline display */
     #iq-upsell[hidden] { display: none !important; }
@@ -887,7 +889,7 @@
 
     /* Selection summary styling */
     .iq-selection-summary {
-      background: rgba(5, 150, 105, 0.06);
+      background: rgba(5, 150, 105, 0.1);
       border: 1px solid rgba(5, 150, 105, 0.25);
       border-radius: var(--radius-md, 8px);
       padding: 0.75rem 1rem;
@@ -899,9 +901,23 @@
       gap: 0.5rem;
     }
     .iq-selection-summary.no-selection {
-      background: rgba(217, 119, 6, 0.08);
-      border: 1px solid rgba(217, 119, 6, 0.3);
+      background: rgba(217, 119, 6, 0.1);
+      border: 1px solid rgba(217, 119, 6, 0.25);
       color: var(--color-warning, #D97706);
+    }
+    
+    /* Tip Banner - Fixed */
+    .iq-hint-banner {
+      margin-top: 1rem;
+      padding: 0.75rem 1rem;
+      background: rgba(0, 123, 255, 0.1);
+      border: 1px solid rgba(0, 123, 255, 0.25);
+      border-radius: var(--radius-md, 8px);
+      color: var(--color-accent-blue, #007BFF);
+      font-size: 0.9rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
     }
     /* Empty state */
     .iq-empty-state {
@@ -1070,13 +1086,24 @@
       <div style="color:var(--color-text-secondary);margin:0.35rem 0 0.7rem;">
         Practice your answers with AI-generated questions tailored to your job title.
       </div>
+      
+      <!-- Process Guide Inside Card -->
+      <div class="iq-process-guide" style="margin-top: 1.25rem; padding-top: 1rem; border-top: 1px solid var(--color-divider); display: flex; gap: 1.5rem; flex-wrap: wrap;">
+        <div style="font-size: 0.85rem; color: var(--color-text-secondary);">
+          <strong style="color: var(--color-text-main);">1.</strong> Generate questions
+        </div>
+        <div style="font-size: 0.85rem; color: var(--color-text-secondary);">
+          <strong style="color: var(--color-text-main);">2.</strong> Star your favorites
+        </div>
+        <div style="font-size: 0.85rem; color: var(--color-text-secondary);">
+          <strong style="color: var(--color-text-main);">3.</strong> Run a Mock Interview
+        </div>
+      </div>
+      
       <div class="rf-plan-limit">
         <div id="iq-usage-container"></div>
       </div>
     </section>
-    <p style="font-size:0.9rem; color:var(--color-text-muted); margin-top:1rem; margin-bottom:1rem;">
-      Step 1: Generate questions · Step 2: Star your favorites · Step 3: Run a Mock Interview
-    </p>
 
     <!-- Selection Summary -->
     <div id="iq-selection-summary" class="iq-selection-summary" style="display:none;">
@@ -1119,7 +1146,7 @@
       </div>
 
       <!-- First-time visitor hint banner -->
-      <div id="iq-first-hint" class="iq-hint-banner" style="display:none; margin-top:1rem; padding:0.75rem 1rem; background:#EFF6FF; border:1px solid #BFDBFE; border-radius:10px; color:#1E40AF; font-size:0.9rem; display:flex; align-items:center; gap:0.5rem;">
+      <div id="iq-first-hint" class="iq-hint-banner" style="display:none;">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;">
           <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/>
           <circle cx="12" cy="12" r="4"/>
@@ -1202,21 +1229,21 @@
         <div class="rf-history-body" data-history-body>
           <div class="rf-history-loading" id="iq-history-loading" data-history-loading>
             <div class="rf-history-skeleton-row">
-              <div class="rf-skeleton" style="width:40px;height:40px;border-radius:var(--radius-md, 12px);"></div>
+              <div class="rf-skeleton" style="width:40px;height:40px;border-radius:var(--radius-md);"></div>
               <div style="flex:1;min-width:0;">
                 <div class="rf-skeleton rf-history-skeleton-pill"></div>
                 <div class="rf-skeleton rf-history-skeleton-pill sm" style="margin-top:8px;"></div>
               </div>
             </div>
             <div class="rf-history-skeleton-row">
-              <div class="rf-skeleton" style="width:40px;height:40px;border-radius:var(--radius-md, 12px);"></div>
+              <div class="rf-skeleton" style="width:40px;height:40px;border-radius:var(--radius-md);"></div>
               <div style="flex:1;min-width:0;">
                 <div class="rf-skeleton rf-history-skeleton-pill"></div>
                 <div class="rf-skeleton rf-history-skeleton-pill sm" style="margin-top:8px;"></div>
               </div>
             </div>
             <div class="rf-history-skeleton-row">
-              <div class="rf-skeleton" style="width:40px;height:40px;border-radius:var(--radius-md, 12px);"></div>
+              <div class="rf-skeleton" style="width:40px;height:40px;border-radius:var(--radius-md);"></div>
               <div style="flex:1;min-width:0;">
                 <div class="rf-skeleton rf-history-skeleton-pill"></div>
                 <div class="rf-skeleton rf-history-skeleton-pill sm" style="margin-top:8px;"></div>
@@ -3419,6 +3446,9 @@ function initIQPage(){
       
       // Update usage indicator
       if (usageContainer) {
+        // Clear container first to prevent duplicates
+        usageContainer.innerHTML = '';
+        
         // Fetch real usage data
         try {
           const token = await getFirebaseToken();
@@ -3446,12 +3476,23 @@ function initIQPage(){
             return;
           }
 
-          const buildUnlimitedText = (usageObj) => {
+          const buildUnlimitedText = (usageObj, featureType) => {
             if (!usageObj) return undefined;
             if (usageObj.limit !== null) return undefined;
             if (usageObj.used === null || usageObj.used === undefined) return undefined;
+            
+            // Match the format from mock interview page
+            if (featureType === 'mockInterviews') {
+              return `Sessions used this month: ${usageObj.used}`;
+            } else if (featureType === 'interviewQuestions') {
+              return `Questions used this month: ${usageObj.used}`;
+            }
             return `${usageObj.used} used this month (unlimited)`;
           };
+
+          // Create Interview Questions indicator container
+          const iqIndicatorDiv = document.createElement('div');
+          usageContainer.appendChild(iqIndicatorDiv);
 
           // Render Interview Questions usage when available
           if (data.usage.interviewQuestions) {
@@ -3459,11 +3500,11 @@ function initIQPage(){
               feature: 'interviewQuestions',
               usage: data.usage.interviewQuestions,
               plan: plan,
-              container: usageContainer,
-              customText: buildUnlimitedText(data.usage.interviewQuestions)
+              container: iqIndicatorDiv,
+              customText: buildUnlimitedText(data.usage.interviewQuestions, 'interviewQuestions')
             });
           } else {
-            usageContainer.innerHTML = `<div class="usage-indicator">Usage information unavailable for Interview Questions.</div>`;
+            iqIndicatorDiv.innerHTML = `<div class="usage-indicator">Usage information unavailable for Interview Questions.</div>`;
           }
 
           // If Pro/Premium, also show Mock Interview usage (only when present)
@@ -3477,7 +3518,7 @@ function initIQPage(){
                 usage: data.usage.mockInterviews,
                 plan: plan,
                 container: mockUsageDiv,
-                customText: buildUnlimitedText(data.usage.mockInterviews)
+                customText: buildUnlimitedText(data.usage.mockInterviews, 'mockInterviews')
               });
             } else {
               mockUsageDiv.innerHTML = `<div class="usage-indicator">Usage information unavailable for Mock Interviews.</div>`;

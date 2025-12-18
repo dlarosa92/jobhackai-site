@@ -165,7 +165,7 @@ export function renderUsageIndicator({ feature, usage, plan, container, customTe
       : `${featureName} usage information`;
     contentHTML = contentParts.join('<span style="margin: 0 0.5rem;">•</span>');
   } else if (isUnlimited) {
-    // Unlimited: show standard meter + monthly used count when available
+    // Unlimited: show infinity symbol + monthly used count when available
     const planName = plan === 'trial' ? 'Trial' : 
                      plan === 'essential' ? 'Essential' : 
                      plan === 'pro' ? 'Pro' : 
@@ -174,34 +174,33 @@ export function renderUsageIndicator({ feature, usage, plan, container, customTe
     const used = usage && usage.used !== null && usage.used !== undefined ? usage.used : null;
 
     if (used !== null) {
-      // For unlimited plans we don't have a meaningful percentage, but we keep the
-      // canonical circular affordance to make the indicator visually consistent.
-      const radius = 16;
-      const circumference = 2 * Math.PI * radius;
+      // Determine the feature-specific label
+      const featureLabel = feature === 'mockInterviews' ? 'Sessions' :
+                          feature === 'interviewQuestions' ? 'Questions' :
+                          feature === 'resumeFeedback' ? 'Feedback runs' :
+                          feature === 'atsScans' ? 'Scans' :
+                          feature === 'coverLetters' ? 'Letters' :
+                          'Items';
 
-      ariaLabel = `${featureName}: ${used} used this month (unlimited) with ${planName} plan`;
+      ariaLabel = `${featureName}: ${used} ${featureLabel.toLowerCase()} used this month (unlimited) with ${planName} plan`;
       contentHTML = `
         <div class="usage-indicator__meter" style="
           display: inline-flex;
           align-items: center;
           gap: 0.5rem;
         ">
-          <svg width="36" height="36" viewBox="0 0 36 36" style="transform: rotate(-90deg);" aria-hidden="true">
-            <circle cx="18" cy="18" r="${radius}" fill="none" stroke="var(--color-divider)" stroke-width="3"/>
-            <circle
-              cx="18"
-              cy="18"
-              r="${radius}"
+          <svg width="36" height="36" viewBox="0 0 36 36" aria-hidden="true" style="flex-shrink: 0;">
+            <path
+              d="M18 12 C14 12, 10 15, 10 18 C10 21, 14 24, 18 24 C22 24, 26 21, 26 18 C26 15, 22 12, 18 12 M18 24 C14 24, 10 27, 10 30 C10 33, 14 36, 18 36 C22 36, 26 33, 26 30 C26 27, 22 24, 18 24 M18 12 C22 12, 26 9, 26 6 C26 3, 22 0, 18 0 C14 0, 10 3, 10 6 C10 9, 14 12, 18 12"
               fill="none"
               stroke="var(--color-cta-green)"
               stroke-width="3"
-              stroke-dasharray="${circumference}"
-              stroke-dashoffset="0"
               stroke-linecap="round"
+              stroke-linejoin="round"
             />
           </svg>
           <span style="color: var(--color-text-secondary); font-size: 0.95rem;">
-            ${customText || `${used} used this month (unlimited)`}
+            ${customText || `${featureLabel} used this month: ${used}`}
           </span>
         </div>
       `;

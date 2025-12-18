@@ -1,0 +1,528 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Interview Questions - Updated Design Mockup</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    :root {
+      --color-bg-light: #F9FAFB;
+      --color-text-main: #1F2937;
+      --color-text-secondary: #4B5563;
+      --color-text-muted: #6B7280;
+      --color-card-bg: #FFFFFF;
+      --color-cta-green: #00E676;
+      --color-cta-green-hover: #00c965;
+      --color-accent-blue: #007BFF;
+      --color-divider: #E5E7EB;
+      --color-error: #DC2626;
+      --color-success: #059669;
+      --color-warning: #D97706;
+      --font-family-base: 'Inter', sans-serif;
+      --font-weight-regular: 400;
+      --font-weight-semibold: 600;
+      --font-weight-bold: 700;
+      --font-weight-extrabold: 800;
+      --font-size-xs: 0.875rem;
+      --font-size-sm: 0.95rem;
+      --font-size-base: 1rem;
+      --font-size-2xl: 1.5rem;
+      --radius-sm: 4px;
+      --radius-md: 8px;
+      --radius-lg: 12px;
+      --radius-xl: 16px;
+      --radius-button: 8px;
+      --radius-card: 8px;
+      --shadow-card: 0 4px 24px rgba(31,41,55,0.07);
+      --shadow-button: 0 2px 8px rgba(0,0,0,0.04);
+      --space-xs: 0.5rem;
+      --space-sm: 1rem;
+      --space-md: 1.5rem;
+      --space-lg: 2rem;
+    }
+
+    body {
+      font-family: var(--font-family-base);
+      background: var(--color-bg-light);
+      color: var(--color-text-main);
+      padding: 2rem;
+      line-height: 1.5;
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    /* Feature Card */
+    .rf-card {
+      background: var(--color-card-bg);
+      border-radius: var(--radius-xl);
+      box-shadow: var(--shadow-card);
+      padding: var(--space-lg);
+      margin-bottom: var(--space-lg);
+    }
+
+    .rf-title {
+      font-size: var(--font-size-2xl);
+      font-weight: var(--font-weight-extrabold);
+      margin-bottom: 0.2rem;
+      color: var(--color-text-main);
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      flex-wrap: wrap;
+    }
+
+    .rf-plan-badge {
+      display: inline-block;
+      background: #C62828;
+      color: #fff;
+      font-weight: 600;
+      border-radius: 999px;
+      padding: 0.2em 0.8em;
+      font-size: 0.9rem;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+    }
+
+    .rf-description {
+      color: var(--color-text-secondary);
+      margin: 0.35rem 0 0.7rem;
+    }
+
+    /* NEW: Process Guide Inside Card */
+    .iq-process-guide {
+      margin-top: 1.25rem;
+      padding-top: 1rem;
+      border-top: 1px solid var(--color-divider);
+      display: flex;
+      gap: 1.5rem;
+      flex-wrap: wrap;
+    }
+
+    .iq-process-guide > div {
+      font-size: 0.85rem;
+      color: var(--color-text-secondary);
+    }
+
+    .iq-process-guide strong {
+      color: var(--color-text-main);
+    }
+
+    .rf-plan-limit {
+      margin-top: 0.7rem;
+    }
+
+    /* Usage Indicator with Infinity Symbol */
+    .usage-indicator {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.95rem;
+      color: var(--color-text-secondary);
+    }
+
+    .usage-indicator__meter {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .usage-indicator__meter svg {
+      flex-shrink: 0;
+    }
+
+    /* Selection Summary Banner - Fixed */
+    .iq-selection-summary {
+      background: rgba(217, 119, 6, 0.1);
+      border: 1px solid rgba(217, 119, 6, 0.25);
+      border-radius: var(--radius-md);
+      padding: 0.75rem 1rem;
+      margin-bottom: 1.25rem;
+      font-size: 0.9rem;
+      color: var(--color-warning);
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    /* Tip Banner - Fixed */
+    .iq-hint-banner {
+      margin-top: 1rem;
+      padding: 0.75rem 1rem;
+      background: rgba(0, 123, 255, 0.1);
+      border: 1px solid rgba(0, 123, 255, 0.25);
+      border-radius: var(--radius-md);
+      color: var(--color-accent-blue);
+      font-size: 0.9rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    /* History Section */
+    .history-card {
+      background: var(--color-card-bg);
+      border-radius: var(--radius-xl);
+      box-shadow: var(--shadow-card);
+      padding: var(--space-lg);
+      margin-bottom: var(--space-lg);
+    }
+
+    .rf-history-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 10px;
+    }
+
+    .rf-history-title-text {
+      font-weight: 800;
+      color: var(--color-text-main);
+      font-size: 1.05rem;
+    }
+
+    .rf-history-subtitle {
+      font-size: 0.875rem;
+      color: var(--color-text-muted);
+      margin-bottom: 16px;
+    }
+
+    .rf-history-list {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    /* FIXED: History Item Colors */
+    .rf-history-item {
+      position: relative;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 0.875rem 1rem;
+      background: var(--color-card-bg);
+      border-radius: var(--radius-md);
+      border: 1px solid var(--color-divider);
+      transition: background 0.18s ease, border-color 0.18s ease, outline 0.18s ease;
+      cursor: pointer;
+      min-height: 56px;
+    }
+
+    .rf-history-item:hover {
+      background: var(--color-bg-light);
+      border-color: #D1D5DB;
+    }
+
+    .rf-history-item.is-selected {
+      outline: 2px solid var(--color-accent-blue);
+      outline-offset: 0;
+      border-color: var(--color-divider);
+      background: var(--color-card-bg);
+    }
+
+    .rf-history-icon {
+      width: 40px;
+      height: 40px;
+      border-radius: var(--radius-md);
+      background: linear-gradient(135deg, #E0E7FF 0%, #C7D2FE 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    .rf-history-icon svg {
+      width: 20px;
+      height: 20px;
+      color: #4F46E5;
+    }
+
+    .rf-history-text {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .rf-history-line1 {
+      font-weight: 700;
+      color: var(--color-text-main);
+      font-size: 0.95rem;
+    }
+
+    .rf-history-line2 {
+      margin-top: 2px;
+      font-size: 0.85rem;
+      color: var(--color-text-muted);
+    }
+
+    /* Buttons - Fixed Border Radius */
+    .btn-primary {
+      background: var(--color-cta-green);
+      color: #fff;
+      border: none;
+      border-radius: var(--radius-button);
+      padding: 0.7rem 2rem;
+      font-size: 1rem;
+      font-weight: 700;
+      cursor: pointer;
+      box-shadow: var(--shadow-button);
+      transition: background 0.18s;
+      min-height: 48px;
+    }
+
+    .btn-primary:hover {
+      background: var(--color-cta-green-hover);
+    }
+
+    .btn-outline {
+      border: 1px solid var(--color-divider);
+      background: var(--color-card-bg);
+      color: var(--color-text-main);
+      font-weight: 600;
+      border-radius: var(--radius-button);
+      padding: 0.6rem 1rem;
+      cursor: pointer;
+      transition: all 0.2s;
+      min-height: 48px;
+    }
+
+    .btn-outline:hover {
+      background: var(--color-bg-light);
+      border-color: #D1D5DB;
+    }
+
+    .actions-row {
+      display: flex;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+      margin-top: 1rem;
+    }
+
+    .comparison-section {
+      margin-top: 3rem;
+      padding: 2rem;
+      background: #fff;
+      border-radius: var(--radius-xl);
+      box-shadow: var(--shadow-card);
+    }
+
+    .comparison-section h2 {
+      font-size: 1.5rem;
+      font-weight: 800;
+      margin-bottom: 1rem;
+      color: var(--color-text-main);
+    }
+
+    .comparison-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 2rem;
+      margin-top: 1.5rem;
+    }
+
+    .comparison-item h3 {
+      font-size: 1rem;
+      font-weight: 700;
+      margin-bottom: 0.5rem;
+      color: var(--color-text-main);
+    }
+
+    .comparison-item p {
+      font-size: 0.875rem;
+      color: var(--color-text-secondary);
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1 style="margin-bottom: 2rem; font-size: 2rem; font-weight: 800;">Interview Questions - Updated Design Mockup</h1>
+
+    <!-- Main Feature Card with Process Guide Inside -->
+    <section class="rf-card">
+      <div class="rf-title">
+        Interview Questions
+        <span class="rf-plan-badge">Premium Plan</span>
+      </div>
+      <div class="rf-description">
+        Practice your answers with AI-generated questions tailored to your job title.
+      </div>
+
+      <!-- NEW: Process Guide Inside Card (not floating in gutter) -->
+      <div class="iq-process-guide">
+        <div><strong>1.</strong> Generate questions</div>
+        <div><strong>2.</strong> Star your favorites</div>
+        <div><strong>3.</strong> Run a Mock Interview</div>
+      </div>
+
+      <div class="rf-plan-limit">
+        <!-- Usage Indicators with Infinity Symbol -->
+        <div class="usage-indicator">
+          <div class="usage-indicator__meter">
+            <svg width="36" height="36" viewBox="0 0 36 36" aria-hidden="true">
+              <path
+                d="M18 12 C14 12, 10 15, 10 18 C10 21, 14 24, 18 24 C22 24, 26 21, 26 18 C26 15, 22 12, 18 12 M18 24 C14 24, 10 27, 10 30 C10 33, 14 36, 18 36 C22 36, 26 33, 26 30 C26 27, 22 24, 18 24 M18 12 C22 12, 26 9, 26 6 C26 3, 22 0, 18 0 C14 0, 10 3, 10 6 C10 9, 14 12, 18 12"
+                fill="none"
+                stroke="var(--color-cta-green)"
+                stroke-width="3"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              />
+            </svg>
+            <span>Questions used this month: 0</span>
+          </div>
+        </div>
+        <div class="usage-indicator" style="margin-top: 0.5rem;">
+          <div class="usage-indicator__meter">
+            <svg width="36" height="36" viewBox="0 0 36 36" aria-hidden="true">
+              <path
+                d="M18 12 C14 12, 10 15, 10 18 C10 21, 14 24, 18 24 C22 24, 26 21, 26 18 C26 15, 22 12, 18 12 M18 24 C14 24, 10 27, 10 30 C10 33, 14 36, 18 36 C22 36, 26 33, 26 30 C26 27, 22 24, 18 24 M18 12 C22 12, 26 9, 26 6 C26 3, 22 0, 18 0 C14 0, 10 3, 10 6 C10 9, 14 12, 18 12"
+                fill="none"
+                stroke="var(--color-cta-green)"
+                stroke-width="3"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              />
+            </svg>
+            <span>Sessions used this month: 0</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Selection Summary Banner (Fixed Colors) -->
+    <div class="iq-selection-summary">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <polygon points="12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26"/>
+      </svg>
+      <span>No questions selected for Mock Interview (star ⭐ to select)</span>
+      <span style="font-size:0.8rem; color:var(--color-text-muted); margin-left:0.5rem;">We'll use your starred questions in your mock interview.</span>
+    </div>
+
+    <!-- Tip Banner (Fixed Colors) -->
+    <div class="iq-hint-banner">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="12" cy="12" r="10"/>
+        <line x1="12" y1="16" x2="12" y2="12"/>
+        <line x1="12" y1="8" x2="12.01" y2="8"/>
+      </svg>
+      <span><strong>Tip:</strong> Star the questions you care about most, then use 'Start Mock Interview' to practice them live.</span>
+    </div>
+
+    <!-- Action Buttons -->
+    <div class="actions-row">
+      <button class="btn-primary">Generate 10 Questions</button>
+      <button class="btn-outline">Copy All</button>
+      <button class="btn-outline">Download PDF</button>
+      <button class="btn-outline">Saved Questions</button>
+      <button class="btn-outline">Show Answer Guidance</button>
+      <button class="btn-primary">Start Mock Interview</button>
+    </div>
+
+    <!-- History Section with Fixed Colors -->
+    <section class="history-card">
+      <div class="rf-history-header">
+        <div>
+          <div class="rf-history-title-text">History</div>
+          <div class="rf-history-subtitle">Last 10 question sets • Auto-saved</div>
+        </div>
+        <button class="btn-outline" style="padding: 0.5rem 1rem;">Manage</button>
+      </div>
+
+      <div class="rf-history-list">
+        <!-- History Item 1 - Selected (Fixed Colors) -->
+        <div class="rf-history-item is-selected">
+          <div class="rf-history-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+              <polyline points="14 2 14 8 20 8"/>
+              <line x1="16" y1="13" x2="8" y2="13"/>
+              <line x1="16" y1="17" x2="8" y2="17"/>
+              <polyline points="10 9 9 9 8 9"/>
+            </svg>
+          </div>
+          <div class="rf-history-text">
+            <div class="rf-history-line1">Business Intelligence (BI) Developer</div>
+            <div class="rf-history-line2">Question set • 1h ago</div>
+          </div>
+        </div>
+
+        <!-- History Item 2 -->
+        <div class="rf-history-item">
+          <div class="rf-history-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+              <polyline points="14 2 14 8 20 8"/>
+              <line x1="16" y1="13" x2="8" y2="13"/>
+              <line x1="16" y1="17" x2="8" y2="17"/>
+              <polyline points="10 9 9 9 8 9"/>
+            </svg>
+          </div>
+          <div class="rf-history-text">
+            <div class="rf-history-line1">Data Engineer</div>
+            <div class="rf-history-line2">Question set • 2h ago</div>
+          </div>
+        </div>
+
+        <!-- History Item 3 -->
+        <div class="rf-history-item">
+          <div class="rf-history-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+              <polyline points="14 2 14 8 20 8"/>
+              <line x1="16" y1="13" x2="8" y2="13"/>
+              <line x1="16" y1="17" x2="8" y2="17"/>
+              <polyline points="10 9 9 9 8 9"/>
+            </svg>
+          </div>
+          <div class="rf-history-text">
+            <div class="rf-history-line1">Windows Systems Engineer</div>
+            <div class="rf-history-line2">Question set • 3d ago</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Comparison Section -->
+    <section class="comparison-section">
+      <h2>Key Changes Summary</h2>
+      <div class="comparison-grid">
+        <div class="comparison-item">
+          <h3>✅ Process Guide</h3>
+          <p>Moved inside the feature card with a border separator. No longer floating in the gutter.</p>
+        </div>
+        <div class="comparison-item">
+          <h3>✅ Infinity Symbol</h3>
+          <p>Replaced confusing full circle with infinity symbol (∞) for unlimited features.</p>
+        </div>
+        <div class="comparison-item">
+          <h3>✅ Updated Wording</h3>
+          <p>"Questions used this month: #" and "Sessions used this month: #" format.</p>
+        </div>
+        <div class="comparison-item">
+          <h3>✅ History Tile Colors</h3>
+          <p>Fixed border radius (8px), outline color (#007BFF), and icon gradient background.</p>
+        </div>
+        <div class="comparison-item">
+          <h3>✅ Banner Colors</h3>
+          <p>Using design system variables with proper opacity (10% bg, 25% border).</p>
+        </div>
+        <div class="comparison-item">
+          <h3>✅ Border Radius</h3>
+          <p>All buttons and inputs use consistent 8px border radius from design system.</p>
+        </div>
+      </div>
+    </section>
+  </div>
+</body>
+</html>
+
