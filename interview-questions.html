@@ -3554,7 +3554,7 @@ function initIQPage(){
             if (featureType === 'mockInterviews') {
               return `Sessions used this month: ${usageObj.used}`;
             } else if (featureType === 'interviewQuestions') {
-              return `Questions used this month: ${usageObj.used}`;
+              return `Sets of questions generated this month: ${usageObj.used}`;
             }
             return `${usageObj.used} used this month (unlimited)`;
           };
@@ -3574,24 +3574,6 @@ function initIQPage(){
             });
           } else {
             iqIndicatorDiv.innerHTML = `<div class="usage-indicator">Usage information unavailable for Interview Questions.</div>`;
-          }
-
-          // If Pro/Premium, also show Mock Interview usage (only when present)
-          if (['pro', 'premium'].includes(plan)) {
-            const mockUsageDiv = document.createElement('div');
-            usageContainer.appendChild(mockUsageDiv);
-
-            if (data.usage.mockInterviews) {
-              window.renderUsageIndicator({
-                feature: 'mockInterviews',
-                usage: data.usage.mockInterviews,
-                plan: plan,
-                container: mockUsageDiv,
-                customText: buildUnlimitedText(data.usage.mockInterviews, 'mockInterviews')
-              });
-            } else {
-              mockUsageDiv.innerHTML = `<div class="usage-indicator">Usage information unavailable for Mock Interviews.</div>`;
-            }
           }
         } catch (e) {
           console.warn('[IQ] Failed to fetch usage for UI:', e);
