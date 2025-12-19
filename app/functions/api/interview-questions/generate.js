@@ -339,7 +339,17 @@ export async function onRequest(context) {
 
     if (d1User && PLAN_LIMITS[effectivePlan]) {
       const dailyLimit = PLAN_LIMITS[effectivePlan];
-      const used = await getFeatureDailyUsage(env, d1User.id, FEATURE);
+      let used = await getFeatureDailyUsage(env, d1User.id, FEATURE);
+      
+      // Normalize old format (questions) to new format (sets)
+      // Old system stored multiples of 10 (10 questions per set)
+      // New system stores individual sets (1 per set)
+      // If value is >= 10 and a multiple of 10, it's old format → convert to sets
+      if (used >= 10 && used % 10 === 0) {
+        const oldValue = used;
+        used = Math.floor(used / 10);
+        console.log('[IQ-GENERATE] Converted old format usage:', { requestId, uid, oldValue, newValue: used });
+      }
       
       // Only check quota for full sets (replacements don't count)
       // Full sets count as 1, replacements count as 0

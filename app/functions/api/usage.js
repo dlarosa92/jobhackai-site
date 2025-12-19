@@ -204,9 +204,22 @@ export async function onRequest(context) {
           ).bind(d1User.id, monthStart, monthEnd).first();
           
           // Handle NULL explicitly - COALESCE should return 0, but be safe
-          usage.interviewQuestions.used = (result && result.total !== null && result.total !== undefined) 
+          let totalUsed = (result && result.total !== null && result.total !== undefined) 
             ? Number(result.total) 
             : 0;
+          
+          // Normalize old format (questions) to new format (sets) for monthly usage
+          // Old system stored multiples of 10 per day (10 questions per set)
+          // New system stores individual sets per day (1 per set)
+          // If total is >= 10 and a multiple of 10, likely all old format → convert
+          // This handles transition period where pre-deployment days are in old format
+          if (totalUsed >= 10 && totalUsed % 10 === 0) {
+            const oldValue = totalUsed;
+            totalUsed = Math.floor(totalUsed / 10);
+            console.log('[USAGE] Converted old format monthly usage for interview_questions:', { uid, oldValue, newValue: totalUsed });
+          }
+          
+          usage.interviewQuestions.used = totalUsed;
         }
       } catch (error) {
         console.error('[USAGE] Error getting interview questions usage:', error);
