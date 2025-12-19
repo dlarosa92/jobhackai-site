@@ -1604,9 +1604,10 @@
     }
     function iqEsc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
     // Helper to disable all question generation buttons when daily limit is reached
+    // Note: Replace buttons remain enabled as replacements are free and don't count toward daily limit
     function iqDisableAllButtons(){
       iqState.dailyLimitReached = true;
-      // Disable generate button
+      // Disable generate button (only full sets count toward daily limit)
       const genBtn = $IQ('#btn-generate');
       if (genBtn) {
         genBtn.disabled = true;
@@ -1616,12 +1617,7 @@
         // Update button text to indicate daily limit reached (instead of leaving "Generating...")
         genBtn.textContent = 'Daily Limit Reached';
       }
-      // Disable all replace buttons
-      $$IQ('.btn-replace').forEach(btn => {
-        btn.disabled = true;
-        btn.setAttribute('aria-disabled', 'true');
-        btn.setAttribute('data-tip', 'Daily limit reached for your plan.');
-      });
+      // Replace buttons remain enabled - replacements are free and don't count toward daily limit
     }
     function iqTrack(event, data={}){
       const payload = { event, ts: iqNow(), role: iqState?.set?.role || $IQ('#iq-role')?.value || '', seniority: iqState.prefs.seniority, type: iqState.prefs.type, count: iqState.prefs.count, used_jd: !!$IQ('#iq-jd')?.value?.trim(), ...data };
@@ -1921,10 +1917,9 @@
         const hasMaxReplacements = replaceCount >= IQ_MAX_REPLACES;
         const hasActiveCooldown = replaceCooldown > 0;
         const hasGlobalReplaceCooldown = replaceGlobalCooldown > 0;
-        const replaceDisabled = hasDailyLimit || hasMaxReplacements || hasActiveCooldown || hasGlobalReplaceCooldown;
-        const replaceTip = hasDailyLimit
-          ? 'Daily limit reached for your plan.'
-          : hasGlobalReplaceCooldown
+        // Replacements are free and don't count toward daily limit, so hasDailyLimit is excluded
+        const replaceDisabled = hasMaxReplacements || hasActiveCooldown || hasGlobalReplaceCooldown;
+        const replaceTip = hasGlobalReplaceCooldown
             ? `Please wait ${replaceGlobalCooldown}s before replacing another question.`
             : hasActiveCooldown
               ? `Please wait ${replaceCooldown}s before replacing this question.`
@@ -2570,7 +2565,7 @@
             const planName = getUserPlan() === 'trial' ? 'Trial' : 
                            getUserPlan() === 'essential' ? 'Essential' :
                            getUserPlan() === 'pro' ? 'Pro' : 'Premium';
-            iqToast(`You've reached today's Interview Questions limit for your ${planName} plan. You can still practice with your existing sets, or upgrade for higher limits.`);
+            iqToast(`Daily limit reached for your ${planName} plan. You can still practice with existing sets or upgrade for higher limits.`);
             // Disable all buttons (generate + replace) since daily quota applies to all operations
             iqDisableAllButtons();
             throw new Error('Daily limit reached');
@@ -2724,7 +2719,7 @@
         if (res.dailyLimitReached) {
           // Clear skeleton loaders on daily limit
           if (holder) {
-            holder.innerHTML = '<div class="iq-empty-state"><strong>Daily Limit Reached</strong>You\'ve reached today\'s limit. You can still practice with your existing sets, or upgrade for higher limits.</div>';
+            holder.innerHTML = '<div class="iq-empty-state"><strong>Daily Limit Reached</strong><p>You\'ve reached today\'s limit for generating new sets. You can still practice with existing sets or upgrade for higher limits.</p></div>';
           }
           return;
         }
@@ -2780,7 +2775,7 @@
             
             // Check if counter actually updated by verifying the usage container has content
             const usageContainer = document.getElementById('iq-usage-container');
-            if (usageContainer && usageContainer.textContent.includes('Sets of questions generated')) {
+            if (usageContainer && usageContainer.textContent.includes('Sets generated')) {
               // Counter updated successfully, no need to retry
               return;
             }
@@ -2871,9 +2866,10 @@
         replaceBtn.setAttribute('aria-disabled', 'true');
       }
 
-      // Helper function to re-enable the button (unless daily limit was reached)
+      // Helper function to re-enable the button
+      // Replacements are free and don't count toward daily limit, so they can always be enabled
       const reenableButton = () => {
-        if (replaceBtn && !iqState.dailyLimitReached) {
+        if (replaceBtn) {
           replaceBtn.disabled = wasDisabled;
           if (!wasDisabled) {
             replaceBtn.removeAttribute('aria-disabled');
@@ -2927,7 +2923,7 @@
             const planName = getUserPlan() === 'trial' ? 'Trial' : 
                            getUserPlan() === 'essential' ? 'Essential' :
                            getUserPlan() === 'pro' ? 'Pro' : 'Premium';
-            iqToast(`You've reached today's Interview Questions limit for your ${planName} plan. You can still practice with your existing sets, or upgrade for higher limits.`);
+            iqToast(`Daily limit reached for your ${planName} plan. You can still practice with existing sets or upgrade for higher limits.`);
             // Disable all buttons (generate + replace) since daily quota applies to all operations
             iqDisableAllButtons();
             // Don't re-enable this button since all buttons are disabled
@@ -2935,11 +2931,27 @@
           }
           
           // Handle auth errors
-          if (response.status === 401 || response.status === 403) {
+          if (response.status === 401) {
             iqToast('Your session has expired. Please log in again.');
             setTimeout(() => {
               window.location.href = 'login.html';
             }, 2000);
+            reenableButton();
+            return;
+          }
+
+          // Handle 403 errors (not always auth-related)
+          // Examples:
+          // - Plan gating (upgradeRequired)
+          // - Replace attempted without generating a new set today
+          if (response.status === 403) {
+            const msg = (errorData && (errorData.error || errorData.message)) || 'Action not allowed.';
+            if (errorData && errorData.upgradeRequired) {
+              iqToast(msg);
+            } else {
+              // Show the server-provided message so users understand what to do next.
+              iqToast(msg);
+            }
             reenableButton();
             return;
           }
@@ -3563,7 +3575,7 @@ function initIQPage(){
             
             // Only handle interviewQuestions (mockInterviews removed from this page)
             if (featureType === 'interviewQuestions') {
-              return `Sets of questions generated this month: ${usageObj.used}`;
+              return `Sets generated this month: ${usageObj.used}`;
             }
             return `${usageObj.used} used this month (unlimited)`;
           };

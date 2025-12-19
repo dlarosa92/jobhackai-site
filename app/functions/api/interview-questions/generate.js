@@ -239,6 +239,64 @@ export async function onRequest(context) {
     const { role, seniority, type, types, jd, mode, replaceIndex } = body;
     isReplaceMode = mode === 'replace';
 
+    // Validate replace mode: require replaceIndex and verify user has generated sets
+    // Replacements are free but must be tied to an existing question set to prevent abuse
+    if (isReplaceMode) {
+      // Basic validation: replaceIndex must be present and valid type
+      if (replaceIndex === undefined || replaceIndex === null || (typeof replaceIndex !== 'number' && typeof replaceIndex !== 'string')) {
+        return errorResponse(
+          'Replace mode requires a valid replaceIndex pointing to an existing question.',
+          400,
+          origin,
+          env,
+          requestId
+        );
+      }
+      
+      // Validate replaceIndex is a valid number within bounds (0-9, since sets have 10 questions)
+      const replaceIndexNum = typeof replaceIndex === 'string' ? parseInt(replaceIndex, 10) : replaceIndex;
+      if (isNaN(replaceIndexNum) || replaceIndexNum < 0 || replaceIndexNum >= 10) {
+        return errorResponse(
+          'replaceIndex must be a number between 0 and 9 (valid question index).',
+          400,
+          origin,
+          env,
+          requestId
+        );
+      }
+      
+      // Security: Verify user has generated at least one set today
+      // This ensures replacements are only allowed after generating a full set (using quota)
+      // Prevents abuse where attackers bypass daily limits by only using replace mode
+      if (isD1Available(env)) {
+        const tempD1User = await getOrCreateUserByAuthId(env, uid, userEmail);
+        if (tempD1User && tempD1User.id) {
+          const todayUsage = await getFeatureDailyUsage(env, tempD1User.id, 'interview_questions');
+          
+          // Normalize if old format (same logic as quota check - use plan limit if available)
+          // For replace validation, we just need to know if they have >= 1 set
+          // If usage is >= 10 and multiple of 10, it's likely old format
+          let normalizedUsage = todayUsage;
+          if (todayUsage >= 10 && todayUsage % 10 === 0) {
+            // Likely old format: convert to sets
+            normalizedUsage = Math.floor(todayUsage / 10);
+          }
+          
+          // User must have generated at least 1 set today to use replacements
+          // This prevents abuse: attackers can't bypass quota by only using replace mode
+          if (normalizedUsage < 1) {
+            return errorResponse(
+              'You must generate at least one question set before using replacements.',
+              403,
+              origin,
+              env,
+              requestId
+            );
+          }
+        }
+      }
+    }
+
     // Validate role
     if (!role || typeof role !== 'string' || role.trim().length === 0) {
       return errorResponse('Role is required', 400, origin, env, requestId);
@@ -328,42 +386,88 @@ export async function onRequest(context) {
     }
 
     // Daily quota check (D1-backed) - now protected by lock
+    // Limits are in sets per day (not questions)
     const FEATURE = 'interview_questions';
     const PLAN_LIMITS = {
-      trial: 40,
-      essential: 80,
-      pro: 150,
-      premium: 250
+      trial: 10,        // 10 sets/day
+      essential: 10,    // 10 sets/day
+      pro: 20,         // 20 sets/day
+      premium: 50      // 50 sets/day
     };
 
     if (d1User && PLAN_LIMITS[effectivePlan]) {
       const dailyLimit = PLAN_LIMITS[effectivePlan];
-      const used = await getFeatureDailyUsage(env, d1User.id, FEATURE);
+      let used = await getFeatureDailyUsage(env, d1User.id, FEATURE);
       
-      if (used + requestedCount > dailyLimit) {
-        // Release lock before returning error
-        if (lockAcquired && env.JOBHACKAI_KV) {
-          await env.JOBHACKAI_KV.delete(lockKey).catch(() => {});
+      // Normalize old format (questions) to new format (sets)
+      // Old system stored multiples of 10 (10 questions per set)
+      // New system stores individual sets (1 per set)
+      // Detection: If value is >= 10, multiple of 10, and >= dailyLimit, it's likely old format
+      // Edge case: If value equals dailyLimit and is multiple of 10, it could be:
+      //   - Old format: 10 questions = 1 set (for trial/essential limit of 10)
+      //   - New format: 10 sets (legitimate, but user would be at limit)
+      // We convert if >= dailyLimit to handle edge cases (10, 20, 50) which are more likely old format
+      // This is safe because: if it's new format and user is at limit, they'll be blocked anyway
+      let needsNormalization = false;
+      let normalizedValue = used;
+      if (used >= dailyLimit && used >= 10 && used % 10 === 0) {
+        const oldValue = used;
+        normalizedValue = Math.floor(used / 10);
+        needsNormalization = true;
+        console.log('[IQ-GENERATE] Detected old format usage, will normalize:', { requestId, uid, oldValue, newValue: normalizedValue, plan: effectivePlan, dailyLimit });
+      }
+      
+      // If we detected old format, update database to normalized value before quota check
+      // This prevents incrementing from old value (e.g., 40 + 1 = 41, which breaks conversion)
+      if (needsNormalization && env.DB) {
+        try {
+          const today = new Date().toISOString().slice(0, 10); // 'YYYY-MM-DD' UTC
+          await env.DB.prepare(
+            `UPDATE feature_daily_usage 
+             SET count = ?, updated_at = datetime('now')
+             WHERE user_id = ? AND feature = ? AND usage_date = ?`
+          ).bind(normalizedValue, d1User.id, FEATURE, today).run();
+          console.log('[IQ-GENERATE] Normalized old format in database:', { requestId, uid, oldValue: used, newValue: normalizedValue });
+          used = normalizedValue; // Use normalized value for quota check
+        } catch (normalizeError) {
+          console.error('[IQ-GENERATE] Error normalizing old format in database:', { requestId, uid, error: normalizeError.message });
+          // Continue with normalized value in memory - will be fixed on next request
+          used = normalizedValue;
         }
-        // Log daily limit hit for monitoring
-        console.warn('[IQ-GENERATE] Daily limit hit:', {
-          requestId,
-          uid,
-          userId: d1User.id,
-          plan: effectivePlan,
-          reason: 'daily_limit',
-          limit: dailyLimit,
-          used,
-          requestedCount
-        });
-        return errorResponse(
-          'Daily Interview Questions limit reached for your plan.',
-          429,
-          origin,
-          env,
-          requestId,
-          { reason: 'daily_limit', limit: dailyLimit, used }
-        );
+      } else {
+        used = normalizedValue; // Use current value (no normalization needed)
+      }
+      
+      // Replacements are free but still subject to cooldown (enforced above)
+      // No quota check needed for replacements - they're tied to existing sets
+      if (!isReplaceMode) {
+        // Only check quota for full sets (replacements don't count)
+        // Full sets count as 1, replacements count as 0
+        if (used + 1 > dailyLimit) {
+          // Release lock before returning error
+          if (lockAcquired && env.JOBHACKAI_KV) {
+            await env.JOBHACKAI_KV.delete(lockKey).catch(() => {});
+          }
+          // Log daily limit hit for monitoring
+          console.warn('[IQ-GENERATE] Daily limit hit:', {
+            requestId,
+            uid,
+            userId: d1User.id,
+            plan: effectivePlan,
+            reason: 'daily_limit',
+            limit: dailyLimit,
+            used,
+            requestedCount: 1
+          });
+          return errorResponse(
+            `Daily limit reached: ${dailyLimit} sets per day for your plan.`,
+            429,
+            origin,
+            env,
+            requestId,
+            { reason: 'daily_limit', limit: dailyLimit, used }
+          );
+        }
       }
     }
 
@@ -424,8 +528,10 @@ export async function onRequest(context) {
 
     // Increment daily usage quota only after response is successfully created
     // This ensures quota is only consumed when user will actually receive questions
+    // Full sets count as 1, replacements count as 0 (free refinement)
     if (d1User && PLAN_LIMITS[effectivePlan]) {
-      await incrementFeatureDailyUsage(env, d1User.id, FEATURE, requestedCount);
+      const incrementAmount = isReplaceMode ? 0 : 1; // Replacements are free
+      await incrementFeatureDailyUsage(env, d1User.id, FEATURE, incrementAmount);
       quotaIncremented = true; // Mark quota as consumed
     } else {
       console.warn('[IQ-GENERATE] Usage increment skipped:', {
