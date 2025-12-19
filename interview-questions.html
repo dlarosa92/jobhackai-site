@@ -1013,6 +1013,7 @@
       align-items: center;
       gap: 0.4rem;
       transition: background 0.18s;
+      min-height: 48px; /* Match height of other action buttons */
     }
     .btn-mock-cta:hover {
       background: #00c965;
@@ -1022,6 +1023,9 @@
     }
     .btn-mock-cta[data-locked="true"]:hover {
       background: #4B5563;
+    }
+    .btn-mock-cta[data-locked="true"] .lock svg {
+      color: #fff; /* White lock icon when button is locked */
     }
   </style>
 </head>
