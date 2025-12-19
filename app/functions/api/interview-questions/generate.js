@@ -239,9 +239,10 @@ export async function onRequest(context) {
     const { role, seniority, type, types, jd, mode, replaceIndex } = body;
     isReplaceMode = mode === 'replace';
 
-    // Validate replace mode: require replaceIndex to prevent abuse (must be outside D1/plan checks)
-    // Replacements are free but must be tied to an existing question set
+    // Validate replace mode: require replaceIndex and verify user has generated sets
+    // Replacements are free but must be tied to an existing question set to prevent abuse
     if (isReplaceMode) {
+      // Basic validation: replaceIndex must be present and valid type
       if (replaceIndex === undefined || replaceIndex === null || (typeof replaceIndex !== 'number' && typeof replaceIndex !== 'string')) {
         return errorResponse(
           'Replace mode requires a valid replaceIndex pointing to an existing question.',
@@ -250,6 +251,49 @@ export async function onRequest(context) {
           env,
           requestId
         );
+      }
+      
+      // Validate replaceIndex is a valid number within bounds (0-9, since sets have 10 questions)
+      const replaceIndexNum = typeof replaceIndex === 'string' ? parseInt(replaceIndex, 10) : replaceIndex;
+      if (isNaN(replaceIndexNum) || replaceIndexNum < 0 || replaceIndexNum >= 10) {
+        return errorResponse(
+          'replaceIndex must be a number between 0 and 9 (valid question index).',
+          400,
+          origin,
+          env,
+          requestId
+        );
+      }
+      
+      // Security: Verify user has generated at least one set today
+      // This ensures replacements are only allowed after generating a full set (using quota)
+      // Prevents abuse where attackers bypass daily limits by only using replace mode
+      if (isD1Available(env)) {
+        const tempD1User = await getOrCreateUserByAuthId(env, uid, userEmail);
+        if (tempD1User && tempD1User.id) {
+          const todayUsage = await getFeatureDailyUsage(env, tempD1User.id, 'interview_questions');
+          
+          // Normalize if old format (same logic as quota check - use plan limit if available)
+          // For replace validation, we just need to know if they have >= 1 set
+          // If usage is >= 10 and multiple of 10, it's likely old format
+          let normalizedUsage = todayUsage;
+          if (todayUsage >= 10 && todayUsage % 10 === 0) {
+            // Likely old format: convert to sets
+            normalizedUsage = Math.floor(todayUsage / 10);
+          }
+          
+          // User must have generated at least 1 set today to use replacements
+          // This prevents abuse: attackers can't bypass quota by only using replace mode
+          if (normalizedUsage < 1) {
+            return errorResponse(
+              'You must generate at least one question set before using replacements.',
+              403,
+              origin,
+              env,
+              requestId
+            );
+          }
+        }
       }
     }
 
