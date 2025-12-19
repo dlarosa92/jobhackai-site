@@ -99,8 +99,32 @@ run_migration() {
     fi
 }
 
+# Function to handle production confirmation
+confirm_production() {
+    echo -e "${RED}⚠️  WARNING: You are about to modify the PRODUCTION database${NC}"
+    echo -e "${YELLOW}This will create the feature_daily_usage table in production.${NC}"
+    echo ""
+    read -p "Are you sure you want to continue? (yes/no): " confirm
+    if [ "$confirm" != "yes" ]; then
+        echo -e "${YELLOW}Migration cancelled.${NC}"
+        return 1
+    fi
+    return 0
+}
+
 # Main execution
-ENVIRONMENT=${1:-"both"}
+ENVIRONMENT=${1:-""}
+
+# If no environment provided, show usage and exit
+if [ -z "$ENVIRONMENT" ]; then
+    echo -e "${RED}Error: No environment specified.${NC}"
+    echo ""
+    echo "Usage:"
+    echo "  $0 qa      # Run on QA database"
+    echo "  $0 prod    # Run on Production database"
+    echo "  $0 both    # Run on both QA and Production"
+    exit 1
+fi
 
 echo -e "${GREEN}========================================${NC}"
 echo -e "${GREEN}Feature Daily Usage Migration${NC}"
@@ -112,20 +136,20 @@ case "$ENVIRONMENT" in
         run_migration "$QA_DB_UUID" "$QA_DB_NAME" "QA"
         ;;
     prod|production)
-        echo -e "${RED}⚠️  WARNING: You are about to modify the PRODUCTION database${NC}"
-        echo -e "${YELLOW}This will create the feature_daily_usage table in production.${NC}"
-        echo ""
-        read -p "Are you sure you want to continue? (yes/no): " confirm
-        if [ "$confirm" != "yes" ]; then
-            echo -e "${YELLOW}Migration cancelled.${NC}"
+        if confirm_production; then
+            run_migration "$PROD_DB_UUID" "$PROD_DB_NAME" "Production"
+        else
             exit 0
         fi
-        run_migration "$PROD_DB_UUID" "$PROD_DB_NAME" "Production"
         ;;
     both)
         run_migration "$QA_DB_UUID" "$QA_DB_NAME" "QA"
         echo ""
-        run_migration "$PROD_DB_UUID" "$PROD_DB_NAME" "Production"
+        if confirm_production; then
+            run_migration "$PROD_DB_UUID" "$PROD_DB_NAME" "Production"
+        else
+            echo -e "${YELLOW}Skipping production migration.${NC}"
+        fi
         ;;
     *)
         echo -e "${RED}Error: Invalid environment. Use 'qa', 'prod', or 'both'${NC}"

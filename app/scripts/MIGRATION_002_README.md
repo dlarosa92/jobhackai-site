@@ -73,7 +73,8 @@ Expected result: Should return one row with `name = 'feature_daily_usage'`
 
 - ✅ Migration uses `CREATE TABLE IF NOT EXISTS` - safe to run multiple times
 - ✅ Indexes use `IF NOT EXISTS` - won't fail if already present
-- ⚠️ **Production**: Script requires explicit "yes" confirmation before running
+- ⚠️ **Production**: Script requires explicit "yes" confirmation before running, even when running with the `both` option.
+- ⚠️ **Arguments**: An environment argument (`qa`, `prod`, or `both`) is required to run the script. It will no longer run by default.
 
 ## Auto-Creation Fallback
 
