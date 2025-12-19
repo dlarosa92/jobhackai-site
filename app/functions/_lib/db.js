@@ -766,6 +766,71 @@ export async function getInterviewQuestionSetsByUser(env, userId, { limit = 10 }
 // ============================================================
 
 /**
+ * Ensure feature_daily_usage table exists (auto-create if missing)
+ * This prevents issues if migrations weren't run and matches the pattern
+ * used by other features (LinkedIn, Cover Letter)
+ * @param {Object} env - Cloudflare environment with DB binding
+ * @returns {Promise<void>}
+ */
+async function ensureFeatureDailyUsageTable(env) {
+  if (!env.DB) {
+    return; // Can't create table without DB
+  }
+
+  try {
+    // Check if table exists
+    const tableCheck = await env.DB.prepare(
+      `SELECT name FROM sqlite_master WHERE type='table' AND name='feature_daily_usage'`
+    ).first();
+
+    if (tableCheck) {
+      return; // Table exists, nothing to do
+    }
+
+    // Create table if it doesn't exist
+    await env.DB.prepare(`
+      CREATE TABLE IF NOT EXISTS feature_daily_usage (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL,
+        feature TEXT NOT NULL,
+        usage_date TEXT NOT NULL,
+        count INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT DEFAULT (datetime('now')),
+        updated_at TEXT DEFAULT (datetime('now')),
+        UNIQUE (user_id, feature, usage_date),
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+      )
+    `).run();
+
+    // Create indexes
+    await env.DB.prepare(`
+      CREATE INDEX IF NOT EXISTS idx_feature_daily_usage_user_id 
+      ON feature_daily_usage(user_id)
+    `).run();
+
+    await env.DB.prepare(`
+      CREATE INDEX IF NOT EXISTS idx_feature_daily_usage_feature 
+      ON feature_daily_usage(feature)
+    `).run();
+
+    await env.DB.prepare(`
+      CREATE INDEX IF NOT EXISTS idx_feature_daily_usage_date 
+      ON feature_daily_usage(usage_date)
+    `).run();
+
+    await env.DB.prepare(`
+      CREATE INDEX IF NOT EXISTS idx_feature_daily_usage_user_feature_date 
+      ON feature_daily_usage(user_id, feature, usage_date)
+    `).run();
+
+    console.log('[DB] Auto-created feature_daily_usage table');
+  } catch (error) {
+    console.error('[DB] Error ensuring feature_daily_usage table:', error);
+    // Don't throw - let the increment function handle the error
+  }
+}
+
+/**
  * Get daily usage count for a feature
  * @param {Object} env - Cloudflare environment with DB binding
  * @param {number} userId - User ID from users table
@@ -805,6 +870,9 @@ export async function incrementFeatureDailyUsage(env, userId, feature, increment
     console.warn('[DB] D1 binding not available');
     return incrementBy;
   }
+
+  // Auto-create table if it doesn't exist (safety net for missing migrations)
+  await ensureFeatureDailyUsageTable(env);
 
   try {
     const today = new Date().toISOString().slice(0, 10); // 'YYYY-MM-DD' UTC
