@@ -1013,6 +1013,7 @@
       align-items: center;
       gap: 0.4rem;
       transition: background 0.18s;
+      min-height: 48px; /* Match height of other action buttons */
     }
     .btn-mock-cta:hover {
       background: #00c965;
@@ -1022,6 +1023,9 @@
     }
     .btn-mock-cta[data-locked="true"]:hover {
       background: #4B5563;
+    }
+    .btn-mock-cta[data-locked="true"] .lock svg {
+      color: #fff; /* White lock icon when button is locked */
     }
   </style>
 </head>
@@ -1191,6 +1195,11 @@
       <div class="iq-actions-sec" id="iq-actions-sec" hidden style="display:none;">
         <button id="chip-saved" class="chip" hidden aria-hidden="true">Saved (0)</button>
       </div>
+      
+      <!-- Questions section - moved inside left column to prevent overlap with history panel -->
+      <div class="iq-questions-section">
+        <div id="iq-questions" class="iq-questions"></div>
+      </div>
       </div>
       </div>
       <aside class="card history-card rf-history" id="iq-history-panel" data-history-panel="v1">
@@ -1295,10 +1304,6 @@
       </aside>
     </div>
 
-    <div class="iq-questions-section">
-      <div id="iq-questions" class="iq-questions"></div>
-    </div>
-
     <div id="iq-lock" class="iq-lock" style="display:none;">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg">
         <rect x="5" y="11" width="14" height="10" rx="2"/>
@@ -1338,7 +1343,7 @@
         <span class="footer-name">JOBHACKAI</span>
       </div>
       <div class="footer-legal">
-        <p> 2025 JobHackAI. All rights reserved.</p>
+        <p>© 2025 JobHackAI. All rights reserved.</p>
       </div>
       <div class="footer-links">
         <a href="index.html">Home</a>
@@ -2732,6 +2737,12 @@
           selSummary.style.display = '';
         }
       iqStartGlobalCooldown(IQ_GLOBAL_COOLDOWN);
+        
+        // Refresh usage counter after successful generation
+        const currentPlan = getUserPlan();
+        if (currentPlan) {
+          updatePlanUI(currentPlan);
+        }
         
       } catch (error) {
         console.error('[IQ] Generate error:', error);
