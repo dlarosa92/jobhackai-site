@@ -1604,9 +1604,10 @@
     }
     function iqEsc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
     // Helper to disable all question generation buttons when daily limit is reached
+    // Note: Replace buttons remain enabled as replacements are free and don't count toward daily limit
     function iqDisableAllButtons(){
       iqState.dailyLimitReached = true;
-      // Disable generate button
+      // Disable generate button (only full sets count toward daily limit)
       const genBtn = $IQ('#btn-generate');
       if (genBtn) {
         genBtn.disabled = true;
@@ -1616,12 +1617,7 @@
         // Update button text to indicate daily limit reached (instead of leaving "Generating...")
         genBtn.textContent = 'Daily Limit Reached';
       }
-      // Disable all replace buttons
-      $$IQ('.btn-replace').forEach(btn => {
-        btn.disabled = true;
-        btn.setAttribute('aria-disabled', 'true');
-        btn.setAttribute('data-tip', 'Daily limit reached. Replacements are still free.');
-      });
+      // Replace buttons remain enabled - replacements are free and don't count toward daily limit
     }
     function iqTrack(event, data={}){
       const payload = { event, ts: iqNow(), role: iqState?.set?.role || $IQ('#iq-role')?.value || '', seniority: iqState.prefs.seniority, type: iqState.prefs.type, count: iqState.prefs.count, used_jd: !!$IQ('#iq-jd')?.value?.trim(), ...data };
@@ -1921,10 +1917,9 @@
         const hasMaxReplacements = replaceCount >= IQ_MAX_REPLACES;
         const hasActiveCooldown = replaceCooldown > 0;
         const hasGlobalReplaceCooldown = replaceGlobalCooldown > 0;
-        const replaceDisabled = hasDailyLimit || hasMaxReplacements || hasActiveCooldown || hasGlobalReplaceCooldown;
-        const replaceTip = hasDailyLimit
-          ? 'Daily limit reached. Replacements are still free.'
-          : hasGlobalReplaceCooldown
+        // Replacements are free and don't count toward daily limit, so hasDailyLimit is excluded
+        const replaceDisabled = hasMaxReplacements || hasActiveCooldown || hasGlobalReplaceCooldown;
+        const replaceTip = hasGlobalReplaceCooldown
             ? `Please wait ${replaceGlobalCooldown}s before replacing another question.`
             : hasActiveCooldown
               ? `Please wait ${replaceCooldown}s before replacing this question.`
@@ -2871,9 +2866,10 @@
         replaceBtn.setAttribute('aria-disabled', 'true');
       }
 
-      // Helper function to re-enable the button (unless daily limit was reached)
+      // Helper function to re-enable the button
+      // Replacements are free and don't count toward daily limit, so they can always be enabled
       const reenableButton = () => {
-        if (replaceBtn && !iqState.dailyLimitReached) {
+        if (replaceBtn) {
           replaceBtn.disabled = wasDisabled;
           if (!wasDisabled) {
             replaceBtn.removeAttribute('aria-disabled');
