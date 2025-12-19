@@ -197,12 +197,15 @@ export async function onRequest(context) {
           const monthEnd = `${year}-${month}-31`;
           
           const result = await env.DB.prepare(
-            `SELECT SUM(count) as total FROM feature_daily_usage
+            `SELECT COALESCE(SUM(count), 0) as total FROM feature_daily_usage
              WHERE user_id = ? AND feature = 'interview_questions'
              AND usage_date >= ? AND usage_date <= ?`
           ).bind(d1User.id, monthStart, monthEnd).first();
           
-          usage.interviewQuestions.used = result && result.total ? result.total : 0;
+          // Handle NULL explicitly - COALESCE should return 0, but be safe
+          usage.interviewQuestions.used = (result && result.total !== null && result.total !== undefined) 
+            ? Number(result.total) 
+            : 0;
         }
       } catch (error) {
         console.error('[USAGE] Error getting interview questions usage:', error);
