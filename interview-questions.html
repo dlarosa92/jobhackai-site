@@ -2931,11 +2931,27 @@
           }
           
           // Handle auth errors
-          if (response.status === 401 || response.status === 403) {
+          if (response.status === 401) {
             iqToast('Your session has expired. Please log in again.');
             setTimeout(() => {
               window.location.href = 'login.html';
             }, 2000);
+            reenableButton();
+            return;
+          }
+
+          // Handle 403 errors (not always auth-related)
+          // Examples:
+          // - Plan gating (upgradeRequired)
+          // - Replace attempted without generating a new set today
+          if (response.status === 403) {
+            const msg = (errorData && (errorData.error || errorData.message)) || 'Action not allowed.';
+            if (errorData && errorData.upgradeRequired) {
+              iqToast(msg);
+            } else {
+              // Show the server-provided message so users understand what to do next.
+              iqToast(msg);
+            }
             reenableButton();
             return;
           }
