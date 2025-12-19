@@ -3550,10 +3550,8 @@ function initIQPage(){
             if (usageObj.limit !== null) return undefined;
             if (usageObj.used === null || usageObj.used === undefined) return undefined;
             
-            // Match the format from mock interview page
-            if (featureType === 'mockInterviews') {
-              return `Sessions used this month: ${usageObj.used}`;
-            } else if (featureType === 'interviewQuestions') {
+            // Only handle interviewQuestions (mockInterviews removed from this page)
+            if (featureType === 'interviewQuestions') {
               return `Sets of questions generated this month: ${usageObj.used}`;
             }
             return `${usageObj.used} used this month (unlimited)`;
