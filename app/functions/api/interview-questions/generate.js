@@ -239,6 +239,20 @@ export async function onRequest(context) {
     const { role, seniority, type, types, jd, mode, replaceIndex } = body;
     isReplaceMode = mode === 'replace';
 
+    // Validate replace mode: require replaceIndex to prevent abuse (must be outside D1/plan checks)
+    // Replacements are free but must be tied to an existing question set
+    if (isReplaceMode) {
+      if (replaceIndex === undefined || replaceIndex === null || (typeof replaceIndex !== 'number' && typeof replaceIndex !== 'string')) {
+        return errorResponse(
+          'Replace mode requires a valid replaceIndex pointing to an existing question.',
+          400,
+          origin,
+          env,
+          requestId
+        );
+      }
+    }
+
     // Validate role
     if (!role || typeof role !== 'string' || role.trim().length === 0) {
       return errorResponse('Role is required', 400, origin, env, requestId);
@@ -347,31 +361,39 @@ export async function onRequest(context) {
       // Only convert if value exceeds plan limit AND is a multiple of 10
       // This prevents false positives: legitimate 10 sets for trial/essential won't be converted
       // But old format values (30, 40, 50+) will be correctly converted
+      let needsNormalization = false;
+      let normalizedValue = used;
       if (used > dailyLimit && used >= 10 && used % 10 === 0) {
         const oldValue = used;
-        used = Math.floor(used / 10);
-        console.log('[IQ-GENERATE] Converted old format usage:', { requestId, uid, oldValue, newValue: used, plan: effectivePlan, dailyLimit });
+        normalizedValue = Math.floor(used / 10);
+        needsNormalization = true;
+        console.log('[IQ-GENERATE] Detected old format usage, will normalize:', { requestId, uid, oldValue, newValue: normalizedValue, plan: effectivePlan, dailyLimit });
       }
       
-      // Validate replace mode: require replaceIndex to prevent abuse
-      // Replacements are free but must be tied to an existing question set
-      if (isReplaceMode) {
-        if (replaceIndex === undefined || replaceIndex === null || (typeof replaceIndex !== 'number' && typeof replaceIndex !== 'string')) {
-          // Release lock before returning error
-          if (lockAcquired && env.JOBHACKAI_KV) {
-            await env.JOBHACKAI_KV.delete(lockKey).catch(() => {});
-          }
-          return errorResponse(
-            'Replace mode requires a valid replaceIndex pointing to an existing question.',
-            400,
-            origin,
-            env,
-            requestId
-          );
+      // If we detected old format, update database to normalized value before quota check
+      // This prevents incrementing from old value (e.g., 40 + 1 = 41, which breaks conversion)
+      if (needsNormalization && env.DB) {
+        try {
+          const today = new Date().toISOString().slice(0, 10); // 'YYYY-MM-DD' UTC
+          await env.DB.prepare(
+            `UPDATE feature_daily_usage 
+             SET count = ?, updated_at = datetime('now')
+             WHERE user_id = ? AND feature = ? AND usage_date = ?`
+          ).bind(normalizedValue, d1User.id, FEATURE, today).run();
+          console.log('[IQ-GENERATE] Normalized old format in database:', { requestId, uid, oldValue: used, newValue: normalizedValue });
+          used = normalizedValue; // Use normalized value for quota check
+        } catch (normalizeError) {
+          console.error('[IQ-GENERATE] Error normalizing old format in database:', { requestId, uid, error: normalizeError.message });
+          // Continue with normalized value in memory - will be fixed on next request
+          used = normalizedValue;
         }
-        // Replacements are free but still subject to cooldown (enforced above)
-        // No quota check needed for replacements - they're tied to existing sets
       } else {
+        used = normalizedValue; // Use current value (no normalization needed)
+      }
+      
+      // Replacements are free but still subject to cooldown (enforced above)
+      // No quota check needed for replacements - they're tied to existing sets
+      if (!isReplaceMode) {
         // Only check quota for full sets (replacements don't count)
         // Full sets count as 1, replacements count as 0
         if (used + 1 > dailyLimit) {
