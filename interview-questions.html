@@ -1620,7 +1620,7 @@
       $$IQ('.btn-replace').forEach(btn => {
         btn.disabled = true;
         btn.setAttribute('aria-disabled', 'true');
-        btn.setAttribute('data-tip', 'Daily limit reached for your plan.');
+        btn.setAttribute('data-tip', 'Daily limit reached. Replacements are still free.');
       });
     }
     function iqTrack(event, data={}){
@@ -1923,7 +1923,7 @@
         const hasGlobalReplaceCooldown = replaceGlobalCooldown > 0;
         const replaceDisabled = hasDailyLimit || hasMaxReplacements || hasActiveCooldown || hasGlobalReplaceCooldown;
         const replaceTip = hasDailyLimit
-          ? 'Daily limit reached for your plan.'
+          ? 'Daily limit reached. Replacements are still free.'
           : hasGlobalReplaceCooldown
             ? `Please wait ${replaceGlobalCooldown}s before replacing another question.`
             : hasActiveCooldown
@@ -2570,7 +2570,7 @@
             const planName = getUserPlan() === 'trial' ? 'Trial' : 
                            getUserPlan() === 'essential' ? 'Essential' :
                            getUserPlan() === 'pro' ? 'Pro' : 'Premium';
-            iqToast(`You've reached today's Interview Questions limit for your ${planName} plan. You can still practice with your existing sets, or upgrade for higher limits.`);
+            iqToast(`Daily limit reached for your ${planName} plan. You can still practice with existing sets or upgrade for higher limits.`);
             // Disable all buttons (generate + replace) since daily quota applies to all operations
             iqDisableAllButtons();
             throw new Error('Daily limit reached');
@@ -2724,7 +2724,7 @@
         if (res.dailyLimitReached) {
           // Clear skeleton loaders on daily limit
           if (holder) {
-            holder.innerHTML = '<div class="iq-empty-state"><strong>Daily Limit Reached</strong>You\'ve reached today\'s limit. You can still practice with your existing sets, or upgrade for higher limits.</div>';
+            holder.innerHTML = '<div class="iq-empty-state"><strong>Daily Limit Reached</strong><p>You\'ve reached today\'s limit for generating new sets. You can still practice with existing sets or upgrade for higher limits.</p></div>';
           }
           return;
         }
@@ -2927,7 +2927,7 @@
             const planName = getUserPlan() === 'trial' ? 'Trial' : 
                            getUserPlan() === 'essential' ? 'Essential' :
                            getUserPlan() === 'pro' ? 'Pro' : 'Premium';
-            iqToast(`You've reached today's Interview Questions limit for your ${planName} plan. You can still practice with your existing sets, or upgrade for higher limits.`);
+            iqToast(`Daily limit reached for your ${planName} plan. You can still practice with existing sets or upgrade for higher limits.`);
             // Disable all buttons (generate + replace) since daily quota applies to all operations
             iqDisableAllButtons();
             // Don't re-enable this button since all buttons are disabled
@@ -3563,7 +3563,7 @@ function initIQPage(){
             
             // Only handle interviewQuestions (mockInterviews removed from this page)
             if (featureType === 'interviewQuestions') {
-              return `Sets of questions generated this month: ${usageObj.used}`;
+              return `Sets generated this month: ${usageObj.used}`;
             }
             return `${usageObj.used} used this month (unlimited)`;
           };

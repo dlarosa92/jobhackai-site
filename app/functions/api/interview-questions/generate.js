@@ -328,19 +328,22 @@ export async function onRequest(context) {
     }
 
     // Daily quota check (D1-backed) - now protected by lock
+    // Limits are in sets per day (not questions)
     const FEATURE = 'interview_questions';
     const PLAN_LIMITS = {
-      trial: 40,
-      essential: 80,
-      pro: 150,
-      premium: 250
+      trial: 10,        // 10 sets/day
+      essential: 10,    // 10 sets/day
+      pro: 20,         // 20 sets/day
+      premium: 50      // 50 sets/day
     };
 
     if (d1User && PLAN_LIMITS[effectivePlan]) {
       const dailyLimit = PLAN_LIMITS[effectivePlan];
       const used = await getFeatureDailyUsage(env, d1User.id, FEATURE);
       
-      if (used + requestedCount > dailyLimit) {
+      // Only check quota for full sets (replacements don't count)
+      // Full sets count as 1, replacements count as 0
+      if (!isReplaceMode && used + 1 > dailyLimit) {
         // Release lock before returning error
         if (lockAcquired && env.JOBHACKAI_KV) {
           await env.JOBHACKAI_KV.delete(lockKey).catch(() => {});
@@ -357,7 +360,7 @@ export async function onRequest(context) {
           requestedCount
         });
         return errorResponse(
-          'Daily Interview Questions limit reached for your plan.',
+          `Daily limit reached: ${dailyLimit} sets per day for your plan.`,
           429,
           origin,
           env,
@@ -424,8 +427,10 @@ export async function onRequest(context) {
 
     // Increment daily usage quota only after response is successfully created
     // This ensures quota is only consumed when user will actually receive questions
+    // Full sets count as 1, replacements count as 0 (free refinement)
     if (d1User && PLAN_LIMITS[effectivePlan]) {
-      await incrementFeatureDailyUsage(env, d1User.id, FEATURE, requestedCount);
+      const incrementAmount = isReplaceMode ? 0 : 1; // Replacements are free
+      await incrementFeatureDailyUsage(env, d1User.id, FEATURE, incrementAmount);
       quotaIncremented = true; // Mark quota as consumed
     } else {
       console.warn('[IQ-GENERATE] Usage increment skipped:', {

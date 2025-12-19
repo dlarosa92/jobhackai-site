@@ -176,7 +176,7 @@ export function renderUsageIndicator({ feature, usage, plan, container, customTe
     if (used !== null) {
       // Determine the feature-specific label
       const featureLabel = feature === 'mockInterviews' ? 'Sessions' :
-                          feature === 'interviewQuestions' ? 'Questions' :
+                          feature === 'interviewQuestions' ? 'Sets' :
                           feature === 'resumeFeedback' ? 'Feedback runs' :
                           feature === 'atsScans' ? 'Scans' :
                           feature === 'coverLetters' ? 'Letters' :
