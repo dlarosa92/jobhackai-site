@@ -429,7 +429,6 @@
     .iq-top-grid aside.card { 
       position:sticky; 
       top:8px; 
-      max-height: calc(100vh - 120px); /* Constrain card height for scrolling */
     }
     @media (max-width: 900px) { .iq-top-grid { grid-template-columns: 1fr; } .iq-top-grid aside.card { position:static; max-height:none; } }
     .iq-questions-section { margin-top: 1.5rem; margin-bottom: 1.5rem; }
@@ -471,24 +470,6 @@
       border: 1px solid var(--color-divider, #E5E7EB);
       padding: 24px;
       margin-bottom: 0;
-    }
-    /* Make history panel use flexbox so header/footer stay visible while body scrolls */
-    .rf-history {
-      display: flex;
-      flex-direction: column;
-      height: 100%; /* Fill the card container */
-    }
-    /* Keep header and footer from shrinking */
-    .rf-history-header,
-    .rf-history-subtitle,
-    .rf-history-footer {
-      flex-shrink: 0;
-    }
-    /* Make only the body scrollable */
-    .rf-history-body {
-      flex: 1;
-      overflow-y: auto;
-      min-height: 0; /* Important for flex scrolling */
     }
 
     .rf-history-header {
@@ -586,8 +567,7 @@
       border-color: #D1D5DB;
     }
     .rf-history-item.is-selected {
-      outline: 2px solid var(--color-accent-blue);
-      outline-offset: 0;
+      outline: none;
       border-color: var(--color-divider, #E5E7EB);
       background: var(--color-card-bg, #fff);
     }
@@ -2787,11 +2767,13 @@
         }
       iqStartGlobalCooldown(IQ_GLOBAL_COOLDOWN);
         
-        // Refresh usage counter after successful generation
-        const currentPlan = getUserPlan();
-        if (currentPlan) {
-          updatePlanUI(currentPlan);
-        }
+        // Refresh usage counter after successful generation (with delay to ensure DB is updated)
+        setTimeout(() => {
+          const currentPlan = getUserPlan();
+          if (currentPlan) {
+            updatePlanUI(currentPlan);
+          }
+        }, 500);
         
       } catch (error) {
         console.error('[IQ] Generate error:', error);
