@@ -344,39 +344,61 @@ export async function onRequest(context) {
       // Normalize old format (questions) to new format (sets)
       // Old system stored multiples of 10 (10 questions per set)
       // New system stores individual sets (1 per set)
-      // If value is >= 10 and a multiple of 10, it's old format → convert to sets
-      if (used >= 10 && used % 10 === 0) {
+      // Only convert if value exceeds plan limit AND is a multiple of 10
+      // This prevents false positives: legitimate 10 sets for trial/essential won't be converted
+      // But old format values (30, 40, 50+) will be correctly converted
+      if (used > dailyLimit && used >= 10 && used % 10 === 0) {
         const oldValue = used;
         used = Math.floor(used / 10);
-        console.log('[IQ-GENERATE] Converted old format usage:', { requestId, uid, oldValue, newValue: used });
+        console.log('[IQ-GENERATE] Converted old format usage:', { requestId, uid, oldValue, newValue: used, plan: effectivePlan, dailyLimit });
       }
       
-      // Only check quota for full sets (replacements don't count)
-      // Full sets count as 1, replacements count as 0
-      if (!isReplaceMode && used + 1 > dailyLimit) {
-        // Release lock before returning error
-        if (lockAcquired && env.JOBHACKAI_KV) {
-          await env.JOBHACKAI_KV.delete(lockKey).catch(() => {});
+      // Validate replace mode: require replaceIndex to prevent abuse
+      // Replacements are free but must be tied to an existing question set
+      if (isReplaceMode) {
+        if (replaceIndex === undefined || replaceIndex === null || (typeof replaceIndex !== 'number' && typeof replaceIndex !== 'string')) {
+          // Release lock before returning error
+          if (lockAcquired && env.JOBHACKAI_KV) {
+            await env.JOBHACKAI_KV.delete(lockKey).catch(() => {});
+          }
+          return errorResponse(
+            'Replace mode requires a valid replaceIndex pointing to an existing question.',
+            400,
+            origin,
+            env,
+            requestId
+          );
         }
-        // Log daily limit hit for monitoring
-        console.warn('[IQ-GENERATE] Daily limit hit:', {
-          requestId,
-          uid,
-          userId: d1User.id,
-          plan: effectivePlan,
-          reason: 'daily_limit',
-          limit: dailyLimit,
-          used,
-          requestedCount
-        });
-        return errorResponse(
-          `Daily limit reached: ${dailyLimit} sets per day for your plan.`,
-          429,
-          origin,
-          env,
-          requestId,
-          { reason: 'daily_limit', limit: dailyLimit, used }
-        );
+        // Replacements are free but still subject to cooldown (enforced above)
+        // No quota check needed for replacements - they're tied to existing sets
+      } else {
+        // Only check quota for full sets (replacements don't count)
+        // Full sets count as 1, replacements count as 0
+        if (used + 1 > dailyLimit) {
+          // Release lock before returning error
+          if (lockAcquired && env.JOBHACKAI_KV) {
+            await env.JOBHACKAI_KV.delete(lockKey).catch(() => {});
+          }
+          // Log daily limit hit for monitoring
+          console.warn('[IQ-GENERATE] Daily limit hit:', {
+            requestId,
+            uid,
+            userId: d1User.id,
+            plan: effectivePlan,
+            reason: 'daily_limit',
+            limit: dailyLimit,
+            used,
+            requestedCount: 1
+          });
+          return errorResponse(
+            `Daily limit reached: ${dailyLimit} sets per day for your plan.`,
+            429,
+            origin,
+            env,
+            requestId,
+            { reason: 'daily_limit', limit: dailyLimit, used }
+          );
+        }
       }
     }
 

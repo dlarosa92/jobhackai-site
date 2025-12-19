@@ -211,9 +211,12 @@ export async function onRequest(context) {
           // Normalize old format (questions) to new format (sets) for monthly usage
           // Old system stored multiples of 10 per day (10 questions per set)
           // New system stores individual sets per day (1 per set)
-          // If total is >= 10 and a multiple of 10, likely all old format → convert
-          // This handles transition period where pre-deployment days are in old format
-          if (totalUsed >= 10 && totalUsed % 10 === 0) {
+          // Only convert if total exceeds reasonable monthly usage AND is a multiple of 10
+          // This prevents false positives: legitimate usage (e.g., 20 sets/month) won't be converted
+          // But old format values (100+, 200+, etc.) will be correctly converted
+          // Conservative threshold: if monthly total > 50 and multiple of 10, likely old format
+          const MONTHLY_CONVERSION_THRESHOLD = 50;
+          if (totalUsed > MONTHLY_CONVERSION_THRESHOLD && totalUsed >= 10 && totalUsed % 10 === 0) {
             const oldValue = totalUsed;
             totalUsed = Math.floor(totalUsed / 10);
             console.log('[USAGE] Converted old format monthly usage for interview_questions:', { uid, oldValue, newValue: totalUsed });
