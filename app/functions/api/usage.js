@@ -190,9 +190,10 @@ export async function onRequest(context) {
         const d1User = await getOrCreateUserByAuthId(env, uid, userEmail);
         if (d1User && d1User.id) {
           // Get current month's usage by summing all daily counts for the month
+          // Use UTC dates to match the increment function which uses UTC
           const now = new Date();
-          const year = now.getFullYear();
-          const month = String(now.getMonth() + 1).padStart(2, '0');
+          const year = now.getUTCFullYear();
+          const month = String(now.getUTCMonth() + 1).padStart(2, '0');
           const monthStart = `${year}-${month}-01`;
           const monthEnd = `${year}-${month}-31`;
           

@@ -2767,13 +2767,42 @@
         }
       iqStartGlobalCooldown(IQ_GLOBAL_COOLDOWN);
         
-        // Refresh usage counter after successful generation (with delay to ensure DB is updated)
-        setTimeout(() => {
+        // Refresh usage counter after successful generation with retry logic
+        // This ensures the counter updates even if DB write hasn't propagated yet
+        const refreshUsageCounter = async (retries = 3, delay = 1000) => {
           const currentPlan = getUserPlan();
-          if (currentPlan) {
-            updatePlanUI(currentPlan);
+          if (!currentPlan) {
+            return;
           }
-        }, 500);
+          
+          try {
+            await updatePlanUI(currentPlan);
+            
+            // Check if counter actually updated by verifying the usage container has content
+            const usageContainer = document.getElementById('iq-usage-container');
+            if (usageContainer && usageContainer.textContent.includes('Sets of questions generated')) {
+              // Counter updated successfully, no need to retry
+              return;
+            }
+            
+            // If counter didn't update and we have retries left, try again
+            if (retries > 0) {
+              console.log(`[IQ] Usage counter refresh retry (${retries} attempts remaining)`);
+              setTimeout(() => refreshUsageCounter(retries - 1, delay), delay);
+            } else {
+              console.warn('[IQ] Usage counter refresh failed after all retries');
+            }
+          } catch (error) {
+            console.error('[IQ] Error refreshing usage counter:', error);
+            // Retry on error if we have attempts left
+            if (retries > 0) {
+              setTimeout(() => refreshUsageCounter(retries - 1, delay), delay);
+            }
+          }
+        };
+        
+        // Initial refresh with delay to allow DB write to complete
+        setTimeout(() => refreshUsageCounter(), 1000);
         
       } catch (error) {
         console.error('[IQ] Generate error:', error);

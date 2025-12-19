@@ -427,6 +427,14 @@ export async function onRequest(context) {
     if (d1User && PLAN_LIMITS[effectivePlan]) {
       await incrementFeatureDailyUsage(env, d1User.id, FEATURE, requestedCount);
       quotaIncremented = true; // Mark quota as consumed
+    } else {
+      console.warn('[IQ-GENERATE] Usage increment skipped:', {
+        requestId,
+        uid,
+        hasD1User: !!d1User,
+        effectivePlan,
+        hasPlanLimit: !!PLAN_LIMITS[effectivePlan]
+      });
     }
 
     // Release lock after successful completion
