@@ -211,11 +211,13 @@ export async function onRequest(context) {
           // Normalize old format (questions) to new format (sets) for monthly usage
           // Old system stored multiples of 10 per day (10 questions per set)
           // New system stores individual sets per day (1 per set)
-          // Only convert if total exceeds reasonable monthly usage AND is a multiple of 10
-          // This prevents false positives: legitimate usage (e.g., 20 sets/month) won't be converted
-          // But old format values (100+, 200+, etc.) will be correctly converted
-          // Conservative threshold: if monthly total > 50 and multiple of 10, likely old format
-          const MONTHLY_CONVERSION_THRESHOLD = 50;
+          // Max legitimate monthly usage by plan:
+          //   Trial/Essential: 10 sets/day × 30 days = 300 sets/month
+          //   Pro: 20 sets/day × 30 days = 600 sets/month
+          //   Premium: 50 sets/day × 30 days = 1500 sets/month
+          // Use threshold above max possible legitimate usage to prevent false positives
+          // Only convert if total exceeds 2000 AND is a multiple of 10 (old format values like 2000+ questions)
+          const MONTHLY_CONVERSION_THRESHOLD = 2000; // Above premium's max of 1500 sets/month
           if (totalUsed > MONTHLY_CONVERSION_THRESHOLD && totalUsed >= 10 && totalUsed % 10 === 0) {
             const oldValue = totalUsed;
             totalUsed = Math.floor(totalUsed / 10);
