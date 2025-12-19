@@ -16,12 +16,21 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
-# Database names
-QA_DB="jobhackai-qa-db"
-PROD_DB="jobhackai-prod-db"
+# Database UUIDs (from wrangler.toml)
+# These can be used directly with wrangler d1 execute
+QA_DB_UUID="80d87a73-6615-4823-b7a4-19a8821b4f87"  # jobhackai-qa-db
+PROD_DB_UUID="f9b709fd-56c3-4a0b-8141-4542327c9d4d"  # jobhackai-prod-db
 
-# Migration file path
-MIGRATION_FILE="app/db/migrations/002_add_feature_daily_usage.sql"
+# Database names (for display)
+QA_DB_NAME="jobhackai-qa-db"
+PROD_DB_NAME="jobhackai-prod-db"
+
+# Get script directory and repo root
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+
+# Migration file path (relative to repo root)
+MIGRATION_FILE="$REPO_ROOT/app/db/migrations/002_add_feature_daily_usage.sql"
 
 # Check if migration file exists
 if [ ! -f "$MIGRATION_FILE" ]; then
@@ -31,10 +40,19 @@ fi
 
 # Function to check if table exists
 check_table_exists() {
-    local db_name=$1
-    local result=$(wrangler d1 execute "$db_name" \
+    local db_uuid=$1
+    # Use UUID as positional argument (wrangler accepts UUIDs as database names)
+    local result=$(wrangler d1 execute "$db_uuid" \
         --command="SELECT name FROM sqlite_master WHERE type='table' AND name='feature_daily_usage';" \
-        2>/dev/null | grep -c "feature_daily_usage" || echo "0")
+        2>/dev/null | grep -o "feature_daily_usage" | wc -l | tr -d ' ' || echo "0")
+    
+    # Handle case where result is empty or non-numeric
+    if [ -z "$result" ] || [ "$result" = "" ]; then
+        result=0
+    fi
+    
+    # Convert to integer for comparison
+    result=$((result + 0))
     
     if [ "$result" -gt 0 ]; then
         return 0  # Table exists
@@ -45,13 +63,14 @@ check_table_exists() {
 
 # Function to run migration
 run_migration() {
-    local db_name=$1
-    local env_name=$2
+    local db_uuid=$1
+    local db_name=$2
+    local env_name=$3
     
     echo -e "${YELLOW}Checking $env_name database ($db_name)...${NC}"
     
     # Check if table already exists
-    if check_table_exists "$db_name"; then
+    if check_table_exists "$db_uuid"; then
         echo -e "${GREEN}✓ Table 'feature_daily_usage' already exists in $env_name database${NC}"
         echo -e "${YELLOW}  Skipping migration (table already present)${NC}"
         return 0
@@ -59,12 +78,13 @@ run_migration() {
     
     echo -e "${YELLOW}Table 'feature_daily_usage' not found. Running migration...${NC}"
     
-    # Run migration
-    if wrangler d1 execute "$db_name" --file="$MIGRATION_FILE"; then
+    # Run migration using UUID as positional argument
+    # wrangler d1 execute accepts UUIDs directly as the database identifier
+    if wrangler d1 execute "$db_uuid" --file="$MIGRATION_FILE"; then
         echo -e "${GREEN}✓ Migration applied successfully to $env_name database${NC}"
         
         # Verify table was created
-        if check_table_exists "$db_name"; then
+        if check_table_exists "$db_uuid"; then
             echo -e "${GREEN}✓ Verified: Table 'feature_daily_usage' now exists in $env_name database${NC}"
             return 0
         else
@@ -73,6 +93,8 @@ run_migration() {
         fi
     else
         echo -e "${RED}✗ Migration failed for $env_name database${NC}"
+        echo -e "${YELLOW}  You can also run manually:${NC}"
+        echo -e "${YELLOW}  wrangler d1 execute $db_uuid --file=$MIGRATION_FILE${NC}"
         return 1
     fi
 }
@@ -87,7 +109,7 @@ echo ""
 
 case "$ENVIRONMENT" in
     qa)
-        run_migration "$QA_DB" "QA"
+        run_migration "$QA_DB_UUID" "$QA_DB_NAME" "QA"
         ;;
     prod|production)
         echo -e "${RED}⚠️  WARNING: You are about to modify the PRODUCTION database${NC}"
@@ -98,12 +120,12 @@ case "$ENVIRONMENT" in
             echo -e "${YELLOW}Migration cancelled.${NC}"
             exit 0
         fi
-        run_migration "$PROD_DB" "Production"
+        run_migration "$PROD_DB_UUID" "$PROD_DB_NAME" "Production"
         ;;
     both)
-        run_migration "$QA_DB" "QA"
+        run_migration "$QA_DB_UUID" "$QA_DB_NAME" "QA"
         echo ""
-        run_migration "$PROD_DB" "Production"
+        run_migration "$PROD_DB_UUID" "$PROD_DB_NAME" "Production"
         ;;
     *)
         echo -e "${RED}Error: Invalid environment. Use 'qa', 'prod', or 'both'${NC}"
