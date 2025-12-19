@@ -147,8 +147,17 @@ case "$ENVIRONMENT" in
         echo ""
         if confirm_production; then
             run_migration "$PROD_DB_UUID" "$PROD_DB_NAME" "Production"
+            echo ""
+            echo -e "${GREEN}========================================${NC}"
+            echo -e "${GREEN}Migration complete!${NC}"
+            echo -e "${GREEN}========================================${NC}"
         else
             echo -e "${YELLOW}Skipping production migration.${NC}"
+            echo ""
+            echo -e "${YELLOW}========================================${NC}"
+            echo -e "${YELLOW}QA migration completed. Production migration skipped.${NC}"
+            echo -e "${YELLOW}========================================${NC}"
+            echo -e "${YELLOW}To migrate production later, run: $0 prod${NC}"
         fi
         ;;
     *)
@@ -162,8 +171,12 @@ case "$ENVIRONMENT" in
         ;;
 esac
 
-echo ""
-echo -e "${GREEN}========================================${NC}"
-echo -e "${GREEN}Migration complete!${NC}"
-echo -e "${GREEN}========================================${NC}"
+# Only show "Migration complete!" for single-environment runs (qa or prod)
+# The 'both' case handles its own completion messages above
+if [ "$ENVIRONMENT" != "both" ]; then
+    echo ""
+    echo -e "${GREEN}========================================${NC}"
+    echo -e "${GREEN}Migration complete!${NC}"
+    echo -e "${GREEN}========================================${NC}"
+fi
 
