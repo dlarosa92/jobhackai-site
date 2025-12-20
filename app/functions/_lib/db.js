@@ -121,14 +121,14 @@ export async function getUserPlan(env, authId) {
  */
 export async function updateUserPlan(env, authId, {
   plan,
-  stripeCustomerId = null,
-  stripeSubscriptionId = null,
-  subscriptionStatus = null,
-  trialEndsAt = null,
-  currentPeriodEnd = null,
-  cancelAt = null,
-  scheduledPlan = null,
-  scheduledAt = null
+  stripeCustomerId = undefined,
+  stripeSubscriptionId = undefined,
+  subscriptionStatus = undefined,
+  trialEndsAt = undefined,
+  currentPeriodEnd = undefined,
+  cancelAt = undefined,
+  scheduledPlan = undefined,
+  scheduledAt = undefined
 }) {
   const db = getDb(env);
   if (!db) {
