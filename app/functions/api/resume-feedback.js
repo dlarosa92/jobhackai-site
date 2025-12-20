@@ -183,8 +183,8 @@ export async function onRequest(context) {
     
     // If plan is 'free' and we're in dev environment, upgrade to 'pro' for testing
     if (isDevEnvironment && plan === 'free') {
-      // In dev environment, if KV lookup failed, try to fetch plan from plan/me endpoint
-      if (env.JOBHACKAI_KV) {
+      // In dev environment, if D1 lookup failed, try to fetch plan from D1 one more time
+      if (isD1Available(env)) {
         try {
           // Try to fetch plan directly from D1 one more time with better error handling
           const directPlan = await getUserPlan(env, uid);
