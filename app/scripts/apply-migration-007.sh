@@ -33,9 +33,41 @@ check_column_exists() {
     # Query PRAGMA table_info and use exact column name matching
     # Use grep with word boundaries to avoid partial matches (e.g., "plan" matching "scheduled_plan")
     # The PRAGMA output is JSON, so we look for the exact column name in the "name" field
-    local result=$(wrangler d1 execute "$db_name" \
+    # Use [[:space:]] instead of \s for POSIX ERE compatibility (works on BSD/macOS grep)
+    # Capture stderr to detect authentication/connection errors instead of silently ignoring them
+    local stdout_output
+    local stderr_output
+    local exit_code
+    local temp_stderr
+    
+    temp_stderr=$(mktemp)
+    
+    # Capture stdout and stderr separately
+    stdout_output=$(wrangler d1 execute "$db_name" \
         --command="PRAGMA table_info(users);" \
-        --json 2>/dev/null | grep -oE "\"name\"\s*:\s*\"${column_name}\"" || echo "")
+        --json 2>"$temp_stderr")
+    exit_code=$?
+    stderr_output=$(cat "$temp_stderr" 2>/dev/null || echo "")
+    rm -f "$temp_stderr"
+    
+    # Check if wrangler command failed
+    if [ $exit_code -ne 0 ]; then
+        echo -e "${RED}Error checking column: wrangler command failed (exit code: $exit_code)${NC}" >&2
+        if [ -n "$stderr_output" ]; then
+            echo "$stderr_output" >&2
+        fi
+        return 1
+    fi
+    
+    # Check stderr for error messages even if exit code was 0 (wrangler sometimes returns 0 with errors)
+    if [ -n "$stderr_output" ] && echo "$stderr_output" | grep -qiE "(error|failed|unauthorized|authentication|couldn't find|not found)"; then
+        echo -e "${RED}Error checking column: wrangler reported an error${NC}" >&2
+        echo "$stderr_output" >&2
+        return 1
+    fi
+    
+    # Extract result from stdout using POSIX-compliant pattern
+    local result=$(echo "$stdout_output" | grep -oE "\"name\"[[:space:]]*:[[:space:]]*\"${column_name}\"" || echo "")
     [ -n "$result" ]
 }
 
