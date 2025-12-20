@@ -71,6 +71,41 @@ check_column_exists() {
     [ -n "$result" ]
 }
 
+# Function to check if migration is complete
+# Migration 007 adds 10 columns total. We check for all critical columns to detect partial migrations.
+check_migration_complete() {
+    local db_name=$1
+    # Check for all columns added by migration 007
+    # These are the critical columns used by getUserPlanData and updateUserPlan
+    local required_columns=(
+        "plan"
+        "stripe_customer_id"
+        "stripe_subscription_id"
+        "subscription_status"
+        "trial_ends_at"
+        "current_period_end"
+        "cancel_at"
+        "scheduled_plan"
+        "scheduled_at"
+        "plan_updated_at"
+    )
+    
+    local missing_columns=()
+    for column in "${required_columns[@]}"; do
+        if ! check_column_exists "$db_name" "$column"; then
+            missing_columns+=("$column")
+        fi
+    done
+    
+    if [ ${#missing_columns[@]} -eq 0 ]; then
+        return 0  # All columns exist
+    else
+        # Return missing columns via global or echo (we'll use return code + echo)
+        echo "${missing_columns[*]}"
+        return 1  # Some columns missing
+    fi
+}
+
 # Function to run migration
 run_migration() {
     local db_name=$1
@@ -78,23 +113,37 @@ run_migration() {
     
     echo -e "${YELLOW}Checking $env_name database ($db_name)...${NC}"
     
-    # Check if plan column already exists
-    if check_column_exists "$db_name" "plan"; then
-        echo -e "${GREEN}✓ Plan column already exists in $env_name database${NC}"
-        echo -e "${YELLOW}  Skipping migration (column already present)${NC}"
+    # Check if all migration columns exist (not just 'plan')
+    # This detects partial migrations where only some columns were added
+    local missing_cols
+    missing_cols=$(check_migration_complete "$db_name")
+    local migration_status=$?
+    
+    if [ $migration_status -eq 0 ]; then
+        echo -e "${GREEN}✓ All migration columns already exist in $env_name database${NC}"
+        echo -e "${YELLOW}  Skipping migration (migration already complete)${NC}"
         return 0
     fi
     
-    echo -e "${YELLOW}Plan column not found. Running migration...${NC}"
+    # Some columns are missing - need to run migration
+    if [ -n "$missing_cols" ]; then
+        echo -e "${YELLOW}Missing columns detected: ${missing_cols}${NC}"
+        echo -e "${YELLOW}Running migration to add missing columns...${NC}"
+    else
+        echo -e "${YELLOW}Migration columns not found. Running migration...${NC}"
+    fi
     
     if wrangler d1 execute "$db_name" --file="$MIGRATION_FILE"; then
         echo -e "${GREEN}✓ Migration applied successfully to $env_name database${NC}"
         
-        # Verify column exists
-        if check_column_exists "$db_name" "plan"; then
-            echo -e "${GREEN}✓ Verification: Plan column confirmed in $env_name database${NC}"
+        # Verify all columns exist after migration
+        local verify_missing
+        verify_missing=$(check_migration_complete "$db_name")
+        if [ $? -eq 0 ]; then
+            echo -e "${GREEN}✓ Verification: All migration columns confirmed in $env_name database${NC}"
         else
-            echo -e "${RED}✗ Warning: Migration completed but column verification failed${NC}"
+            echo -e "${RED}✗ Warning: Migration completed but some columns are still missing: ${verify_missing}${NC}"
+            echo -e "${YELLOW}  You may need to run the migration again or check for errors${NC}"
         fi
         return 0
     else
