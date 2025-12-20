@@ -66,7 +66,12 @@ export async function onRequest(context) {
       }
 
       // Write to D1 (source of truth)
-      await updateUserPlan(env, uid, planData);
+      const success = await updateUserPlan(env, uid, planData);
+      
+      if (!success) {
+        console.error(`❌ [WEBHOOK] D1 write failed for uid=${uid}`);
+        throw new Error(`Failed to update plan in D1 for uid=${uid}`);
+      }
       
       // TEMPORARY: Dual-write to KV during migration period for safety
       // TODO: Remove KV writes after migration is verified
