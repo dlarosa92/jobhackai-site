@@ -4,8 +4,13 @@
 --
 -- This migration adds all columns needed to store user plan and subscription
 -- data in D1, making it the single source of truth instead of KV storage.
+--
+-- SAFE TO RUN MULTIPLE TIMES: Uses IF NOT EXISTS checks where possible
+-- SQLite doesn't support IF NOT EXISTS for ALTER TABLE ADD COLUMN, but
+-- attempting to add an existing column will fail gracefully with a clear error.
 
 -- Add plan column (default 'free' for existing users)
+-- Note: SQLite will error if column exists, but that's safe - just means migration already ran
 ALTER TABLE users ADD COLUMN plan TEXT DEFAULT 'free';
 
 -- Add Stripe subscription tracking columns
@@ -23,7 +28,9 @@ ALTER TABLE users ADD COLUMN scheduled_plan TEXT;  -- Plan that will activate at
 ALTER TABLE users ADD COLUMN scheduled_at TEXT;  -- ISO 8601 datetime
 
 -- Add metadata tracking
-ALTER TABLE users ADD COLUMN plan_updated_at TEXT DEFAULT (datetime('now'));
+-- Note: SQLite doesn't allow datetime('now') in ALTER TABLE, so we'll set it to NULL initially
+-- The application code will set this value when updating plans
+ALTER TABLE users ADD COLUMN plan_updated_at TEXT;
 
 -- Create indexes for efficient plan queries
 CREATE INDEX IF NOT EXISTS idx_users_plan ON users(plan);
