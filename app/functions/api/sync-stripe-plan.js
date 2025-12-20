@@ -211,11 +211,11 @@ export async function onRequest(context) {
         stripeCustomerId: customerId,
         stripeSubscriptionId: latestSub.id,
         subscriptionStatus: status,
-        trialEndsAt: trialEndsAt || undefined,
-        currentPeriodEnd: currentPeriodEnd ? new Date(currentPeriodEnd * 1000).toISOString() : undefined,
-        cancelAt: (cancelAtPeriodEnd && cancelAt) ? new Date(cancelAt * 1000).toISOString() : undefined,
-        scheduledPlan: scheduledPlan || undefined,
-        scheduledAt: scheduledAt || undefined
+        trialEndsAt: trialEndsAt || null, // null clears the field (undefined is skipped)
+        currentPeriodEnd: currentPeriodEnd ? new Date(currentPeriodEnd * 1000).toISOString() : null, // null clears the field (undefined is skipped)
+        cancelAt: (cancelAtPeriodEnd && cancelAt) ? new Date(cancelAt * 1000).toISOString() : null, // null clears the field (undefined is skipped)
+        scheduledPlan: scheduledPlan || null, // null clears the field (undefined is skipped)
+        scheduledAt: scheduledAt || null // null clears the field (undefined is skipped)
       });
       console.log(`✅ [SYNC-STRIPE-PLAN] D1 write completed: ${plan}`);
       

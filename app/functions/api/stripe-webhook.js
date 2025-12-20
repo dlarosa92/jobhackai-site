@@ -215,9 +215,9 @@ export async function onRequest(context) {
         stripeSubscriptionId: sub.id,
         subscriptionStatus: status,
         currentPeriodEnd: sub.current_period_end ? new Date(sub.current_period_end * 1000).toISOString() : null,
-        cancelAt: cancelAt || undefined, // undefined clears the field
-        scheduledPlan: scheduledPlan || undefined,
-        scheduledAt: scheduledAt || undefined
+        cancelAt: cancelAt || null, // null clears the field (undefined is skipped)
+        scheduledPlan: scheduledPlan || null, // null clears the field (undefined is skipped)
+        scheduledAt: scheduledAt || null // null clears the field (undefined is skipped)
       });
     }
 
@@ -232,9 +232,9 @@ export async function onRequest(context) {
         plan: 'free',
         stripeSubscriptionId: null,
         subscriptionStatus: 'canceled',
-        cancelAt: undefined, // Clear cancellation date
-        scheduledPlan: undefined, // Clear scheduled plan
-        scheduledAt: undefined
+        cancelAt: null, // Clear cancellation date
+        scheduledPlan: null, // Clear scheduled plan
+        scheduledAt: null // Clear scheduled date
       });
       
       // Clean up resume data when subscription is deleted (KV cleanup)

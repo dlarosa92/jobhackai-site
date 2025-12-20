@@ -30,9 +30,9 @@ export async function onRequest(context) {
     plan: 'free',
     stripeSubscriptionId: null,
     subscriptionStatus: 'canceled',
-    cancelAt: undefined,
-    scheduledPlan: undefined,
-    scheduledAt: undefined
+    cancelAt: null, // Clear cancellation date
+    scheduledPlan: null, // Clear scheduled plan
+    scheduledAt: null // Clear scheduled date
   });
   
   // TEMPORARY: Also clear KV during migration period
