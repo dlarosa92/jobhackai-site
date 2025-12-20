@@ -128,7 +128,8 @@ export async function updateUserPlan(env, authId, {
   currentPeriodEnd = undefined,
   cancelAt = undefined,
   scheduledPlan = undefined,
-  scheduledAt = undefined
+  scheduledAt = undefined,
+  planEventTimestamp = undefined // ISO 8601 datetime string from Stripe event.created
 }) {
   const db = getDb(env);
   if (!db) {
@@ -182,7 +183,13 @@ export async function updateUserPlan(env, authId, {
     }
 
     // Always update timestamps
-    updates.push('plan_updated_at = datetime(\'now\')');
+    // Use planEventTimestamp if provided (from Stripe event.created), otherwise use current time
+    if (planEventTimestamp !== undefined) {
+      updates.push('plan_updated_at = ?');
+      binds.push(planEventTimestamp);
+    } else {
+      updates.push('plan_updated_at = datetime(\'now\')');
+    }
     updates.push('updated_at = datetime(\'now\')');
 
     if (updates.length === 2) {

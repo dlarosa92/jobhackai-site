@@ -1,4 +1,4 @@
-import { updateUserPlan } from '../_lib/db.js';
+import { updateUserPlan, getUserPlanData } from '../_lib/db.js';
 
 export async function onRequest(context) {
   const { request, env } = context;
@@ -36,10 +36,35 @@ export async function onRequest(context) {
     await env.JOBHACKAI_KV?.put(lockKey, '1', { expirationTtl: 60 }); // 60s lock
   } catch (_) { /* ignore lock failures */ }
 
-  // Helper to update plan in D1 (source of truth) and optionally sync to KV during migration
-  const updatePlanInD1 = async (uid, planData) => {
+  // Helper to update plan in D1 (source of truth) with timestamp-based ordering protection
+  // Prevents out-of-order webhooks from overwriting newer states with older data
+  const updatePlanInD1 = async (uid, planData, eventTimestampSeconds) => {
     if (!uid) return;
     try {
+      // Get current plan_updated_at timestamp for ordering check
+      if (eventTimestampSeconds !== undefined && Number.isFinite(eventTimestampSeconds)) {
+        const currentPlanData = await getUserPlanData(env, uid);
+        
+        if (currentPlanData && currentPlanData.planUpdatedAt) {
+          // Convert stored ISO 8601 datetime to Unix timestamp for comparison
+          const storedTimestamp = Math.floor(new Date(currentPlanData.planUpdatedAt).getTime() / 1000);
+          const eventTimestamp = Math.floor(Number(eventTimestampSeconds));
+
+          if (eventTimestamp < storedTimestamp) {
+            console.log(`⏭️ [WEBHOOK] Skipping out-of-order event: event.created=${eventTimestamp} < stored=${storedTimestamp} for uid=${uid}`);
+            return; // Skip update - this event is older than what we already have
+          }
+        }
+      }
+
+      // Convert event timestamp to ISO 8601 string for storage (if provided)
+      if (eventTimestampSeconds !== undefined && Number.isFinite(eventTimestampSeconds)) {
+        planData.planEventTimestamp = new Date(eventTimestampSeconds * 1000).toISOString();
+      } else {
+        // No event timestamp provided - use current time (fallback for non-webhook updates)
+        planData.planEventTimestamp = undefined;
+      }
+
       // Write to D1 (source of truth)
       await updateUserPlan(env, uid, planData);
       
@@ -115,7 +140,7 @@ export async function onRequest(context) {
           subscriptionStatus: subscription?.status || 'active',
           trialEndsAt: subscription?.trial_end ? new Date(subscription.trial_end * 1000).toISOString() : null,
           currentPeriodEnd: subscription?.current_period_end ? new Date(subscription.current_period_end * 1000).toISOString() : null
-        });
+        }, event.created);
         console.log(`✅ D1 WRITE SUCCESS: ${uid} → ${effectivePlan}`);
       } else {
         console.warn(`⚠️ SKIPPED PLAN UPDATE: effectivePlan=${effectivePlan}, uid=${uid}`);
@@ -152,7 +177,7 @@ export async function onRequest(context) {
         subscriptionStatus: status,
         trialEndsAt: sub.trial_end ? new Date(sub.trial_end * 1000).toISOString() : null,
         currentPeriodEnd: sub.current_period_end ? new Date(sub.current_period_end * 1000).toISOString() : null
-      });
+      }, event.created);
       
       console.log(`✅ D1 WRITE SUCCESS: ${uid} → ${effectivePlan}`);
     }
@@ -218,7 +243,7 @@ export async function onRequest(context) {
         cancelAt: cancelAt || null, // null clears the field (undefined is skipped)
         scheduledPlan: scheduledPlan || null, // null clears the field (undefined is skipped)
         scheduledAt: scheduledAt || null // null clears the field (undefined is skipped)
-      });
+      }, event.created);
     }
 
     if (event.type === 'customer.subscription.deleted') {
@@ -235,7 +260,7 @@ export async function onRequest(context) {
         cancelAt: null, // Clear cancellation date
         scheduledPlan: null, // Clear scheduled plan
         scheduledAt: null // Clear scheduled date
-      });
+      }, event.created);
       
       // Clean up resume data when subscription is deleted (KV cleanup)
       await env.JOBHACKAI_KV?.delete(`user:${uid}:lastResume`);
