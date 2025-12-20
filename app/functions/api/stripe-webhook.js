@@ -239,6 +239,7 @@ export async function onRequest(context) {
         stripeCustomerId: customerId,
         stripeSubscriptionId: sub.id,
         subscriptionStatus: status,
+        trialEndsAt: sub.trial_end ? new Date(sub.trial_end * 1000).toISOString() : null,
         currentPeriodEnd: sub.current_period_end ? new Date(sub.current_period_end * 1000).toISOString() : null,
         cancelAt: cancelAt || null, // null clears the field (undefined is skipped)
         scheduledPlan: scheduledPlan || null, // null clears the field (undefined is skipped)
