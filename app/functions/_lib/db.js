@@ -49,9 +49,27 @@ export async function getOrCreateUserByAuthId(env, authId, email = null) {
 
   try {
     // Try to find existing user
-    const existing = await db.prepare(
-      'SELECT id, auth_id, email, plan, created_at, updated_at FROM users WHERE auth_id = ?'
-    ).bind(authId).first();
+    // First, try with plan column (new schema)
+    let existing;
+    try {
+      existing = await db.prepare(
+        'SELECT id, auth_id, email, plan, created_at, updated_at FROM users WHERE auth_id = ?'
+      ).bind(authId).first();
+    } catch (planError) {
+      // If plan column doesn't exist, try without it (fallback for pre-migration state)
+      if (planError.message && planError.message.includes('no such column: plan')) {
+        console.warn('[DB] Plan column not found, using fallback query. Migration 007 may need to be run.');
+        existing = await db.prepare(
+          'SELECT id, auth_id, email, created_at, updated_at FROM users WHERE auth_id = ?'
+        ).bind(authId).first();
+        // Add plan property with default value
+        if (existing) {
+          existing.plan = 'free';
+        }
+      } else {
+        throw planError;
+      }
+    }
 
     if (existing) {
       // Update email if provided and different
@@ -69,6 +87,11 @@ export async function getOrCreateUserByAuthId(env, authId, email = null) {
     const result = await db.prepare(
       'INSERT INTO users (auth_id, email) VALUES (?, ?) RETURNING id, auth_id, email, created_at, updated_at'
     ).bind(authId, email).first();
+
+    // Add plan property if it wasn't returned (pre-migration state)
+    if (result && !result.plan) {
+      result.plan = 'free';
+    }
 
     console.log('[DB] Created new user:', { id: result.id, authId });
     return result;
