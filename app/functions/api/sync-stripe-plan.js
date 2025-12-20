@@ -1,4 +1,5 @@
 import { getBearer, verifyFirebaseIdToken } from '../_lib/firebase-auth.js';
+import { updateUserPlan } from '../_lib/db.js';
 
 export async function onRequest(context) {
   const { request, env } = context;
@@ -100,8 +101,9 @@ export async function onRequest(context) {
       // If still no customer found, return free plan (not an error)
       if (!customerId) {
         console.log('ℹ️ [SYNC-STRIPE-PLAN] No Stripe customer found - returning free plan');
-        await env.JOBHACKAI_KV.put(`planByUid:${uid}`, 'free');
-        await env.JOBHACKAI_KV.put(`planTsByUid:${uid}`, String(Math.floor(Date.now() / 1000)));
+        await updateUserPlan(env, uid, { plan: 'free' });
+        // TEMPORARY: Also write to KV during migration
+        await env.JOBHACKAI_KV?.put(`planByUid:${uid}`, 'free');
         return json({ ok: true, plan: 'free', trialEndsAt: null }, 200, origin, env);
       }
     }
@@ -125,8 +127,9 @@ export async function onRequest(context) {
 
     if (subscriptions.length === 0) {
       // No active subscriptions, set to free
-      await env.JOBHACKAI_KV.put(`planByUid:${uid}`, 'free');
-      await env.JOBHACKAI_KV.put(`planTsByUid:${uid}`, String(Math.floor(Date.now() / 1000)));
+      await updateUserPlan(env, uid, { plan: 'free' });
+      // TEMPORARY: Also write to KV during migration
+      await env.JOBHACKAI_KV?.put(`planByUid:${uid}`, 'free');
       return json({ ok: true, plan: 'free', trialEndsAt: null }, 200, origin, env);
     }
 
@@ -162,8 +165,6 @@ export async function onRequest(context) {
         plan = 'trial';
         if (latestSub.trial_end) {
           trialEndsAt = new Date(latestSub.trial_end * 1000).toISOString();
-          // Store trial end in KV
-          await env.JOBHACKAI_KV.put(`trialEndByUid:${uid}`, String(latestSub.trial_end));
         }
       } else {
         // Regular subscription in trial period
@@ -180,37 +181,9 @@ export async function onRequest(context) {
 
     console.log('✅ Determined plan:', { plan, trialEndsAt });
 
-    // Update KV with correct plan
-    const timestamp = Math.floor(Date.now() / 1000);
-    const kvKey = `planByUid:${uid}`;
-    console.log(`✍️ [SYNC-STRIPE-PLAN] Writing to KV: ${kvKey} = ${plan}`);
-    
-    try {
-      await env.JOBHACKAI_KV.put(kvKey, plan);
-      await env.JOBHACKAI_KV.put(`planTsByUid:${uid}`, String(timestamp));
-      console.log(`✅ [SYNC-STRIPE-PLAN] KV write completed: ${kvKey} = ${plan}`);
-      // Note: We don't verify the write immediately because Cloudflare KV uses eventual
-      // consistency. A read immediately after a write may not reflect the written value
-      // even if the write succeeded. The write operation will throw if it fails.
-    } catch (kvError) {
-      console.error(`❌ [SYNC-STRIPE-PLAN] KV write error:`, kvError);
-      throw kvError;
-    }
-
-    // Store cancellation data if present
-    if (cancelAtPeriodEnd && cancelAt) {
-      await env.JOBHACKAI_KV.put(`cancelAtByUid:${uid}`, String(cancelAt));
-      console.log(`✅ CANCELLATION STORED: cancels at ${new Date(cancelAt * 1000).toISOString()}`);
-    } else {
-      await env.JOBHACKAI_KV.delete(`cancelAtByUid:${uid}`);
-    }
-
-    // Store current period end for renewal display
-    if (currentPeriodEnd) {
-      await env.JOBHACKAI_KV.put(`periodEndByUid:${uid}`, String(currentPeriodEnd));
-    }
-
-    // Fetch and store scheduled plan change if exists
+    // Fetch scheduled plan change if exists
+    let scheduledPlan = null;
+    let scheduledAt = null;
     if (schedule) {
       const schedRes = await fetch(`https://api.stripe.com/v1/subscription_schedules/${schedule}`, {
         headers: { Authorization: `Bearer ${env.STRIPE_SECRET_KEY}` }
@@ -220,18 +193,50 @@ export async function onRequest(context) {
       if (schedData && schedData.phases && schedData.phases.length > 1) {
         const nextPhase = schedData.phases[1];
         const nextPriceId = nextPhase.items[0]?.price;
-        const nextPlan = priceToPlan(env, nextPriceId);
-        const transitionTime = nextPhase.start_date;
+        scheduledPlan = priceToPlan(env, nextPriceId);
+        scheduledAt = nextPhase.start_date ? new Date(nextPhase.start_date * 1000).toISOString() : null;
         
-        if (nextPlan && transitionTime) {
-          await env.JOBHACKAI_KV.put(`scheduledPlanByUid:${uid}`, nextPlan);
-          await env.JOBHACKAI_KV.put(`scheduledAtByUid:${uid}`, String(transitionTime));
-          console.log(`✅ SCHEDULED CHANGE STORED: ${plan} → ${nextPlan} at ${new Date(transitionTime * 1000).toISOString()}`);
+        if (scheduledPlan && scheduledAt) {
+          console.log(`✅ SCHEDULED CHANGE FOUND: ${plan} → ${scheduledPlan} at ${scheduledAt}`);
         }
       }
-    } else {
-      await env.JOBHACKAI_KV.delete(`scheduledPlanByUid:${uid}`);
-      await env.JOBHACKAI_KV.delete(`scheduledAtByUid:${uid}`);
+    }
+
+    // Update D1 with correct plan (source of truth)
+    console.log(`✍️ [SYNC-STRIPE-PLAN] Writing to D1: users.plan = ${plan} for uid=${uid}`);
+    
+    try {
+      await updateUserPlan(env, uid, {
+        plan: plan,
+        stripeCustomerId: customerId,
+        stripeSubscriptionId: latestSub.id,
+        subscriptionStatus: status,
+        trialEndsAt: trialEndsAt || undefined,
+        currentPeriodEnd: currentPeriodEnd ? new Date(currentPeriodEnd * 1000).toISOString() : undefined,
+        cancelAt: (cancelAtPeriodEnd && cancelAt) ? new Date(cancelAt * 1000).toISOString() : undefined,
+        scheduledPlan: scheduledPlan || undefined,
+        scheduledAt: scheduledAt || undefined
+      });
+      console.log(`✅ [SYNC-STRIPE-PLAN] D1 write completed: ${plan}`);
+      
+      // TEMPORARY: Also write to KV during migration period for safety
+      await env.JOBHACKAI_KV?.put(`planByUid:${uid}`, plan);
+      if (trialEndsAt) {
+        await env.JOBHACKAI_KV?.put(`trialEndByUid:${uid}`, String(latestSub.trial_end));
+      }
+      if (cancelAtPeriodEnd && cancelAt) {
+        await env.JOBHACKAI_KV?.put(`cancelAtByUid:${uid}`, String(cancelAt));
+      }
+      if (currentPeriodEnd) {
+        await env.JOBHACKAI_KV?.put(`periodEndByUid:${uid}`, String(currentPeriodEnd));
+      }
+      if (scheduledPlan && scheduledAt) {
+        await env.JOBHACKAI_KV?.put(`scheduledPlanByUid:${uid}`, scheduledPlan);
+        await env.JOBHACKAI_KV?.put(`scheduledAtByUid:${uid}`, String(Math.floor(new Date(scheduledAt).getTime() / 1000)));
+      }
+    } catch (dbError) {
+      console.error(`❌ [SYNC-STRIPE-PLAN] D1 write error:`, dbError);
+      throw dbError;
     }
 
     return json({ 

@@ -66,8 +66,10 @@ async function ensureSchema(db) {
     .run();
 }
 
+import { getUserPlan } from '../../_lib/db.js';
+
 async function requirePremium(env, uid) {
-  const plan = (await env.JOBHACKAI_KV?.get(`planByUid:${uid}`)) || 'free';
+  const plan = await getUserPlan(env, uid);
   if (plan !== 'premium') return { ok: false, plan };
   return { ok: true, plan };
 }

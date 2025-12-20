@@ -50,7 +50,7 @@ export async function getOrCreateUserByAuthId(env, authId, email = null) {
   try {
     // Try to find existing user
     const existing = await db.prepare(
-      'SELECT id, auth_id, email, created_at, updated_at FROM users WHERE auth_id = ?'
+      'SELECT id, auth_id, email, plan, created_at, updated_at FROM users WHERE auth_id = ?'
     ).bind(authId).first();
 
     if (existing) {
@@ -75,6 +75,173 @@ export async function getOrCreateUserByAuthId(env, authId, email = null) {
   } catch (error) {
     console.error('[DB] Error in getOrCreateUserByAuthId:', error);
     throw error;
+  }
+}
+
+/**
+ * Get user plan from D1 (source of truth)
+ * @param {Object} env - Cloudflare environment with DB binding
+ * @param {string} authId - Firebase UID
+ * @returns {Promise<string>} Plan name ('free', 'trial', 'essential', 'pro', 'premium')
+ */
+export async function getUserPlan(env, authId) {
+  const db = getDb(env);
+  if (!db) {
+    console.warn('[DB] D1 binding not available, defaulting to free');
+    return 'free';
+  }
+
+  try {
+    const user = await db.prepare(
+      'SELECT plan FROM users WHERE auth_id = ?'
+    ).bind(authId).first();
+    
+    return user?.plan || 'free';
+  } catch (error) {
+    console.error('[DB] Error in getUserPlan:', error);
+    return 'free';
+  }
+}
+
+/**
+ * Update user plan in D1
+ * @param {Object} env - Cloudflare environment with DB binding
+ * @param {string} authId - Firebase UID
+ * @param {Object} planData - Plan update data
+ * @param {string} planData.plan - Plan name
+ * @param {string|null} planData.stripeCustomerId - Stripe customer ID
+ * @param {string|null} planData.stripeSubscriptionId - Stripe subscription ID
+ * @param {string|null} planData.subscriptionStatus - Subscription status
+ * @param {string|null} planData.trialEndsAt - ISO 8601 datetime
+ * @param {string|null} planData.currentPeriodEnd - ISO 8601 datetime
+ * @param {string|null} planData.cancelAt - ISO 8601 datetime
+ * @param {string|null} planData.scheduledPlan - Scheduled plan change
+ * @param {string|null} planData.scheduledAt - ISO 8601 datetime for scheduled change
+ * @returns {Promise<boolean>} Success
+ */
+export async function updateUserPlan(env, authId, {
+  plan,
+  stripeCustomerId = null,
+  stripeSubscriptionId = null,
+  subscriptionStatus = null,
+  trialEndsAt = null,
+  currentPeriodEnd = null,
+  cancelAt = null,
+  scheduledPlan = null,
+  scheduledAt = null
+}) {
+  const db = getDb(env);
+  if (!db) {
+    console.warn('[DB] D1 binding not available');
+    return false;
+  }
+
+  try {
+    // Ensure user exists first
+    await getOrCreateUserByAuthId(env, authId);
+
+    // Build UPDATE query dynamically to only set provided fields
+    const updates = [];
+    const binds = [];
+
+    if (plan !== undefined) {
+      updates.push('plan = ?');
+      binds.push(plan);
+    }
+    if (stripeCustomerId !== undefined) {
+      updates.push('stripe_customer_id = ?');
+      binds.push(stripeCustomerId);
+    }
+    if (stripeSubscriptionId !== undefined) {
+      updates.push('stripe_subscription_id = ?');
+      binds.push(stripeSubscriptionId);
+    }
+    if (subscriptionStatus !== undefined) {
+      updates.push('subscription_status = ?');
+      binds.push(subscriptionStatus);
+    }
+    if (trialEndsAt !== undefined) {
+      updates.push('trial_ends_at = ?');
+      binds.push(trialEndsAt);
+    }
+    if (currentPeriodEnd !== undefined) {
+      updates.push('current_period_end = ?');
+      binds.push(currentPeriodEnd);
+    }
+    if (cancelAt !== undefined) {
+      updates.push('cancel_at = ?');
+      binds.push(cancelAt);
+    }
+    if (scheduledPlan !== undefined) {
+      updates.push('scheduled_plan = ?');
+      binds.push(scheduledPlan);
+    }
+    if (scheduledAt !== undefined) {
+      updates.push('scheduled_at = ?');
+      binds.push(scheduledAt);
+    }
+
+    // Always update timestamps
+    updates.push('plan_updated_at = datetime(\'now\')');
+    updates.push('updated_at = datetime(\'now\')');
+
+    if (updates.length === 2) {
+      // Only timestamps to update - nothing to do
+      return true;
+    }
+
+    binds.push(authId);
+
+    const query = `UPDATE users SET ${updates.join(', ')} WHERE auth_id = ?`;
+    await db.prepare(query).bind(...binds).run();
+
+    console.log('[DB] Updated user plan:', { authId, plan });
+    return true;
+  } catch (error) {
+    console.error('[DB] Error in updateUserPlan:', error);
+    return false;
+  }
+}
+
+/**
+ * Get full user plan data including subscription metadata
+ * @param {Object} env - Cloudflare environment with DB binding
+ * @param {string} authId - Firebase UID
+ * @returns {Promise<Object|null>} User plan data or null
+ */
+export async function getUserPlanData(env, authId) {
+  const db = getDb(env);
+  if (!db) {
+    return null;
+  }
+
+  try {
+    const user = await db.prepare(
+      `SELECT plan, stripe_customer_id, stripe_subscription_id, subscription_status,
+              trial_ends_at, current_period_end, cancel_at, scheduled_plan, scheduled_at,
+              plan_updated_at
+       FROM users WHERE auth_id = ?`
+    ).bind(authId).first();
+
+    if (!user) return null;
+
+    return {
+      plan: user.plan || 'free',
+      stripeCustomerId: user.stripe_customer_id,
+      stripeSubscriptionId: user.stripe_subscription_id,
+      subscriptionStatus: user.subscription_status,
+      trialEndsAt: user.trial_ends_at,
+      currentPeriodEnd: user.current_period_end,
+      cancelAt: user.cancel_at,
+      scheduledPlanChange: user.scheduled_plan && user.scheduled_at ? {
+        newPlan: user.scheduled_plan,
+        effectiveDate: user.scheduled_at
+      } : null,
+      planUpdatedAt: user.plan_updated_at
+    };
+  } catch (error) {
+    console.error('[DB] Error in getUserPlanData:', error);
+    return null;
   }
 }
 

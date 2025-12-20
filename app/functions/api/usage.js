@@ -23,14 +23,7 @@ function corsHeaders(origin, env) {
   };
 }
 
-async function getUserPlan(uid, env) {
-  if (!env.JOBHACKAI_KV) {
-    return 'free';
-  }
-  
-  const plan = await env.JOBHACKAI_KV.get(`planByUid:${uid}`);
-  return plan || 'free';
-}
+import { getUserPlan } from '../_lib/db.js';
 
 export async function onRequest(context) {
   const { request, env } = context;
@@ -58,7 +51,7 @@ export async function onRequest(context) {
     }
 
     const { uid, payload } = await verifyFirebaseIdToken(token, env.FIREBASE_PROJECT_ID);
-    const plan = await getUserPlan(uid, env);
+    const plan = await getUserPlan(env, uid);
     const userEmail = payload.email || null;
 
     // Get usage data from KV

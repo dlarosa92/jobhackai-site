@@ -8,7 +8,7 @@
 
 import { getBearer, verifyFirebaseIdToken } from '../../_lib/firebase-auth.js';
 import { errorResponse, successResponse, generateRequestId } from '../../_lib/error-handler.js';
-import { getOrCreateUserByAuthId, isD1Available } from '../../_lib/db.js';
+import { getOrCreateUserByAuthId, isD1Available, getUserPlan } from '../../_lib/db.js';
 
 function corsHeaders(origin, env) {
   const allowedOrigins = [
@@ -30,19 +30,6 @@ function corsHeaders(origin, env) {
   };
 }
 
-async function getUserPlan(uid, env) {
-  if (!env.JOBHACKAI_KV) {
-    return 'free';
-  }
-
-  try {
-    const plan = await env.JOBHACKAI_KV.get(`planByUid:${uid}`);
-    return plan || 'free';
-  } catch (error) {
-    console.warn('[RESUME-FEEDBACK-LATEST] Failed to fetch plan from KV:', error);
-    return 'free';
-  }
-}
 
 export async function onRequest(context) {
   const { request, env } = context;
@@ -122,7 +109,7 @@ export async function onRequest(context) {
       }
     }
 
-    const plan = await getUserPlan(uid, env);
+    const plan = await getUserPlan(env, uid);
     const isPaidRewrite = plan === 'pro' || plan === 'premium';
     const rewriteLocked = !isPaidRewrite;
     const rawRewritten = feedbackData?.rewrittenResume || null;

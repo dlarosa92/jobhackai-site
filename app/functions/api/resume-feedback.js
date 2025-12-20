@@ -50,23 +50,7 @@ function json(data, status = 200, origin, env) {
   });
 }
 
-async function getUserPlan(uid, env) {
-  if (!env.JOBHACKAI_KV) {
-    console.warn('[RESUME-FEEDBACK] KV not available for plan lookup');
-    return 'free';
-  }
-  
-  try {
-    const plan = await env.JOBHACKAI_KV.get(`planByUid:${uid}`);
-    if (!plan) {
-      console.warn(`[RESUME-FEEDBACK] Plan not found in KV for uid: ${uid}`);
-    }
-    return plan || 'free';
-  } catch (error) {
-    console.error('[RESUME-FEEDBACK] Error fetching plan from KV:', error);
-    return 'free';
-  }
-}
+import { getUserPlan } from '../_lib/db.js';
 
 async function getTrialEndDate(uid, env) {
   if (!env.JOBHACKAI_KV) {
@@ -173,7 +157,7 @@ export async function onRequest(context) {
     // Using isDevOrigin alone prevents matching malicious origins like 'https://evil.com/localhost'
     const isDevEnvironment = env.ENVIRONMENT === 'dev' && isDevOrigin;
     
-    let plan = await getUserPlan(uid, env);
+    let plan = await getUserPlan(env, uid);
     const allowedPlans = ['free', 'trial', 'essential', 'pro', 'premium'];
     if (!allowedPlans.includes(plan)) {
       console.warn('[RESUME-FEEDBACK] Invalid plan detected, normalizing to free', { requestId, uid, plan });
@@ -202,24 +186,24 @@ export async function onRequest(context) {
       // In dev environment, if KV lookup failed, try to fetch plan from plan/me endpoint
       if (env.JOBHACKAI_KV) {
         try {
-          // Try to fetch plan directly from KV one more time with better error handling
-          const directPlan = await env.JOBHACKAI_KV.get(`planByUid:${uid}`);
+          // Try to fetch plan directly from D1 one more time with better error handling
+          const directPlan = await getUserPlan(env, uid);
           if (directPlan && directPlan !== 'free') {
             effectivePlan = directPlan;
-            console.log('[RESUME-FEEDBACK] Found plan via direct KV lookup:', effectivePlan);
+            console.log('[RESUME-FEEDBACK] Found plan via direct D1 lookup:', effectivePlan);
           } else {
             // Still 'free' after direct lookup - upgrade to 'pro' for dev testing
             effectivePlan = 'pro';
             console.log('[RESUME-FEEDBACK] Plan lookup returned free in dev environment, upgrading to pro for testing');
           }
-        } catch (kvError) {
-          console.warn('[RESUME-FEEDBACK] KV lookup failed in dev environment, upgrading to pro for testing:', kvError);
+        } catch (dbError) {
+          console.warn('[RESUME-FEEDBACK] D1 lookup failed in dev environment, upgrading to pro for testing:', dbError);
           effectivePlan = 'pro';
         }
       } else {
-        // KV not available in dev environment - upgrade to 'pro' for testing
+        // D1 not available in dev environment - upgrade to 'pro' for testing
         effectivePlan = 'pro';
-        console.log('[RESUME-FEEDBACK] KV not available in dev environment, upgrading to pro for testing');
+        console.log('[RESUME-FEEDBACK] D1 not available in dev environment, upgrading to pro for testing');
       }
     }
     

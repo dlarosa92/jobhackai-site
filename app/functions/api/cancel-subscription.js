@@ -1,4 +1,5 @@
 import { getBearer, verifyFirebaseIdToken } from '../_lib/firebase-auth.js';
+import { updateUserPlan } from '../_lib/db.js';
 
 export async function onRequest(context) {
   const { request, env } = context;
@@ -24,7 +25,17 @@ export async function onRequest(context) {
     }
   }
   
-  // Clear KV - including resume data when subscription is cancelled
+  // Update D1 - set plan to free when subscription is cancelled
+  await updateUserPlan(env, uid, {
+    plan: 'free',
+    stripeSubscriptionId: null,
+    subscriptionStatus: 'canceled',
+    cancelAt: undefined,
+    scheduledPlan: undefined,
+    scheduledAt: undefined
+  });
+  
+  // TEMPORARY: Also clear KV during migration period
   await env.JOBHACKAI_KV?.delete(`planByUid:${uid}`);
   await env.JOBHACKAI_KV?.delete(`cusByUid:${uid}`);
   await env.JOBHACKAI_KV?.delete(`trialEndByUid:${uid}`);

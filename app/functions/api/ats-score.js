@@ -36,14 +36,7 @@ function json(data, status = 200, origin, env) {
   });
 }
 
-async function getUserPlan(uid, env) {
-  if (!env.JOBHACKAI_KV) {
-    return 'free';
-  }
-  
-  const plan = await env.JOBHACKAI_KV.get(`planByUid:${uid}`);
-  return plan || 'free';
-}
+import { getUserPlan } from '../_lib/db.js';
 
 export async function onRequest(context) {
   const { request, env } = context;
@@ -65,7 +58,7 @@ export async function onRequest(context) {
     }
 
     const { uid } = await verifyFirebaseIdToken(token, env.FIREBASE_PROJECT_ID);
-    const plan = await getUserPlan(uid, env);
+    const plan = await getUserPlan(env, uid);
 
     // Parse request body - accept both resumeId (for KV) and resumeText (for direct scoring)
     const body = await request.json();

@@ -36,19 +36,7 @@ function corsHeaders(origin, env) {
   };
 }
 
-async function getUserPlan(uid, env) {
-  if (!env.JOBHACKAI_KV) {
-    return 'free';
-  }
-
-  try {
-    const plan = await env.JOBHACKAI_KV.get(`planByUid:${uid}`);
-    return plan || 'free';
-  } catch (error) {
-    console.warn('[RESUME-FEEDBACK-HISTORY-DETAIL] Failed to fetch plan from KV:', error);
-    return 'free';
-  }
-}
+import { getUserPlan } from '../../../_lib/db.js';
 
 export async function onRequest(context) {
   const { request, env, params } = context;
@@ -154,7 +142,7 @@ export async function onRequest(context) {
     });
 
     // Plan-based rewrite visibility
-    const plan = await getUserPlan(uid, env);
+    const plan = await getUserPlan(env, uid);
     const isPaidRewrite = plan === 'pro' || plan === 'premium';
     const rewriteLocked = !isPaidRewrite;
 

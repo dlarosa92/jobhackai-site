@@ -1,5 +1,6 @@
 import { getBearer, verifyFirebaseIdToken } from '../../_lib/firebase-auth';
 import { callOpenAI } from '../../_lib/openai-client.js';
+import { getUserPlan } from '../../_lib/db.js';
 
 const DB_BINDING_NAMES = ['JOBHACKAI_DB', 'INTERVIEW_QUESTIONS_DB', 'IQ_D1', 'DB'];
 
@@ -78,8 +79,10 @@ async function ensureSchema(db) {
     .run();
 }
 
+import { getUserPlan } from '../../_lib/db.js';
+
 async function requirePremium(env, uid) {
-  const plan = (await env.JOBHACKAI_KV?.get(`planByUid:${uid}`)) || 'free';
+  const plan = await getUserPlan(env, uid);
   if (plan !== 'premium') return { ok: false, plan };
   return { ok: true, plan };
 }

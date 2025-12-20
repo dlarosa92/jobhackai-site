@@ -1,4 +1,5 @@
 import { getBearer, verifyFirebaseIdToken } from '../../_lib/firebase-auth.js';
+import { getUserPlanData } from '../../_lib/db.js';
 
 export async function onRequest(context) {
   const { request, env } = context;
@@ -15,23 +16,15 @@ export async function onRequest(context) {
     
     const { uid } = await verifyFirebaseIdToken(token, env.FIREBASE_PROJECT_ID);
 
-    // Fetch all subscription-related data from KV
-    const plan = (await env.JOBHACKAI_KV?.get(`planByUid:${uid}`)) || 'free';
-    const trialEnd = await env.JOBHACKAI_KV?.get(`trialEndByUid:${uid}`);
-    const cancelAt = await env.JOBHACKAI_KV?.get(`cancelAtByUid:${uid}`);
-    const periodEnd = await env.JOBHACKAI_KV?.get(`periodEndByUid:${uid}`);
-    const scheduledPlan = await env.JOBHACKAI_KV?.get(`scheduledPlanByUid:${uid}`);
-    const scheduledAt = await env.JOBHACKAI_KV?.get(`scheduledAtByUid:${uid}`);
+    // Fetch plan data from D1 (source of truth)
+    const planData = await getUserPlanData(env, uid);
 
     return new Response(JSON.stringify({ 
-      plan,
-      trialEndsAt: trialEnd ? new Date(parseInt(trialEnd) * 1000).toISOString() : null,
-      cancelAt: cancelAt ? new Date(parseInt(cancelAt) * 1000).toISOString() : null,
-      currentPeriodEnd: periodEnd ? new Date(parseInt(periodEnd) * 1000).toISOString() : null,
-      scheduledPlanChange: scheduledPlan ? {
-        newPlan: scheduledPlan,
-        effectiveDate: new Date(parseInt(scheduledAt) * 1000).toISOString()
-      } : null
+      plan: planData?.plan || 'free',
+      trialEndsAt: planData?.trialEndsAt || null,
+      cancelAt: planData?.cancelAt || null,
+      currentPeriodEnd: planData?.currentPeriodEnd || null,
+      scheduledPlanChange: planData?.scheduledPlanChange || null
     }), {
       headers: corsHeaders(origin, env)
     });

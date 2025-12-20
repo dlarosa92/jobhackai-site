@@ -1,3 +1,5 @@
+import { updateUserPlan } from '../_lib/db.js';
+
 export async function onRequest(context) {
   const { request, env } = context;
   const origin = env.FRONTEND_URL || 'https://dev.jobhackai.io';
@@ -34,20 +36,21 @@ export async function onRequest(context) {
     await env.JOBHACKAI_KV?.put(lockKey, '1', { expirationTtl: 60 }); // 60s lock
   } catch (_) { /* ignore lock failures */ }
 
-  // Helper to set plan by uid in KV; subscription events should win via timestamp ordering
-  const setPlan = async (uid, value, tsSeconds) => {
+  // Helper to update plan in D1 (source of truth) and optionally sync to KV during migration
+  const updatePlanInD1 = async (uid, planData) => {
     if (!uid) return;
-    const tsKey = `planTsByUid:${uid}`;
     try {
-      const last = parseInt((await env.JOBHACKAI_KV?.get(tsKey)) || '0', 10);
-      const nextTs = Number.isFinite(tsSeconds) ? Number(tsSeconds) : Math.floor(Date.now() / 1000);
-      if (nextTs >= last) {
-        await env.JOBHACKAI_KV?.put(kvPlanKey(uid), value);
-        await env.JOBHACKAI_KV?.put(tsKey, String(nextTs));
+      // Write to D1 (source of truth)
+      await updateUserPlan(env, uid, planData);
+      
+      // TEMPORARY: Dual-write to KV during migration period for safety
+      // TODO: Remove KV writes after migration is verified
+      if (planData.plan !== undefined) {
+        await env.JOBHACKAI_KV?.put(kvPlanKey(uid), planData.plan);
       }
-    } catch (_) {
-      // Fallback without ordering if KV read fails
-      await env.JOBHACKAI_KV?.put(kvPlanKey(uid), value);
+    } catch (error) {
+      console.error('[WEBHOOK] Error updating plan in D1:', error);
+      throw error;
     }
   };
 
@@ -90,11 +93,32 @@ export async function onRequest(context) {
       
       console.log(`📝 CHECKOUT DATA: originalPlan=${originalPlan}, priceId=${priceId}, effectivePlan=${effectivePlan}, customerId=${customerId}, uid=${uid}`);
       if (effectivePlan && uid) {
-        console.log(`✍️ WRITING TO KV: planByUid:${uid} = ${effectivePlan}`);
-        await setPlan(uid, effectivePlan, event.created || Math.floor(Date.now()/1000));
-        console.log(`✅ KV WRITE SUCCESS: ${uid} → ${effectivePlan}`);
+        // Get subscription details if available
+        const subscriptionId = sess?.subscription || null;
+        let subscription = null;
+        if (subscriptionId) {
+          try {
+            const subRes = await fetch(`https://api.stripe.com/v1/subscriptions/${subscriptionId}`, {
+              headers: { Authorization: `Bearer ${env.STRIPE_SECRET_KEY}` }
+            });
+            subscription = await subRes.json();
+          } catch (e) {
+            console.warn('[WEBHOOK] Failed to fetch subscription details:', e);
+          }
+        }
+        
+        console.log(`✍️ WRITING TO D1: users.plan = ${effectivePlan} for uid=${uid}`);
+        await updatePlanInD1(uid, {
+          plan: effectivePlan,
+          stripeCustomerId: customerId,
+          stripeSubscriptionId: subscriptionId,
+          subscriptionStatus: subscription?.status || 'active',
+          trialEndsAt: subscription?.trial_end ? new Date(subscription.trial_end * 1000).toISOString() : null,
+          currentPeriodEnd: subscription?.current_period_end ? new Date(subscription.current_period_end * 1000).toISOString() : null
+        });
+        console.log(`✅ D1 WRITE SUCCESS: ${uid} → ${effectivePlan}`);
       } else {
-        console.warn(`⚠️ SKIPPED KV WRITE: effectivePlan=${effectivePlan}, uid=${uid}`);
+        console.warn(`⚠️ SKIPPED PLAN UPDATE: effectivePlan=${effectivePlan}, uid=${uid}`);
       }
     }
 
@@ -118,15 +142,19 @@ export async function onRequest(context) {
       }
       
       console.log(`📝 SUBSCRIPTION DATA: status=${status}, priceId=${pId}, basePlan=${plan}, effectivePlan=${effectivePlan}, uid=${uid}`);
-      console.log(`✍️ WRITING TO KV: planByUid:${uid} = ${effectivePlan}`);
-      await setPlan(uid, effectivePlan, event.created || Math.floor(Date.now()/1000));
-      console.log(`✅ KV WRITE SUCCESS: ${uid} → ${effectivePlan}`);
-
-      // Store trial end date if this is a trial subscription
-      if (effectivePlan === 'trial' && event.data.object.trial_end) {
-        await env.JOBHACKAI_KV?.put(`trialEndByUid:${uid}`, String(event.data.object.trial_end));
-        console.log(`✅ TRIAL END DATE STORED: ${new Date(event.data.object.trial_end * 1000).toISOString()}`);
-      }
+      console.log(`✍️ WRITING TO D1: users.plan = ${effectivePlan} for uid=${uid}`);
+      
+      const sub = event.data.object;
+      await updatePlanInD1(uid, {
+        plan: effectivePlan,
+        stripeCustomerId: customerId,
+        stripeSubscriptionId: sub.id,
+        subscriptionStatus: status,
+        trialEndsAt: sub.trial_end ? new Date(sub.trial_end * 1000).toISOString() : null,
+        currentPeriodEnd: sub.current_period_end ? new Date(sub.current_period_end * 1000).toISOString() : null
+      });
+      
+      console.log(`✅ D1 WRITE SUCCESS: ${uid} → ${effectivePlan}`);
     }
 
     if (event.type === 'customer.subscription.updated') {
@@ -136,17 +164,15 @@ export async function onRequest(context) {
       const uid = await fetchUidFromCustomer(customerId);
       
       // Handle scheduled cancellation
+      let cancelAt = null;
       if (sub.cancel_at_period_end === true && sub.cancel_at) {
-        const cancelTimestamp = sub.cancel_at;
-        await env.JOBHACKAI_KV?.put(`cancelAtByUid:${uid}`, String(cancelTimestamp));
-        console.log(`✅ CANCELLATION SCHEDULED: ${uid} → ${new Date(cancelTimestamp * 1000).toISOString()}`);
-      } else if (sub.cancel_at_period_end === false) {
-        // Cancellation was reversed - clear the flag
-        await env.JOBHACKAI_KV?.delete(`cancelAtByUid:${uid}`);
-        console.log(`✅ CANCELLATION REVERSED: ${uid}`);
+        cancelAt = new Date(sub.cancel_at * 1000).toISOString();
+        console.log(`✅ CANCELLATION SCHEDULED: ${uid} → ${cancelAt}`);
       }
       
       // Handle scheduled plan changes (downgrades)
+      let scheduledPlan = null;
+      let scheduledAt = null;
       const schedulePlan = sub.schedule;
       if (schedulePlan) {
         // Fetch schedule details from Stripe
@@ -158,27 +184,16 @@ export async function onRequest(context) {
         if (schedData && schedData.phases && schedData.phases.length > 1) {
           const nextPhase = schedData.phases[1];
           const nextPriceId = nextPhase.items[0]?.price;
-          const nextPlan = priceToPlan(env, nextPriceId);
-          const transitionTime = nextPhase.start_date;
+          scheduledPlan = priceToPlan(env, nextPriceId);
+          scheduledAt = nextPhase.start_date ? new Date(nextPhase.start_date * 1000).toISOString() : null;
           
-          if (nextPlan && transitionTime) {
-            await env.JOBHACKAI_KV?.put(`scheduledPlanByUid:${uid}`, nextPlan);
-            await env.JOBHACKAI_KV?.put(`scheduledAtByUid:${uid}`, String(transitionTime));
-            console.log(`✅ PLAN CHANGE SCHEDULED: ${uid} → ${nextPlan} at ${new Date(transitionTime * 1000).toISOString()}`);
+          if (scheduledPlan && scheduledAt) {
+            console.log(`✅ PLAN CHANGE SCHEDULED: ${uid} → ${scheduledPlan} at ${scheduledAt}`);
           }
         }
-      } else {
-        // No schedule - clear any existing scheduled change
-        await env.JOBHACKAI_KV?.delete(`scheduledPlanByUid:${uid}`);
-        await env.JOBHACKAI_KV?.delete(`scheduledAtByUid:${uid}`);
       }
       
-      // Store current_period_end for "Renews on" display
-      if (sub.current_period_end) {
-        await env.JOBHACKAI_KV?.put(`periodEndByUid:${uid}`, String(sub.current_period_end));
-      }
-      
-      // Also update current plan status (same logic as created handler)
+      // Determine effective plan status
       const status = sub.status;
       const metadata = sub.metadata || {};
       const originalPlan = metadata.original_plan;
@@ -193,8 +208,17 @@ export async function onRequest(context) {
         effectivePlan = plan || 'essential';
       }
       
-      console.log(`✍️ UPDATING KV: planByUid:${uid} = ${effectivePlan}`);
-      await setPlan(uid, effectivePlan, event.created || Math.floor(Date.now()/1000));
+      console.log(`✍️ UPDATING D1: users.plan = ${effectivePlan} for uid=${uid}`);
+      await updatePlanInD1(uid, {
+        plan: effectivePlan,
+        stripeCustomerId: customerId,
+        stripeSubscriptionId: sub.id,
+        subscriptionStatus: status,
+        currentPeriodEnd: sub.current_period_end ? new Date(sub.current_period_end * 1000).toISOString() : null,
+        cancelAt: cancelAt || undefined, // undefined clears the field
+        scheduledPlan: scheduledPlan || undefined,
+        scheduledAt: scheduledAt || undefined
+      });
     }
 
     if (event.type === 'customer.subscription.deleted') {
@@ -202,13 +226,21 @@ export async function onRequest(context) {
       const customerId = event.data.object.customer || null;
       const uid = await fetchUidFromCustomer(customerId);
       console.log(`📝 DELETION DATA: customerId=${customerId}, uid=${uid}`);
-      console.log(`✍️ WRITING TO KV: planByUid:${uid} = free`);
-      await setPlan(uid, 'free', event.created || Math.floor(Date.now()/1000));
+      console.log(`✍️ WRITING TO D1: users.plan = free for uid=${uid}`);
       
-      // Clean up resume data when subscription is deleted
+      await updatePlanInD1(uid, {
+        plan: 'free',
+        stripeSubscriptionId: null,
+        subscriptionStatus: 'canceled',
+        cancelAt: undefined, // Clear cancellation date
+        scheduledPlan: undefined, // Clear scheduled plan
+        scheduledAt: undefined
+      });
+      
+      // Clean up resume data when subscription is deleted (KV cleanup)
       await env.JOBHACKAI_KV?.delete(`user:${uid}:lastResume`);
       await env.JOBHACKAI_KV?.delete(`usage:${uid}`);
-      console.log(`✅ KV WRITE SUCCESS: ${uid} → free (resume data cleaned up)`);
+      console.log(`✅ D1 WRITE SUCCESS: ${uid} → free (resume data cleaned up)`);
     }
 
   } catch (err) {
@@ -247,5 +279,6 @@ function priceToPlan(env, priceId) {
   if (priceId === premium) return 'premium';
   return null;
 }
+
 
 

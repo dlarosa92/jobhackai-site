@@ -51,19 +51,7 @@ function corsHeaders(origin) {
   };
 }
 
-async function getUserPlan(uid, env) {
-  if (!env.JOBHACKAI_KV) {
-    return 'free';
-  }
-
-  try {
-    const plan = await env.JOBHACKAI_KV.get(`planByUid:${uid}`);
-    return plan || 'free';
-  } catch (error) {
-    console.warn('[MI-SESSION-DETAIL] Failed to fetch plan from KV:', error);
-    return 'free';
-  }
-}
+import { getUserPlan } from '../../../_lib/db.js';
 
 export async function onRequest(context) {
   const { request, env, params } = context;
@@ -177,7 +165,7 @@ export async function onRequest(context) {
     });
 
     // Get user plan and enforce access
-    const plan = await getUserPlan(uid, env);
+    const plan = await getUserPlan(env, uid);
     const allowedDevOrigins = ['https://dev.jobhackai.io', 'http://localhost:3003', 'http://localhost:8788'];
     const isDevOrigin = origin && allowedDevOrigins.includes(origin);
     const isDevEnvironment = env.ENVIRONMENT === 'dev' && isDevOrigin;

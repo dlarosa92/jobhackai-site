@@ -1,4 +1,5 @@
 import { getBearer, verifyFirebaseIdToken } from '../../../_lib/firebase-auth.js';
+import { getUserPlan } from '../../../_lib/db.js';
 
 const DB_BINDING_NAMES = ['JOBHACKAI_DB', 'INTERVIEW_QUESTIONS_DB', 'IQ_D1', 'DB'];
 const RETENTION_DAYS = 90;
@@ -85,7 +86,7 @@ async function ensureSchema(db) {
 }
 
 async function requirePremium(env, uid) {
-  const plan = (await env.JOBHACKAI_KV?.get(`planByUid:${uid}`)) || 'free';
+  const plan = await getUserPlan(env, uid);
   if (plan !== 'premium') return { ok: false, plan };
   return { ok: true, plan };
 }

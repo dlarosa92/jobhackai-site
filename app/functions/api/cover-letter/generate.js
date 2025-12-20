@@ -85,11 +85,7 @@ async function ensureSchema(db) {
     .run();
 }
 
-async function getUserPlan(uid, env) {
-  if (!env.JOBHACKAI_KV) return 'free';
-  const plan = await env.JOBHACKAI_KV.get(`planByUid:${uid}`);
-  return plan || 'free';
-}
+import { getUserPlan } from '../../_lib/db.js';
 
 function normalizeWhitespace(s) {
   return String(s || '')
@@ -166,7 +162,7 @@ export async function onRequest(context) {
     return json(origin, { error: 'unauthorized', reason: e?.message || 'invalid_token' }, 401);
   }
 
-  const plan = await getUserPlan(uid, env);
+  const plan = await getUserPlan(env, uid);
   if (plan !== 'pro' && plan !== 'premium') {
     return json(origin, { error: 'not_authorized' }, 403);
   }
