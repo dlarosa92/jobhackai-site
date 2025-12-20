@@ -847,14 +847,14 @@
         applyBillingData(billingStatusData, 'after successful checkout');
       }
       
-      // Force KV plan fetch when pending or on normal dashboard load (fallback)
+      // Force plan fetch from D1 when pending or on normal dashboard load (fallback)
       if (authState.userPlan === 'pending') {
-        console.log('🔄 Forcing KV plan refresh (pending plan)');
-        if (window.JobHackAINavigation?.fetchKVPlan) {
+        console.log('🔄 Forcing plan refresh from D1 (pending plan)');
+        if (window.JobHackAINavigation?.fetchPlanFromAPI) {
           try {
-            const freshPlan = await window.JobHackAINavigation.fetchKVPlan();
+            const freshPlan = await window.JobHackAINavigation.fetchPlanFromAPI();
             if (freshPlan) {
-              console.log('✅ Fetched fresh plan from KV:', freshPlan);
+              console.log('✅ Fetched fresh plan from D1:', freshPlan);
               localStorage.setItem('user-plan', freshPlan);
               // Force navigation update
               if (window.JobHackAINavigation?.setAuthState) {

@@ -1462,11 +1462,11 @@ async function initializeNavigation() {
                   navLog('info', 'Found plan from billing-status fallback, updating', billingData.plan);
                   localStorage.setItem('user-plan', billingData.plan);
                   localStorage.setItem('dev-plan', billingData.plan);
-                  // Sync to KV asynchronously
+                  // Sync to D1 asynchronously (via sync-stripe-plan which writes to D1)
                   fetch('/api/sync-stripe-plan', {
                     method: 'POST',
                     headers: { Authorization: `Bearer ${token}` }
-                  }).catch(err => navLog('warn', 'Failed to sync plan to KV (non-critical):', err));
+                  }).catch(err => navLog('warn', 'Failed to sync plan to D1 (non-critical):', err));
                 }
               }
             }
@@ -1526,7 +1526,7 @@ async function initializeNavigation() {
     setupMobileNavDelegation();
   }, 100);
   
-  // REMOVED: Do NOT call reconcilePlanFromKV() here - it causes race condition
+  // REMOVED: Do NOT call reconcilePlanFromAPI() here - it causes race condition
   // Plan reconciliation will be handled by:
   // 1. Firebase auth's onAuthStateChanged listener (already implemented)
   // 2. Page-specific DOMContentLoaded handlers that wait for auth
@@ -1560,12 +1560,12 @@ async function initializeNavigation() {
   navLog('info', '=== initializeNavigation() COMPLETE ===');
 }
 
-// --- KV Plan Reconciliation and Post-Checkout Activation ---
-async function fetchKVPlan() {
+// --- Plan Reconciliation from D1 via API ---
+async function fetchPlanFromAPI() {
   try {
     // DEFENSIVE GUARD: Ensure FirebaseAuthManager is loaded
     if (!window.FirebaseAuthManager) {
-      console.log('🔍 fetchKVPlan: FirebaseAuthManager not loaded yet, skipping');
+      console.log('🔍 fetchPlanFromAPI: FirebaseAuthManager not loaded yet, skipping');
       return null;
     }
 
@@ -1574,38 +1574,38 @@ async function fetchKVPlan() {
       try {
         await window.FirebaseAuthManager.waitForAuthReady(1000); // Short timeout
       } catch (e) {
-        console.log('🔍 fetchKVPlan: Auth ready timeout, continuing anyway');
+        console.log('🔍 fetchPlanFromAPI: Auth ready timeout, continuing anyway');
       }
     }
 
     const currentUser = window.FirebaseAuthManager?.getCurrentUser?.();
     if (!currentUser) {
-      console.log('🔍 fetchKVPlan: No current user available');
+      console.log('🔍 fetchPlanFromAPI: No current user available');
       return null;
     }
     
     const idToken = await currentUser.getIdToken?.();
     if (!idToken) {
-      console.log('🔍 fetchKVPlan: No ID token available');
+      console.log('🔍 fetchPlanFromAPI: No ID token available');
       return null;
     }
     
-    console.log('🔍 fetchKVPlan: Fetching plan from API...');
+    console.log('🔍 fetchPlanFromAPI: Fetching plan from D1 via API...');
     const r = await fetch('/api/plan/me', { headers: { Authorization: `Bearer ${idToken}` } });
     if (!r.ok) {
-      console.warn(`🔍 fetchKVPlan: API returned ${r.status} ${r.statusText}`);
+      console.warn(`🔍 fetchPlanFromAPI: API returned ${r.status} ${r.statusText}`);
       return null;
     }
     
     const data = await r.json();
-    console.log('🔍 fetchKVPlan: API response:', data);
+    console.log('🔍 fetchPlanFromAPI: API response:', data);
     
     let plan = data.plan || 'free';
     
     // CRITICAL FIX: If plan is 'free' but user is authenticated, check billing-status as fallback
-    // This handles cases where KV storage is out of sync with Stripe
+    // This handles cases where D1 is out of sync with Stripe (shouldn't happen, but safety net)
     if (plan === 'free' && currentUser) {
-      console.log('🔍 fetchKVPlan: Plan is free, checking billing-status as fallback...');
+      console.log('🔍 fetchPlanFromAPI: Plan is free, checking billing-status as fallback...');
       try {
         const billingRes = await fetch('/api/billing-status', { 
           headers: { Authorization: `Bearer ${idToken}` } 
@@ -1613,24 +1613,24 @@ async function fetchKVPlan() {
         if (billingRes.ok) {
           const billingData = await billingRes.json();
           if (billingData.ok && billingData.plan && billingData.plan !== 'free') {
-            console.log(`🔄 fetchKVPlan: Found plan ${billingData.plan} from billing-status, syncing...`);
+            console.log(`🔄 fetchPlanFromAPI: Found plan ${billingData.plan} from billing-status, syncing to D1...`);
             plan = billingData.plan;
-            // Sync to KV storage
+            // Sync to D1 (via sync-stripe-plan which writes to D1)
             try {
               const syncRes = await fetch('/api/sync-stripe-plan', {
                 method: 'POST',
                 headers: { Authorization: `Bearer ${idToken}` }
               });
               if (syncRes.ok) {
-                console.log('✅ fetchKVPlan: Plan synced to KV storage');
+                console.log('✅ fetchPlanFromAPI: Plan synced to D1');
               }
             } catch (syncError) {
-              console.warn('⚠️ fetchKVPlan: Failed to sync plan to KV:', syncError);
+              console.warn('⚠️ fetchPlanFromAPI: Failed to sync plan to D1:', syncError);
             }
           }
         }
       } catch (billingError) {
-        console.warn('⚠️ fetchKVPlan: Failed to check billing-status:', billingError);
+        console.warn('⚠️ fetchPlanFromAPI: Failed to check billing-status:', billingError);
       }
     }
     
@@ -1643,39 +1643,39 @@ async function fetchKVPlan() {
     
     // Update localStorage with correct plan
     localStorage.setItem('user-plan', plan);
-    console.log(`✅ fetchKVPlan: Successfully fetched plan: ${plan}`);
+    console.log(`✅ fetchPlanFromAPI: Successfully fetched plan from D1: ${plan}`);
     return plan;
   } catch (error) {
-    console.warn('❌ fetchKVPlan: Error fetching plan:', error);
+    console.warn('❌ fetchPlanFromAPI: Error fetching plan:', error);
     return null;
   }
 }
 
-async function reconcilePlanFromKV() {
+async function reconcilePlanFromAPI() {
   const auth = getAuthState();
   if (!auth.isAuthenticated) {
-    console.log('🔍 reconcilePlanFromKV: User not authenticated, skipping');
+    console.log('🔍 reconcilePlanFromAPI: User not authenticated, skipping');
     return;
   }
   
   // Check if FirebaseAuthManager is loaded
   if (!window.FirebaseAuthManager) {
-    console.log('🔍 reconcilePlanFromKV: FirebaseAuthManager not loaded, skipping');
+    console.log('🔍 reconcilePlanFromAPI: FirebaseAuthManager not loaded, skipping');
     return;
   }
   
   // FIX: Add retry mechanism for plan reconciliation
-  let kvPlan = null;
+  let plan = null;
   let retryCount = 0;
   const maxRetries = 3;
   
-  console.log('🔍 reconcilePlanFromKV: Starting plan reconciliation...');
+  console.log('🔍 reconcilePlanFromAPI: Starting plan reconciliation from D1...');
   
-  while (!kvPlan && retryCount < maxRetries) {
+  while (!plan && retryCount < maxRetries) {
     try {
-      kvPlan = await fetchKVPlan();
-      if (kvPlan) {
-        console.log(`✅ Plan reconciliation successful on attempt ${retryCount + 1}:`, kvPlan);
+      plan = await fetchPlanFromAPI();
+      if (plan) {
+        console.log(`✅ Plan reconciliation successful on attempt ${retryCount + 1}:`, plan);
         break;
       }
     } catch (error) {
@@ -1690,13 +1690,13 @@ async function reconcilePlanFromKV() {
   }
   
   const current = localStorage.getItem('user-plan');
-  if (kvPlan && kvPlan !== current) {
-    console.log(`🔄 Updating plan from ${current} to ${kvPlan}`);
-    localStorage.setItem('user-plan', kvPlan);
-    localStorage.setItem('dev-plan', kvPlan);
+  if (plan && plan !== current) {
+    console.log(`🔄 Updating plan from ${current} to ${plan}`);
+    localStorage.setItem('user-plan', plan);
+    localStorage.setItem('dev-plan', plan);
     updateNavigation();
-    try { new BroadcastChannel('auth').postMessage({ type: 'plan-update', plan: kvPlan }); } catch (_) {}
-  } else if (!kvPlan) {
+    try { new BroadcastChannel('auth').postMessage({ type: 'plan-update', plan: plan }); } catch (_) {}
+  } else if (!plan) {
     console.warn('⚠️ Plan reconciliation failed after all retries, keeping current plan:', current);
   }
 }
@@ -1705,7 +1705,7 @@ async function waitForPlanActivationIfNeeded() {
   if (!location.search.includes('paid=1')) return;
   const deadline = Date.now() + 10000; // 10s
   while (Date.now() < deadline) {
-    await reconcilePlanFromKV();
+    await reconcilePlanFromAPI();
     const effective = getEffectivePlan();
     if (effective !== 'free' && effective !== 'trial') break;
     await new Promise(r => setTimeout(r, 500));
@@ -1724,8 +1724,8 @@ window.JobHackAINavigation = {
   showUpgradeModal,
   updateNavigation,
   initializeNavigation,
-  fetchKVPlan,
-  reconcilePlanFromKV,
+  fetchPlanFromAPI,
+  reconcilePlanFromAPI,
   PLANS,
   NAVIGATION_CONFIG
 };
