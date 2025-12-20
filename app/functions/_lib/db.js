@@ -88,8 +88,12 @@ export async function getOrCreateUserByAuthId(env, authId, email = null) {
       'INSERT INTO users (auth_id, email) VALUES (?, ?) RETURNING id, auth_id, email, created_at, updated_at'
     ).bind(authId, email).first();
 
+    if (!result) {
+      throw new Error('Failed to create user: INSERT returned null');
+    }
+
     // Add plan property if it wasn't returned (pre-migration state)
-    if (result && !result.plan) {
+    if (!result.plan) {
       result.plan = 'free';
     }
 

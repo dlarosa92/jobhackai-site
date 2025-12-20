@@ -30,8 +30,12 @@ echo ""
 check_column_exists() {
     local db_name=$1
     local column_name=$2
+    # Query PRAGMA table_info and use exact column name matching
+    # Use grep with word boundaries to avoid partial matches (e.g., "plan" matching "scheduled_plan")
+    # The PRAGMA output is JSON, so we look for the exact column name in the "name" field
     local result=$(wrangler d1 execute "$db_name" \
-        --command="PRAGMA table_info(users);" 2>/dev/null | grep -i "$column_name" || echo "")
+        --command="PRAGMA table_info(users);" \
+        --json 2>/dev/null | grep -oE "\"name\"\s*:\s*\"${column_name}\"" || echo "")
     [ -n "$result" ]
 }
 
