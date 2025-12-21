@@ -4930,7 +4930,6 @@
       if (plan === 'free') {
         const headerBadge = document.getElementById('rf-header-plan-badge');
         const headerDesc = document.getElementById('rf-header-desc');
-        const planInfo = document.getElementById('rf-header-plan-info');
         
         if (headerBadge) {
           headerBadge.textContent = 'Free Plan';
@@ -4939,7 +4938,6 @@
         if (headerDesc) {
           headerDesc.textContent = 'Get your basic ATS compatibility score.';
         }
-        if (planInfo) planInfo.style.display = 'none';
 
         if (feedbackTile) {
           const badge = feedbackTile.querySelector('.rf-title .rf-plan-badge');
@@ -4968,25 +4966,13 @@
       else if (plan === 'trial') {
         const headerBadge = document.getElementById('rf-header-plan-badge');
         const headerDesc = document.getElementById('rf-header-desc');
-        const planInfo = document.getElementById('rf-header-plan-info');
         
         if (headerBadge) {
           headerBadge.textContent = 'Trial Plan';
           headerBadge.style.background = '#FF9100';
         }
         if (headerDesc) {
-          headerDesc.textContent = 'Your trial includes 3 full ATS score & feedback runs.';
-        }
-        if (planInfo) {
-          planInfo.style.display = 'block';
-          planInfo.innerHTML = `
-            <div style="color: var(--color-text-main, #1F2937); font-size: 0.95rem; line-height: 1.5;">
-              <strong style="color: var(--color-text-main, #1F2937);">Your trial includes 3 total detailed feedback runs.</strong>
-              <span style="display: block; margin-top: 0.35rem; color: var(--color-text-secondary, #4B5563); font-weight: 400;">
-                Each run combines ATS scoring with detailed feedback, so you know exactly what to fix before you apply.
-              </span>
-            </div>
-          `;
+          headerDesc.textContent = 'Your trial includes 3 full ATS score & feedback runs. Each run combines ATS scoring with detailed feedback, so you know exactly what to fix before you apply.';
         }
 
         // Trial feedback: 3 full runs total during trial
@@ -5040,7 +5026,6 @@
       else if (plan === 'essential') {
         const headerBadge = document.getElementById('rf-header-plan-badge');
         const headerDesc = document.getElementById('rf-header-desc');
-        const planInfo = document.getElementById('rf-header-plan-info');
         
         if (headerBadge) {
           headerBadge.textContent = 'Essential Plan';
@@ -5049,7 +5034,6 @@
         if (headerDesc) {
           headerDesc.textContent = 'Receive an overall ATS compliance score for your resume, highlighting key areas to improve.';
         }
-        if (planInfo) planInfo.style.display = 'none';
 
         // Essential: 3 feedbacks/month
         if (feedbackTile) {
@@ -5127,7 +5111,6 @@
         
         const headerBadge = document.getElementById('rf-header-plan-badge');
         const headerDesc = document.getElementById('rf-header-desc');
-        const planInfo = document.getElementById('rf-header-plan-info');
         
         if (headerBadge) {
           headerBadge.textContent = planLabel;
@@ -5136,7 +5119,6 @@
         if (headerDesc) {
           headerDesc.textContent = 'Upload your resume once. Improve it step-by-step with ATS insights, role-specific feedback, and AI-powered rewrites!';
         }
-        if (planInfo) planInfo.style.display = 'none';
 
         if (feedbackTile) {
           const badge = feedbackTile.querySelector('.rf-title .rf-plan-badge');
@@ -5216,29 +5198,32 @@
             const usage = usageData.usage.resumeFeedback;
             const plan = usageData.plan;
 
-            // Clear container first
-            usageContainer.innerHTML = '';
-            
-            // Build plan-specific copy focused on feedback runs
-            let customText = '';
-            if (plan === 'trial') {
-              customText = `${usage.used || 0} of ${usage.limit || 3} feedback runs used during your trial`;
-            } else if (plan === 'essential') {
-              customText = `${usage.used || 0} of ${usage.limit || 3} feedback runs used this month`;
-            }
+          // Clear container first and insert a child for the indicator
+          usageContainer.innerHTML = '';
+          const indicatorDiv = document.createElement('div');
+          usageContainer.appendChild(indicatorDiv);
 
-            // Render usage indicator using the shared component
-            if (window.renderUsageIndicator) {
-              window.renderUsageIndicator({
-                feature: 'resumeFeedback',
-                usage: usage,
-                plan: plan,
-                container: usageContainer,
-                customText: customText
-              });
-            } else {
-              console.warn('[RESUME-FEEDBACK] Usage indicator component not loaded');
-            }
+          // Build plan-specific copy focused on feedback runs
+          let customText = '';
+          if (plan === 'trial') {
+            customText = `${usage.used || 0} of ${usage.limit || 3} feedback runs used during your trial`;
+          } else if (plan === 'essential') {
+            customText = `${usage.used || 0} of ${usage.limit || 3} feedback runs used this month`;
+          }
+
+          // Render usage indicator using the shared component
+          if (window.renderUsageIndicator) {
+            window.renderUsageIndicator({
+              feature: 'resumeFeedback',
+              usage: usage,
+              plan: plan,
+              container: indicatorDiv,
+              customText: customText
+            });
+          } else {
+            console.warn('[RESUME-FEEDBACK] Usage indicator component not loaded');
+            indicatorDiv.innerHTML = `<div class="usage-indicator">Usage information unavailable. Please refresh and try again.</div>`;
+          }
           }
         } catch (error) {
           console.error('[RESUME-FEEDBACK] Error loading usage indicator:', error);
@@ -6659,18 +6644,8 @@
           <!-- Divider (matching interview questions style) -->
           <div style="margin-top: 1.25rem; padding-top: 1rem; border-top: 1px solid var(--color-divider);"></div>
           
-          <!-- Plan-Specific Information (Trial/Essential) -->
-          <div id="rf-header-plan-info" style="display: none; margin-top: 1rem; padding: 0.875rem 1rem; background: var(--color-bg-light, #F9FAFB); border-radius: var(--radius-md, 8px); border-left: 3px solid var(--color-accent-blue, #007BFF);">
-            <div style="color: var(--color-text-main, #1F2937); font-size: 0.95rem; line-height: 1.5;">
-              <strong style="color: var(--color-text-main, #1F2937);">Your trial includes 3 total detailed feedback runs.</strong>
-              <span style="display: block; margin-top: 0.35rem; color: var(--color-text-secondary, #4B5563); font-weight: 400;">
-                Each run combines ATS scoring with detailed feedback, so you know exactly what to fix before you apply.
-              </span>
-            </div>
-          </div>
-          
           <!-- Usage Indicator Container -->
-          <div class="rf-plan-limit" id="rf-header-usage-container" style="margin-top: 1rem;">
+          <div class="rf-plan-limit" id="rf-header-usage-container" style="margin-top: 1rem; display:flex; justify-content:flex-start;">
             <!-- Usage indicators will be populated by JavaScript -->
           </div>
         </section>
