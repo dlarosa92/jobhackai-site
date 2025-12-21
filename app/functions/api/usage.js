@@ -249,14 +249,14 @@ export async function onRequest(context) {
             
             // Normalize old format for daily usage
             // Old format stored questions (multiples of 10), new format stores sets (1 per set)
-            // Use threshold of dailyLimit * 10 to distinguish old format from new format at limit
-            // Example: Trial user (limit 10) with 10 sets used:
-            //   - New format: stored as 10 (should NOT normalize)
-            //   - Old format: stored as 100 (should normalize to 10)
-            // Threshold of 100 ensures we only normalize clearly old-format values
+            // Normalize if value is > dailyLimit AND multiple of 10 (clearly old format)
+            // Values <= dailyLimit that are multiples of 10 are ambiguous (could be old or new format)
+            //   - Assume new format (don't normalize) to be safe for display
+            //   - Worst case: old format value at limit shows correctly as limit (e.g., 10 sets)
+            // Example: Trial user (limit 10) with old format 50 (5 sets) → normalize to 5
+            // Example: Trial user (limit 10) with old format 10 (1 set) → don't normalize (assume new format 10 sets)
             let normalizedDaily = dailyUsed;
-            const normalizationThreshold = dailyLimit * 10;
-            if (dailyUsed >= normalizationThreshold && dailyUsed >= 10 && dailyUsed % 10 === 0) {
+            if (dailyUsed > dailyLimit && dailyUsed >= 10 && dailyUsed % 10 === 0) {
               normalizedDaily = Math.floor(dailyUsed / 10);
             }
             
