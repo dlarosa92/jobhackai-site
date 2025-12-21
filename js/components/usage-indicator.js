@@ -148,7 +148,7 @@ function renderUsageIndicator({ feature, usage, plan, container, customText }) {
         </svg>
         <span style="color: var(--color-text-secondary); font-size: 0.95rem;">
           ${customText || `${used} / ${usage.limit} used`}
-          ${usage.remaining !== null ? ` • ${usage.remaining} remaining` : ''}
+          ${usage.remaining !== null ? ` • ${usage.remaining} remaining${plan === 'trial' ? ' in your trial' : ''}` : ''}
         </span>
       </div>
     `);
