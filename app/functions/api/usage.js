@@ -122,11 +122,43 @@ export async function onRequest(context) {
       usage.resumeFeedback.remaining = Math.max(0, 3 - usage.resumeFeedback.used);
     } else if (plan === 'trial' && env.JOBHACKAI_KV) {
       // Trial: total limit (3 feedbacks for entire trial period)
-      const totalKey = `feedbackTrialTotal:${uid}`;
+      // Fixed: Changed key from feedbackTrialTotal to feedbackTotalTrial to match write key in resume-feedback.js
+      const totalKey = `feedbackTotalTrial:${uid}`;
       const totalUsed = await env.JOBHACKAI_KV.get(totalKey);
       usage.resumeFeedback.used = totalUsed ? parseInt(totalUsed, 10) : 0;
       usage.resumeFeedback.limit = 3;
       usage.resumeFeedback.remaining = Math.max(0, 3 - usage.resumeFeedback.used);
+    }
+
+    // Check feedback usage for Pro/Premium from D1 usage_events table
+    if ((plan === 'pro' || plan === 'premium') && isD1Available(env)) {
+      try {
+        const d1User = await getOrCreateUserByAuthId(env, uid, userEmail);
+        if (d1User && d1User.id) {
+          // Get current month's usage by counting resume_feedback events
+          const now = new Date();
+          const year = now.getUTCFullYear();
+          const month = String(now.getUTCMonth() + 1).padStart(2, '0');
+          const monthStart = `${year}-${month}-01`;
+          const monthEnd = `${year}-${month}-31`;
+          
+          const result = await env.DB.prepare(
+            `SELECT COUNT(*) as count FROM usage_events
+             WHERE user_id = ? AND feature = 'resume_feedback'
+             AND date(created_at) >= date(?) AND date(created_at) <= date(?)`
+          ).bind(d1User.id, monthStart, monthEnd).first();
+          
+          const totalUsed = (result && result.count !== null && result.count !== undefined) 
+            ? Number(result.count) 
+            : 0;
+          
+          usage.resumeFeedback.used = totalUsed;
+          // limit and remaining stay null for unlimited plans
+        }
+      } catch (error) {
+        console.error('[USAGE] Error getting resume feedback usage for Pro/Premium:', error);
+        // Keep default 0 on error
+      }
     }
 
     // Check rewrite usage (Pro/Premium: 45s cooldown, KV TTL minimum is 60s)
