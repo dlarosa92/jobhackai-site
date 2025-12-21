@@ -3462,6 +3462,13 @@
               }
             } catch (feedbackError) {
               console.error('[RESUME-FEEDBACK] Error processing feedback result:', feedbackError);
+              
+              // Ensure helpful message is shown in description area even if processing fails
+              updateRoleTipsState({
+                hasAtsScore: !!atsScoringSucceeded,
+                roleSpecificFeedback: null
+              });
+              
               // Don't show error modal - ATS score is already visible, feedback is optional
             }
           } else if (feedbackSettled.status === 'rejected') {
@@ -3781,6 +3788,9 @@
             }
           }
 
+          let scoreResult = null;
+          let scoreUpdated = false;
+
           try {
             showLoadingState('Regenerating feedback...');
             this.disabled = true;
@@ -3793,8 +3803,6 @@
             const feedbackPromise = getResumeFeedback(currentResumeId, jobTitle);
             const [atsSettled, feedbackSettled] = await Promise.allSettled([atsPromise, feedbackPromise]);
 
-            let scoreResult = null;
-            let scoreUpdated = false;
             if (atsSettled.status === 'fulfilled' && atsSettled.value) {
               const possibleScore = atsSettled.value;
               if (possibleScore.success && possibleScore.score !== undefined && possibleScore.breakdown) {
@@ -4086,7 +4094,7 @@
             if (window.JobHackAIStatePersistence) {
               cachedScore = window.JobHackAIStatePersistence.loadATSScore(null);
             }
-            const hasAtsScore = !!(cachedScore?.score);
+            const hasAtsScore = !!(scoreResult?.success || cachedScore?.score);
             
             updateRoleTipsState({
               hasAtsScore,
