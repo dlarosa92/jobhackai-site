@@ -3454,9 +3454,11 @@
               if (toastStatus === 'tips_ok' || toastStatus === 'tips_only') {
                 setRoleStatus('Role-specific tips updated.');
               } else if (toastStatus === 'ats_only') {
-                setRoleStatus('ATS score is ready. Role-specific tips are still loading—retry if needed.');
+                // Don't set status - let updateRoleTipsState handle the message in description area
+                setRoleStatus(''); // Clear status, description area will show helpful message
             } else if (toastStatus === 'missing') {
-              setRoleStatus('Couldn’t refresh tips—retry.');
+                // Don't set status - let updateRoleTipsState handle the message in description area
+                setRoleStatus(''); // Clear status, description area will show helpful message
               }
             } catch (feedbackError) {
               console.error('[RESUME-FEEDBACK] Error processing feedback result:', feedbackError);
@@ -3469,7 +3471,7 @@
             
             // Hide role feedback container since we don't have valid feedback data
             hideRoleFeedback();
-            setRoleStatus('Couldn’t refresh tips—retry.');
+            setRoleStatus(''); // Clear status, description area will show helpful message via updateRoleTipsState
             
             // Show error modal but keep ATS score visible
             if (window.showErrorModal) {
@@ -3846,7 +3848,7 @@
               const error = feedbackSettled.status === 'rejected' ? feedbackSettled.reason : new Error('No feedback result');
               console.warn('[RESUME-FEEDBACK] Feedback generation failed (non-blocking):', error);
               hideRoleFeedback();
-              setRoleStatus('Couldn’t refresh tips—retry.');
+              setRoleStatus(''); // Clear status, description area will show helpful message via updateRoleTipsState
               if (window.showErrorModal) {
                 const errorMsg = error.message || 'Failed to generate feedback. Your ATS score is still available.';
                 window.showErrorModal('Feedback Generation Failed', errorMsg, {
@@ -4043,9 +4045,11 @@
             if (toastStatus === 'tips_ok' || toastStatus === 'tips_only') {
               setRoleStatus('Role-specific tips updated.');
             } else if (toastStatus === 'ats_only') {
-              setRoleStatus('ATS score is ready. Role-specific tips are still loading—retry if needed.');
+              // Don't set status - let updateRoleTipsState handle the message in description area
+              setRoleStatus(''); // Clear status, description area will show helpful message
             } else if (toastStatus === 'missing') {
-              setRoleStatus('Couldn’t refresh tips—retry.');
+              // Don't set status - let updateRoleTipsState handle the message in description area
+              setRoleStatus(''); // Clear status, description area will show helpful message
             }
 
             this.textContent = 'Regenerate Feedback';
@@ -4254,11 +4258,8 @@
       } else if (status === 'tips_only') {
         window.JobHackAIToast.success('Role-specific tips updated.');
       } else if (status === 'ats_only') {
-        if (window.JobHackAIToast.info) {
-          window.JobHackAIToast.info('ATS score is ready. Role-specific tips are still loading—retry if needed.');
-        } else {
-          window.JobHackAIToast.success('ATS score is ready. Role-specific tips are still loading—retry if needed.');
-        }
+        // Don't show toast - description area will show helpful message
+        // Toast is redundant and confusing when tips are missing
       }
       return status;
     }
