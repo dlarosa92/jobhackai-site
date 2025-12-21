@@ -1,5 +1,5 @@
 import { getBearer, verifyFirebaseIdToken } from '../_lib/firebase-auth.js';
-import { getOrCreateUserByAuthId, isD1Available } from '../_lib/db.js';
+import { getOrCreateUserByAuthId, isD1Available, getFeatureDailyUsage } from '../_lib/db.js';
 
 function corsHeaders(origin, env) {
   const allowedOrigins = [
@@ -225,6 +225,45 @@ export async function onRequest(context) {
           }
           
           usage.interviewQuestions.used = totalUsed;
+          
+          // Get daily usage for interview questions
+          const PLAN_LIMITS = {
+            trial: 10,
+            essential: 10,
+            pro: 20,
+            premium: 50
+          };
+          
+          const dailyLimit = PLAN_LIMITS[plan];
+          if (dailyLimit) {
+            const today = new Date().toISOString().slice(0, 10); // 'YYYY-MM-DD' UTC
+            const dailyResult = await env.DB.prepare(
+              `SELECT count FROM feature_daily_usage
+               WHERE user_id = ? AND feature = 'interview_questions'
+               AND usage_date = ?`
+            ).bind(d1User.id, today).first();
+            
+            const dailyUsed = (dailyResult && dailyResult.count !== null && dailyResult.count !== undefined) 
+              ? Number(dailyResult.count) 
+              : 0;
+            
+            // Normalize old format for daily usage
+            // Old format stored questions (multiples of 10), new format stores sets (1 per set)
+            // Normalize if value is > dailyLimit AND multiple of 10 (clearly old format)
+            // Values <= dailyLimit that are multiples of 10 are ambiguous (could be old or new format)
+            //   - Assume new format (don't normalize) to be safe for display
+            //   - Worst case: old format value at limit shows correctly as limit (e.g., 10 sets)
+            // Example: Trial user (limit 10) with old format 50 (5 sets) → normalize to 5
+            // Example: Trial user (limit 10) with old format 10 (1 set) → don't normalize (assume new format 10 sets)
+            let normalizedDaily = dailyUsed;
+            if (dailyUsed > dailyLimit && dailyUsed >= 10 && dailyUsed % 10 === 0) {
+              normalizedDaily = Math.floor(dailyUsed / 10);
+            }
+            
+            usage.interviewQuestions.dailyUsed = normalizedDaily;
+            usage.interviewQuestions.dailyLimit = dailyLimit;
+            usage.interviewQuestions.dailyRemaining = Math.max(0, dailyLimit - normalizedDaily);
+          }
         }
       } catch (error) {
         console.error('[USAGE] Error getting interview questions usage:', error);

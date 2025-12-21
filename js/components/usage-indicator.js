@@ -173,7 +173,81 @@ export function renderUsageIndicator({ feature, usage, plan, container, customTe
 
     const used = usage && usage.used !== null && usage.used !== undefined ? usage.used : null;
 
-    if (used !== null) {
+    // Special handling for interview questions with daily limits
+    if (feature === 'interviewQuestions' && usage && usage.dailyLimit !== null && usage.dailyLimit !== undefined && usage.dailyLimit > 0) {
+      const dailyUsed = usage.dailyUsed !== null && usage.dailyUsed !== undefined ? usage.dailyUsed : 0;
+      const dailyLimit = usage.dailyLimit;
+      const dailyRemaining = usage.dailyRemaining !== null && usage.dailyRemaining !== undefined ? usage.dailyRemaining : Math.max(0, dailyLimit - dailyUsed);
+      const dailyPercentage = (dailyUsed / dailyLimit) * 100;
+      
+      // Color thresholds for daily usage
+      const isHighUsage = dailyPercentage > 90; // > 90% used = error (red)
+      const isMediumUsage = dailyPercentage >= 66 && dailyPercentage <= 90; // 66-90% used = warning (yellow)
+      
+      // Circular progress indicator for daily usage
+      const radius = 16;
+      const circumference = 2 * Math.PI * radius;
+      const dailyOffset = circumference - (dailyPercentage / 100) * circumference;
+      
+      ariaLabel = `${featureName}: ${dailyUsed} of ${dailyLimit} sets used today, ${dailyRemaining} remaining today; ${used || 0} sets used this month (unlimited)`;
+      
+      // Build daily usage indicator
+      let dailyIndicatorHTML = `
+        <div class="usage-indicator__meter" style="
+          display: inline-flex;
+          align-items: center;
+          gap: 0.5rem;
+        ">
+          <svg width="36" height="36" viewBox="0 0 36 36" style="transform: rotate(-90deg);" aria-hidden="true">
+            <circle cx="18" cy="18" r="${radius}" fill="none" stroke="var(--color-divider)" stroke-width="3"/>
+            <circle 
+              cx="18" 
+              cy="18" 
+              r="${radius}" 
+              fill="none" 
+              stroke="${isHighUsage ? 'var(--color-error)' : isMediumUsage ? 'var(--color-warning)' : 'var(--color-cta-green)'}" 
+              stroke-width="3"
+              stroke-dasharray="${circumference}"
+              stroke-dashoffset="${dailyOffset}"
+              stroke-linecap="round"
+              style="transition: stroke-dashoffset 0.3s ease;"
+            />
+          </svg>
+          <span style="color: var(--color-text-secondary); font-size: 0.95rem;">
+            ${dailyUsed} / ${dailyLimit} sets today
+            ${dailyRemaining > 0 ? ` • ${dailyRemaining} remaining` : ''}
+          </span>
+        </div>
+      `;
+      
+      // Add monthly usage indicator below daily (if monthly data available)
+      if (used !== null) {
+        dailyIndicatorHTML += `
+          <div class="usage-indicator__meter" style="
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-top: 0.5rem;
+          ">
+            <svg width="36" height="36" viewBox="0 0 36 36" aria-hidden="true" style="flex-shrink: 0;">
+              <path
+                d="M 6 18 C 6 12, 14 12, 18 18 C 22 24, 30 24, 30 18 C 30 12, 22 12, 18 18 C 14 24, 6 24, 6 18"
+                fill="none"
+                stroke="var(--color-cta-green)"
+                stroke-width="2.5"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              />
+            </svg>
+            <span style="color: var(--color-text-secondary); font-size: 0.95rem;">
+              ${customText || `Sets generated this month: ${used}`}
+            </span>
+          </div>
+        `;
+      }
+      
+      contentHTML = dailyIndicatorHTML;
+    } else if (used !== null) {
       // Determine the feature-specific label
       const featureLabel = feature === 'mockInterviews' ? 'Sessions' :
                           feature === 'interviewQuestions' ? 'Sets' :

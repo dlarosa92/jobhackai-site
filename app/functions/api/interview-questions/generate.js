@@ -389,15 +389,15 @@ export async function onRequest(context) {
       // Normalize old format (questions) to new format (sets)
       // Old system stored multiples of 10 (10 questions per set)
       // New system stores individual sets (1 per set)
-      // Detection: If value is >= 10, multiple of 10, and >= dailyLimit, it's likely old format
-      // Edge case: If value equals dailyLimit and is multiple of 10, it could be:
-      //   - Old format: 10 questions = 1 set (for trial/essential limit of 10)
-      //   - New format: 10 sets (legitimate, but user would be at limit)
-      // We convert if >= dailyLimit to handle edge cases (10, 20, 50) which are more likely old format
-      // This is safe because: if it's new format and user is at limit, they'll be blocked anyway
+      // Normalize if value is > dailyLimit AND multiple of 10 (clearly old format)
+      // Values <= dailyLimit that are multiples of 10 are ambiguous (could be old or new format)
+      //   - Assume new format (don't normalize) to be safe for quota enforcement
+      //   - Worst case: old format value at limit shows correctly as limit (e.g., 10 sets)
+      // Example: Trial user (limit 10) with old format 50 (5 sets) → normalize to 5
+      // Example: Trial user (limit 10) with old format 10 (1 set) → don't normalize (assume new format 10 sets)
       let needsNormalization = false;
       let normalizedValue = used;
-      if (used >= dailyLimit && used >= 10 && used % 10 === 0) {
+      if (used > dailyLimit && used >= 10 && used % 10 === 0) {
         const oldValue = used;
         normalizedValue = Math.floor(used / 10);
         needsNormalization = true;
