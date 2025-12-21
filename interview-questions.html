@@ -1694,6 +1694,12 @@
 
       document.querySelectorAll('.rf-history-item.is-selected').forEach(el => el.classList.remove('is-selected'));
 
+      // Explicitly reset generate button text in case it was set to "Daily Limit Reached"
+      const genBtn = $IQ('#btn-generate');
+      if (genBtn) {
+        genBtn.textContent = 'Generate 10 Questions';
+      }
+
       iqRenderQuestions();
       iqUpdateSelectionSummary();
       iqUpdateActionsLayout();
@@ -3464,6 +3470,11 @@ function initIQPage(){
       iqUpdateActionsLayout(); 
       window.addEventListener('resize', iqUpdateActionsLayout);
       renderGenerateCooldownIndicator();
+      
+      // Initialize Start Fresh button state (must be called after iqUpdateActionsLayout 
+      // since that function returns early when there's no set, but we still need to 
+      // disable the button on initial page load)
+      updateStartFreshButtonState();
       
       // Cleanup timers on page unload to prevent memory leaks
       window.addEventListener('beforeunload', () => {
