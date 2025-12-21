@@ -5248,92 +5248,9 @@
     // Initialize usage indicator on load
     window.addEventListener('load', refreshUsageIndicator);
 
-    // --- PLAN LOGIC ---
-    // Update plan badges and unlock features based on user plan
-    document.addEventListener('DOMContentLoaded', function() {
-      const updatePlanUI = () => {
-        const userPlan = getCurrentUserPlan();
-        
-        // Update all plan badges
-        document.querySelectorAll('.rf-plan-badge').forEach(badge => {
-          // Determine badge color based on plan
-          let bgColor = 'var(--color-accent-blue)'; // Trial/Essential blue
-          if (userPlan === 'pro') bgColor = '#388E3C'; // Pro green
-          if (userPlan === 'premium') bgColor = '#C62828'; // Premium red
-          if (userPlan === 'free') bgColor = '#6B7280'; // Free gray
-          
-          badge.style.background = bgColor;
-          badge.textContent = userPlan.charAt(0).toUpperCase() + userPlan.slice(1) + ' Plan';
-        });
-        
-        // Unlock ATS scoring and feedback for trial and above
-        if (['trial', 'essential', 'pro', 'premium'].includes(userPlan)) {
-          const atsSection = document.getElementById('ats-section');
-          if (atsSection) atsSection.classList.remove('locked');
-          
-          // Show feedback content, hide upgrade prompts
-          const feedbackContent = document.getElementById('rf-feedback-content');
-          const feedbackUpgradePrompt = document.querySelector('#rf-feedback-tile .rf-upgrade-prompt');
-          if (feedbackContent && ['pro', 'premium'].includes(userPlan)) {
-            feedbackContent.style.display = 'block';
-            console.log('[RESUME-FEEDBACK] Showing feedback content for plan:', userPlan);
-          }
-          if (feedbackUpgradePrompt) feedbackUpgradePrompt.style.display = 'none';
-        }
-        
-        // Pro/Premium: Unlock resume rewriting
-        if (['pro', 'premium'].includes(userPlan)) {
-          const rewriteContent = document.getElementById('rf-rewrite-content');
-          const rewriteUpgradePrompt = document.querySelector('#rf-rewrite-tile .rf-upgrade-prompt');
-          const rewriteBadge = document.querySelector('#rf-rewrite-tile .rf-plan-badge');
-          
-          // Show rewrite content, hide upgrade prompt
-          if (rewriteContent) {
-            rewriteContent.style.display = 'block';
-            console.log('[RESUME-FEEDBACK] Showing rewrite content for plan:', userPlan);
-          }
-          if (rewriteUpgradePrompt) rewriteUpgradePrompt.style.display = 'none';
-          
-          // Update rewrite badge
-          if (rewriteBadge) {
-            rewriteBadge.style.background = userPlan === 'premium' ? '#C62828' : '#388E3C';
-            rewriteBadge.textContent = userPlan === 'premium' ? 'Premium' : 'Pro';
-          }
-        } else {
-          // Non-Pro: Show upgrade prompt, hide rewrite content
-          const rewriteContent = document.getElementById('rf-rewrite-content');
-          const rewriteUpgradePrompt = document.querySelector('#rf-rewrite-tile .rf-upgrade-prompt');
-          const rewriteBadge = document.querySelector('#rf-rewrite-tile .rf-plan-badge');
-          
-          if (rewriteContent) rewriteContent.style.display = 'none';
-          if (rewriteUpgradePrompt) rewriteUpgradePrompt.style.display = 'flex';
-          
-          // Gray out rewrite badge
-          if (rewriteBadge) {
-            rewriteBadge.style.background = '#6B7280';
-            rewriteBadge.textContent = 'Pro Only';
-          }
-        }
-        
-        // Update plan limit text
-        updatePlanLimitText();
-      };
-      
-      // Update on load
-      updatePlanUI();
-      
-      // Listen for plan changes (cross-tab via localStorage)
-      window.addEventListener('storage', function(e) {
-        if (e.key === 'dev-plan' || e.key === 'user-plan') {
-          updatePlanUI();
-        }
-      });
-       
-      // Listen for custom plan change events
-      window.addEventListener('planChanged', function(e) {
-        updatePlanUI();
-      });
-    });
+    // --- PLAN UI ---
+    // Plan badge + gating are handled by the navigation-driven plan system via `updateRfTileForPlan()`.
+    // Do NOT re-implement a second plan UI updater here (it caused Trial badge color regressions by overwriting state).
 
     // =======================================================
     // RESUME FEEDBACK HISTORY (D1-backed)
@@ -6622,7 +6539,7 @@
       getCurrentSessionId: () => _currentHistoricalSessionId
     };
   </script>
-  <script src="js/components/usage-indicator.js" type="module"></script>
+  <script src="js/components/usage-indicator.js"></script>
   <script src="js/main.js" type="module"></script>
 
   <!-- page content -->
