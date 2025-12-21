@@ -2878,23 +2878,14 @@
         iqSavePrefs(); 
         iqRenderQuestions(); 
         iqUpdateSavedChip(); 
-        iqUpdateSelectionSummary();
         const setId=iqSetId(setObj.role,setObj.seed); 
         iqAddRecent({ id: setId, role: setObj.role, count: setObj.count||IQ_FIXED_COUNT, time: iqNow() }); 
         iqSaveSetFull(setObj); 
         iqRenderRecents();
         
-        // Show action bar after first set exists
-        const actionBar = $IQ('#iq-actions-bar');
-        if (actionBar) {
-          actionBar.style.display = '';
-        }
-        
-        // Show selection summary
-        const selSummary = $IQ('#iq-selection-summary');
-        if (selSummary) {
-          selSummary.style.display = '';
-        }
+        // Update action bar, selection summary, and Start Fresh button state
+        // (iqUpdateActionsLayout() handles all of this and calls updateStartFreshButtonState())
+        iqUpdateActionsLayout();
       iqStartGlobalCooldown(IQ_GLOBAL_COOLDOWN);
         
         // Refresh usage counter after successful generation with retry logic
