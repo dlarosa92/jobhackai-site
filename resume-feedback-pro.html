@@ -5174,7 +5174,7 @@
       if (headerCard && usageContainer) {
         try {
           // Fetch usage data from API
-          const token = localStorage.getItem('firebase-id-token');
+          const token = await getAuthToken().catch(() => null);
           if (!token) {
             console.warn('[RESUME-FEEDBACK] No auth token available for usage fetch');
             usageContainer.innerHTML = `<div class="usage-indicator">Sign in to see your usage limits.</div>`;
