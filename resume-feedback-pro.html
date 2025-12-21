@@ -4387,8 +4387,6 @@
     }
     
     // Track consecutive role-tip failures to adjust messaging
-    let roleTipsFailureCount = 0;
-
     // Helper: control Role-Specific Tips state and retry button visibility
     function updateRoleTipsState({ hasAtsScore, roleSpecificFeedback, allowPlaceholder = false }) {
       const roleContainer = document.getElementById('role-feedback-container');
@@ -4398,8 +4396,6 @@
       const roleInfoBar = document.getElementById('rf-role-info');
       let roleBadge = document.getElementById('rf-role-badge');
       let roleHelper = document.getElementById('rf-role-helper');
-      const firstTryText = 'ATS score is ready. We couldn’t generate tailored tips for this role. Try again or adjust your target role.';
-      const exhaustedText = 'No tailored tips available for this run. Consider adding role-specific details or trying another role.';
 
       if (roleDescEl && !roleDescEl.dataset.baseText) {
         roleDescEl.dataset.baseText = roleDescEl.textContent || '';
@@ -4420,7 +4416,6 @@
 
       // No ATS score – hide section and button
       if (!hasAtsScore) {
-        roleTipsFailureCount = 0;
         if (feedbackGrid) feedbackGrid.style.display = 'none';
         hideRoleFeedback();
         if (roleInfoBar) roleInfoBar.style.display = 'none';
@@ -4432,7 +4427,7 @@
         }
         if (roleDescEl && roleDescEl.dataset.baseText) {
           roleDescEl.textContent = roleDescEl.dataset.baseText;
-          // Clear any previous partial-error state when fully resetting
+          // Clear any previous state when fully resetting
           delete roleDescEl.dataset.lastRoleState;
         }
         setRoleStatus('');
@@ -4441,7 +4436,6 @@
 
       // Clean success: ATS + role-specific tips present
       if (hasRoleSpecific) {
-        roleTipsFailureCount = 0;
         if (feedbackGrid) feedbackGrid.style.display = 'grid';
         showRoleFeedback();
         if (roleBadge) roleBadge.style.display = 'none';
@@ -4468,16 +4462,15 @@
           const currentText = roleDescEl.textContent || '';
           const baseText = roleDescEl.dataset.baseText || '';
           const lastState = roleDescEl.dataset.lastRoleState || '';
-          const isPartialErrorState =
-            lastState === 'partial-error' || currentText === firstTryText || currentText === exhaustedText;
+          const isInfoState = lastState === 'info' || lastState === 'partial-error';
           // Restore baseText if:
-          // - we are recovering from a previous partial-error state, or
+          // - we are recovering from a previous info/error state, or
           // - current text matches baseText (no plan-specific text was set), or
           // - the element is effectively empty
-          if (isPartialErrorState || currentText === baseText || !currentText.trim()) {
+          if (isInfoState || currentText === baseText || !currentText.trim()) {
             roleDescEl.textContent = baseText;
           }
-          if (isPartialErrorState) {
+          if (isInfoState) {
             delete roleDescEl.dataset.lastRoleState;
           }
         }
@@ -4494,7 +4487,6 @@
 
       if (hasPlaceholder) {
         // Keep placeholder visible instead of hiding the grid
-        roleTipsFailureCount = 0;
         if (feedbackGrid) feedbackGrid.style.display = 'grid';
         roleContainer.style.display = 'block';
         if (roleInfoBar) roleInfoBar.style.display = 'none';
@@ -4512,39 +4504,37 @@
         return;
       }
 
-      roleTipsFailureCount += 1;
+      // Simplified: Show helpful informational message, no button
+      // This state should rarely occur since backend always provides fallback tips when job title exists
       if (feedbackGrid) feedbackGrid.style.display = 'none';
       roleContainer.style.display = 'block';
       if (roleInfoBar) roleInfoBar.style.display = 'none';
+
+      // Check if job title exists to provide contextual message
+      const jobTitleInput = document.getElementById('rf-job-title');
+      const hasJobTitle = jobTitleInput?.value?.trim();
+
       if (roleDescEl) {
-        const message = roleTipsFailureCount > 1 ? exhaustedText : firstTryText;
-        roleDescEl.textContent = message;
-        roleDescEl.dataset.lastRoleState = 'partial-error';
-      }
-      const statusMessage = roleTipsFailureCount > 1 ? exhaustedText : firstTryText;
-      setRoleStatus(statusMessage);
-
-      // Render a lightweight guidance badge + helper text (above tips area)
-      roleBadge = document.getElementById('rf-role-badge');
-      if (roleBadge) {
-        roleBadge.style.display = 'inline-flex';
-        roleBadge.style.marginBottom = '8px';
-        roleBadge.textContent = 'Quick suggestions (ATS-based)';
-      }
-      roleHelper = document.getElementById('rf-role-helper');
-      if (roleHelper) {
-        roleHelper.style.display = 'block';
-        roleHelper.style.marginBottom = '12px';
-        roleHelper.textContent = roleTipsFailureCount > 1
-          ? 'We couldn’t generate detailed tips this time. Try adding role-specific details or adjusting the target role, then retry.'
-          : 'Here are quick suggestions from your ATS check. Add a metric and a tool you used for this role, then try again.';
+        if (!hasJobTitle) {
+          // No job title: Encourage user to add one
+          roleDescEl.textContent = 'Add a target role above to get tailored tips for your resume. This helps us provide role-specific keyword suggestions and optimized feedback.';
+        } else {
+          // Job title exists but tips missing (edge case - old cache)
+          roleDescEl.textContent = 'Role-specific tips will appear here after you run your next analysis with a target role.';
+        }
+        roleDescEl.dataset.lastRoleState = 'info';
       }
 
+      // Always hide button in this state - never show "Try again for tailored tips"
       if (regenBtn) {
-        regenBtn.style.display = 'inline-flex';
-        regenBtn.textContent = 'Try again for tailored tips';
-        regenBtn.disabled = false;
+        regenBtn.style.display = 'none';
+        regenBtn.textContent = 'Regenerate Feedback';
       }
+
+      // Hide badge and helper (not needed with simplified message)
+      if (roleBadge) roleBadge.style.display = 'none';
+      if (roleHelper) roleHelper.style.display = 'none';
+      setRoleStatus(''); // Clear status - no error state needed
     }
 
     // Fade transition helpers
@@ -5909,7 +5899,6 @@
       }
       // Clear role-specific status but keep the tile visible for the next run
       setRoleStatus('');
-      roleTipsFailureCount = 0;
       const roleContainer = document.getElementById('role-feedback-container');
       if (roleContainer) roleContainer.style.display = 'block';
       const roleBadge = document.getElementById('rf-role-badge');
