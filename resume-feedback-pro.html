@@ -1264,17 +1264,28 @@
         enforceAccessControl(allowedPlans);
       } else {
         // Navigation not ready yet - wait for navigationReady event
-        window.addEventListener('navigationReady', function onNavigationReady() {
-          window.removeEventListener('navigationReady', onNavigationReady);
-          enforceAccessControl(allowedPlans);
-        }, { once: true });
-        
-        // Fallback: retry after delay if navigation doesn't fire event
-        setTimeout(() => {
-          if (window.JobHackAINavigation && typeof window.JobHackAINavigation.getEffectivePlan === 'function') {
+        // Use execution flag to prevent duplicate calls from event listener and timeout
+        let hasExecuted = false;
+        let fallbackTimeout = setTimeout(() => {
+          if (!hasExecuted && window.JobHackAINavigation && typeof window.JobHackAINavigation.getEffectivePlan === 'function') {
+            hasExecuted = true;
             enforceAccessControl(allowedPlans);
           }
         }, 1000);
+        
+        window.addEventListener('navigationReady', function onNavigationReady() {
+          window.removeEventListener('navigationReady', onNavigationReady);
+          // Clear fallback timeout to prevent duplicate execution
+          if (fallbackTimeout) {
+            clearTimeout(fallbackTimeout);
+            fallbackTimeout = null;
+          }
+          // Only execute if not already executed by timeout
+          if (!hasExecuted) {
+            hasExecuted = true;
+            enforceAccessControl(allowedPlans);
+          }
+        }, { once: true });
       }
     }
     
