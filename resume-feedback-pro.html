@@ -48,6 +48,9 @@
   <link rel="stylesheet" href="css/tokens.css">
   <link rel="stylesheet" href="css/main.css">
 
+  <!-- Load usage indicator component early (before inline scripts that use it) -->
+  <script src="js/components/usage-indicator.js"></script>
+
   <!-- Component overrides -->
   <link rel="stylesheet" href="css/header.css">
   <link rel="stylesheet" href="css/footer.css">
@@ -5245,8 +5248,8 @@
       }
     }
 
-    // Initialize usage indicator on load
-    window.addEventListener('load', refreshUsageIndicator);
+    // Initialize usage indicator when DOM is ready (fires earlier than 'load')
+    document.addEventListener('DOMContentLoaded', refreshUsageIndicator);
 
     // --- PLAN UI ---
     // Plan badge + gating are handled by the navigation-driven plan system via `updateRfTileForPlan()`.
@@ -6539,7 +6542,6 @@
       getCurrentSessionId: () => _currentHistoricalSessionId
     };
   </script>
-  <script src="js/components/usage-indicator.js"></script>
   <script src="js/main.js" type="module"></script>
 
   <!-- page content -->
