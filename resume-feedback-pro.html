@@ -3540,14 +3540,15 @@
             }
           }
 
-          // Update description (preserve tooltip HTML)
+          /* Description update disabled to preserve plan-specific info matching Interview Questions UI */
+          /*
           const descEl = document.getElementById('rf-header-desc');
           if (descEl && atsScoringSucceeded) {
-            // Preserve existing tooltip if it exists
             const existingTooltip = descEl.querySelector('.rf-tooltip-trigger');
             const tooltipHtml = existingTooltip ? existingTooltip.outerHTML : '';
             descEl.innerHTML = 'Your resume was analyzed. See your ATS score and feedback below.' + (tooltipHtml ? ' ' + tooltipHtml : '');
           }
+          */
 
           uploadInput.disabled = false;
           generateBtn.disabled = false;
@@ -5164,9 +5165,9 @@
     }
 
     // Add usage indicator using shared component
-    document.addEventListener('DOMContentLoaded', async function() {
+    window.addEventListener('load', async function() {
       const headerCard = document.getElementById('rf-header-card');
-      const usageContainer = document.getElementById('rf-header-usage-container');
+      const usageContainer = document.getElementById('rf-usage-container');
       const currentPlan = getCurrentUserPlan();
       
       // Fetch usage for all plans to show limits (trial/essential) or total runs (pro/premium)
@@ -5176,6 +5177,7 @@
           const token = localStorage.getItem('firebase-id-token');
           if (!token) {
             console.warn('[RESUME-FEEDBACK] No auth token available for usage fetch');
+            usageContainer.innerHTML = `<div class="usage-indicator">Sign in to see your usage limits.</div>`;
             return;
           }
 
@@ -5189,6 +5191,7 @@
 
           if (!usageResponse.ok) {
             console.warn('[RESUME-FEEDBACK] Failed to fetch usage data');
+            usageContainer.innerHTML = `<div class="usage-indicator">Usage information unavailable. Please refresh and try again.</div>`;
             return;
           }
 
@@ -5198,35 +5201,34 @@
             const usage = usageData.usage.resumeFeedback;
             const plan = usageData.plan;
 
-          // Clear container first and insert a child for the indicator
-          usageContainer.innerHTML = '';
-          const indicatorDiv = document.createElement('div');
-          usageContainer.appendChild(indicatorDiv);
+            // Clear container first
+            usageContainer.innerHTML = '';
+            
+            // Create a child div for the indicator (matching interview questions pattern)
+            const indicatorDiv = document.createElement('div');
+            usageContainer.appendChild(indicatorDiv);
 
-          // Build plan-specific copy focused on feedback runs
-          let customText = '';
-          if (plan === 'trial') {
-            customText = `${usage.used || 0} of ${usage.limit || 3} feedback runs used during your trial`;
-          } else if (plan === 'essential') {
-            customText = `${usage.used || 0} of ${usage.limit || 3} feedback runs used this month`;
-          }
-
-          // Render usage indicator using the shared component
-          if (window.renderUsageIndicator) {
-            window.renderUsageIndicator({
-              feature: 'resumeFeedback',
-              usage: usage,
-              plan: plan,
-              container: indicatorDiv,
-              customText: customText
-            });
+            // Render usage indicator using the shared component
+            if (window.renderUsageIndicator) {
+              window.renderUsageIndicator({
+                feature: 'resumeFeedback',
+                usage: usage,
+                plan: plan,
+                container: indicatorDiv,
+                customText: null // Let component use default text
+              });
+            } else {
+              console.warn('[RESUME-FEEDBACK] Usage indicator component not loaded');
+              indicatorDiv.innerHTML = `<div class="usage-indicator">Usage information unavailable. Please refresh and try again.</div>`;
+            }
           } else {
-            console.warn('[RESUME-FEEDBACK] Usage indicator component not loaded');
-            indicatorDiv.innerHTML = `<div class="usage-indicator">Usage information unavailable. Please refresh and try again.</div>`;
-          }
+            usageContainer.innerHTML = `<div class="usage-indicator">Usage information unavailable.</div>`;
           }
         } catch (error) {
           console.error('[RESUME-FEEDBACK] Error loading usage indicator:', error);
+          if (usageContainer) {
+            usageContainer.innerHTML = `<div class="usage-indicator">Usage information unavailable. Please refresh and try again.</div>`;
+          }
         }
       }
     });
@@ -6645,8 +6647,8 @@
           <div style="margin-top: 1.25rem; padding-top: 1rem; border-top: 1px solid var(--color-divider);"></div>
           
           <!-- Usage Indicator Container -->
-          <div class="rf-plan-limit" id="rf-header-usage-container" style="margin-top: 1rem; display:flex; justify-content:flex-start;">
-            <!-- Usage indicators will be populated by JavaScript -->
+          <div class="rf-plan-limit" style="margin-top: 1rem;">
+            <div id="rf-usage-container"></div>
           </div>
         </section>
 
