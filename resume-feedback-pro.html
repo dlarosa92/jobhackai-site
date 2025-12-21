@@ -3469,9 +3469,11 @@
             const error = feedbackSettled.reason;
             console.warn('[RESUME-FEEDBACK] Feedback generation failed (non-blocking):', error);
             
-            // Clear status - updateRoleTipsState will handle messaging and container visibility
-            setRoleStatus(''); 
+            // Hide role feedback container since we don't have valid feedback data
+            hideRoleFeedback();
+            setRoleStatus(''); // Clear status
 
+            // Update role tips state to show helpful message in description area
             updateRoleTipsState({
               hasAtsScore: !!atsScoringSucceeded,
               roleSpecificFeedback: null
@@ -3851,8 +3853,8 @@
               // Feedback failed - log but don't block (ATS score may be shown)
               const error = feedbackSettled.status === 'rejected' ? feedbackSettled.reason : new Error('No feedback result');
               console.warn('[RESUME-FEEDBACK] Feedback generation failed (non-blocking):', error);
-              // Clear status - updateRoleTipsState will handle messaging and container visibility
-              setRoleStatus(''); 
+              hideRoleFeedback();
+              setRoleStatus(''); // Clear status
 
               // Load cached score to check if ATS score exists (to show helpful message)
               let cachedScore = null;
@@ -3861,6 +3863,7 @@
               }
               const hasAtsScore = !!(scoreResult?.success || cachedScore?.score);
               
+              // Update role tips state to show helpful message in description area
               updateRoleTipsState({
                 hasAtsScore,
                 roleSpecificFeedback: null
@@ -4077,21 +4080,7 @@
             this.textContent = 'Regenerate Feedback';
             this.disabled = false;
             hideLoadingState();
-            
-            // Clear status - updateRoleTipsState will handle messaging and container visibility
-            setRoleStatus(''); 
-            
-            // Load cached score to check if ATS score exists (to show helpful message)
-            let cachedScore = null;
-            if (window.JobHackAIStatePersistence) {
-              cachedScore = window.JobHackAIStatePersistence.loadATSScore(null);
-            }
-            const hasAtsScore = !!(cachedScore?.score);
-            
-            updateRoleTipsState({
-              hasAtsScore,
-              roleSpecificFeedback: null
-            });
+            setRoleStatus('Couldn’t refresh tips—retry.');
           }
         });
       }
