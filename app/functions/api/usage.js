@@ -1,5 +1,5 @@
 import { getBearer, verifyFirebaseIdToken } from '../_lib/firebase-auth.js';
-import { getOrCreateUserByAuthId, isD1Available } from '../_lib/db.js';
+import { getOrCreateUserByAuthId, isD1Available, getFeatureDailyUsage } from '../_lib/db.js';
 
 function corsHeaders(origin, env) {
   const allowedOrigins = [
@@ -225,6 +225,38 @@ export async function onRequest(context) {
           }
           
           usage.interviewQuestions.used = totalUsed;
+          
+          // Get daily usage for interview questions
+          const PLAN_LIMITS = {
+            trial: 10,
+            essential: 10,
+            pro: 20,
+            premium: 50
+          };
+          
+          const dailyLimit = PLAN_LIMITS[plan];
+          if (dailyLimit) {
+            const today = new Date().toISOString().slice(0, 10); // 'YYYY-MM-DD' UTC
+            const dailyResult = await env.DB.prepare(
+              `SELECT count FROM feature_daily_usage
+               WHERE user_id = ? AND feature = 'interview_questions'
+               AND usage_date = ?`
+            ).bind(d1User.id, today).first();
+            
+            const dailyUsed = (dailyResult && dailyResult.count !== null && dailyResult.count !== undefined) 
+              ? Number(dailyResult.count) 
+              : 0;
+            
+            // Normalize old format for daily usage (same logic as monthly)
+            let normalizedDaily = dailyUsed;
+            if (dailyUsed >= 10 && dailyUsed % 10 === 0) {
+              normalizedDaily = Math.floor(dailyUsed / 10);
+            }
+            
+            usage.interviewQuestions.dailyUsed = normalizedDaily;
+            usage.interviewQuestions.dailyLimit = dailyLimit;
+            usage.interviewQuestions.dailyRemaining = Math.max(0, dailyLimit - normalizedDaily);
+          }
         }
       } catch (error) {
         console.error('[USAGE] Error getting interview questions usage:', error);
