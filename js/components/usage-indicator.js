@@ -174,15 +174,15 @@ export function renderUsageIndicator({ feature, usage, plan, container, customTe
     const used = usage && usage.used !== null && usage.used !== undefined ? usage.used : null;
 
     // Special handling for interview questions with daily limits
-    if (feature === 'interviewQuestions' && usage && usage.dailyLimit !== null && usage.dailyLimit !== undefined) {
+    if (feature === 'interviewQuestions' && usage && usage.dailyLimit !== null && usage.dailyLimit !== undefined && usage.dailyLimit > 0) {
       const dailyUsed = usage.dailyUsed !== null && usage.dailyUsed !== undefined ? usage.dailyUsed : 0;
       const dailyLimit = usage.dailyLimit;
       const dailyRemaining = usage.dailyRemaining !== null && usage.dailyRemaining !== undefined ? usage.dailyRemaining : Math.max(0, dailyLimit - dailyUsed);
       const dailyPercentage = (dailyUsed / dailyLimit) * 100;
       
       // Color thresholds for daily usage
-      const isHighUsage = dailyPercentage >= 90; // 90%+ used = error (red)
-      const isMediumUsage = dailyPercentage >= 66 && dailyPercentage < 90; // 66-90% used = warning (yellow)
+      const isHighUsage = dailyPercentage > 90; // > 90% used = error (red)
+      const isMediumUsage = dailyPercentage >= 66 && dailyPercentage <= 90; // 66-90% used = warning (yellow)
       
       // Circular progress indicator for daily usage
       const radius = 16;
