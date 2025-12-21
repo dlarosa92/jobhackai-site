@@ -1,5 +1,5 @@
 import { getBearer, verifyFirebaseIdToken } from '../_lib/firebase-auth.js';
-import { updateUserPlan } from '../_lib/db.js';
+import { updateUserPlan, getUserPlanData } from '../_lib/db.js';
 
 export async function onRequest(context) {
   const { request, env } = context;

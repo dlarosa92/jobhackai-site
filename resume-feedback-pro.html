@@ -1249,18 +1249,76 @@
       
       createDemoUserIfNeeded();
 
-      hydratePlanFromServerAndEnforceAccess();
+      // Wait for navigation system to initialize and sync plan
+      // Navigation system handles all plan syncing - we just listen to events
+      waitForNavigationAndEnforceAccess();
+    });
+
+    // --- ACCESS CONTROL (Uses Navigation System) ---
+    function waitForNavigationAndEnforceAccess() {
+      const allowedPlans = window.__JOBHACKAI_RF_ALLOWED_PLANS__ || ['trial', 'essential', 'pro', 'premium'];
       
       // Wait for navigation system to be ready
-      setTimeout(checkPlanAccess, 100);
-    });
+      if (window.JobHackAINavigation && typeof window.JobHackAINavigation.getEffectivePlan === 'function') {
+        // Navigation is ready - check access immediately
+        enforceAccessControl(allowedPlans);
+      } else {
+        // Navigation not ready yet - wait for navigationReady event
+        window.addEventListener('navigationReady', function onNavigationReady() {
+          window.removeEventListener('navigationReady', onNavigationReady);
+          enforceAccessControl(allowedPlans);
+        }, { once: true });
+        
+        // Fallback: retry after delay if navigation doesn't fire event
+        setTimeout(() => {
+          if (window.JobHackAINavigation && typeof window.JobHackAINavigation.getEffectivePlan === 'function') {
+            enforceAccessControl(allowedPlans);
+          }
+        }, 1000);
+      }
+    }
+    
+    function enforceAccessControl(allowedPlans) {
+      let isAuthenticated, plan;
+      
+      if (window.JobHackAINavigation) {
+        const authState = window.JobHackAINavigation.getAuthState();
+        isAuthenticated = authState.isAuthenticated;
+        plan = window.JobHackAINavigation.getEffectivePlan();
+      } else {
+        isAuthenticated = localStorage.getItem('user-authenticated') === 'true' && !!localStorage.getItem('user-email');
+        plan = localStorage.getItem('user-plan') || 'free';
+      }
+      
+      console.log('[RESUME-FEEDBACK] Access control check:', {
+        isAuthenticated,
+        plan,
+        navigationPlan: window.JobHackAINavigation?.getEffectivePlan?.(),
+        localStoragePlan: localStorage.getItem('user-plan')
+      });
+      
+      if (!isAuthenticated || !allowedPlans.includes(plan)) {
+        if (!isAuthenticated) {
+          window.location.href = 'login.html';
+        } else {
+          window.location.href = 'pricing-a.html?plan=essential';
+        }
+      } else {
+        // Access granted - ensure UI is updated
+        updateRfTileForPlan();
+      }
+    }
 
     // --- UPDATED USER PLAN LOGIC ---
     function getCurrentUserPlan() {
       // Use navigation system's plan detection for consistency
       let plan = 'free';
-      if (window.JobHackAINavigation) {
+      if (window.JobHackAINavigation && typeof window.JobHackAINavigation.getEffectivePlan === 'function') {
         plan = window.JobHackAINavigation.getEffectivePlan();
+        // If navigation returns undefined or invalid, fall back to localStorage
+        if (!plan || plan === 'undefined') {
+          plan = localStorage.getItem('user-plan') || 'free';
+        }
       } else {
         plan = localStorage.getItem('user-plan') || 'free';
       }
@@ -1287,125 +1345,6 @@
       }
       
       return plan;
-    }
-
-    // Guard to prevent concurrent plan syncs
-    let planSyncInProgress = false;
-    
-    async function hydratePlanFromServerAndEnforceAccess() {
-      const allowedPlans = window.__JOBHACKAI_RF_ALLOWED_PLANS__ || ['trial', 'essential', 'pro', 'premium'];
-      const cachedPlan = localStorage.getItem('user-plan');
-      const planPending = window.__JOBHACKAI_PLAN_PENDING__;
-      
-      // Prevent concurrent syncs - if one is already in progress, wait for it
-      if (planSyncInProgress) {
-        console.log('⏸️ [RESUME-FEEDBACK] Plan sync already in progress, skipping duplicate call');
-        return;
-      }
-      
-      // Always sync from Stripe to ensure KV is up to date
-      // This fixes plan mismatch issues between KV cache and actual Stripe subscription
-      planSyncInProgress = true;
-      try {
-        const token = await getAuthToken().catch((err) => {
-          console.warn('[RESUME-FEEDBACK] Unable to obtain auth token for plan hydration:', err);
-          return null;
-        });
-        if (!token) {
-          document.documentElement.classList.remove('plan-pending');
-          planSyncInProgress = false;
-          return;
-        }
-        
-        // Use sync-stripe-plan to ensure KV is synced with Stripe (source of truth)
-        console.log('🔄 [RESUME-FEEDBACK] Syncing plan from Stripe...');
-        const syncResponse = await fetch('/api/sync-stripe-plan', {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          }
-        });
-        
-        if (syncResponse.ok) {
-          const syncData = await syncResponse.json().catch((err) => {
-            console.error('❌ [RESUME-FEEDBACK] Failed to parse sync response JSON:', err);
-            return {};
-          });
-          if (syncData.ok && syncData.plan) {
-            const stripePlan = syncData.plan.toLowerCase();
-            console.log('✅ [RESUME-FEEDBACK] Plan synced from Stripe:', stripePlan);
-            
-            // Update localStorage with Stripe plan (only if changed to avoid unnecessary writes)
-            if (localStorage.getItem('user-plan') !== stripePlan) {
-              localStorage.setItem('user-plan', stripePlan);
-              localStorage.setItem('dev-plan', stripePlan); // Also update dev-plan for consistency
-            }
-            
-            // Dispatch plan change event
-            window.dispatchEvent(new CustomEvent('planChanged', { detail: { newPlan: stripePlan, oldPlan: cachedPlan } }));
-            window.__JOBHACKAI_PLAN_PENDING__ = false;
-            document.documentElement.classList.remove('plan-pending');
-            
-            // Update UI immediately
-            if (typeof updateRfTileForPlan === 'function') {
-              updateRfTileForPlan();
-            }
-            
-            if (!allowedPlans.includes(stripePlan)) {
-              console.log('🚫 [RESUME-FEEDBACK] Stripe plan not allowed, redirecting:', stripePlan);
-              planSyncInProgress = false;
-              window.location.href = 'pricing-a.html?plan=essential';
-              return;
-            }
-            planSyncInProgress = false;
-            return;
-          }
-        }
-        
-        // Fallback to /api/plan/me if sync fails
-        console.warn('[RESUME-FEEDBACK] Stripe sync failed, falling back to plan/me');
-        const response = await fetch('/api/plan/me', {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          }
-        });
-        
-        if (!response.ok) {
-          console.warn('[RESUME-FEEDBACK] Plan API failed during hydration:', response.status, response.statusText);
-          document.documentElement.classList.remove('plan-pending');
-          planSyncInProgress = false;
-          return;
-        }
-        
-        const planData = await response.json().catch((err) => {
-          console.error('❌ [RESUME-FEEDBACK] Failed to parse plan/me response JSON:', err);
-          return {};
-        });
-        const serverPlan = (planData.plan || 'free').toLowerCase();
-        // Only update localStorage if plan changed
-        if (localStorage.getItem('user-plan') !== serverPlan) {
-          localStorage.setItem('user-plan', serverPlan);
-        }
-        window.dispatchEvent(new CustomEvent('planChanged', { detail: { newPlan: serverPlan } }));
-        window.__JOBHACKAI_PLAN_PENDING__ = false;
-        document.documentElement.classList.remove('plan-pending');
-        planSyncInProgress = false;
-        
-        if (!allowedPlans.includes(serverPlan)) {
-          console.log('🚫 [RESUME-FEEDBACK] Server plan not allowed, redirecting:', serverPlan);
-          window.location.href = 'pricing-a.html?plan=essential';
-          return;
-        }
-        
-        console.log('✅ [RESUME-FEEDBACK] Server plan confirmed:', serverPlan);
-      } catch (error) {
-        window.__JOBHACKAI_PLAN_PENDING__ = false;
-        document.documentElement.classList.remove('plan-pending');
-        planSyncInProgress = false;
-        console.warn('[RESUME-FEEDBACK] Failed to hydrate plan from server:', error);
-      }
     }
 
     // --- UPDATED USER OBJECT ---
@@ -2305,41 +2244,94 @@
           // Use navigation system's plan instead of hardcoded value
           user.plan = getCurrentUserPlan();
           
-          // Listen for plan changes from navigation system
+          // Debounce plan updates to prevent flickering
+          let updateRfTileTimeout = null;
+          let lastUpdateTime = 0;
+          let lastUpdatedPlan = null;
+          const UPDATE_COOLDOWN_MS = 300; // Minimum 300ms between updates
+          
+          function debouncedUpdateRfTileForPlan() {
+            const currentPlan = getCurrentUserPlan();
+            const now = Date.now();
+            const timeSinceLastUpdate = now - lastUpdateTime;
+            
+            // Skip if plan hasn't actually changed
+            if (currentPlan === lastUpdatedPlan) {
+              return;
+            }
+            
+            // If enough time has passed, update immediately
+            if (timeSinceLastUpdate >= UPDATE_COOLDOWN_MS) {
+              clearTimeout(updateRfTileTimeout);
+              updateRfTileTimeout = null;
+              lastUpdateTime = now;
+              lastUpdatedPlan = currentPlan;
+              updateRfTileForPlan();
+            } else {
+              // Otherwise, debounce the update
+              clearTimeout(updateRfTileTimeout);
+              updateRfTileTimeout = setTimeout(() => {
+                const latestPlan = getCurrentUserPlan();
+                lastUpdateTime = Date.now();
+                lastUpdatedPlan = latestPlan;
+                updateRfTileForPlan();
+              }, UPDATE_COOLDOWN_MS - timeSinceLastUpdate);
+            }
+          }
+          
+          // Track the last known plan to prevent redundant updates
+          let lastKnownPlan = getCurrentUserPlan();
+          
+          // Unified plan change handler
+          function handlePlanChange(newPlan, source) {
+            if (newPlan && newPlan !== lastKnownPlan && newPlan !== 'undefined') {
+              console.log(`[RESUME-FEEDBACK] Plan change detected (${source}):`, lastKnownPlan, '->', newPlan);
+              lastKnownPlan = newPlan;
+              debouncedUpdateRfTileForPlan();
+            }
+          }
+          
+          // Listen for plan changes from navigation system (storage events)
+          // Note: storage events only fire for changes from OTHER tabs/windows
           window.addEventListener('storage', function(e) {
             if (e.key === 'dev-plan' || e.key === 'user-plan' || e.key === 'user-authenticated') {
-              console.log('Plan change detected via storage:', e.key, e.newValue);
-              updateRfTileForPlan();
+              // Use a small delay to let navigation system finish updating
+              setTimeout(() => {
+                const newPlan = getCurrentUserPlan();
+                handlePlanChange(newPlan, 'storage');
+              }, 50);
             }
           });
           
-          // Listen for custom plan change events
+          // Listen for custom plan change events (from navigation system)
           window.addEventListener('planChanged', function(e) {
-            console.log('Plan changed from', e.detail.oldPlan, 'to', e.detail.newPlan);
-            updateRfTileForPlan();
+            const newPlan = e.detail?.newPlan || getCurrentUserPlan();
+            handlePlanChange(newPlan, 'planChanged');
             // Re-attach button listeners after plan change
             setTimeout(attachRewriteButtonListeners, 100);
           });
           
           // Listen for navigation ready event
           window.addEventListener('navigationReady', function() {
-            console.log('Navigation ready event received, updating resume feedback');
-            updateRfTileForPlan();
+            console.log('[RESUME-FEEDBACK] Navigation ready event received');
+            // Use a delay to ensure navigation has finished initializing
+            setTimeout(() => {
+              const newPlan = getCurrentUserPlan();
+              handlePlanChange(newPlan, 'navigationReady');
+            }, 100);
           });
           
-          // Initial update
+          // Initial update (immediate, no debounce)
           updateRfTileForPlan();
+          lastUpdatedPlan = getCurrentUserPlan();
           
-          // Set up periodic plan checking to catch any missed updates
-          let lastKnownPlan = null;
+          // Set up periodic plan checking to catch any missed updates (reduced frequency)
           setInterval(function() {
             const currentPlan = getCurrentUserPlan();
-            if (currentPlan !== lastKnownPlan) {
-              console.log('Plan change detected via periodic check:', lastKnownPlan, '->', currentPlan);
-              lastKnownPlan = currentPlan;
-              updateRfTileForPlan();
+            if (currentPlan !== lastKnownPlan && currentPlan !== 'undefined') {
+              handlePlanChange(currentPlan, 'periodic');
             }
-          }, 1000); // Check every second
+          }, 5000); // Check every 5 seconds instead of 1 second
         } else {
           console.log('Navigation system not ready, retrying in 100ms');
           setTimeout(waitForNavigationAndInit, 100);
