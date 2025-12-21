@@ -177,7 +177,7 @@ export function renderUsageIndicator({ feature, usage, plan, container, customTe
     if (feature === 'interviewQuestions' && usage.dailyLimit !== null && usage.dailyLimit !== undefined) {
       const dailyUsed = usage.dailyUsed !== null && usage.dailyUsed !== undefined ? usage.dailyUsed : 0;
       const dailyLimit = usage.dailyLimit;
-      const dailyRemaining = usage.dailyRemaining !== null ? usage.dailyRemaining : Math.max(0, dailyLimit - dailyUsed);
+      const dailyRemaining = usage.dailyRemaining !== null && usage.dailyRemaining !== undefined ? usage.dailyRemaining : Math.max(0, dailyLimit - dailyUsed);
       const dailyPercentage = (dailyUsed / dailyLimit) * 100;
       
       // Color thresholds for daily usage

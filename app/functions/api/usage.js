@@ -247,9 +247,12 @@ export async function onRequest(context) {
               ? Number(dailyResult.count) 
               : 0;
             
-            // Normalize old format for daily usage (same logic as monthly)
+            // Normalize old format for daily usage (matches generate.js logic)
+            // Only normalize if value is >= dailyLimit AND >= 10 AND multiple of 10
+            // This prevents valid new-format values (10, 20, 30, 40) from being incorrectly normalized
+            // for Pro (limit 20) and Premium (limit 50) users
             let normalizedDaily = dailyUsed;
-            if (dailyUsed >= 10 && dailyUsed % 10 === 0) {
+            if (dailyUsed >= dailyLimit && dailyUsed >= 10 && dailyUsed % 10 === 0) {
               normalizedDaily = Math.floor(dailyUsed / 10);
             }
             
