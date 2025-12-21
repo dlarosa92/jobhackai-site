@@ -1592,7 +1592,8 @@
       replaceCounts: {}, // Track per-question replace counts (TASK 10B)
       replaceCooldowns: {}, // Track per-question cooldowns
       replaceGlobalCooldown: 0, // Track user-level replace cooldown (matches backend)
-      dailyLimitReached: false // Track if daily limit has been reached
+      dailyLimitReached: false, // Track if daily limit has been reached
+      _resetRequested: false // Track if reset was requested (prevents race conditions)
     };
 
     // Utils & persistence
@@ -1659,6 +1660,9 @@
         return;
       }
 
+      // Set reset flag to prevent race conditions with in-flight API requests
+      iqState._resetRequested = true;
+
       const savedKey = iqSavedKey();
       if (savedKey) {
         try {
@@ -1693,6 +1697,12 @@
       }
 
       document.querySelectorAll('.rf-history-item.is-selected').forEach(el => el.classList.remove('is-selected'));
+
+      // Close saved panel if open (matches iqLoadSetById behavior)
+      const savedPanel = $IQ('#iq-saved-panel');
+      if (savedPanel) {
+        savedPanel.hidden = true;
+      }
 
       // Explicitly reset generate button text in case it was set to "Daily Limit Reached"
       const genBtn = $IQ('#btn-generate');
@@ -2772,6 +2782,9 @@
       const type = iqSanitizeType(activeTypeBtn?.dataset?.value, iqState.prefs.type || 'mixed');
       const jd=$IQ('#iq-jd')?.value?.trim()||''; 
       
+      // Clear reset flag at start of new generation
+      iqState._resetRequested = false;
+      
       // Show skeleton loaders
       const holder=$IQ('#iq-questions'); 
       if(holder) holder.innerHTML=Array.from({length:5}).map(()=>'<div class="iq-question-card skeleton"></div>').join(''); 
@@ -2812,6 +2825,23 @@
           return;
         }
         
+        // Check if reset was requested while request was in flight (prevents race condition)
+        if (iqState._resetRequested) {
+          // User clicked "Start Fresh" while this request was in flight, ignore this response
+          console.log('[IQ] Generation cancelled - reset was requested');
+          // Restore button state
+          if (genBtn) {
+            genBtn.disabled = false;
+            genBtn.textContent = 'Generate 10 Questions';
+            iqUpdateGenerateButtonState();
+          }
+          // Clear skeleton loaders
+          if (holder) {
+            holder.innerHTML = '<div class="iq-empty-state"><strong>Get Started</strong>Choose a role and question types, then generate 10 questions to get started.</div>';
+          }
+          return;
+        }
+        
         // Validate response has questions
         if (!Array.isArray(res.questions) || res.questions.length === 0) {
           throw new Error('No questions generated');
@@ -2819,7 +2849,24 @@
         
         const seed = res.seed || `${Date.now().toString(36)}-${Math.random().toString(36).slice(2,8)}`; 
         const setObj={...res, seed, role: res.role||role, seniority, count: IQ_FIXED_COUNT, type: iqSanitizeType(res.type, type), jd, replacesUsed:0}; 
+        
+        // Check again before setting state (double-check to prevent race condition)
+        if (iqState._resetRequested) {
+          console.log('[IQ] Generation cancelled - reset was requested before setting state');
+          if (genBtn) {
+            genBtn.disabled = false;
+            genBtn.textContent = 'Generate 10 Questions';
+            iqUpdateGenerateButtonState();
+          }
+          if (holder) {
+            holder.innerHTML = '<div class="iq-empty-state"><strong>Get Started</strong>Choose a role and question types, then generate 10 questions to get started.</div>';
+          }
+          return;
+        }
+        
         iqState.set=setObj;
+        // Clear reset flag since we successfully set the new state
+        iqState._resetRequested = false;
         iqResetPerQuestionCooldowns();
         // Reset replace counts when generating a new set
         iqState.replaceCounts = {}; 
@@ -2889,6 +2936,14 @@
         
       } catch (error) {
         console.error('[IQ] Generate error:', error);
+        
+        // Check if reset was requested during error handling
+        if (iqState._resetRequested) {
+          // User clicked "Start Fresh" while this request was in flight, ignore this error
+          console.log('[IQ] Generation error ignored - reset was requested');
+          return;
+        }
+        
         // Show user-friendly error message
         if(holder) {
           const errorMessage = error.message && error.message.includes('timeout') 
