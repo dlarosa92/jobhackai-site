@@ -3541,7 +3541,7 @@
           }
 
           // Update description (preserve tooltip HTML)
-          const descEl = document.getElementById('rf-score-desc');
+          const descEl = document.getElementById('rf-header-desc');
           if (descEl && atsScoringSucceeded) {
             // Preserve existing tooltip if it exists
             const existingTooltip = descEl.querySelector('.rf-tooltip-trigger');
@@ -4928,18 +4928,19 @@
 
       // Free Plan Logic
       if (plan === 'free') {
-        if (atsScoreTile) {
-          safeQueryText(atsScoreTile, '#rf-plan-badge', 'Free Plan');
-          updateDescriptionWithTooltip(
-            safeQuerySelector(atsScoreTile, '#rf-score-desc'),
-            'Get your basic ATS compatibility score.',
-            'Receive an overall ATS compliance score (0-100) for your resume, highlighting key areas to improve for better job application success.'
-          );
-          // Check if free ATS score has been used
-          const usageKey = `atsUsage:${getCurrentUserPlan()}:lifetime`;
-          // For now, show message - will be updated dynamically after API call
-          safeQueryText(atsScoreTile, '#rf-ats-checks', '1 free ATS score per account lifetime');
+        const headerBadge = document.getElementById('rf-header-plan-badge');
+        const headerDesc = document.getElementById('rf-header-desc');
+        const planInfo = document.getElementById('rf-header-plan-info');
+        
+        if (headerBadge) {
+          headerBadge.textContent = 'Free Plan';
+          headerBadge.style.background = 'var(--color-text-muted)';
         }
+        if (headerDesc) {
+          headerDesc.textContent = 'Get your basic ATS compatibility score.';
+        }
+        if (planInfo) planInfo.style.display = 'none';
+
         if (feedbackTile) {
           const badge = feedbackTile.querySelector('.rf-title .rf-plan-badge');
           safeSetText(badge, 'Locked');
@@ -4965,17 +4966,29 @@
 
       // Trial Plan Logic
       else if (plan === 'trial') {
-        if (atsScoreTile) {
-          const badge = atsScoreTile.querySelector('#rf-plan-badge');
-          safeSetText(badge, 'Trial Plan');
-          safeSetStyle(badge, 'background', '#FF9100');
-          updateDescriptionWithTooltip(
-            safeQuerySelector(atsScoreTile, '#rf-score-desc'),
-            'Your trial includes 3 full ATS score & feedback runs.',
-            'Each run combines ATS scoring with detailed feedback so you can see exactly what to fix before you apply.'
-          );
-          safeQueryText(atsScoreTile, '#rf-ats-checks', 'Max 3 feedback runs during your 3-day trial (rate limited to 1 per minute).');
+        const headerBadge = document.getElementById('rf-header-plan-badge');
+        const headerDesc = document.getElementById('rf-header-desc');
+        const planInfo = document.getElementById('rf-header-plan-info');
+        
+        if (headerBadge) {
+          headerBadge.textContent = 'Trial Plan';
+          headerBadge.style.background = '#FF9100';
         }
+        if (headerDesc) {
+          headerDesc.textContent = 'Your trial includes 3 full ATS score & feedback runs.';
+        }
+        if (planInfo) {
+          planInfo.style.display = 'block';
+          planInfo.innerHTML = `
+            <div style="color: var(--color-text-main, #1F2937); font-size: 0.95rem; line-height: 1.5;">
+              <strong style="color: var(--color-text-main, #1F2937);">Your trial includes 3 total detailed feedback runs.</strong>
+              <span style="display: block; margin-top: 0.35rem; color: var(--color-text-secondary, #4B5563); font-weight: 400;">
+                Each run combines ATS scoring with detailed feedback, so you know exactly what to fix before you apply.
+              </span>
+            </div>
+          `;
+        }
+
         // Trial feedback: 3 full runs total during trial
         if (feedbackTile) {
           const badge = feedbackTile.querySelector('.rf-title .rf-plan-badge');
@@ -5025,17 +5038,19 @@
 
       // Essential Plan Logic
       else if (plan === 'essential') {
-        if (atsScoreTile) {
-          const badge = atsScoreTile.querySelector('#rf-plan-badge');
-          safeSetText(badge, 'Essential Plan');
-          safeSetStyle(badge, 'background', '#0077B5');
-          updateDescriptionWithTooltip(
-            safeQuerySelector(atsScoreTile, '#rf-score-desc'),
-            'Receive an overall ATS compliance score for your resume, highlighting key areas to improve.',
-            'Receive an overall ATS compliance score (0-100) for your resume, highlighting key areas to improve for better job application success.'
-          );
-          safeQueryText(atsScoreTile, '#rf-ats-checks', 'Unlimited ATS checks');
+        const headerBadge = document.getElementById('rf-header-plan-badge');
+        const headerDesc = document.getElementById('rf-header-desc');
+        const planInfo = document.getElementById('rf-header-plan-info');
+        
+        if (headerBadge) {
+          headerBadge.textContent = 'Essential Plan';
+          headerBadge.style.background = '#0077B5';
         }
+        if (headerDesc) {
+          headerDesc.textContent = 'Receive an overall ATS compliance score for your resume, highlighting key areas to improve.';
+        }
+        if (planInfo) planInfo.style.display = 'none';
+
         // Essential: 3 feedbacks/month
         if (feedbackTile) {
           // Check monthly usage (will be updated dynamically via API)
@@ -5110,17 +5125,19 @@
         const planLabel = plan.charAt(0).toUpperCase() + plan.slice(1) + ' Plan';
         const planColor = isProPlan ? '#388E3C' : '#C62828';
         
-        if (atsScoreTile) {
-          const badge = atsScoreTile.querySelector('#rf-plan-badge');
-          safeSetText(badge, planLabel);
-          safeSetStyle(badge, 'background', planColor);
-          updateDescriptionWithTooltip(
-            safeQuerySelector(atsScoreTile, '#rf-score-desc'),
-            'Upload your resume once. Improve it step-by-step with ATS insights, role-specific feedback, and AI-powered rewrites!',
-            'Receive an overall ATS compliance score (0-100) for your resume, highlighting key areas to improve for better job application success. Score as many resumes as you need with unlimited access.'
-          );
-          safeQueryHTML(atsScoreTile, '#rf-ats-checks', '');
+        const headerBadge = document.getElementById('rf-header-plan-badge');
+        const headerDesc = document.getElementById('rf-header-desc');
+        const planInfo = document.getElementById('rf-header-plan-info');
+        
+        if (headerBadge) {
+          headerBadge.textContent = planLabel;
+          headerBadge.style.background = planColor;
         }
+        if (headerDesc) {
+          headerDesc.textContent = 'Upload your resume once. Improve it step-by-step with ATS insights, role-specific feedback, and AI-powered rewrites!';
+        }
+        if (planInfo) planInfo.style.display = 'none';
+
         if (feedbackTile) {
           const badge = feedbackTile.querySelector('.rf-title .rf-plan-badge');
           safeSetText(badge, planLabel);
@@ -5166,12 +5183,12 @@
 
     // Add usage indicator using shared component
     document.addEventListener('DOMContentLoaded', async function() {
-      const atsTile = document.getElementById('rf-ats-score-tile');
-      const generateBtn = document.getElementById('rf-generate-btn');
+      const headerCard = document.getElementById('rf-header-card');
+      const usageContainer = document.getElementById('rf-header-usage-container');
       const currentPlan = getCurrentUserPlan();
       
-      // Only show usage indicator for plans that have limits (essential, trial)
-      if (atsTile && (currentPlan === 'essential' || currentPlan === 'trial')) {
+      // Fetch usage for all plans to show limits (trial/essential) or total runs (pro/premium)
+      if (headerCard && usageContainer) {
         try {
           // Fetch usage data from API
           const token = localStorage.getItem('firebase-id-token');
@@ -5199,10 +5216,8 @@
             const usage = usageData.usage.resumeFeedback;
             const plan = usageData.plan;
 
-            // Create container for usage indicator
-            const usageContainer = document.createElement('div');
-            usageContainer.className = 'rf-plan-limit';
-            usageContainer.style.cssText = 'margin-top: 0.75rem; margin-bottom: 0.25rem;';
+            // Clear container first
+            usageContainer.innerHTML = '';
             
             // Build plan-specific copy focused on feedback runs
             let customText = '';
@@ -5212,22 +5227,15 @@
               customText = `${usage.used || 0} of ${usage.limit || 3} feedback runs used this month`;
             }
 
-            // Render usage indicator using shared component
+            // Render usage indicator using the shared component
             if (window.renderUsageIndicator) {
               window.renderUsageIndicator({
                 feature: 'resumeFeedback',
-                usage,
-                plan,
+                usage: usage,
+                plan: plan,
                 container: usageContainer,
-                customText
+                customText: customText
               });
-              
-              // Insert just under the main Generate ATS Score & Feedback button
-              if (generateBtn && generateBtn.parentNode) {
-                generateBtn.insertAdjacentElement('afterend', usageContainer);
-              } else {
-                atsTile.appendChild(usageContainer);
-              }
             } else {
               console.warn('[RESUME-FEEDBACK] Usage indicator component not loaded');
             }
@@ -5986,7 +5994,7 @@
         updateRfTileForPlan();
       } else {
         // Fallback: minimally reset score description while preserving tooltip
-        const scoreDesc = document.getElementById('rf-score-desc');
+        const scoreDesc = document.getElementById('rf-header-desc');
         if (scoreDesc) {
           scoreDesc.innerHTML = 'Get your basic ATS compatibility score.';
         }
@@ -6020,7 +6028,7 @@
       if (data.atsScore !== null && data.atsScore !== undefined) {
         updateProgressRing(data.atsScore);
         // Update score description
-        const scoreDesc = document.getElementById('rf-score-desc');
+        const scoreDesc = document.getElementById('rf-header-desc');
         if (scoreDesc && data.role) {
           scoreDesc.innerHTML = `Your resume scored <strong>${data.atsScore}/100</strong> for ${escapeHtml(data.role)} roles.`;
         }
@@ -6637,6 +6645,36 @@
           </button>
         </div>
         
+        <!-- Header Card (New) -->
+        <section class="rf-card" id="rf-header-card">
+          <div class="rf-title" id="rf-header-title" style="margin-bottom:0.2rem;">
+            Smart Resume Tools
+            <span class="rf-plan-badge" id="rf-header-plan-badge">Free Plan</span>
+          </div>
+          
+          <div style="color:var(--color-text-secondary);margin:0.35rem 0 0.7rem;" id="rf-header-desc">
+            Upload your resume once. Improve it step-by-step with ATS insights, role-specific feedback, and AI-powered rewrites!
+          </div>
+          
+          <!-- Divider (matching interview questions style) -->
+          <div style="margin-top: 1.25rem; padding-top: 1rem; border-top: 1px solid var(--color-divider);"></div>
+          
+          <!-- Plan-Specific Information (Trial/Essential) -->
+          <div id="rf-header-plan-info" style="display: none; margin-top: 1rem; padding: 0.875rem 1rem; background: var(--color-bg-light, #F9FAFB); border-radius: var(--radius-md, 8px); border-left: 3px solid var(--color-accent-blue, #007BFF);">
+            <div style="color: var(--color-text-main, #1F2937); font-size: 0.95rem; line-height: 1.5;">
+              <strong style="color: var(--color-text-main, #1F2937);">Your trial includes 3 total detailed feedback runs.</strong>
+              <span style="display: block; margin-top: 0.35rem; color: var(--color-text-secondary, #4B5563); font-weight: 400;">
+                Each run combines ATS scoring with detailed feedback, so you know exactly what to fix before you apply.
+              </span>
+            </div>
+          </div>
+          
+          <!-- Usage Indicator Container -->
+          <div class="rf-plan-limit" id="rf-header-usage-container" style="margin-top: 1rem;">
+            <!-- Usage indicators will be populated by JavaScript -->
+          </div>
+        </section>
+
         <!-- ATS Score Tile -->
     <section class="rf-card" id="rf-ats-score-tile">
       <div style="display:flex;align-items:center;gap:2.5rem;flex-wrap:wrap;">
@@ -6648,24 +6686,6 @@
            </svg>
         </div>
         <div style="flex:1;min-width:220px;">
-          <div class="rf-title" id="rf-title" style="margin-bottom:0.2rem;">
-            Smart Resume Tools
-            <span class="rf-plan-badge" id="rf-plan-badge">Free Plan</span>
-          </div>
-          <div style="color:var(--color-text-secondary);margin-bottom:0.7rem;" id="rf-score-desc">
-            Get your basic ATS compatibility score.
-            <span class="rf-tooltip-trigger" tabindex="0" aria-label="More info" style="margin-left:0.4em;">
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
-                <circle cx="12" cy="12" r="10"/>
-                <line x1="12" y1="8" x2="12" y2="8"/>
-                <line x1="12" y1="12" x2="12" y2="16"/>
-              </svg>
-              <span class="rf-tooltip-text">Receive an overall ATS compliance score (0-100) for your resume, highlighting key areas to improve for better job application success.</span>
-            </span>
-          </div>
-          <div class="rf-plan-limit" id="rf-plan-limit">
-            <span id="rf-ats-checks">2 ATS checks remaining this month</span>
-          </div>
           <form id="rf-upload-form" style="margin:1rem 0 0.7rem 0;">
             <label for="rf-job-title" style="font-weight:600;display:block;margin-bottom:0.5rem;">Target Role <span style="font-weight:400;color:var(--color-text-muted);font-size:0.9em;">(Recommended for better results)</span></label>
             <div style="position:relative;max-width:400px;margin-bottom:1rem;">
