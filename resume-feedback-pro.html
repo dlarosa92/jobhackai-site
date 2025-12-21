@@ -2624,6 +2624,7 @@
           // Restore file name if available (display only - don't enable button)
           // Browsers don't persist file inputs, so user must re-select file
           const fileNameSpan = document.getElementById('rf-file-name');
+          const lastResumeName = localStorage.getItem('lastUploadedResumeName');
           if (lastResumeName && fileNameSpan) {
             fileNameSpan.textContent = lastResumeName + ' (please re-select file)';
             fileNameSpan.style.color = 'var(--color-text-muted)';
@@ -3896,6 +3897,11 @@
             if (typeof fetchLatestFeedbackFromD1 === 'function') {
               fetchLatestFeedbackFromD1();
             }
+
+            // Refresh usage indicator to show updated count after a successful analysis
+            if (typeof refreshUsageIndicator === 'function') {
+              refreshUsageIndicator();
+            }
             
             // Save role-specific feedback to persistence
             // Use cached score that was already loaded above
@@ -4975,7 +4981,7 @@
         
         if (headerBadge) {
           headerBadge.textContent = 'Trial Plan';
-          headerBadge.style.background = '#FF9100';
+          headerBadge.style.setProperty('background', '#FF9100', 'important');
         }
         if (headerDesc) {
           headerDesc.textContent = 'Your trial includes 3 full ATS score & feedback runs. Each run combines ATS scoring with detailed feedback, so you know exactly what to fix before you apply.';
@@ -4985,7 +4991,9 @@
         if (feedbackTile) {
           const badge = feedbackTile.querySelector('.rf-title .rf-plan-badge');
           safeSetText(badge, 'Trial Plan');
-          safeSetStyle(badge, 'background', '#FF9100');
+          if (badge) {
+            badge.style.setProperty('background', '#FF9100', 'important');
+          }
           safeQueryStyle(feedbackTile, '.rf-upgrade-text', 'display', 'none');
           if (feedbackContent) {
             feedbackContent.style.display = 'block';
@@ -5170,10 +5178,9 @@
     }
 
     // Add usage indicator using shared component
-    window.addEventListener('load', async function() {
+    async function refreshUsageIndicator() {
       const headerCard = document.getElementById('rf-header-card');
       const usageContainer = document.getElementById('rf-usage-container');
-      const currentPlan = getCurrentUserPlan();
       
       // Fetch usage for all plans to show limits (trial/essential) or total runs (pro/premium)
       if (headerCard && usageContainer) {
@@ -5236,7 +5243,10 @@
           }
         }
       }
-    });
+    }
+
+    // Initialize usage indicator on load
+    window.addEventListener('load', refreshUsageIndicator);
 
     // --- PLAN LOGIC ---
     // Update plan badges and unlock features based on user plan
