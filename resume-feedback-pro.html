@@ -3471,8 +3471,14 @@
             
             // Hide role feedback container since we don't have valid feedback data
             hideRoleFeedback();
-            setRoleStatus(''); // Clear status, description area will show helpful message via updateRoleTipsState
-            
+            setRoleStatus(''); // Clear status
+
+            // Update role tips state to show helpful message in description area
+            updateRoleTipsState({
+              hasAtsScore: !!atsScoringSucceeded,
+              roleSpecificFeedback: null
+            });
+
             // Show error modal but keep ATS score visible
             if (window.showErrorModal) {
               const errorMsg = error.message || 'Failed to generate feedback. Your ATS score is still available.';
@@ -3848,7 +3854,21 @@
               const error = feedbackSettled.status === 'rejected' ? feedbackSettled.reason : new Error('No feedback result');
               console.warn('[RESUME-FEEDBACK] Feedback generation failed (non-blocking):', error);
               hideRoleFeedback();
-              setRoleStatus(''); // Clear status, description area will show helpful message via updateRoleTipsState
+              setRoleStatus(''); // Clear status
+
+              // Load cached score to check if ATS score exists (to show helpful message)
+              let cachedScore = null;
+              if (window.JobHackAIStatePersistence) {
+                cachedScore = window.JobHackAIStatePersistence.loadATSScore(null);
+              }
+              const hasAtsScore = !!(scoreResult?.success || cachedScore?.score);
+              
+              // Update role tips state to show helpful message in description area
+              updateRoleTipsState({
+                hasAtsScore,
+                roleSpecificFeedback: null
+              });
+
               if (window.showErrorModal) {
                 const errorMsg = error.message || 'Failed to generate feedback. Your ATS score is still available.';
                 window.showErrorModal('Feedback Generation Failed', errorMsg, {
