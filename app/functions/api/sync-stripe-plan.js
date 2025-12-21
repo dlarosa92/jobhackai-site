@@ -135,19 +135,34 @@ export async function onRequest(context) {
 
     // Get the most recent subscription
     const latestSub = subscriptions[0];
-    const status = latestSub.status;
-    const items = latestSub.items?.data || [];
+    
+    // Fetch the full subscription object to ensure we get metadata
+    // (list endpoint might not include all fields)
+    const fullSubResponse = await fetch(`https://api.stripe.com/v1/subscriptions/${latestSub.id}`, {
+      headers: { Authorization: `Bearer ${env.STRIPE_SECRET_KEY}` }
+    });
+    
+    let fullSub = latestSub; // Fallback to list result
+    if (fullSubResponse.ok) {
+      fullSub = await fullSubResponse.json();
+      console.log('✅ Fetched full subscription object with metadata:', fullSub.metadata);
+    } else {
+      console.warn('⚠️ Could not fetch full subscription, using list result');
+    }
+    
+    const status = fullSub.status;
+    const items = fullSub.items?.data || [];
     const priceId = items[0]?.price?.id || '';
-    const cancelAtPeriodEnd = latestSub.cancel_at_period_end;
-    const cancelAt = latestSub.cancel_at;
-    const currentPeriodEnd = latestSub.current_period_end;
-    const schedule = latestSub.schedule;
+    const cancelAtPeriodEnd = fullSub.cancel_at_period_end;
+    const cancelAt = fullSub.cancel_at;
+    const currentPeriodEnd = fullSub.current_period_end;
+    const schedule = fullSub.schedule;
     
     console.log('🔍 Latest subscription:', { 
       status, 
       priceId, 
-      trialEnd: latestSub.trial_end,
-      metadata: latestSub.metadata,
+      trialEnd: fullSub.trial_end,
+      metadata: fullSub.metadata,
       cancelAtPeriodEnd,
       cancelAt,
       currentPeriodEnd,
@@ -160,15 +175,36 @@ export async function onRequest(context) {
     // Determine plan based on subscription status and metadata
     if (status === 'trialing') {
       // Check if this was originally a trial subscription
-      const originalPlan = latestSub.metadata?.plan;
-      if (originalPlan === 'trial') {
+      // Check both metadata.plan and metadata.original_plan for trial subscriptions
+      const originalPlan = fullSub.metadata?.original_plan || fullSub.metadata?.plan;
+      
+      // Get what plan the price ID maps to (Essential, Pro, Premium, or null if unknown)
+      const priceBasedPlan = priceToPlan(env, priceId);
+      
+      // Also check if D1 already has 'trial' - but only trust it if:
+      // 1. Metadata says it's a trial, OR
+      // 2. Price ID doesn't map to a paid plan (meaning it's actually a trial)
+      // This prevents D1's stale 'trial' from overriding a real Essential/Pro/Premium subscription
+      const existingPlanData = await getUserPlanData(env, uid);
+      const existingPlan = existingPlanData?.plan;
+      
+      // Only trust D1's 'trial' if metadata also suggests trial, OR if price doesn't map to a paid plan
+      const isActuallyTrial = originalPlan === 'trial' || 
+        (existingPlan === 'trial' && !priceBasedPlan); // Only trust D1 trial if price doesn't map to a plan
+      
+      if (isActuallyTrial) {
+        // This is a trial subscription
         plan = 'trial';
-        if (latestSub.trial_end) {
-          trialEndsAt = new Date(latestSub.trial_end * 1000).toISOString();
+        if (fullSub.trial_end) {
+          trialEndsAt = new Date(fullSub.trial_end * 1000).toISOString();
+        }
+        if (!originalPlan && existingPlan === 'trial') {
+          console.log('⚠️ [SYNC-STRIPE-PLAN] Subscription is trialing but metadata not set to trial. D1 has trial and price ID is unknown - keeping trial plan.');
         }
       } else {
-        // Regular subscription in trial period
-        plan = priceToPlan(env, priceId) || 'essential';
+        // Regular subscription in trial period (e.g., Essential plan with trial period)
+        // Use the price-based plan (Essential, Pro, Premium)
+        plan = priceBasedPlan || 'essential';
       }
     } else if (status === 'active') {
       // Active subscription
@@ -209,7 +245,7 @@ export async function onRequest(context) {
       await updateUserPlan(env, uid, {
         plan: plan,
         stripeCustomerId: customerId,
-        stripeSubscriptionId: latestSub.id,
+        stripeSubscriptionId: fullSub.id,
         subscriptionStatus: status,
         trialEndsAt: trialEndsAt || null, // null clears the field (undefined is skipped)
         currentPeriodEnd: currentPeriodEnd ? new Date(currentPeriodEnd * 1000).toISOString() : null, // null clears the field (undefined is skipped)
@@ -222,7 +258,7 @@ export async function onRequest(context) {
       // TEMPORARY: Also write to KV during migration period for safety
       await env.JOBHACKAI_KV?.put(`planByUid:${uid}`, plan);
       if (trialEndsAt) {
-        await env.JOBHACKAI_KV?.put(`trialEndByUid:${uid}`, String(latestSub.trial_end));
+        await env.JOBHACKAI_KV?.put(`trialEndByUid:${uid}`, String(fullSub.trial_end));
       }
       if (cancelAtPeriodEnd && cancelAt) {
         await env.JOBHACKAI_KV?.put(`cancelAtByUid:${uid}`, String(cancelAt));
