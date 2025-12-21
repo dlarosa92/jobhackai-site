@@ -846,6 +846,11 @@ export async function onRequest(context) {
       // Role-specific feedback structure validation
       // If AI succeeded but didn't provide roleSpecificFeedback, log warning and return null
       roleSpecificFeedback: (() => {
+        // If no job title provided, return null (no role-specific tips)
+        if (!normalizedJobTitle || normalizedJobTitle.trim() === '') {
+          return null;
+        }
+        
         const rsf = aiFeedback.roleSpecificFeedback;
         const hasNewFormat =
           rsf &&
@@ -888,7 +893,9 @@ export async function onRequest(context) {
         attempts: maxRetries
       });
       
-      const fallbackRoleTips = shouldAddFallbackTips ? buildFallbackRoleTips(normalizedJobTitle) : null;
+      const fallbackRoleTips = (shouldAddFallbackTips && normalizedJobTitle && normalizedJobTitle.trim() !== '') 
+        ? buildFallbackRoleTips(normalizedJobTitle) 
+        : null;
 
       return {
         originalResume: resumeData.text,
