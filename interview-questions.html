@@ -207,6 +207,30 @@
     .chip-expand { background: var(--color-bg-light, #F8FAFC); border-color: #CBD5E1; color: var(--color-text-muted, #6B7280); font-weight: var(--font-weight-medium, 500); }
     .chip-expand:hover { background: #F1F5F9; border-color: #94A3B8; }
     .iq-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; margin-top: 0.75rem; }
+    .rf-btn-ghost {
+      background: transparent;
+      color: #4B5563;
+      border: 1px solid #E5E7EB;
+      border-radius: 8px;
+      padding: 0.65rem 1.1rem;
+      font-size: 0.95rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.18s ease;
+      min-height: 44px;
+      display: inline-flex;
+      justify-content: center;
+      align-items: center;
+    }
+    .rf-btn-ghost:hover {
+      background: #F9FAFB;
+      color: #374151;
+      border-color: #D1D5DB;
+    }
+    .rf-btn-ghost:active {
+      background: #F3F4F6;
+      border-color: #9CA3AF;
+    }
     .cooldown-badge { padding: 0.3rem 0.5rem; border-radius: var(--radius-md, 8px); border: 1px solid var(--color-divider, #E5E7EB); font-size: 0.9rem; color: var(--color-text-secondary, #4B5563); }
     .skeleton { height: 56px; border-radius: var(--radius-xl, 16px); background: linear-gradient(90deg, #f3f4f6 25%, #eceff3 37%, #f3f4f6 63%); background-size: 400% 100%; animation: sheen 1.2s ease-in-out infinite; }
     @keyframes sheen { 0%{background-position:100% 0} 100%{background-position:0 0} }
@@ -1197,6 +1221,7 @@
 
       <div class="iq-actions">
         <button id="btn-generate" class="btn-primary" aria-label="Generate 10 Questions">Generate 10 Questions</button>
+        <button type="button" id="iq-start-fresh-btn" class="rf-btn-ghost" aria-label="Start Fresh">Start Fresh</button>
       </div>
       <div id="iq-generate-cooldown" class="iq-global-cooldown" aria-live="polite" style="margin-top:0.25rem;"></div>
       
@@ -1618,6 +1643,63 @@
         genBtn.textContent = 'Daily Limit Reached';
       }
       // Replace buttons remain enabled - replacements are free and don't count toward daily limit
+    }
+    function updateStartFreshButtonState() {
+      const btn = $IQ('#iq-start-fresh-btn');
+      if (!btn) return;
+      const enabled = !!iqState.set;
+      btn.disabled = !enabled;
+      btn.setAttribute('aria-disabled', enabled ? 'false' : 'true');
+      btn.style.opacity = enabled ? '' : '0.5';
+      btn.style.cursor = enabled ? 'pointer' : 'not-allowed';
+    }
+
+    function resetInterviewQuestionsSession() {
+      if (!iqState.set) {
+        return;
+      }
+
+      const savedKey = iqSavedKey();
+      if (savedKey) {
+        try {
+          localStorage.removeItem(savedKey);
+        } catch (e) {
+          console.warn('[IQ] Failed to clear saved indexes', e);
+        }
+      }
+
+      iqState.set = null;
+      iqState.cooldown = 0;
+      iqState.dailyLimitReached = false;
+      iqState.replaceCounts = {};
+      iqState.replaceCooldowns = {};
+      iqState.replaceGlobalCooldown = 0;
+
+      if (iqState.timers.global) {
+        clearInterval(iqState.timers.global);
+        iqState.timers.global = null;
+      }
+
+      iqResetPerQuestionCooldowns();
+
+      const roleInput = $IQ('#iq-role');
+      if (roleInput) {
+        roleInput.value = '';
+      }
+
+      const jdInput = $IQ('#iq-jd');
+      if (jdInput) {
+        jdInput.value = '';
+      }
+
+      document.querySelectorAll('.rf-history-item.is-selected').forEach(el => el.classList.remove('is-selected'));
+
+      iqRenderQuestions();
+      iqUpdateSelectionSummary();
+      iqUpdateActionsLayout();
+      iqUpdateGenerateButtonState();
+      renderGenerateCooldownIndicator();
+      updateStartFreshButtonState();
     }
     function iqTrack(event, data={}){
       const payload = { event, ts: iqNow(), role: iqState?.set?.role || $IQ('#iq-role')?.value || '', seniority: iqState.prefs.seniority, type: iqState.prefs.type, count: iqState.prefs.count, used_jd: !!$IQ('#iq-jd')?.value?.trim(), ...data };
@@ -3035,6 +3117,7 @@
       const openSaved = ()=>{ iqRenderSavedPanel(true); iqTrack('iq_saved_opened'); };
       $IQ('#btn-save-set')?.addEventListener('click', openSaved);
       $IQ('#chip-saved')?.addEventListener('click', openSaved);
+      $IQ('#iq-start-fresh-btn')?.addEventListener('click', resetInterviewQuestionsSession);
       // Guidance toggle
       $IQ('#toggle-guidance')?.addEventListener('click', ()=>{ iqState.prefs.showGuidance=!iqState.prefs.showGuidance; iqSavePrefs(); iqUpdateGuidanceUI(); iqTrack(iqState.prefs.showGuidance?'iq_guidance_toggle_true':'iq_guidance_toggle_false'); });
       // Seniority persist
@@ -3279,6 +3362,7 @@
         const count = iqGetSavedItems().length;
         savedCountSpan.textContent = count > 0 ? `(${count})` : '';
       }
+      updateStartFreshButtonState();
     }
     function iqWireQuestionList(){
       const box=$IQ('#iq-questions'); if(!box) return;
