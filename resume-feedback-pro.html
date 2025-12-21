@@ -5049,7 +5049,7 @@
           headerBadge.style.background = '#0077B5';
         }
         if (headerDesc) {
-          headerDesc.textContent = 'Receive an overall ATS compliance score for your resume, highlighting key areas to improve.';
+          headerDesc.textContent = 'Get comprehensive ATS scoring and role-specific feedback. Your Essential plan includes 3 detailed feedback runs per month.';
         }
 
         // Essential: 3 feedbacks/month
@@ -5134,7 +5134,11 @@
           headerBadge.style.background = planColor;
         }
         if (headerDesc) {
-          headerDesc.textContent = 'Upload your resume once. Improve it step-by-step with ATS insights, role-specific feedback, and AI-powered rewrites!';
+          if (isPremiumPlan) {
+            headerDesc.textContent = 'Upload your resume once. Improve it step-by-step with ATS insights, role-specific feedback, and AI-powered rewrites! All your AI-generated content gets priority review.';
+          } else {
+            headerDesc.textContent = 'Upload your resume once. Improve it step-by-step with ATS insights, role-specific feedback, and AI-powered rewrites!';
+          }
         }
 
         if (feedbackTile) {
@@ -5219,7 +5223,7 @@
             // Clear container first
             usageContainer.innerHTML = '';
             
-            // Create a child div for the indicator (matching interview questions pattern)
+            // Create a child div for the resume feedback indicator
             const indicatorDiv = document.createElement('div');
             usageContainer.appendChild(indicatorDiv);
 
@@ -5232,6 +5236,19 @@
                 container: indicatorDiv,
                 customText: null // Let component use default text
               });
+
+              // For Premium plans, also show priority review indicator
+              if (plan === 'premium' && usageData.usage.priorityReview && usageData.usage.priorityReview.enabled) {
+                const priorityDiv = document.createElement('div');
+                priorityDiv.style.marginTop = '0.75rem';
+                usageContainer.appendChild(priorityDiv);
+                window.renderUsageIndicator({
+                  feature: 'priorityReview',
+                  usage: usageData.usage.priorityReview,
+                  plan: plan,
+                  container: priorityDiv
+                });
+              }
             } else {
               console.warn('[RESUME-FEEDBACK] Usage indicator component not loaded');
               indicatorDiv.innerHTML = `<div class="usage-indicator">Usage information unavailable. Please refresh and try again.</div>`;
