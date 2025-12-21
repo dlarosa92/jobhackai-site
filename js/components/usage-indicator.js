@@ -296,24 +296,6 @@ function renderUsageIndicator({ feature, usage, plan, container, customText }) {
 
   indicatorHTML += contentHTML + '</div>';
   container.innerHTML = indicatorHTML;
-
-  // Add tooltip if needed (for upgrade prompts)
-  if (hasQuota && usage.remaining !== null && usage.remaining <= 1) {
-    const tooltipTrigger = document.createElement('span');
-    tooltipTrigger.className = 'jh-tooltip-trigger';
-    tooltipTrigger.setAttribute('tabindex', '0');
-    tooltipTrigger.setAttribute('aria-label', 'More info');
-    tooltipTrigger.style.cssText = 'margin-left: 0.4em; vertical-align: middle; cursor: help;';
-    tooltipTrigger.innerHTML = `
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align: middle; color: var(--color-text-muted);">
-        <circle cx="12" cy="12" r="10"/>
-        <line x1="12" y1="8" x2="12" y2="8"/>
-        <line x1="12" y1="12" x2="12" y2="16"/>
-      </svg>
-      <span class="jh-tooltip-text">Upgrade to Pro for unlimited ${featureName.toLowerCase()}.</span>
-    `;
-    container.querySelector('.usage-indicator').appendChild(tooltipTrigger);
-  }
 }
 
 /**
