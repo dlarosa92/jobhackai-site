@@ -118,7 +118,8 @@ function renderUsageIndicator({ feature, usage, plan, container, customText }) {
     const isHighUsage = percentage >= 66; // 66%+ used = error (red)
     const isMediumUsage = percentage >= 33 && percentage < 66; // 33-66% used = warning (yellow)
     
-    ariaLabelParts.push(`${used} of ${usage.limit} used, ${usage.remaining !== null ? usage.remaining : usage.limit - used} remaining`);
+    const remainingText = usage.remaining !== null ? usage.remaining : usage.limit - used;
+    ariaLabelParts.push(`${used} of ${usage.limit} used, ${remainingText} remaining${plan === 'trial' ? ' in your trial' : ''}`);
     
     // Circular progress indicator
     const radius = 16;
