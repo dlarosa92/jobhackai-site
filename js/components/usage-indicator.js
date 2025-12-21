@@ -10,7 +10,7 @@
  * @param {Object} [options.customText] - Optional custom text override
  */
 
-export function renderUsageIndicator({ feature, usage, plan, container, customText }) {
+function renderUsageIndicator({ feature, usage, plan, container, customText }) {
   if (!container) {
     console.warn('[UsageIndicator] Container element required');
     return;
@@ -321,7 +321,7 @@ export function renderUsageIndicator({ feature, usage, plan, container, customTe
  * @param {number} seconds - Cooldown in seconds
  * @returns {string} Formatted cooldown string (e.g., "1:30" or "45s")
  */
-export function formatCooldown(seconds) {
+function formatCooldown(seconds) {
   if (!seconds || seconds <= 0) return '0s';
   
   const minutes = Math.floor(seconds / 60);
