@@ -1267,7 +1267,9 @@
         // Use execution flag to prevent duplicate calls from event listener and timeout
         let hasExecuted = false;
         let fallbackTimeout = setTimeout(() => {
-          if (!hasExecuted && window.JobHackAINavigation && typeof window.JobHackAINavigation.getEffectivePlan === 'function') {
+          // Always enforce access control after timeout, even if navigation fails to load
+          // enforceAccessControl has localStorage fallback logic that handles navigation unavailability
+          if (!hasExecuted) {
             hasExecuted = true;
             enforceAccessControl(allowedPlans);
           }
