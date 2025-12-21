@@ -174,7 +174,7 @@ export function renderUsageIndicator({ feature, usage, plan, container, customTe
     const used = usage && usage.used !== null && usage.used !== undefined ? usage.used : null;
 
     // Special handling for interview questions with daily limits
-    if (feature === 'interviewQuestions' && usage.dailyLimit !== null && usage.dailyLimit !== undefined) {
+    if (feature === 'interviewQuestions' && usage && usage.dailyLimit !== null && usage.dailyLimit !== undefined) {
       const dailyUsed = usage.dailyUsed !== null && usage.dailyUsed !== undefined ? usage.dailyUsed : 0;
       const dailyLimit = usage.dailyLimit;
       const dailyRemaining = usage.dailyRemaining !== null && usage.dailyRemaining !== undefined ? usage.dailyRemaining : Math.max(0, dailyLimit - dailyUsed);

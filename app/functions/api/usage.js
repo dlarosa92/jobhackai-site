@@ -247,12 +247,16 @@ export async function onRequest(context) {
               ? Number(dailyResult.count) 
               : 0;
             
-            // Normalize old format for daily usage (matches generate.js logic)
-            // Only normalize if value is >= dailyLimit AND >= 10 AND multiple of 10
-            // This prevents valid new-format values (10, 20, 30, 40) from being incorrectly normalized
-            // for Pro (limit 20) and Premium (limit 50) users
+            // Normalize old format for daily usage
+            // Old format stored questions (multiples of 10), new format stores sets (1 per set)
+            // Use threshold of dailyLimit * 10 to distinguish old format from new format at limit
+            // Example: Trial user (limit 10) with 10 sets used:
+            //   - New format: stored as 10 (should NOT normalize)
+            //   - Old format: stored as 100 (should normalize to 10)
+            // Threshold of 100 ensures we only normalize clearly old-format values
             let normalizedDaily = dailyUsed;
-            if (dailyUsed >= dailyLimit && dailyUsed >= 10 && dailyUsed % 10 === 0) {
+            const normalizationThreshold = dailyLimit * 10;
+            if (dailyUsed >= normalizationThreshold && dailyUsed >= 10 && dailyUsed % 10 === 0) {
               normalizedDaily = Math.floor(dailyUsed / 10);
             }
             
