@@ -2703,7 +2703,6 @@
             
             try {
               showLoadingState('Optimizing for ATS compliance…');
-              showRewriteSkeleton();
               this.disabled = true;
               this.textContent = 'Optimizing...';
               
@@ -2900,7 +2899,6 @@
             statusDiv.style.display = 'none';
           }
         showLoadingState('Analyzing your résumé for ATS criteria…');
-        showRewriteSkeleton();
           uploadInput.disabled = true;
 
           // Check if we already have a resumeId for this file
