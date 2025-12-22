@@ -5267,18 +5267,6 @@
                 customText: null // Let component use default text
               });
 
-              // For Premium plans, also show priority review indicator
-              if (plan === 'premium' && usageData.usage.priorityReview && usageData.usage.priorityReview.enabled) {
-                const priorityDiv = document.createElement('div');
-                priorityDiv.style.marginTop = '0.75rem';
-                usageContainer.appendChild(priorityDiv);
-                window.renderUsageIndicator({
-                  feature: 'priorityReview',
-                  usage: usageData.usage.priorityReview,
-                  plan: plan,
-                  container: priorityDiv
-                });
-              }
             } else {
               console.warn('[RESUME-FEEDBACK] Usage indicator component not loaded');
               indicatorDiv.innerHTML = `<div class="usage-indicator">Usage information unavailable. Please refresh and try again.</div>`;
