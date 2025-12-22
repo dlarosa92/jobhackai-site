@@ -4540,7 +4540,8 @@
           regenBtn.style.display = 'none';
           regenBtn.textContent = 'Regenerate Feedback';
         }
-        setRoleStatus('No role tips saved for this run.');
+        // Clear status - message is already shown in the feedback grid
+        setRoleStatus('');
         return;
       }
 
