@@ -1849,7 +1849,6 @@
       
       // Show skeletons for initial analysis
       const jobTitleInput = document.getElementById('rf-job-title');
-      const currentJobTitle = window.currentJobTitle || '';
       const hasRole = jobTitleInput?.value?.trim() || currentJobTitle;
       showSkeletons(willGetFeedback, hasRole);
       hideHeaderSkeleton();
