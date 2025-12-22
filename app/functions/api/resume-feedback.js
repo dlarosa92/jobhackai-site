@@ -617,8 +617,11 @@ export async function onRequest(context) {
   }
 
     // Generate AI feedback with exponential backoff retry
-    // Compute base token budget once for adaptive retries
-    const defaultMaxOutputTokens = Number(env.OPENAI_MAX_TOKENS_ATS) > 0
+    // Token budget logic:
+    // - First attempt (attempt === 0): let generateATSFeedback() use its internal logic
+    //   which applies token optimization (1500 tokens when no role, 3500 when role exists)
+    // - Retry attempts (attempt > 0): override with increased tokens to handle truncation
+    const baseMaxTokens = Number(env.OPENAI_MAX_TOKENS_ATS) > 0
       ? Number(env.OPENAI_MAX_TOKENS_ATS)
       : 3500;
     let aiFeedback = null;
@@ -630,13 +633,17 @@ export async function onRequest(context) {
     
     for (let attempt = 0; attempt < maxRetries; attempt++) {
       try {
-        const maxTokensOverride = defaultMaxOutputTokens + (attempt > 0 ? attempt * 600 : 0);
+        // Only pass maxOutputTokensOverride on retry attempts to increase budget after truncation
+        // First attempt uses generateATSFeedback's internal logic which optimizes for hasRole
+        const options = attempt > 0 
+          ? { maxOutputTokensOverride: baseMaxTokens + (attempt * 600) }
+          : {};
         const aiResponse = await generateATSFeedback(
           resumeData.text,
           ruleBasedScores,
           normalizedJobTitle,
           env,
-          { maxOutputTokensOverride: maxTokensOverride }
+          options
         );
         
         // Capture token usage from OpenAI response
