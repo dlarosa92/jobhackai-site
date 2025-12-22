@@ -2838,13 +2838,11 @@
               
               this.textContent = 'Optimize this resume';
               this.disabled = false;
-              hideRewriteSkeleton();
               hideLoadingState();
             } catch (error) {
               handleApiError(error);
               this.textContent = 'Optimize this resume';
               this.disabled = false;
-              hideRewriteSkeleton();
               hideLoadingState();
             }
           });
@@ -2955,7 +2953,6 @@
                 uploadInput.disabled = false;
                 generateBtn.disabled = false;
                 hideLoadingState();
-                hideRewriteSkeleton();
                 handleApiError(new Error('You have used your 1 free lifetime ATS score. Upgrade to continue scoring unlimited resumes.'));
                 // Redirect to pricing page after showing error
                 setTimeout(() => {
@@ -3048,7 +3045,6 @@
                 uploadInput.disabled = false;
                 generateBtn.disabled = false;
                 hideLoadingState();
-                hideRewriteSkeleton();
                 handleApiError(new Error('You have used your 1 free lifetime ATS score. Upgrade to continue scoring unlimited resumes.'));
                 // Redirect to pricing page after showing error
                 setTimeout(() => {
@@ -3123,7 +3119,6 @@
             uploadInput.disabled = false;
             generateBtn.disabled = false;
             hideLoadingState();
-            hideRewriteSkeleton();
             return;
           }
           
@@ -3576,7 +3571,6 @@
           uploadInput.disabled = false;
           generateBtn.disabled = false;
           hideLoadingState();
-          hideRewriteSkeleton();
         } catch (error) {
           // Restore credit ONLY if ATS scoring failed (not for post-scoring errors)
           // If scoring succeeded but UI/feedback generation failed, user already got value
@@ -3618,7 +3612,6 @@
           uploadInput.disabled = false;
           generateBtn.disabled = false;
           hideLoadingState();
-          hideRewriteSkeleton();
         }
       }
 
