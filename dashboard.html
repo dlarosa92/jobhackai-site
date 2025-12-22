@@ -1024,6 +1024,9 @@
       
       // Add periodic refresh for trial countdown (only if user is on trial)
       if (user.plan === 'trial' && user.trialEndsAt) {
+        // Use mutable state object to track current trial end date (fixes closure issue)
+        const trialState = { trialEndsAt: user.trialEndsAt };
+        
         // Refresh trial data every hour
         const refreshTrialData = async () => {
           try {
@@ -1045,16 +1048,20 @@
                 return;
               }
               
-              // Update trial end date if changed
-              if (planData.trialEndsAt && planData.trialEndsAt !== user.trialEndsAt) {
+              // Update trial end date if changed (compare against current state, not stale closure)
+              if (planData.trialEndsAt && planData.trialEndsAt !== trialState.trialEndsAt) {
                 localStorage.setItem('trial-ends-at', planData.trialEndsAt);
+                // Update mutable state for next comparison
+                trialState.trialEndsAt = planData.trialEndsAt;
                 // Re-render dashboard with updated date
                 const updatedUser = { ...user, trialEndsAt: planData.trialEndsAt };
                 renderDashboard(updatedUser);
                 console.log('✅ Refreshed trial end date:', planData.trialEndsAt);
               } else if (planData.trialEndsAt) {
-                // Just update localStorage to keep it fresh
+                // Just update localStorage to keep it fresh (date hasn't changed)
                 localStorage.setItem('trial-ends-at', planData.trialEndsAt);
+                // Also update state to keep it in sync
+                trialState.trialEndsAt = planData.trialEndsAt;
               }
             }
           } catch (error) {
