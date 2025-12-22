@@ -1848,7 +1848,10 @@
       const willGetFeedback = ['trial', 'essential', 'pro', 'premium'].includes(userPlan);
       
       // Show skeletons for initial analysis
-      showSkeletons(willGetFeedback);
+      const jobTitleInput = document.getElementById('rf-job-title');
+      const currentJobTitle = window.currentJobTitle || '';
+      const hasRole = jobTitleInput?.value?.trim() || currentJobTitle;
+      showSkeletons(willGetFeedback, hasRole);
       hideHeaderSkeleton();
       
       // Store cleanup function (skeleton hide function)
@@ -3139,11 +3142,12 @@
           // Free users only get ATS scoring, not AI feedback, so show different message
           const userPlan = getCurrentUserPlan();
           const willGetFeedback = ['trial', 'essential', 'pro', 'premium'].includes(userPlan);
+          const hasRole = jobTitleInput?.value?.trim() || currentJobTitle;
           
           // Show skeleton loading states (replaces full-screen overlay)
-          // Pass willGetFeedback to conditionally show/hide feedback skeleton
-          showSkeletons(willGetFeedback);
-          if (willGetFeedback) {
+          // Only show role-specific skeleton if user has a plan AND provided a role
+          showSkeletons(willGetFeedback, hasRole);
+          if (willGetFeedback && hasRole) {
             setRoleStatus('Generating tips…');
           } else {
             setRoleStatus('');
@@ -4634,7 +4638,7 @@
     let skeletonHideResolvers = []; // Array of pending Promise resolvers with generation IDs
     let skeletonOperationGeneration = 0; // Generation counter to invalidate stale operations
     
-    function showSkeletons(willGetFeedback = true) {
+    function showSkeletons(willGetFeedback = true, hasRole = false) {
       const skeletonContainer = document.getElementById('rf-skeleton-container');
       if (skeletonContainer) {
         // CRITICAL: Increment generation to invalidate any pending hide operations
@@ -4672,8 +4676,8 @@
         }
         const skeletonFeedback = document.getElementById('rf-skeleton-feedback');
         if (skeletonFeedback) {
-          // Only show feedback skeleton if user will receive feedback
-          skeletonFeedback.style.display = willGetFeedback ? 'grid' : 'none';
+          // Only show feedback skeleton if user will receive feedback AND has a role
+          skeletonFeedback.style.display = (willGetFeedback && hasRole) ? 'grid' : 'none';
         }
         // Ensure feedback content is visible so skeletons render; hide real grids
         const feedbackContent = document.getElementById('rf-feedback-content');
