@@ -972,18 +972,106 @@
           if (dn) authUserName = dn;
         }
       } catch (_) {}
+      
+      // Fetch trial data from D1 via /api/plan/me (source of truth)
+      let trialEndsAtFromAPI = null;
+      try {
+        const firebaseToken = await getFirebaseIdToken();
+        if (firebaseToken) {
+          const planResponse = await fetch('/api/plan/me', {
+            headers: { 'Authorization': `Bearer ${firebaseToken}` }
+          });
+          
+          if (planResponse.ok) {
+            const planData = await planResponse.json();
+            if (planData.trialEndsAt) {
+              trialEndsAtFromAPI = planData.trialEndsAt;
+              localStorage.setItem('trial-ends-at', planData.trialEndsAt);
+              console.log('✅ Fetched trial end date from D1:', planData.trialEndsAt);
+            }
+          }
+        }
+      } catch (error) {
+        console.warn('⚠️ Failed to fetch trial data from API:', error);
+      }
+      
+      // Use API data, fallback to localStorage, never create fake dates
       const user = {
         name: authUserName,
         email: authUserEmail,
         uid: authUserUid,
         plan: currentPlan,
-        trialEndsAt: localStorage.getItem('trial-ends-at') || new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString(),
+        trialEndsAt: trialEndsAtFromAPI || localStorage.getItem('trial-ends-at') || null,
         hasUsedFreeTrial: true,
         hasUsedFreeATS: true
       };
       
+      // Log trial countdown debug info
+      console.log('📊 Trial Countdown Debug:', {
+        plan: user.plan,
+        trialEndsAt: user.trialEndsAt,
+        daysLeft: user.trialEndsAt ? daysLeft(user.trialEndsAt) : null,
+        source: trialEndsAtFromAPI ? 'API (D1)' : localStorage.getItem('trial-ends-at') ? 'localStorage' : 'none'
+      });
+      
+      // If API fetch failed and user is on trial, show warning but don't break dashboard
+      if (!trialEndsAtFromAPI && user.plan === 'trial') {
+        console.warn('⚠️ Could not fetch trial end date from D1. Using cached value if available.');
+      }
+      
       // Continue with existing dashboard logic
       renderDashboard(user);
+      
+      // Add periodic refresh for trial countdown (only if user is on trial)
+      if (user.plan === 'trial' && user.trialEndsAt) {
+        // Refresh trial data every hour
+        const refreshTrialData = async () => {
+          try {
+            const firebaseToken = await getFirebaseIdToken();
+            if (!firebaseToken) return;
+            
+            const planResponse = await fetch('/api/plan/me', {
+              headers: { 'Authorization': `Bearer ${firebaseToken}` }
+            });
+            
+            if (planResponse.ok) {
+              const planData = await planResponse.json();
+              
+              // Check if plan changed (trial expired)
+              if (planData.plan !== 'trial' && currentPlan === 'trial') {
+                console.log('🔄 Trial expired, plan changed to:', planData.plan);
+                // Reload page to show updated plan
+                window.location.reload();
+                return;
+              }
+              
+              // Update trial end date if changed
+              if (planData.trialEndsAt && planData.trialEndsAt !== user.trialEndsAt) {
+                localStorage.setItem('trial-ends-at', planData.trialEndsAt);
+                // Re-render dashboard with updated date
+                const updatedUser = { ...user, trialEndsAt: planData.trialEndsAt };
+                renderDashboard(updatedUser);
+                console.log('✅ Refreshed trial end date:', planData.trialEndsAt);
+              } else if (planData.trialEndsAt) {
+                // Just update localStorage to keep it fresh
+                localStorage.setItem('trial-ends-at', planData.trialEndsAt);
+              }
+            }
+          } catch (error) {
+            console.warn('⚠️ Failed to refresh trial data:', error);
+          }
+        };
+        
+        // Refresh every hour
+        setInterval(refreshTrialData, 3600000); // 1 hour = 3,600,000 ms
+        
+        // Also refresh when page becomes visible (user returns to tab)
+        document.addEventListener('visibilitychange', () => {
+          if (!document.hidden) {
+            refreshTrialData();
+          }
+        });
+      }
     });
 
     // --- USER DATA INJECTION (replace with your data source, e.g. from Google Sheets or Wix Data) ---
@@ -1308,7 +1396,7 @@
         </a>
         <div class="welcome-row">
           <h2>Welcome back, ${user.name || 'User'}!</h2>
-          ${user.plan === 'trial' ? `<div class="trial-countdown">You have ${daysLeft(user.trialEndsAt)} day${daysLeft(user.trialEndsAt) !== 1 ? 's' : ''} left in your trial!</div>` : ''}
+          ${user.plan === 'trial' && user.trialEndsAt ? `<div class="trial-countdown">You have ${daysLeft(user.trialEndsAt)} day${daysLeft(user.trialEndsAt) !== 1 ? 's' : ''} left in your trial!</div>` : ''}
           ${subStatus && subStatus.cancelAt ? `
             <div style="background:#FEF3C7;border-left:4px solid #F59E0B;color:#92400E;padding:0.8rem 1rem;border-radius:8px;margin:0.5rem 0;font-size:0.98rem;">
               ⚠️ <strong>Your subscription will be canceled on ${new Date(subStatus.cancelAt).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}.</strong> You'll have access until then.
@@ -1344,7 +1432,11 @@
         </div>
         ${unlockInsightsHTML}
         <div class="status-action-row">
-          <span class="user-plan-badge ${user.plan}">${planIcon(user.plan)}${user.plan === 'trial' && user.trialEndsAt ? `Trial (${daysLeft(user.trialEndsAt)} days left)` : user.plan.charAt(0).toUpperCase() + user.plan.slice(1)}</span>
+          <span class="user-plan-badge ${user.plan}">${planIcon(user.plan)}${user.plan === 'trial' && user.trialEndsAt 
+  ? `Trial (${daysLeft(user.trialEndsAt)} days left)` 
+  : user.plan === 'trial' && !user.trialEndsAt
+  ? 'Trial' // Show "Trial" without days if date not available
+  : user.plan.charAt(0).toUpperCase() + user.plan.slice(1)}</span>
           ${(user.plan === 'cancelled') ? `<a href="pricing-a.html" class="upgrade-btn">Reactivate</a>` : ''}
         </div>
       </div>`;

@@ -171,20 +171,32 @@ export async function onRequest(context) {
         effectivePlan = plan || 'essential';
       }
       
+      const sub = event.data.object;
+      const trialEndsAtISO = sub.trial_end ? new Date(sub.trial_end * 1000).toISOString() : null;
+      
       console.log(`📝 SUBSCRIPTION DATA: status=${status}, priceId=${pId}, basePlan=${plan}, effectivePlan=${effectivePlan}, uid=${uid}`);
+      console.log(`🔄 TRIAL CONVERSION CHECK:`, {
+        eventType: event.type,
+        currentStatus: status,
+        originalPlan: originalPlan,
+        priceId: pId,
+        mappedPlan: plan,
+        effectivePlan: effectivePlan,
+        trialEndsAt: trialEndsAtISO,
+        subscriptionId: sub.id
+      });
       console.log(`✍️ WRITING TO D1: users.plan = ${effectivePlan} for uid=${uid}`);
       
-      const sub = event.data.object;
       await updatePlanInD1(uid, {
         plan: effectivePlan,
         stripeCustomerId: customerId,
         stripeSubscriptionId: sub.id,
         subscriptionStatus: status,
-        trialEndsAt: sub.trial_end ? new Date(sub.trial_end * 1000).toISOString() : null,
+        trialEndsAt: trialEndsAtISO,
         currentPeriodEnd: sub.current_period_end ? new Date(sub.current_period_end * 1000).toISOString() : null
       }, event.created);
       
-      console.log(`✅ D1 WRITE SUCCESS: ${uid} → ${effectivePlan}`);
+      console.log(`✅ D1 WRITE SUCCESS: ${uid} → ${effectivePlan}${trialEndsAtISO ? ` (trial ends: ${trialEndsAtISO})` : ''}`);
     }
 
     if (event.type === 'customer.subscription.updated') {
@@ -231,11 +243,42 @@ export async function onRequest(context) {
       const pId = items[0]?.price?.id || '';
       const plan = priceToPlan(env, pId);
       
+      // Get previous plan from D1 to detect trial conversion
+      let previousPlan = null;
+      try {
+        const { getUserPlanData } = await import('../../_lib/db.js');
+        const existingPlanData = await getUserPlanData(env, uid);
+        previousPlan = existingPlanData?.plan || null;
+      } catch (e) {
+        console.warn('⚠️ Could not fetch previous plan for comparison:', e.message);
+      }
+      
       let effectivePlan = 'free';
       if (status === 'trialing' && originalPlan === 'trial') {
         effectivePlan = 'trial';
       } else if (status === 'active') {
         effectivePlan = plan || 'essential';
+      }
+      
+      const trialEndsAtISO = sub.trial_end ? new Date(sub.trial_end * 1000).toISOString() : null;
+      
+      // Enhanced logging for trial conversion detection
+      console.log(`🔄 TRIAL CONVERSION CHECK:`, {
+        eventType: event.type,
+        previousStatus: previousPlan ? 'trial' : 'unknown',
+        currentStatus: status,
+        previousPlan: previousPlan,
+        originalPlan: originalPlan,
+        priceId: pId,
+        mappedPlan: plan,
+        effectivePlan: effectivePlan,
+        trialEndsAt: trialEndsAtISO,
+        subscriptionId: sub.id,
+        isTrialConversion: previousPlan === 'trial' && effectivePlan !== 'trial' && status === 'active'
+      });
+      
+      if (previousPlan === 'trial' && effectivePlan !== 'trial' && status === 'active') {
+        console.log(`🎉 TRIAL CONVERTED: ${uid} → ${effectivePlan} (trial expired, subscription now active)`);
       }
       
       console.log(`✍️ UPDATING D1: users.plan = ${effectivePlan} for uid=${uid}`);
@@ -244,12 +287,14 @@ export async function onRequest(context) {
         stripeCustomerId: customerId,
         stripeSubscriptionId: sub.id,
         subscriptionStatus: status,
-        trialEndsAt: sub.trial_end ? new Date(sub.trial_end * 1000).toISOString() : null,
+        trialEndsAt: trialEndsAtISO,
         currentPeriodEnd: sub.current_period_end ? new Date(sub.current_period_end * 1000).toISOString() : null,
         cancelAt: cancelAt || null, // null clears the field (undefined is skipped)
         scheduledPlan: scheduledPlan || null, // null clears the field (undefined is skipped)
         scheduledAt: scheduledAt || null // null clears the field (undefined is skipped)
       }, event.created);
+      
+      console.log(`✅ D1 UPDATE SUCCESS: ${uid} → ${effectivePlan}${trialEndsAtISO ? ` (trial ends: ${trialEndsAtISO})` : ''}`);
     }
 
     if (event.type === 'customer.subscription.deleted') {
