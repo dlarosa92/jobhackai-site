@@ -1832,9 +1832,17 @@
     let currentLoadingOverlay = null;
     
     function showLoadingState(message = 'Loading...') {
-      // For regenerate/rewrite/update/optimize operations - use lightweight overlay
+      // For rewrite operations - use skeleton only, no overlay
+      // Skeleton provides better contextual feedback without blocking the view
+      if (message.includes('Rewriting')) {
+        // Don't show overlay - skeleton will be handled by showRewriteSkeleton()
+        // Just return early to prevent overlay from showing
+        return;
+      }
+      
+      // For regenerate/update/optimize operations - use lightweight overlay
       // since content is already visible and we're just updating it
-      if (message.includes('Regenerating') || message.includes('Rewriting') || 
+      if (message.includes('Regenerating') || 
           message.includes('Updating') || message.includes('Optimizing')) {
         if (window.JobHackAILoading) {
           currentLoadingOverlay = window.JobHackAILoading.show(message, 'main-loading-overlay');
@@ -1853,9 +1861,33 @@
       showSkeletons(willGetFeedback, hasRole);
       hideHeaderSkeleton();
       
+      // For Pro/Premium users, show skeleton on "Your Original Snippet" text box during analysis
+      if (userPlan === 'pro' || userPlan === 'premium') {
+        const rewriteContent = document.getElementById('rf-rewrite-content');
+        if (rewriteContent) {
+          // Ensure rewrite content is visible (it should already be for Pro/Premium)
+          rewriteContent.style.display = 'block';
+          // Show skeleton on the original snippet box (first textarea, index 0)
+          const originalSnippetBox = rewriteContent.querySelectorAll('.rf-snippet-box')[0];
+          if (originalSnippetBox) {
+            originalSnippetBox.classList.add('rf-skeleton', 'rf-snippet-skeleton');
+          }
+        }
+      }
+      
       // Store cleanup function (skeleton hide function)
       currentLoadingOverlay = () => {
         hideSkeletons();
+        // Also hide skeleton on original snippet box for Pro/Premium
+        if (userPlan === 'pro' || userPlan === 'premium') {
+          const rewriteContent = document.getElementById('rf-rewrite-content');
+          if (rewriteContent) {
+            const originalSnippetBox = rewriteContent.querySelectorAll('.rf-snippet-box')[0];
+            if (originalSnippetBox) {
+              originalSnippetBox.classList.remove('rf-skeleton', 'rf-snippet-skeleton');
+            }
+          }
+        }
       };
     }
 
@@ -2044,10 +2076,13 @@
       // Ensure the overlay isn't applied to the whole card
       rewriteContent.classList.remove('rf-skeleton');
 
+      // Only show skeleton on the "Rewritten Snippet" (second textarea, index 1)
+      // The "Original Snippet" (index 0) already has content, so no skeleton needed
       const snippetBoxes = rewriteContent.querySelectorAll('.rf-snippet-box');
-      snippetBoxes.forEach((box) => {
-        box.classList.add('rf-skeleton', 'rf-snippet-skeleton');
-      });
+      if (snippetBoxes.length > 1) {
+        // Only apply skeleton to the rewritten snippet box (second one)
+        snippetBoxes[1].classList.add('rf-skeleton', 'rf-snippet-skeleton');
+      }
     }
 
     function hideRewriteSkeleton() {
@@ -3517,6 +3552,9 @@
           // Use full resume text if available, otherwise use preview
           const origBox = document.querySelectorAll('#rf-rewrite-content .rf-snippet-box')[0];
           if (origBox) {
+            // Remove skeleton effect before populating text
+            origBox.classList.remove('rf-skeleton', 'rf-snippet-skeleton');
+            
             // Try to get full resume text from sessionStorage or upload result
             const resumeText = sessionStorage.getItem('currentResumeText') || uploadResult.resumeText;
             if (resumeText && resumeText.length > 0) {
