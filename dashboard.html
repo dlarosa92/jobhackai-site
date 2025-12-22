@@ -1022,10 +1022,12 @@
       // Continue with existing dashboard logic
       renderDashboard(user);
       
-      // Add periodic refresh for trial countdown (only if user is on trial)
-      if (user.plan === 'trial' && user.trialEndsAt) {
+      // Add periodic refresh for trial expiration detection (always run for trial users)
+      // This ensures trial expiration is detected even when trialEndsAt is initially null
+      if (user.plan === 'trial') {
         // Use mutable state object to track current trial end date (fixes closure issue)
-        const trialState = { trialEndsAt: user.trialEndsAt };
+        // Initialize with null if not available - will be updated on first refresh
+        const trialState = { trialEndsAt: user.trialEndsAt || null };
         
         // Refresh trial data every hour
         const refreshTrialData = async () => {
@@ -1040,7 +1042,7 @@
             if (planResponse.ok) {
               const planData = await planResponse.json();
               
-              // Check if plan changed (trial expired)
+              // Check if plan changed (trial expired) - CRITICAL: always check this
               if (planData.plan !== 'trial' && currentPlan === 'trial') {
                 console.log('🔄 Trial expired, plan changed to:', planData.plan);
                 // Reload page to show updated plan
@@ -1062,6 +1064,12 @@
                 localStorage.setItem('trial-ends-at', planData.trialEndsAt);
                 // Also update state to keep it in sync
                 trialState.trialEndsAt = planData.trialEndsAt;
+                // If we didn't have a date before, now we do - re-render to show countdown
+                if (!user.trialEndsAt) {
+                  const updatedUser = { ...user, trialEndsAt: planData.trialEndsAt };
+                  renderDashboard(updatedUser);
+                  console.log('✅ Trial end date now available:', planData.trialEndsAt);
+                }
               }
             }
           } catch (error) {
