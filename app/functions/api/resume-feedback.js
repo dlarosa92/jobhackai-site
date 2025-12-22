@@ -1012,8 +1012,8 @@ export async function onRequest(context) {
           try {
             const updated = await env.DB.prepare(
               `UPDATE resume_sessions 
-               SET title = COALESCE(?, title),
-                   role = COALESCE(?, role)
+               SET title = COALESCE(title, ?),
+                   role = COALESCE(role, ?)
                WHERE id = ?
                RETURNING id, title, role`
             ).bind(
