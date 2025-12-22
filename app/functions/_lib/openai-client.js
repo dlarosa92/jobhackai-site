@@ -307,14 +307,27 @@ export async function moderateContent(text, apiKey) {
 /**
  * Generate ATS feedback using AI (JSON schema structured output).
  * High-frequency, low-cost endpoint → gpt-4o-mini, tightly capped tokens.
+ * 
+ * TOKEN OPTIMIZATION: When no role is provided, skips role-specific feedback generation
+ * to save ~2000 tokens (~57% reduction in output tokens). This significantly reduces
+ * API costs and response latency for users who don't specify a target role.
  */
 export async function generateATSFeedback(resumeText, ruleBasedScores, jobTitle, env, options = {}) {
   const baseModel = env.OPENAI_MODEL_FEEDBACK || 'gpt-4o-mini';
 
+  // Check if we have a role - this determines if we generate role-specific feedback
+  const hasRole = jobTitle && jobTitle.trim().length > 0;
+
+  // Log token optimization when no role provided (for monitoring cost savings)
+  if (!hasRole) {
+    console.log('[OPENAI][ats_feedback] No role provided - skipping role-specific feedback generation (~2000 tokens saved)');
+  }
+
   // Respect env-driven config with sensible defaults
-  const defaultMaxOutputTokens = Number(env.OPENAI_MAX_TOKENS_ATS) > 0
-    ? Number(env.OPENAI_MAX_TOKENS_ATS)
-    : 3500; // Increased from 2000 to prevent truncation - roleSpecificFeedback needs ~2000 tokens alone
+  // When no role: reduce tokens from 3500 to 1500 (saves ~2000 tokens, ~57% reduction)
+  // Role-specific feedback needs ~2000 tokens alone, so we can significantly reduce when skipping it
+  const envMaxTokens = Number(env.OPENAI_MAX_TOKENS_ATS) > 0 ? Number(env.OPENAI_MAX_TOKENS_ATS) : 3500;
+  const defaultMaxOutputTokens = hasRole ? envMaxTokens : 1500; // ATS rubric only (~1500 tokens)
   const maxOutputTokens = options.maxOutputTokensOverride || defaultMaxOutputTokens;
 
   const temperature = Number.isFinite(Number(env.OPENAI_TEMPERATURE_SCORING))
@@ -325,26 +338,29 @@ export async function generateATSFeedback(resumeText, ruleBasedScores, jobTitle,
   const maxInputTokens = maxOutputTokens * 2; // resume + scores; still cheap with mini
   const truncatedResume = truncateToApproxTokens(resumeText || '', maxInputTokens);
 
-  const targetRoleUsed = jobTitle && jobTitle.trim().length > 0 ? jobTitle.trim() : 'general';
+  const targetRoleUsed = hasRole ? jobTitle.trim() : 'general';
 
-  // Derive role expectations from canonical templates to ground tips in current standards
-  const roleFamily = normalizeRoleToFamily(targetRoleUsed);
-  const roleTemplate = ROLE_SKILL_TEMPLATES[roleFamily] || ROLE_SKILL_TEMPLATES.generic_professional || {};
-  const mustHave = Array.isArray(roleTemplate.must_have) ? roleTemplate.must_have.slice(0, 8) : [];
-  const niceToHave = Array.isArray(roleTemplate.nice_to_have) ? roleTemplate.nice_to_have.slice(0, 8) : [];
-  const tools = Array.isArray(roleTemplate.tools) ? roleTemplate.tools.slice(0, 6) : [];
+  // Only process role templates and expectations if we have a role
+  let roleContext = '';
+  if (hasRole) {
+    // Derive role expectations from canonical templates to ground tips in current standards
+    const roleFamily = normalizeRoleToFamily(targetRoleUsed);
+    const roleTemplate = ROLE_SKILL_TEMPLATES[roleFamily] || ROLE_SKILL_TEMPLATES.generic_professional || {};
+    const mustHave = Array.isArray(roleTemplate.must_have) ? roleTemplate.must_have.slice(0, 8) : [];
+    const niceToHave = Array.isArray(roleTemplate.nice_to_have) ? roleTemplate.nice_to_have.slice(0, 8) : [];
+    const tools = Array.isArray(roleTemplate.tools) ? roleTemplate.tools.slice(0, 6) : [];
 
-  const roleExpectations = [
-    mustHave.length ? `Must-have: ${mustHave.join(', ')}` : null,
-    niceToHave.length ? `Nice-to-have: ${niceToHave.join(', ')}` : null,
-    tools.length ? `Common tools: ${tools.join(', ')}` : null
-  ].filter(Boolean).join(' | ') || 'Follow general professional standards for the stated role.';
+    const roleExpectations = [
+      mustHave.length ? `Must-have: ${mustHave.join(', ')}` : null,
+      niceToHave.length ? `Nice-to-have: ${niceToHave.join(', ')}` : null,
+      tools.length ? `Common tools: ${tools.join(', ')}` : null
+    ].filter(Boolean).join(' | ') || 'Follow general professional standards for the stated role.';
 
-  const roleContext = targetRoleUsed !== 'general' 
-    ? `The candidate is targeting: ${targetRoleUsed}. Base all role-specific advice on current expectations for this role: ${roleExpectations}`
-    : `No specific target role provided. Provide general tech/knowledge worker guidance. ${roleExpectations}`;
+    roleContext = `The candidate is targeting: ${targetRoleUsed}. Base all role-specific advice on current expectations for this role: ${roleExpectations}`;
+  }
 
   // Lean system prompt: instructions only, no repetition of schema constraints
+  // Conditionally include role-specific instructions only when we have a role
   const systemPrompt = `You are an ATS resume expert. Analyze the provided resume and generate precise, actionable feedback.
 
 CORE RULES:
@@ -360,7 +376,7 @@ RESUME-AWARE CONSTRAINT (CRITICAL):
 - If a section is already strong, say so—don't invent problems.
 - Base every diagnosis and tip on SPECIFIC text from the resume.
 
-ROLE-SPECIFIC FEEDBACK (REQUIRED):
+${hasRole ? `ROLE-SPECIFIC FEEDBACK (REQUIRED):
 Provide role-specific feedback for up to 5 sections. If a section lacks enough evidence, include what you can, note what is missing, and give next steps.
 Evaluate these sections for role fit: Header & Contact, Professional Summary, Experience, Skills, Education.
 For each section you can support: fitLevel (big_impact|tunable|strong), diagnosis (one sentence, specific to THIS resume), exactly 3 tips (grounded in actual content), rewritePreview (improve what exists, never fabricate).
@@ -368,7 +384,7 @@ If resume content is too thin to complete a section, explicitly say what to add 
 
 ${roleContext}
 
-ATS ISSUES: Identify structured problems with id, severity (low|medium|high), and details array.`;
+` : ''}ATS ISSUES: Identify structured problems with id, severity (low|medium|high), and details array.`;
 
   // We only send the minimal part of ruleBasedScores the model actually needs
   // NOTE: Do NOT include overallScore - it should not be in the atsRubric response
@@ -395,102 +411,113 @@ ATS ISSUES: Identify structured problems with id, severity (low|medium|high), an
     }
   ];
 
+  // Build schema properties - conditionally include roleSpecificFeedback based on hasRole
+  const schemaProperties = {
+    atsRubric: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          category: { type: 'string' },
+          score: { 
+            type: 'number',
+            description: 'Must match the exact score from RULE-BASED SCORES. Do NOT generate or modify this value.'
+          },
+          max: { 
+            type: 'number',
+            description: 'Must match the exact max value from RULE-BASED SCORES. Do NOT generate or modify this value.'
+          },
+          feedback: { type: 'string' },
+          suggestions: {
+            type: 'array',
+            items: { type: 'string' }
+          }
+        },
+        required: ['category', 'score', 'max', 'feedback']
+      }
+    },
+    atsIssues: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          id: {
+            type: 'string',
+            description: 'Stable identifier like "missing_keywords", "formatting_tables"'
+          },
+          severity: {
+            type: 'string',
+            enum: ['low', 'medium', 'high']
+          },
+          details: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'Specific items, e.g., missing keywords list'
+          }
+        },
+        required: ['id', 'severity', 'details']
+      }
+    }
+  };
+
+  // Build required fields array - conditionally include roleSpecificFeedback
+  const requiredFields = ['atsRubric', 'atsIssues'];
+
+  // Only include roleSpecificFeedback in schema if we have a role
+  if (hasRole) {
+    schemaProperties.roleSpecificFeedback = {
+      type: 'object',
+      properties: {
+        targetRoleUsed: { 
+          type: 'string',
+          description: 'The exact target role string used'
+        },
+        sections: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              section: {
+                type: 'string',
+                enum: ['Header & Contact', 'Professional Summary', 'Experience', 'Skills', 'Education']
+              },
+              fitLevel: {
+                type: 'string',
+                enum: ['big_impact', 'tunable', 'strong']
+              },
+              diagnosis: {
+                type: 'string',
+                description: 'One-sentence summary of main issue/opportunity'
+              },
+              tips: {
+                type: 'array',
+                items: { type: 'string' },
+                minItems: 3,
+                maxItems: 3,
+                description: 'Exactly 3 actionable suggestions'
+              },
+              rewritePreview: {
+                type: 'string',
+                description: '1-2 sentence improved version without fabricating content'
+              }
+            },
+            required: ['section', 'fitLevel', 'diagnosis', 'tips', 'rewritePreview']
+          },
+          minItems: 1,
+          maxItems: 5
+        }
+      },
+      required: ['targetRoleUsed', 'sections']
+    };
+    requiredFields.push('roleSpecificFeedback');
+  }
+
   const responseFormat = {
     name: 'ats_feedback',
     schema: {
       type: 'object',
-      properties: {
-        atsRubric: {
-          type: 'array',
-          items: {
-            type: 'object',
-            properties: {
-              category: { type: 'string' },
-              score: { 
-                type: 'number',
-                description: 'Must match the exact score from RULE-BASED SCORES. Do NOT generate or modify this value.'
-              },
-              max: { 
-                type: 'number',
-                description: 'Must match the exact max value from RULE-BASED SCORES. Do NOT generate or modify this value.'
-              },
-              feedback: { type: 'string' },
-              suggestions: {
-                type: 'array',
-                items: { type: 'string' }
-              }
-            },
-            required: ['category', 'score', 'max', 'feedback']
-          }
-        },
-        roleSpecificFeedback: {
-          type: 'object',
-          properties: {
-            targetRoleUsed: { 
-              type: 'string',
-              description: 'The exact target role string used, or "general" if no role provided'
-            },
-            sections: {
-              type: 'array',
-              items: {
-                type: 'object',
-                properties: {
-                  section: {
-                    type: 'string',
-                    enum: ['Header & Contact', 'Professional Summary', 'Experience', 'Skills', 'Education']
-                  },
-                  fitLevel: {
-                    type: 'string',
-                    enum: ['big_impact', 'tunable', 'strong']
-                  },
-                  diagnosis: {
-                    type: 'string',
-                    description: 'One-sentence summary of main issue/opportunity'
-                  },
-                  tips: {
-                    type: 'array',
-                    items: { type: 'string' },
-                    minItems: 3,
-                    maxItems: 3,
-                    description: 'Exactly 3 actionable suggestions'
-                  },
-                  rewritePreview: {
-                    type: 'string',
-                    description: '1-2 sentence improved version without fabricating content'
-                  }
-                },
-                required: ['section', 'fitLevel', 'diagnosis', 'tips', 'rewritePreview']
-              },
-              minItems: 1,
-              maxItems: 5
-            }
-          },
-          required: ['targetRoleUsed', 'sections']
-        },
-        atsIssues: {
-          type: 'array',
-          items: {
-            type: 'object',
-            properties: {
-              id: {
-                type: 'string',
-                description: 'Stable identifier like "missing_keywords", "formatting_tables"'
-              },
-              severity: {
-                type: 'string',
-                enum: ['low', 'medium', 'high']
-              },
-              details: {
-                type: 'array',
-                items: { type: 'string' },
-                description: 'Specific items, e.g., missing keywords list'
-              }
-            },
-            required: ['id', 'severity', 'details']
-          }
-        }
-      },
-      required: ['atsRubric', 'roleSpecificFeedback', 'atsIssues']
+      properties: schemaProperties,
+      required: requiredFields
     }
   };
 
