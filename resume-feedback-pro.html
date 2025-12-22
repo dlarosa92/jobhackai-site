@@ -3798,7 +3798,17 @@
             showLoadingState('Regenerating feedback...');
             this.disabled = true;
             this.textContent = 'Regenerating...';
-            setRoleStatus('Generating tips…');
+            
+            // Only show "Generating tips..." if user has a plan AND provided a role
+            const userPlan = getCurrentUserPlan();
+            const willGetFeedback = ['trial', 'essential', 'pro', 'premium'].includes(userPlan);
+            const hasRole = jobTitle && jobTitle.trim().length > 0;
+            if (willGetFeedback && hasRole) {
+              setRoleStatus('Generating tips…');
+            } else {
+              setRoleStatus('');
+            }
+            
             const roleChanged = previousJobTitle !== jobTitle;
 
             // Start ATS (if role changed) and feedback in parallel
