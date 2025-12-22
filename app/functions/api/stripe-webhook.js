@@ -265,7 +265,7 @@ export async function onRequest(context) {
       // Enhanced logging for trial conversion detection
       console.log(`🔄 TRIAL CONVERSION CHECK:`, {
         eventType: event.type,
-        previousStatus: previousPlan ? 'trial' : 'unknown',
+        previousStatus: previousPlan || 'unknown', // Use actual previousPlan value, not assumed 'trial'
         currentStatus: status,
         previousPlan: previousPlan,
         originalPlan: originalPlan,
