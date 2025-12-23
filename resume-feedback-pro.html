@@ -3625,58 +3625,60 @@
             // Remove skeleton effect before populating text
             origBox.classList.remove('rf-skeleton', 'rf-snippet-skeleton');
             
-            // Only update if box is empty or still has placeholder/skeleton text
-            // (Performance fix: don't overwrite if already loaded immediately)
+            // Check if box is empty or still has placeholder/skeleton text
             const currentValue = origBox.value || '';
             const isEmptyOrPlaceholder = !currentValue || 
               currentValue.includes('Original resume excerpt') || 
               currentValue.includes('will appear here');
             
-            if (isEmptyOrPlaceholder) {
-              // Try to get full resume text from sessionStorage or upload result
-              const resumeText = sessionStorage.getItem('currentResumeText') || uploadResult.resumeText;
-              if (resumeText && resumeText.length > 0) {
-                // Clean up text for display - remove excessive whitespace and ensure readability
-                let cleanText = resumeText.replace(/\s+/g, ' ').trim();
+            // Always validate quality, even if box was pre-populated (performance fix)
+            // This ensures pro/premium users see quality warnings for corrupted OCR text
+            const resumeText = sessionStorage.getItem('currentResumeText') || uploadResult.resumeText;
+            
+            if (resumeText && resumeText.length > 0) {
+              // Clean up text for display - remove excessive whitespace and ensure readability
+              let cleanText = resumeText.replace(/\s+/g, ' ').trim();
+              
+              // Check if text became empty after cleaning (only whitespace was present)
+              if (cleanText.length === 0) {
+                // Text was only whitespace - show helpful message
+                origBox.value = '⚠️ No readable text could be extracted from this file. Please upload a text-based PDF or DOCX file.';
+              } else {
+                // Validate text quality - check for excessive non-alphanumeric characters (possible OCR corruption)
+                // Only calculate ratio if cleanText has content to avoid division by zero
+                const alphanumericRatio = cleanText.length > 0 
+                  ? (cleanText.match(/[a-zA-Z0-9\s]/g) || []).length / cleanText.length 
+                  : 0;
                 
-                // Check if text became empty after cleaning (only whitespace was present)
-                if (cleanText.length === 0) {
-                  // Text was only whitespace - show helpful message
-                  origBox.value = '⚠️ No readable text could be extracted from this file. Please upload a text-based PDF or DOCX file.';
-                } else {
-                  // Validate text quality - check for excessive non-alphanumeric characters (possible OCR corruption)
-                  // Only calculate ratio if cleanText has content to avoid division by zero
-                  const alphanumericRatio = cleanText.length > 0 
-                    ? (cleanText.match(/[a-zA-Z0-9\s]/g) || []).length / cleanText.length 
-                    : 0;
-                  
-                  if (alphanumericRatio < 0.7 && cleanText.length > 100) {
-                    // Text appears corrupted - show warning message instead
-                    origBox.value = '⚠️ Text extraction quality is low. For best results, please upload a text-based PDF or DOCX file.\n\nExtracted text preview:\n' + cleanText.substring(0, 200) + '...';
-                  } else {
-                    // Use first 500 characters for snippet display (more readable than 200)
-                    // Ensure we don't cut in the middle of a word if possible
-                    let snippet = cleanText.length > 500 ? cleanText.substring(0, 500) : cleanText;
-                    const lastSpace = snippet.lastIndexOf(' ');
-                    if (cleanText.length > 500 && lastSpace > 400) {
-                      snippet = snippet.substring(0, lastSpace) + '...';
-                    } else if (cleanText.length > 500) {
-                      snippet = snippet + '...';
-                    }
-                    origBox.value = snippet;
+                if (alphanumericRatio < 0.7 && cleanText.length > 100) {
+                  // Text appears corrupted - show warning message instead (overwrite pre-populated value if needed)
+                  origBox.value = '⚠️ Text extraction quality is low. For best results, please upload a text-based PDF or DOCX file.\n\nExtracted text preview:\n' + cleanText.substring(0, 200) + '...';
+                } else if (isEmptyOrPlaceholder) {
+                  // Only update if box was empty - don't overwrite pre-populated good-quality text
+                  // Use first 500 characters for snippet display (more readable than 200)
+                  // Ensure we don't cut in the middle of a word if possible
+                  let snippet = cleanText.length > 500 ? cleanText.substring(0, 500) : cleanText;
+                  const lastSpace = snippet.lastIndexOf(' ');
+                  if (cleanText.length > 500 && lastSpace > 400) {
+                    snippet = snippet.substring(0, lastSpace) + '...';
+                  } else if (cleanText.length > 500) {
+                    snippet = snippet + '...';
                   }
+                  origBox.value = snippet;
                 }
-              } else if (uploadResult.textPreview) {
+                // If box already has content (pre-populated) and quality is good, keep it
+              }
+            } else if (isEmptyOrPlaceholder) {
+              // Only update placeholder if box was empty
+              if (uploadResult.textPreview) {
                 origBox.value = uploadResult.textPreview;
               } else {
                 // If no text available, show placeholder
                 origBox.value = 'Resume text will appear here after analysis.';
               }
             }
-            // If box already has content (loaded immediately), just ensure skeleton is removed
-            if (!isEmptyOrPlaceholder) {
-              origBox.classList.remove('rf-skeleton', 'rf-snippet-skeleton');
-            }
+            // Ensure skeleton is removed regardless of whether we updated the value
+            origBox.classList.remove('rf-skeleton', 'rf-snippet-skeleton');
           }
 
           /* Description update disabled to preserve plan-specific info matching Interview Questions UI */
