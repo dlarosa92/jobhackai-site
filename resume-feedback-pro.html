@@ -1796,7 +1796,9 @@
       let actionLabel = 'OK';
       
       // Check if error has upgradeRequired flag (from API response)
+      // Check both top-level and context.upgradeRequired (for dev environment responses)
       const upgradeRequired = error.upgradeRequired || 
+        error.context?.upgradeRequired ||
         (error.message && error.message.includes('Upgrade to Pro'));
       
       // Handle upgrade-required errors with direct Stripe checkout
@@ -3678,16 +3680,9 @@
               roleSpecificFeedback: null
             });
 
-            // Show error modal but keep ATS score visible
-            if (window.showErrorModal) {
-              const errorMsg = error.message || 'Failed to generate feedback. Your ATS score is still available.';
-              window.showErrorModal('Feedback Generation Failed', errorMsg, {
-                buttonText: 'OK',
-                onClose: () => {
-                  // Keep ATS score visible - don't clear state
-                }
-              });
-            }
+            // Use handleApiError to check for upgradeRequired and show appropriate modal
+            // This will show the upgrade modal if upgradeRequired is true, otherwise show generic error
+            handleApiError(error);
             
             // Clean up feedback loading overlay on feedback failure
             if (window._currentFeedbackLoading) {
@@ -4112,13 +4107,8 @@
                 roleSpecificFeedback: null
               });
 
-              if (window.showErrorModal) {
-                const errorMsg = error.message || 'Failed to generate feedback. Your ATS score is still available.';
-                window.showErrorModal('Feedback Generation Failed', errorMsg, {
-                  buttonText: 'OK',
-                  onClose: () => {}
-                });
-              }
+              // Use handleApiError to check for upgradeRequired and show appropriate modal
+              handleApiError(error);
               this.textContent = 'Regenerate Feedback';
               this.disabled = false;
               hideLoadingState();
