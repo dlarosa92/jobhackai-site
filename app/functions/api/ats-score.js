@@ -344,7 +344,10 @@ export async function onRequest(context) {
         grammarScore: ruleBasedScores.grammarScore.score
       },
       feedback,
-      recommendations: ruleBasedScores.recommendations || []
+      recommendations: ruleBasedScores.recommendations || [],
+      // Trust-first: surface extraction confidence to drive UI messaging (non-breaking additive fields)
+      extractionQuality: ruleBasedScores.extractionQuality || null,
+      detectedHeadings: ruleBasedScores.detectedHeadings || null
     };
 
     // Cache result (24 hours) - best effort, skip if KV unavailable

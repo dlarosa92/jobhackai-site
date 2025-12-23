@@ -5,6 +5,7 @@
 import { getBearer, verifyFirebaseIdToken } from '../_lib/firebase-auth.js';
 import { generateATSFeedback } from '../_lib/openai-client.js';
 import { scoreResume } from '../_lib/ats-scoring-engine.js';
+import { getGrammarDiagnostics } from '../_lib/grammar-engine.js';
 import { errorResponse, successResponse, generateRequestId } from '../_lib/error-handler.js';
 import { sanitizeJobTitle, sanitizeResumeText, sanitizeResumeId } from '../_lib/input-sanitizer.js';
 import { validateAIFeedback, validateFeedbackResult, isValidFeedbackResult, normalizeRole } from '../_lib/feedback-validator.js';
@@ -125,6 +126,14 @@ async function updateUsageCounters(uid, resumeId, plan, env) {
       expirationTtl: expirationTtl
     });
   }
+}
+
+function toExtractionQuality(diagnostics) {
+  return {
+    extractionStatus: diagnostics?.extractionStatus || 'ok',
+    confidence: typeof diagnostics?.confidence === 'number' ? diagnostics.confidence : 1.0,
+    tokenCount: typeof diagnostics?.tokenCount === 'number' ? diagnostics.tokenCount : 0
+  };
 }
 
 export async function onRequest(context) {
@@ -533,6 +542,17 @@ export async function onRequest(context) {
       }
     }
 
+  // Ensure extractionQuality is available for UI trust messaging (even when reusing older D1 scores)
+  let extractionQuality = ruleBasedScores?.extractionQuality || null;
+  if (!extractionQuality && resumeData?.text) {
+    try {
+      const diagnostics = await getGrammarDiagnostics(env, resumeData.text, {});
+      extractionQuality = toExtractionQuality(diagnostics);
+    } catch (e) {
+      extractionQuality = null;
+    }
+  }
+
   // --- D1 feedback reuse (source of truth) ---
   if (d1User && isD1Available(env)) {
     try {
@@ -594,7 +614,8 @@ export async function onRequest(context) {
               });
 
               return successResponse({
-                ...feedback
+                ...feedback,
+                extractionQuality: feedback?.extractionQuality || extractionQuality || null
               }, 200, origin, env, requestId);
             } else {
               console.log('[RESUME-FEEDBACK] Ignoring D1 feedback session (role mismatch or invalid structure)', {
@@ -812,6 +833,7 @@ export async function onRequest(context) {
       originalResume: resumeData.text,
       fileName: resumeData.fileName || null,
       resumeId: sanitizedResumeId,
+      extractionQuality: extractionQuality,
       atsRubric: aiFeedback.atsRubric
         // Filter out any "overallScore" or "overall" categories - only process the 5 expected categories
         .filter(item => {
@@ -916,6 +938,7 @@ export async function onRequest(context) {
         originalResume: resumeData.text,
         fileName: resumeData.fileName || null,
         resumeId: sanitizedResumeId,
+        extractionQuality: extractionQuality,
         atsRubric: [
         {
           category: 'Keyword Match',

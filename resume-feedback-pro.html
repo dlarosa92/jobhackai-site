@@ -3325,8 +3325,10 @@
                   showATSFeedback();
                 }, 100);
                 
-                // Show success toast
-                if (window.JobHackAIToast) {
+                // Trust-first: if extraction quality is low, show a single warning toast (auto-dismiss 8s)
+                // and avoid stacking a success toast on top.
+                const warned = maybeWarnLowExtractionQuality(result.extractionQuality);
+                if (!warned && window.JobHackAIToast) {
                   window.JobHackAIToast.success('ATS score calculated successfully.');
                 }
               } else {
@@ -3850,6 +3852,8 @@
               if (possibleScore.success && possibleScore.score !== undefined && possibleScore.breakdown) {
                 scoreResult = possibleScore;
                 scoreUpdated = true;
+                // Trust-first: warn once when extraction quality is low (auto-dismiss 8s)
+                maybeWarnLowExtractionQuality(possibleScore.extractionQuality);
                 updateProgressRing(scoreResult.score);
                 const rubric = [
                   {
@@ -4343,6 +4347,28 @@
         // Toast is redundant and confusing when tips are missing
       }
       return status;
+    }
+
+    // Trust-first: show a warning toast (once per short window) when extraction quality is low.
+    // Uses existing JobHackAIToast (design system-consistent), and auto-dismisses after 8 seconds.
+    let _rfLowExtractionWarnShownAt = 0;
+    function maybeWarnLowExtractionQuality(extractionQuality) {
+      if (!window.JobHackAIToast || !extractionQuality || typeof extractionQuality !== 'object') return false;
+      const confidence = typeof extractionQuality.confidence === 'number' ? extractionQuality.confidence : 1.0;
+      const status = extractionQuality.extractionStatus || 'ok';
+      const isLow = status !== 'ok' || confidence < 0.65;
+      if (!isLow) return false;
+
+      // Avoid accidental duplicate toasts from overlapping async flows.
+      const now = Date.now();
+      if (now - _rfLowExtractionWarnShownAt < 1500) return true;
+      _rfLowExtractionWarnShownAt = now;
+
+      window.JobHackAIToast.warning(
+        'We may not have read your resume perfectly. Some structure checks are less certain—try uploading a DOCX or TXT for best results.',
+        8000
+      );
+      return true;
     }
 
     function setRoleStatus(text) {

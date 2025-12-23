@@ -7,6 +7,119 @@ import { getGrammarDiagnostics } from './grammar-engine.js';
 import { normalizeRoleToFamily } from './role-normalizer.js';
 import { ROLE_SKILL_TEMPLATES } from './role-skills.js';
 
+// --- Extraction-quality & heading detection helpers (trust-first) ---
+function buildExtractionQuality(grammarDiagnostics) {
+  return {
+    extractionStatus: grammarDiagnostics?.extractionStatus || 'ok',
+    confidence: typeof grammarDiagnostics?.confidence === 'number' ? grammarDiagnostics.confidence : 1.0,
+    tokenCount: typeof grammarDiagnostics?.tokenCount === 'number' ? grammarDiagnostics.tokenCount : 0
+  };
+}
+
+function isHighConfidenceQuality(q) {
+  if (!q) return false;
+  if (q.extractionStatus && q.extractionStatus !== 'ok') return false;
+  return (q.confidence || 0) >= 0.65 && (q.tokenCount || 0) >= 80;
+}
+
+function getNormalizedLines(text) {
+  return (text || '')
+    .split('\n')
+    .map((l) => l.trim())
+    .filter(Boolean)
+    .map((l) => l.toLowerCase());
+}
+
+function anyLineMatches(linesLower, patterns) {
+  return linesLower.some((line) => patterns.some((re) => re.test(line)));
+}
+
+function detectSectionHeadings(resumeText) {
+  const linesLower = getNormalizedLines(resumeText);
+
+  // Headings are commonly short, uppercase, or end with ':' in extracted text.
+  // We match whole-line headings to reduce accidental matches inside bullets.
+  const patterns = {
+    experience: [
+      /^experience:?$/,
+      /^work experience:?$/,
+      /^professional experience:?$/,
+      /^employment:?$/,
+      /^work history:?$/,
+      /^career history:?$/,
+      /^relevant experience:?$/,
+      /^projects:?$/ // many resumes use Projects as a primary experience proxy
+    ],
+    education: [
+      /^education:?$/,
+      /^academic background:?$/,
+      /^academics:?$/,
+      /^certifications:?$/,
+      /^certificates:?$/,
+      /^training:?$/
+    ],
+    skills: [
+      /^skills:?$/,
+      /^technical skills:?$/,
+      /^core skills:?$/,
+      /^core competencies:?$/,
+      /^competencies:?$/,
+      /^technologies:?$/,
+      /^technology:?$/,
+      /^tech stack:?$/,
+      /^tools:?$/,
+      /^tooling:?$/,
+      /^frameworks:?$/,
+      /^languages:?$/
+    ]
+  };
+
+  const byHeading = {
+    experience: anyLineMatches(linesLower, patterns.experience),
+    education: anyLineMatches(linesLower, patterns.education),
+    skills: anyLineMatches(linesLower, patterns.skills)
+  };
+
+  // Fallback: broader substring hints (kept minimal; used only to reduce false positives)
+  const textLower = (resumeText || '').toLowerCase();
+  const byHint = {
+    experience: textLower.includes('\nexperience') || textLower.includes('work experience') || textLower.includes('employment'),
+    education: textLower.includes('\neducation') || textLower.includes('university') || textLower.includes('degree'),
+    skills: textLower.includes('\nskills') || textLower.includes('tech stack') || textLower.includes('technologies') || textLower.includes('tools')
+  };
+
+  return {
+    experience: byHeading.experience || byHint.experience,
+    education: byHeading.education || byHint.education,
+    skills: byHeading.skills || byHint.skills
+  };
+}
+
+function getTopLines(resumeText, maxLines = 30) {
+  return (resumeText || '')
+    .split('\n')
+    .map((l) => l.trim())
+    .filter(Boolean)
+    .slice(0, maxLines)
+    .join('\n');
+}
+
+function detectContactSignals(text) {
+  const t = text || '';
+  const hasEmail = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i.test(t);
+  const hasPhone = /(\+?\d{1,3}[\s.-]?)?(\(?\d{3}\)?[\s.-]?)\d{3}[\s.-]?\d{4}/.test(t);
+  const hasLinkedIn = /\blinkedin\.com\/in\/[a-z0-9-_%]+/i.test(t);
+  const hasGitHub = /\bgithub\.com\/[a-z0-9-_%]+/i.test(t);
+  return { hasEmail, hasPhone, hasLinkedIn, hasGitHub };
+}
+
+function safeQualityPrefix(quality) {
+  const highConf = isHighConfidenceQuality(quality);
+  return highConf
+    ? ''
+    : 'We may not have read your resume perfectly, so some checks are less certain. ';
+}
+
 /**
  * Score resume using rule-based rubric
  * @param {string} resumeText - Extracted resume text
@@ -32,6 +145,13 @@ export async function scoreResume(resumeText, jobTitle, metadata = {}, env) {
   const expectedMustHave = finalTemplate.must_have || [];
   const expectedNiceToHave = finalTemplate.nice_to_have || [];
   
+  // Compute grammar diagnostics early so we can gate structure/section checks on extraction quality.
+  // This avoids "confidently wrong" missing-section/contact claims when extraction is shaky.
+  const grammarDiagnostics = await getGrammarDiagnostics(env, resumeText, {
+    extractionHint
+  });
+  const extractionQuality = buildExtractionQuality(grammarDiagnostics);
+
   // Score each category
   const keywordScore = scoreKeywordRelevanceWithTemplates(
     resumeText,
@@ -39,15 +159,10 @@ export async function scoreResume(resumeText, jobTitle, metadata = {}, env) {
     expectedMustHave,
     expectedNiceToHave
   );
-  const formattingScore = scoreFormattingCompliance(resumeText, isMultiColumn);
-  const structureScore = scoreStructureAndCompleteness(resumeText);
+  const formattingScore = scoreFormattingCompliance(resumeText, isMultiColumn, extractionQuality);
+  const structureScore = scoreStructureAndCompleteness(resumeText, extractionQuality);
   const toneScore = scoreToneAndClarity(resumeText);
   
-  // Get grammar diagnostics (single source of truth)
-  const grammarDiagnostics = await getGrammarDiagnostics(env, resumeText, {
-    extractionHint
-  });
-
   // Derive band + final numeric grammar score from diagnostics and other rubric scores
   const { band: grammarBand, finalScore: grammarNumericScore } =
     mapGrammarDiagnosticsToScore(grammarDiagnostics, {
@@ -97,6 +212,8 @@ export async function scoreResume(resumeText, jobTitle, metadata = {}, env) {
     },
     overallScore,
     roleFamily,
+    extractionQuality,
+    detectedHeadings: detectSectionHeadings(resumeText),
     roleSkillSummary: {
       expectedMustHaveCount: keywordScore.expectedMustHaveCount,
       expectedNiceToHaveCount: keywordScore.expectedNiceToHaveCount,
@@ -371,132 +488,156 @@ function detectTables(resumeText) {
 /**
  * Score Formatting Compliance (20 pts)
  */
-function scoreFormattingCompliance(resumeText, isMultiColumn) {
+/**
+ * Score Formatting Compliance (20 pts) – trust-first version (quality-gated)
+ */
+function scoreFormattingCompliance(resumeText, isMultiColumn, quality) {
   let score = 20;
-  let issues = [];
-  
+  const issues = [];
+  const highConf = isHighConfidenceQuality(quality);
+
   // Multi-column penalty (-10 pts)
   if (isMultiColumn) {
     score -= 10;
     issues.push('Multi-column layout detected');
   }
-  
-  // Check for tables using improved detection
+
+  // Tables penalty (-5 pts)
   if (detectTables(resumeText)) {
     score -= 5;
     issues.push('Tables detected');
   }
-  
-  // Check for standard headings
-  const requiredHeadings = ['experience', 'education', 'skills'];
-  const textLower = resumeText.toLowerCase();
-  const hasExperience = textLower.includes('experience') || textLower.includes('work');
-  const hasEducation = textLower.includes('education') || textLower.includes('degree');
-  const hasSkills = textLower.includes('skills') || textLower.includes('technical');
-  
-  if (!hasExperience) {
-    score -= 3;
-    issues.push('Missing Experience section');
+
+  // Headings detection (synonyms + heading-line matching)
+  const headings = detectSectionHeadings(resumeText);
+
+  if (!headings.experience) {
+    if (highConf) score -= 3;
+    issues.push(
+      highConf
+        ? 'Experience section not detected'
+        : 'Couldn’t confidently detect an Experience heading (may be labeled differently)'
+    );
   }
-  if (!hasEducation) {
-    score -= 2;
-    issues.push('Missing Education section');
+  if (!headings.education) {
+    if (highConf) score -= 2;
+    issues.push(
+      highConf
+        ? 'Education section not detected'
+        : 'Couldn’t confidently detect an Education heading (may be labeled differently)'
+    );
   }
-  if (!hasSkills) {
-    score -= 2;
-    issues.push('Missing Skills section');
+  if (!headings.skills) {
+    if (highConf) score -= 2;
+    issues.push(
+      highConf
+        ? 'Skills section not detected'
+        : 'Couldn’t confidently detect a Skills heading (e.g., “Tech Stack”, “Technologies”)'
+    );
   }
-  
+
   score = Math.max(0, score);
-  
+
+  const prefix = safeQualityPrefix(quality);
   let feedback = '';
   if (score >= 18) {
-    feedback = 'Excellent formatting. Avoid tables, graphics, and use standard headings.';
+    feedback = prefix + 'Excellent formatting. Avoid tables, graphics, and use standard headings.';
   } else if (score >= 15) {
-    feedback = 'Good formatting. ' + (issues.length > 0 ? issues.join(', ') + '. ' : '') + 'Avoid tables and graphics.';
+    feedback =
+      prefix +
+      'Good formatting. ' +
+      (issues.length > 0 ? issues.join(', ') + '. ' : '') +
+      'Avoid tables and graphics.';
   } else {
-    feedback = 'Formatting needs improvement. ' + (issues.length > 0 ? issues.join(', ') + '. ' : '') + 'Use single-column layout and standard headings.';
+    feedback =
+      prefix +
+      'Formatting needs improvement. ' +
+      (issues.length > 0 ? issues.join(', ') + '. ' : '') +
+      'Use single-column layout and standard headings.';
   }
-  
+
   return { score, feedback };
 }
 
 /**
  * Score Structure & Completeness (15 pts)
  */
-function scoreStructureAndCompleteness(resumeText) {
+/**
+ * Score Structure & Completeness (15 pts) – trust-first version (quality-gated)
+ */
+function scoreStructureAndCompleteness(resumeText, quality) {
   let score = 15;
-  let issues = [];
-  
-  // Check section order (Contact, Experience, Education, Skills)
-  const textLower = resumeText.toLowerCase();
-  // Filter out -1 values before Math.min to avoid incorrect results when any term is missing
-  const contactIndices = [
-    textLower.indexOf('email'),
-    textLower.indexOf('phone'),
-    textLower.indexOf('@')
-  ].filter(idx => idx !== -1);
-  const contactIndex = contactIndices.length > 0 ? Math.min(...contactIndices) : -1;
-  
-  const experienceIndices = [
-    textLower.indexOf('experience'),
-    textLower.indexOf('work history'),
-    textLower.indexOf('employment')
-  ].filter(idx => idx !== -1);
-  const experienceIndex = experienceIndices.length > 0 ? Math.min(...experienceIndices) : -1;
-  
-  const educationIndices = [
-    textLower.indexOf('education'),
-    textLower.indexOf('degree'),
-    textLower.indexOf('university')
-  ].filter(idx => idx !== -1);
-  const educationIndex = educationIndices.length > 0 ? Math.min(...educationIndices) : -1;
-  
-  if (contactIndex === -1 || contactIndex > 500) {
+  const issues = [];
+  const highConf = isHighConfidenceQuality(quality);
+
+  const textLower = (resumeText || '').toLowerCase();
+
+  // Contact placement: only penalize if we can detect contact somewhere AND we're confident.
+  const topBlock = getTopLines(resumeText, 30);
+  const topContact = detectContactSignals(topBlock);
+  const anyContact = detectContactSignals(resumeText);
+  const hasAnyContact = anyContact.hasEmail || anyContact.hasPhone || anyContact.hasLinkedIn || anyContact.hasGitHub;
+  const hasTopContact = topContact.hasEmail || topContact.hasPhone || topContact.hasLinkedIn || topContact.hasGitHub;
+
+  if (highConf && hasAnyContact && !hasTopContact) {
     score -= 2;
-    issues.push('Contact information not at top');
+    issues.push('Contact details may not be near the top');
+  } else if (!highConf && hasAnyContact && !hasTopContact) {
+    issues.push('Contact placement check is less certain due to extraction quality');
   }
-  
-  if (experienceIndex !== -1 && educationIndex !== -1 && experienceIndex > educationIndex) {
-    score -= 2;
-    issues.push('Experience should come before Education');
+
+  // Order check: Experience should come before Education (only if both are present as headings).
+  if (highConf) {
+    const expIdx = textLower.indexOf('experience');
+    const eduIdx = textLower.indexOf('education');
+    if (expIdx !== -1 && eduIdx !== -1 && expIdx > eduIdx) {
+      score -= 2;
+      issues.push('Experience should come before Education');
+    }
   }
-  
-  // Check date formatting
-  const datePattern = /\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+\d{4}\b/gi;
-  const datesFound = (resumeText.match(datePattern) || []).length;
-  
-  if (datesFound < 2) {
-    score -= 2;
-    issues.push('Inconsistent or missing date formatting');
+
+  // Date formatting: broaden patterns; only enforce when confident.
+  if (highConf) {
+    const monthYear = /\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+\d{4}\b/gi;
+    const numericMonthYear = /\b\d{1,2}[\/\-]\d{4}\b/g;
+    const yearOnly = /\b(19|20)\d{2}\b/g;
+    const datesFound =
+      (resumeText.match(monthYear) || []).length +
+      (resumeText.match(numericMonthYear) || []).length +
+      (resumeText.match(yearOnly) || []).length;
+    if (datesFound < 2) {
+      score -= 2;
+      issues.push('Date formatting may be inconsistent');
+    }
   }
-  
-  // Check for job title-company-description order in experience
-  const experienceSection = resumeText.substring(
-    textLower.indexOf('experience'),
-    textLower.indexOf('education') !== -1 ? textLower.indexOf('education') : resumeText.length
-  );
-  
-  // Look for patterns like "Software Engineer at Company Name"
-  const jobTitlePattern = /([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\s+(?:at|@)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)/g;
-  const jobMatches = (experienceSection.match(jobTitlePattern) || []).length;
-  
-  if (jobMatches === 0 && experienceSection.length > 100) {
-    score -= 2;
-    issues.push('Experience entries should follow Title-Company-Description format');
+
+  // Experience entry parseability: guard and soften.
+  if (highConf) {
+    const expStart = textLower.indexOf('experience');
+    if (expStart !== -1) {
+      const eduStart = textLower.indexOf('education');
+      const experienceSection = resumeText.substring(expStart, eduStart !== -1 ? eduStart : resumeText.length);
+      const jobTitlePattern = /([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\s+(?:at|@)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)/g;
+      const jobMatches = (experienceSection.match(jobTitlePattern) || []).length;
+      if (jobMatches === 0 && experienceSection.length > 140) {
+        score -= 1;
+        issues.push('Experience entries may be easier for ATS to parse with a consistent Title → Company format');
+      }
+    }
   }
-  
+
   score = Math.max(0, score);
-  
+
+  const prefix = safeQualityPrefix(quality);
   let feedback = '';
   if (score >= 13) {
-    feedback = 'Well-structured resume. Order sections: Contact, Experience, Education, Skills.';
+    feedback = prefix + 'Well-structured resume. Order sections: Contact, Experience, Education, Skills.';
   } else if (score >= 10) {
-    feedback = 'Good structure. ' + (issues.length > 0 ? issues.join(', ') + '. ' : '') + 'Ensure consistent date formatting.';
+    feedback = prefix + 'Good structure. ' + (issues.length > 0 ? issues.join(', ') + '. ' : '') + 'Ensure consistent formatting.';
   } else {
-    feedback = 'Structure needs improvement. ' + (issues.length > 0 ? issues.join(', ') + '. ' : '') + 'Follow standard resume format.';
+    feedback = prefix + 'Structure may need improvement. ' + (issues.length > 0 ? issues.join(', ') + '. ' : '') + 'Follow a standard resume format.';
   }
-  
+
   return { score, feedback };
 }
 
