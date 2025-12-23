@@ -1207,13 +1207,39 @@
           lastScore = cachedScore.score.toString();
           lastJobTitle = cachedScore.jobTitle || null;
           lastBreakdown = cachedScore.breakdown || null;
-          // Generate summary from score if breakdown available
-          if (cachedScore.score > 85) {
-            lastSummary = 'Excellent! Your resume is highly ATS compatible.';
-          } else if (cachedScore.score > 70) {
-            lastSummary = 'Your resume meets many ATS criteria and is likely to be noticed.';
+          
+          // Check extractionQuality and show warning if low
+          if (cachedScore.extractionQuality) {
+            maybeWarnLowExtractionQuality(cachedScore.extractionQuality);
+            
+            // Generate summary based on extractionQuality
+            const extractionQuality = cachedScore.extractionQuality;
+            const isHighQuality = extractionQuality.extractionStatus === 'ok' && 
+                                 extractionQuality.confidence >= 0.65 && 
+                                 extractionQuality.tokenCount >= 80;
+            
+            if (isHighQuality) {
+              // Use confident language
+              if (cachedScore.score > 85) {
+                lastSummary = 'Excellent! Your resume is highly ATS compatible.';
+              } else if (cachedScore.score > 70) {
+                lastSummary = 'Your resume meets many ATS criteria and is likely to be noticed.';
+              } else {
+                lastSummary = 'Your resume needs improvement for better ATS results.';
+              }
+            } else {
+              // Use softer language when quality is low
+              lastSummary = 'We may not have detected all sections in your resume. Consider checking formatting.';
+            }
           } else {
-            lastSummary = 'Your resume needs improvement for better ATS results.';
+            // No extractionQuality data - use default confident language
+            if (cachedScore.score > 85) {
+              lastSummary = 'Excellent! Your resume is highly ATS compatible.';
+            } else if (cachedScore.score > 70) {
+              lastSummary = 'Your resume meets many ATS criteria and is likely to be noticed.';
+            } else {
+              lastSummary = 'Your resume needs improvement for better ATS results.';
+            }
           }
         }
       }
@@ -1252,14 +1278,34 @@
                 lastScore = resumeData.score?.toString();
                 lastJobTitle = resumeData.jobTitle || null;
                 lastBreakdown = resumeData.breakdown || null;
+                const extractionQuality = resumeData.extractionQuality;
                 
-                // Generate summary from score
-                if (resumeData.score > 85) {
-                  lastSummary = 'Excellent! Your resume is highly ATS compatible.';
-                } else if (resumeData.score > 70) {
-                  lastSummary = 'Your resume meets many ATS criteria and is likely to be noticed.';
+                // Check and warn if low quality
+                if (extractionQuality) {
+                  maybeWarnLowExtractionQuality(extractionQuality);
+                }
+                
+                // Generate summary based on extractionQuality and API feedback
+                const isHighQuality = extractionQuality && 
+                  extractionQuality.extractionStatus === 'ok' && 
+                  extractionQuality.confidence >= 0.65 && 
+                  extractionQuality.tokenCount >= 80;
+                
+                if (isHighQuality) {
+                  // Use confident language or API feedback if available
+                  if (resumeData.feedback) {
+                    lastSummary = resumeData.feedback;
+                  } else if (resumeData.score > 85) {
+                    lastSummary = 'Excellent! Your resume is highly ATS compatible.';
+                  } else if (resumeData.score > 70) {
+                    lastSummary = 'Your resume meets many ATS criteria and is likely to be noticed.';
+                  } else {
+                    lastSummary = 'Your resume needs improvement for better ATS results.';
+                  }
                 } else {
-                  lastSummary = 'Your resume needs improvement for better ATS results.';
+                  // Use softer language when quality is low
+                  lastSummary = resumeData.feedback || 
+                               'We may not have detected all sections in your resume. Consider checking formatting.';
                 }
                 
                 // Cache KV results back to localStorage via state persistence
@@ -1309,7 +1355,8 @@
                       score: parseFloat(lastScore),
                       breakdown: mergedBreakdown,
                       resumeId: resumeData.resumeId || '',
-                      jobTitle: lastJobTitle
+                      jobTitle: lastJobTitle,
+                      extractionQuality: extractionQuality
                     });
                   } else {
                     // Existing data has feedback - preserve it completely (don't overwrite)
@@ -2031,6 +2078,39 @@
           }
         }
 
+        // Trust-first: show a warning toast (once per short window) when extraction quality is low.
+        // Uses existing JobHackAIToast (design system-consistent), and auto-dismisses after 8 seconds.
+        let _dashboardLowExtractionWarnShownAt = 0;
+
+        function maybeWarnLowExtractionQuality(extractionQuality) {
+          if (!window.JobHackAIToast || !extractionQuality || typeof extractionQuality !== 'object') return false;
+          const confidence = typeof extractionQuality.confidence === 'number' ? extractionQuality.confidence : 1.0;
+          const tokenCount = typeof extractionQuality.tokenCount === 'number' ? extractionQuality.tokenCount : 0;
+          const status = extractionQuality.extractionStatus || 'ok';
+          // Keep frontend warning logic aligned with backend quality gating:
+          // backend treats "high confidence" as: status === 'ok' AND confidence >= 0.65 AND tokenCount >= 80
+          const isLow = status !== 'ok' || confidence < 0.65 || tokenCount < 80;
+          if (!isLow) return false;
+
+          // Avoid accidental duplicate toasts from overlapping async flows.
+          const now = Date.now();
+          if (now - _dashboardLowExtractionWarnShownAt < 1500) return true;
+          _dashboardLowExtractionWarnShownAt = now;
+
+          // Build message conditionally based on status and token count
+          let msg;
+          if (status !== 'ok') {
+            msg = 'We may not have read your resume perfectly. Some structure checks are less certain.';
+          } else if (tokenCount > 0 && tokenCount < 80) {
+            msg = 'We didn\'t get enough readable text from your resume to be fully confident. Some structure checks are less certain.';
+          } else {
+            msg = 'We may not have read your resume perfectly. Some structure checks are less certain.';
+          }
+
+          window.JobHackAIToast.warning(msg, 8000);
+          return true;
+        }
+
         function showLoadingState() {
           const uploadBtn = document.getElementById('ats-upload-btn');
           if (uploadBtn) {
@@ -2399,11 +2479,30 @@
             // Step 4: Update UI with real score
             const score = scoreData.score || 0;
             const breakdown = scoreData.breakdown || {};
+            const extractionQuality = scoreData.extractionQuality;
             
-            // Generate summary based on score
-            const summary = score > 85 ? 'Excellent! Your resume is highly ATS compatible.' : 
-                           score > 70 ? 'Your resume meets many ATS criteria and is likely to be noticed.' : 
-                           'Your resume needs improvement for better ATS results.';
+            // Check and warn if low quality
+            if (extractionQuality) {
+              maybeWarnLowExtractionQuality(extractionQuality);
+            }
+            
+            // Generate summary based on extractionQuality
+            const isHighQuality = extractionQuality && 
+              extractionQuality.extractionStatus === 'ok' && 
+              extractionQuality.confidence >= 0.65 && 
+              extractionQuality.tokenCount >= 80;
+            
+            let summary;
+            if (isHighQuality) {
+              // Use confident language
+              summary = score > 85 ? 'Excellent! Your resume is highly ATS compatible.' : 
+                       score > 70 ? 'Your resume meets many ATS criteria and is likely to be noticed.' : 
+                       'Your resume needs improvement for better ATS results.';
+            } else {
+              // Use softer language when quality is low
+              summary = scoreData.feedback || 
+                       'We may not have detected all sections in your resume. Consider checking formatting.';
+            }
 
             // Update gauge
             updateAtsGauge(score);
@@ -2425,7 +2524,8 @@
                 score,
                 breakdown,
                 resumeId: uploadData.resumeId,
-                jobTitle: jobTitle
+                jobTitle: jobTitle,
+                extractionQuality: scoreData.extractionQuality
               });
             }
 

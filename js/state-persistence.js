@@ -27,8 +27,9 @@
    * @param {string} data.resumeId - Resume ID
    * @param {string} [data.jobTitle] - Job title
    * @param {Array} [data.roleSpecificFeedback] - Role-specific feedback array
+   * @param {Object} [data.extractionQuality] - Extraction quality metrics
    */
-  function saveATSScore({ score, breakdown, resumeId, jobTitle, roleSpecificFeedback }) {
+  function saveATSScore({ score, breakdown, resumeId, jobTitle, roleSpecificFeedback, extractionQuality }) {
     try {
       // Validate input
       if (typeof score !== 'number' || isNaN(score)) {
@@ -110,10 +111,19 @@
           // Clear role feedback if not provided (to distinguish between "no feedback" and "has feedback")
           localStorage.removeItem(STORAGE_KEYS.ROLE_FEEDBACK);
         }
+        
+        // Store extractionQuality separately for easy access
+        if (extractionQuality && typeof extractionQuality === 'object') {
+          localStorage.setItem('jh_last_extraction_quality', JSON.stringify(extractionQuality));
+        } else {
+          // Clear extractionQuality if not provided
+          localStorage.removeItem('jh_last_extraction_quality');
+        }
+        
         localStorage.setItem(STORAGE_KEYS.TIMESTAMP, data.timestamp.toString());
 
         console.log('[STATE-PERSISTENCE] Saved ATS score:', score, 'with role feedback:', !!roleSpecificFeedback, 'with breakdown feedback:', 
-          !!(normalizedBreakdown.keywordScore?.feedback || normalizedBreakdown.formattingScore?.feedback));
+          !!(normalizedBreakdown.keywordScore?.feedback || normalizedBreakdown.formattingScore?.feedback), 'with extractionQuality:', !!extractionQuality);
         return true;
       } catch (storageError) {
         // Handle quota exceeded or other storage errors
@@ -128,7 +138,7 @@
               if (age > CACHE_EXPIRATION) {
                 clearATSScore();
                 // Retry save
-                return saveATSScore({ score, breakdown: normalizedBreakdown, resumeId, jobTitle, roleSpecificFeedback });
+                return saveATSScore({ score, breakdown: normalizedBreakdown, resumeId, jobTitle, roleSpecificFeedback, extractionQuality });
               }
             }
           } catch (cleanupError) {
@@ -267,12 +277,24 @@
         }
       }
 
+      // Retrieve extractionQuality from localStorage
+      const extractionQualityStr = localStorage.getItem('jh_last_extraction_quality');
+      let extractionQuality = null;
+      if (extractionQualityStr) {
+        try {
+          extractionQuality = JSON.parse(extractionQualityStr);
+        } catch (e) {
+          console.warn('[STATE-PERSISTENCE] Failed to parse extractionQuality:', e);
+        }
+      }
+
       return {
         score: parseFloat(score),
         breakdown: normalizedBreakdown,
         resumeId,
         jobTitle: cachedJobTitle || null,
         roleSpecificFeedback,
+        extractionQuality,
         timestamp: parseInt(timestamp, 10),
         cached: true
       };
@@ -296,6 +318,7 @@
       Object.values(STORAGE_KEYS).forEach(key => {
         localStorage.removeItem(key);
       });
+      localStorage.removeItem('jh_last_extraction_quality');
       console.log('[STATE-PERSISTENCE] Cleared ATS score');
     } catch (error) {
       console.warn('[STATE-PERSISTENCE] Failed to clear ATS score:', error);

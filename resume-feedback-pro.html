@@ -1649,7 +1649,8 @@
           score: result.score,
           breakdown: result.breakdown,
           resumeId,
-          jobTitle
+          jobTitle,
+          extractionQuality: result.extractionQuality
         });
       }
       
@@ -2119,7 +2120,8 @@
           if (cachedScore) {
             window.JobHackAIStatePersistence.saveATSScore({
               ...cachedScore,
-              jobTitle: jobTitle
+              jobTitle: jobTitle,
+              extractionQuality: cachedScore.extractionQuality
             });
           }
         }
@@ -2640,7 +2642,8 @@
                       score: resumeData.score,
                       breakdown: resumeData.breakdown || {},
                       resumeId: resumeData.resumeId || '',
-                      jobTitle: resumeData.jobTitle || null
+                      jobTitle: resumeData.jobTitle || null,
+                      extractionQuality: resumeData.extractionQuality
                     });
                   }
                   
@@ -2938,7 +2941,8 @@
                     ...cachedScore,
                     breakdown: updatedBreakdown,
                     jobTitle: jobTitle || null,
-                    roleSpecificFeedback: feedbackResult.roleSpecificFeedback || null
+                    roleSpecificFeedback: feedbackResult.roleSpecificFeedback || null,
+                    extractionQuality: cachedScore.extractionQuality
                   });
                 } else if (currentResumeId && feedbackResult.atsRubric) {
                   // If no cached score exists, reconstruct breakdown from atsRubric to save feedback
@@ -2974,7 +2978,8 @@
                     breakdown: reconstructedBreakdown,
                     resumeId: currentResumeId,
                     jobTitle: jobTitle || null,
-                    roleSpecificFeedback: feedbackResult.roleSpecificFeedback || null
+                    roleSpecificFeedback: feedbackResult.roleSpecificFeedback || null,
+                    extractionQuality: scoreResult?.extractionQuality || cachedScore?.extractionQuality
                   });
                   console.log('[RESUME-FEEDBACK] Saved feedback with reconstructed breakdown');
                 }
@@ -3047,7 +3052,8 @@
           if (cachedScore) {
             window.JobHackAIStatePersistence.saveATSScore({
               ...cachedScore,
-              jobTitle: currentJobTitle || null
+              jobTitle: currentJobTitle || null,
+              extractionQuality: cachedScore.extractionQuality
             });
           }
         }
@@ -3366,6 +3372,51 @@
             hideSkeletons();
           };
 
+          // Pre-flight trial limit check (before any API calls)
+          if (userPlan === 'trial') {
+            try {
+              const token = await getAuthToken();
+              const usageResponse = await fetch('/api/usage', {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Authorization': `Bearer ${token}`
+                }
+              });
+              
+              if (usageResponse.ok) {
+                const usageData = await usageResponse.json();
+                if (usageData.success && usageData.usage && usageData.usage.resumeFeedback) {
+                  const feedbackUsed = usageData.usage.resumeFeedback.used || 0;
+                  const feedbackLimit = usageData.usage.resumeFeedback.limit || 3;
+                  
+                  if (feedbackUsed >= feedbackLimit) {
+                    // Show modal immediately, block all API calls
+                    if (window.showErrorModal) {
+                      window.showErrorModal(
+                        'Trial Complete',
+                        'You\'ve used all 3 feedback attempts. Upgrade to Pro for unlimited feedback and unlock all features.',
+                        {
+                          showUpgrade: true,
+                          upgradeCallback: () => window.location.href = 'pricing-a.html',
+                          upgradeButtonText: 'Upgrade to Pro',
+                          buttonText: 'Maybe Later'
+                        }
+                      );
+                    }
+                    hideLoadingState();
+                    uploadInput.disabled = false;
+                    if (generateBtn) generateBtn.disabled = false;
+                    return; // Block all API calls
+                  }
+                }
+              }
+            } catch (usageError) {
+              console.warn('[RESUME-FEEDBACK] Usage check failed, proceeding with caution:', usageError);
+              // Continue if usage check fails (non-blocking)
+            }
+          }
+
           // --- PARALLEL API CALLS: ATS Score + Feedback ---
           const jobTitleForScore = currentJobTitle || jobTitleInput?.value?.trim() || '';
           const jobTitleForFeedback = jobTitleInput?.value?.trim() || '';
@@ -3647,7 +3698,8 @@
                   breakdown: finalBreakdownWithFeedback,
                   resumeId: uploadResult.resumeId,
                   jobTitle: jobTitleForFeedback || null,
-                  roleSpecificFeedback: feedbackResult.roleSpecificFeedback || null
+                  roleSpecificFeedback: feedbackResult.roleSpecificFeedback || null,
+                  extractionQuality: atsSettled.status === 'fulfilled' ? atsSettled.value.extractionQuality : (scoreResult?.extractionQuality || null)
                 });
                 
                 if (!saveSuccess) {
@@ -4227,6 +4279,7 @@
                   breakdown: updatedBreakdown,
                   jobTitle: jobTitle || null,
                   roleSpecificFeedback: feedbackResult.roleSpecificFeedback || null,
+                  extractionQuality: scoreResult?.extractionQuality || cachedScore?.extractionQuality,
                   timestamp: Date.now() // Update timestamp
                 });
               } else if (currentResumeId && feedbackResult.atsRubric) {
@@ -4313,6 +4366,7 @@
                   resumeId: currentResumeId,
                   jobTitle: jobTitle || null,
                   roleSpecificFeedback: feedbackResult.roleSpecificFeedback || null,
+                  extractionQuality: scoreResult?.extractionQuality || cachedScore?.extractionQuality,
                   timestamp: Date.now()
                 });
                 console.log('[RESUME-FEEDBACK] Saved feedback with reconstructed breakdown');

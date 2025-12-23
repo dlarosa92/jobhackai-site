@@ -2,6 +2,7 @@
 // Stores ATS scores in KV + Firebase Firestore hybrid for cross-device continuity
 
 import { getBearer, verifyFirebaseIdToken } from '../_lib/firebase-auth.js';
+import { getOrCreateUserByAuthId, isD1Available } from '../_lib/db.js';
 
 function corsHeaders(origin, env) {
   const allowedOrigins = [
@@ -60,6 +61,73 @@ export async function onRequest(context) {
 
     // GET: Retrieve last ATS score
     if (request.method === 'GET') {
+      // Try D1 first (source of truth)
+      if (isD1Available(env)) {
+        try {
+          const db = env.DB || env.JOBHACKAI_DB;
+          const d1User = await getOrCreateUserByAuthId(env, uid);
+          if (d1User) {
+            // Get latest resume session for user
+            const latestSession = await db.prepare(
+              `SELECT id, rule_based_scores_json, ats_score, role, created_at
+               FROM resume_sessions 
+               WHERE user_id = ? 
+               ORDER BY created_at DESC 
+               LIMIT 1`
+            ).bind(d1User.id).first();
+            
+            if (latestSession && latestSession.rule_based_scores_json) {
+              try {
+                const ruleBasedScores = JSON.parse(latestSession.rule_based_scores_json);
+                const extractionQuality = ruleBasedScores.extractionQuality;
+                
+                // Reconstruct breakdown from ruleBasedScores
+                const breakdown = {
+                  keywordScore: ruleBasedScores.keywordScore,
+                  formattingScore: ruleBasedScores.formattingScore,
+                  structureScore: ruleBasedScores.structureScore,
+                  toneScore: ruleBasedScores.toneScore,
+                  grammarScore: ruleBasedScores.grammarScore
+                };
+                
+                // Ensure breakdown structure has feedback properties
+                const normalizedBreakdown = { ...breakdown };
+                ['keywordScore', 'formattingScore', 'structureScore', 'toneScore', 'grammarScore'].forEach(key => {
+                  if (normalizedBreakdown[key] && typeof normalizedBreakdown[key] === 'object') {
+                    if (!('feedback' in normalizedBreakdown[key])) {
+                      normalizedBreakdown[key] = {
+                        ...normalizedBreakdown[key],
+                        feedback: normalizedBreakdown[key].tip || normalizedBreakdown[key].message || ''
+                      };
+                    }
+                  }
+                });
+                
+                return json({
+                  success: true,
+                  data: {
+                    score: latestSession.ats_score || ruleBasedScores.overallScore,
+                    breakdown: normalizedBreakdown,
+                    extractionQuality: extractionQuality,
+                    feedback: ruleBasedScores.feedback || null,
+                    jobTitle: latestSession.role || null,
+                    resumeId: `resume:${latestSession.id}`,
+                    timestamp: new Date(latestSession.created_at).getTime()
+                  }
+                }, 200, origin, env);
+              } catch (parseError) {
+                console.warn('[ATS-SCORE-PERSIST] Failed to parse D1 ruleBasedScores, falling back to KV:', parseError);
+                // Fall through to KV fallback
+              }
+            }
+          }
+        } catch (d1Error) {
+          console.warn('[ATS-SCORE-PERSIST] D1 read failed, falling back to KV:', d1Error);
+          // Fall through to KV fallback
+        }
+      }
+      
+      // Fallback to KV (existing code)
       const kv = env.JOBHACKAI_KV;
       if (!kv) {
         return json({ success: false, error: 'Storage not available' }, 500, origin, env);
@@ -110,6 +178,12 @@ export async function onRequest(context) {
           }
         });
         resumeData.breakdown = normalizedBreakdown;
+      }
+      
+      // Ensure extractionQuality is included in KV response (if available)
+      // Note: KV may not have extractionQuality if it was stored before this feature was added
+      if (!resumeData.extractionQuality) {
+        resumeData.extractionQuality = null;
       }
       
       return json({ success: true, data: resumeData }, 200, origin, env);
