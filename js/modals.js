@@ -192,10 +192,13 @@ export function showErrorModal(title, message, options = {}) {
   document.getElementById('jh-error-close').addEventListener('click', closeModal);
 
   if (showRetry && retryCallback) {
-    document.getElementById('jh-error-retry').addEventListener('click', () => {
-      closeModal();
-      setTimeout(() => retryCallback(), 100);
-    });
+    const retryBtn = document.getElementById('jh-error-retry');
+    if (retryBtn) {
+      retryBtn.addEventListener('click', () => {
+        closeModal();
+        setTimeout(() => retryCallback(), 100);
+      });
+    }
   }
 
   // NEW: Add upgrade button handler
