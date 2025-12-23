@@ -549,7 +549,8 @@ function scoreFormattingCompliance(resumeText, isMultiColumn, quality) {
     feedback = prefix + 'Excellent formatting. Avoid tables, graphics, and use standard headings.';
   } else if (score === 17 && !highConf) {
     // Score was capped from 18+ due to low confidence - acknowledge uncertainty
-    feedback = prefix + 'Formatting appears good based on what we could read. Some checks may be less certain due to extraction quality.';
+    // Note: prefix already mentions uncertainty, so we don't repeat it here
+    feedback = prefix + 'Formatting appears good based on what we could read.';
   } else if (score >= 15) {
     feedback =
       prefix +
@@ -668,7 +669,8 @@ function scoreStructureAndCompleteness(resumeText, quality) {
     feedback = prefix + 'Well-structured resume. Order sections: Contact, Experience, Education, Skills.';
   } else if (score === 12 && !highConf) {
     // Score was capped from 13+ due to low confidence - acknowledge uncertainty
-    feedback = prefix + 'Structure appears good based on what we could read. Some checks may be less certain due to extraction quality.';
+    // Note: prefix already mentions uncertainty, so we don't repeat it here
+    feedback = prefix + 'Structure appears good based on what we could read.';
   } else if (score >= 10) {
     feedback = prefix + 'Good structure. ' + (issues.length > 0 ? issues.join(', ') + '. ' : '') + 'Ensure consistent formatting.';
   } else {
