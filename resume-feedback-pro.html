@@ -4355,8 +4355,11 @@
     function maybeWarnLowExtractionQuality(extractionQuality) {
       if (!window.JobHackAIToast || !extractionQuality || typeof extractionQuality !== 'object') return false;
       const confidence = typeof extractionQuality.confidence === 'number' ? extractionQuality.confidence : 1.0;
+      const tokenCount = typeof extractionQuality.tokenCount === 'number' ? extractionQuality.tokenCount : 0;
       const status = extractionQuality.extractionStatus || 'ok';
-      const isLow = status !== 'ok' || confidence < 0.65;
+      // Keep frontend warning logic aligned with backend quality gating:
+      // backend treats "high confidence" as: status === 'ok' AND confidence >= 0.65 AND tokenCount >= 80
+      const isLow = status !== 'ok' || confidence < 0.65 || tokenCount < 80;
       if (!isLow) return false;
 
       // Avoid accidental duplicate toasts from overlapping async flows.
@@ -4364,10 +4367,14 @@
       if (now - _rfLowExtractionWarnShownAt < 1500) return true;
       _rfLowExtractionWarnShownAt = now;
 
-      window.JobHackAIToast.warning(
-        'We may not have read your resume perfectly. Some structure checks are less certain—try uploading a DOCX or TXT for best results.',
-        8000
-      );
+      const msg =
+        status !== 'ok'
+          ? 'We may not have read your resume perfectly. Some structure checks are less certain—try uploading a DOCX or TXT for best results.'
+          : (tokenCount > 0 && tokenCount < 80)
+            ? 'We didn’t get enough readable text from your resume to be fully confident. Some structure checks are less certain—try uploading a DOCX or TXT for best results.'
+            : 'We may not have read your resume perfectly. Some structure checks are less certain—try uploading a DOCX or TXT for best results.';
+
+      window.JobHackAIToast.warning(msg, 8000);
       return true;
     }
 
