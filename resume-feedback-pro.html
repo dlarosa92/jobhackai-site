@@ -3207,6 +3207,9 @@
           // This ensures ATS scores appear in 2-3s as claimed in the PR
           let atsSettled;
           let feedbackSettled;
+          // Track whether we showed (or intended to show) the low-extraction warning toast for this run.
+          // Used to suppress stacked success toasts in later combined ATS+tips messaging.
+          let atsExtractionWarned = false;
           
           // Process ATS result as soon as it's available
           atsPromise
@@ -3328,6 +3331,7 @@
                 // Trust-first: if extraction quality is low, show a single warning toast (auto-dismiss 8s)
                 // and avoid stacking a success toast on top.
                 const warned = maybeWarnLowExtractionQuality(result.extractionQuality);
+                atsExtractionWarned = warned;
                 if (!warned && window.JobHackAIToast) {
                   window.JobHackAIToast.success('ATS score calculated successfully.');
                 }
@@ -3482,7 +3486,9 @@
               // Truthful toast + inline status based on ATS/tips state
               const toastStatus = toastForAtsAndTips({
                 atsOk: atsScoringSucceeded,
-                tips: feedbackResult.roleSpecificFeedback
+                tips: feedbackResult.roleSpecificFeedback,
+                // If we showed a low-extraction warning, avoid stacking a success toast on top.
+                suppressSuccess: atsExtractionWarned
               });
               if (toastStatus === 'tips_ok' || toastStatus === 'tips_only') {
                 setRoleStatus('Role-specific tips updated.');
@@ -3845,6 +3851,7 @@
             // Start ATS (if role changed) and feedback in parallel
             const atsPromise = roleChanged ? getAtsScore(currentResumeId, jobTitle) : Promise.resolve(null);
             const feedbackPromise = getResumeFeedback(currentResumeId, jobTitle);
+            let roleAtsExtractionWarned = false;
             const [atsSettled, feedbackSettled] = await Promise.allSettled([atsPromise, feedbackPromise]);
 
             if (atsSettled.status === 'fulfilled' && atsSettled.value) {
@@ -3853,7 +3860,7 @@
                 scoreResult = possibleScore;
                 scoreUpdated = true;
                 // Trust-first: warn once when extraction quality is low (auto-dismiss 8s)
-                maybeWarnLowExtractionQuality(possibleScore.extractionQuality);
+                roleAtsExtractionWarned = maybeWarnLowExtractionQuality(possibleScore.extractionQuality);
                 updateProgressRing(scoreResult.score);
                 const rubric = [
                   {
@@ -4111,7 +4118,9 @@
 
             const toastStatus = toastForAtsAndTips({
               atsOk: scoreUpdated,
-              tips: feedbackResult.roleSpecificFeedback
+              tips: feedbackResult.roleSpecificFeedback,
+              // If we showed a low-extraction warning, avoid stacking a success toast on top.
+              suppressSuccess: roleAtsExtractionWarned
             });
             if (toastStatus === 'tips_ok' || toastStatus === 'tips_only') {
               setRoleStatus('Role-specific tips updated.');
@@ -4335,9 +4344,10 @@
       return 'missing';
     }
 
-    function toastForAtsAndTips({ atsOk, tips }) {
+    function toastForAtsAndTips({ atsOk, tips, suppressSuccess = false }) {
       const status = getRoleTipsStatus({ atsOk, tips });
       if (!window.JobHackAIToast) return status;
+      if (suppressSuccess) return status;
       if (status === 'tips_ok') {
         window.JobHackAIToast.success('ATS score and role-specific tips updated.');
       } else if (status === 'tips_only') {
