@@ -1795,10 +1795,14 @@
       const customTitle = options.title;
       const customMessage = options.message;
       
-      let message = customMessage || error.message || 'An error occurred';
+      // Use error.message first to preserve specific error handling
+      // customMessage will be used as fallback only if error.message doesn't match specific patterns
+      const originalMessage = error.message || 'An error occurred';
+      let message = originalMessage;
       let modalType = 'error';
       let action = null;
       let actionLabel = 'OK';
+      let messageWasModified = false;
       
       // Check if error has upgradeRequired flag (from API response)
       // Check both top-level and context.upgradeRequired (for dev environment responses)
@@ -1860,27 +1864,40 @@
       // Map error messages to user-friendly modals
       if (message.includes('Unauthorized') || message.includes('Not authenticated')) {
         message = 'Please log in to continue.';
+        messageWasModified = true;
         action = () => window.location.href = 'login.html';
         actionLabel = 'Go to Login';
       } else if (message.includes('Usage limit') || message.includes('limit reached')) {
         message = message + ' Upgrade to unlock more features.';
+        messageWasModified = true;
         action = () => window.location.href = 'pricing-a.html';
         actionLabel = 'View Pricing';
       } else if (message.includes('Rate limit')) {
         message = message + ' Please try again in a moment.';
+        messageWasModified = true;
       } else if (message.includes('Feature locked') || message.includes('upgrade')) {
         message = message;
+        messageWasModified = true;
         action = () => window.location.href = 'pricing-a.html';
         actionLabel = 'Upgrade Now';
       } else if (message.includes('timeout') || message.includes('took too long')) {
         message = 'Our AI took too long to respond. Please try again or simplify your file.';
+        messageWasModified = true;
         action = () => window.location.reload();
         actionLabel = 'Reload Page';
       } else if (message.includes('couldn\'t read') || message.includes('text-based')) {
         // File reading error - already user-friendly
+        messageWasModified = true;
       } else if (message.includes('scanned PDF') || message.includes('image-based')) {
         // Enhanced scanned PDF message with actionable guidance
         message = 'This PDF appears to be image-based (scanned). Please upload a text-based PDF or Word document for best results. We\'re working on scan support for a future update.';
+        messageWasModified = true;
+      }
+      
+      // If no specific error pattern matched and customMessage is provided, use it as fallback
+      // This preserves helpful context for generic feedback errors while allowing specific errors to be handled
+      if (customMessage && !messageWasModified) {
+        message = customMessage;
       }
 
       // Show modal instead of inline error
