@@ -134,7 +134,7 @@
     .rf-card { background: var(--color-card-bg); border-radius: var(--radius-xl); box-shadow: var(--shadow-card); padding: var(--space-lg); margin-bottom: var(--space-lg); }
     .rf-title { font-size: var(--font-size-2xl); font-weight: var(--font-weight-extrabold); margin-bottom: var(--space-xs); color: var(--color-text-main); }
     .rf-section-title { font-size: var(--font-size-xl); font-weight: var(--font-weight-bold); margin-bottom: var(--space-xs); color: var(--color-text-main); }
-    .rf-progress-ring { width: 80px; height: 80px; display: inline-block; vertical-align: middle; margin-right: 1.5rem; }
+    .rf-progress-ring { width: 80px; height: 80px; display: inline-flex; flex-direction: column; align-items: center; vertical-align: middle; margin-right: 1.5rem; }
     .rf-score-badge { display: inline-block; background: #00E676; color: #fff; font-weight: 700; border-radius: 999px; padding: 0.3em 1em; font-size: 1.2rem; margin-left: 0.7rem; }
     /* Status pill component - matches existing .rf-score-badge pattern */
     .rf-status-pill {
@@ -3233,6 +3233,7 @@
                 
                 // Update UI immediately (progress ring, placeholder, etc.)
                 updateProgressRing(result.score);
+                updateExtractionQualityIndicator(result.extractionQuality);
                 hidePlaceholder();
                 
                 // Helper functions to handle both number and object formats (matches existing code pattern)
@@ -3332,6 +3333,7 @@
                 // and avoid stacking a success toast on top.
                 const warned = maybeWarnLowExtractionQuality(result.extractionQuality);
                 atsExtractionWarned = warned;
+                updateExtractionQualityIndicator(result.extractionQuality);
                 if (!warned && window.JobHackAIToast) {
                   window.JobHackAIToast.success('ATS score calculated successfully.');
                 }
@@ -3688,6 +3690,11 @@
             // Hide status pill initially while validating
             hideFileStatus();
             
+            // Track file type for conditional warning messages
+            _rfLastUploadedFileType = file.type || (file.name.toLowerCase().endsWith('.pdf') ? 'application/pdf' : 
+              file.name.toLowerCase().endsWith('.docx') ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' :
+              file.name.toLowerCase().endsWith('.txt') ? 'text/plain' : null);
+
             // Show/hide PDF helper text based on file type
             if (pdfHelper) {
               if (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')) {
@@ -3862,6 +3869,7 @@
                 // Trust-first: warn once when extraction quality is low (auto-dismiss 8s)
                 roleAtsExtractionWarned = maybeWarnLowExtractionQuality(possibleScore.extractionQuality);
                 updateProgressRing(scoreResult.score);
+                updateExtractionQualityIndicator(possibleScore.extractionQuality);
                 const rubric = [
                   {
                     label: 'Keyword Relevance',
@@ -4362,6 +4370,8 @@
     // Trust-first: show a warning toast (once per short window) when extraction quality is low.
     // Uses existing JobHackAIToast (design system-consistent), and auto-dismisses after 8 seconds.
     let _rfLowExtractionWarnShownAt = 0;
+    let _rfLastUploadedFileType = null; // Track file type for conditional messaging
+
     function maybeWarnLowExtractionQuality(extractionQuality) {
       if (!window.JobHackAIToast || !extractionQuality || typeof extractionQuality !== 'object') return false;
       const confidence = typeof extractionQuality.confidence === 'number' ? extractionQuality.confidence : 1.0;
@@ -4377,15 +4387,80 @@
       if (now - _rfLowExtractionWarnShownAt < 1500) return true;
       _rfLowExtractionWarnShownAt = now;
 
-      const msg =
-        status !== 'ok'
+      // Determine if uploaded file was PDF (only suggest DOCX/TXT for PDFs)
+      const isPDF = _rfLastUploadedFileType === 'application/pdf' || 
+                    (typeof _rfLastUploadedFileType === 'string' && _rfLastUploadedFileType.toLowerCase().includes('pdf'));
+
+      // Build message conditionally based on file type
+      let msg;
+      if (status !== 'ok') {
+        msg = isPDF
           ? 'We may not have read your resume perfectly. Some structure checks are less certain—try uploading a DOCX or TXT for best results.'
-          : (tokenCount > 0 && tokenCount < 80)
-            ? 'We didn’t get enough readable text from your resume to be fully confident. Some structure checks are less certain—try uploading a DOCX or TXT for best results.'
-            : 'We may not have read your resume perfectly. Some structure checks are less certain—try uploading a DOCX or TXT for best results.';
+          : 'We may not have read your resume perfectly. Some structure checks are less certain.';
+      } else if (tokenCount > 0 && tokenCount < 80) {
+        msg = isPDF
+          ? 'We didn't get enough readable text from your resume to be fully confident. Some structure checks are less certain—try uploading a DOCX or TXT for best results.'
+          : 'We didn't get enough readable text from your resume to be fully confident. Some structure checks are less certain.';
+      } else {
+        msg = isPDF
+          ? 'We may not have read your resume perfectly. Some structure checks are less certain—try uploading a DOCX or TXT for best results.'
+          : 'We may not have read your resume perfectly. Some structure checks are less certain.';
+      }
 
       window.JobHackAIToast.warning(msg, 8000);
       return true;
+    }
+
+    function updateExtractionQualityIndicator(extractionQuality) {
+      const indicator = document.getElementById('rf-extraction-quality-indicator');
+      const iconEl = indicator?.querySelector('.rf-status-icon');
+      const textEl = indicator?.querySelector('.rf-status-text');
+      
+      if (!indicator || !iconEl || !textEl) return;
+
+      if (!extractionQuality || typeof extractionQuality !== 'object') {
+        indicator.style.display = 'none';
+        return;
+      }
+
+      const confidence = typeof extractionQuality.confidence === 'number' ? extractionQuality.confidence : 1.0;
+      const tokenCount = typeof extractionQuality.tokenCount === 'number' ? extractionQuality.tokenCount : 0;
+      const status = extractionQuality.extractionStatus || 'ok';
+      
+      // High confidence: status === 'ok' AND confidence >= 0.65 AND tokenCount >= 80
+      const isHigh = status === 'ok' && confidence >= 0.65 && tokenCount >= 80;
+      
+      if (isHigh) {
+        indicator.style.display = 'none';
+        return;
+      }
+
+      // Determine variant and message
+      let variant = 'warning';
+      let message = '';
+      
+      if (status !== 'ok') {
+        variant = 'error';
+        message = 'Low Confidence';
+      } else if (tokenCount < 80) {
+        variant = 'warning';
+        message = 'Limited Text';
+      } else if (confidence < 0.65) {
+        variant = 'warning';
+        message = 'Low Confidence';
+      }
+
+      // Apply status pill styling (matches existing design system)
+      indicator.className = `rf-status-pill rf-status-pill--${variant}`;
+      indicator.style.display = 'inline-flex';
+      indicator.style.width = '100%';
+      indicator.style.maxWidth = '80px';
+      indicator.style.justifyContent = 'center';
+      indicator.style.marginTop = '0.5rem';
+      
+      // Use SVG icon from existing system (not emoji)
+      iconEl.innerHTML = getStatusIcon(variant);
+      textEl.textContent = message;
     }
 
     function setRoleStatus(text) {
@@ -6715,6 +6790,10 @@
             <circle cx="40" cy="40" r="36" stroke="#00E676" stroke-width="8" fill="none" stroke-dasharray="226.2" stroke-dashoffset="226.2" stroke-linecap="round"/>
             <text x="40" y="48" text-anchor="middle" font-size="1.6rem" font-weight="700" fill="#1F2937">0%</text>
            </svg>
+           <div id="rf-extraction-quality-indicator" class="rf-status-pill" style="display:none;margin-top:0.5rem;width:100%;max-width:80px;justify-content:center;">
+             <span class="rf-status-icon"></span>
+             <span class="rf-status-text"></span>
+           </div>
         </div>
         <div style="flex:1;min-width:220px;">
           <form id="rf-upload-form" style="margin:1rem 0 0.7rem 0;">
