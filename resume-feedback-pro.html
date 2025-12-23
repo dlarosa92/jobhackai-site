@@ -1714,7 +1714,12 @@
           message: error.message,
           upgradeRequired: error.upgradeRequired
         });
-        throw new Error(errorMessage);
+        const errorObj = new Error(errorMessage);
+        // Preserve upgradeRequired flag for error handler
+        if (error.upgradeRequired) {
+          errorObj.upgradeRequired = true;
+        }
+        throw errorObj;
       }
 
       return await response.json();
@@ -1789,6 +1794,61 @@
       let modalType = 'error';
       let action = null;
       let actionLabel = 'OK';
+      
+      // Check if error has upgradeRequired flag (from API response)
+      const upgradeRequired = error.upgradeRequired || 
+        (error.message && error.message.includes('Upgrade to Pro'));
+      
+      // Handle upgrade-required errors with direct Stripe checkout
+      if (upgradeRequired) {
+        const upgradeToPro = async () => {
+          try {
+            // Show loading state
+            if (window.showLoadingOverlay) {
+              window._currentLoadingOverlay = window.showLoadingOverlay('Redirecting to checkout...');
+            }
+            
+            const idToken = await window.FirebaseAuthManager?.getCurrentUser?.()?.getIdToken?.();
+            const res = await fetch('/api/stripe-checkout', {
+              method: 'POST',
+              headers: { 
+                'Content-Type': 'application/json', 
+                ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}) 
+              },
+              body: JSON.stringify({ plan: 'pro' })
+            });
+            const data = await res.json();
+            if (data && data.ok && data.url) {
+              window.location.href = data.url;
+              return;
+            }
+            throw new Error(data?.error || 'Checkout failed');
+          } catch (e) {
+            console.error('Upgrade checkout error:', e);
+            // Hide loading overlay
+            if (window._currentLoadingOverlay) {
+              window._currentLoadingOverlay();
+              window._currentLoadingOverlay = null;
+            }
+            // Fallback to pricing page if checkout fails
+            window.location.href = 'pricing-a.html';
+          }
+        };
+
+        if (window.showErrorModal) {
+          window.showErrorModal(
+            'Trial Complete',
+            'You\'ve used all 3 feedback attempts. Upgrade to Pro for unlimited feedback and unlock all features.',
+            {
+              showUpgrade: true,
+              upgradeCallback: upgradeToPro,
+              upgradeButtonText: 'Upgrade to Pro',
+              buttonText: 'Maybe Later'
+            }
+          );
+          return;
+        }
+      }
       
       // Map error messages to user-friendly modals
       if (message.includes('Unauthorized') || message.includes('Not authenticated')) {

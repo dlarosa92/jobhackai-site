@@ -24,7 +24,10 @@ export function showErrorModal(title, message, options = {}) {
     onClose = null,
     showRetry = false,
     retryCallback = null,
-    buttonText = 'Got it'
+    buttonText = 'Got it',
+    showUpgrade = false,  // NEW: Enable upgrade button
+    upgradeCallback = null,  // NEW: Callback for upgrade action
+    upgradeButtonText = 'Upgrade to Pro'  // NEW: Custom upgrade button text
   } = options;
 
   // Remove existing error modal if present
@@ -52,51 +55,104 @@ export function showErrorModal(title, message, options = {}) {
   const escapedTitle = escapeHtml(title);
   const escapedMessage = escapeHtml(message);
   const escapedButtonText = escapeHtml(buttonText);
+  const escapedUpgradeText = escapeHtml(upgradeButtonText);
+
+  // Use green checkmark for upgrade modals, red error icon for others
+  const iconColor = showUpgrade ? '#00E676' : '#EF4444';
+  const iconSvg = showUpgrade ? `
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="${iconColor}" stroke-width="2" style="margin-right: 0.75rem;">
+      <circle cx="12" cy="12" r="10"/>
+      <polyline points="9 12 11 14 15 10"/>
+    </svg>
+  ` : `
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="${iconColor}" stroke-width="2" style="margin-right: 0.75rem;">
+      <circle cx="12" cy="12" r="10"/>
+      <line x1="12" y1="8" x2="12" y2="12"/>
+      <line x1="12" y1="16" x2="12.01" y2="16"/>
+    </svg>
+  `;
 
   modal.innerHTML = `
     <div style="
-      background: #fff;
+      background: #FFFFFF;
       border-radius: 16px;
       padding: 2rem;
       max-width: 500px;
       width: 90%;
-      box-shadow: 0 4px 32px rgba(0, 0, 0, 0.15);
+      box-shadow: 0 4px 24px rgba(31, 41, 55, 0.07);
       animation: slideUp 0.3s ease;
     ">
       <div style="display: flex; align-items: center; margin-bottom: 1rem;">
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#EF4444" stroke-width="2" style="margin-right: 0.75rem;">
-          <circle cx="12" cy="12" r="10"/>
-          <line x1="12" y1="8" x2="12" y2="12"/>
-          <line x1="12" y1="16" x2="12.01" y2="16"/>
-        </svg>
-        <h2 style="margin: 0; color: #1F2937; font-size: 1.25rem; font-weight: 600;">${escapedTitle}</h2>
+        ${iconSvg}
+        <h2 style="margin: 0; color: #1F2937; font-size: 1.25rem; font-weight: 600; font-family: 'Inter', sans-serif;">
+          ${escapedTitle}
+        </h2>
       </div>
-      <p style="margin: 0 0 1.5rem 0; color: #4B5563; line-height: 1.6;">${escapedMessage}</p>
-      <div style="display: flex; gap: 0.75rem; justify-content: flex-end;">
-        ${showRetry && retryCallback ? `
-          <button id="jh-error-retry" style="
+      <p style="margin: 0 0 1.5rem 0; color: #4B5563; line-height: 1.6; font-size: 1rem; font-family: 'Inter', sans-serif;">
+        ${escapedMessage}
+      </p>
+      <div style="display: flex; gap: 0.75rem; justify-content: ${showUpgrade ? 'space-between' : 'flex-end'};">
+        ${showUpgrade ? `
+          <button id="jh-error-upgrade" style="
             background: #00E676;
-            color: #fff;
+            color: #FFFFFF;
+            border: none;
+            border-radius: 8px;
+            padding: 0.7rem 2rem;
+            font-size: 1rem;
+            font-weight: 700;
+            font-family: 'Inter', sans-serif;
+            cursor: pointer;
+            transition: all 0.18s;
+            flex: 1;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+          " onmouseover="this.style.background='#006335'; this.style.boxShadow='0 4px 12px rgba(0, 230, 118, 0.2)'" 
+             onmouseout="this.style.background='#00E676'; this.style.boxShadow='0 2px 8px rgba(0, 0, 0, 0.04)'">
+            ${escapedUpgradeText}
+          </button>
+          <button id="jh-error-close" style="
+            background: transparent;
+            color: #6B7280;
+            border: 1px solid #E5E7EB;
+            border-radius: 8px;
+            padding: 0.7rem 1.5rem;
+            font-size: 1rem;
+            font-weight: 500;
+            font-family: 'Inter', sans-serif;
+            cursor: pointer;
+            transition: all 0.18s;
+          " onmouseover="this.style.background='#F9FAFB'; this.style.borderColor='#D1D5DB'" 
+             onmouseout="this.style.background='transparent'; this.style.borderColor='#E5E7EB'">
+            Maybe Later
+          </button>
+        ` : `
+          ${showRetry && retryCallback ? `
+            <button id="jh-error-retry" style="
+              background: #00E676;
+              color: #fff;
+              border: none;
+              border-radius: 8px;
+              padding: 0.75rem 1.5rem;
+              font-size: 1rem;
+              font-weight: 600;
+              font-family: 'Inter', sans-serif;
+              cursor: pointer;
+              transition: opacity 0.2s;
+            ">Try Again</button>
+          ` : ''}
+          <button id="jh-error-close" style="
+            background: ${showRetry ? '#F3F4F6' : '#00E676'};
+            color: ${showRetry ? '#1F2937' : '#fff'};
             border: none;
             border-radius: 8px;
             padding: 0.75rem 1.5rem;
             font-size: 1rem;
             font-weight: 600;
+            font-family: 'Inter', sans-serif;
             cursor: pointer;
             transition: opacity 0.2s;
-          ">Try Again</button>
-        ` : ''}
-        <button id="jh-error-close" style="
-          background: ${showRetry ? '#F3F4F6' : '#00E676'};
-          color: ${showRetry ? '#1F2937' : '#fff'};
-          border: none;
-          border-radius: 8px;
-          padding: 0.75rem 1.5rem;
-          font-size: 1rem;
-          font-weight: 600;
-          cursor: pointer;
-          transition: opacity 0.2s;
-        ">${escapedButtonText}</button>
+          ">${escapedButtonText}</button>
+        `}
       </div>
     </div>
   `;
@@ -140,6 +196,17 @@ export function showErrorModal(title, message, options = {}) {
       closeModal();
       setTimeout(() => retryCallback(), 100);
     });
+  }
+
+  // NEW: Add upgrade button handler
+  if (showUpgrade && upgradeCallback) {
+    const upgradeBtn = document.getElementById('jh-error-upgrade');
+    if (upgradeBtn) {
+      upgradeBtn.addEventListener('click', () => {
+        closeModal();
+        setTimeout(() => upgradeCallback(), 100);
+      });
+    }
   }
 
   modal.addEventListener('click', (e) => {
