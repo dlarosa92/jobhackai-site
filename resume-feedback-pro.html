@@ -134,7 +134,8 @@
     .rf-card { background: var(--color-card-bg); border-radius: var(--radius-xl); box-shadow: var(--shadow-card); padding: var(--space-lg); margin-bottom: var(--space-lg); }
     .rf-title { font-size: var(--font-size-2xl); font-weight: var(--font-weight-extrabold); margin-bottom: var(--space-xs); color: var(--color-text-main); }
     .rf-section-title { font-size: var(--font-size-xl); font-weight: var(--font-weight-bold); margin-bottom: var(--space-xs); color: var(--color-text-main); }
-    .rf-progress-ring { width: 80px; height: 80px; display: inline-flex; flex-direction: column; align-items: center; vertical-align: middle; margin-right: 1.5rem; }
+    .rf-progress-ring { width: 80px; min-height: 80px; display: inline-flex; flex-direction: column; align-items: center; vertical-align: middle; margin-right: 1.5rem; }
+    .rf-progress-ring svg { flex-shrink: 0; width: 80px; height: 80px; }
     .rf-score-badge { display: inline-block; background: #00E676; color: #fff; font-weight: 700; border-radius: 999px; padding: 0.3em 1em; font-size: 1.2rem; margin-left: 0.7rem; }
     /* Status pill component - matches existing .rf-score-badge pattern */
     .rf-status-pill {
@@ -4454,9 +4455,9 @@
       indicator.className = `rf-status-pill rf-status-pill--${variant}`;
       indicator.style.display = 'inline-flex';
       indicator.style.width = '100%';
-      indicator.style.maxWidth = '80px';
       indicator.style.justifyContent = 'center';
       indicator.style.marginTop = '0.5rem';
+      indicator.style.flexShrink = '0';
       
       // Use SVG icon from existing system (not emoji)
       iconEl.innerHTML = getStatusIcon(variant);
@@ -6790,7 +6791,7 @@
             <circle cx="40" cy="40" r="36" stroke="#00E676" stroke-width="8" fill="none" stroke-dasharray="226.2" stroke-dashoffset="226.2" stroke-linecap="round"/>
             <text x="40" y="48" text-anchor="middle" font-size="1.6rem" font-weight="700" fill="#1F2937">0%</text>
            </svg>
-           <div id="rf-extraction-quality-indicator" class="rf-status-pill" style="display:none;margin-top:0.5rem;width:100%;max-width:80px;justify-content:center;">
+           <div id="rf-extraction-quality-indicator" class="rf-status-pill" style="display:none;margin-top:0.5rem;width:100%;justify-content:center;flex-shrink:0;">
              <span class="rf-status-icon"></span>
              <span class="rf-status-text"></span>
            </div>
