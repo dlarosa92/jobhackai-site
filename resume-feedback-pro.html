@@ -1785,12 +1785,17 @@
       return result;
     }
 
-    function handleApiError(error) {
+    function handleApiError(error, options = {}) {
       // Downgrade to debug level - user-facing errors shown via modals
       if (window.console && window.console.debug) {
         window.console.debug('[API Error]', error);
       }
-      let message = error.message || 'An error occurred';
+      
+      // Allow custom title and message to be passed in options
+      const customTitle = options.title;
+      const customMessage = options.message;
+      
+      let message = customMessage || error.message || 'An error occurred';
       let modalType = 'error';
       let action = null;
       let actionLabel = 'OK';
@@ -1880,7 +1885,7 @@
 
       // Show modal instead of inline error
       if (window.showErrorModal) {
-        window.showErrorModal('Error', message, {
+        window.showErrorModal(customTitle || 'Error', message, {
           buttonText: actionLabel || 'Got it',
           onClose: action || null,
           showRetry: !!action,
@@ -3681,8 +3686,11 @@
             });
 
             // Use handleApiError to check for upgradeRequired and show appropriate modal
-            // This will show the upgrade modal if upgradeRequired is true, otherwise show generic error
-            handleApiError(error);
+            // For non-upgrade errors, show feedback-specific messaging
+            handleApiError(error, {
+              title: 'Feedback Generation Failed',
+              message: 'Failed to generate feedback. Your ATS score is still available.'
+            });
             
             // Clean up feedback loading overlay on feedback failure
             if (window._currentFeedbackLoading) {
@@ -4108,7 +4116,11 @@
               });
 
               // Use handleApiError to check for upgradeRequired and show appropriate modal
-              handleApiError(error);
+              // For non-upgrade errors, show feedback-specific messaging
+              handleApiError(error, {
+                title: 'Feedback Generation Failed',
+                message: 'Failed to generate feedback. Your ATS score is still available.'
+              });
               this.textContent = 'Regenerate Feedback';
               this.disabled = false;
               hideLoadingState();
