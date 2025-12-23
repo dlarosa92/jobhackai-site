@@ -601,10 +601,31 @@ function scoreStructureAndCompleteness(resumeText, quality) {
     const monthYear = /\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+\d{4}\b/gi;
     const numericMonthYear = /\b\d{1,2}[\/\-]\d{4}\b/g;
     const yearOnly = /\b(19|20)\d{2}\b/g;
-    const datesFound =
-      (resumeText.match(monthYear) || []).length +
-      (resumeText.match(numericMonthYear) || []).length +
-      (resumeText.match(yearOnly) || []).length;
+    // Count distinct date occurrences (avoid double-counting years inside other date matches)
+    const spans = [];
+    const pushSpan = (start, end) => {
+      if (typeof start !== 'number' || typeof end !== 'number') return;
+      if (start < 0 || end <= start) return;
+      spans.push([start, end]);
+    };
+
+    for (const m of resumeText.matchAll(monthYear)) {
+      pushSpan(m.index, m.index + m[0].length);
+    }
+    for (const m of resumeText.matchAll(numericMonthYear)) {
+      pushSpan(m.index, m.index + m[0].length);
+    }
+
+    const isInsideSpan = (idx) => spans.some(([s, e]) => idx >= s && idx < e);
+    const standaloneYears = new Set();
+    for (const m of resumeText.matchAll(yearOnly)) {
+      const idx = typeof m.index === 'number' ? m.index : -1;
+      if (idx === -1) continue;
+      if (isInsideSpan(idx)) continue; // don't count "2020" inside "Jan 2020" or "01/2020"
+      standaloneYears.add(m[0]);
+    }
+
+    const datesFound = spans.length + standaloneYears.size;
     if (datesFound < 2) {
       score -= 2;
       issues.push('Date formatting may be inconsistent');
