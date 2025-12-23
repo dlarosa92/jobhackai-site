@@ -2926,6 +2926,11 @@
         const uploadInput = document.getElementById('rf-upload');
         const file = uploadInput?.files[0];
         if (!file) {
+          // Disable button to prevent future clicks when no file is selected
+          const generateBtn = document.getElementById('rf-generate-btn');
+          if (generateBtn) {
+            generateBtn.disabled = true;
+          }
           handleApiError(new Error('Please select a resume file first'));
           return;
         }
@@ -3013,7 +3018,11 @@
               if (!hasCredit) {
                 // Free account limit reached - show upgrade message
                 uploadInput.disabled = false;
-                generateBtn.disabled = false;
+                // Only enable button if file still exists
+                const fileStillExists = uploadInput?.files?.[0];
+                if (generateBtn) {
+                  generateBtn.disabled = !fileStillExists;
+                }
                 hideLoadingState();
                 handleApiError(new Error('You have used your 1 free lifetime ATS score. Upgrade to continue scoring unlimited resumes.'));
                 // Redirect to pricing page after showing error
@@ -3105,7 +3114,11 @@
               if (!hasCredit) {
                 // Free account limit reached - show upgrade message
                 uploadInput.disabled = false;
-                generateBtn.disabled = false;
+                // Only enable button if file still exists
+                const fileStillExists = uploadInput?.files?.[0];
+                if (generateBtn) {
+                  generateBtn.disabled = !fileStillExists;
+                }
                 hideLoadingState();
                 handleApiError(new Error('You have used your 1 free lifetime ATS score. Upgrade to continue scoring unlimited resumes.'));
                 // Redirect to pricing page after showing error
@@ -3179,7 +3192,11 @@
               window._currentFeedbackLoading = null;
             }
             uploadInput.disabled = false;
-            generateBtn.disabled = false;
+            // Only enable button if file still exists
+            const fileStillExists = uploadInput?.files?.[0];
+            if (generateBtn) {
+              generateBtn.disabled = !fileStillExists;
+            }
             hideLoadingState();
             return;
           }
@@ -3692,7 +3709,11 @@
           */
 
           uploadInput.disabled = false;
-          generateBtn.disabled = false;
+          // Only enable button if file still exists
+          const fileStillExists = uploadInput?.files?.[0];
+          if (generateBtn) {
+            generateBtn.disabled = !fileStillExists;
+          }
           hideLoadingState();
         } catch (error) {
           // Restore credit ONLY if ATS scoring failed (not for post-scoring errors)
@@ -3733,7 +3754,11 @@
           clearAtsState();
           handleApiError(error);
           uploadInput.disabled = false;
-          generateBtn.disabled = false;
+          // Only enable button if file still exists
+          const fileStillExists = uploadInput?.files?.[0];
+          if (generateBtn) {
+            generateBtn.disabled = !fileStillExists;
+          }
           hideLoadingState();
         }
       }
