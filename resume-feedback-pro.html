@@ -2926,11 +2926,7 @@
         const uploadInput = document.getElementById('rf-upload');
         const file = uploadInput?.files[0];
         if (!file) {
-          // Disable button to prevent future clicks when no file is selected
-          const generateBtn = document.getElementById('rf-generate-btn');
-          if (generateBtn) {
-            generateBtn.disabled = true;
-          }
+          // Guard: always show pop-up if user clicks with no file
           handleApiError(new Error('Please select a resume file first'));
           return;
         }
@@ -3782,11 +3778,6 @@
           const pdfHelper = document.getElementById('rf-pdf-helper');
           
           if (file) {
-            // Immediately disable generate button while validating new file
-            if (generateBtn) {
-              generateBtn.disabled = true;
-            }
-            
             // Hide status pill initially while validating
             hideFileStatus();
             
@@ -3869,7 +3860,8 @@
                 fileNameSpan.style.fontWeight = '600';
               }
               if (generateBtn) {
-                generateBtn.disabled = true;
+                // Keep button clickable; validation failure is shown via status and name color
+                // generateBtn.disabled = true;
               }
               if (statusDiv) {
                 statusDiv.style.display = 'none';
@@ -3886,9 +3878,10 @@
               fileNameSpan.style.color = 'var(--color-text-muted)';
               fileNameSpan.style.fontWeight = 'normal';
             }
-            if (generateBtn) {
-              generateBtn.disabled = true;
-            }
+            // Leave generate button clickable; click guard will show modal if no file
+            // if (generateBtn) {
+            //   generateBtn.disabled = true;
+            // }
             if (statusDiv) {
               statusDiv.style.display = 'none';
             }
@@ -5910,12 +5903,13 @@
           : 'Generate ATS Score & Feedback';
       }
       
-      if (generateBtn) {
-        const hasFile = fileInput && fileInput.files && fileInput.files.length > 0;
-        if (_mode === 'saved' && !hasFile) {
-          generateBtn.disabled = true;
-        }
-      }
+      // Keep generate button clickable; click guard handles missing file case
+      // if (generateBtn) {
+      //   const hasFile = fileInput && fileInput.files && fileInput.files.length > 0;
+      //   if (_mode === 'saved' && !hasFile) {
+      //     generateBtn.disabled = true;
+      //   }
+      // }
       
       if (savedLine) {
         savedLine.style.display = _mode === 'saved' ? 'block' : 'none';
@@ -6029,10 +6023,11 @@
           jobTitleInput.value = data.role;
         }
         
-        // Require a new file before re-running
+        // Require a new file before re-running (enforced by click guard instead of disabling button)
         const generateBtn = document.getElementById('rf-generate-btn');
         if (generateBtn) {
-          generateBtn.disabled = true;
+          // Keep button clickable; generateATSAndFeedback will show a modal if no file is selected
+          // generateBtn.disabled = true;
         }
         
         // Mark active history item
@@ -6152,7 +6147,8 @@
       const pdfHelper = document.getElementById('rf-pdf-helper');
       if (fileInput) fileInput.value = '';
       if (fileName) fileName.textContent = 'No file selected';
-      if (generateBtn) generateBtn.disabled = true;
+      // Keep generate button clickable; click guard will handle missing file
+      // if (generateBtn) generateBtn.disabled = true;
       if (statusDiv) statusDiv.style.display = 'none';
       if (fileStatus) fileStatus.style.display = 'none';
       if (pdfHelper) pdfHelper.style.display = 'none';
