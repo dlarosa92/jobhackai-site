@@ -2683,6 +2683,11 @@
             
             // Do NOT enable generate button - file input is empty after page reload
             // User must select a file again before the button can be enabled
+            
+            // Enable button even without file - click guard will show popup if needed
+            if (generateBtn) {
+              generateBtn.disabled = false;
+            }
           }
         }
       }
@@ -2927,7 +2932,22 @@
         const file = uploadInput?.files[0];
         if (!file) {
           // Guard: always show pop-up if user clicks with no file
-          handleApiError(new Error('Please select a resume file first'));
+          // Check if user is on trial plan for trial-specific messaging
+          const userPlan = getCurrentUserPlan();
+          if (userPlan === 'trial') {
+            // Show trial-specific popup
+            if (window.showErrorModal) {
+              window.showErrorModal('Upload Your Resume', 'Your trial includes 3 full ATS score & feedback runs. Upload your resume to get started and see how your resume performs!', {
+                buttonText: 'Got it',
+                onClose: null
+              });
+            } else {
+              handleApiError(new Error('Please select a resume file first'));
+            }
+          } else {
+            // Generic error for non-trial users
+            handleApiError(new Error('Please select a resume file first'));
+          }
           return;
         }
 
@@ -3893,6 +3913,10 @@
       // Generate Button Click Handler
       if (generateBtn) {
         generateBtn.addEventListener('click', generateATSAndFeedback);
+        
+        // Enable button on page load - click guard will handle missing file
+        // This ensures the popup works even when no file is selected
+        generateBtn.disabled = false;
       }
       // Regenerate Feedback Button
       const regenBtn = document.getElementById('rf-regenerate-btn');
@@ -6147,8 +6171,10 @@
       const pdfHelper = document.getElementById('rf-pdf-helper');
       if (fileInput) fileInput.value = '';
       if (fileName) fileName.textContent = 'No file selected';
-      // Keep generate button clickable; click guard will handle missing file
-      // if (generateBtn) generateBtn.disabled = true;
+      
+      // Enable button - click guard will handle missing file
+      if (generateBtn) generateBtn.disabled = false;
+      
       if (statusDiv) statusDiv.style.display = 'none';
       if (fileStatus) fileStatus.style.display = 'none';
       if (pdfHelper) pdfHelper.style.display = 'none';
