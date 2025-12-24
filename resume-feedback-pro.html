@@ -3699,7 +3699,7 @@
                   resumeId: uploadResult.resumeId,
                   jobTitle: jobTitleForFeedback || null,
                   roleSpecificFeedback: feedbackResult.roleSpecificFeedback || null,
-                  extractionQuality: atsSettled.status === 'fulfilled' ? atsSettled.value.extractionQuality : (scoreResult?.extractionQuality || null)
+                  extractionQuality: atsSettled.value?.extractionQuality ?? null
                 });
                 
                 if (!saveSuccess) {

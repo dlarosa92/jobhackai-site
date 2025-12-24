@@ -1212,9 +1212,10 @@
           if (cachedScore.extractionQuality) {
             maybeWarnLowExtractionQuality(cachedScore.extractionQuality);
             
-            // Generate summary based on extractionQuality
+            // Generate summary based on extractionQuality (consistent with maybeWarnLowExtractionQuality logic)
             const extractionQuality = cachedScore.extractionQuality;
-            const isHighQuality = extractionQuality.extractionStatus === 'ok' && 
+            const status = extractionQuality.extractionStatus || 'ok'; // Default to 'ok' if missing (consistent with warning logic)
+            const isHighQuality = status === 'ok' && 
                                  extractionQuality.confidence >= 0.65 && 
                                  extractionQuality.tokenCount >= 80;
             
