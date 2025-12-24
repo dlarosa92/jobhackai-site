@@ -213,37 +213,83 @@ document.addEventListener('DOMContentLoaded', async function() {
   // UX FIX: Show login form immediately, check auth in background
   const checkAuth = async () => {
     if (loginInProgress) {
-      console.log('⏸️ Login in progress, skipping auto-redirect');
+      console.log('[LOGIN] checkAuth: Login in progress, skipping auto-redirect');
       return false;
     }
 
     // Check for logout-intent flag - if logout is in progress, don't redirect
     const logoutIntent = sessionStorage.getItem('logout-intent');
     if (logoutIntent === '1') {
-      console.log('🚫 Logout in progress, skipping auth check and redirect');
+      console.log('[LOGIN] checkAuth: Logout in progress, skipping auth check and redirect');
       return false;
     }
 
     // ONLY check Firebase, not localStorage
     try {
-      console.log('🔍 Checking Firebase auth state...');
-      // Reduced timeout from 4000ms to 2000ms for faster UX
-      const user = await waitForAuthReady(2000);
+      console.log('[LOGIN] checkAuth: Starting Firebase auth check (timeout: 2000ms)');
+      const startTime = Date.now();
+      
+      // EDGE CASE FIX: Handle both timeout and errors from waitForAuthReady
+      let user = null;
+      try {
+        user = await Promise.race([
+          waitForAuthReady(2000),
+          new Promise((_, reject) => 
+            setTimeout(() => reject(new Error('Auth check timeout')), 2000)
+          )
+        ]);
+      } catch (timeoutError) {
+        console.warn('[LOGIN] checkAuth: Auth check timeout or error:', timeoutError.message);
+        // Try one more quick check
+        try {
+          user = window.FirebaseAuthManager?.getCurrentUser?.();
+          if (user) {
+            console.log('[LOGIN] checkAuth: Found user on retry');
+          }
+        } catch (retryError) {
+          console.warn('[LOGIN] checkAuth: Retry also failed:', retryError.message);
+        }
+      }
+      
+      const elapsed = Date.now() - startTime;
+      console.log(`[LOGIN] checkAuth: Auth check completed in ${elapsed}ms`);
+      
       if (user && user.email) {
         // Double-check logout intent before redirecting
         const logoutIntentCheck = sessionStorage.getItem('logout-intent');
         if (logoutIntentCheck === '1') {
-          console.log('🚫 Logout in progress, preventing redirect to dashboard');
+          console.log('[LOGIN] checkAuth: Logout in progress, preventing redirect to dashboard');
           return false;
         }
-        console.log(`✅ Authenticated as ${user.email}, redirecting to dashboard`);
-        location.replace('/dashboard.html');
-        return true;
+        
+        console.log(`[LOGIN] checkAuth: Authenticated as ${user.email}, redirecting to dashboard`);
+        
+        // EDGE CASE FIX: Try redirect with error handling
+        try {
+          location.replace('/dashboard.html');
+          return true;
+        } catch (redirectError) {
+          console.error('[LOGIN] checkAuth: Redirect failed:', redirectError.message);
+          // Fallback: try window.location.href
+          try {
+            window.location.href = '/dashboard.html';
+            return true;
+          } catch (fallbackError) {
+            console.error('[LOGIN] checkAuth: Fallback redirect also failed:', fallbackError.message);
+            return false;
+          }
+        }
       } else {
-        console.log('🔓 No authenticated user — login form already visible');
+        console.log('[LOGIN] checkAuth: No authenticated user — login form already visible');
       }
     } catch (error) {
-      console.log('No Firebase user, proceeding with login form');
+      // EDGE CASE FIX: Log full error details for debugging
+      console.error('[LOGIN] checkAuth: Unexpected error during auth check:', {
+        message: error.message,
+        stack: error.stack,
+        name: error.name
+      });
+      console.log('[LOGIN] checkAuth: Proceeding with login form despite error');
     }
 
     return false;
@@ -252,8 +298,10 @@ document.addEventListener('DOMContentLoaded', async function() {
   // UX FIX: Don't await auth check - let it run in background
   // Form is already visible, so user can start typing immediately
   // The checkAuth function will redirect if user is authenticated
-  checkAuth().catch(() => {
-    // Silently handle errors - form is already showing
+  checkAuth().catch((error) => {
+    // EDGE CASE FIX: Log errors but don't block UI
+    console.error('[LOGIN] Background auth check failed:', error.message);
+    // Form is already showing, so user can proceed
   });
   
   // Clear logout-intent flag after a short delay (if it was set)
