@@ -328,24 +328,34 @@ function getAuthState() {
       } catch (e) {
         // Fall through to return unauthenticated
       }
+      // If fallback didn't return, Firebase says logged out and localStorage doesn't have valid auth
+      // Don't clear localStorage yet - wait for firebase-auth-ready to fire
+      return {
+        isAuthenticated: false,
+        userPlan: null,
+        devPlan: null
+      };
     }
     
     // Only clear localStorage if firebase-auth-ready has fired AND Firebase says logged out
-    try {
-      const storedAuth = localStorage.getItem('user-authenticated');
-      if (storedAuth === 'true') {
-        // Firebase is initialized and says logged out, but localStorage is stale - sync localStorage
-        navLog('error', 'Firebase says logged out but localStorage is stale, syncing localStorage');
-        localStorage.setItem('user-authenticated', 'false');
-        localStorage.removeItem('user-email');
-        return {
-          isAuthenticated: false,
-          userPlan: null,
-          devPlan: null
-        };
+    // CRITICAL FIX: Check firebaseAuthReadyFired before clearing to prevent premature clearing
+    if (firebaseAuthReadyFired) {
+      try {
+        const storedAuth = localStorage.getItem('user-authenticated');
+        if (storedAuth === 'true') {
+          // Firebase is initialized and says logged out, but localStorage is stale - sync localStorage
+          navLog('error', 'Firebase says logged out but localStorage is stale, syncing localStorage');
+          localStorage.setItem('user-authenticated', 'false');
+          localStorage.removeItem('user-email');
+          return {
+            isAuthenticated: false,
+            userPlan: null,
+            devPlan: null
+          };
+        }
+      } catch (storageError) {
+        navLog('error', 'Failed to check localStorage for stale auth state', storageError.message);
       }
-    } catch (storageError) {
-      navLog('error', 'Failed to check localStorage for stale auth state', storageError.message);
     }
   }
   
@@ -2187,26 +2197,29 @@ document.addEventListener('firebase-auth-ready', async (event) => {
 });
 
 // Fallback: Initialize immediately if Firebase is already ready
-// CRITICAL FIX: Check if Firebase has actually restored a user, not just if currentUser exists
-// currentUser is initialized to null (not undefined), so we need to check for actual user
+// CRITICAL FIX: Check if Firebase manager exists and is ready (has checked auth state)
+// This fallback handles cases where firebase-auth-ready event fired before this script loaded
+// Must work for both logged-in AND logged-out users (navigation needs to initialize for visitors too)
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', () => {
-    // Check if Firebase has actually restored a user (not just if manager exists)
-    const firebaseUser = window.FirebaseAuthManager?.getCurrentUser?.();
-    if (window.FirebaseAuthManager && firebaseUser) {
-      firebaseAuthReadyFired = true; // Mark as ready since we have a user
-      console.log('🔥 Firebase already ready with user, initializing navigation');
-      applyNavForUser(firebaseUser);
+    // Check if Firebase manager exists and has been initialized (auth state has been checked)
+    // Firebase is "ready" when the manager exists and getCurrentUser() can be called
+    // This works for both logged-in (returns user) and logged-out (returns null) users
+    if (window.FirebaseAuthManager && typeof window.FirebaseAuthManager.getCurrentUser === 'function') {
+      const firebaseUser = window.FirebaseAuthManager.getCurrentUser();
+      firebaseAuthReadyFired = true; // Mark as ready - Firebase has checked auth state
+      console.log('🔥 Firebase already ready, initializing navigation', firebaseUser ? '(with user)' : '(logged out)');
+      applyNavForUser(firebaseUser); // Pass null for logged-out users
       initializeNavigation();
     }
   });
 } else {
-  // DOM already loaded, check if Firebase has actually restored a user
-  const firebaseUser = window.FirebaseAuthManager?.getCurrentUser?.();
-  if (window.FirebaseAuthManager && firebaseUser) {
-    firebaseAuthReadyFired = true; // Mark as ready since we have a user
-    console.log('🔥 Firebase already ready with user, initializing navigation');
-    applyNavForUser(firebaseUser);
+  // DOM already loaded, check if Firebase is ready
+  if (window.FirebaseAuthManager && typeof window.FirebaseAuthManager.getCurrentUser === 'function') {
+    const firebaseUser = window.FirebaseAuthManager.getCurrentUser();
+    firebaseAuthReadyFired = true; // Mark as ready - Firebase has checked auth state
+    console.log('🔥 Firebase already ready, initializing navigation', firebaseUser ? '(with user)' : '(logged out)');
+    applyNavForUser(firebaseUser); // Pass null for logged-out users
     initializeNavigation();
   }
 }
