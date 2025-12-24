@@ -295,22 +295,34 @@ document.addEventListener('DOMContentLoaded', async function() {
     return false;
   };
   
-  // UX FIX: Don't await auth check - let it run in background
+  // UX FIX: Run auth check in background but await completion before clearing logout-intent
+  // This prevents race condition where auth state listener fires after flag is cleared
   // Form is already visible, so user can start typing immediately
   // The checkAuth function will redirect if user is authenticated
-  checkAuth().catch((error) => {
-    // EDGE CASE FIX: Log errors but don't block UI
-    console.error('[LOGIN] Background auth check failed:', error.message);
-    // Form is already showing, so user can proceed
-  });
-  
-  // Clear logout-intent flag after a short delay (if it was set)
-  if (hasLogoutIntent) {
-    setTimeout(() => {
-      sessionStorage.removeItem('logout-intent');
-      console.log('✅ Cleared logout-intent flag after auth check');
-    }, 500);
-  }
+  (async () => {
+    try {
+      const authCheckResult = await checkAuth();
+      // Only clear logout-intent flag after auth check completes
+      // If checkAuth returned true, user was redirected, so flag clearing doesn't matter
+      // If checkAuth returned false, user is not authenticated, safe to clear flag
+      if (hasLogoutIntent) {
+        sessionStorage.removeItem('logout-intent');
+        console.log('✅ Cleared logout-intent flag after auth check completed');
+      }
+    } catch (error) {
+      // EDGE CASE FIX: Log errors but don't block UI
+      console.error('[LOGIN] Background auth check failed:', error.message);
+      // Form is already showing, so user can proceed
+      // Still clear logout-intent flag after error to prevent permanent blocking
+      if (hasLogoutIntent) {
+        // Wait a bit longer on error to ensure any pending auth operations complete
+        setTimeout(() => {
+          sessionStorage.removeItem('logout-intent');
+          console.log('✅ Cleared logout-intent flag after auth check error');
+        }, 1000);
+      }
+    }
+  })();
   
   // Don't return early - let the form show while auth check runs in background
   // If user is authenticated, checkAuth() will redirect them
