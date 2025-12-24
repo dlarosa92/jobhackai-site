@@ -2633,6 +2633,7 @@
                     breakdown: resumeData.breakdown || {},
                     jobTitle: resumeData.jobTitle || null,
                     resumeId: resumeData.resumeId || null,
+                    extractionQuality: resumeData.extractionQuality || null, // Include extractionQuality to match loadATSScore() structure
                     timestamp: resumeData.timestamp || Date.now() // Include timestamp, fallback to now if missing
                   };
                   

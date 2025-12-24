@@ -1214,10 +1214,10 @@
             
             // Generate summary based on extractionQuality (consistent with maybeWarnLowExtractionQuality logic)
             const extractionQuality = cachedScore.extractionQuality;
+            const confidence = typeof extractionQuality.confidence === 'number' ? extractionQuality.confidence : 1.0;
+            const tokenCount = typeof extractionQuality.tokenCount === 'number' ? extractionQuality.tokenCount : 0;
             const status = extractionQuality.extractionStatus || 'ok'; // Default to 'ok' if missing (consistent with warning logic)
-            const isHighQuality = status === 'ok' && 
-                                 extractionQuality.confidence >= 0.65 && 
-                                 extractionQuality.tokenCount >= 80;
+            const isHighQuality = status === 'ok' && confidence >= 0.65 && tokenCount >= 80;
             
             if (isHighQuality) {
               // Use confident language
@@ -1286,11 +1286,11 @@
                   maybeWarnLowExtractionQuality(extractionQuality);
                 }
                 
-                // Generate summary based on extractionQuality and API feedback
-                const isHighQuality = extractionQuality && 
-                  extractionQuality.extractionStatus === 'ok' && 
-                  extractionQuality.confidence >= 0.65 && 
-                  extractionQuality.tokenCount >= 80;
+                // Generate summary based on extractionQuality and API feedback (consistent with maybeWarnLowExtractionQuality logic)
+                const confidence = typeof extractionQuality?.confidence === 'number' ? extractionQuality.confidence : 1.0;
+                const tokenCount = typeof extractionQuality?.tokenCount === 'number' ? extractionQuality.tokenCount : 0;
+                const status = extractionQuality?.extractionStatus || 'ok';
+                const isHighQuality = extractionQuality && status === 'ok' && confidence >= 0.65 && tokenCount >= 80;
                 
                 if (isHighQuality) {
                   // Use confident language or API feedback if available
@@ -2487,11 +2487,11 @@
               maybeWarnLowExtractionQuality(extractionQuality);
             }
             
-            // Generate summary based on extractionQuality
-            const isHighQuality = extractionQuality && 
-              extractionQuality.extractionStatus === 'ok' && 
-              extractionQuality.confidence >= 0.65 && 
-              extractionQuality.tokenCount >= 80;
+            // Generate summary based on extractionQuality (consistent with maybeWarnLowExtractionQuality logic)
+            const confidence = typeof extractionQuality?.confidence === 'number' ? extractionQuality.confidence : 1.0;
+            const tokenCount = typeof extractionQuality?.tokenCount === 'number' ? extractionQuality.tokenCount : 0;
+            const status = extractionQuality?.extractionStatus || 'ok';
+            const isHighQuality = extractionQuality && status === 'ok' && confidence >= 0.65 && tokenCount >= 80;
             
             let summary;
             if (isHighQuality) {
