@@ -1532,6 +1532,9 @@ function checkFeatureAccess(featureKey, targetPlan = 'premium') {
 }
 
 // --- INITIALIZATION ---
+// SECURITY FIX: Guard against duplicate Firebase auth listener registration
+let firebaseAuthListenerRegistered = false;
+
 async function initializeNavigation() {
   navLog('info', '=== initializeNavigation() START ===');
   navLog('info', 'Initialization context', {
@@ -1710,10 +1713,12 @@ async function initializeNavigation() {
   
   // SECURITY FIX: Listen to Firebase auth state changes to keep UI in sync
   // This ensures navigation updates immediately when user logs out in another tab
-  if (window.FirebaseAuthManager) {
+  // SECURITY FIX: Guard against duplicate registration - initializeNavigation() can be called multiple times
+  if (window.FirebaseAuthManager && !firebaseAuthListenerRegistered) {
     try {
       if (typeof window.FirebaseAuthManager.onAuthStateChange === 'function') {
         navLog('debug', 'Setting up Firebase auth state listener');
+        firebaseAuthListenerRegistered = true; // Mark as registered before adding listener
         
         // EDGE CASE FIX: Wrap listener in try-catch to prevent errors from breaking navigation
         window.FirebaseAuthManager.onAuthStateChange((user, userRecord) => {
@@ -1760,18 +1765,22 @@ async function initializeNavigation() {
         });
       } else {
         console.warn('[AUTH-LISTENER] FirebaseAuthManager.onAuthStateChange is not a function');
+        firebaseAuthListenerRegistered = false; // Reset flag if setup failed
       }
     } catch (setupError) {
       console.error('[AUTH-LISTENER] Failed to setup auth state listener:', setupError.message);
+      firebaseAuthListenerRegistered = false; // Reset flag on error
     }
-  } else {
+  } else if (!firebaseAuthListenerRegistered) {
     // EDGE CASE FIX: Retry setup when FirebaseAuthManager becomes available
+    // SECURITY FIX: Only retry if listener hasn't been registered yet
     console.log('[AUTH-LISTENER] FirebaseAuthManager not ready, will retry on firebase-auth-ready event');
     document.addEventListener('firebase-auth-ready', function onAuthReady() {
       document.removeEventListener('firebase-auth-ready', onAuthReady);
-      // Retry listener setup
-      if (window.FirebaseAuthManager && typeof window.FirebaseAuthManager.onAuthStateChange === 'function') {
+      // Retry listener setup - check guard to prevent duplicate registration
+      if (window.FirebaseAuthManager && typeof window.FirebaseAuthManager.onAuthStateChange === 'function' && !firebaseAuthListenerRegistered) {
         console.log('[AUTH-LISTENER] Retrying listener setup after firebase-auth-ready');
+        firebaseAuthListenerRegistered = true; // Mark as registered before adding listener
         try {
           window.FirebaseAuthManager.onAuthStateChange((user, userRecord) => {
             try {
@@ -1800,9 +1809,12 @@ async function initializeNavigation() {
           });
         } catch (retryError) {
           console.error('[AUTH-LISTENER] Retry setup failed:', retryError.message);
+          firebaseAuthListenerRegistered = false; // Reset flag on error
         }
       }
     }, { once: true });
+  } else if (firebaseAuthListenerRegistered) {
+    navLog('debug', 'Firebase auth listener already registered, skipping duplicate registration');
   }
   
   navLog('info', '=== initializeNavigation() COMPLETE ===');
