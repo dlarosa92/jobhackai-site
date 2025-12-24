@@ -627,6 +627,11 @@
 
     // Wait for auth state to be ready
     const checkAuthAndInit = () => {
+      // Prevent duplicate initialization and listener registration
+      if (isInitialized) {
+        return;
+      }
+      
       if (isAuthenticated() && !isExcludedPage()) {
         // Set up activity listeners
         CONFIG.ACTIVITY_EVENTS.forEach(eventType => {
