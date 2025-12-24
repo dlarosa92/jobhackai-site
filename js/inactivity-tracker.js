@@ -20,6 +20,10 @@
     // Minimum time between warnings (prevent spam)
     WARNING_COOLDOWN_MS: 2 * 60 * 1000,
     
+    // Throttle activity handler to prevent excessive timer resets and console spam
+    // Only process activity at most once per second
+    ACTIVITY_THROTTLE_MS: 1000,
+    
     // Only track these long-running endpoints (not all fetches)
     LONG_OPERATION_ENDPOINTS: [
       '/api/resume-feedback',
@@ -48,6 +52,8 @@
   let activeOperations = new Set();
   let broadcastChannel = null;
   let countdownInterval = null;
+  let activityThrottleTimer = null;
+  let lastActivityProcessTime = 0;
 
   /**
    * Check if user is authenticated - Firebase-first (matches navigation.js pattern)
@@ -545,14 +551,55 @@
       clearInterval(countdownInterval);
       countdownInterval = null;
     }
+    if (activityThrottleTimer) {
+      clearTimeout(activityThrottleTimer);
+      activityThrottleTimer = null;
+    }
   }
 
   /**
-   * Handle user activity - reset timers
+   * Handle user activity - reset timers (throttled to prevent excessive calls)
    */
   function handleActivity() {
     if (!isAuthenticated() || isExcludedPage()) {
       return;
+    }
+    
+    const now = Date.now();
+    const timeSinceLastProcess = now - lastActivityProcessTime;
+    
+    // Throttle: only process activity if enough time has passed
+    if (timeSinceLastProcess < CONFIG.ACTIVITY_THROTTLE_MS) {
+      // Clear any pending throttle timer and schedule for later
+      if (activityThrottleTimer) {
+        clearTimeout(activityThrottleTimer);
+      }
+      
+      activityThrottleTimer = setTimeout(() => {
+        processActivity();
+      }, CONFIG.ACTIVITY_THROTTLE_MS - timeSinceLastProcess);
+      
+      return;
+    }
+    
+    // Process immediately
+    processActivity();
+  }
+  
+  /**
+   * Process activity - reset timers and broadcast (called after throttling)
+   */
+  function processActivity() {
+    if (!isAuthenticated() || isExcludedPage()) {
+      return;
+    }
+    
+    lastActivityProcessTime = Date.now();
+    
+    // Clear any pending throttle timer
+    if (activityThrottleTimer) {
+      clearTimeout(activityThrottleTimer);
+      activityThrottleTimer = null;
     }
     
     // Reset timers on any activity
