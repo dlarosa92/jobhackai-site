@@ -129,6 +129,9 @@ function getPlanLabel(plan) {
   const p = String(plan || '').toLowerCase();
   if (p === 'premium') return { label: 'Premium Plan', plan: 'premium' };
   if (p === 'pro') return { label: 'Pro Plan', plan: 'pro' };
+  if (p === 'essential') return { label: 'Essential Plan', plan: 'essential' };
+  if (p === 'trial') return { label: 'Trial Plan', plan: 'trial' };
+  if (p === 'free') return { label: 'Free Plan', plan: 'free' };
   return { label: 'Plan', plan: '' };
 }
 
@@ -923,9 +926,18 @@ function initElements() {
   els.historyRetry = $('#cl-history-retry');
 }
 
+// Wait for navigation system before updating badge
+function initPlanBadge() {
+  if (window.JobHackAINavigation?.getEffectivePlan) {
+    updatePlanBadge();
+  } else {
+    window.addEventListener('navigationReady', updatePlanBadge, { once: true });
+  }
+}
+
 async function init() {
   initElements();
-  updatePlanBadge();
+  initPlanBadge();
   window.addEventListener('planChanged', updatePlanBadge);
 
   // Safety: ensure delete modal/backdrop are never stuck visible on cold load
