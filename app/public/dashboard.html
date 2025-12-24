@@ -828,14 +828,14 @@
           <svg width="20" height="20" fill="none" stroke="#6B7280" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06A1.65 1.65 0 0015 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 008.6 15a1.65 1.65 0 00-1.82-.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.6 8.6a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 008.6 4.6a1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0015 4.6a1.65 1.65 0 001.82.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 8.6a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06A1.65 1.65 0 0015 15a1.65 1.65 0 001.82.33z"/></svg>
         </a>
         <div class="welcome-row">
-          <h2>Welcome back, ${user.name || 'User'}!</h2>
+          <h2>Hi, ${user.name || 'User'}</h2>
           ${user.plan === 'trial' ? `<div class="trial-countdown">You have ${daysLeft(user.trialEndsAt)} day${daysLeft(user.trialEndsAt) !== 1 ? 's' : ''} left in your trial!</div>` : ''}
           <div class="user-email">${user.email}</div>
         </div>
         <div class="ats-score-row">
           ${atsDonut(atsScore.percent)}
           <div class="ats-score-details">
-            <span class="ats-score-label">${atsScore.value} / ${atsScore.max}</span>
+            <span class="ats-score-label">${atsScore.percent}%</span>
             <span class="ats-score-summary">${atsScore.summary}</span>
           </div>
         </div>
@@ -1013,7 +1013,7 @@
           <div class="upgrade-popup-overlay" id="upgrade-popup-overlay">
             <div class="upgrade-popup-modal">
               <button class="close-btn" id="upgrade-popup-close" aria-label="Close">×</button>
-              <h2>Welcome back, ${user.name || 'User'}!</h2>
+              <h2>Hi, ${user.name || 'User'}</h2>
               <div class="popup-message">
                 Your previous ATS resume score has been carried over from your free account. You now have access to more features and unlimited scoring!
               </div>
@@ -1228,7 +1228,7 @@
           }
           // Update score label and summary
           const scoreLabel = document.querySelector('.ats-score-label');
-          if (scoreLabel) scoreLabel.textContent = score + ' / 100';
+          if (scoreLabel) scoreLabel.textContent = score + '%';
           const scoreSummary = document.querySelector('.ats-score-summary');
           if (scoreSummary) scoreSummary.textContent = summary;
         });
