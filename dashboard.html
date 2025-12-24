@@ -2090,12 +2090,18 @@
             const text = donut.querySelector('.ats-score-text');
             if (text) text.textContent = score + '%';
           }
-          // Update secondary score display (label stays as "Resume Feedback")
+          // Update label and secondary score display
           const scoreDetails = document.querySelector('.ats-score-details');
+          const scoreLabel = scoreDetails?.querySelector('.ats-score-label');
+          if (scoreLabel && scoreLabel.textContent === '—') {
+            // Update label from "—" to "Resume Feedback" when score is computed
+            scoreLabel.textContent = 'Resume Feedback';
+            scoreLabel.style.color = '';
+          }
+          // Create or update secondary score display
           let scoreSecondary = document.querySelector('.ats-score-secondary');
           if (!scoreSecondary && scoreDetails) {
             // Create element if it doesn't exist (e.g., when user uploads first resume)
-            const scoreLabel = scoreDetails.querySelector('.ats-score-label');
             scoreSecondary = document.createElement('span');
             scoreSecondary.className = 'ats-score-secondary';
             if (scoreLabel && scoreLabel.nextSibling) {
