@@ -1734,6 +1734,8 @@ async function initializeNavigation() {
   
   // Signal that navigation system is ready
   navLog('info', 'Navigation system initialization complete, dispatching ready event');
+  // Set flag to detect if event already fired (for fallback checks)
+  window.__navigationReadyFired = true;
   const readyEvent = new CustomEvent('navigationReady');
   window.dispatchEvent(readyEvent);
   
@@ -2183,6 +2185,8 @@ function applyNavForUser(user) {
 // Initialize navigation when Firebase auth is ready
 document.addEventListener('firebase-auth-ready', async (event) => {
   firebaseAuthReadyFired = true; // Mark as fired - Firebase has restored session
+  // Set flag on window to detect if event already fired (for fallback check)
+  window.__firebaseAuthReadyFired = true;
   console.log('🔥 Firebase auth ready, initializing navigation');
   try {
     const user = window.FirebaseAuthManager
@@ -2196,29 +2200,30 @@ document.addEventListener('firebase-auth-ready', async (event) => {
   }
 });
 
-// Fallback: Initialize immediately if Firebase is already ready
-// CRITICAL FIX: Check if Firebase manager exists and is ready (has checked auth state)
+// Fallback: Initialize immediately if firebase-auth-ready event already fired
+// CRITICAL FIX: Only use fallback if firebase-auth-ready event has already fired
+// Checking if getCurrentUser exists is insufficient - it exists before onAuthStateChanged fires
+// We must verify the event actually fired by checking window.__firebaseAuthReadyFired flag
 // This fallback handles cases where firebase-auth-ready event fired before this script loaded
 // Must work for both logged-in AND logged-out users (navigation needs to initialize for visitors too)
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', () => {
-    // Check if Firebase manager exists and has been initialized (auth state has been checked)
-    // Firebase is "ready" when the manager exists and getCurrentUser() can be called
-    // This works for both logged-in (returns user) and logged-out (returns null) users
-    if (window.FirebaseAuthManager && typeof window.FirebaseAuthManager.getCurrentUser === 'function') {
+    // Only initialize if firebase-auth-ready event has already fired (indicated by flag)
+    // This ensures Firebase has actually checked auth state via onAuthStateChanged
+    if (window.__firebaseAuthReadyFired && window.FirebaseAuthManager && typeof window.FirebaseAuthManager.getCurrentUser === 'function') {
       const firebaseUser = window.FirebaseAuthManager.getCurrentUser();
-      firebaseAuthReadyFired = true; // Mark as ready - Firebase has checked auth state
-      console.log('🔥 Firebase already ready, initializing navigation', firebaseUser ? '(with user)' : '(logged out)');
+      firebaseAuthReadyFired = true; // Sync flag
+      console.log('🔥 Firebase already ready (event fired before script load), initializing navigation', firebaseUser ? '(with user)' : '(logged out)');
       applyNavForUser(firebaseUser); // Pass null for logged-out users
       initializeNavigation();
     }
   });
 } else {
-  // DOM already loaded, check if Firebase is ready
-  if (window.FirebaseAuthManager && typeof window.FirebaseAuthManager.getCurrentUser === 'function') {
+  // DOM already loaded, check if firebase-auth-ready event already fired
+  if (window.__firebaseAuthReadyFired && window.FirebaseAuthManager && typeof window.FirebaseAuthManager.getCurrentUser === 'function') {
     const firebaseUser = window.FirebaseAuthManager.getCurrentUser();
-    firebaseAuthReadyFired = true; // Mark as ready - Firebase has checked auth state
-    console.log('🔥 Firebase already ready, initializing navigation', firebaseUser ? '(with user)' : '(logged out)');
+    firebaseAuthReadyFired = true; // Sync flag
+    console.log('🔥 Firebase already ready (event fired before script load), initializing navigation', firebaseUser ? '(with user)' : '(logged out)');
     applyNavForUser(firebaseUser); // Pass null for logged-out users
     initializeNavigation();
   }

@@ -927,10 +927,25 @@ function initElements() {
 }
 
 // Wait for navigation system before updating badge
+// CRITICAL FIX: window.JobHackAINavigation exists at module load time, but navigation isn't initialized
+// until initializeNavigation() completes and dispatches navigationReady event
+// We must wait for navigationReady event, not just check if the function exists
 function initPlanBadge() {
+  // Always wait for navigationReady event to ensure navigation is fully initialized
+  // This ensures getEffectivePlan() reads from the correct source (not stale localStorage)
   if (window.JobHackAINavigation?.getEffectivePlan) {
-    updatePlanBadge();
+    // Navigation.js has loaded, but may not be initialized yet
+    // Check if navigationReady has already fired
+    const navigationReadyFired = window.__navigationReadyFired || false;
+    if (navigationReadyFired) {
+      // Navigation already initialized, safe to update badge immediately
+      updatePlanBadge();
+    } else {
+      // Wait for navigationReady event
+      window.addEventListener('navigationReady', updatePlanBadge, { once: true });
+    }
   } else {
+    // Navigation.js hasn't loaded yet, wait for navigationReady
     window.addEventListener('navigationReady', updatePlanBadge, { once: true });
   }
 }
