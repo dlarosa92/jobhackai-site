@@ -151,9 +151,12 @@ class HelpCenterSearch {
   }
 
   escapeHtml(text) {
+    // Properly escape HTML for use in attributes (escapes <, >, &, ", and ')
     const div = document.createElement('div');
     div.textContent = text;
-    return div.innerHTML;
+    return div.innerHTML
+      .replace(/"/g, '&quot;')  // Escape double quotes for HTML attributes
+      .replace(/'/g, '&#39;');   // Escape single quotes for HTML attributes
   }
 
   escapeRegex(text) {
@@ -256,6 +259,9 @@ class HelpCenterSearch {
       entries.forEach(entry => {
         if (entry.isIntersecting) {
           const sectionId = entry.target.id;
+          // Skip sections without IDs (e.g., "Still Need Help?" section)
+          if (!sectionId) return;
+          
           tocLinks.forEach(link => {
             link.classList.remove('active');
             if (link.getAttribute('href') === `#${sectionId}`) {
