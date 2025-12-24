@@ -65,6 +65,13 @@ class HelpCenterSearch {
     document.addEventListener('click', (e) => {
       if (!e.target.closest('.help-search-container')) {
         this.hideResults();
+        // Restore consistent state: clear search, show all sections, clear highlights
+        // Only if there's an active search query to avoid disrupting user's current view
+        if (this.searchInput.value.trim().length >= 2) {
+          this.searchInput.value = '';
+          this.showAllSections();
+          this.clearHighlights();
+        }
       }
     });
 
@@ -118,7 +125,7 @@ class HelpCenterSearch {
       const sectionDiv = document.createElement('div');
       sectionDiv.className = 'help-search-result-section';
       sectionDiv.innerHTML = `
-        <h3 class="help-search-section-title">${data.title}</h3>
+        <h3 class="help-search-section-title">${this.escapeHtml(data.title)}</h3>
         ${data.items.map(item => `
           <div class="help-search-result-item" data-section="${sectionId}" data-question="${this.escapeHtml(item.question)}">
             <div class="help-search-question">${this.highlightText(item.question, query)}</div>
