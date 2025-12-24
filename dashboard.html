@@ -2517,6 +2517,11 @@
             const scoreSummary = document.querySelector('.ats-score-summary');
             if (scoreSummary) {
               scoreSummary.textContent = summary;
+              // Clear animation first to ensure it triggers on repeat runs
+              scoreSummary.style.animation = 'none';
+              scoreSummary.style.animationDelay = '';
+              // Force reflow to reset animation state
+              void scoreSummary.offsetWidth;
               // Trigger fade-in animation
               scoreSummary.style.opacity = '0';
               scoreSummary.style.animation = 'feedback-fade-in var(--transition-slow) ease-out forwards';
