@@ -333,7 +333,8 @@ function getAuthState() {
       const storedDevPlan = localStorage.getItem('dev-plan');
       
       // Validate plan values are in allowed list
-      const allowedPlans = ['free', 'trial', 'essential', 'pro', 'premium', 'visitor'];
+      // SECURITY FIX: Include 'pending' as legitimate plan state for trial users waiting for webhook confirmation
+      const allowedPlans = ['free', 'trial', 'essential', 'pro', 'premium', 'visitor', 'pending'];
       if (storedPlan && allowedPlans.includes(storedPlan)) {
         userPlan = storedPlan;
       } else if (storedPlan) {
@@ -347,7 +348,10 @@ function getAuthState() {
         devPlan = storedDevPlan;
       }
     } catch (storageError) {
+      // SECURITY FIX: Set default plan when localStorage access fails to ensure function contract is met
+      // Authenticated users should always have a valid plan string, not null
       console.error('[AUTH] getAuthState: Error reading plan from localStorage:', storageError.message);
+      userPlan = 'free'; // Default to free when storage access fails
     }
   }
 
