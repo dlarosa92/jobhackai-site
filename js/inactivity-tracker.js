@@ -794,12 +794,12 @@
     // Listen for auth state changes
     // SECURITY FIX: firebase-auth-ready event is dispatched on document, not window
     // Custom events dispatched on document do not propagate to window
-    // Match pattern used in navigation.js, cover-letter.js, and linkedin-optimizer.js
-    if (window.FirebaseAuthManager) {
-      document.addEventListener('firebase-auth-ready', () => {
-        setTimeout(checkAuthAndInit, 500);
-      });
-    }
+    // SECURITY FIX: Add listener unconditionally - if FirebaseAuthManager already exists,
+    // the event may have already fired, but if it doesn't exist yet, we need to wait for it
+    // Match pattern used in navigation.js (line 2148) and cover-letter.js (line 82)
+    document.addEventListener('firebase-auth-ready', () => {
+      setTimeout(checkAuthAndInit, 500);
+    });
 
     // Also listen for auth state changes via localStorage (if navigation.js updates it)
     window.addEventListener('storage', (e) => {
