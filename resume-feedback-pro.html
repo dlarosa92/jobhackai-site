@@ -3453,10 +3453,30 @@
                   sessionStorage.setItem('currentAtsBreakdown', JSON.stringify(result.breakdown));
                 }
                 
-                // Also store in localStorage for backward compatibility
-                const summary = result.score > 85 ? 'Excellent! Your resume is highly ATS compatible.' : 
-                               result.score > 70 ? 'Your resume meets many ATS criteria and is likely to be noticed.' : 
-                               'Your resume needs improvement for better ATS results.';
+                // Also store in localStorage for backward compatibility (extractionQuality-aware)
+                let summary;
+                if (result.extractionQuality) {
+                  // Use extractionQuality-aware summary (consistent with dashboard logic)
+                  const confidence = typeof result.extractionQuality.confidence === 'number' ? result.extractionQuality.confidence : 1.0;
+                  const tokenCount = typeof result.extractionQuality.tokenCount === 'number' ? result.extractionQuality.tokenCount : 0;
+                  const status = result.extractionQuality.extractionStatus || 'ok';
+                  const isHighQuality = status === 'ok' && confidence >= 0.65 && tokenCount >= 80;
+                  
+                  if (isHighQuality) {
+                    // Use confident language
+                    summary = result.score > 85 ? 'Excellent! Your resume is highly ATS compatible.' : 
+                             result.score > 70 ? 'Your resume meets many ATS criteria and is likely to be noticed.' : 
+                             'Your resume needs improvement for better ATS results.';
+                  } else {
+                    // Use softer language when quality is low
+                    summary = 'We may not have detected all sections in your resume. Consider checking formatting.';
+                  }
+                } else {
+                  // Fallback to confident language if no extractionQuality data
+                  summary = result.score > 85 ? 'Excellent! Your resume is highly ATS compatible.' : 
+                           result.score > 70 ? 'Your resume meets many ATS criteria and is likely to be noticed.' : 
+                           'Your resume needs improvement for better ATS results.';
+                }
                 localStorage.setItem('lastATSScore', result.score.toString());
                 localStorage.setItem('lastATSSummary', summary);
                 

@@ -405,6 +405,7 @@ export async function onRequest(context) {
           breakdown: result.breakdown,
           summary: result.feedback?.[0] || '',
           jobTitle: normalizedJobTitle,
+          extractionQuality: result.extractionQuality || null, // Include extractionQuality for consistency
           timestamp: Date.now(),
           syncedAt: Date.now()
         };
