@@ -2979,7 +2979,7 @@
                     resumeId: currentResumeId,
                     jobTitle: jobTitle || null,
                     roleSpecificFeedback: feedbackResult.roleSpecificFeedback || null,
-                    extractionQuality: cachedScore?.extractionQuality
+                    extractionQuality: null // No matching cached score, so no quality data for this resume
                   });
                   console.log('[RESUME-FEEDBACK] Saved feedback with reconstructed breakdown');
                 }
@@ -4366,7 +4366,7 @@
                   resumeId: currentResumeId,
                   jobTitle: jobTitle || null,
                   roleSpecificFeedback: feedbackResult.roleSpecificFeedback || null,
-                  extractionQuality: scoreResult?.extractionQuality || cachedScore?.extractionQuality,
+                  extractionQuality: scoreResult?.extractionQuality ?? null, // Prefer scoreResult if available, otherwise null (cachedScore may be from different resume)
                   timestamp: Date.now()
                 });
                 console.log('[RESUME-FEEDBACK] Saved feedback with reconstructed breakdown');
