@@ -301,20 +301,26 @@ function getAuthState() {
   
   // EDGE CASE FIX: If Firebase is initialized and says logged out, trust Firebase
   // This handles cases where logout cleared Firebase but localStorage is stale
-  if (hasFirebaseManager && !firebaseUser && actualAuth) {
-    // Firebase is initialized and says logged out - sync localStorage to match
-    console.log('[AUTH] getAuthState: Firebase says logged out, syncing localStorage');
+  // SECURITY FIX: Check localStorage directly instead of actualAuth, since actualAuth
+  // will be false when Firebase says logged out, preventing cleanup of stale localStorage
+  if (hasFirebaseManager && !firebaseUser) {
+    // Check if localStorage still says user is authenticated (stale data)
     try {
-      localStorage.setItem('user-authenticated', 'false');
-      localStorage.removeItem('user-email');
+      const storedAuth = localStorage.getItem('user-authenticated');
+      if (storedAuth === 'true') {
+        // Firebase is initialized and says logged out, but localStorage is stale - sync localStorage
+        navLog('error', 'Firebase says logged out but localStorage is stale, syncing localStorage');
+        localStorage.setItem('user-authenticated', 'false');
+        localStorage.removeItem('user-email');
+        return {
+          isAuthenticated: false,
+          userPlan: null,
+          devPlan: null
+        };
+      }
     } catch (storageError) {
-      console.error('[AUTH] getAuthState: Failed to sync localStorage:', storageError.message);
+      navLog('error', 'Failed to check localStorage for stale auth state', storageError.message);
     }
-    return {
-      isAuthenticated: false,
-      userPlan: null,
-      devPlan: null
-    };
   }
   
   // EDGE CASE FIX: Safe plan retrieval with validation
