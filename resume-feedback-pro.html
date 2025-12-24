@@ -1820,7 +1820,8 @@
               window._currentLoadingOverlay = window.showLoadingOverlay('Redirecting to checkout...');
             }
             
-            const idToken = await window.FirebaseAuthManager?.getCurrentUser?.()?.getIdToken?.();
+            const user = window.FirebaseAuthManager?.getCurrentUser?.();
+            const idToken = user ? await user.getIdToken() : null;
             const res = await fetch('/api/stripe-checkout', {
               method: 'POST',
               headers: { 
@@ -3406,7 +3407,8 @@
                                 window._currentLoadingOverlay = window.showLoadingOverlay('Redirecting to checkout...');
                               }
                               
-                              const idToken = await window.FirebaseAuthManager?.getCurrentUser?.()?.getIdToken?.();
+                              const user = window.FirebaseAuthManager?.getCurrentUser?.();
+                              const idToken = user ? await user.getIdToken() : null;
                               const res = await fetch('/api/stripe-checkout', {
                                 method: 'POST',
                                 headers: { 
