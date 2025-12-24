@@ -91,7 +91,12 @@
     }
     
     // Only check localStorage if Firebase not initialized
-    const hasFirebaseManager = !!window.FirebaseAuthManager;
+    // SECURITY FIX: Match navigation.js pattern - check both FirebaseAuthManager exists AND getCurrentUser is a function
+    // During initialization, FirebaseAuthManager may exist but getCurrentUser may not be ready yet
+    const firebaseManagerExists = !!window.FirebaseAuthManager;
+    const getCurrentUserExists = typeof window.FirebaseAuthManager?.getCurrentUser === 'function';
+    const hasFirebaseManager = firebaseManagerExists && getCurrentUserExists;
+    
     if (!hasFirebaseManager) {
       try {
         const authState = localStorage.getItem('user-authenticated');
@@ -199,9 +204,20 @@
     }
     
     window.fetch = function(...args) {
-      const url = args[0];
-      const isLongOperation = CONFIG.LONG_OPERATION_ENDPOINTS.some(
-        endpoint => typeof url === 'string' && url.includes(endpoint)
+      const urlArg = args[0];
+      // SECURITY FIX: Handle all fetch() argument types - string, Request object, or URL object
+      // fetch() can be called with: fetch('/api/endpoint'), fetch(new Request(...)), or fetch(new URL(...))
+      let urlString = null;
+      if (typeof urlArg === 'string') {
+        urlString = urlArg;
+      } else if (urlArg instanceof Request) {
+        urlString = urlArg.url;
+      } else if (urlArg instanceof URL) {
+        urlString = urlArg.href;
+      }
+      
+      const isLongOperation = urlString && CONFIG.LONG_OPERATION_ENDPOINTS.some(
+        endpoint => urlString.includes(endpoint)
       );
       
       if (isLongOperation) {
