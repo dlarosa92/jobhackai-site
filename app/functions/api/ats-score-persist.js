@@ -106,7 +106,7 @@ export async function onRequest(context) {
                 return json({
                   success: true,
                   data: {
-                    score: latestSession.ats_score || ruleBasedScores.overallScore,
+                    score: latestSession.ats_score ?? ruleBasedScores.overallScore,
                     breakdown: normalizedBreakdown,
                     extractionQuality: extractionQuality || null,
                     feedback: ruleBasedScores.feedback || null,

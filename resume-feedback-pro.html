@@ -2979,7 +2979,7 @@
                     resumeId: currentResumeId,
                     jobTitle: jobTitle || null,
                     roleSpecificFeedback: feedbackResult.roleSpecificFeedback || null,
-                    extractionQuality: scoreResult?.extractionQuality || cachedScore?.extractionQuality
+                    extractionQuality: cachedScore?.extractionQuality
                   });
                   console.log('[RESUME-FEEDBACK] Saved feedback with reconstructed breakdown');
                 }
