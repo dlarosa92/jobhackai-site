@@ -1,0 +1,636 @@
+<!-- DO NOT EDIT HEADER OR FOOTER PER-PAGE. Use canonical snippet from docs/snippets.md. -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Help Center - JobHackAI</title>
+  <link rel="icon" type="image/png" href="assets/jobhackai_icon_only_128.png">
+  <link rel="apple-touch-icon" href="assets/jobhackai_icon_only_128.png">
+  <script src="js/dynamic-favicon.js?v=20250111-1"></script>
+  <link rel="stylesheet" href="css/tokens.css">
+  <link rel="stylesheet" href="css/main.css">
+  <link rel="stylesheet" href="css/header.css">
+  <link rel="stylesheet" href="css/footer.css">
+  <link rel="stylesheet" href="css/help-center.css">
+</head>
+<body>
+  <!-- Header -->
+  <header class="site-header">
+    <div class="container">
+      <a href="index.html" class="nav-logo" aria-label="Go to homepage">
+        <svg width="24" height="24" fill="none" stroke="#1F2937" stroke-width="2" xmlns="http://www.w3.org/2000/svg">
+          <rect x="3" y="7" width="18" height="13" rx="2"/>
+          <path d="M8 7V5a2 2 0 012-2h4a2 2 0 012 2v2"/>
+        </svg>
+        <span>JOBHACKAI</span>
+      </a>
+      <div class="nav-group">
+        <nav class="nav-links" role="navigation">
+          <!-- Navigation will be dynamically populated by navigation.js -->
+        </nav>
+      </div>
+      <button class="mobile-toggle" aria-label="Open navigation menu" aria-expanded="false" aria-controls="mobileNav">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="3" y1="12" x2="21" y2="12"></line>
+          <line x1="3" y1="6" x2="21" y2="6"></line>
+          <line x1="3" y1="18" x2="21" y2="18"></line>
+        </svg>
+      </button>
+    </div>
+  </header>
+  <nav class="mobile-nav" id="mobileNav">
+    <!-- Mobile navigation will be dynamically populated by navigation.js -->
+  </nav>
+  <div class="mobile-nav-backdrop" id="mobileNavBackdrop"></div>
+  <script src="js/mobile-menu.js?v=20250115-1"></script>
+
+  <main class="help-center-main">
+    <div class="help-center-container">
+      <!-- Header Section -->
+      <div class="help-center-header">
+        <h1 class="help-center-title">Help Center</h1>
+        <p class="help-center-subtitle">Find answers fast</p>
+        
+        <!-- Search Bar -->
+        <div class="help-search-container">
+          <input 
+            type="search" 
+            id="help-search" 
+            class="help-search"
+            placeholder="Search help articles..."
+            autocomplete="off"
+            aria-label="Search help articles"
+          />
+          <div id="help-search-results" class="help-search-results" hidden></div>
+        </div>
+      </div>
+
+      <!-- Table of Contents (Desktop Sidebar) -->
+      <aside class="help-toc" id="helpToc">
+        <nav class="help-toc-nav" aria-label="Help topics">
+          <a href="#getting-started" class="help-toc-link">Getting Started</a>
+          <a href="#billing-trial" class="help-toc-link">Billing & Trial FAQs</a>
+          <a href="#feature-locks" class="help-toc-link">Feature Locks & Plan Limits</a>
+          <a href="#resume-upload" class="help-toc-link">Resume Upload Issues</a>
+          <a href="#linkedin-optimizer" class="help-toc-link">LinkedIn Optimizer FAQs</a>
+          <a href="#interview-prep" class="help-toc-link">Interview Prep FAQs</a>
+          <a href="#data-privacy" class="help-toc-link">Data & Privacy</a>
+        </nav>
+      </aside>
+
+      <!-- Main Content -->
+      <div class="help-content">
+        <!-- Getting Started -->
+        <section id="getting-started" class="help-section">
+          <h2 class="help-section-title">Getting Started</h2>
+          
+          <div class="help-question">
+            <h3 class="help-q">What is JobHackAI?</h3>
+            <div class="help-a">
+              <p>JobHackAI helps you optimize your resume, LinkedIn profile, and interview prep with AI. Upload your resume, get ATS scores, feedback, and tailored interview questions.</p>
+            </div>
+          </div>
+
+          <div class="help-question">
+            <h3 class="help-q">How do I create an account?</h3>
+            <div class="help-a">
+              <p>Click "Start Free Trial" or "Create Free Account" on the homepage. Sign up with email/password or Google. Free accounts get 1 lifetime ATS scan.</p>
+            </div>
+          </div>
+
+          <div class="help-question">
+            <h3 class="help-q">What can I do with a free account?</h3>
+            <div class="help-a">
+              <ul>
+                <li>1 ATS resume scan (lifetime)</li>
+                <li>View your ATS score and basic feedback</li>
+              </ul>
+            </div>
+          </div>
+
+          <div class="help-question">
+            <h3 class="help-q">What's included in the 3-day trial?</h3>
+            <div class="help-a">
+              <ul>
+                <li>Unlimited ATS scans</li>
+                <li>3 resume feedback analyses</li>
+                <li>Unlimited interview question sets</li>
+                <li>Access to all tools (some features locked)</li>
+              </ul>
+            </div>
+          </div>
+
+          <div class="help-question">
+            <h3 class="help-q">How do I upgrade?</h3>
+            <div class="help-a">
+              <p>Go to <a href="pricing-a.html">Pricing</a> or click upgrade prompts on locked features. Plans: Essential ($29/mo), Pro ($59/mo), Premium ($99/mo).</p>
+            </div>
+          </div>
+        </section>
+
+        <!-- Billing & Trial FAQs -->
+        <section id="billing-trial" class="help-section">
+          <h2 class="help-section-title">Billing & Trial FAQs</h2>
+          
+          <div class="help-question">
+            <h3 class="help-q">How does the free trial work?</h3>
+            <div class="help-a">
+              <p>3-day trial starts when you sign up. No credit card required. After 3 days, you can upgrade or continue with a free account (limited features).</p>
+            </div>
+          </div>
+
+          <div class="help-question">
+            <h3 class="help-q">Can I use the trial more than once?</h3>
+            <div class="help-a">
+              <p>No. One trial per user. We track this to prevent abuse.</p>
+            </div>
+          </div>
+
+          <div class="help-question">
+            <h3 class="help-q">When am I charged?</h3>
+            <div class="help-a">
+              <p>Only if you upgrade to a paid plan. Trials are free. Paid plans charge monthly on your billing date.</p>
+            </div>
+          </div>
+
+          <div class="help-question">
+            <h3 class="help-q">How do I cancel my subscription?</h3>
+            <div class="help-a">
+              <p>Go to <a href="billing-management.html">Billing Management</a> in your account settings. Click "Cancel Subscription." You keep access until the end of your billing period.</p>
+            </div>
+          </div>
+
+          <div class="help-question">
+            <h3 class="help-q">What happens when I cancel?</h3>
+            <div class="help-a">
+              <p>Your account stays active. You can return and renew without starting over. After 24 months of inactivity, we may delete inactive account data.</p>
+            </div>
+          </div>
+
+          <div class="help-question">
+            <h3 class="help-q">Do you offer refunds?</h3>
+            <div class="help-a">
+              <p>Contact support at <a href="mailto:support@jobhackai.io">support@jobhackai.io</a>. We handle refunds case-by-case.</p>
+            </div>
+          </div>
+
+          <div class="help-question">
+            <h3 class="help-q">How do I update my payment method?</h3>
+            <div class="help-a">
+              <p>Go to <a href="billing-management.html">Billing Management</a> → Payment Methods. Add or update your card. Stripe processes payments securely.</p>
+            </div>
+          </div>
+
+          <div class="help-question">
+            <h3 class="help-q">Why was my card declined?</h3>
+            <div class="help-a">
+              <p>Common reasons: expired card, insufficient funds, bank security block. Update your payment method or contact your bank.</p>
+            </div>
+          </div>
+        </section>
+
+        <!-- Feature Locks & Plan Limits -->
+        <section id="feature-locks" class="help-section">
+          <h2 class="help-section-title">Feature Locks & Plan Limits</h2>
+          
+          <div class="help-question">
+            <h3 class="help-q">What features are locked on free accounts?</h3>
+            <div class="help-a">
+              <ul>
+                <li>Resume Feedback (locked)</li>
+                <li>Resume Rewriting (locked)</li>
+                <li>Cover Letter Generator (locked)</li>
+                <li>Interview Questions (locked)</li>
+                <li>Mock Interviews (locked)</li>
+                <li>LinkedIn Optimizer (locked)</li>
+              </ul>
+            </div>
+          </div>
+
+          <div class="help-question">
+            <h3 class="help-q">What are the plan limits?</h3>
+            <div class="help-a">
+              <div class="help-plan-comparison">
+                <div class="help-plan-item">
+                  <strong>Free:</strong>
+                  <ul>
+                    <li>1 ATS scan (lifetime)</li>
+                  </ul>
+                </div>
+                <div class="help-plan-item">
+                  <strong>3-Day Trial:</strong>
+                  <ul>
+                    <li>Unlimited ATS scans</li>
+                    <li>3 resume feedback analyses (total)</li>
+                    <li>Unlimited interview questions (1-min cooldown)</li>
+                    <li>Resume Rewriting: locked</li>
+                    <li>Cover Letters: locked</li>
+                    <li>Mock Interviews: locked</li>
+                    <li>LinkedIn Optimizer: locked</li>
+                  </ul>
+                </div>
+                <div class="help-plan-item">
+                  <strong>Essential ($29/mo):</strong>
+                  <ul>
+                    <li>Unlimited ATS scans</li>
+                    <li>3 resume feedback analyses per month</li>
+                    <li>Unlimited interview questions (1-min cooldown)</li>
+                    <li>Resume Rewriting: locked</li>
+                    <li>Cover Letters: locked</li>
+                    <li>Mock Interviews: locked</li>
+                    <li>LinkedIn Optimizer: locked</li>
+                  </ul>
+                </div>
+                <div class="help-plan-item">
+                  <strong>Pro ($59/mo):</strong>
+                  <ul>
+                    <li>Unlimited ATS scans</li>
+                    <li>Unlimited resume feedback</li>
+                    <li>Unlimited resume rewriting</li>
+                    <li>Unlimited cover letters</li>
+                    <li>Unlimited interview questions (1-min cooldown)</li>
+                    <li>20 mock interview sessions per month</li>
+                    <li>LinkedIn Optimizer: locked</li>
+                    <li>Priority Review: locked</li>
+                  </ul>
+                </div>
+                <div class="help-plan-item">
+                  <strong>Premium ($99/mo):</strong>
+                  <ul>
+                    <li>Everything in Pro, plus:</li>
+                    <li>Unlimited mock interviews (1/hr, 5/day soft limit)</li>
+                    <li>LinkedIn Optimizer (unlimited)</li>
+                    <li>Priority Review (faster AI processing)</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="help-question">
+            <h3 class="help-q">What does "unlimited" mean?</h3>
+            <div class="help-a">
+              <p>Unlimited means no hard cap, but we may apply rate limits (e.g., 1 request per minute) to prevent abuse.</p>
+            </div>
+          </div>
+
+          <div class="help-question">
+            <h3 class="help-q">How do I unlock locked features?</h3>
+            <div class="help-a">
+              <p>Upgrade to a plan that includes the feature. Click the lock icon or upgrade prompt to see pricing. <a href="pricing-a.html" class="help-upgrade-link">View Plans →</a></p>
+            </div>
+          </div>
+        </section>
+
+        <!-- Resume Upload Issues -->
+        <section id="resume-upload" class="help-section">
+          <h2 class="help-section-title">Resume Upload Issues</h2>
+          
+          <div class="help-question">
+            <h3 class="help-q">What file formats are supported?</h3>
+            <div class="help-a">
+              <p>PDF, DOCX (Word), and TXT. Maximum file size: 2 MB.</p>
+            </div>
+          </div>
+
+          <div class="help-question">
+            <h3 class="help-q">Why won't my PDF upload?</h3>
+            <div class="help-a">
+              <ul>
+                <li><strong>File too large (over 2 MB):</strong> Compress or use a smaller file</li>
+                <li><strong>Scanned/image PDF:</strong> Upload a text-based PDF or Word document</li>
+                <li><strong>Corrupted file:</strong> Try re-saving or exporting again</li>
+                <li><strong>Unsupported format:</strong> Convert to PDF or DOCX</li>
+              </ul>
+            </div>
+          </div>
+
+          <div class="help-question">
+            <h3 class="help-q">What's the difference between scanned and text-based PDFs?</h3>
+            <div class="help-a">
+              <ul>
+                <li><strong>Text-based PDF:</strong> Selectable text (works best)</li>
+                <li><strong>Scanned PDF:</strong> Image of text (may not work well)</li>
+              </ul>
+            </div>
+          </div>
+
+          <div class="help-question">
+            <h3 class="help-q">How do I convert a scanned PDF to text?</h3>
+            <div class="help-a">
+              <p>Open in Word/Google Docs and save as DOCX, or use OCR software to create a text-based PDF.</p>
+            </div>
+          </div>
+
+          <div class="help-question">
+            <h3 class="help-q">My resume uploads but shows an error.</h3>
+            <div class="help-a">
+              <ul>
+                <li><strong>Extraction failed:</strong> File may be corrupted or image-based</li>
+                <li><strong>Try:</strong> Re-saving as a new PDF/DOCX, checking file size, ensuring text is selectable</li>
+              </ul>
+            </div>
+          </div>
+
+          <div class="help-question">
+            <h3 class="help-q">Why is my resume processing slow?</h3>
+            <div class="help-a">
+              <p>Scanned PDFs take longer. Text-based PDFs and DOCX files process faster (usually under 30 seconds).</p>
+            </div>
+          </div>
+
+          <div class="help-question">
+            <h3 class="help-q">Can I upload multiple resumes?</h3>
+            <div class="help-a">
+              <p>Yes. Each upload creates a new analysis. History stores your last 90 days of runs.</p>
+            </div>
+          </div>
+
+          <div class="help-question">
+            <h3 class="help-q">What happens to my uploaded resume?</h3>
+            <div class="help-a">
+              <p>Stored securely for 90 days, then automatically deleted. You can delete it sooner from History.</p>
+            </div>
+          </div>
+        </section>
+
+        <!-- LinkedIn Optimizer FAQs -->
+        <section id="linkedin-optimizer" class="help-section">
+          <h2 class="help-section-title">LinkedIn Optimizer FAQs</h2>
+          
+          <div class="help-question">
+            <h3 class="help-q">What does the LinkedIn Optimizer do?</h3>
+            <div class="help-a">
+              <p>Analyzes your LinkedIn profile section-by-section and provides scores, feedback, and optimized rewrites for headlines, summary, experience, and skills.</p>
+            </div>
+          </div>
+
+          <div class="help-question">
+            <h3 class="help-q">What do I need to use it?</h3>
+            <div class="help-a">
+              <ul>
+                <li>Target role (required)</li>
+                <li>Headline (required)</li>
+                <li>Summary/About (required)</li>
+                <li>Experience section (required)</li>
+                <li>Skills section (required)</li>
+                <li>Recommendations (optional)</li>
+              </ul>
+            </div>
+          </div>
+
+          <div class="help-question">
+            <h3 class="help-q">Which plan includes LinkedIn Optimizer?</h3>
+            <div class="help-a">
+              <p>Premium only ($99/mo). Other plans show a lock icon. <a href="pricing-a.html" class="help-upgrade-link">Upgrade to Premium →</a></p>
+            </div>
+          </div>
+
+          <div class="help-question">
+            <h3 class="help-q">How accurate is the scoring?</h3>
+            <div class="help-a">
+              <p>Scores are based on ATS optimization, keyword density, and recruiter visibility. Higher scores generally mean better optimization.</p>
+            </div>
+          </div>
+
+          <div class="help-question">
+            <h3 class="help-q">Can I use the optimized text directly?</h3>
+            <div class="help-a">
+              <p>Yes. Copy and paste the optimized text into your LinkedIn profile.</p>
+            </div>
+          </div>
+
+          <div class="help-question">
+            <h3 class="help-q">How often can I optimize my profile?</h3>
+            <div class="help-a">
+              <p>Premium: unlimited. Other plans: feature is locked.</p>
+            </div>
+          </div>
+
+          <div class="help-question">
+            <h3 class="help-q">Does it analyze my entire LinkedIn profile?</h3>
+            <div class="help-a">
+              <p>It analyzes the sections you provide. It doesn't access your LinkedIn account directly—you paste your content.</p>
+            </div>
+          </div>
+
+          <div class="help-question">
+            <h3 class="help-q">What if I don't have recommendations?</h3>
+            <div class="help-a">
+              <p>Recommendations are optional. You'll still get scores and feedback for other sections.</p>
+            </div>
+          </div>
+        </section>
+
+        <!-- Interview Prep FAQs -->
+        <section id="interview-prep" class="help-section">
+          <h2 class="help-section-title">Interview Prep FAQs</h2>
+          
+          <div class="help-question">
+            <h3 class="help-q">What are Interview Questions?</h3>
+            <div class="help-a">
+              <p>AI-generated question sets tailored to your target role, industry, and seniority level. Includes technical and behavioral questions.</p>
+            </div>
+          </div>
+
+          <div class="help-question">
+            <h3 class="help-q">Which plans include Interview Questions?</h3>
+            <div class="help-a">
+              <p>Trial, Essential, Pro, and Premium. Free accounts: locked.</p>
+            </div>
+          </div>
+
+          <div class="help-question">
+            <h3 class="help-q">How many questions do I get?</h3>
+            <div class="help-a">
+              <p>10 questions per set. Generate unlimited sets (1-minute cooldown between requests).</p>
+            </div>
+          </div>
+
+          <div class="help-question">
+            <h3 class="help-q">What are the daily limits?</h3>
+            <div class="help-a">
+              <ul>
+                <li>Trial: 10 sets/day</li>
+                <li>Essential: 10 sets/day</li>
+                <li>Pro: 20 sets/day</li>
+                <li>Premium: 50 sets/day</li>
+              </ul>
+            </div>
+          </div>
+
+          <div class="help-question">
+            <h3 class="help-q">What are Mock Interviews?</h3>
+            <div class="help-a">
+              <p>Practice interviews where you answer 10 questions and get AI feedback with scores and improvement tips.</p>
+            </div>
+          </div>
+
+          <div class="help-question">
+            <h3 class="help-q">Which plans include Mock Interviews?</h3>
+            <div class="help-a">
+              <p>Pro and Premium only.</p>
+            </div>
+          </div>
+
+          <div class="help-question">
+            <h3 class="help-q">How many mock interviews can I do?</h3>
+            <div class="help-a">
+              <ul>
+                <li>Pro: 20 sessions per month</li>
+                <li>Premium: Unlimited (1/hr, 5/day soft limit)</li>
+              </ul>
+            </div>
+          </div>
+
+          <div class="help-question">
+            <h3 class="help-q">How is my mock interview scored?</h3>
+            <div class="help-a">
+              <p>Scored on:</p>
+              <ul>
+                <li>Relevance (30 pts)</li>
+                <li>Structure & Delivery (25 pts)</li>
+                <li>Clarity (20 pts)</li>
+                <li>Depth & Insight (15 pts)</li>
+                <li>Grammar & Pace (10 pts)</li>
+              </ul>
+            </div>
+          </div>
+
+          <div class="help-question">
+            <h3 class="help-q">Can I practice the same questions multiple times?</h3>
+            <div class="help-a">
+              <p>Yes. Generate new question sets or reuse previous ones from your history.</p>
+            </div>
+          </div>
+
+          <div class="help-question">
+            <h3 class="help-q">What's the difference between Interview Questions and Mock Interviews?</h3>
+            <div class="help-a">
+              <ul>
+                <li><strong>Interview Questions:</strong> Question sets only</li>
+                <li><strong>Mock Interviews:</strong> Full practice session with AI scoring and feedback</li>
+              </ul>
+            </div>
+          </div>
+        </section>
+
+        <!-- Data & Privacy -->
+        <section id="data-privacy" class="help-section">
+          <h2 class="help-section-title">Data & Privacy</h2>
+          
+          <div class="help-question">
+            <h3 class="help-q">What data do you store?</h3>
+            <div class="help-a">
+              <ul>
+                <li>Account info (email, name)</li>
+                <li>Resume uploads and analysis results</li>
+                <li>Tool usage history</li>
+                <li>Billing info (processed by Stripe)</li>
+              </ul>
+            </div>
+          </div>
+
+          <div class="help-question">
+            <h3 class="help-q">How long do you keep my data?</h3>
+            <div class="help-a">
+              <ul>
+                <li>Tool runs/history: 90 days, then auto-deleted</li>
+                <li>Account data: Retained while active</li>
+                <li>Inactive accounts (24+ months): May be deleted</li>
+              </ul>
+            </div>
+          </div>
+
+          <div class="help-question">
+            <h3 class="help-q">Do you sell my data?</h3>
+            <div class="help-a">
+              <p>No. We don't sell or share personal information for advertising.</p>
+            </div>
+          </div>
+
+          <div class="help-question">
+            <h3 class="help-q">Can I delete my data?</h3>
+            <div class="help-a">
+              <p>Yes. Delete runs from History, or request full account deletion at <a href="mailto:privacy@jobhackai.io">privacy@jobhackai.io</a>.</p>
+            </div>
+          </div>
+
+          <div class="help-question">
+            <h3 class="help-q">Who processes my payments?</h3>
+            <div class="help-a">
+              <p>Stripe. We don't store full card numbers.</p>
+            </div>
+          </div>
+
+          <div class="help-question">
+            <h3 class="help-q">Do you use my content to train AI?</h3>
+            <div class="help-a">
+              <p>No. Your content isn't used to train our models or OpenAI's models.</p>
+            </div>
+          </div>
+
+          <div class="help-question">
+            <h3 class="help-q">Where is my data stored?</h3>
+            <div class="help-a">
+              <p>Cloudflare infrastructure (US-based). Data is encrypted in transit and at rest.</p>
+            </div>
+          </div>
+
+          <div class="help-question">
+            <h3 class="help-q">More questions?</h3>
+            <div class="help-a">
+              <p>See our full <a href="privacy.html">Privacy Policy</a> or contact <a href="mailto:privacy@jobhackai.io">privacy@jobhackai.io</a>.</p>
+            </div>
+          </div>
+        </section>
+
+        <!-- Contact Support -->
+        <section class="help-section help-contact">
+          <h2 class="help-section-title">Still Need Help?</h2>
+          <p>Can't find what you're looking for? <a href="support.html">Contact Support</a> or email us at <a href="mailto:support@jobhackai.io">support@jobhackai.io</a>.</p>
+        </section>
+      </div>
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer class="site-footer">
+    <div class="footer-container">
+      <div class="footer-brand">
+        <svg class="footer-logo" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect x="3" y="7" width="18" height="13" rx="2" stroke="#1F2937" stroke-width="2"/>
+          <path d="M8 7V5a2 2 0 012-2h4a2 2 0 012 2v2" stroke="#1F2937" stroke-width="2"/>
+        </svg>
+        <span class="footer-name">JOBHACKAI</span>
+      </div>
+      <div class="footer-legal">
+        <p>© 2025 JobHackAI. All rights reserved.</p>
+      </div>
+      <div class="footer-links">
+        <a href="index.html">Home</a>
+        <a href="help.html">Help</a>
+        <a href="privacy.html">Privacy</a>
+      </div>
+    </div>
+  </footer>
+
+  <!-- Load navigation system -->
+  <script src="js/navigation.js?v=20251007-2"></script>
+  <script src="js/help-center.js"></script>
+  <script>
+    // Initialize navigation
+    if (window.JobHackAINavigation && typeof window.JobHackAINavigation.initializeNavigation === 'function') {
+      window.JobHackAINavigation.initializeNavigation();
+    } else {
+      window.addEventListener('DOMContentLoaded', function() {
+        if (window.JobHackAINavigation && typeof window.JobHackAINavigation.initializeNavigation === 'function') {
+          window.JobHackAINavigation.initializeNavigation();
+        }
+      });
+    }
+  </script>
+</body>
+</html>
+
