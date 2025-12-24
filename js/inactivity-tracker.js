@@ -24,6 +24,12 @@
     // Only process activity at most once per second
     ACTIVITY_THROTTLE_MS: 1000,
     
+    // Maximum time an operation can be tracked (prevents hanging requests from blocking logout)
+    MAX_OPERATION_TIME_MS: 10 * 60 * 1000, // 10 minutes
+    
+    // Debounce timer resets for operations (prevent rapid resets from retries)
+    OPERATION_RESET_DEBOUNCE_MS: 30 * 1000, // 30 seconds
+    
     // Only track these long-running endpoints (not all fetches)
     LONG_OPERATION_ENDPOINTS: [
       '/api/resume-feedback',
@@ -50,10 +56,12 @@
   let lastWarningTime = 0;
   let isInitialized = false;
   let activeOperations = new Set();
+  let operationTimeouts = new Map(); // Track operation timeout timers
   let broadcastChannel = null;
   let countdownInterval = null;
   let activityThrottleTimer = null;
   let lastActivityProcessTime = 0;
+  let resetTimerDebounce = null; // Debounce timer for operation resets
 
   /**
    * Check if user is authenticated - Firebase-first (matches navigation.js pattern)
@@ -111,6 +119,21 @@
    */
   function trackOperation(operationId) {
     activeOperations.add(operationId);
+    
+    // Auto-untrack after max operation time (prevents hanging requests from blocking logout)
+    // Clear any existing timeout for this operation
+    if (operationTimeouts.has(operationId)) {
+      clearTimeout(operationTimeouts.get(operationId));
+    }
+    
+    const timeoutId = setTimeout(() => {
+      console.log(`[INACTIVITY] Operation ${operationId} exceeded max time (${CONFIG.MAX_OPERATION_TIME_MS / 60000}min), auto-untracking`);
+      untrackOperation(operationId);
+      operationTimeouts.delete(operationId);
+    }, CONFIG.MAX_OPERATION_TIME_MS);
+    
+    operationTimeouts.set(operationId, timeoutId);
+    
     // Extend timer if operation is active
     if (activeOperations.size > 0) {
       extendTimerForOperations();
@@ -122,6 +145,12 @@
    */
   function untrackOperation(operationId) {
     activeOperations.delete(operationId);
+    
+    // Clear timeout if it exists
+    if (operationTimeouts.has(operationId)) {
+      clearTimeout(operationTimeouts.get(operationId));
+      operationTimeouts.delete(operationId);
+    }
   }
 
   /**
@@ -130,9 +159,18 @@
   function extendTimerForOperations() {
     if (activeOperations.size === 0 || !isAuthenticated()) return;
     
-    // Reset timers to give more time for operations
-    console.log('[INACTIVITY] Extending timer due to active operations');
-    resetTimers();
+    // Debounce rapid resets (prevent rapid retries from resetting timer too often)
+    // Only reset once per OPERATION_RESET_DEBOUNCE_MS
+    if (resetTimerDebounce) {
+      // Already scheduled, skip
+      return;
+    }
+    
+    resetTimerDebounce = setTimeout(() => {
+      console.log('[INACTIVITY] Extending timer due to active operations');
+      resetTimers();
+      resetTimerDebounce = null;
+    }, CONFIG.OPERATION_RESET_DEBOUNCE_MS);
   }
 
   /**
@@ -623,6 +661,12 @@
    * Setup cross-tab synchronization
    */
   function setupCrossTabSync() {
+    // Check for BroadcastChannel support before attempting to use it
+    if (typeof BroadcastChannel === 'undefined') {
+      console.warn('[INACTIVITY] BroadcastChannel not supported in this browser, cross-tab sync disabled');
+      return;
+    }
+    
     try {
       broadcastChannel = new BroadcastChannel('inactivity-tracker');
       
@@ -647,8 +691,11 @@
           }
         }
       };
+      
+      console.log('[INACTIVITY] BroadcastChannel initialized successfully');
     } catch (e) {
-      console.warn('[INACTIVITY] BroadcastChannel not supported, cross-tab sync disabled:', e);
+      console.warn('[INACTIVITY] BroadcastChannel failed to initialize, cross-tab sync disabled:', e);
+      broadcastChannel = null;
     }
   }
 
@@ -753,6 +800,18 @@
     clearTimers();
     hideWarning();
     activeOperations.clear();
+    
+    // Clear all operation timeouts
+    operationTimeouts.forEach((timeoutId) => {
+      clearTimeout(timeoutId);
+    });
+    operationTimeouts.clear();
+    
+    // Clear reset timer debounce
+    if (resetTimerDebounce) {
+      clearTimeout(resetTimerDebounce);
+      resetTimerDebounce = null;
+    }
     
     CONFIG.ACTIVITY_EVENTS.forEach(eventType => {
       document.removeEventListener(eventType, handleActivity);
