@@ -279,7 +279,7 @@
       padding-right: 0;
       line-height: 1.5;
       opacity: 0;
-      animation: feedback-fade-in var(--transition-slow) ease-out forwards;
+      animation: feedback-fade-in var(--transition-slow) forwards;
       animation-delay: 0.2s;
     }
     @keyframes feedback-fade-in {
@@ -2091,8 +2091,22 @@
             if (text) text.textContent = score + '%';
           }
           // Update secondary score display (label stays as "Resume Feedback")
-          const scoreSecondary = document.querySelector('.ats-score-secondary');
-          if (scoreSecondary) scoreSecondary.textContent = score + '% Application Tracking System Score';
+          const scoreDetails = document.querySelector('.ats-score-details');
+          let scoreSecondary = document.querySelector('.ats-score-secondary');
+          if (!scoreSecondary && scoreDetails) {
+            // Create element if it doesn't exist (e.g., when user uploads first resume)
+            const scoreLabel = scoreDetails.querySelector('.ats-score-label');
+            scoreSecondary = document.createElement('span');
+            scoreSecondary.className = 'ats-score-secondary';
+            if (scoreLabel && scoreLabel.nextSibling) {
+              scoreDetails.insertBefore(scoreSecondary, scoreLabel.nextSibling);
+            } else {
+              scoreDetails.appendChild(scoreSecondary);
+            }
+          }
+          if (scoreSecondary) {
+            scoreSecondary.textContent = score + '% Application Tracking System Score';
+          }
         }
 
         function resetAtsGauge() {
@@ -2524,7 +2538,7 @@
               void scoreSummary.offsetWidth;
               // Trigger fade-in animation
               scoreSummary.style.opacity = '0';
-              scoreSummary.style.animation = 'feedback-fade-in var(--transition-slow) ease-out forwards';
+              scoreSummary.style.animation = 'feedback-fade-in var(--transition-slow) forwards';
               scoreSummary.style.animationDelay = '0.2s';
             }
 
