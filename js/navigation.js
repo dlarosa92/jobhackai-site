@@ -1740,8 +1740,14 @@ async function initializeNavigation() {
               navLog('debug', 'Firebase auth state changed: User logged in, updating navigation');
               updateNavigation();
             } else if (isAuthenticated && currentAuthState.isAuthenticated) {
-              // Both agree - just update navigation in case plan changed
+              // Both agree logged in - just update navigation in case plan changed
               navLog('debug', 'Auth state consistent, refreshing navigation');
+              updateNavigation();
+            } else if (!isAuthenticated && !currentAuthState.isAuthenticated) {
+              // SECURITY FIX: Both agree logged out - still update navigation to sync UI
+              // This handles cross-tab logout where Firebase fires with user=null and getAuthState()
+              // has already cleaned up stale localStorage, leaving both as false
+              navLog('debug', 'Auth state changed: Both agree logged out, updating navigation');
               updateNavigation();
             }
           } catch (listenerError) {
@@ -1780,6 +1786,12 @@ async function initializeNavigation() {
                 console.log('[AUTH-LISTENER] Firebase says logged in, updating navigation');
                 updateNavigation();
               } else if (isAuthenticated && currentAuthState.isAuthenticated) {
+                updateNavigation();
+              } else if (!isAuthenticated && !currentAuthState.isAuthenticated) {
+                // SECURITY FIX: Both agree logged out - still update navigation to sync UI
+                // This handles cross-tab logout where Firebase fires with user=null and getAuthState()
+                // has already cleaned up stale localStorage, leaving both as false
+                console.log('[AUTH-LISTENER] Both agree logged out, updating navigation');
                 updateNavigation();
               }
             } catch (listenerError) {
