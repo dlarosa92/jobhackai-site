@@ -133,6 +133,12 @@
    * Intercept fetch to detect long-running API calls
    */
   function setupFetchInterceptor() {
+    // Check if fetch was already intercepted by this tracker
+    if (window.fetch && window.fetch._inactivityTrackerIntercepted) {
+      console.log('[INACTIVITY] Fetch already intercepted, skipping');
+      return;
+    }
+    
     const originalFetch = window.fetch;
     window.fetch = function(...args) {
       const url = args[0];
@@ -154,6 +160,10 @@
       
       return originalFetch.apply(this, args);
     };
+    
+    // Mark as intercepted and store original for potential restoration
+    window.fetch._inactivityTrackerIntercepted = true;
+    window.fetch._originalFetch = originalFetch;
   }
 
   /**
@@ -168,6 +178,12 @@
     }
     
     if (warningShown) return;
+    
+    // Clear any existing countdown interval before creating new one
+    if (countdownInterval) {
+      clearInterval(countdownInterval);
+      countdownInterval = null;
+    }
     
     warningShown = true;
     lastWarningTime = now;
@@ -409,14 +425,22 @@
     warningShown = false;
     const warningBanner = document.getElementById('inactivity-warning');
     if (warningBanner) {
+      // Clear any pending hide timeout to prevent race conditions
+      if (warningBanner._hideTimeout) {
+        clearTimeout(warningBanner._hideTimeout);
+        warningBanner._hideTimeout = null;
+      }
+      
       warningBanner.style.animation = 'inactivitySlideDown 0.3s ease-out reverse';
-      setTimeout(() => {
+      warningBanner._hideTimeout = setTimeout(() => {
         if (warningBanner.parentNode) {
           warningBanner.remove();
         }
+        warningBanner._hideTimeout = null;
       }, 300);
     }
     
+    // Clear countdown interval
     if (countdownInterval) {
       clearInterval(countdownInterval);
       countdownInterval = null;
