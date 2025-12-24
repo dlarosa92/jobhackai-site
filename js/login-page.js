@@ -209,7 +209,8 @@ document.addEventListener('DOMContentLoaded', async function() {
     sessionStorage.removeItem('selectedPlan');
   }
   
-  // === AUTH CHECK (RUN IN PARALLEL, DON'T BLOCK BANNER) ===
+  // === AUTH CHECK (RUN IN BACKGROUND, DON'T BLOCK UI) ===
+  // UX FIX: Show login form immediately, check auth in background
   const checkAuth = async () => {
     if (loginInProgress) {
       console.log('⏸️ Login in progress, skipping auto-redirect');
@@ -226,7 +227,8 @@ document.addEventListener('DOMContentLoaded', async function() {
     // ONLY check Firebase, not localStorage
     try {
       console.log('🔍 Checking Firebase auth state...');
-      const user = await waitForAuthReady(4000);
+      // Reduced timeout from 4000ms to 2000ms for faster UX
+      const user = await waitForAuthReady(2000);
       if (user && user.email) {
         // Double-check logout intent before redirecting
         const logoutIntentCheck = sessionStorage.getItem('logout-intent');
@@ -238,7 +240,7 @@ document.addEventListener('DOMContentLoaded', async function() {
         location.replace('/dashboard.html');
         return true;
       } else {
-        console.log('🔓 No authenticated user — showing login UI');
+        console.log('🔓 No authenticated user — login form already visible');
       }
     } catch (error) {
       console.log('No Firebase user, proceeding with login form');
@@ -247,16 +249,23 @@ document.addEventListener('DOMContentLoaded', async function() {
     return false;
   };
   
-  // Run auth check in parallel (don't await before showing banner)
-  const isAuthenticated = await checkAuth();
+  // UX FIX: Don't await auth check - let it run in background
+  // Form is already visible, so user can start typing immediately
+  // The checkAuth function will redirect if user is authenticated
+  checkAuth().catch(() => {
+    // Silently handle errors - form is already showing
+  });
   
-  // Clear logout-intent flag after auth check completes (if it was set)
+  // Clear logout-intent flag after a short delay (if it was set)
   if (hasLogoutIntent) {
-    sessionStorage.removeItem('logout-intent');
-    console.log('✅ Cleared logout-intent flag after auth check');
+    setTimeout(() => {
+      sessionStorage.removeItem('logout-intent');
+      console.log('✅ Cleared logout-intent flag after auth check');
+    }, 500);
   }
   
-  if (isAuthenticated) return;
+  // Don't return early - let the form show while auth check runs in background
+  // If user is authenticated, checkAuth() will redirect them
   
   // Listen for auth state changes in case user gets authenticated after page load
   const unsubscribe = authManager.onAuthStateChange((user) => {

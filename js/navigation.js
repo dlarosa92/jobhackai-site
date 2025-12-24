@@ -92,7 +92,7 @@ window.stateManager = window.stateManager || (function() {
 // --- LOGGING SYSTEM ---
 const DEBUG = {
   enabled: true,
-  level: 'warn', // 'debug', 'info', 'warn', 'error' - Default to 'warn' to reduce spam
+  level: 'error', // 'debug', 'info', 'warn', 'error' - Default to 'error' to reduce info leakage
   prefix: '[NAV DEBUG]',
   rateLimit: {
     lastLog: {},
@@ -235,54 +235,61 @@ function autoEnableDebugIfNeeded() {
 
 // --- AUTHENTICATION STATE MANAGEMENT ---
 function getAuthState() {
-  let isAuthenticated = localStorage.getItem('user-authenticated') === 'true' && !!localStorage.getItem('user-email');
-  const userPlan = localStorage.getItem('user-plan') || 'free';
-  const devPlan = localStorage.getItem('dev-plan');
-
-  // Self-heal from Firebase auth storage if needed
-  const forceTs = parseInt(localStorage.getItem('force-logged-out') || '0', 10);
-  const cooldownActive = forceTs && (Date.now() - forceTs) < 60000; // 60s TTL
-  if (!isAuthenticated && !cooldownActive) {
-    try {
-      // 1) Try our own auth-user cache first
-      const authUserRaw = localStorage.getItem('auth-user');
-      if (authUserRaw) {
-        const authUser = JSON.parse(authUserRaw);
-        if (authUser && authUser.email) {
-          localStorage.setItem('user-email', authUser.email);
-          localStorage.setItem('user-authenticated', 'true');
-          isAuthenticated = true;
-        }
-      }
-      // 2) Fall back to Firebase SDK local storage
-      if (!isAuthenticated) {
-        for (let i = 0; i < localStorage.length; i++) {
-          const key = localStorage.key(i);
-          if (key && key.startsWith('firebase:authUser:')) {
-            const firebaseAuthRaw = localStorage.getItem(key);
-            try {
-              const firebaseAuth = JSON.parse(firebaseAuthRaw || '{}');
-              if (firebaseAuth && firebaseAuth.email) {
-                localStorage.setItem('user-email', firebaseAuth.email);
-                localStorage.setItem('user-authenticated', 'true');
-                isAuthenticated = true;
-                break;
-              }
-            } catch (_) {}
-          }
-        }
-      }
-    } catch (e) {
-      navLog('warn', 'Auth self-heal failed', e);
-    }
+  // CRITICAL SECURITY FIX: Check Firebase auth state FIRST (source of truth)
+  // This prevents dangerous "self-heal" logic that can restore auth state after logout
+  const logoutIntent = sessionStorage.getItem('logout-intent');
+  
+  // If logout is in progress, always return unauthenticated
+  if (logoutIntent === '1') {
+    return {
+      isAuthenticated: false,
+      userPlan: null,
+      devPlan: null
+    };
   }
+  
+  // Firebase user is the source of truth - check it first
+  const firebaseUser = window.FirebaseAuthManager?.getCurrentUser?.();
+  const isAuthenticatedFromFirebase = !!firebaseUser;
+  
+  // Only fall back to localStorage if Firebase hasn't initialized yet
+  // But don't "self-heal" - that's dangerous and causes logout issues
+  let fallbackAuth = false;
+  if (!window.FirebaseAuthManager && !firebaseUser) {
+    // Firebase not initialized - use localStorage as fallback (for initial page load)
+    fallbackAuth = localStorage.getItem('user-authenticated') === 'true' && 
+                   !!localStorage.getItem('user-email');
+  }
+  
+  const actualAuth = isAuthenticatedFromFirebase || fallbackAuth;
+  
+  // If localStorage says authenticated but Firebase says not, trust Firebase
+  // This handles cases where logout cleared Firebase but localStorage is stale
+  if (!firebaseUser && actualAuth && window.FirebaseAuthManager) {
+    // Firebase is initialized and says logged out - sync localStorage to match
+    localStorage.setItem('user-authenticated', 'false');
+    localStorage.removeItem('user-email');
+    return {
+      isAuthenticated: false,
+      userPlan: null,
+      devPlan: null
+    };
+  }
+  
+  const userPlan = actualAuth ? (localStorage.getItem('user-plan') || 'free') : null;
+  const devPlan = actualAuth ? localStorage.getItem('dev-plan') : null;
 
   const authState = {
-    isAuthenticated,
-    userPlan: isAuthenticated ? userPlan : null,
-    devPlan: devPlan || null
+    isAuthenticated: actualAuth,
+    userPlan,
+    devPlan
   };
-  navLog('debug', 'getAuthState() called', authState);
+  
+  // Only log errors, not debug info (reduces info leakage)
+  if (!actualAuth && localStorage.getItem('user-authenticated') === 'true') {
+    navLog('error', 'Auth state mismatch: localStorage says authenticated but Firebase says not');
+  }
+  
   return authState;
 }
 
@@ -313,18 +320,15 @@ async function logout(e) {
   e?.preventDefault?.();
   console.log('🚪 logout() v2: triggered');
 
-  // Set logout intent immediately - CRITICAL: Must be set before any async operations
+  // CRITICAL SECURITY FIX: Set logout intent IMMEDIATELY (before any async operations)
+  // This prevents race conditions where UI updates before state is cleared
   sessionStorage.setItem('logout-intent', '1');
 
-  // Attempt Firebase sign out
-  try {
-    await window.FirebaseAuthManager?.signOut?.();
-    console.log('✅ Firebase signOut complete');
-  } catch (err) {
-    console.warn('⚠️ signOut error (ignored):', err);
-  }
+  // CRITICAL: Update navigation state IMMEDIATELY (synchronously, before Firebase signOut)
+  // This ensures UI shows logged-out state right away, preventing flickering
+  setAuthState(false, null);
 
-  // Safely clear localStorage
+  // Clear localStorage IMMEDIATELY (synchronously) - don't wait for Firebase
   try {
     ['user-authenticated', 'user-email', 'user-plan', 'dev-plan', 'auth-user', 'selectedPlan']
       .forEach(k => localStorage.removeItem(k));
@@ -332,27 +336,35 @@ async function logout(e) {
     console.warn('⚠️ localStorage cleanup failed:', err);
   }
 
-  // Clear all Firebase auth persistence keys to prevent automatic re-login
+  // Clear all Firebase auth persistence keys IMMEDIATELY (synchronously)
+  // This prevents "self-heal" logic from restoring auth state
   try {
     for (let i = localStorage.length - 1; i >= 0; i--) {
       const key = localStorage.key(i);
       if (key && key.startsWith('firebase:authUser:')) {
         localStorage.removeItem(key);
-        console.log('🗑️ Removed Firebase auth key:', key);
       }
     }
   } catch (err) {
     console.warn('⚠️ Firebase auth key cleanup failed:', err);
   }
 
-  // Also clear any session-scoped plan selection
+  // Clear session-scoped data IMMEDIATELY
   try { sessionStorage.removeItem('selectedPlan'); } catch (_) {}
+
+  // NOW do Firebase signOut (async, but UI already updated synchronously above)
+  try {
+    await window.FirebaseAuthManager?.signOut?.();
+    console.log('✅ Firebase signOut complete');
+  } catch (err) {
+    console.warn('⚠️ signOut error (ignored):', err);
+  }
 
   // Small delay to ensure all cleanup completes before redirect
   // This prevents race conditions with auth state listeners
   await new Promise(resolve => setTimeout(resolve, 100));
 
-  // Redirect to login (keep .html for now)
+  // Redirect to login
   // Clear logout-intent to avoid stale state on back/cached navigation
   try { sessionStorage.removeItem('logout-intent'); } catch (_) {}
   console.log('➡️ Redirecting to /login.html');
@@ -1556,6 +1568,27 @@ async function initializeNavigation() {
       updateQuickPlanSwitcher();
     }
   });
+  
+  // SECURITY FIX: Listen to Firebase auth state changes to keep UI in sync
+  // This ensures navigation updates immediately when user logs out in another tab
+  if (window.FirebaseAuthManager && typeof window.FirebaseAuthManager.onAuthStateChange === 'function') {
+    navLog('debug', 'Setting up Firebase auth state listener');
+    window.FirebaseAuthManager.onAuthStateChange((user) => {
+      const isAuthenticated = !!user;
+      const currentAuthState = getAuthState();
+      
+      // If Firebase says logged out but localStorage says logged in, trust Firebase
+      if (!isAuthenticated && currentAuthState.isAuthenticated) {
+        navLog('error', 'Firebase auth mismatch: Firebase says logged out, syncing localStorage');
+        setAuthState(false, null);
+        updateNavigation();
+      } else if (isAuthenticated && !currentAuthState.isAuthenticated) {
+        // Firebase says logged in - update navigation
+        navLog('debug', 'Firebase auth state changed: User logged in, updating navigation');
+        updateNavigation();
+      }
+    });
+  }
   
   navLog('info', '=== initializeNavigation() COMPLETE ===');
 }
