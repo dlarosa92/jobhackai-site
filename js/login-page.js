@@ -738,6 +738,9 @@ document.addEventListener('DOMContentLoaded', async function() {
     hideError(loginError);
     hideError(signupError);
     
+    // Make auth title visible for signup (it may be hidden from login form)
+    authTitle.style.display = 'block';
+    
     // Show banner only when plan is explicitly selected and equals 'trial' or paid
     let plan = planOverride;
     if (!plan) {
