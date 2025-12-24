@@ -1522,7 +1522,7 @@
             ${atsDonut(atsScore.percent)}
             <div class="ats-score-details">
               <span class="ats-score-label">Resume Feedback</span>
-              <span class="ats-score-secondary">${atsScore.percent}% ATS Score</span>
+              <span class="ats-score-secondary">${atsScore.percent}% Application Tracking System Score</span>
               <span class="ats-score-summary">${atsScore.summary}</span>
             </div>
           ` : `
@@ -2092,7 +2092,7 @@
           }
           // Update secondary score display (label stays as "Resume Feedback")
           const scoreSecondary = document.querySelector('.ats-score-secondary');
-          if (scoreSecondary) scoreSecondary.textContent = score + '% ATS Score';
+          if (scoreSecondary) scoreSecondary.textContent = score + '% Application Tracking System Score';
         }
 
         function resetAtsGauge() {
