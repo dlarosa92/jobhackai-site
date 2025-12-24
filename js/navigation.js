@@ -1570,8 +1570,17 @@ function checkFeatureAccess(featureKey, targetPlan = 'premium') {
 // --- INITIALIZATION ---
 // SECURITY FIX: Guard against duplicate Firebase auth listener registration
 let firebaseAuthListenerRegistered = false;
+// Guard against duplicate navigation initialization
+let navigationInitialized = false;
 
 async function initializeNavigation() {
+  // CRITICAL FIX: Prevent duplicate initialization calls
+  // Both event handler and fallback can call this, causing duplicate storage listeners
+  if (navigationInitialized) {
+    navLog('debug', 'Navigation already initialized, skipping duplicate call');
+    return;
+  }
+  navigationInitialized = true;
   navLog('info', '=== initializeNavigation() START ===');
   navLog('info', 'Initialization context', {
     readyState: document.readyState,
@@ -2206,11 +2215,13 @@ document.addEventListener('firebase-auth-ready', async (event) => {
 // We must verify the event actually fired by checking window.__firebaseAuthReadyFired flag
 // This fallback handles cases where firebase-auth-ready event fired before this script loaded
 // Must work for both logged-in AND logged-out users (navigation needs to initialize for visitors too)
+// CRITICAL FIX: Check if initialization already occurred to prevent duplicate calls
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', () => {
     // Only initialize if firebase-auth-ready event has already fired (indicated by flag)
+    // AND navigation hasn't been initialized yet (prevent duplicate calls)
     // This ensures Firebase has actually checked auth state via onAuthStateChanged
-    if (window.__firebaseAuthReadyFired && window.FirebaseAuthManager && typeof window.FirebaseAuthManager.getCurrentUser === 'function') {
+    if (window.__firebaseAuthReadyFired && !navigationInitialized && window.FirebaseAuthManager && typeof window.FirebaseAuthManager.getCurrentUser === 'function') {
       const firebaseUser = window.FirebaseAuthManager.getCurrentUser();
       firebaseAuthReadyFired = true; // Sync flag
       console.log('🔥 Firebase already ready (event fired before script load), initializing navigation', firebaseUser ? '(with user)' : '(logged out)');
@@ -2220,7 +2231,8 @@ if (document.readyState === 'loading') {
   });
 } else {
   // DOM already loaded, check if firebase-auth-ready event already fired
-  if (window.__firebaseAuthReadyFired && window.FirebaseAuthManager && typeof window.FirebaseAuthManager.getCurrentUser === 'function') {
+  // AND navigation hasn't been initialized yet (prevent duplicate calls)
+  if (window.__firebaseAuthReadyFired && !navigationInitialized && window.FirebaseAuthManager && typeof window.FirebaseAuthManager.getCurrentUser === 'function') {
     const firebaseUser = window.FirebaseAuthManager.getCurrentUser();
     firebaseAuthReadyFired = true; // Sync flag
     console.log('🔥 Firebase already ready (event fired before script load), initializing navigation', firebaseUser ? '(with user)' : '(logged out)');

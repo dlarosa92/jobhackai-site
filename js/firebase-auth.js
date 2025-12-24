@@ -189,6 +189,9 @@ class AuthManager {
       if (!authReadyDispatched) {
         authReadyDispatched = true;
         console.log('🔥 Dispatching firebase-auth-ready event');
+        // CRITICAL FIX: Set flag on window before dispatching event
+        // This allows navigation.js fallback to detect if event fired before script loaded
+        window.__firebaseAuthReadyFired = true;
         // Dispatch event with user = null if logout-intent is detected, otherwise use actual user
         const logoutIntent = sessionStorage.getItem('logout-intent');
         const eventUser = (logoutIntent === '1' && user) ? null : user;
