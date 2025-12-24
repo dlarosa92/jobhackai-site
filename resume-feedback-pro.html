@@ -5355,6 +5355,11 @@
       const plan = getCurrentUserPlan();
       const roleDescEl = document.getElementById('rf-role-desc');
       
+      // Check if we're viewing historical feedback - don't overwrite score description
+      const isHistoricalView = typeof window.JobHackAIHistory?.isHistoricalView === 'function' 
+        ? window.JobHackAIHistory.isHistoricalView() 
+        : false;
+      
       // Helper function to safely set text content
       function safeSetText(element, text) {
         if (element) element.textContent = text;
@@ -5446,7 +5451,7 @@
           headerBadge.textContent = 'Free Plan';
           headerBadge.style.background = 'var(--color-text-muted)';
         }
-        if (headerDesc) {
+        if (headerDesc && !isHistoricalView) {
           headerDesc.textContent = 'Get your basic ATS compatibility score.';
         }
 
@@ -5482,7 +5487,7 @@
           headerBadge.textContent = 'Trial Plan';
           headerBadge.style.setProperty('background', '#FF9100', 'important');
         }
-        if (headerDesc) {
+        if (headerDesc && !isHistoricalView) {
           headerDesc.textContent = 'Your trial includes 3 full ATS score & feedback runs. Each run combines ATS scoring with detailed feedback, so you know exactly what to fix before you apply.';
         }
 
@@ -5544,7 +5549,7 @@
           headerBadge.textContent = 'Essential Plan';
           headerBadge.style.background = '#0077B5';
         }
-        if (headerDesc) {
+        if (headerDesc && !isHistoricalView) {
           headerDesc.textContent = 'Get comprehensive ATS scoring and role-specific feedback. Your Essential plan includes 3 detailed feedback runs per month.';
         }
 
@@ -5629,7 +5634,7 @@
           headerBadge.textContent = planLabel;
           headerBadge.style.background = planColor;
         }
-        if (headerDesc) {
+        if (headerDesc && !isHistoricalView) {
           if (isPremiumPlan) {
             headerDesc.textContent = 'Upload your resume once. Improve it step-by-step with ATS insights, role-specific feedback, and AI-powered rewrites! All your AI-generated content gets priority review.';
           } else {
@@ -6231,8 +6236,12 @@
         
         // Populate target role input for clarity
         const jobTitleInput = document.getElementById('rf-job-title');
-        if (jobTitleInput && data.role) {
-          jobTitleInput.value = data.role;
+        if (jobTitleInput) {
+          if (data.role && data.role.trim()) {
+            jobTitleInput.value = data.role;
+          } else {
+            jobTitleInput.value = '';
+          }
         }
         
         // Require a new file before re-running (enforced by click guard instead of disabling button)
@@ -6459,8 +6468,12 @@
         updateProgressRing(data.atsScore);
         // Update score description
         const scoreDesc = document.getElementById('rf-header-desc');
-        if (scoreDesc && data.role) {
-          scoreDesc.innerHTML = `Your resume scored <strong>${data.atsScore}/100</strong> for ${escapeHtml(data.role)} roles.`;
+        if (scoreDesc) {
+          if (data.role && data.role.trim()) {
+            scoreDesc.innerHTML = `Your resume scored <strong>${data.atsScore}%</strong> for ${escapeHtml(data.role)} roles.`;
+          } else {
+            scoreDesc.innerHTML = `Your resume scored <strong>${data.atsScore}%</strong>.`;
+          }
         }
       }
       

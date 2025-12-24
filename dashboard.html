@@ -37,35 +37,18 @@
   </script>
   <style>
     .dashboard-banner {
-      background: #fff;
-      border-radius: 16px;
-      box-shadow: 0 2px 12px rgba(31,41,55,0.07);
-      padding: 1.2rem 2rem 1.2rem 2rem;
-      margin: 2rem auto 2.2rem auto;
+      background: var(--color-card-bg);
+      border-radius: var(--radius-xl);
+      box-shadow: var(--shadow-lg);
+      padding: var(--space-md) var(--space-lg);
+      margin: var(--space-lg) auto var(--space-lg) auto;
       max-width: 540px;
       display: flex;
       flex-direction: column;
-      gap: 0.5rem;
+      gap: var(--space-xs);
       position: relative;
       align-items: flex-start;
-    }
-    .dashboard-banner .settings-link {
-      position: absolute;
-      top: 1.1rem;
-      right: 1.2rem;
-      color: #6B7280;
-      font-size: 1.1rem;
-      text-decoration: none;
-      display: flex;
-      align-items: center;
-      gap: 0.2rem;
-      transition: color 0.18s;
-      opacity: 0.7;
-    }
-    .dashboard-banner .settings-link:hover {
-      color: #232B36;
-      text-decoration: underline;
-      opacity: 1;
+      min-height: fit-content;
     }
     .dashboard-banner .welcome-row {
       display: flex;
@@ -273,18 +256,41 @@
     .ats-score-details {
       display: flex;
       flex-direction: column;
-      gap: 0.1rem;
+      gap: var(--space-2xs);
+      flex: 1;
+      min-width: 0;
     }
     .ats-score-details .ats-score-label {
-      font-size: 1.05rem;
-      font-weight: 700;
-      color: #232B36;
-      margin-bottom: 0.1rem;
+      font-size: var(--font-size-lg);
+      font-weight: var(--font-weight-bold);
+      color: var(--color-text-main);
+      margin-bottom: var(--space-2xs);
+    }
+    .ats-score-details .ats-score-secondary {
+      font-size: var(--font-size-sm);
+      font-weight: var(--font-weight-medium);
+      color: var(--color-text-muted);
+      margin-bottom: var(--space-xs);
     }
     .ats-score-details .ats-score-summary {
-      font-size: 1rem;
-      color: #4B5563;
-      max-width: 340px;
+      font-size: var(--font-size-base);
+      color: var(--color-text-secondary);
+      max-width: calc(100% - 20px);
+      padding-right: 0;
+      line-height: 1.5;
+      opacity: 0;
+      animation: feedback-fade-in var(--transition-slow) forwards;
+      animation-delay: 0.2s;
+    }
+    @keyframes feedback-fade-in {
+      from {
+        opacity: 0;
+        transform: translateY(10px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
     }
     .user-plan-status {
       display: flex;
@@ -400,9 +406,11 @@
       flex-direction: row;
       align-items: center;
       justify-content: flex-end;
-      gap: 0.7rem;
-      margin-top: 0.5rem;
+      gap: var(--space-sm);
+      margin-top: auto;
+      margin-bottom: 0;
       width: 100%;
+      padding-top: var(--space-md);
     }
     .user-plan-badge {
       display: flex;
@@ -1487,9 +1495,6 @@
       }
       
       let banner = `<div class="dashboard-banner">
-        <a href="#" class="settings-link" aria-label="Account Settings">
-          <svg width="20" height="20" fill="none" stroke="#6B7280" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06A1.65 1.65 0 0015 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 008.6 15a1.65 1.65 0 00-1.82-.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.6 8.6a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 008.6 4.6a1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0015 4.6a1.65 1.65 0 001.82.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 8.6a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06A1.65 1.65 0 0015 15a1.65 1.65 0 001.82.33z"/></svg>
-        </a>
         <div class="welcome-row">
           <h2>Hi, ${user.name || 'User'}</h2>
           ${user.plan === 'trial' && user.trialEndsAt ? `<div class="trial-countdown">You have ${daysLeft(user.trialEndsAt)} day${daysLeft(user.trialEndsAt) !== 1 ? 's' : ''} left in your trial!</div>` : ''}
@@ -1516,7 +1521,8 @@
           ${atsScore.percent !== null && atsScore.percent !== undefined ? `
             ${atsDonut(atsScore.percent)}
             <div class="ats-score-details">
-              <span class="ats-score-label">${atsScore.percent}%</span>
+              <span class="ats-score-label">Resume Feedback</span>
+              <span class="ats-score-secondary">${atsScore.percent}% Application Tracking System Score</span>
               <span class="ats-score-summary">${atsScore.summary}</span>
             </div>
           ` : `
@@ -2084,8 +2090,29 @@
             const text = donut.querySelector('.ats-score-text');
             if (text) text.textContent = score + '%';
           }
-          const scoreLabel = document.querySelector('.ats-score-label');
-          if (scoreLabel) scoreLabel.textContent = score + '%';
+          // Update label and secondary score display
+          const scoreDetails = document.querySelector('.ats-score-details');
+          const scoreLabel = scoreDetails?.querySelector('.ats-score-label');
+          if (scoreLabel && scoreLabel.textContent === '—') {
+            // Update label from "—" to "Resume Feedback" when score is computed
+            scoreLabel.textContent = 'Resume Feedback';
+            scoreLabel.style.color = '';
+          }
+          // Create or update secondary score display
+          let scoreSecondary = document.querySelector('.ats-score-secondary');
+          if (!scoreSecondary && scoreDetails) {
+            // Create element if it doesn't exist (e.g., when user uploads first resume)
+            scoreSecondary = document.createElement('span');
+            scoreSecondary.className = 'ats-score-secondary';
+            if (scoreLabel && scoreLabel.nextSibling) {
+              scoreDetails.insertBefore(scoreSecondary, scoreLabel.nextSibling);
+            } else {
+              scoreDetails.appendChild(scoreSecondary);
+            }
+          }
+          if (scoreSecondary) {
+            scoreSecondary.textContent = score + '% Application Tracking System Score';
+          }
         }
 
         function resetAtsGauge() {
@@ -2508,7 +2535,18 @@
             // Update gauge
             updateAtsGauge(score);
             const scoreSummary = document.querySelector('.ats-score-summary');
-            if (scoreSummary) scoreSummary.textContent = summary;
+            if (scoreSummary) {
+              scoreSummary.textContent = summary;
+              // Clear animation first to ensure it triggers on repeat runs
+              scoreSummary.style.animation = 'none';
+              scoreSummary.style.animationDelay = '';
+              // Force reflow to reset animation state
+              void scoreSummary.offsetWidth;
+              // Trigger fade-in animation
+              scoreSummary.style.opacity = '0';
+              scoreSummary.style.animation = 'feedback-fade-in var(--transition-slow) forwards';
+              scoreSummary.style.animationDelay = '0.2s';
+            }
 
             // Store in sessionStorage for cross-page sync
             sessionStorage.setItem('currentAtsScore', score.toString());
