@@ -69,7 +69,7 @@ function safeFallbackInit() {
     if (signupForm) signupForm.style.display = 'none';
     if (loginLinks) loginLinks.style.display = 'block';
     if (signupLinks) signupLinks.style.display = 'none';
-    if (authTitle) authTitle.textContent = 'Welcome back';
+    if (authTitle) authTitle.style.display = 'none';
     if (banner) banner.style.display = 'none';
     
     // Minimal password toggle handlers (shows error on click)
@@ -793,7 +793,7 @@ document.addEventListener('DOMContentLoaded', async function() {
     signupLinks.style.display = 'none';
     loginForm.style.display = 'flex';
     loginLinks.style.display = 'block';
-    authTitle.textContent = 'Welcome back';
+    authTitle.style.display = 'none';
     hideError(loginError);
     hideError(signupError);
     

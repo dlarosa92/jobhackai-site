@@ -1193,6 +1193,39 @@
       summary: null
     };
     
+    // Trust-first: show a warning toast (once per short window) when extraction quality is low.
+    // Uses existing JobHackAIToast (design system-consistent), and auto-dismisses after 8 seconds.
+    let _dashboardLowExtractionWarnShownAt = 0;
+
+    function maybeWarnLowExtractionQuality(extractionQuality) {
+      if (!window.JobHackAIToast || !extractionQuality || typeof extractionQuality !== 'object') return false;
+      const confidence = typeof extractionQuality.confidence === 'number' ? extractionQuality.confidence : 1.0;
+      const tokenCount = typeof extractionQuality.tokenCount === 'number' ? extractionQuality.tokenCount : 0;
+      const status = extractionQuality.extractionStatus || 'ok';
+      // Keep frontend warning logic aligned with backend quality gating:
+      // backend treats "high confidence" as: status === 'ok' AND confidence >= 0.65 AND tokenCount >= 80
+      const isLow = status !== 'ok' || confidence < 0.65 || tokenCount < 80;
+      if (!isLow) return false;
+
+      // Avoid accidental duplicate toasts from overlapping async flows.
+      const now = Date.now();
+      if (now - _dashboardLowExtractionWarnShownAt < 1500) return true;
+      _dashboardLowExtractionWarnShownAt = now;
+
+      // Build message conditionally based on status and token count
+      let msg;
+      if (status !== 'ok') {
+        msg = 'We may not have read your resume perfectly. Some structure checks are less certain.';
+      } else if (tokenCount > 0 && tokenCount < 80) {
+        msg = 'We didn\'t get enough readable text from your resume to be fully confident. Some structure checks are less certain.';
+      } else {
+        msg = 'We may not have read your resume perfectly. Some structure checks are less certain.';
+      }
+
+      window.JobHackAIToast.warning(msg, 8000);
+      return true;
+    }
+    
     // Load ATS score from state persistence BEFORE rendering
     async function loadAtsScoreFromStorage() {
       let lastScore = null;
@@ -1458,7 +1491,7 @@
           <svg width="20" height="20" fill="none" stroke="#6B7280" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06A1.65 1.65 0 0015 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 008.6 15a1.65 1.65 0 00-1.82-.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.6 8.6a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 008.6 4.6a1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0015 4.6a1.65 1.65 0 001.82.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 8.6a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06A1.65 1.65 0 0015 15a1.65 1.65 0 001.82.33z"/></svg>
         </a>
         <div class="welcome-row">
-          <h2>Welcome back, ${user.name || 'User'}!</h2>
+          <h2>Hi, ${user.name || 'User'}</h2>
           ${user.plan === 'trial' && user.trialEndsAt ? `<div class="trial-countdown">You have ${daysLeft(user.trialEndsAt)} day${daysLeft(user.trialEndsAt) !== 1 ? 's' : ''} left in your trial!</div>` : ''}
           ${subStatus && subStatus.cancelAt ? `
             <div style="background:#FEF3C7;border-left:4px solid #F59E0B;color:#92400E;padding:0.8rem 1rem;border-radius:8px;margin:0.5rem 0;font-size:0.98rem;">
@@ -1483,12 +1516,12 @@
           ${atsScore.percent !== null && atsScore.percent !== undefined ? `
             ${atsDonut(atsScore.percent)}
             <div class="ats-score-details">
-              <span class="ats-score-label">${atsScore.value} / ${atsScore.max}</span>
+              <span class="ats-score-label">${atsScore.percent}%</span>
               <span class="ats-score-summary">${atsScore.summary}</span>
             </div>
           ` : `
             <div class="ats-score-details">
-              <span class="ats-score-label" style="color:var(--color-text-muted);">— / —</span>
+              <span class="ats-score-label" style="color:var(--color-text-muted);">—</span>
               <span class="ats-score-summary" style="color:var(--color-text-muted);font-style:italic;">Upload your résumé above to generate your ATS Score and detailed feedback.</span>
             </div>
           `}
@@ -1722,7 +1755,7 @@
           <div class="upgrade-popup-overlay" id="upgrade-popup-overlay">
             <div class="upgrade-popup-modal">
               <button class="close-btn" id="upgrade-popup-close" aria-label="Close">×</button>
-              <h2>Welcome back, ${user.name || 'User'}!</h2>
+              <h2>Hi, ${user.name || 'User'}</h2>
               <div class="popup-message">
                 Your previous ATS resume score has been carried over from your free account. You now have access to more features and unlimited scoring!
               </div>
@@ -2052,7 +2085,7 @@
             if (text) text.textContent = score + '%';
           }
           const scoreLabel = document.querySelector('.ats-score-label');
-          if (scoreLabel) scoreLabel.textContent = score + ' / 100';
+          if (scoreLabel) scoreLabel.textContent = score + '%';
         }
 
         function resetAtsGauge() {
@@ -2077,39 +2110,6 @@
             // Auto-remove after 8 seconds
             setTimeout(() => errorBanner.remove(), 8000);
           }
-        }
-
-        // Trust-first: show a warning toast (once per short window) when extraction quality is low.
-        // Uses existing JobHackAIToast (design system-consistent), and auto-dismisses after 8 seconds.
-        let _dashboardLowExtractionWarnShownAt = 0;
-
-        function maybeWarnLowExtractionQuality(extractionQuality) {
-          if (!window.JobHackAIToast || !extractionQuality || typeof extractionQuality !== 'object') return false;
-          const confidence = typeof extractionQuality.confidence === 'number' ? extractionQuality.confidence : 1.0;
-          const tokenCount = typeof extractionQuality.tokenCount === 'number' ? extractionQuality.tokenCount : 0;
-          const status = extractionQuality.extractionStatus || 'ok';
-          // Keep frontend warning logic aligned with backend quality gating:
-          // backend treats "high confidence" as: status === 'ok' AND confidence >= 0.65 AND tokenCount >= 80
-          const isLow = status !== 'ok' || confidence < 0.65 || tokenCount < 80;
-          if (!isLow) return false;
-
-          // Avoid accidental duplicate toasts from overlapping async flows.
-          const now = Date.now();
-          if (now - _dashboardLowExtractionWarnShownAt < 1500) return true;
-          _dashboardLowExtractionWarnShownAt = now;
-
-          // Build message conditionally based on status and token count
-          let msg;
-          if (status !== 'ok') {
-            msg = 'We may not have read your resume perfectly. Some structure checks are less certain.';
-          } else if (tokenCount > 0 && tokenCount < 80) {
-            msg = 'We didn\'t get enough readable text from your resume to be fully confident. Some structure checks are less certain.';
-          } else {
-            msg = 'We may not have read your resume perfectly. Some structure checks are less certain.';
-          }
-
-          window.JobHackAIToast.warning(msg, 8000);
-          return true;
         }
 
         function showLoadingState() {

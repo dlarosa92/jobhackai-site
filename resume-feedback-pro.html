@@ -3399,7 +3399,39 @@
                         'You\'ve used all 3 feedback attempts. Upgrade to Pro for unlimited feedback and unlock all features.',
                         {
                           showUpgrade: true,
-                          upgradeCallback: () => window.location.href = 'pricing-a.html',
+                          upgradeCallback: async () => {
+                            try {
+                              // Show loading state
+                              if (window.showLoadingOverlay) {
+                                window._currentLoadingOverlay = window.showLoadingOverlay('Redirecting to checkout...');
+                              }
+                              
+                              const idToken = await window.FirebaseAuthManager?.getCurrentUser?.()?.getIdToken?.();
+                              const res = await fetch('/api/stripe-checkout', {
+                                method: 'POST',
+                                headers: { 
+                                  'Content-Type': 'application/json', 
+                                  ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}) 
+                                },
+                                body: JSON.stringify({ plan: 'pro' })
+                              });
+                              const data = await res.json();
+                              if (data && data.ok && data.url) {
+                                window.location.href = data.url;
+                                return;
+                              }
+                              throw new Error(data?.error || 'Checkout failed');
+                            } catch (e) {
+                              console.error('Upgrade checkout error:', e);
+                              // Hide loading overlay
+                              if (window._currentLoadingOverlay) {
+                                window._currentLoadingOverlay();
+                                window._currentLoadingOverlay = null;
+                              }
+                              // Fallback to pricing page if checkout fails
+                              window.location.href = 'pricing-a.html';
+                            }
+                          },
                           upgradeButtonText: 'Upgrade to Pro',
                           buttonText: 'Maybe Later'
                         }

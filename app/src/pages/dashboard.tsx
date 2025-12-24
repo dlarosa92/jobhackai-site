@@ -772,7 +772,7 @@ export default function Dashboard() {
             </svg>
           </a>
           <div className="welcome-row">
-            <h2>Welcome back, {user.name}!</h2>
+            <h2>Hi, {user.name}</h2>
             {(() => {
               // Show blue banner if user upgraded from free to trial/subscription
               // Check multiple indicators that user had a free account with resume upload
@@ -797,7 +797,7 @@ export default function Dashboard() {
           <div className="ats-score-row">
             {atsDonut(atsScore.percent)}
             <div className="ats-score-details">
-              <span className="ats-score-label">{atsScore.value} / {atsScore.max}</span>
+              <span className="ats-score-label">{atsScore.percent}%</span>
               <span className="ats-score-summary">{atsScore.summary}</span>
             </div>
           </div>
