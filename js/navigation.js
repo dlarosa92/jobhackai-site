@@ -1710,28 +1710,28 @@ async function initializeNavigation() {
           try {
             const isAuthenticated = !!user;
             const currentAuthState = getAuthState();
+            const hasMismatch = isAuthenticated !== currentAuthState.isAuthenticated;
             
-            console.log('[AUTH-LISTENER] Auth state changed:', {
+            // SECURITY FIX: Use navLog instead of console.log to respect log level filtering
+            // Do not log email address to prevent information leakage
+            navLog('debug', 'Auth state changed', {
               firebaseUser: !!user,
-              firebaseEmail: user?.email || null,
               currentAuthState: currentAuthState.isAuthenticated,
-              mismatch: isAuthenticated !== currentAuthState.isAuthenticated
+              mismatch: hasMismatch
             });
             
             // If Firebase says logged out but localStorage says logged in, trust Firebase
             if (!isAuthenticated && currentAuthState.isAuthenticated) {
-              console.log('[AUTH-LISTENER] Firebase says logged out, syncing localStorage');
               navLog('error', 'Firebase auth mismatch: Firebase says logged out, syncing localStorage');
               setAuthState(false, null);
               updateNavigation();
             } else if (isAuthenticated && !currentAuthState.isAuthenticated) {
               // Firebase says logged in - update navigation
-              console.log('[AUTH-LISTENER] Firebase says logged in, updating navigation');
               navLog('debug', 'Firebase auth state changed: User logged in, updating navigation');
               updateNavigation();
             } else if (isAuthenticated && currentAuthState.isAuthenticated) {
               // Both agree - just update navigation in case plan changed
-              console.log('[AUTH-LISTENER] Auth state consistent, refreshing navigation');
+              navLog('debug', 'Auth state consistent, refreshing navigation');
               updateNavigation();
             }
           } catch (listenerError) {
