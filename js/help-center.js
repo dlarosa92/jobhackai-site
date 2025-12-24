@@ -145,16 +145,42 @@ class HelpCenterSearch {
         this.hideResults();
         this.searchInput.value = ''; // Clear search after selection
         this.showAllSections();
-        this.clearHighlights();
+        // Don't clear highlights here - scrollToResult sets a temporary highlight
+        // that will clear itself after 2 seconds
       });
     });
   }
 
   highlightText(text, query) {
     if (!query) return this.escapeHtml(text);
-    const escapedText = this.escapeHtml(text);
+    // Highlight BEFORE escaping to avoid matching HTML entities
+    // Escape the query for regex, then apply highlighting to original text
     const regex = new RegExp(`(${this.escapeRegex(query)})`, 'gi');
-    return escapedText.replace(regex, '<mark>$1</mark>');
+    const highlighted = text.replace(regex, '<mark>$1</mark>');
+    // Now escape the result, but preserve the <mark> tags
+    return this.escapeHtmlPreservingMark(highlighted);
+  }
+
+  escapeHtmlPreservingMark(text) {
+    // Escape HTML but preserve <mark> tags
+    // First, temporarily replace mark tags with placeholders
+    const markPlaceholder = '___MARK_TAG___';
+    const endMarkPlaceholder = '___END_MARK_TAG___';
+    const textWithPlaceholders = text
+      .replace(/<mark>/gi, markPlaceholder)
+      .replace(/<\/mark>/gi, endMarkPlaceholder);
+    
+    // Escape HTML
+    const div = document.createElement('div');
+    div.textContent = textWithPlaceholders;
+    let escaped = div.innerHTML
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+    
+    // Restore mark tags
+    return escaped
+      .replace(new RegExp(markPlaceholder, 'g'), '<mark>')
+      .replace(new RegExp(endMarkPlaceholder, 'g'), '</mark>');
   }
 
   escapeHtml(text) {
