@@ -1333,7 +1333,11 @@
           window.location.href = 'pricing-a.html?plan=essential';
         }
       } else {
-        // Access granted - ensure UI is updated
+        // Access granted - clear plan pending flag and class
+        // This allows tests to detect when plan hydration is complete
+        window.__JOBHACKAI_PLAN_PENDING__ = false;
+        document.documentElement.classList.remove('plan-pending');
+        // Ensure UI is updated
         updateRfTileForPlan();
       }
     }

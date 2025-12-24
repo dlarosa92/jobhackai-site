@@ -1580,7 +1580,6 @@ async function initializeNavigation() {
     navLog('debug', 'Navigation already initialized, skipping duplicate call');
     return;
   }
-  navigationInitialized = true;
   navLog('info', '=== initializeNavigation() START ===');
   navLog('info', 'Initialization context', {
     readyState: document.readyState,
@@ -1745,6 +1744,9 @@ async function initializeNavigation() {
   navLog('info', 'Navigation system initialization complete, dispatching ready event');
   // Set flag to detect if event already fired (for fallback checks)
   window.__navigationReadyFired = true;
+  // CRITICAL FIX: Only mark as initialized AFTER successful completion
+  // This allows retry if initialization fails or returns early (important for Playwright tests)
+  navigationInitialized = true;
   const readyEvent = new CustomEvent('navigationReady');
   window.dispatchEvent(readyEvent);
   
