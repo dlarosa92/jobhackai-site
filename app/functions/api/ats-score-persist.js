@@ -108,7 +108,7 @@ export async function onRequest(context) {
                   data: {
                     score: latestSession.ats_score || ruleBasedScores.overallScore,
                     breakdown: normalizedBreakdown,
-                    extractionQuality: extractionQuality,
+                    extractionQuality: extractionQuality || null,
                     feedback: ruleBasedScores.feedback || null,
                     jobTitle: latestSession.role || null,
                     resumeId: `resume:${latestSession.id}`,
@@ -191,7 +191,7 @@ export async function onRequest(context) {
 
     // POST: Store ATS score
     const body = await request.json();
-    const { resumeId, score, breakdown, summary, jobTitle } = body;
+    const { resumeId, score, breakdown, summary, jobTitle, extractionQuality } = body;
 
     if (!resumeId || typeof score !== 'number') {
       return json({ success: false, error: 'resumeId and score required' }, 400, origin, env);
@@ -212,6 +212,7 @@ export async function onRequest(context) {
       breakdown: breakdown || {},
       summary: summary || '',
       jobTitle: jobTitle || '',
+      extractionQuality: extractionQuality || null,
       timestamp,
       syncedAt: timestamp
     };
