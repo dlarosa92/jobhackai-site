@@ -175,6 +175,7 @@
 
   /**
    * Intercept fetch to detect long-running API calls
+   * Handles external wrappers by maintaining a chain of fetch wrappers
    */
   function setupFetchInterceptor() {
     // Check if fetch was already intercepted by this tracker
@@ -183,7 +184,20 @@
       return;
     }
     
-    const originalFetch = window.fetch;
+    // Store the current fetch (before our wrapper) - this maintains the wrapper chain
+    // If another script wrapped fetch before us, currentFetch is their wrapper
+    // If fetch is native, currentFetch is native fetch
+    const currentFetch = window.fetch;
+    
+    // Store reference to native fetch for potential restoration
+    // If fetch has been wrapped, try to get native via _originalFetch chain
+    let nativeFetch = window.fetch;
+    if (window.fetch._originalFetch) {
+      // Another script has wrapped fetch - follow the chain to get native
+      nativeFetch = window.fetch._originalFetch;
+      console.log('[INACTIVITY] Detected external fetch wrapper, following chain to native fetch');
+    }
+    
     window.fetch = function(...args) {
       const url = args[0];
       const isLongOperation = CONFIG.LONG_OPERATION_ENDPOINTS.some(
@@ -194,7 +208,9 @@
         const operationId = `op_${Date.now()}_${Math.random()}`;
         trackOperation(operationId);
         
-        const fetchPromise = originalFetch.apply(this, args);
+        // Use currentFetch to maintain wrapper chain (calls through any external wrappers)
+        // This ensures api-retry.js and other wrappers still work correctly
+        const fetchPromise = currentFetch.apply(this, args);
         fetchPromise.finally(() => {
           setTimeout(() => untrackOperation(operationId), 2000);
         });
@@ -202,12 +218,14 @@
         return fetchPromise;
       }
       
-      return originalFetch.apply(this, args);
+      // For non-long operations, pass through to current fetch (maintains wrapper chain)
+      return currentFetch.apply(this, args);
     };
     
-    // Mark as intercepted and store original for potential restoration
+    // Mark as intercepted and store references for potential restoration and other scripts
     window.fetch._inactivityTrackerIntercepted = true;
-    window.fetch._originalFetch = originalFetch;
+    window.fetch._originalFetch = nativeFetch; // Store native fetch (for restoration)
+    window.fetch._currentFetch = currentFetch; // Store fetch before our wrapper (for chaining)
   }
 
   /**
