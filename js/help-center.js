@@ -313,13 +313,27 @@ class HelpCenterSearch {
     tocLinks.forEach(link => {
       link.addEventListener('click', (e) => {
         e.preventDefault();
+        e.stopPropagation(); // Prevent triggering document click handler
+        
         const targetId = link.getAttribute('href').substring(1);
         const targetSection = document.getElementById(targetId);
         if (targetSection) {
-          targetSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
-          // Update active state
-          tocLinks.forEach(l => l.classList.remove('active'));
-          link.classList.add('active');
+          // If there's an active search, clear it and show all sections first
+          // This ensures the target section is visible before scrolling
+          if (this.searchInput.value.trim().length >= 2) {
+            this.searchInput.value = '';
+            this.showAllSections();
+            this.clearHighlights();
+            this.hideResults();
+          }
+          
+          // Small delay to ensure section is visible before scrolling
+          setTimeout(() => {
+            targetSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            // Update active state
+            tocLinks.forEach(l => l.classList.remove('active'));
+            link.classList.add('active');
+          }, 50);
         }
       });
     });
