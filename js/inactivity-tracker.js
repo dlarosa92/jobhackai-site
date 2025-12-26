@@ -63,6 +63,7 @@
   let lastActivityProcessTime = 0;
   let resetTimerDebounce = null; // Debounce timer for operation resets
   let lastResetAt = 0; // Timestamp of the last timers reset (used to debounce resetTimers)
+  let lastBroadcastResetAt = 0; // Timestamp of last reset triggered by BroadcastChannel (throttle fallback)
 
   /**
    * Check if user is authenticated - Firebase-first (matches navigation.js pattern)
@@ -720,12 +721,34 @@
       
       broadcastChannel.onmessage = (event) => {
         const { type } = event.data || {};
-        
+
         if (type === 'activity') {
-          // Another tab detected activity, reset timers
-          resetTimers();
-          if (warningShown) {
-            hideWarning();
+          // Prefer explicit user-initiated broadcasts. Producers should send { type: 'activity', userInitiated: true }
+          // for real user activity. Otherwise use a throttled fallback to avoid programmatic noise.
+          const userInitiated = event.data && event.data.userInitiated === true;
+          if (userInitiated && isAuthenticated() && !isExcludedPage()) {
+            resetTimers();
+            if (warningShown) {
+              hideWarning();
+            }
+          } else {
+            // Fallback: allow at most one broadcast-origin reset per BROADCAST_MIN_MS window
+            const now = Date.now();
+            const BROADCAST_MIN_MS = 30 * 1000; // 30s
+            if (!isAuthenticated() || isExcludedPage()) {
+              // Don't act on broadcasts for unauthenticated or excluded pages
+              return;
+            }
+            if (now - lastBroadcastResetAt > BROADCAST_MIN_MS) {
+              lastBroadcastResetAt = now;
+              resetTimers();
+              if (warningShown) {
+                hideWarning();
+              }
+              console.log('[INACTIVITY] Broadcast activity accepted (throttled)', event.data);
+            } else {
+              console.log('[INACTIVITY] Ignoring broadcast activity (not userInitiated, throttled)', { sinceMs: now - lastBroadcastResetAt, data: event.data });
+            }
           }
         } else if (type === 'inactivity-warning') {
           // Another tab showed warning, show it here too
