@@ -727,21 +727,30 @@
           // Producers must send { type: 'activity', userInitiated: true } for real user actions.
           const userInitiated = event.data && event.data.userInitiated === true;
           if (userInitiated && isAuthenticated() && !isExcludedPage()) {
+            // Genuine user-initiated broadcast on an applicable page/user session
             resetTimers();
             if (warningShown) {
               hideWarning();
             }
           } else {
-            // Instrumentation: count and record ignored broadcasts so we can find noisy producers.
-            try {
-              window.__inactivityIgnoredBroadcasts = window.__inactivityIgnoredBroadcasts || { count: 0, recent: [] };
-              window.__inactivityIgnoredBroadcasts.count++;
-              window.__inactivityIgnoredBroadcasts.recent.push({ ts: Date.now(), data: event.data });
-              if (window.__inactivityIgnoredBroadcasts.recent.length > 20) {
-                window.__inactivityIgnoredBroadcasts.recent.shift();
-              }
-            } catch (e) {}
-            console.log('[INACTIVITY] Ignoring non-userInitiated broadcast activity', { detail: event.data, ignoredCount: window.__inactivityIgnoredBroadcasts && window.__inactivityIgnoredBroadcasts.count });
+            // Distinguish why the broadcast was ignored to avoid false-positive instrumentation:
+            // 1) Not userInitiated => likely noisy producer (count as ignored)
+            // 2) userInitiated but user not authenticated or page excluded => valid broadcast but not applicable here (do NOT count as noisy)
+            if (!userInitiated) {
+              try {
+                window.__inactivityIgnoredBroadcasts = window.__inactivityIgnoredBroadcasts || { count: 0, recent: [] };
+                window.__inactivityIgnoredBroadcasts.count++;
+                window.__inactivityIgnoredBroadcasts.recent.push({ ts: Date.now(), data: event.data });
+                if (window.__inactivityIgnoredBroadcasts.recent.length > 20) {
+                  window.__inactivityIgnoredBroadcasts.recent.shift();
+                }
+              } catch (e) {}
+              console.log('[INACTIVITY] Ignoring non-userInitiated broadcast activity (counted as ignored producer)', { detail: event.data, ignoredCount: window.__inactivityIgnoredBroadcasts && window.__inactivityIgnoredBroadcasts.count });
+            } else {
+              // userInitiated === true but not applicable for this tab (e.g., user not authenticated or page excluded)
+              // Do not count as noisy producer; log for visibility.
+              console.log('[INACTIVITY] Ignoring userInitiated broadcast because session/page not applicable', { userInitiated: true, isAuthenticated: isAuthenticated(), isExcludedPage: isExcludedPage(), detail: event.data });
+            }
           }
         } else if (type === 'inactivity-warning') {
           // Another tab showed warning, show it here too
