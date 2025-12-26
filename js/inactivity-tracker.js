@@ -62,6 +62,7 @@
   let activityThrottleTimer = null;
   let lastActivityProcessTime = 0;
   let resetTimerDebounce = null; // Debounce timer for operation resets
+  let lastResetAt = 0; // Timestamp of the last timers reset (used to debounce resetTimers)
 
   /**
    * Check if user is authenticated - Firebase-first (matches navigation.js pattern)
@@ -173,7 +174,8 @@
     
     resetTimerDebounce = setTimeout(() => {
       console.log('[INACTIVITY] Extending timer due to active operations');
-      resetTimers();
+      // Force bypass debounce for long-running operations so they extend the timers immediately
+      resetTimers(true);
       resetTimerDebounce = null;
     }, CONFIG.OPERATION_RESET_DEBOUNCE_MS);
   }
@@ -577,8 +579,21 @@
 
   /**
    * Reset inactivity timers
+   * @param {boolean} force - if true, bypass debounce and reset immediately (used by long-running operations)
    */
-  function resetTimers() {
+  function resetTimers(force = false) {
+    // Debounce repeated resets coming from internal activity/broadcasts.
+    // This prevents the warning/logout schedule from being continuously postponed.
+    const now = Date.now();
+    const MIN_RESET_INTERVAL_MS = CONFIG.ACTIVITY_THROTTLE_MS || 1000;
+
+    if (!force && (now - lastResetAt < MIN_RESET_INTERVAL_MS)) {
+      // Skip if called too soon after the previous reset
+      console.log('[INACTIVITY] resetTimers skipped (debounced)', { sinceMs: now - lastResetAt });
+      return;
+    }
+    lastResetAt = now;
+
     // Clear existing timers
     clearTimers();
     
@@ -587,7 +602,6 @@
       return;
     }
 
-    const now = Date.now();
     lastWarningTime = now;
 
     // Set warning timer
