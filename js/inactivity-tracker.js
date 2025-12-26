@@ -823,10 +823,19 @@
     });
 
     // Listen for navigation system events
-    window.addEventListener('planChanged', () => {
-      // Reset timers on plan change (user is active)
-      if (isAuthenticated()) {
-        resetTimers();
+    // Only treat plan changes as user activity when they are explicitly user-initiated.
+    window.addEventListener('planChanged', (e) => {
+      try {
+        const userInitiated = e && e.detail && e.detail.userInitiated === true;
+        if (userInitiated && isAuthenticated()) {
+          // Genuine user action — reset timers
+          resetTimers();
+        } else {
+          // Programmatic/internal plan change — ignore for inactivity tracking
+          console.log('[INACTIVITY] Ignoring programmatic planChanged event for inactivity timers', { userInitiated: !!userInitiated, detail: e && e.detail });
+        }
+      } catch (err) {
+        console.warn('[INACTIVITY] planChanged handler error', err);
       }
     });
 
