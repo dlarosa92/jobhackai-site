@@ -63,7 +63,6 @@
   let lastActivityProcessTime = 0;
   let resetTimerDebounce = null; // Debounce timer for operation resets
   let lastResetAt = 0; // Timestamp of the last timers reset (used to debounce resetTimers)
-  let lastBroadcastResetAt = 0; // Timestamp of last reset triggered by BroadcastChannel (throttle fallback)
 
   /**
    * Check if user is authenticated - Firebase-first (matches navigation.js pattern)
@@ -724,8 +723,8 @@
         const { type } = event.data || {};
 
         if (type === 'activity') {
-          // Prefer explicit user-initiated broadcasts. Producers should send { type: 'activity', userInitiated: true }
-          // for real user activity. Otherwise use a throttled fallback to avoid programmatic noise.
+          // Strict: only accept broadcasted activity when sender explicitly marks it user-initiated.
+          // Producers must send { type: 'activity', userInitiated: true } for real user actions.
           const userInitiated = event.data && event.data.userInitiated === true;
           if (userInitiated && isAuthenticated() && !isExcludedPage()) {
             resetTimers();
@@ -733,23 +732,16 @@
               hideWarning();
             }
           } else {
-            // Fallback: allow at most one broadcast-origin reset per BROADCAST_MIN_MS window
-            const now = Date.now();
-            const BROADCAST_MIN_MS = 30 * 1000; // 30s
-            if (!isAuthenticated() || isExcludedPage()) {
-              // Don't act on broadcasts for unauthenticated or excluded pages
-              return;
-            }
-            if (now - lastBroadcastResetAt > BROADCAST_MIN_MS) {
-              lastBroadcastResetAt = now;
-              resetTimers();
-              if (warningShown) {
-                hideWarning();
+            // Instrumentation: count and record ignored broadcasts so we can find noisy producers.
+            try {
+              window.__inactivityIgnoredBroadcasts = window.__inactivityIgnoredBroadcasts || { count: 0, recent: [] };
+              window.__inactivityIgnoredBroadcasts.count++;
+              window.__inactivityIgnoredBroadcasts.recent.push({ ts: Date.now(), data: event.data });
+              if (window.__inactivityIgnoredBroadcasts.recent.length > 20) {
+                window.__inactivityIgnoredBroadcasts.recent.shift();
               }
-              console.log('[INACTIVITY] Broadcast activity accepted (throttled)', event.data);
-            } else {
-              console.log('[INACTIVITY] Ignoring broadcast activity (not userInitiated, throttled)', { sinceMs: now - lastBroadcastResetAt, data: event.data });
-            }
+            } catch (e) {}
+            console.log('[INACTIVITY] Ignoring non-userInitiated broadcast activity', { detail: event.data, ignoredCount: window.__inactivityIgnoredBroadcasts && window.__inactivityIgnoredBroadcasts.count });
           }
         } else if (type === 'inactivity-warning') {
           // Another tab showed warning, show it here too
