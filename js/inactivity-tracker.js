@@ -805,17 +805,33 @@
           document.addEventListener(eventType, handleActivity, { passive: true });
         });
 
-        // Listen for visibility changes (tab focus/blur)
+        // Listen for visibility changes (tab focus/blur) with cooldown to avoid flapping
         document.addEventListener('visibilitychange', () => {
           if (document.visibilityState === 'visible' && isAuthenticated() && !isExcludedPage()) {
-            // Reset timers when tab becomes visible
+            const now = Date.now();
+            const VISIBILITY_RESET_MIN_MS = CONFIG.VISIBILITY_RESET_MS || 5000; // 5s default
+            if (now - lastResetAt < VISIBILITY_RESET_MIN_MS) {
+              console.log('[INACTIVITY] Ignoring visibilitychange reset (cooldown)', { sinceMs: now - lastResetAt });
+              return;
+            }
             resetTimers();
           }
         });
 
-        // Listen for focus events (window focus)
-        window.addEventListener('focus', () => {
+        // Listen for focus events (window focus) with isTrusted check and cooldown
+        window.addEventListener('focus', (e) => {
           if (isAuthenticated() && !isExcludedPage()) {
+            const isUser = typeof e?.isTrusted === 'boolean' ? e.isTrusted : true;
+            if (!isUser) {
+              console.log('[INACTIVITY] Ignoring programmatic focus event');
+              return;
+            }
+            const now = Date.now();
+            const FOCUS_RESET_MIN_MS = CONFIG.FOCUS_RESET_MS || 5000; // 5s default
+            if (now - lastResetAt < FOCUS_RESET_MIN_MS) {
+              console.log('[INACTIVITY] Ignoring focus reset (cooldown)', { sinceMs: now - lastResetAt });
+              return;
+            }
             resetTimers();
           }
         });
