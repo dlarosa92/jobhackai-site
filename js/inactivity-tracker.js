@@ -697,11 +697,12 @@
       hideWarning();
     }
     
-    // Broadcast activity to other tabs
+    // Broadcast activity to other tabs (mark as user-initiated so other tabs treat it as real user activity)
     if (broadcastChannel) {
-      broadcastChannel.postMessage({ 
-        type: 'activity', 
-        timestamp: Date.now() 
+      broadcastChannel.postMessage({
+        type: 'activity',
+        timestamp: Date.now(),
+        userInitiated: true
       });
     }
   }
