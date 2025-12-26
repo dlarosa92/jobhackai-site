@@ -1,0 +1,54 @@
+/* Pricing page — responsive button adjustments (scoped to pricing table) */
+.pricing-table .pricing-signup-row td {
+  vertical-align: middle;
+  text-align: center;
+  padding: 16px 12px;
+  box-sizing: border-box;
+}
+
+/* Make the buttons layout-friendly and allow wrapping without overflow */
+.pricing-table .pricing-signup-row .btn-primary,
+.pricing-table .pricing-signup-row .stripe-checkout-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1.25rem;
+  border-radius: var(--radius-button);
+  font-weight: var(--font-weight-semibold);
+  font-size: clamp(14px, 1.6vw, 17px); /* responsive font size */
+  line-height: 1.15;
+  white-space: normal;      /* allow multi-line labels */
+  word-break: break-word;   /* break long words if needed */
+  min-width: 120px;         /* keep visual weight on desktop */
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+/* preserve disabled styling */
+.pricing-table .pricing-signup-row .btn-primary:disabled,
+.pricing-table .pricing-signup-row .stripe-checkout-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Mobile: make buttons stretch, reduce min-width, and increase tap area */
+@media (max-width: 900px) {
+  .pricing-table .pricing-signup-row td {
+    display: block;
+    width: 100%;
+    padding: 10px 8px;
+  }
+
+  .pricing-table .pricing-signup-row .btn-primary,
+  .pricing-table .pricing-signup-row .stripe-checkout-btn {
+    width: calc(100% - 16px);
+    min-width: 0;
+    font-size: 16px;
+    padding: 12px 14px;
+    margin: 0 auto;
+    box-shadow: none;
+  }
+}
+
+
