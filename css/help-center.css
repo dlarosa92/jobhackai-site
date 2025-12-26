@@ -300,7 +300,7 @@
   padding: var(--space-xs) var(--space-md);
   background: var(--color-cta-green);
   color: white;
-  text-decoration: none;
+  text-decoration: none !important;
   border-radius: var(--radius-button);
   font-weight: var(--font-weight-semibold);
   font-size: var(--font-size-sm);
@@ -311,6 +311,7 @@
 .help-upgrade-link:hover {
   background: var(--color-cta-green-hover);
   box-shadow: var(--shadow-button-hover);
+  text-decoration: none !important;
 }
 
 /* Contact Section */
