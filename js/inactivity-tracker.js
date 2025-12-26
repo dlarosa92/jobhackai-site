@@ -63,7 +63,6 @@
   let lastActivityProcessTime = 0;
   let resetTimerDebounce = null; // Debounce timer for operation resets
   let lastResetAt = 0; // Timestamp of the last timers reset (used to debounce resetTimers)
-  let lastBroadcastResetAt = 0; // Timestamp of last reset triggered by BroadcastChannel (throttle fallback)
 
   /**
    * Check if user is authenticated - Firebase-first (matches navigation.js pattern)
@@ -724,31 +723,33 @@
         const { type } = event.data || {};
 
         if (type === 'activity') {
-          // Prefer explicit user-initiated broadcasts. Producers should send { type: 'activity', userInitiated: true }
-          // for real user activity. Otherwise use a throttled fallback to avoid programmatic noise.
+          // Strict: only accept broadcasted activity when sender explicitly marks it user-initiated.
+          // Producers must send { type: 'activity', userInitiated: true } for real user actions.
           const userInitiated = event.data && event.data.userInitiated === true;
           if (userInitiated && isAuthenticated() && !isExcludedPage()) {
+            // Genuine user-initiated broadcast on an applicable page/user session
             resetTimers();
             if (warningShown) {
               hideWarning();
             }
           } else {
-            // Fallback: allow at most one broadcast-origin reset per BROADCAST_MIN_MS window
-            const now = Date.now();
-            const BROADCAST_MIN_MS = 30 * 1000; // 30s
-            if (!isAuthenticated() || isExcludedPage()) {
-              // Don't act on broadcasts for unauthenticated or excluded pages
-              return;
-            }
-            if (now - lastBroadcastResetAt > BROADCAST_MIN_MS) {
-              lastBroadcastResetAt = now;
-              resetTimers();
-              if (warningShown) {
-                hideWarning();
-              }
-              console.log('[INACTIVITY] Broadcast activity accepted (throttled)', event.data);
+            // Distinguish why the broadcast was ignored to avoid false-positive instrumentation:
+            // 1) Not userInitiated => likely noisy producer (count as ignored)
+            // 2) userInitiated but user not authenticated or page excluded => valid broadcast but not applicable here (do NOT count as noisy)
+            if (!userInitiated) {
+              try {
+                window.__inactivityIgnoredBroadcasts = window.__inactivityIgnoredBroadcasts || { count: 0, recent: [] };
+                window.__inactivityIgnoredBroadcasts.count++;
+                window.__inactivityIgnoredBroadcasts.recent.push({ ts: Date.now(), data: event.data });
+                if (window.__inactivityIgnoredBroadcasts.recent.length > 20) {
+                  window.__inactivityIgnoredBroadcasts.recent.shift();
+                }
+              } catch (e) {}
+              console.log('[INACTIVITY] Ignoring non-userInitiated broadcast activity (counted as ignored producer)', { detail: event.data, ignoredCount: window.__inactivityIgnoredBroadcasts && window.__inactivityIgnoredBroadcasts.count });
             } else {
-              console.log('[INACTIVITY] Ignoring broadcast activity (not userInitiated, throttled)', { sinceMs: now - lastBroadcastResetAt, data: event.data });
+              // userInitiated === true but not applicable for this tab (e.g., user not authenticated or page excluded)
+              // Do not count as noisy producer; log for visibility.
+              console.log('[INACTIVITY] Ignoring userInitiated broadcast because session/page not applicable', { userInitiated: true, isAuthenticated: isAuthenticated(), isExcludedPage: isExcludedPage(), detail: event.data });
             }
           }
         } else if (type === 'inactivity-warning') {
