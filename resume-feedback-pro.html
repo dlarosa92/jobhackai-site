@@ -2095,9 +2095,9 @@
       function buildRfPrintHtml() {
         const atsTile = document.getElementById('rf-ats-score-tile');
         const atsScoreHtml = atsTile ? atsTile.innerHTML : '';
-        const roleTips = (window.latestRoleSpecific && window.latestRoleSpecific.sections) ? window.latestRoleSpecific.sections : [];
+        const roleTips = (window.latestRoleSpecific && Array.isArray(window.latestRoleSpecific.sections)) ? window.latestRoleSpecific.sections : [];
         let roleTipsHtml = '';
-        if (roleTips && roleTips.length) {
+        if (Array.isArray(roleTips) && roleTips.length) {
           const sectionsHtml = roleTips.map(s => {
             const heading = escapeHtml(s.section || s.heading || '');
             const tipsArray = (s.tips && Array.isArray(s.tips) && s.tips.length) ? s.tips
