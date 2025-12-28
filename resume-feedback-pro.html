@@ -2090,7 +2090,18 @@
         const atsTile = document.getElementById('rf-ats-score-tile');
         const atsScoreHtml = atsTile ? atsTile.innerHTML : '';
         const roleTips = (window.latestRoleSpecific && window.latestRoleSpecific.sections) ? window.latestRoleSpecific.sections : [];
-        const roleTipsHtml = roleTips.length ? `<section class="rf-print-section"><h3>Role-specific tips</h3><ul>${roleTips.map(s => `<li>${escapeHtml(s.heading || '')}${s.items ? '<ul>' + s.items.map(i => `<li>${escapeHtml(i)}</li>`).join('') + '</ul>' : ''}</li>`).join('')}</ul></section>` : '';
+        let roleTipsHtml = '';
+        if (roleTips && roleTips.length) {
+          const sectionsHtml = roleTips.map(s => {
+            const heading = escapeHtml(s.section || s.heading || '');
+            const tipsArray = (s.tips && Array.isArray(s.tips) && s.tips.length) ? s.tips
+              : (s.items && Array.isArray(s.items) && s.items.length) ? s.items
+              : [];
+            const tipsHtml = tipsArray.length ? `<ul>${tipsArray.map(t => `<li>${escapeHtml(t)}</li>`).join('')}</ul>` : '<div style="color:#6b7280;font-style:italic;">No tips available</div>';
+            return `<div class="rf-print-role-section" style="margin-bottom:8px;"><strong>${heading}</strong>${tipsHtml}</div>`;
+          }).join('');
+          roleTipsHtml = `<section class="rf-print-section"><h3>Role-specific tips</h3>${sectionsHtml}</section>`;
+        }
         const rewrittenText = rewrittenBox.value || rewrittenBox.textContent || '';
         const safeRewritten = escapeHtml(rewrittenText).replace(/\n/g, '<br/>');
 
