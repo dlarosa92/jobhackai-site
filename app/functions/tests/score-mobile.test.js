@@ -28,7 +28,8 @@ iOS Developer with 5 years of experience in developing innovative applications i
     const jobTitleLower = 'ios engineer';
     const ACRONYM_ALLOW = ['ios', 'ml', 'qa'];
     let titleScore = 0;
-    if (ACRONYM_ALLOW.some(a => jobTitleLower.includes(a)) && ACRONYM_ALLOW.some(a => textLower.includes(a))) {
+    // Require the same acronym to appear in both the job title and resume text
+    if (ACRONYM_ALLOW.some(a => jobTitleLower.includes(a) && textLower.includes(a))) {
       titleScore = 10;
     } else {
       const titleWords = jobTitleLower.split(/\s+/).filter(w => w.length > 0);
@@ -37,6 +38,18 @@ iOS Developer with 5 years of experience in developing innovative applications i
     }
 
     assert.strictEqual(titleScore, 10, 'titleScore should be 10 for sample text');
+    
+    // Negative test: job title ML Engineer should NOT score 10 if resume only mentions iOS
+    const jobTitleLower2 = 'ml engineer';
+    let titleScore2 = 0;
+    if (ACRONYM_ALLOW.some(a => jobTitleLower2.includes(a) && textLower.includes(a))) {
+      titleScore2 = 10;
+    } else {
+      const titleWords2 = jobTitleLower2.split(/\s+/).filter(w => w.length > 0);
+      const matchedWords2 = titleWords2.filter(word => word.length > 3 && textLower.includes(word));
+      titleScore2 = Math.round((matchedWords2.length / titleWords2.length) * 10);
+    }
+    assert.strictEqual(titleScore2, 0, 'titleScore should be 0 for ML Engineer when text only mentions iOS');
 
     console.log('score-mobile tests passed');
   } catch (err) {
