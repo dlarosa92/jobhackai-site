@@ -155,6 +155,7 @@ Rules:
 - quickWins: max 3 short bullets.
 - keywordsToAdd: 5-10 items max.
 - feedbackBullets per section: 2-3 items max.
+ - Return section scores on a 0-100 scale if possible; the server will normalize and rescale when needed.
 
 Length caps:
 - headline optimizedText <= 220 chars
@@ -448,8 +449,60 @@ export async function onRequest(context) {
       return jsonResponse(env, { error: 'generation_failed', reason: msg }, 500);
     }
 
+    // --- Normalize section scores and compute weighted overall (server authoritative) ---
+    const WEIGHTS = {
+      headline: 20,
+      summary: 30,
+      experience: 25,
+      skills: 15,
+      recommendations: 10
+    };
+
+    function normalizeTo100(n) {
+      if (typeof n !== 'number' || !Number.isFinite(n)) return null;
+      if (n < 0) return 0;
+      if (n <= 10) return Math.round(n * 10);
+      return Math.round(Math.max(0, Math.min(100, n)));
+    }
+
+    let seenSmallScale = false;
+    let weightSum = 0;
+    let weightedSum = 0;
+    if (output.sections && typeof output.sections === 'object') {
+      for (const [k, sec] of Object.entries(output.sections)) {
+        if (sec && typeof sec.score === 'number') {
+          const originalScore = sec.score;
+          const norm = normalizeTo100(originalScore);
+          if (norm !== null) {
+            if (originalScore <= 10) seenSmallScale = true;
+            output.sections[k].score = norm;
+            if (Object.prototype.hasOwnProperty.call(WEIGHTS, k)) {
+              weightSum += WEIGHTS[k];
+              weightedSum += norm * WEIGHTS[k];
+            }
+          } else {
+            console.warn('[LINKEDIN] section score not numeric for', k, originalScore);
+          }
+        }
+      }
+    }
+
+    let computedOverall = null;
+    if (weightSum > 0) {
+      computedOverall = Math.round(weightedSum / weightSum);
+    }
+
+    const aiOverall = Number.isFinite(output.overallScore) ? normalizeTo100(output.overallScore) : null;
+    const overallScore = computedOverall !== null ? computedOverall : aiOverall !== null ? aiOverall : null;
+
+    if (seenSmallScale) {
+      console.info('[LINKEDIN] AI appears to return 0-10 scale for section scores; normalized to 0-100', {
+        runId: runId,
+        detectedSections: Object.keys(output.sections || {})
+      });
+    }
+
     const updatedAt = Date.now();
-    const overallScore = Number.isFinite(output.overallScore) ? Math.round(output.overallScore) : null;
 
     await db
       .prepare(
@@ -465,7 +518,14 @@ export async function onRequest(context) {
       )
       .bind(
         overallScore,
-        JSON.stringify(output),
+        (function () {
+          try {
+            if (overallScore !== null) output.overallScore = overallScore;
+            return JSON.stringify(output);
+          } catch (e) {
+            return JSON.stringify(output);
+          }
+        })(),
         updatedAt,
         aiResult?.model || null,
         aiResult?.usage?.promptTokens || null,
