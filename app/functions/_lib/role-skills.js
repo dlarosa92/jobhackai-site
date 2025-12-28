@@ -203,6 +203,44 @@ export const ROLE_SKILL_TEMPLATES = {
     ]
   },
 
+  mobile_developer: {
+    must_have: [
+      "swift",
+      "swiftui",
+      "xcode",
+      "ios",
+      "objective-c",
+      "uikit",
+      "cocoa"
+    ],
+    nice_to_have: [
+      "combine",
+      "mvvm",
+      "core data",
+      "rest api",
+      "firebase",
+      "revenuecat"
+    ],
+    tools: ["Xcode", "Git", "CocoaPods", "Fastlane"]
+  },
+  android_developer: {
+    must_have: [
+      "kotlin",
+      "android",
+      "android sdk",
+      "android studio",
+      "java"
+    ],
+    nice_to_have: [
+      "kotlin coroutines",
+      "jetpack compose",
+      "mvvm",
+      "rest api",
+      "firebase"
+    ],
+    tools: ["Android Studio", "Gradle", "Git", "Firebase", "ADB"]
+  },
+
   data_engineer: {
     must_have: [
       "ETL / ELT pipelines",
