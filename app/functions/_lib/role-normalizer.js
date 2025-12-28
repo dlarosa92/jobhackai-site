@@ -90,6 +90,11 @@ export function normalizeRoleToFamily(roleLabel) {
     return "data_engineer";
   }
 
+  // Android-specific mapping (prioritize Android before generic mobile)
+  if (/\bandroid\b/.test(cleaned) || /\bandroid engineer\b/.test(cleaned) || /\bandroid developer\b/.test(cleaned)) {
+    return "android_developer";
+  }
+ 
   // Data Scientist
   if (cleaned.includes("data scientist")) {
     return "data_scientist";

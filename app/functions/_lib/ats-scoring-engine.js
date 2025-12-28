@@ -368,7 +368,12 @@ function scoreKeywordRelevanceWithTemplates(resumeText, jobTitle, expectedMustHa
       // Special-case short acronyms (e.g. "ios", "ml", "qa") so they are not ignored.
       // Require the *same* acronym to appear in both the job title and the resume text.
       const ACRONYM_ALLOW = ['ios', 'ml', 'qa'];
-      if (ACRONYM_ALLOW.some(a => jobTitleLower.includes(a) && textLower.includes(a))) {
+      // Use word-boundary regexes to avoid substring matches (e.g., "ml" in "html")
+      if (ACRONYM_ALLOW.some(a => {
+        const safe = a.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&');
+        const re = new RegExp('\\\\b' + safe + '\\\\b', 'i');
+        return re.test(jobTitleLower) && re.test(textLower);
+      })) {
         titleScore = 10;
       } else {
         const titleWords = jobTitleLower.split(/\s+/).filter(w => w.length > 0);

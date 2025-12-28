@@ -10,6 +10,8 @@ const assert = require('assert');
 
     // Test 1: mapping returns mobile_developer
     assert.strictEqual(normalizeRoleToFamily('iOS Engineer'), 'mobile_developer');
+    // Test 1b: android mobile mapping
+    assert.strictEqual(normalizeRoleToFamily('Android Mobile Developer'), 'android_developer');
 
     // Test 2: template exists and contains swift as a must_have
     assert.ok(ROLE_SKILL_TEMPLATES.mobile_developer, 'mobile_developer template missing');
