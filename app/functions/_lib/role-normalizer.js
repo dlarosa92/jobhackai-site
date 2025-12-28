@@ -59,6 +59,17 @@ export function normalizeRoleToFamily(roleLabel) {
   if (cleaned.includes("cloud engineer")) {
     return "cloud_engineer";
   }
+  
+  // Mobile / iOS (explicit mapping for short labels like "iOS")
+  if (
+    cleaned.includes("ios") ||
+    cleaned.includes("ios engineer") ||
+    cleaned.includes("mobile app") ||
+    cleaned.includes("mobile developer") ||
+    cleaned.includes("mobile")
+  ) {
+    return "mobile_developer";
+  }
 
   // Data Engineer
   if (cleaned.includes("data engineer")) {

@@ -203,6 +203,27 @@ export const ROLE_SKILL_TEMPLATES = {
     ]
   },
 
+  mobile_developer: {
+    must_have: [
+      "swift",
+      "swiftui",
+      "xcode",
+      "ios",
+      "objective-c",
+      "uikit",
+      "cocoa"
+    ],
+    nice_to_have: [
+      "combine",
+      "mvvm",
+      "core data",
+      "rest api",
+      "firebase",
+      "revenuecat"
+    ],
+    tools: ["Xcode", "Git", "CocoaPods", "Fastlane"]
+  },
+
   data_engineer: {
     must_have: [
       "ETL / ELT pipelines",

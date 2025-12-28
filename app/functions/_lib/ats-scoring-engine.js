@@ -365,12 +365,18 @@ function scoreKeywordRelevanceWithTemplates(resumeText, jobTitle, expectedMustHa
       titleScore = 10;
     } else {
       // Partial match
-      const titleWords = jobTitleLower.split(/\s+/).filter(w => w.length > 0);
-      if (titleWords.length > 0) {
-        const matchedWords = titleWords.filter(word => 
-          word.length > 3 && textLower.includes(word)
-        );
-        titleScore = Math.round((matchedWords.length / titleWords.length) * 10);
+      // Special-case short acronyms (e.g. "ios", "ml", "qa") so they are not ignored
+      const ACRONYM_ALLOW = ['ios', 'ml', 'qa'];
+      if (ACRONYM_ALLOW.some(a => jobTitleLower.includes(a)) && ACRONYM_ALLOW.some(a => textLower.includes(a))) {
+        titleScore = 10;
+      } else {
+        const titleWords = jobTitleLower.split(/\s+/).filter(w => w.length > 0);
+        if (titleWords.length > 0) {
+          const matchedWords = titleWords.filter(word => 
+            word.length > 3 && textLower.includes(word)
+          );
+          titleScore = Math.round((matchedWords.length / titleWords.length) * 10);
+        }
       }
     }
   }
