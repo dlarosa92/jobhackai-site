@@ -500,8 +500,12 @@ export async function onRequest(context) {
 
     function normalizeTo100(n) {
       if (typeof n !== 'number' || !Number.isFinite(n)) return null;
-      // Heuristic: if model returned 0-10 scale, scale up
-      if (n <= 10) return Math.round(n * 10);
+      // Defensive: clamp negatives to 0
+      if (n < 0) return 0;
+      // Heuristic scaling for 0-10 model outputs: only scale strictly less than 10.
+      // Treat 10 as a valid 10/100 value (do not scale 10 -> 100).
+      if (n < 10) return Math.round(n * 10);
+      // Otherwise clamp to 0-100 range
       return Math.round(Math.max(0, Math.min(100, n)));
     }
 
