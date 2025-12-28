@@ -441,6 +441,26 @@ section {
   justify-content: center;
 }
 
+/* Ensure resume rewrite action buttons have unified sizing and border weight */
+#rf-rewrite-content .btn,
+#rf-rewrite-content .btn-outline,
+#rf-rewrite-content .btn-secondary {
+  /* Match primary sizing tokens but keep color/style from modifiers */
+  border-width: 2px !important;
+  padding: 0.7rem 1.5rem !important;
+  border-radius: 12px !important;
+  font-weight: 700;
+  height: 56px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Ensure the outline variant shows correct border color while keeping width */
+#rf-rewrite-content .btn-outline {
+  border-style: solid;
+}
+
 .btn-secondary,
 .btn-secondary * {
   color: #fff !important;
