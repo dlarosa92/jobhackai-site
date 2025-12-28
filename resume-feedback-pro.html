@@ -2138,17 +2138,23 @@
       }
 
       // Populate print container and trigger print
-      let printContainer = document.getElementById('rf-print');
+      // Ensure the print container is appended to document.body before printing.
+      // If an existing #rf-print is present but not a child of <body> (e.g., inside .rf-main-column),
+      // create a temporary container in <body> instead to ensure it is visible during print.
+      const existingPrint = document.getElementById('rf-print');
+      let printContainer = null;
       let createdTempPrintContainer = false;
-      if (!printContainer) {
-        // If container missing, create a temp element and mark it for removal after print
+      if (existingPrint && existingPrint.parentElement === document.body) {
+        printContainer = existingPrint;
+      } else {
+        // Create a temporary container attached to body so it will be visible during print.
         printContainer = document.createElement('div');
         printContainer.id = 'rf-print';
         printContainer.style.display = 'none';
         document.body.appendChild(printContainer);
         createdTempPrintContainer = true;
       }
-      // Populate content (works for both existing and temp container)
+      // Populate content into the container attached to <body>.
       printContainer.innerHTML = buildRfPrintHtml();
 
       const prevTitle = document.title;
