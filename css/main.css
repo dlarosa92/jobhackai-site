@@ -447,6 +447,9 @@ section {
 #rf-rewrite-content .btn-secondary {
   /* Match primary sizing tokens but keep color/style from modifiers */
   border-width: 2px !important;
+  /* Ensure border is present (solid) so border-width is honored; color is transparent by default */
+  border-style: solid !important;
+  border-color: transparent !important;
   padding: 0.7rem 1.5rem !important;
   border-radius: 12px !important;
   font-weight: 700;
@@ -456,9 +459,9 @@ section {
   justify-content: center;
 }
 
-/* Ensure the outline variant shows correct border color while keeping width */
+/* Restore visible outline color for outline variant while keeping unified width */
 #rf-rewrite-content .btn-outline {
-  border-style: solid;
+  border-color: #1976D2 !important;
 }
 
 .btn-secondary,
