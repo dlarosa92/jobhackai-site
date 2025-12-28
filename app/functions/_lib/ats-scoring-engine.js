@@ -370,8 +370,8 @@ function scoreKeywordRelevanceWithTemplates(resumeText, jobTitle, expectedMustHa
       const ACRONYM_ALLOW = ['ios', 'ml', 'qa'];
       // Use word-boundary regexes to avoid substring matches (e.g., "ml" in "html")
       if (ACRONYM_ALLOW.some(a => {
-        const safe = a.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&');
-        const re = new RegExp('\\\\b' + safe + '\\\\b', 'i');
+        const safe = a.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\$&');
+        const re = new RegExp(`\\b${safe}\\b`, 'i');
         return re.test(jobTitleLower) && re.test(textLower);
       })) {
         titleScore = 10;
