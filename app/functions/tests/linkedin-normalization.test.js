@@ -1,11 +1,11 @@
 const assert = require('assert');
 
 function normalizeTo100(n) {
-  const num = Number(n);
-  if (!Number.isFinite(num)) return null;
-  // Match production heuristic: only scale values strictly less than 10 (treat 10 as 10/100)
-  if (num < 10) return Math.round(num * 10);
-  return Math.round(Math.max(0, Math.min(100, num)));
+  // Mirror production behavior: expect numbers only
+  if (typeof n !== 'number' || !Number.isFinite(n)) return null;
+  if (n < 0) return 0;
+  if (n <= 10) return Math.round(n * 10);
+  return Math.round(Math.max(0, Math.min(100, n)));
 }
 
 const WEIGHTS = {

@@ -502,9 +502,8 @@ export async function onRequest(context) {
       if (typeof n !== 'number' || !Number.isFinite(n)) return null;
       // Defensive: clamp negatives to 0
       if (n < 0) return 0;
-      // Heuristic scaling for 0-10 model outputs: only scale strictly less than 10.
-      // Treat 10 as a valid 10/100 value (do not scale 10 -> 100).
-      if (n < 10) return Math.round(n * 10);
+      // Heuristic scaling for 0-10 model outputs: scale <= 10 to cover 10->100 case
+      if (n <= 10) return Math.round(n * 10);
       // Otherwise clamp to 0-100 range
       return Math.round(Math.max(0, Math.min(100, n)));
     }
@@ -570,7 +569,15 @@ export async function onRequest(context) {
       )
       .bind(
         overallScore,
-        JSON.stringify(output),
+        // Ensure output.overallScore reflects server-computed value before saving/returning
+        (function () {
+          try {
+            if (overallScore !== null) output.overallScore = overallScore;
+            return JSON.stringify(output);
+          } catch (e) {
+            return JSON.stringify(output);
+          }
+        })(),
         updatedAt,
         aiResult?.model || null,
         aiResult?.usage?.promptTokens || null,

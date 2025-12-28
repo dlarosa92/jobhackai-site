@@ -461,7 +461,7 @@ export async function onRequest(context) {
     function normalizeTo100(n) {
       if (typeof n !== 'number' || !Number.isFinite(n)) return null;
       if (n < 0) return 0;
-      if (n < 10) return Math.round(n * 10);
+      if (n <= 10) return Math.round(n * 10);
       return Math.round(Math.max(0, Math.min(100, n)));
     }
 
@@ -518,7 +518,14 @@ export async function onRequest(context) {
       )
       .bind(
         overallScore,
-        JSON.stringify(output),
+        (function () {
+          try {
+            if (overallScore !== null) output.overallScore = overallScore;
+            return JSON.stringify(output);
+          } catch (e) {
+            return JSON.stringify(output);
+          }
+        })(),
         updatedAt,
         aiResult?.model || null,
         aiResult?.usage?.promptTokens || null,
