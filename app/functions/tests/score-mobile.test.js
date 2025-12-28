@@ -32,8 +32,8 @@ iOS Developer with 5 years of experience in developing innovative applications i
     let titleScore = 0;
     // Require the same acronym to appear in both the job title and resume text
     if (ACRONYM_ALLOW.some(a => {
-      const safe = a.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&');
-      const re = new RegExp(`\\\\b${a}\\\\b`, 'i');
+      const safe = a.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\$&');
+      const re = new RegExp(`\\b${safe}\\b`, 'i');
       return re.test(jobTitleLower) && re.test(textLower);
     })) {
       titleScore = 10;
@@ -49,7 +49,8 @@ iOS Developer with 5 years of experience in developing innovative applications i
     const jobTitleLower2 = 'ml engineer';
     let titleScore2 = 0;
     if (ACRONYM_ALLOW.some(a => {
-      const re2 = new RegExp(`\\\\b${a}\\\\b`, 'i');
+      const safe2 = a.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\$&');
+      const re2 = new RegExp(`\\b${safe2}\\b`, 'i');
       return re2.test(jobTitleLower2) && re2.test(textLower);
     })) {
       titleScore2 = 10;
