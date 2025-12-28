@@ -1210,7 +1210,7 @@
         window._rewriteCooldownInterval = null;
       }
       // Reset button label/state
-      const regenBtn = document.querySelector('#rf-rewrite-content .btn.btn-secondary');
+      const regenBtn = document.querySelector('#rf-rewrite-content #rf-generate');
       if (regenBtn) {
         regenBtn.disabled = false;
         const defaultLabel = 'Generate Rewrite';
@@ -2321,7 +2321,7 @@
     }
 
     function startInlineRewriteCountdown(retryAfterSeconds) {
-      const regenBtn = document.querySelector('#rf-rewrite-content .btn.btn-secondary');
+      const regenBtn = document.querySelector('#rf-rewrite-content #rf-generate');
       const container = document.getElementById('rf-rewrite-cooldown');
 
       clearAllRewriteCooldownTimers();
@@ -2374,7 +2374,7 @@
     async function renderRewriteCooldownIndicator() {
       const container = document.getElementById('rf-rewrite-cooldown');
       const setRegenEnabled = () => {
-        const regenBtn = document.querySelector('#rf-rewrite-content .btn.btn-secondary');
+        const regenBtn = document.querySelector('#rf-rewrite-content #rf-generate');
         if (regenBtn) regenBtn.disabled = false;
       };
       if (!container || typeof window.renderUsageIndicator !== 'function') {
@@ -2454,7 +2454,7 @@
             container.appendChild(helper);
           }
 
-          const regenBtn = document.querySelector('#rf-rewrite-content .btn.btn-secondary');
+          const regenBtn = document.querySelector('#rf-rewrite-content #rf-generate');
           if (regenBtn) regenBtn.disabled = cooldownValue > 0;
           if (cooldownValue === 0) setRegenEnabled();
         };
@@ -2492,7 +2492,7 @@
     // Resume Rewriting Buttons - Fixed selectors to match actual HTML
     const attachRewriteButtonListeners = () => {
       const copyBtn = document.querySelector('#rf-rewrite-content .btn.btn-primary');
-      const regenRewriteBtn = document.querySelector('#rf-rewrite-content .btn.btn-secondary');
+      const regenRewriteBtn = document.querySelector('#rf-rewrite-content #rf-generate');
       const downloadBtn = document.getElementById('rf-download');
       
       if (copyBtn) {
@@ -7465,7 +7465,7 @@
         <div style="margin-top:1.2rem;">
           <button class="btn btn-primary" style="display:none;">Copy Rewritten Resume</button>
           <button id="rf-download" class="btn-outline" style="display:none;" disabled aria-disabled="true" type="button">Download PDF</button>
-          <button class="btn btn-secondary">Generate Rewrite</button>
+          <button id="rf-generate" class="btn-outline" type="button">Generate Rewrite</button>
           <div id="rf-rewrite-cooldown" style="margin-top:0.5rem;"></div>
         </div>
 
