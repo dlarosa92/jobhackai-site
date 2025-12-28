@@ -127,22 +127,22 @@
   font-size: var(--font-size-xs);
   font-weight: var(--font-weight-semibold);
   white-space: nowrap;
-  background: #ef4444;
-  color: #fff;
-  text-transform: capitalize;
-  border: 1px solid rgba(239, 68, 68, 0.25);
-}
-
-.lo-plan-pill[data-plan="premium"] {
-  background: rgba(239, 68, 68, 0.10);
-  border-color: rgba(239, 68, 68, 0.25);
-  color: #b91c1c;
+  background: rgba(107, 114, 128, 0.08);
+  color: var(--color-text-secondary);
+  text-transform: none;
+  border: 1px solid var(--color-divider);
 }
 
 .lo-plan-pill--free {
   background: var(--color-text-muted);
   color: #fff;
   border: 1px solid var(--color-divider);
+}
+
+.lo-plan-pill[data-plan="premium"] {
+  background: #C62828;
+  border-color: #C62828;
+  color: #fff;
 }
 
 .lo-field {

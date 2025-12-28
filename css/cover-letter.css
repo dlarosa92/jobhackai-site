@@ -46,9 +46,9 @@
 }
 
 .cl-plan-badge[data-plan="premium"] {
-  background: rgba(239, 68, 68, 0.10);
-  border-color: rgba(239, 68, 68, 0.25);
-  color: #b91c1c;
+  background: #C62828;
+  border-color: #C62828;
+  color: #fff;
 }
 
 .cl-subtitle {
