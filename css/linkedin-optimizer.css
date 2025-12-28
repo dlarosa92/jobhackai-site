@@ -133,6 +133,12 @@
   border: 1px solid rgba(239, 68, 68, 0.25);
 }
 
+.lo-plan-pill[data-plan="premium"] {
+  background: rgba(239, 68, 68, 0.10);
+  border-color: rgba(239, 68, 68, 0.25);
+  color: #b91c1c;
+}
+
 .lo-plan-pill--free {
   background: var(--color-text-muted);
   color: #fff;
