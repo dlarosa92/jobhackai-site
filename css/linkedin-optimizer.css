@@ -129,7 +129,7 @@
   white-space: nowrap;
   background: rgba(107, 114, 128, 0.08);
   color: var(--color-text-secondary);
-  text-transform: none;
+  text-transform: capitalize;
   border: 1px solid var(--color-divider);
 }
 
@@ -143,6 +143,7 @@
   background: #C62828;
   border-color: #C62828;
   color: #fff;
+  text-transform: none;
 }
 
 .lo-field {

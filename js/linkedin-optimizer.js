@@ -267,7 +267,7 @@ function getRecruiterBoostLabel(score) {
 function setPlanPill(plan) {
   if (!els.planPill) return;
   const normalized = String(plan || 'free').toLowerCase();
-  const label = normalized === 'premium' ? 'Premium' : normalized === 'free' ? 'Free' : normalized;
+  const label = normalized === 'premium' ? 'Premium Plan' : normalized === 'free' ? 'Free' : normalized;
   els.planPill.textContent = label;
   els.planPill.dataset.plan = normalized;
   els.planPill.classList.toggle('lo-plan-pill--premium', normalized === 'premium');
