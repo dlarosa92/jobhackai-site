@@ -130,18 +130,13 @@
   background: #ef4444;
   color: #fff;
   text-transform: capitalize;
-  border: 1px solid var(--color-divider);
-}
-
-.lo-plan-pill[data-plan="premium"] {
-  background: rgba(0, 123, 255, 0.10);
-  border-color: rgba(0, 123, 255, 0.25);
-  color: #0b3b78;
+  border: 1px solid rgba(239, 68, 68, 0.25);
 }
 
 .lo-plan-pill--free {
   background: var(--color-text-muted);
   color: #fff;
+  border: 1px solid var(--color-divider);
 }
 
 .lo-field {
