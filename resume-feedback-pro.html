@@ -2046,20 +2046,8 @@
         downloadBtn.style.display = isVisible ? 'inline-block' : 'none';
         downloadBtn.disabled = !isVisible;
         downloadBtn.setAttribute('aria-disabled', (!isVisible).toString());
-        // Preserve SVG icon by updating the label span instead of replacing button children
-        const label = downloadBtn.querySelector('.rf-download-label');
-        if (label) {
-          label.textContent = 'Download PDF';
-        } else {
-          // Fallback: avoid appending duplicate text nodes on repeated calls.
-          // If a plain text node exists, replace its value; otherwise append a single text node.
-          const existingTextNode = Array.from(downloadBtn.childNodes).find(n => n.nodeType === Node.TEXT_NODE && n.nodeValue && n.nodeValue.trim().length);
-          if (existingTextNode) {
-            existingTextNode.nodeValue = 'Download PDF';
-          } else {
-            downloadBtn.appendChild(document.createTextNode('Download PDF'));
-          }
-        }
+        // Match cover-letter style: keep simple text label
+        downloadBtn.textContent = 'Download PDF';
       }
     };
 
@@ -7476,15 +7464,7 @@
 
         <div style="margin-top:1.2rem;">
           <button class="btn btn-primary" style="display:none;">Copy Rewritten Resume</button>
-          <button id="rf-download" class="btn btn-outline" style="display:none;" disabled aria-disabled="true" type="button">
-            <!-- download icon (small) -->
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false" style="vertical-align:middle;margin-right:8px;">
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-              <polyline points="7 10 12 15 17 10"/>
-              <line x1="12" y1="15" x2="12" y2="3"/>
-            </svg>
-            <span class="rf-download-label">Download PDF</span>
-          </button>
+          <button id="rf-download" class="btn-outline" style="display:none;" disabled aria-disabled="true" type="button">Download PDF</button>
           <button class="btn btn-secondary">Generate Rewrite</button>
           <div id="rf-rewrite-cooldown" style="margin-top:0.5rem;"></div>
         </div>

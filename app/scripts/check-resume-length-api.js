@@ -79,7 +79,7 @@ function queryD1(sql) {
   });
 }
 
-function getKVNamespaceId() {
+function getKVNamespaceId(env = 'production') {
   return new Promise((resolve, reject) => {
     const options = {
       hostname: 'api.cloudflare.com',
@@ -98,12 +98,18 @@ function getKVNamespaceId() {
         try {
           const result = JSON.parse(data);
           if (result.success && result.result && result.result.length > 0) {
-            // Find namespace that matches production pattern
-            const namespace = result.result.find(ns => 
-              ns.title.toLowerCase().includes('production') || 
-              ns.title.toLowerCase().includes('prod') ||
-              ns.title.toLowerCase().includes('jobhackai')
-            ) || result.result[0];
+            // Prefer namespace that matches the requested environment (dev/qa/production).
+            // Fall back to production-like names, then first namespace.
+            const lowerEnv = String(env || 'production').toLowerCase();
+            // First try to find namespace with environment name in title
+            let namespace = result.result.find(ns => ns.title && ns.title.toLowerCase().includes(lowerEnv));
+            if (!namespace) {
+              // Then prefer common production naming
+              namespace = result.result.find(ns => {
+                const t = (ns.title || '').toLowerCase();
+                return t.includes('production') || t.includes('prod') || t.includes('jobhackai');
+              }) || result.result[0];
+            }
             resolve(namespace.id);
           } else {
             reject(new Error('No KV namespaces found'));
@@ -184,8 +190,8 @@ async function main() {
     // Step 3: Try to get resume from KV directly
     console.log('\nStep 3: Searching for resume in KV...');
     
-    // Get KV namespace ID
-    const namespaceId = await getKVNamespaceId();
+    // Get KV namespace ID for the requested environment (prefer namespace matching environment)
+    const namespaceId = await getKVNamespaceId(environment);
     console.log(`✓ Found KV namespace: ${namespaceId}\n`);
     
     // Try to find recent resume keys for this user

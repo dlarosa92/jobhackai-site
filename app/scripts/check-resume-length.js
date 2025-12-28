@@ -157,7 +157,7 @@ try {
     console.log(`  File Size: ${fileSize} bytes`);
     console.log(`  Text Length: ${textLength.toLocaleString()} characters`);
     console.log(`  Word Count: ${wordCount.toLocaleString()} words`);
-    console.log(`  Character/Word Ratio: ${(textLength / wordCount).toFixed(2)} chars/word\n`);
+    console.log(`  Character/Word Ratio: ${wordCount > 0 ? (textLength / wordCount).toFixed(2) : 'N/A'} chars/word\n`);
     
     // Analyze if length could be causing delays
     console.log('Performance Analysis:');
