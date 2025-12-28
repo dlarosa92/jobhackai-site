@@ -59,6 +59,10 @@ export function normalizeRoleToFamily(roleLabel) {
   if (cleaned.includes("cloud engineer")) {
     return "cloud_engineer";
   }
+  // Android-specific mapping (prioritize Android before generic mobile)
+  if (/\bandroid\b/.test(cleaned) || /\bandroid engineer\b/.test(cleaned) || /\bandroid developer\b/.test(cleaned)) {
+    return "android_developer";
+  }
   
   // Mobile / iOS (explicit mapping for short labels like "iOS")
   // Use word-boundary regexes to avoid matching substrings like "automobile" or "bios".
@@ -89,12 +93,6 @@ export function normalizeRoleToFamily(roleLabel) {
   if (cleaned.includes("data engineer")) {
     return "data_engineer";
   }
-
-  // Android-specific mapping (prioritize Android before generic mobile)
-  if (/\bandroid\b/.test(cleaned) || /\bandroid engineer\b/.test(cleaned) || /\bandroid developer\b/.test(cleaned)) {
-    return "android_developer";
-  }
- 
   // Data Scientist
   if (cleaned.includes("data scientist")) {
     return "data_scientist";
