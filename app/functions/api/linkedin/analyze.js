@@ -156,6 +156,7 @@ Rules:
 - quickWins: max 3 short bullets.
 - keywordsToAdd: 5-10 items max.
 - feedbackBullets per section: 2-3 items max.
+ - Return section scores on a 0-100 scale if possible; the server will normalize and rescale when needed.
 
 Length caps:
 - headline optimizedText <= 220 chars
@@ -487,9 +488,66 @@ export async function onRequest(context) {
         .run();
       return jsonResponse(env, { error: 'generation_failed', reason: msg }, 500);
     }
+    
+    // --- Normalize section scores and compute weighted overall (server authoritative) ---
+    const WEIGHTS = {
+      headline: 20,
+      summary: 30,
+      experience: 25,
+      skills: 15,
+      recommendations: 10
+    };
+
+    function normalizeTo100(n) {
+      if (typeof n !== 'number' || !Number.isFinite(n)) return null;
+      // Heuristic: if model returned 0-10 scale, scale up
+      if (n <= 10) return Math.round(n * 10);
+      return Math.round(Math.max(0, Math.min(100, n)));
+    }
+
+    // Normalize all section scores and detect scale mismatches
+    let seenSmallScale = false;
+    let weightSum = 0;
+    let weightedSum = 0; // sum(normalized * weight)
+    if (output.sections && typeof output.sections === 'object') {
+      for (const [k, sec] of Object.entries(output.sections)) {
+        if (sec && typeof sec.score === 'number') {
+          const norm = normalizeTo100(sec.score);
+          if (norm === null) {
+            // leave as-is (will be coerced later), but log
+            console.warn('[LINKEDIN] section score not numeric for', k, sec.score);
+          } else {
+            // replace with normalized score
+            output.sections[k].score = norm;
+            // accumulate weighted sum if k in WEIGHTS
+            if (Object.prototype.hasOwnProperty.call(WEIGHTS, k)) {
+              weightSum += WEIGHTS[k];
+              weightedSum += norm * WEIGHTS[k];
+            }
+            if (sec.score <= 10) seenSmallScale = true;
+          }
+        }
+      }
+    }
+
+    // Compute overall: rescale to 0-100 based on available weights (normalize-to-100 behavior)
+    let computedOverall = null;
+    if (weightSum > 0) {
+      // weighted average = (weightedSum / weightSum)
+      computedOverall = Math.round(weightedSum / weightSum);
+    }
+
+    const aiOverall = Number.isFinite(output.overallScore) ? normalizeTo100(output.overallScore) : null;
+    const overallScore = computedOverall !== null ? computedOverall : aiOverall !== null ? aiOverall : null;
+
+    if (seenSmallScale) {
+      console.info('[LINKEDIN] AI appears to return 0-10 scale for section scores; normalized to 0-100', {
+        runId: runId,
+        detectedSections: Object.keys(output.sections || {})
+      });
+    }
 
     const updatedAt = Date.now();
-    const overallScore = Number.isFinite(output.overallScore) ? Math.round(output.overallScore) : null;
 
     await db
       .prepare(

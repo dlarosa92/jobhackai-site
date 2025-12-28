@@ -32,6 +32,13 @@ function timeAgo(tsMs) {
   return `${y}y ago`;
 }
 
+function normalizeTo100(n) {
+  const num = Number(n);
+  if (!Number.isFinite(num)) return 0;
+  if (num <= 10) return Math.round(num * 10);
+  return Math.round(Math.max(0, Math.min(100, num)));
+}
+
 function formatDateISO(tsMs) {
   try {
     const d = new Date(Number(tsMs || Date.now()));
@@ -276,6 +283,10 @@ function buildScoreMeta(run) {
     when
   ].filter(Boolean);
   let meta = escapeHtml(parts.join(' • '));
+  // Hint when recommendations missing
+  if (run && run.sections && !run.sections.recommendations) {
+    meta += ' <span class="lo-score-hint" title="Add Recommendations to earn up to +10 pts">+10 pts available for Recommendations</span>';
+  }
   if (run.deduped) {
     meta += ' <span class="lo-dedupe-note" title="We found a previous run with the same inputs, so we reused that result.">Loaded from history</span>';
   } else if (run.loadedFromHistory) {
@@ -356,7 +367,8 @@ function renderSections(sections, originalInputsOverride) {
   els.sections.innerHTML = present
     .map((k) => {
       const s = sections[k];
-      const score = Math.round(Number(s.score || 0));
+      const rawScore = Number(s.score || 0);
+      const score = normalizeTo100(rawScore);
       const label = String(s.label || '');
       const bullets = Array.isArray(s.feedbackBullets) ? s.feedbackBullets.slice(0, 3) : [];
       const optimized = String(s.optimizedText || '').trim();
@@ -380,7 +392,14 @@ function renderSections(sections, originalInputsOverride) {
             <div>
               <div class="lo-section-header-row">
                 <span class="lo-card-title lo-section-title">${escapeHtml(sectionTitle(k))}</span>
-                <span class="lo-badge">${score}/100</span>
+                ${(() => {
+                  const SECTION_MAX = { headline: 20, summary: 30, experience: 25, skills: 15, recommendations: 10 };
+                  const max = SECTION_MAX[k] || 100;
+                  const points = Math.round((score / 100) * max);
+                  const badgeText = `${points}/${max}`;
+                  const badgeTitle = `${score}/100`;
+                  return `<span class="lo-badge" title="${escapeHtml(badgeTitle)}">${escapeHtml(badgeText)}</span>`;
+                })()}
               </div>
               <div class="lo-section-label">${escapeHtml(label)}</div>
             </div>
