@@ -512,11 +512,15 @@ export async function onRequest(context) {
     if (output.sections && typeof output.sections === 'object') {
       for (const [k, sec] of Object.entries(output.sections)) {
         if (sec && typeof sec.score === 'number') {
-          const norm = normalizeTo100(sec.score);
+          // capture original reported score before mutating
+          const originalScore = sec.score;
+          const norm = normalizeTo100(originalScore);
           if (norm === null) {
             // leave as-is (will be coerced later), but log
-            console.warn('[LINKEDIN] section score not numeric for', k, sec.score);
+            console.warn('[LINKEDIN] section score not numeric for', k, originalScore);
           } else {
+            // detect if original was in small 0-10 scale
+            if (originalScore <= 10) seenSmallScale = true;
             // replace with normalized score
             output.sections[k].score = norm;
             // accumulate weighted sum if k in WEIGHTS
@@ -524,7 +528,6 @@ export async function onRequest(context) {
               weightSum += WEIGHTS[k];
               weightedSum += norm * WEIGHTS[k];
             }
-            if (sec.score <= 10) seenSmallScale = true;
           }
         }
       }

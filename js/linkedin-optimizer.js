@@ -35,7 +35,7 @@ function timeAgo(tsMs) {
 function normalizeTo100(n) {
   const num = Number(n);
   if (!Number.isFinite(num)) return 0;
-  if (num <= 10) return Math.round(num * 10);
+  // Assume server provides authoritative 0-100 scores; only clamp/floor.
   return Math.round(Math.max(0, Math.min(100, num)));
 }
 

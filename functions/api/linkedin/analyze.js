@@ -470,16 +470,17 @@ export async function onRequest(context) {
     if (output.sections && typeof output.sections === 'object') {
       for (const [k, sec] of Object.entries(output.sections)) {
         if (sec && typeof sec.score === 'number') {
-          const norm = normalizeTo100(sec.score);
+          const originalScore = sec.score;
+          const norm = normalizeTo100(originalScore);
           if (norm !== null) {
+            if (originalScore <= 10) seenSmallScale = true;
             output.sections[k].score = norm;
             if (Object.prototype.hasOwnProperty.call(WEIGHTS, k)) {
               weightSum += WEIGHTS[k];
               weightedSum += norm * WEIGHTS[k];
             }
-            if (sec.score <= 10) seenSmallScale = true;
           } else {
-            console.warn('[LINKEDIN] section score not numeric for', k, sec.score);
+            console.warn('[LINKEDIN] section score not numeric for', k, originalScore);
           }
         }
       }
