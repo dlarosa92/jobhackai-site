@@ -2051,8 +2051,14 @@
         if (label) {
           label.textContent = 'Download PDF';
         } else {
-          // Fallback: ensure button has readable text but do not remove icon
-          downloadBtn.appendChild(document.createTextNode('Download PDF'));
+          // Fallback: avoid appending duplicate text nodes on repeated calls.
+          // If a plain text node exists, replace its value; otherwise append a single text node.
+          const existingTextNode = Array.from(downloadBtn.childNodes).find(n => n.nodeType === Node.TEXT_NODE && n.nodeValue && n.nodeValue.trim().length);
+          if (existingTextNode) {
+            existingTextNode.nodeValue = 'Download PDF';
+          } else {
+            downloadBtn.appendChild(document.createTextNode('Download PDF'));
+          }
         }
       }
     };
@@ -7456,8 +7462,9 @@
 
           body { background: #fff !important; }
           #rf-print { display: block !important; }
-          /* Ensure print container card styles are neutral for multi-page output */
-          #rf-print .rf-card { box-shadow: none !important; border-radius: 0 !important; padding: 0 !important; margin: 0 0 1rem 0 !important; }
+          /* Ensure print container card styles are neutral for multi-page output
+             and explicitly make print cards visible even though .rf-card is hidden above. */
+          #rf-print .rf-card { display: block !important; box-shadow: none !important; border-radius: 0 !important; padding: 0 !important; margin: 0 0 1rem 0 !important; }
         }
         </style>
 
