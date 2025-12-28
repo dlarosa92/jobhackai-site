@@ -464,6 +464,11 @@ section {
   border-color: #1976D2 !important;
 }
 
+/* Ensure filled secondary variant inside rewrite tile doesn't get extra shadow */
+#rf-rewrite-content .btn-secondary {
+  box-shadow: none !important;
+}
+
 .btn-secondary,
 .btn-secondary * {
   color: #fff !important;
