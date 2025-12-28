@@ -2033,13 +2033,143 @@
       }
     };
 
-    // Controls when the copy button is shown (only after we have rewrite content)
+    // Controls when the post-rewrite action buttons are shown (only after we have rewrite content)
     const setCopyRewriteVisibility = (isVisible) => {
       const copyBtn = document.querySelector('#rf-rewrite-content .btn.btn-primary');
-      if (!copyBtn) return;
-      copyBtn.style.display = isVisible ? 'inline-block' : 'none';
-      copyBtn.disabled = !isVisible;
-      if (!isVisible) copyBtn.textContent = 'Copy Rewritten Resume';
+      const downloadBtn = document.getElementById('rf-download');
+      if (copyBtn) {
+        copyBtn.style.display = isVisible ? 'inline-block' : 'none';
+        copyBtn.disabled = !isVisible;
+        if (!isVisible) copyBtn.textContent = 'Copy Rewritten Resume';
+      }
+      if (downloadBtn) {
+        downloadBtn.style.display = isVisible ? 'inline-block' : 'none';
+        downloadBtn.disabled = !isVisible;
+        downloadBtn.setAttribute('aria-disabled', (!isVisible).toString());
+        // Preserve SVG icon by updating the label span instead of replacing button children
+        const label = downloadBtn.querySelector('.rf-download-label');
+        if (label) {
+          label.textContent = 'Download PDF';
+        } else {
+          // Fallback: avoid appending duplicate text nodes on repeated calls.
+          // If a plain text node exists, replace its value; otherwise append a single text node.
+          const existingTextNode = Array.from(downloadBtn.childNodes).find(n => n.nodeType === Node.TEXT_NODE && n.nodeValue && n.nodeValue.trim().length);
+          if (existingTextNode) {
+            existingTextNode.nodeValue = 'Download PDF';
+          } else {
+            downloadBtn.appendChild(document.createTextNode('Download PDF'));
+          }
+        }
+      }
+    };
+
+    // Download PDF handler (reuses window.print flow used across LinkedIn/Cover Letter)
+    const rfDownloadHandler = function() {
+      const rewrittenBox = document.querySelectorAll('#rf-rewrite-content .rf-snippet-box')[1];
+      if (!rewrittenBox) return;
+
+      // Entitlement check - Pro/Premium only
+      const allowedPlans = ['pro', 'premium'];
+      let currentPlan = null;
+      try {
+        if (window.JobHackAINavigation && typeof window.JobHackAINavigation.getEffectivePlan === 'function') {
+          currentPlan = window.JobHackAINavigation.getEffectivePlan();
+        } else if (typeof getCurrentPlanStandalone === 'function') {
+          currentPlan = getCurrentPlanStandalone();
+        }
+      } catch (err) {
+        currentPlan = null;
+      }
+      if (!currentPlan || !allowedPlans.includes(String(currentPlan).toLowerCase())) {
+        // Show upgrade flow (reuse existing modal if available)
+        if (typeof openUpgradeModal === 'function') {
+          openUpgradeModal();
+        } else {
+          // Fallback to pricing page
+          window.location.href = 'pricing-a.html';
+        }
+        return;
+      }
+
+      // Build print HTML content (header with ATS score, role tips, and rewritten resume)
+      function buildRfPrintHtml() {
+        const atsTile = document.getElementById('rf-ats-score-tile');
+        const atsScoreHtml = atsTile ? atsTile.innerHTML : '';
+        const roleTips = (window.latestRoleSpecific && Array.isArray(window.latestRoleSpecific.sections)) ? window.latestRoleSpecific.sections : [];
+        let roleTipsHtml = '';
+        if (Array.isArray(roleTips) && roleTips.length) {
+          const sectionsHtml = roleTips.map(s => {
+            const heading = escapeHtml(s.section || s.heading || '');
+            const tipsArray = (s.tips && Array.isArray(s.tips) && s.tips.length) ? s.tips
+              : (s.items && Array.isArray(s.items) && s.items.length) ? s.items
+              : [];
+            const tipsHtml = tipsArray.length ? `<ul>${tipsArray.map(t => `<li>${escapeHtml(t)}</li>`).join('')}</ul>` : '<div style="color:#6b7280;font-style:italic;">No tips available</div>';
+            return `<div class="rf-print-role-section" style="margin-bottom:8px;"><strong>${heading}</strong>${tipsHtml}</div>`;
+          }).join('');
+          roleTipsHtml = `<section class="rf-print-section"><h3>Role-specific tips</h3>${sectionsHtml}</section>`;
+        }
+        const rewrittenText = rewrittenBox.value || rewrittenBox.textContent || '';
+        const safeRewritten = escapeHtml(rewrittenText).replace(/\n/g, '<br/>');
+
+        // Basic template - keep inline styles minimal and rely on print CSS
+        return `
+          <div class="rf-print-header" style="margin-bottom:16px;">
+            <h2 style="margin:0 0 8px 0;">Resume Rewrite</h2>
+            <div>${atsScoreHtml}</div>
+          </div>
+          ${roleTipsHtml}
+          <section class="rf-print-section">
+            <h3>Rewritten Resume</h3>
+            <div style="white-space:pre-wrap;font-family:inherit;">${safeRewritten}</div>
+          </section>
+          <footer style="margin-top:20px;font-size:11px;color:#6b7280;">Generated by JobHackAI • ${new Date().toLocaleString()}</footer>
+        `;
+      }
+
+      // Helper to escape HTML (simple)
+      function escapeHtml(str) {
+        if (!str) return '';
+        return String(str)
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#39;');
+      }
+
+      // Populate print container and trigger print
+      // Ensure the print container is appended to document.body before printing.
+      // If an existing #rf-print is present but not a child of <body> (e.g., inside .rf-main-column),
+      // create a temporary container in <body> instead to ensure it is visible during print.
+      const existingPrint = document.getElementById('rf-print');
+      let printContainer = null;
+      let createdTempPrintContainer = false;
+      if (existingPrint && existingPrint.parentElement === document.body) {
+        printContainer = existingPrint;
+      } else {
+        // Create a temporary container attached to body so it will be visible during print.
+        printContainer = document.createElement('div');
+        printContainer.id = 'rf-print';
+        printContainer.style.display = 'none';
+        document.body.appendChild(printContainer);
+        createdTempPrintContainer = true;
+      }
+      // Populate content into the container attached to <body>.
+      printContainer.innerHTML = buildRfPrintHtml();
+
+      const prevTitle = document.title;
+      const date = new Date().toISOString().slice(0,10);
+      document.title = `jobhackai-resume-rewrite-${date}`;
+      window.print();
+      setTimeout(() => {
+        document.title = prevTitle;
+        // Clean up print container: remove temporary node or clear persistent container
+        if (createdTempPrintContainer && printContainer && printContainer.parentNode) {
+          printContainer.parentNode.removeChild(printContainer);
+        } else if (printContainer) {
+          printContainer.innerHTML = '';
+        }
+      }, 500);
     };
     
     // Regenerate rewrite handler function
@@ -2375,6 +2505,7 @@
     const attachRewriteButtonListeners = () => {
       const copyBtn = document.querySelector('#rf-rewrite-content .btn.btn-primary');
       const regenRewriteBtn = document.querySelector('#rf-rewrite-content .btn.btn-secondary');
+      const downloadBtn = document.getElementById('rf-download');
       
       if (copyBtn) {
         // Remove any existing listeners
@@ -2386,6 +2517,11 @@
         // Remove any existing listeners
         regenRewriteBtn.removeEventListener('click', regenerateRewriteHandler);
         regenRewriteBtn.addEventListener('click', regenerateRewriteHandler);
+      }
+      
+      if (downloadBtn) {
+        downloadBtn.removeEventListener('click', rfDownloadHandler);
+        downloadBtn.addEventListener('click', rfDownloadHandler);
       }
 
       // Initial render of cooldown state on mount
@@ -7314,11 +7450,47 @@
         </div>
         <textarea class="rf-snippet-box" readonly>AI-optimized resume excerpt.</textarea>
         <div id="rf-change-summary" style="display:none;"></div>
+        <style>
+        /* Print container for Resume Rewriting (matches other product print rules) */
+        #rf-print { display: none; }
+        @media print {
+          header.site-header,
+          nav.mobile-nav,
+          .mobile-nav-backdrop,
+          footer.site-footer,
+          .rf-sidebar-column,
+          .rf-section-actions,
+          .rf-actions,
+          .rf-loading,
+          /* Hide main content and cards so only the print container is shown */
+          .rf-main-column,
+          .rf-card { display: none !important; }
+
+          body { background: #fff !important; }
+          #rf-print { display: block !important; }
+          /* Ensure print container card styles are neutral for multi-page output
+             and explicitly make print cards visible even though .rf-card is hidden above. */
+          #rf-print .rf-card { display: block !important; box-shadow: none !important; border-radius: 0 !important; padding: 0 !important; margin: 0 0 1rem 0 !important; }
+        }
+        </style>
+
         <div style="margin-top:1.2rem;">
           <button class="btn btn-primary" style="display:none;">Copy Rewritten Resume</button>
+          <button id="rf-download" class="btn btn-outline" style="display:none;" disabled aria-disabled="true" type="button">
+            <!-- download icon (small) -->
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false" style="vertical-align:middle;margin-right:8px;">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+              <polyline points="7 10 12 15 17 10"/>
+              <line x1="12" y1="15" x2="12" y2="3"/>
+            </svg>
+            <span class="rf-download-label">Download PDF</span>
+          </button>
           <button class="btn btn-secondary">Generate Rewrite</button>
           <div id="rf-rewrite-cooldown" style="margin-top:0.5rem;"></div>
         </div>
+
+        <!-- Print container used by window.print() -->
+        <div id="rf-print" aria-hidden="true"></div>
       </div>
     </section>
         
