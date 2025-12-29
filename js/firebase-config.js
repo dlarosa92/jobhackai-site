@@ -23,20 +23,41 @@ const firebaseConfig = {
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
 
-// Conditionally initialize Analytics only in browser environment
+// Conditionally initialize Analytics only in browser environment and with consent
 let analytics = null;
-if (typeof window !== 'undefined') {
+
+function initializeAnalyticsIfConsented() {
+  if (typeof window === 'undefined' || analytics !== null) {
+    return; // Already initialized or not in browser
+  }
+  
   try {
-    // Only initialize if measurementId is valid
+    // Only initialize if measurementId is valid AND user has granted analytics consent
     if (firebaseConfig.measurementId) {
-      analytics = getAnalytics(app);
-      console.log('✅ Firebase Analytics initialized');
+      // Check for analytics consent before initializing
+      // Use defensive check - cookie-consent.js might not be loaded yet
+      const hasConsent = window.JHA?.cookieConsent?.hasAnalyticsConsent?.() === true;
+      if (hasConsent) {
+        analytics = getAnalytics(app);
+        console.log('✅ Firebase Analytics initialized');
+      } else {
+        console.log('ℹ️ Firebase Analytics not initialized - no consent');
+      }
     }
   } catch (error) {
     // Analytics initialization failed - log but don't block app
     console.log('ℹ️ Firebase Analytics not available:', error.message);
     analytics = null;
   }
+}
+
+// Try to initialize immediately if in browser
+if (typeof window !== 'undefined') {
+  initializeAnalyticsIfConsented();
+  
+  // Also listen for consent changes (if cookie-consent.js loads later)
+  // This allows analytics to initialize if user grants consent after page load
+  window.addEventListener('cookie-consent-granted', initializeAnalyticsIfConsented);
 }
 
 // Export for use across the site (and future Wix integration)

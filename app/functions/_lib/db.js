@@ -1363,3 +1363,107 @@ export async function incrementMockInterviewMonthlyUsage(env, userId) {
   }
 }
 
+// ============================================================
+// COOKIE CONSENT HELPERS
+// ============================================================
+
+/**
+ * Upsert cookie consent (D1 source of truth)
+ * Handles both authenticated (userId) and anonymous (clientId) cases
+ * @param {Object} env - Cloudflare environment
+ * @param {Object} params - {userId, authId, clientId, consent}
+ * @param {number|null} params.userId - User ID from users table (nullable)
+ * @param {string|null} params.authId - Firebase auth ID (nullable, for logging)
+ * @param {string|null} params.clientId - Anonymous client identifier (nullable)
+ * @param {Object} params.consent - Consent object {version, analytics, updatedAt}
+ * @returns {Promise<boolean>} Success
+ */
+export async function upsertCookieConsent(env, { userId, authId, clientId, consent }) {
+  const db = getDb(env);
+  if (!db) {
+    console.warn('[DB] D1 binding not available');
+    return false;
+  }
+
+  try {
+    if (!userId && !clientId) {
+      console.warn('[DB] No userId or clientId provided for cookie consent');
+      return false;
+    }
+
+    const consentStr = typeof consent === 'string' ? consent : JSON.stringify(consent);
+    const now = new Date().toISOString();
+
+    // Check if exists (prefer userId over clientId)
+    let existing = null;
+    if (userId) {
+      existing = await db.prepare('SELECT id FROM cookie_consents WHERE user_id = ?').bind(userId).first();
+    } else if (clientId) {
+      existing = await db.prepare('SELECT id FROM cookie_consents WHERE client_id = ?').bind(clientId).first();
+    }
+
+    if (existing) {
+      // Update existing
+      if (userId) {
+        await db.prepare(
+          'UPDATE cookie_consents SET consent_json = ?, updated_at = ? WHERE user_id = ?'
+        ).bind(consentStr, now, userId).run();
+      } else {
+        await db.prepare(
+          'UPDATE cookie_consents SET consent_json = ?, updated_at = ? WHERE client_id = ?'
+        ).bind(consentStr, now, clientId).run();
+      }
+      console.log('[DB] Updated cookie consent:', { userId, clientId });
+    } else {
+      // Insert new
+      await db.prepare(
+        'INSERT INTO cookie_consents (user_id, client_id, consent_json, created_at, updated_at) VALUES (?, ?, ?, ?, ?)'
+      ).bind(userId || null, clientId || null, consentStr, now, now).run();
+      console.log('[DB] Created cookie consent:', { userId, clientId });
+    }
+
+    return true;
+  } catch (error) {
+    console.error('[DB] Error in upsertCookieConsent:', error);
+    return false;
+  }
+}
+
+/**
+ * Get cookie consent from D1
+ * @param {Object} env - Cloudflare environment  
+ * @param {string|null} userId - User ID from users table
+ * @param {string|null} clientId - Client ID (anonymous identifier)
+ * @returns {Promise<Object|null>} Consent object or null
+ */
+export async function getCookieConsent(env, userId, clientId) {
+  const db = getDb(env);
+  if (!db) {
+    return null;
+  }
+
+  try {
+    let row = null;
+    
+    // Prefer userId over clientId
+    if (userId) {
+      row = await db.prepare(
+        'SELECT consent_json FROM cookie_consents WHERE user_id = ?'
+      ).bind(userId).first();
+    } else if (clientId) {
+      row = await db.prepare(
+        'SELECT consent_json FROM cookie_consents WHERE client_id = ?'
+      ).bind(clientId).first();
+    }
+
+    if (!row || !row.consent_json) {
+      return null;
+    }
+
+    return JSON.parse(row.consent_json);
+  } catch (error) {
+    console.error('[DB] Error in getCookieConsent:', error);
+    return null;
+  }
+}
+
