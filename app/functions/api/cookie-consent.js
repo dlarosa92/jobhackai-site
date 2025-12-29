@@ -114,7 +114,16 @@ export async function onRequest(context) {
       if (success) {
         return json({ ok: true }, 200, origin, env);
       } else {
-        return json({ ok: false, error: 'Failed to save consent' }, 500, origin, env);
+        // Temporary: Include debug info in response to diagnose issue
+        const dbAvailable = !!(env?.JOBHACKAI_DB || env?.DB);
+        const debugInfo = {
+          hasDb: dbAvailable,
+          hasUserId: !!userId,
+          hasClientId: !!clientId,
+          dbBindingNames: Object.keys(env || {}).filter(k => k.includes('DB') || k.includes('D1'))
+        };
+        console.error('[COOKIE-CONSENT] Failed to save consent, debug info:', debugInfo);
+        return json({ ok: false, error: 'Failed to save consent', debug: debugInfo }, 500, origin, env);
       }
     }
 
