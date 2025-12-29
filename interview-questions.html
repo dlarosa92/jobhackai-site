@@ -3781,9 +3781,24 @@ function initIQPage(){
         authState = window.JobHackAINavigation.getAuthState();
         userPlan = window.JobHackAINavigation.getEffectivePlan();
       } else {
-        // SECURITY: Use Firebase auth check instead of email validation
-        const user = window.FirebaseAuthManager?.getCurrentUser?.();
-        authState = { isAuthenticated: localStorage.getItem('user-authenticated') === 'true' && !!user };
+        // SECURITY: Check Firebase SDK keys synchronously (works before FirebaseAuthManager is ready)
+        // FirebaseAuthManager.getCurrentUser() returns null until onAuthStateChanged fires
+        // Use same pattern as checkAuthentication() for consistency
+        function hasFirebaseAuthKeys() {
+          try {
+            return Object.keys(localStorage).some(k => 
+              k.startsWith('firebase:authUser:') && 
+              localStorage.getItem(k) && 
+              localStorage.getItem(k) !== 'null' &&
+              localStorage.getItem(k).length > 10
+            );
+          } catch (e) {
+            return false;
+          }
+        }
+        const hasLocalStorageAuth = localStorage.getItem('user-authenticated') === 'true';
+        const hasFirebaseKeys = hasFirebaseAuthKeys();
+        authState = { isAuthenticated: hasLocalStorageAuth || hasFirebaseKeys };
         userPlan = localStorage.getItem('user-plan') || 'free';
       }
       

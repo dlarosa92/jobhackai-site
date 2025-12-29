@@ -1109,9 +1109,24 @@
         isAuthenticated = authState.isAuthenticated;
         plan = window.JobHackAINavigation.getEffectivePlan();
       } else {
-        // SECURITY: Use Firebase auth check instead of email validation
-        const user = window.FirebaseAuthManager?.getCurrentUser?.();
-        isAuthenticated = localStorage.getItem('user-authenticated') === 'true' && !!user;
+        // SECURITY: Check Firebase SDK keys synchronously (works before FirebaseAuthManager is ready)
+        // FirebaseAuthManager.getCurrentUser() returns null until onAuthStateChanged fires
+        // Use same pattern as checkAuthentication() for consistency
+        function hasFirebaseAuthKeys() {
+          try {
+            return Object.keys(localStorage).some(k => 
+              k.startsWith('firebase:authUser:') && 
+              localStorage.getItem(k) && 
+              localStorage.getItem(k) !== 'null' &&
+              localStorage.getItem(k).length > 10
+            );
+          } catch (e) {
+            return false;
+          }
+        }
+        const hasLocalStorageAuth = localStorage.getItem('user-authenticated') === 'true';
+        const hasFirebaseKeys = hasFirebaseAuthKeys();
+        isAuthenticated = hasLocalStorageAuth || hasFirebaseKeys;
         plan = localStorage.getItem('user-plan') || 'free';
       }
       
@@ -1371,9 +1386,24 @@
         isAuthenticated = authState.isAuthenticated;
         plan = window.JobHackAINavigation.getEffectivePlan();
       } else {
-        // SECURITY: Use Firebase auth check instead of email validation
-        const user = window.FirebaseAuthManager?.getCurrentUser?.();
-        isAuthenticated = localStorage.getItem('user-authenticated') === 'true' && !!user;
+        // SECURITY: Check Firebase SDK keys synchronously (works before FirebaseAuthManager is ready)
+        // FirebaseAuthManager.getCurrentUser() returns null until onAuthStateChanged fires
+        // Use same pattern as checkAuthentication() for consistency
+        function hasFirebaseAuthKeys() {
+          try {
+            return Object.keys(localStorage).some(k => 
+              k.startsWith('firebase:authUser:') && 
+              localStorage.getItem(k) && 
+              localStorage.getItem(k) !== 'null' &&
+              localStorage.getItem(k).length > 10
+            );
+          } catch (e) {
+            return false;
+          }
+        }
+        const hasLocalStorageAuth = localStorage.getItem('user-authenticated') === 'true';
+        const hasFirebaseKeys = hasFirebaseAuthKeys();
+        isAuthenticated = hasLocalStorageAuth || hasFirebaseKeys;
         plan = localStorage.getItem('user-plan') || 'free';
       }
       
@@ -6976,9 +7006,24 @@
      */
     function initializeHistory() {
       // Only load history if user is authenticated
-      // SECURITY: Use Firebase auth check instead of email validation
-      const user = window.FirebaseAuthManager?.getCurrentUser?.();
-      const isAuthenticated = localStorage.getItem('user-authenticated') === 'true' && !!user;
+      // SECURITY: Check Firebase SDK keys synchronously (works before FirebaseAuthManager is ready)
+      // FirebaseAuthManager.getCurrentUser() returns null until onAuthStateChanged fires
+      // Use same pattern as checkAuthentication() for consistency
+      function hasFirebaseAuthKeys() {
+        try {
+          return Object.keys(localStorage).some(k => 
+            k.startsWith('firebase:authUser:') && 
+            localStorage.getItem(k) && 
+            localStorage.getItem(k) !== 'null' &&
+            localStorage.getItem(k).length > 10
+          );
+        } catch (e) {
+          return false;
+        }
+      }
+      const hasLocalStorageAuth = localStorage.getItem('user-authenticated') === 'true';
+      const hasFirebaseKeys = hasFirebaseAuthKeys();
+      const isAuthenticated = hasLocalStorageAuth || hasFirebaseKeys;
       if (!isAuthenticated) {
         console.log('[RESUME-FEEDBACK-HISTORY] Skipping history load - not authenticated');
         const emptyEl = document.getElementById('rf-history-empty');
