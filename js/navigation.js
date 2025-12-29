@@ -298,13 +298,17 @@ function getAuthState() {
     try {
       const storedAuth = localStorage.getItem('user-authenticated');
       // Check Firebase SDK keys as additional validation (more reliable than email)
+      // SECURITY: Require BOTH flag AND Firebase keys to prevent stale flags or XSS attacks
+      // This matches the pattern used in inactivity-tracker.js and static-auth-guard.js
       const hasFirebaseKeys = Object.keys(localStorage).some(k => 
         k.startsWith('firebase:authUser:') && 
         localStorage.getItem(k) && 
-        localStorage.getItem(k) !== 'null'
+        localStorage.getItem(k) !== 'null' &&
+        localStorage.getItem(k).length > 10
       );
       
-      if (storedAuth === 'true' || hasFirebaseKeys) {
+      // Require both conditions: flag must be true AND Firebase keys must exist
+      if (storedAuth === 'true' && hasFirebaseKeys) {
         fallbackAuth = true;
         console.log('[AUTH] getAuthState: Using localStorage fallback (Firebase not initialized)');
       }
