@@ -51,14 +51,17 @@ export async function hydrateDashboard() {
       const userDocRef = doc(db, 'users', user.uid);
       const userDoc = await getDoc(userDocRef);
 
-      const dashboardData = userDoc.exists() ? userDoc.data() : { name: user.displayName || 'User', email: user.email || '' };
+      // Normalize display name: Firestore stores displayName; fall back to name field or Firebase user displayName.
+      const userDocData = userDoc.exists() ? userDoc.data() : null;
+      const displayName = (userDocData && (userDocData.displayName || userDocData.name)) || user.displayName || 'User';
+      const email = (userDocData && (userDocData.email || user.email)) || user.email || '';
 
       // Render small, design-system based cards (use existing classes)
       contentWrapper.innerHTML = `
         <div class="dashboard-root">
           <div class="dashboard-header">
-            <h2>Welcome, ${escapeHtml(dashboardData.name)}!</h2>
-            <p class="muted">Signed in as ${escapeHtml(dashboardData.email)}</p>
+            <h2>Welcome, ${escapeHtml(displayName)}!</h2>
+            <p class="muted">Signed in as ${escapeHtml(email)}</p>
           </div>
           <div class="dashboard-features">
             <div class="dashboard-card">

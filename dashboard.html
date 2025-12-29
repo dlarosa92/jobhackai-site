@@ -2813,15 +2813,36 @@
           const { default: authManager } = await import('./js/firebase-auth.js');
           const { hydrateDashboard } = await import('./js/dashboard-hydration.js');
 
-          // Run auth guard but don't block the shell for longer than a short timeout
+          // Run auth guard and **stop** hydration if the user is not verified.
           if (typeof authManager.requireVerifiedEmail === 'function') {
-            const guardPromise = authManager.requireVerifiedEmail();
-            const guardResult = await Promise.race([
-              guardPromise,
-              new Promise(res => setTimeout(() => res(false), 3000))
-            ]);
-            if (!guardResult) {
-              console.debug('Auth guard returned false or timed out; continuing with hydration.');
+            try {
+              const guardPromise = authManager.requireVerifiedEmail();
+              // Timeout rejects so we can handle the timeout case explicitly.
+              const guardResult = await Promise.race([
+                guardPromise,
+                new Promise((_, reject) => setTimeout(() => reject(new Error('auth-guard-timeout')), 3000))
+              ]);
+
+              // requireVerifiedEmail returns false when it has redirected/blocked access.
+              if (guardResult === false) {
+                console.log('Auth guard blocked access; halting dashboard hydration.');
+                return; // Stop further execution to avoid showing protected content.
+              }
+            } catch (err) {
+              if (err && err.message === 'auth-guard-timeout') {
+                console.warn('Auth guard timed out; waiting briefly for auth readiness before hydrating.');
+                // Wait for auth readiness (non-blocking long wait) then re-check verification state.
+                await authManager.waitForAuthReady?.(5000).catch(() => {});
+                const currentUser = authManager.getCurrentUser?.();
+                if (!currentUser || !currentUser.emailVerified) {
+                  console.log('Auth not verified after waiting; invoking guard and halting hydration.');
+                  try { await authManager.requireVerifiedEmail(); } catch (_) {}
+                  return;
+                }
+                // else: verified after wait, continue to hydrate
+              } else {
+                console.warn('Auth guard error (continuing cautiously):', err);
+              }
             }
           }
 
