@@ -217,12 +217,16 @@ function detectNavigationIssues() {
   const authState = getAuthState();
   const storedAuth = localStorage.getItem('user-authenticated');
   // Check Firebase SDK keys as additional validation (more reliable than email)
+  // SECURITY: Require BOTH flag AND Firebase keys to match getAuthState() logic
+  // This prevents false inconsistency warnings and matches security requirements
   const hasFirebaseKeys = Object.keys(localStorage).some(k => 
     k.startsWith('firebase:authUser:') && 
     localStorage.getItem(k) && 
-    localStorage.getItem(k) !== 'null'
+    localStorage.getItem(k) !== 'null' &&
+    localStorage.getItem(k).length > 10
   );
-  const isAuthenticated = storedAuth === 'true' || hasFirebaseKeys;
+  // Require both conditions: flag must be true AND Firebase keys must exist
+  const isAuthenticated = storedAuth === 'true' && hasFirebaseKeys;
   if (authState.isAuthenticated !== isAuthenticated) {
     issues.push('Authentication state inconsistency');
     navLog('warn', 'Navigation issue detected: Auth state inconsistency', { 
@@ -333,12 +337,16 @@ function getAuthState() {
       try {
         const storedAuth = localStorage.getItem('user-authenticated');
         // Check Firebase SDK keys as additional validation (more reliable than email)
+        // SECURITY: Require BOTH flag AND Firebase keys to prevent XSS attacks
+        // This matches the pattern used in static-auth-guard.js and inactivity-tracker.js
         const hasFirebaseKeys = Object.keys(localStorage).some(k => 
           k.startsWith('firebase:authUser:') && 
           localStorage.getItem(k) && 
-          localStorage.getItem(k) !== 'null'
+          localStorage.getItem(k) !== 'null' &&
+          localStorage.getItem(k).length > 10
         );
-        if (storedAuth === 'true' || hasFirebaseKeys) {
+        // Require both conditions: flag must be true AND Firebase keys must exist
+        if (storedAuth === 'true' && hasFirebaseKeys) {
           const fallbackPlan = localStorage.getItem('user-plan') || 'free';
           return {
             isAuthenticated: true,
