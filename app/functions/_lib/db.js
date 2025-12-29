@@ -1382,8 +1382,11 @@ export async function upsertCookieConsent(env, { userId, authId, clientId, conse
   const db = getDb(env);
   if (!db) {
     console.warn('[DB] D1 binding not available');
+    console.warn('[DB] Available env keys:', Object.keys(env || {}).filter(k => k.includes('DB') || k.includes('D1')));
     return false;
   }
+
+  console.log('[DB] upsertCookieConsent called:', { hasUserId: !!userId, hasClientId: !!clientId, hasDb: !!db });
 
   try {
     if (!userId && !clientId) {
