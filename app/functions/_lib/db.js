@@ -1406,7 +1406,7 @@ export async function upsertCookieConsent(env, { userId, authId, clientId, conse
         await db.prepare(
           `INSERT INTO cookie_consents (user_id, client_id, consent_json, created_at, updated_at)
            VALUES (?, NULL, ?, ?, ?)
-           ON CONFLICT(user_id) DO UPDATE SET
+           ON CONFLICT(idx_cookie_consents_user_id_unique) DO UPDATE SET
              consent_json = excluded.consent_json,
              updated_at = excluded.updated_at`
         ).bind(userId, consentStr, now, now).run();
@@ -1434,7 +1434,7 @@ export async function upsertCookieConsent(env, { userId, authId, clientId, conse
       await db.prepare(
         `INSERT INTO cookie_consents (user_id, client_id, consent_json, created_at, updated_at)
          VALUES (NULL, ?, ?, ?, ?)
-         ON CONFLICT(client_id) DO UPDATE SET
+         ON CONFLICT(idx_cookie_consents_client_id_unique) DO UPDATE SET
            consent_json = excluded.consent_json,
            updated_at = excluded.updated_at`
       ).bind(clientId, consentStr, now, now).run();
