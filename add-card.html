@@ -477,7 +477,9 @@
       const cardForm = document.getElementById('cardForm');
       
       // Check if user has saved cards using the new user database format
-      const userEmail = localStorage.getItem('user-email');
+      // SECURITY: Get email from Firebase auth instead of localStorage
+      const user = window.FirebaseAuthManager?.getCurrentUser?.();
+      const userEmail = user?.email || null;
       const db = JSON.parse(localStorage.getItem('user-db') || '{}');
       const savedCards = userEmail && db[userEmail] && Array.isArray(db[userEmail].cards) ? db[userEmail].cards : [];
       
@@ -528,7 +530,9 @@
     }
     
     function useSelectedCard(cardIndex) {
-      const userEmail = localStorage.getItem('user-email');
+      // SECURITY: Get email from Firebase auth instead of localStorage
+      const user = window.FirebaseAuthManager?.getCurrentUser?.();
+      const userEmail = user?.email || null;
       const db = JSON.parse(localStorage.getItem('user-db') || '{}');
       const savedCards = userEmail && db[userEmail] && Array.isArray(db[userEmail].cards) ? db[userEmail].cards : [];
       const selectedCard = savedCards[cardIndex];
@@ -542,7 +546,9 @@
     function completeSignupWithCard(card) {
       console.log('completeSignupWithCard called with:', card);
       const planToUse = localStorage.getItem('selected-plan') || 'trial';
-      const userEmail = localStorage.getItem('pending-signup-email') || localStorage.getItem('user-email');
+      // SECURITY: Get email from Firebase auth, fallback to pending-signup-email
+      const user = window.FirebaseAuthManager?.getCurrentUser?.();
+      const userEmail = localStorage.getItem('pending-signup-email') || user?.email || null;
       const firstName = localStorage.getItem('pending-signup-firstName') || '';
       const lastName = localStorage.getItem('pending-signup-lastName') || '';
       

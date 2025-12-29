@@ -192,7 +192,9 @@ document.addEventListener('DOMContentLoaded', async function() {
     showSelectedPlanBanner(selectedPlan);
     
     // Auto-switch to signup form for new users with plan
-    if (!localStorage.getItem('user-email')) {
+    // SECURITY: Check Firebase auth instead of localStorage
+    const user = window.FirebaseAuthManager?.getCurrentUser?.();
+    if (!user?.email) {
       showSignupForm(selectedPlan, true); // Pass flag to skip banner (already shown)
     } else {
       // Existing user who somehow landed here - show login

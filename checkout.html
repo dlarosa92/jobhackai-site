@@ -265,7 +265,16 @@
 
     function getAuthUser() {
       try {
-        return JSON.parse(localStorage.getItem('auth-user') || 'null');
+        // SECURITY: Use Firebase auth instead of localStorage
+        const user = window.FirebaseAuthManager?.getCurrentUser?.();
+        if (user) {
+          return {
+            email: user.email,
+            uid: user.uid,
+            displayName: user.displayName
+          };
+        }
+        return null;
       } catch (e) {
         return null;
       }

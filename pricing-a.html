@@ -187,11 +187,15 @@
       const checkoutButtons = document.querySelectorAll('.stripe-checkout-btn');
       
       // Check if user is already authenticated (compute at click-time for freshness)
-      const getAuthState = () => ({
-        isAuthenticated: localStorage.getItem('user-authenticated') === 'true',
-        userEmail: localStorage.getItem('user-email'),
-        currentPlan: localStorage.getItem('user-plan') || 'free'
-      });
+      const getAuthState = () => {
+        // SECURITY: Get email from Firebase auth instead of localStorage
+        const user = window.FirebaseAuthManager?.getCurrentUser?.();
+        return {
+          isAuthenticated: localStorage.getItem('user-authenticated') === 'true' && !!user,
+          userEmail: user?.email || null,
+          currentPlan: localStorage.getItem('user-plan') || 'free'
+        };
+      };
       
       checkoutButtons.forEach(button => {
         button.addEventListener('click', (e) => {
@@ -554,7 +558,9 @@
     }
     
     function processUpgrade(newPlan, currentPlan) {
-      const userEmail = localStorage.getItem('user-email');
+      // SECURITY: Get email from Firebase auth instead of localStorage
+      const user = window.FirebaseAuthManager?.getCurrentUser?.();
+      const userEmail = user?.email || null;
       if (true) {
         // INTEGRATION: STRIPE - Handle subscription upgrade here
         // For demo, just update the user's plan

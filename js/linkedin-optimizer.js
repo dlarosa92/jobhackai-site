@@ -111,7 +111,7 @@ async function apiFetch(path, options = {}) {
 
 function getAuthState() {
   return window.JobHackAINavigation?.getAuthState?.() || {
-    isAuthenticated: localStorage.getItem('user-authenticated') === 'true' && !!localStorage.getItem('user-email')
+    isAuthenticated: !!window.FirebaseAuthManager?.getCurrentUser?.()
   };
 }
 

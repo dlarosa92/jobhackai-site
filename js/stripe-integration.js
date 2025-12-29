@@ -600,10 +600,7 @@ class JobHackAIStripe {
           const u = window.FirebaseAuthManager?.getCurrentUser?.();
           if (u && u.uid && u.email) return { uid: u.uid, email: u.email };
         } catch(_){}
-        try {
-          const ls = JSON.parse(localStorage.getItem('auth-user') || '{}');
-          if (ls && ls.uid && ls.email) return { uid: ls.uid, email: ls.email };
-        } catch(_){}
+        // SECURITY: Removed localStorage fallback - use Firebase auth only
         return null;
       })();
 
@@ -655,8 +652,8 @@ class JobHackAIStripe {
       // Resolve current user
       let uid = null;
       try { uid = window.FirebaseAuthManager?.getCurrentUser?.()?.uid || null; } catch(_){}
+      // SECURITY: Removed localStorage fallback - use Firebase auth only
       if (!uid) {
-        try { uid = JSON.parse(localStorage.getItem('auth-user') || '{}').uid || null; } catch(_){}
       }
       if (!uid) {
         alert('Please log in to manage your subscription.');

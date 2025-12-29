@@ -10,7 +10,9 @@
     // --- IMMEDIATE PAGE ACCESS CONTROL ---
     // Run immediately to prevent content flash for unauthorized users
     (function enforceAccessImmediate() {
-      const isAuthenticated = localStorage.getItem('user-authenticated') === 'true' && !!localStorage.getItem('user-email');
+      // SECURITY: Use Firebase auth check instead of email validation
+      const user = window.FirebaseAuthManager?.getCurrentUser?.();
+      const isAuthenticated = localStorage.getItem('user-authenticated') === 'true' && !!user;
       const plan = localStorage.getItem('user-plan') || 'free';
       const allowedPlans = ['trial', 'essential', 'pro', 'premium'];
       
@@ -1515,7 +1517,9 @@
         return true;
       } else {
         // Fallback to localStorage check if navigation system not available
-        const isAuthenticated = localStorage.getItem('user-authenticated') === 'true' && !!localStorage.getItem('user-email');
+        // SECURITY: Use Firebase auth check instead of email validation
+        const user = window.FirebaseAuthManager?.getCurrentUser?.();
+        const isAuthenticated = localStorage.getItem('user-authenticated') === 'true' && !!user;
         if (!isAuthenticated) {
           const mainContent = document.querySelector('main');
           mainContent.innerHTML = `
@@ -3756,7 +3760,9 @@ function initIQPage(){
         authState = window.JobHackAINavigation.getAuthState();
         userPlan = window.JobHackAINavigation.getEffectivePlan();
       } else {
-        authState = { isAuthenticated: localStorage.getItem('user-authenticated') === 'true' && !!localStorage.getItem('user-email') };
+        // SECURITY: Use Firebase auth check instead of email validation
+        const user = window.FirebaseAuthManager?.getCurrentUser?.();
+        authState = { isAuthenticated: localStorage.getItem('user-authenticated') === 'true' && !!user };
         userPlan = localStorage.getItem('user-plan') || 'free';
       }
       

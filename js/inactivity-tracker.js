@@ -101,9 +101,13 @@
     if (!hasFirebaseManager) {
       try {
         const authState = localStorage.getItem('user-authenticated');
-        const userEmail = localStorage.getItem('user-email');
-        // Validate email format (matches navigation.js validation)
-        return authState === 'true' && userEmail && userEmail.length > 0 && userEmail.includes('@');
+        // Check Firebase SDK keys as fallback (more reliable than email)
+        const hasFirebaseKeys = Object.keys(localStorage).some(k => 
+          k.startsWith('firebase:authUser:') && 
+          localStorage.getItem(k) && 
+          localStorage.getItem(k) !== 'null'
+        );
+        return authState === 'true' || hasFirebaseKeys;
       } catch (e) {
         return false;
       }

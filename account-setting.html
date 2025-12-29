@@ -23,7 +23,9 @@
     // This runs before any other scripts to show content instantly
     (function() {
       const hasLocalStorageAuth = localStorage.getItem('user-authenticated') === 'true';
-      const cachedEmail = localStorage.getItem('user-email');
+      // SECURITY: Get email from Firebase auth instead of localStorage
+      const user = window.FirebaseAuthManager?.getCurrentUser?.();
+      const cachedEmail = user?.email || null;
       if (hasLocalStorageAuth && cachedEmail) {
         // Use requestAnimationFrame to ensure DOM is ready
         if (document.body) {
@@ -53,7 +55,8 @@
       const user = mgr ? mgr.getCurrentUser() : null;
       
       // Check if user is authenticated via multiple methods
-      const hasLocalStorageAuth = localStorage.getItem('user-authenticated') === 'true' && !!localStorage.getItem('user-email');
+      // SECURITY: Use Firebase auth check instead of email validation
+      const hasLocalStorageAuth = localStorage.getItem('user-authenticated') === 'true' && !!user;
       
       if (!user && !hasLocalStorageAuth) {
         console.log('🔒 No authenticated user found, redirecting to login');
@@ -111,7 +114,8 @@
         authCheckComplete = true;
         const mgr = window.FirebaseAuthManager;
         const user = mgr ? mgr.getCurrentUser() : null;
-        const hasLocalStorageAuth = localStorage.getItem('user-authenticated') === 'true' && !!localStorage.getItem('user-email');
+        // SECURITY: Use Firebase auth check instead of email validation
+        const hasLocalStorageAuth = localStorage.getItem('user-authenticated') === 'true' && !!user;
         
         if (!user && !hasLocalStorageAuth) {
           console.log('🔒 Manual check: No auth found, redirecting to login');
@@ -135,7 +139,9 @@
       if (document.body) {
         // Only add class if we don't have cached auth (to prevent race condition)
         const hasLocalStorageAuth = localStorage.getItem('user-authenticated') === 'true';
-        const cachedEmail = localStorage.getItem('user-email');
+        // SECURITY: Get email from Firebase auth instead of localStorage
+        const user = window.FirebaseAuthManager?.getCurrentUser?.();
+        const cachedEmail = user?.email || null;
         if (!hasLocalStorageAuth || !cachedEmail) {
           document.body.classList.add("account-protected");
         }
@@ -657,7 +663,8 @@
         let user = window.FirebaseAuthManager?.getCurrentUser?.();
         if (!user) {
           // Check if we have localStorage auth as a backup signal
-          const hasLocalStorageAuth = localStorage.getItem('user-authenticated') === 'true' && !!localStorage.getItem('user-email');
+          // SECURITY: Use Firebase auth check instead of email validation
+          const hasLocalStorageAuth = localStorage.getItem('user-authenticated') === 'true';
           
           if (hasLocalStorageAuth) {
             // Wait for Firebase auth manager to initialize
@@ -884,8 +891,10 @@
     function initializeAccountSettingsImmediate() {
       // Check if we have cached auth data
       const hasLocalStorageAuth = localStorage.getItem('user-authenticated') === 'true';
-      const cachedEmail = localStorage.getItem('user-email');
-      const cachedName = localStorage.getItem('user-name');
+      // SECURITY: Get email from Firebase auth instead of localStorage
+      const user = window.FirebaseAuthManager?.getCurrentUser?.();
+      const cachedEmail = user?.email || null;
+      const cachedName = user?.displayName || localStorage.getItem('user-name');
       
       // CRITICAL: Remove account-protected class immediately if we have cached auth
       // This allows content to show even before Firebase verification completes
@@ -926,7 +935,8 @@
     // Load fresh data in background (non-blocking)
     document.addEventListener('DOMContentLoaded', async () => {
       let user = window.FirebaseAuthManager?.getCurrentUser?.();
-      const hasLocalStorageAuth = localStorage.getItem('user-authenticated') === 'true' && !!localStorage.getItem('user-email');
+      // SECURITY: Use Firebase auth check instead of email validation
+      const hasLocalStorageAuth = localStorage.getItem('user-authenticated') === 'true' && !!user;
       
       if (!user && !hasLocalStorageAuth) {
         // No auth at all - redirect handled by static-auth-guard or firebase-auth-ready handler

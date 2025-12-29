@@ -63,7 +63,8 @@ window.stateManager = window.stateManager || (function() {
       'user-authenticated': localStorage.getItem('user-authenticated'),
       'user-plan': localStorage.getItem('user-plan'),
       'dev-plan': localStorage.getItem('dev-plan'),
-      'user-email': localStorage.getItem('user-email')
+      // SECURITY: Removed user-email from backup (use Firebase auth instead)
+      'user-email': window.FirebaseAuthManager?.getCurrentUser?.()?.email || null
     };
     const id = `backup-${Date.now()}`;
     localStorage.setItem(id, JSON.stringify(snapshot));
@@ -209,7 +210,13 @@ function detectNavigationIssues() {
   // Check if authentication state is consistent
   const authState = getAuthState();
   const storedAuth = localStorage.getItem('user-authenticated');
-  const isAuthenticated = storedAuth === 'true' && !!localStorage.getItem('user-email');
+  // Check Firebase SDK keys as additional validation (more reliable than email)
+  const hasFirebaseKeys = Object.keys(localStorage).some(k => 
+    k.startsWith('firebase:authUser:') && 
+    localStorage.getItem(k) && 
+    localStorage.getItem(k) !== 'null'
+  );
+  const isAuthenticated = storedAuth === 'true' || hasFirebaseKeys;
   if (authState.isAuthenticated !== isAuthenticated) {
     issues.push('Authentication state inconsistency');
     navLog('warn', 'Navigation issue detected: Auth state inconsistency', { 
@@ -284,17 +291,16 @@ function getAuthState() {
     // Firebase not initialized - use localStorage as fallback (for initial page load)
     try {
       const storedAuth = localStorage.getItem('user-authenticated');
-      const storedEmail = localStorage.getItem('user-email');
+      // Check Firebase SDK keys as additional validation (more reliable than email)
+      const hasFirebaseKeys = Object.keys(localStorage).some(k => 
+        k.startsWith('firebase:authUser:') && 
+        localStorage.getItem(k) && 
+        localStorage.getItem(k) !== 'null'
+      );
       
-      // EDGE CASE FIX: Validate localStorage data isn't corrupted
-      if (storedAuth === 'true' && storedEmail && storedEmail.length > 0 && storedEmail.includes('@')) {
+      if (storedAuth === 'true' || hasFirebaseKeys) {
         fallbackAuth = true;
         console.log('[AUTH] getAuthState: Using localStorage fallback (Firebase not initialized)');
-      } else if (storedAuth === 'true' && (!storedEmail || !storedEmail.includes('@'))) {
-        // Corrupted localStorage - clear it
-        console.warn('[AUTH] getAuthState: Invalid localStorage data detected, clearing');
-        localStorage.removeItem('user-authenticated');
-        localStorage.removeItem('user-email');
       }
     } catch (storageError) {
       console.error('[AUTH] getAuthState: localStorage access error:', storageError.message);
@@ -316,8 +322,13 @@ function getAuthState() {
       console.log('[AUTH] getAuthState: Firebase not ready yet, using localStorage fallback');
       try {
         const storedAuth = localStorage.getItem('user-authenticated');
-        const storedEmail = localStorage.getItem('user-email');
-        if (storedAuth === 'true' && storedEmail && storedEmail.includes('@')) {
+        // Check Firebase SDK keys as additional validation (more reliable than email)
+        const hasFirebaseKeys = Object.keys(localStorage).some(k => 
+          k.startsWith('firebase:authUser:') && 
+          localStorage.getItem(k) && 
+          localStorage.getItem(k) !== 'null'
+        );
+        if (storedAuth === 'true' || hasFirebaseKeys) {
           const fallbackPlan = localStorage.getItem('user-plan') || 'free';
           return {
             isAuthenticated: true,

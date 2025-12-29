@@ -718,7 +718,9 @@
     });
     
     function checkAuthentication() {
-      const isAuthenticated = localStorage.getItem('user-authenticated') === 'true' && !!localStorage.getItem('user-email');
+      // SECURITY: Use Firebase auth check instead of email validation
+      const user = window.FirebaseAuthManager?.getCurrentUser?.();
+      const isAuthenticated = localStorage.getItem('user-authenticated') === 'true' && !!user;
       const mainContent = document.querySelector('main');
       
       if (!isAuthenticated) {
@@ -854,7 +856,9 @@
     
     // Function to sync cards from old storage format to new format
     function syncCardsFromOldStorage() {
-      const userEmail = localStorage.getItem('user-email');
+      // SECURITY: Get email from Firebase auth instead of localStorage
+      const user = window.FirebaseAuthManager?.getCurrentUser?.();
+      const userEmail = user?.email || null;
       if (!userEmail) return;
       
       // Check if there are cards in the old format
@@ -885,7 +889,9 @@
     }
     
     function getUserCards() {
-      const userEmail = localStorage.getItem('user-email');
+      // SECURITY: Get email from Firebase auth instead of localStorage
+      const user = window.FirebaseAuthManager?.getCurrentUser?.();
+      const userEmail = user?.email || null;
       const db = JSON.parse(localStorage.getItem('user-db') || '{}');
       if (userEmail && db[userEmail] && Array.isArray(db[userEmail].cards)) {
         return db[userEmail].cards;
@@ -894,7 +900,9 @@
     }
     
     function saveUserCards(cards) {
-      const userEmail = localStorage.getItem('user-email');
+      // SECURITY: Get email from Firebase auth instead of localStorage
+      const user = window.FirebaseAuthManager?.getCurrentUser?.();
+      const userEmail = user?.email || null;
       if (!userEmail) return;
       
       const db = JSON.parse(localStorage.getItem('user-db') || '{}');

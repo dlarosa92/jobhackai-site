@@ -10,7 +10,9 @@
     // --- IMMEDIATE PAGE ACCESS CONTROL ---
     // Run immediately to prevent content flash for unauthorized users
     (function enforceAccessImmediate() {
-      const isAuthenticated = localStorage.getItem('user-authenticated') === 'true' && !!localStorage.getItem('user-email');
+      // SECURITY: Use Firebase auth check instead of email validation
+      const user = window.FirebaseAuthManager?.getCurrentUser?.();
+      const isAuthenticated = localStorage.getItem('user-authenticated') === 'true' && !!user;
       const allowedPlans = ['trial', 'essential', 'pro', 'premium'];
       // Expose allowed plans so later scripts stay in sync
       window.__JOBHACKAI_RF_ALLOWED_PLANS__ = allowedPlans;
@@ -1100,7 +1102,9 @@
         isAuthenticated = authState.isAuthenticated;
         plan = window.JobHackAINavigation.getEffectivePlan();
       } else {
-        isAuthenticated = localStorage.getItem('user-authenticated') === 'true' && !!localStorage.getItem('user-email');
+        // SECURITY: Use Firebase auth check instead of email validation
+        const user = window.FirebaseAuthManager?.getCurrentUser?.();
+        isAuthenticated = localStorage.getItem('user-authenticated') === 'true' && !!user;
         plan = localStorage.getItem('user-plan') || 'free';
       }
       
@@ -1135,7 +1139,9 @@
   <script>
     // --- AUTHENTICATION CHECK ---
     function checkAuthentication() {
-      const isAuthenticated = localStorage.getItem('user-authenticated') === 'true' && !!localStorage.getItem('user-email');
+      // SECURITY: Use Firebase auth check instead of email validation
+      const user = window.FirebaseAuthManager?.getCurrentUser?.();
+      const isAuthenticated = localStorage.getItem('user-authenticated') === 'true' && !!user;
       const mainContent = document.querySelector('main');
       
       if (!isAuthenticated) {
@@ -1245,7 +1251,9 @@
       
       // Create demo user if needed for development
       const createDemoUserIfNeeded = () => {
-        const userEmail = localStorage.getItem('user-email');
+        // SECURITY: Get email from Firebase auth instead of localStorage
+        const user = window.FirebaseAuthManager?.getCurrentUser?.();
+        const userEmail = user?.email || null;
         if (!userEmail && localStorage.getItem('user-authenticated') === 'true') {
           // Create demo user
           localStorage.setItem('user-email', 'demo@jobhackai.com');
@@ -1315,7 +1323,9 @@
         isAuthenticated = authState.isAuthenticated;
         plan = window.JobHackAINavigation.getEffectivePlan();
       } else {
-        isAuthenticated = localStorage.getItem('user-authenticated') === 'true' && !!localStorage.getItem('user-email');
+        // SECURITY: Use Firebase auth check instead of email validation
+        const user = window.FirebaseAuthManager?.getCurrentUser?.();
+        isAuthenticated = localStorage.getItem('user-authenticated') === 'true' && !!user;
         plan = localStorage.getItem('user-plan') || 'free';
       }
       
@@ -6918,7 +6928,9 @@
      */
     function initializeHistory() {
       // Only load history if user is authenticated
-      const isAuthenticated = localStorage.getItem('user-authenticated') === 'true' && !!localStorage.getItem('user-email');
+      // SECURITY: Use Firebase auth check instead of email validation
+      const user = window.FirebaseAuthManager?.getCurrentUser?.();
+      const isAuthenticated = localStorage.getItem('user-authenticated') === 'true' && !!user;
       if (!isAuthenticated) {
         console.log('[RESUME-FEEDBACK-HISTORY] Skipping history load - not authenticated');
         const emptyEl = document.getElementById('rf-history-empty');
