@@ -51,25 +51,25 @@ export async function onRequest(context) {
       let userId = null;
       let clientId = null;
 
-      // Extract client_id from cookie if no auth
-      if (!token) {
-        const cookieHeader = request.headers.get('Cookie') || '';
-        const clientIdMatch = cookieHeader.match(/jha_client_id=([^;]+)/);
-        clientId = clientIdMatch ? clientIdMatch[1] : null;
-      } else {
+      // Always extract client_id from cookie (for migration from anonymous to authenticated)
+      const cookieHeader = request.headers.get('Cookie') || '';
+      const clientIdMatch = cookieHeader.match(/jha_client_id=([^;]+)/);
+      clientId = clientIdMatch ? clientIdMatch[1] : null;
+
+      if (token) {
         // Authenticated: get userId
         try {
           const { uid } = await verifyFirebaseIdToken(token, env.FIREBASE_PROJECT_ID);
           const user = await getOrCreateUserByAuthId(env, uid);
           userId = user?.id || null;
         } catch (authError) {
-          // Auth failed, fall back to client_id
-          const cookieHeader = request.headers.get('Cookie') || '';
-          const clientIdMatch = cookieHeader.match(/jha_client_id=([^;]+)/);
-          clientId = clientIdMatch ? clientIdMatch[1] : null;
+          // Auth failed, will use clientId only
+          userId = null;
         }
       }
 
+      // Query by userId first, fall back to clientId if not found
+      // This handles migration: user saved consent anonymously, then logged in
       const consent = await getCookieConsent(env, userId, clientId);
       return json({ ok: true, consent }, 200, origin, env);
     }
