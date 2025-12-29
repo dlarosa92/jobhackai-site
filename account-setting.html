@@ -23,9 +23,20 @@
     // This runs before any other scripts to show content instantly
     (function() {
       const hasLocalStorageAuth = localStorage.getItem('user-authenticated') === 'true';
-      // SECURITY: Get email from Firebase auth instead of localStorage
-      const user = window.FirebaseAuthManager?.getCurrentUser?.();
-      const cachedEmail = user?.email || null;
+      // SECURITY: Get email from Firebase SDK keys (works before firebase-auth.js loads)
+      function getEmailFromFirebaseKeys() {
+        try {
+          const firebaseKeys = Object.keys(localStorage).filter(k => k.startsWith('firebase:authUser:'));
+          if (firebaseKeys.length > 0) {
+            const keyData = JSON.parse(localStorage.getItem(firebaseKeys[0]) || '{}');
+            return keyData.email || null;
+          }
+        } catch (e) {
+          console.warn('Failed to get email from Firebase keys:', e);
+        }
+        return null;
+      }
+      const cachedEmail = getEmailFromFirebaseKeys();
       if (hasLocalStorageAuth && cachedEmail) {
         // Use requestAnimationFrame to ensure DOM is ready
         if (document.body) {
@@ -891,10 +902,25 @@
     function initializeAccountSettingsImmediate() {
       // Check if we have cached auth data
       const hasLocalStorageAuth = localStorage.getItem('user-authenticated') === 'true';
-      // SECURITY: Get email from Firebase auth instead of localStorage
-      const user = window.FirebaseAuthManager?.getCurrentUser?.();
-      const cachedEmail = user?.email || null;
-      const cachedName = user?.displayName || localStorage.getItem('user-name');
+      // SECURITY: Get email from Firebase SDK keys (works before firebase-auth.js loads)
+      function getEmailFromFirebaseKeys() {
+        try {
+          const firebaseKeys = Object.keys(localStorage).filter(k => k.startsWith('firebase:authUser:'));
+          if (firebaseKeys.length > 0) {
+            const keyData = JSON.parse(localStorage.getItem(firebaseKeys[0]) || '{}');
+            return {
+              email: keyData.email || null,
+              displayName: keyData.displayName || null
+            };
+          }
+        } catch (e) {
+          console.warn('Failed to get email from Firebase keys:', e);
+        }
+        return { email: null, displayName: null };
+      }
+      const firebaseData = getEmailFromFirebaseKeys();
+      const cachedEmail = firebaseData.email;
+      const cachedName = firebaseData.displayName || localStorage.getItem('user-name');
       
       // CRITICAL: Remove account-protected class immediately if we have cached auth
       // This allows content to show even before Firebase verification completes

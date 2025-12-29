@@ -10,9 +10,16 @@
     // --- IMMEDIATE PAGE ACCESS CONTROL ---
     // Run immediately to prevent content flash for unauthorized users
     (function enforceAccessImmediate() {
-      // SECURITY: Use Firebase auth check instead of email validation
-      const user = window.FirebaseAuthManager?.getCurrentUser?.();
-      const isAuthenticated = localStorage.getItem('user-authenticated') === 'true' && !!user;
+      // SECURITY: Check auth state using localStorage flags and Firebase SDK keys
+      // FirebaseAuthManager may not be loaded yet, so we check Firebase SDK keys directly
+      const hasLocalStorageAuth = localStorage.getItem('user-authenticated') === 'true';
+      const hasFirebaseKeys = Object.keys(localStorage).some(k => 
+        k.startsWith('firebase:authUser:') && 
+        localStorage.getItem(k) && 
+        localStorage.getItem(k) !== 'null' &&
+        localStorage.getItem(k).length > 10
+      );
+      const isAuthenticated = hasLocalStorageAuth || hasFirebaseKeys;
       const plan = localStorage.getItem('user-plan') || 'free';
       const allowedPlans = ['trial', 'essential', 'pro', 'premium'];
       

@@ -62,9 +62,10 @@ window.stateManager = window.stateManager || (function() {
     const snapshot = {
       'user-authenticated': localStorage.getItem('user-authenticated'),
       'user-plan': localStorage.getItem('user-plan'),
-      'dev-plan': localStorage.getItem('dev-plan'),
-      // SECURITY: Removed user-email from backup (use Firebase auth instead)
-      'user-email': window.FirebaseAuthManager?.getCurrentUser?.()?.email || null
+      'dev-plan': localStorage.getItem('dev-plan')
+      // SECURITY: Do NOT include user-email in backups - email should never be stored in localStorage
+      // Email is available via Firebase auth when needed
+      // Note: Removed 'user-email' from snapshot to prevent security vulnerability
     };
     const id = `backup-${Date.now()}`;
     localStorage.setItem(id, JSON.stringify(snapshot));
@@ -74,8 +75,13 @@ window.stateManager = window.stateManager || (function() {
   function restoreBackup(id) {
     try {
       const snapshot = JSON.parse(localStorage.getItem(id) || '{}');
+      // SECURITY: Skip restoring user-email even if it exists in old backups
+      // This prevents reintroducing the security vulnerability
+      const sensitiveKeys = ['user-email', 'auth-user'];
       Object.entries(snapshot).forEach(([k, v]) => {
-        set(k, v);
+        if (!sensitiveKeys.includes(k)) {
+          set(k, v);
+        }
       });
       return { status: 'ok' };
     } catch (e) {

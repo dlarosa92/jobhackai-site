@@ -717,10 +717,31 @@
       });
     });
     
+    // Helper function to get email from Firebase SDK keys (works before firebase-auth.js loads)
+    function getEmailFromFirebaseKeys() {
+      try {
+        const firebaseKeys = Object.keys(localStorage).filter(k => k.startsWith('firebase:authUser:'));
+        if (firebaseKeys.length > 0) {
+          const keyData = JSON.parse(localStorage.getItem(firebaseKeys[0]) || '{}');
+          return keyData.email || null;
+        }
+      } catch (e) {
+        console.warn('Failed to get email from Firebase keys:', e);
+      }
+      return null;
+    }
+    
     function checkAuthentication() {
-      // SECURITY: Use Firebase auth check instead of email validation
-      const user = window.FirebaseAuthManager?.getCurrentUser?.();
-      const isAuthenticated = localStorage.getItem('user-authenticated') === 'true' && !!user;
+      // SECURITY: Check auth state using localStorage flags and Firebase SDK keys
+      // FirebaseAuthManager may not be loaded, so we check Firebase SDK keys directly
+      const hasLocalStorageAuth = localStorage.getItem('user-authenticated') === 'true';
+      const hasFirebaseKeys = Object.keys(localStorage).some(k => 
+        k.startsWith('firebase:authUser:') && 
+        localStorage.getItem(k) && 
+        localStorage.getItem(k) !== 'null' &&
+        localStorage.getItem(k).length > 10
+      );
+      const isAuthenticated = hasLocalStorageAuth || hasFirebaseKeys;
       const mainContent = document.querySelector('main');
       
       if (!isAuthenticated) {
@@ -856,9 +877,8 @@
     
     // Function to sync cards from old storage format to new format
     function syncCardsFromOldStorage() {
-      // SECURITY: Get email from Firebase auth instead of localStorage
-      const user = window.FirebaseAuthManager?.getCurrentUser?.();
-      const userEmail = user?.email || null;
+      // SECURITY: Get email from Firebase SDK keys (works before firebase-auth.js loads)
+      const userEmail = getEmailFromFirebaseKeys();
       if (!userEmail) return;
       
       // Check if there are cards in the old format
@@ -889,9 +909,8 @@
     }
     
     function getUserCards() {
-      // SECURITY: Get email from Firebase auth instead of localStorage
-      const user = window.FirebaseAuthManager?.getCurrentUser?.();
-      const userEmail = user?.email || null;
+      // SECURITY: Get email from Firebase SDK keys (works before firebase-auth.js loads)
+      const userEmail = getEmailFromFirebaseKeys();
       const db = JSON.parse(localStorage.getItem('user-db') || '{}');
       if (userEmail && db[userEmail] && Array.isArray(db[userEmail].cards)) {
         return db[userEmail].cards;
@@ -900,9 +919,8 @@
     }
     
     function saveUserCards(cards) {
-      // SECURITY: Get email from Firebase auth instead of localStorage
-      const user = window.FirebaseAuthManager?.getCurrentUser?.();
-      const userEmail = user?.email || null;
+      // SECURITY: Get email from Firebase SDK keys (works before firebase-auth.js loads)
+      const userEmail = getEmailFromFirebaseKeys();
       if (!userEmail) return;
       
       const db = JSON.parse(localStorage.getItem('user-db') || '{}');
@@ -1175,9 +1193,17 @@
     async function manageSubscription() {
       try {
         // Use the SECURE /api/billing-portal endpoint with Firebase token
+        // Note: This function requires FirebaseAuthManager, so it may not work until firebase-auth.js loads
+        // For now, check if FirebaseAuthManager is available, otherwise show error
         const user = window.FirebaseAuthManager?.getCurrentUser?.();
         if (!user) {
-          throw new Error('Not authenticated');
+          // Try to get email from Firebase SDK keys to verify auth state
+          const userEmail = getEmailFromFirebaseKeys();
+          if (!userEmail) {
+            throw new Error('Not authenticated. Please refresh the page.');
+          }
+          // If we have email but no FirebaseAuthManager, user needs to refresh
+          throw new Error('Authentication system not fully loaded. Please refresh the page.');
         }
         
         const idToken = await user.getIdToken();
@@ -1236,15 +1262,9 @@
       }
     }
     
-    // Start initialization after DOM is ready and Firebase auth is loaded
-    window.addEventListener('DOMContentLoaded', async function() {
-      // Wait for FirebaseAuthManager to be available (it's a module script)
-      let waitCount = 0;
-      while (!window.FirebaseAuthManager && waitCount < 50) {
-        await new Promise(resolve => setTimeout(resolve, 100)); // Wait up to 5 seconds
-        waitCount++;
-      }
-      
+    // Start initialization after DOM is ready
+    // Note: No need to wait for FirebaseAuthManager since we use Firebase SDK keys directly
+    window.addEventListener('DOMContentLoaded', function() {
       initializeNavigationSystem();
     });
   </script>
