@@ -158,7 +158,8 @@ export default function Dashboard() {
           if (typeof window !== 'undefined') window.location.href = '/login';
           return;
         }
-        try { localStorage.setItem('user-authenticated', 'true'); localStorage.setItem('user-email', u.email || ''); } catch (_) {}
+        // SECURITY: Do NOT store user-email in localStorage - email available via Firebase auth
+        try { localStorage.setItem('user-authenticated', 'true'); } catch (_) {}
 
         // Default plan
         let plan = 'free';

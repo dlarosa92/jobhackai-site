@@ -613,7 +613,7 @@
       localStorage.setItem('user-authenticated', 'true');
       localStorage.setItem('user-plan', planToUse);
       localStorage.setItem('dev-plan', planToUse);
-      localStorage.setItem('user-email', userEmail);
+      // SECURITY: Do NOT store user-email in localStorage - email available via Firebase auth
       
       // Sync with navigation system
       if (window.JobHackAINavigation) {

@@ -762,9 +762,9 @@
 
       console.log('✅ Authenticated:', user.email);
       // Sync to localStorage for other components
+      // SECURITY: Do NOT store user-email in localStorage - email available via Firebase auth
       try {
         localStorage.setItem('user-authenticated', 'true');
-        localStorage.setItem('user-email', user.email);
       } catch (_) {}
 
       return true;
