@@ -8,36 +8,59 @@
   <script src="js/static-auth-guard.js?v=20251007-2"></script>
   <script>
     // --- IMMEDIATE PAGE ACCESS CONTROL ---
-    // Run immediately to prevent content flash for unauthorized users
-    (function enforceAccessImmediate() {
-      // SECURITY: Check auth state using localStorage flags and Firebase SDK keys
-      // FirebaseAuthManager may not be loaded yet, so we check Firebase SDK keys directly
-      const hasLocalStorageAuth = localStorage.getItem('user-authenticated') === 'true';
-      const hasFirebaseKeys = Object.keys(localStorage).some(k => 
-        k.startsWith('firebase:authUser:') && 
-        localStorage.getItem(k) && 
-        localStorage.getItem(k) !== 'null' &&
-        localStorage.getItem(k).length > 10
-      );
-      const isAuthenticated = hasLocalStorageAuth || hasFirebaseKeys;
-      const plan = localStorage.getItem('user-plan') || 'free';
+    // Wait for Firebase auth to be ready before checking (prevents false negatives)
+    (async function enforceAccessImmediate() {
+      // Wait for Firebase auth manager to be ready (max 3 seconds)
+      if (window.FirebaseAuthManager && window.FirebaseAuthManager.waitForAuthReady) {
+        try {
+          await window.FirebaseAuthManager.waitForAuthReady(3000);
+        } catch (e) {
+          console.warn('[INTERVIEW-Q] Auth ready timeout:', e);
+        }
+      }
+      
+      // Check auth state
+      let isAuthenticated = false;
+      let plan = 'free';
+      
+      if (window.FirebaseAuthManager && window.FirebaseAuthManager.getCurrentUser) {
+        const user = window.FirebaseAuthManager.getCurrentUser();
+        isAuthenticated = !!user;
+        if (window.JobHackAINavigation) {
+          plan = window.JobHackAINavigation.getEffectivePlan();
+        } else {
+          plan = localStorage.getItem('user-plan') || 'free';
+        }
+      } else {
+        // Fallback to localStorage check
+        const hasLocalStorageAuth = localStorage.getItem('user-authenticated') === 'true';
+        const hasFirebaseKeys = Object.keys(localStorage).some(k => 
+          k.startsWith('firebase:authUser:') && 
+          localStorage.getItem(k) && 
+          localStorage.getItem(k) !== 'null' &&
+          localStorage.getItem(k).length > 10
+        );
+        isAuthenticated = hasLocalStorageAuth || hasFirebaseKeys;
+        plan = localStorage.getItem('user-plan') || 'free';
+      }
+      
       const allowedPlans = ['trial', 'essential', 'pro', 'premium'];
       
-      // If not authenticated, redirect to login immediately
+      // If not authenticated, redirect to login
       if (!isAuthenticated) {
         console.log('🚫 [INTERVIEW-Q] Not authenticated, redirecting to login');
         window.location.href = 'login.html';
         return;
       }
       
-      // If authenticated but on wrong plan, redirect to pricing with upgrade modal immediately
+      // If authenticated but on wrong plan, redirect to pricing
       if (!allowedPlans.includes(plan)) {
         console.log('🚫 [INTERVIEW-Q] Access denied for plan:', plan);
         window.location.href = 'pricing-a.html?plan=essential';
         return;
       }
       
-      // Access granted - continue loading page
+      // Access granted
       console.log('✅ [INTERVIEW-Q] Access granted for plan:', plan);
     })();
   </script>
@@ -1529,7 +1552,16 @@
     })();
 
     // --- AUTHENTICATION CHECK ---
-    function checkAuthentication() {
+    async function checkAuthentication() {
+      // Wait for Firebase auth to be ready
+      if (window.FirebaseAuthManager && window.FirebaseAuthManager.waitForAuthReady) {
+        try {
+          await window.FirebaseAuthManager.waitForAuthReady(3000);
+        } catch (e) {
+          console.warn('[INTERVIEW-Q] Auth ready timeout in checkAuthentication:', e);
+        }
+      }
+      
       // Use navigation system's authentication check for consistency
       if (window.JobHackAINavigation) {
         const authState = window.JobHackAINavigation.getAuthState();
@@ -1628,7 +1660,8 @@
     const IQ_API = { 
       GENERATE: '/api/interview-questions/generate',
       SAVE_SET: '/api/interview-questions/save-set',
-      GET_SET: '/api/interview-questions/get-set'
+      GET_SET: '/api/interview-questions/get-set',
+      HISTORY: '/api/interview-questions/history'
     };
     const IQ_ANALYTICS_HOOK = '';
 
@@ -1797,7 +1830,61 @@
         if(typeof p.showGuidance==='boolean') iqState.prefs.showGuidance=p.showGuidance;
       }catch{}
     }
-    function iqAddRecent(meta){ iqState.recents = JSON.parse(localStorage.getItem('iq_recent_sets')||'[]'); iqState.recents.unshift(meta); iqState.recents = iqState.recents.slice(0, IQ_RECENT_LIMIT); localStorage.setItem('iq_recent_sets', JSON.stringify(iqState.recents)); }
+    function iqAddRecent(meta){ 
+      iqState.recents = JSON.parse(localStorage.getItem('iq_recent_sets')||'[]'); 
+      iqState.recents.unshift(meta); 
+      iqState.recents = iqState.recents.slice(0, IQ_RECENT_LIMIT); 
+      localStorage.setItem('iq_recent_sets', JSON.stringify(iqState.recents)); 
+    }
+    
+    // Save question set to D1 for history (all plans)
+    async function iqSaveSetToD1(setObj) {
+      try {
+        const token = await getFirebaseToken();
+        if (!token) {
+          console.warn('[IQ] Not authenticated, skipping D1 save');
+          return null;
+        }
+        
+        // Save to D1 with all questions selected initially (for history)
+        const selectedIndices = setObj.questions ? setObj.questions.map((_, idx) => idx) : [];
+        const types = Array.isArray(setObj.types) ? setObj.types : (setObj.type ? [setObj.type] : ['mixed']);
+        
+        const response = await fetch(IQ_API.SAVE_SET, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            role: setObj.role,
+            seniority: setObj.seniority || null,
+            type: setObj.type || 'mixed',
+            types: types,
+            questions: setObj.questions || [],
+            selectedIndices: selectedIndices,
+            jd: setObj.jd || null
+          })
+        });
+        
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          console.warn('[IQ] Failed to save set to D1:', errorData.error || response.status);
+          return null;
+        }
+        
+        const data = await response.json();
+        if (data.success && data.id) {
+          console.log('[IQ] Saved set to D1:', data.id);
+          return { id: data.id, createdAt: data.createdAt };
+        }
+        
+        return null;
+      } catch (e) {
+        console.warn('[IQ] Error saving set to D1:', e);
+        return null;
+      }
+    }
     function iqSaveSetFull(setObj){ 
       try{ 
         const id=iqSetId(setObj.role,setObj.seed); 
@@ -2122,9 +2209,10 @@
       }
     }
     // =======================================================
-    // Interview Questions History (localStorage-backed)
+    // Interview Questions History (D1-backed)
     // UI/UX matches Resume Feedback History panel
-    // Source of truth: localStorage iq_recent_sets + iq_set_${id}
+    // Source of truth: D1 database (interview_question_sets table)
+    // localStorage used only as cache/fallback
     // =======================================================
     let _iqHistoryManageMode = false;
     let _iqHistorySelectedIds = new Set();
@@ -2223,7 +2311,14 @@
         iqHistoryCloseAllMenus();
       }
       iqHistorySyncBulkDeleteState();
-      iqHistoryRenderItems(itemsForRender || iqHistoryLoadItems());
+      // Handle async load - if itemsForRender provided, use it; otherwise load async
+      if (itemsForRender) {
+        iqHistoryRenderItems(itemsForRender);
+      } else {
+        iqHistoryLoadItems().then(items => iqHistoryRenderItems(items)).catch(() => {
+          iqHistoryRenderItems([]);
+        });
+      }
     }
 
     function iqHistoryFormatRelativeTime(ts) {
@@ -2246,7 +2341,47 @@
       }
     }
 
-    function iqHistoryLoadItems() {
+    async function iqHistoryLoadItems() {
+      // Try to fetch from D1 API first (source of truth)
+      try {
+        const token = await getFirebaseToken();
+        if (token) {
+          const response = await fetch(`${IQ_API.HISTORY}?limit=10`, {
+            method: 'GET',
+            headers: {
+              'Authorization': `Bearer ${token}`
+            }
+          });
+          
+          if (response.ok) {
+            const data = await response.json();
+            if (data.items && Array.isArray(data.items)) {
+              // Save to localStorage as cache
+              try {
+                localStorage.setItem('iq_recent_sets', JSON.stringify(data.items));
+              } catch (e) {
+                console.warn('[IQ-HISTORY] Failed to cache history:', e);
+              }
+              
+              // Transform to match expected format
+              const formatted = data.items.map((x) => ({
+                id: String(x?.id || ''),
+                role: String(x?.role || ''),
+                count: Number(x?.count || 0),
+                time: x?.time
+              })).filter((x) => x.id);
+              
+              return formatted;
+            }
+          } else {
+            console.warn('[IQ-HISTORY] API returned error:', response.status);
+          }
+        }
+      } catch (e) {
+        console.warn('[IQ-HISTORY] Failed to fetch from API, using localStorage fallback:', e);
+      }
+      
+      // Fallback to localStorage cache
       try {
         const raw = localStorage.getItem('iq_recent_sets') || '[]';
         const parsed = JSON.parse(raw);
@@ -2274,20 +2409,42 @@
       }
     }
 
-    function iqHistoryDeleteIds(ids) {
+    async function iqHistoryDeleteIds(ids) {
       const del = new Set((ids || []).map(String).filter(Boolean));
       if (!del.size) return;
-      const items = iqHistoryLoadItems();
-      const next = items.filter((x) => !del.has(String(x.id)));
-      iqHistorySaveItems(next);
-      // Best-effort cleanup of stored full payloads
-      del.forEach((id) => {
-        try { localStorage.removeItem(`iq_set_${id}`); } catch {}
-      });
-      // Exit manage mode after deletion
-      _iqHistorySelectedIds.clear();
-      iqHistorySyncBulkDeleteState();
-      iqHistoryRenderItems(next);
+      
+      try {
+        const items = await iqHistoryLoadItems();
+        const next = items.filter((x) => !del.has(String(x.id)));
+        iqHistorySaveItems(next);
+        // Best-effort cleanup of stored full payloads
+        del.forEach((id) => {
+          try { localStorage.removeItem(`iq_set_${id}`); } catch {}
+        });
+        // Exit manage mode after deletion
+        _iqHistorySelectedIds.clear();
+        iqHistorySyncBulkDeleteState();
+        iqHistoryRenderItems(next);
+      } catch (e) {
+        console.warn('[IQ-HISTORY] Failed to delete items:', e);
+        // Fallback: try localStorage-only deletion
+        try {
+          const raw = localStorage.getItem('iq_recent_sets') || '[]';
+          const parsed = JSON.parse(raw);
+          const next = parsed.filter((x) => !del.has(String(x?.id)));
+          iqHistorySaveItems(next);
+          _iqHistorySelectedIds.clear();
+          iqHistorySyncBulkDeleteState();
+          iqHistoryRenderItems(next.map(x => ({
+            id: String(x?.id || ''),
+            role: String(x?.role || ''),
+            count: Number(x?.count || 0),
+            time: x?.time
+          })));
+        } catch (e2) {
+          console.error('[IQ-HISTORY] Failed to delete from localStorage:', e2);
+        }
+      }
     }
 
     function iqHistoryRenderItems(items) {
@@ -2375,12 +2532,17 @@
     }
 
     // Backwards-compatible entry point: re-render the history panel
-    function iqRenderRecents(){
+    async function iqRenderRecents(){
       const panel = document.getElementById('iq-history-panel');
       if (!panel) return;
       iqHistorySetErrorVisible(false);
-      const items = iqHistoryLoadItems();
-      iqHistoryRenderItems(items);
+      try {
+        const items = await iqHistoryLoadItems();
+        iqHistoryRenderItems(items);
+      } catch (e) {
+        console.warn('[IQ-HISTORY] Failed to render recents:', e);
+        iqHistoryRenderItems([]);
+      }
     }
     function iqUpdateGuidanceUI(){ const t=$IQ('#toggle-guidance'); if(t){ t.setAttribute('aria-pressed', String(iqState.prefs.showGuidance)); t.textContent = iqState.prefs.showGuidance ? 'Hide Answer Guidance' : 'Show Answer Guidance'; if(iqState.prefs.showGuidance){ t.classList.add('is-pressed'); } else { t.classList.remove('is-pressed'); } } iqRenderQuestions(); }
     // Backwards-compatible entry point: wire the new History panel interactions
@@ -2403,45 +2565,66 @@
       const modalCancel = document.getElementById('iq-history-modal-cancel');
       const modalConfirm = document.getElementById('iq-history-modal-confirm');
 
-      function refreshFromStorage(withSkeleton = false) {
+      async function refreshFromStorage(withSkeleton = false) {
         if (withSkeleton) iqHistorySetLoading(true);
-        setTimeout(() => {
+        try {
           iqHistorySetErrorVisible(false);
-          const items = iqHistoryLoadItems();
+          const items = await iqHistoryLoadItems();
           iqHistoryRenderItems(items);
-        }, withSkeleton ? 80 : 0);
+        } catch (e) {
+          console.warn('[IQ-HISTORY] Failed to refresh:', e);
+          iqHistoryRenderItems([]);
+        } finally {
+          if (withSkeleton) iqHistorySetLoading(false);
+        }
       }
 
       btnRefresh?.addEventListener('click', () => refreshFromStorage(true));
       btnRetry?.addEventListener('click', () => refreshFromStorage(true));
 
-      btnManage?.addEventListener('click', () => {
-        const items = iqHistoryLoadItems();
-        iqHistorySetManageMode(true, items);
+      btnManage?.addEventListener('click', async () => {
+        try {
+          const items = await iqHistoryLoadItems();
+          iqHistorySetManageMode(true, items);
+        } catch (e) {
+          console.warn('[IQ-HISTORY] Failed to load items for manage mode:', e);
+        }
       });
-      btnCancel?.addEventListener('click', () => {
-        const items = iqHistoryLoadItems();
-        iqHistorySetManageMode(false, items);
+      btnCancel?.addEventListener('click', async () => {
+        try {
+          const items = await iqHistoryLoadItems();
+          iqHistorySetManageMode(false, items);
+        } catch (e) {
+          console.warn('[IQ-HISTORY] Failed to load items for cancel:', e);
+        }
       });
 
-      btnSelectAll?.addEventListener('click', () => {
-        const items = iqHistoryLoadItems();
-        iqHistoryGetVisibleIds(items).forEach((id) => _iqHistorySelectedIds.add(id));
-        iqHistorySyncBulkDeleteState();
-        iqHistoryRenderItems(items);
+      btnSelectAll?.addEventListener('click', async () => {
+        try {
+          const items = await iqHistoryLoadItems();
+          iqHistoryGetVisibleIds(items).forEach((id) => _iqHistorySelectedIds.add(id));
+          iqHistorySyncBulkDeleteState();
+          iqHistoryRenderItems(items);
+        } catch (e) {
+          console.warn('[IQ-HISTORY] Failed to load items for select all:', e);
+        }
       });
 
       btnDeleteSelected?.addEventListener('click', () => {
         iqHistoryOpenDeleteModalFor(Array.from(_iqHistorySelectedIds));
       });
 
-      btnClear?.addEventListener('click', () => {
-        const items = iqHistoryLoadItems();
-        iqHistorySetManageMode(true, items);
-        iqHistoryGetVisibleIds(items).forEach((id) => _iqHistorySelectedIds.add(id));
-        iqHistorySyncBulkDeleteState();
-        iqHistoryRenderItems(items);
-        iqHistoryOpenDeleteModalFor(Array.from(_iqHistorySelectedIds));
+      btnClear?.addEventListener('click', async () => {
+        try {
+          const items = await iqHistoryLoadItems();
+          iqHistorySetManageMode(true, items);
+          iqHistoryGetVisibleIds(items).forEach((id) => _iqHistorySelectedIds.add(id));
+          iqHistorySyncBulkDeleteState();
+          iqHistoryRenderItems(items);
+          iqHistoryOpenDeleteModalFor(Array.from(_iqHistorySelectedIds));
+        } catch (e) {
+          console.warn('[IQ-HISTORY] Failed to load items for clear:', e);
+        }
       });
 
       // "Learn more" link - keep behavior consistent (no nav change requested)
@@ -2474,7 +2657,16 @@
             else _iqHistorySelectedIds.add(sid);
             iqHistorySyncBulkDeleteState();
             // Keep list rendering stable (checkbox state + row selection rules)
-            iqHistoryRenderItems(iqHistoryLoadItems());
+            iqHistoryLoadItems().then(items => iqHistoryRenderItems(items)).catch(() => {
+              // Fallback: re-render current items
+              const currentItems = Array.from(document.querySelectorAll('.rf-history-item')).map(el => ({
+                id: el.getAttribute('data-session-id'),
+                role: el.querySelector('.rf-history-line1')?.textContent || '',
+                count: 0,
+                time: null
+              })).filter(x => x.id);
+              iqHistoryRenderItems(currentItems);
+            });
             return;
           }
           if (action === 'menu-toggle') {
@@ -2508,7 +2700,16 @@
           if (_iqHistorySelectedIds.has(id)) _iqHistorySelectedIds.delete(id);
           else _iqHistorySelectedIds.add(id);
           iqHistorySyncBulkDeleteState();
-          iqHistoryRenderItems(iqHistoryLoadItems());
+          iqHistoryLoadItems().then(items => iqHistoryRenderItems(items)).catch(() => {
+            // Fallback: re-render current items
+            const currentItems = Array.from(document.querySelectorAll('.rf-history-item')).map(el => ({
+              id: el.getAttribute('data-session-id'),
+              role: el.querySelector('.rf-history-line1')?.textContent || '',
+              count: 0,
+              time: null
+            })).filter(x => x.id);
+            iqHistoryRenderItems(currentItems);
+          });
           return;
         }
 
@@ -2526,7 +2727,16 @@
           if (_iqHistorySelectedIds.has(id)) _iqHistorySelectedIds.delete(id);
           else _iqHistorySelectedIds.add(id);
           iqHistorySyncBulkDeleteState();
-          iqHistoryRenderItems(iqHistoryLoadItems());
+          iqHistoryLoadItems().then(items => iqHistoryRenderItems(items)).catch(() => {
+            // Fallback: re-render current items
+            const currentItems = Array.from(document.querySelectorAll('.rf-history-item')).map(el => ({
+              id: el.getAttribute('data-session-id'),
+              role: el.querySelector('.rf-history-line1')?.textContent || '',
+              count: 0,
+              time: null
+            })).filter(x => x.id);
+            iqHistoryRenderItems(currentItems);
+          });
           return;
         }
         handleOpenRestore(id);
@@ -2541,21 +2751,25 @@
       // Modal interactions
       modalCancel?.addEventListener('click', iqHistoryCloseDeleteModal);
       modalBackdrop?.addEventListener('click', iqHistoryCloseDeleteModal);
-      modalConfirm?.addEventListener('click', () => {
+      modalConfirm?.addEventListener('click', async () => {
         const ids = Array.from(_iqHistoryPendingDeleteIds || []).map(String).filter(Boolean);
         iqHistoryCloseDeleteModal();
         if (!ids.length) return;
-        iqHistoryDeleteIds(ids);
+        await iqHistoryDeleteIds(ids);
         // Exit manage mode if we deleted everything visible
         if (_iqHistoryManageMode) {
-          const remaining = iqHistoryLoadItems();
-          if (!remaining.length) {
-            iqHistorySetManageMode(false, remaining);
-          } else {
-            // Keep manage mode, but clear selection
-            _iqHistorySelectedIds.clear();
-            iqHistorySyncBulkDeleteState();
-            iqHistoryRenderItems(remaining);
+          try {
+            const remaining = await iqHistoryLoadItems();
+            if (!remaining.length) {
+              iqHistorySetManageMode(false, remaining);
+            } else {
+              // Keep manage mode, but clear selection
+              _iqHistorySelectedIds.clear();
+              iqHistorySyncBulkDeleteState();
+              iqHistoryRenderItems(remaining);
+            }
+          } catch (e) {
+            console.warn('[IQ-HISTORY] Failed to check remaining items:', e);
           }
         }
       });
@@ -2939,10 +3153,32 @@
         iqSavePrefs(); 
         iqRenderQuestions(); 
         iqUpdateSavedChip(); 
+        
+        // Save to localStorage (for backward compatibility and offline access)
         const setId=iqSetId(setObj.role,setObj.seed); 
         iqAddRecent({ id: setId, role: setObj.role, count: setObj.count||IQ_FIXED_COUNT, time: iqNow() }); 
-        iqSaveSetFull(setObj); 
-        iqRenderRecents();
+        iqSaveSetFull(setObj);
+        
+        // Save to D1 for persistent history (non-blocking)
+        iqSaveSetToD1(setObj).then((savedSet) => {
+          if (savedSet) {
+            // Update localStorage with D1 ID for reference
+            try {
+              const recents = JSON.parse(localStorage.getItem('iq_recent_sets') || '[]');
+              const updated = recents.map(item => 
+                item.id === setId ? { ...item, d1Id: savedSet.id } : item
+              );
+              localStorage.setItem('iq_recent_sets', JSON.stringify(updated));
+            } catch (e) {
+              console.warn('[IQ] Failed to update localStorage with D1 ID:', e);
+            }
+          }
+          // Refresh history from D1
+          iqRenderRecents();
+        }).catch(() => {
+          // Still render recents even if D1 save failed
+          iqRenderRecents();
+        });
         
         // Update action bar, selection summary, and Start Fresh button state
         // (iqUpdateActionsLayout() handles all of this and calls updateStartFreshButtonState())
@@ -3850,11 +4086,11 @@ function initIQPage(){
     }
     
     // Initialize page when DOM is ready
-    document.addEventListener('DOMContentLoaded', function() {
+    document.addEventListener('DOMContentLoaded', async function() {
       // Wait for navigation system to be ready
-      const initPage = () => {
-        // Check authentication first
-        if (!checkAuthentication()) {
+      const initPage = async () => {
+        // Check authentication first (now async)
+        if (!(await checkAuthentication())) {
           return; // Stop here if not authenticated
         }
         
@@ -3866,7 +4102,7 @@ function initIQPage(){
       };
       
       // Try to initialize immediately, then retry after a short delay
-      initPage();
+      await initPage();
       setTimeout(initPage, 100);
       
       // Listen for plan changes from navigation system
