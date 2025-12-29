@@ -168,17 +168,18 @@
 
   // GA Script Loading: Prevent if consent denied
   function preventGALoading() {
-    // Guard: Only wrap createElement once
-    if (gaLoadingPrevented) {
-      return; // Already wrapped
-    }
-    gaLoadingPrevented = true;
-
-    // Remove GA script if it exists
+    // Always remove GA script if it exists (needed when revoking after GA already loaded)
     const existingScript = document.querySelector(`script[src*="googletagmanager.com/gtag/js"]`);
     if (existingScript) {
       existingScript.remove();
     }
+
+    // Guard: Only wrap createElement once to avoid nested wrappers,
+    // but still allow script removal on subsequent calls.
+    if (gaLoadingPrevented) {
+      return; // createElement already wrapped
+    }
+    gaLoadingPrevented = true;
 
     // Prevent future GA script loads by intercepting createElement (only once)
     const originalCreateElement = document.createElement;
@@ -273,6 +274,12 @@
       await setConsent({ version: 1, analytics: false, updatedAt: new Date().toISOString() });
       removeBanner();
       preventGALoading(); // Ensure GA doesn't load
+      // Notify other modules (firebase-config) that consent was revoked
+      try {
+        window.dispatchEvent(new CustomEvent('cookie-consent-revoked'));
+      } catch (e) {
+        /* ignore */
+      }
     };
 
     document.getElementById('jha-manage').onclick = () => {
@@ -331,6 +338,12 @@
         loadGAScript();
       } else {
         preventGALoading();
+        // Notify other modules (firebase-config) that consent was revoked
+        try {
+          window.dispatchEvent(new CustomEvent('cookie-consent-revoked'));
+        } catch (e) {
+          /* ignore */
+        }
       }
     };
 
