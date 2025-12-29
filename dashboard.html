@@ -2802,10 +2802,8 @@
 
     // Run lightweight startup tasks after first paint
     requestAnimationFrame(() => {
-      // Defer non-critical utilities to idle time
-      loadScriptWhenIdle('js/inactivity-tracker.js', { v: '20250115-1' });
-      loadScriptWhenIdle('js/state-persistence.js', { v: '20250115-1' });
-      loadScriptWhenIdle('js/usageMeter.js', { v: '20251006-1' });
+      // Non-critical utilities are already loaded earlier on this page (synchronous includes).
+      // Avoid duplicate loads here to prevent redundant network requests / execution.
 
       // Hydration + auth guard (import modules after first paint)
       (async () => {
@@ -2832,14 +2830,17 @@
               if (err && err.message === 'auth-guard-timeout') {
                 console.warn('Auth guard timed out; waiting briefly for auth readiness before hydrating.');
                 // Wait for auth readiness (non-blocking long wait) then re-check verification state.
-                await authManager.waitForAuthReady?.(5000).catch(() => {});
+                if (authManager && typeof authManager.waitForAuthReady === 'function') {
+                  await authManager.waitForAuthReady(5000).catch(() => {});
+                }
                 const currentUser = authManager.getCurrentUser?.();
                 if (!currentUser || !currentUser.emailVerified) {
-                  console.log('Auth not verified after waiting; invoking guard and halting hydration.');
-                  try { await authManager.requireVerifiedEmail(); } catch (_) {}
-                  return;
+                  console.log('Auth not verified after waiting; invoking guard and halting hydration unless guard passes.');
+                  // requireVerifiedEmail may reload user state and return true if verification completed.
+                  const guardResult = await authManager.requireVerifiedEmail().catch(() => false);
+                  if (!guardResult) return;
+                  // else: guard passed and user is verified; continue to hydrate
                 }
-                // else: verified after wait, continue to hydrate
               } else {
                 console.warn('Auth guard error (continuing cautiously):', err);
               }
