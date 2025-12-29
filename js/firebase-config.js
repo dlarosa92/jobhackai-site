@@ -4,7 +4,7 @@
 
 // Import the functions you need from the SDKs you need
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-app.js";
-import { getAnalytics } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-analytics.js";
+import { getAnalytics, setAnalyticsCollectionEnabled } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-analytics.js";
 // TODO: Add SDKs for Firebase products that you want to use
 // https://firebase.google.com/docs/web/setup#available-libraries
 
@@ -39,6 +39,12 @@ function initializeAnalyticsIfConsented() {
       const hasConsent = window.JHA?.cookieConsent?.hasAnalyticsConsent?.() === true;
       if (hasConsent) {
         analytics = getAnalytics(app);
+        try {
+          // Ensure collection is enabled when consent granted
+          setAnalyticsCollectionEnabled(analytics, true);
+        } catch (e) {
+          // setAnalyticsCollectionEnabled may not be supported in some environments; ignore
+        }
         console.log('✅ Firebase Analytics initialized');
       } else {
         console.log('ℹ️ Firebase Analytics not initialized - no consent');
@@ -58,6 +64,52 @@ if (typeof window !== 'undefined') {
   // Also listen for consent changes (if cookie-consent.js loads later)
   // This allows analytics to initialize if user grants consent after page load
   window.addEventListener('cookie-consent-granted', initializeAnalyticsIfConsented);
+  // When consent is revoked, disable analytics collection immediately
+  window.addEventListener('cookie-consent-revoked', () => {
+    try {
+      if (analytics) {
+        setAnalyticsCollectionEnabled(analytics, false);
+        console.log('ℹ️ Firebase Analytics collection disabled due to consent revoke');
+      }
+    } catch (e) {
+      console.warn('Could not disable analytics collection:', e);
+    }
+
+    // Replace gtag with a noop to prevent further data pushes until consent is re-granted.
+    try {
+      if (window.gtag && !window._original_gtag) {
+        window._original_gtag = window.gtag;
+      }
+      if (window._original_gtag) {
+        window.gtag = function() { console.log('[COOKIE-CONSENT] gtag call blocked due to revoked consent'); };
+        window._gtag_blocked = true;
+      }
+    } catch (e) {
+      /* ignore */
+    }
+  });
+
+  // When consent is re-granted, re-enable collection and restore gtag if possible
+  window.addEventListener('cookie-consent-granted', () => {
+    try {
+      if (analytics) {
+        setAnalyticsCollectionEnabled(analytics, true);
+        console.log('ℹ️ Firebase Analytics collection enabled due to consent grant');
+      }
+    } catch (e) {
+      /* ignore */
+    }
+
+    try {
+      if (window._gtag_blocked && window._original_gtag) {
+        window.gtag = window._original_gtag;
+        window._gtag_blocked = false;
+        delete window._original_gtag;
+      }
+    } catch (e) {
+      /* ignore */
+    }
+  });
 }
 
 // Export for use across the site (and future Wix integration)
