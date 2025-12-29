@@ -3,7 +3,7 @@
  * Handles user profile storage, retrieval, and updates
  */
 
-import { initializeApp } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-app.js";
+import initializeFirebase from './firebase-config.js';
 import { 
   getFirestore, 
   doc, 
@@ -14,21 +14,8 @@ import {
   increment
 } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-firestore.js";
 
-import { firebaseConfig } from './firebase-config.js';
-import { getApps } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-app.js";
-
-// Use existing Firebase app instance if available to prevent multiple initializations
-// This prevents conflicts between firebase-config.js and firestore-profiles.js
-let app;
-const existingApps = getApps();
-if (existingApps.length > 0) {
-  app = existingApps[0];
-  console.log('✅ Using existing Firebase app instance for Firestore');
-} else {
-  app = initializeApp(firebaseConfig);
-  console.log('✅ Initialized new Firebase app instance for Firestore');
-}
-
+// Lazily initialize the Firebase app (idempotent) and Firestore instance.
+const app = await initializeFirebase({ enableAnalytics: false });
 const db = getFirestore(app);
 
 /**
