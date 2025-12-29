@@ -469,6 +469,21 @@
       }
     });
     
+    // Helper function to get email from Firebase SDK keys (works before firebase-auth.js loads)
+    // SECURITY: Defined at module level so it's accessible to all functions
+    function getEmailFromFirebaseKeys() {
+      try {
+        const firebaseKeys = Object.keys(localStorage).filter(k => k.startsWith('firebase:authUser:'));
+        if (firebaseKeys.length > 0) {
+          const keyData = JSON.parse(localStorage.getItem(firebaseKeys[0]) || '{}');
+          return keyData.email || null;
+        }
+      } catch (e) {
+        console.warn('Failed to get email from Firebase keys:', e);
+      }
+      return null;
+    }
+    
     // INTEGRATION: GOOGLE SHEETS - Functions to manage saved cards could sync with backend/Sheets
     function initializeSavedPaymentMethods() {
       const savedPaymentSection = document.getElementById('savedPaymentSection');
@@ -478,18 +493,6 @@
       
       // Check if user has saved cards using the new user database format
       // SECURITY: Get email from Firebase SDK keys (works before firebase-auth.js loads)
-      function getEmailFromFirebaseKeys() {
-        try {
-          const firebaseKeys = Object.keys(localStorage).filter(k => k.startsWith('firebase:authUser:'));
-          if (firebaseKeys.length > 0) {
-            const keyData = JSON.parse(localStorage.getItem(firebaseKeys[0]) || '{}');
-            return keyData.email || null;
-          }
-        } catch (e) {
-          console.warn('Failed to get email from Firebase keys:', e);
-        }
-        return null;
-      }
       const userEmail = getEmailFromFirebaseKeys();
       const db = JSON.parse(localStorage.getItem('user-db') || '{}');
       const savedCards = userEmail && db[userEmail] && Array.isArray(db[userEmail].cards) ? db[userEmail].cards : [];
