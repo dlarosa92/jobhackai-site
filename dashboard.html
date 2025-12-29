@@ -2864,18 +2864,27 @@
           // On startup error, do NOT unconditionally hydrate. Only hydrate if we can confirm
           // the user is authenticated and email-verified (to avoid showing protected content).
           try {
-            const [{ default: authManager }, { hydrateDashboard }] = await Promise.allSettled([
+            const settled = await Promise.allSettled([
               import('./js/firebase-auth.js'),
               import('./js/dashboard-hydration.js')
-            ]).then(results => results.map(r => r.status === 'fulfilled' ? r.value : null));
+            ]);
+
+            const authModuleResult = settled[0];
+            const hydrateModuleResult = settled[1];
+
+            const authManager = (authModuleResult && authModuleResult.status === 'fulfilled') ? authModuleResult.value.default : null;
+            const hydrateModule = (hydrateModuleResult && hydrateModuleResult.status === 'fulfilled') ? hydrateModuleResult.value : null;
+            const hydrateFn = hydrateModule ? (hydrateModule.hydrateDashboard || hydrateModule.default || null) : null;
 
             if (authManager && typeof authManager.waitForAuthReady === 'function') {
               // Give auth a short window to settle
-              await authManager.waitForAuthReady?.(3000).catch(() => {});
+              if (authManager.waitForAuthReady) {
+                await authManager.waitForAuthReady(3000).catch(() => {});
+              }
               const currentUser = authManager.getCurrentUser?.();
-              if (currentUser && currentUser.emailVerified) {
+              if (currentUser && currentUser.emailVerified && hydrateFn) {
                 // Safe to hydrate for verified users
-                try { hydrateDashboard(); } catch (_) {}
+                try { await hydrateFn(); } catch (_) {}
               } else {
                 console.log('Startup error: user not verified or not available; skipping hydrate.');
               }

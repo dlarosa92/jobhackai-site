@@ -21,8 +21,10 @@ export async function hydrateDashboard() {
 
   const doHydrate = async () => {
     try {
-      // Wait briefly for auth readiness (non-blocking long wait)
-      await window.FirebaseAuthManager?.waitForAuthReady?.(3000).catch(() => {});
+      // Wait briefly for auth readiness (non-blocking long wait) if available
+      if (window.FirebaseAuthManager && typeof window.FirebaseAuthManager.waitForAuthReady === 'function') {
+        await window.FirebaseAuthManager.waitForAuthReady(3000).catch(() => {});
+      }
 
       const user = window.FirebaseAuthManager?.getCurrentUser?.();
       if (!user) {
@@ -100,6 +102,7 @@ export async function hydrateDashboard() {
     }
   };
 
-  // Caller is responsible for scheduling (idle/timeouts). Run hydration immediately.
-  doHydrate();
+  // Caller is responsible for scheduling (idle/timeouts). Run hydration and await completion
+  // so this async function resolves when hydration completes.
+  await doHydrate();
 }
