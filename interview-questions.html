@@ -1923,7 +1923,7 @@
             
             if (!response.ok) {
               if (response.status === 403) {
-                iqToast('Accessing question sets requires Pro or Premium plan.');
+                iqToast('Accessing question sets requires a valid plan (Trial, Essential, Pro, or Premium).');
               } else {
                 iqToast('Question set not found.');
               }
@@ -2506,41 +2506,62 @@
         }
         
         // Delete from D1 for numeric IDs (D1 IDs)
-        const deletePromises = Array.from(del).map(async (id) => {
-          // Check if ID is numeric (D1 ID) vs local ID (e.g., "role:seed")
-          const isD1Id = /^\d+$/.test(id);
-          if (isD1Id) {
-            try {
-              const response = await fetch(`${IQ_API.HISTORY}/${id}`, {
-                method: 'DELETE',
-                headers: {
-                  'Authorization': `Bearer ${token}`
+        const deleteResults = await Promise.allSettled(
+          Array.from(del).map(async (id) => {
+            // Check if ID is numeric (D1 ID) vs local ID (e.g., "role:seed")
+            const isD1Id = /^\d+$/.test(id);
+            if (isD1Id) {
+              try {
+                const response = await fetch(`${IQ_API.HISTORY}/${id}`, {
+                  method: 'DELETE',
+                  headers: {
+                    'Authorization': `Bearer ${token}`
+                  }
+                });
+                
+                if (!response.ok) {
+                  console.warn(`[IQ-HISTORY] Failed to delete D1 set ${id}:`, response.status);
+                  return { id, success: false };
                 }
-              });
-              
-              if (!response.ok) {
-                console.warn(`[IQ-HISTORY] Failed to delete D1 set ${id}:`, response.status);
-                return false;
+                return { id, success: true };
+              } catch (e) {
+                console.warn(`[IQ-HISTORY] Error deleting D1 set ${id}:`, e);
+                return { id, success: false };
               }
-              return true;
-            } catch (e) {
-              console.warn(`[IQ-HISTORY] Error deleting D1 set ${id}:`, e);
-              return false;
+            }
+            // For local IDs, just remove from localStorage
+            return { id, success: true };
+          })
+        );
+        
+        // Track which deletions succeeded
+        const successfullyDeleted = new Set();
+        const failedDeletions = [];
+        
+        deleteResults.forEach((result, index) => {
+          if (result.status === 'fulfilled' && result.value.success) {
+            successfullyDeleted.add(result.value.id);
+          } else {
+            const id = Array.from(del)[index];
+            failedDeletions.push(id);
+            if (result.status === 'rejected') {
+              console.error(`[IQ-HISTORY] Delete promise rejected for ${id}:`, result.reason);
             }
           }
-          // For local IDs, just remove from localStorage
-          return true;
         });
         
-        await Promise.all(deletePromises);
+        // Show error toast if any deletions failed
+        if (failedDeletions.length > 0) {
+          iqToast(`Failed to delete ${failedDeletions.length} item(s). Please try again.`);
+        }
         
-        // Update localStorage cache
+        // Update localStorage cache - only filter out successfully deleted items
         const items = await iqHistoryLoadItems();
-        const next = items.filter((x) => !del.has(String(x.id)));
+        const next = items.filter((x) => !successfullyDeleted.has(String(x.id)));
         iqHistorySaveItems(next);
         
-        // Best-effort cleanup of stored full payloads
-        del.forEach((id) => {
+        // Best-effort cleanup of stored full payloads (only for successfully deleted items)
+        successfullyDeleted.forEach((id) => {
           try { localStorage.removeItem(`iq_set_${id}`); } catch {}
         });
         
