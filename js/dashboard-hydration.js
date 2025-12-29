@@ -100,9 +100,6 @@ export async function hydrateDashboard() {
     }
   };
 
-  if ('requestIdleCallback' in window) {
-    requestIdleCallback(doHydrate, { timeout: 2000 });
-  } else {
-    setTimeout(doHydrate, 700);
-  }
+  // Caller is responsible for scheduling (idle/timeouts). Run hydration immediately.
+  doHydrate();
 }

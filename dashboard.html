@@ -2861,7 +2861,30 @@
           }
         } catch (e) {
           console.error('Dashboard startup error:', e);
-          try { const { hydrateDashboard } = await import('./js/dashboard-hydration.js'); hydrateDashboard(); } catch (_) {}
+          // On startup error, do NOT unconditionally hydrate. Only hydrate if we can confirm
+          // the user is authenticated and email-verified (to avoid showing protected content).
+          try {
+            const [{ default: authManager }, { hydrateDashboard }] = await Promise.allSettled([
+              import('./js/firebase-auth.js'),
+              import('./js/dashboard-hydration.js')
+            ]).then(results => results.map(r => r.status === 'fulfilled' ? r.value : null));
+
+            if (authManager && typeof authManager.waitForAuthReady === 'function') {
+              // Give auth a short window to settle
+              await authManager.waitForAuthReady?.(3000).catch(() => {});
+              const currentUser = authManager.getCurrentUser?.();
+              if (currentUser && currentUser.emailVerified) {
+                // Safe to hydrate for verified users
+                try { hydrateDashboard(); } catch (_) {}
+              } else {
+                console.log('Startup error: user not verified or not available; skipping hydrate.');
+              }
+            } else {
+              console.log('Startup error: authManager not available; skipping hydrate to avoid exposing protected content.');
+            }
+          } catch (innerErr) {
+            console.error('Error during safe startup recovery:', innerErr);
+          }
         }
       })();
     });
