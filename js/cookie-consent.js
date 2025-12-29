@@ -15,8 +15,9 @@
   // Module-level variables for banner and GA loading guard
   let bannerElement = null;
   let gaLoadingPrevented = false;
+  let escHandler = null; // Persistent ESC handler for modal
 
-  // Helper: Get consent from localStorage
+  // Helper: Get consent from localStorage (UI performance)
   function getConsent() {
     try {
       const stored = localStorage.getItem(CONSENT_KEY);
@@ -24,6 +25,45 @@
     } catch (e) {
       return null;
     }
+  }
+
+  // Helper: Fetch consent from server (D1 source of truth)
+  async function fetchConsentFromServer() {
+    try {
+      const clientId = getOrCreateClientId();
+      
+      // Get auth token if user is logged in
+      let authToken = null;
+      if (window.FirebaseAuthManager?.getCurrentUser) {
+        const user = window.FirebaseAuthManager.getCurrentUser();
+        if (user) {
+          authToken = await user.getIdToken().catch(() => null);
+        }
+      }
+
+      const headers = {};
+      if (authToken) {
+        headers['Authorization'] = `Bearer ${authToken}`;
+      }
+
+      const response = await fetch('/api/cookie-consent', {
+        method: 'GET',
+        headers,
+        credentials: 'include'
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        if (data.ok && data.consent) {
+          // Sync server consent to localStorage
+          setConsentLocal(data.consent);
+          return data.consent;
+        }
+      }
+    } catch (error) {
+      console.warn('[COOKIE-CONSENT] Failed to fetch consent from server:', error);
+    }
+    return null;
   }
 
   // Helper: Set consent in localStorage
@@ -293,12 +333,10 @@
 
     modal.querySelector('.jha-cookie-modal-backdrop').onclick = closeModal;
     
-    // ESC key handler
-    let escHandler = null;
+    // ESC key handler (persistent, doesn't remove itself)
     escHandler = function(e) {
-      if (e.key === 'Escape' && modal.classList.contains('active')) {
+      if (e.key === 'Escape' && modal && modal.classList.contains('active')) {
         closeModal();
-        document.removeEventListener('keydown', escHandler);
       }
     };
     document.addEventListener('keydown', escHandler);
@@ -311,8 +349,17 @@
     if (!modal) {
       modal = createModal();
     }
+    
+    // Sync checkbox state to current consent (fixes stale state issue)
+    const analyticsCheckbox = document.getElementById('jha-toggle-analytics');
+    if (analyticsCheckbox) {
+      analyticsCheckbox.checked = hasAnalyticsConsent();
+    }
+    
     modal.classList.add('active');
-    document.getElementById('jha-toggle-analytics').focus();
+    if (analyticsCheckbox) {
+      analyticsCheckbox.focus();
+    }
     document.body.style.overflow = 'hidden';
   }
 
@@ -351,7 +398,15 @@
   };
 
   // Initialize
-  function init() {
+  async function init() {
+    // Fetch consent from server (D1 source of truth) on page load
+    // This ensures multi-device sync and makes D1 the actual source of truth
+    const serverConsent = await fetchConsentFromServer();
+    if (serverConsent) {
+      // Server consent loaded, use it (already synced to localStorage by fetchConsentFromServer)
+      console.log('[COOKIE-CONSENT] Loaded consent from server (D1)');
+    }
+
     // Prevent GA from loading if no consent
     if (!hasAnalyticsConsent()) {
       preventGALoading();
