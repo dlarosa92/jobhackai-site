@@ -7,7 +7,7 @@
 // Version stamp for deployment verification
 console.log('🔧 firebase-auth.js VERSION: redirect-fix-v3-CACHE-BUST-FIX - ' + new Date().toISOString());
 
-import { firebaseConfig } from './firebase-config.js';
+import initializeFirebase from './firebase-config.js';
 
 import UserProfileManager from './firestore-profiles.js';
 // Import Firebase Auth functions
@@ -30,10 +30,8 @@ import {
   confirmPasswordReset
 } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-auth.js";
 
-import { initializeApp } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-app.js";
-
-// Initialize Firebase
-const app = initializeApp(firebaseConfig);
+// Initialize Firebase (deferred, idempotent)
+const app = await initializeFirebase({ enableAnalytics: false });
 const auth = getAuth(app);
 
 // --- DIRECT PLAN FETCH FROM D1 VIA API (navigation-independent) ---

@@ -10,12 +10,12 @@
   <title>JobHackAI</title>
   <link rel="icon" type="image/png" href="assets/jobhackai_icon_only_128.png">
   <link rel="apple-touch-icon" href="assets/jobhackai_icon_only_128.png">
-  <script src="js/dynamic-favicon.js?v=20250111-1"></script>
+  <script src="js/dynamic-favicon.js?v=20250111-1" defer></script>
   <link rel="stylesheet" href="css/tokens.css">
   <link rel="stylesheet" href="css/main.css">
   <link rel="stylesheet" href="css/header.css">
   <link rel="stylesheet" href="css/footer.css">
-  <script src="js/components/usage-indicator.js"></script>
+  <script src="js/components/usage-indicator.js" defer></script>
   <script type="module">
     import authManager from './js/firebase-auth.js';
     document.documentElement.classList.add('auth-pending');
@@ -660,17 +660,19 @@
   </nav>
   <div class="mobile-nav-backdrop" id="mobileNavBackdrop"></div>
   <!-- Centralized mobile menu handler -->
-  <script src="js/mobile-menu.js?v=20250115-1"></script>
+  <script src="js/mobile-menu.js?v=20250115-1" defer></script>
   <!-- Main Content -->
   <main>
-    <div id="dashboard-root">
-      <!-- Loading skeleton while auth loads -->
+    <div id="dashboard-skeleton-container">
       <div class="loading-skeleton skeleton-banner"></div>
       <div class="dashboard-features">
         <div class="loading-skeleton skeleton-card"></div>
         <div class="loading-skeleton skeleton-card"></div>
         <div class="loading-skeleton skeleton-card"></div>
       </div>
+    </div>
+    <div id="dashboard-content-wrapper" style="display: none;">
+      <!-- Actual dashboard content will be loaded here by JavaScript -->
     </div>
   </main>
   <!-- Footer (canonical) -->
@@ -2784,22 +2786,64 @@
     });
   </script>
   <script src="js/main.js" type="module"></script>
-  <script src="js/analytics.js" type="module"></script>
-  <script type="module">
-    import authManager from './js/firebase-auth.js';
+  <script>
+    // Non-blocking loader: append non-critical scripts at idle priority.
+    function loadScriptWhenIdle(src, opts = {}) {
+      const loader = () => {
+        const s = document.createElement('script');
+        if (opts.module) s.type = 'module';
+        s.src = src + (opts.v ? `?v=${opts.v}` : '');
+        s.defer = true;
+        document.body.appendChild(s);
+      };
+      if ('requestIdleCallback' in window) requestIdleCallback(loader, { timeout: 2000 });
+      else setTimeout(loader, opts.delay || 800);
+    }
 
-    (async () => {
-      console.log('📋 dashboard guard v3 running');
-      
-      // Require verified email before allowing dashboard access
-      const isVerified = await authManager.requireVerifiedEmail();
-      if (!isVerified) {
-        console.log('🚫 User not verified or not authenticated — redirecting');
-        return; // requireVerifiedEmail handles the redirect
-      }
-      
-      console.log('✅ Verified user accessing dashboard');
-    })();
+    // Run lightweight startup tasks after first paint
+    requestAnimationFrame(() => {
+      // Defer non-critical utilities to idle time
+      loadScriptWhenIdle('js/inactivity-tracker.js', { v: '20250115-1' });
+      loadScriptWhenIdle('js/state-persistence.js', { v: '20250115-1' });
+      loadScriptWhenIdle('js/usageMeter.js', { v: '20251006-1' });
+
+      // Hydration + auth guard (import modules after first paint)
+      (async () => {
+        try {
+          const { default: authManager } = await import('./js/firebase-auth.js');
+          const { hydrateDashboard } = await import('./js/dashboard-hydration.js');
+
+          // Run auth guard but don't block the shell for longer than a short timeout
+          if (typeof authManager.requireVerifiedEmail === 'function') {
+            const guardPromise = authManager.requireVerifiedEmail();
+            const guardResult = await Promise.race([
+              guardPromise,
+              new Promise(res => setTimeout(() => res(false), 3000))
+            ]);
+            if (!guardResult) {
+              console.debug('Auth guard returned false or timed out; continuing with hydration.');
+            }
+          }
+
+          // Start hydration at idle priority
+          if ('requestIdleCallback' in window) {
+            requestIdleCallback(() => hydrateDashboard(), { timeout: 2000 });
+          } else {
+            setTimeout(() => hydrateDashboard(), 700);
+          }
+
+          // Defer analytics until after first paint + idle (non-blocking)
+          if ('requestIdleCallback' in window) {
+            requestIdleCallback(() => import('./js/analytics.js').then(m => m.trackPageView?.()), { timeout: 3000 });
+          } else {
+            setTimeout(() => import('./js/analytics.js').then(m => m.trackPageView?.()), 1200);
+          }
+        } catch (e) {
+          console.error('Dashboard startup error:', e);
+          try { const { hydrateDashboard } = await import('./js/dashboard-hydration.js'); hydrateDashboard(); } catch (_) {}
+        }
+      })();
+    });
   </script>
 </body>
 </html> 

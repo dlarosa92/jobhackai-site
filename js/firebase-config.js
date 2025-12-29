@@ -1,15 +1,7 @@
 // Firebase client initialization for JobHackAI
-// This module uses the official Firebase CDN ESM builds so it can be imported
-// from browser pages. For Wix/Velo, you may adapt imports per Wix docs later.
+// This module provides a lazy, idempotent initializer so importing it
+// does not cause network requests or side-effects during first paint.
 
-// Import the functions you need from the SDKs you need
-import { initializeApp } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-app.js";
-import { getAnalytics } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-analytics.js";
-// TODO: Add SDKs for Firebase products that you want to use
-// https://firebase.google.com/docs/web/setup#available-libraries
-
-// Your web app's Firebase configuration
-// For Firebase JS SDK v7.20.0 and later, measurementId is optional
 const firebaseConfig = {
   apiKey: "AIzaSyCDZksp8XpRJaYnoihiuXT5Uvd0YrbLdfw",
   authDomain: "jobhackai-90558.firebaseapp.com",
@@ -20,24 +12,30 @@ const firebaseConfig = {
   measurementId: "G-X48E90B00S"
 };
 
-// Initialize Firebase
-const app = initializeApp(firebaseConfig);
+// Lazy, idempotent initialization helper that dynamically imports Firebase SDKs.
+let _appPromise = null;
+export default function initializeFirebase(options = { enableAnalytics: false }) {
+  if (_appPromise) return _appPromise;
 
-// Conditionally initialize Analytics only in browser environment
-let analytics = null;
-if (typeof window !== 'undefined') {
-  try {
-    // Only initialize if measurementId is valid
-    if (firebaseConfig.measurementId) {
-      analytics = getAnalytics(app);
-      console.log('✅ Firebase Analytics initialized');
+  _appPromise = (async () => {
+    const { initializeApp, getApps, getApp } = await import("https://www.gstatic.com/firebasejs/12.1.0/firebase-app.js");
+    const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
+
+    if (options.enableAnalytics && typeof window !== 'undefined') {
+      try {
+        const { getAnalytics } = await import("https://www.gstatic.com/firebasejs/12.1.0/firebase-analytics.js");
+        getAnalytics(app);
+        console.debug('Deferred firebase analytics initialized');
+      } catch (e) {
+        console.debug('Deferred firebase analytics failed:', e && e.message);
+      }
     }
-  } catch (error) {
-    // Analytics initialization failed - log but don't block app
-    console.log('ℹ️ Firebase Analytics not available:', error.message);
-    analytics = null;
-  }
+
+    return app;
+  })();
+
+  return _appPromise;
 }
 
-// Export for use across the site (and future Wix integration)
-export { app, analytics, firebaseConfig };
+// Export the static config for other modules that may need it (non-init use).
+export { firebaseConfig };

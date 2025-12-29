@@ -3,17 +3,17 @@
  * Handles email verification and password reset flows from Firebase email links
  */
 
-import { initializeApp } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-app.js";
+import initializeFirebase from "/js/firebase-config.js";
 import { 
   getAuth, 
   applyActionCode, 
   verifyPasswordResetCode, 
   confirmPasswordReset 
 } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-auth.js";
-import { firebaseConfig } from "/js/firebase-config.js";
 import authManager from "/js/firebase-auth.js";
 
-const app = initializeApp(firebaseConfig);
+// Lazily initialize firebase app for action handlers
+const app = await initializeFirebase({ enableAnalytics: false });
 const auth = getAuth(app);
 
 // Get URL parameters
