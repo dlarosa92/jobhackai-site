@@ -73,11 +73,12 @@ export async function onRequest(context) {
 
     console.log('[IQ-GET-SET] Plan check:', { requestId, uid, plan, effectivePlan });
 
-    // Get set requires pro or premium (Mock Interview access)
-    const allowedPlans = ['pro', 'premium'];
+    // Allow all plans to view their own question sets (for history restoration)
+    // Mock Interview usage is enforced elsewhere (mock-interview.html)
+    const allowedPlans = ['trial', 'essential', 'pro', 'premium'];
     if (!allowedPlans.includes(effectivePlan)) {
       return errorResponse(
-        'Accessing question sets for Mock Interviews requires Pro or Premium plan.',
+        'Accessing question sets requires a valid plan.',
         403,
         origin,
         env,

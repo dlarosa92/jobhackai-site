@@ -922,6 +922,52 @@ export async function getInterviewQuestionSetById(env, id, userId) {
 }
 
 /**
+ * Delete an interview question set by ID (with ownership check)
+ * @param {Object} env - Cloudflare environment with DB binding
+ * @param {number} setId - Set ID to delete
+ * @param {number} userId - User ID from users table (required for security)
+ * @returns {Promise<boolean>} True if deleted, false if not found or doesn't belong to user
+ */
+export async function deleteInterviewQuestionSet(env, setId, userId) {
+  if (!env.DB) {
+    console.warn('[DB] D1 binding not available');
+    return false;
+  }
+
+  if (!userId || typeof userId !== 'number') {
+    throw new Error('userId is required for deleteInterviewQuestionSet');
+  }
+
+  try {
+    // Verify ownership and get set
+    const set = await env.DB.prepare(
+      `SELECT id, user_id FROM interview_question_sets WHERE id = ? AND user_id = ?`
+    ).bind(setId, userId).first();
+
+    if (!set) {
+      return false;
+    }
+
+    // Delete the set
+    const result = await env.DB.prepare(
+      `DELETE FROM interview_question_sets WHERE id = ? AND user_id = ?`
+    ).bind(setId, userId).run();
+
+    const rowsAffected = result?.meta?.changes || result?.changes || 0;
+
+    if (rowsAffected === 0) {
+      return false;
+    }
+
+    console.log('[DB] Deleted interview question set:', { setId, userId });
+    return true;
+  } catch (error) {
+    console.error('[DB] Error in deleteInterviewQuestionSet:', error);
+    throw error;
+  }
+}
+
+/**
  * Get interview question sets for a user (for history/recent sets)
  * @param {Object} env - Cloudflare environment with DB binding
  * @param {number} userId - User ID from users table
