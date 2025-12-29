@@ -130,7 +130,15 @@ export async function onRequest(context) {
     return json({ ok: false, error: 'Method not allowed' }, 405, origin, env);
   } catch (error) {
     console.error('[COOKIE-CONSENT] Error:', error);
-    return json({ ok: false, error: 'Internal server error' }, 500, origin, env);
+    console.error('[COOKIE-CONSENT] Error stack:', error.stack);
+    // Include error details in response for debugging
+    const errorInfo = {
+      message: error.message,
+      name: error.name,
+      hasEnv: !!env,
+      dbBindings: env ? Object.keys(env).filter(k => k.includes('DB') || k.includes('D1')) : []
+    };
+    return json({ ok: false, error: 'Internal server error', debug: errorInfo }, 500, origin, env);
   }
 }
 
