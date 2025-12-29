@@ -110,8 +110,27 @@ async function apiFetch(path, options = {}) {
 }
 
 function getAuthState() {
-  return window.JobHackAINavigation?.getAuthState?.() || {
-    isAuthenticated: !!window.FirebaseAuthManager?.getCurrentUser?.()
+  if (window.JobHackAINavigation?.getAuthState) {
+    return window.JobHackAINavigation.getAuthState();
+  }
+  // Fallback: Check Firebase SDK keys synchronously (works before FirebaseAuthManager is ready)
+  // FirebaseAuthManager.getCurrentUser() returns null until onAuthStateChanged fires
+  function hasFirebaseAuthKeys() {
+    try {
+      return Object.keys(localStorage).some(k => 
+        k.startsWith('firebase:authUser:') && 
+        localStorage.getItem(k) && 
+        localStorage.getItem(k) !== 'null' &&
+        localStorage.getItem(k).length > 10
+      );
+    } catch (e) {
+      return false;
+    }
+  }
+  const hasLocalStorageAuth = localStorage.getItem('user-authenticated') === 'true';
+  const hasFirebaseKeys = hasFirebaseAuthKeys();
+  return {
+    isAuthenticated: hasLocalStorageAuth || hasFirebaseKeys
   };
 }
 

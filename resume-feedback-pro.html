@@ -1146,9 +1146,23 @@
   <script>
     // --- AUTHENTICATION CHECK ---
     function checkAuthentication() {
-      // SECURITY: Use Firebase auth check instead of email validation
-      const user = window.FirebaseAuthManager?.getCurrentUser?.();
-      const isAuthenticated = localStorage.getItem('user-authenticated') === 'true' && !!user;
+      // SECURITY: Check Firebase SDK keys synchronously (works before FirebaseAuthManager is ready)
+      // FirebaseAuthManager.getCurrentUser() returns null until onAuthStateChanged fires
+      function hasFirebaseAuthKeys() {
+        try {
+          return Object.keys(localStorage).some(k => 
+            k.startsWith('firebase:authUser:') && 
+            localStorage.getItem(k) && 
+            localStorage.getItem(k) !== 'null' &&
+            localStorage.getItem(k).length > 10
+          );
+        } catch (e) {
+          return false;
+        }
+      }
+      const hasLocalStorageAuth = localStorage.getItem('user-authenticated') === 'true';
+      const hasFirebaseKeys = hasFirebaseAuthKeys();
+      const isAuthenticated = hasLocalStorageAuth || hasFirebaseKeys;
       const mainContent = document.querySelector('main');
       
       if (!isAuthenticated) {
