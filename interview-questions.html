@@ -2539,14 +2539,18 @@
         const failedDeletions = [];
         
         deleteResults.forEach((result, index) => {
-          if (result.status === 'fulfilled' && result.value.success) {
-            successfullyDeleted.add(result.value.id);
+          if (result.status === 'fulfilled') {
+            if (result.value.success) {
+              successfullyDeleted.add(result.value.id);
+            } else {
+              // Promise fulfilled but deletion failed
+              failedDeletions.push(result.value.id);
+            }
           } else {
+            // Promise rejected - use index to get ID since we don't have result.value
             const id = Array.from(del)[index];
             failedDeletions.push(id);
-            if (result.status === 'rejected') {
-              console.error(`[IQ-HISTORY] Delete promise rejected for ${id}:`, result.reason);
-            }
+            console.error(`[IQ-HISTORY] Delete promise rejected for ${id}:`, result.reason);
           }
         });
         
