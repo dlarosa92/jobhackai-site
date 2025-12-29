@@ -290,13 +290,14 @@ export async function getUserPlanData(env, authId) {
  * @returns {Promise<Object>} Resume session { id, user_id, title, role, created_at, raw_text_location }
  */
 export async function createResumeSession(env, userId, { title = null, role = null, rawTextLocation = null } = {}) {
-  if (!env.DB) {
+  const db = getDb(env);
+  if (!db) {
     console.warn('[DB] D1 binding not available');
     return null;
   }
 
   try {
-    const result = await env.DB.prepare(
+    const result = await db.prepare(
       `INSERT INTO resume_sessions (user_id, title, role, raw_text_location) 
        VALUES (?, ?, ?, ?) 
        RETURNING id, user_id, title, role, created_at, raw_text_location`
@@ -318,7 +319,8 @@ export async function createResumeSession(env, userId, { title = null, role = nu
  * @returns {Promise<Object>} Feedback session { id, resume_session_id, feedback_json, created_at }
  */
 export async function createFeedbackSession(env, resumeSessionId, feedbackJson) {
-  if (!env.DB) {
+  const db = getDb(env);
+  if (!db) {
     console.warn('[DB] D1 binding not available');
     return null;
   }
@@ -328,7 +330,7 @@ export async function createFeedbackSession(env, resumeSessionId, feedbackJson) 
       ? feedbackJson 
       : JSON.stringify(feedbackJson);
 
-    const result = await env.DB.prepare(
+    const result = await db.prepare(
       `INSERT INTO feedback_sessions (resume_session_id, feedback_json) 
        VALUES (?, ?) 
        RETURNING id, resume_session_id, feedback_json, created_at`
@@ -352,7 +354,8 @@ export async function createFeedbackSession(env, resumeSessionId, feedbackJson) 
  * @returns {Promise<Object>} Usage event { id, user_id, feature, tokens_used, meta_json, created_at }
  */
 export async function logUsageEvent(env, userId, feature, tokensUsed = null, meta = null) {
-  if (!env.DB) {
+  const db = getDb(env);
+  if (!db) {
     console.warn('[DB] D1 binding not available');
     return null;
   }
@@ -360,7 +363,7 @@ export async function logUsageEvent(env, userId, feature, tokensUsed = null, met
   try {
     const metaStr = meta ? JSON.stringify(meta) : null;
 
-    const result = await env.DB.prepare(
+    const result = await db.prepare(
       `INSERT INTO usage_events (user_id, feature, tokens_used, meta_json) 
        VALUES (?, ?, ?, ?) 
        RETURNING id, user_id, feature, tokens_used, meta_json, created_at`
@@ -383,7 +386,8 @@ export async function logUsageEvent(env, userId, feature, tokensUsed = null, met
  * @returns {Promise<Array>} List of history items
  */
 export async function getResumeFeedbackHistory(env, userId, { limit = 20 } = {}) {
-  if (!env.DB) {
+  const db = getDb(env);
+  if (!db) {
     console.warn('[DB] D1 binding not available');
     return [];
   }
@@ -393,7 +397,7 @@ export async function getResumeFeedbackHistory(env, userId, { limit = 20 } = {})
     // Uses correlated subqueries to get the most recent feedback per resume session
     // This ensures one row per resume_session even when multiple feedback_sessions exist
     // Also fetches ats_score from resume_sessions column or extracts from feedback_json
-    const results = await env.DB.prepare(`
+    const results = await db.prepare(`
       SELECT 
         rs.id as session_id,
         rs.title,
@@ -477,7 +481,8 @@ export async function getResumeFeedbackHistory(env, userId, { limit = 20 } = {})
  * @returns {Promise<Object|null>} Full feedback session or null if not found/unauthorized
  */
 export async function getFeedbackSessionById(env, sessionId, userId) {
-  if (!env.DB) {
+  const db = getDb(env);
+  if (!db) {
     console.warn('[DB] D1 binding not available');
     return null;
   }
@@ -489,7 +494,7 @@ export async function getFeedbackSessionById(env, sessionId, userId) {
 
   try {
     // Join resume_sessions and feedback_sessions, enforcing user ownership
-    const row = await env.DB.prepare(`
+    const row = await db.prepare(`
       SELECT 
         rs.id as session_id,
         rs.user_id,
@@ -574,7 +579,8 @@ export async function getFeedbackSessionById(env, sessionId, userId) {
  * @returns {Promise<boolean>} True if deleted, false if not found/unauthorized
  */
 export async function deleteResumeFeedbackSession(env, sessionId, userId) {
-  if (!env.DB) {
+  const db = getDb(env);
+  if (!db) {
     throw new Error('[DB] D1 binding not available');
   }
 
@@ -583,7 +589,7 @@ export async function deleteResumeFeedbackSession(env, sessionId, userId) {
   }
 
   try {
-    const session = await env.DB.prepare(`
+    const session = await db.prepare(`
       SELECT id, user_id, raw_text_location
       FROM resume_sessions
       WHERE id = ? AND user_id = ?
@@ -593,7 +599,7 @@ export async function deleteResumeFeedbackSession(env, sessionId, userId) {
       return false;
     }
 
-    const result = await env.DB.prepare(`
+    const result = await db.prepare(`
       DELETE FROM resume_sessions
       WHERE id = ? AND user_id = ?
     `).bind(sessionId, userId).run();
@@ -635,13 +641,14 @@ export async function deleteResumeFeedbackSession(env, sessionId, userId) {
  * @returns {Promise<boolean>} Success
  */
 export async function updateResumeSessionAtsScore(env, sessionId, atsScore) {
-  if (!env.DB) {
+  const db = getDb(env);
+  if (!db) {
     console.warn('[DB] D1 binding not available');
     return false;
   }
 
   try {
-    await env.DB.prepare(
+    await db.prepare(
       'UPDATE resume_sessions SET ats_score = ? WHERE id = ?'
     ).bind(atsScore, sessionId).run();
 
@@ -662,13 +669,14 @@ export async function updateResumeSessionAtsScore(env, sessionId, atsScore) {
  * @returns {Promise<Object|null>} Resume session with rule_based_scores_json or null
  */
 export async function getResumeSessionByResumeId(env, userId, resumeId) {
-  if (!env.DB) {
+  const db = getDb(env);
+  if (!db) {
     return null;
   }
 
   try {
     const rawTextLocation = `resume:${resumeId}`;
-    const result = await env.DB.prepare(
+    const result = await db.prepare(
       `SELECT id, user_id, title, role, created_at, raw_text_location, ats_score, rule_based_scores_json
        FROM resume_sessions 
        WHERE user_id = ? AND raw_text_location = ?
@@ -701,7 +709,8 @@ export async function upsertResumeSessionWithScores(env, userId, {
   atsScore = null,
   ruleBasedScores = null
 }) {
-  if (!env.DB) {
+  const db = getDb(env);
+  if (!db) {
     return null;
   }
 
@@ -714,7 +723,7 @@ export async function upsertResumeSessionWithScores(env, userId, {
 
     if (existing) {
       // Update existing
-      const result = await env.DB.prepare(
+      const result = await db.prepare(
         `UPDATE resume_sessions 
          SET ats_score = COALESCE(?, ats_score),
              rule_based_scores_json = COALESCE(?, rule_based_scores_json),
@@ -726,7 +735,7 @@ export async function upsertResumeSessionWithScores(env, userId, {
       return result || null;
     } else {
       // Insert new
-      const result = await env.DB.prepare(
+      const result = await db.prepare(
         `INSERT INTO resume_sessions (user_id, title, role, raw_text_location, ats_score, rule_based_scores_json)
          VALUES (?, ?, ?, ?, ?, ?)
          RETURNING id, user_id, title, role, created_at, raw_text_location, ats_score, rule_based_scores_json`
@@ -850,7 +859,8 @@ export async function ensureMockInterviewSchema(env) {
  * @returns {Promise<Object>} Created set { id, user_id, role, seniority, types_json, questions_json, selected_ids_json, jd, created_at }
  */
 export async function createInterviewQuestionSet(env, { userId, role, seniority = null, types, questions, selectedIndices, jd = null }) {
-  if (!env.DB) {
+  const db = getDb(env);
+  if (!db) {
     console.warn('[DB] D1 binding not available');
     return null;
   }
@@ -860,7 +870,7 @@ export async function createInterviewQuestionSet(env, { userId, role, seniority 
     const questionsJson = JSON.stringify(questions || []);
     const selectedIdsJson = JSON.stringify(selectedIndices || []);
 
-    const result = await env.DB.prepare(
+    const result = await db.prepare(
       `INSERT INTO interview_question_sets (user_id, role, seniority, types_json, questions_json, selected_ids_json, jd)
        VALUES (?, ?, ?, ?, ?, ?, ?)
        RETURNING id, user_id, role, seniority, types_json, questions_json, selected_ids_json, jd, created_at`
@@ -882,7 +892,8 @@ export async function createInterviewQuestionSet(env, { userId, role, seniority 
  * @returns {Promise<Object|null>} Set with parsed JSON fields, or null if not found or doesn't belong to user
  */
 export async function getInterviewQuestionSetById(env, id, userId) {
-  if (!env.DB) {
+  const db = getDb(env);
+  if (!db) {
     console.warn('[DB] D1 binding not available');
     return null;
   }
@@ -893,7 +904,7 @@ export async function getInterviewQuestionSetById(env, id, userId) {
   }
 
   try {
-    const row = await env.DB.prepare(
+    const row = await db.prepare(
       `SELECT id, user_id, role, seniority, types_json, questions_json, selected_ids_json, jd, created_at
        FROM interview_question_sets
        WHERE id = ? AND user_id = ?`
@@ -930,13 +941,14 @@ export async function getInterviewQuestionSetById(env, id, userId) {
  * @returns {Promise<Array>} List of sets with metadata (not full questions)
  */
 export async function getInterviewQuestionSetsByUser(env, userId, { limit = 10 } = {}) {
-  if (!env.DB) {
+  const db = getDb(env);
+  if (!db) {
     console.warn('[DB] D1 binding not available');
     return [];
   }
 
   try {
-    const results = await env.DB.prepare(
+    const results = await db.prepare(
       `SELECT id, role, seniority, types_json, selected_ids_json, created_at
        FROM interview_question_sets
        WHERE user_id = ?
@@ -974,13 +986,14 @@ export async function getInterviewQuestionSetsByUser(env, userId, { limit = 10 }
  * @returns {Promise<void>}
  */
 async function ensureFeatureDailyUsageTable(env) {
-  if (!env.DB) {
+  const db = getDb(env);
+  if (!db) {
     return; // Can't create table without DB
   }
 
   try {
     // Check if table exists
-    const tableCheck = await env.DB.prepare(
+    const tableCheck = await db.prepare(
       `SELECT name FROM sqlite_master WHERE type='table' AND name='feature_daily_usage'`
     ).first();
 
@@ -989,7 +1002,7 @@ async function ensureFeatureDailyUsageTable(env) {
     }
 
     // Create table if it doesn't exist
-    await env.DB.prepare(`
+    await db.prepare(`
       CREATE TABLE IF NOT EXISTS feature_daily_usage (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         user_id INTEGER NOT NULL,
@@ -1004,22 +1017,22 @@ async function ensureFeatureDailyUsageTable(env) {
     `).run();
 
     // Create indexes
-    await env.DB.prepare(`
+    await db.prepare(`
       CREATE INDEX IF NOT EXISTS idx_feature_daily_usage_user_id 
       ON feature_daily_usage(user_id)
     `).run();
 
-    await env.DB.prepare(`
+    await db.prepare(`
       CREATE INDEX IF NOT EXISTS idx_feature_daily_usage_feature 
       ON feature_daily_usage(feature)
     `).run();
 
-    await env.DB.prepare(`
+    await db.prepare(`
       CREATE INDEX IF NOT EXISTS idx_feature_daily_usage_date 
       ON feature_daily_usage(usage_date)
     `).run();
 
-    await env.DB.prepare(`
+    await db.prepare(`
       CREATE INDEX IF NOT EXISTS idx_feature_daily_usage_user_feature_date 
       ON feature_daily_usage(user_id, feature, usage_date)
     `).run();
@@ -1039,14 +1052,15 @@ async function ensureFeatureDailyUsageTable(env) {
  * @returns {Promise<number>} Current usage count for today
  */
 export async function getFeatureDailyUsage(env, userId, feature) {
-  if (!env.DB) {
+  const db = getDb(env);
+  if (!db) {
     console.warn('[DB] D1 binding not available');
     return 0;
   }
 
   try {
     const today = new Date().toISOString().slice(0, 10); // 'YYYY-MM-DD' UTC
-    const row = await env.DB.prepare(
+    const row = await db.prepare(
       `SELECT count FROM feature_daily_usage
        WHERE user_id = ? AND feature = ? AND usage_date = ?`
     ).bind(userId, feature, today).first();
@@ -1067,7 +1081,8 @@ export async function getFeatureDailyUsage(env, userId, feature) {
  * @returns {Promise<number>} New total count after increment
  */
 export async function incrementFeatureDailyUsage(env, userId, feature, incrementBy = 1) {
-  if (!env.DB) {
+  const db = getDb(env);
+  if (!db) {
     console.warn('[DB] D1 binding not available');
     return incrementBy;
   }
@@ -1079,7 +1094,7 @@ export async function incrementFeatureDailyUsage(env, userId, feature, increment
     const today = new Date().toISOString().slice(0, 10); // 'YYYY-MM-DD' UTC
     
     // Use INSERT ... ON CONFLICT pattern (SQLite supports this)
-    const result = await env.DB.prepare(
+    const result = await db.prepare(
       `INSERT INTO feature_daily_usage (user_id, feature, usage_date, count)
        VALUES (?, ?, ?, ?)
        ON CONFLICT(user_id, feature, usage_date)
@@ -1093,7 +1108,7 @@ export async function incrementFeatureDailyUsage(env, userId, feature, increment
     }
     
     // Fallback: if RETURNING doesn't work, fetch separately
-    const row = await env.DB.prepare(
+    const row = await db.prepare(
       `SELECT count FROM feature_daily_usage
        WHERE user_id = ? AND feature = ? AND usage_date = ?`
     ).bind(userId, feature, today).first();

@@ -84,7 +84,13 @@ export async function onRequest(context) {
       const token = getBearer(request);
       let userId = null;
       let authId = null;
+      // Prefer explicit clientId from body, fall back to cookie (for cases where clientId isn't provided)
       let clientId = body.clientId || null;
+      if (!clientId) {
+        const cookieHeader = request.headers.get('Cookie') || '';
+        const clientIdMatch = cookieHeader.match(/jha_client_id=([^;]+)/);
+        clientId = clientIdMatch ? clientIdMatch[1] : null;
+      }
 
       // If authenticated, get userId
       if (token) {
