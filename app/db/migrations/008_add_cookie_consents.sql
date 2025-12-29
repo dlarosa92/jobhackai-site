@@ -22,7 +22,10 @@ CREATE TABLE IF NOT EXISTS cookie_consents (
 CREATE INDEX IF NOT EXISTS idx_cookie_consents_user_id ON cookie_consents(user_id);
 CREATE INDEX IF NOT EXISTS idx_cookie_consents_client_id ON cookie_consents(client_id);
 
--- Unique constraint: one consent record per user OR client_id
--- Note: SQLite doesn't support partial unique indexes, so we'll enforce uniqueness
--- in application code (user_id takes precedence over client_id)
+-- Unique constraints to prevent race conditions
+-- One consent record per user_id (when authenticated)
+CREATE UNIQUE INDEX IF NOT EXISTS idx_cookie_consents_user_id_unique ON cookie_consents(user_id) WHERE user_id IS NOT NULL;
+
+-- One consent record per client_id (when anonymous)
+CREATE UNIQUE INDEX IF NOT EXISTS idx_cookie_consents_client_id_unique ON cookie_consents(client_id) WHERE client_id IS NOT NULL;
 

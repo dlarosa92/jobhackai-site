@@ -12,6 +12,10 @@
   const GA_MEASUREMENT_ID = 'G-X48E90B00S'; // From console data
   const GA_SCRIPT_URL = `https://www.googletagmanager.com/gtag/js?l=dataLayer&id=${GA_MEASUREMENT_ID}`;
 
+  // Module-level variables for banner and GA loading guard
+  let bannerElement = null;
+  let gaLoadingPrevented = false;
+
   // Helper: Get consent from localStorage
   function getConsent() {
     try {
@@ -121,13 +125,19 @@
 
   // GA Script Loading: Prevent if consent denied
   function preventGALoading() {
+    // Guard: Only wrap createElement once
+    if (gaLoadingPrevented) {
+      return; // Already wrapped
+    }
+    gaLoadingPrevented = true;
+
     // Remove GA script if it exists
     const existingScript = document.querySelector(`script[src*="googletagmanager.com/gtag/js"]`);
     if (existingScript) {
       existingScript.remove();
     }
 
-    // Prevent future GA script loads by intercepting createElement
+    // Prevent future GA script loads by intercepting createElement (only once)
     const originalCreateElement = document.createElement;
     document.createElement = function(tagName) {
       const element = originalCreateElement.call(document, tagName);
@@ -175,15 +185,29 @@
     window.dispatchEvent(new CustomEvent('cookie-consent-granted'));
   }
 
+  // Helper: Remove banner if it exists
+  function removeBanner() {
+    if (bannerElement) {
+      bannerElement.remove();
+      bannerElement = null;
+    } else {
+      // Fallback: try to find by ID
+      const existingBanner = document.getElementById('jha-cookie-banner');
+      if (existingBanner) {
+        existingBanner.remove();
+      }
+    }
+  }
+
   // Create banner
   function createBanner() {
     if (hasConsent()) return; // Already has consent
 
-    const banner = document.createElement('div');
-    banner.id = 'jha-cookie-banner';
-    banner.setAttribute('role', 'region');
-    banner.setAttribute('aria-label', 'Cookie preferences');
-    banner.innerHTML = `
+    bannerElement = document.createElement('div');
+    bannerElement.id = 'jha-cookie-banner';
+    bannerElement.setAttribute('role', 'region');
+    bannerElement.setAttribute('aria-label', 'Cookie preferences');
+    bannerElement.innerHTML = `
       <div class="jha-cookie-inner">
         <p>We use cookies to improve your experience. <a href="/cookies.html">Learn more</a></p>
         <div class="jha-cookie-actions">
@@ -193,18 +217,18 @@
         </div>
       </div>
     `;
-    document.body.appendChild(banner);
+    document.body.appendChild(bannerElement);
 
     // Event handlers
     document.getElementById('jha-accept-all').onclick = async () => {
       await setConsent({ version: 1, analytics: true, updatedAt: new Date().toISOString() });
-      banner.remove();
+      removeBanner();
       loadGAScript(); // Load GA now
     };
 
     document.getElementById('jha-reject-all').onclick = async () => {
       await setConsent({ version: 1, analytics: false, updatedAt: new Date().toISOString() });
-      banner.remove();
+      removeBanner();
       preventGALoading(); // Ensure GA doesn't load
     };
 
@@ -258,6 +282,7 @@
     document.getElementById('jha-save-preferences').onclick = async () => {
       const analytics = document.getElementById('jha-toggle-analytics').checked;
       await setConsent({ version: 1, analytics, updatedAt: new Date().toISOString() });
+      removeBanner(); // Remove banner after saving preferences
       closeModal();
       if (analytics) {
         loadGAScript();

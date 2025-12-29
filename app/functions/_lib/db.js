@@ -1394,32 +1394,36 @@ export async function upsertCookieConsent(env, { userId, authId, clientId, conse
     const consentStr = typeof consent === 'string' ? consent : JSON.stringify(consent);
     const now = new Date().toISOString();
 
-    // Check if exists (prefer userId over clientId)
-    let existing = null;
+    // Use INSERT ... ON CONFLICT to handle race conditions atomically
+    // This prevents duplicate records from concurrent requests
+    // Partial unique indexes ensure one record per user_id OR client_id
     if (userId) {
-      existing = await db.prepare('SELECT id FROM cookie_consents WHERE user_id = ?').bind(userId).first();
-    } else if (clientId) {
-      existing = await db.prepare('SELECT id FROM cookie_consents WHERE client_id = ?').bind(clientId).first();
-    }
-
-    if (existing) {
-      // Update existing
-      if (userId) {
-        await db.prepare(
-          'UPDATE cookie_consents SET consent_json = ?, updated_at = ? WHERE user_id = ?'
-        ).bind(consentStr, now, userId).run();
-      } else {
-        await db.prepare(
-          'UPDATE cookie_consents SET consent_json = ?, updated_at = ? WHERE client_id = ?'
-        ).bind(consentStr, now, clientId).run();
+      // For authenticated users: upsert on user_id (prefer user_id over client_id)
+      // Also delete any existing client_id record for this user to prevent duplicates
+      try {
+        await db.prepare('DELETE FROM cookie_consents WHERE client_id = ? AND user_id IS NULL').bind(clientId || '').run();
+      } catch (e) {
+        // Ignore if clientId is null or delete fails
       }
-      console.log('[DB] Updated cookie consent:', { userId, clientId });
-    } else {
-      // Insert new
+      
       await db.prepare(
-        'INSERT INTO cookie_consents (user_id, client_id, consent_json, created_at, updated_at) VALUES (?, ?, ?, ?, ?)'
-      ).bind(userId || null, clientId || null, consentStr, now, now).run();
-      console.log('[DB] Created cookie consent:', { userId, clientId });
+        `INSERT INTO cookie_consents (user_id, client_id, consent_json, created_at, updated_at)
+         VALUES (?, NULL, ?, ?, ?)
+         ON CONFLICT(user_id) DO UPDATE SET
+           consent_json = excluded.consent_json,
+           updated_at = excluded.updated_at`
+      ).bind(userId, consentStr, now, now).run();
+      console.log('[DB] Upserted cookie consent (user):', { userId });
+    } else if (clientId) {
+      // For anonymous users: upsert on client_id
+      await db.prepare(
+        `INSERT INTO cookie_consents (user_id, client_id, consent_json, created_at, updated_at)
+         VALUES (NULL, ?, ?, ?, ?)
+         ON CONFLICT(client_id) DO UPDATE SET
+           consent_json = excluded.consent_json,
+           updated_at = excluded.updated_at`
+      ).bind(clientId, consentStr, now, now).run();
+      console.log('[DB] Upserted cookie consent (client):', { clientId });
     }
 
     return true;
