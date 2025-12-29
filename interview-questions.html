@@ -1124,7 +1124,43 @@
           <li>Works with your starred questions</li>
         </ul>
         <div style="display:flex; gap:.5rem; flex-wrap:wrap;">
-          <a id="upsell-upgrade" href="pricing-a.html" class="btn-primary" style="text-decoration:none;">Upgrade to Pro</a>
+          <a id="upsell-upgrade" href="#" class="btn-primary" style="text-decoration:none;" onclick="startCheckout('pro'); return false;">Upgrade to Pro</a>
+          <script>
+            // Inline helper b/c this page doesn't include the global checkout helper by default.
+            // Starts server-side Stripe Checkout using /api/stripe-checkout so sessions are created dynamically.
+            (function() {
+              async function startCheckoutLocal(plan) {
+                try {
+                  if (window.showLoadingOverlay) {
+                    window._currentLoadingOverlay = window.showLoadingOverlay('Redirecting to checkout...');
+                  }
+                  const user = window.FirebaseAuthManager?.getCurrentUser?.();
+                  if (!user) {
+                    window.location.href = 'login.html';
+                    return;
+                  }
+                  const idToken = await user.getIdToken();
+                  const res = await fetch('/api/stripe-checkout', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}) },
+                    body: JSON.stringify({ plan })
+                  });
+                  const data = await res.json();
+                  if (data && data.ok && data.url) {
+                    window.location.href = data.url;
+                    return;
+                  }
+                  throw new Error(data?.error || 'Checkout failed');
+                } catch (err) {
+                  console.error('Checkout start error:', err);
+                  if (window._currentLoadingOverlay) { window._currentLoadingOverlay(); window._currentLoadingOverlay = null; }
+                  window.location.href = `pricing-a.html?plan=${encodeURIComponent(plan)}`;
+                }
+              }
+              // Expose a global name expected by the inline onclick handler
+              window.startCheckout = startCheckoutLocal;
+            })();
+          </script>
           <button id="upsell-cancel-2" class="btn-outline">Maybe later</button>
         </div>
       </div>

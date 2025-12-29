@@ -1880,7 +1880,46 @@
       return result;
     }
 
-    function handleApiError(error, options = {}) {
+  // Generic helper to start a server-side Stripe Checkout session for a given plan.
+  // Uses the same /api/stripe-checkout endpoint pattern used elsewhere in the app.
+  const startCheckout = async (plan) => {
+    try {
+      if (window.showLoadingOverlay) {
+        window._currentLoadingOverlay = window.showLoadingOverlay('Redirecting to checkout...');
+      }
+
+      const user = window.FirebaseAuthManager?.getCurrentUser?.();
+      if (!user) {
+        // Keep behavior consistent with other upgrade flows: require login first.
+        window.location.href = 'login.html';
+        return;
+      }
+      const idToken = await user.getIdToken();
+      const res = await fetch('/api/stripe-checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}) },
+        body: JSON.stringify({ plan })
+      });
+      const data = await res.json();
+      if (data && data.ok && data.url) {
+        window.location.href = data.url;
+        return;
+      }
+      throw new Error(data?.error || 'Checkout failed');
+    } catch (e) {
+      console.error('Start checkout error:', e);
+      if (window._currentLoadingOverlay) {
+        window._currentLoadingOverlay();
+        window._currentLoadingOverlay = null;
+      }
+      // Fallback to pricing page with plan hint
+      window.location.href = `pricing-a.html?plan=${encodeURIComponent(plan)}`;
+    }
+  };
+  // Expose globally for inline onclick handlers
+  window.startCheckout = startCheckout;
+
+  function handleApiError(error, options = {}) {
       // Downgrade to debug level - user-facing errors shown via modals
       if (window.console && window.console.debug) {
         window.console.debug('[API Error]', error);
@@ -1956,6 +1995,8 @@
           return;
         }
       }
+      
+      
       
       // Map error messages to user-friendly modals
       if (message.includes('Unauthorized') || message.includes('Not authenticated')) {
@@ -5460,7 +5501,7 @@
     function renderPriorityReviewCTA() {
       const cta = document.createElement('div');
       cta.className = 'priority-review-cta premium-cta';
-      cta.innerHTML = `<strong>Want your resume reviewed first?</strong> <span id="priority-review-inline"></span> <button class="priority-btn" onclick="window.location.href='pricing-a.html'">Upgrade to Premium</button>`;
+      cta.innerHTML = `<strong>Want your resume reviewed first?</strong> <span id="priority-review-inline"></span> <button class="priority-btn" onclick="startCheckout('premium')">Upgrade to Premium</button>`;
       // Insert tooltip
       setTimeout(() => {
         const inline = cta.querySelector('#priority-review-inline');
