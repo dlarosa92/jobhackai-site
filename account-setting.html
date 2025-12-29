@@ -66,17 +66,24 @@
       const user = mgr ? mgr.getCurrentUser() : null;
       
       // Check if user is authenticated via multiple methods
-      // SECURITY: Use Firebase auth check instead of email validation
-      const hasLocalStorageAuth = localStorage.getItem('user-authenticated') === 'true' && !!user;
+      // SECURITY: Check localStorage auth independently (works before Firebase loads)
+      const hasLocalStorageAuth = localStorage.getItem('user-authenticated') === 'true';
+      const hasFirebaseKeys = Object.keys(localStorage).some(k => 
+        k.startsWith('firebase:authUser:') && 
+        localStorage.getItem(k) && 
+        localStorage.getItem(k) !== 'null' &&
+        localStorage.getItem(k).length > 10
+      );
+      const hasAnyAuth = hasLocalStorageAuth || hasFirebaseKeys;
       
-      if (!user && !hasLocalStorageAuth) {
+      if (!user && !hasAnyAuth) {
         console.log('🔒 No authenticated user found, redirecting to login');
         window.location.href = "/login.html";
         return;
       }
       
       // If we have localStorage auth but no Firebase user yet, wait a bit more
-      if (!user && hasLocalStorageAuth) {
+      if (!user && hasAnyAuth) {
         console.log('⏳ Waiting for Firebase auth to sync...');
         setTimeout(() => {
           const retryUser = mgr ? mgr.getCurrentUser() : null;
@@ -125,10 +132,17 @@
         authCheckComplete = true;
         const mgr = window.FirebaseAuthManager;
         const user = mgr ? mgr.getCurrentUser() : null;
-        // SECURITY: Use Firebase auth check instead of email validation
-        const hasLocalStorageAuth = localStorage.getItem('user-authenticated') === 'true' && !!user;
+        // SECURITY: Check localStorage auth independently (works before Firebase loads)
+        const hasLocalStorageAuth = localStorage.getItem('user-authenticated') === 'true';
+        const hasFirebaseKeys = Object.keys(localStorage).some(k => 
+          k.startsWith('firebase:authUser:') && 
+          localStorage.getItem(k) && 
+          localStorage.getItem(k) !== 'null' &&
+          localStorage.getItem(k).length > 10
+        );
+        const hasAnyAuth = hasLocalStorageAuth || hasFirebaseKeys;
         
-        if (!user && !hasLocalStorageAuth) {
+        if (!user && !hasAnyAuth) {
           console.log('🔒 Manual check: No auth found, redirecting to login');
           window.location.href = "/login.html";
         } else if (user) {
@@ -961,10 +975,17 @@
     // Load fresh data in background (non-blocking)
     document.addEventListener('DOMContentLoaded', async () => {
       let user = window.FirebaseAuthManager?.getCurrentUser?.();
-      // SECURITY: Use Firebase auth check instead of email validation
-      const hasLocalStorageAuth = localStorage.getItem('user-authenticated') === 'true' && !!user;
+      // SECURITY: Check localStorage auth independently (works before Firebase loads)
+      const hasLocalStorageAuth = localStorage.getItem('user-authenticated') === 'true';
+      const hasFirebaseKeys = Object.keys(localStorage).some(k => 
+        k.startsWith('firebase:authUser:') && 
+        localStorage.getItem(k) && 
+        localStorage.getItem(k) !== 'null' &&
+        localStorage.getItem(k).length > 10
+      );
+      const hasAnyAuth = hasLocalStorageAuth || hasFirebaseKeys;
       
-      if (!user && !hasLocalStorageAuth) {
+      if (!user && !hasAnyAuth) {
         // No auth at all - redirect handled by static-auth-guard or firebase-auth-ready handler
         console.log('⏳ Waiting for auth...');
         return;
@@ -974,7 +995,7 @@
       // Page is already visible, so these can run in background
       const loadDataPromise = (async () => {
         // Get user if not already available (non-blocking, quick check)
-        if (!user && hasLocalStorageAuth) {
+        if (!user && hasAnyAuth) {
           // Only wait briefly - don't block page display
           for (let i = 0; i < 5 && !user; i++) {
             await new Promise(r => setTimeout(r, 100)); // Short waits
@@ -982,7 +1003,7 @@
           }
         }
         
-        if (!user && !hasLocalStorageAuth) {
+        if (!user && !hasAnyAuth) {
           return;
         }
         
