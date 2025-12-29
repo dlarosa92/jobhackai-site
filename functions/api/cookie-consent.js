@@ -111,34 +111,28 @@ export async function onRequest(context) {
         consent: body.consent
       });
 
-      if (success) {
-        return json({ ok: true }, 200, origin, env);
-      } else {
-        // Temporary: Include debug info in response to diagnose issue
-        const dbAvailable = !!(env?.JOBHACKAI_DB || env?.DB);
-        const debugInfo = {
-          hasDb: dbAvailable,
-          hasUserId: !!userId,
-          hasClientId: !!clientId,
-          dbBindingNames: Object.keys(env || {}).filter(k => k.includes('DB') || k.includes('D1'))
-        };
-        console.error('[COOKIE-CONSENT] Failed to save consent, debug info:', debugInfo);
-        return json({ ok: false, error: 'Failed to save consent', debug: debugInfo }, 500, origin, env);
-      }
+          if (success) {
+            return json({ ok: true }, 200, origin, env);
+          } else {
+            // Log detailed debug info server-side, but return a generic error to clients.
+            const dbAvailable = !!(env?.JOBHACKAI_DB || env?.DB);
+            const debugInfo = {
+              hasDb: dbAvailable,
+              hasUserId: !!userId,
+              hasClientId: !!clientId,
+              dbBindingNames: Object.keys(env || {}).filter(k => k.includes('DB') || k.includes('D1'))
+            };
+            console.error('[COOKIE-CONSENT] Failed to save consent, debug info:', debugInfo);
+            return json({ ok: false, error: 'Failed to save consent' }, 500, origin, env);
+          }
     }
 
     return json({ ok: false, error: 'Method not allowed' }, 405, origin, env);
   } catch (error) {
+    // Log full error server-side for diagnostics, but do not expose internals to clients.
     console.error('[COOKIE-CONSENT] Error:', error);
     console.error('[COOKIE-CONSENT] Error stack:', error.stack);
-    // Include error details in response for debugging
-    const errorInfo = {
-      message: error.message,
-      name: error.name,
-      hasEnv: !!env,
-      dbBindings: env ? Object.keys(env).filter(k => k.includes('DB') || k.includes('D1')) : []
-    };
-    return json({ ok: false, error: 'Internal server error', debug: errorInfo }, 500, origin, env);
+    return json({ ok: false, error: 'Internal server error' }, 500, origin, env);
   }
 }
 
