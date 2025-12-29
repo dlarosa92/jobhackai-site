@@ -1124,7 +1124,43 @@
           <li>Works with your starred questions</li>
         </ul>
         <div style="display:flex; gap:.5rem; flex-wrap:wrap;">
-          <a id="upsell-upgrade" href="https://checkout.stripe.com/c/pay/cs_test_b1cvtFHFB53f6B0gmBU65P5CeQHm7bRj2QbfsH1elk5zPbVAKQYTKWmGMt#fidnandhYHdWcXxpYCc%2FJ2FgY2RwaXEnKSd2cGd2ZndsdXFsamtQa2x0cGBrYHZ2QGtkZ2lgYSc%2FY2RpdmApJ2R1bE5gfCc%2FJ3VuWnFgdnFaMDRXfGhBRkR1SFVtZkc0XDNXUENXPHdff05pQzRxMGQyXFRqU1ZsUmNmZ0BkaWs3cXdwXUkwXElrdzRuMUAxVGBhN0NNZHZzYEBfSHUyYDNjYl9nNVxXZ101NTRifWxSSExGJyknY3dqaFZgd3Ngdyc%2FcXdwYCknZ2RmbmJ3anBrYUZqaWp3Jz8nJmNjY2NjYycpJ2lkfGpwcVF8dWAnPydocGlxbFpscWBoJyknYGtkZ2lgVWlkZmBtamlhYHd2Jz9xd3BgeCUl" class="btn-primary" style="text-decoration:none;" target="_blank" rel="noreferrer noopener">Upgrade to Pro</a>
+          <a id="upsell-upgrade" href="#" class="btn-primary" style="text-decoration:none;" onclick="startCheckout('pro'); return false;">Upgrade to Pro</a>
+          <script>
+            // Inline helper b/c this page doesn't include the global checkout helper by default.
+            // Starts server-side Stripe Checkout using /api/stripe-checkout so sessions are created dynamically.
+            (function() {
+              async function startCheckoutLocal(plan) {
+                try {
+                  if (window.showLoadingOverlay) {
+                    window._currentLoadingOverlay = window.showLoadingOverlay('Redirecting to checkout...');
+                  }
+                  const user = window.FirebaseAuthManager?.getCurrentUser?.();
+                  if (!user) {
+                    window.location.href = 'login.html';
+                    return;
+                  }
+                  const idToken = await user.getIdToken();
+                  const res = await fetch('/api/stripe-checkout', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}) },
+                    body: JSON.stringify({ plan })
+                  });
+                  const data = await res.json();
+                  if (data && data.ok && data.url) {
+                    window.location.href = data.url;
+                    return;
+                  }
+                  throw new Error(data?.error || 'Checkout failed');
+                } catch (err) {
+                  console.error('Checkout start error:', err);
+                  if (window._currentLoadingOverlay) { window._currentLoadingOverlay(); window._currentLoadingOverlay = null; }
+                  window.location.href = `pricing-a.html?plan=${encodeURIComponent(plan)}`;
+                }
+              }
+              // Expose a global name expected by the inline onclick handler
+              window.startCheckout = startCheckoutLocal;
+            })();
+          </script>
           <button id="upsell-cancel-2" class="btn-outline">Maybe later</button>
         </div>
       </div>
