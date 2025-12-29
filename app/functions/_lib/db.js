@@ -1444,6 +1444,13 @@ export async function upsertCookieConsent(env, { userId, authId, clientId, conse
     return true;
   } catch (error) {
     console.error('[DB] Error in upsertCookieConsent:', error);
+    console.error('[DB] Error details:', {
+      message: error.message,
+      stack: error.stack,
+      userId: userId || null,
+      clientId: clientId || null,
+      consentPreview: typeof consent === 'string' ? consent.substring(0, 100) : JSON.stringify(consent).substring(0, 100)
+    });
     return false;
   }
 }
