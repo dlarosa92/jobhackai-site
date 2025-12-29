@@ -1363,3 +1363,134 @@ export async function incrementMockInterviewMonthlyUsage(env, userId) {
   }
 }
 
+// ============================================================
+// COOKIE CONSENT HELPERS
+// ============================================================
+
+/**
+ * Upsert cookie consent (D1 source of truth)
+ * Handles both authenticated (userId) and anonymous (clientId) cases
+ * @param {Object} env - Cloudflare environment
+ * @param {Object} params - {userId, authId, clientId, consent}
+ * @param {number|null} params.userId - User ID from users table (nullable)
+ * @param {string|null} params.authId - Firebase auth ID (nullable, for logging)
+ * @param {string|null} params.clientId - Anonymous client identifier (nullable)
+ * @param {Object} params.consent - Consent object {version, analytics, updatedAt}
+ * @returns {Promise<boolean>} Success
+ */
+export async function upsertCookieConsent(env, { userId, authId, clientId, consent }) {
+  const db = getDb(env);
+  if (!db) {
+    console.warn('[DB] D1 binding not available');
+    return false;
+  }
+
+  try {
+    if (!userId && !clientId) {
+      console.warn('[DB] No userId or clientId provided for cookie consent');
+      return false;
+    }
+
+    const consentStr = typeof consent === 'string' ? consent : JSON.stringify(consent);
+    const now = new Date().toISOString();
+
+    // Use INSERT ... ON CONFLICT to handle race conditions atomically
+    // This prevents duplicate records from concurrent requests
+    // Partial unique indexes ensure one record per user_id OR client_id
+    if (userId) {
+      // For authenticated users: upsert on user_id (prefer user_id over client_id)
+      // First, try to INSERT/UPDATE the user_id record
+      // Only if successful, then migrate/delete the client_id record
+      // This ensures atomicity: if INSERT fails, we don't lose the client_id record
+      try {
+        await db.prepare(
+          `INSERT INTO cookie_consents (user_id, client_id, consent_json, created_at, updated_at)
+           VALUES (?, NULL, ?, ?, ?)
+           ON CONFLICT(user_id) DO UPDATE SET
+             consent_json = excluded.consent_json,
+             updated_at = excluded.updated_at`
+        ).bind(userId, consentStr, now, now).run();
+        
+        // Only after successful INSERT/UPDATE, migrate/delete the client_id record
+        // This prevents data loss if INSERT fails
+        if (clientId) {
+          try {
+            await db.prepare('DELETE FROM cookie_consents WHERE client_id = ? AND user_id IS NULL').bind(clientId).run();
+          } catch (e) {
+            // Ignore if delete fails (non-critical, just cleanup)
+            console.warn('[DB] Failed to delete client_id record during migration:', e);
+          }
+        }
+        
+        console.log('[DB] Upserted cookie consent (user):', { userId });
+      } catch (insertError) {
+        // If INSERT fails, log error but don't delete client_id record
+        // This preserves the user's consent even if user_id insert fails
+        console.error('[DB] Failed to upsert cookie consent (user):', insertError);
+        throw insertError; // Re-throw to let caller handle
+      }
+    } else if (clientId) {
+      // For anonymous users: upsert on client_id
+      await db.prepare(
+        `INSERT INTO cookie_consents (user_id, client_id, consent_json, created_at, updated_at)
+         VALUES (NULL, ?, ?, ?, ?)
+         ON CONFLICT(client_id) DO UPDATE SET
+           consent_json = excluded.consent_json,
+           updated_at = excluded.updated_at`
+      ).bind(clientId, consentStr, now, now).run();
+      console.log('[DB] Upserted cookie consent (client):', { clientId });
+    }
+
+    return true;
+  } catch (error) {
+    console.error('[DB] Error in upsertCookieConsent:', error);
+    return false;
+  }
+}
+
+/**
+ * Get cookie consent from D1
+ * @param {Object} env - Cloudflare environment  
+ * @param {string|null} userId - User ID from users table
+ * @param {string|null} clientId - Client ID (anonymous identifier)
+ * @returns {Promise<Object|null>} Consent object or null
+ */
+export async function getCookieConsent(env, userId, clientId) {
+  const db = getDb(env);
+  if (!db) {
+    return null;
+  }
+
+  try {
+    let row = null;
+    
+    // Prefer userId over clientId, but fall back to clientId if userId query returns nothing
+    // This handles migration: user saved consent anonymously (client_id), then logged in (user_id)
+    if (userId) {
+      row = await db.prepare(
+        'SELECT consent_json FROM cookie_consents WHERE user_id = ?'
+      ).bind(userId).first();
+      
+      // If no user_id record found, fall back to client_id (for migration scenario)
+      if (!row && clientId) {
+        row = await db.prepare(
+          'SELECT consent_json FROM cookie_consents WHERE client_id = ?'
+        ).bind(clientId).first();
+      }
+    } else if (clientId) {
+      row = await db.prepare(
+        'SELECT consent_json FROM cookie_consents WHERE client_id = ?'
+      ).bind(clientId).first();
+    }
+
+    if (!row || !row.consent_json) {
+      return null;
+    }
+
+    return JSON.parse(row.consent_json);
+  } catch (error) {
+    console.error('[DB] Error in getCookieConsent:', error);
+    return null;
+  }
+}
+
