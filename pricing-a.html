@@ -188,11 +188,40 @@
       
       // Check if user is already authenticated (compute at click-time for freshness)
       const getAuthState = () => {
-        // SECURITY: Get email from Firebase auth instead of localStorage
+        // SECURITY: Check Firebase SDK keys synchronously (works before FirebaseAuthManager is ready)
+        // FirebaseAuthManager.getCurrentUser() returns null until onAuthStateChanged fires
+        function hasFirebaseAuthKeys() {
+          try {
+            return Object.keys(localStorage).some(k => 
+              k.startsWith('firebase:authUser:') && 
+              localStorage.getItem(k) && 
+              localStorage.getItem(k) !== 'null' &&
+              localStorage.getItem(k).length > 10
+            );
+          } catch (e) {
+            return false;
+          }
+        }
+        function getEmailFromFirebaseKeys() {
+          try {
+            const firebaseKeys = Object.keys(localStorage).filter(k => k.startsWith('firebase:authUser:'));
+            if (firebaseKeys.length > 0) {
+              const keyData = JSON.parse(localStorage.getItem(firebaseKeys[0]) || '{}');
+              return keyData.email || null;
+            }
+          } catch (e) {
+            console.warn('Failed to get email from Firebase keys:', e);
+          }
+          return null;
+        }
+        const hasLocalStorageAuth = localStorage.getItem('user-authenticated') === 'true';
+        const hasFirebaseKeys = hasFirebaseAuthKeys();
         const user = window.FirebaseAuthManager?.getCurrentUser?.();
+        // Use FirebaseAuthManager email if available, otherwise fallback to Firebase SDK keys
+        const userEmail = user?.email || getEmailFromFirebaseKeys();
         return {
-          isAuthenticated: localStorage.getItem('user-authenticated') === 'true' && !!user,
-          userEmail: user?.email || null,
+          isAuthenticated: hasLocalStorageAuth || hasFirebaseKeys,
+          userEmail: userEmail,
           currentPlan: localStorage.getItem('user-plan') || 'free'
         };
       };

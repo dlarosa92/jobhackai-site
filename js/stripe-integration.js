@@ -654,8 +654,6 @@ class JobHackAIStripe {
       try { uid = window.FirebaseAuthManager?.getCurrentUser?.()?.uid || null; } catch(_){}
       // SECURITY: Removed localStorage fallback - use Firebase auth only
       if (!uid) {
-      }
-      if (!uid) {
         alert('Please log in to manage your subscription.');
         window.location.href = 'login.html';
         return;

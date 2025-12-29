@@ -265,7 +265,8 @@
 
     function getAuthUser() {
       try {
-        // SECURITY: Use Firebase auth instead of localStorage
+        // SECURITY: Try FirebaseAuthManager first, then fallback to Firebase SDK keys
+        // FirebaseAuthManager.getCurrentUser() returns null until onAuthStateChanged fires
         const user = window.FirebaseAuthManager?.getCurrentUser?.();
         if (user) {
           return {
@@ -273,6 +274,27 @@
             uid: user.uid,
             displayName: user.displayName
           };
+        }
+        // Fallback: Get user data from Firebase SDK keys (works synchronously)
+        function getEmailFromFirebaseKeys() {
+          try {
+            const firebaseKeys = Object.keys(localStorage).filter(k => k.startsWith('firebase:authUser:'));
+            if (firebaseKeys.length > 0) {
+              const keyData = JSON.parse(localStorage.getItem(firebaseKeys[0]) || '{}');
+              return {
+                email: keyData.email || null,
+                uid: keyData.uid || null,
+                displayName: keyData.displayName || null
+              };
+            }
+          } catch (e) {
+            console.warn('Failed to get user from Firebase keys:', e);
+          }
+          return null;
+        }
+        const firebaseUser = getEmailFromFirebaseKeys();
+        if (firebaseUser && firebaseUser.email && firebaseUser.uid) {
+          return firebaseUser;
         }
         return null;
       } catch (e) {
@@ -301,9 +323,9 @@
         return;
       }
 
-      // Check authentication using Firebase
-      const user = window.FirebaseAuthManager?.getCurrentUser?.();
-      if (!user) {
+      // Check authentication using Firebase (with fallback to Firebase SDK keys)
+      const authUser = getAuthUser();
+      if (!authUser) {
         errorDiv.textContent = 'Please sign in to continue to checkout.';
         errorDiv.style.display = 'block';
         setTimeout(() => { window.location.href = 'login.html'; }, 1200);
@@ -319,7 +341,16 @@
 
       try {
         // Get Firebase ID token for authentication
-        const user = window.FirebaseAuthManager?.getCurrentUser?.();
+        // If FirebaseAuthManager isn't ready yet, wait briefly for it to initialize
+        let user = window.FirebaseAuthManager?.getCurrentUser?.();
+        if (!user && authUser) {
+          // User is authenticated (from Firebase keys) but FirebaseAuthManager not ready yet
+          // Wait up to 2 seconds for FirebaseAuthManager to initialize
+          for (let i = 0; i < 20 && !user; i++) {
+            await new Promise(resolve => setTimeout(resolve, 100));
+            user = window.FirebaseAuthManager?.getCurrentUser?.();
+          }
+        }
         if (!user) {
           errorDiv.textContent = 'Please sign in to continue to checkout.';
           errorDiv.style.display = 'block';
