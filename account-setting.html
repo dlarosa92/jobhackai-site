@@ -164,9 +164,23 @@
       if (document.body) {
         // Only add class if we don't have cached auth (to prevent race condition)
         const hasLocalStorageAuth = localStorage.getItem('user-authenticated') === 'true';
-        // SECURITY: Get email from Firebase auth instead of localStorage
+        // SECURITY: Get email from Firebase SDK keys (works before FirebaseAuthManager is ready)
+        // FirebaseAuthManager.getCurrentUser() returns null until onAuthStateChanged fires
+        // Use the same approach as the inline script to maintain consistency
+        function getEmailFromFirebaseKeys() {
+          try {
+            const firebaseKeys = Object.keys(localStorage).filter(k => k.startsWith('firebase:authUser:'));
+            if (firebaseKeys.length > 0) {
+              const keyData = JSON.parse(localStorage.getItem(firebaseKeys[0]) || '{}');
+              return keyData.email || null;
+            }
+          } catch (e) {
+            console.warn('Failed to get email from Firebase keys:', e);
+          }
+          return null;
+        }
         const user = window.FirebaseAuthManager?.getCurrentUser?.();
-        const cachedEmail = user?.email || null;
+        const cachedEmail = user?.email || getEmailFromFirebaseKeys();
         if (!hasLocalStorageAuth || !cachedEmail) {
           document.body.classList.add("account-protected");
         }

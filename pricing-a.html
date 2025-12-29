@@ -587,9 +587,22 @@
     }
     
     function processUpgrade(newPlan, currentPlan) {
-      // SECURITY: Get email from Firebase auth instead of localStorage
+      // SECURITY: Get email from Firebase auth with fallback to Firebase SDK keys
+      // FirebaseAuthManager.getCurrentUser() returns null until onAuthStateChanged fires
+      function getEmailFromFirebaseKeys() {
+        try {
+          const firebaseKeys = Object.keys(localStorage).filter(k => k.startsWith('firebase:authUser:'));
+          if (firebaseKeys.length > 0) {
+            const keyData = JSON.parse(localStorage.getItem(firebaseKeys[0]) || '{}');
+            return keyData.email || null;
+          }
+        } catch (e) {
+          console.warn('Failed to get email from Firebase keys:', e);
+        }
+        return null;
+      }
       const user = window.FirebaseAuthManager?.getCurrentUser?.();
-      const userEmail = user?.email || null;
+      const userEmail = user?.email || getEmailFromFirebaseKeys();
       if (true) {
         // INTEGRATION: STRIPE - Handle subscription upgrade here
         // For demo, just update the user's plan

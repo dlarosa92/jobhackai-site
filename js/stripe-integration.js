@@ -600,8 +600,23 @@ class JobHackAIStripe {
           const u = window.FirebaseAuthManager?.getCurrentUser?.();
           if (u && u.uid && u.email) return { uid: u.uid, email: u.email };
         } catch(_){}
-        // SECURITY: Removed localStorage fallback - use Firebase auth only
-        return null;
+        // Fallback: Get user data from Firebase SDK keys (works synchronously)
+        // FirebaseAuthManager.getCurrentUser() returns null until onAuthStateChanged fires
+        function getUserFromFirebaseKeys() {
+          try {
+            const firebaseKeys = Object.keys(localStorage).filter(k => k.startsWith('firebase:authUser:'));
+            if (firebaseKeys.length > 0) {
+              const keyData = JSON.parse(localStorage.getItem(firebaseKeys[0]) || '{}');
+              if (keyData.uid && keyData.email) {
+                return { uid: keyData.uid, email: keyData.email };
+              }
+            }
+          } catch (e) {
+            console.warn('Failed to get user from Firebase keys:', e);
+          }
+          return null;
+        }
+        return getUserFromFirebaseKeys();
       })();
 
       if (!authUser) {
@@ -652,7 +667,19 @@ class JobHackAIStripe {
       // Resolve current user
       let uid = null;
       try { uid = window.FirebaseAuthManager?.getCurrentUser?.()?.uid || null; } catch(_){}
-      // SECURITY: Removed localStorage fallback - use Firebase auth only
+      // Fallback: Get UID from Firebase SDK keys (works synchronously)
+      // FirebaseAuthManager.getCurrentUser() returns null until onAuthStateChanged fires
+      if (!uid) {
+        try {
+          const firebaseKeys = Object.keys(localStorage).filter(k => k.startsWith('firebase:authUser:'));
+          if (firebaseKeys.length > 0) {
+            const keyData = JSON.parse(localStorage.getItem(firebaseKeys[0]) || '{}');
+            uid = keyData.uid || null;
+          }
+        } catch (e) {
+          console.warn('Failed to get UID from Firebase keys:', e);
+        }
+      }
       if (!uid) {
         alert('Please log in to manage your subscription.');
         window.location.href = 'login.html';
