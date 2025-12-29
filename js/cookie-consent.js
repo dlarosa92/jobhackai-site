@@ -100,10 +100,13 @@
       return v.toString(16);
     });
 
-    // Set cookie (Secure, SameSite=Lax, 1 year)
+    // Set cookie (Secure only on HTTPS, SameSite=Lax, 1 year)
+    // Secure flag breaks HTTP localhost development, so make it conditional
+    const isSecure = window.location.protocol === 'https:';
+    const secureFlag = isSecure ? 'Secure; ' : '';
     const expires = new Date();
     expires.setFullYear(expires.getFullYear() + 1);
-    document.cookie = `${CLIENT_ID_COOKIE}=${clientId}; Secure; SameSite=Lax; Max-Age=31536000; Path=/`;
+    document.cookie = `${CLIENT_ID_COOKIE}=${clientId}; ${secureFlag}SameSite=Lax; Max-Age=31536000; Path=/`;
 
     return clientId;
   }
