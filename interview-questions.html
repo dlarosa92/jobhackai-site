@@ -1900,8 +1900,94 @@
         console.warn('save set failed',e);
       }
     }
-    function iqLoadSetById(id){ 
+    async function iqLoadSetById(id){ 
       try{ 
+        // Check if ID is numeric (D1 ID) vs local ID (e.g., "role:seed")
+        const isD1Id = /^\d+$/.test(String(id));
+        
+        if (isD1Id) {
+          // Load from D1 API
+          const token = await getFirebaseToken();
+          if (!token) {
+            iqToast('Please log in to load question sets.');
+            return;
+          }
+          
+          try {
+            const response = await fetch(`${IQ_API.GET_SET}?id=${id}`, {
+              method: 'GET',
+              headers: {
+                'Authorization': `Bearer ${token}`
+              }
+            });
+            
+            if (!response.ok) {
+              if (response.status === 403) {
+                iqToast('Accessing question sets requires Pro or Premium plan.');
+              } else {
+                iqToast('Question set not found.');
+              }
+              return;
+            }
+            
+            const data = await response.json();
+            if (!data.success || !data.questions) {
+              iqToast('Invalid question set data.');
+              return;
+            }
+            
+            // Transform D1 response to match expected format
+            const set = {
+              id: String(data.id),
+              role: data.role,
+              seniority: data.seniority || '',
+              type: Array.isArray(data.types) && data.types.length > 0 
+                ? iqSanitizeType(data.types[0], 'mixed')
+                : 'mixed',
+              types: Array.isArray(data.types) ? data.types : [],
+              questions: data.questions || [],
+              selectedIndices: data.selectedIndices || [],
+              jd: data.jd || '',
+              seed: `${data.id}-${Date.now()}`, // Generate a seed for compatibility
+              count: data.questions?.length || 0,
+              replaceCounts: {} // Initialize empty
+            };
+            
+            // Normalize type
+            set.type = iqSanitizeType(set.type, iqInferTypeFromLegacyTypes(set.types));
+            
+            // Save to localStorage for future reference
+            try {
+              localStorage.setItem(`iq_set_${id}`, JSON.stringify(set));
+            } catch (e) {
+              console.warn('[IQ] Failed to cache set in localStorage:', e);
+            }
+            
+            iqState.set = set;
+            iqResetPerQuestionCooldowns();
+            iqState.replaceCounts = set.replaceCounts || {};
+            iqRenderQuestions();
+            iqUpdateSavedChip();
+            iqRevealSecondaryActions();
+            iqUpdateActionsLayout();
+            const savedPanel = $IQ('#iq-saved-panel');
+            if (savedPanel) savedPanel.hidden = true;
+            // History panel selection highlight
+            document.querySelectorAll('.rf-history-item').forEach(el => {
+              el.classList.toggle('is-selected', el.getAttribute('data-session-id') === String(id));
+            });
+            window.scrollTo({top:0,behavior:'smooth'}); 
+            iqToast('Loaded previous set'); 
+            iqTrack('iq_recent_loaded',{ id }); 
+            return;
+          } catch (e) {
+            console.warn('[IQ] Failed to load set from D1:', e);
+            iqToast('Could not load set');
+            return;
+          }
+        }
+        
+        // Load from localStorage for local IDs
         const raw=localStorage.getItem(`iq_set_${id}`); 
         if(!raw){ 
           iqToast('Previous set not found'); 
@@ -2414,13 +2500,50 @@
       if (!del.size) return;
       
       try {
+        const token = await getFirebaseToken();
+        if (!token) {
+          throw new Error('Not authenticated');
+        }
+        
+        // Delete from D1 for numeric IDs (D1 IDs)
+        const deletePromises = Array.from(del).map(async (id) => {
+          // Check if ID is numeric (D1 ID) vs local ID (e.g., "role:seed")
+          const isD1Id = /^\d+$/.test(id);
+          if (isD1Id) {
+            try {
+              const response = await fetch(`${IQ_API.HISTORY}/${id}`, {
+                method: 'DELETE',
+                headers: {
+                  'Authorization': `Bearer ${token}`
+                }
+              });
+              
+              if (!response.ok) {
+                console.warn(`[IQ-HISTORY] Failed to delete D1 set ${id}:`, response.status);
+                return false;
+              }
+              return true;
+            } catch (e) {
+              console.warn(`[IQ-HISTORY] Error deleting D1 set ${id}:`, e);
+              return false;
+            }
+          }
+          // For local IDs, just remove from localStorage
+          return true;
+        });
+        
+        await Promise.all(deletePromises);
+        
+        // Update localStorage cache
         const items = await iqHistoryLoadItems();
         const next = items.filter((x) => !del.has(String(x.id)));
         iqHistorySaveItems(next);
+        
         // Best-effort cleanup of stored full payloads
         del.forEach((id) => {
           try { localStorage.removeItem(`iq_set_${id}`); } catch {}
         });
+        
         // Exit manage mode after deletion
         _iqHistorySelectedIds.clear();
         iqHistorySyncBulkDeleteState();
@@ -2636,10 +2759,10 @@
         });
       });
 
-      function handleOpenRestore(id) {
+      async function handleOpenRestore(id) {
         if (!id) return;
         iqHistoryCloseAllMenus();
-        iqLoadSetById(String(id));
+        await iqLoadSetById(String(id));
       }
 
       listEl.addEventListener('click', (e) => {
