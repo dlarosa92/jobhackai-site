@@ -248,8 +248,11 @@ class AuthManager {
         
         
         // Sync with Firestore (update last login) - non-blocking, errors handled internally
-        UserProfileManager.updateLastLogin(user.uid).catch(() => {
-          // Error already handled in updateLastLogin - silence this to reduce console noise
+        UserProfileManager.updateLastLogin(user.uid).catch((err) => {
+          // Silently ignore Firestore write failures - non-critical operation
+          if (err.code !== 'permission-denied') {
+            console.debug('updateLastLogin failed (non-critical):', err.message);
+          }
         });
         
         // CRITICAL: Prioritize fresh plan selections over existing plans

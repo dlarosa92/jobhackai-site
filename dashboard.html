@@ -1439,6 +1439,13 @@
       // Load ATS score BEFORE rendering (now async)
       await loadAtsScoreFromStorage();
       const root = document.getElementById('dashboard-root');
+      
+      // Guard: Skip legacy render if hydration shell is active or root missing
+      if (!root || document.getElementById('dashboard-skeleton-container')) {
+        console.debug('renderDashboard: Skipping legacy render (hydration active or root missing)');
+        return;
+      }
+      
       const unlocked = featureMatrix[user.plan] || [];
       
       // Fetch subscription status for warning banners

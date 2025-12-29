@@ -46,17 +46,26 @@ export async function hydrateDashboard() {
       const { default: initializeFirebase } = await import('./firebase-config.js');
       const app = await initializeFirebase({ enableAnalytics: false });
 
-      // Load Firestore SDK and fetch user doc only when needed
-      const { getFirestore, doc, getDoc } = await import('https://www.gstatic.com/firebasejs/12.1.0/firebase-firestore.js');
-      const db = getFirestore(app);
+      // Try to load Firestore SDK and fetch user doc, but don't fail if it errors
+      let displayName = user.displayName || 'User';
+      let email = user.email || '';
 
-      const userDocRef = doc(db, 'users', user.uid);
-      const userDoc = await getDoc(userDocRef);
-
-      // Normalize display name: Firestore stores displayName; fall back to name field or Firebase user displayName.
-      const userDocData = userDoc.exists() ? userDoc.data() : null;
-      const displayName = (userDocData && (userDocData.displayName || userDocData.name)) || user.displayName || 'User';
-      const email = (userDocData && (userDocData.email || user.email)) || user.email || '';
+      try {
+        const { getFirestore, doc, getDoc } = await import('https://www.gstatic.com/firebasejs/12.1.0/firebase-firestore.js');
+        const db = getFirestore(app);
+        const userDocRef = doc(db, 'users', user.uid);
+        const userDoc = await getDoc(userDocRef);
+        
+        if (userDoc.exists()) {
+          const userDocData = userDoc.data();
+          displayName = userDocData.displayName || userDocData.name || displayName;
+          email = userDocData.email || email;
+        }
+      } catch (firestoreErr) {
+        // Firestore failed (permissions, network, etc.) - use Firebase user data as fallback
+        console.debug('Firestore read failed (non-critical), using Firebase user data:', firestoreErr.message);
+        // displayName and email already set from Firebase user above
+      }
 
       // Render small, design-system based cards (use existing classes)
       contentWrapper.innerHTML = `
