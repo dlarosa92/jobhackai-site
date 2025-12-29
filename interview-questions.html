@@ -10,7 +10,16 @@
     // --- IMMEDIATE PAGE ACCESS CONTROL ---
     // Run immediately to prevent content flash for unauthorized users
     (function enforceAccessImmediate() {
-      const isAuthenticated = localStorage.getItem('user-authenticated') === 'true' && !!localStorage.getItem('user-email');
+      // SECURITY: Check auth state using localStorage flags and Firebase SDK keys
+      // FirebaseAuthManager may not be loaded yet, so we check Firebase SDK keys directly
+      const hasLocalStorageAuth = localStorage.getItem('user-authenticated') === 'true';
+      const hasFirebaseKeys = Object.keys(localStorage).some(k => 
+        k.startsWith('firebase:authUser:') && 
+        localStorage.getItem(k) && 
+        localStorage.getItem(k) !== 'null' &&
+        localStorage.getItem(k).length > 10
+      );
+      const isAuthenticated = hasLocalStorageAuth || hasFirebaseKeys;
       const plan = localStorage.getItem('user-plan') || 'free';
       const allowedPlans = ['trial', 'essential', 'pro', 'premium'];
       
@@ -1515,7 +1524,23 @@
         return true;
       } else {
         // Fallback to localStorage check if navigation system not available
-        const isAuthenticated = localStorage.getItem('user-authenticated') === 'true' && !!localStorage.getItem('user-email');
+        // SECURITY: Check Firebase SDK keys synchronously (works before FirebaseAuthManager is ready)
+        // FirebaseAuthManager.getCurrentUser() returns null until onAuthStateChanged fires
+        function hasFirebaseAuthKeys() {
+          try {
+            return Object.keys(localStorage).some(k => 
+              k.startsWith('firebase:authUser:') && 
+              localStorage.getItem(k) && 
+              localStorage.getItem(k) !== 'null' &&
+              localStorage.getItem(k).length > 10
+            );
+          } catch (e) {
+            return false;
+          }
+        }
+        const hasLocalStorageAuth = localStorage.getItem('user-authenticated') === 'true';
+        const hasFirebaseKeys = hasFirebaseAuthKeys();
+        const isAuthenticated = hasLocalStorageAuth || hasFirebaseKeys;
         if (!isAuthenticated) {
           const mainContent = document.querySelector('main');
           mainContent.innerHTML = `
@@ -3756,7 +3781,24 @@ function initIQPage(){
         authState = window.JobHackAINavigation.getAuthState();
         userPlan = window.JobHackAINavigation.getEffectivePlan();
       } else {
-        authState = { isAuthenticated: localStorage.getItem('user-authenticated') === 'true' && !!localStorage.getItem('user-email') };
+        // SECURITY: Check Firebase SDK keys synchronously (works before FirebaseAuthManager is ready)
+        // FirebaseAuthManager.getCurrentUser() returns null until onAuthStateChanged fires
+        // Use same pattern as checkAuthentication() for consistency
+        function hasFirebaseAuthKeys() {
+          try {
+            return Object.keys(localStorage).some(k => 
+              k.startsWith('firebase:authUser:') && 
+              localStorage.getItem(k) && 
+              localStorage.getItem(k) !== 'null' &&
+              localStorage.getItem(k).length > 10
+            );
+          } catch (e) {
+            return false;
+          }
+        }
+        const hasLocalStorageAuth = localStorage.getItem('user-authenticated') === 'true';
+        const hasFirebaseKeys = hasFirebaseAuthKeys();
+        authState = { isAuthenticated: hasLocalStorageAuth || hasFirebaseKeys };
         userPlan = localStorage.getItem('user-plan') || 'free';
       }
       

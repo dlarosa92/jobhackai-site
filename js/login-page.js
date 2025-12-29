@@ -192,7 +192,22 @@ document.addEventListener('DOMContentLoaded', async function() {
     showSelectedPlanBanner(selectedPlan);
     
     // Auto-switch to signup form for new users with plan
-    if (!localStorage.getItem('user-email')) {
+    // SECURITY: Check Firebase SDK keys (works before firebase-auth.js loads)
+    // FirebaseAuthManager.getCurrentUser() is null until onAuthStateChanged fires
+    function hasEmailFromFirebaseKeys() {
+      try {
+        const firebaseKeys = Object.keys(localStorage).filter(k => k.startsWith('firebase:authUser:'));
+        if (firebaseKeys.length > 0) {
+          const keyData = JSON.parse(localStorage.getItem(firebaseKeys[0]) || '{}');
+          return !!keyData.email;
+        }
+      } catch (e) {
+        console.warn('Failed to get email from Firebase keys:', e);
+      }
+      return false;
+    }
+    const hasEmail = hasEmailFromFirebaseKeys();
+    if (!hasEmail) {
       showSignupForm(selectedPlan, true); // Pass flag to skip banner (already shown)
     } else {
       // Existing user who somehow landed here - show login

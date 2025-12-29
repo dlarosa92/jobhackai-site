@@ -15,23 +15,28 @@
 
     function hasFirebaseAuth() {
       try {
-        // First check: Look for our own auth state flags (set by firebase-auth.js)
-        const hasLocalStorageAuth = localStorage.getItem('user-authenticated') === 'true' && 
-                                    !!localStorage.getItem('user-email');
-        if (hasLocalStorageAuth) {
-          return true;
-        }
+        // First check: Look for our auth state flag (set by firebase-auth.js)
+        const hasLocalStorageAuth = localStorage.getItem('user-authenticated') === 'true';
         
-        // Second check: Look for Firebase SDK auth user shard
+        // Second check: Look for Firebase SDK auth user shard (more reliable)
+        // Firebase SDK writes these keys synchronously on page load if user is authenticated
+        // SECURITY: Require BOTH flag AND Firebase keys to prevent XSS attacks from bypassing guard
+        // An attacker would need to set both values, not just one
+        let hasFirebaseKeys = false;
         for (var i = 0; i < localStorage.length; i++) {
           var k = localStorage.key(i);
           if (k && k.indexOf('firebase:authUser:') === 0) {
             var userData = localStorage.getItem(k);
             if (userData && userData !== 'null' && userData.length > 10) {
-              return true;
+              hasFirebaseKeys = true;
+              break;
             }
           }
         }
+        
+        // Require both conditions: flag must be true AND Firebase keys must exist
+        // This prevents stale flags or XSS attacks from incorrectly identifying users as authenticated
+        return hasLocalStorageAuth && hasFirebaseKeys;
       } catch (_) {}
       return false;
     }

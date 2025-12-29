@@ -225,16 +225,12 @@ class AuthManager {
         // ✅ CRITICAL: Set localStorage IMMEDIATELY (sync, before any await)
         // This prevents race conditions with static-auth-guard.js
         localStorage.setItem('user-authenticated', 'true');
-        localStorage.setItem('user-email', user.email || '');
+        // SECURITY: Do NOT store email, uid, or auth-user object in localStorage
+        // Email/UID available via Firebase auth.currentUser when needed
         // Cache user name for account settings page performance
         if (user.displayName) {
           localStorage.setItem('user-name', user.displayName);
         }
-        localStorage.setItem('auth-user', JSON.stringify({
-          email: user.email,
-          uid: user.uid,
-          displayName: user.displayName
-        }));
         console.log('✅ localStorage synced immediately for auth guards');
         
         // User is signed in - now do async operations
@@ -536,11 +532,11 @@ class AuthManager {
       });
 
       // Persist auth state immediately
-      localStorage.setItem('user-email', user.email || '');
+      localStorage.setItem('user-authenticated', 'true');
+      // SECURITY: Do NOT store email in localStorage
       if (user.displayName) {
         localStorage.setItem('user-name', user.displayName);
       }
-      localStorage.setItem('user-authenticated', 'true');
       // Update navigation state with correct plan
       if (window.JobHackAINavigation) {
         window.JobHackAINavigation.setAuthState(true, actualPlan);
@@ -634,11 +630,11 @@ class AuthManager {
 
       // Ensure navigation/auth state is updated immediately (avoid redirect race)
       try {
-        localStorage.setItem('user-email', user.email || '');
+        localStorage.setItem('user-authenticated', 'true');
+        // SECURITY: Do NOT store email in localStorage
         if (user.displayName) {
           localStorage.setItem('user-name', user.displayName);
         }
-        localStorage.setItem('user-authenticated', 'true');
         if (window.JobHackAINavigation) {
           window.JobHackAINavigation.setAuthState(true, actualPlan);
         }
