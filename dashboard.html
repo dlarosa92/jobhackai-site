@@ -945,6 +945,12 @@
               loadingIndicator.remove();
               // Mark as processed even on timeout to prevent infinite polling
               sessionStorage.setItem('payment-processed', 'true');
+              // Clean up URL parameter to prevent restarting polling in new sessions
+              const url = new URL(window.location.href);
+              if (url.searchParams.has('paid')) {
+                url.searchParams.delete('paid');
+                window.history.replaceState({}, '', url.toString());
+              }
             }
           };
           
@@ -1820,7 +1826,9 @@
       
       // Show carry-over message after trial → paid upgrade
       // Fix Issue 1: Use previousPlanBeforeUpdate instead of localStorage value
-      if (previousPlanBeforeUpdate === 'trial' && user.plan !== 'trial' && user.plan !== 'free') {
+      // Fix Issue 2: Use explicit positive check to exclude 'cancelled' plan
+      if (previousPlanBeforeUpdate === 'trial' && 
+          (user.plan === 'essential' || user.plan === 'pro' || user.plan === 'premium')) {
         const hasSeenTrialCarriedOverMessage = localStorage.getItem('hasSeenTrialCarriedOverMessage') === 'true';
         if (!hasSeenTrialCarriedOverMessage) {
           const trialCarriedOverHTML = `
