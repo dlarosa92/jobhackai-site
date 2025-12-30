@@ -1214,12 +1214,9 @@
         // Refresh every hour
         setInterval(refreshTrialData, 3600000); // 1 hour = 3,600,000 ms
         
-        // Also refresh when page becomes visible (user returns to tab)
-        document.addEventListener('visibilitychange', () => {
-          if (!document.hidden) {
-            refreshTrialData();
-          }
-        });
+        // Note: visibilitychange handling is centralized to refreshPlanData above
+        // (refreshPlanData also updates trialEnd dates and handles trial->non-trial transitions),
+        // so we avoid registering a second visibility listener to prevent duplicate API calls.
       }
     });
 
