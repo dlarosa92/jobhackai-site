@@ -3,6 +3,10 @@ name = "jobhackai-site"
 account_id = "fabf4409ef32f8c64354a1a099bef2a2"
 compatibility_date = "2024-12-11"
 
+[build]
+  # Publish static files from repository root (no Node build). Adjust if you use a build step.
+  pages_build_output_dir = "."
+
 [env.dev]
 name = "jobhackai-site-dev"
 d1_databases = [
