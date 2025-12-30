@@ -383,8 +383,8 @@ test.describe('Resume Feedback', () => {
     }
     
     // Check if we were redirected to pricing (user doesn't have paid plan)
-    const currentURL = page.url();
-    if (currentURL.includes('/pricing')) {
+    const pricingCheckURL = page.url();
+    if (pricingCheckURL.includes('/pricing')) {
       // Double-check by waiting a bit more - sometimes redirects are delayed
       await page.waitForTimeout(2000);
       const finalURL = page.url();
