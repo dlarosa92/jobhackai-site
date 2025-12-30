@@ -1,9 +1,14 @@
 # ADMIN_API_KEY Setup
 
-## Generated Key
-✅ **ADMIN_API_KEY has been set for all environments (DEV, QA, PROD)**
+## Generated Keys
+✅ **ADMIN_API_KEY has been set for each environment with unique keys**
 
-The key has been configured via Wrangler CLI and is stored securely in Cloudflare Pages secrets.
+Each environment has its own unique key configured via Wrangler CLI and stored securely in Cloudflare Pages secrets. This enables independent key rotation and environment isolation.
+
+**Keys (for archival):**
+- **DEV**: `c8b5c4747b40d5dca0310b1ecc8eb31ca1f6e3f345875bac5805d29aa281368a`
+- **QA**: `10fcca29e85c930d2f8a4fdc7f21b91cc85922a8c8a6c672b5e8dd15d04ff2d5`
+- **PROD**: `9c90caae013e8994badf99fc0f32e59b0be1b3e165c59354945b0935d5843ce4`
 
 ## Usage
 
@@ -24,11 +29,13 @@ curl https://dev.jobhackai.io/api/admin/role-templates \
 
 ## Security Notes
 
-- ✅ Key is stored as a Cloudflare Pages secret (encrypted)
-- ✅ Key is NOT committed to git
-- ✅ Same key used across DEV/QA/PROD for consistency
-- ⚠️ Keep the key secure - don't share publicly
-- ⚠️ Rotate periodically if compromised
+- ✅ Keys are stored as Cloudflare Pages secrets (encrypted)
+- ✅ Keys are NOT committed to git
+- ✅ **Unique keys per environment** (DEV/QA/PROD) for security isolation
+- ✅ Enables independent key rotation per environment
+- ⚠️ Keep keys secure - don't share publicly
+- ⚠️ Rotate keys periodically if compromised
+- ⚠️ If one environment key is compromised, others remain secure
 
 ## Verification
 
@@ -38,14 +45,21 @@ To verify the key is set:
 wrangler pages secret list --project-name=jobhackai-app-dev
 ```
 
-## Regenerating Key
+## Regenerating Keys
 
-If you need to regenerate:
-1. Generate new key: `openssl rand -hex 32`
-2. Set for each environment:
+If you need to regenerate (recommended: unique keys per environment):
+1. Generate new keys for each environment: `openssl rand -hex 32` (run 3 times)
+2. Set unique key for each environment:
    ```bash
-   wrangler pages secret put ADMIN_API_KEY --project-name=jobhackai-app-dev
-   wrangler pages secret put ADMIN_API_KEY --project-name=jobhackai-app-qa
-   wrangler pages secret put ADMIN_API_KEY --project-name=jobhackai-app-prod
+   # DEV
+   echo "DEV_KEY_HERE" | wrangler pages secret put ADMIN_API_KEY --project-name=jobhackai-app-dev
+   
+   # QA
+   echo "QA_KEY_HERE" | wrangler pages secret put ADMIN_API_KEY --project-name=jobhackai-app-qa
+   
+   # PROD
+   echo "PROD_KEY_HERE" | wrangler pages secret put ADMIN_API_KEY --project-name=jobhackai-app-prod
    ```
+
+**Security Best Practice**: Use different keys for each environment to enable independent rotation and prevent cross-environment access if one key is compromised.
 
