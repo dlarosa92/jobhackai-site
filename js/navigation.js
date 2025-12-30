@@ -534,7 +534,10 @@ async function logout(e) {
 
     // Clear session-scoped data IMMEDIATELY
     try { 
-      sessionStorage.removeItem('selectedPlan'); 
+      sessionStorage.removeItem('selectedPlan');
+      // Fix: Clear plan state sync sessionStorage keys to prevent cross-user contamination
+      sessionStorage.removeItem('previous-plan-before-update');
+      sessionStorage.removeItem('payment-processed');
       console.log('[LOGOUT] Session storage cleared');
     } catch (sessionError) {
       console.warn('[LOGOUT] Session storage cleanup failed:', sessionError.message);
