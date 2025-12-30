@@ -1276,6 +1276,12 @@
       lockedDiv.style.display = locked ? 'flex' : 'none';
       formDiv.style.display = locked ? 'none' : '';
       resultsDiv.style.display = 'none';
+      
+      // Phase 4.3: Show locked feature data notice when feature is locked
+      const lockedDataNotice = document.getElementById('rf-locked-data-notice');
+      if (lockedDataNotice) {
+        lockedDataNotice.style.display = locked ? 'block' : 'none';
+      }
     }
 
     // --- Initialize on load ---
@@ -7489,6 +7495,10 @@
           <strong>Upgrade to Pro</strong> to unlock detailed ATS and role-specific feedback.
         </div>
         <a href="#" class="btn btn-secondary" onclick="startCheckout('pro'); return false;">Upgrade Now</a>
+      </div>
+      <!-- Phase 4.3: Locked feature data notice -->
+      <div id="rf-locked-data-notice" style="display:none;background:#F3F4F6;border-left:3px solid #6B7280;padding:0.75rem 1rem;border-radius:8px;margin-top:1rem;font-size:0.875rem;color:#374151;line-height:1.5;">
+        <strong>Data Notice:</strong> Your uploaded resume stays available in your history for 90 days (last 10 runs), even if this tool is locked.
       </div>
       <div id="rf-feedback-content" style="display:none;">
         <!-- Empty state placeholder -->

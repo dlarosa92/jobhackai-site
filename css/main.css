@@ -441,6 +441,15 @@ section {
   justify-content: center;
 }
 
+/* Phase 4.4: Update button hover states - all blue on hover */
+.btn-outline:hover,
+.btn-outline:focus {
+  background: #1976D2 !important;
+  color: #fff !important;
+  border-color: #1976D2 !important;
+  outline: none;
+}
+
 /* Ensure resume rewrite action buttons have unified sizing and border weight */
 #rf-rewrite-content .btn,
 #rf-rewrite-content .btn-outline,

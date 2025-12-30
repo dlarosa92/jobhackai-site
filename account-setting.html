@@ -366,9 +366,9 @@
     }
     .btn-outline-grey:hover,
     .btn-outline-grey:focus {
-      background: #232B36;
+      background: #1976D2;
       color: #fff;
-      border-color: #232B36;
+      border-color: #1976D2;
     }
     .plan-badge {
       display: inline-flex;
@@ -425,8 +425,8 @@
     }
     .btn-link:hover,
     .btn-link:focus {
-      background: #F3F4F6;
-      color: #125bb5;
+      background: #1976D2;
+      color: #fff;
     }
   </style>
 </head>
@@ -905,9 +905,16 @@
           
           html += `</div>`;
           html += `<div class="subscription-action-row">`;
-          html += `<button class="btn-outline" type="button" onclick="openBillingPortal()">Manage Subscription</button>`;
+          html += `<button class="btn-outline" type="button" onclick="openBillingPortal()">Billing Management</button>`;
           html += `<span class="plan-badge ${plan}">${planBadgeText[plan]}</span>`;
           html += `</div>`;
+          
+          // Phase 2.4 & Phase 4.1: Add Stripe portal messaging and billing data notice
+          html += `<div style="background:#F3F4F6;border-left:3px solid #6B7280;padding:0.75rem 1rem;border-radius:8px;margin-top:1rem;font-size:0.875rem;color:#374151;line-height:1.5;">
+            <div style="margin-bottom:0.5rem;"><strong>Billing Information</strong></div>
+            <div style="margin-bottom:0.5rem;">To change plans, visit your billing portal. Your current plan will remain active until the next billing cycle.</div>
+            <div style="font-size:0.8125rem;color:#6B7280;">We use Stripe for secure payment processing. We don't store your card details — Stripe handles all payment data securely.</div>
+          </div>`;
         }
         
         billingSection.innerHTML = html;
