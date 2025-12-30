@@ -146,7 +146,142 @@ export async function onRequest(context) {
       }
     }
 
-    // Create Checkout Session (subscription)
+    // Check for existing active subscriptions and update instead of creating new
+    if (customerId) {
+      try {
+        console.log('🔵 [CHECKOUT] Checking for existing subscriptions for customer', customerId);
+        const subsRes = await stripe(env, `/subscriptions?customer=${customerId}&status=all&limit=10`);
+        
+        if (subsRes.ok) {
+          const subsData = await subsRes.json();
+          const subscriptions = subsData.data || [];
+          
+          // Find active or trialing subscriptions
+          const activeSubscriptions = subscriptions.filter(s => 
+            s.status === 'active' || s.status === 'trialing' || s.status === 'past_due'
+          );
+          
+          if (activeSubscriptions.length > 0) {
+            // Use the most recent active subscription
+            const existingSub = activeSubscriptions.sort((a, b) => b.created - a.created)[0];
+            const existingSubId = existingSub.id;
+            const existingPriceId = existingSub.items?.data?.[0]?.price?.id;
+            
+            console.log('🔵 [CHECKOUT] Found existing subscription', {
+              subscriptionId: existingSubId,
+              status: existingSub.status,
+              currentPriceId: existingPriceId,
+              newPriceId: priceId
+            });
+            
+            // If upgrading to a different plan, update the subscription
+            if (existingPriceId !== priceId) {
+              console.log('🔄 [CHECKOUT] Updating existing subscription to new plan');
+              
+              // Get the subscription item ID to update
+              const subscriptionItemId = existingSub.items?.data?.[0]?.id;
+              
+              if (!subscriptionItemId) {
+                console.log('🔴 [CHECKOUT] No subscription item found to update');
+                // Fall through to create new checkout session
+              } else {
+                try {
+                  // Update subscription: replace the subscription item with new price
+                  const updateBody = {
+                    'items[0][id]': subscriptionItemId,
+                    'items[0][price]': priceId,
+                    'proration_behavior': 'always_invoice', // Prorate charges for plan change
+                    'metadata[plan]': plan,
+                    'metadata[firebaseUid]': uid
+                  };
+                  
+                  // If upgrading to trial, add trial period
+                  if (plan === 'trial') {
+                    updateBody['trial_period_days'] = '3';
+                    updateBody['metadata[original_plan]'] = plan;
+                  }
+                  
+                  const updateRes = await stripe(env, `/subscriptions/${existingSubId}`, {
+                    method: 'POST',
+                    headers: stripeFormHeaders(env),
+                    body: form(updateBody)
+                  });
+                  
+                  if (updateRes.ok) {
+                    const updatedSub = await updateRes.json();
+                    console.log('✅ [CHECKOUT] Subscription updated successfully', {
+                      subscriptionId: existingSubId,
+                      newPriceId: priceId
+                    });
+                    
+                    // Cancel other active subscriptions to prevent multiple subscriptions
+                    const otherSubscriptions = activeSubscriptions.filter(s => s.id !== existingSubId);
+                    for (const otherSub of otherSubscriptions) {
+                      try {
+                        console.log('🔄 [CHECKOUT] Cancelling other subscription', otherSub.id);
+                        await stripe(env, `/subscriptions/${otherSub.id}`, {
+                          method: 'DELETE',
+                          headers: stripeFormHeaders(env)
+                        });
+                        console.log('✅ [CHECKOUT] Cancelled subscription', otherSub.id);
+                      } catch (cancelError) {
+                        console.log('🟡 [CHECKOUT] Failed to cancel subscription (non-fatal)', {
+                          subscriptionId: otherSub.id,
+                          error: cancelError?.message || cancelError
+                        });
+                        // Continue - non-critical
+                      }
+                    }
+                    
+                    // Return success - subscription will be updated via webhook
+                    // Redirect to dashboard with paid=1 to trigger plan refresh
+                    return json({ 
+                      ok: true, 
+                      url: `${env.STRIPE_SUCCESS_URL || `${env.FRONTEND_URL || 'https://dev.jobhackai.io'}/dashboard.html?paid=1`}`,
+                      sessionId: null,
+                      updated: true
+                    }, 200, origin, env);
+                  } else {
+                    const errorText = await updateRes.text();
+                    let errorData;
+                    try {
+                      errorData = JSON.parse(errorText);
+                    } catch {
+                      errorData = { error: { message: errorText || 'Unknown Stripe error' } };
+                    }
+                    console.log('🔴 [CHECKOUT] Subscription update failed', {
+                      status: updateRes.status,
+                      error: errorData
+                    });
+                    // Fall through to create new checkout session as fallback
+                  }
+                } catch (updateError) {
+                  console.log('🔴 [CHECKOUT] Subscription update exception', {
+                    error: updateError?.message || updateError,
+                    stack: updateError?.stack?.substring(0, 200)
+                  });
+                  // Fall through to create new checkout session as fallback
+                }
+              }
+            } else {
+              // Same plan - user might be trying to resubscribe or reactivate
+              console.log('ℹ️ [CHECKOUT] User already has this plan, creating checkout session anyway');
+              // Fall through to create new checkout session
+            }
+          }
+        } else {
+          console.log('🟡 [CHECKOUT] Failed to fetch subscriptions, will create new checkout session');
+          // Fall through to create new checkout session
+        }
+      } catch (subsError) {
+        console.log('🟡 [CHECKOUT] Error checking subscriptions (non-fatal)', {
+          error: subsError?.message || subsError
+        });
+        // Fall through to create new checkout session
+      }
+    }
+
+    // Create Checkout Session (subscription) - fallback for new subscriptions or if update failed
     
     // Prepare session body with trial support
     const sessionBody = {
