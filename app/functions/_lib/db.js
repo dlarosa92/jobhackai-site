@@ -22,7 +22,12 @@
  */
 const DB_BINDING_NAMES = ['DB', 'JOBHACKAI_DB', 'INTERVIEW_QUESTIONS_DB', 'IQ_D1'];
 
-function getDb(env) {
+/**
+ * Resolve the D1 binding from the environment.
+ * @param {Object} env - Cloudflare environment
+ * @returns {Object|null} D1 database binding or null if not available
+ */
+export function getDb(env) {
   if (!env) return null;
   const direct = env.DB;
   if (direct && typeof direct.prepare === 'function') return direct;
