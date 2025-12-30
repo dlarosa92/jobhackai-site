@@ -5,7 +5,8 @@
 import { calcOverallScore } from './calc-overall-score.js';
 import { getGrammarDiagnostics } from './grammar-engine.js';
 import { normalizeRoleToFamily } from './role-normalizer.js';
-import { ROLE_SKILL_TEMPLATES } from './role-skills.js';
+import { loadRoleTemplate } from './role-template-loader.js';
+import { ROLE_SKILL_TEMPLATES } from './role-skills.js'; // Fallback only
 
 // --- Extraction-quality & heading detection helpers (trust-first) ---
 function buildExtractionQuality(grammarDiagnostics) {
@@ -135,12 +136,8 @@ export async function scoreResume(resumeText, jobTitle, metadata = {}, env) {
   const normalizedJobTitle = normalizeJobTitle(jobTitle);
   const roleFamily = normalizeRoleToFamily(normalizedJobTitle);
   
-  // Safety check for missing templates
-  const template = ROLE_SKILL_TEMPLATES[roleFamily];
-  if (!template) {
-    console.warn(`[ATS-SCORING] No template found for roleFamily: ${roleFamily}, using generic_professional`);
-  }
-  const finalTemplate = template || ROLE_SKILL_TEMPLATES.generic_professional;
+  // Load template from D1 (with code fallback)
+  const finalTemplate = await loadRoleTemplate(env, roleFamily);
   
   const expectedMustHave = finalTemplate.must_have || [];
   const expectedNiceToHave = finalTemplate.nice_to_have || [];

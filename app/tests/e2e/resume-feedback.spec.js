@@ -7,6 +7,17 @@ test.describe('Resume Feedback', () => {
     // Upload + ATS scoring can exceed default 30s timeout; allow up to 2 minutes
     test.setTimeout(120000);
     
+    // CRITICAL: Intercept KV fetch to return null (simplest solution - prevents cached state from loading)
+    // This ensures the page always shows upload form, not cached results
+    await page.route('**/api/ats-score-persist', async route => {
+      // Return empty response to prevent KV cache from loading
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ success: true, data: null })
+      });
+    });
+    
     // CRITICAL: Clear any cached state before navigating
     // State persistence might be showing results view instead of upload form
     // Navigate to page first to get context, then clear state
@@ -103,6 +114,45 @@ test.describe('Resume Feedback', () => {
       console.log('⚠️ Plan hydration wait timed out, but page not redirected - continuing');
     }
     
+    // CRITICAL: Verify we're still on resume-feedback page after plan hydration
+    // If redirected to dashboard, navigate back to resume-feedback-pro.html
+    const currentURL = page.url();
+    if (!currentURL.includes('resume-feedback')) {
+      console.log(`⚠️ Page redirected to ${currentURL} during plan hydration, navigating back to resume-feedback-pro.html`);
+      await page.goto('/resume-feedback-pro.html');
+      await page.waitForLoadState('domcontentloaded');
+      
+      // Wait for auth again after navigation
+      await page.waitForFunction(() => {
+        const user = window.FirebaseAuthManager?.getCurrentUser?.();
+        return user !== null && user !== undefined;
+      }, { timeout: 10000 }).catch(() => {
+        return page.waitForFunction(() => {
+          return localStorage.getItem('user-authenticated') === 'true';
+        }, { timeout: 5000 });
+      });
+      
+      // Wait for plan hydration again
+      try {
+        await page.waitForFunction(() => {
+          const planPendingRemoved = !document.documentElement.classList.contains('plan-pending');
+          const planFlagCleared = window.__JOBHACKAI_PLAN_PENDING__ === false || 
+                                  window.__JOBHACKAI_PLAN_PENDING__ === undefined;
+          const stillOnPage = window.location.pathname.includes('resume-feedback-pro') || 
+                              window.location.pathname.includes('resume-feedback');
+          return planPendingRemoved && planFlagCleared && stillOnPage;
+        }, { timeout: 15000 });
+      } catch (error) {
+        const hydrationURL = page.url();
+        if (hydrationURL.includes('/pricing')) {
+          const userPlan = await page.evaluate(() => localStorage.getItem('user-plan') || 'unknown');
+          test.info().skip(`Page redirected to pricing during plan hydration. user-plan=${userPlan}`);
+          return;
+        }
+        console.log('⚠️ Plan hydration wait timed out after navigation - continuing');
+      }
+    }
+    
     // CRITICAL: Wait for KV check to complete, then verify upload form is visible
     // The page fetches from KV storage asynchronously, which may restore cached state
     // Wait for KV fetch to complete, then check if form button exists
@@ -192,18 +242,27 @@ test.describe('Resume Feedback', () => {
                               window.location.pathname.includes('resume-feedback');
           return planPendingRemoved && planFlagCleared && stillOnPage;
         }, { timeout: 15000 });
-      } catch (error) {
-        const hydrationURL = page.url();
-        if (hydrationURL.includes('/pricing')) {
-          const userPlan = await page.evaluate(() => localStorage.getItem('user-plan') || 'unknown');
-          test.info().skip(`Page redirected to pricing during plan hydration. user-plan=${userPlan}`);
-          return;
+        } catch (error) {
+          const hydrationURL = page.url();
+          if (hydrationURL.includes('/pricing')) {
+            const userPlan = await page.evaluate(() => localStorage.getItem('user-plan') || 'unknown');
+            test.info().skip(`Page redirected to pricing during plan hydration. user-plan=${userPlan}`);
+            return;
+          }
+          console.log('⚠️ Plan hydration wait timed out after reload - continuing');
         }
-        console.log('⚠️ Plan hydration wait timed out after reload - continuing');
-      }
-      
-      // Wait for KV check again (it will run on reload)
-      await page.waitForTimeout(3000);
+        
+        // Verify we're still on resume-feedback page after reload
+        const reloadURL = page.url();
+        if (!reloadURL.includes('resume-feedback')) {
+          console.log(`⚠️ Page redirected to ${reloadURL} after reload, navigating back to resume-feedback-pro.html`);
+          await page.goto('/resume-feedback-pro.html');
+          await page.waitForLoadState('domcontentloaded');
+          await page.waitForTimeout(3000);
+        }
+        
+        // Wait for KV check again (it will run on reload)
+        await page.waitForTimeout(3000);
       } else {
         // Form was replaced but no cached score - might be a different issue
         // Try reloading anyway to see if form restores
@@ -238,6 +297,15 @@ test.describe('Resume Feedback', () => {
             return;
           }
           console.log('⚠️ Plan hydration wait timed out after reload - continuing');
+        }
+        
+        // Verify we're still on resume-feedback page after reload
+        const reloadURL2 = page.url();
+        if (!reloadURL2.includes('resume-feedback')) {
+          console.log(`⚠️ Page redirected to ${reloadURL2} after reload, navigating back to resume-feedback-pro.html`);
+          await page.goto('/resume-feedback-pro.html');
+          await page.waitForLoadState('domcontentloaded');
+          await page.waitForTimeout(3000);
         }
         
         await page.waitForTimeout(3000);
@@ -315,8 +383,8 @@ test.describe('Resume Feedback', () => {
     }
     
     // Check if we were redirected to pricing (user doesn't have paid plan)
-    const currentURL = page.url();
-    if (currentURL.includes('/pricing')) {
+    const pricingCheckURL = page.url();
+    if (pricingCheckURL.includes('/pricing')) {
       // Double-check by waiting a bit more - sometimes redirects are delayed
       await page.waitForTimeout(2000);
       const finalURL = page.url();

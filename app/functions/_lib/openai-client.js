@@ -1,7 +1,8 @@
 // OpenAI API client utility
 // Handles rate limiting, structured outputs, prompt caching, and cost tracking
 import { normalizeRoleToFamily } from './role-normalizer.js';
-import { ROLE_SKILL_TEMPLATES } from './role-skills.js';
+import { loadRoleTemplate } from './role-template-loader.js';
+import { ROLE_SKILL_TEMPLATES } from './role-skills.js'; // Fallback only
 
 /**
  * Approximate token-aware truncation.
@@ -345,7 +346,7 @@ export async function generateATSFeedback(resumeText, ruleBasedScores, jobTitle,
   if (hasRole) {
     // Derive role expectations from canonical templates to ground tips in current standards
     const roleFamily = normalizeRoleToFamily(targetRoleUsed);
-    const roleTemplate = ROLE_SKILL_TEMPLATES[roleFamily] || ROLE_SKILL_TEMPLATES.generic_professional || {};
+    const roleTemplate = await loadRoleTemplate(env, roleFamily);
     const mustHave = Array.isArray(roleTemplate.must_have) ? roleTemplate.must_have.slice(0, 8) : [];
     const niceToHave = Array.isArray(roleTemplate.nice_to_have) ? roleTemplate.nice_to_have.slice(0, 8) : [];
     const tools = Array.isArray(roleTemplate.tools) ? roleTemplate.tools.slice(0, 6) : [];

@@ -3,7 +3,8 @@
 
 import { getBearer, verifyFirebaseIdToken } from '../_lib/firebase-auth.js';
 import { scoreResume } from '../_lib/ats-scoring-engine.js';
-import { getOrCreateUserByAuthId, upsertResumeSessionWithScores, isD1Available } from '../_lib/db.js';
+import { getOrCreateUserByAuthId, upsertResumeSessionWithScores, isD1Available, getDb } from '../_lib/db.js';
+import { normalizeRoleToFamily } from '../_lib/role-normalizer.js';
 
 function corsHeaders(origin, env) {
   const allowedOrigins = [
@@ -266,6 +267,24 @@ export async function onRequest(context) {
       }
 
       console.log('[ATS-SCORE] Scoring completed successfully');
+      
+      // Log role usage for gap detection (non-blocking)
+      if (uid && normalizedJobTitle && ruleBasedScores?.keywordScore?.score !== undefined) {
+        try {
+          const db = getDb(env);
+          if (db) {
+            const roleFamily = normalizeRoleToFamily(normalizedJobTitle);
+            // Async fire-and-forget (don't await)
+            db.prepare(
+              'INSERT INTO role_usage_log (user_id, role_label, role_family, keyword_score, created_at) VALUES (?, ?, ?, ?, datetime(\'now\'))'
+            ).bind(uid, normalizedJobTitle, roleFamily, ruleBasedScores.keywordScore.score).run()
+              .catch(err => console.warn('[ATS-SCORE] Role usage log failed (non-fatal):', err.message));
+          }
+        } catch (telemetryError) {
+          // Non-blocking: log but don't fail the request
+          console.warn('[ATS-SCORE] Telemetry logging failed (non-fatal):', telemetryError.message);
+        }
+      }
     } catch (scoreError) {
       console.error('[ATS-SCORE] Scoring error:', scoreError);
       return json({ 
