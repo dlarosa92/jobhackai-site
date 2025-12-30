@@ -144,9 +144,18 @@ export async function onRequest(context) {
         return json({ error: 'status must be "active" or "deprecated"' }, 400, origin, env);
       }
       
-      await db.prepare(
+      const result = await db.prepare(
         'UPDATE role_templates SET status = ?, approved_by = ?, approved_at = datetime(\'now\'), updated_at = datetime(\'now\') WHERE role_family = ?'
       ).bind(status, approved_by || 'admin', role_family).run();
+      
+      // Verify that a row was actually updated
+      const changes = result?.meta?.changes ?? 0;
+      if (changes === 0) {
+        return json({ 
+          error: 'Template not found', 
+          message: `No template found with role_family: ${role_family}` 
+        }, 404, origin, env);
+      }
       
       return json({ success: true }, 200, origin, env);
     } catch (error) {
