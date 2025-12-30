@@ -894,6 +894,14 @@
               if (retries >= maxRetries) {
                 console.warn('⚠️ Plan update timeout - authentication failed');
                 loadingIndicator.remove();
+                // Mark as processed to prevent infinite polling on refresh
+                sessionStorage.setItem('payment-processed', 'true');
+                // Clean up URL parameter
+                const url = new URL(window.location.href);
+                if (url.searchParams.has('paid')) {
+                  url.searchParams.delete('paid');
+                  window.history.replaceState({}, '', url.toString());
+                }
                 return;
               }
               // Retry after delay even if auth fails (might be temporary)
