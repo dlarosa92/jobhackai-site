@@ -112,6 +112,7 @@ export async function getOrCreateUserByAuthId(env, authId, email = null) {
 
 /**
  * Get user plan from D1 (source of truth)
+ * Returns the effective plan, accounting for scheduled plan changes that have taken effect
  * @param {Object} env - Cloudflare environment with DB binding
  * @param {string} authId - Firebase UID
  * @returns {Promise<string>} Plan name ('free', 'trial', 'essential', 'pro', 'premium')
@@ -125,10 +126,23 @@ export async function getUserPlan(env, authId) {
 
   try {
     const user = await db.prepare(
-      'SELECT plan FROM users WHERE auth_id = ?'
+      'SELECT plan, scheduled_plan, scheduled_at FROM users WHERE auth_id = ?'
     ).bind(authId).first();
     
-    return user?.plan || 'free';
+    if (!user) return 'free';
+    
+    // Calculate effective plan - check if scheduled change has taken effect
+    let effectivePlan = user.plan || 'free';
+    if (user.scheduled_plan && user.scheduled_at) {
+      const now = new Date();
+      const scheduledDate = new Date(user.scheduled_at);
+      if (now >= scheduledDate) {
+        // Scheduled change has already taken effect, use the scheduled plan
+        effectivePlan = user.scheduled_plan;
+      }
+    }
+    
+    return effectivePlan;
   } catch (error) {
     console.error('[DB] Error in getUserPlan:', error);
     return 'free';
