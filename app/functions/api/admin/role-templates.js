@@ -90,8 +90,14 @@ export async function onRequest(context) {
     try {
       const { role_family, must_have, nice_to_have, tools, status = 'pending_review', created_by } = await request.json();
       
+      // Validate structure
       if (!role_family || !Array.isArray(must_have) || !Array.isArray(nice_to_have) || !Array.isArray(tools)) {
         return json({ error: 'Invalid template structure' }, 400, origin, env);
+      }
+      // Validate status - only allow known states to avoid invisible templates
+      const ALLOWED_POST_STATUS = ['pending_review', 'active', 'deprecated'];
+      if (!ALLOWED_POST_STATUS.includes(status)) {
+        return json({ error: 'Invalid status value', allowed: ALLOWED_POST_STATUS }, 400, origin, env);
       }
       
       await db.prepare(

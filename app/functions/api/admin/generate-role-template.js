@@ -35,30 +35,35 @@ function json(data, status = 200, origin, env) {
   });
 }
 
-export async function onRequestPost(context) {
+export async function onRequest(context) {
   const { request, env } = context;
   const origin = request.headers.get('Origin') || '';
-  
+
+  // Handle CORS preflight
   if (request.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders(origin, env) });
   }
-  
+
+  if (request.method !== 'POST') {
+    return json({ success: false, error: 'Method not allowed' }, 405, origin, env);
+  }
+
   // Auth check
   const authHeader = request.headers.get('Authorization');
   const expectedAuth = `Bearer ${env.ADMIN_API_KEY}`;
   if (!env.ADMIN_API_KEY || authHeader !== expectedAuth) {
     return json({ error: 'Unauthorized' }, 401, origin, env);
   }
-  
+
   try {
     const { roleLabel } = await request.json();
     if (!roleLabel || typeof roleLabel !== 'string') {
       return json({ error: 'roleLabel required (string)' }, 400, origin, env);
     }
-    
+
     // Generate template
     const template = await generateRoleTemplate(env, roleLabel);
-    
+
     // Save to D1 as pending_review
     const db = getDb(env);
     if (db) {
@@ -85,17 +90,17 @@ export async function onRequestPost(context) {
         JSON.stringify(template.tools)
       ).run();
     }
-    
-    return json({ 
-      success: true, 
+
+    return json({
+      success: true,
       template,
       message: `Template generated and saved as pending_review for role_family: ${template.role_family}`
     }, 200, origin, env);
   } catch (error) {
     console.error('[GENERATE-TEMPLATE] Error:', error);
-    return json({ 
-      error: 'Generation failed', 
-      message: error.message 
+    return json({
+      error: 'Generation failed',
+      message: error.message
     }, 500, origin, env);
   }
 }
