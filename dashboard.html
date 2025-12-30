@@ -860,71 +860,99 @@
         applyBillingData(billingStatusData, 'after successful checkout');
         
         // Phase 1.1: Aggressive polling for plan update after payment
-        // Store initial plan before any updates
-        const initialPlanAfterPayment = billingStatusData?.plan || localStorage.getItem('user-plan') || 'free';
+        // Fix Issue 2: Check if plan has already been updated before starting polling
+        // This prevents unnecessary polling on subsequent page loads with ?paid=1
+        const currentPlanAfterPayment = billingStatusData?.plan || localStorage.getItem('user-plan') || 'free';
+        const hasAlreadyProcessedPayment = sessionStorage.getItem('payment-processed') === 'true';
         
-        // Show loading indicator
-        const loadingIndicator = document.createElement('div');
-        loadingIndicator.id = 'plan-update-loading';
-        loadingIndicator.style.cssText = 'position:fixed;top:20px;right:20px;background:#007BFF;color:#fff;padding:12px 24px;border-radius:8px;z-index:10000;box-shadow:0 4px 12px rgba(0,0,0,0.15);font-family:var(--font-family-base,Inter,sans-serif);font-size:0.95rem;font-weight:500;';
-        loadingIndicator.textContent = 'Updating your plan...';
-        document.body.appendChild(loadingIndicator);
+        // Only start polling if:
+        // 1. Plan is still 'free' or 'trial' (hasn't been updated yet), OR
+        // 2. We haven't already processed this payment
+        const shouldStartPolling = (currentPlanAfterPayment === 'free' || currentPlanAfterPayment === 'trial') && !hasAlreadyProcessedPayment;
         
-        // Poll for plan update
-        let retries = 0;
-        const maxRetries = 10; // 30 seconds total (3s intervals)
-        
-        const pollForPlanUpdate = async () => {
-          retries++;
+        if (shouldStartPolling) {
+          // Store initial plan before any updates
+          const initialPlanAfterPayment = currentPlanAfterPayment;
           
-          const firebaseToken = await getFirebaseIdToken();
-          if (!firebaseToken) {
-            // Authentication issue - check if we should stop polling
-            if (retries >= maxRetries) {
-              console.warn('⚠️ Plan update timeout - authentication failed');
-              loadingIndicator.remove();
-              return;
-            }
-            // Retry after delay even if auth fails (might be temporary)
-            setTimeout(pollForPlanUpdate, 3000);
-            return;
-          }
+          // Show loading indicator
+          const loadingIndicator = document.createElement('div');
+          loadingIndicator.id = 'plan-update-loading';
+          loadingIndicator.style.cssText = 'position:fixed;top:20px;right:20px;background:#007BFF;color:#fff;padding:12px 24px;border-radius:8px;z-index:10000;box-shadow:0 4px 12px rgba(0,0,0,0.15);font-family:var(--font-family-base,Inter,sans-serif);font-size:0.95rem;font-weight:500;';
+          loadingIndicator.textContent = 'Updating your plan...';
+          document.body.appendChild(loadingIndicator);
           
-          try {
-            const planResponse = await fetch('/api/plan/me', {
-              headers: { 'Authorization': `Bearer ${firebaseToken}` }
-            });
+          // Poll for plan update
+          let retries = 0;
+          const maxRetries = 10; // 30 seconds total (3s intervals)
+          
+          const pollForPlanUpdate = async () => {
+            retries++;
             
-            if (planResponse.ok) {
-              const planData = await planResponse.json();
-              const newPlan = planData.plan || 'free';
-              
-              // Check if plan changed from initial state and is not free
-              if (newPlan !== initialPlanAfterPayment && newPlan !== 'free') {
-                // Plan updated! Force reload
-                console.log('✅ Plan updated after payment, reloading...');
-                loadingIndicator.textContent = 'Plan updated! Reloading...';
-                setTimeout(() => {
-                  window.location.reload();
-                }, 500);
+            const firebaseToken = await getFirebaseIdToken();
+            if (!firebaseToken) {
+              // Authentication issue - check if we should stop polling
+              if (retries >= maxRetries) {
+                console.warn('⚠️ Plan update timeout - authentication failed');
+                loadingIndicator.remove();
                 return;
               }
+              // Retry after delay even if auth fails (might be temporary)
+              setTimeout(pollForPlanUpdate, 3000);
+              return;
             }
-          } catch (error) {
-            console.warn('⚠️ Plan poll error:', error);
-          }
+            
+            try {
+              const planResponse = await fetch('/api/plan/me', {
+                headers: { 'Authorization': `Bearer ${firebaseToken}` }
+              });
+              
+              if (planResponse.ok) {
+                const planData = await planResponse.json();
+                const newPlan = planData.plan || 'free';
+                
+                // Check if plan changed from initial state and is not free
+                if (newPlan !== initialPlanAfterPayment && newPlan !== 'free') {
+                  // Plan updated! Mark as processed and reload without ?paid=1
+                  console.log('✅ Plan updated after payment, reloading...');
+                  sessionStorage.setItem('payment-processed', 'true');
+                  loadingIndicator.textContent = 'Plan updated! Reloading...';
+                  setTimeout(() => {
+                    // Fix Issue 2: Remove ?paid=1 from URL to prevent re-triggering on reload
+                    const url = new URL(window.location.href);
+                    url.searchParams.delete('paid');
+                    window.location.href = url.toString();
+                  }, 500);
+                  return;
+                }
+              }
+            } catch (error) {
+              console.warn('⚠️ Plan poll error:', error);
+            }
+            
+            // Check if we should continue polling
+            if (retries < maxRetries) {
+              setTimeout(pollForPlanUpdate, 3000); // Poll every 3 seconds
+            } else {
+              console.warn('⚠️ Plan update timeout - will refresh on next poll');
+              loadingIndicator.remove();
+              // Mark as processed even on timeout to prevent infinite polling
+              sessionStorage.setItem('payment-processed', 'true');
+            }
+          };
           
-          // Check if we should continue polling
-          if (retries < maxRetries) {
-            setTimeout(pollForPlanUpdate, 3000); // Poll every 3 seconds
-          } else {
-            console.warn('⚠️ Plan update timeout - will refresh on next poll');
-            loadingIndicator.remove();
+          // Start polling after initial billing status fetch (wait 2s for webhook to process)
+          setTimeout(pollForPlanUpdate, 2000);
+        } else {
+          // Plan already updated or payment already processed - clean up URL
+          if (hasAlreadyProcessedPayment || (currentPlanAfterPayment !== 'free' && currentPlanAfterPayment !== 'trial')) {
+            const url = new URL(window.location.href);
+            if (url.searchParams.has('paid')) {
+              url.searchParams.delete('paid');
+              // Use replace instead of assign to avoid adding to history
+              window.history.replaceState({}, '', url.toString());
+            }
           }
-        };
-        
-        // Start polling after initial billing status fetch (wait 2s for webhook to process)
-        setTimeout(pollForPlanUpdate, 2000);
+        }
       }
       
       // Force plan fetch from D1 when pending or on normal dashboard load (fallback)
@@ -969,6 +997,13 @@
       // Only set flag if previous-plan actually exists (not defaulting to 'free')
       // This prevents direct paid signups from being incorrectly marked as former free users
       const previousPlan = localStorage.getItem('previous-plan');
+      
+      // Fix Issue 1: Capture previousPlan before it's updated, store in sessionStorage for renderDashboard
+      // This ensures trial→paid carry-over message can be displayed correctly
+      if (previousPlan && previousPlan !== currentPlan) {
+        sessionStorage.setItem('previous-plan-before-update', previousPlan);
+      }
+      
       if (previousPlan === 'free' && (currentPlan === 'trial' || currentPlan === 'essential' || currentPlan === 'pro' || currentPlan === 'premium')) {
         localStorage.setItem('was-free-user', 'true');
         // CRITICAL: Store flag indicating user had free ATS score at upgrade time
@@ -1747,7 +1782,8 @@
       </div>`;
       
       // Phase 2.3: Show carry-over messages for upgrades
-      const previousPlan = localStorage.getItem('previous-plan');
+      // Fix Issue 1: Use sessionStorage value captured before localStorage update
+      const previousPlanBeforeUpdate = sessionStorage.getItem('previous-plan-before-update');
       const wasFreeUser = localStorage.getItem('was-free-user') === 'true';
       const hadFreeATSScoreAtUpgrade = localStorage.getItem('had-free-ats-score-at-upgrade') === 'true';
       
@@ -1775,7 +1811,8 @@
       }
       
       // Show carry-over message after trial → paid upgrade
-      if (previousPlan === 'trial' && user.plan !== 'trial' && user.plan !== 'free') {
+      // Fix Issue 1: Use previousPlanBeforeUpdate instead of localStorage value
+      if (previousPlanBeforeUpdate === 'trial' && user.plan !== 'trial' && user.plan !== 'free') {
         const hasSeenTrialCarriedOverMessage = localStorage.getItem('hasSeenTrialCarriedOverMessage') === 'true';
         if (!hasSeenTrialCarriedOverMessage) {
           const trialCarriedOverHTML = `
