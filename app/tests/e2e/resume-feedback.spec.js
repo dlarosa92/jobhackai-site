@@ -7,6 +7,17 @@ test.describe('Resume Feedback', () => {
     // Upload + ATS scoring can exceed default 30s timeout; allow up to 2 minutes
     test.setTimeout(120000);
     
+    // CRITICAL: Intercept KV fetch to return null (simplest solution - prevents cached state from loading)
+    // This ensures the page always shows upload form, not cached results
+    await page.route('**/api/ats-score-persist', async route => {
+      // Return empty response to prevent KV cache from loading
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ success: true, data: null })
+      });
+    });
+    
     // CRITICAL: Clear any cached state before navigating
     // State persistence might be showing results view instead of upload form
     // Navigate to page first to get context, then clear state

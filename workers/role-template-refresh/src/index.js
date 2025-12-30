@@ -42,6 +42,13 @@ export default {
       
       for (const gap of gaps) {
         try {
+          // Convert role_family (e.g., "data_engineer") to human-readable label (e.g., "Data Engineer")
+          // The normalizer expects spaces, not underscores
+          const roleLabel = gap.role_family
+            .split('_')
+            .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+            .join(' ');
+          
           const generateResponse = await fetch(`${env.ADMIN_API_URL || 'https://dev.jobhackai.io'}/api/admin/generate-role-template`, {
             method: 'POST',
             headers: {
@@ -49,7 +56,7 @@ export default {
               'Content-Type': 'application/json'
             },
             body: JSON.stringify({
-              roleLabel: gap.role_family // Use role_family as label for generation
+              roleLabel // Converted to human-readable format (e.g., "Data Engineer")
             })
           });
           
