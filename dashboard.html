@@ -1034,6 +1034,88 @@
       // Continue with existing dashboard logic
       renderDashboard(user);
       
+      // Add periodic refresh for plan changes (for all users)
+      // This ensures plan upgrades/downgrades are detected automatically
+      const planState = { 
+        currentPlan: user.plan,
+        trialEndsAt: user.trialEndsAt || null 
+      };
+      
+      const refreshPlanData = async () => {
+        try {
+          const firebaseToken = await getFirebaseIdToken();
+          if (!firebaseToken) return;
+          
+          const planResponse = await fetch('/api/plan/me', {
+            headers: { 'Authorization': `Bearer ${firebaseToken}` }
+          });
+          
+          if (planResponse.ok) {
+            const planData = await planResponse.json();
+            const newPlan = planData.plan || 'free';
+            
+            // Check if plan changed
+            if (newPlan !== planState.currentPlan) {
+              console.log(`🔄 Plan changed from ${planState.currentPlan} to ${newPlan}`);
+              
+              // Update localStorage
+              localStorage.setItem('user-plan', newPlan);
+              localStorage.setItem('dev-plan', newPlan);
+              
+              // Update navigation state
+              if (window.JobHackAINavigation?.setAuthState) {
+                window.JobHackAINavigation.setAuthState(true, newPlan);
+              }
+              
+              // Update plan state
+              planState.currentPlan = newPlan;
+              
+              // Update trial end date if available
+              if (planData.trialEndsAt) {
+                planState.trialEndsAt = planData.trialEndsAt;
+                localStorage.setItem('trial-ends-at', planData.trialEndsAt);
+              }
+              
+              // Re-render dashboard with updated plan
+              const updatedUser = { 
+                ...user, 
+                plan: newPlan,
+                trialEndsAt: planData.trialEndsAt || planState.trialEndsAt
+              };
+              renderDashboard(updatedUser);
+              
+              console.log(`✅ Dashboard updated to ${newPlan} plan`);
+              return;
+            }
+            
+            // Update trial end date if changed (even if plan didn't change)
+            if (planData.trialEndsAt && planData.trialEndsAt !== planState.trialEndsAt) {
+              planState.trialEndsAt = planData.trialEndsAt;
+              localStorage.setItem('trial-ends-at', planData.trialEndsAt);
+              const updatedUser = { 
+                ...user, 
+                trialEndsAt: planData.trialEndsAt 
+              };
+              renderDashboard(updatedUser);
+              console.log('✅ Refreshed trial end date:', planData.trialEndsAt);
+            }
+          }
+        } catch (error) {
+          console.warn('⚠️ Failed to refresh plan data:', error);
+        }
+      };
+      
+      // Refresh every 2 minutes (120000 ms) - frequent enough to catch upgrades quickly
+      // but not so frequent as to cause server load
+      setInterval(refreshPlanData, 120000);
+      
+      // Also refresh when page becomes visible (user returns to tab)
+      document.addEventListener('visibilitychange', () => {
+        if (!document.hidden) {
+          refreshPlanData();
+        }
+      });
+      
       // Add periodic refresh for trial expiration detection (always run for trial users)
       // This ensures trial expiration is detected even when trialEndsAt is initially null
       if (user.plan === 'trial') {

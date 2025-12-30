@@ -264,8 +264,18 @@ export async function getUserPlanData(env, authId) {
 
     if (!user) return null;
 
+    // Calculate effective plan - check if scheduled change has taken effect
+    let effectivePlan = user.plan || 'free';
+    if (user.scheduled_plan && user.scheduled_at) {
+      const now = new Date();
+      const scheduledDate = new Date(user.scheduled_at);
+      if (now >= scheduledDate) {
+        effectivePlan = user.scheduled_plan;
+      }
+    }
+
     return {
-      plan: user.plan || 'free',
+      plan: effectivePlan, // Return effective plan, not raw plan
       stripeCustomerId: user.stripe_customer_id,
       stripeSubscriptionId: user.stripe_subscription_id,
       subscriptionStatus: user.subscription_status,
