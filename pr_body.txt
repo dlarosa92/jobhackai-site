@@ -1,0 +1,55 @@
+## Overview
+Implements hybrid role template lifecycle management system for Resume Feedback feature.
+
+## Changes
+
+### Phase 1: Database & Loader
+- ✅ D1 migrations for role_templates, role_usage_log, role_template_audit tables
+- ✅ Template loader (D1-first with code fallback)
+- ✅ Updated ATS scoring engine to use template loader
+- ✅ Added telemetry logging for gap detection
+
+### Phase 2: Template Generation
+- ✅ OpenAI template generator
+- ✅ Admin endpoint for template generation
+
+### Phase 3: Admin API
+- ✅ CRUD endpoints for role templates
+- ✅ Gap detection endpoint
+
+### Phase 4: Automation
+- ✅ Monthly refresh worker
+
+### Phase 5: Bootstrap
+- ✅ Scripts to migrate existing templates to D1
+
+## Migration Status
+
+✅ **D1 Migrations Applied**: All three environments (DEV, QA, PROD) have been migrated successfully.
+
+✅ **ADMIN_API_KEY Configured**: Secret has been set for all environments via Wrangler CLI.
+
+## Environment Variables
+
+- ✅ `ADMIN_API_KEY` - Configured for DEV/QA/PROD (see `009_ADMIN_API_KEY_SETUP.md`)
+- ✅ `OPENAI_API_KEY` - Already configured
+
+## Next Steps After Merge
+
+1. **Bootstrap Templates** (run after deployment):
+   ```bash
+   ADMIN_API_KEY=your-key ADMIN_API_URL=https://dev.jobhackai.io node app/scripts/bootstrap-role-templates.js
+   ```
+
+2. **Verify Setup**:
+   - Check admin endpoints are accessible with ADMIN_API_KEY
+   - Verify template loader falls back to code when D1 unavailable
+   - Test template generation endpoint
+
+## Documentation
+
+- Migration steps: `app/db/migrations/009_role_templates_README.md`
+- Manual migration: `app/db/migrations/009_MANUAL_MIGRATION_STEPS.md`
+- ADMIN_API_KEY setup: `app/db/migrations/009_ADMIN_API_KEY_SETUP.md`
+
+\n## Worker env fix\n\n- ✅ Set  per environment for  worker in  to ensure dev/qa/prod workers call their respective admin APIs (not dev).
