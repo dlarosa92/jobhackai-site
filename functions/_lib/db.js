@@ -107,6 +107,7 @@ export async function getOrCreateUserByAuthId(env, authId, email = null) {
 
 /**
  * Get user plan from D1 (source of truth)
+ * Returns the effective plan, accounting for scheduled plan changes that have taken effect
  * @param {Object} env - Cloudflare environment with DB binding
  * @param {string} authId - Firebase UID
  * @returns {Promise<string>} Plan name ('free', 'trial', 'essential', 'pro', 'premium')
@@ -120,10 +121,23 @@ export async function getUserPlan(env, authId) {
 
   try {
     const user = await db.prepare(
-      'SELECT plan FROM users WHERE auth_id = ?'
+      'SELECT plan, scheduled_plan, scheduled_at FROM users WHERE auth_id = ?'
     ).bind(authId).first();
     
-    return user?.plan || 'free';
+    if (!user) return 'free';
+    
+    // Calculate effective plan - check if scheduled change has taken effect
+    let effectivePlan = user.plan || 'free';
+    if (user.scheduled_plan && user.scheduled_at) {
+      const now = new Date();
+      const scheduledDate = new Date(user.scheduled_at);
+      if (now >= scheduledDate) {
+        // Scheduled change has already taken effect, use the scheduled plan
+        effectivePlan = user.scheduled_plan;
+      }
+    }
+    
+    return effectivePlan;
   } catch (error) {
     console.error('[DB] Error in getUserPlan:', error);
     return 'free';
@@ -259,18 +273,35 @@ export async function getUserPlanData(env, authId) {
 
     if (!user) return null;
 
+    // Calculate effective plan - check if scheduled change has taken effect
+    let effectivePlan = user.plan || 'free';
+    let scheduledPlanChange = null;
+    if (user.scheduled_plan && user.scheduled_at) {
+      const now = new Date();
+      const scheduledDate = new Date(user.scheduled_at);
+      if (now >= scheduledDate) {
+        // Scheduled change has already taken effect, use the scheduled plan as effective
+        effectivePlan = user.scheduled_plan;
+        // Do not expose scheduledPlanChange if the effective date has passed
+        scheduledPlanChange = null;
+      } else {
+        // Scheduled change is in the future — expose it to the API consumer
+        scheduledPlanChange = {
+          newPlan: user.scheduled_plan,
+          effectiveDate: user.scheduled_at
+        };
+      }
+    }
+
     return {
-      plan: user.plan || 'free',
+      plan: effectivePlan, // Return effective plan, not raw plan
       stripeCustomerId: user.stripe_customer_id,
       stripeSubscriptionId: user.stripe_subscription_id,
       subscriptionStatus: user.subscription_status,
       trialEndsAt: user.trial_ends_at,
       currentPeriodEnd: user.current_period_end,
       cancelAt: user.cancel_at,
-      scheduledPlanChange: user.scheduled_plan && user.scheduled_at ? {
-        newPlan: user.scheduled_plan,
-        effectiveDate: user.scheduled_at
-      } : null,
+      scheduledPlanChange,
       planUpdatedAt: user.plan_updated_at
     };
   } catch (error) {
