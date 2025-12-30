@@ -1,6 +1,6 @@
 name = "jobhackai-site"
 # Read from environment to avoid committing identifiers
-account_id = "${CLOUDFLARE_ACCOUNT_ID}"
+account_id = "fabf4409ef32f8c64354a1a099bef2a2"
 compatibility_date = "2024-12-11"
 
 [env.dev]
