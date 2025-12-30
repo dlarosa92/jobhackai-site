@@ -107,12 +107,6 @@ export async function getOrCreateUserByAuthId(env, authId, email = null) {
 
 /**
  * Get user plan from D1 (source of truth)
- * @param {Object} env - Cloudflare environment with DB binding
- * @param {string} authId - Firebase UID
- * @returns {Promise<string>} Plan name ('free', 'trial', 'essential', 'pro', 'premium')
- */
-/**
- * Get user plan from D1 (source of truth)
  * Returns the effective plan, accounting for scheduled plan changes that have taken effect
  * @param {Object} env - Cloudflare environment with DB binding
  * @param {string} authId - Firebase UID
