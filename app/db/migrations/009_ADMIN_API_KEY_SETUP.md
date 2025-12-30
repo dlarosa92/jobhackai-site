@@ -5,10 +5,10 @@
 
 Each environment has its own unique key configured via Wrangler CLI and stored securely in Cloudflare Pages secrets. This enables independent key rotation and environment isolation.
 
-**Keys (for archival):**
-- **DEV**: `c8b5c4747b40d5dca0310b1ecc8eb31ca1f6e3f345875bac5805d29aa281368a`
-- **QA**: `10fcca29e85c930d2f8a4fdc7f21b91cc85922a8c8a6c672b5e8dd15d04ff2d5`
-- **PROD**: `9c90caae013e8994badf99fc0f32e59b0be1b3e165c59354945b0935d5843ce4`
+**⚠️ SECURITY NOTE**: Keys are stored ONLY in Cloudflare Pages secrets. They are NOT stored in this repository or any version control. To retrieve keys, use:
+```bash
+wrangler pages secret list --project-name=jobhackai-app-dev
+```
 
 ## Usage
 
