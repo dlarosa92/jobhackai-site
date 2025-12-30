@@ -858,6 +858,66 @@
 
         billingStatusData = await fetchBillingStatus('after checkout');
         applyBillingData(billingStatusData, 'after successful checkout');
+        
+        // Phase 1.1: Aggressive polling for plan update after payment
+        // Store initial plan before any updates
+        const initialPlanAfterPayment = billingStatusData?.plan || localStorage.getItem('user-plan') || 'free';
+        
+        // Show loading indicator
+        const loadingIndicator = document.createElement('div');
+        loadingIndicator.id = 'plan-update-loading';
+        loadingIndicator.style.cssText = 'position:fixed;top:20px;right:20px;background:#007BFF;color:#fff;padding:12px 24px;border-radius:8px;z-index:10000;box-shadow:0 4px 12px rgba(0,0,0,0.15);font-family:var(--font-family-base,Inter,sans-serif);font-size:0.95rem;font-weight:500;';
+        loadingIndicator.textContent = 'Updating your plan...';
+        document.body.appendChild(loadingIndicator);
+        
+        // Poll for plan update
+        let retries = 0;
+        const maxRetries = 10; // 30 seconds total (3s intervals)
+        
+        const pollForPlanUpdate = async () => {
+          const firebaseToken = await getFirebaseIdToken();
+          if (!firebaseToken) {
+            if (retries >= maxRetries) {
+              loadingIndicator.remove();
+            }
+            return;
+          }
+          
+          try {
+            const planResponse = await fetch('/api/plan/me', {
+              headers: { 'Authorization': `Bearer ${firebaseToken}` }
+            });
+            
+            if (planResponse.ok) {
+              const planData = await planResponse.json();
+              const newPlan = planData.plan || 'free';
+              
+              // Check if plan changed from initial state and is not free
+              if (newPlan !== initialPlanAfterPayment && newPlan !== 'free') {
+                // Plan updated! Force reload
+                console.log('✅ Plan updated after payment, reloading...');
+                loadingIndicator.textContent = 'Plan updated! Reloading...';
+                setTimeout(() => {
+                  window.location.reload();
+                }, 500);
+                return;
+              }
+            }
+          } catch (error) {
+            console.warn('⚠️ Plan poll error:', error);
+          }
+          
+          retries++;
+          if (retries < maxRetries) {
+            setTimeout(pollForPlanUpdate, 3000); // Poll every 3 seconds
+          } else {
+            console.warn('⚠️ Plan update timeout - will refresh on next poll');
+            loadingIndicator.remove();
+          }
+        };
+        
+        // Start polling after initial billing status fetch (wait 2s for webhook to process)
+        setTimeout(pollForPlanUpdate, 2000);
       }
       
       // Force plan fetch from D1 when pending or on normal dashboard load (fallback)
@@ -1639,19 +1699,32 @@
             </div>
           ` : ''}
           <div class="user-email">${user.email}</div>
+          <div style="color:#6B7280;font-size:0.875rem;margin-top:0.5rem;line-height:1.4;">
+            Your command center — see your ATS score, access all tools, and track your progress.
+          </div>
         </div>
         <div class="ats-score-row">
           ${atsScore.percent !== null && atsScore.percent !== undefined ? `
             ${atsDonut(atsScore.percent)}
             <div class="ats-score-details">
               <span class="ats-score-label">Resume Feedback</span>
-              <span class="ats-score-secondary">${atsScore.percent}% Application Tracking System Score</span>
+              <span class="ats-score-secondary" style="display:inline-flex;align-items:center;gap:0.25rem;">
+                ${atsScore.percent}% Application Tracking System Score
+                <span class="jh-tooltip-trigger" tabindex="0" aria-label="What is ATS Score?" style="display:inline-flex;align-items:center;vertical-align:middle;cursor:help;">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false" style="color:#6B7280;">
+                    <circle cx="12" cy="12" r="10"/>
+                    <line x1="12" y1="8" x2="12" y2="8"/>
+                    <line x1="12" y1="12" x2="12" y2="16"/>
+                  </svg>
+                  <span class="jh-tooltip-text">ATS (Applicant Tracking System) Score measures how well your resume matches job requirements. Higher scores increase your chances of passing automated screening systems used by most employers.</span>
+                </span>
+              </span>
               <span class="ats-score-summary">${atsScore.summary}</span>
             </div>
           ` : `
             <div class="ats-score-details">
               <span class="ats-score-label" style="color:var(--color-text-muted);">—</span>
-              <span class="ats-score-summary" style="color:var(--color-text-muted);font-style:italic;">Upload your résumé above to generate your ATS Score and detailed feedback.</span>
+              <span class="ats-score-summary" style="color:var(--color-text-muted);font-style:italic;">Upload your resume above to generate your ATS Score and detailed feedback.</span>
             </div>
           `}
         </div>
@@ -1665,13 +1738,67 @@
           ${(user.plan === 'cancelled') ? `<a href="pricing-a.html" class="upgrade-btn">Reactivate</a>` : ''}
         </div>
       </div>`;
-      // Show one-time "Carried Over ATS Score" message for migrated users
+      
+      // Phase 2.3: Show carry-over messages for upgrades
+      const previousPlan = localStorage.getItem('previous-plan');
+      const wasFreeUser = localStorage.getItem('was-free-user') === 'true';
+      const hadFreeATSScoreAtUpgrade = localStorage.getItem('had-free-ats-score-at-upgrade') === 'true';
+      
+      // Show carry-over message after free → trial/paid upgrade
+      if (wasFreeUser && hadFreeATSScoreAtUpgrade && atsScore.percent !== null && 
+          (user.plan === 'trial' || user.plan === 'essential' || user.plan === 'pro' || user.plan === 'premium')) {
+        const hasSeenCarriedOverMessage = localStorage.getItem('hasSeenCarriedOverAtsMessage') === 'true';
+        if (!hasSeenCarriedOverMessage) {
+          const carriedOverHTML = `
+            <div style="background:#E0F2FE;border-left:3px solid #007BFF;padding:0.75rem 1rem;border-radius:8px;margin-top:1rem;font-size:0.875rem;color:#1E40AF;">
+              <strong>Carried Over ATS Score</strong> — Your previous ATS resume score has been carried over from your free account.
+            </div>
+          `;
+          const bannerContainer = document.querySelector('.dashboard-banner');
+          if (bannerContainer) {
+            const atsRow = bannerContainer.querySelector('.ats-score-row');
+            if (atsRow && atsRow.nextSibling) {
+              atsRow.insertAdjacentHTML('afterend', carriedOverHTML);
+            } else {
+              bannerContainer.insertAdjacentHTML('beforeend', carriedOverHTML);
+            }
+            localStorage.setItem('hasSeenCarriedOverAtsMessage', 'true');
+          }
+        }
+      }
+      
+      // Show carry-over message after trial → paid upgrade
+      if (previousPlan === 'trial' && user.plan !== 'trial' && user.plan !== 'free') {
+        const hasSeenTrialCarriedOverMessage = localStorage.getItem('hasSeenTrialCarriedOverMessage') === 'true';
+        if (!hasSeenTrialCarriedOverMessage) {
+          const trialCarriedOverHTML = `
+            <div style="background:#F0FDF4;border-left:3px solid #00E676;padding:0.75rem 1rem;border-radius:8px;margin-top:1rem;font-size:0.875rem;color:#166534;">
+              <strong>Trial History Preserved</strong> — Your trial history (ATS scores and feedback) has been preserved. Continue where you left off!
+            </div>
+          `;
+          const bannerContainer = document.querySelector('.dashboard-banner');
+          if (bannerContainer) {
+            const existingMessage = bannerContainer.querySelector('[style*="background:#F0FDF4"]');
+            if (!existingMessage) {
+              const atsRow = bannerContainer.querySelector('.ats-score-row');
+              if (atsRow && atsRow.nextSibling) {
+                atsRow.insertAdjacentHTML('afterend', trialCarriedOverHTML);
+              } else {
+                bannerContainer.insertAdjacentHTML('beforeend', trialCarriedOverHTML);
+              }
+              localStorage.setItem('hasSeenTrialCarriedOverMessage', 'true');
+            }
+          }
+        }
+      }
+      
+      // Show one-time "Carried Over ATS Score" message for migrated users (legacy)
       // Check if user has legacy score and hasn't seen the message yet
       const hasLegacyScore = localStorage.getItem('lastATSScore') || sessionStorage.getItem('currentAtsScore');
       const hasSeenCarriedOverMessage = localStorage.getItem('hasSeenCarriedOverAtsMessage') === 'true';
       
-      if (hasLegacyScore && !hasSeenCarriedOverMessage && atsScore.percent !== null) {
-        // Show one-time message
+      if (hasLegacyScore && !hasSeenCarriedOverMessage && atsScore.percent !== null && !wasFreeUser) {
+        // Show one-time message (only if not already shown via upgrade message above)
         const carriedOverBanner = document.createElement('div');
         carriedOverBanner.style.cssText = `
           background: #EFF6FF;
@@ -1975,7 +2102,7 @@
               <button class="close-btn" id="free-account-upgrade-popup-close" aria-label="Close">×</button>
               <h2>Upgrade to Continue</h2>
               <div class="popup-message">
-                You've used your 1 free lifetime ATS resume score. Upgrade to unlock unlimited scoring and access all features!
+                You've used your 1 free lifetime ATS resume score. Upgrade to unlock unlimited scoring and access more features!
               </div>
               <div class="popup-content">
                 <p style="margin-bottom: 1rem; font-weight: 600; color: #232B36;">With a subscription, you'll get:</p>
@@ -2006,8 +2133,11 @@
                   </li>
                 </ul>
               </div>
-              <button class="popup-ok-btn" id="free-account-upgrade-popup-cta" style="margin-bottom: 0.5rem;">View Pricing Plans</button>
+              <button class="popup-ok-btn" id="free-account-upgrade-popup-cta" style="margin-bottom: 0.5rem;">Start Free Trial</button>
               <button class="popup-cancel-btn" id="free-account-upgrade-popup-cancel" style="background: transparent; color: #6B7280; border: 1px solid #D1D5DB; margin-top: 0;">Maybe Later</button>
+              <div style="margin-top: 0.75rem; text-align: center;">
+                <a href="pricing-a.html" style="color: #007BFF; text-decoration: none; font-size: 0.875rem;">Compare Plans</a>
+              </div>
             </div>
           </div>
         `;
@@ -2039,9 +2169,40 @@
           overlay.classList.add('show');
         }, 100);
         
-        // CTA button - redirect to pricing
-        ctaBtn.addEventListener('click', () => {
-          window.location.href = 'pricing-a.html';
+        // CTA button - redirect directly to Stripe checkout (Phase 1.2)
+        ctaBtn.addEventListener('click', async () => {
+          const user = window.FirebaseAuthManager?.getCurrentUser?.();
+          if (!user) {
+            window.location.href = 'login.html';
+            return;
+          }
+          
+          try {
+            // Show loading state
+            ctaBtn.disabled = true;
+            ctaBtn.textContent = 'Redirecting...';
+            
+            const idToken = await user.getIdToken();
+            const res = await fetch('/api/stripe-checkout', {
+              method: 'POST',
+              headers: { 
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${idToken}`
+              },
+              body: JSON.stringify({ plan: 'trial' })
+            });
+            
+            const data = await res.json();
+            if (data?.ok && data?.url) {
+              window.location.href = data.url; // Go directly to Stripe
+              return;
+            }
+            throw new Error(data?.error || 'Checkout failed');
+          } catch (error) {
+            console.error('Checkout error:', error);
+            // Fallback to pricing page only if checkout fails
+            window.location.href = 'pricing-a.html';
+          }
         });
         
         // Close handlers
@@ -2696,7 +2857,7 @@
               // Update UI message to reflect credit has been used
               const usageDiv = document.querySelector('.feature-card:has(#ats-upload-btn) .usage-indicator');
               if (usageDiv) {
-                usageDiv.innerHTML = 'Free ATS score used. Upgrade to trial or paid plan for unlimited scoring. <span class="jh-tooltip-trigger" tabindex="0" aria-label="More info" style="margin-left:0.4em;vertical-align:middle;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false" style="vertical-align:middle"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="8"/><line x1="12" y1="12" x2="12" y2="16"/></svg><span class="jh-tooltip-text">Upgrade to unlock unlimited ATS scoring and access all features.</span></span>';
+                usageDiv.innerHTML = 'Free ATS score used. Upgrade to trial or paid plan for unlimited scoring. <span class="jh-tooltip-trigger" tabindex="0" aria-label="More info" style="margin-left:0.4em;vertical-align:middle;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false" style="vertical-align:middle"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="8"/><line x1="12" y1="12" x2="12" y2="16"/></svg><span class="jh-tooltip-text">Upgrade to unlock unlimited ATS scoring and access more features.</span></span>';
               }
             }
 
