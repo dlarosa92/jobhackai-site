@@ -1070,17 +1070,21 @@
               // Update plan state
               planState.currentPlan = newPlan;
               
-              // Update trial end date if available
-              if (planData.trialEndsAt) {
+            // Update trial end date if available (allow null to clear)
+              if (Object.prototype.hasOwnProperty.call(planData, 'trialEndsAt')) {
                 planState.trialEndsAt = planData.trialEndsAt;
-                localStorage.setItem('trial-ends-at', planData.trialEndsAt);
+                if (planData.trialEndsAt) {
+                  localStorage.setItem('trial-ends-at', planData.trialEndsAt);
+                } else {
+                  localStorage.removeItem('trial-ends-at');
+                }
               }
               
-              // Re-render dashboard with updated plan
+              // Re-render dashboard with updated plan (use canonical planState)
               const updatedUser = { 
                 ...user, 
-                plan: newPlan,
-                trialEndsAt: planData.trialEndsAt || planState.trialEndsAt
+                plan: planState.currentPlan,
+                trialEndsAt: Object.prototype.hasOwnProperty.call(planData, 'trialEndsAt') ? planData.trialEndsAt : planState.trialEndsAt
               };
               renderDashboard(updatedUser);
               
@@ -1088,12 +1092,17 @@
               return;
             }
             
-            // Update trial end date if changed (even if plan didn't change)
-            if (planData.trialEndsAt && planData.trialEndsAt !== planState.trialEndsAt) {
+            // Update trial end date if changed (even if plan didn't change). Allow clearing.
+            if (Object.prototype.hasOwnProperty.call(planData, 'trialEndsAt') && planData.trialEndsAt !== planState.trialEndsAt) {
               planState.trialEndsAt = planData.trialEndsAt;
-              localStorage.setItem('trial-ends-at', planData.trialEndsAt);
+              if (planData.trialEndsAt) {
+                localStorage.setItem('trial-ends-at', planData.trialEndsAt);
+              } else {
+                localStorage.removeItem('trial-ends-at');
+              }
               const updatedUser = { 
                 ...user, 
+                plan: planState.currentPlan,
                 trialEndsAt: planData.trialEndsAt 
               };
               renderDashboard(updatedUser);
@@ -1137,20 +1146,25 @@
               const planData = await planResponse.json();
               
               // Check if plan changed (trial expired) - CRITICAL: always check this
-              if (planData.plan !== 'trial' && currentPlan === 'trial') {
+              if (planData.plan !== 'trial' && planState.currentPlan === 'trial') {
                 console.log('🔄 Trial expired, plan changed to:', planData.plan);
                 // Reload page to show updated plan
                 window.location.reload();
                 return;
               }
               
-              // Update trial end date if changed (compare against current state, not stale closure)
-              if (planData.trialEndsAt && planData.trialEndsAt !== trialState.trialEndsAt) {
-                localStorage.setItem('trial-ends-at', planData.trialEndsAt);
+              // Update trial end date if changed (compare against current state, not stale closure).
+              // Allow clearing of trialEndsAt when backend returns null.
+              if (Object.prototype.hasOwnProperty.call(planData, 'trialEndsAt') && planData.trialEndsAt !== trialState.trialEndsAt) {
+                if (planData.trialEndsAt) {
+                  localStorage.setItem('trial-ends-at', planData.trialEndsAt);
+                } else {
+                  localStorage.removeItem('trial-ends-at');
+                }
                 // Update mutable state for next comparison
                 trialState.trialEndsAt = planData.trialEndsAt;
-                // Re-render dashboard with updated date
-                const updatedUser = { ...user, trialEndsAt: planData.trialEndsAt };
+                // Re-render dashboard with updated date and canonical plan
+                const updatedUser = { ...user, plan: planState.currentPlan, trialEndsAt: planData.trialEndsAt };
                 renderDashboard(updatedUser);
                 console.log('✅ Refreshed trial end date:', planData.trialEndsAt);
               } else if (planData.trialEndsAt) {
@@ -1160,7 +1174,7 @@
                 trialState.trialEndsAt = planData.trialEndsAt;
                 // If we didn't have a date before, now we do - re-render to show countdown
                 if (!user.trialEndsAt) {
-                  const updatedUser = { ...user, trialEndsAt: planData.trialEndsAt };
+                  const updatedUser = { ...user, plan: planState.currentPlan, trialEndsAt: planData.trialEndsAt };
                   renderDashboard(updatedUser);
                   console.log('✅ Trial end date now available:', planData.trialEndsAt);
                 }

@@ -266,11 +266,21 @@ export async function getUserPlanData(env, authId) {
 
     // Calculate effective plan - check if scheduled change has taken effect
     let effectivePlan = user.plan || 'free';
+    let scheduledPlanChange = null;
     if (user.scheduled_plan && user.scheduled_at) {
       const now = new Date();
       const scheduledDate = new Date(user.scheduled_at);
       if (now >= scheduledDate) {
+        // Scheduled change has already taken effect, use the scheduled plan as effective
         effectivePlan = user.scheduled_plan;
+        // Do not expose scheduledPlanChange if the effective date has passed
+        scheduledPlanChange = null;
+      } else {
+        // Scheduled change is in the future — expose it to the API consumer
+        scheduledPlanChange = {
+          newPlan: user.scheduled_plan,
+          effectiveDate: user.scheduled_at
+        };
       }
     }
 
@@ -282,10 +292,7 @@ export async function getUserPlanData(env, authId) {
       trialEndsAt: user.trial_ends_at,
       currentPeriodEnd: user.current_period_end,
       cancelAt: user.cancel_at,
-      scheduledPlanChange: user.scheduled_plan && user.scheduled_at ? {
-        newPlan: user.scheduled_plan,
-        effectiveDate: user.scheduled_at
-      } : null,
+      scheduledPlanChange,
       planUpdatedAt: user.plan_updated_at
     };
   } catch (error) {
