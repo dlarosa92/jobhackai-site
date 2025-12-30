@@ -66,30 +66,32 @@ export async function onRequest(context) {
 
     // Save to D1 as pending_review
     const db = getDb(env);
-    if (db) {
-      await db.prepare(
-        `INSERT INTO role_templates (role_family, must_have_json, nice_to_have_json, tools_json, status, created_by, version)
-         VALUES (?, ?, ?, ?, ?, ?, 1)
-         ON CONFLICT(role_family) DO UPDATE SET
-           must_have_json = ?,
-           nice_to_have_json = ?,
-           tools_json = ?,
-           status = 'pending_review',
-           version = version + 1,
-           updated_at = datetime('now')`
-      ).bind(
-        template.role_family,
-        JSON.stringify(template.must_have),
-        JSON.stringify(template.nice_to_have),
-        JSON.stringify(template.tools),
-        'pending_review',
-        'system',
-        // ON CONFLICT values
-        JSON.stringify(template.must_have),
-        JSON.stringify(template.nice_to_have),
-        JSON.stringify(template.tools)
-      ).run();
+    if (!db) {
+      return json({ error: 'Database unavailable' }, 500, origin, env);
     }
+
+    await db.prepare(
+      `INSERT INTO role_templates (role_family, must_have_json, nice_to_have_json, tools_json, status, created_by, version)
+       VALUES (?, ?, ?, ?, ?, ?, 1)
+       ON CONFLICT(role_family) DO UPDATE SET
+         must_have_json = ?,
+         nice_to_have_json = ?,
+         tools_json = ?,
+         status = 'pending_review',
+         version = version + 1,
+         updated_at = datetime('now')`
+    ).bind(
+      template.role_family,
+      JSON.stringify(template.must_have),
+      JSON.stringify(template.nice_to_have),
+      JSON.stringify(template.tools),
+      'pending_review',
+      'system',
+      // ON CONFLICT values
+      JSON.stringify(template.must_have),
+      JSON.stringify(template.nice_to_have),
+      JSON.stringify(template.tools)
+    ).run();
 
     return json({
       success: true,
