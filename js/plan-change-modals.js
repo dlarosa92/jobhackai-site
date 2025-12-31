@@ -35,6 +35,10 @@ export function showTrialEligibilityModal() {
         from { transform: translateY(20px); opacity: 0; }
         to { transform: translateY(0); opacity: 1; }
       }
+      @keyframes fadeOut {
+        from { opacity: 1; }
+        to { opacity: 0; }
+      }
     </style>
     <div style="
       background: #FFFFFF;
@@ -96,14 +100,16 @@ export function showTrialEligibilityModal() {
 
   let escapeHandler = null;
 
-  const closeModal = () => {
+  const closeModal = (suppressOnCancel = false) => {
     modal.style.animation = 'fadeOut 0.2s ease';
     // Remove keydown handler if attached to avoid leaks
     if (escapeHandler) {
       document.removeEventListener('keydown', escapeHandler);
       escapeHandler = null;
     }
-    setTimeout(() => modal.remove(), 200);
+    setTimeout(() => {
+      modal.remove();
+    }, 200);
   };
 
   modal.querySelector('#jh-trial-modal-close').addEventListener('click', closeModal);
@@ -169,6 +175,10 @@ export function showUpgradeReactivationModal({ currentPlan, newPlan, currentPric
       @keyframes slideUp {
         from { transform: translateY(20px); opacity: 0; }
         to { transform: translateY(0); opacity: 1; }
+      }
+      @keyframes fadeOut {
+        from { opacity: 1; }
+        to { opacity: 0; }
       }
     </style>
     <div style="
@@ -253,7 +263,7 @@ export function showUpgradeReactivationModal({ currentPlan, newPlan, currentPric
 
   let escapeHandler = null;
 
-  const closeModal = () => {
+  const closeModal = (suppressOnCancel = false) => {
     modal.style.animation = 'fadeOut 0.2s ease';
     // Remove keydown handler if attached to avoid leaks
     if (escapeHandler) {
@@ -262,13 +272,14 @@ export function showUpgradeReactivationModal({ currentPlan, newPlan, currentPric
     }
     setTimeout(() => {
       modal.remove();
-      if (onCancel) onCancel();
+      if (onCancel && !suppressOnCancel) onCancel();
     }, 200);
   };
 
   modal.querySelector('#jh-upgrade-modal-cancel').addEventListener('click', closeModal);
   modal.querySelector('#jh-upgrade-modal-confirm').addEventListener('click', () => {
-    modal.remove();
+    // cleanup and close without triggering onCancel
+    closeModal(true);
     if (onConfirm) onConfirm();
   });
 
@@ -443,7 +454,8 @@ export function showDowngradeTimingModal({ fromPlan, toPlan, fromPrice, toPrice,
   modal.querySelector('#jh-downgrade-modal-cancel').addEventListener('click', closeModal);
   modal.querySelector('#jh-downgrade-modal-confirm').addEventListener('click', () => {
     const selected = modal.querySelector('input[name="downgrade-timing"]:checked')?.value || 'scheduled';
-    modal.remove();
+    // cleanup and close without triggering onCancel
+    closeModal(true);
     if (onConfirm) onConfirm({ timing: selected });
   });
 

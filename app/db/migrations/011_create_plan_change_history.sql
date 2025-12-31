@@ -36,3 +36,12 @@ CREATE INDEX IF NOT EXISTS idx_plan_change_history_created_at ON plan_change_his
 CREATE INDEX IF NOT EXISTS idx_plan_change_history_change_type ON plan_change_history(change_type);
 CREATE INDEX IF NOT EXISTS idx_plan_change_history_timing ON plan_change_history(timing);
 
+-- Backfill: After creating plan_change_history, mark users who previously had paid plans
+-- Note: This must run after plan_change_history exists (migration 011).
+UPDATE users SET has_ever_paid = 1
+WHERE id IN (
+  SELECT DISTINCT COALESCE(pch.user_id, 0) FROM plan_change_history pch
+  WHERE pch.to_plan IN ('essential', 'pro', 'premium')
+     OR pch.from_plan IN ('essential', 'pro', 'premium')
+);
+
