@@ -329,6 +329,9 @@ export function showDowngradeTimingModal({ fromPlan, toPlan, fromPrice, toPrice,
     'pro': 'Pro Plan',
     'premium': 'Premium Plan'
   };
+  
+  // Fallback display text for current period end when not provided
+  const periodText = currentPeriodEnd ? currentPeriodEnd : 'your next billing date';
 
   modal.innerHTML = `
     <style>
@@ -376,7 +379,7 @@ export function showDowngradeTimingModal({ fromPlan, toPlan, fromPrice, toPrice,
               <span style="margin-left: 0.5rem; background: #00E676; color: white; padding: 0.125rem 0.5rem; border-radius: 4px; font-size: 0.75rem; font-weight: 600;">Recommended</span>
             </div>
             <p style="margin: 0; color: #64748B; font-size: 0.9rem; line-height: 1.5;">
-              Keep ${planNames[fromPlan] || fromPlan} features until ${currentPeriodEnd}. Plan changes on your next billing date. No charges or credits today.
+              Keep ${planNames[fromPlan] || fromPlan} features until ${periodText}. Plan changes on your next billing date. No charges or credits today.
             </p>
           </div>
         </label>
