@@ -438,7 +438,7 @@ export function showDowngradeTimingModal({ fromPlan, toPlan, fromPrice, toPrice,
 
   let escapeHandler = null;
 
-  const closeModal = () => {
+  const closeModal = (suppressOnCancel = false) => {
     modal.style.animation = 'fadeOut 0.2s ease';
     // Remove keydown handler if attached to avoid leaks
     if (escapeHandler) {
@@ -447,7 +447,7 @@ export function showDowngradeTimingModal({ fromPlan, toPlan, fromPrice, toPrice,
     }
     setTimeout(() => {
       modal.remove();
-      if (onCancel) onCancel();
+      if (onCancel && !suppressOnCancel) onCancel();
     }, 200);
   };
 
