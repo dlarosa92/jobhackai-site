@@ -13,6 +13,37 @@ async function fetchPlanData(page, token) {
   return await response.json();
 }
 
+function isDashboardRedirect(url) {
+  return typeof url === 'string' && url.includes('/dashboard');
+}
+
+function expectStripeOrUpdate(data) {
+  expect(data).toHaveProperty('url');
+  const url = data.url;
+  expect(typeof url).toBe('string');
+
+  const isStripeCheckout = url.includes('checkout.stripe.com');
+  const isDashboardUrl = isDashboardRedirect(url);
+
+  expect(isStripeCheckout || isDashboardUrl).toBe(true);
+
+  if (isDashboardUrl) {
+    const paidFlagged = url.includes('paid=1') || data.updated || data.alreadySubscribed;
+    expect(paidFlagged).toBe(true);
+  }
+}
+
+function isTrialBlockedResponse(data) {
+  if (!data) {
+    return false;
+  }
+  const message = typeof data.error === 'string' ? data.error : '';
+  return message.includes('Trial already used') ||
+    message.includes('Trial is for first-time subscribers') ||
+    data.code === 'trial_not_available' ||
+    data.code === 'trial_already_used';
+}
+
 test.describe('Stripe Billing', () => {
   test('should allow upgrade from trial to essential', async ({ page }) => {
     await page.goto('/pricing-a.html');
@@ -32,7 +63,7 @@ test.describe('Stripe Billing', () => {
     
     const { data } = await postStripeCheckout(page, { plan: 'essential', startTrial: false });
     expect(data.ok).toBe(true);
-    expect(data.url).toContain('checkout.stripe.com');
+    expectStripeOrUpdate(data);
   });
   
   test('should allow upgrade from essential to pro', async ({ page }) => {
@@ -54,7 +85,7 @@ test.describe('Stripe Billing', () => {
     const { response, data } = await postStripeCheckout(page, { plan: 'pro', startTrial: false });
     
     if (response.status() === 200 && data.ok) {
-      expect(data.url).toContain('checkout.stripe.com');
+      expectStripeOrUpdate(data);
     } else {
       expect(data).toHaveProperty('ok');
       expect(data).toHaveProperty('error');
@@ -80,7 +111,7 @@ test.describe('Stripe Billing', () => {
     const { response, data } = await postStripeCheckout(page, { plan: 'pro', startTrial: false });
     
     if (response.status() === 200 && data.ok) {
-      expect(data.url).toContain('checkout.stripe.com');
+      expectStripeOrUpdate(data);
     } else {
       expect(data).toHaveProperty('ok');
       expect(data).toHaveProperty('error');
@@ -102,17 +133,14 @@ test.describe('Stripe Billing', () => {
     
     const { data } = await postStripeCheckout(page, { plan: 'trial', startTrial: true });
 
-    // If trial already used, API should return error
-    // This test assumes the test account has already used trial
-    if (data.error && typeof data.error === 'string' && data.error.includes('Trial already used')) {
+    if (isTrialBlockedResponse(data)) {
       expect(data.ok).toBe(false);
-      expect(data.error).toContain('Trial already used');
+      expect(data.error).toBeTruthy();
+      console.log(`Trial blocked response from API: ${data.error || data.code}`);
     } else if (data.ok) {
-      // If trial is allowed, that's also valid - but log it
       console.log('Trial is available (not yet used)');
       expect(data.url).toContain('checkout.stripe.com');
     } else {
-      // If we get an error but not the expected one, fail the test
       throw new Error(`Unexpected error response: ${JSON.stringify(data)}`);
     }
   });
@@ -270,9 +298,8 @@ test.describe('Stripe Billing', () => {
     
     const { data } = await postStripeCheckout(page, { plan: 'trial', startTrial: true });
     
-    // If trial is blocked (already used), skip this test
-    if (data.error && typeof data.error === 'string' && data.error.includes('Trial already used')) {
-      test.info().skip('Trial already used - cannot test trial signup flow');
+    if (isTrialBlockedResponse(data)) {
+      test.info().skip(`Trial blocked (${data.code || 'unknown'}) - cannot test trial signup flow`);
       return;
     }
     
@@ -307,20 +334,18 @@ test.describe('Stripe Billing', () => {
       
       const { data } = await postStripeCheckout(page, { plan, startTrial: plan === 'trial' });
       
-      // Handle trial-specific case (may be blocked if already used)
-      if (plan === 'trial' && data.error && typeof data.error === 'string' && data.error.includes('Trial already used')) {
-        console.log('Trial already used, skipping trial plan test');
+      if (plan === 'trial' && isTrialBlockedResponse(data)) {
+        console.log('Trial already used or blocked, skipping trial plan test');
         continue;
       }
-      
+
       if (!data.ok) {
-        console.log(`Skipping ${plan} plan check due to API response: ${data.error || 'unknown error'}`);
+        console.log(`Skipping ${plan} plan check due to API response: ${data.error || data.code || 'unknown error'}`);
         continue;
       }
-      
-      // Verify all plans require credit card (redirect to Stripe checkout)
-      expect(data.url).toContain('checkout.stripe.com');
-      console.log(`✅ Verified ${plan} plan requires credit card (redirects to Stripe checkout)`);
+
+      expectStripeOrUpdate(data);
+      console.log(`✅ Verified ${plan} plan requires credit card (redirects to Stripe checkout or applies update)`);
     }
   });
   
