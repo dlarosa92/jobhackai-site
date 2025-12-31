@@ -20,3 +20,13 @@ CREATE INDEX IF NOT EXISTS idx_users_has_ever_paid ON users(has_ever_paid);
 -- Backfill: Set has_ever_paid = 1 for existing paid users
 UPDATE users SET has_ever_paid = 1 WHERE plan IN ('essential', 'pro', 'premium');
 
+-- Also backfill users who previously had a paid subscription according to plan_change_history.
+-- This covers users who cancelled (now 'free') but previously were on a paid plan.
+UPDATE users SET has_ever_paid = 1
+WHERE id IN (
+  SELECT DISTINCT pch.user_id
+  FROM plan_change_history pch
+  WHERE pch.to_plan IN ('essential', 'pro', 'premium')
+     OR pch.from_plan IN ('essential', 'pro', 'premium')
+);
+
