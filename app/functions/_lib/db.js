@@ -175,7 +175,8 @@ export async function updateUserPlan(env, authId, {
   cancelAt = undefined,
   scheduledPlan = undefined,
   scheduledAt = undefined,
-  planEventTimestamp = undefined // ISO 8601 datetime string from Stripe event.created
+  planEventTimestamp = undefined, // ISO 8601 datetime string from Stripe event.created
+  hasEverPaid = undefined // Set to 1 when user upgrades to paid plan
 }) {
   const db = getDb(env);
   if (!db) {
@@ -227,6 +228,10 @@ export async function updateUserPlan(env, authId, {
       updates.push('scheduled_at = ?');
       binds.push(scheduledAt);
     }
+    if (hasEverPaid !== undefined) {
+      updates.push('has_ever_paid = ?');
+      binds.push(hasEverPaid);
+    }
 
     // Always update timestamps
     // Use planEventTimestamp if provided (from Stripe event.created), otherwise use current time
@@ -257,6 +262,76 @@ export async function updateUserPlan(env, authId, {
 }
 
 /**
+ * Log a plan change to plan_change_history table for analytics
+ * @param {Object} env - Cloudflare environment with DB binding
+ * @param {string} authId - Firebase UID
+ * @param {Object} changeData - Plan change data
+ * @param {string} changeData.fromPlan - Previous plan (nullable)
+ * @param {string} changeData.toPlan - New plan
+ * @param {string} changeData.changeType - 'upgrade', 'downgrade', 'reactivation', 'cancellation', 'trial_start'
+ * @param {string} changeData.timing - 'immediate', 'scheduled', 'at_period_end'
+ * @param {boolean} changeData.wasCancelled - Whether subscription was cancelled before this change
+ * @param {string} changeData.stripeSubscriptionId - Stripe subscription ID (optional)
+ * @param {string} changeData.stripeEventId - Stripe webhook event ID (optional)
+ * @param {Object} changeData.metadata - Additional metadata (optional)
+ * @returns {Promise<boolean>} Success status
+ */
+export async function logPlanChange(env, authId, changeData) {
+  const db = getDb(env);
+  if (!db) {
+    console.warn('[DB] D1 binding not available, skipping plan change log');
+    return false;
+  }
+
+  try {
+    // Get user_id from auth_id
+    const user = await db.prepare('SELECT id FROM users WHERE auth_id = ?').bind(authId).first();
+    if (!user) {
+      console.warn('[DB] User not found for plan change log:', authId);
+      return false;
+    }
+
+    const userId = user.id;
+    const {
+      fromPlan = null,
+      toPlan,
+      changeType,
+      timing,
+      wasCancelled = false,
+      stripeSubscriptionId = null,
+      stripeEventId = null,
+      metadata = null
+    } = changeData;
+
+    const metadataJson = metadata ? JSON.stringify(metadata) : null;
+
+    await db.prepare(
+      `INSERT INTO plan_change_history 
+       (user_id, from_plan, to_plan, change_type, timing, was_cancelled, 
+        stripe_subscription_id, stripe_event_id, metadata_json, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`
+    ).bind(
+      userId,
+      fromPlan,
+      toPlan,
+      changeType,
+      timing,
+      wasCancelled ? 1 : 0,
+      stripeSubscriptionId,
+      stripeEventId,
+      metadataJson
+    ).run();
+
+    console.log('[DB] Logged plan change:', { authId, fromPlan, toPlan, changeType, timing });
+    return true;
+  } catch (error) {
+    console.error('[DB] Error logging plan change:', error);
+    // Don't throw - logging failures shouldn't break plan updates
+    return false;
+  }
+}
+
+/**
  * Get full user plan data including subscription metadata
  * @param {Object} env - Cloudflare environment with DB binding
  * @param {string} authId - Firebase UID
@@ -272,7 +347,7 @@ export async function getUserPlanData(env, authId) {
     const user = await db.prepare(
       `SELECT plan, stripe_customer_id, stripe_subscription_id, subscription_status,
               trial_ends_at, current_period_end, cancel_at, scheduled_plan, scheduled_at,
-              plan_updated_at
+              plan_updated_at, has_ever_paid
        FROM users WHERE auth_id = ?`
     ).bind(authId).first();
 
@@ -307,7 +382,8 @@ export async function getUserPlanData(env, authId) {
       currentPeriodEnd: user.current_period_end,
       cancelAt: user.cancel_at,
       scheduledPlanChange,
-      planUpdatedAt: user.plan_updated_at
+      planUpdatedAt: user.plan_updated_at,
+      hasEverPaid: user.has_ever_paid || 0
     };
   } catch (error) {
     console.error('[DB] Error in getUserPlanData:', error);
