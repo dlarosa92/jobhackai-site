@@ -375,7 +375,43 @@
       const currentIndex = planHierarchy.indexOf(currentPlan);
       const newIndex = planHierarchy.indexOf(newPlan);
       
-      if (newIndex <= currentIndex) {
+      if (newIndex < currentIndex) {
+        // Downgrade — show timing selector modal instead of blocking outright
+        if (window.showDowngradeTimingModal) {
+          window.showDowngradeTimingModal({
+            fromPlan: currentPlan,
+            toPlan: newPlan,
+            fromPrice: planPrices[currentPlan] || '',
+            toPrice: planPrices[newPlan] || '',
+            currentPeriodEnd: null,
+            onConfirm: async ({ timing } = {}) => {
+              try {
+                const idToken = await window.FirebaseAuthManager?.getCurrentUser?.()?.getIdToken?.();
+                if (window.showLoadingOverlay) {
+                  window._currentLoadingOverlay = window.showLoadingOverlay('Processing downgrade...');
+                }
+                const res = await fetch('/api/stripe-checkout', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json', ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}) },
+                  body: JSON.stringify({ plan: newPlan, downgradeTiming: timing })
+                });
+                const data = await res.json();
+                if (data && data.ok && data.url) { window.location.href = data.url; return; }
+                throw new Error(data?.error || 'Downgrade failed');
+              } catch (err) {
+                console.error('Downgrade error:', err);
+                if (window._currentLoadingOverlay) { window._currentLoadingOverlay(); window._currentLoadingOverlay = null; }
+                alert('Unable to process downgrade. Please try again.');
+              }
+            },
+            onCancel: () => {}
+          });
+        } else {
+          showUpgradeErrorModal(currentPlan, newPlan);
+        }
+        return;
+      }
+      if (newIndex === currentIndex) {
         showUpgradeErrorModal(currentPlan, newPlan);
         return;
       }
