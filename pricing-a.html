@@ -363,6 +363,13 @@
       }
     });
     
+    const planPrices = {
+      'trial': '$0 for 3 days',
+      'essential': '$29/month',
+      'pro': '$59/month',
+      'premium': '$99/month'
+    };
+
     function userHasCard(userEmail) {
       const db = JSON.parse(localStorage.getItem('user-db') || '{}');
       if (!db[userEmail]) return false;
@@ -492,13 +499,6 @@
         'essential': 'Essential Plan',
         'pro': 'Pro Plan',
         'premium': 'Premium Plan'
-      };
-      
-      const planPrices = {
-        'trial': '$0 for 3 days',
-        'essential': '$29/month',
-        'pro': '$59/month',
-        'premium': '$99/month'
       };
       
       const modal = document.createElement('div');
