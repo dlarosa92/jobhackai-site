@@ -173,6 +173,8 @@
   <script src="js/universal-logout.js?v=20251007-2"></script>
   <!-- Load Stripe integration -->
   <script src="js/stripe-integration.js"></script>
+  <!-- Plan change modals -->
+  <script src="js/plan-change-modals.js" type="module"></script>
   <!-- scripts -->
   <script src="js/main.js" type="module"></script>
   <script src="js/analytics.js" type="module"></script>
@@ -389,6 +391,17 @@
           });
           const data = await res.json();
           if (data && data.ok && data.url) { window.location.href = data.url; return; }
+          
+          // Handle trial eligibility error
+          if (data?.code === 'trial_not_available' || data?.code === 'trial_already_used') {
+            if (window.showTrialEligibilityModal) {
+              window.showTrialEligibilityModal();
+            } else {
+              alert(data?.error || 'Trial is for first-time subscribers only.');
+            }
+            return;
+          }
+          
           throw new Error(data?.error || 'Checkout failed');
         } catch (e) {
           console.error('Checkout error:', e);

@@ -1,4 +1,4 @@
-import { updateUserPlan, getUserPlanData } from '../_lib/db.js';
+import { updateUserPlan, getUserPlanData, logPlanChange } from '../_lib/db.js';
 
 export async function onRequest(context) {
   const { request, env } = context;
@@ -138,14 +138,36 @@ export async function onRequest(context) {
         }
         
         console.log(`✍️ WRITING TO D1: users.plan = ${effectivePlan} for uid=${uid}`);
+        
+        // Set has_ever_paid = 1 if this is a paid plan
+        const paidPlans = ['essential', 'pro', 'premium'];
+        const hasEverPaid = paidPlans.includes(effectivePlan) ? 1 : undefined;
+        
         await updatePlanInD1(uid, {
           plan: effectivePlan,
           stripeCustomerId: customerId,
           stripeSubscriptionId: subscriptionId,
           subscriptionStatus: subscription?.status || 'active',
           trialEndsAt: subscription?.trial_end ? new Date(subscription.trial_end * 1000).toISOString() : null,
-          currentPeriodEnd: subscription?.current_period_end ? new Date(subscription.current_period_end * 1000).toISOString() : null
+          currentPeriodEnd: subscription?.current_period_end ? new Date(subscription.current_period_end * 1000).toISOString() : null,
+          hasEverPaid
         }, event.created);
+        
+        // Log plan change for analytics
+        if (effectivePlan !== 'free') {
+          const changeType = effectivePlan === 'trial' ? 'trial_start' : 'upgrade';
+          await logPlanChange(env, uid, {
+            fromPlan: null, // New subscription
+            toPlan: effectivePlan,
+            changeType,
+            timing: 'immediate',
+            wasCancelled: false,
+            stripeSubscriptionId: subscriptionId,
+            stripeEventId: event.id,
+            metadata: { originalPlan, checkoutSessionId: sessionId }
+          });
+        }
+        
         console.log(`✅ D1 WRITE SUCCESS: ${uid} → ${effectivePlan}`);
       } else {
         console.warn(`⚠️ SKIPPED PLAN UPDATE: effectivePlan=${effectivePlan}, uid=${uid}`);
@@ -187,14 +209,34 @@ export async function onRequest(context) {
       });
       console.log(`✍️ WRITING TO D1: users.plan = ${effectivePlan} for uid=${uid}`);
       
+      // Set has_ever_paid = 1 if this is a paid plan
+      const paidPlans = ['essential', 'pro', 'premium'];
+      const hasEverPaid = paidPlans.includes(effectivePlan) ? 1 : undefined;
+      
       await updatePlanInD1(uid, {
         plan: effectivePlan,
         stripeCustomerId: customerId,
         stripeSubscriptionId: sub.id,
         subscriptionStatus: status,
         trialEndsAt: trialEndsAtISO,
-        currentPeriodEnd: sub.current_period_end ? new Date(sub.current_period_end * 1000).toISOString() : null
+        currentPeriodEnd: sub.current_period_end ? new Date(sub.current_period_end * 1000).toISOString() : null,
+        hasEverPaid
       }, event.created);
+      
+      // Log plan change for analytics
+      if (effectivePlan !== 'free') {
+        const changeType = effectivePlan === 'trial' ? 'trial_start' : 'upgrade';
+        await logPlanChange(env, uid, {
+          fromPlan: null, // New subscription
+          toPlan: effectivePlan,
+          changeType,
+          timing: 'immediate',
+          wasCancelled: false,
+          stripeSubscriptionId: sub.id,
+          stripeEventId: event.id,
+          metadata: { originalPlan }
+        });
+      }
       
       console.log(`✅ D1 WRITE SUCCESS: ${uid} → ${effectivePlan}${trialEndsAtISO ? ` (trial ends: ${trialEndsAtISO})` : ''}`);
     }
@@ -243,12 +285,13 @@ export async function onRequest(context) {
       const pId = items[0]?.price?.id || '';
       const plan = priceToPlan(env, pId);
       
-      // Get previous plan from D1 to detect trial conversion
+      // Get previous plan from D1 to detect plan changes and log analytics
       let previousPlan = null;
+      let wasCancelled = false;
       try {
-        const { getUserPlanData } = await import('../../_lib/db.js');
         const existingPlanData = await getUserPlanData(env, uid);
         previousPlan = existingPlanData?.plan || null;
+        wasCancelled = existingPlanData?.cancelAt !== null && existingPlanData?.cancelAt !== undefined;
       } catch (e) {
         console.warn('⚠️ Could not fetch previous plan for comparison:', e.message);
       }
@@ -282,6 +325,36 @@ export async function onRequest(context) {
       }
       
       console.log(`✍️ UPDATING D1: users.plan = ${effectivePlan} for uid=${uid}`);
+      
+      // Set has_ever_paid = 1 if this is a paid plan
+      const paidPlans = ['essential', 'pro', 'premium'];
+      const hasEverPaid = paidPlans.includes(effectivePlan) ? 1 : undefined;
+      
+      // Determine change type and timing
+      let changeType = null;
+      let timing = 'immediate';
+      
+      if (previousPlan && previousPlan !== effectivePlan) {
+        if (paidPlans.includes(effectivePlan) && (previousPlan === 'free' || previousPlan === 'trial')) {
+          changeType = wasCancelled ? 'reactivation' : 'upgrade';
+        } else if (paidPlans.includes(previousPlan) && effectivePlan === 'free') {
+          changeType = 'cancellation';
+        } else if (paidPlans.includes(previousPlan) && paidPlans.includes(effectivePlan)) {
+          // Compare plan hierarchy
+          const planHierarchy = { essential: 1, pro: 2, premium: 3 };
+          const prevLevel = planHierarchy[previousPlan] || 0;
+          const newLevel = planHierarchy[effectivePlan] || 0;
+          changeType = newLevel > prevLevel ? 'upgrade' : 'downgrade';
+        }
+        
+        // Check if this is a scheduled change
+        if (scheduledPlan && scheduledAt) {
+          timing = 'scheduled';
+        } else if (sub.cancel_at_period_end) {
+          timing = 'at_period_end';
+        }
+      }
+      
       await updatePlanInD1(uid, {
         plan: effectivePlan,
         stripeCustomerId: customerId,
@@ -291,8 +364,28 @@ export async function onRequest(context) {
         currentPeriodEnd: sub.current_period_end ? new Date(sub.current_period_end * 1000).toISOString() : null,
         cancelAt: cancelAt || null, // null clears the field (undefined is skipped)
         scheduledPlan: scheduledPlan || null, // null clears the field (undefined is skipped)
-        scheduledAt: scheduledAt || null // null clears the field (undefined is skipped)
+        scheduledAt: scheduledAt || null, // null clears the field (undefined is skipped)
+        hasEverPaid
       }, event.created);
+      
+      // Log plan change for analytics (only if plan actually changed)
+      if (changeType && previousPlan !== effectivePlan) {
+        await logPlanChange(env, uid, {
+          fromPlan: previousPlan,
+          toPlan: effectivePlan,
+          changeType,
+          timing,
+          wasCancelled,
+          stripeSubscriptionId: sub.id,
+          stripeEventId: event.id,
+          metadata: { 
+            originalPlan,
+            cancelAtPeriodEnd: sub.cancel_at_period_end || false,
+            scheduledPlan,
+            scheduledAt
+          }
+        });
+      }
       
       console.log(`✅ D1 UPDATE SUCCESS: ${uid} → ${effectivePlan}${trialEndsAtISO ? ` (trial ends: ${trialEndsAtISO})` : ''}`);
     }
@@ -304,6 +397,15 @@ export async function onRequest(context) {
       console.log(`📝 DELETION DATA: customerId=${customerId}, uid=${uid}`);
       console.log(`✍️ WRITING TO D1: users.plan = free for uid=${uid}`);
       
+      // Get previous plan for logging
+      let previousPlan = null;
+      try {
+        const existingPlanData = await getUserPlanData(env, uid);
+        previousPlan = existingPlanData?.plan || null;
+      } catch (e) {
+        console.warn('⚠️ Could not fetch previous plan for deletion logging:', e.message);
+      }
+      
       await updatePlanInD1(uid, {
         plan: 'free',
         stripeSubscriptionId: null,
@@ -312,6 +414,20 @@ export async function onRequest(context) {
         scheduledPlan: null, // Clear scheduled plan
         scheduledAt: null // Clear scheduled date
       }, event.created);
+      
+      // Log cancellation for analytics
+      if (previousPlan && previousPlan !== 'free') {
+        await logPlanChange(env, uid, {
+          fromPlan: previousPlan,
+          toPlan: 'free',
+          changeType: 'cancellation',
+          timing: 'immediate',
+          wasCancelled: true,
+          stripeSubscriptionId: event.data.object.id,
+          stripeEventId: event.id,
+          metadata: { deleted: true }
+        });
+      }
       
       // Clean up resume data when subscription is deleted (KV cleanup)
       await env.JOBHACKAI_KV?.delete(`user:${uid}:lastResume`);

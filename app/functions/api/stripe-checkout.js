@@ -1,4 +1,5 @@
 import { getBearer, verifyFirebaseIdToken } from '../_lib/firebase-auth.js';
+import { getUserPlanData, updateUserPlan } from '../_lib/db.js';
 export async function onRequest(context) {
   const { request, env } = context;
   const origin = request.headers.get('Origin') || '';
@@ -63,17 +64,31 @@ export async function onRequest(context) {
       return json({ ok: false, error: 'Missing plan' }, 422, origin, env);
     }
 
-    // Prevent multiple trials per user
+    // Prevent multiple trials per user - check has_ever_paid from D1
     if (plan === 'trial') {
       try {
+        const userPlanData = await getUserPlanData(env, uid);
+        if (userPlanData && userPlanData.hasEverPaid === 1) {
+          console.log('🔴 [CHECKOUT] User has already had a paid subscription, trial not allowed', uid);
+          return json({ 
+            ok: false, 
+            error: 'Trial is for first-time subscribers only. You\'re already subscribed, so you can switch plans anytime.',
+            code: 'trial_not_available'
+          }, 400, origin, env);
+        }
+        // Also check KV as fallback (for migration period)
         const trialUsed = await env.JOBHACKAI_KV?.get(`trialUsedByUid:${uid}`);
         if (trialUsed) {
-          console.log('🔴 [CHECKOUT] Trial already used for user', uid);
-          return json({ ok: false, error: 'Trial already used. Please select a paid plan.' }, 400, origin, env);
+          console.log('🔴 [CHECKOUT] Trial already used for user (KV check)', uid);
+          return json({ 
+            ok: false, 
+            error: 'Trial already used. Please select a paid plan.',
+            code: 'trial_already_used'
+          }, 400, origin, env);
         }
-      } catch (kvError) {
-        console.log('🟡 [CHECKOUT] KV read error for trial check (non-fatal)', kvError?.message || kvError);
-        // Continue - allow trial if KV is unavailable
+      } catch (checkError) {
+        console.log('🟡 [CHECKOUT] Error checking trial eligibility (non-fatal)', checkError?.message || checkError);
+        // Continue - allow trial if check fails (fail open for availability)
       }
     }
 
@@ -214,6 +229,17 @@ export async function onRequest(context) {
                       newPriceId: priceId
                     });
                     
+                    // Set has_ever_paid = 1 if upgrading to a paid plan
+                    const paidPlans = ['essential', 'pro', 'premium'];
+                    if (paidPlans.includes(plan)) {
+                      try {
+                        await updateUserPlan(env, uid, { hasEverPaid: 1 });
+                        console.log('✅ [CHECKOUT] Set has_ever_paid = 1 for paid plan upgrade');
+                      } catch (paidError) {
+                        console.log('🟡 [CHECKOUT] Failed to set has_ever_paid (non-fatal)', paidError?.message || paidError);
+                      }
+                    }
+                    
                     // Cancel other active subscriptions to prevent multiple subscriptions
                     const otherSubscriptions = activeSubscriptions.filter(s => s.id !== existingSubId);
                     for (const otherSub of otherSubscriptions) {
@@ -340,6 +366,18 @@ export async function onRequest(context) {
       if (!s || !s.url) {
         console.log('🔴 [CHECKOUT] Invalid session response', s);
         return json({ ok: false, error: 'Invalid response from Stripe' }, 502, origin, env);
+      }
+      
+      // Set has_ever_paid = 1 if creating a paid plan subscription (will be confirmed via webhook)
+      // Pre-set it here to prevent race conditions
+      const paidPlans = ['essential', 'pro', 'premium'];
+      if (paidPlans.includes(plan)) {
+        try {
+          await updateUserPlan(env, uid, { hasEverPaid: 1 });
+          console.log('✅ [CHECKOUT] Pre-set has_ever_paid = 1 for paid plan checkout');
+        } catch (paidError) {
+          console.log('🟡 [CHECKOUT] Failed to pre-set has_ever_paid (non-fatal)', paidError?.message || paidError);
+        }
       }
       
       console.log('✅ [CHECKOUT] Session created', { id: s.id, url: s.url });
