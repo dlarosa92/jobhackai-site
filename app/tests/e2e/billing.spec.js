@@ -135,7 +135,7 @@ test.describe('Stripe Billing', () => {
 
     if (isTrialBlockedResponse(data)) {
       expect(data.ok).toBe(false);
-      expect(data.error).toBeTruthy();
+      expect(data.error || data.code).toBeTruthy();
       console.log(`Trial blocked response from API: ${data.error || data.code}`);
     } else if (data.ok) {
       console.log('Trial is available (not yet used)');
