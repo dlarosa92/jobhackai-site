@@ -628,6 +628,87 @@
       height: 210px;
       border-radius: 16px;
     }
+</style>
+  <style id="plan-sync-toast-style">
+    #plan-sync-toast {
+      position: fixed;
+      top: calc(var(--header-height) + var(--space-sm));
+      right: var(--space-lg);
+      max-width: 340px;
+      background: var(--color-card-bg);
+      color: var(--color-text-main);
+      border-radius: var(--radius-xl);
+      box-shadow: var(--shadow-xl);
+      padding: var(--space-md);
+      font-family: var(--font-family-base);
+      font-size: var(--font-size-base);
+      line-height: 1.4;
+      z-index: calc(var(--z-modal) + 1);
+      opacity: 0;
+      transform: translateY(-8px);
+      transition: opacity var(--transition-fast), transform var(--transition-fast);
+      pointer-events: none;
+    }
+    #plan-sync-toast.plan-sync-visible {
+      opacity: 1;
+      transform: translateY(0);
+      pointer-events: auto;
+    }
+    #plan-sync-toast.plan-sync-fade-out {
+      opacity: 0;
+      transform: translateY(-8px);
+      pointer-events: none;
+    }
+    #plan-sync-toast .plan-sync-header {
+      display: flex;
+      align-items: flex-start;
+      gap: var(--space-xs);
+    }
+    #plan-sync-toast .plan-sync-icon {
+      font-size: 1.45rem;
+      line-height: 1;
+    }
+    #plan-sync-toast .plan-sync-title {
+      margin: 0;
+      font-size: var(--font-size-lg);
+      font-weight: var(--font-weight-semibold);
+      color: var(--color-text-main);
+    }
+    #plan-sync-toast .plan-sync-note {
+      margin: 0;
+      font-size: var(--font-size-sm);
+      color: var(--color-text-secondary);
+      line-height: 1.4;
+    }
+    #plan-sync-toast .plan-sync-actions {
+      margin-top: var(--space-sm);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--space-sm);
+    }
+    #plan-sync-toast .plan-sync-link {
+      font-weight: var(--font-weight-semibold);
+      color: var(--color-accent-blue);
+      text-decoration: none;
+    }
+    #plan-sync-toast .plan-sync-link:hover,
+    #plan-sync-toast .plan-sync-link:focus {
+      text-decoration: underline;
+    }
+    #plan-sync-toast .plan-sync-status-group {
+      display: inline-flex;
+      align-items: center;
+      gap: var(--space-2xs);
+      font-size: var(--font-size-sm);
+      color: var(--color-text-muted);
+    }
+    #plan-sync-toast .plan-sync-spinner {
+      font-size: 0.95rem;
+    }
+    #plan-sync-toast .plan-sync-status {
+      font-weight: var(--font-weight-medium);
+    }
   </style>
 </head>
 <body>
@@ -847,6 +928,90 @@
         }
       }
 
+      let planSyncToastElement = null;
+      let planSyncStatusElement = null;
+      let planSyncDismissTimeout = null;
+
+      function dismissPlanSyncToast({ immediate = false } = {}) {
+        if (!planSyncToastElement) return;
+        planSyncToastElement.classList.remove('plan-sync-visible');
+        planSyncToastElement.classList.add('plan-sync-fade-out');
+        if (planSyncDismissTimeout) {
+          clearTimeout(planSyncDismissTimeout);
+        }
+        const removeToast = () => {
+          planSyncToastElement?.remove();
+          planSyncToastElement = null;
+          planSyncStatusElement = null;
+          planSyncDismissTimeout = null;
+        };
+        if (immediate) {
+          removeToast();
+        } else {
+          planSyncDismissTimeout = setTimeout(removeToast, 260);
+        }
+      }
+
+      function buildPlanSyncToast() {
+        const toast = document.createElement('div');
+        toast.id = 'plan-sync-toast';
+        toast.innerHTML = `
+          <div class="plan-sync-header">
+            <span class="plan-sync-icon" aria-hidden="true">⭐</span>
+            <div>
+              <p class="plan-sync-title">Welcome aboard, JobHackAI!</p>
+              <p class="plan-sync-note">We’re just syncing your new plan with Stripe—should be ready in a few seconds. Thanks for your patience!</p>
+            </div>
+          </div>
+          <div class="plan-sync-actions">
+            <a href="#" class="plan-sync-link" data-action="view-dashboard">View dashboard</a>
+            <div class="plan-sync-status-group">
+              <span class="plan-sync-spinner" aria-hidden="true">⏳</span>
+              <span class="plan-sync-status" data-role="plan-sync-status-text">Syncing your plan…</span>
+            </div>
+          </div>
+        `;
+        const viewLink = toast.querySelector('[data-action="view-dashboard"]');
+        if (viewLink) {
+          viewLink.addEventListener('click', (event) => {
+            event.preventDefault();
+            const url = new URL(window.location.href);
+            if (url.searchParams.has('paid')) {
+              url.searchParams.delete('paid');
+              window.history.replaceState({}, '', url.toString());
+            }
+            dismissPlanSyncToast();
+          });
+        }
+        return toast;
+      }
+
+      function showPlanSyncToast() {
+        if (!planSyncToastElement) {
+          planSyncToastElement = buildPlanSyncToast();
+          planSyncStatusElement = planSyncToastElement.querySelector('[data-role="plan-sync-status-text"]');
+          document.body.appendChild(planSyncToastElement);
+          requestAnimationFrame(() => {
+            planSyncToastElement?.classList?.add('plan-sync-visible');
+          });
+        } else {
+          // Clear any pending dismiss timeout so re-showing is stable
+          if (planSyncDismissTimeout) {
+            clearTimeout(planSyncDismissTimeout);
+            planSyncDismissTimeout = null;
+          }
+          planSyncToastElement.classList.remove('plan-sync-fade-out');
+          planSyncToastElement.classList.add('plan-sync-visible');
+        }
+        return planSyncStatusElement;
+      }
+
+      function updatePlanSyncStatus(text) {
+        if (planSyncStatusElement) {
+          planSyncStatusElement.textContent = text;
+        }
+      }
+
       let billingStatusData = null;
 
       if (urlParams.get('paid') === '1') {
@@ -874,12 +1039,8 @@
           // Store initial plan before any updates
           const initialPlanAfterPayment = currentPlanAfterPayment;
           
-          // Show loading indicator
-          const loadingIndicator = document.createElement('div');
-          loadingIndicator.id = 'plan-update-loading';
-          loadingIndicator.style.cssText = 'position:fixed;top:20px;right:20px;background:#007BFF;color:#fff;padding:12px 24px;border-radius:8px;z-index:10000;box-shadow:0 4px 12px rgba(0,0,0,0.15);font-family:var(--font-family-base,Inter,sans-serif);font-size:0.95rem;font-weight:500;';
-          loadingIndicator.textContent = 'Updating your plan...';
-          document.body.appendChild(loadingIndicator);
+          // Show welcome sync message while polling
+          showPlanSyncToast();
           
           // Poll for plan update
           let retries = 0;
@@ -893,7 +1054,7 @@
               // Authentication issue - check if we should stop polling
               if (retries >= maxRetries) {
                 console.warn('⚠️ Plan update timeout - authentication failed');
-                loadingIndicator.remove();
+                dismissPlanSyncToast({ immediate: true });
                 // Mark as processed to prevent infinite polling on refresh
                 sessionStorage.setItem('payment-processed', 'true');
                 // Clean up URL parameter
@@ -923,7 +1084,7 @@
                   // Plan updated! Mark as processed and reload without ?paid=1
                   console.log('✅ Plan updated after payment, reloading...');
                   sessionStorage.setItem('payment-processed', 'true');
-                  loadingIndicator.textContent = 'Plan updated! Reloading...';
+                  updatePlanSyncStatus('Plan updated! Reloading...');
                   setTimeout(() => {
                     // Fix Issue 2: Remove ?paid=1 from URL to prevent re-triggering on reload
                     const url = new URL(window.location.href);
@@ -942,7 +1103,7 @@
               setTimeout(pollForPlanUpdate, 3000); // Poll every 3 seconds
             } else {
               console.warn('⚠️ Plan update timeout - will refresh on next poll');
-              loadingIndicator.remove();
+              dismissPlanSyncToast();
               // Mark as processed even on timeout to prevent infinite polling
               sessionStorage.setItem('payment-processed', 'true');
               // Clean up URL parameter to prevent restarting polling in new sessions
