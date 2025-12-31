@@ -995,6 +995,11 @@
             planSyncToastElement?.classList?.add('plan-sync-visible');
           });
         } else {
+          // Clear any pending dismiss timeout so re-showing is stable
+          if (planSyncDismissTimeout) {
+            clearTimeout(planSyncDismissTimeout);
+            planSyncDismissTimeout = null;
+          }
           planSyncToastElement.classList.remove('plan-sync-fade-out');
           planSyncToastElement.classList.add('plan-sync-visible');
         }
