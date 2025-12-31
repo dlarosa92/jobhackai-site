@@ -27,7 +27,7 @@ export async function onRequest(context) {
       return json({ ok: false, error: 'invalid_json' }, 400, origin, env);
     }
     console.log('🔵 [CHECKOUT] Parsed body', body);
-    const { plan } = body || {};
+    const { plan, forceReactivate = false } = body || {};
 
     // Check required environment variables
     if (!env.FIREBASE_PROJECT_ID) {
@@ -206,6 +206,21 @@ export async function onRequest(context) {
                 }, 400, origin, env);
               } else {
                 try {
+                  // If the subscription is scheduled to cancel at period end, prompt frontend to confirm reactivation
+                  if (existingSub.cancel_at_period_end && !forceReactivate) {
+                    console.log('🔔 [CHECKOUT] Existing subscription is scheduled to cancel at period end; prompting reactivation');
+                    return json({
+                      ok: false,
+                      code: 'reactivation_required',
+                      message: 'Subscription is scheduled to cancel at period end. Upgrading will reactivate immediately.',
+                      data: {
+                        currentPlan: existingPriceId ? (existingPriceId) : null,
+                        newPlan: plan,
+                        currentPeriodEnd: existingSub.current_period_end || null,
+                        subscriptionId: existingSubId
+                      }
+                    }, 200, origin, env);
+                  }
                   // Update subscription: replace the subscription item with new price
                   const updateBody = {
                     'items[0][id]': subscriptionItemId,
@@ -214,6 +229,11 @@ export async function onRequest(context) {
                     'metadata[plan]': plan,
                     'metadata[firebaseUid]': uid
                   };
+                  
+                  // If forceReactivate is true, clear cancel_at_period_end
+                  if (forceReactivate) {
+                    updateBody['cancel_at_period_end'] = 'false';
+                  }
                   
                   // If upgrading to trial, add trial_end (timestamp). `trial_period_days` is only valid on create.
                   if (plan === 'trial') {

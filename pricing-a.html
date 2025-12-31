@@ -391,7 +391,47 @@
           });
           const data = await res.json();
           if (data && data.ok && data.url) { window.location.href = data.url; return; }
-          
+
+          // Handle reactivation required (existing subscription scheduled to cancel)
+          if (data?.code === 'reactivation_required') {
+            const capturedIdToken = idToken;
+            if (window.showUpgradeReactivationModal) {
+              window.showUpgradeReactivationModal({
+                currentPlan: data.data?.currentPlan || currentPlan,
+                newPlan: data.data?.newPlan || newPlan,
+                currentPrice: planPrices[currentPlan] || '',
+                newPrice: planPrices[newPlan] || '',
+                proratedAmount: data.data?.proratedAmount || null,
+                onConfirm: async () => {
+                  try {
+                    if (window.showLoadingOverlay) {
+                      window._currentLoadingOverlay = window.showLoadingOverlay('Redirecting to checkout...');
+                    }
+                    const confirmRes = await fetch('/api/stripe-checkout', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json', ...(capturedIdToken ? { Authorization: `Bearer ${capturedIdToken}` } : {}) },
+                      body: JSON.stringify({ plan: newPlan, forceReactivate: true })
+                    });
+                    const confirmData = await confirmRes.json();
+                    if (confirmData && confirmData.ok && confirmData.url) {
+                      window.location.href = confirmData.url;
+                      return;
+                    }
+                    throw new Error(confirmData?.error || 'Checkout failed');
+                  } catch (err) {
+                    console.error('Reactivation checkout error:', err);
+                    if (window._currentLoadingOverlay) { window._currentLoadingOverlay(); window._currentLoadingOverlay = null; }
+                    alert('Unable to start checkout. Please try again.');
+                  }
+                },
+                onCancel: () => {}
+              });
+            } else {
+              alert(data?.message || 'Subscription reactivation required to upgrade. Please visit billing.');
+            }
+            return;
+          }
+
           // Handle trial eligibility error
           if (data?.code === 'trial_not_available' || data?.code === 'trial_already_used') {
             if (window.showTrialEligibilityModal) {
@@ -401,7 +441,7 @@
             }
             return;
           }
-          
+
           throw new Error(data?.error || 'Checkout failed');
         } catch (e) {
           console.error('Checkout error:', e);
@@ -481,6 +521,13 @@
           <div style="background: #FFF7ED; border: 1px solid #FED7AA; border-radius: 8px; padding: 0.875rem; margin-bottom: 1.5rem;">
             <p style="margin: 0; color: #9A3412; font-size: 0.9rem; line-height: 1.5;">
               <strong>Note:</strong> Your new plan will start immediately and you'll be charged ${planPrices[newPlan]} starting today.
+            </p>
+          </div>
+          
+          <div style="background: #E6F7FF; border: 1px solid #91D5FF; border-radius: 8px; padding: 0.875rem; margin-bottom: 1.5rem;">
+            <p style="margin: 0; color: #1890FF; font-size: 0.9rem; line-height: 1.5;">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" style="vertical-align:middle; margin-right:8px; margin-left:2px;"><circle cx="12" cy="12" r="10" stroke="#1890FF" stroke-width="1.5"/><path d="M12 8v4" stroke="#1890FF" stroke-width="1.6" stroke-linecap="round"/><circle cx="12" cy="16.2" r="0.6" fill="#1890FF"/></svg>
+              <strong>ℹ️ Upgrading will reactivate your subscription immediately.</strong>
             </p>
           </div>
           

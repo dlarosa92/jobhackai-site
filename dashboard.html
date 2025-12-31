@@ -2697,7 +2697,7 @@
               hideLoadingState();
               e.target.value = ''; // Reset file input
               return;
-            }
+             }
 
             const uploadData = await uploadResponse.json();
 
@@ -3034,6 +3034,47 @@
           }
 
           const data = await response.json();
+
+          // Reactivation required flow
+          if (data?.code === 'reactivation_required') {
+            const capturedIdToken = idToken;
+            if (window.showUpgradeReactivationModal) {
+              window.showUpgradeReactivationModal({
+                currentPlan: data.data?.currentPlan || null,
+                newPlan: data.data?.newPlan || targetPlan,
+                currentPrice: '',
+                newPrice: '',
+                proratedAmount: data.data?.proratedAmount || null,
+                onConfirm: async () => {
+                  try {
+                    const confirmRes = await fetch('/api/stripe-checkout', {
+                      method: 'POST',
+                      headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${capturedIdToken}`
+                      },
+                      body: JSON.stringify({ plan: targetPlan, forceReactivate: true })
+                    });
+                    const confirmData = await confirmRes.json();
+                    if (confirmData && confirmData.ok && confirmData.url) {
+                      window.location.href = confirmData.url;
+                      return;
+                    }
+                    throw new Error(confirmData?.error || 'Failed to create checkout session');
+                  } catch (err) {
+                    console.error('Reactivation checkout error:', err);
+                    alert('Unable to start checkout. Please try again.');
+                  }
+                },
+                onCancel: () => {}
+              });
+              return;
+            } else {
+              alert(data?.message || 'Subscription reactivation required to upgrade. Please visit billing.');
+              window.location.href = `pricing-a.html?plan=${targetPlan}`;
+              return;
+            }
+          }
 
           if (data.ok && data.url) {
             // Redirect to Stripe Checkout

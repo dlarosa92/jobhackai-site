@@ -639,7 +639,42 @@ class JobHackAIStripe {
         }),
       });
 
-      const { ok, url, error } = await response.json();
+      const respData = await response.json();
+      // Handle reactivation required response from backend
+      if (respData?.code === 'reactivation_required') {
+        if (window.showUpgradeReactivationModal) {
+          window.showUpgradeReactivationModal({
+            currentPlan: respData.data?.currentPlan || null,
+            newPlan: respData.data?.newPlan || plan,
+            currentPrice: '',
+            newPrice: '',
+            proratedAmount: respData.data?.proratedAmount || null,
+            onConfirm: async () => {
+              try {
+                const confirmRes = await fetch('/api/stripe-checkout', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ plan: plan, firebaseUid: authUser.uid, email: authUser.email, forceReactivate: true })
+                });
+                const confirmData = await confirmRes.json();
+                if (confirmData && confirmData.ok && confirmData.url) {
+                  window.location.href = confirmData.url;
+                  return;
+                }
+                throw new Error(confirmData?.error || 'Failed to create checkout session');
+              } catch (err) {
+                console.error('Reactivation checkout error:', err);
+                alert('Unable to start checkout. Please try again.');
+              }
+            },
+            onCancel: () => {}
+          });
+          return;
+        } else {
+          throw new Error(respData?.error || 'Failed to create checkout session');
+        }
+      }
+      const { ok, url, error } = respData;
       if (!ok || !url) throw new Error(error || 'Failed to create checkout session');
       // Redirect to Stripe Checkout
       window.location.href = url;

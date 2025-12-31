@@ -1974,6 +1974,46 @@
               window.location.href = data.url;
               return;
             }
+
+            if (data?.code === 'reactivation_required') {
+              const capturedIdToken = idToken;
+              if (window.showUpgradeReactivationModal) {
+                window.showUpgradeReactivationModal({
+                  currentPlan: data.data?.currentPlan || null,
+                  newPlan: data.data?.newPlan || 'pro',
+                  currentPrice: '',
+                  newPrice: '',
+                  proratedAmount: data.data?.proratedAmount || null,
+                  onConfirm: async () => {
+                    try {
+                      if (window.showLoadingOverlay) {
+                        window._currentLoadingOverlay = window.showLoadingOverlay('Redirecting to checkout...');
+                      }
+                      const confirmRes = await fetch('/api/stripe-checkout', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', ...(capturedIdToken ? { Authorization: `Bearer ${capturedIdToken}` } : {}) },
+                        body: JSON.stringify({ plan: 'pro', forceReactivate: true })
+                      });
+                      const confirmData = await confirmRes.json();
+                      if (confirmData && confirmData.ok && confirmData.url) {
+                        window.location.href = confirmData.url;
+                        return;
+                      }
+                      throw new Error(confirmData?.error || 'Checkout failed');
+                    } catch (err) {
+                      console.error('Reactivation checkout error:', err);
+                      if (window._currentLoadingOverlay) { window._currentLoadingOverlay(); window._currentLoadingOverlay = null; }
+                      window.location.href = 'pricing-a.html';
+                    }
+                  },
+                  onCancel: () => {}
+                });
+              } else {
+                throw new Error(data?.error || 'Checkout failed');
+              }
+              return;
+            }
+
             throw new Error(data?.error || 'Checkout failed');
           } catch (e) {
             console.error('Upgrade checkout error:', e);
