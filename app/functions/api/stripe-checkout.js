@@ -290,9 +290,15 @@ export async function onRequest(context) {
                 }
               }
             } else {
-              // Same plan - user might be trying to resubscribe or reactivate
-              console.log('ℹ️ [CHECKOUT] User already has this plan, creating checkout session anyway');
-              // Fall through to create new checkout session
+              // Same plan - user already has an active subscription for this price.
+              // Don't create a duplicate checkout session; redirect user to dashboard instead.
+              console.log('ℹ️ [CHECKOUT] User already has this plan, returning early to avoid duplicate subscription');
+              return json({
+                ok: true,
+                url: (env.STRIPE_SUCCESS_URL || `${env.FRONTEND_URL || 'https://dev.jobhackai.io'}/dashboard.html`),
+                sessionId: null,
+                alreadySubscribed: true
+              }, 200, origin, env);
             }
           }
         } else {
