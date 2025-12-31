@@ -39,9 +39,16 @@ CREATE INDEX IF NOT EXISTS idx_plan_change_history_timing ON plan_change_history
 -- Backfill: After creating plan_change_history, mark users who previously had paid plans
 -- Note: This must run after plan_change_history exists (migration 011).
 UPDATE users SET has_ever_paid = 1
-WHERE id IN (
-  SELECT DISTINCT COALESCE(pch.user_id, 0) FROM plan_change_history pch
-  WHERE pch.to_plan IN ('essential', 'pro', 'premium')
-     OR pch.from_plan IN ('essential', 'pro', 'premium')
-);
+WHERE
+  -- Any current paid plan
+  plan IN ('essential', 'pro', 'premium')
+  -- Or users with an active/non-cancelled subscription recorded
+  OR stripe_subscription_id IS NOT NULL
+  OR subscription_status IN ('active', 'trialing', 'past_due')
+  -- Or historical entries in plan_change_history (covers cancellations and past paid users)
+  OR id IN (
+    SELECT DISTINCT COALESCE(pch.user_id, 0) FROM plan_change_history pch
+    WHERE pch.to_plan IN ('essential', 'pro', 'premium')
+       OR pch.from_plan IN ('essential', 'pro', 'premium')
+  );
 
