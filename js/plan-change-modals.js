@@ -94,8 +94,15 @@ export function showTrialEligibilityModal() {
 
   document.body.appendChild(modal);
 
+  let escapeHandler = null;
+
   const closeModal = () => {
     modal.style.animation = 'fadeOut 0.2s ease';
+    // Remove keydown handler if attached to avoid leaks
+    if (escapeHandler) {
+      document.removeEventListener('keydown', escapeHandler);
+      escapeHandler = null;
+    }
     setTimeout(() => modal.remove(), 200);
   };
 
@@ -109,10 +116,9 @@ export function showTrialEligibilityModal() {
     if (e.target === modal) closeModal();
   });
 
-  const escapeHandler = (e) => {
+  escapeHandler = (e) => {
     if (e.key === 'Escape') {
       closeModal();
-      document.removeEventListener('keydown', escapeHandler);
     }
   };
   document.addEventListener('keydown', escapeHandler);
@@ -245,8 +251,15 @@ export function showUpgradeReactivationModal({ currentPlan, newPlan, currentPric
 
   document.body.appendChild(modal);
 
+  let escapeHandler = null;
+
   const closeModal = () => {
     modal.style.animation = 'fadeOut 0.2s ease';
+    // Remove keydown handler if attached to avoid leaks
+    if (escapeHandler) {
+      document.removeEventListener('keydown', escapeHandler);
+      escapeHandler = null;
+    }
     setTimeout(() => {
       modal.remove();
       if (onCancel) onCancel();
@@ -263,10 +276,9 @@ export function showUpgradeReactivationModal({ currentPlan, newPlan, currentPric
     if (e.target === modal) closeModal();
   });
 
-  const escapeHandler = (e) => {
+  escapeHandler = (e) => {
     if (e.key === 'Escape') {
       closeModal();
-      document.removeEventListener('keydown', escapeHandler);
     }
   };
   document.addEventListener('keydown', escapeHandler);
@@ -413,8 +425,15 @@ export function showDowngradeTimingModal({ fromPlan, toPlan, fromPrice, toPrice,
 
   document.body.appendChild(modal);
 
+  let escapeHandler = null;
+
   const closeModal = () => {
     modal.style.animation = 'fadeOut 0.2s ease';
+    // Remove keydown handler if attached to avoid leaks
+    if (escapeHandler) {
+      document.removeEventListener('keydown', escapeHandler);
+      escapeHandler = null;
+    }
     setTimeout(() => {
       modal.remove();
       if (onCancel) onCancel();
@@ -432,10 +451,9 @@ export function showDowngradeTimingModal({ fromPlan, toPlan, fromPrice, toPrice,
     if (e.target === modal) closeModal();
   });
 
-  const escapeHandler = (e) => {
+  escapeHandler = (e) => {
     if (e.key === 'Escape') {
       closeModal();
-      document.removeEventListener('keydown', escapeHandler);
     }
   };
   document.addEventListener('keydown', escapeHandler);

@@ -198,7 +198,12 @@ export async function onRequest(context) {
               
               if (!subscriptionItemId) {
                 console.log('🔴 [CHECKOUT] No subscription item found to update');
-                // Fall through to create new checkout session
+                // Do not fall through to create a duplicate checkout session.
+                return json({
+                  ok: false,
+                  error: 'no_subscription_item',
+                  message: 'Unable to update subscription server-side. Please visit the billing portal to manage your subscription.'
+                }, 400, origin, env);
               } else {
                 try {
                   // Update subscription: replace the subscription item with new price
@@ -210,9 +215,11 @@ export async function onRequest(context) {
                     'metadata[firebaseUid]': uid
                   };
                   
-                  // If upgrading to trial, add trial period
+                  // If upgrading to trial, add trial_end (timestamp). `trial_period_days` is only valid on create.
                   if (plan === 'trial') {
-                    updateBody['trial_period_days'] = '3';
+                    const days = 3;
+                    const trialEnd = Math.floor(Date.now() / 1000) + (days * 24 * 60 * 60);
+                    updateBody['trial_end'] = String(trialEnd);
                     updateBody['metadata[original_plan]'] = plan;
                   }
                   
@@ -245,13 +252,25 @@ export async function onRequest(context) {
                     for (const otherSub of otherSubscriptions) {
                       try {
                         console.log('🔄 [CHECKOUT] Cancelling other subscription', otherSub.id);
-                        await stripe(env, `/subscriptions/${otherSub.id}`, {
+                        const cancelRes = await stripe(env, `/subscriptions/${otherSub.id}`, {
                           method: 'DELETE',
                           headers: stripeFormHeaders(env)
                         });
-                        console.log('✅ [CHECKOUT] Cancelled subscription', otherSub.id);
+                        if (cancelRes && cancelRes.ok) {
+                          console.log('✅ [CHECKOUT] Cancelled subscription', otherSub.id);
+                        } else {
+                          const cancelText = cancelRes ? await cancelRes.text() : 'no response';
+                          let cancelData;
+                          try { cancelData = JSON.parse(cancelText); } catch { cancelData = { error: { message: cancelText } }; }
+                          console.log('🟡 [CHECKOUT] Failed to cancel subscription (HTTP error)', {
+                            subscriptionId: otherSub.id,
+                            status: cancelRes?.status,
+                            error: cancelData
+                          });
+                          // Continue - non-critical but log the HTTP failure
+                        }
                       } catch (cancelError) {
-                        console.log('🟡 [CHECKOUT] Failed to cancel subscription (non-fatal)', {
+                        console.log('🟡 [CHECKOUT] Failed to cancel subscription (network error)', {
                           subscriptionId: otherSub.id,
                           error: cancelError?.message || cancelError
                         });
@@ -261,8 +280,8 @@ export async function onRequest(context) {
                     
                     // Return success - subscription will be updated via webhook
                     // Redirect to dashboard with paid=1 to trigger plan refresh
-                    return json({ 
-                      ok: true, 
+                    return json({
+                      ok: true,
                       url: `${env.STRIPE_SUCCESS_URL || `${env.FRONTEND_URL || 'https://dev.jobhackai.io'}/dashboard.html?paid=1`}`,
                       sessionId: null,
                       updated: true
@@ -279,14 +298,24 @@ export async function onRequest(context) {
                       status: updateRes.status,
                       error: errorData
                     });
-                    // Fall through to create new checkout session as fallback
+                    // Do NOT fall through and create a new checkout session when an active subscription exists.
+                    return json({
+                      ok: false,
+                      error: 'subscription_update_failed',
+                      details: errorData
+                    }, 502, origin, env);
                   }
                 } catch (updateError) {
                   console.log('🔴 [CHECKOUT] Subscription update exception', {
                     error: updateError?.message || updateError,
                     stack: updateError?.stack?.substring(0, 200)
                   });
-                  // Fall through to create new checkout session as fallback
+                  // Do NOT fall through - return an error so the frontend can handle safely.
+                  return json({
+                    ok: false,
+                    error: 'subscription_update_exception',
+                    message: updateError?.message || String(updateError)
+                  }, 500, origin, env);
                 }
               }
             } else {
@@ -374,17 +403,9 @@ export async function onRequest(context) {
         return json({ ok: false, error: 'Invalid response from Stripe' }, 502, origin, env);
       }
       
-      // Set has_ever_paid = 1 if creating a paid plan subscription (will be confirmed via webhook)
-      // Pre-set it here to prevent race conditions
-      const paidPlans = ['essential', 'pro', 'premium'];
-      if (paidPlans.includes(plan)) {
-        try {
-          await updateUserPlan(env, uid, { hasEverPaid: 1 });
-          console.log('✅ [CHECKOUT] Pre-set has_ever_paid = 1 for paid plan checkout');
-        } catch (paidError) {
-          console.log('🟡 [CHECKOUT] Failed to pre-set has_ever_paid (non-fatal)', paidError?.message || paidError);
-        }
-      }
+      // NOTE: Do NOT pre-set has_ever_paid here for checkout sessions. The webhook will
+      // confirm payment (checkout.session.completed) and set this flag. Pre-setting it
+      // can incorrectly block trial eligibility if the user abandons checkout.
       
       console.log('✅ [CHECKOUT] Session created', { id: s.id, url: s.url });
       return json({ ok: true, url: s.url, sessionId: s.id }, 200, origin, env);
