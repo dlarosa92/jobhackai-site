@@ -114,9 +114,8 @@ export async function onRequest(context) {
       let effectivePlan = 'free';
       if (originalPlan === 'trial') {
         effectivePlan = 'trial'; // Show as trial immediately
-        // Mark trial as used
-        await env.JOBHACKAI_KV?.put(`trialUsedByUid:${uid}`, '1');
-        console.log(`✅ TRIAL MARKED AS USED: ${uid}`);
+        // Trial usage will be tracked in D1 (source of truth). Do not write authoritative KV flags.
+        console.log(`✅ TRIAL STARTED (tracked in D1): ${uid}`);
       } else {
         effectivePlan = priceToPlan(env, priceId) || 'essential';
       }

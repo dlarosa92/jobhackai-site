@@ -316,6 +316,42 @@ export async function getUserPlanData(env, authId) {
 }
 
 /**
+ * Check if user is eligible for a trial (D1 is source of truth)
+ * A user is eligible if they are on the free plan, have never had a trial (trial_ends_at IS NULL),
+ * and have not previously paid (has_ever_paid = 0).
+ * @param {Object} env - Cloudflare environment with DB binding
+ * @param {string} authId - Firebase UID
+ * @returns {Promise<boolean>}
+ */
+export async function isTrialEligible(env, authId) {
+  const db = getDb(env);
+  if (!db) {
+    console.warn('[DB] D1 binding not available, denying trial for safety');
+    return false;
+  }
+
+  try {
+    const user = await db.prepare(
+      'SELECT plan, trial_ends_at, has_ever_paid FROM users WHERE auth_id = ?'
+    ).bind(authId).first();
+
+    if (!user) {
+      // New user = eligible
+      return true;
+    }
+
+    const isOnFreePlan = (user.plan || 'free') === 'free';
+    const hadTrial = user.trial_ends_at !== null;
+    const everPaid = Number(user.has_ever_paid || 0) === 1;
+
+    return isOnFreePlan && !hadTrial && !everPaid;
+  } catch (error) {
+    console.error('[DB] Error in isTrialEligible:', error);
+    return false; // Fail-closed
+  }
+}
+
+/**
  * Create a resume session
  * @param {Object} env - Cloudflare environment with DB binding
  * @param {number} userId - User ID from users table
