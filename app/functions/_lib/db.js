@@ -332,8 +332,9 @@ export async function isTrialEligible(env, authId) {
   }
 
   try {
+    // Read core columns first (present in migration 007)
     const user = await db.prepare(
-      'SELECT plan, trial_ends_at, has_ever_paid FROM users WHERE auth_id = ?'
+      'SELECT plan, trial_ends_at FROM users WHERE auth_id = ?'
     ).bind(authId).first();
 
     if (!user) {
@@ -343,9 +344,28 @@ export async function isTrialEligible(env, authId) {
 
     const isOnFreePlan = (user.plan || 'free') === 'free';
     const hadTrial = user.trial_ends_at !== null;
-    const everPaid = Number(user.has_ever_paid || 0) === 1;
 
-    return isOnFreePlan && !hadTrial && !everPaid;
+    // has_ever_paid may be added in a later migration (e.g., Migration 010).
+    // Attempt to read it; if the column doesn't exist, treat as not paid (0).
+    let everPaid = 0;
+    try {
+      const paidRow = await db.prepare(
+        'SELECT has_ever_paid FROM users WHERE auth_id = ?'
+      ).bind(authId).first();
+      if (paidRow && paidRow.has_ever_paid !== undefined && paidRow.has_ever_paid !== null) {
+        everPaid = Number(paidRow.has_ever_paid) === 1 ? 1 : 0;
+      }
+    } catch (colErr) {
+      // If column missing, treat as not paid. Re-throw unexpected errors.
+      const msg = String(colErr?.message || '').toLowerCase();
+      if (msg.includes('no such column') || msg.includes('unknown column') || msg.includes('no such')) {
+        everPaid = 0;
+      } else {
+        throw colErr;
+      }
+    }
+
+    return isOnFreePlan && !hadTrial && everPaid === 0;
   } catch (error) {
     console.error('[DB] Error in isTrialEligible:', error);
     // Propagate error to caller so it can return a 500 and avoid misleading 400s
