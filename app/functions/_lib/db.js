@@ -249,6 +249,31 @@ export async function updateUserPlan(env, authId, {
     await db.prepare(query).bind(...binds).run();
 
     console.log('[DB] Updated user plan:', { authId, plan });
+    
+    // If this update indicates a paid plan activation, mark has_ever_paid = 1.
+    // This is separate to avoid failing the whole update if the column/migration is missing.
+    try {
+      const paidPlans = ['essential', 'pro', 'premium'];
+      const becamePaid = (plan && paidPlans.includes(plan)) ||
+        (subscriptionStatus && subscriptionStatus === 'active' && plan && plan !== 'free');
+      if (becamePaid) {
+        try {
+          await db.prepare('UPDATE users SET has_ever_paid = 1 WHERE auth_id = ?').bind(authId).run();
+          console.log('[DB] Marked has_ever_paid = 1 for', authId);
+        } catch (colErr) {
+          const msg = String(colErr?.message || '').toLowerCase();
+          if (msg.includes('no such column') || msg.includes('unknown column') || msg.includes('no such')) {
+            // Column not present yet - ignore
+            console.warn('[DB] has_ever_paid column not present; skipping mark for', authId);
+          } else {
+            throw colErr;
+          }
+        }
+      }
+    } catch (e) {
+      // Non-fatal: log but do not fail the plan update
+      console.warn('[DB] Non-fatal error while updating has_ever_paid:', e);
+    }
     return true;
   } catch (error) {
     console.error('[DB] Error in updateUserPlan:', error);
