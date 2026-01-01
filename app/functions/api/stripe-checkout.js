@@ -1,4 +1,5 @@
 import { getBearer, verifyFirebaseIdToken } from '../_lib/firebase-auth.js';
+import { getUserPlanData } from '../_lib/db.js';
 export async function onRequest(context) {
   const { request, env } = context;
   const origin = request.headers.get('Origin') || '';
@@ -63,17 +64,33 @@ export async function onRequest(context) {
       return json({ ok: false, error: 'Missing plan' }, 422, origin, env);
     }
 
-    // Prevent multiple trials per user
+    // Prevent multiple trials per user (D1 authoritative, KV as fallback cache only)
     if (plan === 'trial') {
       try {
-        const trialUsed = await env.JOBHACKAI_KV?.get(`trialUsedByUid:${uid}`);
-        if (trialUsed) {
-          console.log('🔴 [CHECKOUT] Trial already used for user', uid);
-          return json({ ok: false, error: 'Trial already used. Please select a paid plan.' }, 400, origin, env);
+        // Use D1 (single source of truth) to determine trial eligibility
+        const userPlanData = await getUserPlanData(env, uid);
+        if (userPlanData && userPlanData.hasEverPaid === 1) {
+          console.log('🔴 [CHECKOUT] User has already had a paid subscription, trial not allowed', uid);
+          return json({
+            ok: false,
+            error: "Trial is for first-time subscribers only. You're already subscribed, so you can switch plans anytime.",
+            code: 'trial_not_available'
+          }, 400, origin, env);
         }
-      } catch (kvError) {
-        console.log('🟡 [CHECKOUT] KV read error for trial check (non-fatal)', kvError?.message || kvError);
-        // Continue - allow trial if KV is unavailable
+        // If D1 indicates no paid history, allow trial; webhook will set hasEverPaid on payment completion.
+      } catch (dbErr) {
+        // If D1 fails, fall back to KV check (non-authoritative, temporary)
+        console.log('🟡 [CHECKOUT] D1 read error for trial check (non-fatal)', dbErr?.message || dbErr);
+        try {
+          const trialUsed = await env.JOBHACKAI_KV?.get(`trialUsedByUid:${uid}`);
+          if (trialUsed) {
+            console.log('🔴 [CHECKOUT] Trial already used for user (KV fallback)', uid);
+            return json({ ok: false, error: 'Trial already used. Please select a paid plan.', code: 'trial_already_used' }, 400, origin, env);
+          }
+        } catch (kvError) {
+          console.log('🟡 [CHECKOUT] KV read error for trial check (non-fatal)', kvError?.message || kvError);
+          // Allow trial if both D1 and KV are unavailable (fail-open). Change to fail-closed if desired.
+        }
       }
     }
 
