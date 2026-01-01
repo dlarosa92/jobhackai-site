@@ -326,8 +326,9 @@ export async function getUserPlanData(env, authId) {
 export async function isTrialEligible(env, authId) {
   const db = getDb(env);
   if (!db) {
-    console.warn('[DB] D1 binding not available, denying trial for safety');
-    return false;
+    console.warn('[DB] D1 binding not available');
+    // Surface the error to callers so they can decide (checkout should return 500)
+    throw new Error('D1 binding not available');
   }
 
   try {
@@ -347,7 +348,8 @@ export async function isTrialEligible(env, authId) {
     return isOnFreePlan && !hadTrial && !everPaid;
   } catch (error) {
     console.error('[DB] Error in isTrialEligible:', error);
-    return false; // Fail-closed
+    // Propagate error to caller so it can return a 500 and avoid misleading 400s
+    throw error;
   }
 }
 
