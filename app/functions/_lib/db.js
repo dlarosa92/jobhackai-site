@@ -254,8 +254,11 @@ export async function updateUserPlan(env, authId, {
     // This is separate to avoid failing the whole update if the column/migration is missing.
     try {
       const paidPlans = ['essential', 'pro', 'premium'];
+      // A user is considered to have paid if their plan is one of the paid plans,
+      // or the subscription status is active and the plan is explicitly a paid plan.
+      // Exclude 'trial' from paid checks.
       const becamePaid = (plan && paidPlans.includes(plan)) ||
-        (subscriptionStatus && subscriptionStatus === 'active' && plan && plan !== 'free');
+        (subscriptionStatus && subscriptionStatus === 'active' && plan && !['free', 'trial'].includes(plan));
       if (becamePaid) {
         try {
           await db.prepare('UPDATE users SET has_ever_paid = 1 WHERE auth_id = ?').bind(authId).run();
