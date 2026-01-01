@@ -249,6 +249,34 @@ export async function updateUserPlan(env, authId, {
     await db.prepare(query).bind(...binds).run();
 
     console.log('[DB] Updated user plan:', { authId, plan });
+    
+    // If this update indicates a paid plan activation, mark has_ever_paid = 1.
+    // This is separate to avoid failing the whole update if the column/migration is missing.
+    try {
+      const paidPlans = ['essential', 'pro', 'premium'];
+      // A user is considered to have paid if their plan is one of the paid plans,
+      // or the subscription status is active and the plan is explicitly a paid plan.
+      // Exclude 'trial' from paid checks.
+      const becamePaid = (plan && paidPlans.includes(plan)) ||
+        (subscriptionStatus && subscriptionStatus === 'active' && plan && !['free', 'trial'].includes(plan));
+      if (becamePaid) {
+        try {
+          await db.prepare('UPDATE users SET has_ever_paid = 1 WHERE auth_id = ?').bind(authId).run();
+          console.log('[DB] Marked has_ever_paid = 1 for', authId);
+        } catch (colErr) {
+          const msg = String(colErr?.message || '').toLowerCase();
+          if (msg.includes('no such column') || msg.includes('unknown column') || msg.includes('no such')) {
+            // Column not present yet - ignore
+            console.warn('[DB] has_ever_paid column not present; skipping mark for', authId);
+          } else {
+            throw colErr;
+          }
+        }
+      }
+    } catch (e) {
+      // Non-fatal: log but do not fail the plan update
+      console.warn('[DB] Non-fatal error while updating has_ever_paid:', e);
+    }
     return true;
   } catch (error) {
     console.error('[DB] Error in updateUserPlan:', error);
@@ -312,6 +340,64 @@ export async function getUserPlanData(env, authId) {
   } catch (error) {
     console.error('[DB] Error in getUserPlanData:', error);
     return null;
+  }
+}
+
+/**
+ * Check if user is eligible for a trial (D1 is source of truth)
+ * A user is eligible if they are on the free plan, have never had a trial (trial_ends_at IS NULL),
+ * and have not previously paid (has_ever_paid = 0).
+ * @param {Object} env - Cloudflare environment with DB binding
+ * @param {string} authId - Firebase UID
+ * @returns {Promise<boolean>}
+ */
+export async function isTrialEligible(env, authId) {
+  const db = getDb(env);
+  if (!db) {
+    console.warn('[DB] D1 binding not available');
+    // Surface the error to callers so they can decide (checkout should return 500)
+    throw new Error('D1 binding not available');
+  }
+
+  try {
+    // Read core columns first (present in migration 007)
+    const user = await db.prepare(
+      'SELECT plan, trial_ends_at FROM users WHERE auth_id = ?'
+    ).bind(authId).first();
+
+    if (!user) {
+      // New user = eligible
+      return true;
+    }
+
+    const isOnFreePlan = (user.plan || 'free') === 'free';
+    const hadTrial = user.trial_ends_at !== null;
+
+    // has_ever_paid may be added in a later migration (e.g., Migration 010).
+    // Attempt to read it; if the column doesn't exist, treat as not paid (0).
+    let everPaid = 0;
+    try {
+      const paidRow = await db.prepare(
+        'SELECT has_ever_paid FROM users WHERE auth_id = ?'
+      ).bind(authId).first();
+      if (paidRow && paidRow.has_ever_paid !== undefined && paidRow.has_ever_paid !== null) {
+        everPaid = Number(paidRow.has_ever_paid) === 1 ? 1 : 0;
+      }
+    } catch (colErr) {
+      // If column missing, treat as not paid. Re-throw unexpected errors.
+      const msg = String(colErr?.message || '').toLowerCase();
+      if (msg.includes('no such column') || msg.includes('unknown column') || msg.includes('no such')) {
+        everPaid = 0;
+      } else {
+        throw colErr;
+      }
+    }
+
+    return isOnFreePlan && !hadTrial && everPaid === 0;
+  } catch (error) {
+    console.error('[DB] Error in isTrialEligible:', error);
+    // Propagate error to caller so it can return a 500 and avoid misleading 400s
+    throw error;
   }
 }
 

@@ -114,9 +114,8 @@ export async function onRequest(context) {
       let effectivePlan = 'free';
       if (originalPlan === 'trial') {
         effectivePlan = 'trial'; // Show as trial immediately
-        // Mark trial as used
-        await env.JOBHACKAI_KV?.put(`trialUsedByUid:${uid}`, '1');
-        console.log(`✅ TRIAL MARKED AS USED: ${uid}`);
+        // Trial usage will be tracked in D1 (source of truth). Do not write authoritative KV flags.
+        console.log(`✅ TRIAL STARTED (tracked in D1): ${uid}`);
       } else {
         effectivePlan = priceToPlan(env, priceId) || 'essential';
       }
@@ -137,13 +136,25 @@ export async function onRequest(context) {
           }
         }
         
+        // Determine trial end date. Prefer subscription.trial_end if available.
+        let trialEndsAtISO = subscription?.trial_end ? new Date(subscription.trial_end * 1000).toISOString() : null;
+
+        // If this was a trial and we couldn't fetch subscription details (or trial_end is missing),
+        // set a conservative fallback so the user is marked as having used a trial and cannot re-use it.
+        // The checkout session uses a 3-day trial (see checkout flow), so use 3 days as fallback.
+        if (effectivePlan === 'trial' && !trialEndsAtISO) {
+          const FALLBACK_TRIAL_DAYS = 3;
+          trialEndsAtISO = new Date(Date.now() + FALLBACK_TRIAL_DAYS * 24 * 60 * 60 * 1000).toISOString();
+          console.warn(`[WEBHOOK] subscription.trial_end missing for uid=${uid}; using fallback trialEndsAt=${trialEndsAtISO}`);
+        }
+
         console.log(`✍️ WRITING TO D1: users.plan = ${effectivePlan} for uid=${uid}`);
         await updatePlanInD1(uid, {
           plan: effectivePlan,
           stripeCustomerId: customerId,
           stripeSubscriptionId: subscriptionId,
           subscriptionStatus: subscription?.status || 'active',
-          trialEndsAt: subscription?.trial_end ? new Date(subscription.trial_end * 1000).toISOString() : null,
+          trialEndsAt: trialEndsAtISO,
           currentPeriodEnd: subscription?.current_period_end ? new Date(subscription.current_period_end * 1000).toISOString() : null
         }, event.created);
         console.log(`✅ D1 WRITE SUCCESS: ${uid} → ${effectivePlan}`);
