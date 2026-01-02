@@ -3,7 +3,7 @@
 
 import { getBearer, verifyFirebaseIdToken } from '../_lib/firebase-auth.js';
 import { scoreResume } from '../_lib/ats-scoring-engine.js';
-import { getOrCreateUserByAuthId, upsertResumeSessionWithScores, isD1Available, getDb } from '../_lib/db.js';
+import { getOrCreateUserByAuthId, upsertResumeSessionWithScores, isD1Available, getDb, claimFreeATSUsage } from '../_lib/db.js';
 import { normalizeRoleToFamily } from '../_lib/role-normalizer.js';
 
 function corsHeaders(origin, env) {
@@ -178,7 +178,7 @@ export async function onRequest(context) {
       }
     }
 
-    // Usage limits (Free plan - 1 lifetime): D1 is final source of truth, KV is only cache
+    // ATOMIC Usage limits (Free plan - 1 lifetime): D1 is final source of truth, KV is only cache
     if (plan === 'free') {
       if (!isD1Available(env))
         return json({ success: false, error: 'Cannot verify free ATS usage', message: 'Please try again or contact support.' }, 500, origin, env);
@@ -186,11 +186,8 @@ export async function onRequest(context) {
       const d1User = await getOrCreateUserByAuthId(env, uid, null);
       if (!db || !d1User)
         return json({ success: false, error: 'Cannot verify free ATS usage', message: 'Please try again or contact support.' }, 500, origin, env);
-      const result = await db.prepare(
-        `SELECT COUNT(*) as count FROM usage_events WHERE user_id = ? AND feature = 'ats_score'`
-      ).bind(d1User.id).first();
-      const d1FreeCount = result?.count || 0;
-      if (d1FreeCount >= 1) {
+      const claimed = await claimFreeATSUsage(env, d1User.id);
+      if (!claimed) {
         return json({
           success: false,
           error: 'Usage limit reached',
@@ -198,10 +195,9 @@ export async function onRequest(context) {
           upgradeRequired: true
         }, 403, origin, env);
       }
-      // KV is only a cache here
     }
 
-    // If cached, return cached result
+    // If cached, return cached result (after atomic gating for free users)
     if (cachedResult) {
       console.log(`[ATS-SCORE] Cache hit for ${uid}`, { resumeId, plan });
       return json({
@@ -416,20 +412,6 @@ export async function onRequest(context) {
       }
     }
 
-    // Log to D1 usage_events (free plan enforcement) after successful run
-    if (plan === 'free') {
-      try {
-        const db = getDb(env);
-        const d1User = await getOrCreateUserByAuthId(env, uid, null);
-        if (db && d1User) {
-          // Import logUsageEvent at top of file
-          const { logUsageEvent } = await import('../_lib/db.js');
-          await logUsageEvent(env, d1User.id, 'ats_score', null, { resumeId });
-        }
-      } catch (err) {
-        console.warn('[ATS-SCORE] D1 usage not logged (non-fatal):', err);
-      }
-    }
     // Persist ATS score to KV + Firestore hybrid (best effort)
     if (kv && resumeId) {
       try {
