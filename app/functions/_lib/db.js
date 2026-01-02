@@ -422,6 +422,28 @@ export async function logUsageEvent(env, userId, feature, tokensUsed = null, met
     throw error;
   }
 }
+
+/**
+ * Atomic attempt to reserve a free ATS usage (returns true if succeeded, false if already used)
+ * Uses a unique partial index on (user_id, feature) WHERE feature='ats_score' to enforce one-time use.
+ */
+export async function claimFreeATSUsage(env, userId) {
+  const db = getDb(env);
+  if (!db) throw new Error('D1 unavailable');
+  try {
+    await db.prepare(`
+      INSERT INTO usage_events (user_id, feature, tokens_used, meta_json, created_at)
+      VALUES (?, 'ats_score', null, NULL, datetime('now'))
+    `).bind(userId).run();
+    return true;
+  } catch (e) {
+    const msg = String(e?.message || '').toLowerCase();
+    if (msg.includes('unique') || msg.includes('constraint') || msg.includes('duplicate')) {
+      return false;
+    }
+    throw e;
+  }
+}
 /**
  * Get resume feedback history for a user
  * @param {Object} env - Cloudflare environment with DB binding
