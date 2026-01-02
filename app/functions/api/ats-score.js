@@ -180,24 +180,16 @@ export async function onRequest(context) {
 
     // Usage limits (Free plan - 1 lifetime): D1 is final source of truth, KV is only cache
     if (plan === 'free') {
-      let d1FreeCount = 0;
-      try {
-        // Use usage_events or feature_daily_usage for free plan gating
-        const db = getDb(env);
-        if (db) {
-          const d1User = await getOrCreateUserByAuthId(env, uid, null);
-          if (d1User) {
-            const result = await db.prepare(
-              `SELECT COUNT(*) as count FROM usage_events WHERE user_id = ? AND feature = 'ats_score'`
-            ).bind(d1User.id).first();
-            d1FreeCount = result?.count || 0;
-          } else {
-            d1FreeCount = 0;
-          }
-        }
-      } catch (e) {
+      if (!isD1Available(env))
         return json({ success: false, error: 'Cannot verify free ATS usage', message: 'Please try again or contact support.' }, 500, origin, env);
-      }
+      const db = getDb(env);
+      const d1User = await getOrCreateUserByAuthId(env, uid, null);
+      if (!db || !d1User)
+        return json({ success: false, error: 'Cannot verify free ATS usage', message: 'Please try again or contact support.' }, 500, origin, env);
+      const result = await db.prepare(
+        `SELECT COUNT(*) as count FROM usage_events WHERE user_id = ? AND feature = 'ats_score'`
+      ).bind(d1User.id).first();
+      const d1FreeCount = result?.count || 0;
       if (d1FreeCount >= 1) {
         return json({
           success: false,
@@ -424,6 +416,20 @@ export async function onRequest(context) {
       }
     }
 
+    // Log to D1 usage_events (free plan enforcement) after successful run
+    if (plan === 'free') {
+      try {
+        const db = getDb(env);
+        const d1User = await getOrCreateUserByAuthId(env, uid, null);
+        if (db && d1User) {
+          // Import logUsageEvent at top of file
+          const { logUsageEvent } = await import('../_lib/db.js');
+          await logUsageEvent(env, d1User.id, 'ats_score', null, { resumeId });
+        }
+      } catch (err) {
+        console.warn('[ATS-SCORE] D1 usage not logged (non-fatal):', err);
+      }
+    }
     // Persist ATS score to KV + Firestore hybrid (best effort)
     if (kv && resumeId) {
       try {

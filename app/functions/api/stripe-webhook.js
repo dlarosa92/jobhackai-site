@@ -79,7 +79,17 @@ export async function onRequest(context) {
         await env.JOBHACKAI_KV.delete(`trialUsedByUid:${uid}`);
         await env.JOBHACKAI_KV.delete(`trialEndByUid:${uid}`);
         await env.JOBHACKAI_KV.delete(`feedbackTotalTrial:${uid}`);
-        await env.JOBHACKAI_KV.delete(`feedbackUsage:${uid}`);
+        // Delete all monthly feedbackUsage keys for this UID
+        const monthsToDelete = [];
+        const today = new Date();
+        for (let i = 0; i < 14; i++) { // Cover at least 12 months back + 2 future months safety
+          const d = new Date(today.getFullYear(), today.getMonth() - i, 1);
+          const monthKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+          monthsToDelete.push(`feedbackUsage:${uid}:${monthKey}`);
+        }
+        for (const key of monthsToDelete) {
+          await env.JOBHACKAI_KV.delete(key);
+        }
         await env.JOBHACKAI_KV.delete(`atsUsage:${uid}:lifetime`);
       }
     } catch (error) {
