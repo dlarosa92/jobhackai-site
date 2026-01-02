@@ -331,7 +331,16 @@ export async function onRequest(context) {
       }
 
       // Trial quota check: strictly in D1
-      if (d1User && isD1Available(env)) {
+      if (isD1Available(env)) {
+        if (!d1User) {
+          return errorResponse(
+            'Cannot verify usage limits for trial users. Please try again or contact support.',
+            500,
+            origin,
+            env,
+            requestId
+          );
+        }
         const db = env.DB;
         let trialUsed = 0;
         if (db) {
@@ -353,13 +362,28 @@ export async function onRequest(context) {
 
     // Usage limits (Essential: 3/month)
     // D1 is the authoritative usage source for Essential/monthly quota
-    if (effectivePlan === 'essential' && d1User && isD1Available(env)) {
+    if (effectivePlan === 'essential' && isD1Available(env)) {
+      if (!d1User) {
+        return errorResponse(
+          'Cannot verify usage limits for Essential users. Please try again or contact support.',
+          500,
+          origin,
+          env,
+          requestId
+        );
+      }
       const db = env.DB;
       const now = new Date();
       const year = now.getUTCFullYear();
       const month = String(now.getUTCMonth() + 1).padStart(2, '0');
       const monthStart = `${year}-${month}-01`;
-      const monthEnd = `${year}-${month}-31`;
+      // Calculate the actual last day of the month (handles leap years and month lengths)
+      function getLastDayOfMonth(year, month) {
+        // JS months are 1-based for our input, but 0-based for Date
+        return new Date(Date.UTC(year, month, 0)).getUTCDate();
+      }
+      const lastDay = getLastDayOfMonth(year, Number(month));
+      const monthEnd = `${year}-${month}-${String(lastDay).padStart(2, '0')}`;
       let monthlyUsed = 0;
       if (db) {
         const res = await db.prepare(`SELECT COUNT(*) as count FROM usage_events WHERE user_id = ? AND feature = 'resume_feedback' AND date(created_at) >= date(?) AND date(created_at) <= date(?)`).bind(d1User.id, monthStart, monthEnd).first();

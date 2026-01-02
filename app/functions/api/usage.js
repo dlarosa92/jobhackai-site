@@ -132,8 +132,13 @@ export async function onRequest(context) {
           const now = new Date();
           const year = now.getUTCFullYear();
           const month = String(now.getUTCMonth() + 1).padStart(2, '0');
-          const monthStart = `${year}-${month}-01`;
-          const monthEnd = `${year}-${month}-31`;
+      const monthStart = `${year}-${month}-01`;
+      // Calculate actual last day of month (end-of-month fix)
+      function getLastDayOfMonth(year, month) {
+        return new Date(Date.UTC(year, month, 0)).getUTCDate();
+      }
+      const lastDayOfMonth = getLastDayOfMonth(year, Number(month));
+      const monthEnd = `${year}-${month}-${String(lastDayOfMonth).padStart(2, '0')}`;
           const res = await env.DB.prepare(
             `SELECT COUNT(*) as count FROM usage_events WHERE user_id = ? AND feature = 'resume_feedback' AND date(created_at) >= date(?) AND date(created_at) <= date(?)`
           ).bind(d1User.id, monthStart, monthEnd).first();
@@ -175,8 +180,13 @@ export async function onRequest(context) {
           const now = new Date();
           const year = now.getUTCFullYear();
           const month = String(now.getUTCMonth() + 1).padStart(2, '0');
-          const monthStart = `${year}-${month}-01`;
-          const monthEnd = `${year}-${month}-31`;
+      const monthStart = `${year}-${month}-01`;
+      // Calculate actual last day of month (end-of-month fix)
+      function getLastDayOfMonth(year, month) {
+        return new Date(Date.UTC(year, month, 0)).getUTCDate();
+      }
+      const lastDayOfMonth = getLastDayOfMonth(year, Number(month));
+      const monthEnd = `${year}-${month}-${String(lastDayOfMonth).padStart(2, '0')}`;
           
           const result = await env.DB.prepare(
             `SELECT COUNT(*) as count FROM usage_events
@@ -255,8 +265,13 @@ export async function onRequest(context) {
           const now = new Date();
           const year = now.getUTCFullYear();
           const month = String(now.getUTCMonth() + 1).padStart(2, '0');
-          const monthStart = `${year}-${month}-01`;
-          const monthEnd = `${year}-${month}-31`;
+      const monthStart = `${year}-${month}-01`;
+      // Calculate actual last day of month (end-of-month fix)
+      function getLastDayOfMonth(year, month) {
+        return new Date(Date.UTC(year, month, 0)).getUTCDate();
+      }
+      const lastDayOfMonth = getLastDayOfMonth(year, Number(month));
+      const monthEnd = `${year}-${month}-${String(lastDayOfMonth).padStart(2, '0')}`;
           
           const result = await env.DB.prepare(
             `SELECT COALESCE(SUM(count), 0) as total FROM feature_daily_usage
