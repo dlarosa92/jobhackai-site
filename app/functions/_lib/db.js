@@ -1,6 +1,6 @@
 // Return a D1 database handle, or null if not available
 export function getDb(env) {
-  return env.DB ?? env.jobhackai_DB ?? null;
+  return env.DB ?? env.JOBHACKAI_DB ?? env.jobhackai_DB ?? null;
 }
 
 // Atomic attempt to reserve a free ATS usage (returns true if succeeded, false if already used)

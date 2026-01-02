@@ -178,8 +178,20 @@ export async function onRequest(context) {
       }
     }
 
+    // If cached, return cached result (allow re-reads for free users)
+    if (cachedResult) {
+      console.log(`[ATS-SCORE] Cache hit for ${uid}`, { resumeId, plan });
+      return json({
+        success: true,
+        ...cachedResult,
+        cached: true
+      }, 200, origin, env);
+    }
+
     // ATOMIC Usage limits (Free plan - 1 lifetime): D1 is final source of truth, KV is only cache
     if (plan === 'free') {
+      // Not a cache hit: Only now enforce atomic permission
+
       if (!isD1Available(env))
         return json({ success: false, error: 'Cannot verify free ATS usage', message: 'Please try again or contact support.' }, 500, origin, env);
       const db = getDb(env);
@@ -197,8 +209,6 @@ export async function onRequest(context) {
       }
     }
 
-    // If cached, return cached result (after atomic gating for free users)
-    if (cachedResult) {
       console.log(`[ATS-SCORE] Cache hit for ${uid}`, { resumeId, plan });
       return json({
         success: true,

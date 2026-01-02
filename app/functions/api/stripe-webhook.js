@@ -75,22 +75,26 @@ export async function onRequest(context) {
       
       // Invalidate KV keys for all plan/usage as soon as D1 is updated (cache only)
       if (env.JOBHACKAI_KV) {
-        await env.JOBHACKAI_KV.delete(kvPlanKey(uid));
-        await env.JOBHACKAI_KV.delete(`trialUsedByUid:${uid}`);
-        await env.JOBHACKAI_KV.delete(`trialEndByUid:${uid}`);
-        await env.JOBHACKAI_KV.delete(`feedbackTotalTrial:${uid}`);
-        // Delete all monthly feedbackUsage keys for this UID
-        const monthsToDelete = [];
-        const today = new Date();
-        for (let i = 0; i < 14; i++) { // Cover at least 12 months back + 2 future months safety
-          const d = new Date(today.getFullYear(), today.getMonth() - i, 1);
-          const monthKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-          monthsToDelete.push(`feedbackUsage:${uid}:${monthKey}`);
+        try {
+          await env.JOBHACKAI_KV.delete(kvPlanKey(uid));
+          await env.JOBHACKAI_KV.delete(`trialUsedByUid:${uid}`);
+          await env.JOBHACKAI_KV.delete(`trialEndByUid:${uid}`);
+          await env.JOBHACKAI_KV.delete(`feedbackTotalTrial:${uid}`);
+          // Delete all monthly feedbackUsage keys for this UID
+          const monthsToDelete = [];
+          const today = new Date();
+          for (let i = 0; i < 14; i++) { // Cover at least 12 months back + 2 future months safety
+            const d = new Date(today.getFullYear(), today.getMonth() - i, 1);
+            const monthKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+            monthsToDelete.push(`feedbackUsage:${uid}:${monthKey}`);
+          }
+          for (const key of monthsToDelete) {
+            await env.JOBHACKAI_KV.delete(key);
+          }
+          await env.JOBHACKAI_KV.delete(`atsUsage:${uid}:lifetime`);
+        } catch (kvErr) {
+          console.warn('[WEBHOOK] KV cache invalidation error:', kvErr);
         }
-        for (const key of monthsToDelete) {
-          await env.JOBHACKAI_KV.delete(key);
-        }
-        await env.JOBHACKAI_KV.delete(`atsUsage:${uid}:lifetime`);
       }
     } catch (error) {
       console.error('[WEBHOOK] Error updating plan in D1:', error);
