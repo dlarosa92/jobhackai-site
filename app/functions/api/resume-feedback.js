@@ -347,13 +347,20 @@ export async function onRequest(context) {
     }
 
     // Usage limits (Essential: 3/month)
-    if (effectivePlan === 'essential' && env.JOBHACKAI_KV) {
+    // D1 is the authoritative usage source for Essential/monthly quota
+    if (effectivePlan === 'essential' && d1User && isD1Available(env)) {
+      const db = env.DB;
       const now = new Date();
-      const monthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-      const usageKey = `feedbackUsage:${uid}:${monthKey}`;
-      const usage = await env.JOBHACKAI_KV.get(usageKey);
-      
-      if (usage && parseInt(usage, 10) >= 3) {
+      const year = now.getUTCFullYear();
+      const month = String(now.getUTCMonth() + 1).padStart(2, '0');
+      const monthStart = `${year}-${month}-01`;
+      const monthEnd = `${year}-${month}-31`;
+      let monthlyUsed = 0;
+      if (db) {
+        const res = await db.prepare(`SELECT COUNT(*) as count FROM usage_events WHERE user_id = ? AND feature = 'resume_feedback' AND date(created_at) >= date(?) AND date(created_at) <= date(?)`).bind(d1User.id, monthStart, monthEnd).first();
+        monthlyUsed = res?.count || 0;
+      }
+      if (monthlyUsed >= 3) {
         return errorResponse(
           'You have used all 3 feedbacks this month. Upgrade to Pro for unlimited feedback.',
           403,

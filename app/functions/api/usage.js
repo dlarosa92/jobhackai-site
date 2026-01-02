@@ -104,22 +104,47 @@ export async function onRequest(context) {
       }
     };
 
-    // Check ATS usage (Free plan: lifetime limit)
-    if (plan === 'free' && env.JOBHACKAI_KV) {
-      const atsUsageKey = `atsUsage:${uid}:lifetime`;
-      const atsUsed = await env.JOBHACKAI_KV.get(atsUsageKey);
-      usage.atsScans.used = atsUsed ? parseInt(atsUsed, 10) : 0;
-      usage.atsScans.remaining = Math.max(0, 1 - usage.atsScans.used);
+    // Check ATS usage (Free plan: lifetime limit) -- D1 is authority
+    if (plan === 'free' && isD1Available(env)) {
+      try {
+        const d1User = await getOrCreateUserByAuthId(env, uid, userEmail);
+        let atsUsed = 0;
+        if (d1User && d1User.id && env.DB) {
+          const res = await env.DB.prepare(
+            `SELECT COUNT(*) as count FROM usage_events WHERE user_id = ? AND feature = 'ats_score'`
+          ).bind(d1User.id).first();
+          atsUsed = res?.count || 0;
+        }
+        usage.atsScans.used = atsUsed;
+        usage.atsScans.remaining = Math.max(0, 1 - atsUsed);
+      } catch (e) {
+        usage.atsScans.used = 0;
+        usage.atsScans.remaining = 1;
+      }
     }
 
-    // Check feedback usage (Essential: monthly, Trial: lifetime during trial)
-    if (plan === 'essential' && env.JOBHACKAI_KV) {
-      const now = new Date();
-      const monthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-      const feedbackUsageKey = `feedbackUsage:${uid}:${monthKey}`;
-      const feedbackUsed = await env.JOBHACKAI_KV.get(feedbackUsageKey);
-      usage.resumeFeedback.used = feedbackUsed ? parseInt(feedbackUsed, 10) : 0;
-      usage.resumeFeedback.remaining = Math.max(0, 3 - usage.resumeFeedback.used);
+    // Check feedback usage (Essential: monthly) -- D1 is authority
+    if (plan === 'essential' && isD1Available(env)) {
+      try {
+        const d1User = await getOrCreateUserByAuthId(env, uid, userEmail);
+        let feedbackUsed = 0;
+        if (d1User && d1User.id && env.DB) {
+          const now = new Date();
+          const year = now.getUTCFullYear();
+          const month = String(now.getUTCMonth() + 1).padStart(2, '0');
+          const monthStart = `${year}-${month}-01`;
+          const monthEnd = `${year}-${month}-31`;
+          const res = await env.DB.prepare(
+            `SELECT COUNT(*) as count FROM usage_events WHERE user_id = ? AND feature = 'resume_feedback' AND date(created_at) >= date(?) AND date(created_at) <= date(?)`
+          ).bind(d1User.id, monthStart, monthEnd).first();
+          feedbackUsed = res?.count || 0;
+        }
+        usage.resumeFeedback.used = feedbackUsed;
+        usage.resumeFeedback.remaining = Math.max(0, 3 - feedbackUsed);
+      } catch (e) {
+        usage.resumeFeedback.used = 0;
+        usage.resumeFeedback.remaining = 3;
+      }
     } else if (plan === 'trial' && env.JOBHACKAI_KV) {
       // Trial: total limit (3 feedbacks for entire trial period)
       // Fixed: Changed key from feedbackTrialTotal to feedbackTotalTrial to match write key in resume-feedback.js

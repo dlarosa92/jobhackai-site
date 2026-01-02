@@ -209,14 +209,6 @@ export async function onRequest(context) {
       }
     }
 
-      console.log(`[ATS-SCORE] Cache hit for ${uid}`, { resumeId, plan });
-      return json({
-        success: true,
-        ...cachedResult,
-        cached: true
-      }, 200, origin, env);
-    }
-
     // Get isMultiColumn from resumeData if available, otherwise default to false
     const isMultiColumn = resumeData?.isMultiColumn || false;
 
