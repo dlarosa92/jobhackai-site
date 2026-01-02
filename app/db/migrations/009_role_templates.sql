@@ -62,3 +62,4 @@ CREATE TABLE IF NOT EXISTS role_template_audit (
 CREATE INDEX IF NOT EXISTS idx_role_template_audit_family ON role_template_audit(role_family);
 CREATE INDEX IF NOT EXISTS idx_role_template_audit_changed_at ON role_template_audit(changed_at DESC);
 
+

@@ -73,10 +73,27 @@ export async function onRequest(context) {
         throw new Error(`Failed to update plan in D1 for uid=${uid}`);
       }
       
-      // TEMPORARY: Dual-write to KV during migration period for safety
-      // TODO: Remove KV writes after migration is verified
-      if (planData.plan !== undefined) {
-        await env.JOBHACKAI_KV?.put(kvPlanKey(uid), planData.plan);
+      // Invalidate KV keys for all plan/usage as soon as D1 is updated (cache only)
+      if (env.JOBHACKAI_KV) {
+        try {
+          await env.JOBHACKAI_KV.delete(kvPlanKey(uid));
+          await env.JOBHACKAI_KV.delete(`trialUsedByUid:${uid}`);
+          await env.JOBHACKAI_KV.delete(`trialEndByUid:${uid}`);
+          // Delete all monthly feedbackUsage keys for this UID
+          const monthsToDelete = [];
+          const today = new Date();
+          for (let i = 0; i < 14; i++) { // Cover at least 12 months back + 2 future months safety
+            const d = new Date(today.getFullYear(), today.getMonth() - i, 1);
+            const monthKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+            monthsToDelete.push(`feedbackUsage:${uid}:${monthKey}`);
+          }
+          for (const key of monthsToDelete) {
+            await env.JOBHACKAI_KV.delete(key);
+          }
+          await env.JOBHACKAI_KV.delete(`atsUsage:${uid}:lifetime`);
+        } catch (kvErr) {
+          console.warn('[WEBHOOK] KV cache invalidation error:', kvErr);
+        }
       }
     } catch (error) {
       console.error('[WEBHOOK] Error updating plan in D1:', error);

@@ -47,3 +47,4 @@ wrangler d1 execute jobhackai-prod-db --file="$MIGRATION_FILE" --remote || {
 echo ""
 echo "Migration script complete. Check warnings above if any migrations failed."
 
+

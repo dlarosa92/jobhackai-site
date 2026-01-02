@@ -236,17 +236,9 @@ export async function onRequest(context) {
       }
     }
 
-    // Check plan access (Free plan locked)
+    // Plan gating: always enforce from D1 (cache is just a performance hint)
     if (effectivePlan === 'free') {
-      console.log('[RESUME-FEEDBACK] Access denied - plan is free', {
-        requestId,
-        uid,
-        plan,
-        effectivePlan,
-        isDevEnvironment,
-        hasKV: !!env.JOBHACKAI_KV,
-        origin
-      });
+      // Old behavior: block all free resume feedback, uncomment if you want to revert
       return errorResponse(
         'Resume Feedback is available in Trial, Essential, Pro, or Premium plans.',
         403,
@@ -255,6 +247,29 @@ export async function onRequest(context) {
         requestId,
         { upgradeRequired: true }
       );
+      
+      /*
+      // Or if you want a limited free tier (one run), use:
+      if (!isD1Available(env))
+        return errorResponse('Cannot verify free usage; please try again or contact support.', 500, origin, env, requestId);
+      const db = getDb(env);
+      const d1User = await getOrCreateUserByAuthId(env, uid, userEmail);
+      if (!db || !d1User)
+        return errorResponse('Cannot verify free usage; please try again or contact support.', 500, origin, env, requestId);
+      const res = await db.prepare(`SELECT COUNT(*) as count FROM usage_events WHERE user_id = ? AND feature = 'resume_feedback'`).bind(d1User.id).first();
+      const d1FreeCount = res?.count || 0;
+      if (d1FreeCount >= 1) {
+        return errorResponse(
+          'You have used your one free feedback. Please upgrade!',
+          403,
+          origin,
+          env,
+          requestId,
+          { upgradeRequired: true }
+        );
+      }
+      // KV can be used for quick check/caching (never as authority)
+      */
     }
 
     // Parse request body
@@ -315,30 +330,66 @@ export async function onRequest(context) {
         }
       }
 
-      // Total trial limit check: exactly 3 total feedback attempts across entire trial
-      const totalTrialKey = `feedbackTotalTrial:${uid}`;
-      const totalTrialCount = await env.JOBHACKAI_KV.get(totalTrialKey);
-      
-      if (totalTrialCount && parseInt(totalTrialCount, 10) >= 3) {
-        return errorResponse(
-          'You have used all 3 feedback attempts in your trial. Upgrade to Pro for unlimited feedback.',
-          403,
-          origin,
-          env,
-          requestId,
-          { upgradeRequired: true }
-        );
+      // Trial quota check: strictly in D1
+      if (isD1Available(env)) {
+        if (!d1User) {
+          return errorResponse(
+            'Cannot verify usage limits for trial users. Please try again or contact support.',
+            500,
+            origin,
+            env,
+            requestId
+          );
+        }
+        const db = env.DB;
+        let trialUsed = 0;
+        if (db) {
+          const res = await db.prepare(`SELECT COUNT(*) as count FROM usage_events WHERE user_id = ? AND feature = 'resume_feedback'`).bind(d1User.id).first();
+          trialUsed = res?.count || 0;
+        }
+        if (trialUsed >= 3) {
+          return errorResponse(
+            'You have used all 3 feedback attempts in your trial. Upgrade to Pro for unlimited feedback.',
+            403,
+            origin,
+            env,
+            requestId,
+            { upgradeRequired: true }
+          );
+        }
       }
     }
 
     // Usage limits (Essential: 3/month)
-    if (effectivePlan === 'essential' && env.JOBHACKAI_KV) {
+    // D1 is the authoritative usage source for Essential/monthly quota
+    if (effectivePlan === 'essential' && isD1Available(env)) {
+      if (!d1User) {
+        return errorResponse(
+          'Cannot verify usage limits for Essential users. Please try again or contact support.',
+          500,
+          origin,
+          env,
+          requestId
+        );
+      }
+      const db = env.DB;
       const now = new Date();
-      const monthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-      const usageKey = `feedbackUsage:${uid}:${monthKey}`;
-      const usage = await env.JOBHACKAI_KV.get(usageKey);
-      
-      if (usage && parseInt(usage, 10) >= 3) {
+      const year = now.getUTCFullYear();
+      const month = String(now.getUTCMonth() + 1).padStart(2, '0');
+      const monthStart = `${year}-${month}-01`;
+      // Calculate the actual last day of the month (handles leap years and month lengths)
+      function getLastDayOfMonth(year, month) {
+        // JS months are 1-based for our input, but 0-based for Date
+        return new Date(Date.UTC(year, month, 0)).getUTCDate();
+      }
+      const lastDay = getLastDayOfMonth(year, Number(month));
+      const monthEnd = `${year}-${month}-${String(lastDay).padStart(2, '0')}`;
+      let monthlyUsed = 0;
+      if (db) {
+        const res = await db.prepare(`SELECT COUNT(*) as count FROM usage_events WHERE user_id = ? AND feature = 'resume_feedback' AND date(created_at) >= date(?) AND date(created_at) <= date(?)`).bind(d1User.id, monthStart, monthEnd).first();
+        monthlyUsed = res?.count || 0;
+      }
+      if (monthlyUsed >= 3) {
         return errorResponse(
           'You have used all 3 feedbacks this month. Upgrade to Pro for unlimited feedback.',
           403,

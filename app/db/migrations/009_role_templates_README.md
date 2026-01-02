@@ -50,3 +50,4 @@ CLOUDFLARE_API_TOKEN=your-token ./app/scripts/apply-role-template-migrations.sh
    wrangler d1 execute jobhackai-dev-db --command="SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'role%';" --remote
    ```
 
+
