@@ -73,10 +73,14 @@ export async function onRequest(context) {
         throw new Error(`Failed to update plan in D1 for uid=${uid}`);
       }
       
-      // TEMPORARY: Dual-write to KV during migration period for safety
-      // TODO: Remove KV writes after migration is verified
-      if (planData.plan !== undefined) {
-        await env.JOBHACKAI_KV?.put(kvPlanKey(uid), planData.plan);
+      // Invalidate KV keys for all plan/usage as soon as D1 is updated (cache only)
+      if (env.JOBHACKAI_KV) {
+        await env.JOBHACKAI_KV.delete(kvPlanKey(uid));
+        await env.JOBHACKAI_KV.delete(`trialUsedByUid:${uid}`);
+        await env.JOBHACKAI_KV.delete(`trialEndByUid:${uid}`);
+        await env.JOBHACKAI_KV.delete(`feedbackTotalTrial:${uid}`);
+        await env.JOBHACKAI_KV.delete(`feedbackUsage:${uid}`);
+        await env.JOBHACKAI_KV.delete(`atsUsage:${uid}:lifetime`);
       }
     } catch (error) {
       console.error('[WEBHOOK] Error updating plan in D1:', error);

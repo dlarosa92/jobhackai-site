@@ -178,24 +178,35 @@ export async function onRequest(context) {
       }
     }
 
-    // Usage limits (Free plan - 1 lifetime) - best effort, skip if KV unavailable
-    if (plan === 'free' && kv) {
+    // Usage limits (Free plan - 1 lifetime): D1 is final source of truth, KV is only cache
+    if (plan === 'free') {
+      let d1FreeCount = 0;
       try {
-        const usageKey = `atsUsage:${uid}:lifetime`;
-        const usage = await kv.get(usageKey);
-        
-        if (usage && parseInt(usage, 10) >= 1) {
-          return json({
-            success: false,
-            error: 'Usage limit reached',
-            message: 'You have used your free ATS score. Upgrade to Trial or Essential for unlimited scoring.',
-            upgradeRequired: true
-          }, 403, origin, env);
+        // Use usage_events or feature_daily_usage for free plan gating
+        const db = getDb(env);
+        if (db) {
+          const d1User = await getOrCreateUserByAuthId(env, uid, null);
+          if (d1User) {
+            const result = await db.prepare(
+              `SELECT COUNT(*) as count FROM usage_events WHERE user_id = ? AND feature = 'ats_score'`
+            ).bind(d1User.id).first();
+            d1FreeCount = result?.count || 0;
+          } else {
+            d1FreeCount = 0;
+          }
         }
-      } catch (usageError) {
-        console.warn('[ATS-SCORE] Usage check failed (non-fatal):', usageError);
-        // Continue without usage tracking if KV unavailable
+      } catch (e) {
+        return json({ success: false, error: 'Cannot verify free ATS usage', message: 'Please try again or contact support.' }, 500, origin, env);
       }
+      if (d1FreeCount >= 1) {
+        return json({
+          success: false,
+          error: 'Usage limit reached',
+          message: 'You have used your free ATS score. Upgrade to Trial or Essential for unlimited scoring.',
+          upgradeRequired: true
+        }, 403, origin, env);
+      }
+      // KV is only a cache here
     }
 
     // If cached, return cached result

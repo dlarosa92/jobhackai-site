@@ -236,25 +236,31 @@ export async function onRequest(context) {
       }
     }
 
-    // Check plan access (Free plan locked)
+    // Plan gating: always enforce from D1 (cache is just a performance hint)
     if (effectivePlan === 'free') {
-      console.log('[RESUME-FEEDBACK] Access denied - plan is free', {
-        requestId,
-        uid,
-        plan,
-        effectivePlan,
-        isDevEnvironment,
-        hasKV: !!env.JOBHACKAI_KV,
-        origin
-      });
-      return errorResponse(
-        'Resume Feedback is available in Trial, Essential, Pro, or Premium plans.',
-        403,
-        origin,
-        env,
-        requestId,
-        { upgradeRequired: true }
-      );
+      let d1FreeCount = 0;
+      try {
+        // Use usage_events or feature_daily_usage for free plan gating (or count feedback_sessions if legacy)
+        if (d1User && isD1Available(env)) {
+          const res = await env.DB.prepare(
+            `SELECT COUNT(*) as count FROM usage_events WHERE user_id = ? AND feature = 'resume_feedback'`
+          ).bind(d1User.id).first();
+          d1FreeCount = res?.count || 0;
+        }
+      } catch (e) {
+        return errorResponse('Cannot verify free usage; please try again or contact support.', 500, origin, env, requestId);
+      }
+      if (d1FreeCount >= 1) {
+        return errorResponse(
+          'You have used your one free feedback. Please upgrade!',
+          403,
+          origin,
+          env,
+          requestId,
+          { upgradeRequired: true }
+        );
+      }
+      // KV can be used for quick check/caching (never as authority)
     }
 
     // Parse request body
