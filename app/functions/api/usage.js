@@ -145,14 +145,25 @@ export async function onRequest(context) {
         usage.resumeFeedback.used = 0;
         usage.resumeFeedback.remaining = 3;
       }
-    } else if (plan === 'trial' && env.JOBHACKAI_KV) {
-      // Trial: total limit (3 feedbacks for entire trial period)
-      // Fixed: Changed key from feedbackTrialTotal to feedbackTotalTrial to match write key in resume-feedback.js
-      const totalKey = `feedbackTotalTrial:${uid}`;
-      const totalUsed = await env.JOBHACKAI_KV.get(totalKey);
-      usage.resumeFeedback.used = totalUsed ? parseInt(totalUsed, 10) : 0;
-      usage.resumeFeedback.limit = 3;
-      usage.resumeFeedback.remaining = Math.max(0, 3 - usage.resumeFeedback.used);
+    } else if (plan === 'trial' && isD1Available(env)) {
+      // Trial: total limit (3 feedbacks for entire trial period) -- D1 is authority
+      try {
+        const d1User = await getOrCreateUserByAuthId(env, uid, userEmail);
+        let trialUsed = 0;
+        if (d1User && d1User.id && env.DB) {
+          const res = await env.DB.prepare(
+            `SELECT COUNT(*) as count FROM usage_events WHERE user_id = ? AND feature = 'resume_feedback'`
+          ).bind(d1User.id).first();
+          trialUsed = res?.count || 0;
+        }
+        usage.resumeFeedback.used = trialUsed;
+        usage.resumeFeedback.limit = 3;
+        usage.resumeFeedback.remaining = Math.max(0, 3 - trialUsed);
+      } catch (e) {
+        usage.resumeFeedback.used = 0;
+        usage.resumeFeedback.limit = 3;
+        usage.resumeFeedback.remaining = 3;
+      }
     }
 
     // Check feedback usage for Pro/Premium from D1 usage_events table

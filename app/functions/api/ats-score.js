@@ -189,17 +189,18 @@ export async function onRequest(context) {
     }
 
     // ATOMIC Usage limits (Free plan - 1 lifetime): D1 is final source of truth, KV is only cache
+    let d1User = null;
     if (plan === 'free') {
-      // Not a cache hit: Only now enforce atomic permission
-
       if (!isD1Available(env))
         return json({ success: false, error: 'Cannot verify free ATS usage', message: 'Please try again or contact support.' }, 500, origin, env);
       const db = getDb(env);
-      const d1User = await getOrCreateUserByAuthId(env, uid, null);
+      d1User = await getOrCreateUserByAuthId(env, uid, null);
       if (!db || !d1User)
         return json({ success: false, error: 'Cannot verify free ATS usage', message: 'Please try again or contact support.' }, 500, origin, env);
-      const claimed = await claimFreeATSUsage(env, d1User.id);
-      if (!claimed) {
+      // Pre-flight check to provide user a proper 403 if already used
+      const result = await db.prepare(`SELECT COUNT(*) as count FROM usage_events WHERE user_id = ? AND feature = 'ats_score'`).bind(d1User.id).first();
+      const d1FreeCount = result?.count || 0;
+      if (d1FreeCount >= 1) {
         return json({
           success: false,
           error: 'Usage limit reached',
@@ -214,6 +215,7 @@ export async function onRequest(context) {
 
     // Run rule-based scoring (NO AI TOKENS)
     let ruleBasedScores;
+    let freeAtsClaimed = false;
     try {
       console.log('[ATS-SCORE] Input length:', text.length, 'jobTitle:', normalizedJobTitle);
       console.log('[ATS-SCORE] Starting scoring:', {
@@ -303,6 +305,20 @@ export async function onRequest(context) {
         error: 'invalid-result',
         message: 'Scoring engine returned invalid data. Please try again.'
       }, 500, origin, env);
+    }
+
+    // If Free: Now perform the atomic claim AFTER successful scoring
+    if (plan === 'free' && d1User) {
+      // Only attempt to claim after a successful score
+      freeAtsClaimed = await claimFreeATSUsage(env, d1User.id);
+      if (!freeAtsClaimed) {
+        return json({
+          success: false,
+          error: 'Usage limit reached',
+          message: 'You have used your free ATS score. Upgrade to Trial or Essential for unlimited scoring.',
+          upgradeRequired: true
+        }, 403, origin, env);
+      }
     }
 
     // --- D1 Persistence: Store ruleBasedScores as source of truth ---

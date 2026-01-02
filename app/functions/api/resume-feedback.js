@@ -330,19 +330,24 @@ export async function onRequest(context) {
         }
       }
 
-      // Total trial limit check: exactly 3 total feedback attempts across entire trial
-      const totalTrialKey = `feedbackTotalTrial:${uid}`;
-      const totalTrialCount = await env.JOBHACKAI_KV.get(totalTrialKey);
-      
-      if (totalTrialCount && parseInt(totalTrialCount, 10) >= 3) {
-        return errorResponse(
-          'You have used all 3 feedback attempts in your trial. Upgrade to Pro for unlimited feedback.',
-          403,
-          origin,
-          env,
-          requestId,
-          { upgradeRequired: true }
-        );
+      // Trial quota check: strictly in D1
+      if (d1User && isD1Available(env)) {
+        const db = env.DB;
+        let trialUsed = 0;
+        if (db) {
+          const res = await db.prepare(`SELECT COUNT(*) as count FROM usage_events WHERE user_id = ? AND feature = 'resume_feedback'`).bind(d1User.id).first();
+          trialUsed = res?.count || 0;
+        }
+        if (trialUsed >= 3) {
+          return errorResponse(
+            'You have used all 3 feedback attempts in your trial. Upgrade to Pro for unlimited feedback.',
+            403,
+            origin,
+            env,
+            requestId,
+            { upgradeRequired: true }
+          );
+        }
       }
     }
 

@@ -79,7 +79,6 @@ export async function onRequest(context) {
           await env.JOBHACKAI_KV.delete(kvPlanKey(uid));
           await env.JOBHACKAI_KV.delete(`trialUsedByUid:${uid}`);
           await env.JOBHACKAI_KV.delete(`trialEndByUid:${uid}`);
-          await env.JOBHACKAI_KV.delete(`feedbackTotalTrial:${uid}`);
           // Delete all monthly feedbackUsage keys for this UID
           const monthsToDelete = [];
           const today = new Date();
