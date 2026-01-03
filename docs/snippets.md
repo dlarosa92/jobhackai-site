@@ -89,7 +89,7 @@ _Update this file when a snippet is improved or the design system changes._
       <span class="footer-name">JOBHACKAI</span>
     </div>
     <div class="footer-legal">
-      <p>© 2025 JobHackAI. All rights reserved.</p>
+      <p>© 2026 JobHackAI. All rights reserved.</p>
     </div>
     <div class="footer-links">
       <a href="index.html">Home</a>

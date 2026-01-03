@@ -864,7 +864,7 @@ export default function Dashboard() {
             <span className="footer-name">JOBHACKAI</span>
           </div>
           <div className="footer-legal">
-            <p>© 2025 JobHackAI. All rights reserved.</p>
+            <p>© 2026 JobHackAI. All rights reserved.</p>
           </div>
           <div className="footer-links">
             <a href="/">Home</a>
