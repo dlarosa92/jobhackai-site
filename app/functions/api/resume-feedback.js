@@ -5,6 +5,7 @@
 import { getBearer, verifyFirebaseIdToken } from '../_lib/firebase-auth.js';
 import { generateATSFeedback } from '../_lib/openai-client.js';
 import { scoreResume } from '../_lib/ats-scoring-engine.js';
+import { getGrammarDiagnostics } from '../_lib/grammar-engine.js';
 import { errorResponse, successResponse, generateRequestId } from '../_lib/error-handler.js';
 import { sanitizeJobTitle, sanitizeResumeText, sanitizeResumeId } from '../_lib/input-sanitizer.js';
 import { validateAIFeedback, validateFeedbackResult, isValidFeedbackResult, normalizeRole } from '../_lib/feedback-validator.js';
@@ -50,23 +51,7 @@ function json(data, status = 200, origin, env) {
   });
 }
 
-async function getUserPlan(uid, env) {
-  if (!env.JOBHACKAI_KV) {
-    console.warn('[RESUME-FEEDBACK] KV not available for plan lookup');
-    return 'free';
-  }
-  
-  try {
-    const plan = await env.JOBHACKAI_KV.get(`planByUid:${uid}`);
-    if (!plan) {
-      console.warn(`[RESUME-FEEDBACK] Plan not found in KV for uid: ${uid}`);
-    }
-    return plan || 'free';
-  } catch (error) {
-    console.error('[RESUME-FEEDBACK] Error fetching plan from KV:', error);
-    return 'free';
-  }
-}
+import { getUserPlan } from '../_lib/db.js';
 
 async function getTrialEndDate(uid, env) {
   if (!env.JOBHACKAI_KV) {
@@ -143,6 +128,14 @@ async function updateUsageCounters(uid, resumeId, plan, env) {
   }
 }
 
+function toExtractionQuality(diagnostics) {
+  return {
+    extractionStatus: diagnostics?.extractionStatus || 'ok',
+    confidence: typeof diagnostics?.confidence === 'number' ? diagnostics.confidence : 1.0,
+    tokenCount: typeof diagnostics?.tokenCount === 'number' ? diagnostics.tokenCount : 0
+  };
+}
+
 export async function onRequest(context) {
   const { request, env } = context;
   const origin = request.headers.get('Origin') || '';
@@ -173,7 +166,7 @@ export async function onRequest(context) {
     // Using isDevOrigin alone prevents matching malicious origins like 'https://evil.com/localhost'
     const isDevEnvironment = env.ENVIRONMENT === 'dev' && isDevOrigin;
     
-    let plan = await getUserPlan(uid, env);
+    let plan = await getUserPlan(env, uid);
     const allowedPlans = ['free', 'trial', 'essential', 'pro', 'premium'];
     if (!allowedPlans.includes(plan)) {
       console.warn('[RESUME-FEEDBACK] Invalid plan detected, normalizing to free', { requestId, uid, plan });
@@ -199,27 +192,27 @@ export async function onRequest(context) {
     
     // If plan is 'free' and we're in dev environment, upgrade to 'pro' for testing
     if (isDevEnvironment && plan === 'free') {
-      // In dev environment, if KV lookup failed, try to fetch plan from plan/me endpoint
-      if (env.JOBHACKAI_KV) {
+      // In dev environment, if D1 lookup failed, try to fetch plan from D1 one more time
+      if (isD1Available(env)) {
         try {
-          // Try to fetch plan directly from KV one more time with better error handling
-          const directPlan = await env.JOBHACKAI_KV.get(`planByUid:${uid}`);
+          // Try to fetch plan directly from D1 one more time with better error handling
+          const directPlan = await getUserPlan(env, uid);
           if (directPlan && directPlan !== 'free') {
             effectivePlan = directPlan;
-            console.log('[RESUME-FEEDBACK] Found plan via direct KV lookup:', effectivePlan);
+            console.log('[RESUME-FEEDBACK] Found plan via direct D1 lookup:', effectivePlan);
           } else {
             // Still 'free' after direct lookup - upgrade to 'pro' for dev testing
             effectivePlan = 'pro';
             console.log('[RESUME-FEEDBACK] Plan lookup returned free in dev environment, upgrading to pro for testing');
           }
-        } catch (kvError) {
-          console.warn('[RESUME-FEEDBACK] KV lookup failed in dev environment, upgrading to pro for testing:', kvError);
+        } catch (dbError) {
+          console.warn('[RESUME-FEEDBACK] D1 lookup failed in dev environment, upgrading to pro for testing:', dbError);
           effectivePlan = 'pro';
         }
       } else {
-        // KV not available in dev environment - upgrade to 'pro' for testing
+        // D1 not available in dev environment - upgrade to 'pro' for testing
         effectivePlan = 'pro';
-        console.log('[RESUME-FEEDBACK] KV not available in dev environment, upgrading to pro for testing');
+        console.log('[RESUME-FEEDBACK] D1 not available in dev environment, upgrading to pro for testing');
       }
     }
     
@@ -243,17 +236,9 @@ export async function onRequest(context) {
       }
     }
 
-    // Check plan access (Free plan locked)
+    // Plan gating: always enforce from D1 (cache is just a performance hint)
     if (effectivePlan === 'free') {
-      console.log('[RESUME-FEEDBACK] Access denied - plan is free', {
-        requestId,
-        uid,
-        plan,
-        effectivePlan,
-        isDevEnvironment,
-        hasKV: !!env.JOBHACKAI_KV,
-        origin
-      });
+      // Old behavior: block all free resume feedback, uncomment if you want to revert
       return errorResponse(
         'Resume Feedback is available in Trial, Essential, Pro, or Premium plans.',
         403,
@@ -262,6 +247,29 @@ export async function onRequest(context) {
         requestId,
         { upgradeRequired: true }
       );
+      
+      /*
+      // Or if you want a limited free tier (one run), use:
+      if (!isD1Available(env))
+        return errorResponse('Cannot verify free usage; please try again or contact support.', 500, origin, env, requestId);
+      const db = getDb(env);
+      const d1User = await getOrCreateUserByAuthId(env, uid, userEmail);
+      if (!db || !d1User)
+        return errorResponse('Cannot verify free usage; please try again or contact support.', 500, origin, env, requestId);
+      const res = await db.prepare(`SELECT COUNT(*) as count FROM usage_events WHERE user_id = ? AND feature = 'resume_feedback'`).bind(d1User.id).first();
+      const d1FreeCount = res?.count || 0;
+      if (d1FreeCount >= 1) {
+        return errorResponse(
+          'You have used your one free feedback. Please upgrade!',
+          403,
+          origin,
+          env,
+          requestId,
+          { upgradeRequired: true }
+        );
+      }
+      // KV can be used for quick check/caching (never as authority)
+      */
     }
 
     // Parse request body
@@ -322,30 +330,66 @@ export async function onRequest(context) {
         }
       }
 
-      // Total trial limit check: exactly 3 total feedback attempts across entire trial
-      const totalTrialKey = `feedbackTotalTrial:${uid}`;
-      const totalTrialCount = await env.JOBHACKAI_KV.get(totalTrialKey);
-      
-      if (totalTrialCount && parseInt(totalTrialCount, 10) >= 3) {
-        return errorResponse(
-          'You have used all 3 feedback attempts in your trial. Upgrade to Pro for unlimited feedback.',
-          403,
-          origin,
-          env,
-          requestId,
-          { upgradeRequired: true }
-        );
+      // Trial quota check: strictly in D1
+      if (isD1Available(env)) {
+        if (!d1User) {
+          return errorResponse(
+            'Cannot verify usage limits for trial users. Please try again or contact support.',
+            500,
+            origin,
+            env,
+            requestId
+          );
+        }
+        const db = env.DB;
+        let trialUsed = 0;
+        if (db) {
+          const res = await db.prepare(`SELECT COUNT(*) as count FROM usage_events WHERE user_id = ? AND feature = 'resume_feedback'`).bind(d1User.id).first();
+          trialUsed = res?.count || 0;
+        }
+        if (trialUsed >= 3) {
+          return errorResponse(
+            'You have used all 3 feedback attempts in your trial. Upgrade to Pro for unlimited feedback.',
+            403,
+            origin,
+            env,
+            requestId,
+            { upgradeRequired: true }
+          );
+        }
       }
     }
 
     // Usage limits (Essential: 3/month)
-    if (effectivePlan === 'essential' && env.JOBHACKAI_KV) {
+    // D1 is the authoritative usage source for Essential/monthly quota
+    if (effectivePlan === 'essential' && isD1Available(env)) {
+      if (!d1User) {
+        return errorResponse(
+          'Cannot verify usage limits for Essential users. Please try again or contact support.',
+          500,
+          origin,
+          env,
+          requestId
+        );
+      }
+      const db = env.DB;
       const now = new Date();
-      const monthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-      const usageKey = `feedbackUsage:${uid}:${monthKey}`;
-      const usage = await env.JOBHACKAI_KV.get(usageKey);
-      
-      if (usage && parseInt(usage, 10) >= 3) {
+      const year = now.getUTCFullYear();
+      const month = String(now.getUTCMonth() + 1).padStart(2, '0');
+      const monthStart = `${year}-${month}-01`;
+      // Calculate the actual last day of the month (handles leap years and month lengths)
+      function getLastDayOfMonth(year, month) {
+        // JS months are 1-based for our input, but 0-based for Date
+        return new Date(Date.UTC(year, month, 0)).getUTCDate();
+      }
+      const lastDay = getLastDayOfMonth(year, Number(month));
+      const monthEnd = `${year}-${month}-${String(lastDay).padStart(2, '0')}`;
+      let monthlyUsed = 0;
+      if (db) {
+        const res = await db.prepare(`SELECT COUNT(*) as count FROM usage_events WHERE user_id = ? AND feature = 'resume_feedback' AND date(created_at) >= date(?) AND date(created_at) <= date(?)`).bind(d1User.id, monthStart, monthEnd).first();
+        monthlyUsed = res?.count || 0;
+      }
+      if (monthlyUsed >= 3) {
         return errorResponse(
           'You have used all 3 feedbacks this month. Upgrade to Pro for unlimited feedback.',
           403,
@@ -549,6 +593,17 @@ export async function onRequest(context) {
       }
     }
 
+  // Ensure extractionQuality is available for UI trust messaging (even when reusing older D1 scores)
+  let extractionQuality = ruleBasedScores?.extractionQuality || null;
+  if (!extractionQuality && resumeData?.text) {
+    try {
+      const diagnostics = await getGrammarDiagnostics(env, resumeData.text, {});
+      extractionQuality = toExtractionQuality(diagnostics);
+    } catch (e) {
+      extractionQuality = null;
+    }
+  }
+
   // --- D1 feedback reuse (source of truth) ---
   if (d1User && isD1Available(env)) {
     try {
@@ -610,7 +665,8 @@ export async function onRequest(context) {
               });
 
               return successResponse({
-                ...feedback
+                ...feedback,
+                extractionQuality: feedback?.extractionQuality || extractionQuality || null
               }, 200, origin, env, requestId);
             } else {
               console.log('[RESUME-FEEDBACK] Ignoring D1 feedback session (role mismatch or invalid structure)', {
@@ -633,8 +689,11 @@ export async function onRequest(context) {
   }
 
     // Generate AI feedback with exponential backoff retry
-    // Compute base token budget once for adaptive retries
-    const defaultMaxOutputTokens = Number(env.OPENAI_MAX_TOKENS_ATS) > 0
+    // Token budget logic:
+    // - First attempt (attempt === 0): let generateATSFeedback() use its internal logic
+    //   which applies token optimization (1500 tokens when no role, 3500 when role exists)
+    // - Retry attempts (attempt > 0): override with increased tokens to handle truncation
+    const baseMaxTokens = Number(env.OPENAI_MAX_TOKENS_ATS) > 0
       ? Number(env.OPENAI_MAX_TOKENS_ATS)
       : 3500;
     let aiFeedback = null;
@@ -646,13 +705,17 @@ export async function onRequest(context) {
     
     for (let attempt = 0; attempt < maxRetries; attempt++) {
       try {
-        const maxTokensOverride = defaultMaxOutputTokens + (attempt > 0 ? attempt * 600 : 0);
+        // Only pass maxOutputTokensOverride on retry attempts to increase budget after truncation
+        // First attempt uses generateATSFeedback's internal logic which optimizes for hasRole
+        const options = attempt > 0 
+          ? { maxOutputTokensOverride: baseMaxTokens + (attempt * 600) }
+          : {};
         const aiResponse = await generateATSFeedback(
           resumeData.text,
           ruleBasedScores,
           normalizedJobTitle,
           env,
-          { maxOutputTokensOverride: maxTokensOverride }
+          options
         );
         
         // Capture token usage from OpenAI response
@@ -694,16 +757,20 @@ export async function onRequest(context) {
             : aiResponse.content;
           
           // Validate structure - check ALL required fields before exiting retry loop
-          // This prevents accepting incomplete responses that are missing roleSpecificFeedback
-          const validation = validateAIFeedback(aiFeedback, false);
+          // When no role is provided, allow missing roleSpecificFeedback (it won't be generated by OpenAI)
+          // This saves ~2000 tokens (~57% reduction) when no role is selected
+          const hasNoRole = !normalizedJobTitle || normalizedJobTitle.trim() === '';
+          const validation = validateAIFeedback(aiFeedback, false, hasNoRole);
           
           if (validation.valid) {
             // All required fields present - success, exit retry loop
             break;
           } else {
             // If only roleSpecificFeedback is missing, keep rubric and bail out to fallback tips
+            // BUT: if we have no role, we don't expect role-specific feedback, so this shouldn't happen
             const missingOnlyRoleTips = validation.missing.length === 1 && validation.missing[0] === 'roleSpecificFeedback';
-            if (missingOnlyRoleTips) {
+            if (missingOnlyRoleTips && !hasNoRole) {
+              // Only apply fallback logic if we actually expected role-specific feedback
               partialAIFeedback = aiFeedback;
               missingTipsOnly = true;
               break;
@@ -714,6 +781,7 @@ export async function onRequest(context) {
             console.error(`[RESUME-FEEDBACK] Invalid AI response structure (attempt ${attempt + 1}/${maxRetries})`, {
               requestId,
               missing: validation.missing,
+              hasNoRole,
               ...validation.details
             });
             // Reset aiFeedback to null to prevent using incomplete response
@@ -747,11 +815,14 @@ export async function onRequest(context) {
     }
     
     // If we only missed role-specific tips, keep the partial AI feedback for rubric but mark to add fallback tips
+    // BUT: only if we actually expected role-specific feedback (i.e., we have a role)
     let shouldAddFallbackTips = false;
-    if (missingTipsOnly && partialAIFeedback) {
+    const hasNoRole = !normalizedJobTitle || normalizedJobTitle.trim() === '';
+    if (missingTipsOnly && partialAIFeedback && !hasNoRole) {
+      // Only add fallback tips if we have a role but AI didn't generate role-specific feedback
       aiFeedback = partialAIFeedback;
       shouldAddFallbackTips = true;
-    } else if (!aiFeedback && normalizedJobTitle) {
+    } else if (!aiFeedback && normalizedJobTitle && !hasNoRole) {
       // No AI feedback at all: we will add fallback tips later if a role was provided
       shouldAddFallbackTips = true;
     }
@@ -813,6 +884,7 @@ export async function onRequest(context) {
       originalResume: resumeData.text,
       fileName: resumeData.fileName || null,
       resumeId: sanitizedResumeId,
+      extractionQuality: extractionQuality,
       atsRubric: aiFeedback.atsRubric
         // Filter out any "overallScore" or "overall" categories - only process the 5 expected categories
         .filter(item => {
@@ -862,6 +934,11 @@ export async function onRequest(context) {
       // Role-specific feedback structure validation
       // If AI succeeded but didn't provide roleSpecificFeedback, log warning and return null
       roleSpecificFeedback: (() => {
+        // If no job title provided, return null (no role-specific tips)
+        if (!normalizedJobTitle || normalizedJobTitle.trim() === '') {
+          return null;
+        }
+        
         const rsf = aiFeedback.roleSpecificFeedback;
         const hasNewFormat =
           rsf &&
@@ -904,12 +981,15 @@ export async function onRequest(context) {
         attempts: maxRetries
       });
       
-      const fallbackRoleTips = shouldAddFallbackTips ? buildFallbackRoleTips(normalizedJobTitle) : null;
+      const fallbackRoleTips = (shouldAddFallbackTips && normalizedJobTitle && normalizedJobTitle.trim() !== '') 
+        ? buildFallbackRoleTips(normalizedJobTitle) 
+        : null;
 
       return {
         originalResume: resumeData.text,
         fileName: resumeData.fileName || null,
         resumeId: sanitizedResumeId,
+        extractionQuality: extractionQuality,
         atsRubric: [
         {
           category: 'Keyword Match',
@@ -998,6 +1078,31 @@ export async function onRequest(context) {
             role: normalizedJobTitle || null,
             rawTextLocation: `resume:${sanitizedResumeId}`
           });
+        }
+        
+        // Update title/role if they're missing and we have a job title
+        // This ensures history tiles show the correct job title instead of "Untitled role"
+        if (resumeSession && normalizedJobTitle && (!resumeSession.title || !resumeSession.role)) {
+          try {
+            const updated = await env.DB.prepare(
+              `UPDATE resume_sessions 
+               SET title = COALESCE(title, ?),
+                   role = COALESCE(role, ?)
+               WHERE id = ?
+               RETURNING id, title, role`
+            ).bind(
+              normalizedJobTitle,
+              normalizedJobTitle,
+              resumeSession.id
+            ).first();
+            
+            if (updated) {
+              resumeSession.title = updated.title || resumeSession.title;
+              resumeSession.role = updated.role || resumeSession.role;
+            }
+          } catch (updateError) {
+            console.warn('[RESUME-FEEDBACK] Failed to update session title/role (non-blocking):', updateError.message);
+          }
         }
         
         if (resumeSession) {

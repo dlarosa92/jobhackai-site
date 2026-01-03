@@ -15,6 +15,25 @@
  */
 
 /**
+ * Resolve the D1 binding from the environment.
+ *
+ * Some environments bind D1 under a name other than `DB` (e.g. `JOBHACKAI_DB`).
+ * To prevent silent persistence failures, we resolve from a small allowlist.
+ */
+const DB_BINDING_NAMES = ['DB', 'JOBHACKAI_DB', 'INTERVIEW_QUESTIONS_DB', 'IQ_D1'];
+
+export function getDb(env) {
+  if (!env) return null;
+  const direct = env.DB;
+  if (direct && typeof direct.prepare === 'function') return direct;
+  for (const name of DB_BINDING_NAMES) {
+    const candidate = env[name];
+    if (candidate && typeof candidate.prepare === 'function') return candidate;
+  }
+  return null;
+}
+
+/**
  * Get or create a user by Firebase auth ID
  * @param {Object} env - Cloudflare environment with DB binding
  * @param {string} authId - Firebase UID
@@ -22,21 +41,40 @@
  * @returns {Promise<Object>} User record { id, auth_id, email, created_at, updated_at }
  */
 export async function getOrCreateUserByAuthId(env, authId, email = null) {
-  if (!env.DB) {
+  const db = getDb(env);
+  if (!db) {
     console.warn('[DB] D1 binding not available');
     return null;
   }
 
   try {
     // Try to find existing user
-    const existing = await env.DB.prepare(
-      'SELECT id, auth_id, email, created_at, updated_at FROM users WHERE auth_id = ?'
-    ).bind(authId).first();
+    // First, try with plan column (new schema)
+    let existing;
+    try {
+      existing = await db.prepare(
+        'SELECT id, auth_id, email, plan, created_at, updated_at FROM users WHERE auth_id = ?'
+      ).bind(authId).first();
+    } catch (planError) {
+      // If plan column doesn't exist, try without it (fallback for pre-migration state)
+      if (planError.message && planError.message.includes('no such column: plan')) {
+        console.warn('[DB] Plan column not found, using fallback query. Migration 007 may need to be run.');
+        existing = await db.prepare(
+          'SELECT id, auth_id, email, created_at, updated_at FROM users WHERE auth_id = ?'
+        ).bind(authId).first();
+        // Add plan property with default value
+        if (existing) {
+          existing.plan = 'free';
+        }
+      } else {
+        throw planError;
+      }
+    }
 
     if (existing) {
       // Update email if provided and different
       if (email && email !== existing.email) {
-        await env.DB.prepare(
+        await db.prepare(
           'UPDATE users SET email = ?, updated_at = datetime(\'now\') WHERE id = ?'
         ).bind(email, existing.id).run();
         existing.email = email;
@@ -46,15 +84,307 @@ export async function getOrCreateUserByAuthId(env, authId, email = null) {
     }
 
     // Create new user
-    const result = await env.DB.prepare(
+    const result = await db.prepare(
       'INSERT INTO users (auth_id, email) VALUES (?, ?) RETURNING id, auth_id, email, created_at, updated_at'
     ).bind(authId, email).first();
+
+    if (!result) {
+      throw new Error('Failed to create user: INSERT returned null');
+    }
+
+    // Add plan property if it wasn't returned (pre-migration state)
+    if (!result.plan) {
+      result.plan = 'free';
+    }
 
     console.log('[DB] Created new user:', { id: result.id, authId });
     return result;
   } catch (error) {
     console.error('[DB] Error in getOrCreateUserByAuthId:', error);
     throw error;
+  }
+}
+
+/**
+ * Get user plan from D1 (source of truth)
+ * Returns the effective plan, accounting for scheduled plan changes that have taken effect
+ * @param {Object} env - Cloudflare environment with DB binding
+ * @param {string} authId - Firebase UID
+ * @returns {Promise<string>} Plan name ('free', 'trial', 'essential', 'pro', 'premium')
+ */
+export async function getUserPlan(env, authId) {
+  const db = getDb(env);
+  if (!db) {
+    console.warn('[DB] D1 binding not available, defaulting to free');
+    return 'free';
+  }
+
+  try {
+    const user = await db.prepare(
+      'SELECT plan, scheduled_plan, scheduled_at FROM users WHERE auth_id = ?'
+    ).bind(authId).first();
+    
+    if (!user) return 'free';
+    
+    // Calculate effective plan - check if scheduled change has taken effect
+    let effectivePlan = user.plan || 'free';
+    if (user.scheduled_plan && user.scheduled_at) {
+      const now = new Date();
+      const scheduledDate = new Date(user.scheduled_at);
+      if (now >= scheduledDate) {
+        // Scheduled change has already taken effect, use the scheduled plan
+        effectivePlan = user.scheduled_plan;
+      }
+    }
+    
+    return effectivePlan;
+  } catch (error) {
+    console.error('[DB] Error in getUserPlan:', error);
+    return 'free';
+  }
+}
+
+/**
+ * Update user plan in D1
+ * @param {Object} env - Cloudflare environment with DB binding
+ * @param {string} authId - Firebase UID
+ * @param {Object} planData - Plan update data
+ * @param {string} planData.plan - Plan name
+ * @param {string|null} planData.stripeCustomerId - Stripe customer ID
+ * @param {string|null} planData.stripeSubscriptionId - Stripe subscription ID
+ * @param {string|null} planData.subscriptionStatus - Subscription status
+ * @param {string|null} planData.trialEndsAt - ISO 8601 datetime
+ * @param {string|null} planData.currentPeriodEnd - ISO 8601 datetime
+ * @param {string|null} planData.cancelAt - ISO 8601 datetime
+ * @param {string|null} planData.scheduledPlan - Scheduled plan change
+ * @param {string|null} planData.scheduledAt - ISO 8601 datetime for scheduled change
+ * @returns {Promise<boolean>} Success
+ */
+export async function updateUserPlan(env, authId, {
+  plan,
+  stripeCustomerId = undefined,
+  stripeSubscriptionId = undefined,
+  subscriptionStatus = undefined,
+  trialEndsAt = undefined,
+  currentPeriodEnd = undefined,
+  cancelAt = undefined,
+  scheduledPlan = undefined,
+  scheduledAt = undefined,
+  planEventTimestamp = undefined // ISO 8601 datetime string from Stripe event.created
+}) {
+  const db = getDb(env);
+  if (!db) {
+    console.warn('[DB] D1 binding not available');
+    return false;
+  }
+
+  try {
+    // Ensure user exists first
+    await getOrCreateUserByAuthId(env, authId);
+
+    // Build UPDATE query dynamically to only set provided fields
+    const updates = [];
+    const binds = [];
+
+    if (plan !== undefined) {
+      updates.push('plan = ?');
+      binds.push(plan);
+    }
+    if (stripeCustomerId !== undefined) {
+      updates.push('stripe_customer_id = ?');
+      binds.push(stripeCustomerId);
+    }
+    if (stripeSubscriptionId !== undefined) {
+      updates.push('stripe_subscription_id = ?');
+      binds.push(stripeSubscriptionId);
+    }
+    if (subscriptionStatus !== undefined) {
+      updates.push('subscription_status = ?');
+      binds.push(subscriptionStatus);
+    }
+    if (trialEndsAt !== undefined) {
+      updates.push('trial_ends_at = ?');
+      binds.push(trialEndsAt);
+    }
+    if (currentPeriodEnd !== undefined) {
+      updates.push('current_period_end = ?');
+      binds.push(currentPeriodEnd);
+    }
+    if (cancelAt !== undefined) {
+      updates.push('cancel_at = ?');
+      binds.push(cancelAt);
+    }
+    if (scheduledPlan !== undefined) {
+      updates.push('scheduled_plan = ?');
+      binds.push(scheduledPlan);
+    }
+    if (scheduledAt !== undefined) {
+      updates.push('scheduled_at = ?');
+      binds.push(scheduledAt);
+    }
+
+    // Always update timestamps
+    // Use planEventTimestamp if provided (from Stripe event.created), otherwise use current time
+    if (planEventTimestamp !== undefined) {
+      updates.push('plan_updated_at = ?');
+      binds.push(planEventTimestamp);
+    } else {
+      updates.push('plan_updated_at = datetime(\'now\')');
+    }
+    updates.push('updated_at = datetime(\'now\')');
+
+    if (updates.length === 2) {
+      // Only timestamps to update - nothing to do
+      return true;
+    }
+
+    binds.push(authId);
+
+    const query = `UPDATE users SET ${updates.join(', ')} WHERE auth_id = ?`;
+    await db.prepare(query).bind(...binds).run();
+
+    console.log('[DB] Updated user plan:', { authId, plan });
+    return true;
+  } catch (error) {
+    console.error('[DB] Error in updateUserPlan:', error);
+    return false;
+  }
+}
+
+/**
+ * Get full user plan data including subscription metadata
+ * @param {Object} env - Cloudflare environment with DB binding
+ * @param {string} authId - Firebase UID
+ * @returns {Promise<Object|null>} User plan data or null
+ */
+export async function getUserPlanData(env, authId) {
+  const db = getDb(env);
+  if (!db) {
+    return null;
+  }
+
+  try {
+    const user = await db.prepare(
+      `SELECT plan, stripe_customer_id, stripe_subscription_id, subscription_status,
+              trial_ends_at, current_period_end, cancel_at, scheduled_plan, scheduled_at,
+              plan_updated_at
+       FROM users WHERE auth_id = ?`
+    ).bind(authId).first();
+
+    if (!user) return null;
+
+    // Calculate effective plan - check if scheduled change has taken effect
+    let effectivePlan = user.plan || 'free';
+    let scheduledPlanChange = null;
+    if (user.scheduled_plan && user.scheduled_at) {
+      const now = new Date();
+      const scheduledDate = new Date(user.scheduled_at);
+      if (now >= scheduledDate) {
+        // Scheduled change has already taken effect, use the scheduled plan as effective
+        effectivePlan = user.scheduled_plan;
+        // Do not expose scheduledPlanChange if the effective date has passed
+        scheduledPlanChange = null;
+      } else {
+        // Scheduled change is in the future — expose it to the API consumer
+        scheduledPlanChange = {
+          newPlan: user.scheduled_plan,
+          effectiveDate: user.scheduled_at
+        };
+      }
+    }
+
+    return {
+      plan: effectivePlan, // Return effective plan, not raw plan
+      stripeCustomerId: user.stripe_customer_id,
+      stripeSubscriptionId: user.stripe_subscription_id,
+      subscriptionStatus: user.subscription_status,
+      trialEndsAt: user.trial_ends_at,
+      currentPeriodEnd: user.current_period_end,
+      cancelAt: user.cancel_at,
+      scheduledPlanChange,
+      planUpdatedAt: user.plan_updated_at
+    };
+  } catch (error) {
+    console.error('[DB] Error in getUserPlanData:', error);
+    return null;
+  }
+}
+
+/**
+ * Check if user is eligible for a trial (D1 is source of truth)
+ * A user is eligible if they are on the free plan, have never had a trial (trial_ends_at IS NULL),
+ * and have not previously paid (has_ever_paid = 0).
+ * @param {Object} env - Cloudflare environment with DB binding
+ * @param {string} authId - Firebase UID
+ * @returns {Promise<boolean>}
+ */
+export async function isTrialEligible(env, authId) {
+  const db = getDb(env);
+  if (!db) {
+    console.warn('[DB] D1 binding not available');
+    // Surface the error to callers so they can decide (checkout should return 500)
+    throw new Error('D1 binding not available');
+  }
+  try {
+    // Read core columns first (present in migration 007)
+    const user = await db.prepare(
+      'SELECT plan, trial_ends_at FROM users WHERE auth_id = ?'
+    ).bind(authId).first();
+    if (!user) {
+      // New user = eligible
+      return true;
+    }
+    const isOnFreePlan = (user.plan || 'free') === 'free';
+    const hadTrial = user.trial_ends_at !== null;
+    // has_ever_paid may be added in a later migration (e.g., Migration 010).
+    // Attempt to read it; if the column doesn't exist, treat as not paid (0).
+    let everPaid = 0;
+    try {
+      const paidRow = await db.prepare(
+        'SELECT has_ever_paid FROM users WHERE auth_id = ?'
+      ).bind(authId).first();
+      if (paidRow && paidRow.has_ever_paid !== undefined && paidRow.has_ever_paid !== null) {
+        everPaid = Number(paidRow.has_ever_paid) === 1 ? 1 : 0;
+      }
+    } catch (colErr) {
+      // If column missing, treat as not paid. Re-throw unexpected errors.
+      const msg = String(colErr?.message || '').toLowerCase();
+      if (msg.includes('no such column') || msg.includes('unknown column') || msg.includes('no such')) {
+        everPaid = 0;
+      } else {
+        throw colErr;
+      }
+    }
+    return isOnFreePlan && !hadTrial && everPaid === 0;
+  } catch (error) {
+    console.error('[DB] Error in isTrialEligible:', error);
+    // Propagate error to caller so it can return a 500 and avoid misleading 400s
+    throw error;
+  }
+}
+
+/**
+ * Atomic attempt to reserve a free ATS usage (returns true if succeeded, false if already used)
+ * Uses a unique partial index on (user_id, feature) WHERE feature='ats_score' to enforce one-time use.
+ * @param {Object} env - Cloudflare environment with DB binding
+ * @param {number} userId - User ID from users table
+ * @returns {Promise<boolean>} True if claim succeeded, false if already used
+ */
+export async function claimFreeATSUsage(env, userId) {
+  const db = getDb(env);
+  if (!db) throw new Error('D1 unavailable');
+  try {
+    await db.prepare(`
+      INSERT INTO usage_events (user_id, feature, tokens_used, meta_json, created_at)
+      VALUES (?, 'ats_score', null, NULL, datetime('now'))
+    `).bind(userId).run();
+    return true;
+  } catch (e) {
+    const msg = String(e?.message || '').toLowerCase();
+    if (msg.includes('unique') || msg.includes('constraint') || msg.includes('duplicate')) {
+      return false;
+    }
+    throw e;
   }
 }
 
@@ -69,13 +399,14 @@ export async function getOrCreateUserByAuthId(env, authId, email = null) {
  * @returns {Promise<Object>} Resume session { id, user_id, title, role, created_at, raw_text_location }
  */
 export async function createResumeSession(env, userId, { title = null, role = null, rawTextLocation = null } = {}) {
-  if (!env.DB) {
+  const db = getDb(env);
+  if (!db) {
     console.warn('[DB] D1 binding not available');
     return null;
   }
 
   try {
-    const result = await env.DB.prepare(
+    const result = await db.prepare(
       `INSERT INTO resume_sessions (user_id, title, role, raw_text_location) 
        VALUES (?, ?, ?, ?) 
        RETURNING id, user_id, title, role, created_at, raw_text_location`
@@ -97,7 +428,8 @@ export async function createResumeSession(env, userId, { title = null, role = nu
  * @returns {Promise<Object>} Feedback session { id, resume_session_id, feedback_json, created_at }
  */
 export async function createFeedbackSession(env, resumeSessionId, feedbackJson) {
-  if (!env.DB) {
+  const db = getDb(env);
+  if (!db) {
     console.warn('[DB] D1 binding not available');
     return null;
   }
@@ -107,7 +439,7 @@ export async function createFeedbackSession(env, resumeSessionId, feedbackJson) 
       ? feedbackJson 
       : JSON.stringify(feedbackJson);
 
-    const result = await env.DB.prepare(
+    const result = await db.prepare(
       `INSERT INTO feedback_sessions (resume_session_id, feedback_json) 
        VALUES (?, ?) 
        RETURNING id, resume_session_id, feedback_json, created_at`
@@ -131,7 +463,8 @@ export async function createFeedbackSession(env, resumeSessionId, feedbackJson) 
  * @returns {Promise<Object>} Usage event { id, user_id, feature, tokens_used, meta_json, created_at }
  */
 export async function logUsageEvent(env, userId, feature, tokensUsed = null, meta = null) {
-  if (!env.DB) {
+  const db = getDb(env);
+  if (!db) {
     console.warn('[DB] D1 binding not available');
     return null;
   }
@@ -139,7 +472,7 @@ export async function logUsageEvent(env, userId, feature, tokensUsed = null, met
   try {
     const metaStr = meta ? JSON.stringify(meta) : null;
 
-    const result = await env.DB.prepare(
+    const result = await db.prepare(
       `INSERT INTO usage_events (user_id, feature, tokens_used, meta_json) 
        VALUES (?, ?, ?, ?) 
        RETURNING id, user_id, feature, tokens_used, meta_json, created_at`
@@ -162,7 +495,8 @@ export async function logUsageEvent(env, userId, feature, tokensUsed = null, met
  * @returns {Promise<Array>} List of history items
  */
 export async function getResumeFeedbackHistory(env, userId, { limit = 20 } = {}) {
-  if (!env.DB) {
+  const db = getDb(env);
+  if (!db) {
     console.warn('[DB] D1 binding not available');
     return [];
   }
@@ -172,7 +506,7 @@ export async function getResumeFeedbackHistory(env, userId, { limit = 20 } = {})
     // Uses correlated subqueries to get the most recent feedback per resume session
     // This ensures one row per resume_session even when multiple feedback_sessions exist
     // Also fetches ats_score from resume_sessions column or extracts from feedback_json
-    const results = await env.DB.prepare(`
+    const results = await db.prepare(`
       SELECT 
         rs.id as session_id,
         rs.title,
@@ -256,7 +590,8 @@ export async function getResumeFeedbackHistory(env, userId, { limit = 20 } = {})
  * @returns {Promise<Object|null>} Full feedback session or null if not found/unauthorized
  */
 export async function getFeedbackSessionById(env, sessionId, userId) {
-  if (!env.DB) {
+  const db = getDb(env);
+  if (!db) {
     console.warn('[DB] D1 binding not available');
     return null;
   }
@@ -268,7 +603,7 @@ export async function getFeedbackSessionById(env, sessionId, userId) {
 
   try {
     // Join resume_sessions and feedback_sessions, enforcing user ownership
-    const row = await env.DB.prepare(`
+    const row = await db.prepare(`
       SELECT 
         rs.id as session_id,
         rs.user_id,
@@ -345,6 +680,68 @@ export async function getFeedbackSessionById(env, sessionId, userId) {
 }
 
 /**
+ * Delete a resume feedback session by ID (with ownership check)
+ * Cascades to delete related feedback_sessions (via FK) and optionally removes KV data
+ * @param {Object} env - Cloudflare environment with DB binding
+ * @param {number} sessionId - Resume session ID
+ * @param {number} userId - User ID (required for security - ownership check)
+ * @returns {Promise<boolean>} True if deleted, false if not found/unauthorized
+ */
+export async function deleteResumeFeedbackSession(env, sessionId, userId) {
+  const db = getDb(env);
+  if (!db) {
+    throw new Error('[DB] D1 binding not available');
+  }
+
+  if (!userId || typeof userId !== 'number') {
+    throw new Error('userId is required for deleteResumeFeedbackSession');
+  }
+
+  try {
+    const session = await db.prepare(`
+      SELECT id, user_id, raw_text_location
+      FROM resume_sessions
+      WHERE id = ? AND user_id = ?
+    `).bind(sessionId, userId).first();
+
+    if (!session) {
+      return false;
+    }
+
+    const result = await db.prepare(`
+      DELETE FROM resume_sessions
+      WHERE id = ? AND user_id = ?
+    `).bind(sessionId, userId).run();
+
+    const rowsAffected =
+      typeof result?.meta?.changes === 'number'
+        ? result.meta.changes
+        : typeof result?.changes === 'number'
+          ? result.changes
+          : 0;
+
+    if (rowsAffected === 0) {
+      return false;
+    }
+
+    if (session.raw_text_location && env.JOBHACKAI_KV) {
+      try {
+        await env.JOBHACKAI_KV.delete(session.raw_text_location);
+        console.log('[DB] Deleted KV entry:', session.raw_text_location);
+      } catch (kvError) {
+        console.warn('[DB] Failed to delete KV entry (non-fatal):', kvError);
+      }
+    }
+
+    console.log('[DB] Deleted resume session:', { sessionId, userId });
+    return true;
+  } catch (error) {
+    console.error('[DB] Error in deleteResumeFeedbackSession:', error);
+    throw error;
+  }
+}
+
+/**
  * Update resume session with ATS score
  * Called after feedback is generated to cache the score
  * @param {Object} env - Cloudflare environment with DB binding
@@ -353,13 +750,14 @@ export async function getFeedbackSessionById(env, sessionId, userId) {
  * @returns {Promise<boolean>} Success
  */
 export async function updateResumeSessionAtsScore(env, sessionId, atsScore) {
-  if (!env.DB) {
+  const db = getDb(env);
+  if (!db) {
     console.warn('[DB] D1 binding not available');
     return false;
   }
 
   try {
-    await env.DB.prepare(
+    await db.prepare(
       'UPDATE resume_sessions SET ats_score = ? WHERE id = ?'
     ).bind(atsScore, sessionId).run();
 
@@ -380,13 +778,14 @@ export async function updateResumeSessionAtsScore(env, sessionId, atsScore) {
  * @returns {Promise<Object|null>} Resume session with rule_based_scores_json or null
  */
 export async function getResumeSessionByResumeId(env, userId, resumeId) {
-  if (!env.DB) {
+  const db = getDb(env);
+  if (!db) {
     return null;
   }
 
   try {
     const rawTextLocation = `resume:${resumeId}`;
-    const result = await env.DB.prepare(
+    const result = await db.prepare(
       `SELECT id, user_id, title, role, created_at, raw_text_location, ats_score, rule_based_scores_json
        FROM resume_sessions 
        WHERE user_id = ? AND raw_text_location = ?
@@ -419,7 +818,8 @@ export async function upsertResumeSessionWithScores(env, userId, {
   atsScore = null,
   ruleBasedScores = null
 }) {
-  if (!env.DB) {
+  const db = getDb(env);
+  if (!db) {
     return null;
   }
 
@@ -432,7 +832,7 @@ export async function upsertResumeSessionWithScores(env, userId, {
 
     if (existing) {
       // Update existing
-      const result = await env.DB.prepare(
+      const result = await db.prepare(
         `UPDATE resume_sessions 
          SET ats_score = COALESCE(?, ats_score),
              rule_based_scores_json = COALESCE(?, rule_based_scores_json),
@@ -444,7 +844,7 @@ export async function upsertResumeSessionWithScores(env, userId, {
       return result || null;
     } else {
       // Insert new
-      const result = await env.DB.prepare(
+      const result = await db.prepare(
         `INSERT INTO resume_sessions (user_id, title, role, raw_text_location, ats_score, rule_based_scores_json)
          VALUES (?, ?, ?, ?, ?, ?)
          RETURNING id, user_id, title, role, created_at, raw_text_location, ats_score, rule_based_scores_json`
@@ -464,7 +864,90 @@ export async function upsertResumeSessionWithScores(env, userId, {
  * @returns {boolean}
  */
 export function isD1Available(env) {
-  return !!env.DB;
+  return !!getDb(env);
+}
+
+const INTERVIEW_QUESTION_SETS_TABLE_SQL = `
+CREATE TABLE IF NOT EXISTS interview_question_sets (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL,
+  role TEXT NOT NULL,
+  seniority TEXT,
+  types_json TEXT NOT NULL,
+  questions_json TEXT NOT NULL,
+  selected_ids_json TEXT NOT NULL,
+  jd TEXT,
+  created_at TEXT DEFAULT (datetime('now')),
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);`;
+
+const MOCK_INTERVIEW_SESSIONS_TABLE_SQL = `
+CREATE TABLE IF NOT EXISTS mock_interview_sessions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL,
+  role TEXT NOT NULL,
+  seniority TEXT NOT NULL,
+  interview_style TEXT NOT NULL,
+  question_set_id INTEGER,
+  question_set_name TEXT,
+  overall_score INTEGER NOT NULL,
+  relevance_score INTEGER NOT NULL,
+  structure_score INTEGER NOT NULL,
+  clarity_score INTEGER NOT NULL,
+  insight_score INTEGER NOT NULL,
+  grammar_score INTEGER NOT NULL,
+  situation_pct REAL NOT NULL,
+  action_pct REAL NOT NULL,
+  outcome_pct REAL NOT NULL,
+  qa_pairs_json TEXT NOT NULL,
+  feedback_json TEXT NOT NULL,
+  created_at TEXT DEFAULT (datetime('now')),
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+  FOREIGN KEY (question_set_id) REFERENCES interview_question_sets(id) ON DELETE SET NULL
+);`;
+
+const MOCK_INTERVIEW_USAGE_TABLE_SQL = `
+CREATE TABLE IF NOT EXISTS mock_interview_usage (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL,
+  month TEXT NOT NULL,
+  sessions_used INTEGER NOT NULL DEFAULT 0,
+  last_reset_at TEXT,
+  UNIQUE(user_id, month),
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);`;
+
+async function ensureMockInterviewIndexes(db) {
+  await db
+    .prepare('CREATE INDEX IF NOT EXISTS idx_mock_interview_sessions_user_id ON mock_interview_sessions(user_id)')
+    .run();
+  await db
+    .prepare('CREATE INDEX IF NOT EXISTS idx_mock_interview_sessions_created_at ON mock_interview_sessions(created_at DESC)')
+    .run();
+  await db
+    .prepare('CREATE INDEX IF NOT EXISTS idx_mock_interview_sessions_role ON mock_interview_sessions(role)')
+    .run();
+  await db
+    .prepare('CREATE INDEX IF NOT EXISTS idx_mock_interview_usage_user_month ON mock_interview_usage(user_id, month)')
+    .run();
+}
+
+export async function ensureMockInterviewSchema(env) {
+  const db = getDb(env);
+  if (!db) return;
+
+  try {
+    await db.prepare(INTERVIEW_QUESTION_SETS_TABLE_SQL).run();
+    await db.prepare('CREATE INDEX IF NOT EXISTS idx_interview_question_sets_user_id ON interview_question_sets(user_id)').run();
+    await db.prepare('CREATE INDEX IF NOT EXISTS idx_interview_question_sets_created_at ON interview_question_sets(created_at DESC)').run();
+    await db.prepare('CREATE INDEX IF NOT EXISTS idx_interview_question_sets_role ON interview_question_sets(role)').run();
+    await db.prepare(MOCK_INTERVIEW_SESSIONS_TABLE_SQL).run();
+    await db.prepare(MOCK_INTERVIEW_USAGE_TABLE_SQL).run();
+    await ensureMockInterviewIndexes(db);
+  } catch (error) {
+    console.error('[DB] Error ensuring mock interview schema:', error);
+    throw error;
+  }
 }
 
 // ============================================================
@@ -485,7 +968,8 @@ export function isD1Available(env) {
  * @returns {Promise<Object>} Created set { id, user_id, role, seniority, types_json, questions_json, selected_ids_json, jd, created_at }
  */
 export async function createInterviewQuestionSet(env, { userId, role, seniority = null, types, questions, selectedIndices, jd = null }) {
-  if (!env.DB) {
+  const db = getDb(env);
+  if (!db) {
     console.warn('[DB] D1 binding not available');
     return null;
   }
@@ -495,7 +979,7 @@ export async function createInterviewQuestionSet(env, { userId, role, seniority 
     const questionsJson = JSON.stringify(questions || []);
     const selectedIdsJson = JSON.stringify(selectedIndices || []);
 
-    const result = await env.DB.prepare(
+    const result = await db.prepare(
       `INSERT INTO interview_question_sets (user_id, role, seniority, types_json, questions_json, selected_ids_json, jd)
        VALUES (?, ?, ?, ?, ?, ?, ?)
        RETURNING id, user_id, role, seniority, types_json, questions_json, selected_ids_json, jd, created_at`
@@ -517,7 +1001,8 @@ export async function createInterviewQuestionSet(env, { userId, role, seniority 
  * @returns {Promise<Object|null>} Set with parsed JSON fields, or null if not found or doesn't belong to user
  */
 export async function getInterviewQuestionSetById(env, id, userId) {
-  if (!env.DB) {
+  const db = getDb(env);
+  if (!db) {
     console.warn('[DB] D1 binding not available');
     return null;
   }
@@ -528,7 +1013,7 @@ export async function getInterviewQuestionSetById(env, id, userId) {
   }
 
   try {
-    const row = await env.DB.prepare(
+    const row = await db.prepare(
       `SELECT id, user_id, role, seniority, types_json, questions_json, selected_ids_json, jd, created_at
        FROM interview_question_sets
        WHERE id = ? AND user_id = ?`
@@ -565,13 +1050,14 @@ export async function getInterviewQuestionSetById(env, id, userId) {
  * @returns {Promise<Array>} List of sets with metadata (not full questions)
  */
 export async function getInterviewQuestionSetsByUser(env, userId, { limit = 10 } = {}) {
-  if (!env.DB) {
+  const db = getDb(env);
+  if (!db) {
     console.warn('[DB] D1 binding not available');
     return [];
   }
 
   try {
-    const results = await env.DB.prepare(
+    const results = await db.prepare(
       `SELECT id, role, seniority, types_json, selected_ids_json, created_at
        FROM interview_question_sets
        WHERE user_id = ?
@@ -597,9 +1083,126 @@ export async function getInterviewQuestionSetsByUser(env, userId, { limit = 10 }
   }
 }
 
+/**
+ * Delete an interview question set by ID (with ownership check)
+ * @param {Object} env - Cloudflare environment with DB binding
+ * @param {number} setId - Question set ID
+ * @param {number} userId - User ID (required for security - ownership check)
+ * @returns {Promise<boolean>} True if deleted, false if not found/unauthorized
+ */
+export async function deleteInterviewQuestionSet(env, setId, userId) {
+  const db = getDb(env);
+  if (!db) {
+    throw new Error('[DB] D1 binding not available');
+  }
+
+  if (!userId || typeof userId !== 'number') {
+    throw new Error('userId is required for deleteInterviewQuestionSet');
+  }
+
+  try {
+    // Verify ownership before deleting
+    const set = await db.prepare(
+      'SELECT id FROM interview_question_sets WHERE id = ? AND user_id = ?'
+    ).bind(setId, userId).first();
+
+    if (!set) {
+      return false;
+    }
+
+    // Delete the set (CASCADE will handle related mock_interview_sessions)
+    const result = await db.prepare(
+      'DELETE FROM interview_question_sets WHERE id = ? AND user_id = ?'
+    ).bind(setId, userId).run();
+
+    const rowsAffected =
+      typeof result?.meta?.changes === 'number'
+        ? result.meta.changes
+        : typeof result?.changes === 'number'
+          ? result.changes
+          : 0;
+
+    if (rowsAffected === 0) {
+      return false;
+    }
+
+    console.log('[DB] Deleted interview question set:', { setId, userId });
+    return true;
+  } catch (error) {
+    console.error('[DB] Error in deleteInterviewQuestionSet:', error);
+    throw error;
+  }
+}
+
 // ============================================================
 // FEATURE DAILY USAGE HELPERS
 // ============================================================
+
+/**
+ * Ensure feature_daily_usage table exists (auto-create if missing)
+ * This prevents issues if migrations weren't run and matches the pattern
+ * used by other features (LinkedIn, Cover Letter)
+ * @param {Object} env - Cloudflare environment with DB binding
+ * @returns {Promise<void>}
+ */
+async function ensureFeatureDailyUsageTable(env) {
+  const db = getDb(env);
+  if (!db) {
+    return; // Can't create table without DB
+  }
+
+  try {
+    // Check if table exists
+    const tableCheck = await db.prepare(
+      `SELECT name FROM sqlite_master WHERE type='table' AND name='feature_daily_usage'`
+    ).first();
+
+    if (tableCheck) {
+      return; // Table exists, nothing to do
+    }
+
+    // Create table if it doesn't exist
+    await db.prepare(`
+      CREATE TABLE IF NOT EXISTS feature_daily_usage (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL,
+        feature TEXT NOT NULL,
+        usage_date TEXT NOT NULL,
+        count INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT DEFAULT (datetime('now')),
+        updated_at TEXT DEFAULT (datetime('now')),
+        UNIQUE (user_id, feature, usage_date),
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+      )
+    `).run();
+
+    // Create indexes
+    await db.prepare(`
+      CREATE INDEX IF NOT EXISTS idx_feature_daily_usage_user_id 
+      ON feature_daily_usage(user_id)
+    `).run();
+
+    await db.prepare(`
+      CREATE INDEX IF NOT EXISTS idx_feature_daily_usage_feature 
+      ON feature_daily_usage(feature)
+    `).run();
+
+    await db.prepare(`
+      CREATE INDEX IF NOT EXISTS idx_feature_daily_usage_date 
+      ON feature_daily_usage(usage_date)
+    `).run();
+
+    await db.prepare(`
+      CREATE INDEX IF NOT EXISTS idx_feature_daily_usage_user_feature_date 
+      ON feature_daily_usage(user_id, feature, usage_date)
+    `).run();
+
+    console.log('[DB] Auto-created feature_daily_usage table');
+  } catch (error) {
+    console.error('[DB] Error ensuring feature_daily_usage table:', error);
+    // Don't throw - let the increment function handle the error
+  }
+}
 
 /**
  * Get daily usage count for a feature
@@ -609,14 +1212,15 @@ export async function getInterviewQuestionSetsByUser(env, userId, { limit = 10 }
  * @returns {Promise<number>} Current usage count for today
  */
 export async function getFeatureDailyUsage(env, userId, feature) {
-  if (!env.DB) {
+  const db = getDb(env);
+  if (!db) {
     console.warn('[DB] D1 binding not available');
     return 0;
   }
 
   try {
     const today = new Date().toISOString().slice(0, 10); // 'YYYY-MM-DD' UTC
-    const row = await env.DB.prepare(
+    const row = await db.prepare(
       `SELECT count FROM feature_daily_usage
        WHERE user_id = ? AND feature = ? AND usage_date = ?`
     ).bind(userId, feature, today).first();
@@ -637,16 +1241,20 @@ export async function getFeatureDailyUsage(env, userId, feature) {
  * @returns {Promise<number>} New total count after increment
  */
 export async function incrementFeatureDailyUsage(env, userId, feature, incrementBy = 1) {
-  if (!env.DB) {
+  const db = getDb(env);
+  if (!db) {
     console.warn('[DB] D1 binding not available');
     return incrementBy;
   }
+
+  // Auto-create table if it doesn't exist (safety net for missing migrations)
+  await ensureFeatureDailyUsageTable(env);
 
   try {
     const today = new Date().toISOString().slice(0, 10); // 'YYYY-MM-DD' UTC
     
     // Use INSERT ... ON CONFLICT pattern (SQLite supports this)
-    const result = await env.DB.prepare(
+    const result = await db.prepare(
       `INSERT INTO feature_daily_usage (user_id, feature, usage_date, count)
        VALUES (?, ?, ?, ?)
        ON CONFLICT(user_id, feature, usage_date)
@@ -660,7 +1268,7 @@ export async function incrementFeatureDailyUsage(env, userId, feature, increment
     }
     
     // Fallback: if RETURNING doesn't work, fetch separately
-    const row = await env.DB.prepare(
+    const row = await db.prepare(
       `SELECT count FROM feature_daily_usage
        WHERE user_id = ? AND feature = ? AND usage_date = ?`
     ).bind(userId, feature, today).first();
@@ -670,6 +1278,410 @@ export async function incrementFeatureDailyUsage(env, userId, feature, increment
     console.error('[DB] Error in incrementFeatureDailyUsage:', error);
     // On error, return incrementBy as a safe fallback
     return incrementBy;
+  }
+}
+
+// ============================================================
+// MOCK INTERVIEW SESSION HELPERS
+// ============================================================
+
+/**
+ * Create a mock interview session
+ * @param {Object} env - Cloudflare environment with DB binding
+ * @param {Object} options - Session options
+ * @param {number} options.userId - User ID from users table
+ * @param {string} options.role - Target role
+ * @param {string} options.seniority - Level (e.g., "Senior", "Mid")
+ * @param {string} options.interviewStyle - Style: "mixed", "behavioral", "technical", "leadership"
+ * @param {number|null} options.questionSetId - FK to interview_question_sets.id (nullable)
+ * @param {string|null} options.questionSetName - Display name for the set
+ * @param {number} options.overallScore - Total score 0-100
+ * @param {Object} options.rubricScores - { relevance, structure, clarity, insight, grammar }
+ * @param {Object} options.saoBreakdown - { situationPct, actionPct, outcomePct }
+ * @param {Array} options.qaPairs - Array of { q, a } pairs
+ * @param {Object} options.feedback - Full AI feedback JSON
+ * @returns {Promise<Object>} Created session
+ */
+export async function createMockInterviewSession(env, {
+  userId,
+  role,
+  seniority,
+  interviewStyle,
+  questionSetId = null,
+  questionSetName = null,
+  overallScore,
+  rubricScores,
+  saoBreakdown,
+  qaPairs,
+  feedback
+}) {
+  const db = getDb(env);
+  if (!db) {
+    console.warn('[DB] D1 binding not available');
+    return null;
+  }
+
+  try {
+    await ensureMockInterviewSchema(env);
+
+    const qaPairsJson = JSON.stringify(qaPairs || []);
+    const feedbackJson = JSON.stringify(feedback || {});
+    const setName = questionSetName || (questionSetId ? null : 'AI-generated');
+
+    const result = await db.prepare(
+      `INSERT INTO mock_interview_sessions (
+        user_id, role, seniority, interview_style, question_set_id, question_set_name,
+        overall_score, relevance_score, structure_score, clarity_score, insight_score, grammar_score,
+        situation_pct, action_pct, outcome_pct, qa_pairs_json, feedback_json
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      RETURNING id, user_id, role, seniority, interview_style, question_set_id, question_set_name,
+        overall_score, relevance_score, structure_score, clarity_score, insight_score, grammar_score,
+        situation_pct, action_pct, outcome_pct, created_at`
+    ).bind(
+      userId,
+      role,
+      seniority,
+      interviewStyle,
+      questionSetId,
+      setName,
+      overallScore,
+      rubricScores.relevance,
+      rubricScores.structure,
+      rubricScores.clarity,
+      rubricScores.insight,
+      rubricScores.grammar,
+      saoBreakdown.situationPct,
+      saoBreakdown.actionPct,
+      saoBreakdown.outcomePct,
+      qaPairsJson,
+      feedbackJson
+    ).first();
+
+    console.log('[DB] Created mock interview session:', { id: result.id, userId, role, score: overallScore });
+    return result;
+  } catch (error) {
+    console.error('[DB] Error in createMockInterviewSession:', error);
+    throw error;
+  }
+}
+
+/**
+ * Get mock interview session by ID (enforces ownership)
+ * @param {Object} env - Cloudflare environment with DB binding
+ * @param {number} sessionId - Session ID
+ * @param {number} userId - User ID (required for security)
+ * @returns {Promise<Object|null>} Full session with parsed JSON, or null
+ */
+export async function getMockInterviewSessionById(env, sessionId, userId) {
+  const db = getDb(env);
+  if (!db) {
+    console.warn('[DB] D1 binding not available');
+    return null;
+  }
+
+  if (!userId || typeof userId !== 'number') {
+    console.warn('[DB] userId is required for getMockInterviewSessionById');
+    return null;
+  }
+
+  try {
+    await ensureMockInterviewSchema(env);
+
+    const row = await db.prepare(
+      `SELECT id, user_id, role, seniority, interview_style, question_set_id, question_set_name,
+        overall_score, relevance_score, structure_score, clarity_score, insight_score, grammar_score,
+        situation_pct, action_pct, outcome_pct, qa_pairs_json, feedback_json, created_at
+      FROM mock_interview_sessions
+      WHERE id = ? AND user_id = ?`
+    ).bind(sessionId, userId).first();
+
+    if (!row) {
+      return null;
+    }
+
+    return {
+      id: row.id,
+      userId: row.user_id,
+      role: row.role,
+      seniority: row.seniority,
+      interviewStyle: row.interview_style,
+      questionSetId: row.question_set_id,
+      questionSetName: row.question_set_name || 'AI-generated',
+      overallScore: row.overall_score,
+      rubricScores: {
+        relevance: row.relevance_score,
+        structure: row.structure_score,
+        clarity: row.clarity_score,
+        insight: row.insight_score,
+        grammar: row.grammar_score
+      },
+      saoBreakdown: {
+        situationPct: row.situation_pct,
+        actionPct: row.action_pct,
+        outcomePct: row.outcome_pct
+      },
+      qaPairs: JSON.parse(row.qa_pairs_json || '[]'),
+      feedback: JSON.parse(row.feedback_json || '{}'),
+      createdAt: row.created_at
+    };
+  } catch (error) {
+    console.error('[DB] Error in getMockInterviewSessionById:', error);
+    return null;
+  }
+}
+
+/**
+ * Get mock interview session history for a user
+ * @param {Object} env - Cloudflare environment with DB binding
+ * @param {number} userId - User ID
+ * @param {Object} options - Query options
+ * @param {number} options.limit - Max results (default 10)
+ * @returns {Promise<Array>} List of session summaries (not full feedback)
+ */
+export async function getMockInterviewHistory(env, userId, { limit = 10 } = {}) {
+  const db = getDb(env);
+  if (!db) {
+    console.warn('[DB] D1 binding not available');
+    return [];
+  }
+
+  try {
+    await ensureMockInterviewSchema(env);
+
+    const results = await db.prepare(
+      `SELECT id, role, seniority, interview_style, question_set_name, overall_score, created_at
+      FROM mock_interview_sessions
+      WHERE user_id = ?
+      ORDER BY created_at DESC
+      LIMIT ?`
+    ).bind(userId, limit).all();
+
+    const items = results.results.map(row => ({
+      id: row.id,
+      role: row.role,
+      seniority: row.seniority,
+      interviewStyle: row.interview_style,
+      questionSetName: row.question_set_name || 'AI-generated',
+      overallScore: row.overall_score,
+      createdAt: row.created_at
+    }));
+
+    console.log('[DB] Retrieved mock interview history:', { userId, count: items.length });
+    return items;
+  } catch (error) {
+    console.error('[DB] Error in getMockInterviewHistory:', error);
+    return [];
+  }
+}
+
+/**
+ * Get mock interview monthly usage for a user
+ * @param {Object} env - Cloudflare environment with DB binding
+ * @param {number} userId - User ID
+ * @param {string|null} month - Month string "YYYY-MM" (default: current month)
+ * @returns {Promise<number>} Sessions used this month
+ */
+export async function getMockInterviewMonthlyUsage(env, userId, month = null) {
+  const db = getDb(env);
+  if (!db) {
+    console.warn('[DB] D1 binding not available');
+    return 0;
+  }
+
+  try {
+    await ensureMockInterviewSchema(env);
+
+    const targetMonth = month || new Date().toISOString().slice(0, 7); // "YYYY-MM"
+    
+    const row = await db.prepare(
+      `SELECT sessions_used FROM mock_interview_usage
+      WHERE user_id = ? AND month = ?`
+    ).bind(userId, targetMonth).first();
+
+    return row ? row.sessions_used : 0;
+  } catch (error) {
+    console.error('[DB] Error in getMockInterviewMonthlyUsage:', error);
+    return 0;
+  }
+}
+
+/**
+ * Increment mock interview monthly usage
+ * @param {Object} env - Cloudflare environment with DB binding
+ * @param {number} userId - User ID
+ * @returns {Promise<number>} New total for the month
+ */
+export async function incrementMockInterviewMonthlyUsage(env, userId) {
+  const db = getDb(env);
+  if (!db) {
+    console.warn('[DB] D1 binding not available');
+    return 1;
+  }
+
+  try {
+    await ensureMockInterviewSchema(env);
+
+    const targetMonth = new Date().toISOString().slice(0, 7); // "YYYY-MM"
+    
+    const result = await db.prepare(
+      `INSERT INTO mock_interview_usage (user_id, month, sessions_used, last_reset_at)
+      VALUES (?, ?, 1, datetime('now'))
+      ON CONFLICT(user_id, month)
+      DO UPDATE SET sessions_used = sessions_used + 1, last_reset_at = datetime('now')
+      RETURNING sessions_used`
+    ).bind(userId, targetMonth).first();
+
+    return result ? result.sessions_used : 1;
+  } catch (error) {
+    console.error('[DB] Error in incrementMockInterviewMonthlyUsage:', error);
+    return 1;
+  }
+}
+
+// ============================================================
+// COOKIE CONSENT HELPERS
+// ============================================================
+
+/**
+ * Upsert cookie consent (D1 source of truth)
+ * Handles both authenticated (userId) and anonymous (clientId) cases
+ * @param {Object} env - Cloudflare environment
+ * @param {Object} params - {userId, authId, clientId, consent}
+ * @param {number|null} params.userId - User ID from users table (nullable)
+ * @param {string|null} params.authId - Firebase auth ID (nullable, for logging)
+ * @param {string|null} params.clientId - Anonymous client identifier (nullable)
+ * @param {Object} params.consent - Consent object {version, analytics, updatedAt}
+ * @returns {Promise<boolean>} Success
+ */
+export async function upsertCookieConsent(env, { userId, authId, clientId, consent }) {
+  const db = getDb(env);
+  if (!db) {
+    console.warn('[DB] D1 binding not available');
+    console.warn('[DB] Available env keys:', Object.keys(env || {}).filter(k => k.includes('DB') || k.includes('D1')));
+    return false;
+  }
+
+  console.log('[DB] upsertCookieConsent called:', { hasUserId: !!userId, hasClientId: !!clientId, hasDb: !!db });
+
+  try {
+    if (!userId && !clientId) {
+      console.warn('[DB] No userId or clientId provided for cookie consent');
+      return false;
+    }
+
+    const consentStr = typeof consent === 'string' ? consent : JSON.stringify(consent);
+    const now = new Date().toISOString();
+
+    // Use INSERT ... ON CONFLICT to handle race conditions atomically
+    // This prevents duplicate records from concurrent requests
+    // Partial unique indexes (idx_cookie_consents_user_id_unique, idx_cookie_consents_client_id_unique)
+    // ensure atomicity for both authenticated and anonymous users
+    if (userId) {
+      // For authenticated users: atomic upsert on user_id
+      // The partial unique index on user_id (WHERE user_id IS NOT NULL) ensures atomicity
+      // ON CONFLICT without WHERE clause works because SQLite matches against the partial index
+      await db.prepare(
+        `INSERT INTO cookie_consents (user_id, client_id, consent_json, created_at, updated_at)
+         VALUES (?, NULL, ?, ?, ?)
+         ON CONFLICT(user_id) DO UPDATE SET
+           consent_json = excluded.consent_json,
+           updated_at = excluded.updated_at`
+      ).bind(userId, consentStr, now, now).run();
+      
+      // After successful upsert, clean up any orphaned client_id record
+      // This migration step is non-critical and can fail gracefully
+      if (clientId) {
+        try {
+          await db.prepare('DELETE FROM cookie_consents WHERE client_id = ? AND user_id IS NULL').bind(clientId).run();
+        } catch (e) {
+          // Ignore if delete fails (non-critical, just cleanup)
+          console.warn('[DB] Failed to delete client_id record during migration:', e);
+        }
+      }
+      
+      console.log('[DB] Upserted cookie consent (user):', { userId });
+    } else if (clientId) {
+      // For anonymous users: atomic upsert on client_id
+      // The partial unique index on client_id (WHERE client_id IS NOT NULL) ensures atomicity
+      // ON CONFLICT without WHERE clause works because SQLite matches against the partial index
+      await db.prepare(
+        `INSERT INTO cookie_consents (user_id, client_id, consent_json, created_at, updated_at)
+         VALUES (NULL, ?, ?, ?, ?)
+         ON CONFLICT(client_id) DO UPDATE SET
+           consent_json = excluded.consent_json,
+           updated_at = excluded.updated_at`
+      ).bind(clientId, consentStr, now, now).run();
+      
+      console.log('[DB] Upserted cookie consent (client):', { clientId });
+    }
+
+    return true;
+  } catch (error) {
+    console.error('[DB] Error in upsertCookieConsent:', error);
+    console.error('[DB] Error details:', {
+      message: error.message,
+      stack: error.stack,
+      userId: userId || null,
+      clientId: clientId || null,
+      consentPreview: (() => {
+        if (typeof consent === 'string') return consent.substring(0, 100);
+        if (consent === undefined) return 'undefined';
+        if (consent === null) return 'null';
+        try {
+          const str = JSON.stringify(consent);
+          return str ? str.substring(0, 100) : 'empty';
+        } catch {
+          return 'unstringifiable';
+        }
+      })()
+    });
+    return false;
+  }
+}
+
+/**
+ * Get cookie consent from D1
+ * @param {Object} env - Cloudflare environment  
+ * @param {string|null} userId - User ID from users table
+ * @param {string|null} clientId - Client ID (anonymous identifier)
+ * @returns {Promise<Object|null>} Consent object or null
+ */
+export async function getCookieConsent(env, userId, clientId) {
+  const db = getDb(env);
+  if (!db) {
+    return null;
+  }
+
+  try {
+    let row = null;
+    
+    // Prefer userId over clientId, but fall back to clientId if userId query returns nothing
+    // This handles migration: user saved consent anonymously (client_id), then logged in (user_id)
+    if (userId) {
+      row = await db.prepare(
+        'SELECT consent_json FROM cookie_consents WHERE user_id = ?'
+      ).bind(userId).first();
+      
+      // If no user_id record found, fall back to client_id (for migration scenario)
+      if (!row && clientId) {
+        row = await db.prepare(
+          'SELECT consent_json FROM cookie_consents WHERE client_id = ?'
+        ).bind(clientId).first();
+      }
+    } else if (clientId) {
+      row = await db.prepare(
+        'SELECT consent_json FROM cookie_consents WHERE client_id = ?'
+      ).bind(clientId).first();
+    }
+
+    if (!row || !row.consent_json) {
+      return null;
+    }
+
+    return JSON.parse(row.consent_json);
+  } catch (error) {
+    console.error('[DB] Error in getCookieConsent:', error);
+    return null;
   }
 }
 

@@ -23,7 +23,20 @@
     // This runs before any other scripts to show content instantly
     (function() {
       const hasLocalStorageAuth = localStorage.getItem('user-authenticated') === 'true';
-      const cachedEmail = localStorage.getItem('user-email');
+      // SECURITY: Get email from Firebase SDK keys (works before firebase-auth.js loads)
+      function getEmailFromFirebaseKeys() {
+        try {
+          const firebaseKeys = Object.keys(localStorage).filter(k => k.startsWith('firebase:authUser:'));
+          if (firebaseKeys.length > 0) {
+            const keyData = JSON.parse(localStorage.getItem(firebaseKeys[0]) || '{}');
+            return keyData.email || null;
+          }
+        } catch (e) {
+          console.warn('Failed to get email from Firebase keys:', e);
+        }
+        return null;
+      }
+      const cachedEmail = getEmailFromFirebaseKeys();
       if (hasLocalStorageAuth && cachedEmail) {
         // Use requestAnimationFrame to ensure DOM is ready
         if (document.body) {
@@ -53,16 +66,24 @@
       const user = mgr ? mgr.getCurrentUser() : null;
       
       // Check if user is authenticated via multiple methods
-      const hasLocalStorageAuth = localStorage.getItem('user-authenticated') === 'true' && !!localStorage.getItem('user-email');
+      // SECURITY: Check localStorage auth independently (works before Firebase loads)
+      const hasLocalStorageAuth = localStorage.getItem('user-authenticated') === 'true';
+      const hasFirebaseKeys = Object.keys(localStorage).some(k => 
+        k.startsWith('firebase:authUser:') && 
+        localStorage.getItem(k) && 
+        localStorage.getItem(k) !== 'null' &&
+        localStorage.getItem(k).length > 10
+      );
+      const hasAnyAuth = hasLocalStorageAuth || hasFirebaseKeys;
       
-      if (!user && !hasLocalStorageAuth) {
+      if (!user && !hasAnyAuth) {
         console.log('🔒 No authenticated user found, redirecting to login');
         window.location.href = "/login.html";
         return;
       }
       
       // If we have localStorage auth but no Firebase user yet, wait a bit more
-      if (!user && hasLocalStorageAuth) {
+      if (!user && hasAnyAuth) {
         console.log('⏳ Waiting for Firebase auth to sync...');
         setTimeout(() => {
           const retryUser = mgr ? mgr.getCurrentUser() : null;
@@ -111,9 +132,17 @@
         authCheckComplete = true;
         const mgr = window.FirebaseAuthManager;
         const user = mgr ? mgr.getCurrentUser() : null;
-        const hasLocalStorageAuth = localStorage.getItem('user-authenticated') === 'true' && !!localStorage.getItem('user-email');
+        // SECURITY: Check localStorage auth independently (works before Firebase loads)
+        const hasLocalStorageAuth = localStorage.getItem('user-authenticated') === 'true';
+        const hasFirebaseKeys = Object.keys(localStorage).some(k => 
+          k.startsWith('firebase:authUser:') && 
+          localStorage.getItem(k) && 
+          localStorage.getItem(k) !== 'null' &&
+          localStorage.getItem(k).length > 10
+        );
+        const hasAnyAuth = hasLocalStorageAuth || hasFirebaseKeys;
         
-        if (!user && !hasLocalStorageAuth) {
+        if (!user && !hasAnyAuth) {
           console.log('🔒 Manual check: No auth found, redirecting to login');
           window.location.href = "/login.html";
         } else if (user) {
@@ -135,7 +164,23 @@
       if (document.body) {
         // Only add class if we don't have cached auth (to prevent race condition)
         const hasLocalStorageAuth = localStorage.getItem('user-authenticated') === 'true';
-        const cachedEmail = localStorage.getItem('user-email');
+        // SECURITY: Get email from Firebase SDK keys (works before FirebaseAuthManager is ready)
+        // FirebaseAuthManager.getCurrentUser() returns null until onAuthStateChanged fires
+        // Use the same approach as the inline script to maintain consistency
+        function getEmailFromFirebaseKeys() {
+          try {
+            const firebaseKeys = Object.keys(localStorage).filter(k => k.startsWith('firebase:authUser:'));
+            if (firebaseKeys.length > 0) {
+              const keyData = JSON.parse(localStorage.getItem(firebaseKeys[0]) || '{}');
+              return keyData.email || null;
+            }
+          } catch (e) {
+            console.warn('Failed to get email from Firebase keys:', e);
+          }
+          return null;
+        }
+        const user = window.FirebaseAuthManager?.getCurrentUser?.();
+        const cachedEmail = user?.email || getEmailFromFirebaseKeys();
         if (!hasLocalStorageAuth || !cachedEmail) {
           document.body.classList.add("account-protected");
         }
@@ -154,6 +199,7 @@
   <link rel="icon" type="image/png" href="assets/jobhackai_icon_only_128.png">
   <link rel="apple-touch-icon" href="assets/jobhackai_icon_only_128.png">
   <script src="js/dynamic-favicon.js?v=20250111-1"></script>
+  <script src="js/cookie-consent.js?v=20250128-1" defer></script>
   <link rel="stylesheet" href="css/tokens.css">
   <link rel="stylesheet" href="css/main.css">
   <link rel="stylesheet" href="css/header.css">
@@ -320,9 +366,9 @@
     }
     .btn-outline-grey:hover,
     .btn-outline-grey:focus {
-      background: #232B36;
+      background: #1976D2;
       color: #fff;
-      border-color: #232B36;
+      border-color: #1976D2;
     }
     .plan-badge {
       display: inline-flex;
@@ -379,8 +425,8 @@
     }
     .btn-link:hover,
     .btn-link:focus {
-      background: #F3F4F6;
-      color: #125bb5;
+      background: #1976D2;
+      color: #fff;
     }
   </style>
 </head>
@@ -462,6 +508,32 @@
       <div class="settings-block" style="margin-bottom:2.2rem;">
         <div class="settings-label" style="margin-bottom:0.5rem;">Security</div>
         <button class="btn-outline" type="button" style="margin-bottom:0.2rem;" onclick="resetPassword()">Reset My Password</button>
+        <div class="settings-note" style="margin-top:0.8rem;">
+          <a href="privacy.html" class="settings-support-link" style="display:inline-flex;align-items:center;gap:0.3rem;">
+            <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="flex-shrink:0;">
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+              <path d="M9 12l2 2 4-4"/>
+            </svg>
+            Privacy Policy & Data Retention
+          </a>
+        </div>
+      </div>
+      <!-- Privacy & Cookies Section -->
+      <div class="settings-block" style="margin-bottom:2.2rem;">
+        <div class="settings-label" style="margin-bottom:0.5rem;">Privacy & Cookies</div>
+        <a href="/cookies.html" class="settings-support-link" style="display:inline-flex;align-items:center;gap:0.3rem;">
+          <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="flex-shrink:0;">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+            <path d="M9 12l2 2 4-4"/>
+          </svg>
+          View Cookie Policy
+        </a>
+        <button class="btn-outline" type="button" id="open-cookie-preferences" style="margin-top:0.8rem;">
+          Cookie Preferences
+        </button>
+        <div class="settings-note" style="margin-top:0.8rem;">
+          Manage your cookie preferences and learn how we use cookies.
+        </div>
       </div>
       <!-- Dynamic Billing Section -->
       <div id="billing-section-dynamic" class="settings-block" style="margin-bottom:2.2rem;">
@@ -494,8 +566,9 @@
       </div>
       <div class="footer-links">
         <a href="index.html">Home</a>
-        <a href="support.html">Support</a>
+        <a href="help.html">Help</a>
         <a href="privacy.html">Privacy</a>
+        <a href="cookies.html">Cookies</a>
       </div>
     </div>
   </footer>
@@ -503,6 +576,8 @@
   <!-- Load navigation system -->
   <script src="js/navigation.js?v=20251007-2"></script>
   <script src="js/universal-logout.js?v=20251007-2"></script>
+  <!-- Inactivity tracker - auto-logout after 30 minutes of inactivity -->
+  <script src="js/inactivity-tracker.js?v=20250115-1"></script>
   <script>
     // DO NOT call initializeNavigation synchronously on auth-protected pages
     // Wait for DOMContentLoaded so Firebase auth module has time to load
@@ -646,7 +721,8 @@
         let user = window.FirebaseAuthManager?.getCurrentUser?.();
         if (!user) {
           // Check if we have localStorage auth as a backup signal
-          const hasLocalStorageAuth = localStorage.getItem('user-authenticated') === 'true' && !!localStorage.getItem('user-email');
+          // SECURITY: Use Firebase auth check instead of email validation
+          const hasLocalStorageAuth = localStorage.getItem('user-authenticated') === 'true';
           
           if (hasLocalStorageAuth) {
             // Wait for Firebase auth manager to initialize
@@ -829,9 +905,16 @@
           
           html += `</div>`;
           html += `<div class="subscription-action-row">`;
-          html += `<button class="btn-outline" type="button" onclick="openBillingPortal()">Manage Subscription</button>`;
+          html += `<button class="btn-outline" type="button" onclick="openBillingPortal()">Billing Management</button>`;
           html += `<span class="plan-badge ${plan}">${planBadgeText[plan]}</span>`;
           html += `</div>`;
+          
+          // Phase 2.4 & Phase 4.1: Add Stripe portal messaging and billing data notice
+          html += `<div style="background:#F3F4F6;border-left:3px solid #6B7280;padding:0.75rem 1rem;border-radius:8px;margin-top:1rem;font-size:0.875rem;color:#374151;line-height:1.5;">
+            <div style="margin-bottom:0.5rem;"><strong>Billing Information</strong></div>
+            <div style="margin-bottom:0.5rem;">To change plans, visit your billing portal. Your current plan will remain active until the next billing cycle.</div>
+            <div style="font-size:0.8125rem;color:#6B7280;">We use Stripe for secure payment processing. We don't store your card details — Stripe handles all payment data securely.</div>
+          </div>`;
         }
         
         billingSection.innerHTML = html;
@@ -873,8 +956,25 @@
     function initializeAccountSettingsImmediate() {
       // Check if we have cached auth data
       const hasLocalStorageAuth = localStorage.getItem('user-authenticated') === 'true';
-      const cachedEmail = localStorage.getItem('user-email');
-      const cachedName = localStorage.getItem('user-name');
+      // SECURITY: Get email from Firebase SDK keys (works before firebase-auth.js loads)
+      function getEmailFromFirebaseKeys() {
+        try {
+          const firebaseKeys = Object.keys(localStorage).filter(k => k.startsWith('firebase:authUser:'));
+          if (firebaseKeys.length > 0) {
+            const keyData = JSON.parse(localStorage.getItem(firebaseKeys[0]) || '{}');
+            return {
+              email: keyData.email || null,
+              displayName: keyData.displayName || null
+            };
+          }
+        } catch (e) {
+          console.warn('Failed to get email from Firebase keys:', e);
+        }
+        return { email: null, displayName: null };
+      }
+      const firebaseData = getEmailFromFirebaseKeys();
+      const cachedEmail = firebaseData.email;
+      const cachedName = firebaseData.displayName || localStorage.getItem('user-name');
       
       // CRITICAL: Remove account-protected class immediately if we have cached auth
       // This allows content to show even before Firebase verification completes
@@ -915,9 +1015,17 @@
     // Load fresh data in background (non-blocking)
     document.addEventListener('DOMContentLoaded', async () => {
       let user = window.FirebaseAuthManager?.getCurrentUser?.();
-      const hasLocalStorageAuth = localStorage.getItem('user-authenticated') === 'true' && !!localStorage.getItem('user-email');
+      // SECURITY: Check localStorage auth independently (works before Firebase loads)
+      const hasLocalStorageAuth = localStorage.getItem('user-authenticated') === 'true';
+      const hasFirebaseKeys = Object.keys(localStorage).some(k => 
+        k.startsWith('firebase:authUser:') && 
+        localStorage.getItem(k) && 
+        localStorage.getItem(k) !== 'null' &&
+        localStorage.getItem(k).length > 10
+      );
+      const hasAnyAuth = hasLocalStorageAuth || hasFirebaseKeys;
       
-      if (!user && !hasLocalStorageAuth) {
+      if (!user && !hasAnyAuth) {
         // No auth at all - redirect handled by static-auth-guard or firebase-auth-ready handler
         console.log('⏳ Waiting for auth...');
         return;
@@ -927,7 +1035,7 @@
       // Page is already visible, so these can run in background
       const loadDataPromise = (async () => {
         // Get user if not already available (non-blocking, quick check)
-        if (!user && hasLocalStorageAuth) {
+        if (!user && hasAnyAuth) {
           // Only wait briefly - don't block page display
           for (let i = 0; i < 5 && !user; i++) {
             await new Promise(r => setTimeout(r, 100)); // Short waits
@@ -935,7 +1043,7 @@
           }
         }
         
-        if (!user && !hasLocalStorageAuth) {
+        if (!user && !hasAnyAuth) {
           return;
         }
         

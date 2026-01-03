@@ -1,4 +1,5 @@
 import { getBearer, verifyFirebaseIdToken } from '../_lib/firebase-auth.js';
+import { getOrCreateUserByAuthId, isD1Available, getFeatureDailyUsage } from '../_lib/db.js';
 
 function corsHeaders(origin, env) {
   const allowedOrigins = [
@@ -22,14 +23,7 @@ function corsHeaders(origin, env) {
   };
 }
 
-async function getUserPlan(uid, env) {
-  if (!env.JOBHACKAI_KV) {
-    return 'free';
-  }
-  
-  const plan = await env.JOBHACKAI_KV.get(`planByUid:${uid}`);
-  return plan || 'free';
-}
+import { getUserPlan } from '../_lib/db.js';
 
 export async function onRequest(context) {
   const { request, env } = context;
@@ -56,8 +50,9 @@ export async function onRequest(context) {
       });
     }
 
-    const { uid } = await verifyFirebaseIdToken(token, env.FIREBASE_PROJECT_ID);
-    const plan = await getUserPlan(uid, env);
+    const { uid, payload } = await verifyFirebaseIdToken(token, env.FIREBASE_PROJECT_ID);
+    const plan = await getUserPlan(env, uid);
+    const userEmail = payload.email || null;
 
     // Get usage data from KV
     const usage = {
@@ -109,29 +104,107 @@ export async function onRequest(context) {
       }
     };
 
-    // Check ATS usage (Free plan: lifetime limit)
-    if (plan === 'free' && env.JOBHACKAI_KV) {
-      const atsUsageKey = `atsUsage:${uid}:lifetime`;
-      const atsUsed = await env.JOBHACKAI_KV.get(atsUsageKey);
-      usage.atsScans.used = atsUsed ? parseInt(atsUsed, 10) : 0;
-      usage.atsScans.remaining = Math.max(0, 1 - usage.atsScans.used);
+    // Check ATS usage (Free plan: lifetime limit) -- D1 is authority
+    if (plan === 'free' && isD1Available(env)) {
+      try {
+        const d1User = await getOrCreateUserByAuthId(env, uid, userEmail);
+        let atsUsed = 0;
+        if (d1User && d1User.id && env.DB) {
+          const res = await env.DB.prepare(
+            `SELECT COUNT(*) as count FROM usage_events WHERE user_id = ? AND feature = 'ats_score'`
+          ).bind(d1User.id).first();
+          atsUsed = res?.count || 0;
+        }
+        usage.atsScans.used = atsUsed;
+        usage.atsScans.remaining = Math.max(0, 1 - atsUsed);
+      } catch (e) {
+        usage.atsScans.used = 0;
+        usage.atsScans.remaining = 1;
+      }
     }
 
-    // Check feedback usage (Essential: monthly, Trial: lifetime during trial)
-    if (plan === 'essential' && env.JOBHACKAI_KV) {
-      const now = new Date();
-      const monthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-      const feedbackUsageKey = `feedbackUsage:${uid}:${monthKey}`;
-      const feedbackUsed = await env.JOBHACKAI_KV.get(feedbackUsageKey);
-      usage.resumeFeedback.used = feedbackUsed ? parseInt(feedbackUsed, 10) : 0;
-      usage.resumeFeedback.remaining = Math.max(0, 3 - usage.resumeFeedback.used);
-    } else if (plan === 'trial' && env.JOBHACKAI_KV) {
-      // Trial: total limit (3 feedbacks for entire trial period)
-      const totalKey = `feedbackTrialTotal:${uid}`;
-      const totalUsed = await env.JOBHACKAI_KV.get(totalKey);
-      usage.resumeFeedback.used = totalUsed ? parseInt(totalUsed, 10) : 0;
-      usage.resumeFeedback.limit = 3;
-      usage.resumeFeedback.remaining = Math.max(0, 3 - usage.resumeFeedback.used);
+    // Check feedback usage (Essential: monthly) -- D1 is authority
+    if (plan === 'essential' && isD1Available(env)) {
+      try {
+        const d1User = await getOrCreateUserByAuthId(env, uid, userEmail);
+        let feedbackUsed = 0;
+        if (d1User && d1User.id && env.DB) {
+          const now = new Date();
+          const year = now.getUTCFullYear();
+          const month = String(now.getUTCMonth() + 1).padStart(2, '0');
+      const monthStart = `${year}-${month}-01`;
+      // Calculate actual last day of month (end-of-month fix)
+      function getLastDayOfMonth(year, month) {
+        return new Date(Date.UTC(year, month, 0)).getUTCDate();
+      }
+      const lastDayOfMonth = getLastDayOfMonth(year, Number(month));
+      const monthEnd = `${year}-${month}-${String(lastDayOfMonth).padStart(2, '0')}`;
+          const res = await env.DB.prepare(
+            `SELECT COUNT(*) as count FROM usage_events WHERE user_id = ? AND feature = 'resume_feedback' AND date(created_at) >= date(?) AND date(created_at) <= date(?)`
+          ).bind(d1User.id, monthStart, monthEnd).first();
+          feedbackUsed = res?.count || 0;
+        }
+        usage.resumeFeedback.used = feedbackUsed;
+        usage.resumeFeedback.remaining = Math.max(0, 3 - feedbackUsed);
+      } catch (e) {
+        usage.resumeFeedback.used = 0;
+        usage.resumeFeedback.remaining = 3;
+      }
+    } else if (plan === 'trial' && isD1Available(env)) {
+      // Trial: total limit (3 feedbacks for entire trial period) -- D1 is authority
+      try {
+        const d1User = await getOrCreateUserByAuthId(env, uid, userEmail);
+        let trialUsed = 0;
+        if (d1User && d1User.id && env.DB) {
+          const res = await env.DB.prepare(
+            `SELECT COUNT(*) as count FROM usage_events WHERE user_id = ? AND feature = 'resume_feedback'`
+          ).bind(d1User.id).first();
+          trialUsed = res?.count || 0;
+        }
+        usage.resumeFeedback.used = trialUsed;
+        usage.resumeFeedback.limit = 3;
+        usage.resumeFeedback.remaining = Math.max(0, 3 - trialUsed);
+      } catch (e) {
+        usage.resumeFeedback.used = 0;
+        usage.resumeFeedback.limit = 3;
+        usage.resumeFeedback.remaining = 3;
+      }
+    }
+
+    // Check feedback usage for Pro/Premium from D1 usage_events table
+    if ((plan === 'pro' || plan === 'premium') && isD1Available(env)) {
+      try {
+        const d1User = await getOrCreateUserByAuthId(env, uid, userEmail);
+        if (d1User && d1User.id) {
+          // Get current month's usage by counting resume_feedback events
+          const now = new Date();
+          const year = now.getUTCFullYear();
+          const month = String(now.getUTCMonth() + 1).padStart(2, '0');
+      const monthStart = `${year}-${month}-01`;
+      // Calculate actual last day of month (end-of-month fix)
+      function getLastDayOfMonth(year, month) {
+        return new Date(Date.UTC(year, month, 0)).getUTCDate();
+      }
+      const lastDayOfMonth = getLastDayOfMonth(year, Number(month));
+      const monthEnd = `${year}-${month}-${String(lastDayOfMonth).padStart(2, '0')}`;
+          
+          const result = await env.DB.prepare(
+            `SELECT COUNT(*) as count FROM usage_events
+             WHERE user_id = ? AND feature = 'resume_feedback'
+             AND date(created_at) >= date(?) AND date(created_at) <= date(?)`
+          ).bind(d1User.id, monthStart, monthEnd).first();
+          
+          const totalUsed = (result && result.count !== null && result.count !== undefined) 
+            ? Number(result.count) 
+            : 0;
+          
+          usage.resumeFeedback.used = totalUsed;
+          // limit and remaining stay null for unlimited plans
+        }
+      } catch (error) {
+        console.error('[USAGE] Error getting resume feedback usage for Pro/Premium:', error);
+        // Keep default 0 on error
+      }
     }
 
     // Check rewrite usage (Pro/Premium: 45s cooldown, KV TTL minimum is 60s)
@@ -179,6 +252,105 @@ export async function onRequest(context) {
         if (timeSinceLastHourly < 3600000) {
           usage.mockInterviews.cooldown = Math.ceil((3600000 - timeSinceLastHourly) / 1000); // seconds
         }
+      }
+    }
+
+    // Get Interview Questions monthly usage from database
+    if ((plan === 'trial' || plan === 'essential' || plan === 'pro' || plan === 'premium') && isD1Available(env)) {
+      try {
+        const d1User = await getOrCreateUserByAuthId(env, uid, userEmail);
+        if (d1User && d1User.id) {
+          // Get current month's usage by summing all daily counts for the month
+          // Use UTC dates to match the increment function which uses UTC
+          const now = new Date();
+          const year = now.getUTCFullYear();
+          const month = String(now.getUTCMonth() + 1).padStart(2, '0');
+      const monthStart = `${year}-${month}-01`;
+      // Calculate actual last day of month (end-of-month fix)
+      function getLastDayOfMonth(year, month) {
+        return new Date(Date.UTC(year, month, 0)).getUTCDate();
+      }
+      const lastDayOfMonth = getLastDayOfMonth(year, Number(month));
+      const monthEnd = `${year}-${month}-${String(lastDayOfMonth).padStart(2, '0')}`;
+          
+          const result = await env.DB.prepare(
+            `SELECT COALESCE(SUM(count), 0) as total FROM feature_daily_usage
+             WHERE user_id = ? AND feature = 'interview_questions'
+             AND usage_date >= ? AND usage_date <= ?`
+          ).bind(d1User.id, monthStart, monthEnd).first();
+          
+          // Handle NULL explicitly - COALESCE should return 0, but be safe
+          let totalUsed = (result && result.total !== null && result.total !== undefined) 
+            ? Number(result.total) 
+            : 0;
+          
+          // Normalize old format (questions) to new format (sets) for monthly usage
+          // Old system stored multiples of 10 per day (10 questions per set)
+          // New system stores individual sets per day (1 per set)
+          // Max legitimate monthly usage by plan (new format):
+          //   Trial/Essential: 10 sets/day × 31 days = 310 sets/month
+          //   Pro: 20 sets/day × 31 days = 620 sets/month
+          //   Premium: 50 sets/day × 31 days = 1550 sets/month
+          // Max old format monthly usage (old limits were questions):
+          //   Trial: 40 questions/day × 31 days = 1240 questions (124 sets)
+          //   Essential: 80 questions/day × 31 days = 2480 questions (248 sets)
+          //   Pro: 150 questions/day × 31 days = 4650 questions (465 sets)
+          //   Premium: 250 questions/day × 31 days = 7750 questions (775 sets)
+          // Convert if value is >= 300 (above max new format for trial/essential) AND multiple of 10
+          // This catches all old format values (1240, 2480, 4650, 7750) while avoiding false positives
+          // Edge case: 300, 600, 1500 in new format are possible but rare; if they're multiples of 10,
+          // they'll be converted (300→30, 600→60, 1500→150), which is acceptable for display purposes
+          const MONTHLY_CONVERSION_THRESHOLD = 300; // Above max new format for trial/essential (310)
+          if (totalUsed >= MONTHLY_CONVERSION_THRESHOLD && totalUsed >= 10 && totalUsed % 10 === 0) {
+            const oldValue = totalUsed;
+            totalUsed = Math.floor(totalUsed / 10);
+            console.log('[USAGE] Converted old format monthly usage for interview_questions:', { uid, oldValue, newValue: totalUsed });
+          }
+          
+          usage.interviewQuestions.used = totalUsed;
+          
+          // Get daily usage for interview questions
+          const PLAN_LIMITS = {
+            trial: 10,
+            essential: 10,
+            pro: 20,
+            premium: 50
+          };
+          
+          const dailyLimit = PLAN_LIMITS[plan];
+          if (dailyLimit) {
+            const today = new Date().toISOString().slice(0, 10); // 'YYYY-MM-DD' UTC
+            const dailyResult = await env.DB.prepare(
+              `SELECT count FROM feature_daily_usage
+               WHERE user_id = ? AND feature = 'interview_questions'
+               AND usage_date = ?`
+            ).bind(d1User.id, today).first();
+            
+            const dailyUsed = (dailyResult && dailyResult.count !== null && dailyResult.count !== undefined) 
+              ? Number(dailyResult.count) 
+              : 0;
+            
+            // Normalize old format for daily usage
+            // Old format stored questions (multiples of 10), new format stores sets (1 per set)
+            // Normalize if value is > dailyLimit AND multiple of 10 (clearly old format)
+            // Values <= dailyLimit that are multiples of 10 are ambiguous (could be old or new format)
+            //   - Assume new format (don't normalize) to be safe for display
+            //   - Worst case: old format value at limit shows correctly as limit (e.g., 10 sets)
+            // Example: Trial user (limit 10) with old format 50 (5 sets) → normalize to 5
+            // Example: Trial user (limit 10) with old format 10 (1 set) → don't normalize (assume new format 10 sets)
+            let normalizedDaily = dailyUsed;
+            if (dailyUsed > dailyLimit && dailyUsed >= 10 && dailyUsed % 10 === 0) {
+              normalizedDaily = Math.floor(dailyUsed / 10);
+            }
+            
+            usage.interviewQuestions.dailyUsed = normalizedDaily;
+            usage.interviewQuestions.dailyLimit = dailyLimit;
+            usage.interviewQuestions.dailyRemaining = Math.max(0, dailyLimit - normalizedDaily);
+          }
+        }
+      } catch (error) {
+        console.error('[USAGE] Error getting interview questions usage:', error);
+        // Keep default 0 on error
       }
     }
 

@@ -1,4 +1,5 @@
 import { getBearer, verifyFirebaseIdToken } from '../_lib/firebase-auth.js';
+import { isTrialEligible } from '../_lib/db.js';
 export async function onRequest(context) {
   const { request, env } = context;
   const origin = request.headers.get('Origin') || '';
@@ -63,17 +64,26 @@ export async function onRequest(context) {
       return json({ ok: false, error: 'Missing plan' }, 422, origin, env);
     }
 
-    // Prevent multiple trials per user
+    // Prevent multiple trials per user - check D1 (source of truth)
     if (plan === 'trial') {
       try {
-        const trialUsed = await env.JOBHACKAI_KV?.get(`trialUsedByUid:${uid}`);
-        if (trialUsed) {
-          console.log('🔴 [CHECKOUT] Trial already used for user', uid);
-          return json({ ok: false, error: 'Trial already used. Please select a paid plan.' }, 400, origin, env);
+        const eligible = await isTrialEligible(env, uid);
+        if (!eligible) {
+          console.log('🔴 [CHECKOUT] Trial not eligible for user', uid);
+          return json({
+            ok: false,
+            error: 'Trial already used. Please select a paid plan.',
+            code: 'trial_not_available'
+          }, 400, origin, env);
         }
-      } catch (kvError) {
-        console.log('🟡 [CHECKOUT] KV read error for trial check (non-fatal)', kvError?.message || kvError);
-        // Continue - allow trial if KV is unavailable
+      } catch (dbError) {
+        console.log('🔴 [CHECKOUT] D1 error for trial eligibility check', dbError?.message || dbError);
+        // Fail closed for safety
+        return json({
+          ok: false,
+          error: 'Unable to verify trial eligibility. Please contact support.',
+          code: 'trial_check_failed'
+        }, 500, origin, env);
       }
     }
 
@@ -168,8 +178,18 @@ export async function onRequest(context) {
       sessionBody['subscription_data[metadata][original_plan]'] = plan;
     }
     
-    // Generate a robust idempotency key derived from stable parameters
-    const idem = await makeIdemKey(uid, sessionBody);
+    // Generate idempotency key (forceNew for fresh session if requested from frontend)
+    const forceNew = !!body.forceNew;
+    let idem;
+    if (forceNew) {
+      try {
+        idem = `${uid}:${crypto.randomUUID()}`;
+      } catch (e) {
+        idem = `${uid}:${Date.now()}:${Math.random().toString(36).slice(2,8)}`;
+      }
+    } else {
+      idem = await makeIdemKey(uid, sessionBody);
+    }
 
     console.log('🔵 [CHECKOUT] Creating session', { customerId, priceId, plan });
     try {

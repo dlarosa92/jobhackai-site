@@ -36,31 +36,31 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/12.1.0/firebas
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 
-// --- DIRECT KV PLAN FETCH (navigation-independent) ---
-async function fetchPlanDirectFromKV() {
+// --- DIRECT PLAN FETCH FROM D1 VIA API (navigation-independent) ---
+async function fetchPlanFromAPI() {
   try {
     const user = auth.currentUser;
     if (!user) {
-      console.log('🔍 fetchPlanDirectFromKV: no currentUser');
+      console.log('🔍 fetchPlanFromAPI: no currentUser');
       return null;
     }
     const idToken = await user.getIdToken();
     if (!idToken) {
-      console.log('🔍 fetchPlanDirectFromKV: no idToken');
+      console.log('🔍 fetchPlanFromAPI: no idToken');
       return null;
     }
-    console.log(`🔍 fetchPlanDirectFromKV: calling /api/plan/me for uid=${user.uid}`);
+    console.log(`🔍 fetchPlanFromAPI: calling /api/plan/me for uid=${user.uid}`);
     const res = await fetch('/api/plan/me', { headers: { Authorization: `Bearer ${idToken}` } });
     if (!res.ok) {
-      console.log(`🔍 fetchPlanDirectFromKV: API returned ${res.status}`);
+      console.log(`🔍 fetchPlanFromAPI: API returned ${res.status}`);
       return null;
     }
     const data = await res.json();
-    console.log(`📊 fetchPlanDirectFromKV: API returned plan="${data?.plan}"`);
+    console.log(`📊 fetchPlanFromAPI: API returned plan="${data?.plan}"`);
     return data?.plan || null;
   } catch (e) {
-    // KV fetch failed - this is non-critical, will fallback to other sources
-    console.log('ℹ️ Direct KV fetch unavailable, will use fallback:', e.message || 'network error');
+    // API fetch failed - this is non-critical, will fallback to 'free'
+    console.log('ℹ️ Direct plan API fetch unavailable, will use fallback:', e.message || 'network error');
     return null;
   }
 }
@@ -189,6 +189,9 @@ class AuthManager {
       if (!authReadyDispatched) {
         authReadyDispatched = true;
         console.log('🔥 Dispatching firebase-auth-ready event');
+        // CRITICAL FIX: Set flag on window before dispatching event
+        // This allows navigation.js fallback to detect if event fired before script loaded
+        window.__firebaseAuthReadyFired = true;
         // Dispatch event with user = null if logout-intent is detected, otherwise use actual user
         const logoutIntent = sessionStorage.getItem('logout-intent');
         const eventUser = (logoutIntent === '1' && user) ? null : user;
@@ -222,16 +225,12 @@ class AuthManager {
         // ✅ CRITICAL: Set localStorage IMMEDIATELY (sync, before any await)
         // This prevents race conditions with static-auth-guard.js
         localStorage.setItem('user-authenticated', 'true');
-        localStorage.setItem('user-email', user.email || '');
+        // SECURITY: Do NOT store email, uid, or auth-user object in localStorage
+        // Email/UID available via Firebase auth.currentUser when needed
         // Cache user name for account settings page performance
         if (user.displayName) {
           localStorage.setItem('user-name', user.displayName);
         }
-        localStorage.setItem('auth-user', JSON.stringify({
-          email: user.email,
-          uid: user.uid,
-          displayName: user.displayName
-        }));
         console.log('✅ localStorage synced immediately for auth guards');
         
         // User is signed in - now do async operations
@@ -279,26 +278,26 @@ class AuthManager {
             console.log('🔄 Waiting for Firebase auth to be ready before plan fetching...');
             await this.waitForAuthReady(3000);
             
-            if (window.JobHackAINavigation && typeof window.JobHackAINavigation.fetchKVPlan === 'function') {
-              kvPlan = await window.JobHackAINavigation.fetchKVPlan();
+            if (window.JobHackAINavigation && typeof window.JobHackAINavigation.fetchPlanFromAPI === 'function') {
+              kvPlan = await window.JobHackAINavigation.fetchPlanFromAPI();
               if (kvPlan) console.log('✅ Fetched plan via navigation system:', kvPlan);
             }
-            // Fallback: fetch directly from KV if navigation not ready
+            // Fallback: fetch directly from API if navigation not ready
             if (!kvPlan) {
-              kvPlan = await fetchPlanDirectFromKV();
-              if (kvPlan) console.log('✅ Fetched plan directly from KV (navigation not ready):', kvPlan);
+              kvPlan = await fetchPlanFromAPI();
+              if (kvPlan) console.log('✅ Fetched plan directly from API (navigation not ready):', kvPlan);
             }
           } catch (e) {
-            console.warn('Could not fetch plan from KV:', e);
-            // Add retry mechanism for failed KV fetches
+            console.warn('Could not fetch plan from API:', e);
+            // Add retry mechanism for failed API fetches
             try {
               console.log('🔄 Retrying plan fetch after 1 second...');
               await new Promise(resolve => setTimeout(resolve, 1000));
-              if (window.JobHackAINavigation && typeof window.JobHackAINavigation.fetchKVPlan === 'function') {
-                kvPlan = await window.JobHackAINavigation.fetchKVPlan();
+              if (window.JobHackAINavigation && typeof window.JobHackAINavigation.fetchPlanFromAPI === 'function') {
+                kvPlan = await window.JobHackAINavigation.fetchPlanFromAPI();
               }
               if (!kvPlan) {
-                kvPlan = await fetchPlanDirectFromKV();
+                kvPlan = await fetchPlanFromAPI();
               }
               if (kvPlan) console.log('✅ Retry successful, fetched plan:', kvPlan);
             } catch (retryError) {
@@ -308,50 +307,35 @@ class AuthManager {
           
           if (kvPlan && kvPlan !== 'free') {
             actualPlan = kvPlan;
-            console.log('✅ Retrieved user plan from KV:', actualPlan);
+            console.log('✅ Retrieved user plan from D1 (via API):', actualPlan);
           } else {
-            // KV fetch returned null or 'free' - try Firestore/local storage fallback
+            // API fetch returned null or 'free' - try Firestore as fallback (but NOT email-based lookup)
             const profileResult = await UserProfileManager.getProfile(user.uid);
             if (profileResult.success && profileResult.profile) {
               actualPlan = profileResult.profile.plan || 'free';
-              console.log('✅ Retrieved user plan from Firestore (KV fallback):', actualPlan);
-            } else if (profileResult.isPermissionError) {
-              // Firestore permission error - use local storage fallback silently
-              const userRecord = UserDatabase.getUser(user.email);
-              if (userRecord && userRecord.plan) {
-                actualPlan = userRecord.plan;
-                console.log('✅ Retrieved user plan from local storage (Firestore unavailable):', actualPlan);
-              } else {
-                actualPlan = 'free';
-                console.log('ℹ️ Using default plan (KV/Firestore unavailable, no local storage found):', actualPlan);
-              }
+              console.log('✅ Retrieved user plan from Firestore (API fallback):', actualPlan);
             } else {
-              const userRecord = UserDatabase.getUser(user.email);
-              if (userRecord && userRecord.plan) {
-                actualPlan = userRecord.plan;
-                console.log('✅ Retrieved user plan from local database:', actualPlan);
-              } else {
-                actualPlan = 'free';
-                console.log('ℹ️ Using default plan (all sources unavailable):', actualPlan);
-                // FIX: Add delayed retry for plan reconciliation
-                console.log('🔄 Scheduling delayed plan reconciliation in 5 seconds...');
-                setTimeout(async () => {
-                  try {
-                    console.log('🔄 Attempting delayed plan reconciliation...');
-                    const delayedKvPlan = await window.JobHackAINavigation?.fetchKVPlan?.();
-                    if (delayedKvPlan && delayedKvPlan !== 'free') {
-                      console.log('✅ Delayed reconciliation successful:', delayedKvPlan);
-                      localStorage.setItem('user-plan', delayedKvPlan);
-                      localStorage.setItem('dev-plan', delayedKvPlan);
-                      if (window.JobHackAINavigation) {
-                        window.JobHackAINavigation.updateNavigation();
-                      }
+              // All sources unavailable - default to 'free' (D1 is source of truth, no email-based fallback)
+              actualPlan = 'free';
+              console.log('ℹ️ Using default plan (API/Firestore unavailable). D1 is source of truth - no email-based fallback.');
+              // FIX: Add delayed retry for plan reconciliation
+              console.log('🔄 Scheduling delayed plan reconciliation in 5 seconds...');
+              setTimeout(async () => {
+                try {
+                  console.log('🔄 Attempting delayed plan reconciliation...');
+                  const delayedPlan = await window.JobHackAINavigation?.fetchPlanFromAPI?.();
+                  if (delayedPlan && delayedPlan !== 'free') {
+                    console.log('✅ Delayed reconciliation successful:', delayedPlan);
+                    localStorage.setItem('user-plan', delayedPlan);
+                    localStorage.setItem('dev-plan', delayedPlan);
+                    if (window.JobHackAINavigation) {
+                      window.JobHackAINavigation.updateNavigation();
                     }
-                  } catch (e) {
-                    console.warn('Delayed reconciliation failed:', e);
                   }
-                }, 5000);
-              }
+                } catch (e) {
+                  console.warn('Delayed reconciliation failed:', e);
+                }
+              }, 5000);
             }
           }
         }
@@ -399,6 +383,8 @@ class AuthManager {
     
     // Immediately call with current state
     if (this.currentUser) {
+      // Note: UserDatabase.getUser is only for non-plan data (name, etc.)
+      // Plan data comes from D1 via API, not from email-based lookup
       const userRecord = UserDatabase.getUser(this.currentUser.email);
       callback(this.currentUser, userRecord);
     }
@@ -496,26 +482,26 @@ class AuthManager {
         console.log('🔄 Waiting for Firebase auth to be ready during sign-in...');
         await this.waitForAuthReady(3000);
         
-        if (window.JobHackAINavigation && typeof window.JobHackAINavigation.fetchKVPlan === 'function') {
-          kvPlan = await window.JobHackAINavigation.fetchKVPlan();
+        if (window.JobHackAINavigation && typeof window.JobHackAINavigation.fetchPlanFromAPI === 'function') {
+          kvPlan = await window.JobHackAINavigation.fetchPlanFromAPI();
           if (kvPlan) console.log('✅ Fetched plan via navigation system during sign-in:', kvPlan);
         }
-        // Fallback: fetch directly from KV if navigation not ready
+        // Fallback: fetch directly from API if navigation not ready
         if (!kvPlan) {
-          kvPlan = await fetchPlanDirectFromKV();
-          if (kvPlan) console.log('✅ Fetched plan directly from KV during sign-in:', kvPlan);
+          kvPlan = await fetchPlanFromAPI();
+          if (kvPlan) console.log('✅ Fetched plan directly from API during sign-in:', kvPlan);
         }
       } catch (e) {
-        console.warn('Could not fetch plan from KV during sign-in:', e);
-        // Add retry mechanism for failed KV fetches
+        console.warn('Could not fetch plan from API during sign-in:', e);
+        // Add retry mechanism for failed API fetches
         try {
           console.log('🔄 Retrying plan fetch during sign-in after 1 second...');
           await new Promise(resolve => setTimeout(resolve, 1000));
-          if (window.JobHackAINavigation && typeof window.JobHackAINavigation.fetchKVPlan === 'function') {
-            kvPlan = await window.JobHackAINavigation.fetchKVPlan();
+          if (window.JobHackAINavigation && typeof window.JobHackAINavigation.fetchPlanFromAPI === 'function') {
+            kvPlan = await window.JobHackAINavigation.fetchPlanFromAPI();
           }
           if (!kvPlan) {
-            kvPlan = await fetchPlanDirectFromKV();
+            kvPlan = await fetchPlanFromAPI();
           }
           if (kvPlan) console.log('✅ Retry successful during sign-in, fetched plan:', kvPlan);
         } catch (retryError) {
@@ -525,32 +511,17 @@ class AuthManager {
       
       if (kvPlan && kvPlan !== 'free') {
         actualPlan = kvPlan;
-        console.log('✅ Retrieved user plan from KV during sign-in:', actualPlan);
+        console.log('✅ Retrieved user plan from D1 (via API) during sign-in:', actualPlan);
       } else {
-        // KV fetch returned null or 'free' - try Firestore/local storage fallback
+        // API fetch returned null or 'free' - try Firestore as fallback (but NOT email-based lookup)
         const profileResult = await UserProfileManager.getProfile(user.uid);
         if (profileResult.success && profileResult.profile) {
           actualPlan = profileResult.profile.plan || 'free';
-          console.log('✅ Retrieved user plan from Firestore during sign-in (KV fallback):', actualPlan);
-        } else if (profileResult.isPermissionError) {
-          // Firestore permission error - use local storage fallback silently
-          const userRecord = UserDatabase.getUser(user.email);
-          if (userRecord && userRecord.plan) {
-            actualPlan = userRecord.plan;
-            console.log('✅ Retrieved user plan from local storage during sign-in:', actualPlan);
-          } else {
-            actualPlan = 'free';
-          }
+          console.log('✅ Retrieved user plan from Firestore during sign-in (API fallback):', actualPlan);
         } else {
-          console.warn('⚠️ Could not retrieve profile from Firestore during sign-in, using local data');
-          // Fallback to local database if Firestore fails
-          const userRecord = UserDatabase.getUser(email);
-          if (userRecord) {
-            actualPlan = userRecord.plan || 'free';
-            console.log('✅ Retrieved user plan from local database during sign-in:', actualPlan);
-          } else {
-            console.log('⚠️ All plan sources failed during sign-in, defaulting to free');
-          }
+          // All sources unavailable - default to 'free' (D1 is source of truth, no email-based fallback)
+          actualPlan = 'free';
+          console.log('ℹ️ All plan sources failed during sign-in, defaulting to free. D1 is source of truth - no email-based fallback.');
         }
       }
 
@@ -561,11 +532,11 @@ class AuthManager {
       });
 
       // Persist auth state immediately
-      localStorage.setItem('user-email', user.email || '');
+      localStorage.setItem('user-authenticated', 'true');
+      // SECURITY: Do NOT store email in localStorage
       if (user.displayName) {
         localStorage.setItem('user-name', user.displayName);
       }
-      localStorage.setItem('user-authenticated', 'true');
       // Update navigation state with correct plan
       if (window.JobHackAINavigation) {
         window.JobHackAINavigation.setAuthState(true, actualPlan);
@@ -604,26 +575,26 @@ class AuthManager {
           console.log('🔄 Waiting for Firebase auth to be ready during Google sign-in...');
           await this.waitForAuthReady(3000);
           
-          if (window.JobHackAINavigation && typeof window.JobHackAINavigation.fetchKVPlan === 'function') {
-            kvPlan = await window.JobHackAINavigation.fetchKVPlan();
+          if (window.JobHackAINavigation && typeof window.JobHackAINavigation.fetchPlanFromAPI === 'function') {
+            kvPlan = await window.JobHackAINavigation.fetchPlanFromAPI();
             if (kvPlan) console.log('✅ Fetched plan via navigation system during Google sign-in:', kvPlan);
           }
-          // Fallback: fetch directly from KV if navigation not ready
+          // Fallback: fetch directly from API if navigation not ready
           if (!kvPlan) {
-            kvPlan = await fetchPlanDirectFromKV();
-            if (kvPlan) console.log('✅ Fetched plan directly from KV during Google sign-in:', kvPlan);
+            kvPlan = await fetchPlanFromAPI();
+            if (kvPlan) console.log('✅ Fetched plan directly from API during Google sign-in:', kvPlan);
           }
         } catch (e) {
-          console.warn('Could not fetch plan from KV during Google sign-in:', e);
-          // Add retry mechanism for failed KV fetches
+          console.warn('Could not fetch plan from API during Google sign-in:', e);
+          // Add retry mechanism for failed API fetches
           try {
             console.log('🔄 Retrying plan fetch during Google sign-in after 1 second...');
             await new Promise(resolve => setTimeout(resolve, 1000));
-            if (window.JobHackAINavigation && typeof window.JobHackAINavigation.fetchKVPlan === 'function') {
-              kvPlan = await window.JobHackAINavigation.fetchKVPlan();
+            if (window.JobHackAINavigation && typeof window.JobHackAINavigation.fetchPlanFromAPI === 'function') {
+              kvPlan = await window.JobHackAINavigation.fetchPlanFromAPI();
             }
             if (!kvPlan) {
-              kvPlan = await fetchPlanDirectFromKV();
+              kvPlan = await fetchPlanFromAPI();
             }
             if (kvPlan) console.log('✅ Retry successful during Google sign-in, fetched plan:', kvPlan);
           } catch (retryError) {
@@ -633,24 +604,17 @@ class AuthManager {
         
         if (kvPlan && kvPlan !== 'free') {
           actualPlan = kvPlan;
-          console.log('✅ Retrieved user plan from KV during Google sign-in:', actualPlan);
+          console.log('✅ Retrieved user plan from D1 (via API) during Google sign-in:', actualPlan);
         } else {
-          // KV fetch returned null or 'free' - try Firestore/local storage fallback
+          // API fetch returned null or 'free' - try Firestore as fallback (but NOT email-based lookup)
           const profileResult = await UserProfileManager.getProfile(user.uid);
           if (profileResult.success && profileResult.profile) {
             actualPlan = profileResult.profile.plan || 'free';
-            console.log('✅ Retrieved user plan from Firestore during Google sign-in (KV fallback):', actualPlan);
-          } else if (profileResult.isPermissionError) {
-            // Firestore permission error - use local storage fallback silently
-            const userRecord = UserDatabase.getUser(user.email);
-            if (userRecord && userRecord.plan) {
-              actualPlan = userRecord.plan;
-              console.log('✅ Retrieved user plan from local storage during Google sign-in:', actualPlan);
-            } else {
-              actualPlan = 'free';
-            }
+            console.log('✅ Retrieved user plan from Firestore during Google sign-in (API fallback):', actualPlan);
           } else {
-            console.log('⚠️ All plan sources failed during Google sign-in, defaulting to free');
+            // All sources unavailable - default to 'free' (D1 is source of truth, no email-based fallback)
+            actualPlan = 'free';
+            console.log('ℹ️ All plan sources failed during Google sign-in, defaulting to free. D1 is source of truth - no email-based fallback.');
           }
         }
       }
@@ -666,11 +630,11 @@ class AuthManager {
 
       // Ensure navigation/auth state is updated immediately (avoid redirect race)
       try {
-        localStorage.setItem('user-email', user.email || '');
+        localStorage.setItem('user-authenticated', 'true');
+        // SECURITY: Do NOT store email in localStorage
         if (user.displayName) {
           localStorage.setItem('user-name', user.displayName);
         }
-        localStorage.setItem('user-authenticated', 'true');
         if (window.JobHackAINavigation) {
           window.JobHackAINavigation.setAuthState(true, actualPlan);
         }

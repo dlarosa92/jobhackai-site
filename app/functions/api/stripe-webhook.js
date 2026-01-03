@@ -1,3 +1,5 @@
+import { updateUserPlan, getUserPlanData } from '../_lib/db.js';
+
 export async function onRequest(context) {
   const { request, env } = context;
   const origin = env.FRONTEND_URL || 'https://dev.jobhackai.io';
@@ -34,20 +36,68 @@ export async function onRequest(context) {
     await env.JOBHACKAI_KV?.put(lockKey, '1', { expirationTtl: 60 }); // 60s lock
   } catch (_) { /* ignore lock failures */ }
 
-  // Helper to set plan by uid in KV; subscription events should win via timestamp ordering
-  const setPlan = async (uid, value, tsSeconds) => {
+  // Helper to update plan in D1 (source of truth) with timestamp-based ordering protection
+  // Prevents out-of-order webhooks from overwriting newer states with older data
+  const updatePlanInD1 = async (uid, planData, eventTimestampSeconds) => {
     if (!uid) return;
-    const tsKey = `planTsByUid:${uid}`;
     try {
-      const last = parseInt((await env.JOBHACKAI_KV?.get(tsKey)) || '0', 10);
-      const nextTs = Number.isFinite(tsSeconds) ? Number(tsSeconds) : Math.floor(Date.now() / 1000);
-      if (nextTs >= last) {
-        await env.JOBHACKAI_KV?.put(kvPlanKey(uid), value);
-        await env.JOBHACKAI_KV?.put(tsKey, String(nextTs));
+      // Get current plan_updated_at timestamp for ordering check
+      if (eventTimestampSeconds !== undefined && Number.isFinite(eventTimestampSeconds)) {
+        const currentPlanData = await getUserPlanData(env, uid);
+        
+        if (currentPlanData && currentPlanData.planUpdatedAt) {
+          // Convert stored ISO 8601 datetime to Unix timestamp for comparison
+          const storedTimestamp = Math.floor(new Date(currentPlanData.planUpdatedAt).getTime() / 1000);
+          const eventTimestamp = Math.floor(Number(eventTimestampSeconds));
+
+          if (eventTimestamp < storedTimestamp) {
+            console.log(`⏭️ [WEBHOOK] Skipping out-of-order event: event.created=${eventTimestamp} < stored=${storedTimestamp} for uid=${uid}`);
+            return; // Skip update - this event is older than what we already have
+          }
+        }
       }
-    } catch (_) {
-      // Fallback without ordering if KV read fails
-      await env.JOBHACKAI_KV?.put(kvPlanKey(uid), value);
+
+      // Convert event timestamp to ISO 8601 string for storage (if provided)
+      if (eventTimestampSeconds !== undefined && Number.isFinite(eventTimestampSeconds)) {
+        planData.planEventTimestamp = new Date(eventTimestampSeconds * 1000).toISOString();
+      } else {
+        // No event timestamp provided - use current time (fallback for non-webhook updates)
+        planData.planEventTimestamp = undefined;
+      }
+
+      // Write to D1 (source of truth)
+      const success = await updateUserPlan(env, uid, planData);
+      
+      if (!success) {
+        console.error(`❌ [WEBHOOK] D1 write failed for uid=${uid}`);
+        throw new Error(`Failed to update plan in D1 for uid=${uid}`);
+      }
+      
+      // Invalidate KV keys for all plan/usage as soon as D1 is updated (cache only)
+      if (env.JOBHACKAI_KV) {
+        try {
+          await env.JOBHACKAI_KV.delete(kvPlanKey(uid));
+          await env.JOBHACKAI_KV.delete(`trialUsedByUid:${uid}`);
+          await env.JOBHACKAI_KV.delete(`trialEndByUid:${uid}`);
+          // Delete all monthly feedbackUsage keys for this UID
+          const monthsToDelete = [];
+          const today = new Date();
+          for (let i = 0; i < 14; i++) { // Cover at least 12 months back + 2 future months safety
+            const d = new Date(today.getFullYear(), today.getMonth() - i, 1);
+            const monthKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+            monthsToDelete.push(`feedbackUsage:${uid}:${monthKey}`);
+          }
+          for (const key of monthsToDelete) {
+            await env.JOBHACKAI_KV.delete(key);
+          }
+          await env.JOBHACKAI_KV.delete(`atsUsage:${uid}:lifetime`);
+        } catch (kvErr) {
+          console.warn('[WEBHOOK] KV cache invalidation error:', kvErr);
+        }
+      }
+    } catch (error) {
+      console.error('[WEBHOOK] Error updating plan in D1:', error);
+      throw error;
     }
   };
 
@@ -81,20 +131,52 @@ export async function onRequest(context) {
       let effectivePlan = 'free';
       if (originalPlan === 'trial') {
         effectivePlan = 'trial'; // Show as trial immediately
-        // Mark trial as used
-        await env.JOBHACKAI_KV?.put(`trialUsedByUid:${uid}`, '1');
-        console.log(`✅ TRIAL MARKED AS USED: ${uid}`);
+        // Trial usage will be tracked in D1 (source of truth). Do not write authoritative KV flags.
+        console.log(`✅ TRIAL STARTED (tracked in D1): ${uid}`);
       } else {
         effectivePlan = priceToPlan(env, priceId) || 'essential';
       }
       
       console.log(`📝 CHECKOUT DATA: originalPlan=${originalPlan}, priceId=${priceId}, effectivePlan=${effectivePlan}, customerId=${customerId}, uid=${uid}`);
       if (effectivePlan && uid) {
-        console.log(`✍️ WRITING TO KV: planByUid:${uid} = ${effectivePlan}`);
-        await setPlan(uid, effectivePlan, event.created || Math.floor(Date.now()/1000));
-        console.log(`✅ KV WRITE SUCCESS: ${uid} → ${effectivePlan}`);
+        // Get subscription details if available
+        const subscriptionId = sess?.subscription || null;
+        let subscription = null;
+        if (subscriptionId) {
+          try {
+            const subRes = await fetch(`https://api.stripe.com/v1/subscriptions/${subscriptionId}`, {
+              headers: { Authorization: `Bearer ${env.STRIPE_SECRET_KEY}` }
+            });
+            subscription = await subRes.json();
+          } catch (e) {
+            console.warn('[WEBHOOK] Failed to fetch subscription details:', e);
+          }
+        }
+        
+        // Determine trial end date. Prefer subscription.trial_end if available.
+        let trialEndsAtISO = subscription?.trial_end ? new Date(subscription.trial_end * 1000).toISOString() : null;
+
+        // If this was a trial and we couldn't fetch subscription details (or trial_end is missing),
+        // set a conservative fallback so the user is marked as having used a trial and cannot re-use it.
+        // The checkout session uses a 3-day trial (see checkout flow), so use 3 days as fallback.
+        if (effectivePlan === 'trial' && !trialEndsAtISO) {
+          const FALLBACK_TRIAL_DAYS = 3;
+          trialEndsAtISO = new Date(Date.now() + FALLBACK_TRIAL_DAYS * 24 * 60 * 60 * 1000).toISOString();
+          console.warn(`[WEBHOOK] subscription.trial_end missing for uid=${uid}; using fallback trialEndsAt=${trialEndsAtISO}`);
+        }
+
+        console.log(`✍️ WRITING TO D1: users.plan = ${effectivePlan} for uid=${uid}`);
+        await updatePlanInD1(uid, {
+          plan: effectivePlan,
+          stripeCustomerId: customerId,
+          stripeSubscriptionId: subscriptionId,
+          subscriptionStatus: subscription?.status || 'active',
+          trialEndsAt: trialEndsAtISO,
+          currentPeriodEnd: subscription?.current_period_end ? new Date(subscription.current_period_end * 1000).toISOString() : null
+        }, event.created);
+        console.log(`✅ D1 WRITE SUCCESS: ${uid} → ${effectivePlan}`);
       } else {
-        console.warn(`⚠️ SKIPPED KV WRITE: effectivePlan=${effectivePlan}, uid=${uid}`);
+        console.warn(`⚠️ SKIPPED PLAN UPDATE: effectivePlan=${effectivePlan}, uid=${uid}`);
       }
     }
 
@@ -117,16 +199,32 @@ export async function onRequest(context) {
         effectivePlan = plan || 'essential';
       }
       
+      const sub = event.data.object;
+      const trialEndsAtISO = sub.trial_end ? new Date(sub.trial_end * 1000).toISOString() : null;
+      
       console.log(`📝 SUBSCRIPTION DATA: status=${status}, priceId=${pId}, basePlan=${plan}, effectivePlan=${effectivePlan}, uid=${uid}`);
-      console.log(`✍️ WRITING TO KV: planByUid:${uid} = ${effectivePlan}`);
-      await setPlan(uid, effectivePlan, event.created || Math.floor(Date.now()/1000));
-      console.log(`✅ KV WRITE SUCCESS: ${uid} → ${effectivePlan}`);
-
-      // Store trial end date if this is a trial subscription
-      if (effectivePlan === 'trial' && event.data.object.trial_end) {
-        await env.JOBHACKAI_KV?.put(`trialEndByUid:${uid}`, String(event.data.object.trial_end));
-        console.log(`✅ TRIAL END DATE STORED: ${new Date(event.data.object.trial_end * 1000).toISOString()}`);
-      }
+      console.log(`🔄 TRIAL CONVERSION CHECK:`, {
+        eventType: event.type,
+        currentStatus: status,
+        originalPlan: originalPlan,
+        priceId: pId,
+        mappedPlan: plan,
+        effectivePlan: effectivePlan,
+        trialEndsAt: trialEndsAtISO,
+        subscriptionId: sub.id
+      });
+      console.log(`✍️ WRITING TO D1: users.plan = ${effectivePlan} for uid=${uid}`);
+      
+      await updatePlanInD1(uid, {
+        plan: effectivePlan,
+        stripeCustomerId: customerId,
+        stripeSubscriptionId: sub.id,
+        subscriptionStatus: status,
+        trialEndsAt: trialEndsAtISO,
+        currentPeriodEnd: sub.current_period_end ? new Date(sub.current_period_end * 1000).toISOString() : null
+      }, event.created);
+      
+      console.log(`✅ D1 WRITE SUCCESS: ${uid} → ${effectivePlan}${trialEndsAtISO ? ` (trial ends: ${trialEndsAtISO})` : ''}`);
     }
 
     if (event.type === 'customer.subscription.updated') {
@@ -136,17 +234,15 @@ export async function onRequest(context) {
       const uid = await fetchUidFromCustomer(customerId);
       
       // Handle scheduled cancellation
+      let cancelAt = null;
       if (sub.cancel_at_period_end === true && sub.cancel_at) {
-        const cancelTimestamp = sub.cancel_at;
-        await env.JOBHACKAI_KV?.put(`cancelAtByUid:${uid}`, String(cancelTimestamp));
-        console.log(`✅ CANCELLATION SCHEDULED: ${uid} → ${new Date(cancelTimestamp * 1000).toISOString()}`);
-      } else if (sub.cancel_at_period_end === false) {
-        // Cancellation was reversed - clear the flag
-        await env.JOBHACKAI_KV?.delete(`cancelAtByUid:${uid}`);
-        console.log(`✅ CANCELLATION REVERSED: ${uid}`);
+        cancelAt = new Date(sub.cancel_at * 1000).toISOString();
+        console.log(`✅ CANCELLATION SCHEDULED: ${uid} → ${cancelAt}`);
       }
       
       // Handle scheduled plan changes (downgrades)
+      let scheduledPlan = null;
+      let scheduledAt = null;
       const schedulePlan = sub.schedule;
       if (schedulePlan) {
         // Fetch schedule details from Stripe
@@ -158,33 +254,32 @@ export async function onRequest(context) {
         if (schedData && schedData.phases && schedData.phases.length > 1) {
           const nextPhase = schedData.phases[1];
           const nextPriceId = nextPhase.items[0]?.price;
-          const nextPlan = priceToPlan(env, nextPriceId);
-          const transitionTime = nextPhase.start_date;
+          scheduledPlan = priceToPlan(env, nextPriceId);
+          scheduledAt = nextPhase.start_date ? new Date(nextPhase.start_date * 1000).toISOString() : null;
           
-          if (nextPlan && transitionTime) {
-            await env.JOBHACKAI_KV?.put(`scheduledPlanByUid:${uid}`, nextPlan);
-            await env.JOBHACKAI_KV?.put(`scheduledAtByUid:${uid}`, String(transitionTime));
-            console.log(`✅ PLAN CHANGE SCHEDULED: ${uid} → ${nextPlan} at ${new Date(transitionTime * 1000).toISOString()}`);
+          if (scheduledPlan && scheduledAt) {
+            console.log(`✅ PLAN CHANGE SCHEDULED: ${uid} → ${scheduledPlan} at ${scheduledAt}`);
           }
         }
-      } else {
-        // No schedule - clear any existing scheduled change
-        await env.JOBHACKAI_KV?.delete(`scheduledPlanByUid:${uid}`);
-        await env.JOBHACKAI_KV?.delete(`scheduledAtByUid:${uid}`);
       }
       
-      // Store current_period_end for "Renews on" display
-      if (sub.current_period_end) {
-        await env.JOBHACKAI_KV?.put(`periodEndByUid:${uid}`, String(sub.current_period_end));
-      }
-      
-      // Also update current plan status (same logic as created handler)
+      // Determine effective plan status
       const status = sub.status;
       const metadata = sub.metadata || {};
       const originalPlan = metadata.original_plan;
       const items = sub.items?.data || [];
       const pId = items[0]?.price?.id || '';
       const plan = priceToPlan(env, pId);
+      
+      // Get previous plan from D1 to detect trial conversion
+      let previousPlan = null;
+      try {
+        const { getUserPlanData } = await import('../../_lib/db.js');
+        const existingPlanData = await getUserPlanData(env, uid);
+        previousPlan = existingPlanData?.plan || null;
+      } catch (e) {
+        console.warn('⚠️ Could not fetch previous plan for comparison:', e.message);
+      }
       
       let effectivePlan = 'free';
       if (status === 'trialing' && originalPlan === 'trial') {
@@ -193,8 +288,41 @@ export async function onRequest(context) {
         effectivePlan = plan || 'essential';
       }
       
-      console.log(`✍️ UPDATING KV: planByUid:${uid} = ${effectivePlan}`);
-      await setPlan(uid, effectivePlan, event.created || Math.floor(Date.now()/1000));
+      const trialEndsAtISO = sub.trial_end ? new Date(sub.trial_end * 1000).toISOString() : null;
+      
+      // Enhanced logging for trial conversion detection
+      console.log(`🔄 TRIAL CONVERSION CHECK:`, {
+        eventType: event.type,
+        previousStatus: previousPlan || 'unknown', // Use actual previousPlan value, not assumed 'trial'
+        currentStatus: status,
+        previousPlan: previousPlan,
+        originalPlan: originalPlan,
+        priceId: pId,
+        mappedPlan: plan,
+        effectivePlan: effectivePlan,
+        trialEndsAt: trialEndsAtISO,
+        subscriptionId: sub.id,
+        isTrialConversion: previousPlan === 'trial' && effectivePlan !== 'trial' && status === 'active'
+      });
+      
+      if (previousPlan === 'trial' && effectivePlan !== 'trial' && status === 'active') {
+        console.log(`🎉 TRIAL CONVERTED: ${uid} → ${effectivePlan} (trial expired, subscription now active)`);
+      }
+      
+      console.log(`✍️ UPDATING D1: users.plan = ${effectivePlan} for uid=${uid}`);
+      await updatePlanInD1(uid, {
+        plan: effectivePlan,
+        stripeCustomerId: customerId,
+        stripeSubscriptionId: sub.id,
+        subscriptionStatus: status,
+        trialEndsAt: trialEndsAtISO,
+        currentPeriodEnd: sub.current_period_end ? new Date(sub.current_period_end * 1000).toISOString() : null,
+        cancelAt: cancelAt || null, // null clears the field (undefined is skipped)
+        scheduledPlan: scheduledPlan || null, // null clears the field (undefined is skipped)
+        scheduledAt: scheduledAt || null // null clears the field (undefined is skipped)
+      }, event.created);
+      
+      console.log(`✅ D1 UPDATE SUCCESS: ${uid} → ${effectivePlan}${trialEndsAtISO ? ` (trial ends: ${trialEndsAtISO})` : ''}`);
     }
 
     if (event.type === 'customer.subscription.deleted') {
@@ -202,13 +330,21 @@ export async function onRequest(context) {
       const customerId = event.data.object.customer || null;
       const uid = await fetchUidFromCustomer(customerId);
       console.log(`📝 DELETION DATA: customerId=${customerId}, uid=${uid}`);
-      console.log(`✍️ WRITING TO KV: planByUid:${uid} = free`);
-      await setPlan(uid, 'free', event.created || Math.floor(Date.now()/1000));
+      console.log(`✍️ WRITING TO D1: users.plan = free for uid=${uid}`);
       
-      // Clean up resume data when subscription is deleted
+      await updatePlanInD1(uid, {
+        plan: 'free',
+        stripeSubscriptionId: null,
+        subscriptionStatus: 'canceled',
+        cancelAt: null, // Clear cancellation date
+        scheduledPlan: null, // Clear scheduled plan
+        scheduledAt: null // Clear scheduled date
+      }, event.created);
+      
+      // Clean up resume data when subscription is deleted (KV cleanup)
       await env.JOBHACKAI_KV?.delete(`user:${uid}:lastResume`);
       await env.JOBHACKAI_KV?.delete(`usage:${uid}`);
-      console.log(`✅ KV WRITE SUCCESS: ${uid} → free (resume data cleaned up)`);
+      console.log(`✅ D1 WRITE SUCCESS: ${uid} → free (resume data cleaned up)`);
     }
 
   } catch (err) {
@@ -247,5 +383,6 @@ function priceToPlan(env, priceId) {
   if (priceId === premium) return 'premium';
   return null;
 }
+
 
 

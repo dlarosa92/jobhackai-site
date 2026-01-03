@@ -14,205 +14,14 @@
   <!-- Design tokens & global styles -->
   <link rel="stylesheet" href="css/tokens.css">
   <link rel="stylesheet" href="css/main.css">
+  <link rel="stylesheet" href="css/components.css">
 
   <!-- Component overrides -->
   <link rel="stylesheet" href="css/header.css">
   <link rel="stylesheet" href="css/footer.css">
-  <style>
-    .clg-main {
-      max-width: 600px;
-      margin: 2.5rem auto 4rem auto;
-      padding: 0 1rem;
-    }
-    .clg-card {
-      background: #fff;
-      border-radius: 16px;
-      box-shadow: 0 2px 12px rgba(31,41,55,0.07);
-      padding: 2rem;
-    }
-    .clg-title {
-      font-size: 2rem;
-      font-weight: 800;
-      margin-bottom: 0.5rem;
-      color: #232B36;
-    }
-    .clg-desc {
-      color: #4B5563;
-      margin-bottom: 2rem;
-      font-size: 1.1rem;
-    }
-    .clg-label {
-      display: block;
-      font-weight: 600;
-      margin-bottom: 0.5rem;
-      color: #232B36;
-    }
-    .clg-input {
-      width: 100%;
-      padding: 0.85rem 1.1rem;
-      border: 2px solid #E5E7EB;
-      border-radius: 10px;
-      font-size: 1.08rem;
-      margin-bottom: 1.5rem;
-      transition: border 0.18s;
-      background: #fff;
-      color: #232B36;
-      box-sizing: border-box;
-    }
-    .clg-input:focus {
-      border-color: #1976D2;
-      outline: none;
-    }
-    .clg-textarea {
-      width: 100%;
-      padding: 0.85rem 1.1rem;
-      border: 2px solid #E5E7EB;
-      border-radius: 10px;
-      font-size: 1.08rem;
-      margin-bottom: 1.5rem;
-      transition: border 0.18s;
-      background: #fff;
-      color: #232B36;
-      resize: vertical;
-      min-height: 120px;
-      box-sizing: border-box;
-      font-family: inherit;
-    }
-    .clg-textarea:focus {
-      border-color: #1976D2;
-      outline: none;
-    }
-    .clg-btn {
-      width: 100%;
-      background: #00E676;
-      color: #fff;
-      border: none;
-      border-radius: 12px;
-      font-size: 1.13rem;
-      padding: 1rem 0;
-      font-weight: 700;
-      cursor: pointer;
-      transition: background 0.18s;
-      margin-bottom: 2rem;
-    }
-    .clg-btn:hover,
-    .clg-btn:focus {
-      background: #00c965;
-    }
-    .clg-btn:disabled {
-      background: #9CA3AF;
-      cursor: not-allowed;
-    }
-    .clg-spinner {
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      margin: 2rem 0;
-    }
-    .clg-spinner-circle {
-      width: 40px;
-      height: 40px;
-      border: 4px solid #E5E7EB;
-      border-top: 4px solid #00E676;
-      border-radius: 50%;
-      animation: spin 1s linear infinite;
-    }
-    @keyframes spin {
-      0% { transform: rotate(0deg); }
-      100% { transform: rotate(360deg); }
-    }
-    .clg-preview-label {
-      font-weight: 600;
-      margin-bottom: 0.5rem;
-      color: #232B36;
-    }
-    .clg-preview-box {
-      width: 100%;
-      padding: 1rem;
-      border: 2px solid #E5E7EB;
-      border-radius: 10px;
-      font-size: 1rem;
-      background: #F9FAFB;
-      color: #232B36;
-      resize: vertical;
-      min-height: 200px;
-      box-sizing: border-box;
-      font-family: inherit;
-      line-height: 1.5;
-    }
-    .clg-preview-actions {
-      margin-top: 1rem;
-      display: flex;
-      gap: 1rem;
-    }
-    .clg-copy-btn {
-      background: #1976D2;
-      color: #fff;
-      border: none;
-      border-radius: 8px;
-      padding: 0.75rem 1.5rem;
-      font-size: 1rem;
-      font-weight: 600;
-      cursor: pointer;
-      transition: background 0.18s;
-    }
-    .clg-copy-btn:hover,
-    .clg-copy-btn:focus {
-      background: #125bb5;
-    }
-    .clg-locked {
-      display: flex;
-      align-items: center;
-      gap: 0.8rem;
-      background: #FFF7E6;
-      border: 1px solid #F59E0B;
-      border-radius: 12px;
-      padding: 1rem 1.25rem;
-      margin-bottom: 1.5rem;
-      font-size: 1.04rem;
-      color: #92400E;
-    }
-    .clg-upgrade-btn {
-      background: #F59E0B;
-      color: #fff;
-      border: none;
-      border-radius: 8px;
-      padding: 0.5rem 1rem;
-      font-size: 0.9rem;
-      font-weight: 600;
-      cursor: pointer;
-      transition: background 0.18s;
-      margin-left: auto;
-    }
-    .clg-upgrade-btn:hover,
-    .clg-upgrade-btn:focus {
-      background: #D97706;
-    }
-    .clg-job-dropdown {
-      position: absolute;
-      left: 0;
-      right: 0;
-      top: 100%;
-      background: #fff;
-      border: 1.5px solid #E5E7EB;
-      border-top: none;
-      border-radius: 0 0 8px 8px;
-      box-shadow: 0 2px 8px rgba(31,41,55,0.07);
-      z-index: 10;
-      max-height: 220px;
-      overflow-y: auto;
-    }
-    .clg-job-item {
-      padding: 0.85rem 1.1rem;
-      cursor: pointer;
-      font-size: 1.08rem;
-      color: #232B36;
-      transition: background 0.15s;
-    }
-    .clg-job-item:hover, .clg-job-item.active {
-      background: var(--color-bg-light);
-    }
-  </style>
+  <link rel="stylesheet" href="css/cover-letter.css?v=20251212-2">
+  <link rel="stylesheet" href="css/history-tile.css">
+  <script src="js/custom-select.js?v=20251212-1" defer></script>
 </head>
 <body>
   <!-- Header -->
@@ -247,31 +56,201 @@
   <script src="js/mobile-menu.js?v=20250115-1"></script>
 
   <!-- page content -->
-  <main class="clg-main">
-    <div class="clg-card">
-      <div class="clg-title">Cover Letter Generator</div>
-      <div class="clg-desc">Describe the job target and optionally provide your résumé.</div>
-      <div id="clg-locked" class="clg-locked" style="display:none;">
-        <svg width="22" height="22" fill="none" stroke="#b59f00" stroke-width="2" style="flex-shrink:0;"><path d="M6 10V7a5 5 0 1110 0v3"/><rect x="5" y="10" width="12" height="8" rx="2"/></svg>
-        <span>This feature is only available on <strong>Pro</strong> and <strong>Premium</strong> plans.</span>
-        <button class="clg-upgrade-btn" onclick="window.location.href='pricing.html'">Upgrade</button>
-      </div>
-      <form id="clg-form" autocomplete="off">
-        <label class="clg-label" for="clg-job">Job Title or Role</label>
-        <div style="position:relative;">
-          <input class="clg-input" id="clg-job" name="job" type="text" placeholder="e.g., Product Manager" autocomplete="off" aria-autocomplete="list" aria-haspopup="listbox" aria-expanded="false">
+  <main class="cl-main">
+    <div class="cl-container">
+      <div class="cl-header">
+        <div class="cl-title-row">
+          <h1 class="cl-title">
+            Cover Letter Generator
+            <span class="cl-plan-badge" id="cl-plan-badge">Plan</span>
+          </h1>
         </div>
-        <label class="clg-label" for="clg-desc">Job Description</label>
-        <textarea class="clg-textarea" id="clg-desc" name="desc" rows="5" placeholder="Paste job details here" required></textarea>
-        <button class="clg-btn" id="clg-generate" type="submit">Generate Cover Letter</button>
-      </form>
-      <div id="clg-spinner" class="clg-spinner" style="display:none;">
-        <div class="clg-spinner-circle"></div>
+        <div class="cl-subtitle">
+          Generate an ATS-friendly cover letter tailored to the job description and your background.
+        </div>
       </div>
-      <div class="clg-preview-label">Cover Letter Preview</div>
-      <textarea id="clg-preview" class="clg-preview-box" readonly></textarea>
-      <div class="clg-preview-actions">
-        <button id="clg-copy" class="clg-copy-btn" type="button">Copy Cover Letter</button>
+
+      <div class="cl-layout">
+        <!-- LEFT: Generator + Preview -->
+        <div class="cl-left">
+          <section class="cl-card" aria-labelledby="cl-generator-title">
+            <div class="cl-card-title" id="cl-generator-title">Generator</div>
+
+            <form id="cl-form" class="cl-form" autocomplete="off">
+              <div class="cl-grid">
+                <div class="cl-field">
+                  <label class="cl-label" for="cl-role">Target Role <span class="cl-required">*</span></label>
+                  <div class="cl-role-wrap">
+                    <input
+                      id="cl-role"
+                      class="cl-input"
+                      type="text"
+                      placeholder="Start typing your target role (e.g., Data Engineer, Product Manager)"
+                      autocomplete="off"
+                      role="combobox"
+                      aria-autocomplete="list"
+                      aria-expanded="false">
+                  </div>
+                </div>
+
+                <div class="cl-field">
+                  <label class="cl-label" for="cl-company">Company <span class="cl-optional">(optional)</span></label>
+                  <input id="cl-company" class="cl-input" type="text" placeholder="e.g., Acme Corp" autocomplete="off">
+                </div>
+
+                <div class="cl-field">
+                  <label class="cl-label" for="cl-seniority">Seniority <span class="cl-required">*</span></label>
+                  <select id="cl-seniority" class="cl-select" required aria-label="Seniority">
+                    <option value="" disabled selected hidden>Select level...</option>
+                    <option value="intern">Intern</option>
+                    <option value="junior">Junior</option>
+                    <option value="mid">Mid</option>
+                    <option value="senior">Senior</option>
+                    <option value="lead">Lead</option>
+                    <option value="director">Director</option>
+                  </select>
+                </div>
+
+                <div class="cl-field">
+                  <label class="cl-label" for="cl-tone">Tone <span class="cl-optional">(optional)</span></label>
+                  <select id="cl-tone" class="cl-select">
+                    <option selected>Confident + Professional</option>
+                    <option>Direct + No-Fluff</option>
+                    <option>Warm + Human</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="cl-field">
+                <label class="cl-label" for="cl-job-description">Job Description <span class="cl-required">*</span></label>
+                <textarea id="cl-job-description" class="cl-textarea" rows="7" placeholder="Paste the job description here…" required></textarea>
+              </div>
+
+              <div class="cl-field">
+                <label class="cl-label" for="cl-resume-text">Resume Text <span class="cl-optional">(optional)</span></label>
+                <textarea id="cl-resume-text" class="cl-textarea" rows="6" placeholder="Optional: paste your resume text to make the cover letter more specific…"></textarea>
+              </div>
+
+              <div class="cl-actions">
+                <button id="cl-generate" class="btn-primary" type="submit">Generate Cover Letter</button>
+                <button id="cl-reset" class="btn-outline" type="button">Start Fresh</button>
+              </div>
+            </form>
+          </section>
+
+          <section class="cl-card cl-preview-card" aria-labelledby="cl-preview-title">
+            <div class="cl-preview-header">
+              <div class="cl-card-title" id="cl-preview-title">Preview</div>
+              <div class="cl-save-indicator" id="cl-save-indicator" aria-live="polite"></div>
+            </div>
+
+            <div class="cl-preview-wrap">
+              <textarea id="cl-preview" class="cl-preview-textarea" rows="14" placeholder="Your generated cover letter will appear here…"></textarea>
+              <div class="cl-preview-skeleton" id="cl-preview-skeleton" aria-hidden="true" hidden></div>
+            </div>
+
+            <div class="cl-preview-actions">
+              <button id="cl-copy" class="btn-outline" type="button">Copy Cover Letter</button>
+              <button id="cl-download" class="btn-outline" type="button">Download PDF</button>
+            </div>
+          </section>
+        </div>
+
+        <!-- RIGHT: History -->
+        <aside class="cl-right">
+        <section class="cl-card history-card" aria-labelledby="cl-history-header-title" id="cl-history-panel" data-history-panel="v1">
+          <div class="cl-history-header" data-history-header>
+            <div class="cl-history-title-wrap">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <circle cx="12" cy="12" r="10"/>
+                <polyline points="12 6 12 12 16 14"/>
+              </svg>
+              <span class="cl-history-title-text" id="cl-history-header-title">History</span>
+            </div>
+
+            <div class="cl-history-header-actions" data-history-header-actions>
+              <button id="cl-history-refresh" class="cl-history-icon-btn" title="Refresh history" aria-label="Refresh history" type="button">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                  <path d="M23 4v6h-6"/>
+                  <path d="M1 20v-6h6"/>
+                  <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
+                </svg>
+              </button>
+              <button id="cl-history-manage" class="cl-history-manage-btn" type="button">Manage</button>
+            </div>
+
+            <div class="cl-history-manage-actions" id="cl-history-manage-actions" data-history-manage-controls>
+              <div class="cl-history-manage-actions__actions">
+                <button id="cl-history-delete-selected" class="cl-history-danger-btn" type="button" disabled>Delete selected</button>
+                <button id="cl-history-cancel-manage" class="cl-history-neutral-btn" type="button">Cancel</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="cl-history-subtitle" data-history-subtitle>
+            Last 10 cover letters • Auto-saved
+          </div>
+
+          <div class="cl-history-body" data-history-body>
+            <div class="cl-history-loading" id="cl-history-loading" data-history-loading>
+              <div class="cl-history-skeleton-row">
+                <div class="loading-skeleton" style="width:40px;height:40px;border-radius:var(--radius-md);"></div>
+                <div style="flex:1;min-width:0;">
+                  <div class="loading-skeleton" style="height:12px;width:160px;border-radius:999px;"></div>
+                  <div class="loading-skeleton" style="height:12px;width:120px;border-radius:999px;margin-top:8px;"></div>
+                </div>
+              </div>
+              <div class="cl-history-skeleton-row">
+                <div class="loading-skeleton" style="width:40px;height:40px;border-radius:var(--radius-md);"></div>
+                <div style="flex:1;min-width:0;">
+                  <div class="loading-skeleton" style="height:12px;width:160px;border-radius:999px;"></div>
+                  <div class="loading-skeleton" style="height:12px;width:120px;border-radius:999px;margin-top:8px;"></div>
+                </div>
+              </div>
+              <div class="cl-history-skeleton-row">
+                <div class="loading-skeleton" style="width:40px;height:40px;border-radius:var(--radius-md);"></div>
+                <div style="flex:1;min-width:0;">
+                  <div class="loading-skeleton" style="height:12px;width:160px;border-radius:999px;"></div>
+                  <div class="loading-skeleton" style="height:12px;width:120px;border-radius:999px;margin-top:8px;"></div>
+                </div>
+              </div>
+            </div>
+
+            <div class="cl-history-error" id="cl-history-error" data-history-error hidden>
+              <span data-default-message="Couldn't load history.">Couldn't load history. </span>
+              <button id="cl-history-retry" class="cl-history-link-btn" type="button">Retry.</button>
+            </div>
+
+            <div class="cl-history-list" id="cl-history-list" data-history-list></div>
+
+            <div class="cl-history-empty" id="cl-history-empty" data-history-empty hidden>
+              <div style="font-weight:800;margin-bottom:0.25rem;color:var(--color-text-main);">No history yet</div>
+              <div>Your last 10 cover letters will appear here automatically.</div>
+            </div>
+          </div>
+
+          <div class="cl-history-footer" data-history-footer>
+            <span>Data retention: JobHackAI shows your last 10 cover letters. Runs are automatically deleted after 90 days.</span>
+            <div class="cl-history-footer-links">
+              <a class="cl-history-footer-link" href="#" data-history-learn-more>Learn more</a>
+              <span class="cl-history-footer-separator" aria-hidden="true">·</span>
+              <button id="cl-history-clear" class="cl-history-footer-link cl-history-footer-link--danger" type="button">Clear history</button>
+            </div>
+          </div>
+        </section>
+        </aside>
+      </div>
+    </div>
+
+    <!-- Delete confirmation modal -->
+    <div class="cl-modal-backdrop" id="cl-modal-backdrop" hidden></div>
+    <div class="cl-modal" id="cl-delete-modal" role="dialog" aria-modal="true" aria-labelledby="cl-delete-title" hidden data-history-modal>
+      <h3 class="cl-modal-title" id="cl-delete-title">Permanently delete history?</h3>
+      <p class="cl-modal-text">This will remove the selected items from your account.</p>
+      <p class="cl-modal-text">This cannot be undone.</p>
+      <div class="cl-modal-actions">
+        <button id="cl-delete-cancel" class="cl-history-neutral-btn" type="button">Cancel</button>
+        <button id="cl-delete-confirm" class="cl-history-danger-btn" type="button">Delete permanently</button>
       </div>
     </div>
   </main>
@@ -291,7 +270,7 @@
       </div>
       <div class="footer-links">
         <a href="index.html">Home</a>
-        <a href="support.html">Support</a>
+        <a href="help.html">Help</a>
         <a href="privacy.html">Privacy</a>
       </div>
     </div>
@@ -300,11 +279,17 @@
   <!-- scripts -->
   <script src="js/main.js" type="module"></script>
   <script src="js/analytics.js" type="module"></script>
+  <!-- Load Firebase auth for token retrieval -->
+  <script type="module" src="js/firebase-auth.js?v=20251011-1"></script>
   <!-- Load navigation system -->
   <script src="js/navigation.js?v=20251007-2"></script>
   <script src="js/universal-logout.js?v=20251007-2"></script>
+  <!-- Inactivity tracker - auto-logout after 30 minutes of inactivity -->
+  <script src="js/inactivity-tracker.js?v=20250115-1"></script>
   <!-- Load role selector -->
   <script src="js/role-selector.js?v=20250115-1" type="module"></script>
+  <!-- Cover Letter page logic -->
+  <script src="js/cover-letter.js?v=20251212-1" type="module"></script>
   <script>
     // Initialize navigation system
     if (window.JobHackAINavigation && typeof window.JobHackAINavigation.initializeNavigation === 'function') {
@@ -315,152 +300,6 @@
           window.JobHackAINavigation.initializeNavigation();
         }
       });
-    }
-  </script>
-  <script>
-    // --- AUTHENTICATION CHECK ---
-    function checkAuthentication() {
-      const isAuthenticated = localStorage.getItem('user-authenticated') === 'true' && !!localStorage.getItem('user-email');
-      const mainContent = document.querySelector('main');
-      
-      if (!isAuthenticated) {
-        mainContent.innerHTML = `
-          <div style="max-width: 600px; margin: 4rem auto; text-align: center; padding: 2rem;">
-            <div style="font-size: 4rem; margin-bottom: 1rem;">🔒</div>
-            <h1 style="font-size: 2rem; font-weight: 700; color: var(--color-text-main); margin-bottom: 1rem;">
-              Login Required
-            </h1>
-            <p style="font-size: 1.1rem; color: var(--color-text-secondary); margin-bottom: 2rem; line-height: 1.6;">
-              Cover Letter Generator requires you to be logged in to access this tool. 
-              Please sign in to get started.
-            </p>
-            <div style="display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap;">
-              <a href="login.html" class="btn-primary" style="text-decoration: none;">
-                Sign In
-              </a>
-              <a href="pricing-a.html" class="btn-outline" style="text-decoration: none;">
-                View Pricing
-              </a>
-            </div>
-          </div>
-        `;
-        return false;
-      }
-      return true;
-    }
-
-    // --- PLAN-BASED ACCESS CONTROL ---
-    function checkPlanAccess() {
-      const currentPlan = window.JobHackAINavigation ? window.JobHackAINavigation.getEffectivePlan() : 'free';
-      const lockedDiv = document.getElementById('clg-locked');
-      const formDiv = document.getElementById('clg-form');
-      
-      if (!lockedDiv || !formDiv) return;
-      
-      // Cover Letter Generator is available for Pro and Premium
-      const locked = (currentPlan !== 'pro' && currentPlan !== 'premium');
-      lockedDiv.style.display = locked ? 'flex' : 'none';
-      formDiv.style.display = locked ? 'none' : '';
-    }
-
-    // --- Initialize on load ---
-    document.addEventListener('DOMContentLoaded', function() {
-      // Check authentication first
-      if (!checkAuthentication()) {
-        return; // Stop here if not authenticated
-      }
-      
-      // Wait for navigation system to be ready
-      setTimeout(checkPlanAccess, 100);
-      
-      // Listen for plan changes
-      window.addEventListener('planChanged', function() {
-        setTimeout(checkPlanAccess, 100);
-      });
-      
-      // Periodic check for plan changes
-      setInterval(checkPlanAccess, 2000);
-    });
-
-    const form = document.getElementById('clg-form');
-    const generateBtn = document.getElementById('clg-generate');
-    const spinner = document.getElementById('clg-spinner');
-    const preview = document.getElementById('clg-preview');
-    const copyBtn = document.getElementById('clg-copy');
-
-    form.addEventListener('submit', function(e) {
-      e.preventDefault();
-      generateBtn.disabled = true;
-      spinner.style.display = 'flex';
-      preview.value = '';
-      setTimeout(() => {
-        spinner.style.display = 'none';
-        preview.value = 'Dear Hiring Manager,\n\nI am excited to apply for the ' + document.getElementById('clg-job').value + ' position. I believe my skills and experience make me a strong fit for this role. [AI-generated content here...]';
-        generateBtn.disabled = false;
-      }, 1800);
-    });
-
-    copyBtn.addEventListener('click', function() {
-      preview.select();
-      document.execCommand('copy');
-      copyBtn.textContent = 'Copied!';
-      setTimeout(() => { copyBtn.textContent = 'Copy Cover Letter'; }, 1200);
-    });
-
-    // --- Initialize Role Selector for Job Title or Role ---
-    let roleSelectorInitAttempts = 0;
-    const MAX_ROLE_SELECTOR_ATTEMPTS = 50;
-
-    function initializeRoleSelector() {
-      const jobInput = document.getElementById('clg-job');
-      if (!jobInput) {
-        if (roleSelectorInitAttempts < MAX_ROLE_SELECTOR_ATTEMPTS) {
-          roleSelectorInitAttempts++;
-          setTimeout(initializeRoleSelector, 100);
-        }
-        return;
-      }
-
-      // Wait for RoleSelector class to be available
-      if (window.RoleSelector) {
-        try {
-          if (!jobInput.dataset.roleSelectorInitialized) {
-            const roleSelector = new window.RoleSelector(jobInput, {
-              minChars: 2,
-              maxResults: 8,
-              showCustomOption: true,
-              onSelect: function(roleName, isCustom) {
-                console.log('[COVER-LETTER] Role selected:', roleName, isCustom ? '(custom)' : '');
-              }
-            });
-            jobInput.dataset.roleSelectorInitialized = 'true';
-            console.log('[COVER-LETTER] RoleSelector initialized successfully');
-          }
-        } catch (error) {
-          console.error('[COVER-LETTER] Failed to initialize RoleSelector:', error);
-          if (roleSelectorInitAttempts < MAX_ROLE_SELECTOR_ATTEMPTS) {
-            roleSelectorInitAttempts++;
-            setTimeout(initializeRoleSelector, 500);
-          } else {
-            console.warn('[COVER-LETTER] RoleSelector initialization failed after max attempts - dropdown may not work');
-          }
-        }
-      } else {
-        // RoleSelector not loaded yet, wait and retry
-        if (roleSelectorInitAttempts < MAX_ROLE_SELECTOR_ATTEMPTS) {
-          roleSelectorInitAttempts++;
-          setTimeout(initializeRoleSelector, 200);
-        } else {
-          console.warn('[COVER-LETTER] RoleSelector not available after max attempts - dropdown may not work');
-        }
-      }
-    }
-
-    // Initialize role selector after DOM is ready
-    if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', initializeRoleSelector);
-    } else {
-      setTimeout(initializeRoleSelector, 100);
     }
   </script>
 </body>

@@ -8,27 +8,59 @@
   <script src="js/static-auth-guard.js?v=20251007-2"></script>
   <script>
     // --- IMMEDIATE PAGE ACCESS CONTROL ---
-    // Run immediately to prevent content flash for unauthorized users
-    (function enforceAccessImmediate() {
-      const isAuthenticated = localStorage.getItem('user-authenticated') === 'true' && !!localStorage.getItem('user-email');
-      const plan = localStorage.getItem('user-plan') || 'free';
+    // Wait for Firebase auth to be ready before checking (prevents false negatives)
+    (async function enforceAccessImmediate() {
+      // Wait for Firebase auth manager to be ready (max 3 seconds)
+      if (window.FirebaseAuthManager && window.FirebaseAuthManager.waitForAuthReady) {
+        try {
+          await window.FirebaseAuthManager.waitForAuthReady(3000);
+        } catch (e) {
+          console.warn('[INTERVIEW-Q] Auth ready timeout:', e);
+        }
+      }
+      
+      // Check auth state
+      let isAuthenticated = false;
+      let plan = 'free';
+      
+      if (window.FirebaseAuthManager && window.FirebaseAuthManager.getCurrentUser) {
+        const user = window.FirebaseAuthManager.getCurrentUser();
+        isAuthenticated = !!user;
+        if (window.JobHackAINavigation) {
+          plan = window.JobHackAINavigation.getEffectivePlan();
+        } else {
+          plan = localStorage.getItem('user-plan') || 'free';
+        }
+      } else {
+        // Fallback to localStorage check
+        const hasLocalStorageAuth = localStorage.getItem('user-authenticated') === 'true';
+        const hasFirebaseKeys = Object.keys(localStorage).some(k => 
+          k.startsWith('firebase:authUser:') && 
+          localStorage.getItem(k) && 
+          localStorage.getItem(k) !== 'null' &&
+          localStorage.getItem(k).length > 10
+        );
+        isAuthenticated = hasLocalStorageAuth || hasFirebaseKeys;
+        plan = localStorage.getItem('user-plan') || 'free';
+      }
+      
       const allowedPlans = ['trial', 'essential', 'pro', 'premium'];
       
-      // If not authenticated, redirect to login immediately
+      // If not authenticated, redirect to login
       if (!isAuthenticated) {
         console.log('🚫 [INTERVIEW-Q] Not authenticated, redirecting to login');
         window.location.href = 'login.html';
         return;
       }
       
-      // If authenticated but on wrong plan, redirect to pricing with upgrade modal immediately
+      // If authenticated but on wrong plan, redirect to pricing
       if (!allowedPlans.includes(plan)) {
         console.log('🚫 [INTERVIEW-Q] Access denied for plan:', plan);
         window.location.href = 'pricing-a.html?plan=essential';
         return;
       }
       
-      // Access granted - continue loading page
+      // Access granted
       console.log('✅ [INTERVIEW-Q] Access granted for plan:', plan);
     })();
   </script>
@@ -38,51 +70,90 @@
   <script src="js/dynamic-favicon.js?v=20250111-1"></script>
   <link rel="stylesheet" href="css/tokens.css">
   <link rel="stylesheet" href="css/main.css">
+  <link rel="stylesheet" href="css/components.css">
   <link rel="stylesheet" href="css/header.css">
   <link rel="stylesheet" href="css/footer.css">
+  <script src="js/custom-select.js?v=20251212-1" defer></script>
+  <script src="js/components/usage-indicator.js"></script>
   <style>
     .iq-main {
-      max-width: 1100px;
+      max-width: 1200px;
       margin: 2.5rem auto 4rem auto;
       padding: 0 1rem;
       width: 100%;
     }
-    .iq-title {
-      font-size: 2.3rem;
-      font-weight: 800;
-      margin-bottom: 0.5rem;
-      color: #232B36;
+    /* Canonical feature-tile pattern (matches resume-feedback-pro.html) */
+    .rf-card {
+      background: var(--color-card-bg, #fff);
+      border-radius: var(--radius-xl, 16px);
+      box-shadow: var(--shadow-card, 0 6px 24px rgba(0,0,0,0.08));
+      padding: var(--space-lg, 1.5rem);
+      margin-bottom: var(--space-lg, 1.5rem);
     }
-    .iq-sub {
-      color: #4B5563;
-      margin-bottom: 1.5rem;
-      font-size: 1.13rem;
+    .rf-title {
+      font-size: var(--font-size-2xl, 1.85rem);
+      font-weight: var(--font-weight-extrabold, 800);
+      margin-bottom: var(--space-xs, 0.35rem);
+      color: var(--color-text-main, #1F2937);
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      flex-wrap: wrap;
+    }
+    .rf-plan-badge {
+      display: inline-block;
+      /* Default to neutral so premium never shows blue if JS fails */
+      background: var(--color-text-muted, #6B7280);
+      color: #fff;
+      font-weight: 600;
+      border-radius: 999px;
+      padding: 0.2em 0.8em;
+      font-size: 0.9rem;
+      margin-left: 0.1rem;
+      vertical-align: middle;
+      box-shadow: var(--shadow-sm);
+    }
+    .rf-plan-limit {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      color: var(--color-text-secondary, #4B5563);
+      font-size: 0.95rem;
+      margin-top: 0.5rem;
+    }
+    /* IQ usage stack: allow multiple usage indicators inside the plan-limit row */
+    #iq-usage-container {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+      width: 100%;
     }
     .iq-role-input {
       width: 100%;
       padding: 0.85rem 1.1rem;
-      border: 2px solid #E5E7EB;
-      border-radius: 10px;
+      border: 2px solid var(--color-divider, #E5E7EB);
+      border-radius: var(--radius-button, 8px);
       font-size: 1.08rem;
       margin-bottom: 0;
       transition: border 0.18s;
-      background: #fff;
-      color: #232B36;
+      background: var(--color-card-bg, #fff);
+      color: var(--color-text-main, #1F2937);
       box-sizing: border-box;
+      height: 48px;
     }
     .iq-role-input:focus {
-      border-color: #1976D2;
+      border-color: var(--color-accent-blue, #007BFF);
       outline: none;
     }
     .iq-role-dropdown {
       position: absolute;
       left: 0; right: 0;
-      background: #fff;
-      border: 1.5px solid #E5E7EB;
+      background: var(--color-card-bg, #fff);
+      border: 1.5px solid var(--color-divider, #E5E7EB);
       border-top: none;
-      border-radius: 0 0 10px 10px;
-      box-shadow: 0 2px 8px rgba(31,41,55,0.07);
-      z-index: 10;
+      border-radius: 0 0 var(--radius-button, 8px) var(--radius-button, 8px);
+      box-shadow: var(--shadow-md);
+      z-index: var(--z-dropdown, 1000);
       max-height: 220px;
       overflow-y: auto;
       margin-top: -2px;
@@ -91,83 +162,109 @@
       padding: 0.85rem 1.1rem;
       cursor: pointer;
       font-size: 1.08rem;
-      color: #232B36;
+      color: var(--color-text-main, #1F2937);
       transition: background 0.15s;
     }
     .iq-role-item:hover, .iq-role-item.active {
-      background: #F3F4F6;
+      background: var(--color-bg-light, #F9FAFB);
     }
     .iq-questions {
       margin-bottom: 1.5rem;
     }
     .iq-question-card {
-      background: #fff;
-      border-radius: 16px;
-      box-shadow: 0 2px 6px rgba(31,41,55,0.07);
+      background: var(--color-card-bg, #fff);
+      border-radius: var(--radius-xl, 16px);
+      box-shadow: var(--shadow-sm);
       padding: 1.1rem 1.3rem;
       margin-bottom: 1rem;
       font-size: 1.08rem;
-      color: #232B36;
+      color: var(--color-text-main, #1F2937);
       line-height: 1.45;
     }
     .iq-lock {
-      background: #fff;
-      border: 1.5px solid #E5E7EB;
-      border-radius: 16px;
+      background: var(--color-card-bg, #fff);
+      border: 1.5px solid var(--color-divider, #E5E7EB);
+      border-radius: var(--radius-xl, 16px);
       padding: 1rem 1.25rem;
       display: flex;
       align-items: center;
       gap: 0.8rem;
       margin-top: 1.2rem;
       font-size: 1.04rem;
-      color: #232B36;
-      box-shadow: 0 1px 4px rgba(31,41,55,0.04);
+      color: var(--color-text-main, #1F2937);
+      box-shadow: var(--shadow-sm);
     }
     .iq-upgrade-btn {
       display: block;
       width: 100%;
       margin: 1.7rem 0 0 0;
-      background: #00E676;
+      background: var(--color-cta-green, #00E676);
       color: #fff;
       border: none;
-      border-radius: 12px;
+      border-radius: var(--radius-button, 8px);
       font-size: 1.13rem;
       padding: 1rem 0;
-      font-weight: 700;
+      font-weight: var(--font-weight-bold, 700);
       cursor: pointer;
       transition: background 0.18s;
       text-align: center;
-      box-shadow: 0 2px 8px rgba(31,41,55,0.07);
+      box-shadow: var(--shadow-md);
+      min-height: 48px;
     }
     .iq-upgrade-btn:hover,
     .iq-upgrade-btn:focus {
-      background: #00c965;
+      background: var(--color-cta-green-hover, #00c965);
     }
     @media (max-width: 600px) {
       .iq-main { padding: 0 0.3rem; }
-      .iq-title { font-size: 1.5rem; }
+      .rf-title { font-size: var(--font-size-2xl, 1.5rem); }
       .iq-question-card { font-size: 1rem; padding: 1rem 0.7rem; }
       .iq-upgrade-btn { font-size: 1.01rem; padding: 0.8rem 0; }
     }
     /* ---- IQ MVP+ additions (append only) ---- */
-    .card { background:#fff; border-radius:16px; box-shadow:0 2px 6px rgba(31,41,55,.07); padding:1rem; margin-bottom:1rem; }
-    .iq-toolbar .iq-row { display:flex; gap:.75rem; flex-wrap:wrap; align-items:center; }
+    .card { background: var(--color-card-bg, #fff); border-radius: var(--radius-xl, 16px); box-shadow: var(--shadow-card); padding: 1rem; margin-bottom: 1rem; }
+    .iq-toolbar .iq-row { display: flex; gap: 0.75rem; flex-wrap: wrap; align-items: center; }
     .iq-select, .chip, textarea#iq-jd { 
-      border:1.5px solid #E5E7EB; 
-      border-radius:10px; 
-      padding:.6rem .8rem; 
-      background:#fff; 
+      border: 1.5px solid var(--color-divider, #E5E7EB); 
+      border-radius: var(--radius-button, 8px); 
+      padding: 0.6rem 0.8rem; 
+      background: var(--color-card-bg, #fff); 
       box-sizing: border-box;
+      color: var(--color-text-main, #1F2937);
     }
-    .chip { cursor:pointer; user-select:none; transition: all 0.2s ease; }
-    .chip.is-on { box-shadow:0 0 0 3px rgba(0,123,255,.15); background:#EBF4FF; border-color:#60A5FA; }
-    .chip:hover { border-color:#94A3B8; }
-    .chip.is-on:hover { border-color:#3B82F6; }
-    .chip-expand { background:#F8FAFC; border-color:#CBD5E1; color:#64748B; font-weight:500; }
-    .chip-expand:hover { background:#F1F5F9; border-color:#94A3B8; }
-    .iq-actions { display:flex; gap:.5rem; flex-wrap:wrap; align-items:center; margin-top:.75rem; }
-    .cooldown-badge { padding:.3rem .5rem; border-radius:8px; border:1px solid #E5E7EB; font-size:.9rem; color:#4B5563; }
-    .skeleton { height:56px; border-radius:16px; background:linear-gradient(90deg,#f3f4f6 25%,#eceff3 37%,#f3f4f6 63%); background-size:400% 100%; animation:sheen 1.2s ease-in-out infinite; }
+    .chip { cursor: pointer; user-select: none; transition: all 0.2s ease; }
+    .chip.is-on { box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.15); background: rgba(0, 123, 255, 0.1); border-color: var(--color-accent-blue, #007BFF); }
+    .chip:hover { border-color: #94A3B8; }
+    .chip.is-on:hover { border-color: var(--color-accent-blue, #007BFF); }
+    .chip-expand { background: var(--color-bg-light, #F8FAFC); border-color: #CBD5E1; color: var(--color-text-muted, #6B7280); font-weight: var(--font-weight-medium, 500); }
+    .chip-expand:hover { background: #F1F5F9; border-color: #94A3B8; }
+    .iq-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; margin-top: 0.75rem; }
+    .rf-btn-ghost {
+      background: transparent;
+      color: #4B5563;
+      border: 1px solid #E5E7EB;
+      border-radius: 8px;
+      padding: 0.65rem 1.1rem;
+      font-size: 0.95rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.18s ease;
+      min-height: 44px;
+      display: inline-flex;
+      justify-content: center;
+      align-items: center;
+    }
+    .rf-btn-ghost:hover {
+      background: #F9FAFB;
+      color: #374151;
+      border-color: #D1D5DB;
+    }
+    .rf-btn-ghost:active {
+      background: #F3F4F6;
+      border-color: #9CA3AF;
+    }
+    .cooldown-badge { padding: 0.3rem 0.5rem; border-radius: var(--radius-md, 8px); border: 1px solid var(--color-divider, #E5E7EB); font-size: 0.9rem; color: var(--color-text-secondary, #4B5563); }
+    .skeleton { height: 56px; border-radius: var(--radius-xl, 16px); background: linear-gradient(90deg, #f3f4f6 25%, #eceff3 37%, #f3f4f6 63%); background-size: 400% 100%; animation: sheen 1.2s ease-in-out infinite; }
     @keyframes sheen { 0%{background-position:100% 0} 100%{background-position:0 0} }
     .iq-qactions { 
       display:flex; 
@@ -182,34 +279,68 @@
       opacity: 1;
     }
     .iq-qactions .icon-btn { pointer-events:auto; position:relative; z-index:1; }
-    .icon-btn { border:1px solid #E5E7EB; background:#fff; border-radius:8px; padding:.3rem .45rem; cursor:pointer; transition: opacity 0.15s ease; }
+    .iq-replace-cooldown {
+      margin-left: auto;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.25rem;
+      padding: 0.15rem 0.4rem;
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: var(--color-accent-blue, #007BFF);
+      background: rgba(0, 123, 255, 0.1);
+      border-radius: var(--radius-sm, 4px);
+      border: 1px solid rgba(0, 123, 255, 0.25);
+    }
+    .icon-btn { border: 1px solid var(--color-divider, #E5E7EB); background: var(--color-card-bg, #fff); border-radius: 8px; padding: 0.3rem 0.45rem; cursor: pointer; transition: opacity 0.15s ease; }
     .icon-btn:disabled { opacity: 0.4; cursor: not-allowed; }
-    .link-btn { background:none; border:none; color:#007BFF; cursor:pointer; text-decoration:underline; padding:0 .25rem; }
-    .iq-example { margin:.5rem 0 0 0; color:#4B5563; }
-    .iq-types { display:flex; gap:.4rem; flex-wrap:wrap; }
-    .recent-item { width:100%; text-align:left; padding:.6rem .7rem; border:1.5px solid #E5E7EB; border-radius:10px; background:#fff; cursor:pointer; }
-    .ri-role { font-weight:600; }
-    .ri-meta { color:#6B7280; font-size:.9rem; }
-    .cta-hint { flex-basis:100%; font-size:.9rem; color:#6B7280; margin-top:.25rem; }
+    .link-btn { background: none; border: none; color: var(--color-accent-blue, #007BFF); cursor: pointer; text-decoration: underline; padding: 0 0.25rem; }
+    .iq-example { margin: 0.5rem 0 0 0; color: var(--color-text-secondary, #4B5563); }
+    .iq-types { display: flex; gap: 0.4rem; flex-wrap: wrap; }
+    .recent-item { width: 100%; text-align: left; padding: 0.6rem 0.7rem; border: 1.5px solid var(--color-divider, #E5E7EB); border-radius: var(--radius-button, 8px); background: var(--color-card-bg, #fff); cursor: pointer; }
+    .ri-role { font-weight: 600; }
+    .ri-meta { color: var(--color-text-muted, #6B7280); font-size: 0.9rem; }
+    .cta-hint { flex-basis: 100%; font-size: 0.9rem; color: var(--color-text-muted, #6B7280); margin-top: 0.25rem; }
+    .iq-global-cooldown {
+      display:inline-flex;
+      flex-direction:column;
+      gap:0.2rem;
+      width: fit-content;
+    }
+    .iq-global-cooldown-chip {
+      display:inline-flex;
+      align-items:center;
+      gap:0.35rem;
+      padding:0.3rem 0.75rem;
+      border-radius:999px;
+      background: rgba(0, 123, 255, 0.1);
+      border: 1px solid rgba(0, 123, 255, 0.25);
+      color: var(--color-accent-blue, #007BFF);
+      font-weight:600;
+      font-size:0.87rem;
+    }
+    .iq-global-cooldown-chip svg {
+      flex-shrink:0;
+    }
     .btn-save svg { fill:none; stroke:#6B7280; stroke-width:1.5; }
     /* Stronger selectors to beat any theme overrides */
     .iq-qactions .btn-save[aria-pressed="true"] svg,
-    .iq-qactions .btn-save.is-saved svg { fill:#2563EB; stroke:#2563EB; }
+    .iq-qactions .btn-save.is-saved svg { fill:var(--color-accent-blue, #007BFF); stroke:var(--color-accent-blue, #007BFF); }
     /* Highlight question card when starred */
-    .iq-question-card:has(.btn-save[aria-pressed="true"]) { background:#F0F9FF; border-color:#BFDBFE; }
+    .iq-question-card:has(.btn-save[aria-pressed="true"]) { background:rgba(0, 123, 255, 0.05); border-color:rgba(0, 123, 255, 0.2); }
     .saved-remove { padding:.2rem .5rem; font-size:.8rem; }
-    .recent-item.is-active { border-color:#60A5FA; box-shadow:0 0 0 2px rgba(37,99,235,.15); background:#F8FAFF; }
+    .recent-item.is-active { border-color:var(--color-accent-blue, #007BFF); box-shadow:0 0 0 2px rgba(0, 123, 255, 0.15); background:rgba(0, 123, 255, 0.05); }
 
     /* Fixed question count display (hardcoded 10) */
-    .iq-count-display { padding:.6rem .8rem; color:#4B5563; font-size:.9rem; background:#F9FAFB; border:1px solid #E5E7EB; border-radius:10px; }
+    .iq-count-display { padding:.6rem .8rem; color:#4B5563; font-size:.9rem; background:#F9FAFB; border:1px solid #E5E7EB; border-radius:var(--radius-md, 8px); }
 
     /* Accessibility utility */
     .sr-only { position:absolute !important; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0; }
 
     /* --- Visual polish & overrides --- */
     .iq-main { padding-bottom: 16px; }
-    .card { border-radius:16px; padding:1.25rem; }
-    .iq-select, .chip, textarea#iq-jd { border-radius:12px; }
+    .card { border-radius:var(--radius-xl, 16px); padding:1.25rem; }
+    .iq-select, .chip, textarea#iq-jd { border-radius:var(--radius-button, 8px); }
     .chip { border:1px solid #E5E7EB; padding:.5rem .75rem; line-height:1; background:#fff; min-height:36px; }
     .chip:hover { box-shadow:0 0 0 2px rgba(25,118,210,.10); }
     .chip:focus-visible { outline:none; box-shadow:0 0 0 2px rgba(25,118,210,.12); }
@@ -234,7 +365,7 @@
     }
     .iq-types { 
       flex:1 1 400px; 
-      min-width:400px; 
+      min-width:550px; 
       display:flex; 
       flex-wrap:wrap; 
       gap:0.5rem; 
@@ -248,7 +379,7 @@
     .iq-advanced { margin:.75rem 0 1rem 0; }
     .iq-advanced summary { cursor:pointer; padding:.25rem 0; }
     .iq-advanced[open] #iq-jd { margin-top:.5rem; }
-    #iq-jd { width:100%; border:1.5px solid #E5E7EB; border-radius:12px; padding:.75rem .9rem; }
+    #iq-jd { width:100%; border:1.5px solid #E5E7EB; border-radius:var(--radius-button, 8px); padding:.75rem .9rem; font-family:var(--font-family-base, 'Inter', sans-serif); font-size:var(--font-size-base, 1rem); }
     .iq-toolbar .iq-field .iq-role-input { margin-bottom:0; }
     .iq-toolbar .iq-row > div { 
       margin-bottom: 0; 
@@ -258,11 +389,11 @@
     .iq-toolbar .iq-row > div:not(:last-child) { 
       margin-right: 0; 
     }
-    .btn-outline { border:1px solid #E5E7EB; background:#fff; box-shadow:none; }
-    .btn-outline:hover, .btn-outline:focus-visible { box-shadow:0 0 0 2px rgba(25,118,210,.22); }
-    .btn-outline.is-pressed { background:#F3F4F6; }
+    .btn-outline { border: 1px solid var(--color-divider, #E5E7EB); background: var(--color-card-bg, #fff); box-shadow: none; color: var(--color-text-main, #1F2937); font-weight: 600; border-radius: var(--radius-button, 8px); padding: 0.6rem 1rem; cursor: pointer; transition: all 0.2s; display: inline-flex; align-items: center; gap: 0.4rem; min-height: 48px; }
+    .btn-outline:hover, .btn-outline:focus-visible { background: var(--color-bg-light, #F9FAFB); border-color: #D1D5DB; }
+    .btn-outline.is-pressed { background: var(--color-bg-light, #F3F4F6); }
     .btn-primary[disabled], .btn-outline[disabled] { opacity:.5; cursor:not-allowed; pointer-events:none; }
-    .iq-question-card { border:1px solid #E5E7EB; box-shadow:0 1px 4px rgba(31,41,55,.05); border-radius:16px; padding:1.1rem 1.2rem; }
+    .iq-question-card { border:1px solid #E5E7EB; box-shadow:0 1px 4px rgba(31,41,55,.05); border-radius:var(--radius-xl, 16px); padding:1.1rem 1.2rem; }
     .lock { 
       vertical-align: middle; 
       display: inline-flex;
@@ -278,6 +409,63 @@
     .iq-types .chip.is-on { background:#E8F1FF; border-color:#93C5FD; color:#1D4ED8; box-shadow:0 0 0 2px rgba(29,78,216,.18) inset; }
     .iq-types .chip:focus-visible { box-shadow:0 0 0 2px rgba(25,118,210,.30); }
 
+    /* Question Type segmented control (match Resume Rewrite "Generate Rewrite" UX standard) */
+    .iq-segmented {
+      display: flex;
+      gap: 0.6rem;
+      flex-wrap: nowrap;
+      align-items: center;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      scrollbar-width: thin;
+      scrollbar-color: rgba(0, 123, 255, 0.3) transparent;
+    }
+    .iq-segmented::-webkit-scrollbar {
+      height: 4px;
+    }
+    .iq-segmented::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    .iq-segmented::-webkit-scrollbar-thumb {
+      background: rgba(0, 123, 255, 0.3);
+      border-radius: 2px;
+    }
+    .iq-segmented::-webkit-scrollbar-thumb:hover {
+      background: rgba(0, 123, 255, 0.5);
+    }
+    .iq-segment {
+      background: #fff;
+      color: #007BFF;
+      font-weight: 700;
+      border: 2px solid #007BFF;
+      border-radius: 12px;
+      padding: 0.7rem 1.25rem;
+      font-size: 1rem;
+      cursor: pointer;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+      transition: background 0.18s, color 0.18s, box-shadow 0.18s;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 44px;
+      flex-shrink: 0;
+      white-space: nowrap;
+    }
+    .iq-segment:hover {
+      background: #F0F8FF;
+      color: #0056b3;
+      box-shadow: 0 4px 16px rgba(0,123,255,0.10);
+    }
+    .iq-segment.active {
+      background: #F0F8FF;
+      color: #0056b3;
+      box-shadow: 0 4px 16px rgba(0,123,255,0.10);
+    }
+    .iq-segment:focus-visible {
+      outline: none;
+      box-shadow: 0 0 0 3px rgba(0,123,255,0.25);
+    }
+
     /* Actions layout and cooldown badge text */
     .iq-actions { display:flex; align-items:center; gap:.5rem; flex-wrap:wrap; }
     .iq-actions-sec { display:flex; align-items:center; gap:.5rem; flex-wrap:wrap; margin-top:.5rem; }
@@ -292,10 +480,14 @@
     .icon-btn svg { width:20px; height:20px; stroke:#1F2937; stroke-width:2.25; stroke-linecap:round; stroke-linejoin:round; fill:none; }
     .icon-btn { display:inline-flex; align-items:center; justify-content:center; }
 
-    /* Two-column responsive layout */
-    .iq-two-col { display:grid; grid-template-columns: minmax(0,1fr) minmax(260px,320px); gap:1.25rem; align-items:start; margin-bottom:160px; }
-    .iq-two-col aside.card { position:sticky; top:8px; max-height:70vh; overflow:auto; }
-    @media (max-width: 900px) { .iq-two-col { grid-template-columns: 1fr; } .iq-two-col aside.card { position:static; max-height:70vh; } }
+    /* Two-column responsive layout for top section + history */
+    .iq-top-grid { display:grid; grid-template-columns: minmax(0,1fr) 380px; gap:2rem; align-items:start; margin-bottom:1.5rem; }
+    .iq-top-grid aside.card { 
+      position:sticky; 
+      top:8px; 
+    }
+    @media (max-width: 900px) { .iq-top-grid { grid-template-columns: 1fr; } .iq-top-grid aside.card { position:static; max-height:none; } }
+    .iq-questions-section { margin-top: 1.5rem; margin-bottom: 1.5rem; }
     @media (max-width: 600px) { 
       .iq-main { padding: 0 .75rem 120px .75rem; } 
       .iq-toolbar .iq-row { align-items: stretch; gap: 1rem; } 
@@ -304,6 +496,415 @@
       .iq-types { gap:.6rem .6rem; min-width:100%; } 
       .iq-qactions { opacity: 1; } 
       .iq-actions .btn-primary, .iq-actions .btn-outline { min-height:44px; width:auto; } 
+      /* Allow horizontal scroll for segmented control on mobile */
+      .iq-segmented { padding-bottom: 0.25rem; }
+      .iq-segment { padding: 0.6rem 1rem; font-size: 0.95rem; }
+    }
+    @media (max-width: 400px) {
+      /* Very small screens: reduce button size further */
+      .iq-segment { padding: 0.5rem 0.8rem; font-size: 0.9rem; }
+    }
+
+    /* ============================================================
+       HistoryPanel v1 (Interview Questions)
+       Matches Resume Feedback History panel structure/UX
+       ============================================================ */
+    @keyframes rf-shimmer {
+      0% { background-position: 200% 0; }
+      100% { background-position: -200% 0; }
+    }
+    .rf-skeleton {
+      background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+      background-size: 200% 100%;
+      animation: rf-shimmer 1.5s infinite;
+      border-radius: var(--radius-lg, 14px);
+      opacity: 1;
+      transition: opacity 0.3s ease;
+    }
+
+    .history-card {
+      border: 1px solid var(--color-divider, #E5E7EB);
+      padding: 24px;
+      margin-bottom: 0;
+    }
+
+    .rf-history-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+    .rf-history-title-wrap {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 0;
+    }
+    .rf-history-title-text {
+      font-weight: 800;
+      color: var(--color-text-main, #111827);
+      font-size: 1.05rem;
+      line-height: 1.2;
+    }
+    .rf-history-header-actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-shrink: 0;
+    }
+    .rf-history-icon-btn {
+      width: 40px;
+      height: 40px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border: 1px solid var(--color-divider, #E5E7EB);
+      border-radius: var(--radius-md);
+      background: transparent;
+      cursor: pointer;
+      transition: background 0.18s ease, border-color 0.18s ease;
+    }
+    .rf-history-icon-btn:hover {
+      background: var(--color-bg-light, #F9FAFB);
+      border-color: #D1D5DB;
+    }
+    .rf-history-manage-btn,
+    .rf-history-link-btn {
+      background: transparent;
+      border: none;
+      padding: 0.25rem 0;
+      cursor: pointer;
+      font-weight: 600;
+      color: var(--color-text-secondary, #374151);
+      text-decoration: underline;
+      font-size: 0.95rem;
+    }
+    .rf-history-manage-btn {
+      text-decoration: none;
+      color: var(--color-text-secondary, #374151);
+      font-weight: 700;
+      border: 1px solid var(--color-divider, #E5E7EB);
+      border-radius: var(--radius-md);
+      padding: 0.5rem 1rem;
+      background: transparent;
+      transition: background 0.18s ease, border-color 0.18s ease;
+    }
+    .rf-history-manage-btn:hover {
+      color: var(--color-text-main, #111827);
+      background: var(--color-bg-light, #F9FAFB);
+      border-color: #D1D5DB;
+    }
+    .rf-history-subtitle {
+      margin-top: 10px;
+      font-size: 0.875rem;
+      color: var(--color-text-muted, #6B7280);
+    }
+    .rf-history-body { margin-top: 16px; }
+    .rf-history-list {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .rf-history-item {
+      position: relative;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 0.875rem 1rem;
+      background: var(--color-card-bg, #fff);
+      border-radius: var(--radius-md);
+      border: 1px solid var(--color-divider, #E5E7EB);
+      transition: background 0.18s ease, border-color 0.18s ease, outline 0.18s ease;
+      cursor: pointer;
+      min-height: 56px;
+    }
+    .rf-history-item:hover {
+      background: var(--color-bg-light, #F9FAFB);
+      border-color: #D1D5DB;
+    }
+    .rf-history-item.is-selected {
+      outline: none;
+      border-color: var(--color-divider, #E5E7EB);
+      background: var(--color-card-bg, #fff);
+    }
+    .rf-history-checkbox-wrap {
+      display: none;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+    .rf-history-checkbox {
+      width: 18px;
+      height: 18px;
+      accent-color: var(--color-accent-blue);
+      cursor: pointer;
+    }
+    .rf-history-panel--manage .rf-history-checkbox-wrap { display: inline-flex; }
+    .rf-history-icon {
+      width: 40px;
+      height: 40px;
+      border-radius: var(--radius-md);
+      background: linear-gradient(135deg, #E0E7FF 0%, #C7D2FE 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+    .rf-history-icon svg { width: 20px; height: 20px; color: #4F46E5; }
+    .rf-history-text { flex: 1; min-width: 0; }
+    .rf-history-line1 {
+      font-weight: 700;
+      color: var(--color-text-main, #111827);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      font-size: 0.95rem;
+      line-height: 1.25;
+    }
+    .rf-history-line2 {
+      margin-top: 2px;
+      font-size: 0.85rem;
+      color: var(--color-text-muted, #6B7280);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .rf-history-score {
+      font-weight: 800;
+      color: var(--color-text-main, #111827);
+      font-size: 1.05rem;
+      min-width: 32px;
+      text-align: right;
+      flex-shrink: 0;
+    }
+    .rf-history-row-actions {
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      margin-left: 2px;
+    }
+    .rf-history-kebab {
+      width: 40px;
+      height: 40px;
+      border: 1px solid transparent;
+      border-radius: var(--radius-md);
+      background: transparent;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.18s ease, border-color 0.18s ease, opacity 0.18s ease;
+      opacity: 0;
+    }
+    .rf-history-item:hover .rf-history-kebab,
+    .rf-history-item:focus-within .rf-history-kebab { opacity: 1; }
+    .rf-history-kebab:hover {
+      background: var(--color-bg-light, #F3F4F6);
+      border-color: var(--color-divider, #E5E7EB);
+    }
+    @media (hover: none), (pointer: coarse) {
+      .rf-history-kebab { opacity: 1; }
+    }
+    .rf-history-menu {
+      position: absolute;
+      right: 0;
+      top: calc(100% + 6px);
+      min-width: 170px;
+      background: var(--color-card-bg, #fff);
+      border: 1px solid var(--color-divider, #E5E7EB);
+      border-radius: 12px;
+      box-shadow: var(--shadow-dropdown, 0 12px 28px rgba(0,0,0,0.12));
+      padding: 6px;
+      z-index: var(--z-popover, 1060);
+    }
+    .rf-history-menu[hidden] { display: none; }
+    .rf-history-menu-item {
+      width: 100%;
+      text-align: left;
+      background: transparent;
+      border: none;
+      padding: 10px 10px;
+      border-radius: 10px;
+      cursor: pointer;
+      font-weight: 600;
+      color: var(--color-text-main, #111827);
+    }
+    .rf-history-menu-item:hover { background: var(--color-bg-light, #F9FAFB); }
+    .rf-history-menu-item--danger { color: var(--color-error, #DC2626); }
+    .rf-history-menu-item--danger:hover { background: rgba(220, 38, 38, 0.06); }
+
+    .rf-history-panel--manage .rf-history-header-actions { display: none; }
+    .rf-history-manage-actions {
+      display: none;
+      flex-shrink: 0;
+      align-items: center;
+    }
+    .rf-history-manage-actions__actions {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+    }
+    .rf-history-panel--manage .rf-history-manage-actions {
+      display: flex;
+      justify-content: flex-end;
+      align-items: center;
+      margin-top: 0;
+      width: auto;
+    }
+    .rf-history-panel--manage .rf-history-row-actions { display: none; }
+
+    .rf-history-danger-btn {
+      background: rgba(220, 38, 38, 0.10);
+      border: 1px solid rgba(220, 38, 38, 0.25);
+      color: var(--color-error, #DC2626);
+      font-weight: 800;
+      border-radius: var(--radius-md);
+      padding: 0.7rem 1rem;
+      cursor: pointer;
+      transition: background 0.18s ease, border-color 0.18s ease, opacity 0.18s ease;
+    }
+    .rf-history-danger-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+    .rf-history-danger-btn:hover:not(:disabled) {
+      background: rgba(220, 38, 38, 0.14);
+      border-color: rgba(220, 38, 38, 0.35);
+    }
+    .rf-history-neutral-btn {
+      background: var(--color-card-bg, #fff);
+      border: 1px solid var(--color-divider, #E5E7EB);
+      color: var(--color-text-main, #111827);
+      font-weight: 700;
+      border-radius: var(--radius-md);
+      padding: 0.7rem 1rem;
+      cursor: pointer;
+      transition: background 0.18s ease, border-color 0.18s ease;
+    }
+    .rf-history-neutral-btn:hover { background: var(--color-bg-light, #F9FAFB); border-color: #D1D5DB; }
+
+    @media (max-width: 520px) {
+      .rf-history-panel--manage .rf-history-manage-actions {
+        flex-direction: column;
+        align-items: stretch;
+      }
+      .rf-history-manage-actions__actions {
+        flex-direction: column;
+        align-items: stretch;
+      }
+      #iq-history-delete-selected,
+      #iq-history-cancel-manage {
+        width: 100%;
+      }
+    }
+
+    .rf-history-loading { display: none; }
+    .rf-history-loading.is-visible {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .rf-history-skeleton-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 0.875rem 1rem;
+      border-radius: var(--radius-md);
+      border: 1px solid var(--color-divider, #E5E7EB);
+      background: #fff;
+      min-height: 56px;
+    }
+    .rf-history-skeleton-pill { height: 12px; width: 160px; border-radius: 999px; }
+    .rf-history-skeleton-pill.sm { width: 120px; }
+    .rf-history-skeleton-score { height: 16px; width: 32px; border-radius: 6px; }
+
+    .rf-history-error {
+      padding: 10px 12px;
+      border: 1px solid rgba(220, 38, 38, 0.22);
+      background: rgba(220, 38, 38, 0.06);
+      border-radius: 12px;
+      color: var(--color-text-main, #111827);
+      font-size: 0.95rem;
+      margin-bottom: 12px;
+    }
+    .rf-history-error[hidden] { display: none; }
+    .rf-history-empty {
+      text-align: center;
+      padding: 20px 12px;
+      color: var(--color-text-muted, #6B7280);
+      border: 1px dashed var(--color-divider, #E5E7EB);
+      border-radius: 12px;
+    }
+    .rf-history-empty[hidden] { display: none; }
+
+    .rf-history-footer {
+      margin-top: 16px;
+      font-size: 0.875rem;
+      color: var(--color-text-muted, #6B7280);
+      line-height: 1.45;
+    }
+    .rf-history-footer a,
+    .rf-history-footer button { font-size: inherit; }
+    .rf-history-footer-links {
+      display: inline-flex;
+      gap: 6px;
+      align-items: center;
+      margin-left: 4px;
+    }
+    .rf-history-footer-link { color: var(--color-accent-blue, #2563EB); text-decoration: underline; }
+    .rf-history-footer-separator { color: var(--color-text-muted, #6B7280); font-weight: 600; }
+    .rf-history-footer-link--danger {
+      color: var(--color-error, #DC2626);
+      background: transparent;
+      border: none;
+      padding: 0;
+      font-weight: 600;
+      cursor: pointer;
+      text-decoration: none;
+    }
+    .rf-history-footer-link--danger:hover { text-decoration: underline; }
+
+    .rf-history-modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(17, 24, 39, 0.55);
+      z-index: var(--z-modal-backdrop, 90);
+    }
+    .rf-history-modal-backdrop[hidden] { display: none; }
+    .rf-history-modal {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: min(520px, calc(100vw - 32px));
+      background: #fff;
+      border: 1px solid var(--color-divider, #E5E7EB);
+      border-radius: var(--radius-xl);
+      box-shadow: var(--shadow-xl, 0 20px 50px rgba(0,0,0,0.18));
+      padding: 20px;
+      z-index: var(--z-modal, 100);
+    }
+    .rf-history-modal[hidden] { display: none; }
+    .rf-history-modal h3 {
+      margin: 0 0 8px 0;
+      font-size: 1.15rem;
+      font-weight: 800;
+      color: var(--color-text-main, #111827);
+    }
+    .rf-history-modal p {
+      margin: 6px 0;
+      color: var(--color-text-secondary, #374151);
+      line-height: 1.5;
+    }
+    .rf-history-modal-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+      margin-top: 16px;
+      flex-wrap: wrap;
+    }
+    .rf-history-modal-actions button { min-height: 44px; }
+    @media (max-width: 520px) {
+      .rf-history-modal-actions { flex-direction: column; align-items: stretch; }
     }
 
     /* (Reverted) No overflow menu styles */
@@ -316,7 +917,7 @@
     .iq-main::after { content:""; display:block; height:0; }
 
     /* Lightweight snackbar toast */
-    #iq-toast { position:fixed; bottom:18px; right:18px; background:#111827; color:#fff; padding:.55rem .75rem; border-radius:10px; box-shadow:0 6px 18px rgba(0,0,0,.18); font-size:.95rem; z-index:10000; opacity:0; transform:translateY(8px); transition:opacity .18s ease, transform .18s ease; }
+    #iq-toast { position:fixed; bottom:18px; right:18px; background:#111827; color:#fff; padding:.55rem .75rem; border-radius:var(--radius-md, 8px); box-shadow:0 6px 18px rgba(0,0,0,.18); font-size:.95rem; z-index:10000; opacity:0; transform:translateY(8px); transition:opacity .18s ease, transform .18s ease; }
     #iq-toast.show { opacity:1; transform:translateY(0); }
     /* Ensure overlay respects hidden state regardless of inline display */
     #iq-upsell[hidden] { display: none !important; }
@@ -359,131 +960,49 @@
     .icon-btn[data-tip]:focus-visible::after,
     .icon-btn[data-tip]:hover::before,
     .icon-btn[data-tip]:focus-visible::before { opacity: 1; }
-    /* Notes section spacing */
-    .iq-notes { 
-      margin-top: .8rem; 
-      padding-top: .75rem;
-      border-top: 1px solid #E5E7EB;
-    }
-    .iq-notes-label {
-      display: block;
-      font-size: 0.85rem;
-      font-weight: 500;
-      color: #6B7280;
-      margin-bottom: 0.4rem;
-    }
-    .iq-notes textarea {
-      width: 100%;
-      border: 1.5px solid #E5E7EB;
-      border-radius: 8px;
-      padding: 0.6rem 0.75rem;
-      font-size: 0.9rem;
-      font-family: inherit;
-      line-height: 1.5;
-      color: #1F2937;
-      background: #fff;
-      resize: vertical;
-      transition: border-color 0.15s ease;
-      box-sizing: border-box;
-    }
-    .iq-notes textarea:focus {
-      outline: none;
-      border-color: #1976D2;
-    }
-
     /* Plan strip styling - matches dashboard style */
     .iq-plan-strip {
-      display: flex;
+      display: none; /* Hide the old plan strip, we move it inline */
+    }
+    .usage-indicator {
+      display: inline-flex;
       align-items: center;
-      justify-content: space-between;
-      flex-wrap: wrap;
-      gap: 0.75rem;
-      background: linear-gradient(135deg, #F8FAFC 0%, #EEF2FF 100%);
-      border: 1px solid #E5E7EB;
-      border-radius: 10px;
-      padding: 0.75rem 1rem;
-      margin-bottom: 1.25rem;
+      gap: 0.5rem;
       font-size: 0.95rem;
-      color: #374151;
-    }
-    .iq-plan-strip .plan-info {
-      display: flex;
-      align-items: center;
-      gap: 1rem;
-      flex-wrap: wrap;
-    }
-    /* Reuse dashboard plan badge styles */
-    .iq-plan-strip .user-plan-badge {
-      font-size: 1.05rem;
-      font-weight: 700;
-      border-radius: 999px;
-      padding: 0.22rem 1.1rem 0.22rem 0.8rem;
-      display: inline-flex;
-      align-items: center;
-      gap: 0.4em;
-      background: #FFF7E6;
-      color: #FF9100;
-      box-shadow: 0 1px 4px rgba(31,41,55,0.06);
-    }
-    .iq-plan-strip .user-plan-badge.trial {
-      color: #FF9100;
-      background: #FFF7E6;
-    }
-    .iq-plan-strip .user-plan-badge.essential {
-      color: #0077B5;
-      background: #E3F2FD;
-      font-weight: 700;
-    }
-    .iq-plan-strip .user-plan-badge.pro {
-      color: #388E3C;
-      background: #E8F5E9;
-    }
-    .iq-plan-strip .user-plan-badge.premium {
-      color: #C62828;
-      background: #FFEBEE;
-    }
-    .iq-plan-strip .user-plan-badge.free {
-      color: #6B7280;
-      background: #F3F4F6;
-    }
-    .iq-plan-strip .plan-features {
-      display: flex;
-      align-items: center;
-      gap: 0.75rem;
-      flex-wrap: wrap;
-    }
-    .iq-plan-strip .feature-tag {
-      display: inline-flex;
-      align-items: center;
-      gap: 0.35rem;
-      font-size: 0.9rem;
-      color: #4B5563;
-    }
-    .iq-plan-strip .feature-tag svg {
-      width: 16px;
-      height: 16px;
-      stroke: currentColor;
-      stroke-width: 2;
-      flex-shrink: 0;
+      color: var(--color-text-secondary, #4B5563);
     }
 
     /* Selection summary styling */
     .iq-selection-summary {
-      background: #F0FDF4;
-      border: 1px solid #BBF7D0;
-      border-radius: 8px;
+      background: rgba(5, 150, 105, 0.1);
+      border: 1px solid rgba(5, 150, 105, 0.25);
+      border-radius: var(--radius-md, 8px);
       padding: 0.75rem 1rem;
       margin-bottom: 1.25rem;
       font-size: 0.9rem;
-      color: #166534;
+      color: var(--color-success, #059669);
       display: flex;
       align-items: center;
       gap: 0.5rem;
     }
     .iq-selection-summary.no-selection {
-      background: #FEF3C7;
-      border: 1px solid #FCD34D;
-      color: #92400E;
+      background: rgba(217, 119, 6, 0.1);
+      border: 1px solid rgba(217, 119, 6, 0.25);
+      color: var(--color-warning, #D97706);
+    }
+    
+    /* Tip Banner - Fixed */
+    .iq-hint-banner {
+      margin-top: 1rem;
+      padding: 0.75rem 1rem;
+      background: rgba(0, 123, 255, 0.1);
+      border: 1px solid rgba(0, 123, 255, 0.25);
+      border-radius: var(--radius-md, 8px);
+      color: var(--color-accent-blue, #007BFF);
+      font-size: 0.9rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
     }
     /* Empty state */
     .iq-empty-state {
@@ -579,6 +1098,7 @@
       align-items: center;
       gap: 0.4rem;
       transition: background 0.18s;
+      min-height: 48px; /* Match height of other action buttons */
     }
     .btn-mock-cta:hover {
       background: #00c965;
@@ -588,6 +1108,9 @@
     }
     .btn-mock-cta[data-locked="true"]:hover {
       background: #4B5563;
+    }
+    .btn-mock-cta[data-locked="true"] .lock svg {
+      color: #fff; /* White lock icon when button is locked */
     }
   </style>
 </head>
@@ -624,7 +1147,43 @@
           <li>Works with your starred questions</li>
         </ul>
         <div style="display:flex; gap:.5rem; flex-wrap:wrap;">
-          <a id="upsell-upgrade" href="pricing-a.html" class="btn-primary" style="text-decoration:none;">Upgrade to Pro</a>
+          <a id="upsell-upgrade" href="#" class="btn-primary" style="text-decoration:none;" onclick="startCheckout('pro'); return false;">Upgrade to Pro</a>
+          <script>
+            // Inline helper b/c this page doesn't include the global checkout helper by default.
+            // Starts server-side Stripe Checkout using /api/stripe-checkout so sessions are created dynamically.
+            (function() {
+              async function startCheckoutLocal(plan) {
+                try {
+                  if (window.showLoadingOverlay) {
+                    window._currentLoadingOverlay = window.showLoadingOverlay('Redirecting to checkout...');
+                  }
+                  const user = window.FirebaseAuthManager?.getCurrentUser?.();
+                  if (!user) {
+                    window.location.href = 'login.html';
+                    return;
+                  }
+                  const idToken = await user.getIdToken();
+                  const res = await fetch('/api/stripe-checkout', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}) },
+                    body: JSON.stringify({ plan })
+                  });
+                  const data = await res.json();
+                  if (data && data.ok && data.url) {
+                    window.location.href = data.url;
+                    return;
+                  }
+                  throw new Error(data?.error || 'Checkout failed');
+                } catch (err) {
+                  console.error('Checkout start error:', err);
+                  if (window._currentLoadingOverlay) { window._currentLoadingOverlay(); window._currentLoadingOverlay = null; }
+                  window.location.href = `pricing-a.html?plan=${encodeURIComponent(plan)}`;
+                }
+              }
+              // Expose a global name expected by the inline onclick handler
+              window.startCheckout = startCheckoutLocal;
+            })();
+          </script>
           <button id="upsell-cancel-2" class="btn-outline">Maybe later</button>
         </div>
       </div>
@@ -644,28 +1203,42 @@
   </nav>
   <div class="mobile-nav-backdrop" id="mobileNavBackdrop"></div>
   <main class="iq-main">
-    <h1 class="iq-title">Interview Questions</h1>
-    <p class="iq-sub">Practice your answers with AI-generated questions tailored to your job title.</p>
-    <p style="font-size:0.9rem; color:#6B7280; margin-top:-0.75rem; margin-bottom:1rem;">Step 1: Generate questions · Step 2: Star your favorites · Step 3: Run a Mock Interview</p>
-
-    <!-- Plan Strip -->
-    <div id="iq-plan-strip" class="iq-plan-strip" style="display:none;">
-      <div class="plan-info">
+    <section class="rf-card" id="iq-feature-tile">
+      <div class="rf-title" style="margin-bottom:0.2rem;">
+        Interview Questions
         <span id="plan-badge-container"></span>
-        <span class="plan-features" id="plan-features-display"></span>
       </div>
-      <a href="pricing-a.html" class="btn-outline" id="plan-upgrade-link" style="display:none; text-decoration:none;">
-        Upgrade
-      </a>
-    </div>
+      <div style="color:var(--color-text-secondary);margin:0.35rem 0 0.7rem;">
+        Practice your answers with AI-generated questions tailored to your job title.
+      </div>
+      
+      <!-- Process Guide Inside Card -->
+      <div class="iq-process-guide" style="margin-top: 1.25rem; padding-top: 1rem; border-top: 1px solid var(--color-divider); display: flex; gap: 1.5rem; flex-wrap: wrap;">
+        <div style="font-size: 0.85rem; color: var(--color-text-secondary);">
+          <strong style="color: var(--color-text-main);">1.</strong> Generate questions
+        </div>
+        <div style="font-size: 0.85rem; color: var(--color-text-secondary);">
+          <strong style="color: var(--color-text-main);">2.</strong> Star your favorites
+        </div>
+        <div style="font-size: 0.85rem; color: var(--color-text-secondary);">
+          <strong style="color: var(--color-text-main);">3.</strong> Run a Mock Interview
+        </div>
+      </div>
+      
+      <div class="rf-plan-limit">
+        <div id="iq-usage-container"></div>
+      </div>
+    </section>
 
     <!-- Selection Summary -->
     <div id="iq-selection-summary" class="iq-selection-summary" style="display:none;">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26"/></svg>
       <span id="selection-count-text">Selected for Mock Interview: 0 of 10 questions</span>
-      <span style="font-size:0.8rem; color:#6B7280; margin-left:0.5rem;">We'll use your starred questions in your mock interview.</span>
+      <span style="font-size:0.8rem; color:var(--color-text-muted, #6B7280); margin-left:0.5rem;">We'll use your starred questions in your mock interview.</span>
     </div>
 
+    <div class="iq-top-grid">
+      <div>
     <div class="iq-toolbar card">
       <div class="iq-row">
         <div class="iq-field" style="flex:1 1 300px; min-width:280px; position:relative;">
@@ -684,23 +1257,21 @@
           </select>
         </div>
 
-        <div class="iq-types" aria-label="Question Types" style="min-width:400px;" aria-labelledby="iq-types-label">
-          <div id="iq-types-label" style="margin-bottom:0.5rem; font-weight:600; color:#374151; font-size:0.9rem;">Question Types</div>
-          <button type="button" class="chip is-on" data-type="behavioral">Behavioral</button>
-          <button type="button" class="chip is-on" data-type="technical">Technical</button>
-          <button type="button" id="types-more" class="chip chip-expand" aria-expanded="false" aria-controls="types-advanced" style="margin-left:.25rem;">More types</button>
-          <span id="types-advanced" hidden>
-            <button type="button" class="chip" data-type="system" data-adv="1">System Design</button>
-            <button type="button" class="chip" data-type="leadership" data-adv="1">Leadership</button>
-            <button type="button" class="chip" data-type="culture" data-adv="1">Culture</button>
-          </span>
+        <div class="iq-types" aria-label="Question Type" style="min-width:550px;" aria-labelledby="iq-types-label">
+          <div id="iq-types-label" style="margin-bottom:0.5rem; font-weight:600; color:#374151; font-size:0.9rem;">Question Type</div>
+          <div class="iq-segmented" id="iq-type" role="tablist" aria-label="Question type">
+            <button type="button" class="iq-segment active" data-value="mixed" role="tab" aria-selected="true">Mixed</button>
+            <button type="button" class="iq-segment" data-value="behavioral" role="tab" aria-selected="false">Behavioral</button>
+            <button type="button" class="iq-segment" data-value="technical" role="tab" aria-selected="false">Technical</button>
+            <button type="button" class="iq-segment" data-value="leadership" role="tab" aria-selected="false">Leadership</button>
+          </div>
         </div>
 
         
       </div>
 
       <!-- First-time visitor hint banner -->
-      <div id="iq-first-hint" class="iq-hint-banner" style="display:none; margin-top:1rem; padding:0.75rem 1rem; background:#EFF6FF; border:1px solid #BFDBFE; border-radius:10px; color:#1E40AF; font-size:0.9rem; display:flex; align-items:center; gap:0.5rem;">
+      <div id="iq-first-hint" class="iq-hint-banner" style="display:none;">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;">
           <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/>
           <circle cx="12" cy="12" r="4"/>
@@ -718,10 +1289,9 @@
 
       <div class="iq-actions">
         <button id="btn-generate" class="btn-primary" aria-label="Generate 10 Questions">Generate 10 Questions</button>
+        <button type="button" id="iq-start-fresh-btn" class="rf-btn-ghost" aria-label="Start Fresh">Start Fresh</button>
       </div>
-      <div id="cooldown-helper" class="cta-hint" style="display:none; color:#6B7280; font-size:0.85rem; margin-top:0.25rem;">
-        Next new set available in <span id="cooldown-time">0:59</span> (you can still practice with this set).
-      </div>
+      <div id="iq-generate-cooldown" class="iq-global-cooldown" aria-live="polite" style="margin-top:0.25rem;"></div>
       
       <!-- Action bar with left/right grouping -->
       <div class="iq-actions-bar" id="iq-actions-bar" style="display:none;">
@@ -747,15 +1317,112 @@
       <div class="iq-actions-sec" id="iq-actions-sec" hidden style="display:none;">
         <button id="chip-saved" class="chip" hidden aria-hidden="true">Saved (0)</button>
       </div>
-    </div>
-
-<div class="iq-two-col">
-      <div>
-    <div id="iq-questions" class="iq-questions"></div>
+      
+      <!-- Questions section - moved inside left column to prevent overlap with history panel -->
+      <div class="iq-questions-section">
+        <div id="iq-questions" class="iq-questions"></div>
       </div>
-      <aside class="card" style="align-self:start;">
-        <h3 style="margin:0 0 .5rem 0;">Recent Sets</h3>
-        <div id="iq-recents"></div>
+      </div>
+      </div>
+      <aside class="card history-card rf-history" id="iq-history-panel" data-history-panel="v1">
+        <div class="rf-history-header" data-history-header>
+          <div class="rf-history-title-wrap">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <circle cx="12" cy="12" r="10"/>
+              <polyline points="12 6 12 12 16 14"/>
+            </svg>
+            <span class="rf-history-title-text" id="iq-history-header-title">History</span>
+          </div>
+
+          <div class="rf-history-header-actions" data-history-header-actions>
+            <button id="iq-history-refresh" class="rf-history-icon-btn" title="Refresh history" aria-label="Refresh history" type="button">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <path d="M23 4v6h-6"/>
+                <path d="M1 20v-6h6"/>
+                <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
+              </svg>
+            </button>
+            <button id="iq-history-manage" class="rf-history-manage-btn" type="button">Manage</button>
+          </div>
+
+          <div class="rf-history-manage-actions" id="iq-history-manage-actions" data-history-manage-controls>
+            <div class="rf-history-manage-actions__actions">
+              <button id="iq-history-delete-selected" class="rf-history-danger-btn" type="button" disabled>Delete selected</button>
+              <button id="iq-history-cancel-manage" class="rf-history-neutral-btn" type="button">Cancel</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="rf-history-subtitle" data-history-subtitle>
+          Last 10 question sets • Auto-saved
+        </div>
+
+        <div class="rf-history-body" data-history-body>
+          <div class="rf-history-loading" id="iq-history-loading" data-history-loading>
+            <div class="rf-history-skeleton-row">
+              <div class="rf-skeleton" style="width:40px;height:40px;border-radius:var(--radius-md);"></div>
+              <div style="flex:1;min-width:0;">
+                <div class="rf-skeleton rf-history-skeleton-pill"></div>
+                <div class="rf-skeleton rf-history-skeleton-pill sm" style="margin-top:8px;"></div>
+              </div>
+            </div>
+            <div class="rf-history-skeleton-row">
+              <div class="rf-skeleton" style="width:40px;height:40px;border-radius:var(--radius-md);"></div>
+              <div style="flex:1;min-width:0;">
+                <div class="rf-skeleton rf-history-skeleton-pill"></div>
+                <div class="rf-skeleton rf-history-skeleton-pill sm" style="margin-top:8px;"></div>
+              </div>
+            </div>
+            <div class="rf-history-skeleton-row">
+              <div class="rf-skeleton" style="width:40px;height:40px;border-radius:var(--radius-md);"></div>
+              <div style="flex:1;min-width:0;">
+                <div class="rf-skeleton rf-history-skeleton-pill"></div>
+                <div class="rf-skeleton rf-history-skeleton-pill sm" style="margin-top:8px;"></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="rf-history-error" id="iq-history-error" data-history-error hidden>
+            <span data-default-message="Couldn’t load history.">Couldn’t load history. </span>
+            <button id="iq-history-retry" class="rf-history-link-btn" type="button">Retry.</button>
+          </div>
+
+          <div class="rf-history-list" id="iq-history-list" data-history-list></div>
+
+          <div class="rf-history-empty" id="iq-history-empty" data-history-empty hidden>
+            <div style="font-weight:800;margin-bottom:0.25rem;color:var(--color-text-main, #111827);">No history yet</div>
+            <div>Your last 10 question sets will appear here automatically.</div>
+          </div>
+        </div>
+
+        <div class="rf-history-footer" data-history-footer>
+          <span>Data retention: JobHackAI shows your last 10 question sets. Sets are automatically deleted after 90 days.</span>
+          <div class="rf-history-footer-links">
+            <a class="rf-history-footer-link" href="#" data-history-learn-more>Learn more</a>
+            <span class="rf-history-footer-separator" aria-hidden="true">·</span>
+            <button id="iq-history-clear" class="rf-history-footer-link rf-history-footer-link--danger" type="button">Clear history</button>
+          </div>
+        </div>
+
+        <!-- Delete confirmation modal -->
+        <div class="rf-history-modal-backdrop" id="iq-history-modal-backdrop" hidden></div>
+        <div
+          class="rf-history-modal"
+          id="iq-history-delete-modal"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="iq-history-modal-title"
+          hidden
+          data-history-modal
+        >
+          <h3 id="iq-history-modal-title">Permanently delete history?</h3>
+          <p>This will remove the selected items from your account.</p>
+          <p>This cannot be undone.</p>
+          <div class="rf-history-modal-actions">
+            <button id="iq-history-modal-cancel" class="rf-history-neutral-btn" type="button">Cancel</button>
+            <button id="iq-history-modal-confirm" class="rf-history-danger-btn" type="button">Delete permanently</button>
+          </div>
+        </div>
       </aside>
     </div>
 
@@ -798,11 +1465,11 @@
         <span class="footer-name">JOBHACKAI</span>
       </div>
       <div class="footer-legal">
-        <p> 2025 JobHackAI. All rights reserved.</p>
+        <p>© 2025 JobHackAI. All rights reserved.</p>
       </div>
       <div class="footer-links">
         <a href="index.html">Home</a>
-        <a href="support.html">Support</a>
+        <a href="help.html">Help</a>
         <a href="privacy.html">Privacy</a>
       </div>
     </div>
@@ -885,7 +1552,16 @@
     })();
 
     // --- AUTHENTICATION CHECK ---
-    function checkAuthentication() {
+    async function checkAuthentication() {
+      // Wait for Firebase auth to be ready
+      if (window.FirebaseAuthManager && window.FirebaseAuthManager.waitForAuthReady) {
+        try {
+          await window.FirebaseAuthManager.waitForAuthReady(3000);
+        } catch (e) {
+          console.warn('[INTERVIEW-Q] Auth ready timeout in checkAuthentication:', e);
+        }
+      }
+      
       // Use navigation system's authentication check for consistency
       if (window.JobHackAINavigation) {
         const authState = window.JobHackAINavigation.getAuthState();
@@ -916,7 +1592,23 @@
         return true;
       } else {
         // Fallback to localStorage check if navigation system not available
-        const isAuthenticated = localStorage.getItem('user-authenticated') === 'true' && !!localStorage.getItem('user-email');
+        // SECURITY: Check Firebase SDK keys synchronously (works before FirebaseAuthManager is ready)
+        // FirebaseAuthManager.getCurrentUser() returns null until onAuthStateChanged fires
+        function hasFirebaseAuthKeys() {
+          try {
+            return Object.keys(localStorage).some(k => 
+              k.startsWith('firebase:authUser:') && 
+              localStorage.getItem(k) && 
+              localStorage.getItem(k) !== 'null' &&
+              localStorage.getItem(k).length > 10
+            );
+          } catch (e) {
+            return false;
+          }
+        }
+        const hasLocalStorageAuth = localStorage.getItem('user-authenticated') === 'true';
+        const hasFirebaseKeys = hasFirebaseAuthKeys();
+        const isAuthenticated = hasLocalStorageAuth || hasFirebaseKeys;
         if (!isAuthenticated) {
           const mainContent = document.querySelector('main');
           mainContent.innerHTML = `
@@ -968,15 +1660,16 @@
     const IQ_API = { 
       GENERATE: '/api/interview-questions/generate',
       SAVE_SET: '/api/interview-questions/save-set',
-      GET_SET: '/api/interview-questions/get-set'
+      GET_SET: '/api/interview-questions/get-set',
+      HISTORY: '/api/interview-questions/history'
     };
     const IQ_ANALYTICS_HOOK = '';
 
     // Limits
-    const IQ_GLOBAL_COOLDOWN = 60;          // seconds
+    const IQ_GLOBAL_COOLDOWN = 45;          // seconds
     const IQ_MAX_REPLACES = 3;              // hard cap per set
     const IQ_PER_Q_REPLACE_COOLDOWN = 5;    // seconds
-    const IQ_RECENT_LIMIT = 5;
+    const IQ_RECENT_LIMIT = 10;
 
     // Role selector will be initialized separately
 
@@ -985,27 +1678,42 @@
 
     // State
     const iqState = {
-      prefs: { seniority:'', count:10, types:new Set(['behavioral','technical']), showGuidance:false },
+      prefs: { seniority:'', count:10, type:'mixed', showGuidance:false },
       set: null,
       cooldown: 0,
-      timers: { global:null, perQ:{}, notes:{}, toast:null },
-      notes: {},
+      timers: { global:null, perQ:{}, replaceGlobal:null, toast:null },
       recents: [],
       replaceCounts: {}, // Track per-question replace counts (TASK 10B)
-      dailyLimitReached: false // Track if daily limit has been reached
+      replaceCooldowns: {}, // Track per-question cooldowns
+      replaceGlobalCooldown: 0, // Track user-level replace cooldown (matches backend)
+      dailyLimitReached: false, // Track if daily limit has been reached
+      _resetRequested: false // Track if reset was requested (prevents race conditions)
     };
 
     // Utils & persistence
     const iqNow = ()=> new Date().toISOString();
     const iqSetId = (role, seed)=> `${role}:${seed}`;
-    // Helper to safely convert types (Set, Array, or empty object) to array
-    const iqTypesToArray = (types, fallback = []) => {
-      if (!types) return fallback;
-      if (types instanceof Set) return Array.from(types);
-      if (Array.isArray(types)) return types;
-      // Handle empty object case (from old serialized Sets)
-      if (typeof types === 'object' && Object.keys(types).length === 0) return fallback;
-      return fallback;
+    const IQ_VALID_TYPES = new Set(['mixed','behavioral','technical','leadership']);
+    const iqSanitizeType = (raw, fallback = 'mixed') => {
+      const t = String(raw || '').trim().toLowerCase();
+      return IQ_VALID_TYPES.has(t) ? t : fallback;
+    };
+    // Legacy compatibility: infer a single `type` from older `types[]` representations
+    const iqInferTypeFromLegacyTypes = (legacyTypes) => {
+      if (!legacyTypes) return 'mixed';
+      let arr = [];
+      if (legacyTypes instanceof Set) arr = Array.from(legacyTypes);
+      else if (Array.isArray(legacyTypes)) arr = legacyTypes;
+      else if (typeof legacyTypes === 'object' && Object.keys(legacyTypes).length === 0) arr = [];
+      arr = arr.map(v => String(v || '').toLowerCase()).filter(Boolean);
+      if (!arr.length) return 'mixed';
+      if (arr.includes('mixed')) return 'mixed';
+      // If legacy had multiple selected types, map to mixed
+      if (arr.length > 1) return 'mixed';
+      // Map removed legacy types to nearest bucket
+      if (arr[0] === 'system') return 'technical';
+      if (arr[0] === 'culture') return 'behavioral';
+      return iqSanitizeType(arr[0], 'mixed');
     };
     function iqToast(msg){
       console.log('[iq-toast]', msg);
@@ -1016,9 +1724,10 @@
     }
     function iqEsc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
     // Helper to disable all question generation buttons when daily limit is reached
+    // Note: Replace buttons remain enabled as replacements are free and don't count toward daily limit
     function iqDisableAllButtons(){
       iqState.dailyLimitReached = true;
-      // Disable generate button
+      // Disable generate button (only full sets count toward daily limit)
       const genBtn = $IQ('#btn-generate');
       if (genBtn) {
         genBtn.disabled = true;
@@ -1028,30 +1737,161 @@
         // Update button text to indicate daily limit reached (instead of leaving "Generating...")
         genBtn.textContent = 'Daily Limit Reached';
       }
-      // Disable all replace buttons
-      $$IQ('.btn-replace').forEach(btn => {
-        btn.disabled = true;
-        btn.setAttribute('aria-disabled', 'true');
-        btn.setAttribute('data-tip', 'Daily limit reached for your plan.');
-      });
+      // Replace buttons remain enabled - replacements are free and don't count toward daily limit
+    }
+    function updateStartFreshButtonState() {
+      const btn = $IQ('#iq-start-fresh-btn');
+      if (!btn) return;
+      const enabled = !!iqState.set;
+      btn.disabled = !enabled;
+      btn.setAttribute('aria-disabled', enabled ? 'false' : 'true');
+      btn.style.opacity = enabled ? '' : '0.5';
+      btn.style.cursor = enabled ? 'pointer' : 'not-allowed';
+    }
+
+    function resetInterviewQuestionsSession() {
+      if (!iqState.set) {
+        return;
+      }
+
+      // Set reset flag to prevent race conditions with in-flight API requests
+      iqState._resetRequested = true;
+
+      const savedKey = iqSavedKey();
+      if (savedKey) {
+        try {
+          localStorage.removeItem(savedKey);
+        } catch (e) {
+          console.warn('[IQ] Failed to clear saved indexes', e);
+        }
+      }
+
+      iqState.set = null;
+      iqState.cooldown = 0;
+      iqState.dailyLimitReached = false;
+      iqState.replaceCounts = {};
+      iqState.replaceCooldowns = {};
+      iqState.replaceGlobalCooldown = 0;
+
+      if (iqState.timers.global) {
+        clearInterval(iqState.timers.global);
+        iqState.timers.global = null;
+      }
+
+      iqResetPerQuestionCooldowns();
+
+      const roleInput = $IQ('#iq-role');
+      if (roleInput) {
+        roleInput.value = '';
+      }
+
+      const jdInput = $IQ('#iq-jd');
+      if (jdInput) {
+        jdInput.value = '';
+      }
+
+      document.querySelectorAll('.rf-history-item.is-selected').forEach(el => el.classList.remove('is-selected'));
+
+      // Close saved panel if open (matches iqLoadSetById behavior)
+      const savedPanel = $IQ('#iq-saved-panel');
+      if (savedPanel) {
+        savedPanel.hidden = true;
+      }
+
+      // Explicitly reset generate button text in case it was set to "Daily Limit Reached"
+      const genBtn = $IQ('#btn-generate');
+      if (genBtn) {
+        genBtn.textContent = 'Generate 10 Questions';
+      }
+
+      iqRenderQuestions();
+      iqUpdateSelectionSummary();
+      iqUpdateActionsLayout();
+      iqUpdateGenerateButtonState();
+      renderGenerateCooldownIndicator();
+      updateStartFreshButtonState();
     }
     function iqTrack(event, data={}){
-      const payload = { event, ts: iqNow(), role: iqState?.set?.role || $IQ('#iq-role')?.value || '', seniority: iqState.prefs.seniority, types: [...iqState.prefs.types], count: iqState.prefs.count, used_jd: !!$IQ('#iq-jd')?.value?.trim(), ...data };
+      const payload = { event, ts: iqNow(), role: iqState?.set?.role || $IQ('#iq-role')?.value || '', seniority: iqState.prefs.seniority, type: iqState.prefs.type, count: iqState.prefs.count, used_jd: !!$IQ('#iq-jd')?.value?.trim(), ...data };
       console.log('[iq-analytics]', payload);
       if (!IQ_ANALYTICS_HOOK) return;
       fetch(IQ_ANALYTICS_HOOK, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) }).catch(()=>{});
     }
-    function iqSavePrefs(){ localStorage.setItem('iq_prefs', JSON.stringify({ seniority: iqState.prefs.seniority, count: iqState.prefs.count, types: [...iqState.prefs.types], showGuidance: iqState.prefs.showGuidance })); }
-    function iqLoadPrefs(){ try{ const p=JSON.parse(localStorage.getItem('iq_prefs')||'{}'); if(p.seniority) iqState.prefs.seniority=p.seniority; if(p.count) iqState.prefs.count=p.count; if(Array.isArray(p.types)) iqState.prefs.types=new Set(p.types); if(typeof p.showGuidance==='boolean') iqState.prefs.showGuidance=p.showGuidance; }catch{} }
-    function iqSaveNotes(){ if (!iqState.set) return; localStorage.setItem(`iq_notes_${iqSetId(iqState.set.role, iqState.set.seed)}`, JSON.stringify(iqState.notes)); }
-    function iqLoadNotes(){ if (!iqState.set) return; try{ iqState.notes=JSON.parse(localStorage.getItem(`iq_notes_${iqSetId(iqState.set.role, iqState.set.seed)}`)||'{}'); }catch{ iqState.notes={}; } }
-    function iqAddRecent(meta){ iqState.recents = JSON.parse(localStorage.getItem('iq_recent_sets')||'[]'); iqState.recents.unshift(meta); iqState.recents = iqState.recents.slice(0, IQ_RECENT_LIMIT); localStorage.setItem('iq_recent_sets', JSON.stringify(iqState.recents)); }
+    function iqSavePrefs(){ localStorage.setItem('iq_prefs', JSON.stringify({ seniority: iqState.prefs.seniority, count: iqState.prefs.count, type: iqState.prefs.type, showGuidance: iqState.prefs.showGuidance })); }
+    function iqLoadPrefs(){
+      try{
+        const p=JSON.parse(localStorage.getItem('iq_prefs')||'{}');
+        if(p.seniority) iqState.prefs.seniority=p.seniority;
+        if(p.count) iqState.prefs.count=p.count;
+        // New format
+        if(p.type) iqState.prefs.type = iqSanitizeType(p.type, 'mixed');
+        // Legacy format
+        if(!p.type && Array.isArray(p.types)) iqState.prefs.type = iqInferTypeFromLegacyTypes(p.types);
+        if(typeof p.showGuidance==='boolean') iqState.prefs.showGuidance=p.showGuidance;
+      }catch{}
+    }
+    function iqAddRecent(meta){ 
+      iqState.recents = JSON.parse(localStorage.getItem('iq_recent_sets')||'[]'); 
+      iqState.recents.unshift(meta); 
+      iqState.recents = iqState.recents.slice(0, IQ_RECENT_LIMIT); 
+      localStorage.setItem('iq_recent_sets', JSON.stringify(iqState.recents)); 
+    }
+    
+    // Save question set to D1 for history (all plans)
+    async function iqSaveSetToD1(setObj) {
+      try {
+        const token = await getFirebaseToken();
+        if (!token) {
+          console.warn('[IQ] Not authenticated, skipping D1 save');
+          return null;
+        }
+        
+        // Save to D1 with all questions selected initially (for history)
+        const selectedIndices = setObj.questions ? setObj.questions.map((_, idx) => idx) : [];
+        const types = Array.isArray(setObj.types) ? setObj.types : (setObj.type ? [setObj.type] : ['mixed']);
+        
+        const response = await fetch(IQ_API.SAVE_SET, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            role: setObj.role,
+            seniority: setObj.seniority || null,
+            type: setObj.type || 'mixed',
+            types: types,
+            questions: setObj.questions || [],
+            selectedIndices: selectedIndices,
+            jd: setObj.jd || null
+          })
+        });
+        
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          console.warn('[IQ] Failed to save set to D1:', errorData.error || response.status);
+          return null;
+        }
+        
+        const data = await response.json();
+        if (data.success && data.id) {
+          console.log('[IQ] Saved set to D1:', data.id);
+          return { id: data.id, createdAt: data.createdAt };
+        }
+        
+        return null;
+      } catch (e) {
+        console.warn('[IQ] Error saving set to D1:', e);
+        return null;
+      }
+    }
     function iqSaveSetFull(setObj){ 
       try{ 
         const id=iqSetId(setObj.role,setObj.seed); 
-        // Convert Set to array for JSON serialization and include replaceCounts
+        // Include replaceCounts and persist selected type (legacy types[] supported on load)
         const toSave = {
           ...setObj,
+          type: setObj.type || iqInferTypeFromLegacyTypes(setObj.types),
           types: Array.from(setObj.types || []),
           replaceCounts: iqState.replaceCounts || {}
         };
@@ -1060,36 +1900,115 @@
         console.warn('save set failed',e);
       }
     }
-    function iqLoadSetById(id){ 
+    async function iqLoadSetById(id){ 
       try{ 
+        // Check if ID is numeric (D1 ID) vs local ID (e.g., "role:seed")
+        const isD1Id = /^\d+$/.test(String(id));
+        
+        if (isD1Id) {
+          // Load from D1 API
+          const token = await getFirebaseToken();
+          if (!token) {
+            iqToast('Please log in to load question sets.');
+            return;
+          }
+          
+          try {
+            const response = await fetch(`${IQ_API.GET_SET}?id=${id}`, {
+              method: 'GET',
+              headers: {
+                'Authorization': `Bearer ${token}`
+              }
+            });
+            
+            if (!response.ok) {
+              if (response.status === 403) {
+                iqToast('Accessing question sets requires a valid plan (Trial, Essential, Pro, or Premium).');
+              } else {
+                iqToast('Question set not found.');
+              }
+              return;
+            }
+            
+            const data = await response.json();
+            if (!data.success || !data.questions) {
+              iqToast('Invalid question set data.');
+              return;
+            }
+            
+            // Transform D1 response to match expected format
+            const set = {
+              id: String(data.id),
+              role: data.role,
+              seniority: data.seniority || '',
+              type: Array.isArray(data.types) && data.types.length > 0 
+                ? iqSanitizeType(data.types[0], 'mixed')
+                : 'mixed',
+              types: Array.isArray(data.types) ? data.types : [],
+              questions: data.questions || [],
+              selectedIndices: data.selectedIndices || [],
+              jd: data.jd || '',
+              seed: `${data.id}-${Date.now()}`, // Generate a seed for compatibility
+              count: data.questions?.length || 0,
+              replaceCounts: {} // Initialize empty
+            };
+            
+            // Normalize type
+            set.type = iqSanitizeType(set.type, iqInferTypeFromLegacyTypes(set.types));
+            
+            // Save to localStorage for future reference
+            try {
+              localStorage.setItem(`iq_set_${id}`, JSON.stringify(set));
+            } catch (e) {
+              console.warn('[IQ] Failed to cache set in localStorage:', e);
+            }
+            
+            iqState.set = set;
+            iqResetPerQuestionCooldowns();
+            iqState.replaceCounts = set.replaceCounts || {};
+            iqRenderQuestions();
+            iqUpdateSavedChip();
+            iqRevealSecondaryActions();
+            iqUpdateActionsLayout();
+            const savedPanel = $IQ('#iq-saved-panel');
+            if (savedPanel) savedPanel.hidden = true;
+            // History panel selection highlight
+            document.querySelectorAll('.rf-history-item').forEach(el => {
+              el.classList.toggle('is-selected', el.getAttribute('data-session-id') === String(id));
+            });
+            window.scrollTo({top:0,behavior:'smooth'}); 
+            iqToast('Loaded previous set'); 
+            iqTrack('iq_recent_loaded',{ id }); 
+            return;
+          } catch (e) {
+            console.warn('[IQ] Failed to load set from D1:', e);
+            iqToast('Could not load set');
+            return;
+          }
+        }
+        
+        // Load from localStorage for local IDs
         const raw=localStorage.getItem(`iq_set_${id}`); 
         if(!raw){ 
           iqToast('Previous set not found'); 
           return; 
         } 
         const set=JSON.parse(raw); 
-        // Convert types array back to Set and restore replaceCounts
-        // Handle both new format (array) and old format (empty object from serialized Set)
-        if(Array.isArray(set.types) && set.types.length > 0){
-          set.types = new Set(set.types);
-        } else if(!set.types || (typeof set.types === 'object' && Object.keys(set.types).length === 0)){
-          set.types = new Set(['behavioral', 'technical']);
-        } else if(set.types instanceof Set){
-          // Already a Set, keep it
-        } else {
-          // Fallback for any other case
-          set.types = new Set(['behavioral', 'technical']);
-        }
+        // Normalize legacy/new type fields
+        set.type = iqSanitizeType(set.type, iqInferTypeFromLegacyTypes(set.types));
         iqState.set=set; 
+        iqResetPerQuestionCooldowns();
         iqState.replaceCounts = set.replaceCounts || {}; 
-        iqLoadNotes(); 
         iqRenderQuestions(); 
         iqUpdateSavedChip(); 
         iqRevealSecondaryActions(); 
         iqUpdateActionsLayout(); 
         const savedPanel=$IQ('#iq-saved-panel'); 
         if(savedPanel) savedPanel.hidden=true; 
-        $$IQ('.recent-item').forEach(b=> b.classList.toggle('is-active', b.getAttribute('data-id')===id)); 
+        // History panel selection highlight (standard panel uses .is-selected)
+        document.querySelectorAll('.rf-history-item').forEach(el => {
+          el.classList.toggle('is-selected', el.getAttribute('data-session-id') === id);
+        });
         window.scrollTo({top:0,behavior:'smooth'}); 
         iqToast('Loaded previous set'); 
         iqTrack('iq_recent_loaded',{ id }); 
@@ -1102,88 +2021,139 @@
     // Cooldowns
     function iqStartGlobalCooldown(sec=IQ_GLOBAL_COOLDOWN){
       iqState.cooldown = sec;
-      const cooldownHelper = $IQ('#cooldown-helper');
-      const cooldownTime = $IQ('#cooldown-time');
       const g = $IQ('#btn-generate'); 
       const mi=$IQ('#mi-new-set');
       
-      // Show cooldown UI - only show helper text below button, not badge to the right
-      if (cooldownHelper) { cooldownHelper.style.display = 'block'; }
       if (g) { 
         g.disabled = true; 
         g.setAttribute('aria-disabled','true'); 
         g.classList.add('is-disabled');
-        // Restore button text immediately after successful generation (not wait for cooldown to end)
         g.textContent = iqState.set ? 'New Question Set' : 'Generate 10 Questions';
-        // Update button state to respect role requirement
         iqUpdateGenerateButtonState();
       }
       if (mi) { mi.disabled = true; mi.setAttribute('aria-disabled','true'); }
+      renderGenerateCooldownIndicator();
       
       clearInterval(iqState.timers.global);
       iqState.timers.global = setInterval(()=>{
         iqState.cooldown--;
-        const mm = Math.floor(iqState.cooldown/60);
-        const ss = String(iqState.cooldown%60).padStart(2,'0');
-        const timeStr = `${mm}:${ss}`;
-        if (cooldownTime) cooldownTime.textContent = timeStr;
+        renderGenerateCooldownIndicator();
         
         if (iqState.cooldown<=0) { 
           clearInterval(iqState.timers.global); 
-          if (cooldownHelper) cooldownHelper.style.display = 'none';
           if (g) { 
             g.disabled = false; 
             g.removeAttribute('aria-disabled'); 
             g.classList.remove('is-disabled'); 
-            // Restore button text after cooldown ends
             g.textContent = iqState.set ? 'New Question Set' : 'Generate 10 Questions';
-            // Update button state to respect role requirement
             iqUpdateGenerateButtonState();
           } 
           if (mi) { 
             mi.disabled = false; 
             mi.removeAttribute('aria-disabled'); 
           } 
+          renderGenerateCooldownIndicator();
         }
       }, 1000);
     }
-    function iqStartPerQCooldown(i){
-      const k = `q${i}`;
-      // Look up button initially to ensure it exists
-      const initialBtn = $IQ(`.btn-replace[data-idx="${i}"]`);
-      if (!initialBtn) return; 
-      initialBtn.disabled = true;
-      clearInterval(iqState.timers.perQ[k]);
-      let t = IQ_PER_Q_REPLACE_COOLDOWN;
-      const tick = ()=>{ 
-        // Look up button fresh each tick to handle DOM re-renders
-        const btn = $IQ(`.btn-replace[data-idx="${i}"]`);
-        if(!btn) {
-          // Button no longer exists, clean up timer
-          clearInterval(iqState.timers.perQ[k]);
+    function iqResetPerQuestionCooldowns() {
+      Object.values(iqState.timers.perQ).forEach(clearInterval);
+      iqState.timers.perQ = {};
+      iqState.replaceCooldowns = {};
+      if (iqState.timers.replaceGlobal) {
+        clearInterval(iqState.timers.replaceGlobal);
+      }
+      iqState.replaceGlobalCooldown = 0;
+    }
+
+    function iqUpdateReplaceCooldown(i, seconds) {
+      if (!iqState.replaceCooldowns) iqState.replaceCooldowns = {};
+      if (seconds > 0) {
+        iqState.replaceCooldowns[i] = seconds;
+      } else {
+        delete iqState.replaceCooldowns[i];
+      }
+      iqRenderQuestions();
+    }
+
+    function iqStartReplaceGlobalCooldown(seconds) {
+      // Enforce backend's user-level replace cooldown key on the client
+      // Use provided seconds (e.g., from server retryAfter) or default to IQ_PER_Q_REPLACE_COOLDOWN
+      iqState.replaceGlobalCooldown = seconds !== undefined ? seconds : IQ_PER_Q_REPLACE_COOLDOWN;
+      if (iqState.timers.replaceGlobal) {
+        clearInterval(iqState.timers.replaceGlobal);
+      }
+      const tick = () => {
+        iqRenderQuestions();
+        if (iqState.replaceGlobalCooldown <= 0) {
+          iqState.replaceGlobalCooldown = 0;
+          clearInterval(iqState.timers.replaceGlobal);
           return;
         }
-        btn.setAttribute('data-timer', String(t)); 
-        t--; 
-        if(t<0){ 
-          btn.removeAttribute('data-timer'); 
-          // Check if button should remain disabled due to max replace limit or daily limit
-          const replaceCount = (iqState.replaceCounts && iqState.replaceCounts[i]) || 0;
-          if (replaceCount < IQ_MAX_REPLACES && !iqState.dailyLimitReached) {
-            btn.disabled = false;
-          }
-          clearInterval(iqState.timers.perQ[k]); 
-        } 
+        iqState.replaceGlobalCooldown -= 1;
       };
       tick();
-      iqState.timers.perQ[k] = setInterval(tick, 1000);
+      iqState.timers.replaceGlobal = setInterval(tick, 1000);
     }
-    function iqStopPerQCooldown(i){
-      const k = `q${i}`, btn = $IQ(`.btn-replace[data-idx="${i}"]`);
-      if (!btn) return;
+
+    function iqStartPerQCooldown(i){
+      const k = `q${i}`;
       clearInterval(iqState.timers.perQ[k]);
-      btn.removeAttribute('data-timer');
-      btn.disabled = false;
+      let remaining = IQ_PER_Q_REPLACE_COOLDOWN;
+
+      const cleanup = () => {
+        clearInterval(iqState.timers.perQ[k]);
+        delete iqState.timers.perQ[k];
+        iqUpdateReplaceCooldown(i, 0);
+      };
+
+      const tick = () => {
+        iqUpdateReplaceCooldown(i, remaining);
+        const btn = $IQ(`.btn-replace[data-idx="${i}"]`);
+        if (btn) {
+          btn.disabled = true;
+          btn.setAttribute('aria-disabled', 'true');
+        }
+        remaining -= 1;
+        if (remaining < 0) {
+          cleanup();
+        }
+      };
+
+      tick();
+      iqState.timers.perQ[k] = setInterval(tick, 1000);
+      iqStartReplaceGlobalCooldown();
+    }
+
+    function formatCooldownSeconds(seconds) {
+      if (typeof seconds !== 'number' || seconds <= 0) return '0s';
+      const minutes = Math.floor(seconds / 60);
+      const secs = seconds % 60;
+      if (minutes > 0) {
+        return `${minutes}:${String(secs).padStart(2, '0')}`;
+      }
+      return `${secs}s`;
+    }
+
+    function renderGenerateCooldownIndicator() {
+      const container = $IQ('#iq-generate-cooldown');
+      if (!container) return;
+      container.innerHTML = '';
+      if (iqState.cooldown <= 0) return;
+      const chip = document.createElement('span');
+      chip.className = 'iq-global-cooldown-chip';
+      chip.innerHTML = `
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <circle cx="12" cy="12" r="10"/>
+          <path d="M12 6v6l4 2"/>
+        </svg>
+        ${formatCooldownSeconds(iqState.cooldown)} cooldown
+      `;
+      container.appendChild(chip);
+      const helper = document.createElement('div');
+      helper.className = 'cta-hint';
+      helper.textContent = 'You can still replace individual questions while this cooldown runs.';
+      container.appendChild(helper);
     }
 
     // Update generate button state based on role input and cooldown
@@ -1273,9 +2243,28 @@
         // Use original index for starred questions lookup
         const savedPressed = (typeof iqIsSaved === 'function' ? (iqIsSaved(origIdx) ? 'true' : 'false') : 'false');
         const replaceCount = (iqState.replaceCounts && iqState.replaceCounts[origIdx]) || 0;
-        const replaceDisabled = replaceCount >= IQ_MAX_REPLACES || iqState.dailyLimitReached;
-        const replaceTip = iqState.dailyLimitReached ? 'Daily limit reached for your plan.' : 
-                          replaceDisabled ? 'Max replacements reached for this question. Generate a new set if you\'re still not happy.' : 'New Question';
+        const replaceCooldown = (iqState.replaceCooldowns && iqState.replaceCooldowns[origIdx]) || 0;
+        const replaceGlobalCooldown = iqState.replaceGlobalCooldown || 0;
+        const hasDailyLimit = iqState.dailyLimitReached;
+        const hasMaxReplacements = replaceCount >= IQ_MAX_REPLACES;
+        const hasActiveCooldown = replaceCooldown > 0;
+        const hasGlobalReplaceCooldown = replaceGlobalCooldown > 0;
+        // Replacements are free and don't count toward daily limit, so hasDailyLimit is excluded
+        const replaceDisabled = hasMaxReplacements || hasActiveCooldown || hasGlobalReplaceCooldown;
+        const replaceTip = hasGlobalReplaceCooldown
+            ? `Please wait ${replaceGlobalCooldown}s before replacing another question.`
+            : hasActiveCooldown
+              ? `Please wait ${replaceCooldown}s before replacing this question.`
+              : hasMaxReplacements
+                ? 'Max replacements reached for this question. Generate a new set if you\'re still not happy.'
+                : 'New Question';
+        const replaceCooldownBadge = replaceCooldown > 0 ? `<span class="iq-replace-cooldown" data-idx="${origIdx}">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <circle cx="12" cy="12" r="10"/>
+          <path d="M12 6v6l4 2"/>
+        </svg>
+        ${replaceCooldown}s
+      </span>` : '';
         return `<div class="iq-question-card" data-idx="${origIdx}" data-display-idx="${displayIdx}">
   <div class="iq-qtext">${displayIdx+1}. ${qText}</div>
   <div class="iq-qactions" aria-label="Question actions">
@@ -1293,21 +2282,10 @@
     <button type="button" class="icon-btn btn-save" data-idx="${origIdx}" data-tip="Star to include this question in your Mock Interview" aria-label="Star to include in Mock Interview" aria-pressed="${savedPressed}">
       <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><polygon points="12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26"/></svg>
     </button>
-    <button type="button" class="icon-btn btn-notes" data-idx="${origIdx}" aria-expanded="false" aria-controls="iq-notes-${origIdx}" data-tip="Notes" aria-label="Notes">
-      <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-        <path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9Z"/>
-        <path d="M14 3v6h6"/>
-        <path d="M8 13h8"/>
-        <path d="M8 17h8"/>
-      </svg>
-    </button>
+    ${replaceCooldownBadge}
   </div>
   <div class="iq-hint" ${show?'':'hidden'}>${qHint} ${q.example?`<button class="link-btn btn-example" data-idx="${origIdx}">Example</button>`:''}</div>
   <div id="iq-example-${origIdx}" class="iq-example" hidden>${qExample}</div>
-  <div id="iq-notes-${origIdx}" class="iq-notes" hidden>
-    <label for="iq-notes-ta-${origIdx}" class="iq-notes-label">Your notes (optional)</label>
-    <textarea id="iq-notes-ta-${origIdx}" rows="3" placeholder="S: Situation&#10;T: Task&#10;A: Action&#10;R: Result">${iqState.notes[origIdx]||''}</textarea>
-  </div>
 </div>`;
       }).join('');
       
@@ -1316,38 +2294,646 @@
         iqDisableAllButtons();
       }
     }
-    function iqRenderRecents(){ 
-      const box=$IQ('#iq-recents'); 
-      if(!box) return; 
-      const recents=JSON.parse(localStorage.getItem('iq_recent_sets')||'[]'); 
-      if(recents.length===0){ 
-        box.innerHTML='<div class="empty">No recent sets yet.</div>'; 
+    // =======================================================
+    // Interview Questions History (D1-backed)
+    // UI/UX matches Resume Feedback History panel
+    // Source of truth: D1 database (interview_question_sets table)
+    // localStorage used only as cache/fallback
+    // =======================================================
+    let _iqHistoryManageMode = false;
+    let _iqHistorySelectedIds = new Set();
+    let _iqHistoryPendingDeleteIds = [];
+    let _iqHistoryMenuOpenForId = null;
+    let _iqHistoryHasError = false;
+    let _iqHistoryWired = false;
+
+    function iqHistoryEscapeHtml(str) {
+      return String(str ?? '')
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#039;');
+    }
+
+    function iqHistoryGetVisibleItems(items) {
+      return (items || []).slice(0, IQ_RECENT_LIMIT);
+    }
+
+    function iqHistoryGetVisibleIds(items) {
+      return iqHistoryGetVisibleItems(items)
+        .map((x) => String(x?.id || ''))
+        .filter(Boolean);
+    }
+
+    function iqHistorySetLoading(isLoading) {
+      const loadingEl = document.getElementById('iq-history-loading');
+      if (!loadingEl) return;
+      loadingEl.classList.toggle('is-visible', !!isLoading);
+    }
+
+    function iqHistorySetErrorVisible(isVisible, message) {
+      const errEl = document.getElementById('iq-history-error');
+      if (!errEl) return;
+      const textEl = errEl.querySelector('span[data-default-message]') || errEl.querySelector('span');
+      if (textEl) {
+        if (message) {
+          textEl.textContent = message;
+        } else if (textEl.dataset.defaultMessage) {
+          textEl.textContent = textEl.dataset.defaultMessage;
+        }
+      }
+      errEl.hidden = !isVisible;
+      _iqHistoryHasError = isVisible;
+    }
+
+    function iqHistorySyncBulkDeleteState() {
+      const btn = document.getElementById('iq-history-delete-selected');
+      if (!btn) return;
+      btn.disabled = _iqHistorySelectedIds.size < 1;
+    }
+
+    function iqHistoryCloseAllMenus() {
+      const listEl = document.getElementById('iq-history-list');
+      if (!listEl) return;
+      listEl.querySelectorAll('.rf-history-menu').forEach((menu) => {
+        menu.hidden = true;
+      });
+      _iqHistoryMenuOpenForId = null;
+    }
+
+    function iqHistoryOpenDeleteModalFor(ids) {
+      const unique = Array.from(new Set((ids || []).map(String).filter(Boolean)));
+      if (!unique.length) {
+        _iqHistoryPendingDeleteIds = [];
         return; 
       } 
-      // Clear existing content
-      box.innerHTML = '';
-      // Build DOM nodes safely to prevent XSS
-      recents.forEach(r => {
-        const btn = document.createElement('button');
-        btn.className = 'recent-item';
-        btn.setAttribute('data-id', String(r.id || ''));
+      _iqHistoryPendingDeleteIds = unique;
+      const backdrop = document.getElementById('iq-history-modal-backdrop');
+      const modal = document.getElementById('iq-history-delete-modal');
+      const cancelBtn = document.getElementById('iq-history-modal-cancel');
+      if (backdrop) backdrop.hidden = false;
+      if (modal) modal.hidden = false;
+      setTimeout(() => cancelBtn?.focus?.(), 0);
+    }
+
+    function iqHistoryCloseDeleteModal() {
+      const backdrop = document.getElementById('iq-history-modal-backdrop');
+      const modal = document.getElementById('iq-history-delete-modal');
+      if (backdrop) backdrop.hidden = true;
+      if (modal) modal.hidden = true;
+      _iqHistoryPendingDeleteIds = [];
+    }
+
+    function iqHistorySetManageMode(next, itemsForRender) {
+      const panel = document.getElementById('iq-history-panel');
+      const titleEl = document.getElementById('iq-history-header-title');
+      _iqHistoryManageMode = !!next;
+      if (panel) panel.classList.toggle('rf-history-panel--manage', _iqHistoryManageMode);
+      if (titleEl) titleEl.textContent = _iqHistoryManageMode ? 'Select items' : 'History';
+      if (!_iqHistoryManageMode) {
+        _iqHistorySelectedIds.clear();
+        _iqHistoryMenuOpenForId = null;
+        iqHistoryCloseAllMenus();
+      }
+      iqHistorySyncBulkDeleteState();
+      // Handle async load - if itemsForRender provided, use it; otherwise load async
+      if (itemsForRender) {
+        iqHistoryRenderItems(itemsForRender);
+      } else {
+        iqHistoryLoadItems().then(items => iqHistoryRenderItems(items)).catch(() => {
+          iqHistoryRenderItems([]);
+        });
+      }
+    }
+
+    function iqHistoryFormatRelativeTime(ts) {
+      if (!ts) return '—';
+      const d = new Date(ts);
+      const n = d.getTime();
+      if (!Number.isFinite(n)) return '—';
+      const diffMs = Date.now() - n;
+      if (diffMs < 30 * 1000) return 'just now';
+      const diffMin = Math.floor(diffMs / (60 * 1000));
+      if (diffMin < 60) return `${diffMin}m ago`;
+      const diffHr = Math.floor(diffMin / 60);
+      if (diffHr < 24) return `${diffHr}h ago`;
+      const diffDay = Math.floor(diffHr / 24);
+      if (diffDay < 14) return `${diffDay}d ago`;
+      try {
+        return new Date(n).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      } catch {
+        return '—';
+      }
+    }
+
+    async function iqHistoryLoadItems() {
+      // Try to fetch from D1 API first (source of truth)
+      try {
+        const token = await getFirebaseToken();
+        if (token) {
+          const response = await fetch(`${IQ_API.HISTORY}?limit=10`, {
+            method: 'GET',
+            headers: {
+              'Authorization': `Bearer ${token}`
+            }
+          });
+          
+          if (response.ok) {
+            const data = await response.json();
+            if (data.items && Array.isArray(data.items)) {
+              // Save to localStorage as cache
+              try {
+                localStorage.setItem('iq_recent_sets', JSON.stringify(data.items));
+              } catch (e) {
+                console.warn('[IQ-HISTORY] Failed to cache history:', e);
+              }
+              
+              // Transform to match expected format
+              const formatted = data.items.map((x) => ({
+                id: String(x?.id || ''),
+                role: String(x?.role || ''),
+                count: Number(x?.count || 0),
+                time: x?.time
+              })).filter((x) => x.id);
+              
+              return formatted;
+            }
+          } else {
+            console.warn('[IQ-HISTORY] API returned error:', response.status);
+          }
+        }
+      } catch (e) {
+        console.warn('[IQ-HISTORY] Failed to fetch from API, using localStorage fallback:', e);
+      }
+      
+      // Fallback to localStorage cache
+      try {
+        const raw = localStorage.getItem('iq_recent_sets') || '[]';
+        const parsed = JSON.parse(raw);
+        if (!Array.isArray(parsed)) return [];
+        return parsed
+          .map((x) => ({
+            id: String(x?.id || ''),
+            role: String(x?.role || ''),
+            count: Number(x?.count || 0),
+            time: x?.time
+          }))
+          .filter((x) => x.id);
+      } catch (e) {
+        console.warn('[IQ-HISTORY] Failed to load history:', e);
+        iqHistorySetErrorVisible(true);
+        return [];
+      }
+    }
+
+    function iqHistorySaveItems(items) {
+      try {
+        localStorage.setItem('iq_recent_sets', JSON.stringify(items || []));
+      } catch (e) {
+        console.warn('[IQ-HISTORY] Failed to save history:', e);
+      }
+    }
+
+    async function iqHistoryDeleteIds(ids) {
+      const del = new Set((ids || []).map(String).filter(Boolean));
+      if (!del.size) return;
+      
+      try {
+        const token = await getFirebaseToken();
+        if (!token) {
+          throw new Error('Not authenticated');
+        }
         
-        const roleDiv = document.createElement('div');
-        roleDiv.className = 'ri-role';
-        roleDiv.textContent = String(r.role || '');
+        // Delete from D1 for numeric IDs (D1 IDs)
+        const deleteResults = await Promise.allSettled(
+          Array.from(del).map(async (id) => {
+            // Check if ID is numeric (D1 ID) vs local ID (e.g., "role:seed")
+            const isD1Id = /^\d+$/.test(id);
+            if (isD1Id) {
+              try {
+                const response = await fetch(`${IQ_API.HISTORY}/${id}`, {
+                  method: 'DELETE',
+                  headers: {
+                    'Authorization': `Bearer ${token}`
+                  }
+                });
+                
+                if (!response.ok) {
+                  console.warn(`[IQ-HISTORY] Failed to delete D1 set ${id}:`, response.status);
+                  return { id, success: false };
+                }
+                return { id, success: true };
+              } catch (e) {
+                console.warn(`[IQ-HISTORY] Error deleting D1 set ${id}:`, e);
+                return { id, success: false };
+              }
+            }
+            // For local IDs, just remove from localStorage
+            return { id, success: true };
+          })
+        );
         
-        const metaDiv = document.createElement('div');
-        metaDiv.className = 'ri-meta';
-        const timeStr = r.time ? new Date(r.time).toLocaleString() : '';
-        metaDiv.textContent = `${r.count || 0} Q • ${timeStr}`;
+        // Track which deletions succeeded
+        const successfullyDeleted = new Set();
+        const failedDeletions = [];
         
-        btn.appendChild(roleDiv);
-        btn.appendChild(metaDiv);
-        box.appendChild(btn);
-      });
+        deleteResults.forEach((result, index) => {
+          if (result.status === 'fulfilled') {
+            if (result.value.success) {
+              successfullyDeleted.add(result.value.id);
+            } else {
+              // Promise fulfilled but deletion failed
+              failedDeletions.push(result.value.id);
+            }
+          } else {
+            // Promise rejected - use index to get ID since we don't have result.value
+            const id = Array.from(del)[index];
+            failedDeletions.push(id);
+            console.error(`[IQ-HISTORY] Delete promise rejected for ${id}:`, result.reason);
+          }
+        });
+        
+        // Show error toast if any deletions failed
+        if (failedDeletions.length > 0) {
+          iqToast(`Failed to delete ${failedDeletions.length} item(s). Please try again.`);
+        }
+        
+        // Update localStorage cache - only filter out successfully deleted items
+        const items = await iqHistoryLoadItems();
+        const next = items.filter((x) => !successfullyDeleted.has(String(x.id)));
+        iqHistorySaveItems(next);
+        
+        // Best-effort cleanup of stored full payloads (only for successfully deleted items)
+        successfullyDeleted.forEach((id) => {
+          try { localStorage.removeItem(`iq_set_${id}`); } catch {}
+        });
+        
+        // Exit manage mode after deletion
+        _iqHistorySelectedIds.clear();
+        iqHistorySyncBulkDeleteState();
+        iqHistoryRenderItems(next);
+      } catch (e) {
+        console.warn('[IQ-HISTORY] Failed to delete items:', e);
+        // Fallback: try localStorage-only deletion
+        try {
+          const raw = localStorage.getItem('iq_recent_sets') || '[]';
+          const parsed = JSON.parse(raw);
+          const next = parsed.filter((x) => !del.has(String(x?.id)));
+          iqHistorySaveItems(next);
+          _iqHistorySelectedIds.clear();
+          iqHistorySyncBulkDeleteState();
+          iqHistoryRenderItems(next.map(x => ({
+            id: String(x?.id || ''),
+            role: String(x?.role || ''),
+            count: Number(x?.count || 0),
+            time: x?.time
+          })));
+        } catch (e2) {
+          console.error('[IQ-HISTORY] Failed to delete from localStorage:', e2);
+        }
+      }
+    }
+
+    function iqHistoryRenderItems(items) {
+      const listEl = document.getElementById('iq-history-list');
+      const emptyEl = document.getElementById('iq-history-empty');
+      if (!listEl) return;
+
+      iqHistorySetLoading(false);
+
+      if (!items || items.length === 0) {
+        listEl.innerHTML = '';
+        if (emptyEl) emptyEl.hidden = _iqHistoryHasError ? true : false;
+        return;
+      }
+
+      if (emptyEl) emptyEl.hidden = true;
+
+      const visible = iqHistoryGetVisibleItems(items);
+      let currentId = null;
+      try {
+        if (iqState?.set?.role && iqState?.set?.seed) {
+          currentId = String(iqSetId(iqState.set.role, iqState.set.seed));
+        }
+      } catch {}
+
+      listEl.innerHTML = visible.map((item) => {
+        const id = String(item?.id || '');
+        const roleName = String(item?.role || '').trim() || 'Untitled role';
+        const when = iqHistoryFormatRelativeTime(item?.time);
+        const count = Number.isFinite(Number(item?.count)) ? Number(item.count) : 0;
+        const isCurrent = !_iqHistoryManageMode && currentId && currentId === id;
+        const isSelected = isCurrent ? 'is-selected' : '';
+        const isChecked = _iqHistorySelectedIds.has(id);
+        const menuHidden = _iqHistoryMenuOpenForId !== id;
+
+        return `
+          <div class="rf-history-item ${isSelected}" data-session-id="${iqHistoryEscapeHtml(id)}" tabindex="0" data-history-row>
+            <span class="rf-history-checkbox-wrap" aria-hidden="${_iqHistoryManageMode ? 'false' : 'true'}">
+              <input
+                class="rf-history-checkbox"
+                type="checkbox"
+                data-action="toggle-select"
+                data-session-id="${iqHistoryEscapeHtml(id)}"
+                aria-label="Select ${iqHistoryEscapeHtml(roleName)}"
+                ${isChecked ? 'checked' : ''}
+              />
+            </span>
+
+            <div class="rf-history-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
+                <polyline points="14 2 14 8 20 8"/>
+                <line x1="16" y1="13" x2="8" y2="13"/>
+                <line x1="16" y1="17" x2="8" y2="17"/>
+              </svg>
+            </div>
+
+            <div class="rf-history-text">
+              <div class="rf-history-line1">${iqHistoryEscapeHtml(roleName)}</div>
+              <div class="rf-history-line2">Question set • ${iqHistoryEscapeHtml(when)}</div>
+            </div>
+
+            <div class="rf-history-row-actions" aria-label="Row actions">
+              <button
+                class="rf-history-kebab"
+                type="button"
+                aria-label="Row actions"
+                data-action="menu-toggle"
+                data-session-id="${iqHistoryEscapeHtml(id)}"
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                  <circle cx="5" cy="12" r="2"></circle>
+                  <circle cx="12" cy="12" r="2"></circle>
+                  <circle cx="19" cy="12" r="2"></circle>
+                </svg>
+              </button>
+              <div class="rf-history-menu" role="menu" ${menuHidden ? 'hidden' : ''}>
+                <button class="rf-history-menu-item" type="button" data-action="open" data-session-id="${iqHistoryEscapeHtml(id)}">Open / Restore</button>
+                <button class="rf-history-menu-item rf-history-menu-item--danger" type="button" data-action="delete" data-session-id="${iqHistoryEscapeHtml(id)}">Delete</button>
+              </div>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    // Backwards-compatible entry point: re-render the history panel
+    async function iqRenderRecents(){
+      const panel = document.getElementById('iq-history-panel');
+      if (!panel) return;
+      iqHistorySetErrorVisible(false);
+      try {
+        const items = await iqHistoryLoadItems();
+        iqHistoryRenderItems(items);
+      } catch (e) {
+        console.warn('[IQ-HISTORY] Failed to render recents:', e);
+        iqHistoryRenderItems([]);
+      }
     }
     function iqUpdateGuidanceUI(){ const t=$IQ('#toggle-guidance'); if(t){ t.setAttribute('aria-pressed', String(iqState.prefs.showGuidance)); t.textContent = iqState.prefs.showGuidance ? 'Hide Answer Guidance' : 'Show Answer Guidance'; if(iqState.prefs.showGuidance){ t.classList.add('is-pressed'); } else { t.classList.remove('is-pressed'); } } iqRenderQuestions(); }
-    function iqWireRecents(){ const box=$IQ('#iq-recents'); if(!box) return; box.addEventListener('click',(e)=>{ const btn=e.target.closest('.recent-item'); if(!btn) return; const id=btn.getAttribute('data-id'); if(!id) return; iqLoadSetById(id); }); }
+    // Backwards-compatible entry point: wire the new History panel interactions
+    function iqWireRecents(){
+      if (_iqHistoryWired) return;
+      const panel = document.getElementById('iq-history-panel');
+      const listEl = document.getElementById('iq-history-list');
+      if (!panel || !listEl) return;
+      _iqHistoryWired = true;
+
+      const btnRefresh = document.getElementById('iq-history-refresh');
+      const btnManage = document.getElementById('iq-history-manage');
+      const btnCancel = document.getElementById('iq-history-cancel-manage');
+      const btnDeleteSelected = document.getElementById('iq-history-delete-selected');
+      const btnSelectAll = document.getElementById('iq-history-select-all');
+      const btnClear = document.getElementById('iq-history-clear');
+      const btnRetry = document.getElementById('iq-history-retry');
+      const modalBackdrop = document.getElementById('iq-history-modal-backdrop');
+      const modal = document.getElementById('iq-history-delete-modal');
+      const modalCancel = document.getElementById('iq-history-modal-cancel');
+      const modalConfirm = document.getElementById('iq-history-modal-confirm');
+
+      async function refreshFromStorage(withSkeleton = false) {
+        if (withSkeleton) iqHistorySetLoading(true);
+        try {
+          iqHistorySetErrorVisible(false);
+          const items = await iqHistoryLoadItems();
+          iqHistoryRenderItems(items);
+        } catch (e) {
+          console.warn('[IQ-HISTORY] Failed to refresh:', e);
+          iqHistoryRenderItems([]);
+        } finally {
+          if (withSkeleton) iqHistorySetLoading(false);
+        }
+      }
+
+      btnRefresh?.addEventListener('click', () => refreshFromStorage(true));
+      btnRetry?.addEventListener('click', () => refreshFromStorage(true));
+
+      btnManage?.addEventListener('click', async () => {
+        try {
+          const items = await iqHistoryLoadItems();
+          iqHistorySetManageMode(true, items);
+        } catch (e) {
+          console.warn('[IQ-HISTORY] Failed to load items for manage mode:', e);
+        }
+      });
+      btnCancel?.addEventListener('click', async () => {
+        try {
+          const items = await iqHistoryLoadItems();
+          iqHistorySetManageMode(false, items);
+        } catch (e) {
+          console.warn('[IQ-HISTORY] Failed to load items for cancel:', e);
+        }
+      });
+
+      btnSelectAll?.addEventListener('click', async () => {
+        try {
+          const items = await iqHistoryLoadItems();
+          iqHistoryGetVisibleIds(items).forEach((id) => _iqHistorySelectedIds.add(id));
+          iqHistorySyncBulkDeleteState();
+          iqHistoryRenderItems(items);
+        } catch (e) {
+          console.warn('[IQ-HISTORY] Failed to load items for select all:', e);
+        }
+      });
+
+      btnDeleteSelected?.addEventListener('click', () => {
+        iqHistoryOpenDeleteModalFor(Array.from(_iqHistorySelectedIds));
+      });
+
+      btnClear?.addEventListener('click', async () => {
+        try {
+          const items = await iqHistoryLoadItems();
+          iqHistorySetManageMode(true, items);
+          iqHistoryGetVisibleIds(items).forEach((id) => _iqHistorySelectedIds.add(id));
+          iqHistorySyncBulkDeleteState();
+          iqHistoryRenderItems(items);
+          iqHistoryOpenDeleteModalFor(Array.from(_iqHistorySelectedIds));
+        } catch (e) {
+          console.warn('[IQ-HISTORY] Failed to load items for clear:', e);
+        }
+      });
+
+      // "Learn more" link - keep behavior consistent (no nav change requested)
+      panel.querySelectorAll('[data-history-learn-more]').forEach((a) => {
+        a.addEventListener('click', (e) => {
+          e.preventDefault();
+          // TODO: wire to canonical retention/help article when available.
+          iqToast('Learn more coming soon.');
+        });
+      });
+
+      async function handleOpenRestore(id) {
+        if (!id) return;
+        iqHistoryCloseAllMenus();
+        await iqLoadSetById(String(id));
+      }
+
+      listEl.addEventListener('click', (e) => {
+        const actionEl = e.target.closest('[data-action]');
+        const rowEl = e.target.closest('.rf-history-item');
+        const id = actionEl?.getAttribute('data-session-id') || rowEl?.getAttribute('data-session-id');
+
+        if (actionEl) {
+          const action = actionEl.getAttribute('data-action');
+          if (action === 'toggle-select') {
+            e.stopPropagation();
+            const sid = String(actionEl.getAttribute('data-session-id') || '');
+            if (!sid) return;
+            if (_iqHistorySelectedIds.has(sid)) _iqHistorySelectedIds.delete(sid);
+            else _iqHistorySelectedIds.add(sid);
+            iqHistorySyncBulkDeleteState();
+            // Keep list rendering stable (checkbox state + row selection rules)
+            iqHistoryLoadItems().then(items => iqHistoryRenderItems(items)).catch(() => {
+              // Fallback: re-render current items
+              const currentItems = Array.from(document.querySelectorAll('.rf-history-item')).map(el => ({
+                id: el.getAttribute('data-session-id'),
+                role: el.querySelector('.rf-history-line1')?.textContent || '',
+                count: 0,
+                time: null
+              })).filter(x => x.id);
+              iqHistoryRenderItems(currentItems);
+            });
+            return;
+          }
+          if (action === 'menu-toggle') {
+            e.stopPropagation();
+            const sid = String(actionEl.getAttribute('data-session-id') || '');
+            if (!sid) return;
+            const isAlreadyOpen = _iqHistoryMenuOpenForId === sid;
+            iqHistoryCloseAllMenus();
+            if (!isAlreadyOpen) {
+              _iqHistoryMenuOpenForId = sid;
+              const menu = rowEl?.querySelector('.rf-history-menu');
+              if (menu) menu.hidden = false;
+            }
+            return;
+          }
+          if (action === 'open') {
+            e.stopPropagation();
+            handleOpenRestore(id);
+            return;
+          }
+          if (action === 'delete') {
+            e.stopPropagation();
+            iqHistoryOpenDeleteModalFor([id]);
+            return;
+          }
+        }
+
+        if (!rowEl || !id) return;
+        if (_iqHistoryManageMode) {
+          // Toggle selection on row click in manage mode
+          if (_iqHistorySelectedIds.has(id)) _iqHistorySelectedIds.delete(id);
+          else _iqHistorySelectedIds.add(id);
+          iqHistorySyncBulkDeleteState();
+          iqHistoryLoadItems().then(items => iqHistoryRenderItems(items)).catch(() => {
+            // Fallback: re-render current items
+            const currentItems = Array.from(document.querySelectorAll('.rf-history-item')).map(el => ({
+              id: el.getAttribute('data-session-id'),
+              role: el.querySelector('.rf-history-line1')?.textContent || '',
+              count: 0,
+              time: null
+            })).filter(x => x.id);
+            iqHistoryRenderItems(currentItems);
+          });
+          return;
+        }
+
+        handleOpenRestore(id);
+      });
+
+      listEl.addEventListener('keydown', (e) => {
+        if (e.key !== 'Enter' && e.key !== ' ') return;
+        const rowEl = e.target.closest('.rf-history-item');
+        if (!rowEl) return;
+        e.preventDefault();
+        const id = rowEl.getAttribute('data-session-id');
+        if (!id) return;
+        if (_iqHistoryManageMode) {
+          if (_iqHistorySelectedIds.has(id)) _iqHistorySelectedIds.delete(id);
+          else _iqHistorySelectedIds.add(id);
+          iqHistorySyncBulkDeleteState();
+          iqHistoryLoadItems().then(items => iqHistoryRenderItems(items)).catch(() => {
+            // Fallback: re-render current items
+            const currentItems = Array.from(document.querySelectorAll('.rf-history-item')).map(el => ({
+              id: el.getAttribute('data-session-id'),
+              role: el.querySelector('.rf-history-line1')?.textContent || '',
+              count: 0,
+              time: null
+            })).filter(x => x.id);
+            iqHistoryRenderItems(currentItems);
+          });
+          return;
+        }
+        handleOpenRestore(id);
+      });
+
+      // Close menus when clicking outside
+      document.addEventListener('click', (e) => {
+        if (e.target.closest('#iq-history-panel')) return;
+        iqHistoryCloseAllMenus();
+      });
+
+      // Modal interactions
+      modalCancel?.addEventListener('click', iqHistoryCloseDeleteModal);
+      modalBackdrop?.addEventListener('click', iqHistoryCloseDeleteModal);
+      modalConfirm?.addEventListener('click', async () => {
+        const ids = Array.from(_iqHistoryPendingDeleteIds || []).map(String).filter(Boolean);
+        iqHistoryCloseDeleteModal();
+        if (!ids.length) return;
+        await iqHistoryDeleteIds(ids);
+        // Exit manage mode if we deleted everything visible
+        if (_iqHistoryManageMode) {
+          try {
+            const remaining = await iqHistoryLoadItems();
+            if (!remaining.length) {
+              iqHistorySetManageMode(false, remaining);
+            } else {
+              // Keep manage mode, but clear selection
+              _iqHistorySelectedIds.clear();
+              iqHistorySyncBulkDeleteState();
+              iqHistoryRenderItems(remaining);
+            }
+          } catch (e) {
+            console.warn('[IQ-HISTORY] Failed to check remaining items:', e);
+          }
+        }
+      });
+
+      document.addEventListener('keydown', (e) => {
+        if (e.key !== 'Escape') return;
+        if (modal && modal.hidden === false) {
+          iqHistoryCloseDeleteModal();
+        } else {
+          iqHistoryCloseAllMenus();
+        }
+      });
+
+      // Initial render (avoid skeleton flash after initIQPage already rendered once)
+      refreshFromStorage(false);
+    }
 
     // Initialize Role Selector for ARIA combobox
     function iqInitRoleCombobox(){
@@ -1450,8 +3036,8 @@
       return null;
     }
     
-    async function iqApiGenerate({ role, seniority, types, count, jd }){ 
-      iqTrack('iq_generate_clicked',{count: IQ_FIXED_COUNT,types}); 
+    async function iqApiGenerate({ role, seniority, type, count, jd }){ 
+      iqTrack('iq_generate_clicked',{count: IQ_FIXED_COUNT,type: iqSanitizeType(type, iqState.prefs.type || 'mixed')}); 
       
       try {
         const token = await getFirebaseToken();
@@ -1470,7 +3056,7 @@
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${token}`
           },
-          body: JSON.stringify({ role, seniority, types, jd })
+          body: JSON.stringify({ role, seniority, type, jd })
         }, IQ_API_TIMEOUT);
         
         if (!response.ok) {
@@ -1487,8 +3073,11 @@
           
           // Handle cooldown
           if (response.status === 429 && errorData.reason === 'cooldown') {
-            const retryAfter = errorData.retryAfter || 60;
-            iqToast(`You're generating questions too quickly. Try again in ${retryAfter} seconds.`);
+            const retryAfter = errorData.retryAfter || (errorData.mode === 'replace' ? IQ_PER_Q_REPLACE_COOLDOWN : IQ_GLOBAL_COOLDOWN);
+            const message = errorData.mode === 'replace'
+              ? `Please wait ${retryAfter} seconds before replacing another question.`
+              : `You're generating questions too quickly. Try again in ${retryAfter} seconds.`;
+            iqToast(message);
             throw new Error('Cooldown active');
           }
           
@@ -1497,7 +3086,7 @@
             const planName = getUserPlan() === 'trial' ? 'Trial' : 
                            getUserPlan() === 'essential' ? 'Essential' :
                            getUserPlan() === 'pro' ? 'Pro' : 'Premium';
-            iqToast(`You've reached today's Interview Questions limit for your ${planName} plan. You can still practice with your existing sets, or upgrade for higher limits.`);
+            iqToast(`Daily limit reached for your ${planName} plan. You can still practice with existing sets or upgrade for higher limits.`);
             // Disable all buttons (generate + replace) since daily quota applies to all operations
             iqDisableAllButtons();
             throw new Error('Daily limit reached');
@@ -1513,7 +3102,7 @@
           return {
             role: data.role,
             seniority: data.seniority,
-            types: data.types,
+            type: iqSanitizeType(data.type, iqInferTypeFromLegacyTypes(data.types)),
             count: data.count || IQ_FIXED_COUNT,
             seed: data.seed,
             jd: data.jd || '',
@@ -1539,7 +3128,7 @@
             error: e.message,
             role,
             seniority,
-            types
+            type
           });
           iqToast('The request took too long. Please check your connection and try again.');
           return null;
@@ -1551,7 +3140,7 @@
             error: e.message,
             role,
             seniority,
-            types
+            type
           });
           iqToast('Network error. Please check your internet connection and try again.');
           return null;
@@ -1563,7 +3152,7 @@
           stack: e.stack,
           role,
           seniority,
-          types
+          type
         });
         
         // Show error toast - no fallback to demo questions
@@ -1573,7 +3162,7 @@
     }
     
     // Save question set to D1 for Mock Interview
-    async function iqApiSaveSet({ role, seniority, types, questions, selectedIndices, jd }) {
+    async function iqApiSaveSet({ role, seniority, type, questions, selectedIndices, jd }) {
       try {
         const token = await getFirebaseToken();
         if (!token) {
@@ -1586,7 +3175,7 @@
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${token}`
           },
-          body: JSON.stringify({ role, seniority, types, questions, selectedIndices, jd })
+          body: JSON.stringify({ role, seniority, type, questions, selectedIndices, jd })
         });
         
         if (!response.ok) {
@@ -1612,8 +3201,12 @@
       if(!role){ iqToast('Select a role first'); return; } 
       const seniority=$IQ('#iq-seniority')?.value||''; 
       const count=IQ_FIXED_COUNT; 
-      const types=[...$$IQ('.iq-types .chip.is-on')].map(b=>b.dataset.type).filter(Boolean); 
+      const activeTypeBtn = $IQ('#iq-type .iq-segment.active');
+      const type = iqSanitizeType(activeTypeBtn?.dataset?.value, iqState.prefs.type || 'mixed');
       const jd=$IQ('#iq-jd')?.value?.trim()||''; 
+      
+      // Clear reset flag at start of new generation
+      iqState._resetRequested = false;
       
       // Show skeleton loaders
       const holder=$IQ('#iq-questions'); 
@@ -1628,7 +3221,7 @@
       }
       
       try {
-        const res=await iqApiGenerate({role,seniority,types,count,jd}); 
+        const res=await iqApiGenerate({role,seniority,type,count,jd}); 
         
         // If auth error occurred, iqApiGenerate returns null - don't proceed
         if (!res) {
@@ -1650,7 +3243,24 @@
         if (res.dailyLimitReached) {
           // Clear skeleton loaders on daily limit
           if (holder) {
-            holder.innerHTML = '<div class="iq-empty-state"><strong>Daily Limit Reached</strong>You\'ve reached today\'s limit. You can still practice with your existing sets, or upgrade for higher limits.</div>';
+            holder.innerHTML = '<div class="iq-empty-state"><strong>Daily Limit Reached</strong><p>You\'ve reached today\'s limit for generating new sets. You can still practice with existing sets or upgrade for higher limits.</p></div>';
+          }
+          return;
+        }
+        
+        // Check if reset was requested while request was in flight (prevents race condition)
+        if (iqState._resetRequested) {
+          // User clicked "Start Fresh" while this request was in flight, ignore this response
+          console.log('[IQ] Generation cancelled - reset was requested');
+          // Restore button state
+          if (genBtn) {
+            genBtn.disabled = false;
+            genBtn.textContent = 'Generate 10 Questions';
+            iqUpdateGenerateButtonState();
+          }
+          // Clear skeleton loaders
+          if (holder) {
+            holder.innerHTML = '<div class="iq-empty-state"><strong>Get Started</strong>Choose a role and question types, then generate 10 questions to get started.</div>';
           }
           return;
         }
@@ -1661,40 +3271,115 @@
         }
         
         const seed = res.seed || `${Date.now().toString(36)}-${Math.random().toString(36).slice(2,8)}`; 
-        const setObj={...res, seed, role: res.role||role, seniority, count: IQ_FIXED_COUNT, types: new Set(types), jd, replacesUsed:0}; 
+        const setObj={...res, seed, role: res.role||role, seniority, count: IQ_FIXED_COUNT, type: iqSanitizeType(res.type, type), jd, replacesUsed:0}; 
+        
+        // Check again before setting state (double-check to prevent race condition)
+        if (iqState._resetRequested) {
+          console.log('[IQ] Generation cancelled - reset was requested before setting state');
+          if (genBtn) {
+            genBtn.disabled = false;
+            genBtn.textContent = 'Generate 10 Questions';
+            iqUpdateGenerateButtonState();
+          }
+          if (holder) {
+            holder.innerHTML = '<div class="iq-empty-state"><strong>Get Started</strong>Choose a role and question types, then generate 10 questions to get started.</div>';
+          }
+          return;
+        }
+        
         iqState.set=setObj;
+        // Clear reset flag since we successfully set the new state
+        iqState._resetRequested = false;
+        iqResetPerQuestionCooldowns();
         // Reset replace counts when generating a new set
         iqState.replaceCounts = {}; 
         // Reset daily limit flag on successful generation
         iqState.dailyLimitReached = false;
         // Note: Don't call iqUpdateGenerateButtonState() here - it's redundant
         // because iqStartGlobalCooldown() will call it after properly setting the cooldown
-        iqState.prefs={...iqState.prefs,seniority,count: IQ_FIXED_COUNT,types:new Set(types)}; 
+        iqState.prefs={...iqState.prefs,seniority,count: IQ_FIXED_COUNT,type: iqSanitizeType(res.type, type)}; 
         iqSavePrefs(); 
-        iqLoadNotes(); 
         iqRenderQuestions(); 
         iqUpdateSavedChip(); 
-        iqUpdateSelectionSummary();
+        
+        // Save to localStorage (for backward compatibility and offline access)
         const setId=iqSetId(setObj.role,setObj.seed); 
         iqAddRecent({ id: setId, role: setObj.role, count: setObj.count||IQ_FIXED_COUNT, time: iqNow() }); 
-        iqSaveSetFull(setObj); 
-        iqRenderRecents();
+        iqSaveSetFull(setObj);
         
-        // Show action bar after first set exists
-        const actionBar = $IQ('#iq-actions-bar');
-        if (actionBar) {
-          actionBar.style.display = '';
-        }
+        // Save to D1 for persistent history (non-blocking)
+        iqSaveSetToD1(setObj).then((savedSet) => {
+          if (savedSet) {
+            // Update localStorage with D1 ID for reference
+            try {
+              const recents = JSON.parse(localStorage.getItem('iq_recent_sets') || '[]');
+              const updated = recents.map(item => 
+                item.id === setId ? { ...item, d1Id: savedSet.id } : item
+              );
+              localStorage.setItem('iq_recent_sets', JSON.stringify(updated));
+            } catch (e) {
+              console.warn('[IQ] Failed to update localStorage with D1 ID:', e);
+            }
+          }
+          // Refresh history from D1
+          iqRenderRecents();
+        }).catch(() => {
+          // Still render recents even if D1 save failed
+          iqRenderRecents();
+        });
         
-        // Show selection summary
-        const selSummary = $IQ('#iq-selection-summary');
-        if (selSummary) {
-          selSummary.style.display = '';
-        }
+        // Update action bar, selection summary, and Start Fresh button state
+        // (iqUpdateActionsLayout() handles all of this and calls updateStartFreshButtonState())
+        iqUpdateActionsLayout();
       iqStartGlobalCooldown(IQ_GLOBAL_COOLDOWN);
+        
+        // Refresh usage counter after successful generation with retry logic
+        // This ensures the counter updates even if DB write hasn't propagated yet
+        const refreshUsageCounter = async (retries = 3, delay = 1000) => {
+          const currentPlan = getUserPlan();
+          if (!currentPlan) {
+            return;
+          }
+          
+          try {
+            await updatePlanUI(currentPlan);
+            
+            // Check if counter actually updated by verifying the usage container has content
+            const usageContainer = document.getElementById('iq-usage-container');
+            if (usageContainer && usageContainer.textContent.includes('Sets generated')) {
+              // Counter updated successfully, no need to retry
+              return;
+            }
+            
+            // If counter didn't update and we have retries left, try again
+            if (retries > 0) {
+              console.log(`[IQ] Usage counter refresh retry (${retries} attempts remaining)`);
+              setTimeout(() => refreshUsageCounter(retries - 1, delay), delay);
+            } else {
+              console.warn('[IQ] Usage counter refresh failed after all retries');
+            }
+          } catch (error) {
+            console.error('[IQ] Error refreshing usage counter:', error);
+            // Retry on error if we have attempts left
+            if (retries > 0) {
+              setTimeout(() => refreshUsageCounter(retries - 1, delay), delay);
+            }
+          }
+        };
+        
+        // Initial refresh with delay to allow DB write to complete
+        setTimeout(() => refreshUsageCounter(), 1000);
         
       } catch (error) {
         console.error('[IQ] Generate error:', error);
+        
+        // Check if reset was requested during error handling
+        if (iqState._resetRequested) {
+          // User clicked "Start Fresh" while this request was in flight, ignore this error
+          console.log('[IQ] Generation error ignored - reset was requested');
+          return;
+        }
+        
         // Show user-friendly error message
         if(holder) {
           const errorMessage = error.message && error.message.includes('timeout') 
@@ -1742,7 +3427,7 @@
       const set = iqState.set;
       const role = set.role || ($IQ('#iq-role')?.value?.trim()||'');
       const seniority = set.seniority || iqState.prefs.seniority || '';
-      const types = iqTypesToArray(set.types || iqState.prefs.types, ['behavioral', 'technical']);
+      const type = iqSanitizeType(set.type, iqState.prefs.type || 'mixed');
       const jd = set.jd || $IQ('#iq-jd')?.value || '';
 
       // Check per-question replace limit (TASK 10B)
@@ -1760,9 +3445,10 @@
         replaceBtn.setAttribute('aria-disabled', 'true');
       }
 
-      // Helper function to re-enable the button (unless daily limit was reached)
+      // Helper function to re-enable the button
+      // Replacements are free and don't count toward daily limit, so they can always be enabled
       const reenableButton = () => {
-        if (replaceBtn && !iqState.dailyLimitReached) {
+        if (replaceBtn) {
           replaceBtn.disabled = wasDisabled;
           if (!wasDisabled) {
             replaceBtn.removeAttribute('aria-disabled');
@@ -1790,7 +3476,7 @@
           body: JSON.stringify({ 
             role, 
             seniority, 
-            types, 
+            type, 
             jd,
             mode: 'replace',
             replaceIndex: i
@@ -1802,9 +3488,12 @@
           
           // Handle cooldown
           if (response.status === 429 && errorData.reason === 'cooldown') {
-            const retryAfter = errorData.retryAfter || 60;
-            iqToast(`You're generating questions too quickly. Try again in ${retryAfter} seconds.`);
-            reenableButton();
+            const retryAfter = errorData.retryAfter || IQ_PER_Q_REPLACE_COOLDOWN;
+            iqToast(`Please wait ${retryAfter} seconds before replacing another question.`);
+            // Start global replace cooldown to prevent rapid re-clicks and match backend enforcement
+            // Use server's retryAfter value to sync UI with actual remaining cooldown time
+            iqStartReplaceGlobalCooldown(retryAfter);
+            // Don't re-enable button - it will be enabled when cooldown expires via render logic
             return;
           }
           
@@ -1813,7 +3502,7 @@
             const planName = getUserPlan() === 'trial' ? 'Trial' : 
                            getUserPlan() === 'essential' ? 'Essential' :
                            getUserPlan() === 'pro' ? 'Pro' : 'Premium';
-            iqToast(`You've reached today's Interview Questions limit for your ${planName} plan. You can still practice with your existing sets, or upgrade for higher limits.`);
+            iqToast(`Daily limit reached for your ${planName} plan. You can still practice with existing sets or upgrade for higher limits.`);
             // Disable all buttons (generate + replace) since daily quota applies to all operations
             iqDisableAllButtons();
             // Don't re-enable this button since all buttons are disabled
@@ -1821,11 +3510,27 @@
           }
           
           // Handle auth errors
-          if (response.status === 401 || response.status === 403) {
+          if (response.status === 401) {
             iqToast('Your session has expired. Please log in again.');
             setTimeout(() => {
               window.location.href = 'login.html';
             }, 2000);
+            reenableButton();
+            return;
+          }
+
+          // Handle 403 errors (not always auth-related)
+          // Examples:
+          // - Plan gating (upgradeRequired)
+          // - Replace attempted without generating a new set today
+          if (response.status === 403) {
+            const msg = (errorData && (errorData.error || errorData.message)) || 'Action not allowed.';
+            if (errorData && errorData.upgradeRequired) {
+              iqToast(msg);
+            } else {
+              // Show the server-provided message so users understand what to do next.
+              iqToast(msg);
+            }
             reenableButton();
             return;
           }
@@ -1858,15 +3563,8 @@
           iqToast('Question replaced.');
           iqTrack('iq_replace_one', { index: i });
           
-          // Start global 60-second cooldown after successful replacement
-          // This matches the backend cooldown enforcement for both full sets and replace operations
-          iqStartGlobalCooldown(IQ_GLOBAL_COOLDOWN);
-          
-          // Re-enable button if still under per-question limit and daily limit not reached
-          // The button will be disabled by iqRenderQuestions() if limits are hit
-          if (iqState.replaceCounts[i] < IQ_MAX_REPLACES && !iqState.dailyLimitReached) {
-            reenableButton();
-          }
+          // Start per-question cooldown (with global replace cooldown enforcement)
+          iqStartPerQCooldown(i);
         } else {
           reenableButton();
           throw new Error('Invalid API response: no question returned');
@@ -1916,6 +3614,7 @@
       const openSaved = ()=>{ iqRenderSavedPanel(true); iqTrack('iq_saved_opened'); };
       $IQ('#btn-save-set')?.addEventListener('click', openSaved);
       $IQ('#chip-saved')?.addEventListener('click', openSaved);
+      $IQ('#iq-start-fresh-btn')?.addEventListener('click', resetInterviewQuestionsSession);
       // Guidance toggle
       $IQ('#toggle-guidance')?.addEventListener('click', ()=>{ iqState.prefs.showGuidance=!iqState.prefs.showGuidance; iqSavePrefs(); iqUpdateGuidanceUI(); iqTrack(iqState.prefs.showGuidance?'iq_guidance_toggle_true':'iq_guidance_toggle_false'); });
       // Seniority persist
@@ -1933,12 +3632,28 @@
       $IQ('#upsell-upgrade')?.addEventListener('click', ()=>{ iqTrack('iq_upsell_upgrade_clicked'); });
       const overlay=$IQ('#iq-upsell'); const dialogEl=$IQ('#iq-upsell > div[role="dialog"]'); dialogEl?.addEventListener('click', (e)=> e.stopPropagation()); overlay?.addEventListener('click', (e)=>{ if(e.target===overlay){ overlay.hidden=true; }}); document.addEventListener('keydown', (e)=>{ if(e.key==='Escape' && overlay && !overlay.hidden){ overlay.hidden=true; }});
       
-      // More types one-time reveal
-      const more=$IQ('#types-more'); if(more){ const adv=$IQ('#types-advanced'); more.addEventListener('click', ()=>{ if(adv){ adv.hidden=false; } more.setAttribute('aria-expanded','true'); more.remove(); }, { once:true }); }
-      
-      // Chips a11y (only for selectable chips with data-type, not "More types")
-      $$IQ('.iq-types .chip[data-type]').forEach(b=> b.addEventListener('click', ()=>{ b.classList.toggle('is-on'); b.setAttribute('aria-pressed', b.classList.contains('is-on') ? 'true' : 'false'); iqSavePrefs(); }));
-      $$IQ('.iq-types .chip[data-type]').forEach(b=>{ b.setAttribute('role','button'); b.setAttribute('aria-pressed', b.classList.contains('is-on') ? 'true' : 'false'); b.addEventListener('keydown', (ke)=>{ if(ke.key==='Enter'||ke.key===' '){ ke.preventDefault(); b.click(); } }); });
+      // Question Type segmented control (single-select)
+      const typeBtns = $$IQ('#iq-type .iq-segment');
+      const setActiveType = (nextType) => {
+        const t = iqSanitizeType(nextType, 'mixed');
+        typeBtns.forEach(btn => {
+          const isActive = btn.dataset.value === t;
+          btn.classList.toggle('active', isActive);
+          btn.setAttribute('aria-selected', isActive ? 'true' : 'false');
+        });
+        iqState.prefs.type = t;
+        iqSavePrefs();
+      };
+      if (typeBtns.length) {
+        typeBtns.forEach(btn => {
+          btn.addEventListener('click', () => setActiveType(btn.dataset.value));
+          btn.addEventListener('keydown', (ke) => {
+            if (ke.key === 'Enter' || ke.key === ' ') { ke.preventDefault(); btn.click(); }
+          });
+        });
+        // Hydrate from prefs on load
+        setActiveType(iqState.prefs.type || 'mixed');
+      }
     }
     async function iqHandleMock(useSaved){
       const plan=(window.JobHackAINavigation?.getEffectivePlan?.()||localStorage.getItem('user-plan')||'free');
@@ -1957,7 +3672,7 @@
       if(['pro','premium'].includes(plan)){
         const mode = useSaved ? 'saved' : 'current';
         const seniority = iqState.set?.seniority || '';
-        const types = iqTypesToArray(iqState.set?.types, ['behavioral', 'technical']);
+        const type = iqSanitizeType(iqState.set?.type, iqState.prefs.type || 'mixed');
         const jd = iqState.set?.jd || '';
         const questions = iqState.set?.questions || [];
         
@@ -1973,15 +3688,15 @@
           const savedSet = await iqApiSaveSet({
             role,
             seniority,
-            types,
+            type,
             questions,
             selectedIndices,
             jd
           });
           
           // Success - redirect with D1 set ID
-        const qaMode = (new URL(window.location.href).searchParams.get('qa') || localStorage.getItem('qa_flag')) ? true : false;
-          const url = `mock-interview.html?role=${encodeURIComponent(role)}&mode=${mode}&set=${savedSet.id}${qaMode?'&qa=1':''}`;
+          const qaMode = (new URL(window.location.href).searchParams.get('qa') || localStorage.getItem('qa_flag')) ? true : false;
+          const url = `mock-interview.html?role=${encodeURIComponent(role)}&seniority=${encodeURIComponent(seniority||'')}&mode=${mode}&set=${savedSet.id}&source=d1${qaMode?'&qa=1':''}`;
           
           // Also save to localStorage as fallback
           const localSetId = iqSetId(role, iqState.set?.seed || Date.now());
@@ -1990,12 +3705,17 @@
               id: localSetId, 
               d1Id: savedSet.id,
               role, 
+              seniority,
+              type,
+              selectedIndices,
+              mode,
+              questionsFiltered: true,
               questions: selectedIndices.map(i => questions[i]?.q).filter(Boolean)
             })); 
           } catch(e) { console.warn('localStorage fallback failed', e); }
           
           iqTrack('iq_mock_clicked_unlocked', { mode, savedCount: selectedIndices.length, d1SetId: savedSet.id });
-        window.location.href = url;
+          window.location.href = url;
           
         } catch (saveError) {
           console.error('[IQ] Save set failed, using localStorage fallback:', saveError);
@@ -2006,6 +3726,11 @@
             localStorage.setItem('mi_payload', JSON.stringify({ 
               id: localSetId, 
               role, 
+              seniority,
+              type,
+              selectedIndices,
+              mode,
+              questionsFiltered: true,
               questions: selectedIndices.map(i => questions[i]?.q).filter(Boolean)
             })); 
           } catch(e) { 
@@ -2019,7 +3744,7 @@
           }
           
           const qaMode = (new URL(window.location.href).searchParams.get('qa') || localStorage.getItem('qa_flag')) ? true : false;
-          const url = `mock-interview.html?role=${encodeURIComponent(role)}&mode=${mode}&set=${encodeURIComponent(localSetId)}${qaMode?'&qa=1':''}`;
+          const url = `mock-interview.html?role=${encodeURIComponent(role)}&seniority=${encodeURIComponent(seniority||'')}&mode=${mode}&set=${encodeURIComponent(localSetId)}&source=local${qaMode?'&qa=1':''}`;
           
           iqTrack('iq_mock_clicked_unlocked', { mode, savedCount: selectedIndices.length, fallback: true });
           window.location.href = url;
@@ -2134,11 +3859,12 @@
         const count = iqGetSavedItems().length;
         savedCountSpan.textContent = count > 0 ? `(${count})` : '';
       }
+      updateStartFreshButtonState();
     }
     function iqWireQuestionList(){
       const box=$IQ('#iq-questions'); if(!box) return;
       box.addEventListener('click',(e)=>{
-        const actionBtn = e.target.closest('.btn-copy, .btn-replace, .btn-save, .btn-example, .btn-notes');
+        const actionBtn = e.target.closest('.btn-copy, .btn-replace, .btn-save, .btn-example');
         if(!actionBtn) return;
         const i=parseInt(actionBtn.dataset.idx || actionBtn.closest('[data-idx]')?.dataset?.idx || -1, 10);
         if(i<0) return;
@@ -2149,16 +3875,14 @@
         if(actionBtn.classList.contains('btn-replace')){ iqReplaceOne(i); return; }
         if(actionBtn.classList.contains('btn-save')){ iqToggleSaved(i); const nowSaved=iqIsSaved(i); actionBtn.setAttribute('aria-pressed', String(nowSaved)); iqToast(nowSaved ? 'Added to Saved' : 'Removed from Saved'); return; }
         if(actionBtn.classList.contains('btn-example')){ const ex=$IQ(`#iq-example-${i}`); if(ex) ex.hidden=!ex.hidden; return; }
-        if(actionBtn.classList.contains('btn-notes')){ const panel=$IQ(`#iq-notes-${i}`); const ta=$IQ(`#iq-notes-ta-${i}`); const wasHidden=panel.hidden; if(wasHidden && ta && !ta.value){ ta.value='S:\nT:\nA:\nR:'; } panel.hidden = !panel.hidden; actionBtn.setAttribute('aria-expanded', String(!panel.hidden)); if(!panel.hidden) ta?.focus(); if(wasHidden) iqTrack('iq_notes_opened',{ index:i }); return; }
-      });
-      box.addEventListener('input',(e)=>{
-        const m=e.target.id?.match(/^iq-notes-ta-(\d+)$/); if(!m) return; const idx=parseInt(m[1],10);
-        clearTimeout(iqState.timers.notes[idx]);
-        iqState.timers.notes[idx]=setTimeout(()=>{ iqState.notes[idx]=e.target.value; iqSaveNotes(); },300);
       });
       // Keyboard activation for action buttons
       box.addEventListener('keydown', (e)=>{
-        if(e.key!=='Enter' && e.key!==' ') return; const b=e.target.closest('.btn-copy, .btn-replace, .btn-save, .btn-example, .btn-notes'); if(!b) return; e.preventDefault(); b.click();
+        if(e.key!=='Enter' && e.key!==' ') return; 
+        const b=e.target.closest('.btn-copy, .btn-replace, .btn-save, .btn-example'); 
+        if(!b) return; 
+        e.preventDefault(); 
+        b.click();
       });
     }
 
@@ -2166,9 +3890,8 @@
     (function(){
       let wired=false; if(wired) return; wired=true;
       document.addEventListener('click', (e)=>{
-        // If the click occurred inside the questions list, let the local delegate handle it (avoid double toggles)
         if(e.target.closest('#iq-questions')) return;
-        const actionBtn = e.target.closest('.btn-copy, .btn-replace, .btn-save, .btn-example, .btn-notes');
+        const actionBtn = e.target.closest('.btn-copy, .btn-replace, .btn-save, .btn-example');
         if(!actionBtn) return;
         const card = actionBtn.closest('[data-idx]');
         const i=parseInt(actionBtn.dataset.idx || card?.dataset?.idx || -1, 10);
@@ -2180,7 +3903,6 @@
         if(actionBtn.classList.contains('btn-replace')){ iqReplaceOne(i); return; }
         if(actionBtn.classList.contains('btn-save')){ iqToggleSaved(i); const nowSaved=iqIsSaved(i); actionBtn.setAttribute('aria-pressed', String(nowSaved)); return; }
         if(actionBtn.classList.contains('btn-example')){ const ex=$IQ(`#iq-example-${i}`); if(ex) ex.hidden=!ex.hidden; return; }
-        if(actionBtn.classList.contains('btn-notes')){ const panel=$IQ(`#iq-notes-${i}`); const ta=$IQ(`#iq-notes-ta-${i}`); const exp=panel.hidden; if(exp && !ta?.value){ if(ta) ta.value='S:\nT:\nA:\nR:'; } panel.hidden=!panel.hidden; actionBtn.setAttribute('aria-expanded', String(!panel.hidden)); if(!panel.hidden) ta?.focus(); if(exp) iqTrack('iq_notes_opened',{ index:i }); return; }
       }, true);
     })();
 function initIQPage(){ 
@@ -2238,6 +3960,12 @@ function initIQPage(){
       
       iqUpdateActionsLayout(); 
       window.addEventListener('resize', iqUpdateActionsLayout);
+      renderGenerateCooldownIndicator();
+      
+      // Initialize Start Fresh button state (must be called after iqUpdateActionsLayout 
+      // since that function returns early when there's no set, but we still need to 
+      // disable the button on initial page load)
+      updateStartFreshButtonState();
       
       // Cleanup timers on page unload to prevent memory leaks
       window.addEventListener('beforeunload', () => {
@@ -2245,10 +3973,12 @@ function initIQPage(){
           clearInterval(iqState.timers.global);
         }
         Object.values(iqState.timers.perQ).forEach(clearInterval);
+        if (iqState.timers.replaceGlobal) {
+          clearInterval(iqState.timers.replaceGlobal);
+        }
         if (iqState.timers.toast) {
           clearTimeout(iqState.timers.toast);
         }
-        Object.values(iqState.timers.notes).forEach(clearTimeout);
       });
     }
     window.__IQ__ = { iqState, iqGenerate, iqRegenerate, iqReplaceOne };
@@ -2259,7 +3989,7 @@ function initIQPage(){
     const upgradeBtn = document.getElementById('iq-upgrade');
 
     // Self-tests
-    async function runIQSelfTests(){ const res=[]; const ok=(n,c)=>res.push({n,pass:!!c}); ok('Role input exists', !!document.getElementById('iq-role')); ok('Generate button exists', !!document.getElementById('btn-generate')); iqStartGlobalCooldown(1); ok('Cooldown helper shows', $IQ('#cooldown-helper') && $IQ('#cooldown-helper').style.display !== 'none'); const gen=await iqApiGenerate({ role:'Tester', seniority:'', types:['behavioral'], count:3, jd:'' }); ok('apiGenerate returns questions', Array.isArray(gen.questions)&&gen.questions.length>0); console.log('%cInterview Questions Self-Tests','font-weight:700'); res.forEach(r=>console.log(`${r.pass?'✅':'❌'} ${r.n}`)); }
+    async function runIQSelfTests(){ const res=[]; const ok=(n,c)=>res.push({n,pass:!!c}); ok('Role input exists', !!document.getElementById('iq-role')); ok('Generate button exists', !!document.getElementById('btn-generate')); iqStartGlobalCooldown(1); ok('Cooldown helper shows', $IQ('#iq-generate-cooldown') && $IQ('#iq-generate-cooldown').style.display !== 'none' && $IQ('#iq-generate-cooldown').children.length > 0); const gen=await iqApiGenerate({ role:'Tester', seniority:'', type:'behavioral', count:3, jd:'' }); const hasQuestions = !!(gen && Array.isArray(gen.questions) && gen.questions.length>0); ok('apiGenerate returns questions', hasQuestions); if(!hasQuestions && gen && gen.dailyLimitReached){ console.warn('[IQ] Self-test skipped due to daily limit'); } console.log('%cInterview Questions Self-Tests','font-weight:700'); res.forEach(r=>console.log(`${r.pass?'✅':'❌'} ${r.n}`)); }
     
     // --- QA: Integration harness ---
     function runIQIntegrationQA(){
@@ -2271,8 +4001,7 @@ function initIQPage(){
         const role='QA Engineer';
         const seed=String(Date.now());
         const questions = Array.from({length: IQ_FIXED_COUNT}, (_,i)=>({ q:`QA auto Q${i+1}` }));
-        iqState.set = { role, seed, seniority:'', types:['behavioral'], jd:'', questions };
-        iqState.notes = {};
+        iqState.set = { role, seed, seniority:'', type:'behavioral', jd:'', questions };
         iqSaveSetFull(iqState.set);
         iqRenderQuestions();
         iqWireQuestionList();
@@ -2302,7 +4031,26 @@ function initIQPage(){
         return;
       }
     }
-    document.addEventListener('DOMContentLoaded', ()=>{ initIQPage(); setTimeout(runIQSelfTests,200); setTimeout(runIQIntegrationQA,300); });
+    document.addEventListener('DOMContentLoaded', ()=>{
+      initIQPage();
+      
+      // Only run self-tests when QA is explicitly enabled
+      // This prevents automatic API calls on page load that trigger cooldowns
+      const qaParam = new URL(window.location.href).searchParams.get('qa');
+      const qaFlag = localStorage.getItem('qa_flag');
+      const qaEnabled = !!qaParam || qaFlag === '1';
+
+      if (qaEnabled) {
+        setTimeout(runIQSelfTests, 200);
+      }
+
+      // Clear qa_flag if no qa param is present to prevent persistent QA mode
+      if (!qaParam && qaFlag === '1') {
+        try { localStorage.removeItem('qa_flag'); } catch {}
+      }
+      
+      setTimeout(runIQIntegrationQA, 300);
+    });
     /* ==== End MVP+ module ==== */
 
     // --- PLAN LOGIC ---
@@ -2334,19 +4082,23 @@ function initIQPage(){
         mockBtn?.setAttribute('data-locked','true');
       }
       
-      // Update plan strip
-      updatePlanStrip(userPlan);
+      // Update plan UI
+      updatePlanUI(userPlan);
     }
     
-    // Update the plan strip display
-    function updatePlanStrip(plan) {
-      const strip = document.getElementById('iq-plan-strip');
-      const badgeContainer = document.getElementById('plan-badge-container');
-      const featuresDisplay = document.getElementById('plan-features-display');
-      const upgradeLink = document.getElementById('plan-upgrade-link');
+    // Standardized plan UI update - matches resume feedback
+    let isUpdatingPlanUI = false;
+    async function updatePlanUI(plan) {
+      // Prevent duplicate concurrent executions
+      if (isUpdatingPlanUI) {
+        return;
+      }
       
-      if (!strip) return;
-      strip.style.display = 'flex';
+      isUpdatingPlanUI = true;
+      
+      try {
+        const badgeContainer = document.getElementById('plan-badge-container');
+        const usageContainer = document.getElementById('iq-usage-container');
       
       const planNames = {
         'trial': 'Trial Plan',
@@ -2355,65 +4107,88 @@ function initIQPage(){
         'premium': 'Premium Plan',
         'free': 'Free Plan'
       };
+      const planColors = {
+        trial: '#FF9100',
+        essential: '#0077B5',
+        pro: '#388E3C',
+        premium: '#C62828',
+        free: '#6B7280'
+      };
       
-      // Create plan badge
+      // Update plan badge
       if (badgeContainer) {
-        const badgeClass = plan === 'trial' ? 'trial' : 
-                          plan === 'essential' ? 'essential' :
-                          plan === 'pro' ? 'pro' :
-                          plan === 'premium' ? 'premium' :
-                          plan === 'free' ? 'free' : 'trial';
-        badgeContainer.innerHTML = `<span class="user-plan-badge ${badgeClass}">${planNames[plan] || 'Free Plan'}</span>`;
+        const planLabel = planNames[plan] || 'Free Plan';
+        const planColor = planColors[plan] || planColors.free;
+        badgeContainer.innerHTML = `<span class="rf-plan-badge" style="background:${planColor};">${planLabel}</span>`;
       }
       
-      // Create feature tags with icons
-      const checkIcon = '<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M20 6L9 17l-5-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
-      const lockIcon = '<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="5" y="11" width="14" height="10" rx="2" stroke="currentColor" stroke-width="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4" stroke="currentColor" stroke-width="2"/></svg>';
-      
-      if (featuresDisplay) {
-        if (plan === 'trial') {
-          featuresDisplay.innerHTML = `
-            <span class="feature-tag">${checkIcon} Interview Questions: Included</span>
-            <span class="feature-tag">${lockIcon} Mock Interviews: Pro & Premium</span>
-          `;
-          if (upgradeLink) {
-            upgradeLink.textContent = 'Upgrade';
-            upgradeLink.style.display = 'inline-flex';
+      // Update usage indicator
+      if (usageContainer) {
+        // Clear container first to prevent duplicates
+        usageContainer.innerHTML = '';
+        
+        // Fetch real usage data
+        try {
+          const token = await getFirebaseToken();
+          if (!token) {
+            usageContainer.innerHTML = `<div class="usage-indicator">Sign in to see your usage limits.</div>`;
+            return;
           }
-        } else if (plan === 'essential') {
-          featuresDisplay.innerHTML = `
-            <span class="feature-tag">${checkIcon} Interview Questions: Included</span>
-            <span class="feature-tag">${lockIcon} Mock Interviews: Pro & Premium</span>
-          `;
-          if (upgradeLink) {
-            upgradeLink.textContent = 'Upgrade';
-            upgradeLink.style.display = 'inline-flex';
+
+          const response = await fetch('/api/usage', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`
+            }
+          });
+
+          if (!response.ok) {
+            usageContainer.innerHTML = `<div class="usage-indicator">Usage information unavailable. Please refresh or try again.</div>`;
+            return;
           }
-        } else if (plan === 'pro') {
-          // Get mock interview count if available
-          const mockCount = localStorage.getItem('mock_interviews_remaining') || '20';
-          featuresDisplay.innerHTML = `
-            <span class="feature-tag">${checkIcon} Interview Questions + Mock Interviews: Included</span>
-            <span class="feature-tag" style="color:#6B7280;">${mockCount} mock interviews left this month</span>
-          `;
-          if (upgradeLink) {
-            upgradeLink.textContent = 'Upgrade to Premium';
-            upgradeLink.style.display = 'inline-flex';
+
+          const data = await response.json();
+          if (!data?.usage || !window.renderUsageIndicator) {
+            usageContainer.innerHTML = `<div class="usage-indicator">Usage information unavailable. Please try again.</div>`;
+            return;
           }
-        } else if (plan === 'premium') {
-          featuresDisplay.innerHTML = `
-            <span class="feature-tag">${checkIcon} All features: Unlimited</span>
-          `;
-          if (upgradeLink) upgradeLink.style.display = 'none';
-        } else {
-          featuresDisplay.innerHTML = `
-            <span class="feature-tag">${lockIcon} Upgrade to unlock Interview Questions</span>
-          `;
-          if (upgradeLink) {
-            upgradeLink.textContent = 'Upgrade';
-            upgradeLink.style.display = 'inline-flex';
+
+          const buildUnlimitedText = (usageObj, featureType) => {
+            if (!usageObj) return undefined;
+            if (usageObj.limit !== null) return undefined;
+            if (usageObj.used === null || usageObj.used === undefined) return undefined;
+            
+            // Only handle interviewQuestions (mockInterviews removed from this page)
+            if (featureType === 'interviewQuestions') {
+              return `Sets generated this month: ${usageObj.used}`;
+            }
+            return `${usageObj.used} used this month (unlimited)`;
+          };
+
+          // Create Interview Questions indicator container
+          const iqIndicatorDiv = document.createElement('div');
+          usageContainer.appendChild(iqIndicatorDiv);
+
+          // Render Interview Questions usage when available
+          if (data.usage.interviewQuestions) {
+            window.renderUsageIndicator({
+              feature: 'interviewQuestions',
+              usage: data.usage.interviewQuestions,
+              plan: plan,
+              container: iqIndicatorDiv,
+              customText: buildUnlimitedText(data.usage.interviewQuestions, 'interviewQuestions')
+            });
+          } else {
+            iqIndicatorDiv.innerHTML = `<div class="usage-indicator">Usage information unavailable for Interview Questions.</div>`;
           }
+        } catch (e) {
+          console.warn('[IQ] Failed to fetch usage for UI:', e);
+          usageContainer.innerHTML = `<div class="usage-indicator">Usage information unavailable. Please refresh and try again.</div>`;
         }
+      }
+      } finally {
+        isUpdatingPlanUI = false;
       }
     }
     
@@ -2426,7 +4201,24 @@ function initIQPage(){
         authState = window.JobHackAINavigation.getAuthState();
         userPlan = window.JobHackAINavigation.getEffectivePlan();
       } else {
-        authState = { isAuthenticated: localStorage.getItem('user-authenticated') === 'true' && !!localStorage.getItem('user-email') };
+        // SECURITY: Check Firebase SDK keys synchronously (works before FirebaseAuthManager is ready)
+        // FirebaseAuthManager.getCurrentUser() returns null until onAuthStateChanged fires
+        // Use same pattern as checkAuthentication() for consistency
+        function hasFirebaseAuthKeys() {
+          try {
+            return Object.keys(localStorage).some(k => 
+              k.startsWith('firebase:authUser:') && 
+              localStorage.getItem(k) && 
+              localStorage.getItem(k) !== 'null' &&
+              localStorage.getItem(k).length > 10
+            );
+          } catch (e) {
+            return false;
+          }
+        }
+        const hasLocalStorageAuth = localStorage.getItem('user-authenticated') === 'true';
+        const hasFirebaseKeys = hasFirebaseAuthKeys();
+        authState = { isAuthenticated: hasLocalStorageAuth || hasFirebaseKeys };
         userPlan = localStorage.getItem('user-plan') || 'free';
       }
       
@@ -2442,11 +4234,11 @@ function initIQPage(){
     }
     
     // Initialize page when DOM is ready
-    document.addEventListener('DOMContentLoaded', function() {
+    document.addEventListener('DOMContentLoaded', async function() {
       // Wait for navigation system to be ready
-      const initPage = () => {
-        // Check authentication first
-        if (!checkAuthentication()) {
+      const initPage = async () => {
+        // Check authentication first (now async)
+        if (!(await checkAuthentication())) {
           return; // Stop here if not authenticated
         }
         
@@ -2458,7 +4250,7 @@ function initIQPage(){
       };
       
       // Try to initialize immediately, then retry after a short delay
-      initPage();
+      await initPage();
       setTimeout(initPage, 100);
       
       // Listen for plan changes from navigation system
@@ -2474,8 +4266,10 @@ function initIQPage(){
   <!-- Load navigation system -->
   <script src="js/navigation.js?v=20251007-2"></script>
   <script src="js/universal-logout.js?v=20251007-2"></script>
-  <!-- Load Firebase auth as ES module (required for API authentication) -->
+  <!-- Load Firebase auth as ES module (required for API authentication) - MUST load before inactivity-tracker -->
   <script type="module" src="js/firebase-auth.js?v=20251011-1"></script>
+  <!-- Inactivity tracker - auto-logout after 30 minutes of inactivity -->
+  <script src="js/inactivity-tracker.js?v=20250115-1"></script>
   <!-- Load role selector -->
   <script src="js/role-selector.js?v=20250115-1" type="module"></script>
   <script>

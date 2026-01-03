@@ -7,6 +7,7 @@ import { errorResponse, successResponse, generateRequestId } from '../../_lib/er
 import { 
   getOrCreateUserByAuthId, 
   getInterviewQuestionSetById,
+  getInterviewQuestionSetsByUser,
   isD1Available 
 } from '../../_lib/db.js';
 
@@ -30,19 +31,7 @@ function corsHeaders(origin) {
   };
 }
 
-async function getUserPlan(uid, env) {
-  if (!env.JOBHACKAI_KV) {
-    return 'free';
-  }
-  
-  try {
-    const plan = await env.JOBHACKAI_KV.get(`planByUid:${uid}`);
-    return plan || 'free';
-  } catch (error) {
-    console.error('[IQ-GET-SET] Error fetching plan from KV:', error);
-    return 'free';
-  }
-}
+import { getUserPlan } from '../../_lib/db.js';
 
 export async function onRequest(context) {
   const { request, env } = context;
@@ -69,7 +58,7 @@ export async function onRequest(context) {
     const userEmail = payload.email;
 
     // Get user plan
-    const plan = await getUserPlan(uid, env);
+    const plan = await getUserPlan(env, uid);
     
     // Dev environment detection
     const allowedDevOrigins = ['https://dev.jobhackai.io', 'http://localhost:3003', 'http://localhost:8788'];
@@ -84,11 +73,12 @@ export async function onRequest(context) {
 
     console.log('[IQ-GET-SET] Plan check:', { requestId, uid, plan, effectivePlan });
 
-    // Get set requires pro or premium (Mock Interview access)
-    const allowedPlans = ['pro', 'premium'];
+    // Allow all plans to view their own question sets (for history restoration)
+    // Mock Interview usage is enforced elsewhere (mock-interview.html)
+    const allowedPlans = ['trial', 'essential', 'pro', 'premium'];
     if (!allowedPlans.includes(effectivePlan)) {
       return errorResponse(
-        'Accessing question sets for Mock Interviews requires Pro or Premium plan.',
+        'Accessing question sets requires a valid plan.',
         403,
         origin,
         env,
@@ -108,9 +98,22 @@ export async function onRequest(context) {
       );
     }
 
-    // Get set ID from URL params
+    // Get params
     const url = new URL(request.url);
     const setId = url.searchParams.get('id');
+    const listMode = url.searchParams.get('list');
+
+    // Get or create user in D1 to verify ownership
+    const d1User = await getOrCreateUserByAuthId(env, uid, userEmail);
+    if (!d1User) {
+      return errorResponse('Failed to resolve user', 500, origin, env, requestId);
+    }
+
+    // List recent sets for dropdown
+    if (listMode) {
+      const sets = await getInterviewQuestionSetsByUser(env, d1User.id, { limit: 20 });
+      return successResponse({ sets }, 200, origin, env, requestId);
+    }
 
     if (!setId) {
       return errorResponse('Set ID is required', 400, origin, env, requestId);
@@ -120,12 +123,6 @@ export async function onRequest(context) {
     const setIdInt = parseInt(setId, 10);
     if (isNaN(setIdInt) || setIdInt <= 0) {
       return errorResponse('Invalid set ID', 400, origin, env, requestId);
-    }
-
-    // Get or create user in D1 to verify ownership
-    const d1User = await getOrCreateUserByAuthId(env, uid, userEmail);
-    if (!d1User) {
-      return errorResponse('Failed to resolve user', 500, origin, env, requestId);
     }
 
     // Retrieve the question set (SQL enforces ownership via WHERE id = ? AND user_id = ?)

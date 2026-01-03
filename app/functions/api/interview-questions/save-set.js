@@ -30,19 +30,7 @@ function corsHeaders(origin) {
   };
 }
 
-async function getUserPlan(uid, env) {
-  if (!env.JOBHACKAI_KV) {
-    return 'free';
-  }
-  
-  try {
-    const plan = await env.JOBHACKAI_KV.get(`planByUid:${uid}`);
-    return plan || 'free';
-  } catch (error) {
-    console.error('[IQ-SAVE-SET] Error fetching plan from KV:', error);
-    return 'free';
-  }
-}
+import { getUserPlan } from '../../_lib/db.js';
 
 export async function onRequest(context) {
   const { request, env } = context;
@@ -69,7 +57,7 @@ export async function onRequest(context) {
     const userEmail = payload.email;
 
     // Get user plan
-    const plan = await getUserPlan(uid, env);
+    const plan = await getUserPlan(env, uid);
     
     // Dev environment detection
     const allowedDevOrigins = ['https://dev.jobhackai.io', 'http://localhost:3003', 'http://localhost:8788'];
@@ -84,11 +72,12 @@ export async function onRequest(context) {
 
     console.log('[IQ-SAVE-SET] Plan check:', { requestId, uid, plan, effectivePlan });
 
-    // Save set requires pro or premium (Mock Interview access)
-    const allowedPlans = ['pro', 'premium'];
+    // Allow all plans to save question sets for history
+    // Mock Interview access is enforced elsewhere (mock-interview.html)
+    const allowedPlans = ['trial', 'essential', 'pro', 'premium'];
     if (!allowedPlans.includes(effectivePlan)) {
       return errorResponse(
-        'Saving question sets for Mock Interviews requires Pro or Premium plan.',
+        'Saving question sets requires a valid plan.',
         403,
         origin,
         env,
@@ -127,21 +116,24 @@ export async function onRequest(context) {
       return errorResponse('Questions array is required', 400, origin, env, requestId);
     }
 
-    if (!Array.isArray(selectedIndices) || selectedIndices.length === 0) {
-      return errorResponse('At least one question must be selected', 400, origin, env, requestId);
-    }
+    // selectedIndices is optional - if not provided, select all questions (for history)
+    let validIndices;
+    if (!selectedIndices || !Array.isArray(selectedIndices) || selectedIndices.length === 0) {
+      // Default to all questions selected for history purposes
+      validIndices = questions.map((_, idx) => idx);
+    } else {
+      // Validate selectedIndices are valid indices
+      const maxIndex = questions.length - 1;
+      validIndices = selectedIndices.filter(idx => 
+        typeof idx === 'number' && 
+        Number.isInteger(idx) && 
+        idx >= 0 && 
+        idx <= maxIndex
+      );
 
-    // Validate selectedIndices are valid indices
-    const maxIndex = questions.length - 1;
-    const validIndices = selectedIndices.filter(idx => 
-      typeof idx === 'number' && 
-      Number.isInteger(idx) && 
-      idx >= 0 && 
-      idx <= maxIndex
-    );
-
-    if (validIndices.length === 0) {
-      return errorResponse('No valid question indices provided', 400, origin, env, requestId);
+      if (validIndices.length === 0) {
+        return errorResponse('No valid question indices provided', 400, origin, env, requestId);
+      }
     }
 
     // Get or create user in D1
@@ -151,11 +143,14 @@ export async function onRequest(context) {
     }
 
     // Create the question set
+    // Normalize types - handle both single type string and array
+    let normalizedTypes = Array.isArray(types) ? types : (types ? [types] : ['behavioral', 'technical']);
+    
     const savedSet = await createInterviewQuestionSet(env, {
       userId: d1User.id,
       role: role.trim(),
       seniority: seniority || null,
-      types: Array.isArray(types) ? types : ['behavioral', 'technical'],
+      types: normalizedTypes,
       questions,
       selectedIndices: validIndices,
       jd: jd || null

@@ -39,14 +39,7 @@ function json(data, status = 200, origin, env, extraHeaders = {}) {
   });
 }
 
-async function getUserPlan(uid, env) {
-  if (!env.JOBHACKAI_KV) {
-    return 'free';
-  }
-
-  const plan = await env.JOBHACKAI_KV.get(`planByUid:${uid}`);
-  return plan || 'free';
-}
+import { getUserPlan } from '../_lib/db.js';
 
 export async function onRequest(context) {
   const { request, env } = context;
@@ -68,7 +61,7 @@ export async function onRequest(context) {
     }
 
     const { uid, payload } = await verifyFirebaseIdToken(token, env.FIREBASE_PROJECT_ID);
-    const plan = await getUserPlan(uid, env);
+    const plan = await getUserPlan(env, uid);
     // Effective cooldown is 45s, but KV requires a minimum TTL of 60s.
     // We store the timestamp with a slightly longer TTL for safety, and enforce 45s in code.
     const cooldownSeconds = 45;

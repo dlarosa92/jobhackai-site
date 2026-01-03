@@ -10,7 +10,7 @@
  * @param {Object} [options.customText] - Optional custom text override
  */
 
-export function renderUsageIndicator({ feature, usage, plan, container, customText }) {
+function renderUsageIndicator({ feature, usage, plan, container, customText }) {
   if (!container) {
     console.warn('[UsageIndicator] Container element required');
     return;
@@ -118,7 +118,8 @@ export function renderUsageIndicator({ feature, usage, plan, container, customTe
     const isHighUsage = percentage >= 66; // 66%+ used = error (red)
     const isMediumUsage = percentage >= 33 && percentage < 66; // 33-66% used = warning (yellow)
     
-    ariaLabelParts.push(`${used} of ${usage.limit} used, ${usage.remaining !== null ? usage.remaining : usage.limit - used} remaining`);
+    const remainingText = usage.remaining !== null ? usage.remaining : usage.limit - used;
+    ariaLabelParts.push(`${used} of ${usage.limit} used, ${remainingText} remaining${plan === 'trial' ? ' in your trial' : ''}`);
     
     // Circular progress indicator
     const radius = 16;
@@ -148,7 +149,7 @@ export function renderUsageIndicator({ feature, usage, plan, container, customTe
         </svg>
         <span style="color: var(--color-text-secondary); font-size: 0.95rem;">
           ${customText || `${used} / ${usage.limit} used`}
-          ${usage.remaining !== null ? ` • ${usage.remaining} remaining` : ''}
+          ${usage.remaining !== null ? ` • ${usage.remaining} remaining${plan === 'trial' ? ' in your trial' : ''}` : ''}
         </span>
       </div>
     `);
@@ -165,18 +166,127 @@ export function renderUsageIndicator({ feature, usage, plan, container, customTe
       : `${featureName} usage information`;
     contentHTML = contentParts.join('<span style="margin: 0 0.5rem;">•</span>');
   } else if (isUnlimited) {
-    // Unlimited badge
+    // Unlimited: show infinity symbol + monthly used count when available
     const planName = plan === 'trial' ? 'Trial' : 
                      plan === 'essential' ? 'Essential' : 
                      plan === 'pro' ? 'Pro' : 
                      plan === 'premium' ? 'Premium' : plan;
-    
-    ariaLabel = `${featureName}: Unlimited with ${planName} plan`;
-    contentHTML = `
-      <span style="color: var(--color-text-secondary); font-size: 0.95rem;">
-        ${customText || `Unlimited with your ${planName} plan.`}
-      </span>
-    `;
+
+    const used = usage && usage.used !== null && usage.used !== undefined ? usage.used : null;
+
+    // Special handling for interview questions with daily limits
+    if (feature === 'interviewQuestions' && usage && usage.dailyLimit !== null && usage.dailyLimit !== undefined && usage.dailyLimit > 0) {
+      const dailyUsed = usage.dailyUsed !== null && usage.dailyUsed !== undefined ? usage.dailyUsed : 0;
+      const dailyLimit = usage.dailyLimit;
+      const dailyRemaining = usage.dailyRemaining !== null && usage.dailyRemaining !== undefined ? usage.dailyRemaining : Math.max(0, dailyLimit - dailyUsed);
+      const dailyPercentage = (dailyUsed / dailyLimit) * 100;
+      
+      // Color thresholds for daily usage
+      const isHighUsage = dailyPercentage > 90; // > 90% used = error (red)
+      const isMediumUsage = dailyPercentage >= 66 && dailyPercentage <= 90; // 66-90% used = warning (yellow)
+      
+      // Circular progress indicator for daily usage
+      const radius = 16;
+      const circumference = 2 * Math.PI * radius;
+      const dailyOffset = circumference - (dailyPercentage / 100) * circumference;
+      
+      ariaLabel = `${featureName}: ${dailyUsed} of ${dailyLimit} sets used today, ${dailyRemaining} remaining today; ${used || 0} sets used this month (unlimited)`;
+      
+      // Build daily usage indicator
+      let dailyIndicatorHTML = `
+        <div class="usage-indicator__meter" style="
+          display: inline-flex;
+          align-items: center;
+          gap: 0.5rem;
+        ">
+          <svg width="36" height="36" viewBox="0 0 36 36" style="transform: rotate(-90deg);" aria-hidden="true">
+            <circle cx="18" cy="18" r="${radius}" fill="none" stroke="var(--color-divider)" stroke-width="3"/>
+            <circle 
+              cx="18" 
+              cy="18" 
+              r="${radius}" 
+              fill="none" 
+              stroke="${isHighUsage ? 'var(--color-error)' : isMediumUsage ? 'var(--color-warning)' : 'var(--color-cta-green)'}" 
+              stroke-width="3"
+              stroke-dasharray="${circumference}"
+              stroke-dashoffset="${dailyOffset}"
+              stroke-linecap="round"
+              style="transition: stroke-dashoffset 0.3s ease;"
+            />
+          </svg>
+          <span style="color: var(--color-text-secondary); font-size: 0.95rem;">
+            ${dailyUsed} / ${dailyLimit} sets today
+            ${dailyRemaining > 0 ? ` • ${dailyRemaining} remaining` : ''}
+          </span>
+        </div>
+      `;
+      
+      // Add monthly usage indicator below daily (if monthly data available)
+      if (used !== null) {
+        dailyIndicatorHTML += `
+          <div class="usage-indicator__meter" style="
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-top: 0.5rem;
+          ">
+            <svg width="36" height="36" viewBox="0 0 36 36" aria-hidden="true" style="flex-shrink: 0;">
+              <path
+                d="M 6 18 C 6 12, 14 12, 18 18 C 22 24, 30 24, 30 18 C 30 12, 22 12, 18 18 C 14 24, 6 24, 6 18"
+                fill="none"
+                stroke="var(--color-cta-green)"
+                stroke-width="2.5"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              />
+            </svg>
+            <span style="color: var(--color-text-secondary); font-size: 0.95rem;">
+              ${customText || `Sets generated this month: ${used}`}
+            </span>
+          </div>
+        `;
+      }
+      
+      contentHTML = dailyIndicatorHTML;
+    } else if (used !== null) {
+      // Determine the feature-specific label
+      const featureLabel = feature === 'mockInterviews' ? 'Sessions' :
+                          feature === 'interviewQuestions' ? 'Sets' :
+                          feature === 'resumeFeedback' ? 'Feedback runs' :
+                          feature === 'atsScans' ? 'Scans' :
+                          feature === 'coverLetters' ? 'Letters' :
+                          'Items';
+
+      ariaLabel = `${featureName}: ${used} ${featureLabel.toLowerCase()} used this month (unlimited) with ${planName} plan`;
+      contentHTML = `
+        <div class="usage-indicator__meter" style="
+          display: inline-flex;
+          align-items: center;
+          gap: 0.5rem;
+        ">
+          <svg width="36" height="36" viewBox="0 0 36 36" aria-hidden="true" style="flex-shrink: 0;">
+            <path
+              d="M 6 18 C 6 12, 14 12, 18 18 C 22 24, 30 24, 30 18 C 30 12, 22 12, 18 18 C 14 24, 6 24, 6 18"
+              fill="none"
+              stroke="var(--color-cta-green)"
+              stroke-width="2.5"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            />
+          </svg>
+          <span style="color: var(--color-text-secondary); font-size: 0.95rem;">
+            ${customText || `${featureLabel} used this month: ${used}`}
+          </span>
+        </div>
+      `;
+    } else {
+      ariaLabel = `${featureName}: Unlimited with ${planName} plan`;
+      contentHTML = `
+        <span style="color: var(--color-text-secondary); font-size: 0.95rem;">
+          ${customText || `Unlimited with your ${planName} plan.`}
+        </span>
+      `;
+    }
   } else {
     // Fallback
     ariaLabel = `${featureName} usage information`;
@@ -187,24 +297,6 @@ export function renderUsageIndicator({ feature, usage, plan, container, customTe
 
   indicatorHTML += contentHTML + '</div>';
   container.innerHTML = indicatorHTML;
-
-  // Add tooltip if needed (for upgrade prompts)
-  if (hasQuota && usage.remaining !== null && usage.remaining <= 1) {
-    const tooltipTrigger = document.createElement('span');
-    tooltipTrigger.className = 'jh-tooltip-trigger';
-    tooltipTrigger.setAttribute('tabindex', '0');
-    tooltipTrigger.setAttribute('aria-label', 'More info');
-    tooltipTrigger.style.cssText = 'margin-left: 0.4em; vertical-align: middle; cursor: help;';
-    tooltipTrigger.innerHTML = `
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align: middle; color: var(--color-text-muted);">
-        <circle cx="12" cy="12" r="10"/>
-        <line x1="12" y1="8" x2="12" y2="8"/>
-        <line x1="12" y1="12" x2="12" y2="16"/>
-      </svg>
-      <span class="jh-tooltip-text">Upgrade to Pro for unlimited ${featureName.toLowerCase()}.</span>
-    `;
-    container.querySelector('.usage-indicator').appendChild(tooltipTrigger);
-  }
 }
 
 /**
@@ -212,7 +304,7 @@ export function renderUsageIndicator({ feature, usage, plan, container, customTe
  * @param {number} seconds - Cooldown in seconds
  * @returns {string} Formatted cooldown string (e.g., "1:30" or "45s")
  */
-export function formatCooldown(seconds) {
+function formatCooldown(seconds) {
   if (!seconds || seconds <= 0) return '0s';
   
   const minutes = Math.floor(seconds / 60);

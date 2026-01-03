@@ -10,7 +10,16 @@
     // --- IMMEDIATE PAGE ACCESS CONTROL ---
     // Run immediately to prevent content flash for unauthorized users
     (function enforceAccessImmediate() {
-      const isAuthenticated = localStorage.getItem('user-authenticated') === 'true' && !!localStorage.getItem('user-email');
+      // SECURITY: Check auth state using localStorage flags and Firebase SDK keys
+      // FirebaseAuthManager may not be loaded yet, so we check Firebase SDK keys directly
+      const hasLocalStorageAuth = localStorage.getItem('user-authenticated') === 'true';
+      const hasFirebaseKeys = Object.keys(localStorage).some(k => 
+        k.startsWith('firebase:authUser:') && 
+        localStorage.getItem(k) && 
+        localStorage.getItem(k) !== 'null' &&
+        localStorage.getItem(k).length > 10
+      );
+      const isAuthenticated = hasLocalStorageAuth || hasFirebaseKeys;
       const allowedPlans = ['trial', 'essential', 'pro', 'premium'];
       // Expose allowed plans so later scripts stay in sync
       window.__JOBHACKAI_RF_ALLOWED_PLANS__ = allowedPlans;
@@ -48,9 +57,13 @@
   <link rel="stylesheet" href="css/tokens.css">
   <link rel="stylesheet" href="css/main.css">
 
+  <!-- Load usage indicator component early (before inline scripts that use it) -->
+  <script src="js/components/usage-indicator.js"></script>
+
   <!-- Component overrides -->
   <link rel="stylesheet" href="css/header.css">
   <link rel="stylesheet" href="css/footer.css">
+  <link rel="stylesheet" href="css/history-tile.css">
   <style>
     html, body {
       height: 100%;
@@ -130,7 +143,8 @@
     .rf-card { background: var(--color-card-bg); border-radius: var(--radius-xl); box-shadow: var(--shadow-card); padding: var(--space-lg); margin-bottom: var(--space-lg); }
     .rf-title { font-size: var(--font-size-2xl); font-weight: var(--font-weight-extrabold); margin-bottom: var(--space-xs); color: var(--color-text-main); }
     .rf-section-title { font-size: var(--font-size-xl); font-weight: var(--font-weight-bold); margin-bottom: var(--space-xs); color: var(--color-text-main); }
-    .rf-progress-ring { width: 80px; height: 80px; display: inline-block; vertical-align: middle; margin-right: 1.5rem; }
+    .rf-progress-ring { width: 80px; min-height: 80px; display: inline-flex; flex-direction: column; align-items: center; vertical-align: middle; margin-right: 1.5rem; }
+    .rf-progress-ring svg { flex-shrink: 0; width: 80px; height: 80px; }
     .rf-score-badge { display: inline-block; background: #00E676; color: #fff; font-weight: 700; border-radius: 999px; padding: 0.3em 1em; font-size: 1.2rem; margin-left: 0.7rem; }
     /* Status pill component - matches existing .rf-score-badge pattern */
     .rf-status-pill {
@@ -261,10 +275,20 @@
       border-radius: var(--radius-lg);
       opacity: 1;
       transition: opacity 0.3s ease;
+      /* Force browser to keep animation running even when tab is inactive */
+      will-change: background-position;
+      /* Fallback: ensure visibility even if animation stops */
+      background-color: #f0f0f0;
     }
     .rf-skeleton.hidden {
       opacity: 0;
       pointer-events: none;
+      animation: none; /* Stop animation when hiding */
+    }
+    /* Ensure skeleton container stays visible */
+    #rf-skeleton-container {
+      /* Prevent hiding when tab becomes inactive */
+      visibility: visible !important;
     }
     .rf-skeleton-header {
       height: 60px;
@@ -326,60 +350,144 @@
       color: #374151;
       border-color: #D1D5DB;
     }
-    /* History Section Styles */
+    /* ============================================================
+       HistoryPanel v1 (Resume Feedback)
+       Standardized Saved History UI/UX
+       ============================================================ */
+    .history-card {
+      border: 1px solid var(--color-divider);
+      padding: 24px;
+      margin-bottom: 0;
+    }
+
+    .rf-history-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .rf-history-title-wrap {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 0;
+    }
+
+    .rf-history-title-text {
+      font-weight: 800;
+      color: var(--color-text-main);
+      font-size: 1.05rem;
+      line-height: 1.2;
+    }
+
+    .rf-history-header-actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-shrink: 0;
+    }
+
+    .rf-history-icon-btn {
+      width: 40px;
+      height: 40px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border: 1px solid var(--color-divider);
+      border-radius: var(--radius-md);
+      background: transparent;
+      cursor: pointer;
+      transition: background 0.18s ease, border-color 0.18s ease;
+    }
+    .rf-history-icon-btn:hover {
+      background: #F9FAFB;
+      border-color: #D1D5DB;
+    }
+
+    .rf-history-manage-btn,
+    .rf-history-link-btn {
+      background: transparent;
+      border: none;
+      padding: 0.25rem 0;
+      cursor: pointer;
+      font-weight: 600;
+      color: var(--color-text-secondary);
+      text-decoration: underline;
+      font-size: 0.95rem;
+    }
+    .rf-history-manage-btn {
+      text-decoration: none;
+      color: var(--color-text-secondary);
+      font-weight: 700;
+      border: 1px solid var(--color-divider);
+      border-radius: var(--radius-md);
+      padding: 0.5rem 1rem;
+      background: transparent;
+      transition: background 0.18s ease, border-color 0.18s ease;
+    }
+    .rf-history-manage-btn:hover { 
+      color: var(--color-text-main);
+      background: #F9FAFB;
+      border-color: #D1D5DB;
+    }
+
+    .rf-history-subtitle {
+      margin-top: 10px;
+      font-size: 0.875rem; /* ~14px */
+      color: var(--color-text-muted);
+    }
+
+    .rf-history-body {
+      margin-top: 16px;
+    }
+
     .rf-history-list {
       display: flex;
       flex-direction: column;
-      gap: 0.75rem;
-      margin-top: 1rem;
+      gap: 12px;
     }
+
     .rf-history-item {
+      position: relative;
       display: flex;
       align-items: center;
-      gap: 1rem;
+      gap: 12px;
       padding: 0.875rem 1rem;
-      background: #F9FAFB;
+      background: #fff;
       border-radius: var(--radius-md);
       border: 1px solid var(--color-divider);
-      transition: all 0.18s ease;
+      transition: background 0.18s ease, border-color 0.18s ease, outline 0.18s ease;
       cursor: pointer;
+      min-height: 56px;
     }
     .rf-history-item:hover {
-      background: #F3F4F6;
-      border-color: var(--color-accent-blue);
+      background: #F9FAFB;
+      border-color: #D1D5DB;
     }
-    .rf-history-item.active {
-      background: #F0F7FF;
-      border-color: var(--color-accent-blue);
+    .rf-history-item.is-selected {
+      outline: 2px solid var(--color-accent-blue);
+      outline-offset: 0;
+      border-color: var(--color-divider);
+      background: #fff;
     }
-    .rf-history-item .rf-history-score {
-      font-weight: 700;
-      color: var(--color-cta-green);
-      font-size: 1.1rem;
-      min-width: 32px;
-      text-align: right;
-    }
-    .rf-history-actions {
+
+    .rf-history-checkbox-wrap {
       display: none;
-      margin-top: 0.75rem;
       align-items: center;
-      justify-content: space-between;
-      gap: 0.5rem;
-      flex-wrap: wrap;
+      justify-content: center;
+      flex-shrink: 0;
     }
-    .rf-history-count {
-      color: var(--color-text-muted);
-      font-size: 0.9rem;
-    }
-    .rf-btn-link {
-      background: none;
-      border: none;
-      color: var(--color-text-secondary);
-      text-decoration: underline;
-      padding: 0.25rem 0.15rem;
+    .rf-history-checkbox {
+      width: 18px;
+      height: 18px;
+      accent-color: var(--color-accent-blue);
       cursor: pointer;
-      font-size: 0.9rem;
     }
+    .rf-history-panel--manage .rf-history-checkbox-wrap {
+      display: inline-flex;
+    }
+
     .rf-history-icon {
       width: 40px;
       height: 40px;
@@ -395,52 +503,308 @@
       height: 20px;
       color: #4F46E5;
     }
-    .rf-history-details {
+
+    .rf-history-text {
       flex: 1;
       min-width: 0;
     }
-    .rf-history-title {
-      font-weight: 600;
+    .rf-history-line1 {
+      font-weight: 700;
       color: var(--color-text-main);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
       font-size: 0.95rem;
+      line-height: 1.25;
+    }
+    .rf-history-line2 {
+      margin-top: 2px;
+      font-size: 0.85rem;
+      color: var(--color-text-muted);
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
     }
-    .rf-history-meta {
-      font-size: 0.8rem;
-      color: var(--color-text-muted);
-      margin-top: 0.15rem;
+
+    .rf-history-score {
+      font-weight: 800;
+      color: var(--color-text-main);
+      font-size: 1.05rem;
+      min-width: 32px;
+      text-align: right;
+      flex-shrink: 0;
     }
-    .rf-history-empty {
-      text-align: center;
-      padding: 2rem 1rem;
-      color: var(--color-text-muted);
-    }
-    .rf-history-empty svg {
-      width: 48px;
-      height: 48px;
-      margin-bottom: 0.75rem;
-      opacity: 0.4;
-    }
-    .rf-history-loading {
+
+    .rf-history-row-actions {
+      position: relative;
       display: flex;
       align-items: center;
       justify-content: center;
-      gap: 0.5rem;
-      padding: 1.5rem;
+      flex-shrink: 0;
+      margin-left: 2px;
+    }
+
+    .rf-history-kebab {
+      width: 40px;
+      height: 40px;
+      border: 1px solid transparent;
+      border-radius: var(--radius-md);
+      background: transparent;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.18s ease, border-color 0.18s ease, opacity 0.18s ease;
+      opacity: 0;
+    }
+    .rf-history-item:hover .rf-history-kebab,
+    .rf-history-item:focus-within .rf-history-kebab {
+      opacity: 1;
+    }
+    .rf-history-kebab:hover {
+      background: #F3F4F6;
+      border-color: #E5E7EB;
+    }
+
+    /* Mobile (no hover): kebab always visible */
+    @media (hover: none), (pointer: coarse) {
+      .rf-history-kebab { opacity: 1; }
+    }
+
+    .rf-history-menu {
+      position: absolute;
+      right: 0;
+      top: calc(100% + 6px);
+      min-width: 170px;
+      background: #fff;
+      border: 1px solid var(--color-divider);
+      border-radius: 12px;
+      box-shadow: var(--shadow-dropdown);
+      padding: 6px;
+      z-index: var(--z-popover);
+    }
+    .rf-history-menu[hidden] { display: none; }
+    .rf-history-menu-item {
+      width: 100%;
+      text-align: left;
+      background: transparent;
+      border: none;
+      padding: 10px 10px;
+      border-radius: 10px;
+      cursor: pointer;
+      font-weight: 600;
+      color: var(--color-text-main);
+    }
+    .rf-history-menu-item:hover {
+      background: #F9FAFB;
+    }
+    .rf-history-menu-item--danger {
+      color: var(--color-error);
+    }
+    .rf-history-menu-item--danger:hover {
+      background: rgba(220, 38, 38, 0.06);
+    }
+
+    .rf-history-panel--manage .rf-history-header-actions { display: none; }
+    .rf-history-manage-actions {
+      display: none;
+      width: 100%;
+      margin-top: 12px;
+      gap: 12px;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    .rf-history-manage-actions__actions {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    .rf-history-panel--manage .rf-history-manage-actions { 
+      display: flex;
+      justify-content: flex-end;
+      align-items: center;
+    }
+    .rf-history-panel--manage .rf-history-row-actions { display: none; }
+
+    .rf-history-danger-btn {
+      background: rgba(220, 38, 38, 0.10);
+      border: 1px solid rgba(220, 38, 38, 0.25);
+      color: var(--color-error);
+      font-weight: 800;
+      border-radius: var(--radius-md);
+      padding: 0.7rem 1rem;
+      cursor: pointer;
+      transition: background 0.18s ease, border-color 0.18s ease, opacity 0.18s ease;
+    }
+    .rf-history-danger-btn:disabled {
+      opacity: 0.55;
+      cursor: not-allowed;
+    }
+    .rf-history-danger-btn:hover:not(:disabled) {
+      background: rgba(220, 38, 38, 0.14);
+      border-color: rgba(220, 38, 38, 0.35);
+    }
+
+    .rf-history-neutral-btn {
+      background: #fff;
+      border: 1px solid var(--color-divider);
+      color: var(--color-text-main);
+      font-weight: 700;
+      border-radius: var(--radius-md);
+      padding: 0.7rem 1rem;
+      cursor: pointer;
+      transition: background 0.18s ease, border-color 0.18s ease;
+    }
+    .rf-history-neutral-btn:hover {
+      background: #F9FAFB;
+      border-color: #D1D5DB;
+    }
+
+    /* Manage actions stacking on small screens */
+    @media (max-width: 520px) {
+      .rf-history-panel--manage .rf-history-manage-actions {
+        flex-direction: column;
+        align-items: stretch;
+      }
+      #rf-history-delete-selected,
+      #rf-history-cancel-manage {
+        width: 100%;
+      }
+    }
+
+    .rf-history-loading {
+      display: none;
+    }
+    .rf-history-loading.is-visible {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .rf-history-skeleton-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 0.875rem 1rem;
+      border-radius: var(--radius-md);
+      border: 1px solid var(--color-divider);
+      background: #fff;
+      min-height: 56px;
+    }
+    .rf-history-skeleton-pill {
+      height: 12px;
+      width: 160px;
+      border-radius: 999px;
+    }
+    .rf-history-skeleton-pill.sm { width: 120px; }
+    .rf-history-skeleton-score { height: 16px; width: 32px; border-radius: 6px; }
+
+    .rf-history-error {
+      padding: 10px 12px;
+      border: 1px solid rgba(220, 38, 38, 0.22);
+      background: rgba(220, 38, 38, 0.06);
+      border-radius: 12px;
+      color: var(--color-text-main);
+      font-size: 0.95rem;
+      margin-bottom: 12px;
+    }
+    .rf-history-error[hidden] { display: none; }
+
+    .rf-history-empty {
+      text-align: center;
+      padding: 20px 12px;
       color: var(--color-text-muted);
+      border: 1px dashed var(--color-divider);
+      border-radius: 12px;
     }
-    .rf-history-loading .spinner {
-      width: 20px;
-      height: 20px;
-      border: 2px solid var(--color-divider);
-      border-top-color: var(--color-accent-blue);
-      border-radius: 50%;
-      animation: spin 0.8s linear infinite;
+    .rf-history-empty[hidden] { display: none; }
+
+    .rf-history-footer {
+      margin-top: 16px;
+      font-size: 0.875rem; /* 13–14px */
+      color: var(--color-text-muted);
+      line-height: 1.45;
     }
-    @keyframes spin {
-      to { transform: rotate(360deg); }
+    .rf-history-footer a,
+    .rf-history-footer button {
+      font-size: inherit;
+    }
+    .rf-history-footer-links {
+      display: inline-flex;
+      gap: 6px;
+      align-items: center;
+      margin-left: 4px;
+    }
+    .rf-history-footer-link {
+      color: var(--color-accent-blue);
+      text-decoration: underline;
+    }
+    .rf-history-footer-separator {
+      color: var(--color-text-muted);
+      font-weight: 600;
+    }
+    .rf-history-footer-link--danger {
+      color: var(--color-error);
+      background: transparent;
+      border: none;
+      padding: 0;
+      font-weight: 600;
+      cursor: pointer;
+      text-decoration: none;
+    }
+    .rf-history-footer-link--danger:hover {
+      text-decoration: underline;
+    }
+
+    /* Delete confirmation modal */
+    .rf-history-modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(17, 24, 39, 0.55);
+      z-index: var(--z-modal-backdrop);
+    }
+    .rf-history-modal-backdrop[hidden] { display: none; }
+    .rf-history-modal {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: min(520px, calc(100vw - 32px));
+      background: #fff;
+      border: 1px solid var(--color-divider);
+      border-radius: var(--radius-xl);
+      box-shadow: var(--shadow-xl);
+      padding: 20px;
+      z-index: var(--z-modal);
+    }
+    .rf-history-modal[hidden] { display: none; }
+    .rf-history-modal h3 {
+      margin: 0 0 8px 0;
+      font-size: 1.15rem;
+      font-weight: 800;
+      color: var(--color-text-main);
+    }
+    .rf-history-modal p {
+      margin: 6px 0;
+      color: var(--color-text-secondary);
+      line-height: 1.5;
+    }
+    .rf-history-modal-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+      margin-top: 16px;
+      flex-wrap: wrap;
+    }
+    .rf-history-modal-actions button {
+      min-height: 44px;
+    }
+    @media (max-width: 520px) {
+      .rf-history-modal-actions {
+        flex-direction: column;
+        align-items: stretch;
+      }
     }
     .priority-review-cta {
       background: #F0F7FF;
@@ -711,6 +1075,8 @@
   <!-- DEV-ONLY PLAN TOGGLE will be added by navigation.js -->
   <script src="js/navigation.js?v=20251007-2"></script>
   <script src="js/universal-logout.js?v=20251007-2"></script>
+  <!-- Inactivity tracker - auto-logout after 30 minutes of inactivity -->
+  <script src="js/inactivity-tracker.js?v=20250115-1"></script>
   
   <!-- UX Enhancement Components -->
   <script src="js/modals.js?v=20250115-1" type="module"></script>
@@ -743,7 +1109,24 @@
         isAuthenticated = authState.isAuthenticated;
         plan = window.JobHackAINavigation.getEffectivePlan();
       } else {
-        isAuthenticated = localStorage.getItem('user-authenticated') === 'true' && !!localStorage.getItem('user-email');
+        // SECURITY: Check Firebase SDK keys synchronously (works before FirebaseAuthManager is ready)
+        // FirebaseAuthManager.getCurrentUser() returns null until onAuthStateChanged fires
+        // Use same pattern as checkAuthentication() for consistency
+        function hasFirebaseAuthKeys() {
+          try {
+            return Object.keys(localStorage).some(k => 
+              k.startsWith('firebase:authUser:') && 
+              localStorage.getItem(k) && 
+              localStorage.getItem(k) !== 'null' &&
+              localStorage.getItem(k).length > 10
+            );
+          } catch (e) {
+            return false;
+          }
+        }
+        const hasLocalStorageAuth = localStorage.getItem('user-authenticated') === 'true';
+        const hasFirebaseKeys = hasFirebaseAuthKeys();
+        isAuthenticated = hasLocalStorageAuth || hasFirebaseKeys;
         plan = localStorage.getItem('user-plan') || 'free';
       }
       
@@ -778,7 +1161,23 @@
   <script>
     // --- AUTHENTICATION CHECK ---
     function checkAuthentication() {
-      const isAuthenticated = localStorage.getItem('user-authenticated') === 'true' && !!localStorage.getItem('user-email');
+      // SECURITY: Check Firebase SDK keys synchronously (works before FirebaseAuthManager is ready)
+      // FirebaseAuthManager.getCurrentUser() returns null until onAuthStateChanged fires
+      function hasFirebaseAuthKeys() {
+        try {
+          return Object.keys(localStorage).some(k => 
+            k.startsWith('firebase:authUser:') && 
+            localStorage.getItem(k) && 
+            localStorage.getItem(k) !== 'null' &&
+            localStorage.getItem(k).length > 10
+          );
+        } catch (e) {
+          return false;
+        }
+      }
+      const hasLocalStorageAuth = localStorage.getItem('user-authenticated') === 'true';
+      const hasFirebaseKeys = hasFirebaseAuthKeys();
+      const isAuthenticated = hasLocalStorageAuth || hasFirebaseKeys;
       const mainContent = document.querySelector('main');
       
       if (!isAuthenticated) {
@@ -853,7 +1252,7 @@
         window._rewriteCooldownInterval = null;
       }
       // Reset button label/state
-      const regenBtn = document.querySelector('#rf-rewrite-content .btn.btn-secondary');
+      const regenBtn = document.querySelector('#rf-rewrite-content #rf-generate');
       if (regenBtn) {
         regenBtn.disabled = false;
         const defaultLabel = 'Generate Rewrite';
@@ -877,6 +1276,12 @@
       lockedDiv.style.display = locked ? 'flex' : 'none';
       formDiv.style.display = locked ? 'none' : '';
       resultsDiv.style.display = 'none';
+      
+      // Phase 4.3: Show locked feature data notice when feature is locked
+      const lockedDataNotice = document.getElementById('rf-locked-data-notice');
+      if (lockedDataNotice) {
+        lockedDataNotice.style.display = locked ? 'block' : 'none';
+      }
     }
 
     // --- Initialize on load ---
@@ -887,14 +1292,43 @@
       }
       
       // Create demo user if needed for development
+      // SECURITY: Do NOT write email to localStorage - get it from Firebase SDK keys instead
       const createDemoUserIfNeeded = () => {
-        const userEmail = localStorage.getItem('user-email');
+        // Try to get email from Firebase SDK keys (works before firebase-auth.js loads)
+        function getEmailFromFirebaseKeys() {
+          try {
+            const firebaseKeys = Object.keys(localStorage).filter(k => k.startsWith('firebase:authUser:'));
+            if (firebaseKeys.length > 0) {
+              const keyData = JSON.parse(localStorage.getItem(firebaseKeys[0]) || '{}');
+              return keyData.email || null;
+            }
+          } catch (e) {
+            console.warn('Failed to get email from Firebase keys:', e);
+          }
+          return null;
+        }
+        
+        // Try FirebaseAuthManager first (if loaded)
+        const user = window.FirebaseAuthManager?.getCurrentUser?.();
+        let userEmail = user?.email || null;
+        
+        // Fallback to Firebase SDK keys if FirebaseAuthManager not available
+        if (!userEmail) {
+          userEmail = getEmailFromFirebaseKeys();
+        }
+        
+        // SECURITY: If no email found, skip demo user creation - do NOT write email to localStorage
+        // This prevents reintroducing the security vulnerability
         if (!userEmail && localStorage.getItem('user-authenticated') === 'true') {
-          // Create demo user
-          localStorage.setItem('user-email', 'demo@jobhackai.com');
+          console.warn('[RESUME-FEEDBACK] User authenticated but no email found. Skipping demo user creation to maintain security.');
+          return;
+        }
+        
+        // Only create demo user if we have a valid email from Firebase
+        if (userEmail) {
           const db = JSON.parse(localStorage.getItem('user-db') || '{}');
-          if (!db['demo@jobhackai.com']) {
-            db['demo@jobhackai.com'] = {
+          if (!db[userEmail]) {
+            db[userEmail] = {
               plan: 'free',
               firstName: 'Demo',
               lastName: 'User',
@@ -908,18 +1342,110 @@
       
       createDemoUserIfNeeded();
 
-      hydratePlanFromServerAndEnforceAccess();
+      // Wait for navigation system to initialize and sync plan
+      // Navigation system handles all plan syncing - we just listen to events
+      waitForNavigationAndEnforceAccess();
+    });
+
+    // --- ACCESS CONTROL (Uses Navigation System) ---
+    function waitForNavigationAndEnforceAccess() {
+      const allowedPlans = window.__JOBHACKAI_RF_ALLOWED_PLANS__ || ['trial', 'essential', 'pro', 'premium'];
       
       // Wait for navigation system to be ready
-      setTimeout(checkPlanAccess, 100);
-    });
+      if (window.JobHackAINavigation && typeof window.JobHackAINavigation.getEffectivePlan === 'function') {
+        // Navigation is ready - check access immediately
+        enforceAccessControl(allowedPlans);
+      } else {
+        // Navigation not ready yet - wait for navigationReady event
+        // Use execution flag to prevent duplicate calls from event listener and timeout
+        let hasExecuted = false;
+        let fallbackTimeout = setTimeout(() => {
+          // Always enforce access control after timeout, even if navigation fails to load
+          // enforceAccessControl has localStorage fallback logic that handles navigation unavailability
+          if (!hasExecuted) {
+            hasExecuted = true;
+            enforceAccessControl(allowedPlans);
+          }
+        }, 1000);
+        
+        window.addEventListener('navigationReady', function onNavigationReady() {
+          window.removeEventListener('navigationReady', onNavigationReady);
+          // Clear fallback timeout to prevent duplicate execution
+          if (fallbackTimeout) {
+            clearTimeout(fallbackTimeout);
+            fallbackTimeout = null;
+          }
+          // Only execute if not already executed by timeout
+          if (!hasExecuted) {
+            hasExecuted = true;
+            enforceAccessControl(allowedPlans);
+          }
+        }, { once: true });
+      }
+    }
+    
+    function enforceAccessControl(allowedPlans) {
+      let isAuthenticated, plan;
+      
+      if (window.JobHackAINavigation) {
+        const authState = window.JobHackAINavigation.getAuthState();
+        isAuthenticated = authState.isAuthenticated;
+        plan = window.JobHackAINavigation.getEffectivePlan();
+      } else {
+        // SECURITY: Check Firebase SDK keys synchronously (works before FirebaseAuthManager is ready)
+        // FirebaseAuthManager.getCurrentUser() returns null until onAuthStateChanged fires
+        // Use same pattern as checkAuthentication() for consistency
+        function hasFirebaseAuthKeys() {
+          try {
+            return Object.keys(localStorage).some(k => 
+              k.startsWith('firebase:authUser:') && 
+              localStorage.getItem(k) && 
+              localStorage.getItem(k) !== 'null' &&
+              localStorage.getItem(k).length > 10
+            );
+          } catch (e) {
+            return false;
+          }
+        }
+        const hasLocalStorageAuth = localStorage.getItem('user-authenticated') === 'true';
+        const hasFirebaseKeys = hasFirebaseAuthKeys();
+        isAuthenticated = hasLocalStorageAuth || hasFirebaseKeys;
+        plan = localStorage.getItem('user-plan') || 'free';
+      }
+      
+      console.log('[RESUME-FEEDBACK] Access control check:', {
+        isAuthenticated,
+        plan,
+        navigationPlan: window.JobHackAINavigation?.getEffectivePlan?.(),
+        localStoragePlan: localStorage.getItem('user-plan')
+      });
+      
+      if (!isAuthenticated || !allowedPlans.includes(plan)) {
+        if (!isAuthenticated) {
+          window.location.href = 'login.html';
+        } else {
+          window.location.href = 'pricing-a.html?plan=essential';
+        }
+      } else {
+        // Access granted - clear plan pending flag and class
+        // This allows tests to detect when plan hydration is complete
+        window.__JOBHACKAI_PLAN_PENDING__ = false;
+        document.documentElement.classList.remove('plan-pending');
+        // Ensure UI is updated
+        updateRfTileForPlan();
+      }
+    }
 
     // --- UPDATED USER PLAN LOGIC ---
     function getCurrentUserPlan() {
       // Use navigation system's plan detection for consistency
       let plan = 'free';
-      if (window.JobHackAINavigation) {
+      if (window.JobHackAINavigation && typeof window.JobHackAINavigation.getEffectivePlan === 'function') {
         plan = window.JobHackAINavigation.getEffectivePlan();
+        // If navigation returns undefined or invalid, fall back to localStorage
+        if (!plan || plan === 'undefined') {
+          plan = localStorage.getItem('user-plan') || 'free';
+        }
       } else {
         plan = localStorage.getItem('user-plan') || 'free';
       }
@@ -946,125 +1472,6 @@
       }
       
       return plan;
-    }
-
-    // Guard to prevent concurrent plan syncs
-    let planSyncInProgress = false;
-    
-    async function hydratePlanFromServerAndEnforceAccess() {
-      const allowedPlans = window.__JOBHACKAI_RF_ALLOWED_PLANS__ || ['trial', 'essential', 'pro', 'premium'];
-      const cachedPlan = localStorage.getItem('user-plan');
-      const planPending = window.__JOBHACKAI_PLAN_PENDING__;
-      
-      // Prevent concurrent syncs - if one is already in progress, wait for it
-      if (planSyncInProgress) {
-        console.log('⏸️ [RESUME-FEEDBACK] Plan sync already in progress, skipping duplicate call');
-        return;
-      }
-      
-      // Always sync from Stripe to ensure KV is up to date
-      // This fixes plan mismatch issues between KV cache and actual Stripe subscription
-      planSyncInProgress = true;
-      try {
-        const token = await getAuthToken().catch((err) => {
-          console.warn('[RESUME-FEEDBACK] Unable to obtain auth token for plan hydration:', err);
-          return null;
-        });
-        if (!token) {
-          document.documentElement.classList.remove('plan-pending');
-          planSyncInProgress = false;
-          return;
-        }
-        
-        // Use sync-stripe-plan to ensure KV is synced with Stripe (source of truth)
-        console.log('🔄 [RESUME-FEEDBACK] Syncing plan from Stripe...');
-        const syncResponse = await fetch('/api/sync-stripe-plan', {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          }
-        });
-        
-        if (syncResponse.ok) {
-          const syncData = await syncResponse.json().catch((err) => {
-            console.error('❌ [RESUME-FEEDBACK] Failed to parse sync response JSON:', err);
-            return {};
-          });
-          if (syncData.ok && syncData.plan) {
-            const stripePlan = syncData.plan.toLowerCase();
-            console.log('✅ [RESUME-FEEDBACK] Plan synced from Stripe:', stripePlan);
-            
-            // Update localStorage with Stripe plan (only if changed to avoid unnecessary writes)
-            if (localStorage.getItem('user-plan') !== stripePlan) {
-              localStorage.setItem('user-plan', stripePlan);
-              localStorage.setItem('dev-plan', stripePlan); // Also update dev-plan for consistency
-            }
-            
-            // Dispatch plan change event
-            window.dispatchEvent(new CustomEvent('planChanged', { detail: { newPlan: stripePlan, oldPlan: cachedPlan } }));
-            window.__JOBHACKAI_PLAN_PENDING__ = false;
-            document.documentElement.classList.remove('plan-pending');
-            
-            // Update UI immediately
-            if (typeof updateRfTileForPlan === 'function') {
-              updateRfTileForPlan();
-            }
-            
-            if (!allowedPlans.includes(stripePlan)) {
-              console.log('🚫 [RESUME-FEEDBACK] Stripe plan not allowed, redirecting:', stripePlan);
-              planSyncInProgress = false;
-              window.location.href = 'pricing-a.html?plan=essential';
-              return;
-            }
-            planSyncInProgress = false;
-            return;
-          }
-        }
-        
-        // Fallback to /api/plan/me if sync fails
-        console.warn('[RESUME-FEEDBACK] Stripe sync failed, falling back to plan/me');
-        const response = await fetch('/api/plan/me', {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          }
-        });
-        
-        if (!response.ok) {
-          console.warn('[RESUME-FEEDBACK] Plan API failed during hydration:', response.status, response.statusText);
-          document.documentElement.classList.remove('plan-pending');
-          planSyncInProgress = false;
-          return;
-        }
-        
-        const planData = await response.json().catch((err) => {
-          console.error('❌ [RESUME-FEEDBACK] Failed to parse plan/me response JSON:', err);
-          return {};
-        });
-        const serverPlan = (planData.plan || 'free').toLowerCase();
-        // Only update localStorage if plan changed
-        if (localStorage.getItem('user-plan') !== serverPlan) {
-          localStorage.setItem('user-plan', serverPlan);
-        }
-        window.dispatchEvent(new CustomEvent('planChanged', { detail: { newPlan: serverPlan } }));
-        window.__JOBHACKAI_PLAN_PENDING__ = false;
-        document.documentElement.classList.remove('plan-pending');
-        planSyncInProgress = false;
-        
-        if (!allowedPlans.includes(serverPlan)) {
-          console.log('🚫 [RESUME-FEEDBACK] Server plan not allowed, redirecting:', serverPlan);
-          window.location.href = 'pricing-a.html?plan=essential';
-          return;
-        }
-        
-        console.log('✅ [RESUME-FEEDBACK] Server plan confirmed:', serverPlan);
-      } catch (error) {
-        window.__JOBHACKAI_PLAN_PENDING__ = false;
-        document.documentElement.classList.remove('plan-pending');
-        planSyncInProgress = false;
-        console.warn('[RESUME-FEEDBACK] Failed to hydrate plan from server:', error);
-      }
     }
 
     // --- UPDATED USER OBJECT ---
@@ -1342,7 +1749,8 @@
           score: result.score,
           breakdown: result.breakdown,
           resumeId,
-          jobTitle
+          jobTitle,
+          extractionQuality: result.extractionQuality
         });
       }
       
@@ -1407,7 +1815,12 @@
           message: error.message,
           upgradeRequired: error.upgradeRequired
         });
-        throw new Error(errorMessage);
+        const errorObj = new Error(errorMessage);
+        // Preserve upgradeRequired flag for error handler
+        if (error.upgradeRequired) {
+          errorObj.upgradeRequired = true;
+        }
+        throw errorObj;
       }
 
       return await response.json();
@@ -1473,45 +1886,166 @@
       return result;
     }
 
-    function handleApiError(error) {
+  // Generic helper to start a server-side Stripe Checkout session for a given plan.
+  // Uses the same /api/stripe-checkout endpoint pattern used elsewhere in the app.
+  const startCheckout = async (plan) => {
+    try {
+      if (window.showLoadingOverlay) {
+        window._currentLoadingOverlay = window.showLoadingOverlay('Redirecting to checkout...');
+      }
+
+      const user = window.FirebaseAuthManager?.getCurrentUser?.();
+      if (!user) {
+        // Keep behavior consistent with other upgrade flows: require login first.
+        window.location.href = 'login.html';
+        return;
+      }
+      const idToken = await user.getIdToken();
+      const res = await fetch('/api/stripe-checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}) },
+        body: JSON.stringify({ plan })
+      });
+      const data = await res.json();
+      if (data && data.ok && data.url) {
+        window.location.href = data.url;
+        return;
+      }
+      throw new Error(data?.error || 'Checkout failed');
+    } catch (e) {
+      console.error('Start checkout error:', e);
+      if (window._currentLoadingOverlay) {
+        window._currentLoadingOverlay();
+        window._currentLoadingOverlay = null;
+      }
+      // Fallback to pricing page with plan hint
+      window.location.href = `pricing-a.html?plan=${encodeURIComponent(plan)}`;
+    }
+  };
+  // Expose globally for inline onclick handlers
+  window.startCheckout = startCheckout;
+
+  function handleApiError(error, options = {}) {
       // Downgrade to debug level - user-facing errors shown via modals
       if (window.console && window.console.debug) {
         window.console.debug('[API Error]', error);
       }
-      let message = error.message || 'An error occurred';
+      
+      // Allow custom title and message to be passed in options
+      const customTitle = options.title;
+      const customMessage = options.message;
+      
+      // Use error.message first to preserve specific error handling
+      // customMessage will be used as fallback only if error.message doesn't match specific patterns
+      const originalMessage = error.message || 'An error occurred';
+      let message = originalMessage;
       let modalType = 'error';
       let action = null;
       let actionLabel = 'OK';
+      let messageWasModified = false;
+      
+      // Check if error has upgradeRequired flag (from API response)
+      // Check both top-level and context.upgradeRequired (for dev environment responses)
+      const upgradeRequired = error.upgradeRequired || 
+        error.context?.upgradeRequired ||
+        (error.message && error.message.includes('Upgrade to Pro'));
+      
+      // Handle upgrade-required errors with direct Stripe checkout
+      if (upgradeRequired) {
+        const upgradeToPro = async () => {
+          try {
+            // Show loading state
+            if (window.showLoadingOverlay) {
+              window._currentLoadingOverlay = window.showLoadingOverlay('Redirecting to checkout...');
+            }
+            
+            const user = window.FirebaseAuthManager?.getCurrentUser?.();
+            const idToken = user ? await user.getIdToken() : null;
+            const res = await fetch('/api/stripe-checkout', {
+              method: 'POST',
+              headers: { 
+                'Content-Type': 'application/json', 
+                ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}) 
+              },
+              body: JSON.stringify({ plan: 'pro' })
+            });
+            const data = await res.json();
+            if (data && data.ok && data.url) {
+              window.location.href = data.url;
+              return;
+            }
+            throw new Error(data?.error || 'Checkout failed');
+          } catch (e) {
+            console.error('Upgrade checkout error:', e);
+            // Hide loading overlay
+            if (window._currentLoadingOverlay) {
+              window._currentLoadingOverlay();
+              window._currentLoadingOverlay = null;
+            }
+            // Fallback to pricing page if checkout fails
+            window.location.href = 'pricing-a.html';
+          }
+        };
+
+        if (window.showErrorModal) {
+          window.showErrorModal(
+            'Trial Complete',
+            'You\'ve used all 3 feedback attempts. Upgrade to Pro for unlimited feedback and unlock all features.',
+            {
+              showUpgrade: true,
+              upgradeCallback: upgradeToPro,
+              upgradeButtonText: 'Upgrade to Pro',
+              buttonText: 'Maybe Later'
+            }
+          );
+          return;
+        }
+      }
+      
+      
       
       // Map error messages to user-friendly modals
       if (message.includes('Unauthorized') || message.includes('Not authenticated')) {
         message = 'Please log in to continue.';
+        messageWasModified = true;
         action = () => window.location.href = 'login.html';
         actionLabel = 'Go to Login';
       } else if (message.includes('Usage limit') || message.includes('limit reached')) {
         message = message + ' Upgrade to unlock more features.';
+        messageWasModified = true;
         action = () => window.location.href = 'pricing-a.html';
         actionLabel = 'View Pricing';
       } else if (message.includes('Rate limit')) {
         message = message + ' Please try again in a moment.';
+        messageWasModified = true;
       } else if (message.includes('Feature locked') || message.includes('upgrade')) {
         message = message;
+        messageWasModified = true;
         action = () => window.location.href = 'pricing-a.html';
         actionLabel = 'Upgrade Now';
       } else if (message.includes('timeout') || message.includes('took too long')) {
         message = 'Our AI took too long to respond. Please try again or simplify your file.';
+        messageWasModified = true;
         action = () => window.location.reload();
         actionLabel = 'Reload Page';
       } else if (message.includes('couldn\'t read') || message.includes('text-based')) {
         // File reading error - already user-friendly
+        messageWasModified = true;
       } else if (message.includes('scanned PDF') || message.includes('image-based')) {
         // Enhanced scanned PDF message with actionable guidance
         message = 'This PDF appears to be image-based (scanned). Please upload a text-based PDF or Word document for best results. We\'re working on scan support for a future update.';
+        messageWasModified = true;
+      }
+      
+      // If no specific error pattern matched and customMessage is provided, use it as fallback
+      // This preserves helpful context for generic feedback errors while allowing specific errors to be handled
+      if (customMessage && !messageWasModified) {
+        message = customMessage;
       }
 
       // Show modal instead of inline error
       if (window.showErrorModal) {
-        window.showErrorModal('Error', message, {
+        window.showErrorModal(customTitle || 'Error', message, {
           buttonText: actionLabel || 'Got it',
           onClose: action || null,
           showRetry: !!action,
@@ -1536,9 +2070,17 @@
     let currentLoadingOverlay = null;
     
     function showLoadingState(message = 'Loading...') {
-      // For regenerate/rewrite/update/optimize operations - use lightweight overlay
+      // For rewrite operations - use skeleton only, no overlay
+      // Skeleton provides better contextual feedback without blocking the view
+      if (message.includes('Rewriting')) {
+        // Don't show overlay - skeleton will be handled by showRewriteSkeleton()
+        // Just return early to prevent overlay from showing
+        return;
+      }
+      
+      // For regenerate/update/optimize operations - use lightweight overlay
       // since content is already visible and we're just updating it
-      if (message.includes('Regenerating') || message.includes('Rewriting') || 
+      if (message.includes('Regenerating') || 
           message.includes('Updating') || message.includes('Optimizing')) {
         if (window.JobHackAILoading) {
           currentLoadingOverlay = window.JobHackAILoading.show(message, 'main-loading-overlay');
@@ -1552,12 +2094,38 @@
       const willGetFeedback = ['trial', 'essential', 'pro', 'premium'].includes(userPlan);
       
       // Show skeletons for initial analysis
-      showSkeletons(willGetFeedback);
+      const jobTitleInput = document.getElementById('rf-job-title');
+      const hasRole = jobTitleInput?.value?.trim() || currentJobTitle;
+      showSkeletons(willGetFeedback, hasRole);
       hideHeaderSkeleton();
+      
+      // For Pro/Premium users, show skeleton on "Your Original Snippet" text box during analysis
+      if (userPlan === 'pro' || userPlan === 'premium') {
+        const rewriteContent = document.getElementById('rf-rewrite-content');
+        if (rewriteContent) {
+          // Ensure rewrite content is visible (it should already be for Pro/Premium)
+          rewriteContent.style.display = 'block';
+          // Show skeleton on the original snippet box (first textarea, index 0)
+          const originalSnippetBox = rewriteContent.querySelectorAll('.rf-snippet-box')[0];
+          if (originalSnippetBox) {
+            originalSnippetBox.classList.add('rf-skeleton', 'rf-snippet-skeleton');
+          }
+        }
+      }
       
       // Store cleanup function (skeleton hide function)
       currentLoadingOverlay = () => {
         hideSkeletons();
+        // Also hide skeleton on original snippet box for Pro/Premium
+        if (userPlan === 'pro' || userPlan === 'premium') {
+          const rewriteContent = document.getElementById('rf-rewrite-content');
+          if (rewriteContent) {
+            const originalSnippetBox = rewriteContent.querySelectorAll('.rf-snippet-box')[0];
+            if (originalSnippetBox) {
+              originalSnippetBox.classList.remove('rf-skeleton', 'rf-snippet-skeleton');
+            }
+          }
+        }
       };
     }
 
@@ -1600,13 +2168,131 @@
       }
     };
 
-    // Controls when the copy button is shown (only after we have rewrite content)
+    // Controls when the post-rewrite action buttons are shown (only after we have rewrite content)
     const setCopyRewriteVisibility = (isVisible) => {
       const copyBtn = document.querySelector('#rf-rewrite-content .btn.btn-primary');
-      if (!copyBtn) return;
-      copyBtn.style.display = isVisible ? 'inline-block' : 'none';
-      copyBtn.disabled = !isVisible;
-      if (!isVisible) copyBtn.textContent = 'Copy Rewritten Resume';
+      const downloadBtn = document.getElementById('rf-download');
+      if (copyBtn) {
+        copyBtn.style.display = isVisible ? 'inline-block' : 'none';
+        copyBtn.disabled = !isVisible;
+        if (!isVisible) copyBtn.textContent = 'Copy Rewritten Resume';
+      }
+      if (downloadBtn) {
+        downloadBtn.style.display = isVisible ? 'inline-block' : 'none';
+        downloadBtn.disabled = !isVisible;
+        downloadBtn.setAttribute('aria-disabled', (!isVisible).toString());
+        // Match Cover Letter: text-only btn-outline label
+        downloadBtn.textContent = 'Download PDF';
+      }
+    };
+
+    // Download PDF handler (reuses window.print flow used across LinkedIn/Cover Letter)
+    const rfDownloadHandler = function() {
+      const rewrittenBox = document.querySelectorAll('#rf-rewrite-content .rf-snippet-box')[1];
+      if (!rewrittenBox) return;
+
+      // Entitlement check - Pro/Premium only
+      const allowedPlans = ['pro', 'premium'];
+      let currentPlan = null;
+      try {
+        if (window.JobHackAINavigation && typeof window.JobHackAINavigation.getEffectivePlan === 'function') {
+          currentPlan = window.JobHackAINavigation.getEffectivePlan();
+        } else if (typeof getCurrentPlanStandalone === 'function') {
+          currentPlan = getCurrentPlanStandalone();
+        }
+      } catch (err) {
+        currentPlan = null;
+      }
+      if (!currentPlan || !allowedPlans.includes(String(currentPlan).toLowerCase())) {
+        // Show upgrade flow (reuse existing modal if available)
+        if (typeof openUpgradeModal === 'function') {
+          openUpgradeModal();
+        } else {
+          // Fallback to pricing page
+          window.location.href = 'pricing-a.html';
+        }
+        return;
+      }
+
+      // Build print HTML content (header with ATS score, role tips, and rewritten resume)
+      function buildRfPrintHtml() {
+        const atsTile = document.getElementById('rf-ats-score-tile');
+        const atsScoreHtml = atsTile ? atsTile.innerHTML : '';
+        const roleTips = (window.latestRoleSpecific && Array.isArray(window.latestRoleSpecific.sections)) ? window.latestRoleSpecific.sections : [];
+        let roleTipsHtml = '';
+        if (Array.isArray(roleTips) && roleTips.length) {
+          const sectionsHtml = roleTips.map(s => {
+            const heading = escapeHtml(s.section || s.heading || '');
+            const tipsArray = (s.tips && Array.isArray(s.tips) && s.tips.length) ? s.tips
+              : (s.items && Array.isArray(s.items) && s.items.length) ? s.items
+              : [];
+            const tipsHtml = tipsArray.length ? `<ul>${tipsArray.map(t => `<li>${escapeHtml(t)}</li>`).join('')}</ul>` : '<div style="color:#6b7280;font-style:italic;">No tips available</div>';
+            return `<div class="rf-print-role-section" style="margin-bottom:8px;"><strong>${heading}</strong>${tipsHtml}</div>`;
+          }).join('');
+          roleTipsHtml = `<section class="rf-print-section"><h3>Role-specific tips</h3>${sectionsHtml}</section>`;
+        }
+        const rewrittenText = rewrittenBox.value || rewrittenBox.textContent || '';
+        const safeRewritten = escapeHtml(rewrittenText).replace(/\n/g, '<br/>');
+
+        // Basic template - keep inline styles minimal and rely on print CSS
+        return `
+          <div class="rf-print-header" style="margin-bottom:16px;">
+            <h2 style="margin:0 0 8px 0;">Resume Rewrite</h2>
+            <div>${atsScoreHtml}</div>
+          </div>
+          ${roleTipsHtml}
+          <section class="rf-print-section">
+            <h3>Rewritten Resume</h3>
+            <div style="white-space:pre-wrap;font-family:inherit;">${safeRewritten}</div>
+          </section>
+          <footer style="margin-top:20px;font-size:11px;color:#6b7280;">Generated by JobHackAI • ${new Date().toLocaleString()}</footer>
+        `;
+      }
+
+      // Helper to escape HTML (simple)
+      function escapeHtml(str) {
+        if (!str) return '';
+        return String(str)
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#39;');
+      }
+
+      // Populate print container and trigger print
+      // Ensure the print container is appended to document.body before printing.
+      // If an existing #rf-print is present but not a child of <body> (e.g., inside .rf-main-column),
+      // create a temporary container in <body> instead to ensure it is visible during print.
+      const existingPrint = document.getElementById('rf-print');
+      let printContainer = null;
+      let createdTempPrintContainer = false;
+      if (existingPrint && existingPrint.parentElement === document.body) {
+        printContainer = existingPrint;
+      } else {
+        // Create a temporary container attached to body so it will be visible during print.
+        printContainer = document.createElement('div');
+        printContainer.id = 'rf-print';
+        printContainer.style.display = 'none';
+        document.body.appendChild(printContainer);
+        createdTempPrintContainer = true;
+      }
+      // Populate content into the container attached to <body>.
+      printContainer.innerHTML = buildRfPrintHtml();
+
+      const prevTitle = document.title;
+      const date = new Date().toISOString().slice(0,10);
+      document.title = `jobhackai-resume-rewrite-${date}`;
+      window.print();
+      setTimeout(() => {
+        document.title = prevTitle;
+        // Clean up print container: remove temporary node or clear persistent container
+        if (createdTempPrintContainer && printContainer && printContainer.parentNode) {
+          printContainer.parentNode.removeChild(printContainer);
+        } else if (printContainer) {
+          printContainer.innerHTML = '';
+        }
+      }, 500);
     };
     
     // Regenerate rewrite handler function
@@ -1694,7 +2380,8 @@
           if (cachedScore) {
             window.JobHackAIStatePersistence.saveATSScore({
               ...cachedScore,
-              jobTitle: jobTitle
+              jobTitle: jobTitle,
+              extractionQuality: cachedScore.extractionQuality
             });
           }
         }
@@ -1746,10 +2433,13 @@
       // Ensure the overlay isn't applied to the whole card
       rewriteContent.classList.remove('rf-skeleton');
 
+      // Only show skeleton on the "Rewritten Snippet" (second textarea, index 1)
+      // The "Original Snippet" (index 0) already has content, so no skeleton needed
       const snippetBoxes = rewriteContent.querySelectorAll('.rf-snippet-box');
-      snippetBoxes.forEach((box) => {
-        box.classList.add('rf-skeleton', 'rf-snippet-skeleton');
-      });
+      if (snippetBoxes.length > 1) {
+        // Only apply skeleton to the rewritten snippet box (second one)
+        snippetBoxes[1].classList.add('rf-skeleton', 'rf-snippet-skeleton');
+      }
     }
 
     function hideRewriteSkeleton() {
@@ -1766,7 +2456,7 @@
     }
 
     function startInlineRewriteCountdown(retryAfterSeconds) {
-      const regenBtn = document.querySelector('#rf-rewrite-content .btn.btn-secondary');
+      const regenBtn = document.querySelector('#rf-rewrite-content #rf-generate');
       const container = document.getElementById('rf-rewrite-cooldown');
 
       clearAllRewriteCooldownTimers();
@@ -1819,7 +2509,7 @@
     async function renderRewriteCooldownIndicator() {
       const container = document.getElementById('rf-rewrite-cooldown');
       const setRegenEnabled = () => {
-        const regenBtn = document.querySelector('#rf-rewrite-content .btn.btn-secondary');
+        const regenBtn = document.querySelector('#rf-rewrite-content #rf-generate');
         if (regenBtn) regenBtn.disabled = false;
       };
       if (!container || typeof window.renderUsageIndicator !== 'function') {
@@ -1899,7 +2589,7 @@
             container.appendChild(helper);
           }
 
-          const regenBtn = document.querySelector('#rf-rewrite-content .btn.btn-secondary');
+          const regenBtn = document.querySelector('#rf-rewrite-content #rf-generate');
           if (regenBtn) regenBtn.disabled = cooldownValue > 0;
           if (cooldownValue === 0) setRegenEnabled();
         };
@@ -1937,7 +2627,8 @@
     // Resume Rewriting Buttons - Fixed selectors to match actual HTML
     const attachRewriteButtonListeners = () => {
       const copyBtn = document.querySelector('#rf-rewrite-content .btn.btn-primary');
-      const regenRewriteBtn = document.querySelector('#rf-rewrite-content .btn.btn-secondary');
+      const regenRewriteBtn = document.querySelector('#rf-rewrite-content #rf-generate');
+      const downloadBtn = document.getElementById('rf-download');
       
       if (copyBtn) {
         // Remove any existing listeners
@@ -1949,6 +2640,11 @@
         // Remove any existing listeners
         regenRewriteBtn.removeEventListener('click', regenerateRewriteHandler);
         regenRewriteBtn.addEventListener('click', regenerateRewriteHandler);
+      }
+      
+      if (downloadBtn) {
+        downloadBtn.removeEventListener('click', rfDownloadHandler);
+        downloadBtn.addEventListener('click', rfDownloadHandler);
       }
 
       // Initial render of cooldown state on mount
@@ -1964,41 +2660,94 @@
           // Use navigation system's plan instead of hardcoded value
           user.plan = getCurrentUserPlan();
           
-          // Listen for plan changes from navigation system
+          // Debounce plan updates to prevent flickering
+          let updateRfTileTimeout = null;
+          let lastUpdateTime = 0;
+          let lastUpdatedPlan = null;
+          const UPDATE_COOLDOWN_MS = 300; // Minimum 300ms between updates
+          
+          function debouncedUpdateRfTileForPlan() {
+            const currentPlan = getCurrentUserPlan();
+            const now = Date.now();
+            const timeSinceLastUpdate = now - lastUpdateTime;
+            
+            // Skip if plan hasn't actually changed
+            if (currentPlan === lastUpdatedPlan) {
+              return;
+            }
+            
+            // If enough time has passed, update immediately
+            if (timeSinceLastUpdate >= UPDATE_COOLDOWN_MS) {
+              clearTimeout(updateRfTileTimeout);
+              updateRfTileTimeout = null;
+              lastUpdateTime = now;
+              lastUpdatedPlan = currentPlan;
+              updateRfTileForPlan();
+            } else {
+              // Otherwise, debounce the update
+              clearTimeout(updateRfTileTimeout);
+              updateRfTileTimeout = setTimeout(() => {
+                const latestPlan = getCurrentUserPlan();
+                lastUpdateTime = Date.now();
+                lastUpdatedPlan = latestPlan;
+                updateRfTileForPlan();
+              }, UPDATE_COOLDOWN_MS - timeSinceLastUpdate);
+            }
+          }
+          
+          // Track the last known plan to prevent redundant updates
+          let lastKnownPlan = getCurrentUserPlan();
+          
+          // Unified plan change handler
+          function handlePlanChange(newPlan, source) {
+            if (newPlan && newPlan !== lastKnownPlan && newPlan !== 'undefined') {
+              console.log(`[RESUME-FEEDBACK] Plan change detected (${source}):`, lastKnownPlan, '->', newPlan);
+              lastKnownPlan = newPlan;
+              debouncedUpdateRfTileForPlan();
+            }
+          }
+          
+          // Listen for plan changes from navigation system (storage events)
+          // Note: storage events only fire for changes from OTHER tabs/windows
           window.addEventListener('storage', function(e) {
             if (e.key === 'dev-plan' || e.key === 'user-plan' || e.key === 'user-authenticated') {
-              console.log('Plan change detected via storage:', e.key, e.newValue);
-              updateRfTileForPlan();
+              // Use a small delay to let navigation system finish updating
+              setTimeout(() => {
+                const newPlan = getCurrentUserPlan();
+                handlePlanChange(newPlan, 'storage');
+              }, 50);
             }
           });
           
-          // Listen for custom plan change events
+          // Listen for custom plan change events (from navigation system)
           window.addEventListener('planChanged', function(e) {
-            console.log('Plan changed from', e.detail.oldPlan, 'to', e.detail.newPlan);
-            updateRfTileForPlan();
+            const newPlan = e.detail?.newPlan || getCurrentUserPlan();
+            handlePlanChange(newPlan, 'planChanged');
             // Re-attach button listeners after plan change
             setTimeout(attachRewriteButtonListeners, 100);
           });
           
           // Listen for navigation ready event
           window.addEventListener('navigationReady', function() {
-            console.log('Navigation ready event received, updating resume feedback');
-            updateRfTileForPlan();
+            console.log('[RESUME-FEEDBACK] Navigation ready event received');
+            // Use a delay to ensure navigation has finished initializing
+            setTimeout(() => {
+              const newPlan = getCurrentUserPlan();
+              handlePlanChange(newPlan, 'navigationReady');
+            }, 100);
           });
           
-          // Initial update
+          // Initial update (immediate, no debounce)
           updateRfTileForPlan();
+          lastUpdatedPlan = getCurrentUserPlan();
           
-          // Set up periodic plan checking to catch any missed updates
-          let lastKnownPlan = null;
+          // Set up periodic plan checking to catch any missed updates (reduced frequency)
           setInterval(function() {
             const currentPlan = getCurrentUserPlan();
-            if (currentPlan !== lastKnownPlan) {
-              console.log('Plan change detected via periodic check:', lastKnownPlan, '->', currentPlan);
-              lastKnownPlan = currentPlan;
-              updateRfTileForPlan();
+            if (currentPlan !== lastKnownPlan && currentPlan !== 'undefined') {
+              handlePlanChange(currentPlan, 'periodic');
             }
-          }, 1000); // Check every second
+          }, 5000); // Check every 5 seconds instead of 1 second
         } else {
           console.log('Navigation system not ready, retrying in 100ms');
           setTimeout(waitForNavigationAndInit, 100);
@@ -2150,6 +2899,7 @@
                     breakdown: resumeData.breakdown || {},
                     jobTitle: resumeData.jobTitle || null,
                     resumeId: resumeData.resumeId || null,
+                    extractionQuality: resumeData.extractionQuality || null, // Include extractionQuality to match loadATSScore() structure
                     timestamp: resumeData.timestamp || Date.now() // Include timestamp, fallback to now if missing
                   };
                   
@@ -2159,7 +2909,8 @@
                       score: resumeData.score,
                       breakdown: resumeData.breakdown || {},
                       resumeId: resumeData.resumeId || '',
-                      jobTitle: resumeData.jobTitle || null
+                      jobTitle: resumeData.jobTitle || null,
+                      extractionQuality: resumeData.extractionQuality
                     });
                   }
                   
@@ -2278,6 +3029,7 @@
           // Restore file name if available (display only - don't enable button)
           // Browsers don't persist file inputs, so user must re-select file
           const fileNameSpan = document.getElementById('rf-file-name');
+          const lastResumeName = localStorage.getItem('lastUploadedResumeName');
           if (lastResumeName && fileNameSpan) {
             fileNameSpan.textContent = lastResumeName + ' (please re-select file)';
             fileNameSpan.style.color = 'var(--color-text-muted)';
@@ -2285,6 +3037,11 @@
             
             // Do NOT enable generate button - file input is empty after page reload
             // User must select a file again before the button can be enabled
+            
+            // Enable button even without file - click guard will show popup if needed
+            if (generateBtn) {
+              generateBtn.disabled = false;
+            }
           }
         }
       }
@@ -2308,7 +3065,23 @@
 
     window.addEventListener('visibilitychange', () => {
       if (document.hidden) {
+        // Only hide overlays, NOT skeletons
+        // Skeletons should remain visible to show progress even when tab is inactive
         forceHideOverlays();
+        // DO NOT call hideSkeletons() here - let them stay visible
+      } else {
+        // When tab becomes visible again, ensure skeletons are still animating
+        // Force a reflow to restart animations if they were throttled
+        const skeletons = document.querySelectorAll('.rf-skeleton:not(.hidden)');
+        if (skeletons.length > 0) {
+          skeletons.forEach(skeleton => {
+            // Force animation restart by toggling will-change
+            skeleton.style.willChange = 'auto';
+            requestAnimationFrame(() => {
+              skeleton.style.willChange = 'background-position';
+            });
+          });
+        }
       }
     });
 
@@ -2351,7 +3124,6 @@
             
             try {
               showLoadingState('Optimizing for ATS compliance…');
-              showRewriteSkeleton();
               this.disabled = true;
               this.textContent = 'Optimizing...';
               
@@ -2436,7 +3208,8 @@
                     ...cachedScore,
                     breakdown: updatedBreakdown,
                     jobTitle: jobTitle || null,
-                    roleSpecificFeedback: feedbackResult.roleSpecificFeedback || null
+                    roleSpecificFeedback: feedbackResult.roleSpecificFeedback || null,
+                    extractionQuality: cachedScore.extractionQuality
                   });
                 } else if (currentResumeId && feedbackResult.atsRubric) {
                   // If no cached score exists, reconstruct breakdown from atsRubric to save feedback
@@ -2472,7 +3245,8 @@
                     breakdown: reconstructedBreakdown,
                     resumeId: currentResumeId,
                     jobTitle: jobTitle || null,
-                    roleSpecificFeedback: feedbackResult.roleSpecificFeedback || null
+                    roleSpecificFeedback: feedbackResult.roleSpecificFeedback || null,
+                    extractionQuality: null // No matching cached score, so no quality data for this resume
                   });
                   console.log('[RESUME-FEEDBACK] Saved feedback with reconstructed breakdown');
                 }
@@ -2487,13 +3261,11 @@
               
               this.textContent = 'Optimize this resume';
               this.disabled = false;
-              hideRewriteSkeleton();
               hideLoadingState();
             } catch (error) {
               handleApiError(error);
               this.textContent = 'Optimize this resume';
               this.disabled = false;
-              hideRewriteSkeleton();
               hideLoadingState();
             }
           });
@@ -2515,7 +3287,23 @@
         const uploadInput = document.getElementById('rf-upload');
         const file = uploadInput?.files[0];
         if (!file) {
-          handleApiError(new Error('Please select a resume file first'));
+          // Guard: always show pop-up if user clicks with no file
+          // Check if user is on trial plan for trial-specific messaging
+          const userPlan = getCurrentUserPlan();
+          if (userPlan === 'trial') {
+            // Show trial-specific popup
+            if (window.showErrorModal) {
+              window.showErrorModal('Upload Your Resume', 'Your trial includes 3 full ATS score & feedback runs. Upload your resume to get started and see how your resume performs!', {
+                buttonText: 'Got it',
+                onClose: null
+              });
+            } else {
+              handleApiError(new Error('Please select a resume file first'));
+            }
+          } else {
+            // Generic error for non-trial users
+            handleApiError(new Error('Please select a resume file first'));
+          }
           return;
         }
 
@@ -2531,7 +3319,8 @@
           if (cachedScore) {
             window.JobHackAIStatePersistence.saveATSScore({
               ...cachedScore,
-              jobTitle: currentJobTitle || null
+              jobTitle: currentJobTitle || null,
+              extractionQuality: cachedScore.extractionQuality
             });
           }
         }
@@ -2548,7 +3337,6 @@
             statusDiv.style.display = 'none';
           }
         showLoadingState('Analyzing your résumé for ATS criteria…');
-        showRewriteSkeleton();
           uploadInput.disabled = true;
 
           // Check if we already have a resumeId for this file
@@ -2603,9 +3391,12 @@
               if (!hasCredit) {
                 // Free account limit reached - show upgrade message
                 uploadInput.disabled = false;
-                generateBtn.disabled = false;
+                // Only enable button if file still exists
+                const fileStillExists = uploadInput?.files?.[0];
+                if (generateBtn) {
+                  generateBtn.disabled = !fileStillExists;
+                }
                 hideLoadingState();
-                hideRewriteSkeleton();
                 handleApiError(new Error('You have used your 1 free lifetime ATS score. Upgrade to continue scoring unlimited resumes.'));
                 // Redirect to pricing page after showing error
                 setTimeout(() => {
@@ -2696,9 +3487,12 @@
               if (!hasCredit) {
                 // Free account limit reached - show upgrade message
                 uploadInput.disabled = false;
-                generateBtn.disabled = false;
+                // Only enable button if file still exists
+                const fileStillExists = uploadInput?.files?.[0];
+                if (generateBtn) {
+                  generateBtn.disabled = !fileStillExists;
+                }
                 hideLoadingState();
-                hideRewriteSkeleton();
                 handleApiError(new Error('You have used your 1 free lifetime ATS score. Upgrade to continue scoring unlimited resumes.'));
                 // Redirect to pricing page after showing error
                 setTimeout(() => {
@@ -2771,9 +3565,12 @@
               window._currentFeedbackLoading = null;
             }
             uploadInput.disabled = false;
-            generateBtn.disabled = false;
+            // Only enable button if file still exists
+            const fileStillExists = uploadInput?.files?.[0];
+            if (generateBtn) {
+              generateBtn.disabled = !fileStillExists;
+            }
             hideLoadingState();
-            hideRewriteSkeleton();
             return;
           }
           
@@ -2789,11 +3586,12 @@
           // Free users only get ATS scoring, not AI feedback, so show different message
           const userPlan = getCurrentUserPlan();
           const willGetFeedback = ['trial', 'essential', 'pro', 'premium'].includes(userPlan);
+          const hasRole = jobTitleInput?.value?.trim() || currentJobTitle;
           
           // Show skeleton loading states (replaces full-screen overlay)
-          // Pass willGetFeedback to conditionally show/hide feedback skeleton
-          showSkeletons(willGetFeedback);
-          if (willGetFeedback) {
+          // Only show role-specific skeleton if user has a plan AND provided a role
+          showSkeletons(willGetFeedback, hasRole);
+          if (willGetFeedback && hasRole) {
             setRoleStatus('Generating tips…');
           } else {
             setRoleStatus('');
@@ -2803,10 +3601,121 @@
           // Hide skeleton header since real progress header is already visible
           hideHeaderSkeleton();
           
+          // PERFORMANCE FIX: Load original snippet immediately (don't wait for API)
+          // This provides instant feedback to users while API processes in background
+          if (userPlan === 'pro' || userPlan === 'premium') {
+            const origBox = document.querySelectorAll('#rf-rewrite-content .rf-snippet-box')[0];
+            if (origBox) {
+              // Show skeleton initially
+              origBox.classList.add('rf-snippet-skeleton');
+              
+              // Load text immediately from sessionStorage or upload result
+              const resumeText = sessionStorage.getItem('currentResumeText') || uploadResult.resumeText;
+              if (resumeText && resumeText.length > 0) {
+                // Clean up text for display
+                let cleanText = resumeText.replace(/\s+/g, ' ').trim();
+                
+                if (cleanText.length > 0) {
+                  // Use first 500 characters for snippet display
+                  let snippet = cleanText.length > 500 ? cleanText.substring(0, 500) : cleanText;
+                  const lastSpace = snippet.lastIndexOf(' ');
+                  if (cleanText.length > 500 && lastSpace > 400) {
+                    snippet = snippet.substring(0, lastSpace) + '...';
+                  } else if (cleanText.length > 500) {
+                    snippet = snippet + '...';
+                  }
+                  origBox.value = snippet;
+                  // Remove skeleton after a brief delay to show it loaded
+                  setTimeout(() => {
+                    origBox.classList.remove('rf-snippet-skeleton');
+                  }, 300);
+                }
+              }
+            }
+          }
+          
           // Store cleanup function for error handling (skeleton hide function)
           window._currentFeedbackLoading = () => {
             hideSkeletons();
           };
+
+          // Pre-flight trial limit check (before any API calls)
+          if (userPlan === 'trial') {
+            try {
+              const token = await getAuthToken();
+              const usageResponse = await fetch('/api/usage', {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Authorization': `Bearer ${token}`
+                }
+              });
+              
+              if (usageResponse.ok) {
+                const usageData = await usageResponse.json();
+                if (usageData.success && usageData.usage && usageData.usage.resumeFeedback) {
+                  const feedbackUsed = usageData.usage.resumeFeedback.used || 0;
+                  const feedbackLimit = usageData.usage.resumeFeedback.limit || 3;
+                  
+                  if (feedbackUsed >= feedbackLimit) {
+                    // Show modal immediately, block all API calls
+                    if (window.showErrorModal) {
+                      window.showErrorModal(
+                        'Trial Complete',
+                        'You\'ve used all 3 feedback attempts. Upgrade to Pro for unlimited feedback and unlock all features.',
+                        {
+                          showUpgrade: true,
+                          upgradeCallback: async () => {
+                            try {
+                              // Show loading state
+                              if (window.showLoadingOverlay) {
+                                window._currentLoadingOverlay = window.showLoadingOverlay('Redirecting to checkout...');
+                              }
+                              
+                              const user = window.FirebaseAuthManager?.getCurrentUser?.();
+                              const idToken = user ? await user.getIdToken() : null;
+                              const res = await fetch('/api/stripe-checkout', {
+                                method: 'POST',
+                                headers: { 
+                                  'Content-Type': 'application/json', 
+                                  ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}) 
+                                },
+                                body: JSON.stringify({ plan: 'pro' })
+                              });
+                              const data = await res.json();
+                              if (data && data.ok && data.url) {
+                                window.location.href = data.url;
+                                return;
+                              }
+                              throw new Error(data?.error || 'Checkout failed');
+                            } catch (e) {
+                              console.error('Upgrade checkout error:', e);
+                              // Hide loading overlay
+                              if (window._currentLoadingOverlay) {
+                                window._currentLoadingOverlay();
+                                window._currentLoadingOverlay = null;
+                              }
+                              // Fallback to pricing page if checkout fails
+                              window.location.href = 'pricing-a.html';
+                            }
+                          },
+                          upgradeButtonText: 'Upgrade to Pro',
+                          buttonText: 'Maybe Later'
+                        }
+                      );
+                    }
+                    hideLoadingState();
+                    uploadInput.disabled = false;
+                    if (generateBtn) generateBtn.disabled = false;
+                    return; // Block all API calls
+                  }
+                }
+              }
+            } catch (usageError) {
+              console.warn('[RESUME-FEEDBACK] Usage check failed, proceeding with caution:', usageError);
+              // Continue if usage check fails (non-blocking)
+            }
+          }
 
           // --- PARALLEL API CALLS: ATS Score + Feedback ---
           const jobTitleForScore = currentJobTitle || jobTitleInput?.value?.trim() || '';
@@ -2826,6 +3735,9 @@
           // This ensures ATS scores appear in 2-3s as claimed in the PR
           let atsSettled;
           let feedbackSettled;
+          // Track whether we showed (or intended to show) the low-extraction warning toast for this run.
+          // Used to suppress stacked success toasts in later combined ATS+tips messaging.
+          let atsExtractionWarned = false;
           
           // Process ATS result as soon as it's available
           atsPromise
@@ -2840,15 +3752,36 @@
                   sessionStorage.setItem('currentAtsBreakdown', JSON.stringify(result.breakdown));
                 }
                 
-                // Also store in localStorage for backward compatibility
-                const summary = result.score > 85 ? 'Excellent! Your resume is highly ATS compatible.' : 
-                               result.score > 70 ? 'Your resume meets many ATS criteria and is likely to be noticed.' : 
-                               'Your resume needs improvement for better ATS results.';
+                // Also store in localStorage for backward compatibility (extractionQuality-aware)
+                let summary;
+                if (result.extractionQuality) {
+                  // Use extractionQuality-aware summary (consistent with dashboard logic)
+                  const confidence = typeof result.extractionQuality.confidence === 'number' ? result.extractionQuality.confidence : 1.0;
+                  const tokenCount = typeof result.extractionQuality.tokenCount === 'number' ? result.extractionQuality.tokenCount : 0;
+                  const status = result.extractionQuality.extractionStatus || 'ok';
+                  const isHighQuality = status === 'ok' && confidence >= 0.65 && tokenCount >= 80;
+                  
+                  if (isHighQuality) {
+                    // Use confident language
+                    summary = result.score > 85 ? 'Excellent! Your resume is highly ATS compatible.' : 
+                             result.score > 70 ? 'Your resume meets many ATS criteria and is likely to be noticed.' : 
+                             'Your resume needs improvement for better ATS results.';
+                  } else {
+                    // Use softer language when quality is low
+                    summary = 'We may not have detected all sections in your resume. Consider checking formatting.';
+                  }
+                } else {
+                  // Fallback to confident language if no extractionQuality data
+                  summary = result.score > 85 ? 'Excellent! Your resume is highly ATS compatible.' : 
+                           result.score > 70 ? 'Your resume meets many ATS criteria and is likely to be noticed.' : 
+                           'Your resume needs improvement for better ATS results.';
+                }
                 localStorage.setItem('lastATSScore', result.score.toString());
                 localStorage.setItem('lastATSSummary', summary);
                 
                 // Update UI immediately (progress ring, placeholder, etc.)
                 updateProgressRing(result.score);
+                updateExtractionQualityIndicator(result.extractionQuality);
                 hidePlaceholder();
                 
                 // Helper functions to handle both number and object formats (matches existing code pattern)
@@ -2944,8 +3877,12 @@
                   showATSFeedback();
                 }, 100);
                 
-                // Show success toast
-                if (window.JobHackAIToast) {
+                // Trust-first: if extraction quality is low, show a single warning toast (auto-dismiss 8s)
+                // and avoid stacking a success toast on top.
+                const warned = maybeWarnLowExtractionQuality(result.extractionQuality);
+                atsExtractionWarned = warned;
+                updateExtractionQualityIndicator(result.extractionQuality);
+                if (!warned && window.JobHackAIToast) {
                   window.JobHackAIToast.success('ATS score calculated successfully.');
                 }
               } else {
@@ -3081,7 +4018,8 @@
                   breakdown: finalBreakdownWithFeedback,
                   resumeId: uploadResult.resumeId,
                   jobTitle: jobTitleForFeedback || null,
-                  roleSpecificFeedback: feedbackResult.roleSpecificFeedback || null
+                  roleSpecificFeedback: feedbackResult.roleSpecificFeedback || null,
+                  extractionQuality: atsSettled.value?.extractionQuality ?? null
                 });
                 
                 if (!saveSuccess) {
@@ -3099,17 +4037,28 @@
               // Truthful toast + inline status based on ATS/tips state
               const toastStatus = toastForAtsAndTips({
                 atsOk: atsScoringSucceeded,
-                tips: feedbackResult.roleSpecificFeedback
+                tips: feedbackResult.roleSpecificFeedback,
+                // If we showed a low-extraction warning, avoid stacking a success toast on top.
+                suppressSuccess: atsExtractionWarned
               });
               if (toastStatus === 'tips_ok' || toastStatus === 'tips_only') {
                 setRoleStatus('Role-specific tips updated.');
               } else if (toastStatus === 'ats_only') {
-                setRoleStatus('ATS score is ready. Role-specific tips are still loading—retry if needed.');
+                // Don't set status - let updateRoleTipsState handle the message in description area
+                setRoleStatus(''); // Clear status, description area will show helpful message
             } else if (toastStatus === 'missing') {
-              setRoleStatus('Couldn’t refresh tips—retry.');
+                // Don't set status - let updateRoleTipsState handle the message in description area
+                setRoleStatus(''); // Clear status, description area will show helpful message
               }
             } catch (feedbackError) {
               console.error('[RESUME-FEEDBACK] Error processing feedback result:', feedbackError);
+              
+              // Ensure helpful message is shown in description area even if processing fails
+              updateRoleTipsState({
+                hasAtsScore: !!atsScoringSucceeded,
+                roleSpecificFeedback: null
+              });
+              
               // Don't show error modal - ATS score is already visible, feedback is optional
             }
           } else if (feedbackSettled.status === 'rejected') {
@@ -3117,20 +4066,20 @@
             const error = feedbackSettled.reason;
             console.warn('[RESUME-FEEDBACK] Feedback generation failed (non-blocking):', error);
             
-            // Hide role feedback container since we don't have valid feedback data
-            hideRoleFeedback();
-            setRoleStatus('Couldn’t refresh tips—retry.');
-            
-            // Show error modal but keep ATS score visible
-            if (window.showErrorModal) {
-              const errorMsg = error.message || 'Failed to generate feedback. Your ATS score is still available.';
-              window.showErrorModal('Feedback Generation Failed', errorMsg, {
-                buttonText: 'OK',
-                onClose: () => {
-                  // Keep ATS score visible - don't clear state
-                }
-              });
-            }
+            // Clear status - updateRoleTipsState will handle messaging and container visibility
+            setRoleStatus(''); 
+
+            updateRoleTipsState({
+              hasAtsScore: !!atsScoringSucceeded,
+              roleSpecificFeedback: null
+            });
+
+            // Use handleApiError to check for upgradeRequired and show appropriate modal
+            // For non-upgrade errors, show feedback-specific messaging
+            handleApiError(error, {
+              title: 'Feedback Generation Failed',
+              message: 'Failed to generate feedback. Your ATS score is still available.'
+            });
             
             // Clean up feedback loading overlay on feedback failure
             if (window._currentFeedbackLoading) {
@@ -3154,12 +4103,23 @@
           
           // Both ATS scoring and feedback completed successfully
 
-          // Update original snippet in rewrite section
+          // Update original snippet in rewrite section (only if not already loaded)
           // Use full resume text if available, otherwise use preview
           const origBox = document.querySelectorAll('#rf-rewrite-content .rf-snippet-box')[0];
           if (origBox) {
-            // Try to get full resume text from sessionStorage or upload result
+            // Remove skeleton effect before populating text
+            origBox.classList.remove('rf-skeleton', 'rf-snippet-skeleton');
+            
+            // Check if box is empty or still has placeholder/skeleton text
+            const currentValue = origBox.value || '';
+            const isEmptyOrPlaceholder = !currentValue || 
+              currentValue.includes('Original resume excerpt') || 
+              currentValue.includes('will appear here');
+            
+            // Always validate quality, even if box was pre-populated (performance fix)
+            // This ensures pro/premium users see quality warnings for corrupted OCR text
             const resumeText = sessionStorage.getItem('currentResumeText') || uploadResult.resumeText;
+            
             if (resumeText && resumeText.length > 0) {
               // Clean up text for display - remove excessive whitespace and ensure readability
               let cleanText = resumeText.replace(/\s+/g, ' ').trim();
@@ -3176,9 +4136,10 @@
                   : 0;
                 
                 if (alphanumericRatio < 0.7 && cleanText.length > 100) {
-                  // Text appears corrupted - show warning message instead
+                  // Text appears corrupted - show warning message instead (overwrite pre-populated value if needed)
                   origBox.value = '⚠️ Text extraction quality is low. For best results, please upload a text-based PDF or DOCX file.\n\nExtracted text preview:\n' + cleanText.substring(0, 200) + '...';
-                } else {
+                } else if (isEmptyOrPlaceholder) {
+                  // Only update if box was empty - don't overwrite pre-populated good-quality text
                   // Use first 500 characters for snippet display (more readable than 200)
                   // Ensure we don't cut in the middle of a word if possible
                   let snippet = cleanText.length > 500 ? cleanText.substring(0, 500) : cleanText;
@@ -3190,28 +4151,38 @@
                   }
                   origBox.value = snippet;
                 }
+                // If box already has content (pre-populated) and quality is good, keep it
               }
-            } else if (uploadResult.textPreview) {
-              origBox.value = uploadResult.textPreview;
-            } else {
-              // If no text available, show placeholder
-              origBox.value = 'Resume text will appear here after analysis.';
+            } else if (isEmptyOrPlaceholder) {
+              // Only update placeholder if box was empty
+              if (uploadResult.textPreview) {
+                origBox.value = uploadResult.textPreview;
+              } else {
+                // If no text available, show placeholder
+                origBox.value = 'Resume text will appear here after analysis.';
+              }
             }
+            // Ensure skeleton is removed regardless of whether we updated the value
+            origBox.classList.remove('rf-skeleton', 'rf-snippet-skeleton');
           }
 
-          // Update description (preserve tooltip HTML)
-          const descEl = document.getElementById('rf-score-desc');
+          /* Description update disabled to preserve plan-specific info matching Interview Questions UI */
+          /*
+          const descEl = document.getElementById('rf-header-desc');
           if (descEl && atsScoringSucceeded) {
-            // Preserve existing tooltip if it exists
             const existingTooltip = descEl.querySelector('.rf-tooltip-trigger');
             const tooltipHtml = existingTooltip ? existingTooltip.outerHTML : '';
             descEl.innerHTML = 'Your resume was analyzed. See your ATS score and feedback below.' + (tooltipHtml ? ' ' + tooltipHtml : '');
           }
+          */
 
           uploadInput.disabled = false;
-          generateBtn.disabled = false;
+          // Only enable button if file still exists
+          const fileStillExists = uploadInput?.files?.[0];
+          if (generateBtn) {
+            generateBtn.disabled = !fileStillExists;
+          }
           hideLoadingState();
-          hideRewriteSkeleton();
         } catch (error) {
           // Restore credit ONLY if ATS scoring failed (not for post-scoring errors)
           // If scoring succeeded but UI/feedback generation failed, user already got value
@@ -3251,9 +4222,12 @@
           clearAtsState();
           handleApiError(error);
           uploadInput.disabled = false;
-          generateBtn.disabled = false;
+          // Only enable button if file still exists
+          const fileStillExists = uploadInput?.files?.[0];
+          if (generateBtn) {
+            generateBtn.disabled = !fileStillExists;
+          }
           hideLoadingState();
-          hideRewriteSkeleton();
         }
       }
 
@@ -3276,14 +4250,14 @@
           const pdfHelper = document.getElementById('rf-pdf-helper');
           
           if (file) {
-            // Immediately disable generate button while validating new file
-            if (generateBtn) {
-              generateBtn.disabled = true;
-            }
-            
             // Hide status pill initially while validating
             hideFileStatus();
             
+            // Track file type for conditional warning messages
+            _rfLastUploadedFileType = file.type || (file.name.toLowerCase().endsWith('.pdf') ? 'application/pdf' : 
+              file.name.toLowerCase().endsWith('.docx') ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' :
+              file.name.toLowerCase().endsWith('.txt') ? 'text/plain' : null);
+
             // Show/hide PDF helper text based on file type
             if (pdfHelper) {
               if (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')) {
@@ -3358,7 +4332,8 @@
                 fileNameSpan.style.fontWeight = '600';
               }
               if (generateBtn) {
-                generateBtn.disabled = true;
+                // Keep button clickable; validation failure is shown via status and name color
+                // generateBtn.disabled = true;
               }
               if (statusDiv) {
                 statusDiv.style.display = 'none';
@@ -3375,9 +4350,10 @@
               fileNameSpan.style.color = 'var(--color-text-muted)';
               fileNameSpan.style.fontWeight = 'normal';
             }
-            if (generateBtn) {
-              generateBtn.disabled = true;
-            }
+            // Leave generate button clickable; click guard will show modal if no file
+            // if (generateBtn) {
+            //   generateBtn.disabled = true;
+            // }
             if (statusDiv) {
               statusDiv.style.display = 'none';
             }
@@ -3389,6 +4365,10 @@
       // Generate Button Click Handler
       if (generateBtn) {
         generateBtn.addEventListener('click', generateATSAndFeedback);
+        
+        // Enable button on page load - click guard will handle missing file
+        // This ensures the popup works even when no file is selected
+        generateBtn.disabled = false;
       }
       // Regenerate Feedback Button
       const regenBtn = document.getElementById('rf-regenerate-btn');
@@ -3424,26 +4404,41 @@
             }
           }
 
+          let scoreResult = null;
+          let scoreUpdated = false;
+
           try {
             showLoadingState('Regenerating feedback...');
             this.disabled = true;
             this.textContent = 'Regenerating...';
-            setRoleStatus('Generating tips…');
+            
+            // Only show "Generating tips..." if user has a plan AND provided a role
+            const userPlan = getCurrentUserPlan();
+            const willGetFeedback = ['trial', 'essential', 'pro', 'premium'].includes(userPlan);
+            const hasRole = jobTitle && jobTitle.trim().length > 0;
+            if (willGetFeedback && hasRole) {
+              setRoleStatus('Generating tips…');
+            } else {
+              setRoleStatus('');
+            }
+            
             const roleChanged = previousJobTitle !== jobTitle;
 
             // Start ATS (if role changed) and feedback in parallel
             const atsPromise = roleChanged ? getAtsScore(currentResumeId, jobTitle) : Promise.resolve(null);
             const feedbackPromise = getResumeFeedback(currentResumeId, jobTitle);
+            let roleAtsExtractionWarned = false;
             const [atsSettled, feedbackSettled] = await Promise.allSettled([atsPromise, feedbackPromise]);
 
-            let scoreResult = null;
-            let scoreUpdated = false;
             if (atsSettled.status === 'fulfilled' && atsSettled.value) {
               const possibleScore = atsSettled.value;
               if (possibleScore.success && possibleScore.score !== undefined && possibleScore.breakdown) {
                 scoreResult = possibleScore;
                 scoreUpdated = true;
+                // Trust-first: warn once when extraction quality is low (auto-dismiss 8s)
+                roleAtsExtractionWarned = maybeWarnLowExtractionQuality(possibleScore.extractionQuality);
                 updateProgressRing(scoreResult.score);
+                updateExtractionQualityIndicator(possibleScore.extractionQuality);
                 const rubric = [
                   {
                     label: 'Keyword Relevance',
@@ -3494,15 +4489,27 @@
               // Feedback failed - log but don't block (ATS score may be shown)
               const error = feedbackSettled.status === 'rejected' ? feedbackSettled.reason : new Error('No feedback result');
               console.warn('[RESUME-FEEDBACK] Feedback generation failed (non-blocking):', error);
-              hideRoleFeedback();
-              setRoleStatus('Couldn’t refresh tips—retry.');
-              if (window.showErrorModal) {
-                const errorMsg = error.message || 'Failed to generate feedback. Your ATS score is still available.';
-                window.showErrorModal('Feedback Generation Failed', errorMsg, {
-                  buttonText: 'OK',
-                  onClose: () => {}
-                });
+              // Clear status - updateRoleTipsState will handle messaging and container visibility
+              setRoleStatus(''); 
+
+              // Load cached score to check if ATS score exists (to show helpful message)
+              let cachedScore = null;
+              if (window.JobHackAIStatePersistence) {
+                cachedScore = window.JobHackAIStatePersistence.loadATSScore(null);
               }
+              const hasAtsScore = !!(scoreResult?.success || cachedScore?.score);
+              
+              updateRoleTipsState({
+                hasAtsScore,
+                roleSpecificFeedback: null
+              });
+
+              // Use handleApiError to check for upgradeRequired and show appropriate modal
+              // For non-upgrade errors, show feedback-specific messaging
+              handleApiError(error, {
+                title: 'Feedback Generation Failed',
+                message: 'Failed to generate feedback. Your ATS score is still available.'
+              });
               this.textContent = 'Regenerate Feedback';
               this.disabled = false;
               hideLoadingState();
@@ -3549,6 +4556,11 @@
             if (typeof fetchLatestFeedbackFromD1 === 'function') {
               fetchLatestFeedbackFromD1();
             }
+
+            // Refresh usage indicator to show updated count after a successful analysis
+            if (typeof refreshUsageIndicator === 'function') {
+              refreshUsageIndicator();
+            }
             
             // Save role-specific feedback to persistence
             // Use cached score that was already loaded above
@@ -3587,6 +4599,7 @@
                   breakdown: updatedBreakdown,
                   jobTitle: jobTitle || null,
                   roleSpecificFeedback: feedbackResult.roleSpecificFeedback || null,
+                  extractionQuality: scoreResult?.extractionQuality || cachedScore?.extractionQuality,
                   timestamp: Date.now() // Update timestamp
                 });
               } else if (currentResumeId && feedbackResult.atsRubric) {
@@ -3673,6 +4686,7 @@
                   resumeId: currentResumeId,
                   jobTitle: jobTitle || null,
                   roleSpecificFeedback: feedbackResult.roleSpecificFeedback || null,
+                  extractionQuality: scoreResult?.extractionQuality ?? null, // Prefer scoreResult if available, otherwise null (cachedScore may be from different resume)
                   timestamp: Date.now()
                 });
                 console.log('[RESUME-FEEDBACK] Saved feedback with reconstructed breakdown');
@@ -3682,14 +4696,18 @@
 
             const toastStatus = toastForAtsAndTips({
               atsOk: scoreUpdated,
-              tips: feedbackResult.roleSpecificFeedback
+              tips: feedbackResult.roleSpecificFeedback,
+              // If we showed a low-extraction warning, avoid stacking a success toast on top.
+              suppressSuccess: roleAtsExtractionWarned
             });
             if (toastStatus === 'tips_ok' || toastStatus === 'tips_only') {
               setRoleStatus('Role-specific tips updated.');
             } else if (toastStatus === 'ats_only') {
-              setRoleStatus('ATS score is ready. Role-specific tips are still loading—retry if needed.');
+              // Don't set status - let updateRoleTipsState handle the message in description area
+              setRoleStatus(''); // Clear status, description area will show helpful message
             } else if (toastStatus === 'missing') {
-              setRoleStatus('Couldn’t refresh tips—retry.');
+              // Don't set status - let updateRoleTipsState handle the message in description area
+              setRoleStatus(''); // Clear status, description area will show helpful message
             }
 
             this.textContent = 'Regenerate Feedback';
@@ -3700,7 +4718,21 @@
             this.textContent = 'Regenerate Feedback';
             this.disabled = false;
             hideLoadingState();
-            setRoleStatus('Couldn’t refresh tips—retry.');
+            
+            // Clear status - updateRoleTipsState will handle messaging and container visibility
+            setRoleStatus(''); 
+            
+            // Load cached score to check if ATS score exists (to show helpful message)
+            let cachedScore = null;
+            if (window.JobHackAIStatePersistence) {
+              cachedScore = window.JobHackAIStatePersistence.loadATSScore(null);
+            }
+            const hasAtsScore = !!(scoreResult?.success || cachedScore?.score);
+            
+            updateRoleTipsState({
+              hasAtsScore,
+              roleSpecificFeedback: null
+            });
           }
         });
       }
@@ -3890,21 +4922,115 @@
       return 'missing';
     }
 
-    function toastForAtsAndTips({ atsOk, tips }) {
+    function toastForAtsAndTips({ atsOk, tips, suppressSuccess = false }) {
       const status = getRoleTipsStatus({ atsOk, tips });
       if (!window.JobHackAIToast) return status;
+      if (suppressSuccess) return status;
       if (status === 'tips_ok') {
         window.JobHackAIToast.success('ATS score and role-specific tips updated.');
       } else if (status === 'tips_only') {
         window.JobHackAIToast.success('Role-specific tips updated.');
       } else if (status === 'ats_only') {
-        if (window.JobHackAIToast.info) {
-          window.JobHackAIToast.info('ATS score is ready. Role-specific tips are still loading—retry if needed.');
-        } else {
-          window.JobHackAIToast.success('ATS score is ready. Role-specific tips are still loading—retry if needed.');
-        }
+        // Don't show toast - description area will show helpful message
+        // Toast is redundant and confusing when tips are missing
       }
       return status;
+    }
+
+    // Trust-first: show a warning toast (once per short window) when extraction quality is low.
+    // Uses existing JobHackAIToast (design system-consistent), and auto-dismisses after 8 seconds.
+    let _rfLowExtractionWarnShownAt = 0;
+    let _rfLastUploadedFileType = null; // Track file type for conditional messaging
+
+    function maybeWarnLowExtractionQuality(extractionQuality) {
+      if (!window.JobHackAIToast || !extractionQuality || typeof extractionQuality !== 'object') return false;
+      const confidence = typeof extractionQuality.confidence === 'number' ? extractionQuality.confidence : 1.0;
+      const tokenCount = typeof extractionQuality.tokenCount === 'number' ? extractionQuality.tokenCount : 0;
+      const status = extractionQuality.extractionStatus || 'ok';
+      // Keep frontend warning logic aligned with backend quality gating:
+      // backend treats "high confidence" as: status === 'ok' AND confidence >= 0.65 AND tokenCount >= 80
+      const isLow = status !== 'ok' || confidence < 0.65 || tokenCount < 80;
+      if (!isLow) return false;
+
+      // Avoid accidental duplicate toasts from overlapping async flows.
+      const now = Date.now();
+      if (now - _rfLowExtractionWarnShownAt < 1500) return true;
+      _rfLowExtractionWarnShownAt = now;
+
+      // Determine if uploaded file was PDF (only suggest DOCX/TXT for PDFs)
+      const isPDF = _rfLastUploadedFileType === 'application/pdf' || 
+                    (typeof _rfLastUploadedFileType === 'string' && _rfLastUploadedFileType.toLowerCase().includes('pdf'));
+
+      // Build message conditionally based on file type
+      let msg;
+      if (status !== 'ok') {
+        msg = isPDF
+          ? 'We may not have read your resume perfectly. Some structure checks are less certain—try uploading a DOCX or TXT for best results.'
+          : 'We may not have read your resume perfectly. Some structure checks are less certain.';
+      } else if (tokenCount > 0 && tokenCount < 80) {
+        msg = isPDF
+          ? 'We didn\'t get enough readable text from your resume to be fully confident. Some structure checks are less certain—try uploading a DOCX or TXT for best results.'
+          : 'We didn\'t get enough readable text from your resume to be fully confident. Some structure checks are less certain.';
+      } else {
+        msg = isPDF
+          ? 'We may not have read your resume perfectly. Some structure checks are less certain—try uploading a DOCX or TXT for best results.'
+          : 'We may not have read your resume perfectly. Some structure checks are less certain.';
+      }
+
+      window.JobHackAIToast.warning(msg, 8000);
+      return true;
+    }
+
+    function updateExtractionQualityIndicator(extractionQuality) {
+      const indicator = document.getElementById('rf-extraction-quality-indicator');
+      const iconEl = indicator?.querySelector('.rf-status-icon');
+      const textEl = indicator?.querySelector('.rf-status-text');
+      
+      if (!indicator || !iconEl || !textEl) return;
+
+      if (!extractionQuality || typeof extractionQuality !== 'object') {
+        indicator.style.display = 'none';
+        return;
+      }
+
+      const confidence = typeof extractionQuality.confidence === 'number' ? extractionQuality.confidence : 1.0;
+      const tokenCount = typeof extractionQuality.tokenCount === 'number' ? extractionQuality.tokenCount : 0;
+      const status = extractionQuality.extractionStatus || 'ok';
+      
+      // High confidence: status === 'ok' AND confidence >= 0.65 AND tokenCount >= 80
+      const isHigh = status === 'ok' && confidence >= 0.65 && tokenCount >= 80;
+      
+      if (isHigh) {
+        indicator.style.display = 'none';
+        return;
+      }
+
+      // Determine variant and message
+      let variant = 'warning';
+      let message = '';
+      
+      if (status !== 'ok') {
+        variant = 'error';
+        message = 'Low Confidence';
+      } else if (tokenCount < 80) {
+        variant = 'warning';
+        message = 'Limited Text';
+      } else if (confidence < 0.65) {
+        variant = 'warning';
+        message = 'Low Confidence';
+      }
+
+      // Apply status pill styling (matches existing design system)
+      indicator.className = `rf-status-pill rf-status-pill--${variant}`;
+      indicator.style.display = 'inline-flex';
+      indicator.style.width = '100%';
+      indicator.style.justifyContent = 'center';
+      indicator.style.marginTop = '0.5rem';
+      indicator.style.flexShrink = '0';
+      
+      // Use SVG icon from existing system (not emoji)
+      iconEl.innerHTML = getStatusIcon(variant);
+      textEl.textContent = message;
     }
 
     function setRoleStatus(text) {
@@ -4031,8 +5157,6 @@
     }
     
     // Track consecutive role-tip failures to adjust messaging
-    let roleTipsFailureCount = 0;
-
     // Helper: control Role-Specific Tips state and retry button visibility
     function updateRoleTipsState({ hasAtsScore, roleSpecificFeedback, allowPlaceholder = false }) {
       const roleContainer = document.getElementById('role-feedback-container');
@@ -4042,8 +5166,6 @@
       const roleInfoBar = document.getElementById('rf-role-info');
       let roleBadge = document.getElementById('rf-role-badge');
       let roleHelper = document.getElementById('rf-role-helper');
-      const firstTryText = 'ATS score is ready. We couldn’t generate tailored tips for this role. Try again or adjust your target role.';
-      const exhaustedText = 'No tailored tips available for this run. Consider adding role-specific details or trying another role.';
 
       if (roleDescEl && !roleDescEl.dataset.baseText) {
         roleDescEl.dataset.baseText = roleDescEl.textContent || '';
@@ -4064,7 +5186,6 @@
 
       // No ATS score – hide section and button
       if (!hasAtsScore) {
-        roleTipsFailureCount = 0;
         if (feedbackGrid) feedbackGrid.style.display = 'none';
         hideRoleFeedback();
         if (roleInfoBar) roleInfoBar.style.display = 'none';
@@ -4076,7 +5197,7 @@
         }
         if (roleDescEl && roleDescEl.dataset.baseText) {
           roleDescEl.textContent = roleDescEl.dataset.baseText;
-          // Clear any previous partial-error state when fully resetting
+          // Clear any previous state when fully resetting
           delete roleDescEl.dataset.lastRoleState;
         }
         setRoleStatus('');
@@ -4085,7 +5206,6 @@
 
       // Clean success: ATS + role-specific tips present
       if (hasRoleSpecific) {
-        roleTipsFailureCount = 0;
         if (feedbackGrid) feedbackGrid.style.display = 'grid';
         showRoleFeedback();
         if (roleBadge) roleBadge.style.display = 'none';
@@ -4112,16 +5232,15 @@
           const currentText = roleDescEl.textContent || '';
           const baseText = roleDescEl.dataset.baseText || '';
           const lastState = roleDescEl.dataset.lastRoleState || '';
-          const isPartialErrorState =
-            lastState === 'partial-error' || currentText === firstTryText || currentText === exhaustedText;
+          const isInfoState = lastState === 'info' || lastState === 'partial-error';
           // Restore baseText if:
-          // - we are recovering from a previous partial-error state, or
+          // - we are recovering from a previous info/error state, or
           // - current text matches baseText (no plan-specific text was set), or
           // - the element is effectively empty
-          if (isPartialErrorState || currentText === baseText || !currentText.trim()) {
+          if (isInfoState || currentText === baseText || !currentText.trim()) {
             roleDescEl.textContent = baseText;
           }
-          if (isPartialErrorState) {
+          if (isInfoState) {
             delete roleDescEl.dataset.lastRoleState;
           }
         }
@@ -4138,7 +5257,6 @@
 
       if (hasPlaceholder) {
         // Keep placeholder visible instead of hiding the grid
-        roleTipsFailureCount = 0;
         if (feedbackGrid) feedbackGrid.style.display = 'grid';
         roleContainer.style.display = 'block';
         if (roleInfoBar) roleInfoBar.style.display = 'none';
@@ -4152,43 +5270,42 @@
           regenBtn.style.display = 'none';
           regenBtn.textContent = 'Regenerate Feedback';
         }
-        setRoleStatus('No role tips saved for this run.');
+        // Clear status - message is already shown in the feedback grid
+        setRoleStatus('');
         return;
       }
 
-      roleTipsFailureCount += 1;
+      // Simplified: Show helpful informational message, no button
+      // This state should rarely occur since backend always provides fallback tips when job title exists
       if (feedbackGrid) feedbackGrid.style.display = 'none';
       roleContainer.style.display = 'block';
       if (roleInfoBar) roleInfoBar.style.display = 'none';
+
+      // Check if job title exists to provide contextual message
+      const jobTitleInput = document.getElementById('rf-job-title');
+      const hasJobTitle = jobTitleInput?.value?.trim();
+
       if (roleDescEl) {
-        const message = roleTipsFailureCount > 1 ? exhaustedText : firstTryText;
-        roleDescEl.textContent = message;
-        roleDescEl.dataset.lastRoleState = 'partial-error';
-      }
-      const statusMessage = roleTipsFailureCount > 1 ? exhaustedText : firstTryText;
-      setRoleStatus(statusMessage);
-
-      // Render a lightweight guidance badge + helper text (above tips area)
-      roleBadge = document.getElementById('rf-role-badge');
-      if (roleBadge) {
-        roleBadge.style.display = 'inline-flex';
-        roleBadge.style.marginBottom = '8px';
-        roleBadge.textContent = 'Quick suggestions (ATS-based)';
-      }
-      roleHelper = document.getElementById('rf-role-helper');
-      if (roleHelper) {
-        roleHelper.style.display = 'block';
-        roleHelper.style.marginBottom = '12px';
-        roleHelper.textContent = roleTipsFailureCount > 1
-          ? 'We couldn’t generate detailed tips this time. Try adding role-specific details or adjusting the target role, then retry.'
-          : 'Here are quick suggestions from your ATS check. Add a metric and a tool you used for this role, then try again.';
+        if (!hasJobTitle) {
+          // No job title: Encourage user to add one
+          roleDescEl.textContent = 'Add a target role above to get tailored tips for your resume. This helps us provide role-specific keyword suggestions and optimized feedback.';
+        } else {
+          // Job title exists but tips missing (edge case - old cache)
+          roleDescEl.textContent = 'Role-specific tips will appear here after you run your next analysis with a target role.';
+        }
+        roleDescEl.dataset.lastRoleState = 'info';
       }
 
+      // Always hide button in this state - never show "Try again for tailored tips"
       if (regenBtn) {
-        regenBtn.style.display = 'inline-flex';
-        regenBtn.textContent = 'Try again for tailored tips';
-        regenBtn.disabled = false;
+        regenBtn.style.display = 'none';
+        regenBtn.textContent = 'Regenerate Feedback';
       }
+
+      // Hide badge and helper (not needed with simplified message)
+      if (roleBadge) roleBadge.style.display = 'none';
+      if (roleHelper) roleHelper.style.display = 'none';
+      setRoleStatus(''); // Clear status - no error state needed
     }
 
     // Fade transition helpers
@@ -4247,7 +5364,7 @@
     let skeletonHideResolvers = []; // Array of pending Promise resolvers with generation IDs
     let skeletonOperationGeneration = 0; // Generation counter to invalidate stale operations
     
-    function showSkeletons(willGetFeedback = true) {
+    function showSkeletons(willGetFeedback = true, hasRole = false) {
       const skeletonContainer = document.getElementById('rf-skeleton-container');
       if (skeletonContainer) {
         // CRITICAL: Increment generation to invalidate any pending hide operations
@@ -4285,8 +5402,8 @@
         }
         const skeletonFeedback = document.getElementById('rf-skeleton-feedback');
         if (skeletonFeedback) {
-          // Only show feedback skeleton if user will receive feedback
-          skeletonFeedback.style.display = willGetFeedback ? 'grid' : 'none';
+          // Only show feedback skeleton if user will receive feedback AND has a role
+          skeletonFeedback.style.display = (willGetFeedback && hasRole) ? 'grid' : 'none';
         }
         // Ensure feedback content is visible so skeletons render; hide real grids
         const feedbackContent = document.getElementById('rf-feedback-content');
@@ -4390,7 +5507,7 @@
     function renderPriorityReviewCTA() {
       const cta = document.createElement('div');
       cta.className = 'priority-review-cta premium-cta';
-      cta.innerHTML = `<strong>Want your resume reviewed first?</strong> <span id="priority-review-inline"></span> <button class="priority-btn" onclick="window.location.href='pricing-a.html'">Upgrade to Premium</button>`;
+      cta.innerHTML = `<strong>Want your resume reviewed first?</strong> <span id="priority-review-inline"></span> <button class="priority-btn" onclick="startCheckout('premium')">Upgrade to Premium</button>`;
       // Insert tooltip
       setTimeout(() => {
         const inline = cta.querySelector('#priority-review-inline');
@@ -4503,6 +5620,11 @@
       const plan = getCurrentUserPlan();
       const roleDescEl = document.getElementById('rf-role-desc');
       
+      // Check if we're viewing historical feedback - don't overwrite score description
+      const isHistoricalView = typeof window.JobHackAIHistory?.isHistoricalView === 'function' 
+        ? window.JobHackAIHistory.isHistoricalView() 
+        : false;
+      
       // Helper function to safely set text content
       function safeSetText(element, text) {
         if (element) element.textContent = text;
@@ -4587,18 +5709,17 @@
 
       // Free Plan Logic
       if (plan === 'free') {
-        if (atsScoreTile) {
-          safeQueryText(atsScoreTile, '#rf-plan-badge', 'Free Plan');
-          updateDescriptionWithTooltip(
-            safeQuerySelector(atsScoreTile, '#rf-score-desc'),
-            'Get your basic ATS compatibility score.',
-            'Receive an overall ATS compliance score (0-100) for your resume, highlighting key areas to improve for better job application success.'
-          );
-          // Check if free ATS score has been used
-          const usageKey = `atsUsage:${getCurrentUserPlan()}:lifetime`;
-          // For now, show message - will be updated dynamically after API call
-          safeQueryText(atsScoreTile, '#rf-ats-checks', '1 free ATS score per account lifetime');
+        const headerBadge = document.getElementById('rf-header-plan-badge');
+        const headerDesc = document.getElementById('rf-header-desc');
+        
+        if (headerBadge) {
+          headerBadge.textContent = 'Free Plan';
+          headerBadge.style.background = 'var(--color-text-muted)';
         }
+        if (headerDesc && !isHistoricalView) {
+          headerDesc.textContent = 'Get your basic ATS compatibility score.';
+        }
+
         if (feedbackTile) {
           const badge = feedbackTile.querySelector('.rf-title .rf-plan-badge');
           safeSetText(badge, 'Locked');
@@ -4624,22 +5745,24 @@
 
       // Trial Plan Logic
       else if (plan === 'trial') {
-        if (atsScoreTile) {
-          const badge = atsScoreTile.querySelector('#rf-plan-badge');
-          safeSetText(badge, 'Trial Plan');
-          safeSetStyle(badge, 'background', '#FF9100');
-          updateDescriptionWithTooltip(
-            safeQuerySelector(atsScoreTile, '#rf-score-desc'),
-            'Your trial includes 3 full ATS score & feedback runs.',
-            'Each run combines ATS scoring with detailed feedback so you can see exactly what to fix before you apply.'
-          );
-          safeQueryText(atsScoreTile, '#rf-ats-checks', 'Max 3 feedback runs during your 3-day trial (rate limited to 1 per minute).');
+        const headerBadge = document.getElementById('rf-header-plan-badge');
+        const headerDesc = document.getElementById('rf-header-desc');
+        
+        if (headerBadge) {
+          headerBadge.textContent = 'Trial Plan';
+          headerBadge.style.setProperty('background', '#FF9100', 'important');
         }
+        if (headerDesc && !isHistoricalView) {
+          headerDesc.textContent = 'Your trial includes 3 full ATS score & feedback runs. Each run combines ATS scoring with detailed feedback, so you know exactly what to fix before you apply.';
+        }
+
         // Trial feedback: 3 full runs total during trial
         if (feedbackTile) {
           const badge = feedbackTile.querySelector('.rf-title .rf-plan-badge');
           safeSetText(badge, 'Trial Plan');
-          safeSetStyle(badge, 'background', '#FF9100');
+          if (badge) {
+            badge.style.setProperty('background', '#FF9100', 'important');
+          }
           safeQueryStyle(feedbackTile, '.rf-upgrade-text', 'display', 'none');
           if (feedbackContent) {
             feedbackContent.style.display = 'block';
@@ -4684,17 +5807,17 @@
 
       // Essential Plan Logic
       else if (plan === 'essential') {
-        if (atsScoreTile) {
-          const badge = atsScoreTile.querySelector('#rf-plan-badge');
-          safeSetText(badge, 'Essential Plan');
-          safeSetStyle(badge, 'background', '#0077B5');
-          updateDescriptionWithTooltip(
-            safeQuerySelector(atsScoreTile, '#rf-score-desc'),
-            'Receive an overall ATS compliance score for your resume, highlighting key areas to improve.',
-            'Receive an overall ATS compliance score (0-100) for your resume, highlighting key areas to improve for better job application success.'
-          );
-          safeQueryText(atsScoreTile, '#rf-ats-checks', 'Unlimited ATS checks');
+        const headerBadge = document.getElementById('rf-header-plan-badge');
+        const headerDesc = document.getElementById('rf-header-desc');
+        
+        if (headerBadge) {
+          headerBadge.textContent = 'Essential Plan';
+          headerBadge.style.background = '#0077B5';
         }
+        if (headerDesc && !isHistoricalView) {
+          headerDesc.textContent = 'Get comprehensive ATS scoring and role-specific feedback. Your Essential plan includes 3 detailed feedback runs per month.';
+        }
+
         // Essential: 3 feedbacks/month
         if (feedbackTile) {
           // Check monthly usage (will be updated dynamically via API)
@@ -4769,17 +5892,21 @@
         const planLabel = plan.charAt(0).toUpperCase() + plan.slice(1) + ' Plan';
         const planColor = isProPlan ? '#388E3C' : '#C62828';
         
-        if (atsScoreTile) {
-          const badge = atsScoreTile.querySelector('#rf-plan-badge');
-          safeSetText(badge, planLabel);
-          safeSetStyle(badge, 'background', planColor);
-          updateDescriptionWithTooltip(
-            safeQuerySelector(atsScoreTile, '#rf-score-desc'),
-            'Upload your resume once. Improve it step-by-step with ATS insights, role-specific feedback, and AI-powered rewrites!',
-            'Receive an overall ATS compliance score (0-100) for your resume, highlighting key areas to improve for better job application success. Score as many resumes as you need with unlimited access.'
-          );
-          safeQueryHTML(atsScoreTile, '#rf-ats-checks', '');
+        const headerBadge = document.getElementById('rf-header-plan-badge');
+        const headerDesc = document.getElementById('rf-header-desc');
+        
+        if (headerBadge) {
+          headerBadge.textContent = planLabel;
+          headerBadge.style.background = planColor;
         }
+        if (headerDesc && !isHistoricalView) {
+          if (isPremiumPlan) {
+            headerDesc.textContent = 'Upload your resume once. Improve it step-by-step with ATS insights, role-specific feedback, and AI-powered rewrites! All your AI-generated content gets priority review.';
+          } else {
+            headerDesc.textContent = 'Upload your resume once. Improve it step-by-step with ATS insights, role-specific feedback, and AI-powered rewrites!';
+          }
+        }
+
         if (feedbackTile) {
           const badge = feedbackTile.querySelector('.rf-title .rf-plan-badge');
           safeSetText(badge, planLabel);
@@ -4824,18 +5951,18 @@
     }
 
     // Add usage indicator using shared component
-    document.addEventListener('DOMContentLoaded', async function() {
-      const atsTile = document.getElementById('rf-ats-score-tile');
-      const generateBtn = document.getElementById('rf-generate-btn');
-      const currentPlan = getCurrentUserPlan();
+    async function refreshUsageIndicator() {
+      const headerCard = document.getElementById('rf-header-card');
+      const usageContainer = document.getElementById('rf-usage-container');
       
-      // Only show usage indicator for plans that have limits (essential, trial)
-      if (atsTile && (currentPlan === 'essential' || currentPlan === 'trial')) {
+      // Fetch usage for all plans to show limits (trial/essential) or total runs (pro/premium)
+      if (headerCard && usageContainer) {
         try {
           // Fetch usage data from API
-          const token = localStorage.getItem('firebase-id-token');
+          const token = await getAuthToken().catch(() => null);
           if (!token) {
             console.warn('[RESUME-FEEDBACK] No auth token available for usage fetch');
+            usageContainer.innerHTML = `<div class="usage-indicator">Sign in to see your usage limits.</div>`;
             return;
           }
 
@@ -4849,6 +5976,7 @@
 
           if (!usageResponse.ok) {
             console.warn('[RESUME-FEEDBACK] Failed to fetch usage data');
+            usageContainer.innerHTML = `<div class="usage-indicator">Usage information unavailable. Please refresh and try again.</div>`;
             return;
           }
 
@@ -4858,131 +5986,45 @@
             const usage = usageData.usage.resumeFeedback;
             const plan = usageData.plan;
 
-            // Create container for usage indicator
-            const usageContainer = document.createElement('div');
-            usageContainer.className = 'rf-plan-limit';
-            usageContainer.style.cssText = 'margin-top: 0.75rem; margin-bottom: 0.25rem;';
+            // Clear container first
+            usageContainer.innerHTML = '';
             
-            // Build plan-specific copy focused on feedback runs
-            let customText = '';
-            if (plan === 'trial') {
-              customText = `${usage.used || 0} of ${usage.limit || 3} feedback runs used during your trial`;
-            } else if (plan === 'essential') {
-              customText = `${usage.used || 0} of ${usage.limit || 3} feedback runs used this month`;
-            }
+            // Create a child div for the resume feedback indicator
+            const indicatorDiv = document.createElement('div');
+            usageContainer.appendChild(indicatorDiv);
 
-            // Render usage indicator using shared component
+            // Render usage indicator using the shared component
             if (window.renderUsageIndicator) {
               window.renderUsageIndicator({
                 feature: 'resumeFeedback',
-                usage,
-                plan,
-                container: usageContainer,
-                customText
+                usage: usage,
+                plan: plan,
+                container: indicatorDiv,
+                customText: null // Let component use default text
               });
-              
-              // Insert just under the main Generate ATS Score & Feedback button
-              if (generateBtn && generateBtn.parentNode) {
-                generateBtn.insertAdjacentElement('afterend', usageContainer);
-              } else {
-                atsTile.appendChild(usageContainer);
-              }
+
             } else {
               console.warn('[RESUME-FEEDBACK] Usage indicator component not loaded');
+              indicatorDiv.innerHTML = `<div class="usage-indicator">Usage information unavailable. Please refresh and try again.</div>`;
             }
+          } else {
+            usageContainer.innerHTML = `<div class="usage-indicator">Usage information unavailable.</div>`;
           }
         } catch (error) {
           console.error('[RESUME-FEEDBACK] Error loading usage indicator:', error);
+          if (usageContainer) {
+            usageContainer.innerHTML = `<div class="usage-indicator">Usage information unavailable. Please refresh and try again.</div>`;
+          }
         }
       }
-    });
+    }
 
-    // --- PLAN LOGIC ---
-    // Update plan badges and unlock features based on user plan
-    document.addEventListener('DOMContentLoaded', function() {
-      const updatePlanUI = () => {
-        const userPlan = getCurrentUserPlan();
-        
-        // Update all plan badges
-        document.querySelectorAll('.rf-plan-badge').forEach(badge => {
-          // Determine badge color based on plan
-          let bgColor = 'var(--color-accent-blue)'; // Trial/Essential blue
-          if (userPlan === 'pro') bgColor = '#388E3C'; // Pro green
-          if (userPlan === 'premium') bgColor = '#C62828'; // Premium red
-          if (userPlan === 'free') bgColor = '#6B7280'; // Free gray
-          
-          badge.style.background = bgColor;
-          badge.textContent = userPlan.charAt(0).toUpperCase() + userPlan.slice(1) + ' Plan';
-        });
-        
-        // Unlock ATS scoring and feedback for trial and above
-        if (['trial', 'essential', 'pro', 'premium'].includes(userPlan)) {
-          const atsSection = document.getElementById('ats-section');
-          if (atsSection) atsSection.classList.remove('locked');
-          
-          // Show feedback content, hide upgrade prompts
-          const feedbackContent = document.getElementById('rf-feedback-content');
-          const feedbackUpgradePrompt = document.querySelector('#rf-feedback-tile .rf-upgrade-prompt');
-          if (feedbackContent && ['pro', 'premium'].includes(userPlan)) {
-            feedbackContent.style.display = 'block';
-            console.log('[RESUME-FEEDBACK] Showing feedback content for plan:', userPlan);
-          }
-          if (feedbackUpgradePrompt) feedbackUpgradePrompt.style.display = 'none';
-        }
-        
-        // Pro/Premium: Unlock resume rewriting
-        if (['pro', 'premium'].includes(userPlan)) {
-          const rewriteContent = document.getElementById('rf-rewrite-content');
-          const rewriteUpgradePrompt = document.querySelector('#rf-rewrite-tile .rf-upgrade-prompt');
-          const rewriteBadge = document.querySelector('#rf-rewrite-tile .rf-plan-badge');
-          
-          // Show rewrite content, hide upgrade prompt
-          if (rewriteContent) {
-            rewriteContent.style.display = 'block';
-            console.log('[RESUME-FEEDBACK] Showing rewrite content for plan:', userPlan);
-          }
-          if (rewriteUpgradePrompt) rewriteUpgradePrompt.style.display = 'none';
-          
-          // Update rewrite badge
-          if (rewriteBadge) {
-            rewriteBadge.style.background = userPlan === 'premium' ? '#C62828' : '#388E3C';
-            rewriteBadge.textContent = userPlan === 'premium' ? 'Premium' : 'Pro';
-          }
-        } else {
-          // Non-Pro: Show upgrade prompt, hide rewrite content
-          const rewriteContent = document.getElementById('rf-rewrite-content');
-          const rewriteUpgradePrompt = document.querySelector('#rf-rewrite-tile .rf-upgrade-prompt');
-          const rewriteBadge = document.querySelector('#rf-rewrite-tile .rf-plan-badge');
-          
-          if (rewriteContent) rewriteContent.style.display = 'none';
-          if (rewriteUpgradePrompt) rewriteUpgradePrompt.style.display = 'flex';
-          
-          // Gray out rewrite badge
-          if (rewriteBadge) {
-            rewriteBadge.style.background = '#6B7280';
-            rewriteBadge.textContent = 'Pro Only';
-          }
-        }
-        
-        // Update plan limit text
-        updatePlanLimitText();
-      };
-      
-      // Update on load
-      updatePlanUI();
-      
-      // Listen for plan changes (cross-tab via localStorage)
-      window.addEventListener('storage', function(e) {
-        if (e.key === 'dev-plan' || e.key === 'user-plan') {
-          updatePlanUI();
-        }
-      });
-       
-      // Listen for custom plan change events
-      window.addEventListener('planChanged', function(e) {
-        updatePlanUI();
-      });
-    });
+    // Initialize usage indicator when DOM is ready (fires earlier than 'load')
+    document.addEventListener('DOMContentLoaded', refreshUsageIndicator);
+
+    // --- PLAN UI ---
+    // Plan badge + gating are handled by the navigation-driven plan system via `updateRfTileForPlan()`.
+    // Do NOT re-implement a second plan UI updater here (it caused Trial badge color regressions by overwriting state).
 
     // =======================================================
     // RESUME FEEDBACK HISTORY (D1-backed)
@@ -4991,6 +6033,142 @@
     
     // In-memory history cache (source of truth is always the server)
     let _historyItems = [];
+    // HistoryPanel v1 state
+    let _historyManageMode = false;
+    let _historySelectedIds = new Set();
+    let _historyPendingDeleteIds = [];
+    let _historyMenuOpenForSessionId = null;
+    let _historyHasError = false;
+
+    function getVisibleHistoryItems(items) {
+      // UI spec: show last 10
+      return (items || []).slice(0, 10);
+    }
+
+    function getVisibleHistoryIds() {
+      return getVisibleHistoryItems(_historyItems)
+        .map((x) => String(x?.sessionId || ''))
+        .filter(Boolean);
+    }
+
+    function setHistoryManageMode(next) {
+      const panel = document.getElementById('rf-history-panel');
+      const titleEl = document.getElementById('rf-history-header-title');
+      _historyManageMode = !!next;
+      if (panel) {
+        panel.classList.toggle('rf-history-panel--manage', _historyManageMode);
+      }
+      if (titleEl) {
+        titleEl.textContent = _historyManageMode ? 'Select items' : 'History';
+      }
+      if (!_historyManageMode) {
+        _historySelectedIds.clear();
+        _historyMenuOpenForSessionId = null;
+      }
+      syncBulkDeleteState();
+      // Re-render list so checkboxes/menus match mode
+      renderHistoryItems(_historyItems);
+    }
+
+    function syncBulkDeleteState() {
+      const btn = document.getElementById('rf-history-delete-selected');
+      if (!btn) return;
+      btn.disabled = _historySelectedIds.size < 1;
+    }
+
+    function setHistoryLoading(isLoading) {
+      const loadingEl = document.getElementById('rf-history-loading');
+      if (!loadingEl) return;
+      loadingEl.classList.toggle('is-visible', !!isLoading);
+    }
+
+    function setHistoryErrorVisible(isVisible, message) {
+      const errEl = document.getElementById('rf-history-error');
+      if (!errEl) return;
+      const textEl = errEl.querySelector('span[data-default-message]') || errEl.querySelector('span');
+      if (textEl) {
+        if (message) {
+          textEl.textContent = message;
+        } else if (textEl.dataset.defaultMessage) {
+          textEl.textContent = textEl.dataset.defaultMessage;
+        }
+      }
+      errEl.hidden = !isVisible;
+      _historyHasError = isVisible;
+    }
+
+    function closeAllHistoryMenus() {
+      const listEl = document.getElementById('rf-history-list');
+      if (!listEl) return;
+      listEl.querySelectorAll('.rf-history-menu').forEach((menu) => {
+        menu.hidden = true;
+      });
+      _historyMenuOpenForSessionId = null;
+    }
+
+    function openDeleteModalFor(ids) {
+      const unique = Array.from(new Set((ids || []).map(String).filter(Boolean)));
+      if (!unique.length) {
+        _historyPendingDeleteIds = [];
+        return;
+      }
+      _historyPendingDeleteIds = unique;
+
+      const backdrop = document.getElementById('rf-history-modal-backdrop');
+      const modal = document.getElementById('rf-history-delete-modal');
+      const cancelBtn = document.getElementById('rf-history-modal-cancel');
+      if (backdrop) backdrop.hidden = false;
+      if (modal) modal.hidden = false;
+      // Default focus: Cancel
+      setTimeout(() => cancelBtn?.focus?.(), 0);
+    }
+
+    function closeDeleteModal() {
+      const backdrop = document.getElementById('rf-history-modal-backdrop');
+      const modal = document.getElementById('rf-history-delete-modal');
+      if (backdrop) backdrop.hidden = true;
+      if (modal) modal.hidden = true;
+      _historyPendingDeleteIds = [];
+    }
+
+    async function deleteResumeFeedbackHistoryItem(sessionId) {
+      // NOTE: backend may not support DELETE yet; we fail gracefully if it doesn't.
+      const token = await getAuthToken().catch(() => null);
+      if (!token) throw new Error('Unauthorized');
+
+      const res = await fetch(`/api/resume-feedback/history/${encodeURIComponent(String(sessionId))}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (!res.ok) {
+        const msg = `Delete failed (${res.status})`;
+        throw new Error(msg);
+      }
+      return true;
+    }
+
+    async function deleteResumeFeedbackHistoryItems(sessionIds) {
+      const ids = Array.from(new Set((sessionIds || []).map(String).filter(Boolean)));
+      if (!ids.length) return { success: [], failures: [] };
+      const results = await Promise.allSettled(ids.map((id) => deleteResumeFeedbackHistoryItem(id)));
+      const successIds = results
+        .filter((r) => r.status === 'fulfilled')
+        .map((r, index) => ids[index]);
+      const failures = results
+        .map((result, index) => ({ result, id: ids[index] }))
+        .filter(({ result }) => result.status === 'rejected');
+
+      if (successIds.length) {
+        _historyItems = _historyItems.filter(item => !successIds.includes(String(item.sessionId)));
+        renderHistoryItems(_historyItems);
+      }
+
+      return { success: successIds, failures };
+    }
     
     /**
      * Normalize SQLite datetime format to ISO 8601 for Safari compatibility
@@ -5088,92 +6266,98 @@
     /**
      * Render history items to the DOM
      */
-    const HISTORY_PAGE_SIZE = 10;
-    let _historyVisibleCount = HISTORY_PAGE_SIZE;
-    
     function renderHistoryItems(items) {
-      const listEl = document.getElementById('rf-history-list');
+    const listEl = document.getElementById('rf-history-list');
       const emptyEl = document.getElementById('rf-history-empty');
-      const loadingEl = document.getElementById('rf-history-loading');
-      const actionsEl = document.getElementById('rf-history-actions');
-      const countEl = document.getElementById('rf-history-count');
-      const showMoreBtn = document.getElementById('rf-history-show-more');
-      const showLessBtn = document.getElementById('rf-history-show-less');
       
       if (!listEl) return;
       
-      // Hide loading
-      if (loadingEl) loadingEl.style.display = 'none';
+      // Always hide loading when rendering
+      setHistoryLoading(false);
       
       if (!items || items.length === 0) {
-        listEl.style.display = 'none';
-        if (emptyEl) emptyEl.style.display = 'block';
-        if (actionsEl) actionsEl.style.display = 'none';
+        listEl.innerHTML = '';
+        if (emptyEl) {
+          emptyEl.hidden = _historyHasError ? true : false;
+        }
         return;
       }
       
-      if (emptyEl) emptyEl.style.display = 'none';
+      if (emptyEl) emptyEl.hidden = true;
       
-      // Limit visible items to current page size
-      const visibleItems = items.slice(0, _historyVisibleCount);
-      
-      // Build history list HTML with clickable items and atsScore
-      listEl.innerHTML = visibleItems.map(item => `
-        <div class="rf-history-item" data-session-id="${item.sessionId || ''}" title="Click to view this analysis">
-          <div class="rf-history-icon">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
-              <polyline points="14 2 14 8 20 8"/>
-              <line x1="16" y1="13" x2="8" y2="13"/>
-              <line x1="16" y1="17" x2="8" y2="17"/>
-              <polyline points="10 9 9 9 8 9"/>
-            </svg>
-          </div>
-          <div class="rf-history-details">
-            <div class="rf-history-title">${escapeHtml(getHistoryItemTitle(item))}</div>
-            <div class="rf-history-meta">
-              ${item.role ? `<span style="margin-right:0.5rem;">📌 ${escapeHtml(item.role)}</span>` : ''}
-              <span>📅 ${formatHistoryDate(item.createdAt)}</span>
+      const visibleItems = getVisibleHistoryItems(items);
+
+    listEl.innerHTML = visibleItems.map(item => {
+        const sessionId = String(item?.sessionId || '');
+        const roleName = String(item?.role || '').trim() || 'Untitled role';
+        const when = formatHistoryDate(item?.createdAt) || '—';
+
+      // Prevent null from being coerced into a valid 0 score.
+        const normalizedScore = item?.atsScore != null && Number.isFinite(Number(item.atsScore))
+        ? Number(item.atsScore)
+        : null;
+
+        const isCurrent = !_historyManageMode && _currentHistoricalSessionId && String(_currentHistoricalSessionId) === sessionId;
+        const isSelected = isCurrent ? 'is-selected' : '';
+        const isChecked = _historySelectedIds.has(sessionId);
+
+      const scoreHtml = normalizedScore !== null
+          ? `<div class="rf-history-score" aria-label="Score ${Math.round(normalizedScore)}">${Math.round(normalizedScore)}</div>`
+        : '';
+
+        const menuHidden = _historyMenuOpenForSessionId !== sessionId;
+
+      return `
+          <div class="rf-history-item ${isSelected}" data-session-id="${escapeHtml(sessionId)}" tabindex="0" data-history-row>
+            <span class="rf-history-checkbox-wrap" aria-hidden="${_historyManageMode ? 'false' : 'true'}">
+              <input
+                class="rf-history-checkbox"
+                type="checkbox"
+                data-action="toggle-select"
+                data-session-id="${escapeHtml(sessionId)}"
+                aria-label="Select ${escapeHtml(roleName)}"
+                ${isChecked ? 'checked' : ''}
+              />
+            </span>
+
+            <div class="rf-history-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
+                <polyline points="14 2 14 8 20 8"/>
+                <line x1="16" y1="13" x2="8" y2="13"/>
+                <line x1="16" y1="17" x2="8" y2="17"/>
+              </svg>
             </div>
-          </div>
-          ${item.atsScore !== null && item.atsScore !== undefined ? `<div class="rf-history-score">${item.atsScore}</div>` : ''}
+
+            <div class="rf-history-text">
+              <div class="rf-history-line1">${escapeHtml(roleName)}</div>
+              <div class="rf-history-line2">${escapeHtml(when)}</div>
+            </div>
+
+          ${scoreHtml}
+
+            <div class="rf-history-row-actions" aria-label="Row actions">
+              <button
+                class="rf-history-kebab"
+                type="button"
+                aria-label="Row actions"
+                data-action="menu-toggle"
+                data-session-id="${escapeHtml(sessionId)}"
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                  <circle cx="5" cy="12" r="2"></circle>
+                  <circle cx="12" cy="12" r="2"></circle>
+                  <circle cx="19" cy="12" r="2"></circle>
+                </svg>
+              </button>
+              <div class="rf-history-menu" role="menu" ${menuHidden ? 'hidden' : ''}>
+                <button class="rf-history-menu-item" type="button" data-action="open" data-session-id="${escapeHtml(sessionId)}">Open / Restore</button>
+                <button class="rf-history-menu-item rf-history-menu-item--danger" type="button" data-action="delete" data-session-id="${escapeHtml(sessionId)}">Delete</button>
+              </div>
+            </div>
         </div>
-      `).join('');
-      
-      listEl.style.display = 'flex';
-      
-      // Add click handlers for history items
-      listEl.querySelectorAll('.rf-history-item').forEach(itemEl => {
-        itemEl.addEventListener('click', function() {
-          const sessionId = this.dataset.sessionId;
-          if (sessionId) {
-            loadHistoryDetail(sessionId);
-          }
-        });
-      });
-      
-      // Show/hide actions (Show more / Show less)
-      const hasMore = items.length > _historyVisibleCount;
-      const canShowLess = _historyVisibleCount > HISTORY_PAGE_SIZE;
-      
-      if (actionsEl) actionsEl.style.display = (hasMore || canShowLess) ? 'flex' : 'none';
-      if (countEl) countEl.textContent = `Showing ${Math.min(_historyVisibleCount, items.length)} of ${items.length}`;
-      
-      if (showMoreBtn) {
-        showMoreBtn.style.display = hasMore ? 'inline-flex' : 'none';
-        showMoreBtn.onclick = () => {
-          _historyVisibleCount = Math.min(_historyVisibleCount + HISTORY_PAGE_SIZE, _historyItems.length);
-          renderHistoryItems(_historyItems);
-        };
-      }
-      
-      if (showLessBtn) {
-        showLessBtn.style.display = canShowLess ? 'inline-flex' : 'none';
-        showLessBtn.onclick = () => {
-          _historyVisibleCount = HISTORY_PAGE_SIZE;
-          renderHistoryItems(_historyItems);
-        };
-      }
+      `;
+    }).join('');
     }
     
     /**
@@ -5201,12 +6385,13 @@
           : 'Generate ATS Score & Feedback';
       }
       
-      if (generateBtn) {
-        const hasFile = fileInput && fileInput.files && fileInput.files.length > 0;
-        if (_mode === 'saved' && !hasFile) {
-          generateBtn.disabled = true;
-        }
-      }
+      // Keep generate button clickable; click guard handles missing file case
+      // if (generateBtn) {
+      //   const hasFile = fileInput && fileInput.files && fileInput.files.length > 0;
+      //   if (_mode === 'saved' && !hasFile) {
+      //     generateBtn.disabled = true;
+      //   }
+      // }
       
       if (savedLine) {
         savedLine.style.display = _mode === 'saved' ? 'block' : 'none';
@@ -5316,14 +6501,19 @@
         
         // Populate target role input for clarity
         const jobTitleInput = document.getElementById('rf-job-title');
-        if (jobTitleInput && data.role) {
-          jobTitleInput.value = data.role;
+        if (jobTitleInput) {
+          if (data.role && data.role.trim()) {
+            jobTitleInput.value = data.role;
+          } else {
+            jobTitleInput.value = '';
+          }
         }
         
-        // Require a new file before re-running
+        // Require a new file before re-running (enforced by click guard instead of disabling button)
         const generateBtn = document.getElementById('rf-generate-btn');
         if (generateBtn) {
-          generateBtn.disabled = true;
+          // Keep button clickable; generateATSAndFeedback will show a modal if no file is selected
+          // generateBtn.disabled = true;
         }
         
         // Mark active history item
@@ -5381,8 +6571,8 @@
       const banner = document.getElementById('rf-historical-banner');
       if (banner) banner.style.display = 'none';
       
-      // Clear active history item
-      document.querySelectorAll('.rf-history-item.active').forEach(el => el.classList.remove('active'));
+      // Clear selected history item outline
+      document.querySelectorAll('.rf-history-item.is-selected').forEach(el => el.classList.remove('is-selected'));
       
       // Reset form and results
       resetFormToDefault();
@@ -5422,12 +6612,12 @@
      * Mark the active history item in the sidebar
      */
     function markActiveHistoryItem(sessionId) {
-      // Remove active from all items
-      document.querySelectorAll('.rf-history-item.active').forEach(el => el.classList.remove('active'));
+      // Remove selected from all items
+      document.querySelectorAll('.rf-history-item.is-selected').forEach(el => el.classList.remove('is-selected'));
       
-      // Add active to current
+      // Add selected outline to current (normal mode)
       const activeItem = document.querySelector(`.rf-history-item[data-session-id="${sessionId}"]`);
-      if (activeItem) activeItem.classList.add('active');
+      if (activeItem) activeItem.classList.add('is-selected');
     }
     
     /**
@@ -5443,7 +6633,10 @@
       const pdfHelper = document.getElementById('rf-pdf-helper');
       if (fileInput) fileInput.value = '';
       if (fileName) fileName.textContent = 'No file selected';
-      if (generateBtn) generateBtn.disabled = true;
+      
+      // Enable button - click guard will handle missing file
+      if (generateBtn) generateBtn.disabled = false;
+      
       if (statusDiv) statusDiv.style.display = 'none';
       if (fileStatus) fileStatus.style.display = 'none';
       if (pdfHelper) pdfHelper.style.display = 'none';
@@ -5465,6 +6658,9 @@
       }
       if (scoreText) scoreText.textContent = '0%';
       
+      // Hide extraction quality indicator
+      updateExtractionQualityIndicator(null);
+      
       // Hide feedback sections and role info
       const feedbackContent = document.getElementById('rf-feedback-content');
       const rubricGrid = document.getElementById('rf-rubric-grid');
@@ -5479,7 +6675,6 @@
       }
       // Clear role-specific status but keep the tile visible for the next run
       setRoleStatus('');
-      roleTipsFailureCount = 0;
       const roleContainer = document.getElementById('role-feedback-container');
       if (roleContainer) roleContainer.style.display = 'block';
       const roleBadge = document.getElementById('rf-role-badge');
@@ -5503,7 +6698,7 @@
         updateRfTileForPlan();
       } else {
         // Fallback: minimally reset score description while preserving tooltip
-        const scoreDesc = document.getElementById('rf-score-desc');
+        const scoreDesc = document.getElementById('rf-header-desc');
         if (scoreDesc) {
           scoreDesc.innerHTML = 'Get your basic ATS compatibility score.';
         }
@@ -5537,9 +6732,13 @@
       if (data.atsScore !== null && data.atsScore !== undefined) {
         updateProgressRing(data.atsScore);
         // Update score description
-        const scoreDesc = document.getElementById('rf-score-desc');
-        if (scoreDesc && data.role) {
-          scoreDesc.innerHTML = `Your resume scored <strong>${data.atsScore}/100</strong> for ${escapeHtml(data.role)} roles.`;
+        const scoreDesc = document.getElementById('rf-header-desc');
+        if (scoreDesc) {
+          if (data.role && data.role.trim()) {
+            scoreDesc.innerHTML = `Your resume scored <strong>${data.atsScore}%</strong> for ${escapeHtml(data.role)} roles.`;
+          } else {
+            scoreDesc.innerHTML = `Your resume scored <strong>${data.atsScore}%</strong>.`;
+          }
         }
       }
       
@@ -5768,25 +6967,25 @@
      * Fetch history from the D1-backed API
      */
     async function fetchResumeFeedbackHistory() {
-      const loadingEl = document.getElementById('rf-history-loading');
       const emptyEl = document.getElementById('rf-history-empty');
       const listEl = document.getElementById('rf-history-list');
-      
-      // Show loading state
-      if (loadingEl) loadingEl.style.display = 'flex';
-      if (emptyEl) emptyEl.style.display = 'none';
-      if (listEl) listEl.style.display = 'none';
+      // Show loading skeleton, hide error + empty
+      setHistoryErrorVisible(false);
+      setHistoryLoading(true);
+      if (emptyEl) emptyEl.hidden = true;
+      if (listEl) listEl.innerHTML = '';
       
       try {
         const token = await getAuthToken().catch(() => null);
         if (!token) {
           console.warn('[RESUME-FEEDBACK-HISTORY] No auth token available');
           _historyItems = [];
+          setHistoryLoading(false);
           renderHistoryItems([]);
           return;
         }
         
-        const response = await fetch('/api/resume-feedback/history?limit=20', {
+        const response = await fetch('/api/resume-feedback/history?limit=10', {
           method: 'GET',
           headers: {
             'Authorization': `Bearer ${token}`,
@@ -5797,20 +6996,23 @@
         if (!response.ok) {
           console.warn('[RESUME-FEEDBACK-HISTORY] API returned error:', response.status);
           _historyItems = [];
+          setHistoryLoading(false);
+          setHistoryErrorVisible(true, 'Couldn’t load history.');
           renderHistoryItems([]);
           return;
         }
         
         const data = await response.json();
         _historyItems = data.items || [];
-        _historyVisibleCount = HISTORY_PAGE_SIZE;
-        
+        setHistoryLoading(false);
         console.log('[RESUME-FEEDBACK-HISTORY] Loaded history:', _historyItems.length, 'items');
         renderHistoryItems(_historyItems);
         
       } catch (error) {
         console.error('[RESUME-FEEDBACK-HISTORY] Error fetching history:', error);
         _historyItems = [];
+        setHistoryLoading(false);
+        setHistoryErrorVisible(true, 'Couldn’t load history.');
         renderHistoryItems([]);
       }
     }
@@ -5851,13 +7053,30 @@
      */
     function initializeHistory() {
       // Only load history if user is authenticated
-      const isAuthenticated = localStorage.getItem('user-authenticated') === 'true' && !!localStorage.getItem('user-email');
+      // SECURITY: Check Firebase SDK keys synchronously (works before FirebaseAuthManager is ready)
+      // FirebaseAuthManager.getCurrentUser() returns null until onAuthStateChanged fires
+      // Use same pattern as checkAuthentication() for consistency
+      function hasFirebaseAuthKeys() {
+        try {
+          return Object.keys(localStorage).some(k => 
+            k.startsWith('firebase:authUser:') && 
+            localStorage.getItem(k) && 
+            localStorage.getItem(k) !== 'null' &&
+            localStorage.getItem(k).length > 10
+          );
+        } catch (e) {
+          return false;
+        }
+      }
+      const hasLocalStorageAuth = localStorage.getItem('user-authenticated') === 'true';
+      const hasFirebaseKeys = hasFirebaseAuthKeys();
+      const isAuthenticated = hasLocalStorageAuth || hasFirebaseKeys;
       if (!isAuthenticated) {
         console.log('[RESUME-FEEDBACK-HISTORY] Skipping history load - not authenticated');
-        const loadingEl = document.getElementById('rf-history-loading');
         const emptyEl = document.getElementById('rf-history-empty');
-        if (loadingEl) loadingEl.style.display = 'none';
-        if (emptyEl) emptyEl.style.display = 'block';
+        setHistoryLoading(false);
+        setHistoryErrorVisible(false);
+        if (emptyEl) emptyEl.hidden = false;
         return;
       }
       
@@ -5869,9 +7088,243 @@
       if (refreshBtn) {
         refreshBtn.addEventListener('click', function(e) {
           e.preventDefault();
+          if (_historyManageMode) return;
           fetchResumeFeedbackHistory();
         });
       }
+
+      // Retry link
+      const retryBtn = document.getElementById('rf-history-retry');
+      if (retryBtn) {
+        retryBtn.addEventListener('click', function(e) {
+          e.preventDefault();
+          fetchResumeFeedbackHistory();
+        });
+      }
+
+      // Manage mode controls
+      const manageBtn = document.getElementById('rf-history-manage');
+      if (manageBtn) {
+        manageBtn.addEventListener('click', function(e) {
+          e.preventDefault();
+          setHistoryManageMode(true);
+        });
+      }
+
+      const cancelManageBtn = document.getElementById('rf-history-cancel-manage');
+      if (cancelManageBtn) {
+        cancelManageBtn.addEventListener('click', function(e) {
+          e.preventDefault();
+          setHistoryManageMode(false);
+        });
+      }
+
+      const deleteSelectedBtn = document.getElementById('rf-history-delete-selected');
+      if (deleteSelectedBtn) {
+        deleteSelectedBtn.addEventListener('click', function(e) {
+          e.preventDefault();
+          if (_historySelectedIds.size < 1) return;
+          openDeleteModalFor(Array.from(_historySelectedIds));
+        });
+      }
+
+      // Retention footer: Clear history
+      const clearBtn = document.getElementById('rf-history-clear');
+      if (clearBtn) {
+        clearBtn.addEventListener('click', function(e) {
+          e.preventDefault();
+          const ids = getVisibleHistoryIds();
+          if (!ids.length) {
+            return;
+          }
+          if (!_historyManageMode) setHistoryManageMode(true);
+          _historySelectedIds = new Set(ids);
+          syncBulkDeleteState();
+          renderHistoryItems(_historyItems);
+          openDeleteModalFor(ids);
+        });
+      }
+
+      // Modal actions
+      const modalCancel = document.getElementById('rf-history-modal-cancel');
+      const modalConfirm = document.getElementById('rf-history-modal-confirm');
+      const modal = document.getElementById('rf-history-delete-modal');
+      const backdrop = document.getElementById('rf-history-modal-backdrop');
+
+      if (modalCancel) {
+        modalCancel.addEventListener('click', function(e) {
+          e.preventDefault();
+          closeDeleteModal();
+        });
+      }
+      if (backdrop) {
+        backdrop.addEventListener('click', function() {
+          closeDeleteModal();
+        });
+      }
+      if (modalConfirm) {
+        modalConfirm.addEventListener('click', async function(e) {
+          e.preventDefault();
+          const ids = Array.from(new Set(_historyPendingDeleteIds));
+          if (!ids.length) return;
+          modalConfirm.disabled = true;
+          try {
+            const { failures } = await deleteResumeFeedbackHistoryItems(ids);
+            ids.forEach((id) => _historySelectedIds.delete(id));
+            syncBulkDeleteState();
+            closeDeleteModal();
+            await fetchResumeFeedbackHistory();
+            if (failures.length) {
+              const failureReason = failures[0].result?.reason;
+              const failureMessage = failureReason?.message
+                || 'Some selected entries could not be deleted. History refreshed to reflect the current state.';
+              setHistoryErrorVisible(true, failureMessage);
+            } else {
+              setHistoryErrorVisible(false);
+            }
+          } catch (err) {
+            console.warn('[RESUME-FEEDBACK-HISTORY] Delete failed:', err);
+            closeDeleteModal();
+            const failureMessage = err?.message || 'Failed to delete selected history.';
+            setHistoryErrorVisible(true, failureMessage);
+            await fetchResumeFeedbackHistory().catch(() => {});
+            _historySelectedIds.clear();
+            syncBulkDeleteState();
+          } finally {
+            modalConfirm.disabled = false;
+          }
+        });
+      }
+
+      // Focus trap + ESC close for modal
+      if (modal && !modal.dataset.bound) {
+        modal.dataset.bound = '1';
+        modal.addEventListener('keydown', function(e) {
+          if (e.key === 'Escape') {
+            e.preventDefault();
+            closeDeleteModal();
+            return;
+          }
+          if (e.key !== 'Tab') return;
+          const focusables = modal.querySelectorAll('button,[href],input,select,textarea,[tabindex]:not([tabindex="-1"])');
+          const list = Array.from(focusables).filter((el) => !el.disabled && el.offsetParent !== null);
+          if (!list.length) return;
+          const first = list[0];
+          const last = list[list.length - 1];
+          const active = document.activeElement;
+          if (e.shiftKey && active === first) {
+            e.preventDefault();
+            last.focus();
+          } else if (!e.shiftKey && active === last) {
+            e.preventDefault();
+            first.focus();
+          }
+        });
+      }
+
+      document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') {
+          const backdropEl = document.getElementById('rf-history-modal-backdrop');
+          if (backdropEl && !backdropEl.hidden) {
+            closeDeleteModal();
+          }
+          closeAllHistoryMenus();
+        }
+      });
+
+      // Row interactions (delegated)
+      const listEl = document.getElementById('rf-history-list');
+      if (listEl && !listEl.dataset.bound) {
+        listEl.dataset.bound = '1';
+
+        listEl.addEventListener('click', function(e) {
+          const actionEl = e.target.closest('[data-action]');
+          const rowEl = e.target.closest('.rf-history-item');
+          const sessionId = actionEl?.dataset?.sessionId || rowEl?.dataset?.sessionId || '';
+          if (!rowEl || !sessionId) return;
+
+          const action = actionEl?.dataset?.action || null;
+          if (action === 'menu-toggle') {
+            e.preventDefault();
+            e.stopPropagation();
+            // toggle this menu, close others
+            const menu = rowEl.querySelector('.rf-history-menu');
+            if (!menu) return;
+            const willOpen = menu.hidden;
+            closeAllHistoryMenus();
+            menu.hidden = !willOpen;
+            _historyMenuOpenForSessionId = willOpen ? String(sessionId) : null;
+            return;
+          }
+
+          if (action === 'open') {
+            e.preventDefault();
+            e.stopPropagation();
+            closeAllHistoryMenus();
+            loadHistoryDetail(sessionId);
+            return;
+          }
+
+          if (action === 'delete') {
+            e.preventDefault();
+            e.stopPropagation();
+            closeAllHistoryMenus();
+            openDeleteModalFor([sessionId]);
+            return;
+          }
+
+          if (action === 'toggle-select') {
+            e.preventDefault();
+            e.stopPropagation();
+            if (_historySelectedIds.has(String(sessionId))) _historySelectedIds.delete(String(sessionId));
+            else _historySelectedIds.add(String(sessionId));
+            syncBulkDeleteState();
+            renderHistoryItems(_historyItems);
+            return;
+          }
+
+          // Row click default
+          if (_historyManageMode) {
+            if (_historySelectedIds.has(String(sessionId))) _historySelectedIds.delete(String(sessionId));
+            else _historySelectedIds.add(String(sessionId));
+            syncBulkDeleteState();
+            renderHistoryItems(_historyItems);
+            return;
+          }
+
+          loadHistoryDetail(sessionId);
+        });
+
+        function isInteractiveKeyTarget(element) {
+          if (!element) return false;
+          const interactiveSelector = 'button, input, textarea, select, a, [role="button"], [role="link"], [contenteditable="true"]';
+          return Boolean(element.closest && element.closest(interactiveSelector));
+        }
+
+        listEl.addEventListener('keydown', function(e) {
+          const rowEl = e.target.closest('.rf-history-item');
+          if (!rowEl) return;
+          if (e.key !== 'Enter' && e.key !== ' ') return;
+          if (isInteractiveKeyTarget(e.target)) return;
+          e.preventDefault();
+          const sessionId = rowEl.dataset.sessionId;
+          if (!sessionId) return;
+          if (_historyManageMode) {
+            if (_historySelectedIds.has(String(sessionId))) _historySelectedIds.delete(String(sessionId));
+            else _historySelectedIds.add(String(sessionId));
+            syncBulkDeleteState();
+            renderHistoryItems(_historyItems);
+          } else {
+            loadHistoryDetail(sessionId);
+          }
+        });
+      }
+
+      // Close menus on outside click
+      document.addEventListener('click', function(e) {
+        const withinMenu = e.target.closest('.rf-history-row-actions');
+        if (!withinMenu) closeAllHistoryMenus();
+      });
     }
     
     // Initialize history when DOM is ready
@@ -5892,7 +7345,6 @@
       getCurrentSessionId: () => _currentHistoricalSessionId
     };
   </script>
-  <script src="js/components/usage-indicator.js" type="module"></script>
   <script src="js/main.js" type="module"></script>
 
   <!-- page content -->
@@ -5917,6 +7369,26 @@
           </button>
         </div>
         
+        <!-- Header Card (New) -->
+        <section class="rf-card" id="rf-header-card">
+          <div class="rf-title" id="rf-header-title" style="margin-bottom:0.2rem;">
+            Smart Resume Tools
+            <span class="rf-plan-badge" id="rf-header-plan-badge">Free Plan</span>
+          </div>
+          
+          <div style="color:var(--color-text-secondary);margin:0.35rem 0 0.7rem;" id="rf-header-desc">
+            Upload your resume once. Improve it step-by-step with ATS insights, role-specific feedback, and AI-powered rewrites!
+          </div>
+          
+          <!-- Divider (matching interview questions style) -->
+          <div style="margin-top: 1.25rem; padding-top: 1rem; border-top: 1px solid var(--color-divider);"></div>
+          
+          <!-- Usage Indicator Container -->
+          <div class="rf-plan-limit" style="margin-top: 1rem;">
+            <div id="rf-usage-container"></div>
+          </div>
+        </section>
+
         <!-- ATS Score Tile -->
     <section class="rf-card" id="rf-ats-score-tile">
       <div style="display:flex;align-items:center;gap:2.5rem;flex-wrap:wrap;">
@@ -5926,26 +7398,12 @@
             <circle cx="40" cy="40" r="36" stroke="#00E676" stroke-width="8" fill="none" stroke-dasharray="226.2" stroke-dashoffset="226.2" stroke-linecap="round"/>
             <text x="40" y="48" text-anchor="middle" font-size="1.6rem" font-weight="700" fill="#1F2937">0%</text>
            </svg>
+           <div id="rf-extraction-quality-indicator" class="rf-status-pill" style="display:none;margin-top:0.5rem;width:100%;justify-content:center;flex-shrink:0;">
+             <span class="rf-status-icon"></span>
+             <span class="rf-status-text"></span>
+           </div>
         </div>
         <div style="flex:1;min-width:220px;">
-          <div class="rf-title" id="rf-title" style="margin-bottom:0.2rem;">
-            Smart Resume Tools
-            <span class="rf-plan-badge" id="rf-plan-badge">Free Plan</span>
-          </div>
-          <div style="color:var(--color-text-secondary);margin-bottom:0.7rem;" id="rf-score-desc">
-            Get your basic ATS compatibility score.
-            <span class="rf-tooltip-trigger" tabindex="0" aria-label="More info" style="margin-left:0.4em;">
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
-                <circle cx="12" cy="12" r="10"/>
-                <line x1="12" y1="8" x2="12" y2="8"/>
-                <line x1="12" y1="12" x2="12" y2="16"/>
-              </svg>
-              <span class="rf-tooltip-text">Receive an overall ATS compliance score (0-100) for your resume, highlighting key areas to improve for better job application success.</span>
-            </span>
-          </div>
-          <div class="rf-plan-limit" id="rf-plan-limit">
-            <span id="rf-ats-checks">2 ATS checks remaining this month</span>
-          </div>
           <form id="rf-upload-form" style="margin:1rem 0 0.7rem 0;">
             <label for="rf-job-title" style="font-weight:600;display:block;margin-bottom:0.5rem;">Target Role <span style="font-weight:400;color:var(--color-text-muted);font-size:0.9em;">(Recommended for better results)</span></label>
             <div style="position:relative;max-width:400px;margin-bottom:1rem;">
@@ -6034,9 +7492,13 @@
           <path d="M12 5v14M5 12h14"/>
         </svg>
         <div class="rf-upgrade-text">
-          <strong>Upgrade to Essential or Pro</strong> to unlock detailed ATS and role-specific feedback.
+          <strong>Upgrade to Pro</strong> to unlock detailed ATS and role-specific feedback.
         </div>
-        <a href="pricing-a.html" class="btn btn-secondary">Upgrade Now</a>
+        <a href="#" class="btn btn-secondary" onclick="startCheckout('pro'); return false;">Upgrade Now</a>
+      </div>
+      <!-- Phase 4.3: Locked feature data notice -->
+      <div id="rf-locked-data-notice" style="display:none;background:#F3F4F6;border-left:3px solid #6B7280;padding:0.75rem 1rem;border-radius:8px;margin-top:1rem;font-size:0.875rem;color:#374151;line-height:1.5;">
+        <strong>Data Notice:</strong> Your uploaded resume stays available in your history for 90 days (last 10 runs), even if this tool is locked.
       </div>
       <div id="rf-feedback-content" style="display:none;">
         <!-- Empty state placeholder -->
@@ -6120,7 +7582,7 @@
         <div class="rf-upgrade-text">
           <strong>Upgrade to Pro</strong> to unlock resume rewriting powered by this ATS feedback and your target role.
         </div>
-        <a href="pricing-a.html" class="btn btn-secondary">Upgrade Now</a>
+        <a href="#" class="btn btn-secondary" onclick="startCheckout('pro'); return false;">Upgrade Now</a>
       </div>
       <!-- Hidden content that will be shown for Pro/Premium plans -->
       <div id="rf-rewrite-content" style="display:none; padding: 0 1.5rem;">
@@ -6132,11 +7594,39 @@
         </div>
         <textarea class="rf-snippet-box" readonly>AI-optimized resume excerpt.</textarea>
         <div id="rf-change-summary" style="display:none;"></div>
+        <style>
+        /* Print container for Resume Rewriting (matches other product print rules) */
+        #rf-print { display: none; }
+        @media print {
+          header.site-header,
+          nav.mobile-nav,
+          .mobile-nav-backdrop,
+          footer.site-footer,
+          .rf-sidebar-column,
+          .rf-section-actions,
+          .rf-actions,
+          .rf-loading,
+          /* Hide main content and cards so only the print container is shown */
+          .rf-main-column,
+          .rf-card { display: none !important; }
+
+          body { background: #fff !important; }
+          #rf-print { display: block !important; }
+          /* Ensure print container card styles are neutral for multi-page output
+             and explicitly make print cards visible even though .rf-card is hidden above. */
+          #rf-print .rf-card { display: block !important; box-shadow: none !important; border-radius: 0 !important; padding: 0 !important; margin: 0 0 1rem 0 !important; }
+        }
+        </style>
+
         <div style="margin-top:1.2rem;">
           <button class="btn btn-primary" style="display:none;">Copy Rewritten Resume</button>
-          <button class="btn btn-secondary">Generate Rewrite</button>
+          <button id="rf-download" class="btn-outline" style="display:none;" disabled aria-disabled="true" type="button">Download PDF</button>
+          <button id="rf-generate" class="btn-outline" type="button">Generate Rewrite</button>
           <div id="rf-rewrite-cooldown" style="margin-top:0.5rem;"></div>
         </div>
+
+        <!-- Print container used by window.print() -->
+        <div id="rf-print" aria-hidden="true"></div>
       </div>
     </section>
         
@@ -6144,55 +7634,121 @@
 
       <!-- Sidebar Column - Sticky History -->
       <aside class="rf-sidebar-column">
-        <section class="rf-card" id="rf-history-tile" style="margin-bottom:0;">
-          <div class="rf-title" style="display:flex;align-items:center;justify-content:space-between;font-size:var(--font-size-xl);">
-            <span>
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:text-bottom;margin-right:0.5rem;">
+        <section
+          class="rf-card history-card"
+          id="rf-history-panel"
+          data-history-panel="v1"
+        >
+          <div class="rf-history-header" data-history-header>
+            <div class="rf-history-title-wrap">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
                 <circle cx="12" cy="12" r="10"/>
                 <polyline points="12 6 12 12 16 14"/>
               </svg>
-              Your Feedback History
-            </span>
-            <button id="rf-history-refresh" class="rf-btn-secondary" style="padding:0.4rem 0.75rem;font-size:0.85rem;" title="Refresh history">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <span class="rf-history-title-text" id="rf-history-header-title">History</span>
+            </div>
+
+            <div class="rf-history-header-actions" data-history-header-actions>
+              <button id="rf-history-refresh" class="rf-history-icon-btn" title="Refresh history" aria-label="Refresh history" type="button">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
                 <path d="M23 4v6h-6"/>
                 <path d="M1 20v-6h6"/>
                 <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
               </svg>
             </button>
+              <button id="rf-history-manage" class="rf-history-manage-btn" type="button">Manage</button>
           </div>
-          <div style="color:var(--color-text-secondary);margin-bottom:1rem;font-size:0.95rem;">
-            We automatically save your past feedback so you can come back and compare improvements.
-          </div>
-          <div id="rf-history-content">
-            <!-- Loading state -->
-            <div class="rf-history-loading" id="rf-history-loading">
-              <div class="spinner"></div>
-              <span>Loading history...</span>
-            </div>
-            <!-- History list (populated by JS) -->
-            <div class="rf-history-list" id="rf-history-list" style="display:none;"></div>
-            <!-- Empty state -->
-            <div class="rf-history-empty" id="rf-history-empty" style="display:none;">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
-                <line x1="16" y1="2" x2="16" y2="6"/>
-                <line x1="8" y1="2" x2="8" y2="6"/>
-                <line x1="3" y1="10" x2="21" y2="10"/>
-              </svg>
-              <div style="font-weight:600;margin-bottom:0.25rem;">No history yet</div>
-              <div>Upload a resume and run feedback to see your history here.</div>
-            </div>
-            <!-- Actions: show more/less -->
-            <div class="rf-history-actions" id="rf-history-actions">
-              <div class="rf-history-count" id="rf-history-count">Showing 0 of 0</div>
-              <div style="display:flex;gap:0.4rem;align-items:center;flex-wrap:wrap;">
-                <button class="rf-btn-secondary" id="rf-history-show-more" type="button">Show more</button>
-                <button class="rf-btn-link" id="rf-history-show-less" type="button">Show less</button>
+
+            <div class="rf-history-manage-actions" id="rf-history-manage-actions" data-history-manage-controls>
+              <div class="rf-history-manage-actions__actions">
+                <button id="rf-history-delete-selected" class="rf-history-danger-btn" type="button" disabled>Delete selected</button>
+                <button id="rf-history-cancel-manage" class="rf-history-neutral-btn" type="button">Cancel</button>
               </div>
+            </div>
+            </div>
+
+          <div class="rf-history-subtitle" data-history-subtitle>
+            Last 10 feedback runs • Auto-saved
+              </div>
+
+          <div class="rf-history-body" data-history-body>
+            <div class="rf-history-loading" id="rf-history-loading" data-history-loading>
+              <div class="rf-history-skeleton-row">
+                <div class="rf-skeleton" style="width:40px;height:40px;border-radius:var(--radius-md);"></div>
+                <div style="flex:1;min-width:0;">
+                  <div class="rf-skeleton rf-history-skeleton-pill"></div>
+                  <div class="rf-skeleton rf-history-skeleton-pill sm" style="margin-top:8px;"></div>
+            </div>
+                <div class="rf-skeleton rf-history-skeleton-score"></div>
+              </div>
+              <div class="rf-history-skeleton-row">
+                <div class="rf-skeleton" style="width:40px;height:40px;border-radius:var(--radius-md);"></div>
+                <div style="flex:1;min-width:0;">
+                  <div class="rf-skeleton rf-history-skeleton-pill"></div>
+                  <div class="rf-skeleton rf-history-skeleton-pill sm" style="margin-top:8px;"></div>
+                </div>
+                <div class="rf-skeleton rf-history-skeleton-score"></div>
+              </div>
+              <div class="rf-history-skeleton-row">
+                <div class="rf-skeleton" style="width:40px;height:40px;border-radius:var(--radius-md);"></div>
+                <div style="flex:1;min-width:0;">
+                  <div class="rf-skeleton rf-history-skeleton-pill"></div>
+                  <div class="rf-skeleton rf-history-skeleton-pill sm" style="margin-top:8px;"></div>
+                </div>
+                <div class="rf-skeleton rf-history-skeleton-score"></div>
+              </div>
+              <div class="rf-history-skeleton-row">
+                <div class="rf-skeleton" style="width:40px;height:40px;border-radius:var(--radius-md);"></div>
+                <div style="flex:1;min-width:0;">
+                  <div class="rf-skeleton rf-history-skeleton-pill"></div>
+                  <div class="rf-skeleton rf-history-skeleton-pill sm" style="margin-top:8px;"></div>
+                </div>
+                <div class="rf-skeleton rf-history-skeleton-score"></div>
+              </div>
+            </div>
+
+            <div class="rf-history-error" id="rf-history-error" data-history-error hidden>
+            <span data-default-message="Couldn’t load history.">Couldn’t load history. </span>
+              <button id="rf-history-retry" class="rf-history-link-btn" type="button">Retry.</button>
+            </div>
+
+            <div class="rf-history-list" id="rf-history-list" data-history-list></div>
+
+            <div class="rf-history-empty" id="rf-history-empty" data-history-empty hidden>
+              <div style="font-weight:800;margin-bottom:0.25rem;color:var(--color-text-main);">No history yet</div>
+              <div>Your last 10 feedback runs will appear here automatically.</div>
+            </div>
+          </div>
+
+          <div class="rf-history-footer" data-history-footer>
+            <span>Data retention: JobHackAI shows your last 10 resume feedback runs. Runs are automatically deleted after 90 days.</span>
+            <div class="rf-history-footer-links">
+              <a class="rf-history-footer-link" href="#" data-history-learn-more>Learn more</a>
+              <span class="rf-history-footer-separator" aria-hidden="true">·</span>
+              <button id="rf-history-clear" class="rf-history-footer-link rf-history-footer-link--danger" type="button">Clear history</button>
             </div>
           </div>
         </section>
+
+        <!-- Delete confirmation modal -->
+        <div class="rf-history-modal-backdrop" id="rf-history-modal-backdrop" hidden></div>
+        <div
+          class="rf-history-modal"
+          id="rf-history-delete-modal"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="rf-history-modal-title"
+          hidden
+          data-history-modal
+        >
+          <h3 id="rf-history-modal-title">Permanently delete history?</h3>
+          <p>This will remove the selected items from your account.</p>
+          <p>This cannot be undone.</p>
+          <div class="rf-history-modal-actions">
+            <button id="rf-history-modal-cancel" class="rf-history-neutral-btn" type="button">Cancel</button>
+            <button id="rf-history-modal-confirm" class="rf-history-danger-btn" type="button">Delete permanently</button>
+          </div>
+        </div>
       </aside><!-- /.rf-sidebar-column -->
     </div><!-- /.rf-layout-container -->
   </main>
@@ -6212,7 +7768,7 @@
       </div>
       <div class="footer-links">
         <a href="index.html">Home</a>
-        <a href="support.html">Support</a>
+        <a href="help.html">Help</a>
         <a href="privacy.html">Privacy</a>
       </div>
     </div>

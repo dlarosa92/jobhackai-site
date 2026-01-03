@@ -120,13 +120,27 @@ const tests = [
     }
   },
   {
-    name: 'Invalid AI feedback - incomplete roleSpecificFeedback (wrong section count)',
+    name: 'Valid AI feedback - partial sections (1-5 sections allowed)',
     fn: () => {
+      // The schema allows 1-5 sections, so 3 sections should be valid
       const feedback = createValidAIFeedback();
       feedback.roleSpecificFeedback.sections = feedback.roleSpecificFeedback.sections.slice(0, 3); // Only 3 sections
       const result = validateAIFeedback(feedback, false);
+      if (!result.valid) {
+        throw new Error(`Expected valid (1-5 sections allowed), got invalid. Missing: ${result.missing.join(', ')}`);
+      }
+      return true;
+    }
+  },
+  {
+    name: 'Invalid AI feedback - empty sections array',
+    fn: () => {
+      // 0 sections should be invalid (minItems: 1 in schema)
+      const feedback = createValidAIFeedback();
+      feedback.roleSpecificFeedback.sections = [];
+      const result = validateAIFeedback(feedback, false);
       if (result.valid) {
-        throw new Error('Expected invalid (wrong section count), got valid');
+        throw new Error('Expected invalid (empty sections), got valid');
       }
       if (!result.missing.includes('roleSpecificFeedback')) {
         throw new Error(`Expected roleSpecificFeedback in missing, got: ${result.missing.join(', ')}`);
@@ -201,6 +215,86 @@ const tests = [
       if (result1.valid || result2.valid) {
         throw new Error('Expected invalid for null/undefined, got valid');
       }
+      return true;
+    }
+  },
+  {
+    name: 'allowMissingRoleFeedback=true accepts missing roleSpecificFeedback (no role scenario)',
+    fn: () => {
+      const feedback = createValidAIFeedback();
+      // Remove role-specific feedback to simulate no-role scenario
+      delete feedback.roleSpecificFeedback;
+      
+      // Should be invalid when not allowed to miss role feedback
+      const resultNotAllowed = validateAIFeedback(feedback, false, false);
+      if (resultNotAllowed.valid) {
+        throw new Error('Expected invalid when allowMissingRoleFeedback=false, got valid');
+      }
+      if (!resultNotAllowed.missing.includes('roleSpecificFeedback')) {
+        throw new Error(`Expected roleSpecificFeedback in missing, got: ${resultNotAllowed.missing.join(', ')}`);
+      }
+      
+      // Should be valid when allowed to miss role feedback (no role provided)
+      const resultAllowed = validateAIFeedback(feedback, false, true);
+      if (!resultAllowed.valid) {
+        throw new Error(`Expected valid when allowMissingRoleFeedback=true, got invalid. Missing: ${resultAllowed.missing.join(', ')}`);
+      }
+      if (resultAllowed.details.roleSpecificFeedbackSkipped !== true) {
+        throw new Error('Expected roleSpecificFeedbackSkipped=true in details');
+      }
+      
+      return true;
+    }
+  },
+  {
+    name: 'allowMissingRoleFeedback=true still requires atsRubric and atsIssues',
+    fn: () => {
+      // Test that even with allowMissingRoleFeedback=true, other fields are still required
+      const feedbackNoRubric = createValidAIFeedback();
+      delete feedbackNoRubric.roleSpecificFeedback;
+      delete feedbackNoRubric.atsRubric;
+      
+      const result1 = validateAIFeedback(feedbackNoRubric, false, true);
+      if (result1.valid) {
+        throw new Error('Expected invalid when atsRubric missing, even with allowMissingRoleFeedback=true');
+      }
+      if (!result1.missing.includes('atsRubric')) {
+        throw new Error(`Expected atsRubric in missing, got: ${result1.missing.join(', ')}`);
+      }
+      
+      const feedbackNoIssues = createValidAIFeedback();
+      delete feedbackNoIssues.roleSpecificFeedback;
+      delete feedbackNoIssues.atsIssues;
+      
+      const result2 = validateAIFeedback(feedbackNoIssues, false, true);
+      if (result2.valid) {
+        throw new Error('Expected invalid when atsIssues missing, even with allowMissingRoleFeedback=true');
+      }
+      if (!result2.missing.includes('atsIssues')) {
+        throw new Error(`Expected atsIssues in missing, got: ${result2.missing.join(', ')}`);
+      }
+      
+      return true;
+    }
+  },
+  {
+    name: 'validateFeedbackResult passes allowMissingRoleFeedback parameter correctly',
+    fn: () => {
+      const feedback = createValidAIFeedback();
+      delete feedback.roleSpecificFeedback;
+      
+      // Should be invalid when not allowed
+      const result1 = validateFeedbackResult(feedback, false);
+      if (result1.valid) {
+        throw new Error('Expected invalid when allowMissingRoleFeedback=false, got valid');
+      }
+      
+      // Should be valid when allowed
+      const result2 = validateFeedbackResult(feedback, true);
+      if (!result2.valid) {
+        throw new Error(`Expected valid when allowMissingRoleFeedback=true, got invalid. Missing: ${result2.missing.join(', ')}`);
+      }
+      
       return true;
     }
   }

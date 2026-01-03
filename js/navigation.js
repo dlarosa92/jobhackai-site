@@ -62,8 +62,10 @@ window.stateManager = window.stateManager || (function() {
     const snapshot = {
       'user-authenticated': localStorage.getItem('user-authenticated'),
       'user-plan': localStorage.getItem('user-plan'),
-      'dev-plan': localStorage.getItem('dev-plan'),
-      'user-email': localStorage.getItem('user-email')
+      'dev-plan': localStorage.getItem('dev-plan')
+      // SECURITY: Do NOT include user-email in backups - email should never be stored in localStorage
+      // Email is available via Firebase auth when needed
+      // Note: Removed 'user-email' from snapshot to prevent security vulnerability
     };
     const id = `backup-${Date.now()}`;
     localStorage.setItem(id, JSON.stringify(snapshot));
@@ -73,8 +75,13 @@ window.stateManager = window.stateManager || (function() {
   function restoreBackup(id) {
     try {
       const snapshot = JSON.parse(localStorage.getItem(id) || '{}');
+      // SECURITY: Skip restoring user-email even if it exists in old backups
+      // This prevents reintroducing the security vulnerability
+      const sensitiveKeys = ['user-email', 'auth-user'];
       Object.entries(snapshot).forEach(([k, v]) => {
-        set(k, v);
+        if (!sensitiveKeys.includes(k)) {
+          set(k, v);
+        }
       });
       return { status: 'ok' };
     } catch (e) {
@@ -89,10 +96,14 @@ window.stateManager = window.stateManager || (function() {
   return { get, set, watch, unwatch, createBackup, restoreBackup, listBackups };
 })();
 
+// --- FIREBASE AUTH READY TRACKING ---
+// Track when firebase-auth-ready event fires to prevent premature localStorage clearing
+let firebaseAuthReadyFired = false;
+
 // --- LOGGING SYSTEM ---
 const DEBUG = {
   enabled: true,
-  level: 'warn', // 'debug', 'info', 'warn', 'error' - Default to 'warn' to reduce spam
+  level: 'error', // 'debug', 'info', 'warn', 'error' - Default to 'error' to reduce info leakage
   prefix: '[NAV DEBUG]',
   rateLimit: {
     lastLog: {},
@@ -205,7 +216,17 @@ function detectNavigationIssues() {
   // Check if authentication state is consistent
   const authState = getAuthState();
   const storedAuth = localStorage.getItem('user-authenticated');
-  const isAuthenticated = storedAuth === 'true' && !!localStorage.getItem('user-email');
+  // Check Firebase SDK keys as additional validation (more reliable than email)
+  // SECURITY: Require BOTH flag AND Firebase keys to match getAuthState() logic
+  // This prevents false inconsistency warnings and matches security requirements
+  const hasFirebaseKeys = Object.keys(localStorage).some(k => 
+    k.startsWith('firebase:authUser:') && 
+    localStorage.getItem(k) && 
+    localStorage.getItem(k) !== 'null' &&
+    localStorage.getItem(k).length > 10
+  );
+  // Require both conditions: flag must be true AND Firebase keys must exist
+  const isAuthenticated = storedAuth === 'true' && hasFirebaseKeys;
   if (authState.isAuthenticated !== isAuthenticated) {
     issues.push('Authentication state inconsistency');
     navLog('warn', 'Navigation issue detected: Auth state inconsistency', { 
@@ -235,54 +256,191 @@ function autoEnableDebugIfNeeded() {
 
 // --- AUTHENTICATION STATE MANAGEMENT ---
 function getAuthState() {
-  let isAuthenticated = localStorage.getItem('user-authenticated') === 'true' && !!localStorage.getItem('user-email');
-  const userPlan = localStorage.getItem('user-plan') || 'free';
-  const devPlan = localStorage.getItem('dev-plan');
-
-  // Self-heal from Firebase auth storage if needed
-  const forceTs = parseInt(localStorage.getItem('force-logged-out') || '0', 10);
-  const cooldownActive = forceTs && (Date.now() - forceTs) < 60000; // 60s TTL
-  if (!isAuthenticated && !cooldownActive) {
+  // CRITICAL SECURITY FIX: Check Firebase auth state FIRST (source of truth)
+  // This prevents dangerous "self-heal" logic that can restore auth state after logout
+  const logoutIntent = sessionStorage.getItem('logout-intent');
+  
+  // If logout is in progress, always return unauthenticated
+  if (logoutIntent === '1') {
+    console.log('[AUTH] getAuthState: Logout in progress, returning unauthenticated');
+    return {
+      isAuthenticated: false,
+      userPlan: null,
+      devPlan: null
+    };
+  }
+  
+  // EDGE CASE FIX: Safely get Firebase user with error handling
+  let firebaseUser = null;
+  let firebaseError = null;
+  let firebaseManagerExists = !!window.FirebaseAuthManager;
+  let getCurrentUserExists = false;
+  
+  try {
+    if (window.FirebaseAuthManager) {
+      getCurrentUserExists = typeof window.FirebaseAuthManager.getCurrentUser === 'function';
+      if (getCurrentUserExists) {
+        firebaseUser = window.FirebaseAuthManager.getCurrentUser();
+      } else {
+        console.warn('[AUTH] getAuthState: FirebaseAuthManager exists but getCurrentUser is not a function');
+      }
+    }
+  } catch (error) {
+    firebaseError = error;
+    console.error('[AUTH] getAuthState: Error calling getCurrentUser():', error.message);
+  }
+  
+  const isAuthenticatedFromFirebase = !!firebaseUser;
+  
+  // EDGE CASE FIX: Only fall back to localStorage if Firebase hasn't initialized yet
+  // AND we're sure Firebase isn't available (not just an error)
+  let fallbackAuth = false;
+  const hasFirebaseManager = firebaseManagerExists && getCurrentUserExists;
+  
+  if (!hasFirebaseManager && !firebaseUser) {
+    // Firebase not initialized - use localStorage as fallback (for initial page load)
     try {
-      // 1) Try our own auth-user cache first
-      const authUserRaw = localStorage.getItem('auth-user');
-      if (authUserRaw) {
-        const authUser = JSON.parse(authUserRaw);
-        if (authUser && authUser.email) {
-          localStorage.setItem('user-email', authUser.email);
-          localStorage.setItem('user-authenticated', 'true');
-          isAuthenticated = true;
-        }
+      const storedAuth = localStorage.getItem('user-authenticated');
+      // Check Firebase SDK keys as additional validation (more reliable than email)
+      // SECURITY: Require BOTH flag AND Firebase keys to prevent stale flags or XSS attacks
+      // This matches the pattern used in inactivity-tracker.js and static-auth-guard.js
+      const hasFirebaseKeys = Object.keys(localStorage).some(k => 
+        k.startsWith('firebase:authUser:') && 
+        localStorage.getItem(k) && 
+        localStorage.getItem(k) !== 'null' &&
+        localStorage.getItem(k).length > 10
+      );
+      
+      // Require both conditions: flag must be true AND Firebase keys must exist
+      if (storedAuth === 'true' && hasFirebaseKeys) {
+        fallbackAuth = true;
+        console.log('[AUTH] getAuthState: Using localStorage fallback (Firebase not initialized)');
       }
-      // 2) Fall back to Firebase SDK local storage
-      if (!isAuthenticated) {
-        for (let i = 0; i < localStorage.length; i++) {
-          const key = localStorage.key(i);
-          if (key && key.startsWith('firebase:authUser:')) {
-            const firebaseAuthRaw = localStorage.getItem(key);
-            try {
-              const firebaseAuth = JSON.parse(firebaseAuthRaw || '{}');
-              if (firebaseAuth && firebaseAuth.email) {
-                localStorage.setItem('user-email', firebaseAuth.email);
-                localStorage.setItem('user-authenticated', 'true');
-                isAuthenticated = true;
-                break;
-              }
-            } catch (_) {}
-          }
+    } catch (storageError) {
+      console.error('[AUTH] getAuthState: localStorage access error:', storageError.message);
+    }
+  }
+  
+  const actualAuth = isAuthenticatedFromFirebase || fallbackAuth;
+  
+  // EDGE CASE FIX: If Firebase is initialized and says logged out, trust Firebase
+  // This handles cases where logout cleared Firebase but localStorage is stale
+  // SECURITY FIX: Check localStorage directly instead of actualAuth, since actualAuth
+  // will be false when Firebase says logged out, preventing cleanup of stale localStorage
+  // CRITICAL FIX: Don't clear localStorage if firebase-auth-ready hasn't fired yet
+  // Firebase may still be restoring the session during initialization
+  if (hasFirebaseManager && !firebaseUser) {
+    // If firebase-auth-ready hasn't fired yet, Firebase may still be restoring session
+    // Use localStorage fallback temporarily instead of clearing it
+    if (!firebaseAuthReadyFired) {
+      console.log('[AUTH] getAuthState: Firebase not ready yet, using localStorage fallback');
+      try {
+        const storedAuth = localStorage.getItem('user-authenticated');
+        // Check Firebase SDK keys as additional validation (more reliable than email)
+        // SECURITY: Require BOTH flag AND Firebase keys to prevent XSS attacks
+        // This matches the pattern used in static-auth-guard.js and inactivity-tracker.js
+        const hasFirebaseKeys = Object.keys(localStorage).some(k => 
+          k.startsWith('firebase:authUser:') && 
+          localStorage.getItem(k) && 
+          localStorage.getItem(k) !== 'null' &&
+          localStorage.getItem(k).length > 10
+        );
+        // Require both conditions: flag must be true AND Firebase keys must exist
+        if (storedAuth === 'true' && hasFirebaseKeys) {
+          const fallbackPlan = localStorage.getItem('user-plan') || 'free';
+          return {
+            isAuthenticated: true,
+            userPlan: fallbackPlan,
+            devPlan: localStorage.getItem('dev-plan') || fallbackPlan
+          };
         }
+      } catch (e) {
+        // Fall through to return unauthenticated
       }
-    } catch (e) {
-      navLog('warn', 'Auth self-heal failed', e);
+      // If fallback didn't return, Firebase says logged out and localStorage doesn't have valid auth
+      // Don't clear localStorage yet - wait for firebase-auth-ready to fire
+      return {
+        isAuthenticated: false,
+        userPlan: null,
+        devPlan: null
+      };
+    }
+    
+    // Only clear localStorage if firebase-auth-ready has fired AND Firebase says logged out
+    // CRITICAL FIX: Check firebaseAuthReadyFired before clearing to prevent premature clearing
+    if (firebaseAuthReadyFired) {
+      try {
+        const storedAuth = localStorage.getItem('user-authenticated');
+        if (storedAuth === 'true') {
+          // Firebase is initialized and says logged out, but localStorage is stale - sync localStorage
+          navLog('error', 'Firebase says logged out but localStorage is stale, syncing localStorage');
+          localStorage.setItem('user-authenticated', 'false');
+          localStorage.removeItem('user-email');
+          return {
+            isAuthenticated: false,
+            userPlan: null,
+            devPlan: null
+          };
+        }
+      } catch (storageError) {
+        navLog('error', 'Failed to check localStorage for stale auth state', storageError.message);
+      }
+    }
+  }
+  
+  // EDGE CASE FIX: Safe plan retrieval with validation
+  let userPlan = null;
+  let devPlan = null;
+  
+  if (actualAuth) {
+    try {
+      const storedPlan = localStorage.getItem('user-plan');
+      const storedDevPlan = localStorage.getItem('dev-plan');
+      
+      // Validate plan values are in allowed list
+      // SECURITY FIX: Include 'pending' as legitimate plan state for trial users waiting for webhook confirmation
+      const allowedPlans = ['free', 'trial', 'essential', 'pro', 'premium', 'visitor', 'pending'];
+      if (storedPlan && allowedPlans.includes(storedPlan)) {
+        userPlan = storedPlan;
+      } else if (storedPlan) {
+        console.warn('[AUTH] getAuthState: Invalid plan in localStorage:', storedPlan);
+        userPlan = 'free'; // Default to free
+      } else {
+        userPlan = 'free';
+      }
+      
+      if (storedDevPlan && allowedPlans.includes(storedDevPlan)) {
+        devPlan = storedDevPlan;
+      }
+    } catch (storageError) {
+      // SECURITY FIX: Set default plan when localStorage access fails to ensure function contract is met
+      // Authenticated users should always have a valid plan string, not null
+      console.error('[AUTH] getAuthState: Error reading plan from localStorage:', storageError.message);
+      userPlan = 'free'; // Default to free when storage access fails
     }
   }
 
   const authState = {
-    isAuthenticated,
-    userPlan: isAuthenticated ? userPlan : null,
-    devPlan: devPlan || null
+    isAuthenticated: actualAuth,
+    userPlan,
+    devPlan
   };
-  navLog('debug', 'getAuthState() called', authState);
+  
+  // Log errors for debugging (only errors, not debug info)
+  if (!actualAuth && localStorage.getItem('user-authenticated') === 'true') {
+    navLog('error', 'Auth state mismatch: localStorage says authenticated but Firebase says not', {
+      firebaseManagerExists,
+      getCurrentUserExists,
+      firebaseError: firebaseError?.message,
+      firebaseUser: !!firebaseUser
+    });
+  }
+  
+  // EDGE CASE: Log if we had an error but still determined auth state
+  if (firebaseError && actualAuth) {
+    console.warn('[AUTH] getAuthState: Used fallback auth despite Firebase error');
+  }
+  
   return authState;
 }
 
@@ -309,54 +467,115 @@ function setAuthState(isAuthenticated, plan = null) {
   }, 100);
 }
 
+// EDGE CASE FIX: Prevent multiple rapid logout calls
+let logoutInProgress = false;
+
 async function logout(e) {
   e?.preventDefault?.();
-  console.log('🚪 logout() v2: triggered');
-
-  // Set logout intent immediately - CRITICAL: Must be set before any async operations
-  sessionStorage.setItem('logout-intent', '1');
-
-  // Attempt Firebase sign out
-  try {
-    await window.FirebaseAuthManager?.signOut?.();
-    console.log('✅ Firebase signOut complete');
-  } catch (err) {
-    console.warn('⚠️ signOut error (ignored):', err);
+  
+  // EDGE CASE FIX: Debounce rapid logout clicks
+  if (logoutInProgress) {
+    console.log('[LOGOUT] Logout already in progress, ignoring duplicate call');
+    return;
   }
+  
+  logoutInProgress = true;
+  console.log('[LOGOUT] logout() v2: triggered');
 
-  // Safely clear localStorage
   try {
-    ['user-authenticated', 'user-email', 'user-plan', 'dev-plan', 'auth-user', 'selectedPlan']
-      .forEach(k => localStorage.removeItem(k));
-  } catch (err) {
-    console.warn('⚠️ localStorage cleanup failed:', err);
-  }
+    // CRITICAL SECURITY FIX: Set logout intent IMMEDIATELY (before any async operations)
+    // This prevents race conditions where UI updates before state is cleared
+    sessionStorage.setItem('logout-intent', '1');
+    console.log('[LOGOUT] Logout intent flag set');
 
-  // Clear all Firebase auth persistence keys to prevent automatic re-login
-  try {
-    for (let i = localStorage.length - 1; i >= 0; i--) {
-      const key = localStorage.key(i);
-      if (key && key.startsWith('firebase:authUser:')) {
-        localStorage.removeItem(key);
-        console.log('🗑️ Removed Firebase auth key:', key);
-      }
+    // CRITICAL: Update navigation state IMMEDIATELY (synchronously, before Firebase signOut)
+    // This ensures UI shows logged-out state right away, preventing flickering
+    try {
+      setAuthState(false, null);
+      console.log('[LOGOUT] Navigation state updated synchronously');
+    } catch (navError) {
+      console.error('[LOGOUT] Failed to update navigation state:', navError.message);
     }
-  } catch (err) {
-    console.warn('⚠️ Firebase auth key cleanup failed:', err);
+
+    // Clear localStorage IMMEDIATELY (synchronously) - don't wait for Firebase
+    try {
+      const keysToRemove = ['user-authenticated', 'user-email', 'user-plan', 'dev-plan', 'auth-user', 'selectedPlan'];
+      keysToRemove.forEach(k => {
+        try {
+          localStorage.removeItem(k);
+        } catch (keyError) {
+          console.warn(`[LOGOUT] Failed to remove ${k}:`, keyError.message);
+        }
+      });
+      console.log('[LOGOUT] localStorage cleared');
+    } catch (storageError) {
+      console.error('[LOGOUT] localStorage cleanup failed:', storageError.message);
+    }
+
+    // Clear all Firebase auth persistence keys IMMEDIATELY (synchronously)
+    // This prevents "self-heal" logic from restoring auth state
+    try {
+      let removedCount = 0;
+      for (let i = localStorage.length - 1; i >= 0; i--) {
+        const key = localStorage.key(i);
+        if (key && key.startsWith('firebase:authUser:')) {
+          try {
+            localStorage.removeItem(key);
+            removedCount++;
+          } catch (keyError) {
+            console.warn(`[LOGOUT] Failed to remove Firebase key ${key}:`, keyError.message);
+          }
+        }
+      }
+      console.log(`[LOGOUT] Removed ${removedCount} Firebase auth keys`);
+    } catch (firebaseKeyError) {
+      console.error('[LOGOUT] Firebase auth key cleanup failed:', firebaseKeyError.message);
+    }
+
+    // Clear session-scoped data IMMEDIATELY
+    try { 
+      sessionStorage.removeItem('selectedPlan');
+      // Fix: Clear plan state sync sessionStorage keys to prevent cross-user contamination
+      sessionStorage.removeItem('previous-plan-before-update');
+      sessionStorage.removeItem('payment-processed');
+      console.log('[LOGOUT] Session storage cleared');
+    } catch (sessionError) {
+      console.warn('[LOGOUT] Session storage cleanup failed:', sessionError.message);
+    }
+
+    // NOW do Firebase signOut (async, but UI already updated synchronously above)
+    try {
+      if (window.FirebaseAuthManager?.signOut) {
+        await window.FirebaseAuthManager.signOut();
+        console.log('[LOGOUT] Firebase signOut complete');
+      } else {
+        console.warn('[LOGOUT] FirebaseAuthManager.signOut not available');
+      }
+    } catch (signOutError) {
+      console.warn('[LOGOUT] signOut error (ignored):', signOutError.message);
+    }
+
+    // Small delay to ensure all cleanup completes before redirect
+    // This prevents race conditions with auth state listeners
+    await new Promise(resolve => setTimeout(resolve, 100));
+
+    // Redirect to login
+    // Clear logout-intent to avoid stale state on back/cached navigation
+    try { 
+      sessionStorage.removeItem('logout-intent'); 
+      console.log('[LOGOUT] Logout intent flag cleared');
+    } catch (sessionError) {
+      console.warn('[LOGOUT] Failed to clear logout-intent:', sessionError.message);
+    }
+    
+    console.log('[LOGOUT] Redirecting to /login.html');
+    location.replace('/login.html');
+  } finally {
+    // EDGE CASE FIX: Reset flag after a delay in case redirect fails
+    setTimeout(() => {
+      logoutInProgress = false;
+    }, 2000);
   }
-
-  // Also clear any session-scoped plan selection
-  try { sessionStorage.removeItem('selectedPlan'); } catch (_) {}
-
-  // Small delay to ensure all cleanup completes before redirect
-  // This prevents race conditions with auth state listeners
-  await new Promise(resolve => setTimeout(resolve, 100));
-
-  // Redirect to login (keep .html for now)
-  // Clear logout-intent to avoid stale state on back/cached navigation
-  try { sessionStorage.removeItem('logout-intent'); } catch (_) {}
-  console.log('➡️ Redirecting to /login.html');
-  location.replace('/login.html');
 }
 
 // --- PLAN CONFIGURATION ---
@@ -1381,7 +1600,18 @@ function checkFeatureAccess(featureKey, targetPlan = 'premium') {
 }
 
 // --- INITIALIZATION ---
+// SECURITY FIX: Guard against duplicate Firebase auth listener registration
+let firebaseAuthListenerRegistered = false;
+// Guard against duplicate navigation initialization
+let navigationInitialized = false;
+
 async function initializeNavigation() {
+  // CRITICAL FIX: Prevent duplicate initialization calls
+  // Both event handler and fallback can call this, causing duplicate storage listeners
+  if (navigationInitialized) {
+    navLog('debug', 'Navigation already initialized, skipping duplicate call');
+    return;
+  }
   navLog('info', '=== initializeNavigation() START ===');
   navLog('info', 'Initialization context', {
     readyState: document.readyState,
@@ -1462,11 +1692,11 @@ async function initializeNavigation() {
                   navLog('info', 'Found plan from billing-status fallback, updating', billingData.plan);
                   localStorage.setItem('user-plan', billingData.plan);
                   localStorage.setItem('dev-plan', billingData.plan);
-                  // Sync to KV asynchronously
+                  // Sync to D1 asynchronously (via sync-stripe-plan which writes to D1)
                   fetch('/api/sync-stripe-plan', {
                     method: 'POST',
                     headers: { Authorization: `Bearer ${token}` }
-                  }).catch(err => navLog('warn', 'Failed to sync plan to KV (non-critical):', err));
+                  }).catch(err => navLog('warn', 'Failed to sync plan to D1 (non-critical):', err));
                 }
               }
             }
@@ -1526,7 +1756,7 @@ async function initializeNavigation() {
     setupMobileNavDelegation();
   }, 100);
   
-  // REMOVED: Do NOT call reconcilePlanFromKV() here - it causes race condition
+  // REMOVED: Do NOT call reconcilePlanFromAPI() here - it causes race condition
   // Plan reconciliation will be handled by:
   // 1. Firebase auth's onAuthStateChanged listener (already implemented)
   // 2. Page-specific DOMContentLoaded handlers that wait for auth
@@ -1544,6 +1774,11 @@ async function initializeNavigation() {
   
   // Signal that navigation system is ready
   navLog('info', 'Navigation system initialization complete, dispatching ready event');
+  // Set flag to detect if event already fired (for fallback checks)
+  window.__navigationReadyFired = true;
+  // CRITICAL FIX: Only mark as initialized AFTER successful completion
+  // This allows retry if initialization fails or returns early (important for Playwright tests)
+  navigationInitialized = true;
   const readyEvent = new CustomEvent('navigationReady');
   window.dispatchEvent(readyEvent);
   
@@ -1557,15 +1792,121 @@ async function initializeNavigation() {
     }
   });
   
+  // SECURITY FIX: Listen to Firebase auth state changes to keep UI in sync
+  // This ensures navigation updates immediately when user logs out in another tab
+  // SECURITY FIX: Guard against duplicate registration - initializeNavigation() can be called multiple times
+  if (window.FirebaseAuthManager && !firebaseAuthListenerRegistered) {
+    try {
+      if (typeof window.FirebaseAuthManager.onAuthStateChange === 'function') {
+        navLog('debug', 'Setting up Firebase auth state listener');
+        firebaseAuthListenerRegistered = true; // Mark as registered before adding listener
+        
+        // EDGE CASE FIX: Wrap listener in try-catch to prevent errors from breaking navigation
+        window.FirebaseAuthManager.onAuthStateChange((user, userRecord) => {
+          try {
+            const isAuthenticated = !!user;
+            const currentAuthState = getAuthState();
+            const hasMismatch = isAuthenticated !== currentAuthState.isAuthenticated;
+            
+            // SECURITY FIX: Use navLog instead of console.log to respect log level filtering
+            // Do not log email address to prevent information leakage
+            navLog('debug', 'Auth state changed', {
+              firebaseUser: !!user,
+              currentAuthState: currentAuthState.isAuthenticated,
+              mismatch: hasMismatch
+            });
+            
+            // If Firebase says logged out but localStorage says logged in, trust Firebase
+            if (!isAuthenticated && currentAuthState.isAuthenticated) {
+              navLog('error', 'Firebase auth mismatch: Firebase says logged out, syncing localStorage');
+              setAuthState(false, null);
+              updateNavigation();
+            } else if (isAuthenticated && !currentAuthState.isAuthenticated) {
+              // Firebase says logged in - update navigation
+              navLog('debug', 'Firebase auth state changed: User logged in, updating navigation');
+              updateNavigation();
+            } else if (isAuthenticated && currentAuthState.isAuthenticated) {
+              // Both agree logged in - just update navigation in case plan changed
+              navLog('debug', 'Auth state consistent, refreshing navigation');
+              updateNavigation();
+            } else if (!isAuthenticated && !currentAuthState.isAuthenticated) {
+              // SECURITY FIX: Both agree logged out - still update navigation to sync UI
+              // This handles cross-tab logout where Firebase fires with user=null and getAuthState()
+              // has already cleaned up stale localStorage, leaving both as false
+              navLog('debug', 'Auth state changed: Both agree logged out, updating navigation');
+              updateNavigation();
+            }
+          } catch (listenerError) {
+            // EDGE CASE FIX: Don't let listener errors break navigation
+            console.error('[AUTH-LISTENER] Error in auth state listener:', {
+              message: listenerError.message,
+              stack: listenerError.stack
+            });
+          }
+        });
+      } else {
+        console.warn('[AUTH-LISTENER] FirebaseAuthManager.onAuthStateChange is not a function');
+        firebaseAuthListenerRegistered = false; // Reset flag if setup failed
+      }
+    } catch (setupError) {
+      console.error('[AUTH-LISTENER] Failed to setup auth state listener:', setupError.message);
+      firebaseAuthListenerRegistered = false; // Reset flag on error
+    }
+  } else if (!firebaseAuthListenerRegistered) {
+    // EDGE CASE FIX: Retry setup when FirebaseAuthManager becomes available
+    // SECURITY FIX: Only retry if listener hasn't been registered yet
+    console.log('[AUTH-LISTENER] FirebaseAuthManager not ready, will retry on firebase-auth-ready event');
+    document.addEventListener('firebase-auth-ready', function onAuthReady() {
+      document.removeEventListener('firebase-auth-ready', onAuthReady);
+      // Retry listener setup - check guard to prevent duplicate registration
+      if (window.FirebaseAuthManager && typeof window.FirebaseAuthManager.onAuthStateChange === 'function' && !firebaseAuthListenerRegistered) {
+        console.log('[AUTH-LISTENER] Retrying listener setup after firebase-auth-ready');
+        firebaseAuthListenerRegistered = true; // Mark as registered before adding listener
+        try {
+          window.FirebaseAuthManager.onAuthStateChange((user, userRecord) => {
+            try {
+              const isAuthenticated = !!user;
+              const currentAuthState = getAuthState();
+              
+              if (!isAuthenticated && currentAuthState.isAuthenticated) {
+                console.log('[AUTH-LISTENER] Firebase says logged out, syncing localStorage');
+                setAuthState(false, null);
+                updateNavigation();
+              } else if (isAuthenticated && !currentAuthState.isAuthenticated) {
+                console.log('[AUTH-LISTENER] Firebase says logged in, updating navigation');
+                updateNavigation();
+              } else if (isAuthenticated && currentAuthState.isAuthenticated) {
+                updateNavigation();
+              } else if (!isAuthenticated && !currentAuthState.isAuthenticated) {
+                // SECURITY FIX: Both agree logged out - still update navigation to sync UI
+                // This handles cross-tab logout where Firebase fires with user=null and getAuthState()
+                // has already cleaned up stale localStorage, leaving both as false
+                console.log('[AUTH-LISTENER] Both agree logged out, updating navigation');
+                updateNavigation();
+              }
+            } catch (listenerError) {
+              console.error('[AUTH-LISTENER] Error in retry listener:', listenerError.message);
+            }
+          });
+        } catch (retryError) {
+          console.error('[AUTH-LISTENER] Retry setup failed:', retryError.message);
+          firebaseAuthListenerRegistered = false; // Reset flag on error
+        }
+      }
+    }, { once: true });
+  } else if (firebaseAuthListenerRegistered) {
+    navLog('debug', 'Firebase auth listener already registered, skipping duplicate registration');
+  }
+  
   navLog('info', '=== initializeNavigation() COMPLETE ===');
 }
 
-// --- KV Plan Reconciliation and Post-Checkout Activation ---
-async function fetchKVPlan() {
+// --- Plan Reconciliation from D1 via API ---
+async function fetchPlanFromAPI() {
   try {
     // DEFENSIVE GUARD: Ensure FirebaseAuthManager is loaded
     if (!window.FirebaseAuthManager) {
-      console.log('🔍 fetchKVPlan: FirebaseAuthManager not loaded yet, skipping');
+      console.log('🔍 fetchPlanFromAPI: FirebaseAuthManager not loaded yet, skipping');
       return null;
     }
 
@@ -1574,38 +1915,38 @@ async function fetchKVPlan() {
       try {
         await window.FirebaseAuthManager.waitForAuthReady(1000); // Short timeout
       } catch (e) {
-        console.log('🔍 fetchKVPlan: Auth ready timeout, continuing anyway');
+        console.log('🔍 fetchPlanFromAPI: Auth ready timeout, continuing anyway');
       }
     }
 
     const currentUser = window.FirebaseAuthManager?.getCurrentUser?.();
     if (!currentUser) {
-      console.log('🔍 fetchKVPlan: No current user available');
+      console.log('🔍 fetchPlanFromAPI: No current user available');
       return null;
     }
     
     const idToken = await currentUser.getIdToken?.();
     if (!idToken) {
-      console.log('🔍 fetchKVPlan: No ID token available');
+      console.log('🔍 fetchPlanFromAPI: No ID token available');
       return null;
     }
     
-    console.log('🔍 fetchKVPlan: Fetching plan from API...');
+    console.log('🔍 fetchPlanFromAPI: Fetching plan from D1 via API...');
     const r = await fetch('/api/plan/me', { headers: { Authorization: `Bearer ${idToken}` } });
     if (!r.ok) {
-      console.warn(`🔍 fetchKVPlan: API returned ${r.status} ${r.statusText}`);
+      console.warn(`🔍 fetchPlanFromAPI: API returned ${r.status} ${r.statusText}`);
       return null;
     }
     
     const data = await r.json();
-    console.log('🔍 fetchKVPlan: API response:', data);
+    console.log('🔍 fetchPlanFromAPI: API response:', data);
     
     let plan = data.plan || 'free';
     
     // CRITICAL FIX: If plan is 'free' but user is authenticated, check billing-status as fallback
-    // This handles cases where KV storage is out of sync with Stripe
+    // This handles cases where D1 is out of sync with Stripe (shouldn't happen, but safety net)
     if (plan === 'free' && currentUser) {
-      console.log('🔍 fetchKVPlan: Plan is free, checking billing-status as fallback...');
+      console.log('🔍 fetchPlanFromAPI: Plan is free, checking billing-status as fallback...');
       try {
         const billingRes = await fetch('/api/billing-status', { 
           headers: { Authorization: `Bearer ${idToken}` } 
@@ -1613,24 +1954,24 @@ async function fetchKVPlan() {
         if (billingRes.ok) {
           const billingData = await billingRes.json();
           if (billingData.ok && billingData.plan && billingData.plan !== 'free') {
-            console.log(`🔄 fetchKVPlan: Found plan ${billingData.plan} from billing-status, syncing...`);
+            console.log(`🔄 fetchPlanFromAPI: Found plan ${billingData.plan} from billing-status, syncing to D1...`);
             plan = billingData.plan;
-            // Sync to KV storage
+            // Sync to D1 (via sync-stripe-plan which writes to D1)
             try {
               const syncRes = await fetch('/api/sync-stripe-plan', {
                 method: 'POST',
                 headers: { Authorization: `Bearer ${idToken}` }
               });
               if (syncRes.ok) {
-                console.log('✅ fetchKVPlan: Plan synced to KV storage');
+                console.log('✅ fetchPlanFromAPI: Plan synced to D1');
               }
             } catch (syncError) {
-              console.warn('⚠️ fetchKVPlan: Failed to sync plan to KV:', syncError);
+              console.warn('⚠️ fetchPlanFromAPI: Failed to sync plan to D1:', syncError);
             }
           }
         }
       } catch (billingError) {
-        console.warn('⚠️ fetchKVPlan: Failed to check billing-status:', billingError);
+        console.warn('⚠️ fetchPlanFromAPI: Failed to check billing-status:', billingError);
       }
     }
     
@@ -1643,39 +1984,39 @@ async function fetchKVPlan() {
     
     // Update localStorage with correct plan
     localStorage.setItem('user-plan', plan);
-    console.log(`✅ fetchKVPlan: Successfully fetched plan: ${plan}`);
+    console.log(`✅ fetchPlanFromAPI: Successfully fetched plan from D1: ${plan}`);
     return plan;
   } catch (error) {
-    console.warn('❌ fetchKVPlan: Error fetching plan:', error);
+    console.warn('❌ fetchPlanFromAPI: Error fetching plan:', error);
     return null;
   }
 }
 
-async function reconcilePlanFromKV() {
+async function reconcilePlanFromAPI() {
   const auth = getAuthState();
   if (!auth.isAuthenticated) {
-    console.log('🔍 reconcilePlanFromKV: User not authenticated, skipping');
+    console.log('🔍 reconcilePlanFromAPI: User not authenticated, skipping');
     return;
   }
   
   // Check if FirebaseAuthManager is loaded
   if (!window.FirebaseAuthManager) {
-    console.log('🔍 reconcilePlanFromKV: FirebaseAuthManager not loaded, skipping');
+    console.log('🔍 reconcilePlanFromAPI: FirebaseAuthManager not loaded, skipping');
     return;
   }
   
   // FIX: Add retry mechanism for plan reconciliation
-  let kvPlan = null;
+  let plan = null;
   let retryCount = 0;
   const maxRetries = 3;
   
-  console.log('🔍 reconcilePlanFromKV: Starting plan reconciliation...');
+  console.log('🔍 reconcilePlanFromAPI: Starting plan reconciliation from D1...');
   
-  while (!kvPlan && retryCount < maxRetries) {
+  while (!plan && retryCount < maxRetries) {
     try {
-      kvPlan = await fetchKVPlan();
-      if (kvPlan) {
-        console.log(`✅ Plan reconciliation successful on attempt ${retryCount + 1}:`, kvPlan);
+      plan = await fetchPlanFromAPI();
+      if (plan) {
+        console.log(`✅ Plan reconciliation successful on attempt ${retryCount + 1}:`, plan);
         break;
       }
     } catch (error) {
@@ -1690,13 +2031,13 @@ async function reconcilePlanFromKV() {
   }
   
   const current = localStorage.getItem('user-plan');
-  if (kvPlan && kvPlan !== current) {
-    console.log(`🔄 Updating plan from ${current} to ${kvPlan}`);
-    localStorage.setItem('user-plan', kvPlan);
-    localStorage.setItem('dev-plan', kvPlan);
+  if (plan && plan !== current) {
+    console.log(`🔄 Updating plan from ${current} to ${plan}`);
+    localStorage.setItem('user-plan', plan);
+    localStorage.setItem('dev-plan', plan);
     updateNavigation();
-    try { new BroadcastChannel('auth').postMessage({ type: 'plan-update', plan: kvPlan }); } catch (_) {}
-  } else if (!kvPlan) {
+    try { new BroadcastChannel('auth').postMessage({ type: 'plan-update', plan: plan }); } catch (_) {}
+  } else if (!plan) {
     console.warn('⚠️ Plan reconciliation failed after all retries, keeping current plan:', current);
   }
 }
@@ -1705,7 +2046,7 @@ async function waitForPlanActivationIfNeeded() {
   if (!location.search.includes('paid=1')) return;
   const deadline = Date.now() + 10000; // 10s
   while (Date.now() < deadline) {
-    await reconcilePlanFromKV();
+    await reconcilePlanFromAPI();
     const effective = getEffectivePlan();
     if (effective !== 'free' && effective !== 'trial') break;
     await new Promise(r => setTimeout(r, 500));
@@ -1724,8 +2065,8 @@ window.JobHackAINavigation = {
   showUpgradeModal,
   updateNavigation,
   initializeNavigation,
-  fetchKVPlan,
-  reconcilePlanFromKV,
+  fetchPlanFromAPI,
+  reconcilePlanFromAPI,
   PLANS,
   NAVIGATION_CONFIG
 };
@@ -1886,6 +2227,9 @@ function applyNavForUser(user) {
 
 // Initialize navigation when Firebase auth is ready
 document.addEventListener('firebase-auth-ready', async (event) => {
+  firebaseAuthReadyFired = true; // Mark as fired - Firebase has restored session
+  // Set flag on window to detect if event already fired (for fallback check)
+  window.__firebaseAuthReadyFired = true;
   console.log('🔥 Firebase auth ready, initializing navigation');
   try {
     const user = window.FirebaseAuthManager
@@ -1899,23 +2243,34 @@ document.addEventListener('firebase-auth-ready', async (event) => {
   }
 });
 
-// Fallback: Initialize immediately if Firebase is already ready
+// Fallback: Initialize immediately if firebase-auth-ready event already fired
+// CRITICAL FIX: Only use fallback if firebase-auth-ready event has already fired
+// Checking if getCurrentUser exists is insufficient - it exists before onAuthStateChanged fires
+// We must verify the event actually fired by checking window.__firebaseAuthReadyFired flag
+// This fallback handles cases where firebase-auth-ready event fired before this script loaded
+// Must work for both logged-in AND logged-out users (navigation needs to initialize for visitors too)
+// CRITICAL FIX: Check if initialization already occurred to prevent duplicate calls
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', () => {
-    // Check if Firebase is already ready (auth state already changed)
-    if (window.FirebaseAuthManager && window.FirebaseAuthManager.currentUser !== undefined) {
-      console.log('🔥 Firebase already ready, initializing navigation');
-      const user = window.FirebaseAuthManager.getCurrentUser();
-      applyNavForUser(user);
+    // Only initialize if firebase-auth-ready event has already fired (indicated by flag)
+    // AND navigation hasn't been initialized yet (prevent duplicate calls)
+    // This ensures Firebase has actually checked auth state via onAuthStateChanged
+    if (window.__firebaseAuthReadyFired && !navigationInitialized && window.FirebaseAuthManager && typeof window.FirebaseAuthManager.getCurrentUser === 'function') {
+      const firebaseUser = window.FirebaseAuthManager.getCurrentUser();
+      firebaseAuthReadyFired = true; // Sync flag
+      console.log('🔥 Firebase already ready (event fired before script load), initializing navigation', firebaseUser ? '(with user)' : '(logged out)');
+      applyNavForUser(firebaseUser); // Pass null for logged-out users
       initializeNavigation();
     }
   });
 } else {
-  // DOM already loaded, check if Firebase is ready
-  if (window.FirebaseAuthManager && window.FirebaseAuthManager.currentUser !== undefined) {
-    console.log('🔥 Firebase already ready, initializing navigation');
-    const user = window.FirebaseAuthManager.getCurrentUser();
-    applyNavForUser(user);
+  // DOM already loaded, check if firebase-auth-ready event already fired
+  // AND navigation hasn't been initialized yet (prevent duplicate calls)
+  if (window.__firebaseAuthReadyFired && !navigationInitialized && window.FirebaseAuthManager && typeof window.FirebaseAuthManager.getCurrentUser === 'function') {
+    const firebaseUser = window.FirebaseAuthManager.getCurrentUser();
+    firebaseAuthReadyFired = true; // Sync flag
+    console.log('🔥 Firebase already ready (event fired before script load), initializing navigation', firebaseUser ? '(with user)' : '(logged out)');
+    applyNavForUser(firebaseUser); // Pass null for logged-out users
     initializeNavigation();
   }
 }

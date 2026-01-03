@@ -3,7 +3,8 @@
 
 import { getBearer, verifyFirebaseIdToken } from '../_lib/firebase-auth.js';
 import { scoreResume } from '../_lib/ats-scoring-engine.js';
-import { getOrCreateUserByAuthId, upsertResumeSessionWithScores, isD1Available } from '../_lib/db.js';
+import { getOrCreateUserByAuthId, upsertResumeSessionWithScores, isD1Available, getDb, claimFreeATSUsage } from '../_lib/db.js';
+import { normalizeRoleToFamily } from '../_lib/role-normalizer.js';
 
 function corsHeaders(origin, env) {
   const allowedOrigins = [
@@ -36,14 +37,7 @@ function json(data, status = 200, origin, env) {
   });
 }
 
-async function getUserPlan(uid, env) {
-  if (!env.JOBHACKAI_KV) {
-    return 'free';
-  }
-  
-  const plan = await env.JOBHACKAI_KV.get(`planByUid:${uid}`);
-  return plan || 'free';
-}
+import { getUserPlan } from '../_lib/db.js';
 
 export async function onRequest(context) {
   const { request, env } = context;
@@ -65,7 +59,7 @@ export async function onRequest(context) {
     }
 
     const { uid } = await verifyFirebaseIdToken(token, env.FIREBASE_PROJECT_ID);
-    const plan = await getUserPlan(uid, env);
+    const plan = await getUserPlan(env, uid);
 
     // Parse request body - accept both resumeId (for KV) and resumeText (for direct scoring)
     const body = await request.json();
@@ -184,27 +178,7 @@ export async function onRequest(context) {
       }
     }
 
-    // Usage limits (Free plan - 1 lifetime) - best effort, skip if KV unavailable
-    if (plan === 'free' && kv) {
-      try {
-        const usageKey = `atsUsage:${uid}:lifetime`;
-        const usage = await kv.get(usageKey);
-        
-        if (usage && parseInt(usage, 10) >= 1) {
-          return json({
-            success: false,
-            error: 'Usage limit reached',
-            message: 'You have used your free ATS score. Upgrade to Trial or Essential for unlimited scoring.',
-            upgradeRequired: true
-          }, 403, origin, env);
-        }
-      } catch (usageError) {
-        console.warn('[ATS-SCORE] Usage check failed (non-fatal):', usageError);
-        // Continue without usage tracking if KV unavailable
-      }
-    }
-
-    // If cached, return cached result
+    // If cached, return cached result (allow re-reads for free users)
     if (cachedResult) {
       console.log(`[ATS-SCORE] Cache hit for ${uid}`, { resumeId, plan });
       return json({
@@ -214,11 +188,34 @@ export async function onRequest(context) {
       }, 200, origin, env);
     }
 
+    // ATOMIC Usage limits (Free plan - 1 lifetime): D1 is final source of truth, KV is only cache
+    let d1User = null;
+    if (plan === 'free') {
+      if (!isD1Available(env))
+        return json({ success: false, error: 'Cannot verify free ATS usage', message: 'Please try again or contact support.' }, 500, origin, env);
+      const db = getDb(env);
+      d1User = await getOrCreateUserByAuthId(env, uid, null);
+      if (!db || !d1User)
+        return json({ success: false, error: 'Cannot verify free ATS usage', message: 'Please try again or contact support.' }, 500, origin, env);
+      // Pre-flight check to provide user a proper 403 if already used
+      const result = await db.prepare(`SELECT COUNT(*) as count FROM usage_events WHERE user_id = ? AND feature = 'ats_score'`).bind(d1User.id).first();
+      const d1FreeCount = result?.count || 0;
+      if (d1FreeCount >= 1) {
+        return json({
+          success: false,
+          error: 'Usage limit reached',
+          message: 'You have used your free ATS score. Upgrade to Trial or Essential for unlimited scoring.',
+          upgradeRequired: true
+        }, 403, origin, env);
+      }
+    }
+
     // Get isMultiColumn from resumeData if available, otherwise default to false
     const isMultiColumn = resumeData?.isMultiColumn || false;
 
     // Run rule-based scoring (NO AI TOKENS)
     let ruleBasedScores;
+    let freeAtsClaimed = false;
     try {
       console.log('[ATS-SCORE] Input length:', text.length, 'jobTitle:', normalizedJobTitle);
       console.log('[ATS-SCORE] Starting scoring:', {
@@ -273,6 +270,24 @@ export async function onRequest(context) {
       }
 
       console.log('[ATS-SCORE] Scoring completed successfully');
+      
+      // Log role usage for gap detection (non-blocking)
+      if (uid && normalizedJobTitle && ruleBasedScores?.keywordScore?.score !== undefined) {
+        try {
+          const db = getDb(env);
+          if (db) {
+            const roleFamily = normalizeRoleToFamily(normalizedJobTitle);
+            // Async fire-and-forget (don't await)
+            db.prepare(
+              'INSERT INTO role_usage_log (user_id, role_label, role_family, keyword_score, created_at) VALUES (?, ?, ?, ?, datetime(\'now\'))'
+            ).bind(uid, normalizedJobTitle, roleFamily, ruleBasedScores.keywordScore.score).run()
+              .catch(err => console.warn('[ATS-SCORE] Role usage log failed (non-fatal):', err.message));
+          }
+        } catch (telemetryError) {
+          // Non-blocking: log but don't fail the request
+          console.warn('[ATS-SCORE] Telemetry logging failed (non-fatal):', telemetryError.message);
+        }
+      }
     } catch (scoreError) {
       console.error('[ATS-SCORE] Scoring error:', scoreError);
       return json({ 
@@ -290,6 +305,20 @@ export async function onRequest(context) {
         error: 'invalid-result',
         message: 'Scoring engine returned invalid data. Please try again.'
       }, 500, origin, env);
+    }
+
+    // If Free: Now perform the atomic claim AFTER successful scoring
+    if (plan === 'free' && d1User) {
+      // Only attempt to claim after a successful score
+      freeAtsClaimed = await claimFreeATSUsage(env, d1User.id);
+      if (!freeAtsClaimed) {
+        return json({
+          success: false,
+          error: 'Usage limit reached',
+          message: 'You have used your free ATS score. Upgrade to Trial or Essential for unlimited scoring.',
+          upgradeRequired: true
+        }, 403, origin, env);
+      }
     }
 
     // --- D1 Persistence: Store ruleBasedScores as source of truth ---
@@ -351,7 +380,10 @@ export async function onRequest(context) {
         grammarScore: ruleBasedScores.grammarScore.score
       },
       feedback,
-      recommendations: ruleBasedScores.recommendations || []
+      recommendations: ruleBasedScores.recommendations || [],
+      // Trust-first: surface extraction confidence to drive UI messaging (non-breaking additive fields)
+      extractionQuality: ruleBasedScores.extractionQuality || null,
+      detectedHeadings: ruleBasedScores.detectedHeadings || null
     };
 
     // Cache result (24 hours) - best effort, skip if KV unavailable
@@ -409,6 +441,7 @@ export async function onRequest(context) {
           breakdown: result.breakdown,
           summary: result.feedback?.[0] || '',
           jobTitle: normalizedJobTitle,
+          extractionQuality: result.extractionQuality || null, // Include extractionQuality for consistency
           timestamp: Date.now(),
           syncedAt: Date.now()
         };

@@ -1,0 +1,25 @@
+name = "jobhackai-retention-cleaner"
+main = "src/index.js"
+compatibility_date = "2024-12-11"
+
+[triggers]
+crons = ["0 3 * * *"] # daily at 03:00 UTC
+
+[env.dev]
+name = "jobhackai-retention-cleaner-dev"
+d1_databases = [
+  { binding = "JOBHACKAI_DB", database_id = "c5c0eee5-a223-4ea2-974e-f4aee5a28bab" }
+]
+
+[env.qa]
+name = "jobhackai-retention-cleaner-qa"
+d1_databases = [
+  { binding = "JOBHACKAI_DB", database_id = "80d87a73-6615-4823-b7a4-19a8821b4f87" }
+]
+
+[env.production]
+name = "jobhackai-retention-cleaner-prod"
+d1_databases = [
+  { binding = "JOBHACKAI_DB", database_id = "f9b709fd-56c3-4a0b-8141-4542327c9d4d" }
+]
+

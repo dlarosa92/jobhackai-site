@@ -14,9 +14,12 @@
  * Validates AI feedback response structure
  * @param {Object} aiFeedback - Parsed AI feedback response
  * @param {boolean} allowOldFormat - Whether to accept old array format for roleSpecificFeedback (default: false)
+ * @param {boolean} allowMissingRoleFeedback - Whether to allow missing roleSpecificFeedback (default: false)
+ *   Set to true when no role was provided, so we don't require role-specific feedback generation.
+ *   This supports the token optimization where role-specific feedback is skipped when no role is selected.
  * @returns {ValidationResult} Validation result with valid flag, missing fields, and details
  */
-export function validateAIFeedback(aiFeedback, allowOldFormat = false) {
+export function validateAIFeedback(aiFeedback, allowOldFormat = false, allowMissingRoleFeedback = false) {
   const missing = [];
   const details = {};
   
@@ -30,28 +33,35 @@ export function validateAIFeedback(aiFeedback, allowOldFormat = false) {
   details.hasAtsRubric = hasAtsRubric;
   details.atsRubricLength = aiFeedback?.atsRubric?.length || 0;
   
-  // Validate roleSpecificFeedback (new format)
-  const hasNewFormat = aiFeedback?.roleSpecificFeedback &&
-                       typeof aiFeedback.roleSpecificFeedback === 'object' &&
-                       !Array.isArray(aiFeedback.roleSpecificFeedback) &&
-                       aiFeedback.roleSpecificFeedback.targetRoleUsed !== undefined &&
-                       Array.isArray(aiFeedback.roleSpecificFeedback.sections) &&
-                       aiFeedback.roleSpecificFeedback.sections.length > 0;
-  
-  // Validate roleSpecificFeedback (old format - for backwards compatibility)
-  const hasOldFormat = allowOldFormat &&
-                       Array.isArray(aiFeedback?.roleSpecificFeedback) &&
-                       aiFeedback.roleSpecificFeedback.length > 0;
-  
-  const hasRoleSpecificFeedback = hasNewFormat || hasOldFormat;
-  if (!hasRoleSpecificFeedback) {
-    missing.push('roleSpecificFeedback');
+  // Validate roleSpecificFeedback only if not allowed to be missing
+  if (!allowMissingRoleFeedback) {
+    // Validate roleSpecificFeedback (new format)
+    const hasNewFormat = aiFeedback?.roleSpecificFeedback &&
+                         typeof aiFeedback.roleSpecificFeedback === 'object' &&
+                         !Array.isArray(aiFeedback.roleSpecificFeedback) &&
+                         aiFeedback.roleSpecificFeedback.targetRoleUsed !== undefined &&
+                         Array.isArray(aiFeedback.roleSpecificFeedback.sections) &&
+                         aiFeedback.roleSpecificFeedback.sections.length > 0;
+    
+    // Validate roleSpecificFeedback (old format - for backwards compatibility)
+    const hasOldFormat = allowOldFormat &&
+                         Array.isArray(aiFeedback?.roleSpecificFeedback) &&
+                         aiFeedback.roleSpecificFeedback.length > 0;
+    
+    const hasRoleSpecificFeedback = hasNewFormat || hasOldFormat;
+    if (!hasRoleSpecificFeedback) {
+      missing.push('roleSpecificFeedback');
+    }
+    details.hasRoleSpecificFeedback = hasRoleSpecificFeedback;
+    details.roleSpecificFeedbackType = typeof aiFeedback?.roleSpecificFeedback;
+    details.roleSpecificFeedbackFormat = hasNewFormat ? 'new' : (hasOldFormat ? 'old' : 'none');
+    details.roleSpecificFeedbackKeys = aiFeedback?.roleSpecificFeedback ? Object.keys(aiFeedback.roleSpecificFeedback) : null;
+    details.sectionsLength = aiFeedback?.roleSpecificFeedback?.sections?.length;
+  } else {
+    // When allowed to be missing, just record if it exists (for logging/debugging)
+    details.hasRoleSpecificFeedback = !!(aiFeedback?.roleSpecificFeedback);
+    details.roleSpecificFeedbackSkipped = true;
   }
-  details.hasRoleSpecificFeedback = hasRoleSpecificFeedback;
-  details.roleSpecificFeedbackType = typeof aiFeedback?.roleSpecificFeedback;
-  details.roleSpecificFeedbackFormat = hasNewFormat ? 'new' : (hasOldFormat ? 'old' : 'none');
-  details.roleSpecificFeedbackKeys = aiFeedback?.roleSpecificFeedback ? Object.keys(aiFeedback.roleSpecificFeedback) : null;
-  details.sectionsLength = aiFeedback?.roleSpecificFeedback?.sections?.length;
   
   // Validate atsIssues
   const hasAtsIssues = aiFeedback?.atsIssues && 
@@ -73,11 +83,14 @@ export function validateAIFeedback(aiFeedback, allowOldFormat = false) {
  * Validates complete feedback result before caching
  * Only accepts new format (not old array format) for roleSpecificFeedback
  * @param {Object} result - Feedback result object to validate
+ * @param {boolean} allowMissingRoleFeedback - Whether to allow missing roleSpecificFeedback (default: false)
+ *   Set to true when validating results generated without a role
  * @returns {ValidationResult} Validation result with valid flag, missing fields, and details
  */
-export function validateFeedbackResult(result) {
+export function validateFeedbackResult(result, allowMissingRoleFeedback = false) {
   // Don't allow old format in cache - only cache complete, properly formatted results
-  return validateAIFeedback(result, false);
+  // Pass through allowMissingRoleFeedback parameter for cases where role wasn't provided
+  return validateAIFeedback(result, false, allowMissingRoleFeedback);
 }
 
 /**
