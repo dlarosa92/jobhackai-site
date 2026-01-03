@@ -22,7 +22,7 @@
  */
 const DB_BINDING_NAMES = ['DB', 'JOBHACKAI_DB', 'INTERVIEW_QUESTIONS_DB', 'IQ_D1'];
 
-function getDb(env) {
+export function getDb(env) {
   if (!env) return null;
   const direct = env.DB;
   if (direct && typeof direct.prepare === 'function') return direct;
