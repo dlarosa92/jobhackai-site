@@ -311,6 +311,84 @@ export async function getUserPlanData(env, authId) {
 }
 
 /**
+ * Check if user is eligible for a trial (D1 is source of truth)
+ * A user is eligible if they are on the free plan, have never had a trial (trial_ends_at IS NULL),
+ * and have not previously paid (has_ever_paid = 0).
+ * @param {Object} env - Cloudflare environment with DB binding
+ * @param {string} authId - Firebase UID
+ * @returns {Promise<boolean>}
+ */
+export async function isTrialEligible(env, authId) {
+  const db = getDb(env);
+  if (!db) {
+    console.warn('[DB] D1 binding not available');
+    // Surface the error to callers so they can decide (checkout should return 500)
+    throw new Error('D1 binding not available');
+  }
+  try {
+    // Read core columns first (present in migration 007)
+    const user = await db.prepare(
+      'SELECT plan, trial_ends_at FROM users WHERE auth_id = ?'
+    ).bind(authId).first();
+    if (!user) {
+      // New user = eligible
+      return true;
+    }
+    const isOnFreePlan = (user.plan || 'free') === 'free';
+    const hadTrial = user.trial_ends_at !== null;
+    // has_ever_paid may be added in a later migration (e.g., Migration 010).
+    // Attempt to read it; if the column doesn't exist, treat as not paid (0).
+    let everPaid = 0;
+    try {
+      const paidRow = await db.prepare(
+        'SELECT has_ever_paid FROM users WHERE auth_id = ?'
+      ).bind(authId).first();
+      if (paidRow && paidRow.has_ever_paid !== undefined && paidRow.has_ever_paid !== null) {
+        everPaid = Number(paidRow.has_ever_paid) === 1 ? 1 : 0;
+      }
+    } catch (colErr) {
+      // If column missing, treat as not paid. Re-throw unexpected errors.
+      const msg = String(colErr?.message || '').toLowerCase();
+      if (msg.includes('no such column') || msg.includes('unknown column') || msg.includes('no such')) {
+        everPaid = 0;
+      } else {
+        throw colErr;
+      }
+    }
+    return isOnFreePlan && !hadTrial && everPaid === 0;
+  } catch (error) {
+    console.error('[DB] Error in isTrialEligible:', error);
+    // Propagate error to caller so it can return a 500 and avoid misleading 400s
+    throw error;
+  }
+}
+
+/**
+ * Atomic attempt to reserve a free ATS usage (returns true if succeeded, false if already used)
+ * Uses a unique partial index on (user_id, feature) WHERE feature='ats_score' to enforce one-time use.
+ * @param {Object} env - Cloudflare environment with DB binding
+ * @param {number} userId - User ID from users table
+ * @returns {Promise<boolean>} True if claim succeeded, false if already used
+ */
+export async function claimFreeATSUsage(env, userId) {
+  const db = getDb(env);
+  if (!db) throw new Error('D1 unavailable');
+  try {
+    await db.prepare(`
+      INSERT INTO usage_events (user_id, feature, tokens_used, meta_json, created_at)
+      VALUES (?, 'ats_score', null, NULL, datetime('now'))
+    `).bind(userId).run();
+    return true;
+  } catch (e) {
+    const msg = String(e?.message || '').toLowerCase();
+    if (msg.includes('unique') || msg.includes('constraint') || msg.includes('duplicate')) {
+      return false;
+    }
+    throw e;
+  }
+}
+
+/**
  * Create a resume session
  * @param {Object} env - Cloudflare environment with DB binding
  * @param {number} userId - User ID from users table
