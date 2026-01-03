@@ -1641,7 +1641,17 @@ export async function upsertCookieConsent(env, { userId, authId, clientId, conse
       stack: error.stack,
       userId: userId || null,
       clientId: clientId || null,
-      consentPreview: typeof consent === 'string' ? consent.substring(0, 100) : JSON.stringify(consent).substring(0, 100)
+      consentPreview: (() => {
+        if (typeof consent === 'string') return consent.substring(0, 100);
+        if (consent === undefined) return 'undefined';
+        if (consent === null) return 'null';
+        try {
+          const str = JSON.stringify(consent);
+          return str ? str.substring(0, 100) : 'empty';
+        } catch {
+          return 'unstringifiable';
+        }
+      })()
     });
     return false;
   }
