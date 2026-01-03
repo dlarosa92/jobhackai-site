@@ -387,7 +387,7 @@
   gap: 2rem;
   justify-content: center; /* center to align with features above */
   flex-wrap: wrap;
-  padding: 0; /* remove left/right inset so cards align with section centering */
+  padding: 0 0 1.5rem; /* keep bottom padding so spacing matches mobile layout */
 }
 
 .blog-card {
