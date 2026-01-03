@@ -3002,7 +3002,8 @@
               'Authorization': `Bearer ${idToken}`
             },
             body: JSON.stringify({
-              plan: targetPlan
+              plan: targetPlan,
+              forceNew: true
             })
           });
 
