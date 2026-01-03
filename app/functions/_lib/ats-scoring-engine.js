@@ -168,6 +168,10 @@ export async function scoreResume(resumeText, jobTitle, metadata = {}, env) {
     });
   
   const grammarScore = buildGrammarScore(grammarNumericScore, grammarBand);
+  // Surface flagged terms from diagnostics so the UI can clarify likely tech/proper nouns
+  const flaggedTerms = Array.isArray(grammarDiagnostics.flaggedTerms)
+    ? grammarDiagnostics.flaggedTerms
+    : [];
   
   // Build scores object for overall calculation
   const scores = {
@@ -205,7 +209,8 @@ export async function scoreResume(resumeText, jobTitle, metadata = {}, env) {
     grammarScore: {
       score: grammarScore.score,
       max: 10,
-      feedback: grammarScore.feedback
+      feedback: grammarScore.feedback,
+      flaggedTerms
     },
     overallScore,
     roleFamily,

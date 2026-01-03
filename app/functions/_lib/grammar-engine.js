@@ -331,6 +331,7 @@ export async function getGrammarDiagnostics(env, text, options = {}) {
   let misspellCount = 0;
   let knownTokens = 0;
   let checkedTokens = 0;
+  const flaggedTermsSet = new Set();
 
   if (englishWords) {
     const sentenceList = sentences.length ? sentences : [input];
@@ -362,6 +363,11 @@ export async function getGrammarDiagnostics(env, text, options = {}) {
           knownTokens++;
         } else {
           misspellCount++;
+          // Capture a user-friendly version of the flagged term (strip edge punctuation)
+          const displayWord = word.replace(/^[^A-Za-z0-9]+|[^A-Za-z0-9]+$/g, '');
+          if (displayWord) {
+            flaggedTermsSet.add(displayWord);
+          }
         }
       }
     }
@@ -477,6 +483,9 @@ export async function getGrammarDiagnostics(env, text, options = {}) {
   if (confidence < 0.1) confidence = 0.1;
   if (confidence > 1.0) confidence = 1.0;
 
+  // Limit flagged terms to a small, useful set for UI display
+  const flaggedTerms = Array.from(flaggedTermsSet).slice(0, 20);
+
   return {
     rawScore,
     misspellCount,
@@ -489,7 +498,8 @@ export async function getGrammarDiagnostics(env, text, options = {}) {
     dictionaryHitRate,
     tokenCount,
     extractionStatus,
-    confidence
+    confidence,
+    flaggedTerms
   };
 }
 
