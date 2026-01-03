@@ -64,7 +64,7 @@ export async function onRequest(context) {
       // Try D1 first (source of truth)
       if (isD1Available(env)) {
         try {
-          const db = env.DB || env.JOBHACKAI_DB;
+          const db = (await import('../_lib/db.js')).getDb(env);
           const d1User = await getOrCreateUserByAuthId(env, uid);
           if (d1User) {
             // Get latest resume session for user
