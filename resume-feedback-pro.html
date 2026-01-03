@@ -2995,7 +2995,8 @@
                 label: 'Grammar & Spelling',
                 score: getScore(cachedScore.breakdown.grammarScore),
                 max: 10,
-                tip: getFeedback(cachedScore.breakdown.grammarScore)
+                tip: getFeedback(cachedScore.breakdown.grammarScore),
+                flaggedTerms: cachedScore.breakdown.grammarScore?.flaggedTerms
               }
             ];
             updateRubricGrid(rubric);
@@ -3839,7 +3840,8 @@
                     label: 'Grammar & Spelling',
                     score: getScore(result.breakdown.grammarScore),
                     max: 10,
-                    tip: getFeedback(result.breakdown.grammarScore, result.feedback, 4)
+                  tip: getFeedback(result.breakdown.grammarScore, result.feedback, 4),
+                  flaggedTerms: result.breakdown.grammarScore?.flaggedTerms
                   }
                 ];
                 updateRubricGrid(rubric);
@@ -4468,7 +4470,8 @@
                     label: 'Grammar & Spelling',
                     score: scoreResult.breakdown.grammarScore?.score || 0,
                     max: 10,
-                    tip: limitFeedbackToSentences(scoreResult.breakdown.grammarScore?.feedback || '')
+                  tip: limitFeedbackToSentences(scoreResult.breakdown.grammarScore?.feedback || ''),
+                  flaggedTerms: scoreResult.breakdown.grammarScore?.flaggedTerms
                   }
                 ];
                 updateRubricGrid(rubric);
@@ -4889,16 +4892,30 @@
       const grid = document.getElementById('rf-rubric-grid');
       if (!grid) return;
       grid.innerHTML = '';
+
+      const formatTip = (item) => {
+        const baseTip = item.tip || item.feedback || '';
+        const flaggedTerms = Array.isArray(item.flaggedTerms)
+          ? item.flaggedTerms.filter(Boolean)
+          : [];
+        if (!flaggedTerms.length) return baseTip;
+
+        const displayTerms = flaggedTerms.slice(0, 6).join(', ');
+        const note = `Flagged terms likely OK: ${displayTerms}.`;
+        return baseTip ? `${baseTip} ${note}` : note;
+      };
+
       rubric.forEach(item => {
         const div = document.createElement('div');
         div.className = 'rf-rubric-item';
         // Use — / — for empty scores
         const scoreDisplay = (item.score === undefined || item.score === null) ? '— / —' : `${item.score} / ${item.max}`;
+        const formattedTip = formatTip(item);
         
         div.innerHTML = `
           <div class="rf-rubric-label">${escapeHtml(item.label)}</div>
           <div class="rf-rubric-score">${escapeHtml(scoreDisplay)}</div>
-          <div style="color:var(--color-text-secondary);font-size:0.98rem;">${escapeHtml(item.tip || item.feedback || '')}</div>
+          <div style="color:var(--color-text-secondary);font-size:0.98rem;">${escapeHtml(formattedTip)}</div>
         `;
         grid.appendChild(div);
       });
