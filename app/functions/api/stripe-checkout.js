@@ -178,8 +178,18 @@ export async function onRequest(context) {
       sessionBody['subscription_data[metadata][original_plan]'] = plan;
     }
     
-    // Generate a robust idempotency key derived from stable parameters
-    const idem = await makeIdemKey(uid, sessionBody);
+    // Generate idempotency key (forceNew for fresh session if requested from frontend)
+    const forceNew = !!body.forceNew;
+    let idem;
+    if (forceNew) {
+      try {
+        idem = `${uid}:${crypto.randomUUID()}`;
+      } catch (e) {
+        idem = `${uid}:${Date.now()}:${Math.random().toString(36).slice(2,8)}`;
+      }
+    } else {
+      idem = await makeIdemKey(uid, sessionBody);
+    }
 
     console.log('🔵 [CHECKOUT] Creating session', { customerId, priceId, plan });
     try {
