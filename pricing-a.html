@@ -292,7 +292,8 @@
                   },
                   body: JSON.stringify({ 
                     plan, 
-                    startTrial: plan === 'trial' 
+                    startTrial: plan === 'trial',
+                    forceNew: true 
                   })
                 });
                 
