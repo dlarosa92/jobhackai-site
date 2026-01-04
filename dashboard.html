@@ -1119,6 +1119,8 @@
       
       // Create user object from authentication data
       let authUserName = 'User';
+      let authUserFirstName = '';
+      let authUserLastName = '';
       let authUserEmail = 'user@example.com';
       let authUserUid = null;
       try {
@@ -1127,7 +1129,15 @@
           authUserEmail = u.email || authUserEmail;
           authUserUid = u.uid || null;
           const dn = u.displayName || '';
-          if (dn) authUserName = dn;
+          if (dn) {
+            authUserName = dn;
+            // Parse firstName and lastName from displayName
+            const nameParts = dn.trim().split(/\s+/);
+            if (nameParts.length > 0) {
+              authUserFirstName = nameParts[0];
+              authUserLastName = nameParts.slice(1).join(' ') || '';
+            }
+          }
         }
       } catch (_) {}
       
@@ -1156,6 +1166,8 @@
       // Use API data, fallback to localStorage, never create fake dates
       const user = {
         name: authUserName,
+        firstName: authUserFirstName,
+        lastName: authUserLastName,
         email: authUserEmail,
         uid: authUserUid,
         plan: currentPlan,
@@ -1748,7 +1760,6 @@
 
     function buildFirstAtsMilestoneHtml(snapshot) {
       if (snapshot) {
-        const roleText = snapshot.role ? `First run · ${escapeHtmlText(snapshot.role)}` : 'First run saved';
         return `
         <div class="first-ats-milestone">
           <span class="first-ats-score-value">${snapshot.score}%</span>
@@ -1763,13 +1774,13 @@
               <span class="jh-tooltip-text">This score reflects the first resume you submitted through Resume Feedback or the free lifetime run.</span>
             </span>
           </span>
-          <span class="first-ats-score-role">${roleText}</span>
+          <span class="first-ats-score-role">First run · <span class="first-ats-time-ago">—</span></span>
         </div>`;
       }
 
       return `
         <div class="first-ats-milestone first-ats-welcome">
-          Hi there — your first resume score from Resume Feedback or your free ATS run will live here.
+          Your first resume score from Resume Feedback or your free ATS run will live here.
         </div>`;
     }
     
@@ -1840,7 +1851,7 @@
       
       let banner = `<div class="dashboard-banner">
         <div class="welcome-row">
-          <h2>Your First ATS Resume</h2> <!-- PATCH: Remove Hi there..., just title -->
+          <h2>${user.firstName && user.lastName ? `Hi, ${escapeHtmlText(user.firstName)} ${escapeHtmlText(user.lastName)}` : user.firstName ? `Hi, ${escapeHtmlText(user.firstName)}` : user.name ? `Hi, ${escapeHtmlText(user.name)}` : 'Hi, User'}</h2>
           ${user.plan === 'trial' && user.trialEndsAt ? `<div class="trial-countdown">You have ${daysLeft(user.trialEndsAt)} day${daysLeft(user.trialEndsAt) !== 1 ? 's' : ''} left in your trial!</div>` : ''}
           ${subStatus && subStatus.cancelAt ? `
             <div style="background:#FEF3C7;border-left:4px solid #F59E0B;color:#92400E;padding:0.8rem 1rem;border-radius:8px;margin:0.5rem 0;font-size:0.98rem;">
@@ -1868,18 +1879,14 @@
           ${atsScore.percent !== null && atsScore.percent !== undefined ? `
             ${atsDonut(atsScore.percent)}
             <div class="ats-score-details">
-              <span class="ats-score-label">Resume Feedback</span>
-              <span class="ats-score-secondary" style="display:inline-flex;align-items:center;gap:0.25rem;">
-                First run &middot; <span id="ats-score-age">—</span>
-                <span class="jh-tooltip-trigger" tabindex="0" aria-label="What is ATS Score?" style="display:inline-flex;align-items:center;vertical-align:middle;cursor:help;">
+              <span class="ats-score-label">Last Resume Feedback <span class="jh-tooltip-trigger" tabindex="0" aria-label="What is ATS Score?" style="display:inline-flex;align-items:center;vertical-align:middle;cursor:default;margin-left:0.25rem;">
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false" style="color:#6B7280;">
                     <circle cx="12" cy="12" r="10"/>
                     <line x1="12" y1="8" x2="12" y2="8"/>
                     <line x1="12" y1="12" x2="12" y2="16"/>
                   </svg>
                   <span class="jh-tooltip-text">ATS (Applicant Tracking System) Score measures how well your resume matches job requirements. Higher scores increase your chances of passing automated screening systems used by most employers.</span>
-                </span>
-              </span>
+                </span></span>
               <span class="ats-score-summary">${atsScore.summary}</span>
             </div>
           ` : `
@@ -2002,8 +2009,8 @@
         }
         featuresHtml += `<div class="feature-action">`;
         if (isUnlocked && feature.key === 'ats') {
-          // --- PATCH: Conditionally render upload button only if FREE and no D1 (persisted) ATS ---
-          if (user.plan === 'free' && (!atsScore.atsPersisted || atsScore.percent === null)) {
+          // --- PATCH: Conditionally render upload button only if FREE and no first-time resume exists ---
+          if (user.plan === 'free' && !firstAtsSnapshot) {
             featuresHtml += `<input type=\"file\" id=\"ats-upload-input\" accept=\".pdf,.docx,.txt\" title=\"Upload your resume in PDF, DOCX, or TXT format\" style=\"display:none;\" />`;
             featuresHtml += `<button class=\"btn-primary\" id=\"ats-upload-btn\">${feature.action}</button>`;
           }
@@ -2104,6 +2111,16 @@
         const ts = atsScore.timestamp || (atsScore.d1Payload && (atsScore.d1Payload.timestamp || atsScore.d1Payload.createdAt));
         if (ageEl && ts) {
           ageEl.textContent = timeAgo(ts);
+        }
+      } catch (e) {
+        // ignore
+      }
+      
+      // Update first ATS card timestamp if we have a snapshot
+      try {
+        const firstAtsTimeEl = document.querySelector('.first-ats-time-ago');
+        if (firstAtsTimeEl && firstAtsSnapshot && firstAtsSnapshot.createdAt) {
+          firstAtsTimeEl.textContent = timeAgo(firstAtsSnapshot.createdAt);
         }
       } catch (e) {
         // ignore
