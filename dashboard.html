@@ -2180,7 +2180,12 @@ document.addEventListener("DOMContentLoaded", function () {
         alert('Failed to score resume.');
         return;
       }
-      // POLL /api/ats-score-persist for up-to-date score
+      // Parse POST response to obtain resumeId or timestamp to match D1 persistence
+      const postJson = await postResp.json().catch(() => null);
+      const expectedResumeId = postJson?.resumeId || postJson?.data?.resumeId || null;
+      const expectedTimestamp = postJson?.timestamp || postJson?.data?.timestamp || Date.now();
+
+      // POLL /api/ats-score-persist for up-to-date score that matches this upload
       let attempts = 0;
       let gotPersisted = false;
       while (attempts < 16) { // up to ~30s
@@ -2189,17 +2194,35 @@ document.addEventListener("DOMContentLoaded", function () {
           const d1Resp = await fetch('/api/ats-score-persist', {headers: idToken ? {'Authorization': `Bearer ${idToken}`} : {}});
           if (d1Resp.ok) {
             const d1Payload = await d1Resp.json();
-            if (d1Payload.success && d1Payload.data && d1Payload.data.score != null) {
-              // Save to cache and re-render UI
-              window.JobHackAIStatePersistence?.saveATSScore?.({
-                score: d1Payload.data.score,
-                breakdown: d1Payload.data.breakdown,
-                resumeId: d1Payload.data.resumeId || '',
-                jobTitle: d1Payload.data.jobTitle,
-                extractionQuality: d1Payload.data.extractionQuality
-              });
-              gotPersisted = true;
-              break;
+            if (d1Payload && d1Payload.success && d1Payload.data && d1Payload.data.score != null) {
+              // If server returned a resumeId for our POST, require a match
+              if (expectedResumeId) {
+                if (d1Payload.data.resumeId && String(d1Payload.data.resumeId) === String(expectedResumeId)) {
+                  window.JobHackAIStatePersistence?.saveATSScore?.({
+                    score: d1Payload.data.score,
+                    breakdown: d1Payload.data.breakdown,
+                    resumeId: d1Payload.data.resumeId || '',
+                    jobTitle: d1Payload.data.jobTitle,
+                    extractionQuality: d1Payload.data.extractionQuality
+                  });
+                  gotPersisted = true;
+                  break;
+                }
+              } else {
+                // Otherwise use timestamps: require D1 timestamp to be >= expectedTimestamp
+                const d1Ts = d1Payload.data.timestamp || d1Payload.data.createdAt || null;
+                if (d1Ts && Number(d1Ts) >= Number(expectedTimestamp)) {
+                  window.JobHackAIStatePersistence?.saveATSScore?.({
+                    score: d1Payload.data.score,
+                    breakdown: d1Payload.data.breakdown,
+                    resumeId: d1Payload.data.resumeId || '',
+                    jobTitle: d1Payload.data.jobTitle,
+                    extractionQuality: d1Payload.data.extractionQuality
+                  });
+                  gotPersisted = true;
+                  break;
+                }
+              }
             }
           }
         } catch (_) {}
