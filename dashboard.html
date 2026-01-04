@@ -1659,44 +1659,6 @@
 
       return atsScore;
     }
- (dashboard(d1): D1-first ATS score read; upload clears cache, polls persist; hide upload after persisted score; remove 'Hi there')
-          }
-        });
-
-        if (!response.ok) {
-          console.warn('[DASHBOARD] ats-score-persist response not ok:', response.status);
-          return atsScore;
-        }
-
-        const payload = await response.json();
-        if (!payload.success || !payload.data) {
-          return atsScore;
-        }
-
-        const resumeData = payload.data;
-        const rawScore = typeof resumeData.score === 'number' ? resumeData.score : parseFloat(resumeData.score);
-        if (Number.isNaN(rawScore)) {
-          return atsScore;
-        }
-
-        const scoreValue = Math.max(0, Math.min(100, Math.round(rawScore)));
-        const extractionQuality = resumeData.extractionQuality;
-
-        if (extractionQuality) {
-          maybeWarnLowExtractionQuality(extractionQuality);
-        }
-
-        atsScore.value = scoreValue;
-        atsScore.percent = scoreValue;
-        atsScore.summary = deriveAtsSummary(scoreValue, extractionQuality, resumeData.feedback);
-        atsScore.jobTitle = resumeData.jobTitle || null;
-        atsScore.breakdown = resumeData.breakdown || null;
-      } catch (error) {
-        console.warn('[DASHBOARD] Failed to load ATS score from D1:', error);
-      }
-
-      return atsScore;
-    }
 
     function escapeHtmlText(value) {
       if (!value) return '';
@@ -1875,7 +1837,6 @@
             ${atsDonut(atsScore.percent)}
             <div class="ats-score-details">
               <span class="ats-score-label">Resume Feedback</span>
- (dashboard(d1): D1-first ATS score read; upload clears cache, polls persist; hide upload after persisted score; remove 'Hi there')
               <span class="ats-score-secondary" style="display:inline-flex;align-items:center;gap:0.25rem;">
                 First run &middot; <span id="ats-score-age">—</span>
                 <span class="jh-tooltip-trigger" tabindex="0" aria-label="What is ATS Score?" style="display:inline-flex;align-items:center;vertical-align:middle;cursor:help;">
@@ -3317,6 +3278,7 @@ document.addEventListener("DOMContentLoaded", function () {
         window.JobHackAINavigation.initializeNavigation();
       }
     });
+    }
   </script>
   <script src="js/main.js" type="module"></script>
   <script src="js/analytics.js" type="module"></script>
