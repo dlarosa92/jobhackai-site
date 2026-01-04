@@ -1541,7 +1541,6 @@
     }
 
     // Load ATS score from D1 persistence BEFORE rendering
-    async function loadAtsScoreFromStorage() {
 // Load ATS score from D1 persistence BEFORE rendering
     async function loadAtsScoreFromStorage() {
       // First attempt: canonical persisted score from D1
@@ -1976,7 +1975,6 @@
             featuresHtml += `<button class=\"btn-primary\" id=\"ats-upload-btn\">${feature.action}</button>`;
           }
           featuresHtml += `<div class=\"usage-indicator\" data-feature=\"atsScans\" data-plan=\"${user.plan}\"></div>`;
-          featuresHtml += `<div class="usage-indicator" data-feature="atsScans" data-plan="${user.plan}"></div>`;
         } else if (isUnlocked && feature.key === 'feedback') {
           // Resume Feedback: link to feedback page (unlocked for trial, essential, pro, premium)
           featuresHtml += `<a href=\"resume-feedback-pro.html\" class=\"btn-primary\">Get Detailed Feedback</a>`;
@@ -2081,8 +2079,17 @@ document.addEventListener("DOMContentLoaded", function () {
       input.click();
     });
     input.addEventListener('change', async function (event) {
+      if (input._jhUploadInProgress) {
+        console.warn('[DASHBOARD] Upload already in progress, ignoring duplicate change event.');
+        return;
+      }
+      input._jhUploadInProgress = true;
+      try {
       const files = event.target.files;
-      if (!files || !files[0]) return;
+      if (!files || !files[0]) {
+        input._jhUploadInProgress = false;
+        return;
+      }
       // CLEAR ATS CACHE BEFORE POST
       window.JobHackAIStatePersistence?.clearATSScore?.();
       // Build form
@@ -2091,8 +2098,20 @@ document.addEventListener("DOMContentLoaded", function () {
       // POST to /api/ats-score
       let postResp = null;
       let idToken = '';
-      if (window.FirebaseAuthManager?.getCurrentUser) {
-        idToken = await window.FirebaseAuthManager.getCurrentUser().getIdToken();
+      const currentUserForUpload = window.FirebaseAuthManager?.getCurrentUser?.();
+      if (currentUserForUpload) {
+        try {
+          idToken = await currentUserForUpload.getIdToken();
+        } catch (err) {
+          console.warn('[DASHBOARD] Failed to get ID token for upload:', err);
+          alert('Authentication error. Please sign out and sign in again.');
+          input._jhUploadInProgress = false;
+          return;
+        }
+      } else {
+        alert('Authentication expired — please sign in again.');
+        input._jhUploadInProgress = false;
+        return;
       }
       try {
         postResp = await fetch('/api/ats-score', {method: 'POST', headers: idToken ? { 'Authorization': `Bearer ${idToken}`} : {}, body: formData});
@@ -2135,6 +2154,10 @@ document.addEventListener("DOMContentLoaded", function () {
         if (input) input.style.display = 'none';
         // Optionally force reload/refresh
         window.location.reload();
+      }
+      } finally {
+        // clear flag if not reloading (reload will navigate away)
+        try { input._jhUploadInProgress = false; } catch(_) {}
       }
     });
   });
@@ -2653,6 +2676,11 @@ document.addEventListener("DOMContentLoaded", function () {
         }
 
         atsUploadInput.addEventListener('change', async function(e) {
+          if (atsUploadInput._jhUploadInProgress) {
+            console.warn('[DASHBOARD] Upload already in progress, ignoring duplicate change event.');
+            return;
+          }
+          atsUploadInput._jhUploadInProgress = true;
           const file = e.target.files[0];
           if (!file) return;
 
@@ -3278,7 +3306,6 @@ document.addEventListener("DOMContentLoaded", function () {
         window.JobHackAINavigation.initializeNavigation();
       }
     });
-    }
   </script>
   <script src="js/main.js" type="module"></script>
   <script src="js/analytics.js" type="module"></script>
