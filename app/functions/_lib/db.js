@@ -867,6 +867,101 @@ export function isD1Available(env) {
   return !!getDb(env);
 }
 
+// ============================================================
+// FIRST RESUME SNAPSHOT HELPERS
+// ============================================================
+
+const FIRST_RESUME_SNAPSHOT_TABLE_SQL = `
+CREATE TABLE IF NOT EXISTS first_resume_snapshots (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL,
+  resume_session_id INTEGER NOT NULL,
+  snapshot_json TEXT NOT NULL,
+  created_at TEXT DEFAULT (datetime('now')),
+  UNIQUE(user_id),
+  FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+);`;
+
+async function ensureFirstResumeSnapshotTable(env) {
+  const db = getDb(env);
+  if (!db) return;
+  try {
+    const tableCheck = await db.prepare(
+      `SELECT name FROM sqlite_master WHERE type='table' AND name='first_resume_snapshots'`
+    ).first();
+    if (tableCheck) return;
+    await db.prepare(FIRST_RESUME_SNAPSHOT_TABLE_SQL).run();
+    // Ensure a unique index exists on user_id (safety for older schemas)
+    await db.prepare('CREATE UNIQUE INDEX IF NOT EXISTS idx_first_snapshot_user_id ON first_resume_snapshots(user_id)').run();
+  } catch (e) {
+    console.warn('[DB] ensureFirstResumeSnapshotTable failed:', e);
+  }
+}
+
+/**
+ * Get the first resume snapshot for a user
+ * @param {Object} env - Cloudflare environment with DB binding
+ * @param {number} userId - User ID from users table
+ * @returns {Promise<Object|null>} Snapshot object with { id, resumeSessionId, snapshot, createdAt } or null
+ */
+export async function getFirstResumeSnapshot(env, userId) {
+  const db = getDb(env);
+  if (!db) return null;
+  await ensureFirstResumeSnapshotTable(env);
+  try {
+    const row = await db.prepare(
+      `SELECT id, resume_session_id, snapshot_json, created_at
+       FROM first_resume_snapshots
+       WHERE user_id = ?
+       ORDER BY id ASC
+       LIMIT 1`
+    ).bind(userId).first();
+    if (!row || !row.snapshot_json) return null;
+    return {
+      id: row.id,
+      resumeSessionId: row.resume_session_id,
+      snapshot: JSON.parse(row.snapshot_json),
+      createdAt: row.created_at
+    };
+  } catch (e) {
+    console.error('[DB] getFirstResumeSnapshot error:', e);
+    return null;
+  }
+}
+
+/**
+ * Set the first resume snapshot for a user (only if one doesn't exist)
+ * @param {Object} env - Cloudflare environment with DB binding
+ * @param {number} userId - User ID from users table
+ * @param {number} resumeSessionId - Resume session ID
+ * @param {Object} snapshotObj - Snapshot data object to store
+ * @returns {Promise<boolean>} True if set (or already existed), false on error
+ */
+export async function setFirstResumeSnapshot(env, userId, resumeSessionId, snapshotObj) {
+  const db = getDb(env);
+  if (!db) return false;
+  await ensureFirstResumeSnapshotTable(env);
+  try {
+    const snapshotJson = JSON.stringify(snapshotObj);
+    // Use atomic INSERT ... ON CONFLICT to avoid race conditions.
+    // If a row already exists for this user_id, do nothing.
+    const result = await db.prepare(
+      `INSERT INTO first_resume_snapshots (user_id, resume_session_id, snapshot_json)
+       VALUES (?, ?, ?)
+       ON CONFLICT(user_id) DO NOTHING
+       RETURNING id`
+    ).bind(userId, resumeSessionId, snapshotJson).first();
+
+    // If INSERT returned a row, we created the snapshot.
+    if (result && result.id) return true;
+    // If no row returned, another concurrent request likely inserted it; treat as success.
+    return true;
+  } catch (e) {
+    console.warn('[DB] setFirstResumeSnapshot failed (non-fatal):', e);
+    return false;
+  }
+}
+
 const INTERVIEW_QUESTION_SETS_TABLE_SQL = `
 CREATE TABLE IF NOT EXISTS interview_question_sets (
   id INTEGER PRIMARY KEY AUTOINCREMENT,

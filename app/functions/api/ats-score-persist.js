@@ -2,7 +2,7 @@
 // Stores ATS scores in KV + Firebase Firestore hybrid for cross-device continuity
 
 import { getBearer, verifyFirebaseIdToken } from '../_lib/firebase-auth.js';
-import { getOrCreateUserByAuthId, isD1Available, getDb } from '../_lib/db.js';
+import { getOrCreateUserByAuthId, isD1Available, getDb, upsertResumeSessionWithScores, getFirstResumeSnapshot, setFirstResumeSnapshot } from '../_lib/db.js';
 
 function corsHeaders(origin, env) {
   const allowedOrigins = [
@@ -59,8 +59,51 @@ export async function onRequest(context) {
 
     const { uid } = await verifyFirebaseIdToken(token, env.FIREBASE_PROJECT_ID);
 
-    // GET: Retrieve last ATS score
+    // Parse query params
+    const url = new URL(request.url);
+    const firstOnly = url.searchParams.get('first') === 'true';
+
+    // GET: Retrieve last ATS score or first snapshot
     if (request.method === 'GET') {
+      // If caller asked only for the first-run snapshot but D1 is unavailable,
+      // don't fall back to KV (which contains latest resume). Return null so
+      // callers (dashboard) know there's no persisted first snapshot yet.
+      if (firstOnly && !isD1Available(env)) {
+        return json({ success: true, data: null }, 200, origin, env);
+      }
+
+      // If caller asked for first-run snapshot, prefer D1
+      if (firstOnly && isD1Available(env)) {
+        try {
+          const db = getDb(env);
+          const d1User = await getOrCreateUserByAuthId(env, uid);
+          if (d1User) {
+            const first = await getFirstResumeSnapshot(env, d1User.id);
+            if (first && first.snapshot) {
+              const payload = first.snapshot;
+              // Normalize fields to existing response shape
+              return json({
+                success: true,
+                data: {
+                  score: payload.score ?? null,
+                  breakdown: payload.breakdown ?? null,
+                  extractionQuality: payload.extractionQuality ?? null,
+                  feedback: payload.feedback ?? null,
+                  jobTitle: payload.jobTitle ?? null,
+                  resumeId: payload.resumeId ? payload.resumeId : `resume:${first.resumeSessionId}`,
+                  timestamp: payload.timestamp ?? Date.parse(first.createdAt)
+                }
+              }, 200, origin, env);
+            }
+          }
+          // No first snapshot found, return null
+          return json({ success: true, data: null }, 200, origin, env);
+        } catch (e) {
+          console.warn('[ATS-SCORE-PERSIST] D1 first snapshot read failed:', e);
+          return json({ success: true, data: null }, 200, origin, env);
+        }
+      }
+
       // Try D1 first (source of truth)
       if (isD1Available(env)) {
         try {
@@ -224,7 +267,42 @@ export async function onRequest(context) {
       });
     } catch (kvError) {
       console.warn('[ATS-SCORE-PERSIST] KV write failed:', kvError);
-      // Continue to Firestore even if KV fails
+      // Continue even if KV fails
+    }
+
+    // Mirror to D1 and persist first snapshot
+    if (isD1Available(env)) {
+      try {
+        const d1User = await getOrCreateUserByAuthId(env, uid, null);
+        if (d1User) {
+          const session = await upsertResumeSessionWithScores(env, d1User.id, {
+            resumeId,
+            role: jobTitle || null,
+            atsScore: score,
+            ruleBasedScores: breakdown || null
+          });
+          // Persist first-ever snapshot if not already set
+          if (session) {
+            const existingFirst = await getFirstResumeSnapshot(env, d1User.id);
+            if (!existingFirst) {
+              await setFirstResumeSnapshot(env, d1User.id, session.id, {
+                uid,
+                resumeId,
+                score,
+                breakdown,
+                summary,
+                jobTitle,
+                extractionQuality,
+                feedback: null,
+                timestamp
+              });
+              console.log('[ATS-SCORE-PERSIST] Created D1 firstResume snapshot', { uid, resumeId, sessionId: session.id });
+            }
+          }
+        }
+      } catch (e) {
+        console.warn('[ATS-SCORE-PERSIST] D1 mirror/first-snapshot failed (non-fatal):', e);
+      }
     }
 
     // Mirror to Firestore (for analytics and multi-device continuity)

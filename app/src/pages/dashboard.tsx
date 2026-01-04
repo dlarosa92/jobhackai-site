@@ -213,36 +213,24 @@ export default function Dashboard() {
 
   const fetchFirstRunInfo = async (token: string) => {
     try {
-      const response = await fetch('/api/resume-feedback/history?limit=50', {
+      const response = await fetch('/api/ats-score-persist?first=true', {
         method: 'GET',
         headers: { Authorization: `Bearer ${token}` }
       });
       if (!response.ok) {
-        throw new Error('Failed to load resume history');
+        throw new Error('Failed to load first resume info from server');
       }
-      const json = await response.json();
-      const items: any[] = Array.isArray(json?.items) ? json.items : [];
-      if (items.length === 0) {
+      const data = await response.json();
+      const payload = data?.data;
+      if (data?.success && payload) {
+        const parsedScore = coerceScore(payload.score);
+        setFirstRunInfo({
+          score: parsedScore,
+          createdAt: payload.timestamp ? new Date(payload.timestamp).toISOString() : (payload.createdAt || null)
+        });
+      } else {
         setFirstRunInfo(null);
-        return;
       }
-      let earliest = items[0];
-      const getTimestamp = (item: any) => {
-        const candidate = item.createdAt || item.feedbackCreatedAt || item.timestamp;
-        if (!candidate) return Number.POSITIVE_INFINITY;
-        const parsed = new Date(candidate).getTime();
-        return Number.isNaN(parsed) ? Number.POSITIVE_INFINITY : parsed;
-      };
-      for (let i = 1; i < items.length; i += 1) {
-        const current = items[i];
-        if (getTimestamp(current) < getTimestamp(earliest)) {
-          earliest = current;
-        }
-      }
-      setFirstRunInfo({
-        score: typeof earliest.atsScore === 'number' ? earliest.atsScore : (typeof earliest.score === 'number' ? earliest.score : null),
-        createdAt: earliest.createdAt || earliest.feedbackCreatedAt || earliest.timestamp || null
-      });
     } catch (error) {
       console.error('[DASHBOARD] Failed to load first resume run:', error);
       setFirstRunInfo(null);
