@@ -1541,51 +1541,125 @@
     }
 
     // Load ATS score from D1 persistence BEFORE rendering
+// Load ATS score from D1 persistence BEFORE rendering
     async function loadAtsScoreFromStorage() {
-      const user = window.FirebaseAuthManager?.getCurrentUser?.();
-      if (!user) {
-        return atsScore;
-      }
-
+      // First attempt: canonical persisted score from D1
       try {
-        const idToken = await user.getIdToken();
-        const response = await fetch('/api/ats-score-persist', {
-          method: 'GET',
-          headers: {
-            'Authorization': `Bearer ${idToken}`
+        const user = window.FirebaseAuthManager?.getCurrentUser?.();
+        if (user) {
+          const idToken = await user.getIdToken();
+          const response = await fetch('/api/ats-score-persist', {
+            method: 'GET',
+            headers: { 'Authorization': `Bearer ${idToken}` }
+          });
+
+          if (response.ok) {
+            const payload = await response.json();
+            if (payload && payload.success && payload.data) {
+              const resumeData = payload.data;
+              const rawScore = typeof resumeData.score === 'number' ? resumeData.score : parseFloat(resumeData.score);
+              if (!Number.isNaN(rawScore)) {
+                const scoreValue = Math.max(0, Math.min(100, Math.round(rawScore)));
+                const extractionQuality = resumeData.extractionQuality;
+                if (extractionQuality) maybeWarnLowExtractionQuality(extractionQuality);
+
+                atsScore.value = scoreValue;
+                atsScore.percent = scoreValue;
+                atsScore.summary = deriveAtsSummary(scoreValue, extractionQuality, resumeData.feedback);
+                atsScore.jobTitle = resumeData.jobTitle || null;
+                atsScore.breakdown = resumeData.breakdown || null;
+                // Capture timestamp from D1 payload (ms since epoch)
+                atsScore.timestamp = resumeData.timestamp || resumeData.createdAt || null;
+
+                // Cache D1 result for fallback
+                if (window.JobHackAIStatePersistence) {
+                  try {
+                    window.JobHackAIStatePersistence.saveATSScore({
+                      score: scoreValue,
+                      breakdown: atsScore.breakdown,
+                      resumeId: resumeData.resumeId || '',
+                      jobTitle: atsScore.jobTitle,
+                      extractionQuality: extractionQuality
+                    });
+                  } catch (e) {
+                    console.warn('[DASHBOARD] Failed to save D1 ATS score to cache:', e);
+                  }
+                }
+
+                atsScore.atsPersisted = true;
+                atsScore.d1Payload = resumeData;
+                return atsScore;
+              }
+            }
+          } else {
+            console.warn('[DASHBOARD] ats-score-persist response not ok:', response.status);
           }
-        });
-
-        if (!response.ok) {
-          console.warn('[DASHBOARD] ats-score-persist response not ok:', response.status);
-          return atsScore;
         }
-
-        const payload = await response.json();
-        if (!payload.success || !payload.data) {
-          return atsScore;
-        }
-
-        const resumeData = payload.data;
-        const rawScore = typeof resumeData.score === 'number' ? resumeData.score : parseFloat(resumeData.score);
-        if (Number.isNaN(rawScore)) {
-          return atsScore;
-        }
-
-        const scoreValue = Math.max(0, Math.min(100, Math.round(rawScore)));
-        const extractionQuality = resumeData.extractionQuality;
-
-        if (extractionQuality) {
-          maybeWarnLowExtractionQuality(extractionQuality);
-        }
-
-        atsScore.value = scoreValue;
-        atsScore.percent = scoreValue;
-        atsScore.summary = deriveAtsSummary(scoreValue, extractionQuality, resumeData.feedback);
-        atsScore.jobTitle = resumeData.jobTitle || null;
-        atsScore.breakdown = resumeData.breakdown || null;
       } catch (error) {
         console.warn('[DASHBOARD] Failed to load ATS score from D1:', error);
+      }
+
+      // Fallback: load from local state persistence / localStorage
+      try {
+        let lastScore = null;
+        let lastSummary = null;
+        let lastJobTitle = null;
+        let lastBreakdown = null;
+
+        if (window.JobHackAIStatePersistence) {
+          const cachedScore = window.JobHackAIStatePersistence.loadATSScore();
+          if (cachedScore && cachedScore.score !== null && cachedScore.score !== undefined) {
+            lastScore = String(cachedScore.score);
+            lastJobTitle = cachedScore.jobTitle || null;
+            lastBreakdown = cachedScore.breakdown || null;
+
+            if (cachedScore.extractionQuality) {
+              maybeWarnLowExtractionQuality(cachedScore.extractionQuality);
+              const extractionQuality = cachedScore.extractionQuality;
+              const confidence = typeof extractionQuality.confidence === 'number' ? extractionQuality.confidence : 1.0;
+              const tokenCount = typeof extractionQuality.tokenCount === 'number' ? extractionQuality.tokenCount : 0;
+              const status = extractionQuality.extractionStatus || 'ok';
+              const isHighQuality = status === 'ok' && confidence >= 0.65 && tokenCount >= 80;
+
+              if (isHighQuality) {
+                if (cachedScore.score > 85) lastSummary = 'Excellent! Your resume is highly ATS compatible.';
+                else if (cachedScore.score > 70) lastSummary = 'Your resume meets many ATS criteria and is likely to be noticed.';
+                else lastSummary = 'Your resume needs improvement for better ATS results.';
+              } else {
+                lastSummary = 'We may not have detected all sections in your resume. Consider checking formatting.';
+              }
+            } else {
+              if (cachedScore.score > 85) lastSummary = 'Excellent! Your resume is highly ATS compatible.';
+              else if (cachedScore.score > 70) lastSummary = 'Your resume meets many ATS criteria and is likely to be noticed.';
+              else lastSummary = 'Your resume needs improvement for better ATS results.';
+            }
+          }
+        }
+
+        if (!lastScore) {
+          lastScore = sessionStorage.getItem('currentAtsScore') || localStorage.getItem('lastATSScore');
+          lastSummary = lastSummary || localStorage.getItem('lastATSSummary');
+          const breakdownStr = sessionStorage.getItem('currentAtsBreakdown') || localStorage.getItem('lastATSBreakdown');
+          if (breakdownStr) {
+            try {
+              lastBreakdown = JSON.parse(breakdownStr);
+            } catch (e) {
+              console.warn('[DASHBOARD] Failed to parse breakdown:', e);
+            }
+          }
+        }
+
+        atsScore.value = lastScore ? parseInt(lastScore, 10) : null;
+        atsScore.percent = lastScore ? parseInt(lastScore, 10) : null;
+        atsScore.summary = lastSummary || 'Your resume was analyzed.';
+        atsScore.jobTitle = lastJobTitle || null;
+        atsScore.breakdown = lastBreakdown || null;
+        // When loading from cache fallback, treat as persisted to keep UI consistent
+        if (atsScore.percent !== null && atsScore.percent !== undefined) {
+          atsScore.atsPersisted = true;
+        }
+      } catch (e) {
+        console.warn('[DASHBOARD] Error loading cached ATS score:', e);
       }
 
       return atsScore;
@@ -1599,6 +1673,33 @@
         .replaceAll('>', '&gt;')
         .replaceAll('"', '&quot;')
         .replaceAll("'", '&#39;');
+    }
+
+    // Simple relative time formatter (accepts ms timestamp or date-string)
+    function timeAgo(dateInput) {
+      if (!dateInput) return '—';
+      let ts = null;
+      if (typeof dateInput === 'number' && Number.isFinite(dateInput)) ts = dateInput;
+      else if (typeof dateInput === 'string' && dateInput.trim()) {
+        const normalized = dateInput.replace(' ', 'T');
+        const d = new Date(normalized);
+        if (!Number.isNaN(d.getTime())) ts = d.getTime();
+      }
+      if (!ts) return '—';
+      const diff = Date.now() - ts;
+      if (diff < 30 * 1000) return 'just now';
+      const s = Math.floor(diff / 1000);
+      if (s < 60) return `${s}s ago`;
+      const m = Math.floor(s / 60);
+      if (m < 60) return `${m}m ago`;
+      const h = Math.floor(m / 60);
+      if (h < 24) return `${h}h ago`;
+      const d = Math.floor(h / 24);
+      if (d < 30) return `${d}d ago`;
+      const mo = Math.floor(d / 30);
+      if (mo < 12) return `${mo}mo ago`;
+      const y = Math.floor(mo / 12);
+      return `${y}y ago`;
     }
 
     async function loadFirstAtsSnapshot() {
@@ -1739,7 +1840,7 @@
       
       let banner = `<div class="dashboard-banner">
         <div class="welcome-row">
-          <h2>Hi, ${user.name || 'User'}</h2>
+          <h2>Your First ATS Resume</h2> <!-- PATCH: Remove Hi there..., just title -->
           ${user.plan === 'trial' && user.trialEndsAt ? `<div class="trial-countdown">You have ${daysLeft(user.trialEndsAt)} day${daysLeft(user.trialEndsAt) !== 1 ? 's' : ''} left in your trial!</div>` : ''}
           ${subStatus && subStatus.cancelAt ? `
             <div style="background:#FEF3C7;border-left:4px solid #F59E0B;color:#92400E;padding:0.8rem 1rem;border-radius:8px;margin:0.5rem 0;font-size:0.98rem;">
@@ -1767,9 +1868,9 @@
           ${atsScore.percent !== null && atsScore.percent !== undefined ? `
             ${atsDonut(atsScore.percent)}
             <div class="ats-score-details">
-              <span class="ats-score-label">Latest Resume Feedback</span>
+              <span class="ats-score-label">Resume Feedback</span>
               <span class="ats-score-secondary" style="display:inline-flex;align-items:center;gap:0.25rem;">
-                ${atsScore.percent}% Application Tracking System Score
+                First run &middot; <span id="ats-score-age">—</span>
                 <span class="jh-tooltip-trigger" tabindex="0" aria-label="What is ATS Score?" style="display:inline-flex;align-items:center;vertical-align:middle;cursor:help;">
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false" style="color:#6B7280;">
                     <circle cx="12" cy="12" r="10"/>
@@ -1901,10 +2002,12 @@
         }
         featuresHtml += `<div class="feature-action">`;
         if (isUnlocked && feature.key === 'ats') {
-          // ATS Scoring: real upload
-          featuresHtml += `<input type=\"file\" id=\"ats-upload-input\" accept=\".pdf,.docx,.txt\" title=\"Upload your resume in PDF, DOCX, or TXT format\" style=\"display:none;\" />`;
-          featuresHtml += `<button class=\"btn-primary\" id=\"ats-upload-btn\">${feature.action}</button>`;
-          featuresHtml += `<div class="usage-indicator" data-feature="atsScans" data-plan="${user.plan}"></div>`;
+          // --- PATCH: Conditionally render upload button only if FREE and no D1 (persisted) ATS ---
+          if (user.plan === 'free' && (!atsScore.atsPersisted || atsScore.percent === null)) {
+            featuresHtml += `<input type=\"file\" id=\"ats-upload-input\" accept=\".pdf,.docx,.txt\" title=\"Upload your resume in PDF, DOCX, or TXT format\" style=\"display:none;\" />`;
+            featuresHtml += `<button class=\"btn-primary\" id=\"ats-upload-btn\">${feature.action}</button>`;
+          }
+          featuresHtml += `<div class=\"usage-indicator\" data-feature=\"atsScans\" data-plan=\"${user.plan}\"></div>`;
         } else if (isUnlocked && feature.key === 'feedback') {
           // Resume Feedback: link to feedback page (unlocked for trial, essential, pro, premium)
           featuresHtml += `<a href=\"resume-feedback-pro.html\" class=\"btn-primary\">Get Detailed Feedback</a>`;
@@ -1995,7 +2098,206 @@
         }
       })();
       
-      // --- Upgrade Pop-up Logic ---
+      // Update ATS score "age" display if we have a timestamp
+      try {
+        const ageEl = document.getElementById('ats-score-age');
+        const ts = atsScore.timestamp || (atsScore.d1Payload && (atsScore.d1Payload.timestamp || atsScore.d1Payload.createdAt));
+        if (ageEl && ts) {
+          ageEl.textContent = timeAgo(ts);
+        }
+      } catch (e) {
+        // ignore
+      }
+      
+// --- ATS Upload PATCH: POST, clear cache, poll for D1 persist and re-render  ---
+(function () {
+  function domGuarded(selector, cb) {
+    const el = document.querySelector(selector);
+    if (el) cb(el);
+  }
+  domGuarded('#ats-upload-btn', function(btn) {
+    const input = document.getElementById('ats-upload-input');
+    if (!input) return;
+    input.addEventListener('change', async function (event) {
+      if (input._jhUploadInProgress) {
+        console.warn('[DASHBOARD] Upload already in progress, ignoring duplicate change event.');
+        return;
+      }
+      input._jhUploadInProgress = true;
+      try {
+      const files = event.target.files;
+      if (!files || !files[0]) {
+        input._jhUploadInProgress = false;
+        return;
+      }
+      // Validate file type & size (mirror existing handler)
+      const fileToUpload = files[0];
+      const allowed = ['pdf', 'docx', 'txt'];
+      const ext = (fileToUpload.name || '').split('.').pop().toLowerCase();
+      const maxSize = 2 * 1024 * 1024; // 2 MB
+      if (!allowed.includes(ext)) {
+        try { showErrorBanner('Invalid file type. Please upload PDF, DOCX, or TXT.'); } catch(_) {}
+        input._jhUploadInProgress = false;
+        event.target.value = '';
+        return;
+      }
+      if (fileToUpload.size > maxSize) {
+        try { showErrorBanner('File size exceeds 2 MB limit. Please upload a smaller file.'); } catch(_) {}
+        input._jhUploadInProgress = false;
+        event.target.value = '';
+        return;
+      }
+      // CLEAR ATS CACHE BEFORE POST
+      window.JobHackAIStatePersistence?.clearATSScore?.();
+      // Build form
+      const formData = new FormData();
+      formData.append('resume', fileToUpload);
+      // Indicate upload started in UI so user sees progress (matches original handler)
+      try { showLoadingState(); } catch(_) {}
+      // POST to /api/ats-score
+      let postResp = null;
+      let idToken = '';
+      const currentUserForUpload = window.FirebaseAuthManager?.getCurrentUser?.();
+      if (currentUserForUpload) {
+        try {
+          idToken = await currentUserForUpload.getIdToken();
+        } catch (err) {
+          console.warn('[DASHBOARD] Failed to get ID token for upload:', err);
+          alert('Authentication error. Please sign out and sign in again.');
+          input._jhUploadInProgress = false;
+          return;
+        }
+      } else {
+        alert('Authentication expired — please sign in again.');
+        input._jhUploadInProgress = false;
+        return;
+      }
+      // Capture client-side timestamp BEFORE the POST so we can compare against server-side D1 timestamps
+      const expectedTimestampBeforePost = Date.now();
+      try {
+        postResp = await fetch('/api/ats-score', {method: 'POST', headers: idToken ? { 'Authorization': `Bearer ${idToken}`} : {}, body: formData});
+      } catch (err) {
+        alert('Failed to submit resume.');
+        try { hideLoadingState(); } catch(_) {}
+        try { event.target.value = ''; } catch(_) {}
+        return;
+      }
+      if (!postResp || !postResp.ok) {
+        alert('Failed to score resume.');
+        try { hideLoadingState(); } catch(_) {}
+        try { event.target.value = ''; } catch(_) {}
+        return;
+      }
+      // Parse POST response to obtain resumeId or timestamp to match D1 persistence
+      const postJson = await postResp.json().catch(() => null);
+      const expectedResumeId = postJson?.resumeId || postJson?.data?.resumeId || null;
+      const expectedTimestamp = postJson?.timestamp || postJson?.data?.timestamp || expectedTimestampBeforePost;
+
+      // POLL /api/ats-score-persist for up-to-date score that matches this upload
+      let attempts = 0;
+      let gotPersisted = false;
+      while (attempts < 16) { // up to ~30s
+        attempts++;
+        try {
+          const d1Resp = await fetch('/api/ats-score-persist', {headers: idToken ? {'Authorization': `Bearer ${idToken}`} : {}});
+          if (d1Resp.ok) {
+            const d1Payload = await d1Resp.json();
+            if (d1Payload && d1Payload.success && d1Payload.data && d1Payload.data.score != null) {
+              // If server returned a resumeId for our POST, require a match
+              if (expectedResumeId) {
+                if (d1Payload.data.resumeId && String(d1Payload.data.resumeId) === String(expectedResumeId)) {
+                  window.JobHackAIStatePersistence?.saveATSScore?.({
+                    score: d1Payload.data.score,
+                    breakdown: d1Payload.data.breakdown,
+                    resumeId: d1Payload.data.resumeId || '',
+                    jobTitle: d1Payload.data.jobTitle,
+                    extractionQuality: d1Payload.data.extractionQuality
+                  });
+                  gotPersisted = true;
+                  break;
+                }
+              } else {
+                // Otherwise use timestamps: require D1 timestamp to be >= expectedTimestamp
+                const d1Ts = d1Payload.data.timestamp || d1Payload.data.createdAt || null;
+                if (d1Ts && Number(d1Ts) >= Number(expectedTimestamp)) {
+                  window.JobHackAIStatePersistence?.saveATSScore?.({
+                    score: d1Payload.data.score,
+                    breakdown: d1Payload.data.breakdown,
+                    resumeId: d1Payload.data.resumeId || '',
+                    jobTitle: d1Payload.data.jobTitle,
+                    extractionQuality: d1Payload.data.extractionQuality
+                  });
+                  gotPersisted = true;
+                  break;
+                }
+              }
+            }
+          }
+        } catch (_) {}
+        await new Promise(r=>setTimeout(r, 2000));
+      }
+      // If polling didn't observe persistence, attempt one final check and inform the user
+      if (!gotPersisted) {
+        try {
+          const finalCheck = await fetch('/api/ats-score-persist', {headers: idToken ? {'Authorization': `Bearer ${idToken}`} : {}});
+          if (finalCheck.ok) {
+            const finalPayload = await finalCheck.json();
+            if (finalPayload && finalPayload.success && finalPayload.data && finalPayload.data.score != null) {
+              // Validate final payload matches this upload (resumeId or timestamp)
+              let finalMatch = false;
+              if (expectedResumeId) {
+                if (finalPayload.data.resumeId && String(finalPayload.data.resumeId) === String(expectedResumeId)) {
+                  finalMatch = true;
+                }
+              } else {
+                const d1Ts = finalPayload.data.timestamp || finalPayload.data.createdAt || null;
+                if (d1Ts && Number(d1Ts) >= Number(expectedTimestamp)) {
+                  finalMatch = true;
+                }
+              }
+
+              if (finalMatch) {
+                window.JobHackAIStatePersistence?.saveATSScore?.({
+                  score: finalPayload.data.score,
+                  breakdown: finalPayload.data.breakdown,
+                  resumeId: finalPayload.data.resumeId || '',
+                  jobTitle: finalPayload.data.jobTitle,
+                  extractionQuality: finalPayload.data.extractionQuality
+                });
+                gotPersisted = true;
+                btn.style.display = 'none';
+                if (input) input.style.display = 'none';
+                window.location.reload();
+                return;
+              }
+            }
+          }
+        } catch (e) {
+          // ignore final check errors
+        }
+      }
+      if (!gotPersisted) {
+        // Inform the user that processing is taking longer than expected
+        try { showErrorBanner('Resume uploaded and scored — persistence still pending. Please refresh the dashboard in a minute to see your score.'); } catch(_) {}
+        try { hideLoadingState(); } catch(_) {}
+      }
+      // Hide upload button immediately for free users once D1 seen
+      if (gotPersisted) {
+        btn.style.display = 'none';
+        if (input) input.style.display = 'none';
+        // Optionally force reload/refresh
+        window.location.reload();
+      }
+      } finally {
+        // clear flag if not reloading (reload will navigate away)
+        try { input._jhUploadInProgress = false; } catch(_) {}
+      }
+    });
+  });
+})();
+// --- END ATS PATCH ---
+
+// --- Upgrade Pop-up Logic ---
       function showUpgradePopup() {
         // Check if popup was already shown
         const popupShownKey = 'upgrade-popup-shown';
@@ -2507,6 +2809,12 @@
         }
 
         atsUploadInput.addEventListener('change', async function(e) {
+          if (atsUploadInput._jhUploadInProgress) {
+            console.warn('[DASHBOARD] Upload already in progress, ignoring duplicate change event.');
+            return;
+          }
+          atsUploadInput._jhUploadInProgress = true;
+          try {
           const file = e.target.files[0];
           if (!file) return;
 
@@ -2951,6 +3259,9 @@
             showErrorBanner(errorMessage);
             hideLoadingState();
             e.target.value = ''; // Reset file input
+          }
+          } finally {
+            try { atsUploadInput._jhUploadInProgress = false; } catch (_) {}
           }
         });
       }
