@@ -388,7 +388,7 @@ export default function Dashboard() {
   const atsSummaryText = scoreLoading
     ? 'Loading your latest ATS score...'
     : (atsScoreData?.summary || 'Run your resume through Resume Feedback to show your latest ATS score on the dashboard.');
-  const hasPersistentScore = atsScoreData?.score !== null && atsScoreData?.score !== undefined;
+  const hasPersistentScore = !scoreLoading && atsScoreData?.score !== null && atsScoreData?.score !== undefined;
 
   return (
     <>
@@ -993,12 +993,12 @@ export default function Dashboard() {
                 <span className="first-run-score-value">
                   {firstRunInfo?.score != null ? `${Math.round(firstRunInfo.score)}%` : '—'}
                 </span>
-                {firstRunInfo && (
+                {firstRunInfo?.score != null && (
                   <span className="first-run-small-label">Frozen for reference</span>
                 )}
               </div>
               <p className="first-run-copy">
-                {firstRunInfo
+                {firstRunInfo?.score != null
                   ? 'We freeze your first-ever score so you always remember where you started.'
                   : 'Upload your first resume in Resume Feedback to capture that first score.'}
               </p>
