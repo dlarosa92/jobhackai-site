@@ -2174,10 +2174,14 @@
         postResp = await fetch('/api/ats-score', {method: 'POST', headers: idToken ? { 'Authorization': `Bearer ${idToken}`} : {}, body: formData});
       } catch (err) {
         alert('Failed to submit resume.');
+        try { hideLoadingState(); } catch(_) {}
+        try { event.target.value = ''; } catch(_) {}
         return;
       }
       if (!postResp || !postResp.ok) {
         alert('Failed to score resume.');
+        try { hideLoadingState(); } catch(_) {}
+        try { event.target.value = ''; } catch(_) {}
         return;
       }
       // Parse POST response to obtain resumeId or timestamp to match D1 persistence
