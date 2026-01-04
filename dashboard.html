@@ -2105,8 +2105,8 @@
         // ignore
       }
       
-      // --- ATS Upload PATCH: POST, clear cache, poll for D1 persist and re-render  ---
-document.addEventListener("DOMContentLoaded", function () {
+// --- ATS Upload PATCH: POST, clear cache, poll for D1 persist and re-render  ---
+(function () {
   function domGuarded(selector, cb) {
     const el = document.querySelector(selector);
     if (el) cb(el);
@@ -2270,7 +2270,7 @@ document.addEventListener("DOMContentLoaded", function () {
       }
     });
   });
-});
+})();
 // --- END ATS PATCH ---
 
 // --- Upgrade Pop-up Logic ---
