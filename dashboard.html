@@ -2010,7 +2010,9 @@
         featuresHtml += `<div class="feature-action">`;
         if (isUnlocked && feature.key === 'ats') {
           // --- PATCH: Conditionally render upload button only if FREE and no first-time resume exists ---
-          if (user.plan === 'free' && !firstAtsSnapshot) {
+          // Show upload only when we have no persisted ATS score and no firstAtsSnapshot.
+          // This avoids showing the button when history API fails but a cached/persisted score exists.
+          if (user.plan === 'free' && !(firstAtsSnapshot || atsScore.atsPersisted || (atsScore.percent !== null && atsScore.percent !== undefined))) {
             featuresHtml += `<input type=\"file\" id=\"ats-upload-input\" accept=\".pdf,.docx,.txt\" title=\"Upload your resume in PDF, DOCX, or TXT format\" style=\"display:none;\" />`;
             featuresHtml += `<button class=\"btn-primary\" id=\"ats-upload-btn\">${feature.action}</button>`;
           }
