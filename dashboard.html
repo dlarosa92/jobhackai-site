@@ -212,6 +212,36 @@
       background: #00c965;
       outline: none;
     }
+    .first-ats-milestone {
+      font-size: 0.95rem;
+      color: #4B5563;
+      margin-bottom: 0.6rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+    }
+    .first-ats-score-value {
+      font-size: 1.35rem;
+      font-weight: 700;
+      color: #111827;
+    }
+    .first-ats-score-meta {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.3rem;
+      font-size: 0.9rem;
+      color: #6B7280;
+    }
+    .first-ats-score-role {
+      font-size: 0.85rem;
+      color: #6B7280;
+    }
+    .first-ats-tooltip svg {
+      width: 16px;
+      height: 16px;
+      flex-shrink: 0;
+      stroke: #6B7280;
+    }
     @media (max-width: 700px) {
       .dashboard-banner, .dashboard-features {
         padding-left: 0.5rem;
@@ -1351,8 +1381,8 @@
     const features = [
       {
         key: "ats",
-        title: "ATS Resume Score",
-        desc: "Receive an overall ATS compliance score for your resume, highlighting key areas to improve.",
+        title: "Your First ATS Resume",
+        desc: "Keep the score from your first ATS run saved as a reference point while you continue improving.",
         action: "Upload Resume",
         included: true
       },
@@ -1473,201 +1503,173 @@
       return true;
     }
     
-    // Load ATS score from state persistence BEFORE rendering
+    function deriveAtsSummary(score, extractionQuality, providedSummary) {
+      if (providedSummary && providedSummary.trim()) {
+        return providedSummary;
+      }
+
+      const hasExtractionQuality = extractionQuality && typeof extractionQuality === 'object';
+      const confidence = hasExtractionQuality && typeof extractionQuality.confidence === 'number' ? extractionQuality.confidence : 1.0;
+      const tokenCount = hasExtractionQuality && typeof extractionQuality.tokenCount === 'number' ? extractionQuality.tokenCount : 0;
+      const status = hasExtractionQuality ? (extractionQuality.extractionStatus || 'ok') : 'ok';
+      const isHighQuality = hasExtractionQuality && status === 'ok' && confidence >= 0.65 && tokenCount >= 80;
+
+      if (isHighQuality) {
+        if (score > 85) {
+          return 'Excellent! Your resume is highly ATS compatible.';
+        }
+        if (score > 70) {
+          return 'Your resume meets many ATS criteria and is likely to be noticed.';
+        }
+        return 'Your resume needs improvement for better ATS results.';
+      }
+
+      if (hasExtractionQuality) {
+        if (status !== 'ok' || confidence < 0.65 || tokenCount === 0 || (tokenCount > 0 && tokenCount < 80)) {
+          return 'We may not have read your resume perfectly. Some structure checks are less certain.';
+        }
+      }
+
+      if (score > 85) {
+        return 'Excellent! Your resume is highly ATS compatible.';
+      }
+      if (score > 70) {
+        return 'Your resume meets many ATS criteria and is likely to be noticed.';
+      }
+
+      return 'Your resume needs improvement for better ATS results.';
+    }
+
+    // Load ATS score from D1 persistence BEFORE rendering
     async function loadAtsScoreFromStorage() {
-      let lastScore = null;
-      let lastSummary = null;
-      let lastJobTitle = null;
-      let lastBreakdown = null;
-      
-      // Try state persistence utility first (handles cache expiration)
-      if (window.JobHackAIStatePersistence) {
-        const cachedScore = window.JobHackAIStatePersistence.loadATSScore();
-        if (cachedScore && cachedScore.score !== null && cachedScore.score !== undefined) {
-          lastScore = cachedScore.score.toString();
-          lastJobTitle = cachedScore.jobTitle || null;
-          lastBreakdown = cachedScore.breakdown || null;
-          
-          // Check extractionQuality and show warning if low
-          if (cachedScore.extractionQuality) {
-            maybeWarnLowExtractionQuality(cachedScore.extractionQuality);
-            
-            // Generate summary based on extractionQuality (consistent with maybeWarnLowExtractionQuality logic)
-            const extractionQuality = cachedScore.extractionQuality;
-            const confidence = typeof extractionQuality.confidence === 'number' ? extractionQuality.confidence : 1.0;
-            const tokenCount = typeof extractionQuality.tokenCount === 'number' ? extractionQuality.tokenCount : 0;
-            const status = extractionQuality.extractionStatus || 'ok'; // Default to 'ok' if missing (consistent with warning logic)
-            const isHighQuality = status === 'ok' && confidence >= 0.65 && tokenCount >= 80;
-            
-            if (isHighQuality) {
-              // Use confident language
-              if (cachedScore.score > 85) {
-                lastSummary = 'Excellent! Your resume is highly ATS compatible.';
-              } else if (cachedScore.score > 70) {
-                lastSummary = 'Your resume meets many ATS criteria and is likely to be noticed.';
-              } else {
-                lastSummary = 'Your resume needs improvement for better ATS results.';
-              }
-            } else {
-              // Use softer language when quality is low
-              lastSummary = 'We may not have detected all sections in your resume. Consider checking formatting.';
-            }
-          } else {
-            // No extractionQuality data - use default confident language
-            if (cachedScore.score > 85) {
-              lastSummary = 'Excellent! Your resume is highly ATS compatible.';
-            } else if (cachedScore.score > 70) {
-              lastSummary = 'Your resume meets many ATS criteria and is likely to be noticed.';
-            } else {
-              lastSummary = 'Your resume needs improvement for better ATS results.';
-            }
+      const user = window.FirebaseAuthManager?.getCurrentUser?.();
+      if (!user) {
+        return atsScore;
+      }
+
+      try {
+        const idToken = await user.getIdToken();
+        const response = await fetch('/api/ats-score-persist', {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${idToken}`
           }
+        });
+
+        if (!response.ok) {
+          console.warn('[DASHBOARD] ats-score-persist response not ok:', response.status);
+          return atsScore;
         }
-      }
-      
-      // Fallback to sessionStorage/localStorage if state persistence not available or no cached score
-      if (!lastScore) {
-        lastScore = sessionStorage.getItem('currentAtsScore') || localStorage.getItem('lastATSScore');
-        lastSummary = localStorage.getItem('lastATSSummary');
-        const breakdownStr = sessionStorage.getItem('currentAtsBreakdown') || localStorage.getItem('lastATSBreakdown');
-        if (breakdownStr) {
-          try {
-            lastBreakdown = JSON.parse(breakdownStr);
-          } catch (e) {
-            console.warn('[DASHBOARD] Failed to parse breakdown:', e);
-          }
+
+        const payload = await response.json();
+        if (!payload.success || !payload.data) {
+          return atsScore;
         }
-      }
-      
-      // If still no score, try KV fallback via API
-      if (!lastScore) {
-        try {
-          const user = window.FirebaseAuthManager?.getCurrentUser?.();
-          if (user) {
-            const idToken = await user.getIdToken();
-            const kvResponse = await fetch('/api/ats-score-persist', {
-              method: 'GET',
-              headers: {
-                'Authorization': `Bearer ${idToken}`
-              }
-            });
-            
-            if (kvResponse.ok) {
-              const kvData = await kvResponse.json();
-              if (kvData.success && kvData.data) {
-                const resumeData = kvData.data;
-                lastScore = resumeData.score?.toString();
-                lastJobTitle = resumeData.jobTitle || null;
-                lastBreakdown = resumeData.breakdown || null;
-                const extractionQuality = resumeData.extractionQuality;
-                
-                // Check and warn if low quality
-                if (extractionQuality) {
-                  maybeWarnLowExtractionQuality(extractionQuality);
-                }
-                
-                // Generate summary based on extractionQuality and API feedback (consistent with maybeWarnLowExtractionQuality logic)
-                const confidence = typeof extractionQuality?.confidence === 'number' ? extractionQuality.confidence : 1.0;
-                const tokenCount = typeof extractionQuality?.tokenCount === 'number' ? extractionQuality.tokenCount : 0;
-                const status = extractionQuality?.extractionStatus || 'ok';
-                const isHighQuality = extractionQuality && status === 'ok' && confidence >= 0.65 && tokenCount >= 80;
-                
-                if (isHighQuality) {
-                  // Use confident language or API feedback if available
-                  if (resumeData.feedback) {
-                    lastSummary = resumeData.feedback;
-                  } else if (resumeData.score > 85) {
-                    lastSummary = 'Excellent! Your resume is highly ATS compatible.';
-                  } else if (resumeData.score > 70) {
-                    lastSummary = 'Your resume meets many ATS criteria and is likely to be noticed.';
-                  } else {
-                    lastSummary = 'Your resume needs improvement for better ATS results.';
-                  }
-                } else {
-                  // Use softer language when quality is low
-                  lastSummary = resumeData.feedback || 
-                               'We may not have detected all sections in your resume. Consider checking formatting.';
-                }
-                
-                // Cache KV results back to localStorage via state persistence
-                // BUT: Only if localStorage doesn't already have data with feedback
-                // This prevents overwriting feedback that was saved from feedback page
-                if (window.JobHackAIStatePersistence && lastScore) {
-                  // Check if localStorage already has data with feedback
-                  const existingData = window.JobHackAIStatePersistence.loadATSScore(null);
-                  const hasExistingFeedback = existingData && existingData.breakdown && 
-                    (existingData.breakdown.keywordScore?.feedback || 
-                     existingData.breakdown.formattingScore?.feedback ||
-                     existingData.breakdown.structureScore?.feedback ||
-                     existingData.breakdown.toneScore?.feedback ||
-                     existingData.breakdown.grammarScore?.feedback);
-                  
-                  // Only save from KV if:
-                  // 1. No existing data in localStorage, OR
-                  // 2. Existing data doesn't have feedback (KV might be newer or have feedback)
-                  // DO NOT save from KV if existing data already has feedback (preserve existing feedback)
-                  const kvHasFeedback = lastBreakdown && 
-                    (lastBreakdown.keywordScore?.feedback || 
-                     lastBreakdown.formattingScore?.feedback ||
-                     lastBreakdown.structureScore?.feedback ||
-                     lastBreakdown.toneScore?.feedback ||
-                     lastBreakdown.grammarScore?.feedback);
-                  
-                  // Only save from KV if no existing data OR existing doesn't have feedback
-                  // This ensures existing feedback (from feedback page) is never overwritten
-                  if (!existingData || !hasExistingFeedback) {
-                    // Merge KV breakdown with existing feedback if both exist
-                    let mergedBreakdown = lastBreakdown || {};
-                    if (existingData && existingData.breakdown && !hasExistingFeedback && kvHasFeedback) {
-                      // KV has feedback, existing doesn't - use KV feedback
-                      mergedBreakdown = { ...lastBreakdown };
-                    } else if (existingData && existingData.breakdown) {
-                      // Existing has breakdown but no feedback - merge with KV
-                      mergedBreakdown = { ...lastBreakdown };
-                      // Preserve any score data from existing if KV doesn't have it
-                      ['keywordScore', 'formattingScore', 'structureScore', 'toneScore', 'grammarScore'].forEach(key => {
-                        if (existingData.breakdown[key] && !mergedBreakdown[key]) {
-                          mergedBreakdown[key] = existingData.breakdown[key];
-                        }
-                      });
-                    }
-                    
-                    window.JobHackAIStatePersistence.saveATSScore({
-                      score: parseFloat(lastScore),
-                      breakdown: mergedBreakdown,
-                      resumeId: resumeData.resumeId || '',
-                      jobTitle: lastJobTitle,
-                      extractionQuality: extractionQuality
-                    });
-                  } else {
-                    // Existing data has feedback - preserve it completely (don't overwrite)
-                    console.log('[DASHBOARD] Preserving existing localStorage data with feedback, skipping KV overwrite');
-                  }
-                }
-                
-                console.log('[DASHBOARD] Loaded ATS score from KV:', lastScore);
-              }
-            }
-          }
-        } catch (kvError) {
-          console.warn('[DASHBOARD] KV fetch failed:', kvError);
+
+        const resumeData = payload.data;
+        const rawScore = typeof resumeData.score === 'number' ? resumeData.score : parseFloat(resumeData.score);
+        if (Number.isNaN(rawScore)) {
+          return atsScore;
         }
-      }
-      
-      // Only update score if we have valid data (prevent reset to 0% or 78%)
-      if (lastScore) {
-        const scoreValue = parseInt(lastScore, 10);
-        // Only update if score is valid (0-100)
-        if (!isNaN(scoreValue) && scoreValue >= 0 && scoreValue <= 100) {
-          atsScore.value = scoreValue;
-          atsScore.percent = scoreValue;
-          atsScore.summary = lastSummary || 'Your resume was analyzed.';
-          atsScore.jobTitle = lastJobTitle;
-          atsScore.breakdown = lastBreakdown;
+
+        const scoreValue = Math.max(0, Math.min(100, Math.round(rawScore)));
+        const extractionQuality = resumeData.extractionQuality;
+
+        if (extractionQuality) {
+          maybeWarnLowExtractionQuality(extractionQuality);
         }
+
+        atsScore.value = scoreValue;
+        atsScore.percent = scoreValue;
+        atsScore.summary = deriveAtsSummary(scoreValue, extractionQuality, resumeData.feedback);
+        atsScore.jobTitle = resumeData.jobTitle || null;
+        atsScore.breakdown = resumeData.breakdown || null;
+      } catch (error) {
+        console.warn('[DASHBOARD] Failed to load ATS score from D1:', error);
       }
-      
+
       return atsScore;
+    }
+
+    function escapeHtmlText(value) {
+      if (!value) return '';
+      return value
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#39;');
+    }
+
+    async function loadFirstAtsSnapshot() {
+      const user = window.FirebaseAuthManager?.getCurrentUser?.();
+      if (!user) {
+        return null;
+      }
+
+      try {
+        const idToken = await user.getIdToken();
+        const response = await fetch('/api/resume-feedback/history', {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${idToken}`
+          }
+        });
+
+        if (!response.ok) {
+          console.warn('[DASHBOARD] resume-feedback history response not ok:', response.status);
+          return null;
+        }
+
+        const historyData = await response.json();
+        const entries = Array.isArray(historyData.items) ? historyData.items : [];
+        const scoredEntries = entries
+          .filter(entry => typeof entry.atsScore === 'number' && entry.createdAt)
+          .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+
+        const firstEntry = scoredEntries[0];
+        if (!firstEntry) {
+          return null;
+        }
+
+        return {
+          score: Math.max(0, Math.min(100, Math.round(firstEntry.atsScore))),
+          role: firstEntry.role || firstEntry.title || null,
+          createdAt: firstEntry.createdAt,
+          sessionId: firstEntry.sessionId,
+          summary: firstEntry.summary || null
+        };
+      } catch (error) {
+        console.warn('[DASHBOARD] Failed to load first ATS snapshot:', error);
+        return null;
+      }
+    }
+
+    function buildFirstAtsMilestoneHtml(snapshot) {
+      if (snapshot) {
+        const roleText = snapshot.role ? `First run · ${escapeHtmlText(snapshot.role)}` : 'First run saved';
+        return `
+        <div class="first-ats-milestone">
+          <span class="first-ats-score-value">${snapshot.score}%</span>
+          <span class="first-ats-score-meta">
+            Saved snapshot from your first resume score.
+            <span class="jh-tooltip-trigger first-ats-tooltip" tabindex="0" aria-label="First ATS resume info">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+                <circle cx="12" cy="12" r="10"></circle>
+                <line x1="12" y1="8" x2="12" y2="8"></line>
+                <line x1="12" y1="12" x2="12" y2="16"></line>
+              </svg>
+              <span class="jh-tooltip-text">This score reflects the first resume you submitted through Resume Feedback or the free lifetime run.</span>
+            </span>
+          </span>
+          <span class="first-ats-score-role">${roleText}</span>
+        </div>`;
+      }
+
+      return `
+        <div class="first-ats-milestone first-ats-welcome">
+          Hi there — your first resume score from Resume Feedback or your free ATS run will live here.
+        </div>`;
     }
     
     async function renderDashboard(user) {
@@ -1675,6 +1677,8 @@
       await loadAtsScoreFromStorage();
       const root = document.getElementById('dashboard-root');
       const unlocked = featureMatrix[user.plan] || [];
+      const firstAtsSnapshot = await loadFirstAtsSnapshot();
+      const firstAtsMilestoneHtml = buildFirstAtsMilestoneHtml(firstAtsSnapshot);
       
       // Fetch subscription status for warning banners
       const subStatus = await fetchSubscriptionStatus();
@@ -1763,7 +1767,7 @@
           ${atsScore.percent !== null && atsScore.percent !== undefined ? `
             ${atsDonut(atsScore.percent)}
             <div class="ats-score-details">
-              <span class="ats-score-label">Resume Feedback</span>
+              <span class="ats-score-label">Latest Resume Feedback</span>
               <span class="ats-score-secondary" style="display:inline-flex;align-items:center;gap:0.25rem;">
                 ${atsScore.percent}% Application Tracking System Score
                 <span class="jh-tooltip-trigger" tabindex="0" aria-label="What is ATS Score?" style="display:inline-flex;align-items:center;vertical-align:middle;cursor:help;">
@@ -1889,9 +1893,12 @@
       const orderedFeatures = [atsFeature, ...otherFeatures];
       for (const feature of orderedFeatures) {
         const isUnlocked = unlocked.includes(feature.key);
-        featuresHtml += `<div class="feature-card${isUnlocked ? '' : ' locked'}">`;
+        featuresHtml += `<div class="feature-card${isUnlocked ? '' : ' locked'}" data-feature-key="${feature.key}">`;
         featuresHtml += `<div class="feature-title">${feature.title}</div>`;
         featuresHtml += `<div class="feature-desc">${feature.desc}</div>`;
+        if (feature.key === 'ats') {
+          featuresHtml += firstAtsMilestoneHtml;
+        }
         featuresHtml += `<div class="feature-action">`;
         if (isUnlocked && feature.key === 'ats') {
           // ATS Scoring: real upload
@@ -2438,8 +2445,8 @@
           const scoreDetails = document.querySelector('.ats-score-details');
           const scoreLabel = scoreDetails?.querySelector('.ats-score-label');
           if (scoreLabel && scoreLabel.textContent === '—') {
-            // Update label from "—" to "Resume Feedback" when score is computed
-            scoreLabel.textContent = 'Resume Feedback';
+            // Update label from "—" to "Latest Resume Feedback" when score is computed
+            scoreLabel.textContent = 'Latest Resume Feedback';
             scoreLabel.style.color = '';
           }
           // Create or update secondary score display
@@ -2747,8 +2754,8 @@
             const uploadBtn = document.getElementById('ats-upload-btn');
             if (uploadBtn) uploadBtn.textContent = 'Scoring...';
 
-            // Get job title if available (default to 'Software Engineer' for now)
-            const jobTitle = 'Software Engineer'; // TODO: Add job title input to dashboard if needed
+            // Dashboard uploads do not provide a default role
+            const jobTitle = null;
             
             const scoreResponse = await fetch('/api/ats-score', {
               method: 'POST',
