@@ -2148,6 +2148,35 @@ document.addEventListener("DOMContentLoaded", function () {
         } catch (_) {}
         await new Promise(r=>setTimeout(r, 2000));
       }
+      // If polling didn't observe persistence, attempt one final check and inform the user
+      if (!gotPersisted) {
+        try {
+          const finalCheck = await fetch('/api/ats-score-persist', {headers: idToken ? {'Authorization': `Bearer ${idToken}`} : {}});
+          if (finalCheck.ok) {
+            const finalPayload = await finalCheck.json();
+            if (finalPayload && finalPayload.success && finalPayload.data && finalPayload.data.score != null) {
+              window.JobHackAIStatePersistence?.saveATSScore?.({
+                score: finalPayload.data.score,
+                breakdown: finalPayload.data.breakdown,
+                resumeId: finalPayload.data.resumeId || '',
+                jobTitle: finalPayload.data.jobTitle,
+                extractionQuality: finalPayload.data.extractionQuality
+              });
+              gotPersisted = true;
+              btn.style.display = 'none';
+              if (input) input.style.display = 'none';
+              window.location.reload();
+            }
+          }
+        } catch (e) {
+          // ignore final check errors
+        }
+      }
+      if (!gotPersisted) {
+        // Inform the user that processing is taking longer than expected
+        try { showErrorBanner('Resume uploaded and scored — persistence still pending. Please refresh the dashboard in a minute to see your score.'); } catch(_) {}
+        try { hideLoadingState(); } catch(_) {}
+      }
       // Hide upload button immediately for free users once D1 seen
       if (gotPersisted) {
         btn.style.display = 'none';
@@ -2681,6 +2710,7 @@ document.addEventListener("DOMContentLoaded", function () {
             return;
           }
           atsUploadInput._jhUploadInProgress = true;
+          try {
           const file = e.target.files[0];
           if (!file) return;
 
@@ -3125,6 +3155,9 @@ document.addEventListener("DOMContentLoaded", function () {
             showErrorBanner(errorMessage);
             hideLoadingState();
             e.target.value = ''; // Reset file input
+          }
+          } finally {
+            try { atsUploadInput._jhUploadInProgress = false; } catch (_) {}
           }
         });
       }
