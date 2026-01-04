@@ -1568,6 +1568,8 @@
                 atsScore.summary = deriveAtsSummary(scoreValue, extractionQuality, resumeData.feedback);
                 atsScore.jobTitle = resumeData.jobTitle || null;
                 atsScore.breakdown = resumeData.breakdown || null;
+                // Capture timestamp from D1 payload (ms since epoch)
+                atsScore.timestamp = resumeData.timestamp || resumeData.createdAt || null;
 
                 // Cache D1 result for fallback
                 if (window.JobHackAIStatePersistence) {
@@ -1667,6 +1669,33 @@
         .replaceAll('>', '&gt;')
         .replaceAll('"', '&quot;')
         .replaceAll("'", '&#39;');
+    }
+
+    // Simple relative time formatter (accepts ms timestamp or date-string)
+    function timeAgo(dateInput) {
+      if (!dateInput) return '—';
+      let ts = null;
+      if (typeof dateInput === 'number' && Number.isFinite(dateInput)) ts = dateInput;
+      else if (typeof dateInput === 'string' && dateInput.trim()) {
+        const normalized = dateInput.replace(' ', 'T');
+        const d = new Date(normalized);
+        if (!Number.isNaN(d.getTime())) ts = d.getTime();
+      }
+      if (!ts) return '—';
+      const diff = Date.now() - ts;
+      if (diff < 30 * 1000) return 'just now';
+      const s = Math.floor(diff / 1000);
+      if (s < 60) return `${s}s ago`;
+      const m = Math.floor(s / 60);
+      if (m < 60) return `${m}m ago`;
+      const h = Math.floor(m / 60);
+      if (h < 24) return `${h}h ago`;
+      const d = Math.floor(h / 24);
+      if (d < 30) return `${d}d ago`;
+      const mo = Math.floor(d / 30);
+      if (mo < 12) return `${mo}mo ago`;
+      const y = Math.floor(mo / 12);
+      return `${y}y ago`;
     }
 
     async function loadFirstAtsSnapshot() {
@@ -2065,6 +2094,17 @@
         }
       })();
       
+      // Update ATS score "age" display if we have a timestamp
+      try {
+        const ageEl = document.getElementById('ats-score-age');
+        const ts = atsScore.timestamp || (atsScore.d1Payload && (atsScore.d1Payload.timestamp || atsScore.d1Payload.createdAt));
+        if (ageEl && ts) {
+          ageEl.textContent = timeAgo(ts);
+        }
+      } catch (e) {
+        // ignore
+      }
+      
       // --- ATS Upload PATCH: POST, clear cache, poll for D1 persist and re-render  ---
 document.addEventListener("DOMContentLoaded", function () {
   function domGuarded(selector, cb) {
@@ -2090,11 +2130,28 @@ document.addEventListener("DOMContentLoaded", function () {
         input._jhUploadInProgress = false;
         return;
       }
+      // Validate file type & size (mirror existing handler)
+      const fileToUpload = files[0];
+      const allowed = ['pdf', 'docx', 'txt'];
+      const ext = (fileToUpload.name || '').split('.').pop().toLowerCase();
+      const maxSize = 2 * 1024 * 1024; // 2 MB
+      if (!allowed.includes(ext)) {
+        try { showErrorBanner('Invalid file type. Please upload PDF, DOCX, or TXT.'); } catch(_) {}
+        input._jhUploadInProgress = false;
+        event.target.value = '';
+        return;
+      }
+      if (fileToUpload.size > maxSize) {
+        try { showErrorBanner('File size exceeds 2 MB limit. Please upload a smaller file.'); } catch(_) {}
+        input._jhUploadInProgress = false;
+        event.target.value = '';
+        return;
+      }
       // CLEAR ATS CACHE BEFORE POST
       window.JobHackAIStatePersistence?.clearATSScore?.();
       // Build form
       const formData = new FormData();
-      formData.append('resume', files[0]);
+      formData.append('resume', fileToUpload);
       // POST to /api/ats-score
       let postResp = null;
       let idToken = '';
