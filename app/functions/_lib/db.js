@@ -878,6 +878,7 @@ CREATE TABLE IF NOT EXISTS first_resume_snapshots (
   resume_session_id INTEGER NOT NULL,
   snapshot_json TEXT NOT NULL,
   created_at TEXT DEFAULT (datetime('now')),
+  UNIQUE(user_id),
   FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
 );`;
 
@@ -890,7 +891,8 @@ async function ensureFirstResumeSnapshotTable(env) {
     ).first();
     if (tableCheck) return;
     await db.prepare(FIRST_RESUME_SNAPSHOT_TABLE_SQL).run();
-    await db.prepare('CREATE INDEX IF NOT EXISTS idx_first_snapshot_user_id ON first_resume_snapshots(user_id)').run();
+    // Ensure a unique index exists on user_id (safety for older schemas)
+    await db.prepare('CREATE UNIQUE INDEX IF NOT EXISTS idx_first_snapshot_user_id ON first_resume_snapshots(user_id)').run();
   } catch (e) {
     console.warn('[DB] ensureFirstResumeSnapshotTable failed:', e);
   }
@@ -940,17 +942,20 @@ export async function setFirstResumeSnapshot(env, userId, resumeSessionId, snaps
   if (!db) return false;
   await ensureFirstResumeSnapshotTable(env);
   try {
-    const existing = await db.prepare(
-      `SELECT id FROM first_resume_snapshots WHERE user_id = ? LIMIT 1`
-    ).bind(userId).first();
-    if (existing) return true; // already set, don't overwrite
     const snapshotJson = JSON.stringify(snapshotObj);
+    // Use atomic INSERT ... ON CONFLICT to avoid race conditions.
+    // If a row already exists for this user_id, do nothing.
     const result = await db.prepare(
       `INSERT INTO first_resume_snapshots (user_id, resume_session_id, snapshot_json)
        VALUES (?, ?, ?)
+       ON CONFLICT(user_id) DO NOTHING
        RETURNING id`
     ).bind(userId, resumeSessionId, snapshotJson).first();
-    return !!result;
+
+    // If INSERT returned a row, we created the snapshot.
+    if (result && result.id) return true;
+    // If no row returned, another concurrent request likely inserted it; treat as success.
+    return true;
   } catch (e) {
     console.warn('[DB] setFirstResumeSnapshot failed (non-fatal):', e);
     return false;

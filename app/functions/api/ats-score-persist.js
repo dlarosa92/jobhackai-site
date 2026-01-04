@@ -65,6 +65,13 @@ export async function onRequest(context) {
 
     // GET: Retrieve last ATS score or first snapshot
     if (request.method === 'GET') {
+      // If caller asked only for the first-run snapshot but D1 is unavailable,
+      // don't fall back to KV (which contains latest resume). Return null so
+      // callers (dashboard) know there's no persisted first snapshot yet.
+      if (firstOnly && !isD1Available(env)) {
+        return json({ success: true, data: null }, 200, origin, env);
+      }
+
       // If caller asked for first-run snapshot, prefer D1
       if (firstOnly && isD1Available(env)) {
         try {
