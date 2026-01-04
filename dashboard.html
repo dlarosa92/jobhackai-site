@@ -2152,6 +2152,8 @@
       // Build form
       const formData = new FormData();
       formData.append('resume', fileToUpload);
+      // Indicate upload started in UI so user sees progress (matches original handler)
+      try { showLoadingState(); } catch(_) {}
       // POST to /api/ats-score
       let postResp = null;
       let idToken = '';
