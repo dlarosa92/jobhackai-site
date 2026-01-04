@@ -1654,6 +1654,10 @@
         atsScore.summary = lastSummary || 'Your resume was analyzed.';
         atsScore.jobTitle = lastJobTitle || null;
         atsScore.breakdown = lastBreakdown || null;
+        // When loading from cache fallback, treat as persisted to keep UI consistent
+        if (atsScore.percent !== null && atsScore.percent !== undefined) {
+          atsScore.atsPersisted = true;
+        }
       } catch (e) {
         console.warn('[DASHBOARD] Error loading cached ATS score:', e);
       }
@@ -2114,10 +2118,6 @@
   domGuarded('#ats-upload-btn', function(btn) {
     const input = document.getElementById('ats-upload-input');
     if (!input) return;
-    btn.addEventListener('click', function (e) {
-      input.value = '';
-      input.click();
-    });
     input.addEventListener('change', async function (event) {
       if (input._jhUploadInProgress) {
         console.warn('[DASHBOARD] Upload already in progress, ignoring duplicate change event.');
