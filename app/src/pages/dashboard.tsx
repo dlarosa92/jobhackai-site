@@ -14,7 +14,7 @@ export default function Dashboard() {
   });
 
   const [atsScoreData, setAtsScoreData] = useState<{
-    score: number;
+    score: number | null;
     summary: string;
     jobTitle?: string;
     syncedAt?: number;
@@ -176,6 +176,11 @@ export default function Dashboard() {
     return 'moments ago';
   };
 
+  const coerceScore = (value: unknown): number | null => {
+    const num = Number(value);
+    return Number.isFinite(num) ? num : null;
+  };
+
   const fetchLatestAtsScore = async (token: string) => {
     try {
       const response = await fetch('/api/ats-score-persist', {
@@ -188,9 +193,9 @@ export default function Dashboard() {
       const data = await response.json();
       const payload = data?.data;
       if (data?.success && payload) {
-        const scoreValue = Number(payload.score);
+        const parsedScore = coerceScore(payload.score);
         setAtsScoreData({
-          score: Number.isNaN(scoreValue) ? 0 : scoreValue,
+          score: parsedScore,
           summary: payload.summary || 'Saved ATS score from your latest resume run.',
           jobTitle: payload.jobTitle || undefined,
           syncedAt: payload.syncedAt || payload.timestamp || undefined
@@ -223,7 +228,10 @@ export default function Dashboard() {
       }
       let earliest = items[0];
       const getTimestamp = (item: any) => {
-        return new Date(item.createdAt || item.feedbackCreatedAt || item.timestamp || 0).getTime();
+        const candidate = item.createdAt || item.feedbackCreatedAt || item.timestamp;
+        if (!candidate) return Number.POSITIVE_INFINITY;
+        const parsed = new Date(candidate).getTime();
+        return Number.isNaN(parsed) ? Number.POSITIVE_INFINITY : parsed;
       };
       for (let i = 1; i < items.length; i += 1) {
         const current = items[i];
@@ -384,11 +392,14 @@ export default function Dashboard() {
     }
   }, []);
 
-  const displayScorePercent = scoreLoading ? 0 : (atsScoreData?.score ?? 0);
+  const persistentScoreValue = atsScoreData?.score ?? null;
+  const hasPersistentScore = !scoreLoading && persistentScoreValue != null;
+  const displayScorePercent = scoreLoading
+    ? 0
+    : (persistentScoreValue != null ? Math.round(persistentScoreValue) : 0);
   const atsSummaryText = scoreLoading
     ? 'Loading your latest ATS score...'
     : (atsScoreData?.summary || 'Run your resume through Resume Feedback to show your latest ATS score on the dashboard.');
-  const hasPersistentScore = !scoreLoading && atsScoreData?.score !== null && atsScoreData?.score !== undefined;
 
   return (
     <>
