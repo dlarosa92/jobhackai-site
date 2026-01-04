@@ -2170,6 +2170,8 @@
         input._jhUploadInProgress = false;
         return;
       }
+      // Capture client-side timestamp BEFORE the POST so we can compare against server-side D1 timestamps
+      const expectedTimestampBeforePost = Date.now();
       try {
         postResp = await fetch('/api/ats-score', {method: 'POST', headers: idToken ? { 'Authorization': `Bearer ${idToken}`} : {}, body: formData});
       } catch (err) {
@@ -2187,7 +2189,7 @@
       // Parse POST response to obtain resumeId or timestamp to match D1 persistence
       const postJson = await postResp.json().catch(() => null);
       const expectedResumeId = postJson?.resumeId || postJson?.data?.resumeId || null;
-      const expectedTimestamp = postJson?.timestamp || postJson?.data?.timestamp || Date.now();
+      const expectedTimestamp = postJson?.timestamp || postJson?.data?.timestamp || expectedTimestampBeforePost;
 
       // POLL /api/ats-score-persist for up-to-date score that matches this upload
       let attempts = 0;
