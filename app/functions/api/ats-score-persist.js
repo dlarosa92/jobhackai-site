@@ -2,7 +2,7 @@
 // Stores ATS scores in KV + Firebase Firestore hybrid for cross-device continuity
 
 import { getBearer, verifyFirebaseIdToken } from '../_lib/firebase-auth.js';
-import { getOrCreateUserByAuthId, isD1Available } from '../_lib/db.js';
+import { getOrCreateUserByAuthId, isD1Available, getDb } from '../_lib/db.js';
 
 function corsHeaders(origin, env) {
   const allowedOrigins = [
@@ -64,7 +64,7 @@ export async function onRequest(context) {
       // Try D1 first (source of truth)
       if (isD1Available(env)) {
         try {
-          const db = (await import('../_lib/db.js')).getDb(env);
+          const db = getDb(env);
           const d1User = await getOrCreateUserByAuthId(env, uid);
           if (d1User) {
             // Get latest resume session for user
