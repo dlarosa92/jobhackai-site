@@ -13,12 +13,18 @@ export default function Dashboard() {
     hasUsedFreeATS: true
   });
 
-  const [atsScore, setAtsScore] = useState({
-    percent: 78,
-    value: 78,
-    max: 100,
-    summary: "Your resume meets many ATS criteria and is likely to be noticed."
-  });
+  const [atsScoreData, setAtsScoreData] = useState<{
+    score: number;
+    summary: string;
+    jobTitle?: string;
+    syncedAt?: number;
+  } | null>(null);
+  const [scoreLoading, setScoreLoading] = useState(true);
+  const [firstRunInfo, setFirstRunInfo] = useState<{
+    score: number | null;
+    createdAt: string | null;
+  } | null>(null);
+  const [firstRunLoading, setFirstRunLoading] = useState(true);
 
   // Feature matrix based on plan
   const featureMatrix = {
@@ -149,12 +155,104 @@ export default function Dashboard() {
     );
   };
 
+  const formatRelativeTime = (timestamp?: string | number | null) => {
+    if (!timestamp) return '';
+    const parsed = new Date(timestamp).getTime();
+    if (Number.isNaN(parsed)) return '';
+    const diffMs = Date.now() - parsed;
+    if (diffMs < 0) return 'just now';
+    const units = [
+      { label: 'day', ms: 24 * 60 * 60 * 1000 },
+      { label: 'hour', ms: 60 * 60 * 1000 },
+      { label: 'minute', ms: 60 * 1000 },
+      { label: 'second', ms: 1000 }
+    ];
+    for (const { label, ms } of units) {
+      const value = Math.floor(diffMs / ms);
+      if (value >= 1) {
+        return `${value} ${label}${value > 1 ? 's' : ''} ago`;
+      }
+    }
+    return 'moments ago';
+  };
+
+  const fetchLatestAtsScore = async (token: string) => {
+    try {
+      const response = await fetch('/api/ats-score-persist', {
+        method: 'GET',
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (!response.ok) {
+        throw new Error('Failed to load ATS score from server');
+      }
+      const data = await response.json();
+      const payload = data?.data;
+      if (data?.success && payload) {
+        const scoreValue = Number(payload.score);
+        setAtsScoreData({
+          score: Number.isNaN(scoreValue) ? 0 : scoreValue,
+          summary: payload.summary || 'Saved ATS score from your latest resume run.',
+          jobTitle: payload.jobTitle || undefined,
+          syncedAt: payload.syncedAt || payload.timestamp || undefined
+        });
+      } else {
+        setAtsScoreData(null);
+      }
+    } catch (error) {
+      console.error('[DASHBOARD] Failed to load ATS score:', error);
+      setAtsScoreData(null);
+    } finally {
+      setScoreLoading(false);
+    }
+  };
+
+  const fetchFirstRunInfo = async (token: string) => {
+    try {
+      const response = await fetch('/api/resume-feedback/history?limit=50', {
+        method: 'GET',
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (!response.ok) {
+        throw new Error('Failed to load resume history');
+      }
+      const json = await response.json();
+      const items: any[] = Array.isArray(json?.items) ? json.items : [];
+      if (items.length === 0) {
+        setFirstRunInfo(null);
+        return;
+      }
+      let earliest = items[0];
+      const getTimestamp = (item: any) => {
+        return new Date(item.createdAt || item.feedbackCreatedAt || item.timestamp || 0).getTime();
+      };
+      for (let i = 1; i < items.length; i += 1) {
+        const current = items[i];
+        if (getTimestamp(current) < getTimestamp(earliest)) {
+          earliest = current;
+        }
+      }
+      setFirstRunInfo({
+        score: typeof earliest.atsScore === 'number' ? earliest.atsScore : (typeof earliest.score === 'number' ? earliest.score : null),
+        createdAt: earliest.createdAt || earliest.feedbackCreatedAt || earliest.timestamp || null
+      });
+    } catch (error) {
+      console.error('[DASHBOARD] Failed to load first resume run:', error);
+      setFirstRunInfo(null);
+    } finally {
+      setFirstRunLoading(false);
+    }
+  };
+
   useEffect(() => {
     // Sync auth + plan from Firebase + KV
     if (auth) {
       const unsubscribe = onAuthStateChanged(auth, async (u) => {
         if (!u) {
           try { localStorage.setItem('user-authenticated', 'false'); } catch (_) {}
+          setAtsScoreData(null);
+          setFirstRunInfo(null);
+          setScoreLoading(false);
+          setFirstRunLoading(false);
           if (typeof window !== 'undefined') window.location.href = '/login';
           return;
         }
@@ -164,8 +262,9 @@ export default function Dashboard() {
         // Default plan
         let plan = 'free';
         let trialEndsAt = '';
+        let token = '';
         try {
-          const token = await u.getIdToken();
+          token = await u.getIdToken();
           const r = await fetch('/api/plan/me', { headers: { Authorization: `Bearer ${token}` } });
           if (r.ok) {
             const data = await r.json();
@@ -185,6 +284,18 @@ export default function Dashboard() {
           plan: plan as any,
           trialEndsAt: trialEndsAt || prev.trialEndsAt
         }));
+
+        if (token) {
+          setScoreLoading(true);
+          setFirstRunLoading(true);
+          await Promise.all([
+            fetchLatestAtsScore(token),
+            fetchFirstRunInfo(token)
+          ]);
+        } else {
+          setScoreLoading(false);
+          setFirstRunLoading(false);
+        }
       });
       return () => unsubscribe();
     }
@@ -272,6 +383,12 @@ export default function Dashboard() {
       }
     }
   }, []);
+
+  const displayScorePercent = scoreLoading ? 0 : (atsScoreData?.score ?? 0);
+  const atsSummaryText = scoreLoading
+    ? 'Loading your latest ATS score...'
+    : (atsScoreData?.summary || 'Run your resume through Resume Feedback to show your latest ATS score on the dashboard.');
+  const hasPersistentScore = atsScoreData?.score !== null && atsScoreData?.score !== undefined;
 
   return (
     <>
@@ -382,6 +499,57 @@ export default function Dashboard() {
           background: #00c965;
           text-decoration: none;
           outline: none;
+        }
+        .first-run-section {
+          max-width: 960px;
+          margin: 1.5rem auto 2rem;
+          padding: 0 0.5rem;
+        }
+        .first-run-card {
+          background: #fff;
+          border-radius: 18px;
+          box-shadow: 0 2px 12px rgba(31,41,55,0.08);
+          padding: 1.2rem 1.5rem;
+          margin: 0 auto 1.4rem auto;
+          max-width: 760px;
+          border: 1px solid #EFF2F7;
+        }
+        .first-run-row {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          margin-bottom: 0.6rem;
+        }
+        .first-run-title {
+          font-size: 1.1rem;
+          font-weight: 700;
+          color: #111;
+        }
+        .first-run-meta {
+          font-size: 0.95rem;
+          color: #6B7280;
+          font-weight: 500;
+        }
+        .first-run-score-row {
+          display: flex;
+          align-items: baseline;
+          gap: 0.4rem;
+          margin-bottom: 0.4rem;
+        }
+        .first-run-score-value {
+          font-size: 2rem;
+          font-weight: 800;
+          color: #111;
+        }
+        .first-run-small-label {
+          font-size: 0.9rem;
+          color: #4B5563;
+        }
+        .first-run-copy {
+          margin: 0;
+          color: #4B5563;
+          font-size: 1rem;
+          line-height: 1.4;
         }
         .dashboard-features {
           display: grid;
@@ -796,10 +964,10 @@ export default function Dashboard() {
             <div className="user-email">{user.email}</div>
           </div>
           <div className="ats-score-row">
-            {atsDonut(atsScore.percent)}
+            {atsDonut(displayScorePercent)}
             <div className="ats-score-details">
-              <span className="ats-score-label">{atsScore.percent}%</span>
-              <span className="ats-score-summary">{atsScore.summary}</span>
+              <span className="ats-score-label">{displayScorePercent}%</span>
+              <span className="ats-score-summary">{atsSummaryText}</span>
             </div>
           </div>
           <div className="status-action-row">
@@ -809,6 +977,34 @@ export default function Dashboard() {
             </span>
           </div>
         </div>
+
+        {!firstRunLoading && (
+          <section className="first-run-section">
+            <div className="first-run-card">
+              <div className="first-run-row">
+                <span className="first-run-title">Your First ATS Resume</span>
+                <span className="first-run-meta">
+                  {firstRunInfo?.createdAt
+                    ? `First run · ${formatRelativeTime(firstRunInfo.createdAt)}`
+                    : 'No ATS runs yet'}
+                </span>
+              </div>
+              <div className="first-run-score-row">
+                <span className="first-run-score-value">
+                  {firstRunInfo?.score != null ? `${Math.round(firstRunInfo.score)}%` : '—'}
+                </span>
+                {firstRunInfo && (
+                  <span className="first-run-small-label">Frozen for reference</span>
+                )}
+              </div>
+              <p className="first-run-copy">
+                {firstRunInfo
+                  ? 'We freeze your first-ever score so you always remember where you started.'
+                  : 'Upload your first resume in Resume Feedback to capture that first score.'}
+              </p>
+            </div>
+          </section>
+        )}
 
         <div className="dashboard-features">
           {features.map((feature) => {
@@ -822,10 +1018,16 @@ export default function Dashboard() {
                 <div className="feature-action">
                   {isUnlocked ? (
                     feature.key === 'ats' ? (
-                      <>
-                        <input type="file" id="ats-upload-input" accept="application/pdf" style={{display: 'none'}} />
-                        <button id="ats-upload-btn" className="btn-primary">{feature.action}</button>
-                      </>
+                      hasPersistentScore ? (
+                        <a href="/resume-feedback-pro" className="btn-primary">
+                          Run a new analysis in Resume Feedback
+                        </a>
+                      ) : (
+                        <>
+                          <input type="file" id="ats-upload-input" accept="application/pdf" style={{display: 'none'}} />
+                          <button id="ats-upload-btn" className="btn-primary">{feature.action}</button>
+                        </>
+                      )
                     ) : (
                       <a href={`${feature.key}.html`} className="btn-primary">{feature.action}</a>
                     )
