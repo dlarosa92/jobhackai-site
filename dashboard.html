@@ -2241,18 +2241,33 @@
           if (finalCheck.ok) {
             const finalPayload = await finalCheck.json();
             if (finalPayload && finalPayload.success && finalPayload.data && finalPayload.data.score != null) {
-              window.JobHackAIStatePersistence?.saveATSScore?.({
-                score: finalPayload.data.score,
-                breakdown: finalPayload.data.breakdown,
-                resumeId: finalPayload.data.resumeId || '',
-                jobTitle: finalPayload.data.jobTitle,
-                extractionQuality: finalPayload.data.extractionQuality
-              });
-              gotPersisted = true;
-              btn.style.display = 'none';
-              if (input) input.style.display = 'none';
-              window.location.reload();
-              return;
+              // Validate final payload matches this upload (resumeId or timestamp)
+              let finalMatch = false;
+              if (expectedResumeId) {
+                if (finalPayload.data.resumeId && String(finalPayload.data.resumeId) === String(expectedResumeId)) {
+                  finalMatch = true;
+                }
+              } else {
+                const d1Ts = finalPayload.data.timestamp || finalPayload.data.createdAt || null;
+                if (d1Ts && Number(d1Ts) >= Number(expectedTimestamp)) {
+                  finalMatch = true;
+                }
+              }
+
+              if (finalMatch) {
+                window.JobHackAIStatePersistence?.saveATSScore?.({
+                  score: finalPayload.data.score,
+                  breakdown: finalPayload.data.breakdown,
+                  resumeId: finalPayload.data.resumeId || '',
+                  jobTitle: finalPayload.data.jobTitle,
+                  extractionQuality: finalPayload.data.extractionQuality
+                });
+                gotPersisted = true;
+                btn.style.display = 'none';
+                if (input) input.style.display = 'none';
+                window.location.reload();
+                return;
+              }
             }
           }
         } catch (e) {
