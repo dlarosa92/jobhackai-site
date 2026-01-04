@@ -143,14 +143,29 @@ export default function Dashboard() {
     const stroke = 3;
     const norm = 2 * Math.PI * radius;
     const progress = (percent / 100) * norm;
+    // Color-code the stroke based on score thresholds for clearer UX:
+    // >=75: green, >=50: amber, <50: red
+    const strokeColor = (typeof percent === 'number')
+      ? (percent >= 75 ? '#00E676' : (percent >= 50 ? '#FFC107' : '#FF5252'))
+      : '#00E676';
+
     return (
-      <div className="ats-donut" aria-label="ATS Score">
-        <svg viewBox="0 0 54 54">
+      <div className="ats-donut" aria-label="ATS Score" role="img" aria-valuenow={typeof percent === 'number' ? percent : undefined}>
+        <svg viewBox="0 0 54 54" aria-hidden="true">
           <circle cx="27" cy="27" r={radius} stroke="#E5E7EB" strokeWidth={stroke} fill="none"/>
-          <circle cx="27" cy="27" r={radius} stroke="#00E676" strokeWidth={stroke} fill="none" 
-                  strokeDasharray={norm} strokeDashoffset={norm - progress} strokeLinecap="round"/>
+          <circle
+            cx="27"
+            cy="27"
+            r={radius}
+            stroke={strokeColor}
+            strokeWidth={stroke}
+            fill="none"
+            strokeDasharray={norm}
+            strokeDashoffset={norm - progress}
+            strokeLinecap="round"
+          />
         </svg>
-        <span className="ats-score-text">{percent}%</span>
+        <span className="ats-score-text">{(typeof percent === 'number' && percent > 0) ? `${percent}%` : '—'}</span>
       </div>
     );
   };
