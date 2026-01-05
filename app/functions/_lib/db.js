@@ -527,6 +527,7 @@ export async function getResumeFeedbackHistory(env, userId, { limit = 20 } = {})
          LIMIT 1) as feedback_json
       FROM resume_sessions rs
       WHERE rs.user_id = ?
+        AND EXISTS (SELECT 1 FROM feedback_sessions fs WHERE fs.resume_session_id = rs.id)
       ORDER BY rs.created_at DESC
       LIMIT ?
     `).bind(userId, limit).all();
