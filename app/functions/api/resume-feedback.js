@@ -526,7 +526,7 @@ export async function onRequest(context) {
     // /api/ats-score finishes writing. Retries ensure we find the newly written scores.
     let ruleBasedScores = null;
     if (d1User && isD1Available(env)) {
-      const maxRetries = 3;
+      const maxRetries = 4; // 4 attempts = 3 waits × 200ms = 600ms max wait
       const retryDelay = 200; // 200ms between retries (600ms max wait)
       
       for (let attempt = 0; attempt < maxRetries; attempt++) {
