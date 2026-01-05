@@ -1733,15 +1733,23 @@
           const snapshotData = await response.json();
           const persisted = snapshotData?.data;
           if (snapshotData?.success && persisted) {
-            return {
-              score: Math.max(0, Math.min(100, Math.round(persisted.score ?? 0))),
-              role: persisted.jobTitle || persisted.role || null,
-              createdAt: persisted.timestamp
-                ? new Date(Number(persisted.timestamp)).toISOString()
-                : (persisted.createdAt || null),
-              sessionId: persisted.resumeId || persisted.sessionId || null,
-              summary: persisted.summary || null
-            };
+            const scoreCandidate = typeof persisted.score === 'number'
+              ? persisted.score
+              : (typeof persisted.score === 'string' ? parseFloat(persisted.score) : NaN);
+            if (!Number.isNaN(scoreCandidate)) {
+              const scoreValue = Math.max(0, Math.min(100, Math.round(scoreCandidate)));
+              return {
+                score: scoreValue,
+                role: persisted.jobTitle || persisted.role || null,
+                createdAt: persisted.timestamp
+                  ? new Date(Number(persisted.timestamp)).toISOString()
+                  : (persisted.createdAt || null),
+                sessionId: persisted.resumeId || persisted.sessionId || null,
+                summary: persisted.summary || null
+              };
+            } else {
+              console.warn('[DASHBOARD] Persisted first snapshot missing valid score, falling back to history.');
+            }
           }
         }
       } catch (error) {
