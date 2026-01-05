@@ -2920,13 +2920,15 @@
         
         // If no history score, show 0% (don't load from persistence or localStorage)
         // This ensures free account scores don't appear on resume feedback page
-        if (!cachedScore || !cachedScore.score) {
+        // FIX: Use == null to correctly handle legitimate 0% scores (0 is falsy but valid)
+        if (!cachedScore || cachedScore.score == null) {
           console.log('[RESUME-FEEDBACK] No history found - showing 0% (free account scores excluded)');
           return; // Exit early - UI already shows 0% from updateProgressRing(0) above
         }
         
         // Display the score from history
-        if (cachedScore && cachedScore.score) {
+        // FIX: Use != null to correctly handle legitimate 0% scores
+        if (cachedScore && cachedScore.score != null) {
           console.log('[RESUME-FEEDBACK] Loading score from resume feedback history:', cachedScore.score);
           updateProgressRing(cachedScore.score);
           
