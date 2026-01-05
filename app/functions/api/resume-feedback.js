@@ -521,53 +521,79 @@ export async function onRequest(context) {
     // Resume text is already validated by sanitizeResumeText (80,000 char limit)
 
     // --- Try to load existing ruleBasedScores from D1 (source of truth) ---
+    // OPTIMIZATION: Add retry mechanism to handle race condition with /api/ats-score
+    // When both APIs run in parallel, /api/resume-feedback might check D1 before
+    // /api/ats-score finishes writing. Retries ensure we find the newly written scores.
     let ruleBasedScores = null;
     if (d1User && isD1Available(env)) {
-      try {
-        const existingSession = await getResumeSessionByResumeId(env, d1User.id, sanitizedResumeId);
-        if (existingSession) {
-          resumeSession = existingSession;
-        }
-        
-        if (existingSession?.rule_based_scores_json) {
-          try {
-            const parsed = JSON.parse(existingSession.rule_based_scores_json);
-            
-            // Validate structure (must have all required fields)
-            const isValid = parsed &&
-              typeof parsed.overallScore === 'number' &&
-              parsed.keywordScore?.score !== undefined &&
-              parsed.formattingScore?.score !== undefined &&
-              parsed.structureScore?.score !== undefined &&
-              parsed.toneScore?.score !== undefined &&
-              parsed.grammarScore?.score !== undefined;
-            
-            if (isValid) {
-              ruleBasedScores = parsed;
-              console.log('[RESUME-FEEDBACK] Reusing ruleBasedScores from D1', {
+      const maxRetries = 3;
+      const retryDelay = 200; // 200ms between retries (600ms max wait)
+      
+      for (let attempt = 0; attempt < maxRetries; attempt++) {
+        try {
+          const existingSession = await getResumeSessionByResumeId(env, d1User.id, sanitizedResumeId);
+          if (existingSession) {
+            resumeSession = existingSession;
+          }
+          
+          if (existingSession?.rule_based_scores_json) {
+            try {
+              const parsed = JSON.parse(existingSession.rule_based_scores_json);
+              
+              // Validate structure (must have all required fields)
+              const isValid = parsed &&
+                typeof parsed.overallScore === 'number' &&
+                parsed.keywordScore?.score !== undefined &&
+                parsed.formattingScore?.score !== undefined &&
+                parsed.structureScore?.score !== undefined &&
+                parsed.toneScore?.score !== undefined &&
+                parsed.grammarScore?.score !== undefined;
+              
+              if (isValid) {
+                ruleBasedScores = parsed;
+                console.log('[RESUME-FEEDBACK] Reusing ruleBasedScores from D1', {
+                  requestId,
+                  resumeId: sanitizedResumeId,
+                  overallScore: ruleBasedScores.overallScore,
+                  attempt: attempt + 1
+                });
+                break; // Found valid scores, exit retry loop
+              } else {
+                console.warn('[RESUME-FEEDBACK] Invalid ruleBasedScores structure in D1, will retry', {
+                  requestId,
+                  attempt: attempt + 1
+                });
+              }
+            } catch (parseError) {
+              console.warn('[RESUME-FEEDBACK] Failed to parse ruleBasedScores from D1, will retry', {
                 requestId,
-                resumeId: sanitizedResumeId,
-                overallScore: ruleBasedScores.overallScore
+                error: parseError.message,
+                attempt: attempt + 1
               });
-            } else {
-              console.warn('[RESUME-FEEDBACK] Invalid ruleBasedScores structure in D1, will re-score', { requestId });
             }
-          } catch (parseError) {
-            console.warn('[RESUME-FEEDBACK] Failed to parse ruleBasedScores from D1, will re-score', {
-              requestId,
-              error: parseError.message
-            });
+          }
+          
+          // If scores not found and not last attempt, wait before retrying
+          if (!ruleBasedScores && attempt < maxRetries - 1) {
+            await new Promise(resolve => setTimeout(resolve, retryDelay));
+          }
+        } catch (d1Error) {
+          // Non-blocking: continue without D1 lookup
+          console.warn('[RESUME-FEEDBACK] D1 lookup failed (non-fatal), will retry:', {
+            requestId,
+            error: d1Error.message,
+            attempt: attempt + 1
+          });
+          if (attempt < maxRetries - 1) {
+            await new Promise(resolve => setTimeout(resolve, retryDelay));
           }
         }
-      } catch (d1Error) {
-        // Non-blocking: continue without D1 lookup
-        console.warn('[RESUME-FEEDBACK] D1 lookup failed (non-fatal), will re-score:', d1Error.message);
       }
     }
 
-    // Only re-score if we didn't find valid scores in D1
+    // Only re-score if we didn't find valid scores in D1 after retries
     if (!ruleBasedScores) {
-      console.log('[RESUME-FEEDBACK] Re-scoring resume (no valid D1 scores found)', { requestId });
+      console.log('[RESUME-FEEDBACK] Re-scoring resume (no valid D1 scores found after retries)', { requestId });
       
       // Get rule-based scores first (for AI context) - includes new grammar engine
       ruleBasedScores = await scoreResume(

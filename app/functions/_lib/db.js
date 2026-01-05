@@ -827,31 +827,36 @@ export async function upsertResumeSessionWithScores(env, userId, {
     const rawTextLocation = `resume:${resumeId}`;
     const ruleBasedScoresJson = ruleBasedScores ? JSON.stringify(ruleBasedScores) : null;
 
-    // Check if exists
-    const existing = await getResumeSessionByResumeId(env, userId, resumeId);
+    // OPTIMIZATION: Use single query with UPDATE + INSERT fallback
+    // This reduces database round trips from 2 to 1 (or 2 if UPDATE affects 0 rows)
+    // First, try to update the most recent session for this resumeId
+    const updateResult = await db.prepare(
+      `UPDATE resume_sessions 
+       SET ats_score = COALESCE(?, ats_score),
+           rule_based_scores_json = COALESCE(?, rule_based_scores_json),
+           role = COALESCE(?, role)
+       WHERE id = (
+         SELECT id FROM resume_sessions
+         WHERE user_id = ? AND raw_text_location = ?
+         ORDER BY created_at DESC
+         LIMIT 1
+       )
+       RETURNING id, user_id, title, role, created_at, raw_text_location, ats_score, rule_based_scores_json`
+    ).bind(atsScore, ruleBasedScoresJson, role, userId, rawTextLocation).first();
 
-    if (existing) {
-      // Update existing
-      const result = await db.prepare(
-        `UPDATE resume_sessions 
-         SET ats_score = COALESCE(?, ats_score),
-             rule_based_scores_json = COALESCE(?, rule_based_scores_json),
-             role = COALESCE(?, role)
-         WHERE id = ?
-         RETURNING id, user_id, title, role, created_at, raw_text_location, ats_score, rule_based_scores_json`
-      ).bind(atsScore, ruleBasedScoresJson, role, existing.id).first();
-
-      return result || null;
-    } else {
-      // Insert new
-      const result = await db.prepare(
-        `INSERT INTO resume_sessions (user_id, title, role, raw_text_location, ats_score, rule_based_scores_json)
-         VALUES (?, ?, ?, ?, ?, ?)
-         RETURNING id, user_id, title, role, created_at, raw_text_location, ats_score, rule_based_scores_json`
-      ).bind(userId, role, role, rawTextLocation, atsScore, ruleBasedScoresJson).first();
-
-      return result || null;
+    if (updateResult) {
+      // Update succeeded - return updated session
+      return updateResult;
     }
+
+    // No existing session found - insert new one
+    const insertResult = await db.prepare(
+      `INSERT INTO resume_sessions (user_id, title, role, raw_text_location, ats_score, rule_based_scores_json)
+       VALUES (?, ?, ?, ?, ?, ?)
+       RETURNING id, user_id, title, role, created_at, raw_text_location, ats_score, rule_based_scores_json`
+    ).bind(userId, role, role, rawTextLocation, atsScore, ruleBasedScoresJson).first();
+
+    return insertResult || null;
   } catch (error) {
     console.error('[DB] Error in upsertResumeSessionWithScores:', error);
     return null;
