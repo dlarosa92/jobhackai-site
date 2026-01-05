@@ -2869,62 +2869,65 @@
         // FIX: Initialize ATS score to 0% for new users before checking cache
         updateProgressRing(0);
         
-        // Try state persistence first
-        // On initial page load, don't validate against input field (which is empty)
-        // This allows us to restore cached scores and populate the job title field
-        // Validation only happens when user explicitly provides a job title for new analysis
-        if (window.JobHackAIStatePersistence) {
-          cachedScore = window.JobHackAIStatePersistence.loadATSScore(null);
-        }
-        
-        // If no cached score, try KV fallback
-        if (!cachedScore || !cachedScore.score) {
-          try {
-            const user = window.FirebaseAuthManager?.getCurrentUser?.();
-            if (user) {
-              const idToken = await user.getIdToken();
-              const kvResponse = await fetch('/api/ats-score-persist', {
-                method: 'GET',
-                headers: {
-                  'Authorization': `Bearer ${idToken}`
-                }
-              });
+        // CRITICAL FIX: Resume feedback page should ONLY show scores from resume feedback runs
+        // Free account uploads (via /api/ats-score) do NOT create history entries
+        // Only resume feedback runs (via /api/resume-feedback) create history entries
+        // So we check history first to exclude free account scores
+        try {
+          const token = await getAuthToken();
+          if (token) {
+            const historyResponse = await fetch('/api/resume-feedback/history?limit=1', {
+              headers: {
+                'Authorization': `Bearer ${token}`
+              }
+            });
+            
+            if (historyResponse.ok) {
+              const historyData = await historyResponse.json();
+              const latestHistoryItem = historyData.items?.[0]; // Newest first (ORDER BY created_at DESC)
               
-              if (kvResponse.ok) {
-                const kvData = await kvResponse.json();
-                if (kvData.success && kvData.data) {
-                  const resumeData = kvData.data;
-                  cachedScore = {
-                    score: resumeData.score,
-                    breakdown: resumeData.breakdown || {},
-                    jobTitle: resumeData.jobTitle || null,
-                    resumeId: resumeData.resumeId || null,
-                    extractionQuality: resumeData.extractionQuality || null, // Include extractionQuality to match loadATSScore() structure
-                    timestamp: resumeData.timestamp || Date.now() // Include timestamp, fallback to now if missing
-                  };
-                  
-                  // Cache KV results back to localStorage
-                  if (window.JobHackAIStatePersistence) {
-                    window.JobHackAIStatePersistence.saveATSScore({
-                      score: resumeData.score,
-                      breakdown: resumeData.breakdown || {},
-                      resumeId: resumeData.resumeId || '',
-                      jobTitle: resumeData.jobTitle || null,
-                      extractionQuality: resumeData.extractionQuality
-                    });
+              if (latestHistoryItem && latestHistoryItem.atsScore != null && typeof latestHistoryItem.atsScore === 'number') {
+                // Use score from history (resume feedback run only)
+                cachedScore = {
+                  score: latestHistoryItem.atsScore,
+                  breakdown: {}, // History doesn't include breakdown - will try to restore from localStorage if available
+                  jobTitle: latestHistoryItem.role || latestHistoryItem.title || null,
+                  resumeId: latestHistoryItem.resumeId || null,
+                  timestamp: latestHistoryItem.createdAt ? new Date(latestHistoryItem.createdAt).getTime() : Date.now()
+                };
+                
+                console.log('[RESUME-FEEDBACK] Loaded score from history (resume feedback run only):', cachedScore.score);
+                
+                // Try to restore breakdown from localStorage if available (for backward compatibility)
+                // This allows rubric grid to show breakdown even if history doesn't include it
+                if (window.JobHackAIStatePersistence && cachedScore.resumeId) {
+                  const localStorageScore = window.JobHackAIStatePersistence.loadATSScore(null);
+                  if (localStorageScore && localStorageScore.breakdown && 
+                      localStorageScore.resumeId === cachedScore.resumeId) {
+                    // Only use localStorage breakdown if it matches the current resumeId
+                    cachedScore.breakdown = localStorageScore.breakdown;
+                    cachedScore.extractionQuality = localStorageScore.extractionQuality;
+                    cachedScore.roleSpecificFeedback = localStorageScore.roleSpecificFeedback;
                   }
-                  
-                  console.log('[RESUME-FEEDBACK] Loaded ATS score from KV:', resumeData.score);
                 }
               }
             }
-          } catch (kvError) {
-            console.warn('[RESUME-FEEDBACK] KV fetch failed:', kvError);
           }
+        } catch (historyError) {
+          console.warn('[RESUME-FEEDBACK] History fetch failed:', historyError);
+          // Continue without history - will show 0% (correct for new users)
         }
         
-          if (cachedScore && cachedScore.score) {
-          console.log('[RESUME-FEEDBACK] Loading cached ATS score:', cachedScore.score);
+        // If no history score, show 0% (don't load from persistence or localStorage)
+        // This ensures free account scores don't appear on resume feedback page
+        if (!cachedScore || !cachedScore.score) {
+          console.log('[RESUME-FEEDBACK] No history found - showing 0% (free account scores excluded)');
+          return; // Exit early - UI already shows 0% from updateProgressRing(0) above
+        }
+        
+        // Display the score from history
+        if (cachedScore && cachedScore.score) {
+          console.log('[RESUME-FEEDBACK] Loading score from resume feedback history:', cachedScore.score);
           updateProgressRing(cachedScore.score);
           
           // Hide placeholder
@@ -2937,7 +2940,7 @@
           }
           
           // Convert breakdown to rubric format if available
-          if (cachedScore.breakdown) {
+          if (cachedScore.breakdown && Object.keys(cachedScore.breakdown).length > 0) {
             // Map cached breakdown structure to rubric format
             // API returns: breakdown.keywordScore = { score, max, feedback }
             // Also supports legacy format: breakdown.keywordScore = number
@@ -3006,9 +3009,9 @@
           if (cachedScore.roleSpecificFeedback) {
             const isOldFormat = Array.isArray(cachedScore.roleSpecificFeedback) && 
                                cachedScore.roleSpecificFeedback.length > 0;
-          const isNewFormat = isValidRoleTips(cachedScore.roleSpecificFeedback);
-          
-          if (isOldFormat || isNewFormat) {
+            const isNewFormat = isValidRoleTips(cachedScore.roleSpecificFeedback);
+            
+            if (isOldFormat || isNewFormat) {
               updateFeedbackGrid(cachedScore.roleSpecificFeedback);
             } else {
               console.warn('[RESUME-FEEDBACK] Invalid roleSpecificFeedback format in cache:', typeof cachedScore.roleSpecificFeedback);
