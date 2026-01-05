@@ -3099,10 +3099,25 @@
                         const snapshotData = await snapshotCheck.json();
                         if (snapshotData.success && snapshotData.data && snapshotData.data.score != null) {
                           // Validate snapshot matches this upload
-                          const snapshotMatches = snapshotData.data.resumeId === uploadData.resumeId ||
-                                                  snapshotData.data.score === score;
+                          // Prefer resumeId matching (definitive identifier) when available
+                          // Only fall back to score matching if resumeId is missing from snapshot
+                          let snapshotMatches = false;
+                          if (snapshotData.data.resumeId && uploadData.resumeId) {
+                            // Both have resumeId - require exact match
+                            snapshotMatches = snapshotData.data.resumeId === uploadData.resumeId;
+                          } else if (snapshotData.data.resumeId || uploadData.resumeId) {
+                            // One has resumeId but other doesn't - can't definitively match, skip
+                            snapshotMatches = false;
+                          } else {
+                            // Neither has resumeId - fall back to score matching (less reliable)
+                            snapshotMatches = snapshotData.data.score === score;
+                          }
+                          
                           if (snapshotMatches) {
-                            console.log(`[DASHBOARD] ✅ Snapshot confirmed on attempt ${attempts}`);
+                            console.log(`[DASHBOARD] ✅ Snapshot confirmed on attempt ${attempts}`, {
+                              resumeIdMatch: snapshotData.data.resumeId === uploadData.resumeId,
+                              scoreMatch: snapshotData.data.score === score
+                            });
                             snapshotConfirmed = true;
                             break;
                           }
