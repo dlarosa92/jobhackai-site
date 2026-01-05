@@ -1119,8 +1119,6 @@
       
       // Create user object from authentication data
       let authUserName = 'User';
-      let authUserFirstName = '';
-      let authUserLastName = '';
       let authUserEmail = 'user@example.com';
       let authUserUid = null;
       try {
@@ -1129,15 +1127,7 @@
           authUserEmail = u.email || authUserEmail;
           authUserUid = u.uid || null;
           const dn = u.displayName || '';
-          if (dn) {
-            authUserName = dn;
-            // Parse firstName and lastName from displayName
-            const nameParts = dn.trim().split(/\s+/);
-            if (nameParts.length > 0) {
-              authUserFirstName = nameParts[0];
-              authUserLastName = nameParts.slice(1).join(' ') || '';
-            }
-          }
+          if (dn) authUserName = dn;
         }
       } catch (_) {}
       
@@ -1166,8 +1156,6 @@
       // Use API data, fallback to localStorage, never create fake dates
       const user = {
         name: authUserName,
-        firstName: authUserFirstName,
-        lastName: authUserLastName,
         email: authUserEmail,
         uid: authUserUid,
         plan: currentPlan,
@@ -1553,6 +1541,7 @@
     }
 
     // Load ATS score from D1 persistence BEFORE rendering
+    async function loadAtsScoreFromStorage() {
 // Load ATS score from D1 persistence BEFORE rendering
     async function loadAtsScoreFromStorage() {
       // First attempt: canonical persisted score from D1
@@ -1580,8 +1569,6 @@
                 atsScore.summary = deriveAtsSummary(scoreValue, extractionQuality, resumeData.feedback);
                 atsScore.jobTitle = resumeData.jobTitle || null;
                 atsScore.breakdown = resumeData.breakdown || null;
-                // Capture timestamp from D1 payload (ms since epoch)
-                atsScore.timestamp = resumeData.timestamp || resumeData.createdAt || null;
 
                 // Cache D1 result for fallback
                 if (window.JobHackAIStatePersistence) {
@@ -1666,10 +1653,6 @@
         atsScore.summary = lastSummary || 'Your resume was analyzed.';
         atsScore.jobTitle = lastJobTitle || null;
         atsScore.breakdown = lastBreakdown || null;
-        // When loading from cache fallback, treat as persisted to keep UI consistent
-        if (atsScore.percent !== null && atsScore.percent !== undefined) {
-          atsScore.atsPersisted = true;
-        }
       } catch (e) {
         console.warn('[DASHBOARD] Error loading cached ATS score:', e);
       }
@@ -1687,76 +1670,12 @@
         .replaceAll("'", '&#39;');
     }
 
-    // Simple relative time formatter (accepts ms timestamp or date-string)
-    function timeAgo(dateInput) {
-      if (!dateInput) return '—';
-      let ts = null;
-      if (typeof dateInput === 'number' && Number.isFinite(dateInput)) ts = dateInput;
-      else if (typeof dateInput === 'string' && dateInput.trim()) {
-        const normalized = dateInput.replace(' ', 'T');
-        const d = new Date(normalized);
-        if (!Number.isNaN(d.getTime())) ts = d.getTime();
-      }
-      if (!ts) return '—';
-      const diff = Date.now() - ts;
-      if (diff < 30 * 1000) return 'just now';
-      const s = Math.floor(diff / 1000);
-      if (s < 60) return `${s}s ago`;
-      const m = Math.floor(s / 60);
-      if (m < 60) return `${m}m ago`;
-      const h = Math.floor(m / 60);
-      if (h < 24) return `${h}h ago`;
-      const d = Math.floor(h / 24);
-      if (d < 30) return `${d}d ago`;
-      const mo = Math.floor(d / 30);
-      if (mo < 12) return `${mo}mo ago`;
-      const y = Math.floor(mo / 12);
-      return `${y}y ago`;
-    }
-
     async function loadFirstAtsSnapshot() {
       const user = window.FirebaseAuthManager?.getCurrentUser?.();
       if (!user) {
         return null;
       }
 
-      try {
-        const idToken = await user.getIdToken();
-        const response = await fetch('/api/ats-score-persist?first=true', {
-          method: 'GET',
-          headers: {
-            'Authorization': `Bearer ${idToken}`
-          }
-        });
-
-        if (response.ok) {
-          const snapshotData = await response.json();
-          const persisted = snapshotData?.data;
-          if (snapshotData?.success && persisted) {
-            const scoreCandidate = typeof persisted.score === 'number'
-              ? persisted.score
-              : (typeof persisted.score === 'string' ? parseFloat(persisted.score) : NaN);
-            if (!Number.isNaN(scoreCandidate)) {
-              const scoreValue = Math.max(0, Math.min(100, Math.round(scoreCandidate)));
-              return {
-                score: scoreValue,
-                role: persisted.jobTitle || persisted.role || null,
-                createdAt: persisted.timestamp
-                  ? new Date(Number(persisted.timestamp)).toISOString()
-                  : (persisted.createdAt || null),
-                sessionId: persisted.resumeId || persisted.sessionId || null,
-                summary: persisted.summary || null
-              };
-            } else {
-              console.warn('[DASHBOARD] Persisted first snapshot missing valid score, falling back to history.');
-            }
-          }
-        }
-      } catch (error) {
-        console.warn('[DASHBOARD] Failed to load persisted first ATS snapshot:', error);
-      }
-
-      // Fallback to history-based approximation if persistence is unavailable
       try {
         const idToken = await user.getIdToken();
         const response = await fetch('/api/resume-feedback/history', {
@@ -1797,6 +1716,7 @@
 
     function buildFirstAtsMilestoneHtml(snapshot) {
       if (snapshot) {
+        const roleText = snapshot.role ? `First run · ${escapeHtmlText(snapshot.role)}` : 'First run saved';
         return `
         <div class="first-ats-milestone">
           <span class="first-ats-score-value">${snapshot.score}%</span>
@@ -1811,13 +1731,12 @@
               <span class="jh-tooltip-text">This score reflects the first resume you submitted through Resume Feedback or the free lifetime run.</span>
             </span>
           </span>
-          <span class="first-ats-score-role">First run · <span class="first-ats-time-ago">—</span></span>
+          <span class="first-ats-score-role">${roleText}</span>
         </div>`;
       }
 
       return `
         <div class="first-ats-milestone first-ats-welcome">
-          Your first resume score from Resume Feedback or your free ATS run will live here.
         </div>`;
     }
     
@@ -1888,7 +1807,7 @@
       
       let banner = `<div class="dashboard-banner">
         <div class="welcome-row">
-          <h2>${user.firstName && user.lastName ? `Hi, ${escapeHtmlText(user.firstName)} ${escapeHtmlText(user.lastName)}` : user.firstName ? `Hi, ${escapeHtmlText(user.firstName)}` : user.name ? `Hi, ${escapeHtmlText(user.name)}` : 'Hi, User'}</h2>
+          <h2>Your First ATS Resume</h2> <!-- PATCH: Remove Hi there..., just title -->
           ${user.plan === 'trial' && user.trialEndsAt ? `<div class="trial-countdown">You have ${daysLeft(user.trialEndsAt)} day${daysLeft(user.trialEndsAt) !== 1 ? 's' : ''} left in your trial!</div>` : ''}
           ${subStatus && subStatus.cancelAt ? `
             <div style="background:#FEF3C7;border-left:4px solid #F59E0B;color:#92400E;padding:0.8rem 1rem;border-radius:8px;margin:0.5rem 0;font-size:0.98rem;">
@@ -1916,14 +1835,19 @@
           ${atsScore.percent !== null && atsScore.percent !== undefined ? `
             ${atsDonut(atsScore.percent)}
             <div class="ats-score-details">
-              <span class="ats-score-label">Last Resume Feedback <span class="jh-tooltip-trigger" tabindex="0" aria-label="What is ATS Score?" style="display:inline-flex;align-items:center;vertical-align:middle;cursor:default;margin-left:0.25rem;">
+              <span class="ats-score-label">Resume Feedback</span>
+ (dashboard(d1): D1-first ATS score read; upload clears cache, polls persist; hide upload after persisted score; remove 'Hi there')
+              <span class="ats-score-secondary" style="display:inline-flex;align-items:center;gap:0.25rem;">
+                First run &middot; <span id="ats-score-age">—</span>
+                <span class="jh-tooltip-trigger" tabindex="0" aria-label="What is ATS Score?" style="display:inline-flex;align-items:center;vertical-align:middle;cursor:help;">
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false" style="color:#6B7280;">
                     <circle cx="12" cy="12" r="10"/>
                     <line x1="12" y1="8" x2="12" y2="8"/>
                     <line x1="12" y1="12" x2="12" y2="16"/>
                   </svg>
                   <span class="jh-tooltip-text">ATS (Applicant Tracking System) Score measures how well your resume matches job requirements. Higher scores increase your chances of passing automated screening systems used by most employers.</span>
-                </span></span>
+                </span>
+              </span>
               <span class="ats-score-summary">${atsScore.summary}</span>
             </div>
           ` : `
@@ -2046,14 +1970,13 @@
         }
         featuresHtml += `<div class="feature-action">`;
         if (isUnlocked && feature.key === 'ats') {
-          // --- PATCH: Conditionally render upload button only if FREE and no first-time resume exists ---
-          // Show upload only when we have no persisted ATS score and no firstAtsSnapshot.
-          // This avoids showing the button when history API fails but a cached/persisted score exists.
-          if (user.plan === 'free' && !(firstAtsSnapshot || atsScore.atsPersisted || (atsScore.percent !== null && atsScore.percent !== undefined))) {
+          // --- PATCH: Conditionally render upload button only if FREE and no D1 (persisted) ATS ---
+          if (user.plan === 'free' && (!atsScore.atsPersisted || atsScore.percent === null)) {
             featuresHtml += `<input type=\"file\" id=\"ats-upload-input\" accept=\".pdf,.docx,.txt\" title=\"Upload your resume in PDF, DOCX, or TXT format\" style=\"display:none;\" />`;
             featuresHtml += `<button class=\"btn-primary\" id=\"ats-upload-btn\">${feature.action}</button>`;
           }
           featuresHtml += `<div class=\"usage-indicator\" data-feature=\"atsScans\" data-plan=\"${user.plan}\"></div>`;
+          featuresHtml += `<div class="usage-indicator" data-feature="atsScans" data-plan="${user.plan}"></div>`;
         } else if (isUnlocked && feature.key === 'feedback') {
           // Resume Feedback: link to feedback page (unlocked for trial, essential, pro, premium)
           featuresHtml += `<a href=\"resume-feedback-pro.html\" class=\"btn-primary\">Get Detailed Feedback</a>`;
@@ -2144,26 +2067,79 @@
         }
       })();
       
-      // Update ATS score "age" display if we have a timestamp
-      try {
-        const ageEl = document.getElementById('ats-score-age');
-        const ts = atsScore.timestamp || (atsScore.d1Payload && (atsScore.d1Payload.timestamp || atsScore.d1Payload.createdAt));
-        if (ageEl && ts) {
-          ageEl.textContent = timeAgo(ts);
-        }
-      } catch (e) {
-        // ignore
+      // --- ATS Upload PATCH: POST, clear cache, poll for D1 persist and re-render  ---
+document.addEventListener("DOMContentLoaded", function () {
+  function domGuarded(selector, cb) {
+    const el = document.querySelector(selector);
+    if (el) cb(el);
+  }
+  domGuarded('#ats-upload-btn', function(btn) {
+    const input = document.getElementById('ats-upload-input');
+    if (!input) return;
+    btn.addEventListener('click', function (e) {
+      input.value = '';
+      input.click();
+    });
+    input.addEventListener('change', async function (event) {
+      const files = event.target.files;
+      if (!files || !files[0]) return;
+      // CLEAR ATS CACHE BEFORE POST
+      window.JobHackAIStatePersistence?.clearATSScore?.();
+      // Build form
+      const formData = new FormData();
+      formData.append('resume', files[0]);
+      // POST to /api/ats-score
+      let postResp = null;
+      let idToken = '';
+      if (window.FirebaseAuthManager?.getCurrentUser) {
+        idToken = await window.FirebaseAuthManager.getCurrentUser().getIdToken();
       }
-      
-      // Update first ATS card timestamp if we have a snapshot
       try {
-        const firstAtsTimeEl = document.querySelector('.first-ats-time-ago');
-        if (firstAtsTimeEl && firstAtsSnapshot && firstAtsSnapshot.createdAt) {
-          firstAtsTimeEl.textContent = timeAgo(firstAtsSnapshot.createdAt);
-        }
-      } catch (e) {
-        // ignore
+        postResp = await fetch('/api/ats-score', {method: 'POST', headers: idToken ? { 'Authorization': `Bearer ${idToken}`} : {}, body: formData});
+      } catch (err) {
+        alert('Failed to submit resume.');
+        return;
       }
+      if (!postResp || !postResp.ok) {
+        alert('Failed to score resume.');
+        return;
+      }
+      // POLL /api/ats-score-persist for up-to-date score
+      let attempts = 0;
+      let gotPersisted = false;
+      while (attempts < 16) { // up to ~30s
+        attempts++;
+        try {
+          const d1Resp = await fetch('/api/ats-score-persist', {headers: idToken ? {'Authorization': `Bearer ${idToken}`} : {}});
+          if (d1Resp.ok) {
+            const d1Payload = await d1Resp.json();
+            if (d1Payload.success && d1Payload.data && d1Payload.data.score != null) {
+              // Save to cache and re-render UI
+              window.JobHackAIStatePersistence?.saveATSScore?.({
+                score: d1Payload.data.score,
+                breakdown: d1Payload.data.breakdown,
+                resumeId: d1Payload.data.resumeId || '',
+                jobTitle: d1Payload.data.jobTitle,
+                extractionQuality: d1Payload.data.extractionQuality
+              });
+              gotPersisted = true;
+              break;
+            }
+          }
+        } catch (_) {}
+        await new Promise(r=>setTimeout(r, 2000));
+      }
+      // Hide upload button immediately for free users once D1 seen
+      if (gotPersisted) {
+        btn.style.display = 'none';
+        if (input) input.style.display = 'none';
+        // Optionally force reload/refresh
+        window.location.reload();
+      }
+    });
+  });
+});
+// --- END ATS PATCH ---
 
 // --- Upgrade Pop-up Logic ---
       function showUpgradePopup() {
@@ -2677,12 +2653,6 @@
         }
 
         atsUploadInput.addEventListener('change', async function(e) {
-          if (atsUploadInput._jhUploadInProgress) {
-            console.warn('[DASHBOARD] Upload already in progress, ignoring duplicate change event.');
-            return;
-          }
-          atsUploadInput._jhUploadInProgress = true;
-          try {
           const file = e.target.files[0];
           if (!file) return;
 
@@ -3095,96 +3065,6 @@
               });
             }
 
-            // Step 5: Create first resume snapshot in D1 (for "Your First ATS Resume" tile)
-            try {
-              const persistResponse = await fetch('/api/ats-score-persist', {
-                method: 'POST',
-                headers: {
-                  'Authorization': `Bearer ${idToken}`,
-                  'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                  resumeId: uploadData.resumeId,
-                  score: score,
-                  breakdown: breakdown,
-                  summary: summary,
-                  jobTitle: jobTitle,
-                  extractionQuality: extractionQuality
-                })
-              });
-
-              if (persistResponse.ok) {
-                const persistData = await persistResponse.json();
-                console.log('[DASHBOARD] Snapshot creation response:', persistData);
-
-                // Step 6: Poll to verify snapshot was created (for free users, we need to confirm before reload)
-                if (!hasUnlimitedAccess && userPlan === 'free') {
-                  let snapshotConfirmed = false;
-                  let attempts = 0;
-                  const maxAttempts = 5;
-
-                  while (attempts < maxAttempts && !snapshotConfirmed) {
-                    attempts++;
-                    await new Promise(r => setTimeout(r, 1000)); // Wait 1 second between attempts
-
-                    try {
-                      const snapshotCheck = await fetch('/api/ats-score-persist?first=true', {
-                        headers: { Authorization: `Bearer ${idToken}` }
-                      });
-
-                      if (snapshotCheck.ok) {
-                        const snapshotData = await snapshotCheck.json();
-                        if (snapshotData.success && snapshotData.data && snapshotData.data.score != null) {
-                          // Validate snapshot matches this upload
-                          // Prefer resumeId matching (definitive identifier) when available
-                          // Only fall back to score matching if resumeId is missing from snapshot
-                          let snapshotMatches = false;
-                          if (snapshotData.data.resumeId && uploadData.resumeId) {
-                            // Both have resumeId - require exact match
-                            snapshotMatches = snapshotData.data.resumeId === uploadData.resumeId;
-                          } else if (snapshotData.data.resumeId || uploadData.resumeId) {
-                            // One has resumeId but other doesn't - can't definitively match, skip
-                            snapshotMatches = false;
-                          } else {
-                            // Neither has resumeId - fall back to score matching (less reliable)
-                            snapshotMatches = snapshotData.data.score === score;
-                          }
-                          
-                          if (snapshotMatches) {
-                            console.log(`[DASHBOARD] ✅ Snapshot confirmed on attempt ${attempts}`, {
-                              resumeIdMatch: snapshotData.data.resumeId === uploadData.resumeId,
-                              scoreMatch: snapshotData.data.score === score
-                            });
-                            snapshotConfirmed = true;
-                            break;
-                          }
-                        }
-                      }
-                    } catch (pollError) {
-                      console.warn('[DASHBOARD] Snapshot polling error:', pollError);
-                    }
-                  }
-
-                  // If snapshot confirmed (or max attempts reached), hide button and reload for free users
-                  if (snapshotConfirmed || attempts >= maxAttempts) {
-                    const uploadBtn = document.getElementById('ats-upload-btn');
-                    const uploadInput = document.getElementById('ats-upload-input');
-                    if (uploadBtn) uploadBtn.style.display = 'none';
-                    if (uploadInput) uploadInput.style.display = 'none';
-                    
-                    // Reload page to show updated dashboard with first resume tile
-                    window.location.reload();
-                    return; // Exit early since we're reloading
-                  }
-                }
-              } else {
-                console.warn('[DASHBOARD] Failed to create snapshot (non-fatal):', persistResponse.status);
-              }
-            } catch (snapshotError) {
-              console.warn('[DASHBOARD] Snapshot creation error (non-fatal):', snapshotError);
-              // Continue - snapshot creation failure shouldn't block the upload flow
-            }
-
             // Update UI message for free accounts (credit already consumed before upload)
             if (!hasUnlimitedAccess && userPlan === 'free') {
               // Update UI message to reflect credit has been used
@@ -3217,9 +3097,6 @@
             showErrorBanner(errorMessage);
             hideLoadingState();
             e.target.value = ''; // Reset file input
-          }
-          } finally {
-            try { atsUploadInput._jhUploadInProgress = false; } catch (_) {}
           }
         });
       }
@@ -3281,7 +3158,7 @@
               plan: targetPlan,
               forceNew: true
             })
-            });
+          });
 
           // Check if response is ok before parsing JSON
           if (!response.ok) {
@@ -3400,6 +3277,7 @@
       if (window.JobHackAINavigation && typeof window.JobHackAINavigation.initializeNavigation === 'function') {
         window.JobHackAINavigation.initializeNavigation();
       }
+    }
     });
   </script>
   <script src="js/main.js" type="module"></script>

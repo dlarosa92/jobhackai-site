@@ -110,7 +110,6 @@ export async function onRequest(context) {
           const db = getDb(env);
           const d1User = await getOrCreateUserByAuthId(env, uid);
           if (d1User) {
-            // Get latest resume session for user
             const latestSession = await db.prepare(
               `SELECT id, rule_based_scores_json, ats_score, role, created_at
                FROM resume_sessions 
@@ -118,13 +117,10 @@ export async function onRequest(context) {
                ORDER BY created_at DESC 
                LIMIT 1`
             ).bind(d1User.id).first();
-            
             if (latestSession && latestSession.rule_based_scores_json) {
               try {
                 const ruleBasedScores = JSON.parse(latestSession.rule_based_scores_json);
                 const extractionQuality = ruleBasedScores.extractionQuality;
-                
-                // Reconstruct breakdown from ruleBasedScores
                 const breakdown = {
                   keywordScore: ruleBasedScores.keywordScore,
                   formattingScore: ruleBasedScores.formattingScore,
@@ -132,8 +128,6 @@ export async function onRequest(context) {
                   toneScore: ruleBasedScores.toneScore,
                   grammarScore: ruleBasedScores.grammarScore
                 };
-                
-                // Ensure breakdown structure has feedback properties
                 const normalizedBreakdown = { ...breakdown };
                 ['keywordScore', 'formattingScore', 'structureScore', 'toneScore', 'grammarScore'].forEach(key => {
                   if (normalizedBreakdown[key] && typeof normalizedBreakdown[key] === 'object') {
@@ -145,7 +139,6 @@ export async function onRequest(context) {
                     }
                   }
                 });
-                
                 return json({
                   success: true,
                   data: {
@@ -159,77 +152,20 @@ export async function onRequest(context) {
                   }
                 }, 200, origin, env);
               } catch (parseError) {
-                console.warn('[ATS-SCORE-PERSIST] Failed to parse D1 ruleBasedScores, falling back to KV:', parseError);
-                // Fall through to KV fallback
+                console.warn('[ATS-SCORE-PERSIST] Failed to parse D1 ruleBasedScores, returning null:', parseError);
+                return json({ success: true, data: null }, 200, origin, env);
               }
             }
+            // No valid session found
+            return json({ success: true, data: null }, 200, origin, env);
           }
         } catch (d1Error) {
-          console.warn('[ATS-SCORE-PERSIST] D1 read failed, falling back to KV:', d1Error);
-          // Fall through to KV fallback
+          console.warn('[ATS-SCORE-PERSIST] D1 read failed:', d1Error);
+          return json({ success: true, data: null }, 200, origin, env);
         }
       }
-      
-      // Fallback to KV (existing code)
-      const kv = env.JOBHACKAI_KV;
-      if (!kv) {
-        return json({ success: false, error: 'Storage not available' }, 500, origin, env);
-      }
-
-      const lastResumeKey = `user:${uid}:lastResume`;
-      const lastResumeData = await kv.get(lastResumeKey);
-
-      if (!lastResumeData) {
-        return json({ success: true, data: null }, 200, origin, env);
-      }
-
-      let resumeData;
-      try {
-        resumeData = JSON.parse(lastResumeData);
-      } catch (parseError) {
-        console.warn('[ATS-SCORE-PERSIST] Failed to parse KV data, clearing:', parseError);
-        // Clear corrupted data
-        await kv.delete(lastResumeKey);
-        return json({ success: true, data: null }, 200, origin, env);
-      }
-      
-      // Validate that the stored data belongs to this user (double-check UID)
-      // This prevents showing data from a previous user account that was deleted
-      // and a new account created with the same email/UID
-      if (resumeData.uid && resumeData.uid !== uid) {
-        // Data belongs to a different user - don't return it
-        console.warn('[ATS-SCORE-PERSIST] UID mismatch detected, clearing stale data', {
-          storedUid: resumeData.uid,
-          currentUid: uid
-        });
-        // Delete the stale data
-        await kv.delete(lastResumeKey);
-        return json({ success: true, data: null }, 200, origin, env);
-      }
-      
-      // Ensure breakdown structure has feedback properties
-      if (resumeData.breakdown && typeof resumeData.breakdown === 'object') {
-        const normalizedBreakdown = { ...resumeData.breakdown };
-        ['keywordScore', 'formattingScore', 'structureScore', 'toneScore', 'grammarScore'].forEach(key => {
-          if (normalizedBreakdown[key] && typeof normalizedBreakdown[key] === 'object') {
-            if (!('feedback' in normalizedBreakdown[key])) {
-              normalizedBreakdown[key] = {
-                ...normalizedBreakdown[key],
-                feedback: normalizedBreakdown[key].tip || normalizedBreakdown[key].message || ''
-              };
-            }
-          }
-        });
-        resumeData.breakdown = normalizedBreakdown;
-      }
-      
-      // Ensure extractionQuality is included in KV response (if available)
-      // Note: KV may not have extractionQuality if it was stored before this feature was added
-      if (!resumeData.extractionQuality) {
-        resumeData.extractionQuality = null;
-      }
-      
-      return json({ success: true, data: resumeData }, 200, origin, env);
+      // Always return null for non-D1 or no record
+      return json({ success: true, data: null }, 200, origin, env);
     }
 
     // POST: Store ATS score
