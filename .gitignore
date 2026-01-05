@@ -55,3 +55,4 @@ qa_pages_vars_and_firebase_fix.sh
 test-results/
 playwright-report/
 app/tests/.auth/
+*.bak
