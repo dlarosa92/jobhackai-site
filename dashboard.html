@@ -1722,6 +1722,35 @@
 
       try {
         const idToken = await user.getIdToken();
+        const response = await fetch('/api/ats-score-persist?first=true', {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${idToken}`
+          }
+        });
+
+        if (response.ok) {
+          const snapshotData = await response.json();
+          const persisted = snapshotData?.data;
+          if (snapshotData?.success && persisted) {
+            return {
+              score: Math.max(0, Math.min(100, Math.round(persisted.score ?? 0))),
+              role: persisted.jobTitle || persisted.role || null,
+              createdAt: persisted.timestamp
+                ? new Date(Number(persisted.timestamp)).toISOString()
+                : (persisted.createdAt || null),
+              sessionId: persisted.resumeId || persisted.sessionId || null,
+              summary: persisted.summary || null
+            };
+          }
+        }
+      } catch (error) {
+        console.warn('[DASHBOARD] Failed to load persisted first ATS snapshot:', error);
+      }
+
+      // Fallback to history-based approximation if persistence is unavailable
+      try {
+        const idToken = await user.getIdToken();
         const response = await fetch('/api/resume-feedback/history', {
           method: 'GET',
           headers: {
