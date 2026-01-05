@@ -2164,194 +2164,6 @@
       } catch (e) {
         // ignore
       }
-      
-// --- ATS Upload PATCH: POST, clear cache, poll for D1 persist and re-render  ---
-(function () {
-  function domGuarded(selector, cb) {
-    const el = document.querySelector(selector);
-    if (el) cb(el);
-  }
-  domGuarded('#ats-upload-btn', function(btn) {
-    const input = document.getElementById('ats-upload-input');
-    if (!input) return;
-    input.addEventListener('change', async function (event) {
-      if (input._jhUploadInProgress) {
-        console.warn('[DASHBOARD] Upload already in progress, ignoring duplicate change event.');
-        return;
-      }
-      input._jhUploadInProgress = true;
-      try {
-      const files = event.target.files;
-      if (!files || !files[0]) {
-        input._jhUploadInProgress = false;
-        return;
-      }
-      // Validate file type & size (mirror existing handler)
-      const fileToUpload = files[0];
-      const allowed = ['pdf', 'docx', 'txt'];
-      const ext = (fileToUpload.name || '').split('.').pop().toLowerCase();
-      const maxSize = 2 * 1024 * 1024; // 2 MB
-      if (!allowed.includes(ext)) {
-        try { showErrorBanner('Invalid file type. Please upload PDF, DOCX, or TXT.'); } catch(_) {}
-        input._jhUploadInProgress = false;
-        event.target.value = '';
-        return;
-      }
-      if (fileToUpload.size > maxSize) {
-        try { showErrorBanner('File size exceeds 2 MB limit. Please upload a smaller file.'); } catch(_) {}
-        input._jhUploadInProgress = false;
-        event.target.value = '';
-        return;
-      }
-      // CLEAR ATS CACHE BEFORE POST
-      window.JobHackAIStatePersistence?.clearATSScore?.();
-      // Build form
-      const formData = new FormData();
-      formData.append('resume', fileToUpload);
-      // Indicate upload started in UI so user sees progress (matches original handler)
-      try { showLoadingState(); } catch(_) {}
-      // POST to /api/ats-score
-      let postResp = null;
-      let idToken = '';
-      const currentUserForUpload = window.FirebaseAuthManager?.getCurrentUser?.();
-      if (currentUserForUpload) {
-        try {
-          idToken = await currentUserForUpload.getIdToken();
-        } catch (err) {
-          console.warn('[DASHBOARD] Failed to get ID token for upload:', err);
-          alert('Authentication error. Please sign out and sign in again.');
-          input._jhUploadInProgress = false;
-          return;
-        }
-      } else {
-        alert('Authentication expired — please sign in again.');
-        input._jhUploadInProgress = false;
-        return;
-      }
-      // Capture client-side timestamp BEFORE the POST so we can compare against server-side D1 timestamps
-      const expectedTimestampBeforePost = Date.now();
-      try {
-        postResp = await fetch('/api/ats-score', {method: 'POST', headers: idToken ? { 'Authorization': `Bearer ${idToken}`} : {}, body: formData});
-      } catch (err) {
-        alert('Failed to submit resume.');
-        try { hideLoadingState(); } catch(_) {}
-        try { event.target.value = ''; } catch(_) {}
-        return;
-      }
-      if (!postResp || !postResp.ok) {
-        alert('Failed to score resume.');
-        try { hideLoadingState(); } catch(_) {}
-        try { event.target.value = ''; } catch(_) {}
-        return;
-      }
-      // Parse POST response to obtain resumeId or timestamp to match D1 persistence
-      const postJson = await postResp.json().catch(() => null);
-      const expectedResumeId = postJson?.resumeId || postJson?.data?.resumeId || null;
-      const expectedTimestamp = postJson?.timestamp || postJson?.data?.timestamp || expectedTimestampBeforePost;
-
-      // POLL /api/ats-score-persist for up-to-date score that matches this upload
-      let attempts = 0;
-      let gotPersisted = false;
-      while (attempts < 16) { // up to ~30s
-        attempts++;
-        try {
-          const d1Resp = await fetch('/api/ats-score-persist', {headers: idToken ? {'Authorization': `Bearer ${idToken}`} : {}});
-          if (d1Resp.ok) {
-            const d1Payload = await d1Resp.json();
-            if (d1Payload && d1Payload.success && d1Payload.data && d1Payload.data.score != null) {
-              // If server returned a resumeId for our POST, require a match
-              if (expectedResumeId) {
-                if (d1Payload.data.resumeId && String(d1Payload.data.resumeId) === String(expectedResumeId)) {
-                  window.JobHackAIStatePersistence?.saveATSScore?.({
-                    score: d1Payload.data.score,
-                    breakdown: d1Payload.data.breakdown,
-                    resumeId: d1Payload.data.resumeId || '',
-                    jobTitle: d1Payload.data.jobTitle,
-                    extractionQuality: d1Payload.data.extractionQuality
-                  });
-                  gotPersisted = true;
-                  break;
-                }
-              } else {
-                // Otherwise use timestamps: require D1 timestamp to be >= expectedTimestamp
-                const d1Ts = d1Payload.data.timestamp || d1Payload.data.createdAt || null;
-                if (d1Ts && Number(d1Ts) >= Number(expectedTimestamp)) {
-                  window.JobHackAIStatePersistence?.saveATSScore?.({
-                    score: d1Payload.data.score,
-                    breakdown: d1Payload.data.breakdown,
-                    resumeId: d1Payload.data.resumeId || '',
-                    jobTitle: d1Payload.data.jobTitle,
-                    extractionQuality: d1Payload.data.extractionQuality
-                  });
-                  gotPersisted = true;
-                  break;
-                }
-              }
-            }
-          }
-        } catch (_) {}
-        await new Promise(r=>setTimeout(r, 2000));
-      }
-      // If polling didn't observe persistence, attempt one final check and inform the user
-      if (!gotPersisted) {
-        try {
-          const finalCheck = await fetch('/api/ats-score-persist', {headers: idToken ? {'Authorization': `Bearer ${idToken}`} : {}});
-          if (finalCheck.ok) {
-            const finalPayload = await finalCheck.json();
-            if (finalPayload && finalPayload.success && finalPayload.data && finalPayload.data.score != null) {
-              // Validate final payload matches this upload (resumeId or timestamp)
-              let finalMatch = false;
-              if (expectedResumeId) {
-                if (finalPayload.data.resumeId && String(finalPayload.data.resumeId) === String(expectedResumeId)) {
-                  finalMatch = true;
-                }
-              } else {
-                const d1Ts = finalPayload.data.timestamp || finalPayload.data.createdAt || null;
-                if (d1Ts && Number(d1Ts) >= Number(expectedTimestamp)) {
-                  finalMatch = true;
-                }
-              }
-
-              if (finalMatch) {
-                window.JobHackAIStatePersistence?.saveATSScore?.({
-                  score: finalPayload.data.score,
-                  breakdown: finalPayload.data.breakdown,
-                  resumeId: finalPayload.data.resumeId || '',
-                  jobTitle: finalPayload.data.jobTitle,
-                  extractionQuality: finalPayload.data.extractionQuality
-                });
-                gotPersisted = true;
-                btn.style.display = 'none';
-                if (input) input.style.display = 'none';
-                window.location.reload();
-                return;
-              }
-            }
-          }
-        } catch (e) {
-          // ignore final check errors
-        }
-      }
-      if (!gotPersisted) {
-        // Inform the user that processing is taking longer than expected
-        try { showErrorBanner('Resume uploaded and scored — persistence still pending. Please refresh the dashboard in a minute to see your score.'); } catch(_) {}
-        try { hideLoadingState(); } catch(_) {}
-      }
-      // Hide upload button immediately for free users once D1 seen
-      if (gotPersisted) {
-        btn.style.display = 'none';
-        if (input) input.style.display = 'none';
-        // Optionally force reload/refresh
-        window.location.reload();
-      }
-      } finally {
-        // clear flag if not reloading (reload will navigate away)
-        try { input._jhUploadInProgress = false; } catch(_) {}
-      }
-    });
-  });
-})();
-// --- END ATS PATCH ---
 
 // --- Upgrade Pop-up Logic ---
       function showUpgradePopup() {
@@ -3281,6 +3093,96 @@
                 jobTitle: jobTitle,
                 extractionQuality: scoreData.extractionQuality
               });
+            }
+
+            // Step 5: Create first resume snapshot in D1 (for "Your First ATS Resume" tile)
+            try {
+              const persistResponse = await fetch('/api/ats-score-persist', {
+                method: 'POST',
+                headers: {
+                  'Authorization': `Bearer ${idToken}`,
+                  'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                  resumeId: uploadData.resumeId,
+                  score: score,
+                  breakdown: breakdown,
+                  summary: summary,
+                  jobTitle: jobTitle,
+                  extractionQuality: extractionQuality
+                })
+              });
+
+              if (persistResponse.ok) {
+                const persistData = await persistResponse.json();
+                console.log('[DASHBOARD] Snapshot creation response:', persistData);
+
+                // Step 6: Poll to verify snapshot was created (for free users, we need to confirm before reload)
+                if (!hasUnlimitedAccess && userPlan === 'free') {
+                  let snapshotConfirmed = false;
+                  let attempts = 0;
+                  const maxAttempts = 5;
+
+                  while (attempts < maxAttempts && !snapshotConfirmed) {
+                    attempts++;
+                    await new Promise(r => setTimeout(r, 1000)); // Wait 1 second between attempts
+
+                    try {
+                      const snapshotCheck = await fetch('/api/ats-score-persist?first=true', {
+                        headers: { Authorization: `Bearer ${idToken}` }
+                      });
+
+                      if (snapshotCheck.ok) {
+                        const snapshotData = await snapshotCheck.json();
+                        if (snapshotData.success && snapshotData.data && snapshotData.data.score != null) {
+                          // Validate snapshot matches this upload
+                          // Prefer resumeId matching (definitive identifier) when available
+                          // Only fall back to score matching if resumeId is missing from snapshot
+                          let snapshotMatches = false;
+                          if (snapshotData.data.resumeId && uploadData.resumeId) {
+                            // Both have resumeId - require exact match
+                            snapshotMatches = snapshotData.data.resumeId === uploadData.resumeId;
+                          } else if (snapshotData.data.resumeId || uploadData.resumeId) {
+                            // One has resumeId but other doesn't - can't definitively match, skip
+                            snapshotMatches = false;
+                          } else {
+                            // Neither has resumeId - fall back to score matching (less reliable)
+                            snapshotMatches = snapshotData.data.score === score;
+                          }
+                          
+                          if (snapshotMatches) {
+                            console.log(`[DASHBOARD] ✅ Snapshot confirmed on attempt ${attempts}`, {
+                              resumeIdMatch: snapshotData.data.resumeId === uploadData.resumeId,
+                              scoreMatch: snapshotData.data.score === score
+                            });
+                            snapshotConfirmed = true;
+                            break;
+                          }
+                        }
+                      }
+                    } catch (pollError) {
+                      console.warn('[DASHBOARD] Snapshot polling error:', pollError);
+                    }
+                  }
+
+                  // If snapshot confirmed (or max attempts reached), hide button and reload for free users
+                  if (snapshotConfirmed || attempts >= maxAttempts) {
+                    const uploadBtn = document.getElementById('ats-upload-btn');
+                    const uploadInput = document.getElementById('ats-upload-input');
+                    if (uploadBtn) uploadBtn.style.display = 'none';
+                    if (uploadInput) uploadInput.style.display = 'none';
+                    
+                    // Reload page to show updated dashboard with first resume tile
+                    window.location.reload();
+                    return; // Exit early since we're reloading
+                  }
+                }
+              } else {
+                console.warn('[DASHBOARD] Failed to create snapshot (non-fatal):', persistResponse.status);
+              }
+            } catch (snapshotError) {
+              console.warn('[DASHBOARD] Snapshot creation error (non-fatal):', snapshotError);
+              // Continue - snapshot creation failure shouldn't block the upload flow
             }
 
             // Update UI message for free accounts (credit already consumed before upload)
