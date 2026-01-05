@@ -527,51 +527,48 @@ export async function getResumeFeedbackHistory(env, userId, { limit = 20 } = {})
          LIMIT 1) as feedback_json
       FROM resume_sessions rs
       WHERE rs.user_id = ?
+        AND EXISTS (SELECT 1 FROM feedback_sessions fs WHERE fs.resume_session_id = rs.id)
       ORDER BY rs.created_at DESC
       LIMIT ?
     `).bind(userId, limit).all();
 
-    // Transform to clean history items, extracting ats_score if needed
-    const items = results.results.map(row => {
-      let atsScore = row.ats_score;
-      let fileName = null;
-      let resumeId = null;
-      let feedback = null;
-      
-      if (row.feedback_json) {
-        try {
-          feedback = JSON.parse(row.feedback_json);
-          fileName = feedback?.fileName || null;
-          resumeId = feedback?.resumeId || null;
-        } catch (e) {
-          // Ignore parse errors
+    // Transform to clean history items, extracting ats_score if needed. Only return paid/trial/essential/pro/premium feedback sessions
+    const items = results.results
+      .filter(row => !!row.feedback_id) // Only include sessions with feedback (paid runs)
+      .map(row => {
+        let atsScore = row.ats_score;
+        let fileName = null;
+        let resumeId = null;
+        let feedback = null;
+        if (row.feedback_json) {
+          try {
+            feedback = JSON.parse(row.feedback_json);
+            fileName = feedback?.fileName || null;
+            resumeId = feedback?.resumeId || null;
+          } catch (e) {
+            // Ignore parse errors
+          }
         }
-      }
-      
-      // If ats_score column is null, try to extract from feedback_json
-      if (atsScore === null && feedback) {
-        // Prefer canonical overallScore if present
-        if (typeof feedback.overallScore === 'number') {
-          atsScore = feedback.overallScore;
-        } else if (feedback.aiFeedback && typeof feedback.aiFeedback.overallScore === 'number') {
-          atsScore = feedback.aiFeedback.overallScore;
-        } else if (feedback.atsRubric && Array.isArray(feedback.atsRubric)) {
-          // Fallback: sum rubric scores and round (matches calcOverallScore behavior)
-          atsScore = Math.round(feedback.atsRubric.reduce((sum, item) => sum + (item.score || 0), 0));
+        if (atsScore === null && feedback) {
+          if (typeof feedback.overallScore === 'number') {
+            atsScore = feedback.overallScore;
+          } else if (feedback.aiFeedback && typeof feedback.aiFeedback.overallScore === 'number') {
+            atsScore = feedback.aiFeedback.overallScore;
+          } else if (feedback.atsRubric && Array.isArray(feedback.atsRubric)) {
+            atsScore = Math.round(feedback.atsRubric.reduce((sum, item) => sum + (item.score || 0), 0));
+          }
         }
-      }
-      
-      return {
-        sessionId: String(row.session_id),
-        title: row.title,
-        role: row.role,
-        createdAt: row.created_at,
-        atsScore: atsScore,
-        hasFeedback: !!row.feedback_id,
-        fileName,
-        resumeId
-      };
-    });
+        return {
+          sessionId: String(row.session_id),
+          title: row.title,
+          role: row.role,
+          createdAt: row.created_at,
+          atsScore: atsScore,
+          hasFeedback: !!row.feedback_id,
+          fileName,
+          resumeId
+        };
+      });
 
     console.log('[DB] Retrieved history:', { userId, count: items.length });
     return items;

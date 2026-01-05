@@ -2864,16 +2864,12 @@
 
       // Load cached ATS score on page load (with KV fallback)
       async function loadCachedATSScore() {
-        let cachedScore = null;
-        
-        // FIX: Initialize ATS score to 0% for new users before checking cache
-        updateProgressRing(0);
-        
-        // CRITICAL FIX: Resume feedback page should ONLY show scores from resume feedback runs
-        // Free account uploads (via /api/ats-score) do NOT create history entries
-        // Only resume feedback runs (via /api/resume-feedback) create history entries
-        // So we check history first to exclude free account scores
-        try {
+let cachedScore = null;
+              
+              // ATS score for resume feedback tile and history is always fetched from D1 feedback API.
+              updateProgressRing(0);
+              
+              try {
           const token = await getAuthToken();
           if (token) {
             const historyResponse = await fetch('/api/resume-feedback/history?limit=1', {
