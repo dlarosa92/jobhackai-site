@@ -1669,7 +1669,12 @@ export async function upsertCookieConsent(env, { userId, authId, clientId, conse
     const consentStr = typeof consent === 'string' ? consent : JSON.stringify(consent);
     const now = new Date().toISOString();
 
-    // Use SELECT → UPDATE/INSERT pattern for atomic upsert compatible with D1 partial indexes
+    // Use SELECT → INSERT/UPDATE pattern for compatibility with D1 partial indexes.
+    // NOTE: This pattern is NOT atomic by itself. Concurrent requests can still race:
+    // two requests may SELECT and see no row, then both try to INSERT. To mitigate
+    // that, we catch UNIQUE constraint failures on INSERT and retry as an UPDATE.
+    // This provides a robust fallback for D1 environments that don't accept
+    // partial UNIQUE indexes as ON CONFLICT targets.
     if (userId) {
       // For authenticated users: upsert by user_id (prefer user_id over client_id)
       const existing = await db.prepare(
@@ -1682,11 +1687,25 @@ export async function upsertCookieConsent(env, { userId, authId, clientId, conse
           'UPDATE cookie_consents SET consent_json = ?, updated_at = ? WHERE user_id = ?'
         ).bind(consentStr, now, userId).run();
       } else {
-        // Insert new
-        await db.prepare(
-          `INSERT INTO cookie_consents (user_id, client_id, consent_json, created_at, updated_at)
-           VALUES (?, NULL, ?, ?, ?)`
-        ).bind(userId, consentStr, now, now).run();
+        // Insert new; on UNIQUE violation (race), fall back to UPDATE
+        try {
+          await db.prepare(
+            `INSERT INTO cookie_consents (user_id, client_id, consent_json, created_at, updated_at)
+             VALUES (?, NULL, ?, ?, ?)`
+          ).bind(userId, consentStr, now, now).run();
+        } catch (err) {
+          // D1/SQLite returns an error when UNIQUE constraint is violated.
+          // Perform an UPDATE as a fallback if it's a UNIQUE constraint error,
+          // otherwise rethrow.
+          const msg = err && err.message ? String(err.message) : '';
+          if (msg.includes('UNIQUE constraint failed') || msg.includes('ON CONFLICT clause')) {
+            await db.prepare(
+              'UPDATE cookie_consents SET consent_json = ?, updated_at = ? WHERE user_id = ?'
+            ).bind(consentStr, now, userId).run();
+          } else {
+            throw err;
+          }
+        }
       }
       // After successful upsert, clean up any orphaned client_id record
       if (clientId) {
@@ -1708,10 +1727,21 @@ export async function upsertCookieConsent(env, { userId, authId, clientId, conse
           'UPDATE cookie_consents SET consent_json = ?, updated_at = ? WHERE client_id = ?'
         ).bind(consentStr, now, clientId).run();
       } else {
-        await db.prepare(
-          `INSERT INTO cookie_consents (user_id, client_id, consent_json, created_at, updated_at)
-           VALUES (NULL, ?, ?, ?, ?)`
-        ).bind(clientId, consentStr, now, now).run();
+        try {
+          await db.prepare(
+            `INSERT INTO cookie_consents (user_id, client_id, consent_json, created_at, updated_at)
+             VALUES (NULL, ?, ?, ?, ?)`
+          ).bind(clientId, consentStr, now, now).run();
+        } catch (err) {
+          const msg = err && err.message ? String(err.message) : '';
+          if (msg.includes('UNIQUE constraint failed') || msg.includes('ON CONFLICT clause')) {
+            await db.prepare(
+              'UPDATE cookie_consents SET consent_json = ?, updated_at = ? WHERE client_id = ?'
+            ).bind(consentStr, now, clientId).run();
+          } else {
+            throw err;
+          }
+        }
       }
       console.log('[DB] Upserted cookie consent (client):', { clientId });
     }
