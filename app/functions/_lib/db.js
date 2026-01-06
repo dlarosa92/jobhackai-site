@@ -1669,24 +1669,26 @@ export async function upsertCookieConsent(env, { userId, authId, clientId, conse
     const consentStr = typeof consent === 'string' ? consent : JSON.stringify(consent);
     const now = new Date().toISOString();
 
-    // Use INSERT ... ON CONFLICT to handle race conditions atomically
-    // This prevents duplicate records from concurrent requests
-    // Partial unique indexes (idx_cookie_consents_user_id_unique, idx_cookie_consents_client_id_unique)
-    // ensure atomicity for both authenticated and anonymous users
+    // Use SELECT → UPDATE/INSERT pattern for atomic upsert compatible with D1 partial indexes
     if (userId) {
-      // For authenticated users: atomic upsert on user_id
-      // The partial unique index on user_id (WHERE user_id IS NOT NULL) ensures atomicity
-      // ON CONFLICT without WHERE clause works because SQLite matches against the partial index
-      await db.prepare(
-        `INSERT INTO cookie_consents (user_id, client_id, consent_json, created_at, updated_at)
-         VALUES (?, NULL, ?, ?, ?)
-         ON CONFLICT(user_id) DO UPDATE SET
-           consent_json = excluded.consent_json,
-           updated_at = excluded.updated_at`
-      ).bind(userId, consentStr, now, now).run();
-      
+      // For authenticated users: upsert by user_id (prefer user_id over client_id)
+      const existing = await db.prepare(
+        'SELECT id FROM cookie_consents WHERE user_id = ?'
+      ).bind(userId).first();
+
+      if (existing) {
+        // Update existing
+        await db.prepare(
+          'UPDATE cookie_consents SET consent_json = ?, updated_at = ? WHERE user_id = ?'
+        ).bind(consentStr, now, userId).run();
+      } else {
+        // Insert new
+        await db.prepare(
+          `INSERT INTO cookie_consents (user_id, client_id, consent_json, created_at, updated_at)
+           VALUES (?, NULL, ?, ?, ?)`
+        ).bind(userId, consentStr, now, now).run();
+      }
       // After successful upsert, clean up any orphaned client_id record
-      // This migration step is non-critical and can fail gracefully
       if (clientId) {
         try {
           await db.prepare('DELETE FROM cookie_consents WHERE client_id = ? AND user_id IS NULL').bind(clientId).run();
@@ -1695,20 +1697,22 @@ export async function upsertCookieConsent(env, { userId, authId, clientId, conse
           console.warn('[DB] Failed to delete client_id record during migration:', e);
         }
       }
-      
       console.log('[DB] Upserted cookie consent (user):', { userId });
     } else if (clientId) {
-      // For anonymous users: atomic upsert on client_id
-      // The partial unique index on client_id (WHERE client_id IS NOT NULL) ensures atomicity
-      // ON CONFLICT without WHERE clause works because SQLite matches against the partial index
-      await db.prepare(
-        `INSERT INTO cookie_consents (user_id, client_id, consent_json, created_at, updated_at)
-         VALUES (NULL, ?, ?, ?, ?)
-         ON CONFLICT(client_id) DO UPDATE SET
-           consent_json = excluded.consent_json,
-           updated_at = excluded.updated_at`
-      ).bind(clientId, consentStr, now, now).run();
-      
+      // For anonymous users: upsert by client_id
+      const existingClient = await db.prepare(
+        'SELECT id FROM cookie_consents WHERE client_id = ?'
+      ).bind(clientId).first();
+      if (existingClient) {
+        await db.prepare(
+          'UPDATE cookie_consents SET consent_json = ?, updated_at = ? WHERE client_id = ?'
+        ).bind(consentStr, now, clientId).run();
+      } else {
+        await db.prepare(
+          `INSERT INTO cookie_consents (user_id, client_id, consent_json, created_at, updated_at)
+           VALUES (NULL, ?, ?, ?, ?)`
+        ).bind(clientId, consentStr, now, now).run();
+      }
       console.log('[DB] Upserted cookie consent (client):', { clientId });
     }
 
