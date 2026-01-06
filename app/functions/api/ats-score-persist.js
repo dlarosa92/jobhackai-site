@@ -240,17 +240,17 @@ export async function onRequest(context) {
               });
               console.log('[ATS-SCORE-PERSIST] Created D1 firstResume snapshot', { uid, resumeId, sessionId: session.id });
             }
-            // At this point D1 mirror appears successful — update KV record to mark synced
-            try {
-              resumeState.syncedAt = Date.now();
-              resumeState.needsSync = false;
-              await kv.put(lastResumeKey, JSON.stringify(resumeState), {
-                expirationTtl: 2592000
-              });
-            } catch (kvUpdateErr) {
-              // Non-fatal: KV update failing here is informational only
-              console.warn('[ATS-SCORE-PERSIST] KV update after D1 mirror failed:', kvUpdateErr);
-            }
+          }
+          // At this point D1 mirror appears successful — update KV record to mark synced
+          try {
+            resumeState.syncedAt = Date.now();
+            resumeState.needsSync = false;
+            await kv.put(lastResumeKey, JSON.stringify(resumeState), {
+              expirationTtl: 2592000
+            });
+          } catch (kvUpdateErr) {
+            // Non-fatal: KV update failing here is informational only
+            console.warn('[ATS-SCORE-PERSIST] KV update after D1 mirror failed:', kvUpdateErr);
           }
         }
       } catch (e) {
