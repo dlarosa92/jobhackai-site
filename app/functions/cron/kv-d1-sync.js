@@ -1,5 +1,5 @@
 // Lightweight cron worker to sync KV-cached resume states into D1 when possible.
-import { getDb, getOrCreateUserByAuthId, upsertResumeSessionWithScores, setFirstResumeSnapshot, getFirstResumeSnapshot } from '../_lib/db.js';
+import { getDb, getOrCreateUserByAuthId, upsertResumeSessionWithScores, setFirstResumeSnapshot, getFirstResumeSnapshot, isD1Available } from '../_lib/db.js';
 
 export async function onRequest(context) {
   const { env } = context;
@@ -61,13 +61,6 @@ export async function onRequest(context) {
   return new Response(JSON.stringify({ success: true }), { status: 200 });
 }
 
-function isD1Available(env) {
-  // simple helper - mimic existing check in other modules
-  try {
-    return !!env.DB; // relies on binding presence; adjust if your env uses different binding
-  } catch (e) {
-    return false;
-  }
-}
+// NOTE: isD1Available is imported from ../_lib/db.js to ensure consistent D1 binding resolution.
 
 

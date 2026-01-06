@@ -3133,22 +3133,56 @@ let cachedScore = null;
       // type: 'info' | 'success' | 'error'
       const toastId = opts.id || `${type}:${title}`;
       if (window._rfToast.currentId === toastId) return; // dedupe identical toast
-      // replace previous
-      if (window._rfToast.currentToast && typeof window._rfToast.currentToast.dismiss === 'function') {
-        try { window._rfToast.currentToast.dismiss(); } catch (e) { /* ignore */ }
-      }
+      // replace previous toast element if present
+      try {
+        if (window._rfToast.currentToast && window._rfToast.currentToast.parentNode) {
+          window._rfToast.currentToast.remove();
+        }
+      } catch (e) { /* ignore */ }
+
       if (!window.JobHackAIToast) return;
       const fn = type === 'success' ? window.JobHackAIToast.success : (
                    type === 'error' ? window.JobHackAIToast.error : window.JobHackAIToast.info);
-      const toast = fn(title, opts);
+      const duration = opts.autoDismissMs || 8000;
+      const toast = fn(title, duration);
       window._rfToast.currentId = toastId;
       window._rfToast.currentToast = toast;
-      // Clear tracking on dismiss (best-effort)
-      if (toast && typeof toast.onDismiss === 'function') {
-        toast.onDismiss(() => { window._rfToast.currentId = null; window._rfToast.currentToast = null; });
-      } else {
-        setTimeout(() => { window._rfToast.currentId = null; window._rfToast.currentToast = null; }, (opts.autoDismissMs || 8000));
+
+      // If an action is requested, insert an action button into the toast element.
+      try {
+        if (opts.actionText && typeof opts.onAction === 'function' && toast && toast.querySelector) {
+          const closeBtn = toast.querySelector('button');
+          const actionBtn = document.createElement('button');
+          actionBtn.className = 'jh-toast-action';
+          actionBtn.style.cssText = `
+            background: none;
+            border: none;
+            color: #059669;
+            cursor: pointer;
+            padding: 0 8px;
+            font-weight: 600;
+          `;
+          actionBtn.textContent = opts.actionText;
+          actionBtn.addEventListener('click', (ev) => {
+            ev.stopPropagation();
+            try { opts.onAction(); } catch (e) { console.warn('[RESUME-FEEDBACK] toast action failed', e); }
+            // Dismiss toast after action
+            try { if (toast && toast.parentNode) toast.remove(); } catch (e) {}
+            window._rfToast.currentId = null;
+            window._rfToast.currentToast = null;
+          });
+          if (closeBtn && closeBtn.parentNode) {
+            closeBtn.parentNode.insertBefore(actionBtn, closeBtn);
+          } else {
+            toast.appendChild(actionBtn);
+          }
+        }
+      } catch (e) {
+        console.warn('[RESUME-FEEDBACK] failed to add toast action', e);
       }
+
+      // Clear tracking after duration + small buffer
+      setTimeout(() => { window._rfToast.currentId = null; window._rfToast.currentToast = null; }, duration + 400);
     }
 
     // Insert a persistent session-restart banner when resetSession() intentionally runs
