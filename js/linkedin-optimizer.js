@@ -1555,8 +1555,9 @@ async function init() {
     };
 
     // Prefer navigationReady (gives plan + auth); fallback to firebase-auth-ready
-    document.addEventListener('navigationReady', onReady, { once: true });
-    document.addEventListener('firebase-auth-ready', onReady, { once: true });
+    // Listen on window because navigationReady is dispatched on window by the navigation system.
+    window.addEventListener('navigationReady', onReady, { once: true });
+    window.addEventListener('firebase-auth-ready', onReady, { once: true });
   });
 
   await applyGate();
