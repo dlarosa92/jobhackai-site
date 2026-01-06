@@ -249,8 +249,27 @@ export default function Dashboard() {
           setFirstRunInfo(null);
           setScoreLoading(false);
           setFirstRunLoading(false);
-          if (typeof window !== 'undefined') window.location.href = '/login';
-          return;
+
+          // Wait for firebase-auth-ready before redirect to avoid bounce during session restore
+          const authReady = typeof window !== 'undefined' && !!(window as any).__firebaseAuthReadyFired;
+          if (typeof window !== 'undefined' && !authReady) {
+            await new Promise(resolve => {
+              let done = false;
+              const timer = setTimeout(() => { if (!done) { done = true; resolve(false); } }, 2500);
+              const onReady = () => { if (!done) { done = true; clearTimeout(timer); resolve(true); } };
+              document.addEventListener('firebase-auth-ready', onReady, { once: true });
+            });
+            if (!(window as any).FirebaseAuthManager?.getCurrentUser?.()) {
+              window.location.href = '/login';
+              return;
+            } else {
+              // Auth now restored; skip redirect
+              return;
+            }
+          } else if (typeof window !== 'undefined') {
+            window.location.href = '/login';
+            return;
+          }
         }
         // SECURITY: Do NOT store user-email in localStorage - email available via Firebase auth
         try { localStorage.setItem('user-authenticated', 'true'); } catch (_) {}
@@ -273,13 +292,15 @@ export default function Dashboard() {
           }
         } catch (_) {}
 
-        setUser(prev => ({
-          ...prev,
-          name: u.displayName || prev.name,
-          email: u.email || prev.email,
-          plan: plan as any,
-          trialEndsAt: trialEndsAt || prev.trialEndsAt
-        }));
+        if (u) {
+          setUser(prev => ({
+            ...prev,
+            name: u.displayName || prev.name,
+            email: u.email || prev.email,
+            plan: plan as any,
+            trialEndsAt: trialEndsAt || prev.trialEndsAt
+          }));
+        }
 
         if (token) {
           setScoreLoading(true);
@@ -292,6 +313,7 @@ export default function Dashboard() {
           setScoreLoading(false);
           setFirstRunLoading(false);
         }
+      }
       });
       return () => unsubscribe();
     }

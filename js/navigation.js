@@ -464,6 +464,10 @@ function setAuthState(isAuthenticated, plan = null) {
   setTimeout(() => {
     updateNavigation();
     updateDevPlanToggle();
+    // Remove nav-loading class after nav/render/hydration
+    if (typeof document !== 'undefined') {
+      document.documentElement.classList.remove('nav-loading');
+    }
   }, 100);
 }
 
@@ -629,15 +633,18 @@ const PLANS = {
 window.PLANS = PLANS;
 
 // --- ENSURE LOCALSTORAGE KEYS ARE ALWAYS SET ---
-if (!localStorage.getItem('user-authenticated')) {
-  localStorage.setItem('user-authenticated', 'false');
-}
-if (!localStorage.getItem('user-plan')) {
-  localStorage.setItem('user-plan', 'free');
-}
+// Delay setting default user-plan until after navigation initialization/hydration to prevent early free plan flicker
+// if (!localStorage.getItem('user-plan')) {
+//   localStorage.setItem('user-plan', 'free');
+// }
 // Ensure dev-plan is always set for consistency
 if (!localStorage.getItem('dev-plan')) {
   localStorage.setItem('dev-plan', localStorage.getItem('user-plan') || 'free');
+}
+
+// At script start, add nav-loading class to keep nav/CTAs hidden
+if (typeof document !== 'undefined') {
+  document.documentElement.classList.add('nav-loading');
 }
 
 // --- NAVIGATION CONFIGURATION ---

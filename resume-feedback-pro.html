@@ -11,7 +11,6 @@
     // Run immediately to prevent content flash for unauthorized users
     (function enforceAccessImmediate() {
       // SECURITY: Check auth state using localStorage flags and Firebase SDK keys
-      // FirebaseAuthManager may not be loaded yet, so we check Firebase SDK keys directly
       const hasLocalStorageAuth = localStorage.getItem('user-authenticated') === 'true';
       const hasFirebaseKeys = Object.keys(localStorage).some(k => 
         k.startsWith('firebase:authUser:') && 
@@ -21,30 +20,38 @@
       );
       const isAuthenticated = hasLocalStorageAuth || hasFirebaseKeys;
       const allowedPlans = ['trial', 'essential', 'pro', 'premium'];
-      // Expose allowed plans so later scripts stay in sync
       window.__JOBHACKAI_RF_ALLOWED_PLANS__ = allowedPlans;
       const cachedPlan = localStorage.getItem('user-plan');
-      
-      // If not authenticated, redirect to login immediately
-      if (!isAuthenticated) {
-        console.log('🚫 [RESUME-FEEDBACK] Not authenticated, redirecting to login');
-        window.location.href = 'login.html';
-        return;
-      }
-      
-      if (cachedPlan) {
-        // Cached plan detected - enforce immediately
-        if (!allowedPlans.includes(cachedPlan)) {
-          console.log('🚫 [RESUME-FEEDBACK] Access denied for cached plan:', cachedPlan);
+
+      // Wait for firebase-auth-ready or hydration before irreversible action
+      function handleAuthReadyOrTimeout() {
+        const navAuth = window.JobHackAINavigation && window.JobHackAINavigation.getAuthState && window.JobHackAINavigation.getAuthState();
+        const effectivePlan = window.JobHackAINavigation && window.JobHackAINavigation.getEffectivePlan && window.JobHackAINavigation.getEffectivePlan();
+        const hydratedPlan = effectivePlan || cachedPlan;
+        if (!(navAuth && navAuth.isAuthenticated)) {
+          window.location.href = 'login.html';
+          return;
+        }
+        if (hydratedPlan && !allowedPlans.includes(hydratedPlan)) {
           window.location.href = 'pricing-a.html?plan=essential';
           return;
         }
-        console.log('✅ [RESUME-FEEDBACK] Access granted for cached plan:', cachedPlan);
+        document.documentElement.classList.remove('auth-pending');
+        document.documentElement.classList.remove('plan-pending');
+      }
+      if (!isAuthenticated) {
+        document.documentElement.classList.add('auth-pending');
+        document.addEventListener('firebase-auth-ready', handleAuthReadyOrTimeout, { once: true });
+        setTimeout(handleAuthReadyOrTimeout, 3000); // graceful fallback
       } else {
-        // Plan not cached yet - allow page to load and defer enforcement
-        console.log('⏳ [RESUME-FEEDBACK] Plan not cached yet. Deferring enforcement until server plan check completes.');
-        window.__JOBHACKAI_PLAN_PENDING__ = true;
-        document.documentElement.classList.add('plan-pending');
+        if (cachedPlan && !allowedPlans.includes(cachedPlan)) {
+          document.documentElement.classList.add('plan-pending');
+          document.addEventListener('firebase-auth-ready', handleAuthReadyOrTimeout, { once: true });
+          setTimeout(handleAuthReadyOrTimeout, 3000);
+        } else {
+          document.documentElement.classList.remove('auth-pending');
+          document.documentElement.classList.remove('plan-pending');
+        }
       }
     })();
   </script>
