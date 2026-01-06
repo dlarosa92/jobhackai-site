@@ -6763,6 +6763,15 @@ let cachedScore = null;
       currentResumeId = null;
       window.latestAtsIssues = null;
       window.latestRoleSpecific = null;
+      
+      // Show persistent banner to explain destructive reset (BFCache or explicit)
+      try {
+        if (typeof showSessionRestartBanner === 'function') {
+          showSessionRestartBanner();
+        }
+      } catch (e) {
+        console.warn('[RESUME-FEEDBACK] Failed to show session restart banner', e);
+      }
     }
     
     function clearHistoricalView() {

@@ -1,5 +1,5 @@
 // Lightweight cron worker to sync KV-cached resume states into D1 when possible.
-import { getDb, getOrCreateUserByAuthId, upsertResumeSessionWithScores, setFirstResumeSnapshot, getFirstResumeSnapshot } from '../_lib/db.js';
+import { getDb, getOrCreateUserByAuthId, upsertResumeSessionWithScores, setFirstResumeSnapshot, getFirstResumeSnapshot, isD1Available } from '../_lib/db.js';
 
 export async function onRequest(context) {
   const { env } = context;
@@ -11,49 +11,54 @@ export async function onRequest(context) {
 
   // List recent keys with prefix user: and try to sync those needing it.
   try {
-    const listResp = await kv.list({ prefix: 'user:' });
-    for (const keyInfo of listResp.keys) {
-      try {
-        const raw = await kv.get(keyInfo.name);
-        if (!raw) continue;
-        const record = JSON.parse(raw);
-        if (!record || !record.needsSync) continue;
-        // Attempt to mirror into D1
-        if (!isD1Available(env)) continue;
-        const d1User = await getOrCreateUserByAuthId(env, record.uid, null);
-        if (!d1User) continue;
-        // Upsert session with scores
-        const session = await upsertResumeSessionWithScores(env, d1User.id, {
-          resumeId: record.resumeId,
-          role: record.jobTitle || null,
-          atsScore: record.score,
-          ruleBasedScores: record.breakdown || null
-        });
-        if (session) {
-          // mark first snapshot if needed
-          const existingFirst = await getFirstResumeSnapshot(env, d1User.id);
-          if (!existingFirst) {
-            await setFirstResumeSnapshot(env, d1User.id, session.id, {
-              uid: record.uid,
-              resumeId: record.resumeId,
-              score: record.score,
-              breakdown: record.breakdown,
-              summary: record.summary || '',
-              jobTitle: record.jobTitle || '',
-              extractionQuality: record.extractionQuality || null,
-              feedback: null,
-              timestamp: record.timestamp || Date.now()
-            });
+    let cursor = undefined;
+    do {
+      const listResp = await kv.list({ prefix: 'user:', cursor });
+      for (const keyInfo of listResp.keys) {
+        try {
+          const raw = await kv.get(keyInfo.name);
+          if (!raw) continue;
+          const record = JSON.parse(raw);
+          if (!record || !record.needsSync) continue;
+          // Attempt to mirror into D1
+          if (!isD1Available(env)) continue;
+          const d1User = await getOrCreateUserByAuthId(env, record.uid, null);
+          if (!d1User) continue;
+          // Upsert session with scores
+          const session = await upsertResumeSessionWithScores(env, d1User.id, {
+            resumeId: record.resumeId,
+            role: record.jobTitle || null,
+            atsScore: record.score,
+            ruleBasedScores: record.breakdown || null
+          });
+          if (session) {
+            // mark first snapshot if needed
+            const existingFirst = await getFirstResumeSnapshot(env, d1User.id);
+            if (!existingFirst) {
+              await setFirstResumeSnapshot(env, d1User.id, session.id, {
+                uid: record.uid,
+                resumeId: record.resumeId,
+                score: record.score,
+                breakdown: record.breakdown,
+                summary: record.summary || '',
+                jobTitle: record.jobTitle || '',
+                extractionQuality: record.extractionQuality || null,
+                feedback: null,
+                timestamp: record.timestamp || Date.now()
+              });
+            }
+            // update KV record
+            record.syncedAt = Date.now();
+            record.needsSync = false;
+            await kv.put(keyInfo.name, JSON.stringify(record), { expirationTtl: 2592000 });
           }
-          // update KV record
-          record.syncedAt = Date.now();
-          record.needsSync = false;
-          await kv.put(keyInfo.name, JSON.stringify(record), { expirationTtl: 2592000 });
+        } catch (innerErr) {
+          console.warn('[KV-D1-SYNC] item failed to sync', keyInfo.name, innerErr);
         }
-      } catch (innerErr) {
-        console.warn('[KV-D1-SYNC] item failed to sync', keyInfo.name, innerErr);
       }
-    }
+      // paginate
+      cursor = listResp.list_complete ? undefined : listResp.cursor;
+    } while (cursor);
   } catch (e) {
     console.warn('[KV-D1-SYNC] sync worker failed', e);
   }
@@ -61,13 +66,6 @@ export async function onRequest(context) {
   return new Response(JSON.stringify({ success: true }), { status: 200 });
 }
 
-function isD1Available(env) {
-  // simple helper - mimic existing check in other modules
-  try {
-    return !!env.DB; // relies on binding presence; adjust if your env uses different binding
-  } catch (e) {
-    return false;
-  }
-}
+// NOTE: isD1Available is provided by ../_lib/db.js for consistent binding resolution.
 
 
