@@ -1781,6 +1781,14 @@ async function initializeNavigation() {
   
   // Signal that navigation system is ready
   navLog('info', 'Navigation system initialization complete, dispatching ready event');
+  // Remove nav-loading now that navigation has been rendered so visitor CTAs become visible
+  try {
+    if (typeof document !== 'undefined') {
+      document.documentElement.classList.remove('nav-loading');
+    }
+  } catch (e) {
+    navLog('warn', 'Failed to remove nav-loading class', e);
+  }
   // Set flag to detect if event already fired (for fallback checks)
   window.__navigationReadyFired = true;
   // CRITICAL FIX: Only mark as initialized AFTER successful completion

@@ -1542,6 +1542,14 @@ async function init() {
 
   // Wait for navigation/auth hydration before applying gates (avoid transient locked view)
   await new Promise(resolve => {
+    // If nav or firebase-ready flags already fired, resolve immediately to avoid delay
+    const navReadyFired = !!window.__navigationReadyFired;
+    const authReadyFired = !!window.__firebaseAuthReadyFired;
+    if (navReadyFired || authReadyFired) {
+      resolve();
+      return;
+    }
+
     let done = false;
     const timer = setTimeout(() => {
       if (!done) { done = true; resolve(); }
@@ -1555,9 +1563,10 @@ async function init() {
     };
 
     // Prefer navigationReady (gives plan + auth); fallback to firebase-auth-ready
-    // Listen on window because navigationReady is dispatched on window by the navigation system.
+    // navigationReady is dispatched on window
     window.addEventListener('navigationReady', onReady, { once: true });
-    window.addEventListener('firebase-auth-ready', onReady, { once: true });
+    // firebase-auth-ready is dispatched on document
+    document.addEventListener('firebase-auth-ready', onReady, { once: true });
   });
 
   await applyGate();
