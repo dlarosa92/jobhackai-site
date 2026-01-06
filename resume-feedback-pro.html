@@ -3196,7 +3196,8 @@ let cachedScore = null;
       // Only reset session on BFCache restores (event.persisted).
       _cancelPendingSkeletonOperations();
       if (event.persisted) {
-        resetSession();
+        // Mark this as an automatic restore so a persistent banner is shown.
+        resetSession(true);
       }
     });
 
@@ -3210,8 +3211,9 @@ let cachedScore = null;
         // Show a lightweight toast instead of resetting session. If analysis is running show running toast,
         // otherwise if finished while away show success toast. This preserves user progress and avoids surprising resets.
         try {
-          const isRunning = document.querySelector('#rf-ats-score-tile .rf-progress-ring svg text')?.textContent?.trim() === '' || 
-                            !!document.querySelector('#rf-ats-score-tile .rf-progress-indicator.running');
+          // Determine running state by checking the page's feedback-loading guard.
+          // We store a cleanup function in window._currentFeedbackLoading while an analysis is in progress.
+          const isRunning = typeof window._currentFeedbackLoading === 'function';
           const finished = !!document.querySelector('#rf-feedback-content') && document.querySelector('#rf-feedback-content').style.display !== 'none';
           if (isRunning) {
             showRfToast('info', 'Analysis still running', {
