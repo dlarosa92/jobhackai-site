@@ -1398,7 +1398,7 @@
         <div class="rf-history-footer" data-history-footer>
           <span>Data retention: JobHackAI shows your last 10 question sets. Sets are automatically deleted after 90 days.</span>
           <div class="rf-history-footer-links">
-            <a class="rf-history-footer-link" href="#" data-history-learn-more>Learn more</a>
+            <a class="rf-history-footer-link" href="privacy.html" data-history-learn-more>Learn more</a>
             <span class="rf-history-footer-separator" aria-hidden="true">·</span>
             <button id="iq-history-clear" class="rf-history-footer-link rf-history-footer-link--danger" type="button">Clear history</button>
           </div>
@@ -2775,14 +2775,8 @@
         }
       });
 
-      // "Learn more" link - keep behavior consistent (no nav change requested)
-      panel.querySelectorAll('[data-history-learn-more]').forEach((a) => {
-        a.addEventListener('click', (e) => {
-          e.preventDefault();
-          // TODO: wire to canonical retention/help article when available.
-          iqToast('Learn more coming soon.');
-        });
-      });
+      // "Learn more" link - use native anchor navigation (no JS interception)
+      // Removed placeholder toast handler so the anchor `href` will navigate directly to the privacy page.
 
       async function handleOpenRestore(id) {
         if (!id) return;
