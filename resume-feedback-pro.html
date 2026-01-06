@@ -24,10 +24,20 @@
       const cachedPlan = localStorage.getItem('user-plan');
 
       // Wait for firebase-auth-ready or hydration before irreversible action
+      let done = false;
+      const timeoutHandle = setTimeout(() => {
+        if (!done) handleAuthReadyOrTimeout();
+      }, 3000);
+
       function handleAuthReadyOrTimeout() {
+        if (done) return;
+        done = true;
+        try { clearTimeout(timeoutHandle); } catch (_) {}
+
         const navAuth = window.JobHackAINavigation && window.JobHackAINavigation.getAuthState && window.JobHackAINavigation.getAuthState();
         const effectivePlan = window.JobHackAINavigation && window.JobHackAINavigation.getEffectivePlan && window.JobHackAINavigation.getEffectivePlan();
         const hydratedPlan = effectivePlan || cachedPlan;
+
         if (!(navAuth && navAuth.isAuthenticated)) {
           window.location.href = 'login.html';
           return;
@@ -39,18 +49,24 @@
         document.documentElement.classList.remove('auth-pending');
         document.documentElement.classList.remove('plan-pending');
       }
+
       if (!isAuthenticated) {
         document.documentElement.classList.add('auth-pending');
         document.addEventListener('firebase-auth-ready', handleAuthReadyOrTimeout, { once: true });
-        setTimeout(handleAuthReadyOrTimeout, 3000); // graceful fallback
       } else {
-        if (cachedPlan && !allowedPlans.includes(cachedPlan)) {
+        // If cachedPlan missing, mark plan-pending until server check completes
+        if (!cachedPlan) {
+          window.__JOBHACKAI_PLAN_PENDING__ = true;
           document.documentElement.classList.add('plan-pending');
           document.addEventListener('firebase-auth-ready', handleAuthReadyOrTimeout, { once: true });
-          setTimeout(handleAuthReadyOrTimeout, 3000);
+        } else if (cachedPlan && !allowedPlans.includes(cachedPlan)) {
+          document.documentElement.classList.add('plan-pending');
+          document.addEventListener('firebase-auth-ready', handleAuthReadyOrTimeout, { once: true });
         } else {
           document.documentElement.classList.remove('auth-pending');
           document.documentElement.classList.remove('plan-pending');
+          done = true;
+          try { clearTimeout(timeoutHandle); } catch (_) {}
         }
       }
     })();

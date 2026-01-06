@@ -270,7 +270,10 @@ export default function Dashboard() {
             window.location.href = '/login';
             return;
           }
+          // Ensure callback always returns when user is null to avoid falling through and calling methods on null
+          return;
         }
+
         // SECURITY: Do NOT store user-email in localStorage - email available via Firebase auth
         try { localStorage.setItem('user-authenticated', 'true'); } catch (_) {}
 
@@ -313,7 +316,6 @@ export default function Dashboard() {
           setScoreLoading(false);
           setFirstRunLoading(false);
         }
-      }
       });
       return () => unsubscribe();
     }
