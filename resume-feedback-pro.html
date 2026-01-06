@@ -3127,11 +3127,77 @@ let cachedScore = null;
       }
     }
 
+    // Toast / banner helpers for resume-feedback area
+    window._rfToast = window._rfToast || { currentId: null, currentToast: null };
+    function showRfToast(type, title, opts = {}) {
+      // type: 'info' | 'success' | 'error'
+      const toastId = opts.id || `${type}:${title}`;
+      if (window._rfToast.currentId === toastId) return; // dedupe identical toast
+      // replace previous
+      if (window._rfToast.currentToast && typeof window._rfToast.currentToast.dismiss === 'function') {
+        try { window._rfToast.currentToast.dismiss(); } catch (e) { /* ignore */ }
+      }
+      if (!window.JobHackAIToast) return;
+      const fn = type === 'success' ? window.JobHackAIToast.success : (
+                   type === 'error' ? window.JobHackAIToast.error : window.JobHackAIToast.info);
+      const toast = fn(title, opts);
+      window._rfToast.currentId = toastId;
+      window._rfToast.currentToast = toast;
+      // Clear tracking on dismiss (best-effort)
+      if (toast && typeof toast.onDismiss === 'function') {
+        toast.onDismiss(() => { window._rfToast.currentId = null; window._rfToast.currentToast = null; });
+      } else {
+        setTimeout(() => { window._rfToast.currentId = null; window._rfToast.currentToast = null; }, (opts.autoDismissMs || 8000));
+      }
+    }
+
+    // Insert a persistent session-restart banner when resetSession() intentionally runs
+    function showSessionRestartBanner() {
+      const existing = document.getElementById('rf-session-restart-banner');
+      if (existing) {
+        existing.style.display = 'flex';
+        return;
+      }
+      const banner = document.createElement('div');
+      banner.id = 'rf-session-restart-banner';
+      banner.className = 'rf-banner rf-banner--warning';
+      banner.innerHTML = `
+        <div class="rf-banner__inner">
+          <div class="rf-banner__icon">⚠️</div>
+          <div class="rf-banner__content">
+            <div class="rf-banner__title">Session restarted</div>
+            <div class="rf-banner__desc">Your previous in-progress analysis was cleared. Upload your resume again or open Recent to view past results.</div>
+          </div>
+          <div class="rf-banner__actions">
+            <button id="rf-session-restart-open-recent" class="rf-btn rf-btn--link">Open Recent</button>
+            <button id="rf-session-restart-dismiss" class="rf-btn rf-btn--plain">Dismiss</button>
+          </div>
+        </div>
+      `;
+      const tile = document.getElementById('rf-ats-score-tile');
+      const container = tile ? tile.parentNode : document.body;
+      container.insertBefore(banner, tile || container.firstChild);
+      const openBtn = document.getElementById('rf-session-restart-open-recent');
+      if (openBtn) {
+        openBtn.addEventListener('click', () => {
+          if (window.JobHackAIHistory && typeof window.JobHackAIHistory.openSidebar === 'function') {
+            window.JobHackAIHistory.openSidebar();
+          }
+        });
+      }
+      const dismissBtn = document.getElementById('rf-session-restart-dismiss');
+      if (dismissBtn) {
+        dismissBtn.addEventListener('click', () => { banner.style.display = 'none'; });
+      }
+    }
+
     window.addEventListener('pageshow', (event) => {
-      // event.persisted is true for BFCache restores (Safari/Firefox/Chrome)
-      // Cancel any pending skeleton operations and reset session to Start Fresh
+      // Cancel any pending skeleton operations always.
+      // Only reset session on BFCache restores (event.persisted).
       _cancelPendingSkeletonOperations();
-      resetSession();
+      if (event.persisted) {
+        resetSession();
+      }
     });
 
     window.addEventListener('visibilitychange', () => {
@@ -3139,9 +3205,32 @@ let cachedScore = null;
         forceHideOverlays();
         // DO NOT call hideSkeletons() here - let them stay visible while tab is hidden
       } else {
-        // When tab becomes visible again, cancel any skeleton operations and reset to Start Fresh
+        // When tab becomes visible again, cancel any skeleton operations but DO NOT wipe the user's session.
         _cancelPendingSkeletonOperations();
-        resetSession();
+        // Show a lightweight toast instead of resetting session. If analysis is running show running toast,
+        // otherwise if finished while away show success toast. This preserves user progress and avoids surprising resets.
+        try {
+          const isRunning = document.querySelector('#rf-ats-score-tile .rf-progress-ring svg text')?.textContent?.trim() === '' || 
+                            !!document.querySelector('#rf-ats-score-tile .rf-progress-indicator.running');
+          const finished = !!document.querySelector('#rf-feedback-content') && document.querySelector('#rf-feedback-content').style.display !== 'none';
+          if (isRunning) {
+            showRfToast('info', 'Analysis still running', {
+              id: 'rf:analysis-running',
+              actionText: 'View',
+              onAction: () => { const tile = document.getElementById('rf-ats-score-tile'); if (tile) tile.scrollIntoView({ behavior: 'smooth', block: 'start' }); },
+              autoDismissMs: 8000
+            });
+          } else if (finished) {
+            showRfToast('success', 'Analysis complete — View results', {
+              id: 'rf:analysis-finished',
+              actionText: 'View',
+              onAction: () => { const tile = document.getElementById('rf-ats-score-tile'); if (tile) tile.scrollIntoView({ behavior: 'smooth', block: 'start' }); },
+              autoDismissMs: 8000
+            });
+          }
+        } catch (e) {
+          console.warn('[RESUME-FEEDBACK] visibilitychange toast failed', e);
+        }
       }
     });
 

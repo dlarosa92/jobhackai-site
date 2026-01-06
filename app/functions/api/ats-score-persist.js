@@ -164,6 +164,10 @@ export async function onRequest(context) {
           return json({ success: true, data: null }, 200, origin, env);
         }
       }
+      // Intentional: D1 is the single source-of-truth for GET reads.
+      // We do NOT return KV-cached data to clients. POST still writes to KV
+      // for fast preloading; KV is ephemeral—ensure background sync copies KV
+      // writes into D1 when available and log/alert on D1 failures.
       // Always return null for non-D1 or no record
       return json({ success: true, data: null }, 200, origin, env);
     }
@@ -193,7 +197,9 @@ export async function onRequest(context) {
       jobTitle: jobTitle || '',
       extractionQuality: extractionQuality || null,
       timestamp,
-      syncedAt: timestamp
+      // initially assume not yet synced to D1; we'll set syncedAt after successful D1 mirror
+      syncedAt: null,
+      needsSync: true
     };
 
     // Store in KV (fast, for dashboard pre-loading)
@@ -235,9 +241,22 @@ export async function onRequest(context) {
               console.log('[ATS-SCORE-PERSIST] Created D1 firstResume snapshot', { uid, resumeId, sessionId: session.id });
             }
           }
+          // At this point D1 mirror appears successful — update KV record to mark synced
+          try {
+            resumeState.syncedAt = Date.now();
+            resumeState.needsSync = false;
+            await kv.put(lastResumeKey, JSON.stringify(resumeState), {
+              expirationTtl: 2592000
+            });
+          } catch (kvUpdateErr) {
+            // Non-fatal: KV update failing here is informational only
+            console.warn('[ATS-SCORE-PERSIST] KV update after D1 mirror failed:', kvUpdateErr);
+          }
         }
       } catch (e) {
+        // If D1 mirror fails, leave needsSync=true in KV so a background sync worker can retry.
         console.warn('[ATS-SCORE-PERSIST] D1 mirror/first-snapshot failed (non-fatal):', e);
+        // TODO: increment metrics counter for D1 write failures here
       }
     }
 
