@@ -3065,25 +3065,60 @@ let cachedScore = null;
     // Expose for history interactions
     window.clearTargetRoleState = clearTargetRoleState;
 
+    // Start Fresh on navigation (back/forward), page restore, and reloads
+    function _cancelPendingSkeletonOperations() {
+      try {
+        // Invalidate any in-flight skeleton-related operations so callbacks don't run
+        if (typeof skeletonOperationGeneration !== 'undefined') {
+          skeletonOperationGeneration++;
+        }
+
+        // Clear any scheduled hide timeout and resolve pending hide resolvers as cancelled
+        if (typeof skeletonHideTimeout !== 'undefined' && skeletonHideTimeout !== null) {
+          clearTimeout(skeletonHideTimeout);
+          skeletonHideTimeout = null;
+        }
+        if (Array.isArray(skeletonHideResolvers) && skeletonHideResolvers.length > 0) {
+          skeletonHideResolvers.forEach(({ resolve, generation }) => {
+            try { resolve({ generation, cancelled: true }); } catch (_) {}
+          });
+          skeletonHideResolvers = [];
+        }
+
+        // Immediately hide skeleton UI elements (no fade) to reflect the reset state
+        const skeletonContainer = document.getElementById('rf-skeleton-container');
+        if (skeletonContainer) {
+          // Ensure child skeletons are not left in hidden state for future runs
+          const skeletons = skeletonContainer.querySelectorAll('.rf-skeleton');
+          skeletons.forEach(s => s.classList.remove('hidden'));
+          skeletonContainer.style.display = 'none';
+        }
+        const skeletonHeader = document.getElementById('rf-skeleton-header');
+        if (skeletonHeader) skeletonHeader.style.display = 'none';
+        const skeletonRubric = document.getElementById('rf-skeleton-rubric');
+        if (skeletonRubric) skeletonRubric.style.display = 'none';
+        const skeletonFeedback = document.getElementById('rf-skeleton-feedback');
+        if (skeletonFeedback) skeletonFeedback.style.display = 'none';
+      } catch (e) {
+        console.warn('[RESUME-FEEDBACK] Failed to cancel skeleton operations', e);
+      }
+    }
+
+    window.addEventListener('pageshow', (event) => {
+      // event.persisted is true for BFCache restores (Safari/Firefox/Chrome)
+      // Cancel any pending skeleton operations and reset session to Start Fresh
+      _cancelPendingSkeletonOperations();
+      resetSession();
+    });
+
     window.addEventListener('visibilitychange', () => {
       if (document.hidden) {
-        // Only hide overlays, NOT skeletons
-        // Skeletons should remain visible to show progress even when tab is inactive
         forceHideOverlays();
-        // DO NOT call hideSkeletons() here - let them stay visible
+        // DO NOT call hideSkeletons() here - let them stay visible while tab is hidden
       } else {
-        // When tab becomes visible again, ensure skeletons are still animating
-        // Force a reflow to restart animations if they were throttled
-        const skeletons = document.querySelectorAll('.rf-skeleton:not(.hidden)');
-        if (skeletons.length > 0) {
-          skeletons.forEach(skeleton => {
-            // Force animation restart by toggling will-change
-            skeleton.style.willChange = 'auto';
-            requestAnimationFrame(() => {
-              skeleton.style.willChange = 'background-position';
-            });
-          });
-        }
+        // When tab becomes visible again, cancel any skeleton operations and reset to Start Fresh
+        _cancelPendingSkeletonOperations();
+        resetSession();
       }
     });
 
