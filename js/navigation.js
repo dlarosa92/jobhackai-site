@@ -7,6 +7,44 @@ console.log('🔧 navigation.js VERSION: redirect-fix-v3-SYNC-AND-CLEANUP - ' + 
 // Hide header until nav is resolved to avoid flicker on first paint
 try { document.documentElement.classList.add('nav-loading'); } catch (e) { /* ignore */ }
 
+// Debounced navigation update scheduler (module-scope)
+let __jha_nav_timer = null;
+const NAV_DEBOUNCE_MS = 200;   // coalesce bursts (tune 150-300ms)
+const NAV_MAX_WAIT_MS = 600;   // reveal nav if nothing authoritative arrives
+
+function revealNav(){
+  try {
+    document.documentElement.classList.remove('nav-loading');
+    document.documentElement.classList.add('nav-ready');
+  } catch (e) { /* ignore in non-browser contexts */ }
+}
+
+function scheduleUpdateNavigation(force) {
+  // force === true -> immediate call to updateNavigation()
+  if (force) {
+    if (__jha_nav_timer) { clearTimeout(__jha_nav_timer); __jha_nav_timer = null; }
+    try { updateNavigation(); } catch (err) { console.error('updateNavigation error', err); }
+    revealNav();
+    return;
+  }
+
+  if (__jha_nav_timer) clearTimeout(__jha_nav_timer);
+  __jha_nav_timer = setTimeout(() => {
+    __jha_nav_timer = null;
+    try { updateNavigation(); } catch (err) { console.error('updateNavigation error', err); }
+    revealNav();
+  }, NAV_DEBOUNCE_MS);
+
+  // ensure nav is revealed eventually to avoid indefinite hiding
+  if (!document.documentElement.dataset.navTimeoutSet) {
+    document.documentElement.dataset.navTimeoutSet = '1';
+    setTimeout(() => {
+      if (__jha_nav_timer) { clearTimeout(__jha_nav_timer); __jha_nav_timer = null; try { updateNavigation(); } catch (e) {} revealNav(); }
+      document.documentElement.removeAttribute('data-nav-timeout-set');
+    }, NAV_MAX_WAIT_MS);
+  }
+}
+
 // --- ROBUSTNESS GLOBALS ---
 // Ensure robustness globals are available for smoke tests and agent interface
 window.siteHealth = window.siteHealth || {
@@ -468,10 +506,6 @@ function setAuthState(isAuthenticated, plan = null) {
   setTimeout(() => {
     scheduleUpdateNavigation();
     updateDevPlanToggle();
-    // Remove nav-loading class after nav/render/hydration
-    if (typeof document !== 'undefined') {
-      document.documentElement.classList.remove('nav-loading');
-    }
   }, 100);
 }
 
@@ -1092,43 +1126,7 @@ function updateNavigation() {
     hasConfig: !!navConfig,
     navItemsCount: navConfig?.navItems?.length || 0 
   });
-// Debounced navigation update scheduler (coalesce rapid updates and avoid flicker)
-let __jha_nav_timer = null;
-const NAV_DEBOUNCE_MS = 200;   // coalesce bursts (tune 150-300ms)
-const NAV_MAX_WAIT_MS = 600;   // reveal nav if nothing authoritative arrives
-
-function revealNav(){
-  try {
-    document.documentElement.classList.remove('nav-loading');
-    document.documentElement.classList.add('nav-ready');
-  } catch (e) { /* ignore in non-browser contexts */ }
-}
-
-function scheduleUpdateNavigation(force) {
-  // force === true -> immediate call to updateNavigation()
-  if (force) {
-    if (__jha_nav_timer) { clearTimeout(__jha_nav_timer); __jha_nav_timer = null; }
-    try { updateNavigation(); } catch (err) { console.error('updateNavigation error', err); }
-    revealNav();
-    return;
-  }
-
-  if (__jha_nav_timer) clearTimeout(__jha_nav_timer);
-  __jha_nav_timer = setTimeout(() => {
-    __jha_nav_timer = null;
-    try { updateNavigation(); } catch (err) { console.error('updateNavigation error', err); }
-    revealNav();
-  }, NAV_DEBOUNCE_MS);
-
-  // ensure nav is revealed eventually to avoid indefinite hiding
-  if (!document.documentElement.dataset.navTimeoutSet) {
-    document.documentElement.dataset.navTimeoutSet = '1';
-    setTimeout(() => {
-      if (__jha_nav_timer) { clearTimeout(__jha_nav_timer); __jha_nav_timer = null; try { updateNavigation(); } catch (e) {} revealNav(); }
-      document.documentElement.removeAttribute('data-nav-timeout-set');
-    }, NAV_MAX_WAIT_MS);
-  }
-}
+ 
   
   const navGroup = document.querySelector('.nav-group');
   const navLinks = document.querySelector('.nav-links');
@@ -1876,7 +1874,8 @@ async function initializeNavigation() {
             if (!isAuthenticated && currentAuthState.isAuthenticated) {
               navLog('error', 'Firebase auth mismatch: Firebase says logged out, syncing localStorage');
               setAuthState(false, null);
-              scheduleUpdateNavigation();
+              // Logout is authoritative; force immediate nav update to remove auth UI
+              scheduleUpdateNavigation(true);
             } else if (isAuthenticated && !currentAuthState.isAuthenticated) {
               // Firebase says logged in - force navigation update (authoritative)
               navLog('debug', 'Firebase auth state changed: User logged in, forcing navigation update');
@@ -1890,7 +1889,7 @@ async function initializeNavigation() {
               // This handles cross-tab logout where Firebase fires with user=null and getAuthState()
               // has already cleaned up stale localStorage, leaving both as false
               navLog('debug', 'Auth state changed: Both agree logged out, updating navigation');
-              scheduleUpdateNavigation();
+              scheduleUpdateNavigation(true);
             }
           } catch (listenerError) {
             // EDGE CASE FIX: Don't let listener errors break navigation
