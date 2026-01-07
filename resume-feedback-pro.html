@@ -6726,7 +6726,7 @@ let cachedScore = null;
     /**
      * Hide the historical view banner and clear state
      */
-    function resetSession() {
+    function resetSession(showBanner = false) {
       let storageCleared = false;
       // Reset high-level state flags (UI only; never touches usage counters)
       _isHistoricalView = false;
@@ -6768,7 +6768,7 @@ let cachedScore = null;
       
       // Show persistent banner to explain destructive reset (BFCache or explicit)
       try {
-        if (typeof showSessionRestartBanner === 'function') {
+        if (showBanner && typeof showSessionRestartBanner === 'function') {
           showSessionRestartBanner();
         }
       } catch (e) {

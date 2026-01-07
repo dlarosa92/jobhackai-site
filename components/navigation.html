@@ -248,6 +248,15 @@
   background: #00c965;
 }
 
+/* Hide visitor CTAs while navigation is hydrating to avoid flicker */
+html.nav-loading .nav-signup,
+html.nav-loading .mobile-nav-signup,
+html.nav-loading .nav-login {
+  visibility: hidden;
+  pointer-events: none;
+  opacity: 0;
+}
+
 .mobile-toggle {
   display: none;
   background: none;

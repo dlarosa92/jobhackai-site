@@ -242,15 +242,20 @@ export async function onRequest(context) {
             }
           }
           // At this point D1 mirror appears successful — update KV record to mark synced
-          try {
-            resumeState.syncedAt = Date.now();
-            resumeState.needsSync = false;
-            await kv.put(lastResumeKey, JSON.stringify(resumeState), {
-              expirationTtl: 2592000
-            });
-          } catch (kvUpdateErr) {
-            // Non-fatal: KV update failing here is informational only
-            console.warn('[ATS-SCORE-PERSIST] KV update after D1 mirror failed:', kvUpdateErr);
+          if (session) {
+            try {
+              resumeState.syncedAt = Date.now();
+              resumeState.needsSync = false;
+              await kv.put(lastResumeKey, JSON.stringify(resumeState), {
+                expirationTtl: 2592000
+              });
+            } catch (kvUpdateErr) {
+              // Non-fatal: KV update failing here is informational only
+              console.warn('[ATS-SCORE-PERSIST] KV update after D1 mirror failed:', kvUpdateErr);
+            }
+          } else {
+            // D1 mirror did not return a session object - leave needsSync=true so background sync can retry
+            console.warn('[ATS-SCORE-PERSIST] D1 mirror failed; leaving KV needsSync=true', { uid, resumeId });
           }
         }
       } catch (e) {

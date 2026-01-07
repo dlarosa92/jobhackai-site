@@ -1540,6 +1540,39 @@ async function init() {
     applyGate().catch(() => {});
   });
 
+  // Wait for navigation/auth hydration before applying gates (avoid transient locked view)
+  await new Promise(resolve => {
+    // If navigationReady has already fired, resolve immediately to avoid delay.
+    // Note: firebase-auth-ready alone does NOT guarantee plan data is available,
+    // so do NOT treat it as equivalent to navigationReady here.
+    const navReadyFired = !!window.__navigationReadyFired;
+    if (navReadyFired) {
+      resolve();
+      return;
+    }
+    // If only firebase auth is ready (session restored) we must still wait for
+    // navigationReady which ensures plan hydration has completed.
+    const authReadyFired = !!window.__firebaseAuthReadyFired;
+
+    let done = false;
+    const timer = setTimeout(() => {
+      if (!done) { done = true; resolve(); }
+    }, 3000);
+
+    const onReady = () => {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      resolve();
+    };
+
+    // Prefer navigationReady (gives plan + auth); fallback to firebase-auth-ready
+    // navigationReady is dispatched on window
+    window.addEventListener('navigationReady', onReady, { once: true });
+    // firebase-auth-ready is dispatched on document
+    document.addEventListener('firebase-auth-ready', onReady, { once: true });
+  });
+
   await applyGate();
 }
 
