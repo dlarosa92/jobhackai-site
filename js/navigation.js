@@ -201,10 +201,19 @@ function patchNav(plan) {
           try { newCta.textContent = planConfig.cta.text; } catch(_) {}
           newCta.className = 'btn btn-primary';
           newCta.setAttribute('role', 'button');
-          // Desktop styling (keep simple - CSS handles visual)
-          try { newCta.style.cssText = 'background: #00E676; color: white !important; padding: 0.5rem 1rem; border-radius: 8px; text-decoration: none; font-weight: 600; display: inline-block;'; } catch(_) {}
+          // Apply mobile vs desktop styles matching skeleton variant
+          try {
+            if (skeleton.classList && skeleton.classList.contains('cta-skeleton-mobile')) {
+              newCta.style.cssText = 'background: #00E676; color: white !important; padding: 0.75rem 0; border-radius: 8px; text-decoration: none; font-weight: 600; display: block; text-align: center; margin-top: 1.5rem;';
+            } else {
+              newCta.style.cssText = 'background: #00E676; color: white !important; padding: 0.5rem 1rem; border-radius: 8px; text-decoration: none; font-weight: 600; display: inline-block;';
+            }
+          } catch(_) {}
           if (planConfig.cta.planId) {
-            try { attachPlanSelectionHandler(newCta, planConfig.cta.planId, 'navigation-cta-desktop'); } catch(_) {}
+            try {
+              const handlerSource = (skeleton.classList && skeleton.classList.contains('cta-skeleton-mobile')) ? 'navigation-cta-mobile' : 'navigation-cta-desktop';
+              attachPlanSelectionHandler(newCta, planConfig.cta.planId, handlerSource);
+            } catch(_) {}
           }
           try { skeleton.replaceWith(newCta); } catch (e) { navLog('warn', 'Failed to replace skeleton with CTA', e); }
         }
@@ -213,10 +222,11 @@ function patchNav(plan) {
 
     const badge = navActions.querySelector('.plan-badge, .nav-plan-pill');
     if (badge) {
-      const text = plan === 'premium' ? 'Premium' : (plan === 'pro' ? 'Pro' : (plan === 'free' ? 'Free' : ''));
+      // Prefer human-friendly name from PLANS config; fallback to capitalized plan id
+      const text = (window.PLANS && PLANS[plan] && PLANS[plan].name) ? PLANS[plan].name : (plan ? (plan.charAt(0).toUpperCase() + plan.slice(1)) : '');
       try { badge.textContent = text; } catch(_) {}
       try { badge.dataset.plan = plan; } catch(e){/*ignore*/}
-      badge.classList.toggle('hidden', plan === 'visitor');
+      badge.classList.toggle('hidden', plan === 'visitor' || !text);
     }
     // Ensure dataset.plan reflects the current plan to prevent repeated patch attempts
     try { navActions.dataset.plan = plan; } catch(_) {}
@@ -1189,14 +1199,40 @@ function updateNavigation() {
   const currentPlan = getEffectivePlan();
   const authState = getAuthState();
   
+  // The plan-only optimization is applied after we determine navConfig below,
+  // so the pre-check has been moved to the post-navConfig section to avoid TDZ.
+  
+  // Additional debugging for visitor state issues
+  if (currentPlan !== 'visitor' && !authState.isAuthenticated) {
+    navLog('warn', 'POTENTIAL ISSUE: User not authenticated but plan is not visitor', {
+      currentPlan,
+      authState,
+      devOverride,
+      'localStorage dev-plan': localStorage.getItem('dev-plan'),
+      'localStorage user-plan': localStorage.getItem('user-plan'),
+      'localStorage user-authenticated': localStorage.getItem('user-authenticated')
+    });
+  }
+  
+  navLog('info', 'Navigation state detected', { 
+    devOverride, 
+    currentPlan, 
+    authState,
+    url: window.location.href 
+  });
+  
+  const navConfig = NAVIGATION_CONFIG[currentPlan] || NAVIGATION_CONFIG.visitor;
+  navLog('info', 'Using navigation config', { 
+    plan: currentPlan, 
+    hasConfig: !!navConfig,
+    navItemsCount: navConfig?.navItems?.length || 0 
+  });
+ 
   // --- Plan-only optimization: patch instead of full rebuild ---
   try {
     const oldNavActions = document.querySelector('.nav-actions');
     if (oldNavActions) {
       // Determine previous plan from multiple possible markers:
-      // 1) nav-actions dataset.plan (preferred)
-      // 2) existing badge dataset.plan/text
-      // 3) nav-actions data-plan attribute
       const existingBadge = oldNavActions.querySelector('.plan-badge, .nav-plan-pill');
       const badgePlan = existingBadge && (existingBadge.dataset?.plan || (existingBadge.textContent||'').trim().toLowerCase());
       const navDatasetPlan = (oldNavActions.dataset && oldNavActions.dataset.plan) ? (oldNavActions.dataset.plan || '').toString().toLowerCase() : null;
@@ -1225,39 +1261,15 @@ function updateNavigation() {
         // refresh any small stateful parts
         try { updateQuickPlanSwitcher(); } catch(_) {}
         try { revealNav(); } catch(_) {}
+        // Ensure plan dataset updated to avoid repeated patch attempts
+        try { oldNavActions.dataset.plan = currentPlan; } catch(_) {}
         return; // skip full rebuild
       }
     }
   } catch (e) {
     navLog('warn', 'patchNav pre-check failed', e);
   }
-  
-  // Additional debugging for visitor state issues
-  if (currentPlan !== 'visitor' && !authState.isAuthenticated) {
-    navLog('warn', 'POTENTIAL ISSUE: User not authenticated but plan is not visitor', {
-      currentPlan,
-      authState,
-      devOverride,
-      'localStorage dev-plan': localStorage.getItem('dev-plan'),
-      'localStorage user-plan': localStorage.getItem('user-plan'),
-      'localStorage user-authenticated': localStorage.getItem('user-authenticated')
-    });
-  }
-  
-  navLog('info', 'Navigation state detected', { 
-    devOverride, 
-    currentPlan, 
-    authState,
-    url: window.location.href 
-  });
-  
-  const navConfig = NAVIGATION_CONFIG[currentPlan] || NAVIGATION_CONFIG.visitor;
-  navLog('info', 'Using navigation config', { 
-    plan: currentPlan, 
-    hasConfig: !!navConfig,
-    navItemsCount: navConfig?.navItems?.length || 0 
-  });
- 
+
   
   const navGroup = document.querySelector('.nav-group');
   const navLinks = document.querySelector('.nav-links');
