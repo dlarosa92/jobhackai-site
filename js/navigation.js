@@ -168,7 +168,8 @@ function isAuthPossiblyPending() {
 function patchNav(plan) {
   try {
     const navActions = document.querySelector('.nav-actions');
-    if (!navActions) return;
+    const mobileNav = document.getElementById('mobileNav') || document.querySelector('.mobile-nav');
+    if (!navActions && !mobileNav) return;
 
     // CTA selector - adjust to match your markup
     const cta = navActions.querySelector('a.btn.btn-primary, a.btn-primary, button.btn-primary, a.cta-button, .btn-primary');
@@ -186,19 +187,17 @@ function patchNav(plan) {
         cta.classList.add('plan-premium');
       }
     } else {
-      // No anchor CTA found — maybe there's a skeleton placeholder. Replace it with a real CTA if appropriate.
-      const skeleton = navActions.querySelector('.cta-skeleton-desktop, .cta-skeleton-mobile');
+      // No anchor CTA found — maybe there's a skeleton placeholder.
+      const skeleton = navActions ? navActions.querySelector('.cta-skeleton-desktop, .cta-skeleton-mobile') : null;
       if (skeleton) {
         const planConfig = NAVIGATION_CONFIG[plan] || NAVIGATION_CONFIG.visitor;
-        // Only create a real CTA if config has a cta
+        // If plan defines a CTA, create and replace; otherwise remove the skeleton to avoid stuck placeholder.
         if (planConfig && planConfig.cta) {
           const newCta = document.createElement('a');
-          // Use config href/text directly (no updateLink available here)
           try { newCta.href = planConfig.cta.href; } catch(_) {}
           try { newCta.textContent = planConfig.cta.text; } catch(_) {}
           newCta.className = 'btn btn-primary';
           newCta.setAttribute('role', 'button');
-          // Apply mobile vs desktop styles matching skeleton variant
           try {
             if (skeleton.classList && skeleton.classList.contains('cta-skeleton-mobile')) {
               newCta.style.cssText = 'background: #00E676; color: white !important; padding: 0.75rem 0; border-radius: 8px; text-decoration: none; font-weight: 600; display: block; text-align: center; margin-top: 1.5rem;';
@@ -213,6 +212,8 @@ function patchNav(plan) {
             } catch(_) {}
           }
           try { skeleton.replaceWith(newCta); } catch (e) { navLog('warn', 'Failed to replace skeleton with CTA', e); }
+        } else {
+          try { skeleton.remove(); } catch(_) {}
         }
       }
     }
@@ -227,6 +228,22 @@ function patchNav(plan) {
     }
     // Ensure dataset.plan reflects the current plan to prevent repeated patch attempts
     try { navActions.dataset.plan = plan; } catch(_) {}
+
+    // Compute and set nav signature for this plan so patch pre-checks remain coherent
+    try {
+      const planConfig = NAVIGATION_CONFIG[plan] || NAVIGATION_CONFIG.visitor;
+      if (navActions && planConfig && Array.isArray(planConfig.navItems)) {
+        const signature = planConfig.navItems.map(item => {
+          const base = `${item.text}::${item.href || ''}::locked:${!!item.locked}`;
+          if (item.isDropdown && Array.isArray(item.items)) {
+            const children = item.items.map(si => `${si.text}::${si.href || ''}::locked:${!!si.locked}`).join('|');
+            return `${base}::D::${children}`;
+          }
+          return base;
+        }).join('||');
+        try { navActions.dataset.navSignature = signature; } catch(_) {}
+      }
+    } catch (_) {}
   } catch (err) {
     console.warn('patchNav error', err);
   }
