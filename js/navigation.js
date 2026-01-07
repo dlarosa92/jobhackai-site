@@ -38,10 +38,46 @@ function scheduleUpdateNavigation(force) {
   // ensure nav is revealed eventually to avoid indefinite hiding
   if (!document.documentElement.dataset.navTimeoutSet) {
     document.documentElement.dataset.navTimeoutSet = '1';
-    setTimeout(() => {
-      if (__jha_nav_timer) { clearTimeout(__jha_nav_timer); __jha_nav_timer = null; try { updateNavigation(); } catch (e) {} revealNav(); }
-      document.documentElement.removeAttribute('data-nav-timeout-set');
-    }, NAV_MAX_WAIT_MS);
+    // allow a few conservative retries if auth still appears to be restoring
+    const MAX_RETRIES = 3;
+    const scheduleRevealCheck = (delay) => {
+      setTimeout(() => {
+        try {
+          const retries = parseInt(document.documentElement.dataset.navTimeoutRetries || '0', 10);
+          const pending = (typeof isAuthPossiblyPending === 'function' && isAuthPossiblyPending()) && !(window.__firebaseAuthReadyFired || firebaseAuthReadyFired);
+          if (pending && retries < MAX_RETRIES) {
+            // increment retry count and defer reveal
+            document.documentElement.dataset.navTimeoutRetries = String(retries + 1);
+            navLog('info', 'NAV reveal deferred due to pending auth', { retries: retries + 1 });
+            // try again after another NAV_MAX_WAIT_MS
+            scheduleRevealCheck(NAV_MAX_WAIT_MS);
+            return;
+          }
+
+          // Proceed to reveal (either not pending, or retries exhausted)
+          if (__jha_nav_timer) {
+            clearTimeout(__jha_nav_timer);
+            __jha_nav_timer = null;
+          }
+          try { updateNavigation(); } catch (e) { navLog('warn', 'updateNavigation failed during reveal timeout', e); }
+          try { revealNav(); } catch (e) { navLog('warn', 'revealNav failed during reveal timeout', e); }
+
+          // Cleanup timeout markers now that reveal has been performed
+          try { document.documentElement.removeAttribute('data-nav-timeout-set'); } catch (_) {}
+          try { document.documentElement.removeAttribute('data-nav-timeout-retries'); } catch (_) {}
+        } catch (e) {
+          // best-effort reveal on any unexpected error and cleanup
+          try {
+            if (__jha_nav_timer) { clearTimeout(__jha_nav_timer); __jha_nav_timer = null; }
+            try { updateNavigation(); } catch (ee) {}
+            try { revealNav(); } catch (ee) {}
+          } catch (_) {}
+          try { document.documentElement.removeAttribute('data-nav-timeout-set'); } catch (_) {}
+          try { document.documentElement.removeAttribute('data-nav-timeout-retries'); } catch (_) {}
+        }
+      }, delay);
+    };
+    scheduleRevealCheck(NAV_MAX_WAIT_MS);
   }
 }
 
@@ -137,9 +173,143 @@ window.stateManager = window.stateManager || (function() {
   return { get, set, watch, unwatch, createBackup, restoreBackup, listBackups };
 })();
 
+// ----------------------- NAV HELPERS -----------------------
+// Detect whether auth may be in-flight: localStorage suggests auth but Firebase not ready yet.
+function isAuthPossiblyPending() {
+  try {
+    const lsAuth = localStorage.getItem('user-authenticated');
+    if (lsAuth !== 'true') return false;
+    // Helper: check for Firebase SDK persistence keys (same pattern used by getAuthState)
+    const hasFirebaseKeys = Object.keys(localStorage).some(k =>
+      k.startsWith('firebase:authUser:') &&
+      localStorage.getItem(k) &&
+      localStorage.getItem(k) !== 'null' &&
+      localStorage.getItem(k).length > 10
+    );
+
+    // If auth already marked ready (either event flag or global fallback), not pending
+    if (firebaseAuthReadyFired || window.__firebaseAuthReadyFired) return false;
+
+    // If persistence keys exist AND local flag is set, session likely restoring
+    if (hasFirebaseKeys) return true;
+
+    // If Firebase manager exists and reports no current user yet, and we haven't seen firebase-auth-ready, treat as pending
+    const fm = window.FirebaseAuthManager;
+    if (fm && typeof fm.getCurrentUser === 'function' && !fm.getCurrentUser()) return true;
+  } catch (e) { /* ignore */ }
+  return false;
+}
+
+// Patch only the parts of the nav that change (cta text/href and plan badge) to avoid full DOM rebuild
+function patchNav(plan) {
+  try {
+    const navActions = document.querySelector('.nav-actions');
+    const mobileNav = document.getElementById('mobileNav') || document.querySelector('.mobile-nav');
+    if (!navActions && !mobileNav) return;
+
+    // Use whichever actions container exists to perform patching work
+    const actionsRoot = navActions || mobileNav;
+
+    // CTA selector - adjust to match your markup
+    const cta = actionsRoot.querySelector('a.btn.btn-primary, a.btn-primary, button.btn-primary, a.cta-button, .btn-primary');
+    // If CTA anchor exists, update it in place
+    if (cta) {
+      if (plan === 'visitor') {
+        try { cta.textContent = 'Start Free Trial'; } catch(_) {}
+        if (cta.tagName === 'A') try { cta.href = '/login.html?plan=trial'; } catch(_) {}
+        cta.classList.remove('plan-premium');
+        cta.classList.add('plan-visitor');
+      } else {
+        try { cta.textContent = (plan === 'premium' ? 'Premium Plan' : (plan === 'pro' ? 'Pro Plan' : 'Open')); } catch(_) {}
+        if (cta.tagName === 'A') try { cta.href = '/dashboard'; } catch(_) {}
+        cta.classList.remove('plan-visitor');
+        cta.classList.add('plan-premium');
+      }
+      // Ensure click handler reflects the new plan - remove any stale handler and attach new one if planConfig specifies planId
+      try {
+        // Remove stale handler (attachPlanSelectionHandler will also clean up if needed)
+        if (cta._jha_plan_handler) {
+          try { cta.removeEventListener('click', cta._jha_plan_handler); } catch(_) {}
+          cta._jha_plan_handler = null;
+        }
+        const planConfig = NAVIGATION_CONFIG[plan] || NAVIGATION_CONFIG.visitor;
+        if (planConfig && planConfig.cta && planConfig.cta.planId) {
+          const handlerSource = (actionsRoot.classList && actionsRoot.classList.contains('mobile-nav')) ? 'navigation-cta-mobile' : 'navigation-cta-desktop';
+          attachPlanSelectionHandler(cta, planConfig.cta.planId, handlerSource);
+        }
+      } catch (e) { /* ignore handler attach errors */ }
+    } else {
+      // No anchor CTA found — maybe there's a skeleton placeholder.
+      const skeleton = actionsRoot ? actionsRoot.querySelector('.cta-skeleton-desktop, .cta-skeleton-mobile') : null;
+      if (skeleton) {
+        const planConfig = NAVIGATION_CONFIG[plan] || NAVIGATION_CONFIG.visitor;
+        // If plan defines a CTA, create and replace; otherwise remove the skeleton to avoid stuck placeholder.
+        if (planConfig && planConfig.cta) {
+          const newCta = document.createElement('a');
+          try { newCta.href = planConfig.cta.href; } catch(_) {}
+          try { newCta.textContent = planConfig.cta.text; } catch(_) {}
+          newCta.className = 'btn btn-primary';
+          newCta.setAttribute('role', 'button');
+          try {
+            if (skeleton.classList && skeleton.classList.contains('cta-skeleton-mobile')) {
+              newCta.style.cssText = 'background: #00E676; color: white !important; padding: 0.75rem 0; border-radius: 8px; text-decoration: none; font-weight: 600; display: block; text-align: center; margin-top: 1.5rem;';
+            } else {
+              newCta.style.cssText = 'background: #00E676; color: white !important; padding: 0.5rem 1rem; border-radius: 8px; text-decoration: none; font-weight: 600; display: inline-block;';
+            }
+          } catch(_) {}
+          if (planConfig.cta.planId) {
+            try {
+              const handlerSource = (skeleton.classList && skeleton.classList.contains('cta-skeleton-mobile')) ? 'navigation-cta-mobile' : 'navigation-cta-desktop';
+              attachPlanSelectionHandler(newCta, planConfig.cta.planId, handlerSource);
+            } catch(_) {}
+          }
+          try { skeleton.replaceWith(newCta); } catch (e) { navLog('warn', 'Failed to replace skeleton with CTA', e); }
+        } else {
+          try { skeleton.remove(); } catch(_) {}
+        }
+      }
+    }
+
+    const badge = actionsRoot.querySelector('.plan-badge, .nav-plan-pill');
+    if (badge) {
+      // Prefer human-friendly name from PLANS config; fallback to capitalized plan id
+      const text = (window.PLANS && PLANS[plan] && PLANS[plan].name) ? PLANS[plan].name : (plan ? (plan.charAt(0).toUpperCase() + plan.slice(1)) : '');
+      try { badge.textContent = text; } catch(_) {}
+      try { badge.dataset.plan = plan; } catch(e){/*ignore*/}
+      badge.classList.toggle('hidden', plan === 'visitor' || !text);
+    }
+    // Ensure dataset.plan reflects the current plan to prevent repeated patch attempts
+    try { if (actionsRoot) actionsRoot.dataset.plan = plan; } catch(_) {}
+
+    // Compute and set nav signature for this plan so patch pre-checks remain coherent
+    try {
+      const planConfig = NAVIGATION_CONFIG[plan] || NAVIGATION_CONFIG.visitor;
+      if (actionsRoot && planConfig && Array.isArray(planConfig.navItems)) {
+        const signature = planConfig.navItems.map(item => {
+          const base = `${item.text}::${item.href || ''}::locked:${!!item.locked}`;
+          if (item.isDropdown && Array.isArray(item.items)) {
+            const children = item.items.map(si => `${si.text}::${si.href || ''}::locked:${!!si.locked}`).join('|');
+            return `${base}::D::${children}`;
+          }
+          return base;
+        }).join('||');
+        try { actionsRoot.dataset.navSignature = signature; } catch(_) {}
+      }
+    } catch (_) {}
+  } catch (err) {
+    console.warn('patchNav error', err);
+  }
+}
+
 // --- FIREBASE AUTH READY TRACKING ---
 // Track when firebase-auth-ready event fires to prevent premature localStorage clearing
 let firebaseAuthReadyFired = false;
+// If a global flag was set before this script loaded, sync it immediately to avoid races
+try {
+  if (typeof window !== 'undefined' && window.__firebaseAuthReadyFired) {
+    firebaseAuthReadyFired = true;
+  }
+} catch (_) {}
 
 // --- LOGGING SYSTEM ---
 const DEBUG = {
@@ -370,10 +540,10 @@ function getAuthState() {
   // will be false when Firebase says logged out, preventing cleanup of stale localStorage
   // CRITICAL FIX: Don't clear localStorage if firebase-auth-ready hasn't fired yet
   // Firebase may still be restoring the session during initialization
-  if (hasFirebaseManager && !firebaseUser) {
+    if (hasFirebaseManager && !firebaseUser) {
     // If firebase-auth-ready hasn't fired yet, Firebase may still be restoring session
     // Use localStorage fallback temporarily instead of clearing it
-    if (!firebaseAuthReadyFired) {
+    if (!(firebaseAuthReadyFired || window.__firebaseAuthReadyFired)) {
       console.log('[AUTH] getAuthState: Firebase not ready yet, using localStorage fallback');
       try {
         const storedAuth = localStorage.getItem('user-authenticated');
@@ -408,8 +578,8 @@ function getAuthState() {
     }
     
     // Only clear localStorage if firebase-auth-ready has fired AND Firebase says logged out
-    // CRITICAL FIX: Check firebaseAuthReadyFired before clearing to prevent premature clearing
-    if (firebaseAuthReadyFired) {
+    // CRITICAL FIX: Check firebaseAuthReadyFired (or global fallback) before clearing to prevent premature clearing
+    if (firebaseAuthReadyFired || window.__firebaseAuthReadyFired) {
       try {
         const storedAuth = localStorage.getItem('user-authenticated');
         if (storedAuth === 'true') {
@@ -488,10 +658,14 @@ function getAuthState() {
 function setAuthState(isAuthenticated, plan = null) {
   navLog('info', 'setAuthState() called', { isAuthenticated, plan });
   
-  localStorage.setItem('user-authenticated', isAuthenticated ? 'true' : 'false');
-  if (plan) {
-    localStorage.setItem('user-plan', plan);
-    localStorage.setItem('dev-plan', plan);
+  try {
+    localStorage.setItem('user-authenticated', isAuthenticated ? 'true' : 'false');
+    if (plan) {
+      localStorage.setItem('user-plan', plan);
+      localStorage.setItem('dev-plan', plan);
+    }
+  } catch (e) {
+    navLog('warn', 'Failed to set auth state in localStorage', { message: e?.message });
   }
   
   // Only log on debug level to reduce spam
@@ -871,9 +1045,23 @@ function attachPlanSelectionHandler(element, planId, source) {
   const planSource = source || 'navigation-cta';
   element.dataset.planId = planId;
   element.dataset.planSource = planSource;
+  // Remove any previously attached handler to avoid stale closures capturing old planId
+  try {
+    if (element._jha_plan_handler) {
+      try { element.removeEventListener('click', element._jha_plan_handler); } catch (_) {}
+      element._jha_plan_handler = null;
+    }
+  } catch (e) { /* ignore */ }
 
   const handler = () => persistSelectedPlan(planId, { source: planSource });
-  element.addEventListener('click', handler, { passive: true });
+  try {
+    element.addEventListener('click', handler, { passive: true });
+    // Keep a reference so we can remove it later if the CTA is updated in-place
+    element._jha_plan_handler = handler;
+  } catch (e) {
+    // Fallback: attach without options if browser doesn't support options param
+    try { element.addEventListener('click', handler); element._jha_plan_handler = handler; } catch (_) {}
+  }
 }
 
 // --- UTILITY FUNCTIONS ---
@@ -1101,6 +1289,9 @@ function updateNavigation() {
   const currentPlan = getEffectivePlan();
   const authState = getAuthState();
   
+  // The plan-only optimization is applied after we determine navConfig below,
+  // so the pre-check has been moved to the post-navConfig section to avoid TDZ.
+  
   // Additional debugging for visitor state issues
   if (currentPlan !== 'visitor' && !authState.isAuthenticated) {
     navLog('warn', 'POTENTIAL ISSUE: User not authenticated but plan is not visitor', {
@@ -1127,6 +1318,50 @@ function updateNavigation() {
     navItemsCount: navConfig?.navItems?.length || 0 
   });
  
+  // --- Plan-only optimization: patch instead of full rebuild ---
+  try {
+    const oldNavActions = document.querySelector('.nav-actions');
+    if (oldNavActions) {
+      // Determine previous plan from multiple possible markers:
+      const existingBadge = oldNavActions.querySelector('.plan-badge, .nav-plan-pill');
+      const badgePlan = existingBadge && (existingBadge.dataset?.plan || (existingBadge.textContent||'').trim().toLowerCase());
+      const navDatasetPlan = (oldNavActions.dataset && oldNavActions.dataset.plan) ? (oldNavActions.dataset.plan || '').toString().toLowerCase() : null;
+      const attrPlan = (oldNavActions.getAttribute && oldNavActions.getAttribute('data-plan')) ? (oldNavActions.getAttribute('data-plan') || '').toString().toLowerCase() : null;
+      const previousPlan = (navDatasetPlan || badgePlan || attrPlan || null);
+
+      // Compute nav signature for current config to ensure structure hasn't changed
+      let newSignature = '';
+      try {
+    if (navConfig && Array.isArray(navConfig.navItems)) {
+      newSignature = navConfig.navItems.map(item => {
+        const base = `${item.text}::${item.href || ''}::locked:${!!item.locked}`;
+        if (item.isDropdown && Array.isArray(item.items)) {
+          const children = item.items.map(si => `${si.text}::${si.href || ''}::locked:${!!si.locked}`).join('|');
+          return `${base}::D::${children}`;
+        }
+        return base;
+      }).join('||');
+    }
+      } catch (e) { /* ignore */ }
+
+      const previousSignature = oldNavActions.dataset?.navSignature || null;
+
+      // Only patch when a previous plan exists, it's different, AND the nav signature is unchanged
+      if (previousPlan && previousPlan !== currentPlan && previousSignature && newSignature && previousSignature === newSignature) {
+        navLog('debug', 'Plan changed only and nav signature unchanged - patching nav', { previousPlan, currentPlan, signature: newSignature });
+        patchNav(currentPlan);
+        // refresh any small stateful parts
+        try { updateQuickPlanSwitcher(); } catch(_) {}
+        try { revealNav(); } catch(_) {}
+        // Ensure plan dataset updated to avoid repeated patch attempts
+        try { oldNavActions.dataset.plan = currentPlan; } catch(_) {}
+        return; // skip full rebuild
+      }
+    }
+  } catch (e) {
+    navLog('warn', 'patchNav pre-check failed', e);
+  }
+
   
   const navGroup = document.querySelector('.nav-group');
   const navLinks = document.querySelector('.nav-links');
@@ -1164,6 +1399,16 @@ function updateNavigation() {
 
   const createVisitorCTA = (isMobile = false) => {
     if (!navConfig?.cta) return null;
+
+    // If auth looks like it might be in-flight, show a neutral skeleton instead of visitor CTA
+    if (isAuthPossiblyPending && isAuthPossiblyPending()) {
+      const placeholder = document.createElement('span');
+      placeholder.className = isMobile ? 'cta-skeleton-mobile' : 'cta-skeleton-desktop';
+      placeholder.setAttribute('aria-hidden', 'true');
+      // minimal inline sizing so layout doesn't jump
+      placeholder.style.cssText = isMobile ? 'display:block;height:36px;width:120px;border-radius:8px;' : 'display:inline-block;height:36px;width:120px;border-radius:8px;';
+      return placeholder;
+    }
 
     const cta = document.createElement('a');
     updateLink(cta, navConfig.cta.href);
@@ -1560,6 +1805,26 @@ function updateNavigation() {
   });
   
   // Setup event delegation for mobile nav triggers (works even after navigation rebuilds)
+  // After the DOM build, ensure nav-actions carries plan and signature so plan-only patches can be validated
+  try {
+    const navActionsEl = document.querySelector('.nav-actions');
+    if (navActionsEl && navConfig && Array.isArray(navConfig.navItems)) {
+      const signature = navConfig.navItems.map(item => {
+        const base = `${item.text}::${item.href || ''}::locked:${!!item.locked}`;
+        if (item.isDropdown && Array.isArray(item.items)) {
+          const children = item.items.map(si => `${si.text}::${si.href || ''}::locked:${!!si.locked}`).join('|');
+          return `${base}::D::${children}`;
+        }
+        return base;
+      }).join('||');
+      try { navActionsEl.dataset.navSignature = signature; } catch(_) {}
+      try { navActionsEl.dataset.plan = currentPlan; } catch(_) {}
+    } else if (navActionsEl) {
+      try { navActionsEl.dataset.plan = currentPlan; } catch(_) {}
+    }
+  } catch (e) {
+    navLog('debug', 'Failed to set nav signature or plan dataset (post-build)', e);
+  }
   setupMobileNavDelegation();
   
   // Auto-detect issues after navigation update
@@ -1666,13 +1931,17 @@ async function initializeNavigation() {
   });
   
   // Initialize required localStorage keys for smoke tests
-  if (!localStorage.getItem('user-authenticated')) {
-    localStorage.setItem('user-authenticated', 'false');
-    navLog('debug', 'Initialized user-authenticated to false');
-  }
-  if (!localStorage.getItem('user-plan')) {
-    localStorage.setItem('user-plan', 'free');
-    navLog('debug', 'Initialized user-plan to free');
+  try {
+    if (!localStorage.getItem('user-authenticated')) {
+      try { localStorage.setItem('user-authenticated', 'false'); } catch (_) {}
+      navLog('debug', 'Initialized user-authenticated to false');
+    }
+    if (!localStorage.getItem('user-plan')) {
+      try { localStorage.setItem('user-plan', 'free'); } catch (_) {}
+      navLog('debug', 'Initialized user-plan to free');
+    }
+  } catch (storageInitError) {
+    navLog('warn', 'localStorage not available during navigation initialization', { error: storageInitError?.message });
   }
 
   // --- Plan persistence fix ---

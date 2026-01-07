@@ -607,3 +607,16 @@
 /* Prevent flicker: hide header until navigation is resolved */
 html.nav-loading header.site-header { opacity: 0; pointer-events: none; transition: opacity .15s ease; }
 html.nav-ready  header.site-header { opacity: 1; pointer-events: auto;  transition: opacity .18s ease; }
+
+/* nav CTA skeleton to avoid flicker while auth/plan pending */
+.cta-skeleton-desktop,
+.cta-skeleton-mobile {
+  background: #F3F4F6;
+  display: inline-block;
+  border-radius: 8px;
+  vertical-align: middle;
+  background-image: linear-gradient(90deg,#f3f4f6 0%,#eceff1 50%,#f3f4f6 100%);
+  background-size: 200% 100%;
+  animation: jha-shimmer 1.4s linear infinite;
+}
+@keyframes jha-shimmer { 0% { background-position: -200% 0 } 100% { background-position: 200% 0 } }
