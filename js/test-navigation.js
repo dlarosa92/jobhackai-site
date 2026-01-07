@@ -160,7 +160,7 @@ function testURLParameters() {
   window.history.replaceState({}, '', url);
   
   // Reload navigation
-  window.JobHackAINavigation.updateNavigation();
+  window.JobHackAINavigation.scheduleUpdateNavigation();
   
   const currentPlan = window.JobHackAINavigation.getCurrentPlan();
   if (currentPlan === 'pro') {

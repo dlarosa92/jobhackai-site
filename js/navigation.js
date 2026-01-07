@@ -4,6 +4,9 @@
 // Version stamp for deployment verification
 console.log('🔧 navigation.js VERSION: redirect-fix-v3-SYNC-AND-CLEANUP - ' + new Date().toISOString());
 
+// Hide header until nav is resolved to avoid flicker on first paint
+try { document.documentElement.classList.add('nav-loading'); } catch (e) { /* ignore */ }
+
 // --- ROBUSTNESS GLOBALS ---
 // Ensure robustness globals are available for smoke tests and agent interface
 window.siteHealth = window.siteHealth || {
@@ -461,8 +464,9 @@ function setAuthState(isAuthenticated, plan = null) {
   });
   
   // Trigger navigation update after state change
+  // Trigger navigation update after state change (debounced to avoid flicker)
   setTimeout(() => {
-    updateNavigation();
+    scheduleUpdateNavigation();
     updateDevPlanToggle();
     // Remove nav-loading class after nav/render/hydration
     if (typeof document !== 'undefined') {
@@ -936,7 +940,7 @@ function setPlan(plan) {
     });
     window.dispatchEvent(planChangeEvent);
     
-    updateNavigation();
+    scheduleUpdateNavigation();
     updateDevPlanToggle();
   } else {
     navLog('error', 'setPlan: Invalid plan provided', plan);
@@ -1088,6 +1092,43 @@ function updateNavigation() {
     hasConfig: !!navConfig,
     navItemsCount: navConfig?.navItems?.length || 0 
   });
+// Debounced navigation update scheduler (coalesce rapid updates and avoid flicker)
+let __jha_nav_timer = null;
+const NAV_DEBOUNCE_MS = 200;   // coalesce bursts (tune 150-300ms)
+const NAV_MAX_WAIT_MS = 600;   // reveal nav if nothing authoritative arrives
+
+function revealNav(){
+  try {
+    document.documentElement.classList.remove('nav-loading');
+    document.documentElement.classList.add('nav-ready');
+  } catch (e) { /* ignore in non-browser contexts */ }
+}
+
+function scheduleUpdateNavigation(force) {
+  // force === true -> immediate call to updateNavigation()
+  if (force) {
+    if (__jha_nav_timer) { clearTimeout(__jha_nav_timer); __jha_nav_timer = null; }
+    try { updateNavigation(); } catch (err) { console.error('updateNavigation error', err); }
+    revealNav();
+    return;
+  }
+
+  if (__jha_nav_timer) clearTimeout(__jha_nav_timer);
+  __jha_nav_timer = setTimeout(() => {
+    __jha_nav_timer = null;
+    try { updateNavigation(); } catch (err) { console.error('updateNavigation error', err); }
+    revealNav();
+  }, NAV_DEBOUNCE_MS);
+
+  // ensure nav is revealed eventually to avoid indefinite hiding
+  if (!document.documentElement.dataset.navTimeoutSet) {
+    document.documentElement.dataset.navTimeoutSet = '1';
+    setTimeout(() => {
+      if (__jha_nav_timer) { clearTimeout(__jha_nav_timer); __jha_nav_timer = null; try { updateNavigation(); } catch (e) {} revealNav(); }
+      document.documentElement.removeAttribute('data-nav-timeout-set');
+    }, NAV_MAX_WAIT_MS);
+  }
+}
   
   const navGroup = document.querySelector('.nav-group');
   const navLinks = document.querySelector('.nav-links');
@@ -1802,7 +1843,7 @@ async function initializeNavigation() {
   window.addEventListener('storage', (e) => {
     if (e.key === 'dev-plan' || e.key === 'user-plan' || e.key === 'user-authenticated') {
       navLog('info', 'Storage event detected', { key: e.key, newValue: e.newValue, oldValue: e.oldValue });
-      updateNavigation();
+      scheduleUpdateNavigation();
       updateQuickPlanSwitcher();
     }
   });
@@ -1835,21 +1876,21 @@ async function initializeNavigation() {
             if (!isAuthenticated && currentAuthState.isAuthenticated) {
               navLog('error', 'Firebase auth mismatch: Firebase says logged out, syncing localStorage');
               setAuthState(false, null);
-              updateNavigation();
+              scheduleUpdateNavigation();
             } else if (isAuthenticated && !currentAuthState.isAuthenticated) {
-              // Firebase says logged in - update navigation
-              navLog('debug', 'Firebase auth state changed: User logged in, updating navigation');
-              updateNavigation();
+              // Firebase says logged in - force navigation update (authoritative)
+              navLog('debug', 'Firebase auth state changed: User logged in, forcing navigation update');
+              scheduleUpdateNavigation(true);
             } else if (isAuthenticated && currentAuthState.isAuthenticated) {
-              // Both agree logged in - just update navigation in case plan changed
+              // Both agree logged in - just schedule update in case plan changed
               navLog('debug', 'Auth state consistent, refreshing navigation');
-              updateNavigation();
+              scheduleUpdateNavigation();
             } else if (!isAuthenticated && !currentAuthState.isAuthenticated) {
-              // SECURITY FIX: Both agree logged out - still update navigation to sync UI
+              // SECURITY FIX: Both agree logged out - still schedule navigation to sync UI
               // This handles cross-tab logout where Firebase fires with user=null and getAuthState()
               // has already cleaned up stale localStorage, leaving both as false
               navLog('debug', 'Auth state changed: Both agree logged out, updating navigation');
-              updateNavigation();
+              scheduleUpdateNavigation();
             }
           } catch (listenerError) {
             // EDGE CASE FIX: Don't let listener errors break navigation
@@ -2050,7 +2091,7 @@ async function reconcilePlanFromAPI() {
     console.log(`🔄 Updating plan from ${current} to ${plan}`);
     localStorage.setItem('user-plan', plan);
     localStorage.setItem('dev-plan', plan);
-    updateNavigation();
+    scheduleUpdateNavigation(true);
     try { new BroadcastChannel('auth').postMessage({ type: 'plan-update', plan: plan }); } catch (_) {}
   } else if (!plan) {
     console.warn('⚠️ Plan reconciliation failed after all retries, keeping current plan:', current);
@@ -2079,6 +2120,7 @@ window.JobHackAINavigation = {
   checkFeatureAccess,
   showUpgradeModal,
   updateNavigation,
+  scheduleUpdateNavigation,
   initializeNavigation,
   fetchPlanFromAPI,
   reconcilePlanFromAPI,
