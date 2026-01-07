@@ -156,8 +156,6 @@ function isAuthPossiblyPending() {
     if (fm && typeof fm.getCurrentUser === 'function') {
       // If FirebaseAuthManager exists and reports no current user yet, and we haven't seen firebase-auth-ready, treat as pending
       if (!fm.getCurrentUser() && !firebaseAuthReadyFired) return true;
-      // If FirebaseAuthManager exists and there are no firebase keys yet but local flag is true, also consider pending
-      if (!hasFirebaseKeys && !fm.getCurrentUser() && !firebaseAuthReadyFired) return true;
       return false;
     }
 
