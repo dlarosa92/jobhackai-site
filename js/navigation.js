@@ -143,9 +143,26 @@ function isAuthPossiblyPending() {
   try {
     const lsAuth = localStorage.getItem('user-authenticated');
     if (lsAuth !== 'true') return false;
-    // If Firebase manager exists but has no current user yet, auth is pending
+    // Helper: check for Firebase SDK persistence keys (same pattern used by getAuthState)
+    const hasFirebaseKeys = Object.keys(localStorage).some(k =>
+      k.startsWith('firebase:authUser:') &&
+      localStorage.getItem(k) &&
+      localStorage.getItem(k) !== 'null' &&
+      localStorage.getItem(k).length > 10
+    );
+
+    // If Firebase manager exists but has no current user yet, auth may be pending
     const fm = window.FirebaseAuthManager;
-    if (fm && typeof fm.getCurrentUser === 'function' && !fm.getCurrentUser()) return true;
+    if (fm && typeof fm.getCurrentUser === 'function') {
+      // If FirebaseAuthManager exists and reports no current user yet, and we haven't seen firebase-auth-ready, treat as pending
+      if (!fm.getCurrentUser() && !firebaseAuthReadyFired) return true;
+      // If FirebaseAuthManager exists and there are no firebase keys yet but local flag is true, also consider pending
+      if (!hasFirebaseKeys && !fm.getCurrentUser() && !firebaseAuthReadyFired) return true;
+      return false;
+    }
+
+    // If Firebase manager not present but firebase keys exist, auth likely being restored — treat as pending
+    if (!fm && hasFirebaseKeys && !firebaseAuthReadyFired) return true;
   } catch (e) { /* ignore */ }
   return false;
 }
@@ -162,7 +179,7 @@ function patchNav(plan) {
       if (plan === 'visitor') {
         // visitor CTA
         try { cta.textContent = 'Start Free Trial'; } catch(_) {}
-        if (cta.tagName === 'A') try { cta.href = '/login?plan=trial'; } catch(_) {}
+        if (cta.tagName === 'A') try { cta.href = '/login.html?plan=trial'; } catch(_) {}
         cta.classList.remove('plan-premium');
         cta.classList.add('plan-visitor');
       } else {
@@ -1154,10 +1171,34 @@ function updateNavigation() {
   try {
     const oldNavActions = document.querySelector('.nav-actions');
     if (oldNavActions) {
+      // Determine previous plan from multiple possible markers:
+      // 1) nav-actions dataset.plan (preferred)
+      // 2) existing badge dataset.plan/text
+      // 3) nav-actions data-plan attribute
       const existingBadge = oldNavActions.querySelector('.plan-badge, .nav-plan-pill');
-      const previousPlan = existingBadge && (existingBadge.dataset?.plan || (existingBadge.textContent||'').trim().toLowerCase());
-      if (previousPlan && previousPlan !== currentPlan) {
-        navLog('debug', 'Plan changed only - patching nav', { previousPlan, currentPlan });
+      const badgePlan = existingBadge && (existingBadge.dataset?.plan || (existingBadge.textContent||'').trim().toLowerCase());
+      const navDatasetPlan = (oldNavActions.dataset && oldNavActions.dataset.plan) ? (oldNavActions.dataset.plan || '').toString().toLowerCase() : null;
+      const attrPlan = (oldNavActions.getAttribute && oldNavActions.getAttribute('data-plan')) ? (oldNavActions.getAttribute('data-plan') || '').toString().toLowerCase() : null;
+      const previousPlan = (navDatasetPlan || badgePlan || attrPlan || null);
+
+      // Compute nav signature for current config to ensure structure hasn't changed
+      let newSignature = '';
+      try {
+        if (navConfig && Array.isArray(navConfig.navItems)) {
+          newSignature = navConfig.navItems.map(item => {
+            if (item.isDropdown && Array.isArray(item.items)) {
+              return `${item.text}::D::${item.items.map(si => si.text).join('|')}`;
+            }
+            return `${item.text}`;
+          }).join('||');
+        }
+      } catch (e) { /* ignore */ }
+
+      const previousSignature = oldNavActions.dataset?.navSignature || null;
+
+      // Only patch when a previous plan exists, it's different, AND the nav signature is unchanged
+      if (previousPlan && previousPlan !== currentPlan && previousSignature && newSignature && previousSignature === newSignature) {
+        navLog('debug', 'Plan changed only and nav signature unchanged - patching nav', { previousPlan, currentPlan, signature: newSignature });
         patchNav(currentPlan);
         // refresh any small stateful parts
         try { updateQuickPlanSwitcher(); } catch(_) {}
@@ -1280,6 +1321,27 @@ function updateNavigation() {
   if (mobileNav) {
     mobileNav.innerHTML = '';
     navLog('debug', 'Cleared mobile nav');
+  }
+
+  // After building or clearing nav pieces, store a signature of the intended nav structure
+  // so we can safely decide when a plan-only patch is allowed.
+  try {
+    const navActionsEl = document.querySelector('.nav-actions');
+    if (navActionsEl && navConfig && Array.isArray(navConfig.navItems)) {
+      // Build a simple signature describing link structure (text + dropdown marker + child texts)
+      const signature = navConfig.navItems.map(item => {
+        if (item.isDropdown && Array.isArray(item.items)) {
+          return `${item.text}::D::${item.items.map(si => si.text).join('|')}`;
+        }
+        return `${item.text}`;
+      }).join('||');
+      try { navActionsEl.dataset.navSignature = signature; } catch(_) {}
+      try { navActionsEl.dataset.plan = currentPlan; } catch(_) {}
+    } else if (navActionsEl) {
+      try { navActionsEl.dataset.plan = currentPlan; } catch(_) {}
+    }
+  } catch (e) {
+    navLog('debug', 'Failed to set nav signature or plan dataset', e);
   }
 
   // --- Build Nav Links (Desktop) ---
@@ -1638,6 +1700,24 @@ function updateNavigation() {
   });
   
   // Setup event delegation for mobile nav triggers (works even after navigation rebuilds)
+  // After the DOM build, ensure nav-actions carries plan and signature so plan-only patches can be validated
+  try {
+    const navActionsEl = document.querySelector('.nav-actions');
+    if (navActionsEl && navConfig && Array.isArray(navConfig.navItems)) {
+      const signature = navConfig.navItems.map(item => {
+        if (item.isDropdown && Array.isArray(item.items)) {
+          return `${item.text}::D::${item.items.map(si => si.text).join('|')}`;
+        }
+        return `${item.text}`;
+      }).join('||');
+      try { navActionsEl.dataset.navSignature = signature; } catch(_) {}
+      try { navActionsEl.dataset.plan = currentPlan; } catch(_) {}
+    } else if (navActionsEl) {
+      try { navActionsEl.dataset.plan = currentPlan; } catch(_) {}
+    }
+  } catch (e) {
+    navLog('debug', 'Failed to set nav signature or plan dataset (post-build)', e);
+  }
   setupMobileNavDelegation();
   
   // Auto-detect issues after navigation update
