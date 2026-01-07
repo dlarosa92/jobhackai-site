@@ -151,16 +151,15 @@ function isAuthPossiblyPending() {
       localStorage.getItem(k).length > 10
     );
 
-    // If Firebase manager exists but has no current user yet, auth may be pending
-    const fm = window.FirebaseAuthManager;
-    if (fm && typeof fm.getCurrentUser === 'function') {
-      // If FirebaseAuthManager exists and reports no current user yet, and we haven't seen firebase-auth-ready, treat as pending
-      if (!fm.getCurrentUser() && !firebaseAuthReadyFired) return true;
-      return false;
-    }
+    // If auth already marked ready, not pending
+    if (firebaseAuthReadyFired) return false;
 
-    // If Firebase manager not present but firebase keys exist, auth likely being restored — treat as pending
-    if (!fm && hasFirebaseKeys && !firebaseAuthReadyFired) return true;
+    // If persistence keys exist AND local flag is set, session likely restoring
+    if (hasFirebaseKeys) return true;
+
+    // If Firebase manager exists and reports no current user yet, and we haven't seen firebase-auth-ready, treat as pending
+    const fm = window.FirebaseAuthManager;
+    if (fm && typeof fm.getCurrentUser === 'function' && !fm.getCurrentUser()) return true;
   } catch (e) { /* ignore */ }
   return false;
 }
@@ -1240,14 +1239,16 @@ function updateNavigation() {
       // Compute nav signature for current config to ensure structure hasn't changed
       let newSignature = '';
       try {
-        if (navConfig && Array.isArray(navConfig.navItems)) {
-          newSignature = navConfig.navItems.map(item => {
-            if (item.isDropdown && Array.isArray(item.items)) {
-              return `${item.text}::D::${item.items.map(si => si.text).join('|')}`;
-            }
-            return `${item.text}`;
-          }).join('||');
+    if (navConfig && Array.isArray(navConfig.navItems)) {
+      newSignature = navConfig.navItems.map(item => {
+        const base = `${item.text}::${item.href || ''}::locked:${!!item.locked}`;
+        if (item.isDropdown && Array.isArray(item.items)) {
+          const children = item.items.map(si => `${si.text}::${si.href || ''}::locked:${!!si.locked}`).join('|');
+          return `${base}::D::${children}`;
         }
+        return base;
+      }).join('||');
+    }
       } catch (e) { /* ignore */ }
 
       const previousSignature = oldNavActions.dataset?.navSignature || null;
@@ -1716,10 +1717,12 @@ function updateNavigation() {
     const navActionsEl = document.querySelector('.nav-actions');
     if (navActionsEl && navConfig && Array.isArray(navConfig.navItems)) {
       const signature = navConfig.navItems.map(item => {
+        const base = `${item.text}::${item.href || ''}::locked:${!!item.locked}`;
         if (item.isDropdown && Array.isArray(item.items)) {
-          return `${item.text}::D::${item.items.map(si => si.text).join('|')}`;
+          const children = item.items.map(si => `${si.text}::${si.href || ''}::locked:${!!si.locked}`).join('|');
+          return `${base}::D::${children}`;
         }
-        return `${item.text}`;
+        return base;
       }).join('||');
       try { navActionsEl.dataset.navSignature = signature; } catch(_) {}
       try { navActionsEl.dataset.plan = currentPlan; } catch(_) {}
