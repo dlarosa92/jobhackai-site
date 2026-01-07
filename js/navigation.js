@@ -46,19 +46,34 @@ function scheduleUpdateNavigation(force) {
           const retries = parseInt(document.documentElement.dataset.navTimeoutRetries || '0', 10);
           const pending = (typeof isAuthPossiblyPending === 'function' && isAuthPossiblyPending()) && !(window.__firebaseAuthReadyFired || firebaseAuthReadyFired);
           if (pending && retries < MAX_RETRIES) {
+            // increment retry count and defer reveal
             document.documentElement.dataset.navTimeoutRetries = String(retries + 1);
             navLog('info', 'NAV reveal deferred due to pending auth', { retries: retries + 1 });
             // try again after another NAV_MAX_WAIT_MS
             scheduleRevealCheck(NAV_MAX_WAIT_MS);
             return;
           }
-          if (__jha_nav_timer) { clearTimeout(__jha_nav_timer); __jha_nav_timer = null; try { updateNavigation(); } catch (e) {} revealNav(); }
+
+          // Proceed to reveal (either not pending, or retries exhausted)
+          if (__jha_nav_timer) {
+            clearTimeout(__jha_nav_timer);
+            __jha_nav_timer = null;
+          }
+          try { updateNavigation(); } catch (e) { navLog('warn', 'updateNavigation failed during reveal timeout', e); }
+          try { revealNav(); } catch (e) { navLog('warn', 'revealNav failed during reveal timeout', e); }
+
+          // Cleanup timeout markers now that reveal has been performed
+          try { document.documentElement.removeAttribute('data-nav-timeout-set'); } catch (_) {}
+          try { document.documentElement.removeAttribute('data-nav-timeout-retries'); } catch (_) {}
         } catch (e) {
-          // best-effort reveal on any unexpected error
-          try { if (__jha_nav_timer) { clearTimeout(__jha_nav_timer); __jha_nav_timer = null; try { updateNavigation(); } catch (ee) {} revealNav(); } } catch (_) {}
-        } finally {
-          document.documentElement.removeAttribute('data-nav-timeout-set');
-          document.documentElement.removeAttribute('data-nav-timeout-retries');
+          // best-effort reveal on any unexpected error and cleanup
+          try {
+            if (__jha_nav_timer) { clearTimeout(__jha_nav_timer); __jha_nav_timer = null; }
+            try { updateNavigation(); } catch (ee) {}
+            try { revealNav(); } catch (ee) {}
+          } catch (_) {}
+          try { document.documentElement.removeAttribute('data-nav-timeout-set'); } catch (_) {}
+          try { document.documentElement.removeAttribute('data-nav-timeout-retries'); } catch (_) {}
         }
       }, delay);
     };
@@ -289,6 +304,12 @@ function patchNav(plan) {
 // --- FIREBASE AUTH READY TRACKING ---
 // Track when firebase-auth-ready event fires to prevent premature localStorage clearing
 let firebaseAuthReadyFired = false;
+// If a global flag was set before this script loaded, sync it immediately to avoid races
+try {
+  if (typeof window !== 'undefined' && window.__firebaseAuthReadyFired) {
+    firebaseAuthReadyFired = true;
+  }
+} catch (_) {}
 
 // --- LOGGING SYSTEM ---
 const DEBUG = {
