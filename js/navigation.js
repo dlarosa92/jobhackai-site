@@ -1792,9 +1792,9 @@ async function initializeNavigation() {
     }
   }
   
-  // Update navigation
-  navLog('debug', 'Calling updateNavigation()');
-  updateNavigation();
+  // Update navigation (use scheduler to ensure revealNav runs and errors are handled)
+  navLog('debug', 'Calling scheduleUpdateNavigation(true)');
+  scheduleUpdateNavigation(true);
   
   // Ensure mobile nav delegation is set up (in case updateNavigation runs before mobileNav exists)
   // This will be called again in updateNavigation, but this ensures it's ready
@@ -1820,13 +1820,11 @@ async function initializeNavigation() {
   
   // Signal that navigation system is ready
   navLog('info', 'Navigation system initialization complete, dispatching ready event');
-  // Remove nav-loading now that navigation has been rendered so visitor CTAs become visible
+  // Ensure nav is revealed (scheduler calls revealNav); call revealNav as a safe fallback
   try {
-    if (typeof document !== 'undefined') {
-      document.documentElement.classList.remove('nav-loading');
-    }
+    revealNav();
   } catch (e) {
-    navLog('warn', 'Failed to remove nav-loading class', e);
+    navLog('warn', 'Failed to reveal nav after initialization', e);
   }
   // Set flag to detect if event already fired (for fallback checks)
   window.__navigationReadyFired = true;
