@@ -77,6 +77,8 @@ function testNavigationRendering() {
     
     // Test visitor plan navigation
     nav.setPlan('visitor');
+    // force immediate nav update so DOM assertions are synchronous in tests
+    if (typeof nav.scheduleUpdateNavigation === 'function') nav.scheduleUpdateNavigation(true);
     const visitorLinks = navLinks.querySelectorAll('a');
     console.log(`   - Visitor plan has ${visitorLinks.length} navigation items`);
     
