@@ -175,19 +175,39 @@ function patchNav(plan) {
 
     // CTA selector - adjust to match your markup
     const cta = navActions.querySelector('a.btn.btn-primary, a.btn-primary, button.btn-primary, a.cta-button, .btn-primary');
+    // If CTA anchor exists, update it in place
     if (cta) {
       if (plan === 'visitor') {
-        // visitor CTA
         try { cta.textContent = 'Start Free Trial'; } catch(_) {}
         if (cta.tagName === 'A') try { cta.href = '/login.html?plan=trial'; } catch(_) {}
         cta.classList.remove('plan-premium');
         cta.classList.add('plan-visitor');
       } else {
-        // authenticated CTA / plan badge
         try { cta.textContent = (plan === 'premium' ? 'Premium Plan' : (plan === 'pro' ? 'Pro Plan' : 'Open')); } catch(_) {}
         if (cta.tagName === 'A') try { cta.href = '/dashboard'; } catch(_) {}
         cta.classList.remove('plan-visitor');
         cta.classList.add('plan-premium');
+      }
+    } else {
+      // No anchor CTA found — maybe there's a skeleton placeholder. Replace it with a real CTA if appropriate.
+      const skeleton = navActions.querySelector('.cta-skeleton-desktop, .cta-skeleton-mobile');
+      if (skeleton) {
+        const planConfig = NAVIGATION_CONFIG[plan] || NAVIGATION_CONFIG.visitor;
+        // Only create a real CTA if config has a cta
+        if (planConfig && planConfig.cta) {
+          const newCta = document.createElement('a');
+          // Use config href/text directly (no updateLink available here)
+          try { newCta.href = planConfig.cta.href; } catch(_) {}
+          try { newCta.textContent = planConfig.cta.text; } catch(_) {}
+          newCta.className = 'btn btn-primary';
+          newCta.setAttribute('role', 'button');
+          // Desktop styling (keep simple - CSS handles visual)
+          try { newCta.style.cssText = 'background: #00E676; color: white !important; padding: 0.5rem 1rem; border-radius: 8px; text-decoration: none; font-weight: 600; display: inline-block;'; } catch(_) {}
+          if (planConfig.cta.planId) {
+            try { attachPlanSelectionHandler(newCta, planConfig.cta.planId, 'navigation-cta-desktop'); } catch(_) {}
+          }
+          try { skeleton.replaceWith(newCta); } catch (e) { navLog('warn', 'Failed to replace skeleton with CTA', e); }
+        }
       }
     }
 
@@ -198,6 +218,8 @@ function patchNav(plan) {
       try { badge.dataset.plan = plan; } catch(e){/*ignore*/}
       badge.classList.toggle('hidden', plan === 'visitor');
     }
+    // Ensure dataset.plan reflects the current plan to prevent repeated patch attempts
+    try { navActions.dataset.plan = plan; } catch(_) {}
   } catch (err) {
     console.warn('patchNav error', err);
   }
@@ -1321,27 +1343,6 @@ function updateNavigation() {
   if (mobileNav) {
     mobileNav.innerHTML = '';
     navLog('debug', 'Cleared mobile nav');
-  }
-
-  // After building or clearing nav pieces, store a signature of the intended nav structure
-  // so we can safely decide when a plan-only patch is allowed.
-  try {
-    const navActionsEl = document.querySelector('.nav-actions');
-    if (navActionsEl && navConfig && Array.isArray(navConfig.navItems)) {
-      // Build a simple signature describing link structure (text + dropdown marker + child texts)
-      const signature = navConfig.navItems.map(item => {
-        if (item.isDropdown && Array.isArray(item.items)) {
-          return `${item.text}::D::${item.items.map(si => si.text).join('|')}`;
-        }
-        return `${item.text}`;
-      }).join('||');
-      try { navActionsEl.dataset.navSignature = signature; } catch(_) {}
-      try { navActionsEl.dataset.plan = currentPlan; } catch(_) {}
-    } else if (navActionsEl) {
-      try { navActionsEl.dataset.plan = currentPlan; } catch(_) {}
-    }
-  } catch (e) {
-    navLog('debug', 'Failed to set nav signature or plan dataset', e);
   }
 
   // --- Build Nav Links (Desktop) ---
