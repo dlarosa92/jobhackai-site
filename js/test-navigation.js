@@ -25,6 +25,8 @@ function testPlanSwitching() {
   
   plans.forEach(plan => {
     nav.setPlan(plan);
+    // force immediate nav update for synchronous test assertions
+    if (typeof nav.scheduleUpdateNavigation === 'function') nav.scheduleUpdateNavigation(true);
     const currentPlan = nav.getCurrentPlan();
     if (currentPlan === plan) {
       console.log(`   ✅ ${plan} plan set correctly`);
@@ -75,11 +77,15 @@ function testNavigationRendering() {
     
     // Test visitor plan navigation
     nav.setPlan('visitor');
+    // force immediate nav update so DOM assertions are synchronous in tests
+    if (typeof nav.scheduleUpdateNavigation === 'function') nav.scheduleUpdateNavigation(true);
     const visitorLinks = navLinks.querySelectorAll('a');
     console.log(`   - Visitor plan has ${visitorLinks.length} navigation items`);
     
     // Test premium plan navigation
     nav.setPlan('premium');
+    // force immediate nav update so DOM assertions are synchronous in tests
+    if (typeof nav.scheduleUpdateNavigation === 'function') nav.scheduleUpdateNavigation(true);
     const premiumLinks = navLinks.querySelectorAll('a');
     console.log(`   - Premium plan has ${premiumLinks.length} navigation items`);
     
@@ -160,7 +166,8 @@ function testURLParameters() {
   window.history.replaceState({}, '', url);
   
   // Reload navigation
-  window.JobHackAINavigation.updateNavigation();
+  // Force immediate update for test determinism
+  window.JobHackAINavigation.scheduleUpdateNavigation(true);
   
   const currentPlan = window.JobHackAINavigation.getCurrentPlan();
   if (currentPlan === 'pro') {

@@ -821,8 +821,11 @@
                   // Trigger navigation update
                   window.dispatchEvent(new CustomEvent('planChanged', { detail: { newPlan: syncData.plan } }));
                   // CRITICAL: Re-initialize navigation to reflect new plan
-                  if (window.JobHackAINavigation && typeof window.JobHackAINavigation.updateNavigation === 'function') {
+                  if (window.JobHackAINavigation && typeof window.JobHackAINavigation.scheduleUpdateNavigation === 'function') {
                     console.log('🔄 [ACCOUNT-SETTINGS] Re-initializing navigation with synced plan:', syncData.plan);
+                    window.JobHackAINavigation.scheduleUpdateNavigation(true);
+                  } else if (window.JobHackAINavigation && typeof window.JobHackAINavigation.updateNavigation === 'function') {
+                    // fallback
                     window.JobHackAINavigation.updateNavigation();
                   }
                 }

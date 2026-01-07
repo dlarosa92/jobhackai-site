@@ -85,7 +85,7 @@ window.auditTrail = {
       };
     }
     
-    // Hook into updateNavigation
+    // Hook into updateNavigation (legacy)
     const originalUpdateNavigation = window.updateNavigation;
     if (originalUpdateNavigation) {
       window.updateNavigation = function() {
@@ -95,6 +95,20 @@ window.auditTrail = {
           currentAuth: localStorage.getItem('user-authenticated')
         });
         return originalUpdateNavigation.apply(this, arguments);
+      };
+    }
+
+    // Hook into scheduleUpdateNavigation (new scheduler) if present on global nav object
+    if (window.JobHackAINavigation && typeof window.JobHackAINavigation.scheduleUpdateNavigation === 'function') {
+      const origSched = window.JobHackAINavigation.scheduleUpdateNavigation;
+      window.JobHackAINavigation.scheduleUpdateNavigation = function(...args) {
+        auditTrail.log(auditTrail.types.NAVIGATION_UPDATE, {
+          action: 'scheduleUpdateNavigation',
+          args,
+          currentPlan: localStorage.getItem('user-plan'),
+          currentAuth: localStorage.getItem('user-authenticated')
+        });
+        return origSched.apply(this, args);
       };
     }
     

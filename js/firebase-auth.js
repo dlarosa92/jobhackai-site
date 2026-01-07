@@ -324,11 +324,14 @@ class AuthManager {
                 try {
                   console.log('🔄 Attempting delayed plan reconciliation...');
                   const delayedPlan = await window.JobHackAINavigation?.fetchPlanFromAPI?.();
-                  if (delayedPlan && delayedPlan !== 'free') {
+                    if (delayedPlan && delayedPlan !== 'free') {
                     console.log('✅ Delayed reconciliation successful:', delayedPlan);
                     localStorage.setItem('user-plan', delayedPlan);
                     localStorage.setItem('dev-plan', delayedPlan);
-                    if (window.JobHackAINavigation) {
+                    if (window.JobHackAINavigation && typeof window.JobHackAINavigation.scheduleUpdateNavigation === 'function') {
+                      window.JobHackAINavigation.scheduleUpdateNavigation(true);
+                    } else if (window.JobHackAINavigation && typeof window.JobHackAINavigation.updateNavigation === 'function') {
+                      // fallback
                       window.JobHackAINavigation.updateNavigation();
                     }
                   }

@@ -603,3 +603,7 @@
 .nav-dropdown-menu a:hover {
   background-color: #F9FAFB;
 }
+
+/* Prevent flicker: hide header until navigation is resolved */
+html.nav-loading header.site-header { opacity: 0; pointer-events: none; transition: opacity .15s ease; }
+html.nav-ready  header.site-header { opacity: 1; pointer-events: auto;  transition: opacity .18s ease; }
