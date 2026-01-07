@@ -137,6 +137,55 @@ window.stateManager = window.stateManager || (function() {
   return { get, set, watch, unwatch, createBackup, restoreBackup, listBackups };
 })();
 
+// ----------------------- NAV HELPERS -----------------------
+// Detect whether auth may be in-flight: localStorage suggests auth but Firebase not ready yet.
+function isAuthPossiblyPending() {
+  try {
+    const lsAuth = localStorage.getItem('user-authenticated');
+    if (lsAuth !== 'true') return false;
+    // If Firebase manager exists but has no current user yet, auth is pending
+    const fm = window.FirebaseAuthManager;
+    if (fm && typeof fm.getCurrentUser === 'function' && !fm.getCurrentUser()) return true;
+  } catch (e) { /* ignore */ }
+  return false;
+}
+
+// Patch only the parts of the nav that change (cta text/href and plan badge) to avoid full DOM rebuild
+function patchNav(plan) {
+  try {
+    const navActions = document.querySelector('.nav-actions');
+    if (!navActions) return;
+
+    // CTA selector - adjust to match your markup
+    const cta = navActions.querySelector('a.btn.btn-primary, a.btn-primary, button.btn-primary, a.cta-button, .btn-primary');
+    if (cta) {
+      if (plan === 'visitor') {
+        // visitor CTA
+        try { cta.textContent = 'Start Free Trial'; } catch(_) {}
+        if (cta.tagName === 'A') try { cta.href = '/login?plan=trial'; } catch(_) {}
+        cta.classList.remove('plan-premium');
+        cta.classList.add('plan-visitor');
+      } else {
+        // authenticated CTA / plan badge
+        try { cta.textContent = (plan === 'premium' ? 'Premium Plan' : (plan === 'pro' ? 'Pro Plan' : 'Open')); } catch(_) {}
+        if (cta.tagName === 'A') try { cta.href = '/dashboard'; } catch(_) {}
+        cta.classList.remove('plan-visitor');
+        cta.classList.add('plan-premium');
+      }
+    }
+
+    const badge = navActions.querySelector('.plan-badge, .nav-plan-pill');
+    if (badge) {
+      const text = plan === 'premium' ? 'Premium' : (plan === 'pro' ? 'Pro' : (plan === 'free' ? 'Free' : ''));
+      try { badge.textContent = text; } catch(_) {}
+      try { badge.dataset.plan = plan; } catch(e){/*ignore*/}
+      badge.classList.toggle('hidden', plan === 'visitor');
+    }
+  } catch (err) {
+    console.warn('patchNav error', err);
+  }
+}
+
 // --- FIREBASE AUTH READY TRACKING ---
 // Track when firebase-auth-ready event fires to prevent premature localStorage clearing
 let firebaseAuthReadyFired = false;
@@ -1101,6 +1150,25 @@ function updateNavigation() {
   const currentPlan = getEffectivePlan();
   const authState = getAuthState();
   
+  // --- Plan-only optimization: patch instead of full rebuild ---
+  try {
+    const oldNavActions = document.querySelector('.nav-actions');
+    if (oldNavActions) {
+      const existingBadge = oldNavActions.querySelector('.plan-badge, .nav-plan-pill');
+      const previousPlan = existingBadge && (existingBadge.dataset?.plan || (existingBadge.textContent||'').trim().toLowerCase());
+      if (previousPlan && previousPlan !== currentPlan) {
+        navLog('debug', 'Plan changed only - patching nav', { previousPlan, currentPlan });
+        patchNav(currentPlan);
+        // refresh any small stateful parts
+        try { updateQuickPlanSwitcher(); } catch(_) {}
+        try { revealNav(); } catch(_) {}
+        return; // skip full rebuild
+      }
+    }
+  } catch (e) {
+    navLog('warn', 'patchNav pre-check failed', e);
+  }
+  
   // Additional debugging for visitor state issues
   if (currentPlan !== 'visitor' && !authState.isAuthenticated) {
     navLog('warn', 'POTENTIAL ISSUE: User not authenticated but plan is not visitor', {
@@ -1164,6 +1232,16 @@ function updateNavigation() {
 
   const createVisitorCTA = (isMobile = false) => {
     if (!navConfig?.cta) return null;
+
+    // If auth looks like it might be in-flight, show a neutral skeleton instead of visitor CTA
+    if (isAuthPossiblyPending && isAuthPossiblyPending()) {
+      const placeholder = document.createElement('span');
+      placeholder.className = isMobile ? 'cta-skeleton-mobile' : 'cta-skeleton-desktop';
+      placeholder.setAttribute('aria-hidden', 'true');
+      // minimal inline sizing so layout doesn't jump
+      placeholder.style.cssText = isMobile ? 'display:block;height:36px;width:120px;border-radius:8px;' : 'display:inline-block;height:36px;width:120px;border-radius:8px;';
+      return placeholder;
+    }
 
     const cta = document.createElement('a');
     updateLink(cta, navConfig.cta.href);
