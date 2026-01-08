@@ -28,17 +28,69 @@ function scheduleUpdateNavigation(force) {
         && !(firebaseAuthReadyFired || window.__firebaseAuthReadyFired || window.__NAV_AUTH_READY);
 
       if (pending) {
-        // Only set one deferred listener to avoid duplicates
+        // Only set one deferred listener to avoid duplicates; set flag immediately and attach listener on document.
         if (!window.__NAV_DEFERRED_NAV_UPDATE) {
           window.__NAV_DEFERRED_NAV_UPDATE = true;
           navLog('info', 'Forced navigation update deferred until firebase-auth-ready');
-          window.addEventListener('firebase-auth-ready', () => {
+
+          // Handler marks auth-ready flags and schedules the forced update (debounced)
+          const deferredHandler = () => {
             try {
+              // Sync auth-ready flags to prevent re-deferral
+              try { window.__NAV_AUTH_READY = true; } catch (_) {}
+              try { window.__firebaseAuthReadyFired = true; } catch (_) {}
+              try { firebaseAuthReadyFired = true; } catch (_) {}
+
+              // Clear any fallback timer
+              if (window.__NAV_DEFERRED_TIMEOUT) {
+                clearTimeout(window.__NAV_DEFERRED_TIMEOUT);
+                window.__NAV_DEFERRED_TIMEOUT = null;
+              }
+
+              // Allow a tiny settle window then force the navigation update
               window.__NAV_DEFERRED_NAV_UPDATE = false;
-              // give a tiny debounce to allow other post-auth tasks to settle
               setTimeout(() => scheduleUpdateNavigation(true), 40);
             } catch (e) { console.error('Deferred navigation error', e); }
-          }, { once: true });
+          };
+
+          try {
+            if (typeof document !== 'undefined' && typeof document.addEventListener === 'function') {
+              document.addEventListener('firebase-auth-ready', deferredHandler, { once: true });
+            } else if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+              window.addEventListener('firebase-auth-ready', deferredHandler, { once: true });
+            }
+          } catch (e) {
+            // registration failed - clear defer flag and continue immediately
+            window.__NAV_DEFERRED_NAV_UPDATE = false;
+            navLog('warn', 'Failed to attach deferred firebase-auth-ready handler; proceeding immediately', e);
+            if (__jha_nav_timer) { clearTimeout(__jha_nav_timer); __jha_nav_timer = null; }
+            try { updateNavigation(); } catch (err) { console.error('updateNavigation error', err); }
+            revealNav();
+            return;
+          }
+
+          // Fallback: if auth-ready never fires, force navigation after timeout
+          try {
+            window.__NAV_DEFERRED_TIMEOUT = setTimeout(() => {
+              try {
+                if (window.__NAV_DEFERRED_NAV_UPDATE) {
+                  navLog('warn', 'Deferred nav timeout fired; forcing navigation update');
+                  try { window.__NAV_AUTH_READY = true; } catch (_) {}
+                  try { window.__firebaseAuthReadyFired = true; } catch (_) {}
+                  try { firebaseAuthReadyFired = true; } catch (_) {}
+                  window.__NAV_DEFERRED_NAV_UPDATE = false;
+                  scheduleUpdateNavigation(true);
+                }
+              } catch (e) {
+                console.error('Deferred nav timeout handler error', e);
+              } finally {
+                if (window.__NAV_DEFERRED_TIMEOUT) {
+                  clearTimeout(window.__NAV_DEFERRED_TIMEOUT);
+                  window.__NAV_DEFERRED_TIMEOUT = null;
+                }
+              }
+            }, 5000);
+          } catch (e) { /* ignore timers errors */ }
         } else {
           navLog('debug', 'Forced navigation already deferred; skipping duplicate defer');
         }
