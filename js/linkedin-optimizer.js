@@ -138,6 +138,20 @@ function getEffectivePlan() {
   return window.JobHackAINavigation?.getEffectivePlan?.() || (localStorage.getItem('user-plan') || 'free');
 }
 
+// Wait for firebase auth ready event with timeout fallback
+function waitForAuthReadyTimeout(ms = 800) {
+  return new Promise((resolve) => {
+    try {
+      if (window.__firebaseAuthReadyFired) return resolve(true);
+      const onReady = () => resolve(true);
+      window.addEventListener('firebase-auth-ready', onReady, { once: true });
+      setTimeout(() => resolve(!!window.__firebaseAuthReadyFired), ms);
+    } catch (e) {
+      resolve(false);
+    }
+  });
+}
+
 const els = {
   app: null,
   locked: null,
@@ -190,7 +204,20 @@ let _historyHasError = false;
 
 function setLockedView(kind) {
   // kind: 'none'|'login'|'upgrade'
-  if (!els.locked || !els.app) return;
+  // If locked UI exists, use it. Otherwise fallback to redirect so user sees an actionable gating path.
+  if (!els.locked || !els.app) {
+    if (kind === 'login') {
+      window.location.replace('/login.html?redirect=' + encodeURIComponent(window.location.pathname));
+      return;
+    }
+    if (kind === 'upgrade') {
+      window.location.replace('/pricing-a.html?redirect=' + encodeURIComponent(window.location.pathname));
+      return;
+    }
+    // none: nothing to do if page UI is not present
+    return;
+  }
+
   if (kind === 'none') {
     els.locked.style.display = 'none';
     els.app.style.display = '';
@@ -1501,18 +1528,29 @@ async function init() {
   els.print = $('#lo-print');
 
   const applyGate = async () => {
-    const auth = getAuthState();
-    const plan = getEffectivePlan();
+    // Wait briefly for Firebase/nav to hydrate to avoid transient wrong UI
+    await waitForAuthReadyTimeout(800);
 
-    if (!auth.isAuthenticated) {
+    // Prefer authoritative navigation state when available
+    const nav = window.JobHackAINavigation;
+    const auth = nav?.getAuthState?.() || getAuthState();
+    const plan = nav?.getEffectivePlan?.() || getEffectivePlan();
+
+    // Enforce gate: if missing locked UI, fallback to redirect so users see a clear path
+    if (!auth || !auth.isAuthenticated) {
+      setLoading(false);
+      setResultsVisible(false);
       setLockedView('login');
       return;
     }
     if (plan !== 'premium') {
+      setLoading(false);
+      setResultsVisible(false);
       setLockedView('upgrade');
       return;
     }
 
+    // Authorized premium user — initialize page if not already done
     setLockedView('none');
     setPlanPill(plan);
     if (unlockedInitialized) return;
@@ -1521,7 +1559,7 @@ async function init() {
     bindEvents();
     initRoleSelector();
 
-    // Load history once auth is ready for token
+    // Load history once auth is ready for token (best-effort)
     try {
       await waitForFirebaseUser();
     } catch {
