@@ -194,27 +194,20 @@ class AuthManager {
       authReadyDispatched = true;
       console.log('🔥 Dispatching firebase-auth-ready event');
 
-      // Defensive: ensure manager is present (wait up to 3s). In the vast majority of
-      // cases the manager is already attached (constructor exposes it), but this
-      // protects against any remaining race conditions where a consumer receives the
-      // event but the global manager isn't yet callable.
+      // Set flag on window before dispatching event. Do NOT block the event loop
+      // waiting for the manager — the manager is exposed in the constructor and
+      // consumers should tolerate the case where getCurrentUser() returns null.
       try {
-        const start = Date.now();
-        while (!(window.FirebaseAuthManager && typeof window.FirebaseAuthManager.getCurrentUser === 'function') && (Date.now() - start) < 3000) {
-          // small non-blocking sleep
-          // eslint-disable-next-line no-await-in-loop
-          await new Promise(r => setTimeout(r, 100));
-        }
-      } catch (_) { /* ignore */ }
-
-      // Set flag on window before dispatching event
-      window.__firebaseAuthReadyFired = true;
+        window.__firebaseAuthReadyFired = true;
+      } catch (_) {}
       // Dispatch event with user = null if logout-intent is detected, otherwise use actual user
-      const logoutIntent = sessionStorage.getItem('logout-intent');
-      const eventUser = (logoutIntent === '1' && user) ? null : user;
-      document.dispatchEvent(new CustomEvent("firebase-auth-ready", {
-        detail: { user: eventUser || null }
-      }));
+      try {
+        const logoutIntent = sessionStorage.getItem('logout-intent');
+        const eventUser = (logoutIntent === '1' && user) ? null : user;
+        document.dispatchEvent(new CustomEvent("firebase-auth-ready", {
+          detail: { user: eventUser || null }
+        }));
+      } catch (_) { /* ignore dispatch errors */ }
     }
       
       // ✅ CRITICAL: Check for logout-intent before processing user

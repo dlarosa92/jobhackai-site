@@ -2811,23 +2811,41 @@ document.addEventListener('firebase-auth-ready', async (event) => {
   window.__firebaseAuthReadyFired = true;
   console.log('🔥 Firebase auth ready, initializing navigation');
   try {
-    // Defensive: ensure manager API exists (wait up to 3s)
-    const waitForManager = async (timeout = 3000) => {
-      if (window.FirebaseAuthManager && typeof window.FirebaseAuthManager.getCurrentUser === 'function') return;
-      const start = Date.now();
-      while (!(window.FirebaseAuthManager && typeof window.FirebaseAuthManager.getCurrentUser === 'function') && (Date.now() - start) < timeout) {
-        // eslint-disable-next-line no-await-in-loop
-        await new Promise(r => setTimeout(r, 100));
+    // Non-blocking: if the manager API exists, proceed; otherwise poll briefly
+    const proceedWithNav = () => {
+      try {
+        const user = (window.FirebaseAuthManager && typeof window.FirebaseAuthManager.getCurrentUser === 'function')
+          ? window.FirebaseAuthManager.getCurrentUser()
+          : null;
+        applyNavForUser(user);
+        initializeNavigation();
+      } catch (err) {
+        console.warn("[nav] failed during proceedWithNav", err);
+        initializeNavigation();
       }
     };
-    await waitForManager().catch(() => { /* ignore */ });
 
-    const user = (window.FirebaseAuthManager && typeof window.FirebaseAuthManager.getCurrentUser === 'function')
-      ? window.FirebaseAuthManager.getCurrentUser()
-      : null;
-
-    applyNavForUser(user);
-    initializeNavigation();
+    if (window.FirebaseAuthManager && typeof window.FirebaseAuthManager.getCurrentUser === 'function') {
+      proceedWithNav();
+    } else {
+      // Poll non-blockingly for a short period (~3s) and then proceed regardless.
+      let tries = 0;
+      const poll = setInterval(() => {
+        tries++;
+        try {
+          if (window.FirebaseAuthManager && typeof window.FirebaseAuthManager.getCurrentUser === 'function') {
+            clearInterval(poll);
+            proceedWithNav();
+          } else if (tries > 30) { // ~3s
+            clearInterval(poll);
+            proceedWithNav();
+          }
+        } catch (e) {
+          clearInterval(poll);
+          proceedWithNav();
+        }
+      }, 100);
+    }
   } catch (err) {
     console.warn("[nav] failed to apply state", err);
     initializeNavigation();
