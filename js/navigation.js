@@ -379,7 +379,7 @@ function confidentlyAuthenticatedForNav() {
 
     // 3) If firebase-auth-ready has fired, we can use localStorage heuristics safely
     try {
-      if (firebaseAuthReadyFired || window.__firebaseAuthReadyFired) {
+      if (typeof window !== 'undefined' && !!window.__firebaseAuthReadyFired) {
         const storedAuth = (typeof localStorage !== 'undefined' && localStorage.getItem('user-authenticated') === 'true');
         const hasFirebaseKeys = (typeof localStorage !== 'undefined') && Object.keys(localStorage).some(k =>
           k.startsWith('firebase:authUser:') &&
