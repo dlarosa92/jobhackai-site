@@ -20,8 +20,37 @@ function revealNav(){
 }
 
 function scheduleUpdateNavigation(force) {
-  // force === true -> immediate call to updateNavigation()
+  // If caller requests a forced navigation update, ensure we don't run it while auth is possibly pending.
+  // This avoids the visitor CTA / redirect race during auth restore.
   if (force) {
+    try {
+      const pending = (typeof isAuthPossiblyPending === 'function' && isAuthPossiblyPending())
+        && !(firebaseAuthReadyFired || window.__firebaseAuthReadyFired || window.__NAV_AUTH_READY);
+
+      if (pending) {
+        // Only set one deferred listener to avoid duplicates
+        if (!window.__NAV_DEFERRED_NAV_UPDATE) {
+          window.__NAV_DEFERRED_NAV_UPDATE = true;
+          navLog('info', 'Forced navigation update deferred until firebase-auth-ready');
+          window.addEventListener('firebase-auth-ready', () => {
+            try {
+              window.__NAV_DEFERRED_NAV_UPDATE = false;
+              // give a tiny debounce to allow other post-auth tasks to settle
+              setTimeout(() => scheduleUpdateNavigation(true), 40);
+            } catch (e) { console.error('Deferred navigation error', e); }
+          }, { once: true });
+        } else {
+          navLog('debug', 'Forced navigation already deferred; skipping duplicate defer');
+        }
+        // Do not run updateNavigation now
+        return;
+      }
+    } catch (e) {
+      // If anything goes wrong, fall back to immediate behavior rather than blocking navigation entirely
+      navLog('warn', 'Error evaluating auth pending state; falling back to immediate force', e);
+    }
+
+    // If we reach here, auth is not pending — proceed with immediate force
     if (__jha_nav_timer) { clearTimeout(__jha_nav_timer); __jha_nav_timer = null; }
     try { updateNavigation(); } catch (err) { console.error('updateNavigation error', err); }
     revealNav();
@@ -310,6 +339,23 @@ try {
     firebaseAuthReadyFired = true;
   }
 } catch (_) {}
+// NAV: defer forced nav updates until auth readiness is known.
+// This prevents callers that pass `force=true` from immediately rendering visitor CTAs
+// while Firebase is still restoring a session.
+window.__NAV_DEFERRED_NAV_UPDATE = window.__NAV_DEFERRED_NAV_UPDATE || false;
+window.__NAV_AUTH_READY = !!(firebaseAuthReadyFired || window.__firebaseAuthReadyFired);
+
+// Mirror firebase-auth-ready to a global for any scripts needing it
+try {
+  if (window && typeof window.addEventListener === 'function') {
+    window.addEventListener('firebase-auth-ready', () => {
+      try {
+        window.__NAV_AUTH_READY = true;
+        firebaseAuthReadyFired = true;
+      } catch (e) { /* ignore */ }
+    });
+  }
+} catch (e) { /* ignore */ }
 
 // --- LOGGING SYSTEM ---
 const DEBUG = {
@@ -1282,6 +1328,23 @@ function showUpgradeModal(targetPlan = 'premium') {
 function updateNavigation() {
   navLog('info', '=== updateNavigation() START ===');
   
+  // Safety: if auth looks like it's still restoring, do not render full nav now.
+  // scheduleUpdateNavigation will retry after auth becomes ready.
+  try {
+    const pending = (typeof isAuthPossiblyPending === 'function' && isAuthPossiblyPending())
+      && !(firebaseAuthReadyFired || window.__firebaseAuthReadyFired || window.__NAV_AUTH_READY);
+
+    if (pending) {
+      navLog('info', 'updateNavigation deferred because auth appears to be pending');
+      // schedule a normal (debounced) nav update to run after the wait period
+      scheduleUpdateNavigation();
+      return;
+    }
+  } catch (e) {
+    // If the check fails, continue — better to try rendering than to silently fail.
+    navLog('warn', 'Auth pending check failed in updateNavigation, proceeding', e);
+  }
+
   // Auto-detect issues before starting
   autoEnableDebugIfNeeded();
   
