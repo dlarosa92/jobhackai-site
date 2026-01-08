@@ -428,17 +428,7 @@
 }
 
 /* Right panel: History */
-.lo-locked {
-  display: none;
-  text-align: center;
-  padding: var(--space-xl);
-}
-
-.lo-login-card,
-.lo-upgrade-card {
-  max-width: 620px;
-  margin: 4rem auto 0 auto;
-}
+/* Locked UI removed from HTML; styles retained for reference or removed as needed */
 
 /* ============================================================
    HistoryPanel v1 (LinkedIn Optimizer)

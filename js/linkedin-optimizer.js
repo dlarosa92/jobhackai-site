@@ -1476,9 +1476,7 @@ function bindEvents() {
 async function init() {
   // elements
   els.app = $('#lo-app');
-  els.locked = $('#lo-locked');
-  els.login = $('#lo-login');
-  els.upgrade = $('#lo-upgrade');
+  // locked/login/upgrade UI removed from page; init code will handle absent elements gracefully
   els.form = $('#lo-form');
   els.role = $('#lo-role');
   els.headline = $('#lo-headline');
