@@ -142,10 +142,43 @@ function getEffectivePlan() {
 function waitForAuthReadyTimeout(ms = 800) {
   return new Promise((resolve) => {
     try {
+      // Fast-path: check global ready flag
       if (window.__firebaseAuthReadyFired) return resolve(true);
-      const onReady = () => resolve(true);
-      window.addEventListener('firebase-auth-ready', onReady, { once: true });
-      setTimeout(() => resolve(!!window.__firebaseAuthReadyFired), ms);
+
+      let settled = false;
+      const cleanup = () => {
+        try {
+          document.removeEventListener('firebase-auth-ready', onDocReady);
+        } catch (e) {}
+        try {
+          window.removeEventListener('firebase-auth-ready', onWinReady);
+        } catch (e) {}
+        clearTimeout(timer);
+      };
+
+      const onDocReady = () => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        resolve(true);
+      };
+      const onWinReady = () => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        resolve(true);
+      };
+
+      // Listen on both document and window to be robust to where the event is dispatched.
+      document.addEventListener('firebase-auth-ready', onDocReady, { once: true });
+      window.addEventListener('firebase-auth-ready', onWinReady, { once: true });
+
+      const timer = setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        resolve(!!window.__firebaseAuthReadyFired);
+      }, ms);
     } catch (e) {
       resolve(false);
     }
