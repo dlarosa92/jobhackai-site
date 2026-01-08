@@ -138,6 +138,53 @@ function getEffectivePlan() {
   return window.JobHackAINavigation?.getEffectivePlan?.() || (localStorage.getItem('user-plan') || 'free');
 }
 
+// Wait for firebase auth ready event with timeout fallback
+function waitForAuthReadyTimeout(ms = 800) {
+  return new Promise((resolve) => {
+    try {
+      // Fast-path: check global ready flag
+      if (window.__firebaseAuthReadyFired) return resolve(true);
+
+      let settled = false;
+      const cleanup = () => {
+        try {
+          document.removeEventListener('firebase-auth-ready', onDocReady);
+        } catch (e) {}
+        try {
+          window.removeEventListener('firebase-auth-ready', onWinReady);
+        } catch (e) {}
+        clearTimeout(timer);
+      };
+
+      const onDocReady = () => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        resolve(true);
+      };
+      const onWinReady = () => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        resolve(true);
+      };
+
+      // Listen on both document and window to be robust to where the event is dispatched.
+      document.addEventListener('firebase-auth-ready', onDocReady, { once: true });
+      window.addEventListener('firebase-auth-ready', onWinReady, { once: true });
+
+      const timer = setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        resolve(!!window.__firebaseAuthReadyFired);
+      }, ms);
+    } catch (e) {
+      resolve(false);
+    }
+  });
+}
+
 const els = {
   app: null,
   locked: null,
@@ -190,7 +237,20 @@ let _historyHasError = false;
 
 function setLockedView(kind) {
   // kind: 'none'|'login'|'upgrade'
-  if (!els.locked || !els.app) return;
+  // If locked UI exists, use it. Otherwise fallback to redirect so user sees an actionable gating path.
+  if (!els.locked || !els.app) {
+    if (kind === 'login') {
+      window.location.replace('/login.html?redirect=' + encodeURIComponent(window.location.pathname));
+      return;
+    }
+    if (kind === 'upgrade') {
+      window.location.replace('/pricing-a.html?redirect=' + encodeURIComponent(window.location.pathname));
+      return;
+    }
+    // none: nothing to do if page UI is not present
+    return;
+  }
+
   if (kind === 'none') {
     els.locked.style.display = 'none';
     els.app.style.display = '';
@@ -1476,9 +1536,7 @@ function bindEvents() {
 async function init() {
   // elements
   els.app = $('#lo-app');
-  els.locked = $('#lo-locked');
-  els.login = $('#lo-login');
-  els.upgrade = $('#lo-upgrade');
+  // locked/login/upgrade UI removed from page; init code will handle absent elements gracefully
   els.form = $('#lo-form');
   els.role = $('#lo-role');
   els.headline = $('#lo-headline');
@@ -1503,18 +1561,29 @@ async function init() {
   els.print = $('#lo-print');
 
   const applyGate = async () => {
-    const auth = getAuthState();
-    const plan = getEffectivePlan();
+    // Wait briefly for Firebase/nav to hydrate to avoid transient wrong UI
+    await waitForAuthReadyTimeout(800);
 
-    if (!auth.isAuthenticated) {
+    // Prefer authoritative navigation state when available
+    const nav = window.JobHackAINavigation;
+    const auth = nav?.getAuthState?.() || getAuthState();
+    const plan = nav?.getEffectivePlan?.() || getEffectivePlan();
+
+    // Enforce gate: if missing locked UI, fallback to redirect so users see a clear path
+    if (!auth || !auth.isAuthenticated) {
+      setLoading(false);
+      setResultsVisible(false);
       setLockedView('login');
       return;
     }
     if (plan !== 'premium') {
+      setLoading(false);
+      setResultsVisible(false);
       setLockedView('upgrade');
       return;
     }
 
+    // Authorized premium user — initialize page if not already done
     setLockedView('none');
     setPlanPill(plan);
     if (unlockedInitialized) return;
@@ -1523,7 +1592,7 @@ async function init() {
     bindEvents();
     initRoleSelector();
 
-    // Load history once auth is ready for token
+    // Load history once auth is ready for token (best-effort)
     try {
       await waitForFirebaseUser();
     } catch {
