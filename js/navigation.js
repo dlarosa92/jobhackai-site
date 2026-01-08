@@ -4,8 +4,55 @@
 // Version stamp for deployment verification
 console.log('🔧 navigation.js VERSION: redirect-fix-v3-SYNC-AND-CLEANUP - ' + new Date().toISOString());
 
-// Hide header until nav is resolved to avoid flicker on first paint
-try { document.documentElement.classList.add('nav-loading'); } catch (e) { /* ignore */ }
+// Hide header until nav is resolved to avoid flicker on first paint.
+// If the user is already authenticated, avoid nav-loading so the full nav persists
+// (prevents the brief centered-logo fallback when navigating to home while logged-in).
+try {
+  const _authDecision = (typeof confidentlyAuthenticatedForNav === 'function') ? confidentlyAuthenticatedForNav() : null;
+  if (_authDecision === true) {
+    // Confidently authenticated -> do not add nav-loading
+  } else if (_authDecision === false) {
+    // Confidently unauthenticated -> preserve existing behavior (hide until reveal)
+    document.documentElement.classList.add('nav-loading');
+  } else {
+    // Unknown (race/load-order) -> default to hiding nav, but re-evaluate when auth becomes ready
+    document.documentElement.classList.add('nav-loading');
+    try {
+      // Re-evaluate when firebase-auth-ready fires
+      const onAuthReady = function () {
+        try { document.removeEventListener('firebase-auth-ready', onAuthReady); } catch (_) {}
+        try { scheduleUpdateNavigation(true); } catch (_) {}
+      };
+      try {
+        if (!window.__jha_nav_auth_ready_listener_registered) {
+          document.addEventListener('firebase-auth-ready', onAuthReady, { once: true });
+          window.__jha_nav_auth_ready_listener_registered = true;
+        }
+      } catch (_) {}
+    } catch (_) {}
+    try {
+      // Also poll briefly for FirebaseAuthManager presence in case it is added later
+      if (!window.__jha_auth_poll_interval) {
+        let __jha_auth_poll_tries = 0;
+        window.__jha_auth_poll_interval = setInterval(() => {
+          __jha_auth_poll_tries++;
+          try {
+            if (window.FirebaseAuthManager && typeof window.FirebaseAuthManager.getCurrentUser === 'function') {
+              clearInterval(window.__jha_auth_poll_interval);
+              window.__jha_auth_poll_interval = null;
+              try { scheduleUpdateNavigation(true); } catch (_) {}
+            } else if (__jha_auth_poll_tries > 50) { // stop after ~5s
+              clearInterval(window.__jha_auth_poll_interval);
+              window.__jha_auth_poll_interval = null;
+            }
+          } catch (_) {
+            // ignore polling errors
+          }
+        }, 100);
+      }
+    } catch (_) {}
+  }
+} catch (e) { /* ignore */ }
 
 // Debounced navigation update scheduler (module-scope)
 let __jha_nav_timer = null;
@@ -435,6 +482,51 @@ try {
     });
   }
 } catch (e) { /* ignore */ }
+
+// Poll interval handle used when waiting for FirebaseAuthManager to be added to window
+window.__jha_auth_poll_interval = window.__jha_auth_poll_interval || null;
+
+// Helper: determine authentication confidence for initial nav decisions.
+// Returns:
+//  - true  => confidently authenticated
+//  - false => confidently not authenticated
+//  - null  => unknown / defer (e.g., Firebase not ready yet)
+function confidentlyAuthenticatedForNav() {
+  try {
+    // 1) Honor explicit logout intent immediately
+    try {
+      if (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('logout-intent') === '1') {
+        return false;
+      }
+    } catch (_) {}
+
+    // 2) If Firebase manager is available, trust it (source of truth)
+    try {
+      if (window.FirebaseAuthManager && typeof window.FirebaseAuthManager.getCurrentUser === 'function') {
+        return !!window.FirebaseAuthManager.getCurrentUser();
+      }
+    } catch (_) {}
+
+    // 3) If firebase-auth-ready has fired, we can use localStorage heuristics safely
+    try {
+      if (typeof window !== 'undefined' && !!window.__firebaseAuthReadyFired) {
+        const storedAuth = (typeof localStorage !== 'undefined' && localStorage.getItem('user-authenticated') === 'true');
+        const hasFirebaseKeys = (typeof localStorage !== 'undefined') && Object.keys(localStorage).some(k =>
+          k.startsWith('firebase:authUser:') &&
+          localStorage.getItem(k) &&
+          localStorage.getItem(k) !== 'null' &&
+          localStorage.getItem(k).length > 10
+        );
+        return storedAuth && hasFirebaseKeys;
+      }
+    } catch (_) {}
+
+    // 4) Otherwise, defer decision - Firebase may still be restoring session
+    return null;
+  } catch (_) {
+    return null;
+  }
+}
 
 // --- LOGGING SYSTEM ---
 const DEBUG = {
@@ -981,7 +1073,47 @@ if (!localStorage.getItem('dev-plan')) {
 
 // At script start, add nav-loading class to keep nav/CTAs hidden
 if (typeof document !== 'undefined') {
-  document.documentElement.classList.add('nav-loading');
+  try {
+    const _authDecision = (typeof confidentlyAuthenticatedForNav === 'function') ? confidentlyAuthenticatedForNav() : null;
+    if (_authDecision === true) {
+      // Confidently authenticated -> do not add nav-loading
+    } else if (_authDecision === false) {
+      document.documentElement.classList.add('nav-loading');
+    } else {
+      // Unknown -> default to hiding nav and re-evaluating when auth is ready
+      document.documentElement.classList.add('nav-loading');
+      try {
+        const onAuthReady = function () {
+          try { document.removeEventListener('firebase-auth-ready', onAuthReady); } catch (_) {}
+          try { scheduleUpdateNavigation(true); } catch (_) {}
+        };
+        try {
+          if (!window.__jha_nav_auth_ready_listener_registered) {
+            document.addEventListener('firebase-auth-ready', onAuthReady, { once: true });
+            window.__jha_nav_auth_ready_listener_registered = true;
+          }
+        } catch (_) {}
+      } catch (_) {}
+      try {
+        if (!window.__jha_auth_poll_interval) {
+          let __jha_auth_poll_tries = 0;
+          window.__jha_auth_poll_interval = setInterval(() => {
+            __jha_auth_poll_tries++;
+            try {
+              if (window.FirebaseAuthManager && typeof window.FirebaseAuthManager.getCurrentUser === 'function') {
+                clearInterval(window.__jha_auth_poll_interval);
+                window.__jha_auth_poll_interval = null;
+                try { scheduleUpdateNavigation(true); } catch (_) {}
+              } else if (__jha_auth_poll_tries > 50) {
+                clearInterval(window.__jha_auth_poll_interval);
+                window.__jha_auth_poll_interval = null;
+              }
+            } catch (_) {}
+          }, 100);
+        }
+      } catch (_) {}
+    }
+  } catch (e) { /* ignore */ }
 }
 
 // --- NAVIGATION CONFIGURATION ---

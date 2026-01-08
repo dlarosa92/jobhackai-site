@@ -222,3 +222,115 @@ if (window.location.hostname === 'localhost' || window.location.hostname === '12
 }
 
 console.log('💡 Run testJobHackAINavigation() to test the navigation system manually'); 
+
+// --- New automated nav-loading tests ---
+function testNavLoadingAuthenticatedDecision() {
+  console.log('✅ Test Nav Loading: Authenticated decision');
+  const originalFirebase = window.FirebaseAuthManager;
+  try {
+    window.FirebaseAuthManager = { getCurrentUser: () => ({ uid: 'test-user' }) };
+    const result = (typeof confidentlyAuthenticatedForNav === 'function') ? confidentlyAuthenticatedForNav() : null;
+    if (result === true) {
+      console.log('   ✅ confidentlyAuthenticatedForNav() returned true when FirebaseAuthManager present');
+    } else {
+      console.log('   ❌ Expected true but got', result);
+    }
+  } catch (e) {
+    console.log('   ❌ Error during test:', e);
+  } finally {
+    window.FirebaseAuthManager = originalFirebase;
+  }
+}
+
+function testNavLoadingHonorsLogoutIntent() {
+  console.log('✅ Test Nav Loading: logout-intent honored');
+  try {
+    sessionStorage.setItem('logout-intent', '1');
+    const result = (typeof confidentlyAuthenticatedForNav === 'function') ? confidentlyAuthenticatedForNav() : null;
+    if (result === false) {
+      console.log('   ✅ logout-intent prevented authenticated decision');
+    } else {
+      console.log('   ❌ Expected false but got', result);
+    }
+  } catch (e) {
+    console.log('   ❌ Error during test:', e);
+  } finally {
+    sessionStorage.removeItem('logout-intent');
+  }
+}
+
+function testNavLoadingStaleLocalStorageDefers() {
+  console.log('✅ Test Nav Loading: stale localStorage defers until ready');
+  const savedFlag = window.__firebaseAuthReadyFired;
+  try {
+    window.__firebaseAuthReadyFired = false;
+    localStorage.setItem('user-authenticated', 'true');
+    localStorage.setItem('firebase:authUser:test', '{"uid":"x"}');
+    const result = (typeof confidentlyAuthenticatedForNav === 'function') ? confidentlyAuthenticatedForNav() : null;
+    if (result === null) {
+      console.log('   ✅ Decision deferred when firebase not ready');
+    } else {
+      console.log('   ❌ Expected null (defer) but got', result);
+    }
+    // Now simulate firebase ready
+    window.__firebaseAuthReadyFired = true;
+    const result2 = confidentlyAuthenticatedForNav();
+    if (result2 === true) {
+      console.log('   ✅ After firebase ready, decision is authenticated');
+    } else {
+      console.log('   ❌ After firebase ready expected true but got', result2);
+    }
+  } catch (e) {
+    console.log('   ❌ Error during test:', e);
+  } finally {
+    window.__firebaseAuthReadyFired = savedFlag;
+    localStorage.removeItem('user-authenticated');
+    localStorage.removeItem('firebase:authUser:test');
+  }
+}
+
+function testNavLoadingFirebaseManagerDelayed() {
+  console.log('✅ Test Nav Loading: Firebase manager delayed handling');
+  const originalFirebase = window.FirebaseAuthManager;
+  try {
+    delete window.FirebaseAuthManager;
+    window.__firebaseAuthReadyFired = false;
+    const initial = confidentlyAuthenticatedForNav();
+    if (initial === null) {
+      console.log('   ✅ Initial decision deferred as expected');
+    } else {
+      console.log('   ❌ Expected initial defer but got', initial);
+    }
+    // Simulate firebase-auth-ready event with manager becoming available
+    setTimeout(() => {
+      window.FirebaseAuthManager = { getCurrentUser: () => ({ uid: 'delayed' }) };
+      const evt = new CustomEvent('firebase-auth-ready');
+      document.dispatchEvent(evt);
+      setTimeout(() => {
+        const after = confidentlyAuthenticatedForNav();
+        if (after === true) {
+          console.log('   ✅ After auth-ready, decision is authenticated');
+        } else {
+          console.log('   ❌ After auth-ready expected true but got', after);
+        }
+      }, 50);
+    }, 50);
+  } catch (e) {
+    console.log('   ❌ Error during test:', e);
+  } finally {
+    // cleanup scheduled later by async callbacks
+    setTimeout(() => {
+      window.FirebaseAuthManager = originalFirebase;
+    }, 500);
+  }
+}
+
+// Expose nav-loading tests
+window.testNavLoadingSuite = function runNavLoadingTests() {
+  testNavLoadingAuthenticatedDecision();
+  testNavLoadingHonorsLogoutIntent();
+  testNavLoadingStaleLocalStorageDefers();
+  testNavLoadingFirebaseManagerDelayed();
+};
+
+console.log('💡 Run testNavLoadingSuite() to execute nav-loading automated checks');
