@@ -4,8 +4,30 @@
 // Version stamp for deployment verification
 console.log('🔧 navigation.js VERSION: redirect-fix-v3-SYNC-AND-CLEANUP - ' + new Date().toISOString());
 
-// Hide header until nav is resolved to avoid flicker on first paint
-try { document.documentElement.classList.add('nav-loading'); } catch (e) { /* ignore */ }
+// Hide header until nav is resolved to avoid flicker on first paint.
+// If the user is already authenticated, avoid nav-loading so the full nav persists
+// (prevents the brief centered-logo fallback when navigating to home while logged-in).
+try {
+  let isLikelyAuthenticated = false;
+  try {
+    if (window.FirebaseAuthManager && typeof window.FirebaseAuthManager.getCurrentUser === 'function') {
+      isLikelyAuthenticated = !!window.FirebaseAuthManager.getCurrentUser();
+    } else {
+      const storedAuth = localStorage.getItem('user-authenticated') === 'true';
+      const hasFirebaseKeys = Object.keys(localStorage).some(k =>
+        k.startsWith('firebase:authUser:') &&
+        localStorage.getItem(k) &&
+        localStorage.getItem(k) !== 'null' &&
+        localStorage.getItem(k).length > 10
+      );
+      isLikelyAuthenticated = storedAuth && hasFirebaseKeys;
+    }
+  } catch (e) { /* ignore storage/window access errors */ }
+
+  if (!isLikelyAuthenticated) {
+    document.documentElement.classList.add('nav-loading');
+  }
+} catch (e) { /* ignore */ }
 
 // Debounced navigation update scheduler (module-scope)
 let __jha_nav_timer = null;
@@ -856,7 +878,27 @@ if (!localStorage.getItem('dev-plan')) {
 
 // At script start, add nav-loading class to keep nav/CTAs hidden
 if (typeof document !== 'undefined') {
-  document.documentElement.classList.add('nav-loading');
+  try {
+    let isLikelyAuthenticated = false;
+    try {
+      if (window.FirebaseAuthManager && typeof window.FirebaseAuthManager.getCurrentUser === 'function') {
+        isLikelyAuthenticated = !!window.FirebaseAuthManager.getCurrentUser();
+      } else {
+        const storedAuth = localStorage.getItem('user-authenticated') === 'true';
+        const hasFirebaseKeys = Object.keys(localStorage).some(k =>
+          k.startsWith('firebase:authUser:') &&
+          localStorage.getItem(k) &&
+          localStorage.getItem(k) !== 'null' &&
+          localStorage.getItem(k).length > 10
+        );
+        isLikelyAuthenticated = storedAuth && hasFirebaseKeys;
+      }
+    } catch (e) { /* ignore storage/window access errors */ }
+
+    if (!isLikelyAuthenticated) {
+      document.documentElement.classList.add('nav-loading');
+    }
+  } catch (e) { /* ignore */ }
 }
 
 // --- NAVIGATION CONFIGURATION ---
