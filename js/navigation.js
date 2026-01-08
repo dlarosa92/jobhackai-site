@@ -23,7 +23,12 @@ try {
         try { document.removeEventListener('firebase-auth-ready', onAuthReady); } catch (_) {}
         try { scheduleUpdateNavigation(true); } catch (_) {}
       };
-      document.addEventListener('firebase-auth-ready', onAuthReady, { once: true });
+      try {
+        if (!window.__jha_nav_auth_ready_listener_registered) {
+          document.addEventListener('firebase-auth-ready', onAuthReady, { once: true });
+          window.__jha_nav_auth_ready_listener_registered = true;
+        }
+      } catch (_) {}
     } catch (_) {}
     try {
       // Also poll briefly for FirebaseAuthManager presence in case it is added later
@@ -957,7 +962,12 @@ if (typeof document !== 'undefined') {
           try { document.removeEventListener('firebase-auth-ready', onAuthReady); } catch (_) {}
           try { scheduleUpdateNavigation(true); } catch (_) {}
         };
-        document.addEventListener('firebase-auth-ready', onAuthReady, { once: true });
+        try {
+          if (!window.__jha_nav_auth_ready_listener_registered) {
+            document.addEventListener('firebase-auth-ready', onAuthReady, { once: true });
+            window.__jha_nav_auth_ready_listener_registered = true;
+          }
+        } catch (_) {}
       } catch (_) {}
       try {
         if (!window.__jha_auth_poll_interval) {
