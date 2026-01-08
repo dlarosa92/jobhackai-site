@@ -104,8 +104,24 @@ function scheduleUpdateNavigation(force) {
 
     // If we reach here, auth is not pending — proceed with immediate force
     if (__jha_nav_timer) { clearTimeout(__jha_nav_timer); __jha_nav_timer = null; }
-    try { updateNavigation(); } catch (err) { console.error('updateNavigation error', err); }
-    revealNav();
+    try {
+      updateNavigation();
+    } catch (err) {
+      console.error('updateNavigation error', err);
+    }
+    // Only reveal nav if auth is not pending now
+    try {
+      const pendingNow = (typeof isAuthPossiblyPending === 'function' && isAuthPossiblyPending())
+        && !(firebaseAuthReadyFired || window.__firebaseAuthReadyFired || window.__NAV_AUTH_READY);
+      if (!pendingNow) {
+        revealNav();
+      } else {
+        navLog('info', 'Skipped revealNav due to auth pending after forced update');
+      }
+    } catch (e) {
+      // If check fails, reveal to avoid hiding nav indefinitely
+      revealNav();
+    }
     return;
   }
 
@@ -113,7 +129,18 @@ function scheduleUpdateNavigation(force) {
   __jha_nav_timer = setTimeout(() => {
     __jha_nav_timer = null;
     try { updateNavigation(); } catch (err) { console.error('updateNavigation error', err); }
-    revealNav();
+    // Reveal only if auth is not pending after updateNavigation()
+    try {
+      const pendingNow = (typeof isAuthPossiblyPending === 'function' && isAuthPossiblyPending())
+        && !(firebaseAuthReadyFired || window.__firebaseAuthReadyFired || window.__NAV_AUTH_READY);
+      if (!pendingNow) {
+        revealNav();
+      } else {
+        navLog('info', 'Skipped revealNav due to auth pending after scheduled update');
+      }
+    } catch (e) {
+      revealNav();
+    }
   }, NAV_DEBOUNCE_MS);
 
   // ensure nav is revealed eventually to avoid indefinite hiding
