@@ -143,13 +143,17 @@ class AuthManager {
   constructor() {
     this.currentUser = null;
     this.authStateListeners = [];
-    this.setupAuthStateListener();
-    // Expose globally for consumers that can't import modules
-    try { 
+    // Expose globally BEFORE starting auth listener to avoid event-ordering races.
+    // Consumers receiving the "firebase-auth-ready" event should be able to call
+    // `window.FirebaseAuthManager.getCurrentUser()` immediately without a TDZ.
+    try {
       window.FirebaseAuthManager = this;
       // Also expose currentUser directly for easier access
       window.FirebaseAuthManager.currentUser = this.currentUser;
     } catch (_) { /* no-op */ }
+
+    // Now start listening to auth state changes
+    this.setupAuthStateListener();
   }
 
   // Initialize free ATS credit for new users
@@ -182,23 +186,36 @@ class AuthManager {
     onAuthStateChanged(auth, async (user) => {
       console.log('🔥 Firebase auth state changed:', user ? `User: ${user.email}` : 'No user');
       
-      // ✅ CRITICAL: Dispatch firebase-auth-ready event FIRST (before logout-intent check)
-      // This ensures pages waiting for this event (like navigation.js, account-setting.html) 
-      // don't hang indefinitely during logout. The event represents "auth state is ready",
-      // not necessarily "user is logged in".
-      if (!authReadyDispatched) {
-        authReadyDispatched = true;
-        console.log('🔥 Dispatching firebase-auth-ready event');
-        // CRITICAL FIX: Set flag on window before dispatching event
-        // This allows navigation.js fallback to detect if event fired before script loaded
-        window.__firebaseAuthReadyFired = true;
-        // Dispatch event with user = null if logout-intent is detected, otherwise use actual user
-        const logoutIntent = sessionStorage.getItem('logout-intent');
-        const eventUser = (logoutIntent === '1' && user) ? null : user;
-        document.dispatchEvent(new CustomEvent("firebase-auth-ready", {
-          detail: { user: eventUser || null }
-        }));
-      }
+    // ✅ CRITICAL: Dispatch firebase-auth-ready event FIRST (before logout-intent check)
+    // This ensures pages waiting for this event (like navigation.js, account-setting.html) 
+    // don't hang indefinitely during logout. The event represents "auth state is ready",
+    // not necessarily "user is logged in".
+    if (!authReadyDispatched) {
+      authReadyDispatched = true;
+      console.log('🔥 Dispatching firebase-auth-ready event');
+
+      // Defensive: ensure manager is present (wait up to 3s). In the vast majority of
+      // cases the manager is already attached (constructor exposes it), but this
+      // protects against any remaining race conditions where a consumer receives the
+      // event but the global manager isn't yet callable.
+      try {
+        const start = Date.now();
+        while (!(window.FirebaseAuthManager && typeof window.FirebaseAuthManager.getCurrentUser === 'function') && (Date.now() - start) < 3000) {
+          // small non-blocking sleep
+          // eslint-disable-next-line no-await-in-loop
+          await new Promise(r => setTimeout(r, 100));
+        }
+      } catch (_) { /* ignore */ }
+
+      // Set flag on window before dispatching event
+      window.__firebaseAuthReadyFired = true;
+      // Dispatch event with user = null if logout-intent is detected, otherwise use actual user
+      const logoutIntent = sessionStorage.getItem('logout-intent');
+      const eventUser = (logoutIntent === '1' && user) ? null : user;
+      document.dispatchEvent(new CustomEvent("firebase-auth-ready", {
+        detail: { user: eventUser || null }
+      }));
+    }
       
       // ✅ CRITICAL: Check for logout-intent before processing user
       // This prevents race conditions where Firebase auth persistence restores user during logout

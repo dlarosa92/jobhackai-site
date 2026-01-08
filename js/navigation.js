@@ -469,15 +469,43 @@ try {
 // This prevents callers that pass `force=true` from immediately rendering visitor CTAs
 // while Firebase is still restoring a session.
 window.__NAV_DEFERRED_NAV_UPDATE = window.__NAV_DEFERRED_NAV_UPDATE || false;
-window.__NAV_AUTH_READY = !!(firebaseAuthReadyFired || window.__firebaseAuthReadyFired);
+// Require both the firebase-ready flag AND the manager API to consider nav-auth ready
+window.__NAV_AUTH_READY = !!(
+  (firebaseAuthReadyFired || window.__firebaseAuthReadyFired)
+  && window.FirebaseAuthManager
+  && typeof window.FirebaseAuthManager.getCurrentUser === 'function'
+);
 
-// Mirror firebase-auth-ready to a global for any scripts needing it
+// Mirror firebase-auth-ready to a global for any scripts needing it, but ensure the
+// manager API exists before we consider navigation truly ready. If the manager isn't
+// present yet, poll briefly (bounded) to avoid a race that causes the header flicker.
 try {
   if (window && typeof window.addEventListener === 'function') {
     window.addEventListener('firebase-auth-ready', () => {
       try {
-        window.__NAV_AUTH_READY = true;
-        firebaseAuthReadyFired = true;
+        // If manager exists, we can mark nav ready immediately
+        if (window.FirebaseAuthManager && typeof window.FirebaseAuthManager.getCurrentUser === 'function') {
+          window.__NAV_AUTH_READY = true;
+          firebaseAuthReadyFired = true;
+          return;
+        }
+
+        // Defensive fallback: poll for manager for a short time (max ~3s)
+        let tries = 0;
+        const poll = setInterval(() => {
+          tries++;
+          if (window.FirebaseAuthManager && typeof window.FirebaseAuthManager.getCurrentUser === 'function') {
+            clearInterval(poll);
+            window.__NAV_AUTH_READY = true;
+            firebaseAuthReadyFired = true;
+            return;
+          }
+          if (tries > 30) { // ~3s at 100ms intervals
+            clearInterval(poll);
+            // Last-resort: mark nav ready only if the global ready flag exists
+            window.__NAV_AUTH_READY = !!(firebaseAuthReadyFired || window.__firebaseAuthReadyFired);
+          }
+        }, 100);
       } catch (e) { /* ignore */ }
     });
   }
@@ -2829,9 +2857,21 @@ document.addEventListener('firebase-auth-ready', async (event) => {
   window.__firebaseAuthReadyFired = true;
   console.log('🔥 Firebase auth ready, initializing navigation');
   try {
-    const user = window.FirebaseAuthManager
+    // Defensive: ensure manager API exists (wait up to 3s)
+    const waitForManager = async (timeout = 3000) => {
+      if (window.FirebaseAuthManager && typeof window.FirebaseAuthManager.getCurrentUser === 'function') return;
+      const start = Date.now();
+      while (!(window.FirebaseAuthManager && typeof window.FirebaseAuthManager.getCurrentUser === 'function') && (Date.now() - start) < timeout) {
+        // eslint-disable-next-line no-await-in-loop
+        await new Promise(r => setTimeout(r, 100));
+      }
+    };
+    await waitForManager().catch(() => { /* ignore */ });
+
+    const user = (window.FirebaseAuthManager && typeof window.FirebaseAuthManager.getCurrentUser === 'function')
       ? window.FirebaseAuthManager.getCurrentUser()
       : null;
+
     applyNavForUser(user);
     initializeNavigation();
   } catch (err) {
