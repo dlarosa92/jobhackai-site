@@ -3133,21 +3133,49 @@ let cachedScore = null;
       // type: 'info' | 'success' | 'error'
       const toastId = opts.id || `${type}:${title}`;
       if (window._rfToast.currentId === toastId) return; // dedupe identical toast
-      // replace previous
+      // replace previous toast
       if (window._rfToast.currentToast && typeof window._rfToast.currentToast.dismiss === 'function') {
         try { window._rfToast.currentToast.dismiss(); } catch (e) { /* ignore */ }
       }
       if (!window.JobHackAIToast) return;
+      
+      // Determine numeric duration to pass to JobHackAIToast API
+      const duration = (typeof opts.autoDismissMs === 'number') ? opts.autoDismissMs : 3000;
+      
       const fn = type === 'success' ? window.JobHackAIToast.success : (
                    type === 'error' ? window.JobHackAIToast.error : window.JobHackAIToast.info);
-      const toast = fn(title, opts);
+      const toast = fn(title, duration);
+      
+      // Tag toast for debugging/lookup and wire our tracking/dedupe hooks
+      if (toast && typeof toast === 'object') {
+        try { toast.dataset = toast.dataset || {}; toast.dataset.rfId = toastId; } catch (e) { /* ignore */ }
+      }
+      
       window._rfToast.currentId = toastId;
       window._rfToast.currentToast = toast;
-      // Clear tracking on dismiss (best-effort)
+      
+      // Clear tracking on dismiss - only if this toast is still the current toast
+      // This prevents race conditions where a dismissed toast's callback fires after
+      // a new toast has been shown, which would incorrectly clear the new toast's state
       if (toast && typeof toast.onDismiss === 'function') {
-        toast.onDismiss(() => { window._rfToast.currentId = null; window._rfToast.currentToast = null; });
+        // Capture toastId and toast reference in closure to check on callback
+        const capturedToastId = toastId;
+        const capturedToast = toast;
+        toast.onDismiss(() => {
+          // Only clear if this toast is still the current toast
+          if (window._rfToast && window._rfToast.currentId === capturedToastId && window._rfToast.currentToast === capturedToast) {
+            window._rfToast.currentId = null;
+            window._rfToast.currentToast = null;
+          }
+        });
       } else {
-        setTimeout(() => { window._rfToast.currentId = null; window._rfToast.currentToast = null; }, (opts.autoDismissMs || 8000));
+        setTimeout(() => {
+          // Only clear if this toast is still the current toast
+          if (window._rfToast && window._rfToast.currentId === toastId && window._rfToast.currentToast === toast) {
+            window._rfToast.currentId = null;
+            window._rfToast.currentToast = null;
+          }
+        }, (opts.autoDismissMs || 8000));
       }
     }
 
@@ -4044,6 +4072,14 @@ let cachedScore = null;
                   window._currentFeedbackLoading();
                   window._currentFeedbackLoading = null;
                 }
+                // Dismiss "Analysis still running" toast if it exists
+                if (window._rfToast && window._rfToast.currentId === 'rf:analysis-running' && window._rfToast.currentToast) {
+                  try {
+                    if (typeof window._rfToast.currentToast.dismiss === 'function') {
+                      window._rfToast.currentToast.dismiss();
+                    }
+                  } catch (e) { /* ignore */ }
+                }
                 handleApiError(new Error('Failed to calculate ATS score. Please try again.'));
               }
             })
@@ -4054,6 +4090,14 @@ let cachedScore = null;
               if (window._currentFeedbackLoading) {
                 window._currentFeedbackLoading();
                 window._currentFeedbackLoading = null;
+              }
+              // Dismiss "Analysis still running" toast if it exists
+              if (window._rfToast && window._rfToast.currentId === 'rf:analysis-running' && window._rfToast.currentToast) {
+                try {
+                  if (typeof window._rfToast.currentToast.dismiss === 'function') {
+                    window._rfToast.currentToast.dismiss();
+                  }
+                } catch (e) { /* ignore */ }
               }
               handleApiError(error);
             });
@@ -4239,6 +4283,15 @@ let cachedScore = null;
               window._currentFeedbackLoading = null;
             }
             
+            // Dismiss "Analysis still running" toast if it exists
+            if (window._rfToast && window._rfToast.currentId === 'rf:analysis-running' && window._rfToast.currentToast) {
+              try {
+                if (typeof window._rfToast.currentToast.dismiss === 'function') {
+                  window._rfToast.currentToast.dismiss();
+                }
+              } catch (e) { /* ignore */ }
+            }
+            
             // Feedback failed, but ATS scoring may have succeeded
           } else {
             // Free plan - no feedback
@@ -4253,7 +4306,27 @@ let cachedScore = null;
             window._currentFeedbackLoading = null;
           }
           
-          // Both ATS scoring and feedback completed successfully
+          // Dismiss "Analysis still running" toast if it exists
+          if (window._rfToast && window._rfToast.currentId === 'rf:analysis-running' && window._rfToast.currentToast) {
+            try {
+              if (typeof window._rfToast.currentToast.dismiss === 'function') {
+                window._rfToast.currentToast.dismiss();
+              }
+            } catch (e) { /* ignore */ }
+          }
+          
+          // Show "Analysis complete" toast only if ATS scoring succeeded
+          // If both ATS and feedback failed, error modals are already shown, so don't show misleading success toast
+          if (atsScoringSucceeded) {
+            showRfToast('success', 'Analysis complete — View results', {
+              id: 'rf:analysis-finished',
+              actionText: 'View',
+              onAction: () => { const tile = document.getElementById('rf-ats-score-tile'); if (tile) tile.scrollIntoView({ behavior: 'smooth', block: 'start' }); },
+              autoDismissMs: 8000
+            });
+          }
+          
+          // Both ATS scoring and feedback completed (successfully or with errors)
 
           // Update original snippet in rewrite section (only if not already loaded)
           // Use full resume text if available, otherwise use preview
@@ -4370,6 +4443,14 @@ let cachedScore = null;
           if (window._currentFeedbackLoading) {
             window._currentFeedbackLoading();
             window._currentFeedbackLoading = null;
+          }
+          // Dismiss "Analysis still running" toast if it exists
+          if (window._rfToast && window._rfToast.currentId === 'rf:analysis-running' && window._rfToast.currentToast) {
+            try {
+              if (typeof window._rfToast.currentToast.dismiss === 'function') {
+                window._rfToast.currentToast.dismiss();
+              }
+            } catch (e) { /* ignore */ }
           }
           clearAtsState();
           handleApiError(error);
