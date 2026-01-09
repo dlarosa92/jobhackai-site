@@ -198,6 +198,14 @@
       document.body.appendChild(toast);
     }
 
+    // Expose programmatic API expected by callers
+    toast.dismiss = () => {
+      hideToast(toast);
+    };
+    toast.onDismiss = (cb) => {
+      toast._onDismiss = typeof cb === 'function' ? cb : null;
+    };
+
     // Auto-hide after duration
     if (duration > 0) {
       setTimeout(() => hideToast(toast), duration);
@@ -214,8 +222,22 @@
     if (toast && toast.parentNode) {
       toast.style.animation = 'slideOutRight 0.3s ease-in';
       setTimeout(() => {
+        // Call any registered onDismiss callback before removing
+        try {
+          if (typeof toast._onDismiss === 'function') {
+            toast._onDismiss();
+          }
+        } catch (e) { /* ignore */ }
+
         if (toast.parentNode) {
           toast.remove();
+        } else {
+          // If already removed, still try callback (best-effort)
+          try {
+            if (typeof toast._onDismiss === 'function') {
+              toast._onDismiss();
+            }
+          } catch (e) { /* ignore */ }
         }
       }, 300);
     }
