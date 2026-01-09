@@ -29,16 +29,30 @@
         if (!done) handleAuthReadyOrTimeout();
       }, 3000);
 
-      function handleAuthReadyOrTimeout() {
+      async function handleAuthReadyOrTimeout() {
         if (done) return;
         done = true;
         try { clearTimeout(timeoutHandle); } catch (_) {}
+
+        // TRI-STATE FIX: Wait for Firebase auth to be ready before redirecting
+        // This prevents race conditions where Firebase is still initializing
+        let user = null;
+        if (window.FirebaseAuthManager && typeof window.FirebaseAuthManager.waitForAuthReady === 'function') {
+          try {
+            user = await window.FirebaseAuthManager.waitForAuthReady(5000);
+          } catch (error) {
+            console.warn('[RESUME-FEEDBACK] waitForAuthReady error in immediate check:', error);
+          }
+        }
 
         const navAuth = window.JobHackAINavigation && window.JobHackAINavigation.getAuthState && window.JobHackAINavigation.getAuthState();
         const effectivePlan = window.JobHackAINavigation && window.JobHackAINavigation.getEffectivePlan && window.JobHackAINavigation.getEffectivePlan();
         const hydratedPlan = effectivePlan || cachedPlan;
 
-        if (!(navAuth && navAuth.isAuthenticated)) {
+        // Check authentication: prefer Firebase user, then navigation, then localStorage
+        const isAuthenticated = user || (navAuth && navAuth.isAuthenticated);
+        
+        if (!isAuthenticated) {
           window.location.href = 'login.html';
           return;
         }
@@ -1124,33 +1138,77 @@
   <script>
     // --- PAGE ACCESS CONTROL (Second check after navigation system) ---
     // Also run after navigation system initializes to double-check
-    function enforceAccess() {
+    async function enforceAccess() {
+      // TRI-STATE FIX: Wait for Firebase auth to be ready before redirecting
       let isAuthenticated, plan;
       
-      if (window.JobHackAINavigation) {
-        const authState = window.JobHackAINavigation.getAuthState();
-        isAuthenticated = authState.isAuthenticated;
-        plan = window.JobHackAINavigation.getEffectivePlan();
-      } else {
-        // SECURITY: Check Firebase SDK keys synchronously (works before FirebaseAuthManager is ready)
-        // FirebaseAuthManager.getCurrentUser() returns null until onAuthStateChanged fires
-        // Use same pattern as checkAuthentication() for consistency
-        function hasFirebaseAuthKeys() {
-          try {
-            return Object.keys(localStorage).some(k => 
-              k.startsWith('firebase:authUser:') && 
-              localStorage.getItem(k) && 
-              localStorage.getItem(k) !== 'null' &&
-              localStorage.getItem(k).length > 10
-            );
-          } catch (e) {
-            return false;
+      // Wait for Firebase auth to be ready if FirebaseAuthManager exists
+      if (window.FirebaseAuthManager && typeof window.FirebaseAuthManager.waitForAuthReady === 'function') {
+        try {
+          console.log('[RESUME-FEEDBACK] Waiting for Firebase auth to be ready before enforceAccess check...');
+          const user = await window.FirebaseAuthManager.waitForAuthReady(8000);
+          
+          // Prefer Firebase user result over navigation state (navigation may not have synced yet)
+          if (window.JobHackAINavigation) {
+            const authState = window.JobHackAINavigation.getAuthState();
+            isAuthenticated = user || (authState && authState.isAuthenticated);
+            plan = window.JobHackAINavigation.getEffectivePlan();
+          } else {
+            isAuthenticated = !!user;
+            plan = localStorage.getItem('user-plan') || 'free';
+          }
+        } catch (error) {
+          console.warn('[RESUME-FEEDBACK] waitForAuthReady error in enforceAccess, using fallback:', error);
+          // Fallback to navigation/localStorage check
+          if (window.JobHackAINavigation) {
+            const authState = window.JobHackAINavigation.getAuthState();
+            isAuthenticated = authState && authState.isAuthenticated;
+            plan = window.JobHackAINavigation.getEffectivePlan();
+          } else {
+            // SECURITY: Check Firebase SDK keys synchronously (works before FirebaseAuthManager is ready)
+            function hasFirebaseAuthKeys() {
+              try {
+                return Object.keys(localStorage).some(k => 
+                  k.startsWith('firebase:authUser:') && 
+                  localStorage.getItem(k) && 
+                  localStorage.getItem(k) !== 'null' &&
+                  localStorage.getItem(k).length > 10
+                );
+              } catch (e) {
+                return false;
+              }
+            }
+            const hasLocalStorageAuth = localStorage.getItem('user-authenticated') === 'true';
+            const hasFirebaseKeys = hasFirebaseAuthKeys();
+            isAuthenticated = hasLocalStorageAuth || hasFirebaseKeys;
+            plan = localStorage.getItem('user-plan') || 'free';
           }
         }
-        const hasLocalStorageAuth = localStorage.getItem('user-authenticated') === 'true';
-        const hasFirebaseKeys = hasFirebaseAuthKeys();
-        isAuthenticated = hasLocalStorageAuth || hasFirebaseKeys;
-        plan = localStorage.getItem('user-plan') || 'free';
+      } else {
+        // No FirebaseAuthManager - use navigation/localStorage fallback
+        if (window.JobHackAINavigation) {
+          const authState = window.JobHackAINavigation.getAuthState();
+          isAuthenticated = authState.isAuthenticated;
+          plan = window.JobHackAINavigation.getEffectivePlan();
+        } else {
+          // SECURITY: Check Firebase SDK keys synchronously (works before FirebaseAuthManager is ready)
+          function hasFirebaseAuthKeys() {
+            try {
+              return Object.keys(localStorage).some(k => 
+                k.startsWith('firebase:authUser:') && 
+                localStorage.getItem(k) && 
+                localStorage.getItem(k) !== 'null' &&
+                localStorage.getItem(k).length > 10
+              );
+            } catch (e) {
+              return false;
+            }
+          }
+          const hasLocalStorageAuth = localStorage.getItem('user-authenticated') === 'true';
+          const hasFirebaseKeys = hasFirebaseAuthKeys();
+          isAuthenticated = hasLocalStorageAuth || hasFirebaseKeys;
+          plan = localStorage.getItem('user-plan') || 'free';
+        }
       }
       
       // FIX: Enhanced logging for plan detection debugging
@@ -1167,7 +1225,7 @@
       
       if (!isAuthenticated || !allowedPlans.includes(plan)) {
         if (!isAuthenticated) {
-        window.location.href = 'login.html';
+          window.location.href = 'login.html';
         } else {
           window.location.href = 'pricing-a.html?plan=essential';
         }
@@ -1176,9 +1234,13 @@
     
     // Wait for DOM to be ready before enforcing access again
     if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', enforceAccess);
+      document.addEventListener('DOMContentLoaded', async () => {
+        await enforceAccess();
+      });
     } else {
-      setTimeout(enforceAccess, 100); // Small delay to allow navigation system to initialize
+      setTimeout(async () => {
+        await enforceAccess();
+      }, 100); // Small delay to allow navigation system to initialize
     }
   </script>
   <script>
@@ -1377,21 +1439,23 @@
       // Wait for navigation system to be ready
       if (window.JobHackAINavigation && typeof window.JobHackAINavigation.getEffectivePlan === 'function') {
         // Navigation is ready - check access immediately
-        enforceAccessControl(allowedPlans);
+        (async () => {
+          await enforceAccessControl(allowedPlans);
+        })();
       } else {
         // Navigation not ready yet - wait for navigationReady event
         // Use execution flag to prevent duplicate calls from event listener and timeout
         let hasExecuted = false;
-        let fallbackTimeout = setTimeout(() => {
+        let fallbackTimeout = setTimeout(async () => {
           // Always enforce access control after timeout, even if navigation fails to load
           // enforceAccessControl has localStorage fallback logic that handles navigation unavailability
           if (!hasExecuted) {
             hasExecuted = true;
-            enforceAccessControl(allowedPlans);
+            await enforceAccessControl(allowedPlans);
           }
         }, 1000);
         
-        window.addEventListener('navigationReady', function onNavigationReady() {
+        window.addEventListener('navigationReady', async function onNavigationReady() {
           window.removeEventListener('navigationReady', onNavigationReady);
           // Clear fallback timeout to prevent duplicate execution
           if (fallbackTimeout) {
@@ -1401,39 +1465,84 @@
           // Only execute if not already executed by timeout
           if (!hasExecuted) {
             hasExecuted = true;
-            enforceAccessControl(allowedPlans);
+            await enforceAccessControl(allowedPlans);
           }
         }, { once: true });
       }
     }
     
-    function enforceAccessControl(allowedPlans) {
+    async function enforceAccessControl(allowedPlans) {
+      // TRI-STATE FIX: Wait for Firebase auth to be ready before redirecting
+      // This prevents race conditions where Firebase is still initializing
       let isAuthenticated, plan;
       
-      if (window.JobHackAINavigation) {
-        const authState = window.JobHackAINavigation.getAuthState();
-        isAuthenticated = authState.isAuthenticated;
-        plan = window.JobHackAINavigation.getEffectivePlan();
-      } else {
-        // SECURITY: Check Firebase SDK keys synchronously (works before FirebaseAuthManager is ready)
-        // FirebaseAuthManager.getCurrentUser() returns null until onAuthStateChanged fires
-        // Use same pattern as checkAuthentication() for consistency
-        function hasFirebaseAuthKeys() {
-          try {
-            return Object.keys(localStorage).some(k => 
-              k.startsWith('firebase:authUser:') && 
-              localStorage.getItem(k) && 
-              localStorage.getItem(k) !== 'null' &&
-              localStorage.getItem(k).length > 10
-            );
-          } catch (e) {
-            return false;
+      // Wait for Firebase auth to be ready if FirebaseAuthManager exists
+      if (window.FirebaseAuthManager && typeof window.FirebaseAuthManager.waitForAuthReady === 'function') {
+        try {
+          console.log('[RESUME-FEEDBACK] Waiting for Firebase auth to be ready before access control check...');
+          const user = await window.FirebaseAuthManager.waitForAuthReady(8000);
+          
+          // Prefer Firebase user result over navigation state (navigation may not have synced yet)
+          if (window.JobHackAINavigation) {
+            const authState = window.JobHackAINavigation.getAuthState();
+            isAuthenticated = user || (authState && authState.isAuthenticated);
+            plan = window.JobHackAINavigation.getEffectivePlan();
+          } else {
+            isAuthenticated = !!user;
+            plan = localStorage.getItem('user-plan') || 'free';
+          }
+        } catch (error) {
+          console.warn('[RESUME-FEEDBACK] waitForAuthReady error, using fallback check:', error);
+          // Fallback to navigation/localStorage check
+          if (window.JobHackAINavigation) {
+            const authState = window.JobHackAINavigation.getAuthState();
+            isAuthenticated = authState && authState.isAuthenticated;
+            plan = window.JobHackAINavigation.getEffectivePlan();
+          } else {
+            // SECURITY: Check Firebase SDK keys synchronously (works before FirebaseAuthManager is ready)
+            function hasFirebaseAuthKeys() {
+              try {
+                return Object.keys(localStorage).some(k => 
+                  k.startsWith('firebase:authUser:') && 
+                  localStorage.getItem(k) && 
+                  localStorage.getItem(k) !== 'null' &&
+                  localStorage.getItem(k).length > 10
+                );
+              } catch (e) {
+                return false;
+              }
+            }
+            const hasLocalStorageAuth = localStorage.getItem('user-authenticated') === 'true';
+            const hasFirebaseKeys = hasFirebaseAuthKeys();
+            isAuthenticated = hasLocalStorageAuth || hasFirebaseKeys;
+            plan = localStorage.getItem('user-plan') || 'free';
           }
         }
-        const hasLocalStorageAuth = localStorage.getItem('user-authenticated') === 'true';
-        const hasFirebaseKeys = hasFirebaseAuthKeys();
-        isAuthenticated = hasLocalStorageAuth || hasFirebaseKeys;
-        plan = localStorage.getItem('user-plan') || 'free';
+      } else {
+        // No FirebaseAuthManager - use navigation/localStorage fallback
+        if (window.JobHackAINavigation) {
+          const authState = window.JobHackAINavigation.getAuthState();
+          isAuthenticated = authState.isAuthenticated;
+          plan = window.JobHackAINavigation.getEffectivePlan();
+        } else {
+          // SECURITY: Check Firebase SDK keys synchronously (works before FirebaseAuthManager is ready)
+          function hasFirebaseAuthKeys() {
+            try {
+              return Object.keys(localStorage).some(k => 
+                k.startsWith('firebase:authUser:') && 
+                localStorage.getItem(k) && 
+                localStorage.getItem(k) !== 'null' &&
+                localStorage.getItem(k).length > 10
+              );
+            } catch (e) {
+              return false;
+            }
+          }
+          const hasLocalStorageAuth = localStorage.getItem('user-authenticated') === 'true';
+          const hasFirebaseKeys = hasFirebaseAuthKeys();
+          isAuthenticated = hasLocalStorageAuth || hasFirebaseKeys;
+          plan = localStorage.getItem('user-plan') || 'free';
+        }
       }
       
       console.log('[RESUME-FEEDBACK] Access control check:', {

@@ -4,7 +4,7 @@
  */
 
 // Version stamp for deployment verification
-console.log('🔧 login-page.js VERSION: redirect-fix-v2 - ' + new Date().toISOString());
+console.log('🔧 login-page.js VERSION: auth-tri-state-v1 - ' + new Date().toISOString());
 
 import authManager from './firebase-auth.js';
 import { waitForAuthReady } from './firebase-auth.js';
@@ -239,35 +239,34 @@ document.addEventListener('DOMContentLoaded', async function() {
       return false;
     }
 
-    // ONLY check Firebase, not localStorage
+    // ONLY check Firebase, wait for auth to be ready (tri-state pattern)
     try {
-      console.log('[LOGIN] checkAuth: Starting Firebase auth check (timeout: 2000ms)');
+      console.log('[LOGIN] checkAuth: Starting Firebase auth check (timeout: 10000ms)');
       const startTime = Date.now();
       
-      // EDGE CASE FIX: Handle both timeout and errors from waitForAuthReady
+      // TRI-STATE FIX: Wait for Firebase to resolve auth state before making redirect decision
+      // Use longer timeout to allow Firebase to restore session from persistence
       let user = null;
       try {
-        user = await Promise.race([
-          waitForAuthReady(2000),
-          new Promise((_, reject) => 
-            setTimeout(() => reject(new Error('Auth check timeout')), 2000)
-          )
-        ]);
-      } catch (timeoutError) {
-        console.warn('[LOGIN] checkAuth: Auth check timeout or error:', timeoutError.message);
-        // Try one more quick check
-        try {
-          user = window.FirebaseAuthManager?.getCurrentUser?.();
-          if (user) {
-            console.log('[LOGIN] checkAuth: Found user on retry');
-          }
-        } catch (retryError) {
-          console.warn('[LOGIN] checkAuth: Retry also failed:', retryError.message);
+        // Wait up to 10 seconds for Firebase to restore session
+        user = await waitForAuthReady(10000);
+        if (!user && window.FirebaseAuthManager?.isAuthReady?.()) {
+          // Auth is ready but no user - explicitly unauthenticated
+          console.log('[LOGIN] checkAuth: Firebase auth ready, no authenticated user');
+        } else if (!user) {
+          // Auth not ready yet - don't redirect, show login form
+          console.log('[LOGIN] checkAuth: Firebase auth not ready yet, showing login form');
+        }
+      } catch (error) {
+        console.warn('[LOGIN] checkAuth: Auth check error:', error.message);
+        // Fallback: check if auth is ready but user check failed
+        if (window.FirebaseAuthManager?.isAuthReady?.()) {
+          user = window.FirebaseAuthManager?.getCurrentUser?.() || null;
         }
       }
       
       const elapsed = Date.now() - startTime;
-      console.log(`[LOGIN] checkAuth: Auth check completed in ${elapsed}ms`);
+      console.log(`[LOGIN] checkAuth: Auth check completed in ${elapsed}ms, user:`, user ? user.email : 'null');
       
       if (user && user.email) {
         // Double-check logout intent before redirecting
