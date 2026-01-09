@@ -2765,7 +2765,6 @@ function renderMarketingNav(desktop, mobile) {
     <a href="/features.html">Features</a>
     <a href="/pricing.html">Pricing</a>
     <a class="btn-link" href="/login.html">Login</a>
-    <a class="btn-primary" href="/signup.html">Start Free Trial</a>
   `;
   if (mobile) mobile.innerHTML = desktop.innerHTML;
 }
