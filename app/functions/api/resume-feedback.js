@@ -362,6 +362,7 @@ export async function onRequest(context) {
 
     // Usage limits (Essential: 3/month)
     // D1 is the authoritative usage source for Essential/monthly quota
+    // Monthly allowance starts from plan activation date (plan_updated_at), not calendar month start
     if (effectivePlan === 'essential' && isD1Available(env)) {
       if (!d1User) {
         return errorResponse(
@@ -384,9 +385,35 @@ export async function onRequest(context) {
       }
       const lastDay = getLastDayOfMonth(year, Number(month));
       const monthEnd = `${year}-${month}-${String(lastDay).padStart(2, '0')}`;
+
+      // Determine effective start: later of monthStart and plan_updated_at
+      // This ensures users who upgrade mid-month get a fresh allowance starting at plan activation
+      let effectiveStart = monthStart;
+      try {
+        const userRow = await db.prepare(
+          'SELECT plan_updated_at FROM users WHERE id = ?'
+        ).bind(d1User.id).first();
+
+        if (userRow && userRow.plan_updated_at) {
+          // Normalize to YYYY-MM-DD for date comparison
+          const planUpdatedDate = new Date(userRow.plan_updated_at).toISOString().split('T')[0];
+          if (new Date(planUpdatedDate) > new Date(effectiveStart)) {
+            effectiveStart = planUpdatedDate;
+          }
+        }
+      } catch (e) {
+        // If we cannot read plan_updated_at, fall back to monthStart
+        console.warn('[RESUME-FEEDBACK] Failed to read plan_updated_at for usage enforcement, falling back to monthStart:', e);
+      }
+
       let monthlyUsed = 0;
       if (db) {
-        const res = await db.prepare(`SELECT COUNT(*) as count FROM usage_events WHERE user_id = ? AND feature = 'resume_feedback' AND date(created_at) >= date(?) AND date(created_at) <= date(?)`).bind(d1User.id, monthStart, monthEnd).first();
+        // Count resume_feedback events in D1 between effectiveStart and monthEnd
+        const res = await db.prepare(
+          `SELECT COUNT(*) as count FROM usage_events
+           WHERE user_id = ? AND feature = 'resume_feedback'
+             AND date(created_at) >= date(?) AND date(created_at) <= date(?)`
+        ).bind(d1User.id, effectiveStart, monthEnd).first();
         monthlyUsed = res?.count || 0;
       }
       if (monthlyUsed >= 3) {
