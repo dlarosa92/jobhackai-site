@@ -3154,11 +3154,28 @@ let cachedScore = null;
       window._rfToast.currentId = toastId;
       window._rfToast.currentToast = toast;
       
-      // Clear tracking on dismiss
+      // Clear tracking on dismiss - only if this toast is still the current toast
+      // This prevents race conditions where a dismissed toast's callback fires after
+      // a new toast has been shown, which would incorrectly clear the new toast's state
       if (toast && typeof toast.onDismiss === 'function') {
-        toast.onDismiss(() => { window._rfToast.currentId = null; window._rfToast.currentToast = null; });
+        // Capture toastId and toast reference in closure to check on callback
+        const capturedToastId = toastId;
+        const capturedToast = toast;
+        toast.onDismiss(() => {
+          // Only clear if this toast is still the current toast
+          if (window._rfToast && window._rfToast.currentId === capturedToastId && window._rfToast.currentToast === capturedToast) {
+            window._rfToast.currentId = null;
+            window._rfToast.currentToast = null;
+          }
+        });
       } else {
-        setTimeout(() => { window._rfToast.currentId = null; window._rfToast.currentToast = null; }, (opts.autoDismissMs || 8000));
+        setTimeout(() => {
+          // Only clear if this toast is still the current toast
+          if (window._rfToast && window._rfToast.currentId === toastId && window._rfToast.currentToast === toast) {
+            window._rfToast.currentId = null;
+            window._rfToast.currentToast = null;
+          }
+        }, (opts.autoDismissMs || 8000));
       }
     }
 
