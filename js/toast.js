@@ -223,6 +223,7 @@
       toast.style.animation = 'slideOutRight 0.3s ease-in';
       setTimeout(() => {
         // Call any registered onDismiss callback before removing
+        // Only call once - either before removal or if already removed (best-effort)
         try {
           if (typeof toast._onDismiss === 'function') {
             toast._onDismiss();
@@ -231,14 +232,8 @@
 
         if (toast.parentNode) {
           toast.remove();
-        } else {
-          // If already removed, still try callback (best-effort)
-          try {
-            if (typeof toast._onDismiss === 'function') {
-              toast._onDismiss();
-            }
-          } catch (e) { /* ignore */ }
         }
+        // Note: If toast was already removed by another call, callback was already invoked above
       }, 300);
     }
   }
