@@ -3128,7 +3128,12 @@ let cachedScore = null;
     }
 
     // Toast / banner helpers for resume-feedback area
-    window._rfToast = window._rfToast || { currentId: null, currentToast: null };
+    window._rfToast = window._rfToast || {
+      currentId: null,
+      currentToast: null,
+      activeRunId: null,   // sessionId for the user-started analysis currently considered "active"
+      suppress: false      // set true when user loads history / clicks Start Fresh to prevent toasts
+    };
     function showRfToast(type, title, opts = {}) {
       // type: 'info' | 'success' | 'error'
       const toastId = opts.id || `${type}:${title}`;
@@ -3250,7 +3255,8 @@ let cachedScore = null;
               onAction: () => { const tile = document.getElementById('rf-ats-score-tile'); if (tile) tile.scrollIntoView({ behavior: 'smooth', block: 'start' }); },
               autoDismissMs: 8000
             });
-          } else if (finished) {
+          } else if (finished && window._rfToast && window._rfToast.activeRunId && !window._rfToast.suppress) {
+            // Show finished toast only if it matches an active run (and not suppressed)
             showRfToast('success', 'Analysis complete — View results', {
               id: 'rf:analysis-finished',
               actionText: 'View',
@@ -3755,6 +3761,13 @@ let cachedScore = null;
           
           currentResumeId = uploadResult.resumeId;
           
+          // Set active run ID for this generation to gate toast notifications
+          // Use a timestamp-based ID that will be updated with sessionId when feedback completes
+          if (window._rfToast) {
+            window._rfToast.activeRunId = `run_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+            window._rfToast.suppress = false;
+          }
+          
           // Clear previous feedback context when uploading a new resume
           // This prevents using feedback from the previous resume with the new one
           window.latestAtsIssues = null;
@@ -4120,6 +4133,11 @@ let cachedScore = null;
           if (feedbackSettled.status === 'fulfilled' && feedbackSettled.value) {
             const feedbackResult = feedbackSettled.value;
             try {
+              // Update activeRunId with sessionId if available (for proper toast gating)
+              if (window._rfToast && feedbackResult.sessionId) {
+                window._rfToast.activeRunId = feedbackResult.sessionId;
+              }
+              
               // Update history with new session (D1-backed)
               if (window.JobHackAIHistory && feedbackResult.sessionId) {
                 window.JobHackAIHistory.addItem(feedbackResult.sessionId, feedbackResult.meta);
@@ -4317,7 +4335,8 @@ let cachedScore = null;
           
           // Show "Analysis complete" toast only if ATS scoring succeeded
           // If both ATS and feedback failed, error modals are already shown, so don't show misleading success toast
-          if (atsScoringSucceeded) {
+          // Gate toast by activeRunId to prevent showing for history loads or after Start Fresh
+          if (atsScoringSucceeded && window._rfToast && window._rfToast.activeRunId && !window._rfToast.suppress) {
             showRfToast('success', 'Analysis complete — View results', {
               id: 'rf:analysis-finished',
               actionText: 'View',
@@ -4473,6 +4492,16 @@ let cachedScore = null;
       
       if (startFreshBtn) {
         startFreshBtn.addEventListener('click', function() {
+          // User reset - suppress any pending analysis-toasts
+          if (window._rfToast) {
+            window._rfToast.activeRunId = null;
+            window._rfToast.suppress = true;
+            if (window._rfToast.currentToast && typeof window._rfToast.currentToast.dismiss === 'function') {
+              try { window._rfToast.currentToast.dismiss(); } catch (e) { /* ignore */ }
+            }
+            window._rfToast.currentId = null;
+            window._rfToast.currentToast = null;
+          }
           resetSession();
         });
       }
@@ -4657,6 +4686,12 @@ let cachedScore = null;
             
             const roleChanged = previousJobTitle !== jobTitle;
 
+            // Set active run ID for this regeneration to gate toast notifications
+            if (window._rfToast) {
+              window._rfToast.activeRunId = `run_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+              window._rfToast.suppress = false;
+            }
+
             // Start ATS (if role changed) and feedback in parallel
             const atsPromise = roleChanged ? getAtsScore(currentResumeId, jobTitle) : Promise.resolve(null);
             const feedbackPromise = getResumeFeedback(currentResumeId, jobTitle);
@@ -4751,6 +4786,11 @@ let cachedScore = null;
             }
 
             const feedbackResult = feedbackSettled.value;
+            
+            // Update activeRunId with sessionId if available (for proper toast gating)
+            if (window._rfToast && feedbackResult.sessionId) {
+              window._rfToast.activeRunId = feedbackResult.sessionId;
+            }
             
             // Update history with new session (D1-backed)
             if (window.JobHackAIHistory && feedbackResult.sessionId) {
@@ -6666,6 +6706,18 @@ let cachedScore = null;
      */
     async function loadHistoryDetail(sessionId) {
       console.log('[RESUME-FEEDBACK-HISTORY] Loading history detail:', sessionId);
+      
+      // Suppress toasts when loading a history item
+      if (window._rfToast) {
+        window._rfToast.activeRunId = null;
+        window._rfToast.suppress = true;
+        // Immediately dismiss any existing 'analysis finished' toast
+        if (window._rfToast.currentId === 'rf:analysis-finished' && window._rfToast.currentToast && typeof window._rfToast.currentToast.dismiss === 'function') {
+          try { window._rfToast.currentToast.dismiss(); } catch (e) { /* ignore */ }
+          window._rfToast.currentId = null;
+          window._rfToast.currentToast = null;
+        }
+      }
       
       // Show loading state
       const loadingOverlay = document.getElementById('loading-overlay');
