@@ -5,7 +5,7 @@
  */
 
 // Version stamp for deployment verification
-console.log('🔧 firebase-auth.js VERSION: redirect-fix-v3-CACHE-BUST-FIX - ' + new Date().toISOString());
+console.log('🔧 firebase-auth.js VERSION: auth-tri-state-v1 - ' + new Date().toISOString());
 
 import { firebaseConfig } from './firebase-config.js';
 
@@ -143,6 +143,11 @@ class AuthManager {
   constructor() {
     this.currentUser = null;
     this.authStateListeners = [];
+    // Tri-state auth pattern: null = unknown, user object = authenticated, false = explicitly unauthenticated
+    this._authReady = false; // Flag indicating Firebase has resolved initial auth state
+    this._authReadyPromise = null;
+    this._authReadyResolver = null;
+    this._initializeAuthReady();
     this.setupAuthStateListener();
     // Expose globally for consumers that can't import modules
     try { 
@@ -150,6 +155,44 @@ class AuthManager {
       // Also expose currentUser directly for easier access
       window.FirebaseAuthManager.currentUser = this.currentUser;
     } catch (_) { /* no-op */ }
+  }
+
+  /**
+   * Initialize the auth ready promise/resolver for tri-state pattern
+   */
+  _initializeAuthReady() {
+    this._authReadyPromise = new Promise((resolve) => {
+      this._authReadyResolver = resolve;
+    });
+  }
+
+  /**
+   * Mark auth as ready and resolve waiting promises
+   * Called when Firebase onAuthStateChanged fires for the first time
+   */
+  _markAuthReady(user) {
+    if (this._authReady) {
+      // Already marked as ready, just update currentUser
+      return;
+    }
+    this._authReady = true;
+    this.currentUser = user || null;
+    if (window.FirebaseAuthManager) {
+      window.FirebaseAuthManager.currentUser = this.currentUser;
+    }
+    // Resolve the promise
+    if (this._authReadyResolver) {
+      this._authReadyResolver(user || null);
+      this._authReadyResolver = null; // Clear resolver after resolving
+    }
+  }
+
+  /**
+   * Check if auth state has been resolved (tri-state pattern)
+   * @returns {boolean} true if Firebase has determined auth state (even if no user)
+   */
+  isAuthReady() {
+    return this._authReady;
   }
 
   // Initialize free ATS credit for new users
@@ -200,6 +243,12 @@ class AuthManager {
       if (window.FirebaseAuthManager) {
         window.FirebaseAuthManager.currentUser = effectiveUser;
         console.log('🔥 Updated window.FirebaseAuthManager.currentUser:', effectiveUser ? `User: ${effectiveUser.email}` : 'null');
+      }
+      
+      // ✅ TRI-STATE PATTERN: Mark auth as ready on first onAuthStateChanged call
+      // This ensures waitForAuthReady() resolves even if user is null
+      if (!authReadyDispatched) {
+        this._markAuthReady(effectiveUser);
       }
       
       // ✅ CRITICAL: Dispatch firebase-auth-ready event AFTER currentUser is set
@@ -790,11 +839,13 @@ class AuthManager {
   }
 
   /**
-   * Wait for auth state to be ready
+   * Wait for auth state to be ready (tri-state pattern)
+   * Resolves to user object if authenticated, null if unauthenticated, or times out
+   * @param {number} timeoutMs - Maximum time to wait in milliseconds
+   * @returns {Promise<User|null>} Resolves with user if authenticated, null otherwise
    */
-  async waitForAuthReady(timeoutMs = 5000) {
-    const startTime = Date.now();
-    console.log('🔥 waitForAuthReady started, currentUser:', this.currentUser);
+  async waitForAuthReady(timeoutMs = 10000) {
+    console.log('🔥 waitForAuthReady started, authReady:', this._authReady, 'currentUser:', this.currentUser);
     
     // Check logout-intent immediately - if logout is in progress, return null
     const logoutIntent = sessionStorage.getItem('logout-intent');
@@ -803,29 +854,47 @@ class AuthManager {
       return null;
     }
     
-    while (!this.currentUser && (Date.now() - startTime) < timeoutMs) {
-      // Check logout-intent on each iteration
-      const logoutIntentCheck = sessionStorage.getItem('logout-intent');
-      if (logoutIntentCheck === '1') {
-        console.log('🚫 Logout in progress during wait, returning null');
+    // If already ready, return immediately
+    if (this._authReady) {
+      const finalLogoutIntent = sessionStorage.getItem('logout-intent');
+      if (finalLogoutIntent === '1') {
+        console.log('🚫 Logout in progress, waitForAuthReady returning null');
+        return null;
+      }
+      console.log('🔥 waitForAuthReady finished (already ready), currentUser:', this.currentUser);
+      return this.currentUser;
+    }
+    
+    // Wait for auth to be ready with timeout
+    try {
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Auth ready timeout')), timeoutMs)
+      );
+      
+      const user = await Promise.race([
+        this._authReadyPromise,
+        timeoutPromise
+      ]);
+      
+      // Final check before returning
+      const finalLogoutIntent = sessionStorage.getItem('logout-intent');
+      if (finalLogoutIntent === '1') {
+        console.log('🚫 Logout in progress, waitForAuthReady returning null (final check)');
         return null;
       }
       
-      await new Promise(resolve => setTimeout(resolve, 100));
-      if ((Date.now() - startTime) % 1000 < 100) { // Log every second
-        console.log('🔥 waitForAuthReady waiting... currentUser:', this.currentUser);
+      console.log('🔥 waitForAuthReady finished, currentUser:', user);
+      return user;
+    } catch (error) {
+      // Timeout occurred - Firebase hasn't resolved auth state yet
+      console.warn('🔥 waitForAuthReady timeout after', timeoutMs, 'ms, Firebase not ready yet');
+      // Return currentUser if available (may be null if Firebase still initializing)
+      const finalLogoutIntent = sessionStorage.getItem('logout-intent');
+      if (finalLogoutIntent === '1') {
+        return null;
       }
+      return this.currentUser; // May be null if Firebase hasn't resolved
     }
-    
-    // Final check before returning
-    const finalLogoutIntent = sessionStorage.getItem('logout-intent');
-    if (finalLogoutIntent === '1') {
-      console.log('🚫 Logout in progress, waitForAuthReady returning null (final check)');
-      return null;
-    }
-    
-    console.log('🔥 waitForAuthReady finished, currentUser:', this.currentUser);
-    return this.currentUser;
   }
 
   /**
