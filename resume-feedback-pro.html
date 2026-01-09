@@ -1162,7 +1162,7 @@
           // Fallback to navigation/localStorage check
           if (window.JobHackAINavigation) {
             const authState = window.JobHackAINavigation.getAuthState();
-            isAuthenticated = authState.isAuthenticated;
+            isAuthenticated = authState && authState.isAuthenticated;
             plan = window.JobHackAINavigation.getEffectivePlan();
           } else {
             // SECURITY: Check Firebase SDK keys synchronously (works before FirebaseAuthManager is ready)
@@ -1496,7 +1496,7 @@
           // Fallback to navigation/localStorage check
           if (window.JobHackAINavigation) {
             const authState = window.JobHackAINavigation.getAuthState();
-            isAuthenticated = authState.isAuthenticated;
+            isAuthenticated = authState && authState.isAuthenticated;
             plan = window.JobHackAINavigation.getEffectivePlan();
           } else {
             // SECURITY: Check Firebase SDK keys synchronously (works before FirebaseAuthManager is ready)

@@ -971,7 +971,7 @@ const authManager = new AuthManager();
 export default authManager;
 export { auth, UserDatabase };
 // Back-compat: some modules import named waitForAuthReady; provide a proxy
-export async function waitForAuthReady(timeoutMs = 5000) {
+export async function waitForAuthReady(timeoutMs = 10000) {
   return authManager.waitForAuthReady(timeoutMs);
 }
 
