@@ -4315,15 +4315,18 @@ let cachedScore = null;
             } catch (e) { /* ignore */ }
           }
           
-          // Show "Analysis complete" toast when analysis finishes
-          showRfToast('success', 'Analysis complete — View results', {
-            id: 'rf:analysis-finished',
-            actionText: 'View',
-            onAction: () => { const tile = document.getElementById('rf-ats-score-tile'); if (tile) tile.scrollIntoView({ behavior: 'smooth', block: 'start' }); },
-            autoDismissMs: 8000
-          });
+          // Show "Analysis complete" toast only if ATS scoring succeeded
+          // If both ATS and feedback failed, error modals are already shown, so don't show misleading success toast
+          if (atsScoringSucceeded) {
+            showRfToast('success', 'Analysis complete — View results', {
+              id: 'rf:analysis-finished',
+              actionText: 'View',
+              onAction: () => { const tile = document.getElementById('rf-ats-score-tile'); if (tile) tile.scrollIntoView({ behavior: 'smooth', block: 'start' }); },
+              autoDismissMs: 8000
+            });
+          }
           
-          // Both ATS scoring and feedback completed successfully
+          // Both ATS scoring and feedback completed (successfully or with errors)
 
           // Update original snippet in rewrite section (only if not already loaded)
           // Use full resume text if available, otherwise use preview
