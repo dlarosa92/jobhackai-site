@@ -2828,10 +2828,15 @@ document.addEventListener('firebase-auth-ready', async (event) => {
   // Set flag on window to detect if event already fired (for fallback check)
   window.__firebaseAuthReadyFired = true;
   console.log('🔥 Firebase auth ready, initializing navigation');
+  // TIMING VERIFICATION: Log state when navigation receives event
+  console.log('🔍 [TIMING CHECK] Navigation received event');
+  console.log('🔍 [TIMING CHECK] window.FirebaseAuthManager exists?', !!window.FirebaseAuthManager);
   try {
     const user = window.FirebaseAuthManager
       ? window.FirebaseAuthManager.getCurrentUser()
       : null;
+    // TIMING VERIFICATION: Log what getCurrentUser returned
+    console.log('🔍 [TIMING CHECK] getCurrentUser() returned:', user);
     applyNavForUser(user);
     initializeNavigation();
   } catch (err) {
@@ -2853,7 +2858,10 @@ if (document.readyState === 'loading') {
     // AND navigation hasn't been initialized yet (prevent duplicate calls)
     // This ensures Firebase has actually checked auth state via onAuthStateChanged
     if (window.__firebaseAuthReadyFired && !navigationInitialized && window.FirebaseAuthManager && typeof window.FirebaseAuthManager.getCurrentUser === 'function') {
+      // TIMING VERIFICATION: Log fallback path execution
+      console.log('🔍 [TIMING CHECK] Fallback path (DOMContentLoaded) executing');
       const firebaseUser = window.FirebaseAuthManager.getCurrentUser();
+      console.log('🔍 [TIMING CHECK] Fallback getCurrentUser() returned:', firebaseUser);
       firebaseAuthReadyFired = true; // Sync flag
       console.log('🔥 Firebase already ready (event fired before script load), initializing navigation', firebaseUser ? '(with user)' : '(logged out)');
       applyNavForUser(firebaseUser); // Pass null for logged-out users
@@ -2864,7 +2872,10 @@ if (document.readyState === 'loading') {
   // DOM already loaded, check if firebase-auth-ready event already fired
   // AND navigation hasn't been initialized yet (prevent duplicate calls)
   if (window.__firebaseAuthReadyFired && !navigationInitialized && window.FirebaseAuthManager && typeof window.FirebaseAuthManager.getCurrentUser === 'function') {
+    // TIMING VERIFICATION: Log fallback path execution (DOM already loaded)
+    console.log('🔍 [TIMING CHECK] Fallback path (DOM already loaded) executing');
     const firebaseUser = window.FirebaseAuthManager.getCurrentUser();
+    console.log('🔍 [TIMING CHECK] Fallback getCurrentUser() returned:', firebaseUser);
     firebaseAuthReadyFired = true; // Sync flag
     console.log('🔥 Firebase already ready (event fired before script load), initializing navigation', firebaseUser ? '(with user)' : '(logged out)');
     applyNavForUser(firebaseUser); // Pass null for logged-out users

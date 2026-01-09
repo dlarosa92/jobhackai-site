@@ -189,6 +189,12 @@ class AuthManager {
       if (!authReadyDispatched) {
         authReadyDispatched = true;
         console.log('🔥 Dispatching firebase-auth-ready event');
+        // TIMING VERIFICATION: Log state before dispatch
+        console.log('🔍 [TIMING CHECK] About to dispatch event, this.currentUser =', this.currentUser);
+        console.log('🔍 [TIMING CHECK] window.FirebaseAuthManager exists?', !!window.FirebaseAuthManager);
+        if (window.FirebaseAuthManager) {
+          console.log('🔍 [TIMING CHECK] window.FirebaseAuthManager.getCurrentUser() =', window.FirebaseAuthManager.getCurrentUser());
+        }
         // CRITICAL FIX: Set flag on window before dispatching event
         // This allows navigation.js fallback to detect if event fired before script loaded
         window.__firebaseAuthReadyFired = true;
@@ -198,6 +204,8 @@ class AuthManager {
         document.dispatchEvent(new CustomEvent("firebase-auth-ready", {
           detail: { user: eventUser || null }
         }));
+        // TIMING VERIFICATION: Log state after dispatch
+        console.log('🔍 [TIMING CHECK] After dispatch, this.currentUser =', this.currentUser);
       }
       
       // ✅ CRITICAL: Check for logout-intent before processing user
@@ -214,6 +222,8 @@ class AuthManager {
       
       // Only set currentUser if logout-intent check passed
       this.currentUser = user;
+      // TIMING VERIFICATION: Log after setting currentUser
+      console.log('🔍 [TIMING CHECK] Just set this.currentUser =', this.currentUser);
       // Update the exposed currentUser property
       if (window.FirebaseAuthManager) {
         window.FirebaseAuthManager.currentUser = user;
