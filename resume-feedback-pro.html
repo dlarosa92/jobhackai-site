@@ -1147,13 +1147,14 @@
         try {
           console.log('[RESUME-FEEDBACK] Waiting for Firebase auth to be ready before enforceAccess check...');
           const user = await window.FirebaseAuthManager.waitForAuthReady(8000);
-          isAuthenticated = !!user;
           
+          // Prefer Firebase user result over navigation state (navigation may not have synced yet)
           if (window.JobHackAINavigation) {
             const authState = window.JobHackAINavigation.getAuthState();
-            isAuthenticated = authState.isAuthenticated;
+            isAuthenticated = user || (authState && authState.isAuthenticated);
             plan = window.JobHackAINavigation.getEffectivePlan();
           } else {
+            isAuthenticated = !!user;
             plan = localStorage.getItem('user-plan') || 'free';
           }
         } catch (error) {
@@ -1233,9 +1234,13 @@
     
     // Wait for DOM to be ready before enforcing access again
     if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', enforceAccess);
+      document.addEventListener('DOMContentLoaded', async () => {
+        await enforceAccess();
+      });
     } else {
-      setTimeout(enforceAccess, 100); // Small delay to allow navigation system to initialize
+      setTimeout(async () => {
+        await enforceAccess();
+      }, 100); // Small delay to allow navigation system to initialize
     }
   </script>
   <script>
@@ -1434,21 +1439,23 @@
       // Wait for navigation system to be ready
       if (window.JobHackAINavigation && typeof window.JobHackAINavigation.getEffectivePlan === 'function') {
         // Navigation is ready - check access immediately
-        enforceAccessControl(allowedPlans);
+        (async () => {
+          await enforceAccessControl(allowedPlans);
+        })();
       } else {
         // Navigation not ready yet - wait for navigationReady event
         // Use execution flag to prevent duplicate calls from event listener and timeout
         let hasExecuted = false;
-        let fallbackTimeout = setTimeout(() => {
+        let fallbackTimeout = setTimeout(async () => {
           // Always enforce access control after timeout, even if navigation fails to load
           // enforceAccessControl has localStorage fallback logic that handles navigation unavailability
           if (!hasExecuted) {
             hasExecuted = true;
-            enforceAccessControl(allowedPlans);
+            await enforceAccessControl(allowedPlans);
           }
         }, 1000);
         
-        window.addEventListener('navigationReady', function onNavigationReady() {
+        window.addEventListener('navigationReady', async function onNavigationReady() {
           window.removeEventListener('navigationReady', onNavigationReady);
           // Clear fallback timeout to prevent duplicate execution
           if (fallbackTimeout) {
@@ -1458,7 +1465,7 @@
           // Only execute if not already executed by timeout
           if (!hasExecuted) {
             hasExecuted = true;
-            enforceAccessControl(allowedPlans);
+            await enforceAccessControl(allowedPlans);
           }
         }, { once: true });
       }
@@ -1474,13 +1481,14 @@
         try {
           console.log('[RESUME-FEEDBACK] Waiting for Firebase auth to be ready before access control check...');
           const user = await window.FirebaseAuthManager.waitForAuthReady(8000);
-          isAuthenticated = !!user;
           
+          // Prefer Firebase user result over navigation state (navigation may not have synced yet)
           if (window.JobHackAINavigation) {
             const authState = window.JobHackAINavigation.getAuthState();
-            isAuthenticated = authState.isAuthenticated;
+            isAuthenticated = user || (authState && authState.isAuthenticated);
             plan = window.JobHackAINavigation.getEffectivePlan();
           } else {
+            isAuthenticated = !!user;
             plan = localStorage.getItem('user-plan') || 'free';
           }
         } catch (error) {
