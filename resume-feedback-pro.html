@@ -3171,6 +3171,10 @@ let cachedScore = null;
           if (window._rfToast && window._rfToast.currentId === capturedToastId && window._rfToast.currentToast === capturedToast) {
             window._rfToast.currentId = null;
             window._rfToast.currentToast = null;
+            // Clear activeRunId when "Analysis complete" toast is dismissed to prevent re-showing on tab switches
+            if (capturedToastId === 'rf:analysis-finished') {
+              window._rfToast.activeRunId = null;
+            }
           }
         });
       } else {
@@ -3179,6 +3183,10 @@ let cachedScore = null;
           if (window._rfToast && window._rfToast.currentId === toastId && window._rfToast.currentToast === toast) {
             window._rfToast.currentId = null;
             window._rfToast.currentToast = null;
+            // Clear activeRunId when "Analysis complete" toast is dismissed to prevent re-showing on tab switches
+            if (toastId === 'rf:analysis-finished') {
+              window._rfToast.activeRunId = null;
+            }
           }
         }, (opts.autoDismissMs || 8000));
       }
@@ -6711,12 +6719,12 @@ let cachedScore = null;
       if (window._rfToast) {
         window._rfToast.activeRunId = null;
         window._rfToast.suppress = true;
-        // Immediately dismiss any existing 'analysis finished' toast
-        if (window._rfToast.currentId === 'rf:analysis-finished' && window._rfToast.currentToast && typeof window._rfToast.currentToast.dismiss === 'function') {
+        // Immediately dismiss any existing toast (consistent with Start Fresh behavior)
+        if (window._rfToast.currentToast && typeof window._rfToast.currentToast.dismiss === 'function') {
           try { window._rfToast.currentToast.dismiss(); } catch (e) { /* ignore */ }
-          window._rfToast.currentId = null;
-          window._rfToast.currentToast = null;
         }
+        window._rfToast.currentId = null;
+        window._rfToast.currentToast = null;
       }
       
       // Show loading state
