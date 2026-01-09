@@ -2774,13 +2774,8 @@ function renderUnverifiedNav(desktop, mobile) {
   if (!desktop) return;
   desktop.innerHTML = `
     <span class="nav-status">Verify your email to unlock your account</span>
-    <button id="nav-logout-btn" class="btn-outline">Logout</button>
   `;
   if (mobile) mobile.innerHTML = desktop.innerHTML;
-  const btn = document.getElementById("nav-logout-btn");
-  if (btn && window.FirebaseAuthManager) {
-    btn.onclick = () => window.FirebaseAuthManager.signOut();
-  }
 }
 
 function renderVerifiedNav(desktop, mobile) {
@@ -2790,13 +2785,8 @@ function renderVerifiedNav(desktop, mobile) {
     <a href="/interview-questions.html">Interview Questions</a>
     <a href="/pricing.html">Pricing</a>
     <a href="/account-setting.html" class="nav-account-link">Account</a>
-    <button id="nav-logout-btn" class="btn-outline">Logout</button>
   `;
   if (mobile) mobile.innerHTML = desktop.innerHTML;
-  const btn = document.getElementById("nav-logout-btn");
-  if (btn && window.FirebaseAuthManager) {
-    btn.onclick = () => window.FirebaseAuthManager.signOut();
-  }
 }
 
 function applyNavForUser(user) {

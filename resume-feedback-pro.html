@@ -3156,6 +3156,10 @@ let cachedScore = null;
         try { toast.dataset = toast.dataset || {}; toast.dataset.rfId = toastId; } catch (e) { /* ignore */ }
       }
       
+      // Store the activeRunId that was active when this toast was created
+      // This prevents race conditions where an old toast's dismiss clears a new activeRunId
+      const capturedActiveRunId = window._rfToast ? window._rfToast.activeRunId : null;
+      
       window._rfToast.currentId = toastId;
       window._rfToast.currentToast = toast;
       
@@ -3171,8 +3175,9 @@ let cachedScore = null;
           if (window._rfToast && window._rfToast.currentId === capturedToastId && window._rfToast.currentToast === capturedToast) {
             window._rfToast.currentId = null;
             window._rfToast.currentToast = null;
-            // Clear activeRunId when "Analysis complete" toast is dismissed to prevent re-showing on tab switches
-            if (capturedToastId === 'rf:analysis-finished') {
+            // Clear activeRunId only if it still matches the run that created this toast
+            // This prevents an old toast from clearing a new activeRunId when analyses complete in rapid succession
+            if (capturedToastId === 'rf:analysis-finished' && window._rfToast.activeRunId === capturedActiveRunId) {
               window._rfToast.activeRunId = null;
             }
           }
@@ -3183,8 +3188,9 @@ let cachedScore = null;
           if (window._rfToast && window._rfToast.currentId === toastId && window._rfToast.currentToast === toast) {
             window._rfToast.currentId = null;
             window._rfToast.currentToast = null;
-            // Clear activeRunId when "Analysis complete" toast is dismissed to prevent re-showing on tab switches
-            if (toastId === 'rf:analysis-finished') {
+            // Clear activeRunId only if it still matches the run that created this toast
+            // This prevents an old toast from clearing a new activeRunId when analyses complete in rapid succession
+            if (toastId === 'rf:analysis-finished' && window._rfToast.activeRunId === capturedActiveRunId) {
               window._rfToast.activeRunId = null;
             }
           }
