@@ -739,37 +739,19 @@ class AuthManager {
 
   /**
    * Sign in with LinkedIn
-   * Opens LinkedIn OAuth popup and handles callback via postMessage
+   * Opens LinkedIn OAuth popup via server-side start endpoint and handles callback via postMessage
+   * State generation, signing, and cookie storage are handled server-side for security
    */
-  async signInWithLinkedIn(firebaseFunctionUrl) {
+  async signInWithLinkedIn() {
     return new Promise((resolve, reject) => {
-      // Generate state for CSRF protection
-      const state = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
-      
-      // Store state in cookie (shared across windows) instead of sessionStorage (isolated)
-      // Cookie is secure, SameSite=Lax, expires in 10 minutes
-      const isSecure = window.location.protocol === 'https:';
-      const secureFlag = isSecure ? 'Secure; ' : '';
-      const expires = new Date();
-      expires.setMinutes(expires.getMinutes() + 10); // 10 minute expiration
-      document.cookie = `linkedin_oauth_state=${state}; ${secureFlag}SameSite=Lax; Expires=${expires.toUTCString()}; Path=/`;
+      // Call server-side start endpoint which generates state, signs it, stores in cookie, and redirects to LinkedIn
+      // This ensures state is cryptographically secure and cannot be tampered with client-side
+      // Use host (includes port) instead of hostname to match server-side redirect_uri construction
+      const startUrl = `${window.location.protocol}//${window.location.host}/api/auth/linkedin/start`;
 
-      // LinkedIn Client ID - should be stored securely (currently using from config)
-      // For now, we'll get it from the function URL or use a constant
-      // TODO: Make this configurable via environment
-      const linkedinClientId = '86v58h3j3qetn0';
-      
-      // Build LinkedIn OAuth URL
-      const linkedinAuthUrl = new URL('https://www.linkedin.com/oauth/v2/authorization');
-      linkedinAuthUrl.searchParams.set('response_type', 'code');
-      linkedinAuthUrl.searchParams.set('client_id', linkedinClientId);
-      linkedinAuthUrl.searchParams.set('redirect_uri', firebaseFunctionUrl);
-      linkedinAuthUrl.searchParams.set('state', state);
-      linkedinAuthUrl.searchParams.set('scope', 'r_liteprofile r_emailaddress');
-
-      // Open popup window
+      // Open popup window to start endpoint
       const popup = window.open(
-        linkedinAuthUrl.toString(),
+        startUrl,
         'linkedin-auth',
         'width=600,height=700,scrollbars=yes,resizable=yes'
       );
