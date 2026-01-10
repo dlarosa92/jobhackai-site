@@ -745,7 +745,14 @@ class AuthManager {
     return new Promise((resolve, reject) => {
       // Generate state for CSRF protection
       const state = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
-      sessionStorage.setItem('linkedin_oauth_state', state);
+      
+      // Store state in cookie (shared across windows) instead of sessionStorage (isolated)
+      // Cookie is secure, SameSite=Lax, expires in 10 minutes
+      const isSecure = window.location.protocol === 'https:';
+      const secureFlag = isSecure ? 'Secure; ' : '';
+      const expires = new Date();
+      expires.setMinutes(expires.getMinutes() + 10); // 10 minute expiration
+      document.cookie = `linkedin_oauth_state=${state}; ${secureFlag}SameSite=Lax; Expires=${expires.toUTCString()}; Path=/`;
 
       // LinkedIn Client ID - should be stored securely (currently using from config)
       // For now, we'll get it from the function URL or use a constant

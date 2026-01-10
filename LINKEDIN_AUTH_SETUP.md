@@ -81,7 +81,7 @@ This will deploy to: `https://us-central1-jobhackai-90558.cloudfunctions.net/lin
 1. **Secrets are NOT in git** - They're stored in Firebase (safe)
 2. **Rotate the exposed secret** - If a secret was ever exposed, it must be rotated immediately in LinkedIn Developer Console
 3. **HTTPS only** - All redirect URLs use HTTPS
-4. **CSRF protection** - State parameter is validated client-side in the callback page against sessionStorage before Firebase sign-in
+4. **CSRF protection** - State parameter is validated client-side in the callback page against a cookie (shared across windows) before Firebase sign-in
 
 ## 🐛 Troubleshooting
 

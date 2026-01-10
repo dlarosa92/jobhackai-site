@@ -232,20 +232,32 @@ exports.linkedinAuth = onRequest(
             const receivedState = ${JSON.stringify(state || '')};
             
             // CSRF Protection: Validate state parameter
-            const storedState = sessionStorage.getItem('linkedin_oauth_state');
+            // Read state from cookie (shared across windows, unlike sessionStorage)
+            function getCookie(name) {
+              const cookies = document.cookie.split(';');
+              for (const cookie of cookies) {
+                const [cookieName, cookieValue] = cookie.trim().split('=');
+                if (cookieName === name) {
+                  return decodeURIComponent(cookieValue);
+                }
+              }
+              return null;
+            }
+            
+            const storedState = getCookie('linkedin_oauth_state');
             if (!receivedState || !storedState || receivedState !== storedState) {
               console.error('CSRF validation failed: state mismatch');
               document.querySelector('.container').innerHTML = 
                 '<h2 style="color: red;">Security Error</h2>' +
                 '<p>Invalid authentication state. Please try again.</p>' +
                 '<p><a href="' + frontendOrigin + '/login.html">Return to Login</a></p>';
-              // Clean up stored state
-              sessionStorage.removeItem('linkedin_oauth_state');
+              // Clean up stored state cookie
+              document.cookie = 'linkedin_oauth_state=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT';
               throw new Error('CSRF validation failed');
             }
             
-            // Clear stored state after validation
-            sessionStorage.removeItem('linkedin_oauth_state');
+            // Clear stored state cookie after validation
+            document.cookie = 'linkedin_oauth_state=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT';
             
             // Sign in with custom token
             firebase.auth().signInWithCustomToken(customToken)
