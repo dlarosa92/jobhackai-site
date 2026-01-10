@@ -515,23 +515,11 @@ document.addEventListener('DOMContentLoaded', async function() {
     }, 8000); // 8 second timeout
     
     try {
-      // Get Firebase Function URL based on environment
-      // For dev: use dev function URL, for prod: use production function URL
-      const hostname = window.location.hostname;
-      let functionUrl;
+      // Build callback URL based on current hostname (Cloudflare Pages)
+      // This ensures cookies work for CSRF validation (same domain)
+      const callbackUrl = `${window.location.protocol}//${window.location.hostname}/api/auth/linkedin/callback`;
       
-      if (hostname === 'dev.jobhackai.io' || hostname === 'localhost') {
-        // Dev environment - update this after deploying to dev
-        functionUrl = 'https://us-central1-jobhackai-90558.cloudfunctions.net/linkedinAuth';
-      } else if (hostname === 'qa.jobhackai.io') {
-        // QA environment
-        functionUrl = 'https://us-central1-jobhackai-90558.cloudfunctions.net/linkedinAuth';
-      } else {
-        // Production environment
-        functionUrl = 'https://us-central1-jobhackai-90558.cloudfunctions.net/linkedinAuth';
-      }
-      
-      const result = await authManager.signInWithLinkedIn(functionUrl);
+      const result = await authManager.signInWithLinkedIn(callbackUrl);
       
       if (result.success) {
         redirected = true;

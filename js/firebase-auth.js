@@ -741,7 +741,7 @@ class AuthManager {
    * Sign in with LinkedIn
    * Opens LinkedIn OAuth popup and handles callback via postMessage
    */
-  async signInWithLinkedIn(firebaseFunctionUrl) {
+  async signInWithLinkedIn(callbackUrl) {
     return new Promise((resolve, reject) => {
       // Generate state for CSRF protection
       const state = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
@@ -759,11 +759,15 @@ class AuthManager {
       // TODO: Make this configurable via environment
       const linkedinClientId = '86v58h3j3qetn0';
       
+      // Build callback URL based on current hostname (Cloudflare Pages)
+      // This ensures cookies work for CSRF validation (same domain)
+      const callbackUrl = `${window.location.protocol}//${window.location.hostname}/api/auth/linkedin/callback`;
+      
       // Build LinkedIn OAuth URL
       const linkedinAuthUrl = new URL('https://www.linkedin.com/oauth/v2/authorization');
       linkedinAuthUrl.searchParams.set('response_type', 'code');
       linkedinAuthUrl.searchParams.set('client_id', linkedinClientId);
-      linkedinAuthUrl.searchParams.set('redirect_uri', firebaseFunctionUrl);
+      linkedinAuthUrl.searchParams.set('redirect_uri', callbackUrl);
       linkedinAuthUrl.searchParams.set('state', state);
       linkedinAuthUrl.searchParams.set('scope', 'r_liteprofile r_emailaddress');
 
