@@ -1,7 +1,7 @@
 /**
  * LinkedIn OAuth Callback Handler (Cloudflare Pages Function)
- * Handles the OAuth callback from LinkedIn, proxies to Firebase Function
- * to create custom token, then returns HTML that signs user in
+ * Validates OAuth state, exchanges code for token, fetches profile,
+ * mints Firebase custom token in-worker, and returns HTML that signs user in
  */
 
 function corsHeaders(origin, env) {
@@ -25,6 +25,179 @@ function corsHeaders(origin, env) {
   };
 }
 
+/**
+ * Parse cookies from Cookie header
+ */
+function parseCookies(cookieHeader) {
+  if (!cookieHeader) return {};
+  const cookies = {};
+  cookieHeader.split(';').forEach(cookie => {
+    const trimmed = cookie.trim();
+    const eqIndex = trimmed.indexOf('=');
+    if (eqIndex > 0) {
+      const name = trimmed.substring(0, eqIndex);
+      const value = decodeURIComponent(trimmed.substring(eqIndex + 1));
+      cookies[name] = value;
+    }
+  });
+  return cookies;
+}
+
+/**
+ * Sign a value using HMAC-SHA256 (constant-time)
+ */
+async function hmacSign(secret, value) {
+  const key = await crypto.subtle.importKey(
+    'raw',
+    new TextEncoder().encode(secret),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign']
+  );
+  const sig = await crypto.subtle.sign(
+    'HMAC',
+    key,
+    new TextEncoder().encode(value)
+  );
+  // Convert to base64url
+  return btoa(String.fromCharCode(...new Uint8Array(sig)))
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/, '');
+}
+
+/**
+ * Constant-time string comparison to prevent timing attacks
+ */
+function safeEquals(a, b) {
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) {
+    diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  }
+  return diff === 0;
+}
+
+/**
+ * Base64url encode a buffer or string
+ */
+function base64UrlEncode(input) {
+  let str;
+  if (typeof input === 'string') {
+    str = input;
+  } else if (input instanceof ArrayBuffer) {
+    str = String.fromCharCode(...new Uint8Array(input));
+  } else if (input instanceof Uint8Array) {
+    str = String.fromCharCode(...input);
+  } else {
+    throw new Error('Invalid input type for base64UrlEncode');
+  }
+  const b64 = btoa(str);
+  return b64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+/**
+ * Convert JSON object to base64url encoded string
+ */
+function jsonToBase64Url(obj) {
+  return base64UrlEncode(new TextEncoder().encode(JSON.stringify(obj)));
+}
+
+/**
+ * Convert PEM private key to ArrayBuffer (PKCS#8 format)
+ */
+function pemToArrayBuffer(pem) {
+  const b64 = pem
+    .replace(/-----BEGIN PRIVATE KEY-----/, '')
+    .replace(/-----END PRIVATE KEY-----/, '')
+    .replace(/\s+/g, '');
+  const binary = atob(b64);
+  const len = binary.length;
+  const bytes = new Uint8Array(len);
+  for (let i = 0; i < len; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return bytes.buffer;
+}
+
+/**
+ * Import RSA private key from PEM format
+ */
+async function importRsaPrivateKey(pem) {
+  const keyData = pemToArrayBuffer(pem);
+  return await crypto.subtle.importKey(
+    'pkcs8',
+    keyData,
+    {
+      name: 'RSASSA-PKCS1-v1_5',
+      hash: { name: 'SHA-256' }
+    },
+    false,
+    ['sign']
+  );
+}
+
+/**
+ * Sign JWT segment using RSA private key
+ */
+async function signJwtSegment(privateKey, signingInput) {
+  const data = new TextEncoder().encode(signingInput);
+  const signature = await crypto.subtle.sign(
+    { name: 'RSASSA-PKCS1-v1_5' },
+    privateKey,
+    data
+  );
+  return base64UrlEncode(signature);
+}
+
+/**
+ * Create Firebase custom token (JWT) in-worker
+ * Matches Firebase's custom token specification exactly
+ */
+async function createFirebaseCustomToken(env, uid, additionalClaims = {}) {
+  const now = Math.floor(Date.now() / 1000);
+  const iat = now;
+  const exp = now + 3600; // 1 hour max (Firebase requirement)
+
+  const serviceAccountEmail = env.FIREBASE_SA_EMAIL;
+  const privateKeyPem = env.FIREBASE_SA_PRIVATE_KEY;
+
+  if (!serviceAccountEmail || !privateKeyPem) {
+    throw new Error('Missing Firebase service account credentials');
+  }
+
+  // JWT Header
+  const header = {
+    alg: 'RS256',
+    typ: 'JWT'
+  };
+
+  // JWT Payload (Firebase custom token spec)
+  const payload = {
+    iss: serviceAccountEmail,
+    sub: serviceAccountEmail,
+    aud: 'https://identitytoolkit.googleapis.com/google.identity.identitytoolkit.v1.IdentityToolkit',
+    iat,
+    exp,
+    uid
+  };
+
+  // Add custom claims if provided
+  if (additionalClaims && Object.keys(additionalClaims).length > 0) {
+    payload.claims = additionalClaims;
+  }
+
+  // Create signing input: base64url(header).base64url(payload)
+  const signingInput = `${jsonToBase64Url(header)}.${jsonToBase64Url(payload)}`;
+
+  // Import private key and sign
+  const privateKey = await importRsaPrivateKey(privateKeyPem);
+  const signature = await signJwtSegment(privateKey, signingInput);
+
+  // Return complete JWT: header.payload.signature
+  return `${signingInput}.${signature}`;
+}
+
 export async function onRequest(context) {
   const { request, env } = context;
   const origin = request.headers.get('Origin') || '';
@@ -43,14 +216,16 @@ export async function onRequest(context) {
     });
   }
 
+  // Expire state cookie (set in response if successful)
+  const expireCookie = 'linkedin_oauth_state=; HttpOnly; Secure; SameSite=Lax; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT';
+
   try {
-    const { code, state, error, error_description } = Object.fromEntries(url.searchParams);
+    const { code, state: returnedState, error, error_description } = Object.fromEntries(url.searchParams);
 
     // Handle LinkedIn OAuth errors
     if (error) {
       console.error('[LINKEDIN-CALLBACK] LinkedIn OAuth error:', error, error_description);
       
-      // SECURITY: Escape HTML to prevent XSS
       const escapeHtml = (text) => {
         if (!text) return '';
         const map = {
@@ -81,7 +256,7 @@ export async function onRequest(context) {
         </html>
       `, {
         status: 400,
-        headers: { 'Content-Type': 'text/html', ...corsHeaders(origin, env) }
+        headers: { 'Content-Type': 'text/html', ...corsHeaders(origin, env), 'Set-Cookie': expireCookie }
       });
     }
 
@@ -89,9 +264,64 @@ export async function onRequest(context) {
     if (!code) {
       return new Response('Missing authorization code', {
         status: 400,
-        headers: { 'Content-Type': 'text/plain', ...corsHeaders(origin, env) }
+        headers: { 'Content-Type': 'text/plain', ...corsHeaders(origin, env), 'Set-Cookie': expireCookie }
       });
     }
+
+    // STATE VALIDATION: Read and verify state cookie BEFORE any token exchange
+    const cookies = parseCookies(request.headers.get('Cookie') || '');
+    const cookieValue = cookies['linkedin_oauth_state'];
+
+    if (!cookieValue) {
+      console.error('[LINKEDIN-CALLBACK] Missing state cookie');
+      return new Response('Missing OAuth state. Please start authentication again.', {
+        status: 401,
+        headers: { 'Content-Type': 'text/plain', ...corsHeaders(origin, env), 'Set-Cookie': expireCookie }
+      });
+    }
+
+    // Parse state|signature from cookie
+    const parts = cookieValue.split('|');
+    if (parts.length !== 2) {
+      console.error('[LINKEDIN-CALLBACK] Invalid state cookie format');
+      return new Response('Invalid state cookie format', {
+        status: 401,
+        headers: { 'Content-Type': 'text/plain', ...corsHeaders(origin, env), 'Set-Cookie': expireCookie }
+      });
+    }
+
+    const [storedState, storedSignature] = parts;
+
+    // Verify HMAC signature
+    const stateSecret = env.LINKEDIN_STATE_SECRET;
+    if (!stateSecret) {
+      console.error('[LINKEDIN-CALLBACK] LINKEDIN_STATE_SECRET not configured');
+      return new Response('Server configuration error. Please contact support.', {
+        status: 500,
+        headers: { 'Content-Type': 'text/plain', ...corsHeaders(origin, env), 'Set-Cookie': expireCookie }
+      });
+    }
+
+    const expectedSignature = await hmacSign(stateSecret, storedState);
+
+    if (!safeEquals(expectedSignature, storedSignature)) {
+      console.error('[LINKEDIN-CALLBACK] Invalid state signature - possible CSRF attack');
+      return new Response('Invalid state signature. Please try again.', {
+        status: 401,
+        headers: { 'Content-Type': 'text/plain', ...corsHeaders(origin, env), 'Set-Cookie': expireCookie }
+      });
+    }
+
+    // Compare returned state with stored state
+    if (!returnedState || returnedState !== storedState) {
+      console.error('[LINKEDIN-CALLBACK] State mismatch - CSRF protection triggered');
+      return new Response('State mismatch. Please try again.', {
+        status: 401,
+        headers: { 'Content-Type': 'text/plain', ...corsHeaders(origin, env), 'Set-Cookie': expireCookie }
+      });
+    }
+
+    // State validation passed - proceed with OAuth token exchange
 
     // Get LinkedIn credentials from environment
     const linkedinClientId = env.LINKEDIN_CLIENT_ID;
@@ -102,11 +332,11 @@ export async function onRequest(context) {
       console.error('[LINKEDIN-CALLBACK] LinkedIn credentials not configured');
       return new Response('Server configuration error. Please contact support.', {
         status: 500,
-        headers: { 'Content-Type': 'text/plain', ...corsHeaders(origin, env) }
+        headers: { 'Content-Type': 'text/plain', ...corsHeaders(origin, env), 'Set-Cookie': expireCookie }
       });
     }
 
-    // Build redirect URI (the current callback URL - what LinkedIn redirected to)
+    // Build redirect URI (the current callback URL)
     const redirectUri = `${url.protocol}//${url.host}${url.pathname}`;
 
     // Step 1: Exchange authorization code for access token
@@ -129,7 +359,7 @@ export async function onRequest(context) {
       console.error('[LINKEDIN-CALLBACK] LinkedIn token exchange failed:', tokenResponse.status, errorText);
       return new Response('Failed to exchange authorization code. Please try again.', {
         status: 500,
-        headers: { 'Content-Type': 'text/plain', ...corsHeaders(origin, env) }
+        headers: { 'Content-Type': 'text/plain', ...corsHeaders(origin, env), 'Set-Cookie': expireCookie }
       });
     }
 
@@ -140,7 +370,7 @@ export async function onRequest(context) {
       console.error('[LINKEDIN-CALLBACK] No access token in response:', tokenData);
       return new Response('Invalid response from LinkedIn. Please try again.', {
         status: 500,
-        headers: { 'Content-Type': 'text/plain', ...corsHeaders(origin, env) }
+        headers: { 'Content-Type': 'text/plain', ...corsHeaders(origin, env), 'Set-Cookie': expireCookie }
       });
     }
 
@@ -156,7 +386,7 @@ export async function onRequest(context) {
       console.error('[LINKEDIN-CALLBACK] LinkedIn profile fetch failed:', profileResponse.status, errorText);
       return new Response('Failed to fetch profile. Please try again.', {
         status: 500,
-        headers: { 'Content-Type': 'text/plain', ...corsHeaders(origin, env) }
+        headers: { 'Content-Type': 'text/plain', ...corsHeaders(origin, env), 'Set-Cookie': expireCookie }
       });
     }
 
@@ -180,39 +410,27 @@ export async function onRequest(context) {
       console.warn('[LINKEDIN-CALLBACK] Failed to fetch email, continuing without it');
     }
 
-    // Step 4: Create Firebase custom token
-    // Use LinkedIn ID as the UID prefix to ensure uniqueness
+    // Step 4: Create Firebase custom token IN-WORKER (no Firebase Function call)
     const linkedinId = profile.id;
     const firebaseUid = `linkedin:${linkedinId}`;
 
-    // Extract name from profile
     const firstName = profile.localizedFirstName || '';
     const lastName = profile.localizedLastName || '';
     const displayName = `${firstName} ${lastName}`.trim() || email || 'LinkedIn User';
 
-    // Create custom token via Firebase Function helper endpoint
-    // We'll call a new endpoint that accepts profile data
-    // For now, call the existing Firebase Function which we'll modify to accept this
-    // OR we can create the token using service account
-    
-    // Simplest: Call Firebase Function's token creation via a helper endpoint
-    // But since that doesn't exist, let's create the token using Firebase REST API
-    
-    // Actually, the simplest approach for MVP: Call the Firebase Function
-    // but we need it to accept our redirect URI. Let's modify approach:
-    // We'll create a token creation endpoint OR use the existing one differently
-    
-    // For now: Return HTML that fetches token from a backend endpoint
-    // OR directly create token here using service account
-    
+    // Mint Firebase custom token directly in worker
     const customToken = await createFirebaseCustomToken(
+      env,
       firebaseUid,
-      { provider: 'linkedin', linkedinId, email, displayName },
-      env
+      {
+        provider: 'linkedin',
+        linkedinId,
+        email,
+        displayName
+      }
     );
 
     // Step 5: Return HTML page that signs in with Firebase and redirects
-    // This page will run in the popup window and close itself after sign-in
     const firebaseConfig = {
       apiKey: env.FIREBASE_WEB_API_KEY || "AIzaSyCDZksp8XpRJaYnoihiuXT5Uvd0YrbLdfw",
       authDomain: env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN || "jobhackai-90558.firebaseapp.com",
@@ -275,36 +493,8 @@ export async function onRequest(context) {
             
             const customToken = ${JSON.stringify(customToken)};
             const frontendOrigin = ${JSON.stringify(frontendOrigin)};
-            const receivedState = ${JSON.stringify(state || '')};
             
-            // CSRF Protection: Validate state parameter
-            function getCookie(name) {
-              const cookies = document.cookie.split(';');
-              for (const cookie of cookies) {
-                const [cookieName, cookieValue] = cookie.trim().split('=');
-                if (cookieName === name) {
-                  return decodeURIComponent(cookieValue);
-                }
-              }
-              return null;
-            }
-            
-            const storedState = getCookie('linkedin_oauth_state');
-            if (!receivedState || !storedState || receivedState !== storedState) {
-              console.error('CSRF validation failed: state mismatch');
-              document.querySelector('.container').innerHTML = 
-                '<h2 style="color: red;">Security Error</h2>' +
-                '<p>Invalid authentication state. Please try again.</p>' +
-                '<p><a href="' + frontendOrigin + '/login.html">Return to Login</a></p>';
-              // Clean up stored state cookie
-              document.cookie = 'linkedin_oauth_state=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT';
-              throw new Error('CSRF validation failed');
-            }
-            
-            // Clear stored state cookie after validation
-            document.cookie = 'linkedin_oauth_state=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT';
-            
-            // Sign in with custom token
+            // Sign in with custom token (state already validated server-side)
             firebase.auth().signInWithCustomToken(customToken)
               .then((userCredential) => {
                 console.log('✅ Successfully signed in with Firebase:', userCredential.user.uid);
@@ -340,6 +530,7 @@ export async function onRequest(context) {
     return new Response(html, {
       headers: {
         'Content-Type': 'text/html',
+        'Set-Cookie': expireCookie,
         ...corsHeaders(origin, env)
       }
     });
@@ -363,61 +554,7 @@ export async function onRequest(context) {
       </html>
     `, {
       status: 500,
-      headers: { 'Content-Type': 'text/html', ...corsHeaders(origin, env) }
+      headers: { 'Content-Type': 'text/html', ...corsHeaders(origin, env), 'Set-Cookie': expireCookie }
     });
-  }
-}
-
-/**
- * Create Firebase custom token using Firebase Function helper endpoint
- * The helper endpoint accepts profile data and returns a custom token
- * SECURED: Requires API key authentication
- */
-async function createFirebaseCustomToken(uid, customClaims, env) {
-  // Get API key from environment (must be set in Cloudflare Pages secrets)
-  const apiKey = env.LINKEDIN_TOKEN_API_KEY;
-  if (!apiKey) {
-    console.error('[LINKEDIN-CALLBACK] LINKEDIN_TOKEN_API_KEY not configured');
-    throw new Error('Server configuration error. Please contact support.');
-  }
-
-  // Call Firebase Function helper endpoint that creates custom tokens
-  const firebaseFunctionHelperUrl = 'https://us-central1-jobhackai-90558.cloudfunctions.net/linkedinCreateToken';
-  
-  try {
-    const tokenResponse = await fetch(firebaseFunctionHelperUrl, {
-      method: 'POST',
-      headers: { 
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`
-      },
-      body: JSON.stringify({ 
-        uid, 
-        customClaims,
-        projectId: env.FIREBASE_PROJECT_ID || 'jobhackai-90558'
-      })
-    });
-
-    if (!tokenResponse.ok) {
-      const errorText = await tokenResponse.text();
-      console.error('[LINKEDIN-CALLBACK] Helper endpoint failed:', tokenResponse.status, errorText);
-      
-      // Don't expose internal errors to client
-      if (tokenResponse.status === 401) {
-        throw new Error('Authentication failed. Please try again.');
-      }
-      throw new Error(`Token creation failed: ${tokenResponse.status}`);
-    }
-
-    const data = await tokenResponse.json();
-    if (!data.customToken) {
-      throw new Error('No custom token in response');
-    }
-
-    return data.customToken;
-    
-  } catch (error) {
-    console.error('[LINKEDIN-CALLBACK] Failed to create custom token:', error);
-    throw new Error('Failed to create authentication token. Please try again.');
   }
 }

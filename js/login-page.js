@@ -515,11 +515,8 @@ document.addEventListener('DOMContentLoaded', async function() {
     }, 8000); // 8 second timeout
     
     try {
-      // Build callback URL based on current hostname (Cloudflare Pages)
-      // This ensures cookies work for CSRF validation (same domain)
-      const callbackUrl = `${window.location.protocol}//${window.location.hostname}/api/auth/linkedin/callback`;
-      
-      const result = await authManager.signInWithLinkedIn(callbackUrl);
+      // Call server-side start endpoint which handles state generation and LinkedIn redirect
+      const result = await authManager.signInWithLinkedIn();
       
       if (result.success) {
         redirected = true;
