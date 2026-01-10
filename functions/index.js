@@ -74,6 +74,10 @@ exports.linkedinAuth = onRequest(
       return res.status(400).send('Missing authorization code');
     }
 
+    // Note: State validation happens client-side in the callback HTML
+    // The state parameter is passed back from LinkedIn and will be validated
+    // against sessionStorage in the browser before Firebase sign-in
+
     // Get LinkedIn credentials from secrets
     const clientId = linkedinClientId.value();
     const clientSecret = linkedinClientSecret.value();
@@ -225,6 +229,23 @@ exports.linkedinAuth = onRequest(
             
             const customToken = ${JSON.stringify(customToken)};
             const frontendOrigin = ${JSON.stringify(frontendOrigin)};
+            const receivedState = ${JSON.stringify(state || '')};
+            
+            // CSRF Protection: Validate state parameter
+            const storedState = sessionStorage.getItem('linkedin_oauth_state');
+            if (!receivedState || !storedState || receivedState !== storedState) {
+              console.error('CSRF validation failed: state mismatch');
+              document.querySelector('.container').innerHTML = 
+                '<h2 style="color: red;">Security Error</h2>' +
+                '<p>Invalid authentication state. Please try again.</p>' +
+                '<p><a href="' + frontendOrigin + '/login.html">Return to Login</a></p>';
+              // Clean up stored state
+              sessionStorage.removeItem('linkedin_oauth_state');
+              throw new Error('CSRF validation failed');
+            }
+            
+            // Clear stored state after validation
+            sessionStorage.removeItem('linkedin_oauth_state');
             
             // Sign in with custom token
             firebase.auth().signInWithCustomToken(customToken)

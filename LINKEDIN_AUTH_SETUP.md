@@ -32,8 +32,8 @@ firebase login
 # Set Client ID
 echo -n "86v58h3j3qetn0" | firebase functions:secrets:set LINKEDIN_CLIENT_ID
 
-# Set Client Secret (replace with your actual secret)
-echo -n "R!B0i#VNG1t%ij" | firebase functions:secrets:set LINKEDIN_CLIENT_SECRET
+# Set Client Secret (replace with your actual secret from LinkedIn Developer Console)
+echo -n "YOUR_CLIENT_SECRET" | firebase functions:secrets:set LINKEDIN_CLIENT_SECRET
 ```
 
 **⚠️ IMPORTANT**: 
@@ -79,9 +79,9 @@ This will deploy to: `https://us-central1-jobhackai-90558.cloudfunctions.net/lin
 ## 🔒 Security Notes
 
 1. **Secrets are NOT in git** - They're stored in Firebase (safe)
-2. **Rotate the exposed secret** - The Client Secret shared in chat should be rotated
+2. **Rotate the exposed secret** - If a secret was ever exposed, it must be rotated immediately in LinkedIn Developer Console
 3. **HTTPS only** - All redirect URLs use HTTPS
-4. **CSRF protection** - State parameter validation included
+4. **CSRF protection** - State parameter is validated client-side in the callback page against sessionStorage before Firebase sign-in
 
 ## 🐛 Troubleshooting
 
