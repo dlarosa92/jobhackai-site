@@ -746,7 +746,8 @@ class AuthManager {
     return new Promise((resolve, reject) => {
       // Call server-side start endpoint which generates state, signs it, stores in cookie, and redirects to LinkedIn
       // This ensures state is cryptographically secure and cannot be tampered with client-side
-      const startUrl = `${window.location.protocol}//${window.location.hostname}/api/auth/linkedin/start`;
+      // Use host (includes port) instead of hostname to match server-side redirect_uri construction
+      const startUrl = `${window.location.protocol}//${window.location.host}/api/auth/linkedin/start`;
 
       // Open popup window to start endpoint
       const popup = window.open(

@@ -411,6 +411,15 @@ export async function onRequest(context) {
     }
 
     // Step 4: Create Firebase custom token IN-WORKER (no Firebase Function call)
+    // Validate profile ID exists to prevent shared/malformed UIDs
+    if (!profile.id || typeof profile.id !== 'string' || profile.id.trim() === '') {
+      console.error('[LINKEDIN-CALLBACK] Invalid or missing LinkedIn profile ID:', profile);
+      return new Response('Invalid profile data received from LinkedIn. Please try again.', {
+        status: 500,
+        headers: { 'Content-Type': 'text/plain', ...corsHeaders(origin, env), 'Set-Cookie': expireCookie }
+      });
+    }
+    
     const linkedinId = profile.id;
     const firebaseUid = `linkedin:${linkedinId}`;
 
@@ -517,9 +526,22 @@ export async function onRequest(context) {
               })
               .catch((error) => {
                 console.error('❌ Firebase sign-in error:', error);
+                // HTML escape error message to prevent XSS
+                const escapeHtml = (text) => {
+                  if (!text) return '';
+                  const map = {
+                    '&': '&amp;',
+                    '<': '&lt;',
+                    '>': '&gt;',
+                    '"': '&quot;',
+                    "'": '&#039;'
+                  };
+                  return String(text).replace(/[&<>"']/g, m => map[m]);
+                };
+                const safeErrorMessage = escapeHtml(error.message || 'An unknown error occurred');
                 document.querySelector('.container').innerHTML = 
                   '<h2 style="color: red;">Authentication Failed</h2>' +
-                  '<p>' + error.message + '</p>' +
+                  '<p>' + safeErrorMessage + '</p>' +
                   '<p><a href="' + frontendOrigin + '/login.html">Return to Login</a></p>';
               });
           </script>
