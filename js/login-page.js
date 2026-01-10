@@ -494,10 +494,117 @@ document.addEventListener('DOMContentLoaded', async function() {
     } finally { loginInProgress = false; }
   });
   
-  // ===== LinkedIn SIGN-IN (NOT YET IMPLEMENTED) =====
-  linkedinSignInBtn?.addEventListener('click', function(e) {
+  // ===== LinkedIn SIGN-IN =====
+  linkedinSignInBtn?.addEventListener('click', async function(e) {
     e.preventDefault();
-    showError(loginError, 'LinkedIn sign-in coming soon! Please use Google or email/password.');
+    loginInProgress = true;
+    
+    // Show loading state
+    const originalText = this.textContent;
+    this.textContent = 'Signing in...';
+    this.disabled = true;
+    
+    // Fallback redirect timeout - ensures user always gets redirected even if something fails
+    let redirected = false;
+    const fallbackRedirectTimeout = setTimeout(() => {
+      if (!redirected && authManager.getCurrentUser()) {
+        console.log('⚠️ Fallback redirect triggered - redirecting to dashboard');
+        sessionStorage.removeItem('selectedPlan');
+        window.location.href = 'dashboard.html';
+      }
+    }, 8000); // 8 second timeout
+    
+    try {
+      // Get Firebase Function URL based on environment
+      // For dev: use dev function URL, for prod: use production function URL
+      const hostname = window.location.hostname;
+      let functionUrl;
+      
+      if (hostname === 'dev.jobhackai.io' || hostname === 'localhost') {
+        // Dev environment - update this after deploying to dev
+        functionUrl = 'https://us-central1-jobhackai-90558.cloudfunctions.net/linkedinAuth';
+      } else if (hostname === 'qa.jobhackai.io') {
+        // QA environment
+        functionUrl = 'https://us-central1-jobhackai-90558.cloudfunctions.net/linkedinAuth';
+      } else {
+        // Production environment
+        functionUrl = 'https://us-central1-jobhackai-90558.cloudfunctions.net/linkedinAuth';
+      }
+      
+      const result = await authManager.signInWithLinkedIn(functionUrl);
+      
+      if (result.success) {
+        redirected = true;
+        clearTimeout(fallbackRedirectTimeout);
+        
+        // Route based on selected plan (only if freshly selected from pricing page)
+        let storedPlan = null;
+        let isFreshSelection = false;
+        try {
+          const stored = sessionStorage.getItem('selectedPlan');
+          if (stored) {
+            const data = JSON.parse(stored);
+            storedPlan = data.planId;
+            const timestamp = data.timestamp || 0;
+            isFreshSelection = Date.now() - timestamp < 5 * 60 * 1000; // 5 minutes
+          }
+        } catch (e) {}
+        
+        // Only use the plan if it was freshly selected
+        const plan = isFreshSelection ? (selectedPlan || storedPlan || 'free') : 'free';
+        
+        // Show loading state with smooth transition
+        document.body.style.opacity = '0.7';
+        document.body.style.transition = 'opacity 0.3s ease';
+        this.textContent = 'Redirecting...';
+        
+        // Longer delay to ensure auth state is fully persisted
+        await new Promise(resolve => setTimeout(resolve, 500));
+        
+        if (planRequiresPayment(plan)) {
+          // Start server-driven checkout; trial requires card
+          try {
+            const idToken = await authManager.getCurrentUser()?.getIdToken?.(true); // Force refresh
+            const res = await fetch('/api/stripe-checkout', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}) },
+              body: JSON.stringify({ plan, startTrial: plan === 'trial' })
+            });
+            const data = await res.json();
+            if (data && data.ok && data.url) { 
+              console.log('🚀 Redirecting to Stripe checkout:', data.url);
+              window.location.href = data.url; 
+              return; 
+            }
+          } catch (error) {
+            console.error('Checkout error:', error);
+          }
+          window.location.href = 'pricing-a.html';
+        } else {
+          // Existing user or free plan -> take user to dashboard
+          sessionStorage.removeItem('selectedPlan');
+          console.log('🚀 Redirecting to dashboard (existing user or free plan)');
+          window.location.href = 'dashboard.html';
+        }
+      } else if (result.error) {
+        clearTimeout(fallbackRedirectTimeout);
+        // Show error (but not if user just closed popup)
+        showError(loginError, result.error);
+        this.textContent = originalText;
+        this.disabled = false;
+      } else {
+        clearTimeout(fallbackRedirectTimeout);
+        // Silent failure (user closed popup)
+        this.textContent = originalText;
+        this.disabled = false;
+      }
+    } catch (error) {
+      clearTimeout(fallbackRedirectTimeout);
+      console.error('LinkedIn sign-in error:', error);
+      showError(loginError, 'An unexpected error occurred. Please try again.');
+      this.textContent = originalText;
+      this.disabled = false;
+    } finally { loginInProgress = false; }
   });
   
   // ===== EMAIL/PASSWORD LOGIN =====

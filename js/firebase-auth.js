@@ -738,6 +738,215 @@ class AuthManager {
   }
 
   /**
+   * Sign in with LinkedIn
+   * Opens LinkedIn OAuth popup and handles callback via postMessage
+   */
+  async signInWithLinkedIn(firebaseFunctionUrl) {
+    return new Promise((resolve, reject) => {
+      // Generate state for CSRF protection
+      const state = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+      sessionStorage.setItem('linkedin_oauth_state', state);
+
+      // LinkedIn Client ID - should be stored securely (currently using from config)
+      // For now, we'll get it from the function URL or use a constant
+      // TODO: Make this configurable via environment
+      const linkedinClientId = '86v58h3j3qetn0';
+      
+      // Build LinkedIn OAuth URL
+      const linkedinAuthUrl = new URL('https://www.linkedin.com/oauth/v2/authorization');
+      linkedinAuthUrl.searchParams.set('response_type', 'code');
+      linkedinAuthUrl.searchParams.set('client_id', linkedinClientId);
+      linkedinAuthUrl.searchParams.set('redirect_uri', firebaseFunctionUrl);
+      linkedinAuthUrl.searchParams.set('state', state);
+      linkedinAuthUrl.searchParams.set('scope', 'r_liteprofile r_emailaddress');
+
+      // Open popup window
+      const popup = window.open(
+        linkedinAuthUrl.toString(),
+        'linkedin-auth',
+        'width=600,height=700,scrollbars=yes,resizable=yes'
+      );
+
+      if (!popup) {
+        return resolve({ success: false, error: 'Popup blocked. Please allow popups for this site.' });
+      }
+
+      // Listen for message from popup (when callback completes)
+      const messageListener = async (event) => {
+        // Verify origin matches our frontend
+        const allowedOrigins = [
+          'https://dev.jobhackai.io',
+          'https://qa.jobhackai.io',
+          'https://app.jobhackai.io',
+          'http://localhost:8787',
+          'http://localhost:8788'
+        ];
+        
+        if (!allowedOrigins.includes(event.origin)) {
+          console.warn('Ignored message from unauthorized origin:', event.origin);
+          return;
+        }
+
+        if (event.data?.type === 'linkedin-auth-success') {
+          window.removeEventListener('message', messageListener);
+          popup.close();
+
+          // Wait a moment for Firebase auth state to propagate
+          await new Promise(resolve => setTimeout(resolve, 500));
+
+          // Get the signed-in user
+          const user = auth.currentUser;
+          if (!user) {
+            // Wait a bit more and try again
+            await this.waitForAuthReady(3000);
+            const retryUser = auth.currentUser;
+            if (!retryUser) {
+              return resolve({ success: false, error: 'Sign-in completed but user session not found. Please try again.' });
+            }
+          }
+
+          const currentUser = auth.currentUser;
+
+          // Extract name from display name or email
+          const nameParts = currentUser.displayName ? currentUser.displayName.split(' ') : ['', ''];
+          
+          // CRITICAL: Prioritize newly selected plan over existing plans (same as Google)
+          const selectedPlan = this.getSelectedPlan();
+          let actualPlan = 'free';
+
+          if (selectedPlan && selectedPlan !== 'free') {
+            actualPlan = selectedPlan === 'trial' ? 'pending' : selectedPlan;
+            console.log('✅ Using newly selected plan for LinkedIn sign-in:', actualPlan);
+          } else {
+            // Fetch plan from API (same logic as Google sign-in)
+            let kvPlan = null;
+            try {
+              console.log('🔄 Waiting for Firebase auth to be ready during LinkedIn sign-in...');
+              await this.waitForAuthReady(3000);
+              
+              if (window.JobHackAINavigation && typeof window.JobHackAINavigation.fetchPlanFromAPI === 'function') {
+                kvPlan = await window.JobHackAINavigation.fetchPlanFromAPI();
+                if (kvPlan) console.log('✅ Fetched plan via navigation system during LinkedIn sign-in:', kvPlan);
+              }
+              if (!kvPlan) {
+                kvPlan = await fetchPlanFromAPI();
+                if (kvPlan) console.log('✅ Fetched plan directly from API during LinkedIn sign-in:', kvPlan);
+              }
+            } catch (e) {
+              console.warn('Could not fetch plan from API during LinkedIn sign-in:', e);
+              try {
+                console.log('🔄 Retrying plan fetch during LinkedIn sign-in after 1 second...');
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                if (window.JobHackAINavigation && typeof window.JobHackAINavigation.fetchPlanFromAPI === 'function') {
+                  kvPlan = await window.JobHackAINavigation.fetchPlanFromAPI();
+                }
+                if (!kvPlan) {
+                  kvPlan = await fetchPlanFromAPI();
+                }
+                if (kvPlan) console.log('✅ Retry successful during LinkedIn sign-in, fetched plan:', kvPlan);
+              } catch (retryError) {
+                console.warn('Retry also failed during LinkedIn sign-in:', retryError);
+              }
+            }
+            
+            if (kvPlan && kvPlan !== 'free') {
+              actualPlan = kvPlan;
+              console.log('✅ Retrieved user plan from D1 (via API) during LinkedIn sign-in:', actualPlan);
+            } else {
+              // Try Firestore as fallback
+              const profileResult = await UserProfileManager.getProfile(currentUser.uid);
+              if (profileResult.success && profileResult.profile) {
+                actualPlan = profileResult.profile.plan || 'free';
+                console.log('✅ Retrieved user plan from Firestore during LinkedIn sign-in (API fallback):', actualPlan);
+              } else {
+                actualPlan = 'free';
+                console.log('ℹ️ All plan sources failed during LinkedIn sign-in, defaulting to free.');
+              }
+            }
+          }
+          
+          const userData = {
+            uid: currentUser.uid,
+            firstName: nameParts[0] || '',
+            lastName: nameParts.slice(1).join(' ') || '',
+            plan: actualPlan
+          };
+
+          // Update local database
+          UserDatabase.createOrUpdateUser(currentUser.email, userData);
+
+          // Persist auth state immediately
+          try {
+            localStorage.setItem('user-authenticated', 'true');
+            if (currentUser.displayName) {
+              localStorage.setItem('user-name', currentUser.displayName);
+            }
+            if (window.JobHackAINavigation) {
+              window.JobHackAINavigation.setAuthState(true, actualPlan);
+            }
+          } catch (e) {
+            console.warn('auth state persist failed during LinkedIn sign-in:', e);
+          }
+
+          // Initialize free account tracking for new free users
+          if (userData.plan === 'free') {
+            if (window.freeAccountManager) {
+              window.freeAccountManager.initializeForNewUser();
+            }
+          }
+
+          // Create or update Firestore profile
+          const firestoreData = {
+            email: currentUser.email,
+            displayName: currentUser.displayName || '',
+            firstName: nameParts[0] || '',
+            lastName: nameParts.slice(1).join(' ') || '',
+            photoURL: currentUser.photoURL || null,
+            plan: selectedPlan === 'trial' ? 'pending' : (selectedPlan || 'free'),
+            signupSource: 'linkedin_oauth',
+            pendingPlan: selectedPlan === 'trial' ? 'trial' : null
+          };
+          
+          try {
+            await UserProfileManager.upsertProfile(currentUser.uid, firestoreData);
+          } catch (err) {
+            console.warn('Could not sync Firestore profile:', err);
+          }
+
+          return resolve({ success: true, user: currentUser });
+        }
+
+        if (event.data?.type === 'linkedin-auth-error') {
+          window.removeEventListener('message', messageListener);
+          popup.close();
+          return resolve({ success: false, error: event.data.error || 'Authentication failed' });
+        }
+      };
+
+      window.addEventListener('message', messageListener);
+
+      // Cleanup if popup is closed manually
+      const checkClosed = setInterval(() => {
+        if (popup.closed) {
+          clearInterval(checkClosed);
+          window.removeEventListener('message', messageListener);
+          resolve({ success: false, error: null }); // Silent failure - user closed popup
+        }
+      }, 500);
+
+      // Timeout after 5 minutes
+      setTimeout(() => {
+        clearInterval(checkClosed);
+        window.removeEventListener('message', messageListener);
+        if (!popup.closed) {
+          popup.close();
+        }
+        resolve({ success: false, error: 'Authentication timeout. Please try again.' });
+      }, 5 * 60 * 1000);
+    });
+  }
+
+  /**
    * Sign out
    */
   async signOut() {
