@@ -310,3 +310,50 @@ exports.linkedinAuth = onRequest(
   }
   }
 );
+
+/**
+ * Helper endpoint: Create Firebase custom token from profile data
+ * Used by Cloudflare Pages callback after it fetches LinkedIn profile
+ */
+exports.linkedinCreateToken = onRequest(
+  {
+    cors: true,
+  },
+  async (req, res) => {
+    // Handle CORS for preflight
+    if (req.method === 'OPTIONS') {
+      res.set('Access-Control-Allow-Origin', '*');
+      res.set('Access-Control-Allow-Methods', 'POST, OPTIONS');
+      res.set('Access-Control-Allow-Headers', 'Content-Type');
+      res.set('Access-Control-Max-Age', '3600');
+      return res.status(204).send('');
+    }
+
+    // Only allow POST requests
+    if (req.method !== 'POST') {
+      return res.status(405).send('Method Not Allowed');
+    }
+
+    try {
+      const { uid, customClaims, projectId } = req.body;
+
+      if (!uid) {
+        return res.status(400).json({ error: 'Missing uid' });
+      }
+
+      // Validate project ID matches
+      if (projectId && projectId !== 'jobhackai-90558') {
+        return res.status(403).json({ error: 'Invalid project ID' });
+      }
+
+      // Create Firebase custom token
+      const customToken = await admin.auth().createCustomToken(uid, customClaims || {});
+
+      return res.json({ customToken });
+
+    } catch (error) {
+      console.error('Create token error:', error);
+      return res.status(500).json({ error: 'Failed to create token' });
+    }
+  }
+);

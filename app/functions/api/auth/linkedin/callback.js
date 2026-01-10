@@ -89,7 +89,7 @@ export async function onRequest(context) {
       });
     }
 
-    // Build redirect URI (the current callback URL)
+    // Build redirect URI (the current callback URL - what LinkedIn redirected to)
     const redirectUri = `${url.protocol}//${url.host}${url.pathname}`;
 
     // Step 1: Exchange authorization code for access token
@@ -163,53 +163,164 @@ export async function onRequest(context) {
       console.warn('[LINKEDIN-CALLBACK] Failed to fetch email, continuing without it');
     }
 
-    // Step 4: Get Firebase custom token from Firebase Function
-    // We proxy to the existing Firebase Function which handles custom token creation
-    const firebaseFunctionUrl = 'https://us-central1-jobhackai-90558.cloudfunctions.net/linkedinAuth';
-    
-    // Forward the request to Firebase Function
-    // The Firebase Function will handle custom token creation and return HTML
-    const firebaseResponse = await fetch(
-      `${firebaseFunctionUrl}?code=${encodeURIComponent(code)}&state=${encodeURIComponent(state || '')}`,
-      {
-        method: 'GET',
-        headers: {
-          'User-Agent': 'Cloudflare-Pages-Proxy'
-        }
-    });
+    // Step 4: Create Firebase custom token
+    // Use LinkedIn ID as the UID prefix to ensure uniqueness
+    const linkedinId = profile.id;
+    const firebaseUid = `linkedin:${linkedinId}`;
 
-    if (!firebaseResponse.ok) {
-      const errorText = await firebaseResponse.text();
-      console.error('[LINKEDIN-CALLBACK] Firebase Function call failed:', firebaseResponse.status, errorText);
-      return new Response(`
-        <!DOCTYPE html>
-        <html>
-          <head>
-            <title>Server Error</title>
-            <meta http-equiv="refresh" content="3;url=${frontendOrigin}/login.html">
-          </head>
-          <body style="font-family: Arial, sans-serif; text-align: center; padding: 50px;">
-            <h2>An error occurred</h2>
-            <p>Please try again later.</p>
-            <p>Redirecting to login page...</p>
-          </body>
-        </html>
-      `, {
-        status: 500,
-        headers: { 'Content-Type': 'text/html', ...corsHeaders(origin, env) }
-      });
-    }
+    // Extract name from profile
+    const firstName = profile.localizedFirstName || '';
+    const lastName = profile.localizedLastName || '';
+    const displayName = `${firstName} ${lastName}`.trim() || email || 'LinkedIn User';
 
-    // Return the HTML from Firebase Function (which includes the custom token)
-    const html = await firebaseResponse.text();
+    // Create custom token via Firebase Function helper endpoint
+    // We'll call a new endpoint that accepts profile data
+    // For now, call the existing Firebase Function which we'll modify to accept this
+    // OR we can create the token using service account
     
-    // Update the frontend origin in the HTML if needed
-    const updatedHtml = html.replace(
-      /const frontendOrigin = [^;]+;/g,
-      `const frontendOrigin = ${JSON.stringify(frontendOrigin)};`
+    // Simplest: Call Firebase Function's token creation via a helper endpoint
+    // But since that doesn't exist, let's create the token using Firebase REST API
+    
+    // Actually, the simplest approach for MVP: Call the Firebase Function
+    // but we need it to accept our redirect URI. Let's modify approach:
+    // We'll create a token creation endpoint OR use the existing one differently
+    
+    // For now: Return HTML that fetches token from a backend endpoint
+    // OR directly create token here using service account
+    
+    const customToken = await createFirebaseCustomToken(
+      firebaseUid,
+      { provider: 'linkedin', linkedinId, email, displayName },
+      env
     );
 
-    return new Response(updatedHtml, {
+    // Step 5: Return HTML page that signs in with Firebase and redirects
+    // This page will run in the popup window and close itself after sign-in
+    const firebaseConfig = {
+      apiKey: env.FIREBASE_WEB_API_KEY || "AIzaSyCDZksp8XpRJaYnoihiuXT5Uvd0YrbLdfw",
+      authDomain: env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN || "jobhackai-90558.firebaseapp.com",
+      projectId: env.FIREBASE_PROJECT_ID || "jobhackai-90558",
+      storageBucket: env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || "jobhackai-90558.firebasestorage.app",
+      messagingSenderId: env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID || "40538124818",
+      appId: env.NEXT_PUBLIC_FIREBASE_APP_ID || "1:40538124818:web:cd61fc1d120ec79d4ddecb"
+    };
+
+    const html = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Signing you in...</title>
+          <style>
+            body {
+              font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+              display: flex;
+              justify-content: center;
+              align-items: center;
+              height: 100vh;
+              margin: 0;
+              background: #f5f5f5;
+            }
+            .container {
+              text-align: center;
+              padding: 40px;
+              background: white;
+              border-radius: 8px;
+              box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            }
+            .spinner {
+              border: 4px solid #f3f3f3;
+              border-top: 4px solid #0077B5;
+              border-radius: 50%;
+              width: 40px;
+              height: 40px;
+              animation: spin 1s linear infinite;
+              margin: 0 auto 20px;
+            }
+            @keyframes spin {
+              0% { transform: rotate(0deg); }
+              100% { transform: rotate(360deg); }
+            }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <div class="spinner"></div>
+            <h2>Signing you in...</h2>
+            <p>Please wait while we complete authentication.</p>
+          </div>
+          
+          <script src="https://www.gstatic.com/firebasejs/12.1.0/firebase-app-compat.js"></script>
+          <script src="https://www.gstatic.com/firebasejs/12.1.0/firebase-auth-compat.js"></script>
+          <script>
+            // Initialize Firebase with client config
+            const firebaseConfig = ${JSON.stringify(firebaseConfig)};
+            firebase.initializeApp(firebaseConfig);
+            
+            const customToken = ${JSON.stringify(customToken)};
+            const frontendOrigin = ${JSON.stringify(frontendOrigin)};
+            const receivedState = ${JSON.stringify(state || '')};
+            
+            // CSRF Protection: Validate state parameter
+            function getCookie(name) {
+              const cookies = document.cookie.split(';');
+              for (const cookie of cookies) {
+                const [cookieName, cookieValue] = cookie.trim().split('=');
+                if (cookieName === name) {
+                  return decodeURIComponent(cookieValue);
+                }
+              }
+              return null;
+            }
+            
+            const storedState = getCookie('linkedin_oauth_state');
+            if (!receivedState || !storedState || receivedState !== storedState) {
+              console.error('CSRF validation failed: state mismatch');
+              document.querySelector('.container').innerHTML = 
+                '<h2 style="color: red;">Security Error</h2>' +
+                '<p>Invalid authentication state. Please try again.</p>' +
+                '<p><a href="' + frontendOrigin + '/login.html">Return to Login</a></p>';
+              // Clean up stored state cookie
+              document.cookie = 'linkedin_oauth_state=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT';
+              throw new Error('CSRF validation failed');
+            }
+            
+            // Clear stored state cookie after validation
+            document.cookie = 'linkedin_oauth_state=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT';
+            
+            // Sign in with custom token
+            firebase.auth().signInWithCustomToken(customToken)
+              .then((userCredential) => {
+                console.log('✅ Successfully signed in with Firebase:', userCredential.user.uid);
+                
+                // Close popup if opened as popup, otherwise redirect
+                if (window.opener) {
+                  // Send success message to parent window
+                  window.opener.postMessage({
+                    type: 'linkedin-auth-success',
+                    user: {
+                      uid: userCredential.user.uid,
+                      email: userCredential.user.email
+                    }
+                  }, frontendOrigin);
+                  window.close();
+                } else {
+                  // Not a popup - redirect to dashboard
+                  window.location.href = frontendOrigin + '/dashboard.html';
+                }
+              })
+              .catch((error) => {
+                console.error('❌ Firebase sign-in error:', error);
+                document.querySelector('.container').innerHTML = 
+                  '<h2 style="color: red;">Authentication Failed</h2>' +
+                  '<p>' + error.message + '</p>' +
+                  '<p><a href="' + frontendOrigin + '/login.html">Return to Login</a></p>';
+              });
+          </script>
+        </body>
+      </html>
+    `;
+
+    return new Response(html, {
       headers: {
         'Content-Type': 'text/html',
         ...corsHeaders(origin, env)
@@ -237,5 +348,44 @@ export async function onRequest(context) {
       status: 500,
       headers: { 'Content-Type': 'text/html', ...corsHeaders(origin, env) }
     });
+  }
+}
+
+/**
+ * Create Firebase custom token using Firebase Function helper endpoint
+ * The helper endpoint accepts profile data and returns a custom token
+ */
+async function createFirebaseCustomToken(uid, customClaims, env) {
+  // Call Firebase Function helper endpoint that creates custom tokens
+  // We'll create this endpoint in Firebase Functions
+  const firebaseFunctionHelperUrl = 'https://us-central1-jobhackai-90558.cloudfunctions.net/linkedinCreateToken';
+  
+  try {
+    const tokenResponse = await fetch(firebaseFunctionHelperUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ 
+        uid, 
+        customClaims,
+        projectId: env.FIREBASE_PROJECT_ID || 'jobhackai-90558'
+      })
+    });
+
+    if (!tokenResponse.ok) {
+      const errorText = await tokenResponse.text();
+      console.error('[LINKEDIN-CALLBACK] Helper endpoint failed:', tokenResponse.status, errorText);
+      throw new Error(`Token creation failed: ${tokenResponse.status}`);
+    }
+
+    const data = await tokenResponse.json();
+    if (!data.customToken) {
+      throw new Error('No custom token in response');
+    }
+
+    return data.customToken;
+    
+  } catch (error) {
+    console.error('[LINKEDIN-CALLBACK] Failed to create custom token:', error);
+    throw new Error('Failed to create authentication token. Please try again.');
   }
 }
