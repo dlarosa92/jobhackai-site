@@ -34,7 +34,16 @@ echo -n "86v58h3j3qetn0" | firebase functions:secrets:set LINKEDIN_CLIENT_ID
 
 # Set Client Secret (replace with your actual secret from LinkedIn Developer Console)
 echo -n "YOUR_CLIENT_SECRET" | firebase functions:secrets:set LINKEDIN_CLIENT_SECRET
+
+# Set API Key for token creation endpoint (generate a secure random key)
+# Generate with: openssl rand -hex 32
+echo -n "YOUR_GENERATED_API_KEY" | firebase functions:secrets:set LINKEDIN_TOKEN_API_KEY
 ```
+
+**⚠️ SECURITY**: The `LINKEDIN_TOKEN_API_KEY` is a shared secret between Cloudflare Pages and Firebase Functions. It must:
+- Be a strong random value (use `openssl rand -hex 32` to generate)
+- Be set in both Firebase Functions secrets AND Cloudflare Pages secrets
+- Match exactly in both places
 
 **⚠️ CRITICAL SECURITY WARNING**: 
 - **If a LinkedIn Client Secret was ever committed to git or shared publicly, it MUST be rotated immediately**
@@ -43,14 +52,31 @@ echo -n "YOUR_CLIENT_SECRET" | firebase functions:secrets:set LINKEDIN_CLIENT_SE
 - Use the NEW secret in the command above (never use an exposed secret)
 - Secrets in git history remain accessible even after file removal - rotation is mandatory
 
-### Step 3: Deploy the Function
+### Step 3: Set Cloudflare Pages Secret
+The same API key must be set in Cloudflare Pages secrets:
 ```bash
-firebase deploy --only functions:linkedinAuth --project jobhackai-90558
+# Set the same API key in Cloudflare Pages (for dev environment)
+wrangler pages secret put LINKEDIN_TOKEN_API_KEY --project-name=jobhackai-app-dev
+# Enter the same value you used in Step 2
+
+# For QA environment:
+wrangler pages secret put LINKEDIN_TOKEN_API_KEY --project-name=jobhackai-app-qa
+
+# For production:
+wrangler pages secret put LINKEDIN_TOKEN_API_KEY --project-name=jobhackai-app-prod
 ```
 
-This will deploy to: `https://us-central1-jobhackai-90558.cloudfunctions.net/linkedinAuth`
+### Step 4: Deploy the Functions
+```bash
+# Deploy both functions
+firebase deploy --only functions:linkedinAuth,functions:linkedinCreateToken --project jobhackai-90558
+```
 
-### Step 4: Update LinkedIn Redirect URLs
+This will deploy:
+- `linkedinAuth`: `https://us-central1-jobhackai-90558.cloudfunctions.net/linkedinAuth`
+- `linkedinCreateToken`: `https://us-central1-jobhackai-90558.cloudfunctions.net/linkedinCreateToken`
+
+### Step 5: Update LinkedIn Redirect URLs
 1. Go to [LinkedIn Developer Portal](https://www.linkedin.com/developers/apps)
 2. Select app: **jobhackai-auth**
 3. Go to **Auth** → **OAuth 2.0 settings**
@@ -59,7 +85,7 @@ This will deploy to: `https://us-central1-jobhackai-90558.cloudfunctions.net/lin
    https://us-central1-jobhackai-90558.cloudfunctions.net/linkedinAuth
    ```
 
-### Step 5: Test the Flow
+### Step 6: Test the Flow
 1. Go to your login page
 2. Click "Continue with LinkedIn"
 3. Complete LinkedIn authorization
@@ -81,10 +107,13 @@ This will deploy to: `https://us-central1-jobhackai-90558.cloudfunctions.net/lin
 
 ## 🔒 Security Notes
 
-1. **Secrets are NOT in git** - They're stored in Firebase (safe)
+1. **Secrets are NOT in git** - They're stored in Firebase Functions secrets and Cloudflare Pages secrets (safe)
 2. **Rotate the exposed secret** - If a secret was ever exposed, it must be rotated immediately in LinkedIn Developer Console
 3. **HTTPS only** - All redirect URLs use HTTPS
 4. **CSRF protection** - State parameter is validated client-side in the callback page against a cookie (shared across windows) before Firebase sign-in
+5. **API key authentication** - The `linkedinCreateToken` endpoint requires a shared API key to prevent unauthorized token creation
+6. **XSS protection** - All user-provided error messages are HTML-escaped before display
+7. **UID validation** - Token creation only accepts UIDs with the `linkedin:` prefix
 
 ## 🐛 Troubleshooting
 

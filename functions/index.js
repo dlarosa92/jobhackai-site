@@ -14,6 +14,7 @@ admin.initializeApp();
 // Define secrets (these will be set via firebase functions:secrets:set)
 const linkedinClientId = defineSecret('LINKEDIN_CLIENT_ID');
 const linkedinClientSecret = defineSecret('LINKEDIN_CLIENT_SECRET');
+const linkedinTokenApiKey = defineSecret('LINKEDIN_TOKEN_API_KEY');
 
 // Firebase client config for the callback page
 const FIREBASE_CLIENT_CONFIG = {
@@ -314,9 +315,11 @@ exports.linkedinAuth = onRequest(
 /**
  * Helper endpoint: Create Firebase custom token from profile data
  * Used by Cloudflare Pages callback after it fetches LinkedIn profile
+ * SECURED: Requires API key in Authorization header
  */
 exports.linkedinCreateToken = onRequest(
   {
+    secrets: [linkedinTokenApiKey],
     cors: true,
   },
   async (req, res) => {
@@ -324,7 +327,7 @@ exports.linkedinCreateToken = onRequest(
     if (req.method === 'OPTIONS') {
       res.set('Access-Control-Allow-Origin', '*');
       res.set('Access-Control-Allow-Methods', 'POST, OPTIONS');
-      res.set('Access-Control-Allow-Headers', 'Content-Type');
+      res.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
       res.set('Access-Control-Max-Age', '3600');
       return res.status(204).send('');
     }
@@ -335,6 +338,18 @@ exports.linkedinCreateToken = onRequest(
     }
 
     try {
+      // SECURITY: Verify API key from Authorization header
+      const authHeader = req.headers.authorization || '';
+      const providedKey = authHeader.startsWith('Bearer ') 
+        ? authHeader.substring(7) 
+        : authHeader;
+      const expectedKey = linkedinTokenApiKey.value();
+
+      if (!providedKey || providedKey !== expectedKey) {
+        console.error('Unauthorized token creation attempt - invalid API key');
+        return res.status(401).json({ error: 'Unauthorized' });
+      }
+
       const { uid, customClaims, projectId } = req.body;
 
       if (!uid) {
@@ -344,6 +359,12 @@ exports.linkedinCreateToken = onRequest(
       // Validate project ID matches
       if (projectId && projectId !== 'jobhackai-90558') {
         return res.status(403).json({ error: 'Invalid project ID' });
+      }
+
+      // SECURITY: Validate UID format - must be linkedin: prefixed
+      if (!uid.startsWith('linkedin:')) {
+        console.error('Invalid UID format - must start with linkedin:', uid);
+        return res.status(400).json({ error: 'Invalid UID format' });
       }
 
       // Create Firebase custom token

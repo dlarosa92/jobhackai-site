@@ -49,16 +49,33 @@ export async function onRequest(context) {
     // Handle LinkedIn OAuth errors
     if (error) {
       console.error('[LINKEDIN-CALLBACK] LinkedIn OAuth error:', error, error_description);
+      
+      // SECURITY: Escape HTML to prevent XSS
+      const escapeHtml = (text) => {
+        if (!text) return '';
+        const map = {
+          '&': '&amp;',
+          '<': '&lt;',
+          '>': '&gt;',
+          '"': '&quot;',
+          "'": '&#039;'
+        };
+        return String(text).replace(/[&<>"']/g, m => map[m]);
+      };
+      
+      const safeError = escapeHtml(error_description || error);
+      const frontendUrl = env.FRONTEND_URL || 'https://dev.jobhackai.io';
+      
       return new Response(`
         <!DOCTYPE html>
         <html>
           <head>
             <title>Authentication Error</title>
-            <meta http-equiv="refresh" content="3;url=${env.FRONTEND_URL || 'https://dev.jobhackai.io'}/login.html">
+            <meta http-equiv="refresh" content="3;url=${frontendUrl}/login.html">
           </head>
           <body style="font-family: Arial, sans-serif; text-align: center; padding: 50px;">
             <h2>Authentication Failed</h2>
-            <p>${error_description || error}</p>
+            <p>${safeError}</p>
             <p>Redirecting to login page...</p>
           </body>
         </html>
@@ -354,16 +371,26 @@ export async function onRequest(context) {
 /**
  * Create Firebase custom token using Firebase Function helper endpoint
  * The helper endpoint accepts profile data and returns a custom token
+ * SECURED: Requires API key authentication
  */
 async function createFirebaseCustomToken(uid, customClaims, env) {
+  // Get API key from environment (must be set in Cloudflare Pages secrets)
+  const apiKey = env.LINKEDIN_TOKEN_API_KEY;
+  if (!apiKey) {
+    console.error('[LINKEDIN-CALLBACK] LINKEDIN_TOKEN_API_KEY not configured');
+    throw new Error('Server configuration error. Please contact support.');
+  }
+
   // Call Firebase Function helper endpoint that creates custom tokens
-  // We'll create this endpoint in Firebase Functions
   const firebaseFunctionHelperUrl = 'https://us-central1-jobhackai-90558.cloudfunctions.net/linkedinCreateToken';
   
   try {
     const tokenResponse = await fetch(firebaseFunctionHelperUrl, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`
+      },
       body: JSON.stringify({ 
         uid, 
         customClaims,
@@ -374,6 +401,11 @@ async function createFirebaseCustomToken(uid, customClaims, env) {
     if (!tokenResponse.ok) {
       const errorText = await tokenResponse.text();
       console.error('[LINKEDIN-CALLBACK] Helper endpoint failed:', tokenResponse.status, errorText);
+      
+      // Don't expose internal errors to client
+      if (tokenResponse.status === 401) {
+        throw new Error('Authentication failed. Please try again.');
+      }
       throw new Error(`Token creation failed: ${tokenResponse.status}`);
     }
 
