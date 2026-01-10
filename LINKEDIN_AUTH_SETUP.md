@@ -36,9 +36,12 @@ echo -n "86v58h3j3qetn0" | firebase functions:secrets:set LINKEDIN_CLIENT_ID
 echo -n "YOUR_CLIENT_SECRET" | firebase functions:secrets:set LINKEDIN_CLIENT_SECRET
 ```
 
-**⚠️ IMPORTANT**: 
-- The Client Secret you shared in chat should be **rotated immediately** in LinkedIn Developer Console for security
-- After rotating, use the new secret in the command above
+**⚠️ CRITICAL SECURITY WARNING**: 
+- **If a LinkedIn Client Secret was ever committed to git or shared publicly, it MUST be rotated immediately**
+- Go to [LinkedIn Developer Portal](https://www.linkedin.com/developers/apps) → Your App → Auth → Generate a new Client Secret
+- **Delete the old secret** after generating the new one
+- Use the NEW secret in the command above (never use an exposed secret)
+- Secrets in git history remain accessible even after file removal - rotation is mandatory
 
 ### Step 3: Deploy the Function
 ```bash
