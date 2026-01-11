@@ -207,7 +207,8 @@ export async function onRequest(context) {
     const linkedinClientId = env.LINKEDIN_CLIENT_ID;
     const linkedinClientSecret = env.LINKEDIN_CLIENT_SECRET;
     const frontendOrigin = env.LINKEDIN_FRONTEND_URL || env.FRONTEND_URL || 'https://dev.jobhackai.io';
-    const firebaseApiKey = env.FIREBASE_WEB_API_KEY;
+    // Trim API key to remove any leading/trailing whitespace or BOM characters
+    const firebaseApiKey = (env.FIREBASE_WEB_API_KEY || '').trim();
 
     if (!linkedinClientId || !linkedinClientSecret) {
       console.error('[LINKEDIN-CALLBACK] LinkedIn credentials not configured');
@@ -218,7 +219,7 @@ export async function onRequest(context) {
     }
 
     if (!firebaseApiKey) {
-      console.error('[LINKEDIN-CALLBACK] FIREBASE_WEB_API_KEY not configured');
+      console.error('[LINKEDIN-CALLBACK] FIREBASE_WEB_API_KEY not configured or empty after trimming');
       return new Response('Server configuration error. Please contact support.', {
         status: 500,
         headers: { 'Content-Type': 'text/plain', ...corsHeaders(origin, env), 'Set-Cookie': expireCookie }
@@ -325,8 +326,9 @@ export async function onRequest(context) {
                 
                 // Client calls Firebase REST API signInWithIdp (client is authority)
                 // postBody uses id_token (OIDC) if available, otherwise access_token (legacy)
+                // Use encodeURIComponent to properly encode the API key in the URL
                 const response = await fetch(
-                  \`https://identitytoolkit.googleapis.com/v1/accounts:signInWithIdp?key=\${firebaseApiKey}\`,
+                  \`https://identitytoolkit.googleapis.com/v1/accounts:signInWithIdp?key=\${encodeURIComponent(firebaseApiKey)}\`,
                   {
                     method: 'POST',
                     headers: {
