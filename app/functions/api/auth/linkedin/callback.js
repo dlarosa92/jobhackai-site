@@ -267,6 +267,8 @@ export async function onRequest(context) {
 
     // Build postBody for Firebase signInWithIdp (OIDC provider requires id_token)
     const postBody = `id_token=${encodeURIComponent(idToken)}&providerId=oidc.linkedin.com`;
+    // Store LinkedIn OIDC id_token for SDK sign-in (needed for signInWithCredential)
+    const linkedinOidcIdToken = idToken;
 
     // Step 2: Return HTML popup that calls Firebase REST API client-side
     // Server does NOT call Firebase - client is the authority
@@ -321,6 +323,7 @@ export async function onRequest(context) {
                 const firebaseApiKey = ${JSON.stringify(firebaseApiKey)};
                 const frontendOrigin = ${JSON.stringify(frontendOrigin)};
                 const redirectUri = ${JSON.stringify(redirectUri)};
+                const linkedinOidcIdToken = ${JSON.stringify(linkedinOidcIdToken)};
                 
                 // Client calls Firebase REST API signInWithIdp (client is authority)
                 // postBody uses id_token (OIDC) if available, otherwise access_token (legacy)
@@ -377,7 +380,8 @@ export async function onRequest(context) {
                     },
                     idToken: authData.idToken,
                     refreshToken: authData.refreshToken,
-                    expiresIn: authData.expiresIn || '3600'
+                    expiresIn: authData.expiresIn || '3600',
+                    linkedinOidcIdToken: linkedinOidcIdToken
                   }, frontendOrigin);
                   window.close();
                 } else {
