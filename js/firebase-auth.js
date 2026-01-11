@@ -146,8 +146,13 @@ function decodeJwtPayload(token) {
     const parts = token.split('.');
     if (parts.length !== 3) return null;
     const payload = parts[1];
-    // Base64URL decode
-    const decoded = atob(payload.replace(/-/g, '+').replace(/_/g, '/'));
+    // Base64URL decode - add padding before calling atob()
+    let base64 = payload.replace(/-/g, '+').replace(/_/g, '/');
+    // Add padding (Base64URL doesn't include padding, but atob() requires it)
+    while (base64.length % 4) {
+      base64 += '=';
+    }
+    const decoded = atob(base64);
     return JSON.parse(decoded);
   } catch (e) {
     console.error('Failed to decode JWT:', e);
