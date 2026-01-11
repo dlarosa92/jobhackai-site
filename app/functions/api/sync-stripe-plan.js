@@ -38,12 +38,28 @@ export async function onRequest(context) {
       throw new Error('JOBHACKAI_KV binding is not configured on this environment');
     }
 
-    // Get customer ID from KV
+    // Step 1: Try KV (cache)
     let customerId = await env.JOBHACKAI_KV.get(`cusByUid:${uid}`);
     
-    // If not in KV, try to find by email (like billing-status does)
+    // Step 2: If KV miss, try D1 (authoritative)
     if (!customerId) {
-      console.log('🟡 [SYNC-STRIPE-PLAN] No customer in KV, searching by email');
+      console.log('🟡 [SYNC-STRIPE-PLAN] No customer in KV for uid', uid);
+      try {
+        const userPlan = await getUserPlanData(env, uid);
+        if (userPlan?.stripeCustomerId) {
+          customerId = userPlan.stripeCustomerId;
+          console.log('✅ [SYNC-STRIPE-PLAN] Found customer ID in D1:', customerId);
+          // Cache it in KV for next time
+          await env.JOBHACKAI_KV.put(`cusByUid:${uid}`, customerId);
+        }
+      } catch (d1Error) {
+        console.warn('⚠️ [SYNC-STRIPE-PLAN] D1 lookup failed (non-fatal):', d1Error?.message || d1Error);
+      }
+    }
+    
+    // Step 3: Only if both KV and D1 miss, fallback to Stripe email search (last resort)
+    if (!customerId) {
+      console.log('🟡 [SYNC-STRIPE-PLAN] No customer in KV or D1, trying Stripe email search (last resort)');
       
       if (email) {
         try {
@@ -89,7 +105,7 @@ export async function onRequest(context) {
                 customerId = foundCustomer;
                 // Cache it for next time
                 await env.JOBHACKAI_KV.put(`cusByUid:${uid}`, customerId);
-                console.log('✅ [SYNC-STRIPE-PLAN] Found customer by email and cached:', customerId);
+                console.log('✅ [SYNC-STRIPE-PLAN] Found customer by email (last resort) and cached:', customerId);
               }
             }
           }
