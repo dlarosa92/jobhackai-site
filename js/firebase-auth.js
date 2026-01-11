@@ -10,7 +10,7 @@ console.log('🔧 firebase-auth.js VERSION: auth-tri-state-v1 - ' + new Date().t
 import { firebaseConfig } from './firebase-config.js';
 
 import UserProfileManager from './firestore-profiles.js';
-import { storeTokens } from './token-manager.js';
+import { storeTokens, clearTokens } from './token-manager.js';
 import { apiFetchJSON } from './api-fetch.js';
 // Import Firebase Auth functions
 import { 
@@ -803,11 +803,16 @@ class AuthManager {
               return resolve({ success: false, error: 'Missing authentication tokens' });
             }
 
+            // Validate user data
+            if (!user || !user.uid || typeof user.uid !== 'string' || user.uid.trim() === '') {
+              return resolve({ success: false, error: 'Invalid user data in authentication response' });
+            }
+
             // Store tokens in sessionStorage
             storeTokens(idToken, refreshToken, parseInt(expiresIn || '3600', 10));
 
-            const uid = user?.uid;
-            const email = user?.email || '';
+            const uid = user.uid;
+            const email = user.email || '';
 
             // CRITICAL: Prioritize newly selected plan over existing plans (same as Google)
             const selectedPlan = this.getSelectedPlan();
@@ -890,6 +895,12 @@ class AuthManager {
               console.warn('Could not sync Firestore profile:', err);
             }
 
+            // Set currentUser for LinkedIn token-based auth (bypasses Firebase SDK)
+            this.currentUser = { uid, email };
+            if (window.FirebaseAuthManager) {
+              window.FirebaseAuthManager.currentUser = this.currentUser;
+            }
+
             return resolve({ success: true, user: { uid, email } });
           } catch (error) {
             console.error('Error processing LinkedIn auth success:', error);
@@ -958,6 +969,9 @@ class AuthManager {
           }
         }
       } catch (_) { /* no-op */ }
+
+      // Clear LinkedIn tokens from sessionStorage
+      clearTokens();
 
       // Sync navigation if available
       if (window.JobHackAINavigation && typeof window.JobHackAINavigation.setAuthState === 'function') {

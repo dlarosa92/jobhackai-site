@@ -344,6 +344,11 @@ export async function onRequest(context) {
                   throw new Error('No idToken in Firebase response');
                 }
 
+                // Validate localId is present and valid
+                if (!authData.localId || typeof authData.localId !== 'string' || authData.localId.trim() === '') {
+                  throw new Error('Invalid user ID in Firebase response');
+                }
+
                 // Send success message to parent window with tokens
                 if (window.opener) {
                   window.opener.postMessage({
@@ -358,7 +363,18 @@ export async function onRequest(context) {
                   }, frontendOrigin);
                   window.close();
                 } else {
-                  // Not a popup - redirect to dashboard
+                  // Not a popup (same-window fallback) - store tokens before redirecting
+                  try {
+                    const expiresIn = parseInt(authData.expiresIn || '3600', 10);
+                    const expiryTime = Date.now() + (expiresIn * 1000) - (60 * 1000); // Subtract 1 minute buffer
+                    sessionStorage.setItem('firebase_id_token', authData.idToken);
+                    sessionStorage.setItem('firebase_refresh_token', authData.refreshToken);
+                    sessionStorage.setItem('firebase_token_expiry', expiryTime.toString());
+                  } catch (e) {
+                    console.error('Failed to store tokens in same-window flow:', e);
+                    throw new Error('Failed to store authentication tokens');
+                  }
+                  // Redirect to dashboard
                   window.location.href = frontendOrigin + '/dashboard.html';
                 }
               } catch (error) {
