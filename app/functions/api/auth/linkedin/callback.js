@@ -268,8 +268,8 @@ export async function onRequest(context) {
 
     // Build postBody for Firebase signInWithIdp (prefer id_token for OIDC)
     const postBody = idToken
-      ? `id_token=${encodeURIComponent(idToken)}&providerId=linkedin.com`
-      : `access_token=${encodeURIComponent(accessToken)}&providerId=linkedin.com`;
+      ? `id_token=${encodeURIComponent(idToken)}&providerId=oidc.linkedin.com`
+      : `access_token=${encodeURIComponent(accessToken)}&providerId=oidc.linkedin.com`;
 
     // Step 2: Return HTML popup that calls Firebase REST API client-side
     // Server does NOT call Firebase - client is the authority
