@@ -354,6 +354,11 @@ export async function onRequest(context) {
                   throw new Error('No refreshToken in Firebase response');
                 }
 
+                // Validate email is present (required for session restoration)
+                if (!authData.email || typeof authData.email !== 'string' || authData.email.trim() === '') {
+                  throw new Error('Email is required for authentication');
+                }
+
                 // Send success message to parent window with tokens
                 if (window.opener) {
                   window.opener.postMessage({
