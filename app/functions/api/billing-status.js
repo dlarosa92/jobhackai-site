@@ -1,4 +1,5 @@
 import { getBearer, verifyFirebaseIdToken } from '../_lib/firebase-auth.js';
+import { getUserPlanData } from '../_lib/db.js';
 
 /**
  * GET /api/billing-status
@@ -50,12 +51,29 @@ export async function onRequest(context) {
       }
     }
 
-    // Get Stripe customer ID from KV
+    // Step 1: Try KV (cache)
     let customerId = await env.JOBHACKAI_KV?.get(kvCusKey(uid));
     
+    // Step 2: If KV miss, try D1 (authoritative)
     if (!customerId) {
       console.log('🟡 [BILLING-STATUS] No customer found in KV for uid', uid);
-      // Try to find by email in Stripe as fallback
+      try {
+        const userPlan = await getUserPlanData(env, uid);
+        if (userPlan?.stripeCustomerId) {
+          customerId = userPlan.stripeCustomerId;
+          console.log('✅ [BILLING-STATUS] Found customer ID in D1:', customerId);
+          // Cache it in KV for next time
+          await env.JOBHACKAI_KV?.put(kvCusKey(uid), customerId);
+        }
+      } catch (d1Error) {
+        console.warn('⚠️ [BILLING-STATUS] D1 lookup failed (non-fatal):', d1Error?.message || d1Error);
+      }
+    }
+    
+    // Step 3: Only if both KV and D1 miss, fallback to Stripe email search (last resort)
+    if (!customerId) {
+      console.log('🟡 [BILLING-STATUS] No customer in KV or D1, trying Stripe email search (last resort)');
+      // Try to find by email in Stripe as last-resort fallback
       // Get all customers with this email (not just first one) to handle duplicates
       const searchRes = await stripe(env, `/customers?email=${encodeURIComponent(email)}&limit=100`);
       const searchData = await searchRes.json();
