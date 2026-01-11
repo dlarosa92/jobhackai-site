@@ -65,6 +65,7 @@ export async function onRequest(context) {
     linkedinAuthUrl.searchParams.set('client_id', clientId);
     linkedinAuthUrl.searchParams.set('redirect_uri', redirectUri);
     linkedinAuthUrl.searchParams.set('state', stateValue);
+    // Requested scopes (legacy): keep original r_liteprofile and r_emailaddress
     linkedinAuthUrl.searchParams.set('scope', 'r_liteprofile r_emailaddress');
 
     // Redirect to LinkedIn with state cookie set

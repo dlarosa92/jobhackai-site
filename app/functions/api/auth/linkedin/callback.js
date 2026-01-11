@@ -253,15 +253,22 @@ export async function onRequest(context) {
     }
 
     const tokenData = await tokenResponse.json();
-    const accessToken = tokenData.access_token;
+    const accessToken = tokenData.access_token || null;
+    const idToken = tokenData.id_token || null;
 
-    if (!accessToken) {
-      console.error('[LINKEDIN-CALLBACK] No access token in response:', tokenData);
+    // Prefer OIDC id_token if available, otherwise fall back to access_token (legacy)
+    if (!idToken && !accessToken) {
+      console.error('[LINKEDIN-CALLBACK] No id_token or access_token in response:', tokenData);
       return new Response('Invalid response from LinkedIn. Please try again.', {
         status: 500,
         headers: { 'Content-Type': 'text/plain', ...corsHeaders(origin, env), 'Set-Cookie': expireCookie }
       });
     }
+
+    // Build postBody for Firebase signInWithIdp (prefer id_token for OIDC)
+    const postBody = idToken
+      ? `id_token=${encodeURIComponent(idToken)}&providerId=linkedin.com`
+      : `access_token=${encodeURIComponent(accessToken)}&providerId=linkedin.com`;
 
     // Step 2: Return HTML popup that calls Firebase REST API client-side
     // Server does NOT call Firebase - client is the authority
@@ -312,11 +319,12 @@ export async function onRequest(context) {
           <script>
             (async function() {
               try {
-                const linkedinAccessToken = ${JSON.stringify(accessToken)};
+                const postBody = ${JSON.stringify(postBody)};
                 const firebaseApiKey = ${JSON.stringify(firebaseApiKey)};
                 const frontendOrigin = ${JSON.stringify(frontendOrigin)};
                 
                 // Client calls Firebase REST API signInWithIdp (client is authority)
+                // postBody uses id_token (OIDC) if available, otherwise access_token (legacy)
                 const response = await fetch(
                   \`https://identitytoolkit.googleapis.com/v1/accounts:signInWithIdp?key=\${firebaseApiKey}\`,
                   {
@@ -325,7 +333,7 @@ export async function onRequest(context) {
                       'Content-Type': 'application/json',
                     },
                     body: JSON.stringify({
-                      postBody: \`access_token=\${encodeURIComponent(linkedinAccessToken)}&providerId=linkedin.com\`,
+                      postBody: postBody,
                       requestUri: frontendOrigin,
                       returnSecureToken: true
                     })
