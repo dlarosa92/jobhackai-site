@@ -375,6 +375,8 @@ export async function onRequest(context) {
                     sessionStorage.setItem('firebase_id_token', authData.idToken);
                     sessionStorage.setItem('firebase_refresh_token', authData.refreshToken);
                     sessionStorage.setItem('firebase_token_expiry', expiryTime.toString());
+                    // Set flag to trigger user initialization on page load
+                    sessionStorage.setItem('linkedin_pending_init', '1');
                   } catch (e) {
                     console.error('Failed to store tokens in same-window flow:', e);
                     throw new Error('Failed to store authentication tokens');

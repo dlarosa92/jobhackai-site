@@ -256,15 +256,23 @@ class AuthManager {
       }
       
       // ✅ LinkedIn token restoration: If Firebase SDK sees no user but LinkedIn tokens exist, restore session
+      // Check logout-intent FIRST to prevent restoration during logout
       if (!effectiveUser && tokenManagerIsAuthenticated()) {
-        const idToken = getIdTokenSync();
-        if (idToken) {
-          const payload = decodeJwtPayload(idToken);
-          if (payload && (payload.user_id || payload.sub)) {
-            const uid = payload.user_id || payload.sub;
-            const email = payload.email || '';
-            effectiveUser = { uid, email };
-            console.log('✅ Restored LinkedIn session from sessionStorage tokens');
+        const logoutIntent = sessionStorage.getItem('logout-intent');
+        if (logoutIntent === '1') {
+          console.log('🚫 Logout in progress, skipping LinkedIn token restoration');
+        } else {
+          const idToken = getIdTokenSync();
+          if (idToken) {
+            const payload = decodeJwtPayload(idToken);
+            if (payload && (payload.user_id || payload.sub)) {
+              const uid = payload.user_id || payload.sub;
+              const email = payload.email || '';
+              if (email && email.trim() !== '') {
+                effectiveUser = { uid, email };
+                console.log('✅ Restored LinkedIn session from sessionStorage tokens');
+              }
+            }
           }
         }
       }
@@ -449,20 +457,86 @@ class AuthManager {
         // LinkedIn token-based user (plain object, not Firebase SDK user)
         // Set localStorage and navigation state
         localStorage.setItem('user-authenticated', 'true');
-        try {
-          // Fetch plan for LinkedIn user
-          const kvPlan = await apiFetchJSON('/api/plan/me');
-          const actualPlan = kvPlan?.plan || 'free';
-          if (window.JobHackAINavigation) {
-            window.JobHackAINavigation.setAuthState(true, actualPlan);
+        
+        // Check if this is a same-window fallback that needs user initialization
+        const pendingInit = sessionStorage.getItem('linkedin_pending_init');
+        if (pendingInit === '1') {
+          // Same-window fallback: perform full user initialization
+          sessionStorage.removeItem('linkedin_pending_init');
+          const uid = effectiveUser.uid;
+          const email = effectiveUser.email;
+          
+          try {
+            // Fetch plan for LinkedIn user
+            const kvPlan = await apiFetchJSON('/api/plan/me');
+            let actualPlan = kvPlan?.plan || 'free';
+            
+            // Extract name from email (LinkedIn doesn't provide displayName in REST response)
+            const emailParts = email.split('@')[0].split('.');
+            const firstName = emailParts[0] || '';
+            const lastName = emailParts.slice(1).join(' ') || '';
+            
+            const userData = {
+              uid,
+              firstName,
+              lastName,
+              plan: actualPlan
+            };
+            
+            // Update local database
+            UserDatabase.createOrUpdateUser(email, userData);
+            
+            // Initialize free account tracking for new free users
+            if (actualPlan === 'free') {
+              if (window.freeAccountManager) {
+                window.freeAccountManager.initializeForNewUser();
+              }
+            }
+            
+            // Create or update Firestore profile
+            const firestoreData = {
+              email,
+              displayName: `${firstName} ${lastName}`.trim() || email,
+              firstName,
+              lastName,
+              photoURL: null,
+              plan: actualPlan,
+              signupSource: 'linkedin_oauth'
+            };
+            
+            try {
+              await UserProfileManager.upsertProfile(uid, firestoreData);
+            } catch (err) {
+              console.warn('Could not sync Firestore profile:', err);
+            }
+            
+            if (window.JobHackAINavigation) {
+              window.JobHackAINavigation.setAuthState(true, actualPlan);
+            }
+            this.notifyAuthStateChange(effectiveUser, null);
+          } catch (e) {
+            console.warn('Could not initialize LinkedIn user:', e);
+            if (window.JobHackAINavigation) {
+              window.JobHackAINavigation.setAuthState(true, 'free');
+            }
+            this.notifyAuthStateChange(effectiveUser, null);
           }
-          this.notifyAuthStateChange(effectiveUser, null);
-        } catch (e) {
-          console.warn('Could not fetch plan for LinkedIn user:', e);
-          if (window.JobHackAINavigation) {
-            window.JobHackAINavigation.setAuthState(true, 'free');
+        } else {
+          // Normal token restoration (page refresh) - just fetch plan and set state
+          try {
+            const kvPlan = await apiFetchJSON('/api/plan/me');
+            const actualPlan = kvPlan?.plan || 'free';
+            if (window.JobHackAINavigation) {
+              window.JobHackAINavigation.setAuthState(true, actualPlan);
+            }
+            this.notifyAuthStateChange(effectiveUser, null);
+          } catch (e) {
+            console.warn('Could not fetch plan for LinkedIn user:', e);
+            if (window.JobHackAINavigation) {
+              window.JobHackAINavigation.setAuthState(true, 'free');
+            }
+            this.notifyAuthStateChange(effectiveUser, null);
           }
-          this.notifyAuthStateChange(effectiveUser, null);
         }
       } else {
         // User is signed out - clear immediately
@@ -860,16 +934,16 @@ class AuthManager {
               return resolve({ success: false, error: 'Invalid user data in authentication response' });
             }
 
-            // Store tokens in sessionStorage
-            storeTokens(idToken, refreshToken, parseInt(expiresIn || '3600', 10));
-
             const uid = user.uid;
             const email = user.email || '';
 
-            // Validate email is not empty before using as database key
+            // Validate email is not empty before storing tokens or using as database key
             if (!email || email.trim() === '') {
               return resolve({ success: false, error: 'Email is required for authentication' });
             }
+
+            // Store tokens in sessionStorage (after validation)
+            storeTokens(idToken, refreshToken, parseInt(expiresIn || '3600', 10));
 
             // CRITICAL: Prioritize newly selected plan over existing plans (same as Google)
             const selectedPlan = this.getSelectedPlan();
