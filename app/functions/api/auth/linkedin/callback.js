@@ -323,10 +323,11 @@ export async function onRequest(context) {
                 const postBody = ${JSON.stringify(postBody)};
                 const firebaseApiKey = ${JSON.stringify(firebaseApiKey)};
                 const frontendOrigin = ${JSON.stringify(frontendOrigin)};
+                const redirectUri = ${JSON.stringify(redirectUri)};
                 
                 // Client calls Firebase REST API signInWithIdp (client is authority)
                 // postBody uses id_token (OIDC) if available, otherwise access_token (legacy)
-                // Use encodeURIComponent to properly encode the API key in the URL
+                // IMPORTANT: requestUri MUST match the OAuth redirect URI (callback URL)
                 const response = await fetch(
                   \`https://identitytoolkit.googleapis.com/v1/accounts:signInWithIdp?key=\${encodeURIComponent(firebaseApiKey)}\`,
                   {
@@ -336,7 +337,7 @@ export async function onRequest(context) {
                     },
                     body: JSON.stringify({
                       postBody: postBody,
-                      requestUri: frontendOrigin,
+                      requestUri: redirectUri,
                       returnSecureToken: true
                     })
                   }
