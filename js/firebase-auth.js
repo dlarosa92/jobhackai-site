@@ -10,6 +10,8 @@ console.log('🔧 firebase-auth.js VERSION: auth-tri-state-v1 - ' + new Date().t
 import { firebaseConfig } from './firebase-config.js';
 
 import UserProfileManager from './firestore-profiles.js';
+import { storeTokens } from './token-manager.js';
+import { apiFetchJSON } from './api-fetch.js';
 // Import Firebase Auth functions
 import { 
   getAuth, 
@@ -740,12 +742,11 @@ class AuthManager {
   /**
    * Sign in with LinkedIn
    * Opens LinkedIn OAuth popup via server-side start endpoint and handles callback via postMessage
-   * State generation, signing, and cookie storage are handled server-side for security
+   * Uses token-based authentication (no Firebase SDK auth state)
    */
   async signInWithLinkedIn() {
     return new Promise((resolve, reject) => {
       // Call server-side start endpoint which generates state, signs it, stores in cookie, and redirects to LinkedIn
-      // This ensures state is cryptographically secure and cannot be tampered with client-side
       // Use host (includes port) instead of hostname to match server-side redirect_uri construction
       const startUrl = `${window.location.protocol}//${window.location.host}/api/auth/linkedin/start`;
 
@@ -756,9 +757,21 @@ class AuthManager {
         'width=600,height=700,scrollbars=yes,resizable=yes'
       );
 
+      // Handle popup blocked - provide same-window fallback
       if (!popup) {
-        return resolve({ success: false, error: 'Popup blocked. Please allow popups for this site.' });
+        // Same-window fallback
+        const useSameWindow = confirm('Popup was blocked. Click OK to continue in this window, or Cancel to allow popups and try again.');
+        if (useSameWindow) {
+          window.location.href = startUrl;
+          return resolve({ success: false, error: 'Redirecting to authentication...' });
+        } else {
+          return resolve({ success: false, error: 'Popup blocked. Please allow popups for this site and try again.' });
+        }
       }
+
+      let messageReceived = false;
+      let timeoutId = null;
+      let checkClosedInterval = null;
 
       // Listen for message from popup (when callback completes)
       const messageListener = async (event) => {
@@ -777,160 +790,145 @@ class AuthManager {
         }
 
         if (event.data?.type === 'linkedin-auth-success') {
+          messageReceived = true;
           window.removeEventListener('message', messageListener);
-          popup.close();
+          if (timeoutId) clearTimeout(timeoutId);
+          if (checkClosedInterval) clearInterval(checkClosedInterval);
+          if (!popup.closed) popup.close();
 
-          // Wait a moment for Firebase auth state to propagate
-          await new Promise(resolve => setTimeout(resolve, 500));
-
-          // Get the signed-in user
-          const user = auth.currentUser;
-          if (!user) {
-            // Wait a bit more and try again
-            await this.waitForAuthReady(3000);
-            const retryUser = auth.currentUser;
-            if (!retryUser) {
-              return resolve({ success: false, error: 'Sign-in completed but user session not found. Please try again.' });
+          try {
+            // Store tokens from postMessage
+            const { idToken, refreshToken, expiresIn, user } = event.data;
+            if (!idToken || !refreshToken) {
+              return resolve({ success: false, error: 'Missing authentication tokens' });
             }
-          }
 
-          const currentUser = auth.currentUser;
+            // Store tokens in sessionStorage
+            storeTokens(idToken, refreshToken, parseInt(expiresIn || '3600', 10));
 
-          // Extract name from display name or email
-          const nameParts = currentUser.displayName ? currentUser.displayName.split(' ') : ['', ''];
-          
-          // CRITICAL: Prioritize newly selected plan over existing plans (same as Google)
-          const selectedPlan = this.getSelectedPlan();
-          let actualPlan = 'free';
+            const uid = user?.uid;
+            const email = user?.email || '';
 
-          if (selectedPlan && selectedPlan !== 'free') {
-            actualPlan = selectedPlan === 'trial' ? 'pending' : selectedPlan;
-            console.log('✅ Using newly selected plan for LinkedIn sign-in:', actualPlan);
-          } else {
-            // Fetch plan from API (same logic as Google sign-in)
-            let kvPlan = null;
-            try {
-              console.log('🔄 Waiting for Firebase auth to be ready during LinkedIn sign-in...');
-              await this.waitForAuthReady(3000);
-              
-              if (window.JobHackAINavigation && typeof window.JobHackAINavigation.fetchPlanFromAPI === 'function') {
-                kvPlan = await window.JobHackAINavigation.fetchPlanFromAPI();
-                if (kvPlan) console.log('✅ Fetched plan via navigation system during LinkedIn sign-in:', kvPlan);
-              }
-              if (!kvPlan) {
-                kvPlan = await fetchPlanFromAPI();
-                if (kvPlan) console.log('✅ Fetched plan directly from API during LinkedIn sign-in:', kvPlan);
-              }
-            } catch (e) {
-              console.warn('Could not fetch plan from API during LinkedIn sign-in:', e);
+            // CRITICAL: Prioritize newly selected plan over existing plans (same as Google)
+            const selectedPlan = this.getSelectedPlan();
+            let actualPlan = 'free';
+
+            if (selectedPlan && selectedPlan !== 'free') {
+              actualPlan = selectedPlan === 'trial' ? 'pending' : selectedPlan;
+              console.log('✅ Using newly selected plan for LinkedIn sign-in:', actualPlan);
+            } else {
+              // Fetch plan from API using token
+              let kvPlan = null;
               try {
-                console.log('🔄 Retrying plan fetch during LinkedIn sign-in after 1 second...');
-                await new Promise(resolve => setTimeout(resolve, 1000));
-                if (window.JobHackAINavigation && typeof window.JobHackAINavigation.fetchPlanFromAPI === 'function') {
-                  kvPlan = await window.JobHackAINavigation.fetchPlanFromAPI();
+                kvPlan = await apiFetchJSON('/api/plan/me');
+                if (kvPlan?.plan) {
+                  actualPlan = kvPlan.plan;
+                  console.log('✅ Fetched plan from API during LinkedIn sign-in:', actualPlan);
                 }
-                if (!kvPlan) {
-                  kvPlan = await fetchPlanFromAPI();
+              } catch (e) {
+                console.warn('Could not fetch plan from API during LinkedIn sign-in:', e);
+                // Try Firestore as fallback
+                try {
+                  const profileResult = await UserProfileManager.getProfile(uid);
+                  if (profileResult.success && profileResult.profile) {
+                    actualPlan = profileResult.profile.plan || 'free';
+                    console.log('✅ Retrieved user plan from Firestore during LinkedIn sign-in (API fallback):', actualPlan);
+                  }
+                } catch (firestoreError) {
+                  console.warn('Could not fetch plan from Firestore:', firestoreError);
                 }
-                if (kvPlan) console.log('✅ Retry successful during LinkedIn sign-in, fetched plan:', kvPlan);
-              } catch (retryError) {
-                console.warn('Retry also failed during LinkedIn sign-in:', retryError);
               }
             }
             
-            if (kvPlan && kvPlan !== 'free') {
-              actualPlan = kvPlan;
-              console.log('✅ Retrieved user plan from D1 (via API) during LinkedIn sign-in:', actualPlan);
-            } else {
-              // Try Firestore as fallback
-              const profileResult = await UserProfileManager.getProfile(currentUser.uid);
-              if (profileResult.success && profileResult.profile) {
-                actualPlan = profileResult.profile.plan || 'free';
-                console.log('✅ Retrieved user plan from Firestore during LinkedIn sign-in (API fallback):', actualPlan);
-              } else {
-                actualPlan = 'free';
-                console.log('ℹ️ All plan sources failed during LinkedIn sign-in, defaulting to free.');
+            // Extract name from email (LinkedIn doesn't provide displayName in REST response)
+            const emailParts = email.split('@')[0].split('.');
+            const firstName = emailParts[0] || '';
+            const lastName = emailParts.slice(1).join(' ') || '';
+            
+            const userData = {
+              uid,
+              firstName,
+              lastName,
+              plan: actualPlan
+            };
+
+            // Update local database
+            UserDatabase.createOrUpdateUser(email, userData);
+
+            // Persist auth state immediately
+            try {
+              localStorage.setItem('user-authenticated', 'true');
+              if (window.JobHackAINavigation) {
+                window.JobHackAINavigation.setAuthState(true, actualPlan);
+              }
+            } catch (e) {
+              console.warn('auth state persist failed during LinkedIn sign-in:', e);
+            }
+
+            // Initialize free account tracking for new free users
+            if (userData.plan === 'free') {
+              if (window.freeAccountManager) {
+                window.freeAccountManager.initializeForNewUser();
               }
             }
-          }
-          
-          const userData = {
-            uid: currentUser.uid,
-            firstName: nameParts[0] || '',
-            lastName: nameParts.slice(1).join(' ') || '',
-            plan: actualPlan
-          };
 
-          // Update local database
-          UserDatabase.createOrUpdateUser(currentUser.email, userData);
-
-          // Persist auth state immediately
-          try {
-            localStorage.setItem('user-authenticated', 'true');
-            if (currentUser.displayName) {
-              localStorage.setItem('user-name', currentUser.displayName);
+            // Create or update Firestore profile
+            const firestoreData = {
+              email,
+              displayName: `${firstName} ${lastName}`.trim() || email,
+              firstName,
+              lastName,
+              photoURL: null,
+              plan: selectedPlan === 'trial' ? 'pending' : (selectedPlan || 'free'),
+              signupSource: 'linkedin_oauth',
+              pendingPlan: selectedPlan === 'trial' ? 'trial' : null
+            };
+            
+            try {
+              await UserProfileManager.upsertProfile(uid, firestoreData);
+            } catch (err) {
+              console.warn('Could not sync Firestore profile:', err);
             }
-            if (window.JobHackAINavigation) {
-              window.JobHackAINavigation.setAuthState(true, actualPlan);
-            }
-          } catch (e) {
-            console.warn('auth state persist failed during LinkedIn sign-in:', e);
-          }
 
-          // Initialize free account tracking for new free users
-          if (userData.plan === 'free') {
-            if (window.freeAccountManager) {
-              window.freeAccountManager.initializeForNewUser();
-            }
+            return resolve({ success: true, user: { uid, email } });
+          } catch (error) {
+            console.error('Error processing LinkedIn auth success:', error);
+            return resolve({ success: false, error: error.message || 'Failed to complete sign-in' });
           }
-
-          // Create or update Firestore profile
-          const firestoreData = {
-            email: currentUser.email,
-            displayName: currentUser.displayName || '',
-            firstName: nameParts[0] || '',
-            lastName: nameParts.slice(1).join(' ') || '',
-            photoURL: currentUser.photoURL || null,
-            plan: selectedPlan === 'trial' ? 'pending' : (selectedPlan || 'free'),
-            signupSource: 'linkedin_oauth',
-            pendingPlan: selectedPlan === 'trial' ? 'trial' : null
-          };
-          
-          try {
-            await UserProfileManager.upsertProfile(currentUser.uid, firestoreData);
-          } catch (err) {
-            console.warn('Could not sync Firestore profile:', err);
-          }
-
-          return resolve({ success: true, user: currentUser });
         }
 
         if (event.data?.type === 'linkedin-auth-error') {
+          messageReceived = true;
           window.removeEventListener('message', messageListener);
-          popup.close();
+          if (timeoutId) clearTimeout(timeoutId);
+          if (checkClosedInterval) clearInterval(checkClosedInterval);
+          if (!popup.closed) popup.close();
           return resolve({ success: false, error: event.data.error || 'Authentication failed' });
         }
       };
 
       window.addEventListener('message', messageListener);
 
-      // Cleanup if popup is closed manually
-      const checkClosed = setInterval(() => {
-        if (popup.closed) {
-          clearInterval(checkClosed);
+      // Cleanup if popup is closed manually (before message received)
+      checkClosedInterval = setInterval(() => {
+        if (popup.closed && !messageReceived) {
+          clearInterval(checkClosedInterval);
           window.removeEventListener('message', messageListener);
-          resolve({ success: false, error: null }); // Silent failure - user closed popup
+          if (timeoutId) clearTimeout(timeoutId);
+          resolve({ success: false, error: 'Popup was closed. Please try again.' });
         }
       }, 500);
 
       // Timeout after 5 minutes
-      setTimeout(() => {
-        clearInterval(checkClosed);
-        window.removeEventListener('message', messageListener);
-        if (!popup.closed) {
-          popup.close();
+      timeoutId = setTimeout(() => {
+        if (!messageReceived) {
+          clearInterval(checkClosedInterval);
+          window.removeEventListener('message', messageListener);
+          if (!popup.closed) {
+            popup.close();
+          }
+          resolve({ success: false, error: 'Authentication timeout. Please try again.' });
         }
-        resolve({ success: false, error: 'Authentication timeout. Please try again.' });
       }, 5 * 60 * 1000);
     });
   }
