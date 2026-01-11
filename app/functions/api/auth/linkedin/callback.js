@@ -254,22 +254,19 @@ export async function onRequest(context) {
     }
 
     const tokenData = await tokenResponse.json();
-    const accessToken = tokenData.access_token || null;
     const idToken = tokenData.id_token || null;
 
-    // Prefer OIDC id_token if available, otherwise fall back to access_token (legacy)
-    if (!idToken && !accessToken) {
-      console.error('[LINKEDIN-CALLBACK] No id_token or access_token in response:', tokenData);
+    // OIDC provider requires id_token (we request 'openid' scope)
+    if (!idToken) {
+      console.error('[LINKEDIN-CALLBACK] No id_token in OIDC response:', tokenData);
       return new Response('Invalid response from LinkedIn. Please try again.', {
         status: 500,
         headers: { 'Content-Type': 'text/plain', ...corsHeaders(origin, env), 'Set-Cookie': expireCookie }
       });
     }
 
-    // Build postBody for Firebase signInWithIdp (prefer id_token for OIDC)
-    const postBody = idToken
-      ? `id_token=${encodeURIComponent(idToken)}&providerId=oidc.linkedin.com`
-      : `access_token=${encodeURIComponent(accessToken)}&providerId=oidc.linkedin.com`;
+    // Build postBody for Firebase signInWithIdp (OIDC provider requires id_token)
+    const postBody = `id_token=${encodeURIComponent(idToken)}&providerId=oidc.linkedin.com`;
 
     // Step 2: Return HTML popup that calls Firebase REST API client-side
     // Server does NOT call Firebase - client is the authority
