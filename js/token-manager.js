@@ -123,7 +123,7 @@ async function refreshTokenInternal() {
     throw new Error('Invalid refresh response');
   }
 
-  storeTokens(data.id_token, data.refresh_token, parseInt(data.expires_in, 10));
+  storeTokens(data.id_token, data.refresh_token, parseInt(data.expires_in || '3600', 10));
   return data.id_token;
 }
 

@@ -467,9 +467,21 @@ class AuthManager {
           const email = effectiveUser.email;
           
           try {
-            // Fetch plan for LinkedIn user
-            const kvPlan = await apiFetchJSON('/api/plan/me');
-            let actualPlan = kvPlan?.plan || 'free';
+            // CRITICAL: Prioritize newly selected plan over existing plans (same as popup flow)
+            const selectedPlan = this.getSelectedPlan();
+            let actualPlan = 'free';
+
+            if (selectedPlan && selectedPlan !== 'free') {
+              actualPlan = selectedPlan === 'trial' ? 'pending' : selectedPlan;
+              console.log('✅ Using newly selected plan for LinkedIn sign-in (same-window):', actualPlan);
+            } else {
+              // Fetch plan from API using token
+              const kvPlan = await apiFetchJSON('/api/plan/me');
+              if (kvPlan?.plan) {
+                actualPlan = kvPlan.plan;
+                console.log('✅ Fetched plan from API during LinkedIn sign-in (same-window):', actualPlan);
+              }
+            }
             
             // Extract name from email (LinkedIn doesn't provide displayName in REST response)
             const emailParts = email.split('@')[0].split('.');
@@ -500,8 +512,9 @@ class AuthManager {
               firstName,
               lastName,
               photoURL: null,
-              plan: actualPlan,
-              signupSource: 'linkedin_oauth'
+              plan: selectedPlan === 'trial' ? 'pending' : (selectedPlan || 'free'),
+              signupSource: 'linkedin_oauth',
+              pendingPlan: selectedPlan === 'trial' ? 'trial' : null
             };
             
             try {
