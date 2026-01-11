@@ -349,6 +349,11 @@ export async function onRequest(context) {
                   throw new Error('Invalid user ID in Firebase response');
                 }
 
+                // Validate refreshToken is present
+                if (!authData.refreshToken) {
+                  throw new Error('No refreshToken in Firebase response');
+                }
+
                 // Send success message to parent window with tokens
                 if (window.opener) {
                   window.opener.postMessage({

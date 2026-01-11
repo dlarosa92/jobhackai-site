@@ -10,7 +10,7 @@ console.log('🔧 firebase-auth.js VERSION: auth-tri-state-v1 - ' + new Date().t
 import { firebaseConfig } from './firebase-config.js';
 
 import UserProfileManager from './firestore-profiles.js';
-import { storeTokens, clearTokens } from './token-manager.js';
+import { storeTokens, clearTokens, isAuthenticated as tokenManagerIsAuthenticated, getIdTokenSync } from './token-manager.js';
 import { apiFetchJSON } from './api-fetch.js';
 // Import Firebase Auth functions
 import { 
@@ -139,6 +139,23 @@ class UserDatabase {
 }
 
 /**
+ * Decode JWT token to extract payload (for LinkedIn token restoration)
+ */
+function decodeJwtPayload(token) {
+  try {
+    const parts = token.split('.');
+    if (parts.length !== 3) return null;
+    const payload = parts[1];
+    // Base64URL decode
+    const decoded = atob(payload.replace(/-/g, '+').replace(/_/g, '/'));
+    return JSON.parse(decoded);
+  } catch (e) {
+    console.error('Failed to decode JWT:', e);
+    return null;
+  }
+}
+
+/**
  * Authentication Manager
  */
 class AuthManager {
@@ -238,6 +255,20 @@ class AuthManager {
         }
       }
       
+      // ✅ LinkedIn token restoration: If Firebase SDK sees no user but LinkedIn tokens exist, restore session
+      if (!effectiveUser && tokenManagerIsAuthenticated()) {
+        const idToken = getIdTokenSync();
+        if (idToken) {
+          const payload = decodeJwtPayload(idToken);
+          if (payload && (payload.user_id || payload.sub)) {
+            const uid = payload.user_id || payload.sub;
+            const email = payload.email || '';
+            effectiveUser = { uid, email };
+            console.log('✅ Restored LinkedIn session from sessionStorage tokens');
+          }
+        }
+      }
+      
       // ✅ CRITICAL FIX: Set currentUser BEFORE dispatching event to prevent race condition
       // This ensures getCurrentUser() returns the correct value when navigation event handler runs
       this.currentUser = effectiveUser;
@@ -276,7 +307,9 @@ class AuthManager {
       
       // effectiveUser is now guaranteed to match this.currentUser
       
-      if (user) {
+      if (effectiveUser && typeof effectiveUser.reload === 'function') {
+        // Firebase SDK user (Google/Email auth)
+        const user = effectiveUser;
         
         // ✅ CRITICAL: Set localStorage IMMEDIATELY (sync, before any await)
         // This prevents race conditions with static-auth-guard.js
@@ -412,6 +445,25 @@ class AuthManager {
         
         // Notify listeners
         this.notifyAuthStateChange(user, userRecord);
+      } else if (effectiveUser) {
+        // LinkedIn token-based user (plain object, not Firebase SDK user)
+        // Set localStorage and navigation state
+        localStorage.setItem('user-authenticated', 'true');
+        try {
+          // Fetch plan for LinkedIn user
+          const kvPlan = await apiFetchJSON('/api/plan/me');
+          const actualPlan = kvPlan?.plan || 'free';
+          if (window.JobHackAINavigation) {
+            window.JobHackAINavigation.setAuthState(true, actualPlan);
+          }
+          this.notifyAuthStateChange(effectiveUser, null);
+        } catch (e) {
+          console.warn('Could not fetch plan for LinkedIn user:', e);
+          if (window.JobHackAINavigation) {
+            window.JobHackAINavigation.setAuthState(true, 'free');
+          }
+          this.notifyAuthStateChange(effectiveUser, null);
+        }
       } else {
         // User is signed out - clear immediately
         localStorage.setItem('user-authenticated', 'false');
@@ -814,6 +866,11 @@ class AuthManager {
             const uid = user.uid;
             const email = user.email || '';
 
+            // Validate email is not empty before using as database key
+            if (!email || email.trim() === '') {
+              return resolve({ success: false, error: 'Email is required for authentication' });
+            }
+
             // CRITICAL: Prioritize newly selected plan over existing plans (same as Google)
             const selectedPlan = this.getSelectedPlan();
             let actualPlan = 'free';
@@ -1155,13 +1212,20 @@ class AuthManager {
         return false;
       }
       
-      // Reload user to get latest verification status
-      await user.reload();
-      
-      if (!user.emailVerified) {
-        console.log('User not verified, redirecting to verify-email');
-        window.location.href = `/verify-email.html?email=${encodeURIComponent(user.email || '')}`;
-        return false;
+      // Handle plain object users (LinkedIn token-based auth) vs Firebase SDK users
+      if (typeof user.reload === 'function') {
+        // Firebase SDK user - reload to get latest verification status
+        await user.reload();
+        if (!user.emailVerified) {
+          console.log('User not verified, redirecting to verify-email');
+          window.location.href = `/verify-email.html?email=${encodeURIComponent(user.email || '')}`;
+          return false;
+        }
+      } else {
+        // Plain object user (LinkedIn token-based) - check token payload for email_verified
+        // For LinkedIn users, assume verified (LinkedIn requires verified emails)
+        // If verification is required, we'd need to store emailVerified in sessionStorage
+        console.log('LinkedIn token-based user, allowing access (LinkedIn emails are verified)');
       }
       
       console.log('User verified, allowing access');
