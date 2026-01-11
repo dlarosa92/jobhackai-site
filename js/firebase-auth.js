@@ -274,15 +274,16 @@ class AuthManager {
           // Try to restore SDK auth state using stored LinkedIn OIDC id_token if available
           const storedOidcToken = sessionStorage.getItem('linkedin_oidc_id_token');
           if (storedOidcToken) {
-            // Attempt SDK sign-in (async, but onAuthStateChanged will fire again when it completes)
+            // Attempt SDK sign-in asynchronously
+            // onAuthStateChanged will fire again when SDK sign-in completes
             const provider = new OAuthProvider('oidc.linkedin.com');
-            const credential = OAuthProvider.credential(storedOidcToken);
+            const credential = provider.credential({ idToken: storedOidcToken });
             signInWithCredential(auth, credential).then((result) => {
               console.log('✅ Signed into Firebase SDK using stored LinkedIn OIDC token');
               // onAuthStateChanged will fire again with the SDK user
             }).catch((err) => {
-              console.warn('Could not restore SDK auth with stored OIDC token, using fallback:', err);
-              // Fall through to plain object fallback below
+              console.warn('Could not restore SDK auth with stored OIDC token:', err);
+              // SDK sign-in failed - fallback to plain object by checking tokens
               const idToken = getIdTokenSync();
               if (idToken) {
                 const payload = decodeJwtPayload(idToken);
@@ -290,12 +291,18 @@ class AuthManager {
                   const uid = payload.user_id || payload.sub;
                   const email = payload.email || '';
                   if (email && email.trim() !== '') {
-                    effectiveUser = { uid, email };
+                    // Set currentUser directly since onAuthStateChanged won't fire again
+                    this.currentUser = { uid, email };
+                    if (window.FirebaseAuthManager) {
+                      window.FirebaseAuthManager.currentUser = this.currentUser;
+                    }
                     console.log('✅ Restored LinkedIn session from sessionStorage tokens (fallback)');
                   }
                 }
               }
             });
+            // Don't set effectiveUser here - wait for SDK sign-in result
+            // If SDK sign-in fails, the catch handler will set currentUser directly
           } else {
             // No OIDC token stored - fall back to plain object (legacy behavior)
             const idToken = getIdTokenSync();
@@ -1092,9 +1099,14 @@ class AuthManager {
               const linkedinOidcIdToken = event.data.linkedinOidcIdToken;
               if (linkedinOidcIdToken) {
                 const provider = new OAuthProvider('oidc.linkedin.com');
-                const credential = OAuthProvider.credential(linkedinOidcIdToken);
-                await signInWithCredential(auth, credential);
-                // onAuthStateChanged will set currentUser automatically
+                const credential = provider.credential({ idToken: linkedinOidcIdToken });
+                const userCredential = await signInWithCredential(auth, credential);
+                // Set currentUser synchronously from result to avoid race condition
+                this.currentUser = userCredential.user;
+                if (window.FirebaseAuthManager) {
+                  window.FirebaseAuthManager.currentUser = this.currentUser;
+                }
+                // onAuthStateChanged will also fire, but we've already set currentUser
                 console.log('✅ Signed into Firebase SDK with LinkedIn OIDC credential');
               } else {
                 console.warn('⚠️ LinkedIn OIDC id_token not available, falling back to plain object');

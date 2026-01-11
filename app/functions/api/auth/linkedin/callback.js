@@ -392,6 +392,10 @@ export async function onRequest(context) {
                     sessionStorage.setItem('firebase_id_token', authData.idToken);
                     sessionStorage.setItem('firebase_refresh_token', authData.refreshToken);
                     sessionStorage.setItem('firebase_token_expiry', expiryTime.toString());
+                    // Store LinkedIn OIDC id_token for SDK sign-in restoration
+                    if (linkedinOidcIdToken) {
+                      sessionStorage.setItem('linkedin_oidc_id_token', linkedinOidcIdToken);
+                    }
                     // Set flag to trigger user initialization on page load
                     sessionStorage.setItem('linkedin_pending_init', '1');
                   } catch (e) {
