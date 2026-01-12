@@ -878,8 +878,22 @@ function setAuthState(isAuthenticated, plan = null) {
   try {
     localStorage.setItem('user-authenticated', isAuthenticated ? 'true' : 'false');
     if (plan) {
+      const oldPlan = localStorage.getItem('user-plan') || localStorage.getItem('dev-plan');
       localStorage.setItem('user-plan', plan);
       localStorage.setItem('dev-plan', plan);
+      
+      // Dispatch planChanged event to notify other components (dashboard, account-settings, etc.)
+      // This ensures immediate UI updates when plan changes, rather than waiting for polling
+      try {
+        const planChangeEvent = new CustomEvent('planChanged', {
+          detail: { oldPlan, newPlan: plan }
+        });
+        window.dispatchEvent(planChangeEvent);
+        navLog('debug', 'setAuthState: Dispatched planChanged event', { oldPlan, newPlan: plan });
+      } catch (eventError) {
+        // Non-critical: if event dispatch fails, don't break auth flow
+        navLog('warn', 'setAuthState: Failed to dispatch planChanged event', { message: eventError?.message });
+      }
     }
   } catch (e) {
     navLog('warn', 'Failed to set auth state in localStorage', { message: e?.message });
