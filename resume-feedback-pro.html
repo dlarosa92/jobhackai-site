@@ -7370,18 +7370,25 @@ let cachedScore = null;
       
       // CRITICAL: Filter to only valid object sections to prevent blank "Tunable" cards
       // Keep only entries that are objects with meaningful content
+      // Must handle both NEW format (diagnosis, tips, rewritePreview) and OLD format (feedback, tip)
       const validSections = sections.filter(section => {
         // Must be an object (not string, null, array, etc.)
         if (!section || typeof section !== 'object' || Array.isArray(section)) {
           return false;
         }
         
-        // Must have at least one piece of meaningful content
+        // NEW format: check for new format fields
         const hasDiagnosis = typeof section.diagnosis === 'string' && section.diagnosis.trim().length > 0;
         const hasTips = Array.isArray(section.tips) && section.tips.length > 0;
         const hasRewritePreview = typeof section.rewritePreview === 'string' && section.rewritePreview.trim().length > 0;
+        const hasNewFormat = hasDiagnosis || hasTips || hasRewritePreview;
         
-        return hasDiagnosis || hasTips || hasRewritePreview;
+        // OLD format: check for old format fields (feedback or tip)
+        const hasFeedback = typeof section.feedback === 'string' && section.feedback.trim().length > 0;
+        const hasTip = typeof section.tip === 'string' && section.tip.trim().length > 0;
+        const hasOldFormat = hasFeedback || hasTip;
+        
+        return hasNewFormat || hasOldFormat;
       });
       
       if (validSections.length === 0) {
@@ -7399,6 +7406,24 @@ let cachedScore = null;
       }
       
       feedbackGrid.innerHTML = validSections.map(section => {
+        // Detect format: old format has feedback/tip but not diagnosis/tips/rewritePreview
+        const isOldFormat = (typeof section.feedback === 'string' || typeof section.tip === 'string') && 
+                           !section.diagnosis && !Array.isArray(section.tips) && !section.rewritePreview;
+        
+        if (isOldFormat) {
+          // Render OLD format
+          const scoreDisplay = (section.score === undefined || section.score === null) ? '— / —' : escapeHtml(section.score);
+          return `
+            <div class="rf-feedback-card">
+              <div class="rf-feedback-label">
+                ${escapeHtml(section.section || section.label || 'Section')} <span class="rf-feedback-score">${scoreDisplay}</span>
+              </div>
+              <div class="rf-feedback-tip">${escapeHtml(section.feedback || section.tip || '')}</div>
+            </div>
+          `;
+        }
+        
+        // Render NEW format
         const fitChipClass = {
           'big_impact': 'rf-fit-chip-big-impact',
           'tunable': 'rf-fit-chip-tunable',
