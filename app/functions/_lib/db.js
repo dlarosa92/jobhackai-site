@@ -14,6 +14,8 @@
  * - Uses TEXT for dates (ISO 8601 format) for SQLite/D1 compatibility
  */
 
+import { sanitizeRoleSpecificFeedback } from './feedback-validator.js';
+
 /**
  * Resolve the D1 binding from the environment.
  *
@@ -628,6 +630,39 @@ export async function getFeedbackSessionById(env, sessionId, userId) {
     if (row.feedback_json) {
       try {
         feedbackData = JSON.parse(row.feedback_json);
+        
+        // CRITICAL: Sanitize roleSpecificFeedback on read to prevent returning corrupted legacy data
+        // This ensures history detail never returns malformed sections arrays even if DB row is poisoned
+        if (feedbackData?.roleSpecificFeedback) {
+          const rsf = feedbackData.roleSpecificFeedback;
+          
+          // New format: sanitize
+          if (typeof rsf === 'object' && !Array.isArray(rsf)) {
+            const sanitized = sanitizeRoleSpecificFeedback(rsf);
+            if (sanitized) {
+              feedbackData.roleSpecificFeedback = sanitized;
+            } else {
+              // Malformed - remove it
+              delete feedbackData.roleSpecificFeedback;
+            }
+          }
+          // Old format: filter to objects only
+          else if (Array.isArray(rsf)) {
+            const filtered = rsf.filter(
+              item => item && typeof item === 'object' && !Array.isArray(item)
+            );
+            if (filtered.length > 0) {
+              feedbackData.roleSpecificFeedback = filtered;
+            } else {
+              // No valid objects - remove it
+              delete feedbackData.roleSpecificFeedback;
+            }
+          }
+          // Invalid type - remove it
+          else {
+            delete feedbackData.roleSpecificFeedback;
+          }
+        }
       } catch (e) {
         console.warn('[DB] Failed to parse feedback_json:', e);
       }

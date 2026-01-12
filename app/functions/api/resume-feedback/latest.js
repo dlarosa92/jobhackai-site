@@ -9,6 +9,7 @@
 import { getBearer, verifyFirebaseIdToken } from '../../_lib/firebase-auth.js';
 import { errorResponse, successResponse, generateRequestId } from '../../_lib/error-handler.js';
 import { getOrCreateUserByAuthId, isD1Available, getUserPlan } from '../../_lib/db.js';
+import { sanitizeRoleSpecificFeedback } from '../../_lib/feedback-validator.js';
 
 function corsHeaders(origin, env) {
   const allowedOrigins = [
@@ -118,6 +119,26 @@ export async function onRequest(context) {
     const rewrittenResume = rewriteLocked ? null : rawRewritten;
     const rewriteChangeSummary = rewriteLocked ? null : rawSummary;
 
+    // CRITICAL: Sanitize roleSpecificFeedback before returning to prevent malformed data
+    let roleSpecificFeedback = null;
+    if (feedbackData?.roleSpecificFeedback) {
+      const rsf = feedbackData.roleSpecificFeedback;
+      
+      // New format: sanitize
+      if (typeof rsf === 'object' && !Array.isArray(rsf)) {
+        const sanitized = sanitizeRoleSpecificFeedback(rsf);
+        roleSpecificFeedback = sanitized || null;
+      }
+      // Old format: filter to objects only
+      else if (Array.isArray(rsf)) {
+        const filtered = rsf.filter(
+          item => item && typeof item === 'object' && !Array.isArray(item)
+        );
+        roleSpecificFeedback = filtered.length > 0 ? filtered : null;
+      }
+      // Invalid type - return null
+    }
+
     const latest = {
       sessionId: String(row.resume_session_id),
       title: row.title,
@@ -125,7 +146,7 @@ export async function onRequest(context) {
       createdAt: row.feedback_created_at,
       atsScore: atsScore ?? null,
       atsRubric: feedbackData?.atsRubric || null,
-      roleSpecificFeedback: feedbackData?.roleSpecificFeedback || null,
+      roleSpecificFeedback,
       atsIssues: feedbackData?.atsIssues || null,
       rewrittenResume,
       rewriteChangeSummary,

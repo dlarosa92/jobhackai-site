@@ -5510,7 +5510,36 @@ let cachedScore = null;
       
       // Handle NEW structure with fitLevel, diagnosis, tips, rewritePreview
       if (isNewStructure) {
-        roleSpecificFeedback.sections.forEach(section => {
+        // CRITICAL: Filter to only valid object sections to prevent blank "Tunable" cards
+        const validSections = roleSpecificFeedback.sections.filter(section => {
+          // Must be an object (not string, null, array, etc.)
+          if (!section || typeof section !== 'object' || Array.isArray(section)) {
+            return false;
+          }
+          
+          // Must have at least one piece of meaningful content
+          const hasDiagnosis = typeof section.diagnosis === 'string' && section.diagnosis.trim().length > 0;
+          const hasTips = Array.isArray(section.tips) && section.tips.length > 0;
+          const hasRewritePreview = typeof section.rewritePreview === 'string' && section.rewritePreview.trim().length > 0;
+          
+          return hasDiagnosis || hasTips || hasRewritePreview;
+        });
+        
+        if (validSections.length === 0) {
+          // Show helpful message instead of blank cards
+          const messageDiv = document.createElement('div');
+          messageDiv.className = 'rf-feedback-card';
+          messageDiv.style.cssText = 'grid-column: 1 / -1; text-align: center; padding: 2rem;';
+          messageDiv.innerHTML = `
+            <div style="color: var(--color-text-muted); font-style: italic;">
+              Role-specific tips couldn't be generated for this upload. Try uploading a PDF or re-running.
+            </div>
+          `;
+          grid.appendChild(messageDiv);
+          return;
+        }
+        
+        validSections.forEach(section => {
           const div = document.createElement('div');
           div.className = 'rf-feedback-card';
           
@@ -5553,7 +5582,26 @@ let cachedScore = null;
       
       // Handle OLD structure (backwards compatibility)
       if (isOldStructure) {
-        roleSpecificFeedback.forEach(item => {
+        // Filter to only valid objects (prevent rendering strings/nulls/etc.)
+        const validItems = roleSpecificFeedback.filter(
+          item => item && typeof item === 'object' && !Array.isArray(item)
+        );
+        
+        if (validItems.length === 0) {
+          // Show helpful message instead of blank cards
+          const messageDiv = document.createElement('div');
+          messageDiv.className = 'rf-feedback-card';
+          messageDiv.style.cssText = 'grid-column: 1 / -1; text-align: center; padding: 2rem;';
+          messageDiv.innerHTML = `
+            <div style="color: var(--color-text-muted); font-style: italic;">
+              Role-specific tips couldn't be generated for this upload. Try uploading a PDF or re-running.
+            </div>
+          `;
+          grid.appendChild(messageDiv);
+          return;
+        }
+        
+        validItems.forEach(item => {
           const div = document.createElement('div');
           div.className = 'rf-feedback-card';
           const scoreDisplay = (item.score === undefined || item.score === null) ? '— / —' : escapeHtml(item.score);
@@ -7320,12 +7368,37 @@ let cachedScore = null;
       // Handle both old array format and new object format
       const sections = roleSpecificFeedback.sections || (Array.isArray(roleSpecificFeedback) ? roleSpecificFeedback : []);
       
-      if (sections.length === 0) {
-        feedbackGrid.style.display = 'none';
+      // CRITICAL: Filter to only valid object sections to prevent blank "Tunable" cards
+      // Keep only entries that are objects with meaningful content
+      const validSections = sections.filter(section => {
+        // Must be an object (not string, null, array, etc.)
+        if (!section || typeof section !== 'object' || Array.isArray(section)) {
+          return false;
+        }
+        
+        // Must have at least one piece of meaningful content
+        const hasDiagnosis = typeof section.diagnosis === 'string' && section.diagnosis.trim().length > 0;
+        const hasTips = Array.isArray(section.tips) && section.tips.length > 0;
+        const hasRewritePreview = typeof section.rewritePreview === 'string' && section.rewritePreview.trim().length > 0;
+        
+        return hasDiagnosis || hasTips || hasRewritePreview;
+      });
+      
+      if (validSections.length === 0) {
+        // Show helpful message instead of blank cards
+        feedbackGrid.innerHTML = `
+          <div class="rf-feedback-card" style="grid-column: 1 / -1; text-align: center; padding: 2rem;">
+            <div style="color: var(--color-text-muted); font-style: italic;">
+              Role-specific tips couldn't be generated for this upload. Try uploading a PDF or re-running.
+            </div>
+          </div>
+        `;
+        feedbackGrid.style.display = 'grid';
+        applyFadeIn(feedbackGrid);
         return;
       }
       
-      feedbackGrid.innerHTML = sections.map(section => {
+      feedbackGrid.innerHTML = validSections.map(section => {
         const fitChipClass = {
           'big_impact': 'rf-fit-chip-big-impact',
           'tunable': 'rf-fit-chip-tunable',

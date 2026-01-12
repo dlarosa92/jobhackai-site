@@ -35,28 +35,27 @@ export function validateAIFeedback(aiFeedback, allowOldFormat = false, allowMiss
   
   // Validate roleSpecificFeedback only if not allowed to be missing
   if (!allowMissingRoleFeedback) {
-    // Validate roleSpecificFeedback (new format)
-    const hasNewFormat = aiFeedback?.roleSpecificFeedback &&
-                         typeof aiFeedback.roleSpecificFeedback === 'object' &&
-                         !Array.isArray(aiFeedback.roleSpecificFeedback) &&
-                         aiFeedback.roleSpecificFeedback.targetRoleUsed !== undefined &&
-                         Array.isArray(aiFeedback.roleSpecificFeedback.sections) &&
-                         aiFeedback.roleSpecificFeedback.sections.length > 0;
+    const rsf = aiFeedback?.roleSpecificFeedback;
+    
+    // Validate roleSpecificFeedback (new format) - use strict validation
+    const hasNewFormat = isRoleSpecificFeedbackStrict(rsf);
     
     // Validate roleSpecificFeedback (old format - for backwards compatibility)
+    // Old format must be array of objects (not mixed types)
     const hasOldFormat = allowOldFormat &&
-                         Array.isArray(aiFeedback?.roleSpecificFeedback) &&
-                         aiFeedback.roleSpecificFeedback.length > 0;
+                         Array.isArray(rsf) &&
+                         rsf.length > 0 &&
+                         rsf.every(item => item && typeof item === 'object' && !Array.isArray(item));
     
     const hasRoleSpecificFeedback = hasNewFormat || hasOldFormat;
     if (!hasRoleSpecificFeedback) {
       missing.push('roleSpecificFeedback');
     }
     details.hasRoleSpecificFeedback = hasRoleSpecificFeedback;
-    details.roleSpecificFeedbackType = typeof aiFeedback?.roleSpecificFeedback;
+    details.roleSpecificFeedbackType = typeof rsf;
     details.roleSpecificFeedbackFormat = hasNewFormat ? 'new' : (hasOldFormat ? 'old' : 'none');
-    details.roleSpecificFeedbackKeys = aiFeedback?.roleSpecificFeedback ? Object.keys(aiFeedback.roleSpecificFeedback) : null;
-    details.sectionsLength = aiFeedback?.roleSpecificFeedback?.sections?.length;
+    details.roleSpecificFeedbackKeys = rsf && typeof rsf === 'object' && !Array.isArray(rsf) ? Object.keys(rsf) : null;
+    details.sectionsLength = hasNewFormat ? rsf.sections.length : (hasOldFormat ? rsf.length : 0);
   } else {
     // When allowed to be missing, just record if it exists (for logging/debugging)
     details.hasRoleSpecificFeedback = !!(aiFeedback?.roleSpecificFeedback);
@@ -94,6 +93,146 @@ export function validateFeedbackResult(result, allowMissingRoleFeedback = false)
 }
 
 /**
+ * Sanitize role-specific feedback to ensure all sections are valid objects with required fields
+ * Filters out non-object entries, enforces types, and drops empty sections
+ * @param {Object|null|undefined} rsf - Role-specific feedback object
+ * @returns {Object|null} Sanitized role-specific feedback or null if invalid/empty
+ */
+export function sanitizeRoleSpecificFeedback(rsf) {
+  if (!rsf || typeof rsf !== 'object' || Array.isArray(rsf)) {
+    return null;
+  }
+
+  if (!Array.isArray(rsf.sections)) {
+    return null;
+  }
+
+  // Filter to only object entries (drop strings, nulls, arrays, etc.)
+  const objectSections = rsf.sections.filter(
+    item => item && typeof item === 'object' && !Array.isArray(item)
+  );
+
+  // Sanitize each section object
+  const cleanSections = objectSections
+    .map(section => {
+      // Enforce required fields with defaults
+      const sectionName = typeof section.section === 'string' && section.section.trim()
+        ? section.section.trim()
+        : null;
+      
+      if (!sectionName) {
+        return null; // Drop sections without a name
+      }
+
+      // Validate fitLevel (enum)
+      const validFitLevels = ['big_impact', 'tunable', 'strong'];
+      const fitLevel = validFitLevels.includes(section.fitLevel)
+        ? section.fitLevel
+        : 'tunable';
+
+      // Ensure diagnosis is a string
+      const diagnosis = typeof section.diagnosis === 'string'
+        ? section.diagnosis.trim()
+        : '';
+
+      // Ensure tips is an array of strings
+      const tips = Array.isArray(section.tips)
+        ? section.tips
+            .filter(tip => typeof tip === 'string')
+            .map(tip => tip.trim())
+            .filter(tip => tip.length > 0)
+            .slice(0, 3) // Cap at 3
+        : [];
+
+      // Ensure rewritePreview is a string
+      const rewritePreview = typeof section.rewritePreview === 'string'
+        ? section.rewritePreview.trim()
+        : '';
+
+      // Drop sections with no meaningful content
+      if (!diagnosis && tips.length === 0 && !rewritePreview) {
+        return null;
+      }
+
+      return {
+        section: sectionName,
+        fitLevel,
+        diagnosis,
+        tips,
+        rewritePreview
+      };
+    })
+    .filter(section => section !== null); // Remove dropped sections
+
+  // Return null if no valid sections remain
+  if (cleanSections.length === 0) {
+    return null;
+  }
+
+  return {
+    targetRoleUsed: typeof rsf.targetRoleUsed === 'string' && rsf.targetRoleUsed.trim()
+      ? rsf.targetRoleUsed.trim()
+      : 'general',
+    sections: cleanSections
+  };
+}
+
+/**
+ * Strict validation for role-specific feedback structure
+ * Checks that all sections are objects with required fields and correct types
+ * @param {Object|null|undefined} rsf - Role-specific feedback object
+ * @returns {boolean} True if rsf is strictly valid
+ */
+export function isRoleSpecificFeedbackStrict(rsf) {
+  if (!rsf || typeof rsf !== 'object' || Array.isArray(rsf)) {
+    return false;
+  }
+
+  if (typeof rsf.targetRoleUsed !== 'string' || !rsf.targetRoleUsed.trim()) {
+    return false;
+  }
+
+  if (!Array.isArray(rsf.sections) || rsf.sections.length === 0) {
+    return false;
+  }
+
+  // Every section must be an object with required fields
+  const validFitLevels = ['big_impact', 'tunable', 'strong'];
+  return rsf.sections.every(section => {
+    if (!section || typeof section !== 'object' || Array.isArray(section)) {
+      return false;
+    }
+
+    // Check required fields exist and have correct types
+    if (typeof section.section !== 'string' || !section.section.trim()) {
+      return false;
+    }
+
+    if (!validFitLevels.includes(section.fitLevel)) {
+      return false;
+    }
+
+    if (typeof section.diagnosis !== 'string') {
+      return false;
+    }
+
+    if (!Array.isArray(section.tips)) {
+      return false;
+    }
+
+    if (!section.tips.every(tip => typeof tip === 'string')) {
+      return false;
+    }
+
+    if (typeof section.rewritePreview !== 'string') {
+      return false;
+    }
+
+    return true;
+  });
+}
+
+/**
  * Normalize a role string for comparison
  * @param {string|null|undefined} role 
  * @returns {string|null}
@@ -119,13 +258,8 @@ export function isValidFeedbackResult(result, { requireRoleSpecific = false } = 
   const hasAtsRubric = Array.isArray(result.atsRubric) && result.atsRubric.length > 0;
   const hasAtsIssues = Array.isArray(result.atsIssues);
 
-  const rsf = result.roleSpecificFeedback;
-  const rsfIsObject = rsf && typeof rsf === 'object' && !Array.isArray(rsf);
-  const hasRoleSpecificFeedback =
-    rsfIsObject &&
-    rsf.targetRoleUsed !== undefined &&
-    Array.isArray(rsf.sections) &&
-    rsf.sections.length > 0;
+  // Use strict validation for role-specific feedback
+  const hasRoleSpecificFeedback = isRoleSpecificFeedbackStrict(result.roleSpecificFeedback);
 
   const roleSpecificOk = requireRoleSpecific ? hasRoleSpecificFeedback : true;
 
