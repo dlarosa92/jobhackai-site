@@ -11,7 +11,6 @@
     // Run immediately to prevent content flash for unauthorized users
     (function enforceAccessImmediate() {
       // SECURITY: Check auth state using localStorage flags and Firebase SDK keys
-      // FirebaseAuthManager may not be loaded yet, so we check Firebase SDK keys directly
       const hasLocalStorageAuth = localStorage.getItem('user-authenticated') === 'true';
       const hasFirebaseKeys = Object.keys(localStorage).some(k => 
         k.startsWith('firebase:authUser:') && 
@@ -21,30 +20,68 @@
       );
       const isAuthenticated = hasLocalStorageAuth || hasFirebaseKeys;
       const allowedPlans = ['trial', 'essential', 'pro', 'premium'];
-      // Expose allowed plans so later scripts stay in sync
       window.__JOBHACKAI_RF_ALLOWED_PLANS__ = allowedPlans;
       const cachedPlan = localStorage.getItem('user-plan');
-      
-      // If not authenticated, redirect to login immediately
-      if (!isAuthenticated) {
-        console.log('🚫 [RESUME-FEEDBACK] Not authenticated, redirecting to login');
-        window.location.href = 'login.html';
-        return;
-      }
-      
-      if (cachedPlan) {
-        // Cached plan detected - enforce immediately
-        if (!allowedPlans.includes(cachedPlan)) {
-          console.log('🚫 [RESUME-FEEDBACK] Access denied for cached plan:', cachedPlan);
+
+      // Wait for firebase-auth-ready or hydration before irreversible action
+      let done = false;
+      const timeoutHandle = setTimeout(() => {
+        if (!done) handleAuthReadyOrTimeout();
+      }, 3000);
+
+      async function handleAuthReadyOrTimeout() {
+        if (done) return;
+        done = true;
+        try { clearTimeout(timeoutHandle); } catch (_) {}
+
+        // TRI-STATE FIX: Wait for Firebase auth to be ready before redirecting
+        // This prevents race conditions where Firebase is still initializing
+        let user = null;
+        if (window.FirebaseAuthManager && typeof window.FirebaseAuthManager.waitForAuthReady === 'function') {
+          try {
+            user = await window.FirebaseAuthManager.waitForAuthReady(5000);
+          } catch (error) {
+            console.warn('[RESUME-FEEDBACK] waitForAuthReady error in immediate check:', error);
+          }
+        }
+
+        const navAuth = window.JobHackAINavigation && window.JobHackAINavigation.getAuthState && window.JobHackAINavigation.getAuthState();
+        const effectivePlan = window.JobHackAINavigation && window.JobHackAINavigation.getEffectivePlan && window.JobHackAINavigation.getEffectivePlan();
+        const hydratedPlan = effectivePlan || cachedPlan;
+
+        // Check authentication: prefer Firebase user, then navigation, then localStorage
+        const isAuthenticated = user || (navAuth && navAuth.isAuthenticated);
+        
+        if (!isAuthenticated) {
+          window.location.href = 'login.html';
+          return;
+        }
+        if (hydratedPlan && !allowedPlans.includes(hydratedPlan)) {
           window.location.href = 'pricing-a.html?plan=essential';
           return;
         }
-        console.log('✅ [RESUME-FEEDBACK] Access granted for cached plan:', cachedPlan);
+        document.documentElement.classList.remove('auth-pending');
+        document.documentElement.classList.remove('plan-pending');
+      }
+
+      if (!isAuthenticated) {
+        document.documentElement.classList.add('auth-pending');
+        document.addEventListener('firebase-auth-ready', handleAuthReadyOrTimeout, { once: true });
       } else {
-        // Plan not cached yet - allow page to load and defer enforcement
-        console.log('⏳ [RESUME-FEEDBACK] Plan not cached yet. Deferring enforcement until server plan check completes.');
-        window.__JOBHACKAI_PLAN_PENDING__ = true;
-        document.documentElement.classList.add('plan-pending');
+        // If cachedPlan missing, mark plan-pending until server check completes
+        if (!cachedPlan) {
+          window.__JOBHACKAI_PLAN_PENDING__ = true;
+          document.documentElement.classList.add('plan-pending');
+          document.addEventListener('firebase-auth-ready', handleAuthReadyOrTimeout, { once: true });
+        } else if (cachedPlan && !allowedPlans.includes(cachedPlan)) {
+          document.documentElement.classList.add('plan-pending');
+          document.addEventListener('firebase-auth-ready', handleAuthReadyOrTimeout, { once: true });
+        } else {
+          document.documentElement.classList.remove('auth-pending');
+          document.documentElement.classList.remove('plan-pending');
+          done = true;
+          try { clearTimeout(timeoutHandle); } catch (_) {}
+        }
       }
     })();
   </script>
@@ -1101,33 +1138,77 @@
   <script>
     // --- PAGE ACCESS CONTROL (Second check after navigation system) ---
     // Also run after navigation system initializes to double-check
-    function enforceAccess() {
+    async function enforceAccess() {
+      // TRI-STATE FIX: Wait for Firebase auth to be ready before redirecting
       let isAuthenticated, plan;
       
-      if (window.JobHackAINavigation) {
-        const authState = window.JobHackAINavigation.getAuthState();
-        isAuthenticated = authState.isAuthenticated;
-        plan = window.JobHackAINavigation.getEffectivePlan();
-      } else {
-        // SECURITY: Check Firebase SDK keys synchronously (works before FirebaseAuthManager is ready)
-        // FirebaseAuthManager.getCurrentUser() returns null until onAuthStateChanged fires
-        // Use same pattern as checkAuthentication() for consistency
-        function hasFirebaseAuthKeys() {
-          try {
-            return Object.keys(localStorage).some(k => 
-              k.startsWith('firebase:authUser:') && 
-              localStorage.getItem(k) && 
-              localStorage.getItem(k) !== 'null' &&
-              localStorage.getItem(k).length > 10
-            );
-          } catch (e) {
-            return false;
+      // Wait for Firebase auth to be ready if FirebaseAuthManager exists
+      if (window.FirebaseAuthManager && typeof window.FirebaseAuthManager.waitForAuthReady === 'function') {
+        try {
+          console.log('[RESUME-FEEDBACK] Waiting for Firebase auth to be ready before enforceAccess check...');
+          const user = await window.FirebaseAuthManager.waitForAuthReady(8000);
+          
+          // Prefer Firebase user result over navigation state (navigation may not have synced yet)
+          if (window.JobHackAINavigation) {
+            const authState = window.JobHackAINavigation.getAuthState();
+            isAuthenticated = user || (authState && authState.isAuthenticated);
+            plan = window.JobHackAINavigation.getEffectivePlan();
+          } else {
+            isAuthenticated = !!user;
+            plan = localStorage.getItem('user-plan') || 'free';
+          }
+        } catch (error) {
+          console.warn('[RESUME-FEEDBACK] waitForAuthReady error in enforceAccess, using fallback:', error);
+          // Fallback to navigation/localStorage check
+          if (window.JobHackAINavigation) {
+            const authState = window.JobHackAINavigation.getAuthState();
+            isAuthenticated = authState && authState.isAuthenticated;
+            plan = window.JobHackAINavigation.getEffectivePlan();
+          } else {
+            // SECURITY: Check Firebase SDK keys synchronously (works before FirebaseAuthManager is ready)
+            function hasFirebaseAuthKeys() {
+              try {
+                return Object.keys(localStorage).some(k => 
+                  k.startsWith('firebase:authUser:') && 
+                  localStorage.getItem(k) && 
+                  localStorage.getItem(k) !== 'null' &&
+                  localStorage.getItem(k).length > 10
+                );
+              } catch (e) {
+                return false;
+              }
+            }
+            const hasLocalStorageAuth = localStorage.getItem('user-authenticated') === 'true';
+            const hasFirebaseKeys = hasFirebaseAuthKeys();
+            isAuthenticated = hasLocalStorageAuth || hasFirebaseKeys;
+            plan = localStorage.getItem('user-plan') || 'free';
           }
         }
-        const hasLocalStorageAuth = localStorage.getItem('user-authenticated') === 'true';
-        const hasFirebaseKeys = hasFirebaseAuthKeys();
-        isAuthenticated = hasLocalStorageAuth || hasFirebaseKeys;
-        plan = localStorage.getItem('user-plan') || 'free';
+      } else {
+        // No FirebaseAuthManager - use navigation/localStorage fallback
+        if (window.JobHackAINavigation) {
+          const authState = window.JobHackAINavigation.getAuthState();
+          isAuthenticated = authState.isAuthenticated;
+          plan = window.JobHackAINavigation.getEffectivePlan();
+        } else {
+          // SECURITY: Check Firebase SDK keys synchronously (works before FirebaseAuthManager is ready)
+          function hasFirebaseAuthKeys() {
+            try {
+              return Object.keys(localStorage).some(k => 
+                k.startsWith('firebase:authUser:') && 
+                localStorage.getItem(k) && 
+                localStorage.getItem(k) !== 'null' &&
+                localStorage.getItem(k).length > 10
+              );
+            } catch (e) {
+              return false;
+            }
+          }
+          const hasLocalStorageAuth = localStorage.getItem('user-authenticated') === 'true';
+          const hasFirebaseKeys = hasFirebaseAuthKeys();
+          isAuthenticated = hasLocalStorageAuth || hasFirebaseKeys;
+          plan = localStorage.getItem('user-plan') || 'free';
+        }
       }
       
       // FIX: Enhanced logging for plan detection debugging
@@ -1144,7 +1225,7 @@
       
       if (!isAuthenticated || !allowedPlans.includes(plan)) {
         if (!isAuthenticated) {
-        window.location.href = 'login.html';
+          window.location.href = 'login.html';
         } else {
           window.location.href = 'pricing-a.html?plan=essential';
         }
@@ -1153,9 +1234,13 @@
     
     // Wait for DOM to be ready before enforcing access again
     if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', enforceAccess);
+      document.addEventListener('DOMContentLoaded', async () => {
+        await enforceAccess();
+      });
     } else {
-      setTimeout(enforceAccess, 100); // Small delay to allow navigation system to initialize
+      setTimeout(async () => {
+        await enforceAccess();
+      }, 100); // Small delay to allow navigation system to initialize
     }
   </script>
   <script>
@@ -1354,21 +1439,23 @@
       // Wait for navigation system to be ready
       if (window.JobHackAINavigation && typeof window.JobHackAINavigation.getEffectivePlan === 'function') {
         // Navigation is ready - check access immediately
-        enforceAccessControl(allowedPlans);
+        (async () => {
+          await enforceAccessControl(allowedPlans);
+        })();
       } else {
         // Navigation not ready yet - wait for navigationReady event
         // Use execution flag to prevent duplicate calls from event listener and timeout
         let hasExecuted = false;
-        let fallbackTimeout = setTimeout(() => {
+        let fallbackTimeout = setTimeout(async () => {
           // Always enforce access control after timeout, even if navigation fails to load
           // enforceAccessControl has localStorage fallback logic that handles navigation unavailability
           if (!hasExecuted) {
             hasExecuted = true;
-            enforceAccessControl(allowedPlans);
+            await enforceAccessControl(allowedPlans);
           }
         }, 1000);
         
-        window.addEventListener('navigationReady', function onNavigationReady() {
+        window.addEventListener('navigationReady', async function onNavigationReady() {
           window.removeEventListener('navigationReady', onNavigationReady);
           // Clear fallback timeout to prevent duplicate execution
           if (fallbackTimeout) {
@@ -1378,39 +1465,84 @@
           // Only execute if not already executed by timeout
           if (!hasExecuted) {
             hasExecuted = true;
-            enforceAccessControl(allowedPlans);
+            await enforceAccessControl(allowedPlans);
           }
         }, { once: true });
       }
     }
     
-    function enforceAccessControl(allowedPlans) {
+    async function enforceAccessControl(allowedPlans) {
+      // TRI-STATE FIX: Wait for Firebase auth to be ready before redirecting
+      // This prevents race conditions where Firebase is still initializing
       let isAuthenticated, plan;
       
-      if (window.JobHackAINavigation) {
-        const authState = window.JobHackAINavigation.getAuthState();
-        isAuthenticated = authState.isAuthenticated;
-        plan = window.JobHackAINavigation.getEffectivePlan();
-      } else {
-        // SECURITY: Check Firebase SDK keys synchronously (works before FirebaseAuthManager is ready)
-        // FirebaseAuthManager.getCurrentUser() returns null until onAuthStateChanged fires
-        // Use same pattern as checkAuthentication() for consistency
-        function hasFirebaseAuthKeys() {
-          try {
-            return Object.keys(localStorage).some(k => 
-              k.startsWith('firebase:authUser:') && 
-              localStorage.getItem(k) && 
-              localStorage.getItem(k) !== 'null' &&
-              localStorage.getItem(k).length > 10
-            );
-          } catch (e) {
-            return false;
+      // Wait for Firebase auth to be ready if FirebaseAuthManager exists
+      if (window.FirebaseAuthManager && typeof window.FirebaseAuthManager.waitForAuthReady === 'function') {
+        try {
+          console.log('[RESUME-FEEDBACK] Waiting for Firebase auth to be ready before access control check...');
+          const user = await window.FirebaseAuthManager.waitForAuthReady(8000);
+          
+          // Prefer Firebase user result over navigation state (navigation may not have synced yet)
+          if (window.JobHackAINavigation) {
+            const authState = window.JobHackAINavigation.getAuthState();
+            isAuthenticated = user || (authState && authState.isAuthenticated);
+            plan = window.JobHackAINavigation.getEffectivePlan();
+          } else {
+            isAuthenticated = !!user;
+            plan = localStorage.getItem('user-plan') || 'free';
+          }
+        } catch (error) {
+          console.warn('[RESUME-FEEDBACK] waitForAuthReady error, using fallback check:', error);
+          // Fallback to navigation/localStorage check
+          if (window.JobHackAINavigation) {
+            const authState = window.JobHackAINavigation.getAuthState();
+            isAuthenticated = authState && authState.isAuthenticated;
+            plan = window.JobHackAINavigation.getEffectivePlan();
+          } else {
+            // SECURITY: Check Firebase SDK keys synchronously (works before FirebaseAuthManager is ready)
+            function hasFirebaseAuthKeys() {
+              try {
+                return Object.keys(localStorage).some(k => 
+                  k.startsWith('firebase:authUser:') && 
+                  localStorage.getItem(k) && 
+                  localStorage.getItem(k) !== 'null' &&
+                  localStorage.getItem(k).length > 10
+                );
+              } catch (e) {
+                return false;
+              }
+            }
+            const hasLocalStorageAuth = localStorage.getItem('user-authenticated') === 'true';
+            const hasFirebaseKeys = hasFirebaseAuthKeys();
+            isAuthenticated = hasLocalStorageAuth || hasFirebaseKeys;
+            plan = localStorage.getItem('user-plan') || 'free';
           }
         }
-        const hasLocalStorageAuth = localStorage.getItem('user-authenticated') === 'true';
-        const hasFirebaseKeys = hasFirebaseAuthKeys();
-        isAuthenticated = hasLocalStorageAuth || hasFirebaseKeys;
-        plan = localStorage.getItem('user-plan') || 'free';
+      } else {
+        // No FirebaseAuthManager - use navigation/localStorage fallback
+        if (window.JobHackAINavigation) {
+          const authState = window.JobHackAINavigation.getAuthState();
+          isAuthenticated = authState.isAuthenticated;
+          plan = window.JobHackAINavigation.getEffectivePlan();
+        } else {
+          // SECURITY: Check Firebase SDK keys synchronously (works before FirebaseAuthManager is ready)
+          function hasFirebaseAuthKeys() {
+            try {
+              return Object.keys(localStorage).some(k => 
+                k.startsWith('firebase:authUser:') && 
+                localStorage.getItem(k) && 
+                localStorage.getItem(k) !== 'null' &&
+                localStorage.getItem(k).length > 10
+              );
+            } catch (e) {
+              return false;
+            }
+          }
+          const hasLocalStorageAuth = localStorage.getItem('user-authenticated') === 'true';
+          const hasFirebaseKeys = hasFirebaseAuthKeys();
+          isAuthenticated = hasLocalStorageAuth || hasFirebaseKeys;
+          plan = localStorage.getItem('user-plan') || 'free';
+        }
       }
       
       console.log('[RESUME-FEEDBACK] Access control check:', {
@@ -2864,67 +2996,68 @@
 
       // Load cached ATS score on page load (with KV fallback)
       async function loadCachedATSScore() {
-        let cachedScore = null;
-        
-        // FIX: Initialize ATS score to 0% for new users before checking cache
-        updateProgressRing(0);
-        
-        // Try state persistence first
-        // On initial page load, don't validate against input field (which is empty)
-        // This allows us to restore cached scores and populate the job title field
-        // Validation only happens when user explicitly provides a job title for new analysis
-        if (window.JobHackAIStatePersistence) {
-          cachedScore = window.JobHackAIStatePersistence.loadATSScore(null);
-        }
-        
-        // If no cached score, try KV fallback
-        if (!cachedScore || !cachedScore.score) {
-          try {
-            const user = window.FirebaseAuthManager?.getCurrentUser?.();
-            if (user) {
-              const idToken = await user.getIdToken();
-              const kvResponse = await fetch('/api/ats-score-persist', {
-                method: 'GET',
-                headers: {
-                  'Authorization': `Bearer ${idToken}`
-                }
-              });
+let cachedScore = null;
               
-              if (kvResponse.ok) {
-                const kvData = await kvResponse.json();
-                if (kvData.success && kvData.data) {
-                  const resumeData = kvData.data;
-                  cachedScore = {
-                    score: resumeData.score,
-                    breakdown: resumeData.breakdown || {},
-                    jobTitle: resumeData.jobTitle || null,
-                    resumeId: resumeData.resumeId || null,
-                    extractionQuality: resumeData.extractionQuality || null, // Include extractionQuality to match loadATSScore() structure
-                    timestamp: resumeData.timestamp || Date.now() // Include timestamp, fallback to now if missing
-                  };
-                  
-                  // Cache KV results back to localStorage
-                  if (window.JobHackAIStatePersistence) {
-                    window.JobHackAIStatePersistence.saveATSScore({
-                      score: resumeData.score,
-                      breakdown: resumeData.breakdown || {},
-                      resumeId: resumeData.resumeId || '',
-                      jobTitle: resumeData.jobTitle || null,
-                      extractionQuality: resumeData.extractionQuality
-                    });
+              // ATS score for resume feedback tile and history is always fetched from D1 feedback API.
+              updateProgressRing(0);
+              
+              try {
+          const token = await getAuthToken();
+          if (token) {
+            const historyResponse = await fetch('/api/resume-feedback/history?limit=1', {
+              headers: {
+                'Authorization': `Bearer ${token}`
+              }
+            });
+            
+            if (historyResponse.ok) {
+              const historyData = await historyResponse.json();
+              const latestHistoryItem = historyData.items?.[0]; // Newest first (ORDER BY created_at DESC)
+              
+              if (latestHistoryItem && latestHistoryItem.atsScore != null && typeof latestHistoryItem.atsScore === 'number') {
+                // Use score from history (resume feedback run only)
+                cachedScore = {
+                  score: latestHistoryItem.atsScore,
+                  breakdown: {}, // History doesn't include breakdown - will try to restore from localStorage if available
+                  jobTitle: latestHistoryItem.role || latestHistoryItem.title || null,
+                  resumeId: latestHistoryItem.resumeId || null,
+                  timestamp: latestHistoryItem.createdAt ? new Date(latestHistoryItem.createdAt).getTime() : Date.now()
+                };
+                
+                console.log('[RESUME-FEEDBACK] Loaded score from history (resume feedback run only):', cachedScore.score);
+                
+                // Try to restore breakdown from localStorage if available (for backward compatibility)
+                // This allows rubric grid to show breakdown even if history doesn't include it
+                if (window.JobHackAIStatePersistence && cachedScore.resumeId) {
+                  const localStorageScore = window.JobHackAIStatePersistence.loadATSScore(null);
+                  if (localStorageScore && localStorageScore.breakdown && 
+                      localStorageScore.resumeId === cachedScore.resumeId) {
+                    // Only use localStorage breakdown if it matches the current resumeId
+                    cachedScore.breakdown = localStorageScore.breakdown;
+                    cachedScore.extractionQuality = localStorageScore.extractionQuality;
+                    cachedScore.roleSpecificFeedback = localStorageScore.roleSpecificFeedback;
                   }
-                  
-                  console.log('[RESUME-FEEDBACK] Loaded ATS score from KV:', resumeData.score);
                 }
               }
             }
-          } catch (kvError) {
-            console.warn('[RESUME-FEEDBACK] KV fetch failed:', kvError);
           }
+        } catch (historyError) {
+          console.warn('[RESUME-FEEDBACK] History fetch failed:', historyError);
+          // Continue without history - will show 0% (correct for new users)
         }
         
-          if (cachedScore && cachedScore.score) {
-          console.log('[RESUME-FEEDBACK] Loading cached ATS score:', cachedScore.score);
+        // If no history score, show 0% (don't load from persistence or localStorage)
+        // This ensures free account scores don't appear on resume feedback page
+        // FIX: Use == null to correctly handle legitimate 0% scores (0 is falsy but valid)
+        if (!cachedScore || cachedScore.score == null) {
+          console.log('[RESUME-FEEDBACK] No history found - showing 0% (free account scores excluded)');
+          return; // Exit early - UI already shows 0% from updateProgressRing(0) above
+        }
+        
+        // Display the score from history
+        // FIX: Use != null to correctly handle legitimate 0% scores
+        if (cachedScore && cachedScore.score != null) {
+          console.log('[RESUME-FEEDBACK] Loading score from resume feedback history:', cachedScore.score);
           updateProgressRing(cachedScore.score);
           
           // Hide placeholder
@@ -2937,7 +3070,7 @@
           }
           
           // Convert breakdown to rubric format if available
-          if (cachedScore.breakdown) {
+          if (cachedScore.breakdown && Object.keys(cachedScore.breakdown).length > 0) {
             // Map cached breakdown structure to rubric format
             // API returns: breakdown.keywordScore = { score, max, feedback }
             // Also supports legacy format: breakdown.keywordScore = number
@@ -2995,7 +3128,8 @@
                 label: 'Grammar & Spelling',
                 score: getScore(cachedScore.breakdown.grammarScore),
                 max: 10,
-                tip: getFeedback(cachedScore.breakdown.grammarScore)
+                tip: getFeedback(cachedScore.breakdown.grammarScore),
+                flaggedTerms: cachedScore.breakdown.grammarScore?.flaggedTerms
               }
             ];
             updateRubricGrid(rubric);
@@ -3005,9 +3139,9 @@
           if (cachedScore.roleSpecificFeedback) {
             const isOldFormat = Array.isArray(cachedScore.roleSpecificFeedback) && 
                                cachedScore.roleSpecificFeedback.length > 0;
-          const isNewFormat = isValidRoleTips(cachedScore.roleSpecificFeedback);
-          
-          if (isOldFormat || isNewFormat) {
+            const isNewFormat = isValidRoleTips(cachedScore.roleSpecificFeedback);
+            
+            if (isOldFormat || isNewFormat) {
               updateFeedbackGrid(cachedScore.roleSpecificFeedback);
             } else {
               console.warn('[RESUME-FEEDBACK] Invalid roleSpecificFeedback format in cache:', typeof cachedScore.roleSpecificFeedback);
@@ -3063,24 +3197,198 @@
     // Expose for history interactions
     window.clearTargetRoleState = clearTargetRoleState;
 
+    // Start Fresh on navigation (back/forward), page restore, and reloads
+    function _cancelPendingSkeletonOperations() {
+      try {
+        // Invalidate any in-flight skeleton-related operations so callbacks don't run
+        if (typeof skeletonOperationGeneration !== 'undefined') {
+          skeletonOperationGeneration++;
+        }
+
+        // Clear any scheduled hide timeout and resolve pending hide resolvers as cancelled
+        if (typeof skeletonHideTimeout !== 'undefined' && skeletonHideTimeout !== null) {
+          clearTimeout(skeletonHideTimeout);
+          skeletonHideTimeout = null;
+        }
+        if (Array.isArray(skeletonHideResolvers) && skeletonHideResolvers.length > 0) {
+          skeletonHideResolvers.forEach(({ resolve, generation }) => {
+            try { resolve({ generation, cancelled: true }); } catch (_) {}
+          });
+          skeletonHideResolvers = [];
+        }
+
+        // Immediately hide skeleton UI elements (no fade) to reflect the reset state
+        const skeletonContainer = document.getElementById('rf-skeleton-container');
+        if (skeletonContainer) {
+          // Ensure child skeletons are not left in hidden state for future runs
+          const skeletons = skeletonContainer.querySelectorAll('.rf-skeleton');
+          skeletons.forEach(s => s.classList.remove('hidden'));
+          skeletonContainer.style.display = 'none';
+        }
+        const skeletonHeader = document.getElementById('rf-skeleton-header');
+        if (skeletonHeader) skeletonHeader.style.display = 'none';
+        const skeletonRubric = document.getElementById('rf-skeleton-rubric');
+        if (skeletonRubric) skeletonRubric.style.display = 'none';
+        const skeletonFeedback = document.getElementById('rf-skeleton-feedback');
+        if (skeletonFeedback) skeletonFeedback.style.display = 'none';
+      } catch (e) {
+        console.warn('[RESUME-FEEDBACK] Failed to cancel skeleton operations', e);
+      }
+    }
+
+    // Toast / banner helpers for resume-feedback area
+    window._rfToast = window._rfToast || {
+      currentId: null,
+      currentToast: null,
+      activeRunId: null,   // sessionId for the user-started analysis currently considered "active"
+      suppress: false      // set true when user loads history / clicks Start Fresh to prevent toasts
+    };
+    function showRfToast(type, title, opts = {}) {
+      // type: 'info' | 'success' | 'error'
+      const toastId = opts.id || `${type}:${title}`;
+      if (window._rfToast.currentId === toastId) return; // dedupe identical toast
+      // replace previous toast
+      if (window._rfToast.currentToast && typeof window._rfToast.currentToast.dismiss === 'function') {
+        try { window._rfToast.currentToast.dismiss(); } catch (e) { /* ignore */ }
+      }
+      if (!window.JobHackAIToast) return;
+      
+      // Determine numeric duration to pass to JobHackAIToast API
+      const duration = (typeof opts.autoDismissMs === 'number') ? opts.autoDismissMs : 3000;
+      
+      const fn = type === 'success' ? window.JobHackAIToast.success : (
+                   type === 'error' ? window.JobHackAIToast.error : window.JobHackAIToast.info);
+      const toast = fn(title, duration);
+      
+      // Tag toast for debugging/lookup and wire our tracking/dedupe hooks
+      if (toast && typeof toast === 'object') {
+        try { toast.dataset = toast.dataset || {}; toast.dataset.rfId = toastId; } catch (e) { /* ignore */ }
+      }
+      
+      // Store the activeRunId that was active when this toast was created
+      // This prevents race conditions where an old toast's dismiss clears a new activeRunId
+      const capturedActiveRunId = window._rfToast ? window._rfToast.activeRunId : null;
+      
+      window._rfToast.currentId = toastId;
+      window._rfToast.currentToast = toast;
+      
+      // Clear tracking on dismiss - only if this toast is still the current toast
+      // This prevents race conditions where a dismissed toast's callback fires after
+      // a new toast has been shown, which would incorrectly clear the new toast's state
+      if (toast && typeof toast.onDismiss === 'function') {
+        // Capture toastId and toast reference in closure to check on callback
+        const capturedToastId = toastId;
+        const capturedToast = toast;
+        toast.onDismiss(() => {
+          // Only clear if this toast is still the current toast
+          if (window._rfToast && window._rfToast.currentId === capturedToastId && window._rfToast.currentToast === capturedToast) {
+            window._rfToast.currentId = null;
+            window._rfToast.currentToast = null;
+            // Clear activeRunId only if it still matches the run that created this toast
+            // This prevents an old toast from clearing a new activeRunId when analyses complete in rapid succession
+            if (capturedToastId === 'rf:analysis-finished' && window._rfToast.activeRunId === capturedActiveRunId) {
+              window._rfToast.activeRunId = null;
+            }
+          }
+        });
+      } else {
+        setTimeout(() => {
+          // Only clear if this toast is still the current toast
+          if (window._rfToast && window._rfToast.currentId === toastId && window._rfToast.currentToast === toast) {
+            window._rfToast.currentId = null;
+            window._rfToast.currentToast = null;
+            // Clear activeRunId only if it still matches the run that created this toast
+            // This prevents an old toast from clearing a new activeRunId when analyses complete in rapid succession
+            if (toastId === 'rf:analysis-finished' && window._rfToast.activeRunId === capturedActiveRunId) {
+              window._rfToast.activeRunId = null;
+            }
+          }
+        }, (opts.autoDismissMs || 8000));
+      }
+    }
+
+    // Insert a persistent session-restart banner when resetSession() intentionally runs
+    function showSessionRestartBanner() {
+      const existing = document.getElementById('rf-session-restart-banner');
+      if (existing) {
+        existing.style.display = 'flex';
+        return;
+      }
+      const banner = document.createElement('div');
+      banner.id = 'rf-session-restart-banner';
+      banner.className = 'rf-banner rf-banner--warning';
+      banner.innerHTML = `
+        <div class="rf-banner__inner">
+          <div class="rf-banner__icon">⚠️</div>
+          <div class="rf-banner__content">
+            <div class="rf-banner__title">Session restarted</div>
+            <div class="rf-banner__desc">Your previous in-progress analysis was cleared. Upload your resume again or open Recent to view past results.</div>
+          </div>
+          <div class="rf-banner__actions">
+            <button id="rf-session-restart-open-recent" class="rf-btn rf-btn--link">Open Recent</button>
+            <button id="rf-session-restart-dismiss" class="rf-btn rf-btn--plain">Dismiss</button>
+          </div>
+        </div>
+      `;
+      const tile = document.getElementById('rf-ats-score-tile');
+      const container = tile ? tile.parentNode : document.body;
+      container.insertBefore(banner, tile || container.firstChild);
+      const openBtn = document.getElementById('rf-session-restart-open-recent');
+      if (openBtn) {
+        openBtn.addEventListener('click', () => {
+          if (window.JobHackAIHistory && typeof window.JobHackAIHistory.openSidebar === 'function') {
+            window.JobHackAIHistory.openSidebar();
+          }
+        });
+      }
+      const dismissBtn = document.getElementById('rf-session-restart-dismiss');
+      if (dismissBtn) {
+        dismissBtn.addEventListener('click', () => { banner.style.display = 'none'; });
+      }
+    }
+
+    window.addEventListener('pageshow', (event) => {
+      // Cancel any pending skeleton operations always.
+      // Only reset session on BFCache restores (event.persisted).
+      _cancelPendingSkeletonOperations();
+      if (event.persisted) {
+        // Mark this as an automatic restore so a persistent banner is shown.
+        resetSession(true);
+      }
+    });
+
     window.addEventListener('visibilitychange', () => {
       if (document.hidden) {
-        // Only hide overlays, NOT skeletons
-        // Skeletons should remain visible to show progress even when tab is inactive
         forceHideOverlays();
-        // DO NOT call hideSkeletons() here - let them stay visible
+        // DO NOT call hideSkeletons() here - let them stay visible while tab is hidden
       } else {
-        // When tab becomes visible again, ensure skeletons are still animating
-        // Force a reflow to restart animations if they were throttled
-        const skeletons = document.querySelectorAll('.rf-skeleton:not(.hidden)');
-        if (skeletons.length > 0) {
-          skeletons.forEach(skeleton => {
-            // Force animation restart by toggling will-change
-            skeleton.style.willChange = 'auto';
-            requestAnimationFrame(() => {
-              skeleton.style.willChange = 'background-position';
+        // When tab becomes visible again, cancel any skeleton operations but DO NOT wipe the user's session.
+        _cancelPendingSkeletonOperations();
+        // Show a lightweight toast instead of resetting session. If analysis is running show running toast,
+        // otherwise if finished while away show success toast. This preserves user progress and avoids surprising resets.
+        try {
+          // Determine running state by checking the page's feedback-loading guard.
+          // We store a cleanup function in window._currentFeedbackLoading while an analysis is in progress.
+          const isRunning = typeof window._currentFeedbackLoading === 'function';
+          const finished = !!document.querySelector('#rf-feedback-content') && document.querySelector('#rf-feedback-content').style.display !== 'none';
+          if (isRunning) {
+            showRfToast('info', 'Analysis still running', {
+              id: 'rf:analysis-running',
+              actionText: 'View',
+              onAction: () => { const tile = document.getElementById('rf-ats-score-tile'); if (tile) tile.scrollIntoView({ behavior: 'smooth', block: 'start' }); },
+              autoDismissMs: 8000
             });
-          });
+          } else if (finished && window._rfToast && window._rfToast.activeRunId && !window._rfToast.suppress) {
+            // Show finished toast only if it matches an active run (and not suppressed)
+            showRfToast('success', 'Analysis complete — View results', {
+              id: 'rf:analysis-finished',
+              actionText: 'View',
+              onAction: () => { const tile = document.getElementById('rf-ats-score-tile'); if (tile) tile.scrollIntoView({ behavior: 'smooth', block: 'start' }); },
+              autoDismissMs: 8000
+            });
+          }
+        } catch (e) {
+          console.warn('[RESUME-FEEDBACK] visibilitychange toast failed', e);
         }
       }
     });
@@ -3576,6 +3884,13 @@
           
           currentResumeId = uploadResult.resumeId;
           
+          // Set active run ID for this generation to gate toast notifications
+          // Use a timestamp-based ID that will be updated with sessionId when feedback completes
+          if (window._rfToast) {
+            window._rfToast.activeRunId = `run_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+            window._rfToast.suppress = false;
+          }
+          
           // Clear previous feedback context when uploading a new resume
           // This prevents using feedback from the previous resume with the new one
           window.latestAtsIssues = null;
@@ -3839,7 +4154,8 @@
                     label: 'Grammar & Spelling',
                     score: getScore(result.breakdown.grammarScore),
                     max: 10,
-                    tip: getFeedback(result.breakdown.grammarScore, result.feedback, 4)
+                  tip: getFeedback(result.breakdown.grammarScore, result.feedback, 4),
+                  flaggedTerms: result.breakdown.grammarScore?.flaggedTerms
                   }
                 ];
                 updateRubricGrid(rubric);
@@ -3892,6 +4208,14 @@
                   window._currentFeedbackLoading();
                   window._currentFeedbackLoading = null;
                 }
+                // Dismiss "Analysis still running" toast if it exists
+                if (window._rfToast && window._rfToast.currentId === 'rf:analysis-running' && window._rfToast.currentToast) {
+                  try {
+                    if (typeof window._rfToast.currentToast.dismiss === 'function') {
+                      window._rfToast.currentToast.dismiss();
+                    }
+                  } catch (e) { /* ignore */ }
+                }
                 handleApiError(new Error('Failed to calculate ATS score. Please try again.'));
               }
             })
@@ -3902,6 +4226,14 @@
               if (window._currentFeedbackLoading) {
                 window._currentFeedbackLoading();
                 window._currentFeedbackLoading = null;
+              }
+              // Dismiss "Analysis still running" toast if it exists
+              if (window._rfToast && window._rfToast.currentId === 'rf:analysis-running' && window._rfToast.currentToast) {
+                try {
+                  if (typeof window._rfToast.currentToast.dismiss === 'function') {
+                    window._rfToast.currentToast.dismiss();
+                  }
+                } catch (e) { /* ignore */ }
               }
               handleApiError(error);
             });
@@ -3924,6 +4256,11 @@
           if (feedbackSettled.status === 'fulfilled' && feedbackSettled.value) {
             const feedbackResult = feedbackSettled.value;
             try {
+              // Update activeRunId with sessionId if available (for proper toast gating)
+              if (window._rfToast && feedbackResult.sessionId) {
+                window._rfToast.activeRunId = feedbackResult.sessionId;
+              }
+              
               // Update history with new session (D1-backed)
               if (window.JobHackAIHistory && feedbackResult.sessionId) {
                 window.JobHackAIHistory.addItem(feedbackResult.sessionId, feedbackResult.meta);
@@ -4087,6 +4424,15 @@
               window._currentFeedbackLoading = null;
             }
             
+            // Dismiss "Analysis still running" toast if it exists
+            if (window._rfToast && window._rfToast.currentId === 'rf:analysis-running' && window._rfToast.currentToast) {
+              try {
+                if (typeof window._rfToast.currentToast.dismiss === 'function') {
+                  window._rfToast.currentToast.dismiss();
+                }
+              } catch (e) { /* ignore */ }
+            }
+            
             // Feedback failed, but ATS scoring may have succeeded
           } else {
             // Free plan - no feedback
@@ -4101,7 +4447,28 @@
             window._currentFeedbackLoading = null;
           }
           
-          // Both ATS scoring and feedback completed successfully
+          // Dismiss "Analysis still running" toast if it exists
+          if (window._rfToast && window._rfToast.currentId === 'rf:analysis-running' && window._rfToast.currentToast) {
+            try {
+              if (typeof window._rfToast.currentToast.dismiss === 'function') {
+                window._rfToast.currentToast.dismiss();
+              }
+            } catch (e) { /* ignore */ }
+          }
+          
+          // Show "Analysis complete" toast only if ATS scoring succeeded
+          // If both ATS and feedback failed, error modals are already shown, so don't show misleading success toast
+          // Gate toast by activeRunId to prevent showing for history loads or after Start Fresh
+          if (atsScoringSucceeded && window._rfToast && window._rfToast.activeRunId && !window._rfToast.suppress) {
+            showRfToast('success', 'Analysis complete — View results', {
+              id: 'rf:analysis-finished',
+              actionText: 'View',
+              onAction: () => { const tile = document.getElementById('rf-ats-score-tile'); if (tile) tile.scrollIntoView({ behavior: 'smooth', block: 'start' }); },
+              autoDismissMs: 8000
+            });
+          }
+          
+          // Both ATS scoring and feedback completed (successfully or with errors)
 
           // Update original snippet in rewrite section (only if not already loaded)
           // Use full resume text if available, otherwise use preview
@@ -4219,6 +4586,14 @@
             window._currentFeedbackLoading();
             window._currentFeedbackLoading = null;
           }
+          // Dismiss "Analysis still running" toast if it exists
+          if (window._rfToast && window._rfToast.currentId === 'rf:analysis-running' && window._rfToast.currentToast) {
+            try {
+              if (typeof window._rfToast.currentToast.dismiss === 'function') {
+                window._rfToast.currentToast.dismiss();
+              }
+            } catch (e) { /* ignore */ }
+          }
           clearAtsState();
           handleApiError(error);
           uploadInput.disabled = false;
@@ -4240,6 +4615,16 @@
       
       if (startFreshBtn) {
         startFreshBtn.addEventListener('click', function() {
+          // User reset - suppress any pending analysis-toasts
+          if (window._rfToast) {
+            window._rfToast.activeRunId = null;
+            window._rfToast.suppress = true;
+            if (window._rfToast.currentToast && typeof window._rfToast.currentToast.dismiss === 'function') {
+              try { window._rfToast.currentToast.dismiss(); } catch (e) { /* ignore */ }
+            }
+            window._rfToast.currentId = null;
+            window._rfToast.currentToast = null;
+          }
           resetSession();
         });
       }
@@ -4424,6 +4809,12 @@
             
             const roleChanged = previousJobTitle !== jobTitle;
 
+            // Set active run ID for this regeneration to gate toast notifications
+            if (window._rfToast) {
+              window._rfToast.activeRunId = `run_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+              window._rfToast.suppress = false;
+            }
+
             // Start ATS (if role changed) and feedback in parallel
             const atsPromise = roleChanged ? getAtsScore(currentResumeId, jobTitle) : Promise.resolve(null);
             const feedbackPromise = getResumeFeedback(currentResumeId, jobTitle);
@@ -4468,7 +4859,8 @@
                     label: 'Grammar & Spelling',
                     score: scoreResult.breakdown.grammarScore?.score || 0,
                     max: 10,
-                    tip: limitFeedbackToSentences(scoreResult.breakdown.grammarScore?.feedback || '')
+                  tip: limitFeedbackToSentences(scoreResult.breakdown.grammarScore?.feedback || ''),
+                  flaggedTerms: scoreResult.breakdown.grammarScore?.flaggedTerms
                   }
                 ];
                 updateRubricGrid(rubric);
@@ -4517,6 +4909,11 @@
             }
 
             const feedbackResult = feedbackSettled.value;
+            
+            // Update activeRunId with sessionId if available (for proper toast gating)
+            if (window._rfToast && feedbackResult.sessionId) {
+              window._rfToast.activeRunId = feedbackResult.sessionId;
+            }
             
             // Update history with new session (D1-backed)
             if (window.JobHackAIHistory && feedbackResult.sessionId) {
@@ -4889,16 +5286,30 @@
       const grid = document.getElementById('rf-rubric-grid');
       if (!grid) return;
       grid.innerHTML = '';
+
+      const formatTip = (item) => {
+        const baseTip = item.tip || item.feedback || '';
+        const flaggedTerms = Array.isArray(item.flaggedTerms)
+          ? item.flaggedTerms.filter(Boolean)
+          : [];
+        if (!flaggedTerms.length) return baseTip;
+
+        const displayTerms = flaggedTerms.slice(0, 6).join(', ');
+        const note = `Flagged terms likely OK: ${displayTerms}.`;
+        return baseTip ? `${baseTip} ${note}` : note;
+      };
+
       rubric.forEach(item => {
         const div = document.createElement('div');
         div.className = 'rf-rubric-item';
         // Use — / — for empty scores
         const scoreDisplay = (item.score === undefined || item.score === null) ? '— / —' : `${item.score} / ${item.max}`;
+        const formattedTip = formatTip(item);
         
         div.innerHTML = `
           <div class="rf-rubric-label">${escapeHtml(item.label)}</div>
           <div class="rf-rubric-score">${escapeHtml(scoreDisplay)}</div>
-          <div style="color:var(--color-text-secondary);font-size:0.98rem;">${escapeHtml(item.tip || item.feedback || '')}</div>
+          <div style="color:var(--color-text-secondary);font-size:0.98rem;">${escapeHtml(formattedTip)}</div>
         `;
         grid.appendChild(div);
       });
@@ -6419,6 +6830,18 @@
     async function loadHistoryDetail(sessionId) {
       console.log('[RESUME-FEEDBACK-HISTORY] Loading history detail:', sessionId);
       
+      // Suppress toasts when loading a history item
+      if (window._rfToast) {
+        window._rfToast.activeRunId = null;
+        window._rfToast.suppress = true;
+        // Immediately dismiss any existing toast (consistent with Start Fresh behavior)
+        if (window._rfToast.currentToast && typeof window._rfToast.currentToast.dismiss === 'function') {
+          try { window._rfToast.currentToast.dismiss(); } catch (e) { /* ignore */ }
+        }
+        window._rfToast.currentId = null;
+        window._rfToast.currentToast = null;
+      }
+      
       // Show loading state
       const loadingOverlay = document.getElementById('loading-overlay');
       if (loadingOverlay) {
@@ -6559,7 +6982,7 @@
     /**
      * Hide the historical view banner and clear state
      */
-    function resetSession() {
+    function resetSession(showBanner = false) {
       let storageCleared = false;
       // Reset high-level state flags (UI only; never touches usage counters)
       _isHistoricalView = false;
@@ -6598,6 +7021,15 @@
       currentResumeId = null;
       window.latestAtsIssues = null;
       window.latestRoleSpecific = null;
+      
+      // Show persistent banner to explain destructive reset (BFCache or explicit)
+      try {
+        if (showBanner && typeof showSessionRestartBanner === 'function') {
+          showSessionRestartBanner();
+        }
+      } catch (e) {
+        console.warn('[RESUME-FEEDBACK] Failed to show session restart banner', e);
+      }
     }
     
     function clearHistoricalView() {
@@ -7723,7 +8155,7 @@
           <div class="rf-history-footer" data-history-footer>
             <span>Data retention: JobHackAI shows your last 10 resume feedback runs. Runs are automatically deleted after 90 days.</span>
             <div class="rf-history-footer-links">
-              <a class="rf-history-footer-link" href="#" data-history-learn-more>Learn more</a>
+              <a class="rf-history-footer-link" href="privacy.html" data-history-learn-more>Learn more</a>
               <span class="rf-history-footer-separator" aria-hidden="true">·</span>
               <button id="rf-history-clear" class="rf-history-footer-link rf-history-footer-link--danger" type="button">Clear history</button>
             </div>

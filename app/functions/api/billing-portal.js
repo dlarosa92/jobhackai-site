@@ -1,4 +1,5 @@
 import { getBearer, verifyFirebaseIdToken } from '../_lib/firebase-auth.js';
+import { getUserPlanData } from '../_lib/db.js';
 
 /**
  * POST /api/billing-portal
@@ -33,18 +34,36 @@ export async function onRequest(context) {
     const email = (payload?.email) || '';
     console.log('🔵 [BILLING-PORTAL] Authenticated', { uid, email });
 
-    // Get Stripe customer ID from KV
-    const customerId = await env.JOBHACKAI_KV?.get(kvCusKey(uid));
+    // Step 1: Try KV (cache)
+    let customerId = await env.JOBHACKAI_KV?.get(kvCusKey(uid));
+    
+    // Step 2: If KV miss, try D1 (authoritative)
     if (!customerId) {
-      console.log('🟡 [BILLING-PORTAL] No customer found for uid', uid);
-      // Try to find by email in Stripe as fallback
+      console.log('🟡 [BILLING-PORTAL] No customer found in KV for uid', uid);
+      try {
+        const userPlan = await getUserPlanData(env, uid);
+        if (userPlan?.stripeCustomerId) {
+          customerId = userPlan.stripeCustomerId;
+          console.log('✅ [BILLING-PORTAL] Found customer ID in D1:', customerId);
+          // Cache it in KV for next time
+          await env.JOBHACKAI_KV?.put(kvCusKey(uid), customerId);
+        }
+      } catch (d1Error) {
+        console.warn('⚠️ [BILLING-PORTAL] D1 lookup failed (non-fatal):', d1Error?.message || d1Error);
+      }
+    }
+    
+    // Step 3: Only if both KV and D1 miss, fallback to Stripe email search (last resort)
+    if (!customerId) {
+      console.log('🟡 [BILLING-PORTAL] No customer in KV or D1, trying Stripe email search (last resort)');
+      // Try to find by email in Stripe as last-resort fallback
       if (email) {
         const searchRes = await stripe(env, `/customers?email=${encodeURIComponent(email)}&limit=1`);
         const searchData = await searchRes.json();
         
         if (searchRes.ok && searchData.data && searchData.data.length > 0) {
           const foundCustomerId = searchData.data[0].id;
-          console.log('🟡 [BILLING-PORTAL] Found customer by email', foundCustomerId);
+          console.log('🟡 [BILLING-PORTAL] Found customer by email (last resort)', foundCustomerId);
           // Cache it for next time
           await env.JOBHACKAI_KV?.put(kvCusKey(uid), foundCustomerId);
           // Use the found customer ID

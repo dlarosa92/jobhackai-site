@@ -527,51 +527,48 @@ export async function getResumeFeedbackHistory(env, userId, { limit = 20 } = {})
          LIMIT 1) as feedback_json
       FROM resume_sessions rs
       WHERE rs.user_id = ?
+        AND EXISTS (SELECT 1 FROM feedback_sessions fs WHERE fs.resume_session_id = rs.id)
       ORDER BY rs.created_at DESC
       LIMIT ?
     `).bind(userId, limit).all();
 
-    // Transform to clean history items, extracting ats_score if needed
-    const items = results.results.map(row => {
-      let atsScore = row.ats_score;
-      let fileName = null;
-      let resumeId = null;
-      let feedback = null;
-      
-      if (row.feedback_json) {
-        try {
-          feedback = JSON.parse(row.feedback_json);
-          fileName = feedback?.fileName || null;
-          resumeId = feedback?.resumeId || null;
-        } catch (e) {
-          // Ignore parse errors
+    // Transform to clean history items, extracting ats_score if needed. Only return paid/trial/essential/pro/premium feedback sessions
+    const items = results.results
+      .filter(row => !!row.feedback_id) // Only include sessions with feedback (paid runs)
+      .map(row => {
+        let atsScore = row.ats_score;
+        let fileName = null;
+        let resumeId = null;
+        let feedback = null;
+        if (row.feedback_json) {
+          try {
+            feedback = JSON.parse(row.feedback_json);
+            fileName = feedback?.fileName || null;
+            resumeId = feedback?.resumeId || null;
+          } catch (e) {
+            // Ignore parse errors
+          }
         }
-      }
-      
-      // If ats_score column is null, try to extract from feedback_json
-      if (atsScore === null && feedback) {
-        // Prefer canonical overallScore if present
-        if (typeof feedback.overallScore === 'number') {
-          atsScore = feedback.overallScore;
-        } else if (feedback.aiFeedback && typeof feedback.aiFeedback.overallScore === 'number') {
-          atsScore = feedback.aiFeedback.overallScore;
-        } else if (feedback.atsRubric && Array.isArray(feedback.atsRubric)) {
-          // Fallback: sum rubric scores and round (matches calcOverallScore behavior)
-          atsScore = Math.round(feedback.atsRubric.reduce((sum, item) => sum + (item.score || 0), 0));
+        if (atsScore === null && feedback) {
+          if (typeof feedback.overallScore === 'number') {
+            atsScore = feedback.overallScore;
+          } else if (feedback.aiFeedback && typeof feedback.aiFeedback.overallScore === 'number') {
+            atsScore = feedback.aiFeedback.overallScore;
+          } else if (feedback.atsRubric && Array.isArray(feedback.atsRubric)) {
+            atsScore = Math.round(feedback.atsRubric.reduce((sum, item) => sum + (item.score || 0), 0));
+          }
         }
-      }
-      
-      return {
-        sessionId: String(row.session_id),
-        title: row.title,
-        role: row.role,
-        createdAt: row.created_at,
-        atsScore: atsScore,
-        hasFeedback: !!row.feedback_id,
-        fileName,
-        resumeId
-      };
-    });
+        return {
+          sessionId: String(row.session_id),
+          title: row.title,
+          role: row.role,
+          createdAt: row.created_at,
+          atsScore: atsScore,
+          hasFeedback: !!row.feedback_id,
+          fileName,
+          resumeId
+        };
+      });
 
     console.log('[DB] Retrieved history:', { userId, count: items.length });
     return items;
@@ -827,31 +824,36 @@ export async function upsertResumeSessionWithScores(env, userId, {
     const rawTextLocation = `resume:${resumeId}`;
     const ruleBasedScoresJson = ruleBasedScores ? JSON.stringify(ruleBasedScores) : null;
 
-    // Check if exists
-    const existing = await getResumeSessionByResumeId(env, userId, resumeId);
+    // OPTIMIZATION: Use single query with UPDATE + INSERT fallback
+    // This reduces database round trips from 2 to 1 (or 2 if UPDATE affects 0 rows)
+    // First, try to update the most recent session for this resumeId
+    const updateResult = await db.prepare(
+      `UPDATE resume_sessions 
+       SET ats_score = COALESCE(?, ats_score),
+           rule_based_scores_json = COALESCE(?, rule_based_scores_json),
+           role = COALESCE(?, role)
+       WHERE id = (
+         SELECT id FROM resume_sessions
+         WHERE user_id = ? AND raw_text_location = ?
+         ORDER BY created_at DESC
+         LIMIT 1
+       )
+       RETURNING id, user_id, title, role, created_at, raw_text_location, ats_score, rule_based_scores_json`
+    ).bind(atsScore, ruleBasedScoresJson, role, userId, rawTextLocation).first();
 
-    if (existing) {
-      // Update existing
-      const result = await db.prepare(
-        `UPDATE resume_sessions 
-         SET ats_score = COALESCE(?, ats_score),
-             rule_based_scores_json = COALESCE(?, rule_based_scores_json),
-             role = COALESCE(?, role)
-         WHERE id = ?
-         RETURNING id, user_id, title, role, created_at, raw_text_location, ats_score, rule_based_scores_json`
-      ).bind(atsScore, ruleBasedScoresJson, role, existing.id).first();
-
-      return result || null;
-    } else {
-      // Insert new
-      const result = await db.prepare(
-        `INSERT INTO resume_sessions (user_id, title, role, raw_text_location, ats_score, rule_based_scores_json)
-         VALUES (?, ?, ?, ?, ?, ?)
-         RETURNING id, user_id, title, role, created_at, raw_text_location, ats_score, rule_based_scores_json`
-      ).bind(userId, role, role, rawTextLocation, atsScore, ruleBasedScoresJson).first();
-
-      return result || null;
+    if (updateResult) {
+      // Update succeeded - return updated session
+      return updateResult;
     }
+
+    // No existing session found - insert new one
+    const insertResult = await db.prepare(
+      `INSERT INTO resume_sessions (user_id, title, role, raw_text_location, ats_score, rule_based_scores_json)
+       VALUES (?, ?, ?, ?, ?, ?)
+       RETURNING id, user_id, title, role, created_at, raw_text_location, ats_score, rule_based_scores_json`
+    ).bind(userId, role, role, rawTextLocation, atsScore, ruleBasedScoresJson).first();
+
+    return insertResult || null;
   } catch (error) {
     console.error('[DB] Error in upsertResumeSessionWithScores:', error);
     return null;
@@ -865,6 +867,101 @@ export async function upsertResumeSessionWithScores(env, userId, {
  */
 export function isD1Available(env) {
   return !!getDb(env);
+}
+
+// ============================================================
+// FIRST RESUME SNAPSHOT HELPERS
+// ============================================================
+
+const FIRST_RESUME_SNAPSHOT_TABLE_SQL = `
+CREATE TABLE IF NOT EXISTS first_resume_snapshots (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL,
+  resume_session_id INTEGER NOT NULL,
+  snapshot_json TEXT NOT NULL,
+  created_at TEXT DEFAULT (datetime('now')),
+  UNIQUE(user_id),
+  FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+);`;
+
+async function ensureFirstResumeSnapshotTable(env) {
+  const db = getDb(env);
+  if (!db) return;
+  try {
+    const tableCheck = await db.prepare(
+      `SELECT name FROM sqlite_master WHERE type='table' AND name='first_resume_snapshots'`
+    ).first();
+    if (tableCheck) return;
+    await db.prepare(FIRST_RESUME_SNAPSHOT_TABLE_SQL).run();
+    // Ensure a unique index exists on user_id (safety for older schemas)
+    await db.prepare('CREATE UNIQUE INDEX IF NOT EXISTS idx_first_snapshot_user_id ON first_resume_snapshots(user_id)').run();
+  } catch (e) {
+    console.warn('[DB] ensureFirstResumeSnapshotTable failed:', e);
+  }
+}
+
+/**
+ * Get the first resume snapshot for a user
+ * @param {Object} env - Cloudflare environment with DB binding
+ * @param {number} userId - User ID from users table
+ * @returns {Promise<Object|null>} Snapshot object with { id, resumeSessionId, snapshot, createdAt } or null
+ */
+export async function getFirstResumeSnapshot(env, userId) {
+  const db = getDb(env);
+  if (!db) return null;
+  await ensureFirstResumeSnapshotTable(env);
+  try {
+    const row = await db.prepare(
+      `SELECT id, resume_session_id, snapshot_json, created_at
+       FROM first_resume_snapshots
+       WHERE user_id = ?
+       ORDER BY id ASC
+       LIMIT 1`
+    ).bind(userId).first();
+    if (!row || !row.snapshot_json) return null;
+    return {
+      id: row.id,
+      resumeSessionId: row.resume_session_id,
+      snapshot: JSON.parse(row.snapshot_json),
+      createdAt: row.created_at
+    };
+  } catch (e) {
+    console.error('[DB] getFirstResumeSnapshot error:', e);
+    return null;
+  }
+}
+
+/**
+ * Set the first resume snapshot for a user (only if one doesn't exist)
+ * @param {Object} env - Cloudflare environment with DB binding
+ * @param {number} userId - User ID from users table
+ * @param {number} resumeSessionId - Resume session ID
+ * @param {Object} snapshotObj - Snapshot data object to store
+ * @returns {Promise<boolean>} True if set (or already existed), false on error
+ */
+export async function setFirstResumeSnapshot(env, userId, resumeSessionId, snapshotObj) {
+  const db = getDb(env);
+  if (!db) return false;
+  await ensureFirstResumeSnapshotTable(env);
+  try {
+    const snapshotJson = JSON.stringify(snapshotObj);
+    // Use atomic INSERT ... ON CONFLICT to avoid race conditions.
+    // If a row already exists for this user_id, do nothing.
+    const result = await db.prepare(
+      `INSERT INTO first_resume_snapshots (user_id, resume_session_id, snapshot_json)
+       VALUES (?, ?, ?)
+       ON CONFLICT(user_id) DO NOTHING
+       RETURNING id`
+    ).bind(userId, resumeSessionId, snapshotJson).first();
+
+    // If INSERT returned a row, we created the snapshot.
+    if (result && result.id) return true;
+    // If no row returned, another concurrent request likely inserted it; treat as success.
+    return true;
+  } catch (e) {
+    console.warn('[DB] setFirstResumeSnapshot failed (non-fatal):', e);
+    return false;
+  }
 }
 
 const INTERVIEW_QUESTION_SETS_TABLE_SQL = `
@@ -1572,24 +1669,45 @@ export async function upsertCookieConsent(env, { userId, authId, clientId, conse
     const consentStr = typeof consent === 'string' ? consent : JSON.stringify(consent);
     const now = new Date().toISOString();
 
-    // Use INSERT ... ON CONFLICT to handle race conditions atomically
-    // This prevents duplicate records from concurrent requests
-    // Partial unique indexes (idx_cookie_consents_user_id_unique, idx_cookie_consents_client_id_unique)
-    // ensure atomicity for both authenticated and anonymous users
+    // Use SELECT → INSERT/UPDATE pattern for compatibility with D1 partial indexes.
+    // NOTE: This pattern is NOT atomic by itself. Concurrent requests can still race:
+    // two requests may SELECT and see no row, then both try to INSERT. To mitigate
+    // that, we catch UNIQUE constraint failures on INSERT and retry as an UPDATE.
+    // This provides a robust fallback for D1 environments that don't accept
+    // partial UNIQUE indexes as ON CONFLICT targets.
     if (userId) {
-      // For authenticated users: atomic upsert on user_id
-      // The partial unique index on user_id (WHERE user_id IS NOT NULL) ensures atomicity
-      // ON CONFLICT without WHERE clause works because SQLite matches against the partial index
-      await db.prepare(
-        `INSERT INTO cookie_consents (user_id, client_id, consent_json, created_at, updated_at)
-         VALUES (?, NULL, ?, ?, ?)
-         ON CONFLICT(user_id) DO UPDATE SET
-           consent_json = excluded.consent_json,
-           updated_at = excluded.updated_at`
-      ).bind(userId, consentStr, now, now).run();
-      
+      // For authenticated users: upsert by user_id (prefer user_id over client_id)
+      const existing = await db.prepare(
+        'SELECT id FROM cookie_consents WHERE user_id = ?'
+      ).bind(userId).first();
+
+      if (existing) {
+        // Update existing
+        await db.prepare(
+          'UPDATE cookie_consents SET consent_json = ?, updated_at = ? WHERE user_id = ?'
+        ).bind(consentStr, now, userId).run();
+      } else {
+        // Insert new; on UNIQUE violation (race), fall back to UPDATE
+        try {
+          await db.prepare(
+            `INSERT INTO cookie_consents (user_id, client_id, consent_json, created_at, updated_at)
+             VALUES (?, NULL, ?, ?, ?)`
+          ).bind(userId, consentStr, now, now).run();
+        } catch (err) {
+          // D1/SQLite returns an error when UNIQUE constraint is violated.
+          // Perform an UPDATE as a fallback if it's a UNIQUE constraint error,
+          // otherwise rethrow.
+          const msg = err && err.message ? String(err.message) : '';
+          if (msg.includes('UNIQUE constraint failed') || msg.includes('ON CONFLICT clause')) {
+            await db.prepare(
+              'UPDATE cookie_consents SET consent_json = ?, updated_at = ? WHERE user_id = ?'
+            ).bind(consentStr, now, userId).run();
+          } else {
+            throw err;
+          }
+        }
+      }
       // After successful upsert, clean up any orphaned client_id record
-      // This migration step is non-critical and can fail gracefully
       if (clientId) {
         try {
           await db.prepare('DELETE FROM cookie_consents WHERE client_id = ? AND user_id IS NULL').bind(clientId).run();
@@ -1598,20 +1716,33 @@ export async function upsertCookieConsent(env, { userId, authId, clientId, conse
           console.warn('[DB] Failed to delete client_id record during migration:', e);
         }
       }
-      
       console.log('[DB] Upserted cookie consent (user):', { userId });
     } else if (clientId) {
-      // For anonymous users: atomic upsert on client_id
-      // The partial unique index on client_id (WHERE client_id IS NOT NULL) ensures atomicity
-      // ON CONFLICT without WHERE clause works because SQLite matches against the partial index
-      await db.prepare(
-        `INSERT INTO cookie_consents (user_id, client_id, consent_json, created_at, updated_at)
-         VALUES (NULL, ?, ?, ?, ?)
-         ON CONFLICT(client_id) DO UPDATE SET
-           consent_json = excluded.consent_json,
-           updated_at = excluded.updated_at`
-      ).bind(clientId, consentStr, now, now).run();
-      
+      // For anonymous users: upsert by client_id
+      const existingClient = await db.prepare(
+        'SELECT id FROM cookie_consents WHERE client_id = ?'
+      ).bind(clientId).first();
+      if (existingClient) {
+        await db.prepare(
+          'UPDATE cookie_consents SET consent_json = ?, updated_at = ? WHERE client_id = ?'
+        ).bind(consentStr, now, clientId).run();
+      } else {
+        try {
+          await db.prepare(
+            `INSERT INTO cookie_consents (user_id, client_id, consent_json, created_at, updated_at)
+             VALUES (NULL, ?, ?, ?, ?)`
+          ).bind(clientId, consentStr, now, now).run();
+        } catch (err) {
+          const msg = err && err.message ? String(err.message) : '';
+          if (msg.includes('UNIQUE constraint failed') || msg.includes('ON CONFLICT clause')) {
+            await db.prepare(
+              'UPDATE cookie_consents SET consent_json = ?, updated_at = ? WHERE client_id = ?'
+            ).bind(consentStr, now, clientId).run();
+          } else {
+            throw err;
+          }
+        }
+      }
       console.log('[DB] Upserted cookie consent (client):', { clientId });
     }
 

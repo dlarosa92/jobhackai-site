@@ -362,6 +362,7 @@ export async function onRequest(context) {
 
     // Usage limits (Essential: 3/month)
     // D1 is the authoritative usage source for Essential/monthly quota
+    // Monthly allowance starts from plan activation date (plan_updated_at), not calendar month start
     if (effectivePlan === 'essential' && isD1Available(env)) {
       if (!d1User) {
         return errorResponse(
@@ -384,9 +385,35 @@ export async function onRequest(context) {
       }
       const lastDay = getLastDayOfMonth(year, Number(month));
       const monthEnd = `${year}-${month}-${String(lastDay).padStart(2, '0')}`;
+
+      // Determine effective start: later of monthStart and plan_updated_at
+      // This ensures users who upgrade mid-month get a fresh allowance starting at plan activation
+      let effectiveStart = monthStart;
+      try {
+        const userRow = await db.prepare(
+          'SELECT plan_updated_at FROM users WHERE id = ?'
+        ).bind(d1User.id).first();
+
+        if (userRow && userRow.plan_updated_at) {
+          // Normalize to YYYY-MM-DD for date comparison
+          const planUpdatedDate = new Date(userRow.plan_updated_at).toISOString().split('T')[0];
+          if (new Date(planUpdatedDate) > new Date(effectiveStart)) {
+            effectiveStart = planUpdatedDate;
+          }
+        }
+      } catch (e) {
+        // If we cannot read plan_updated_at, fall back to monthStart
+        console.warn('[RESUME-FEEDBACK] Failed to read plan_updated_at for usage enforcement, falling back to monthStart:', e);
+      }
+
       let monthlyUsed = 0;
       if (db) {
-        const res = await db.prepare(`SELECT COUNT(*) as count FROM usage_events WHERE user_id = ? AND feature = 'resume_feedback' AND date(created_at) >= date(?) AND date(created_at) <= date(?)`).bind(d1User.id, monthStart, monthEnd).first();
+        // Count resume_feedback events in D1 between effectiveStart and monthEnd
+        const res = await db.prepare(
+          `SELECT COUNT(*) as count FROM usage_events
+           WHERE user_id = ? AND feature = 'resume_feedback'
+             AND date(created_at) >= date(?) AND date(created_at) <= date(?)`
+        ).bind(d1User.id, effectiveStart, monthEnd).first();
         monthlyUsed = res?.count || 0;
       }
       if (monthlyUsed >= 3) {
@@ -521,53 +548,79 @@ export async function onRequest(context) {
     // Resume text is already validated by sanitizeResumeText (80,000 char limit)
 
     // --- Try to load existing ruleBasedScores from D1 (source of truth) ---
+    // OPTIMIZATION: Add retry mechanism to handle race condition with /api/ats-score
+    // When both APIs run in parallel, /api/resume-feedback might check D1 before
+    // /api/ats-score finishes writing. Retries ensure we find the newly written scores.
     let ruleBasedScores = null;
     if (d1User && isD1Available(env)) {
-      try {
-        const existingSession = await getResumeSessionByResumeId(env, d1User.id, sanitizedResumeId);
-        if (existingSession) {
-          resumeSession = existingSession;
-        }
-        
-        if (existingSession?.rule_based_scores_json) {
-          try {
-            const parsed = JSON.parse(existingSession.rule_based_scores_json);
-            
-            // Validate structure (must have all required fields)
-            const isValid = parsed &&
-              typeof parsed.overallScore === 'number' &&
-              parsed.keywordScore?.score !== undefined &&
-              parsed.formattingScore?.score !== undefined &&
-              parsed.structureScore?.score !== undefined &&
-              parsed.toneScore?.score !== undefined &&
-              parsed.grammarScore?.score !== undefined;
-            
-            if (isValid) {
-              ruleBasedScores = parsed;
-              console.log('[RESUME-FEEDBACK] Reusing ruleBasedScores from D1', {
+      const maxRetries = 4; // 4 attempts = 3 waits × 200ms = 600ms max wait
+      const retryDelay = 200; // 200ms between retries (600ms max wait)
+      
+      for (let attempt = 0; attempt < maxRetries; attempt++) {
+        try {
+          const existingSession = await getResumeSessionByResumeId(env, d1User.id, sanitizedResumeId);
+          if (existingSession) {
+            resumeSession = existingSession;
+          }
+          
+          if (existingSession?.rule_based_scores_json) {
+            try {
+              const parsed = JSON.parse(existingSession.rule_based_scores_json);
+              
+              // Validate structure (must have all required fields)
+              const isValid = parsed &&
+                typeof parsed.overallScore === 'number' &&
+                parsed.keywordScore?.score !== undefined &&
+                parsed.formattingScore?.score !== undefined &&
+                parsed.structureScore?.score !== undefined &&
+                parsed.toneScore?.score !== undefined &&
+                parsed.grammarScore?.score !== undefined;
+              
+              if (isValid) {
+                ruleBasedScores = parsed;
+                console.log('[RESUME-FEEDBACK] Reusing ruleBasedScores from D1', {
+                  requestId,
+                  resumeId: sanitizedResumeId,
+                  overallScore: ruleBasedScores.overallScore,
+                  attempt: attempt + 1
+                });
+                break; // Found valid scores, exit retry loop
+              } else {
+                console.warn('[RESUME-FEEDBACK] Invalid ruleBasedScores structure in D1, will retry', {
+                  requestId,
+                  attempt: attempt + 1
+                });
+              }
+            } catch (parseError) {
+              console.warn('[RESUME-FEEDBACK] Failed to parse ruleBasedScores from D1, will retry', {
                 requestId,
-                resumeId: sanitizedResumeId,
-                overallScore: ruleBasedScores.overallScore
+                error: parseError.message,
+                attempt: attempt + 1
               });
-            } else {
-              console.warn('[RESUME-FEEDBACK] Invalid ruleBasedScores structure in D1, will re-score', { requestId });
             }
-          } catch (parseError) {
-            console.warn('[RESUME-FEEDBACK] Failed to parse ruleBasedScores from D1, will re-score', {
-              requestId,
-              error: parseError.message
-            });
+          }
+          
+          // If scores not found and not last attempt, wait before retrying
+          if (!ruleBasedScores && attempt < maxRetries - 1) {
+            await new Promise(resolve => setTimeout(resolve, retryDelay));
+          }
+        } catch (d1Error) {
+          // Non-blocking: continue without D1 lookup
+          console.warn('[RESUME-FEEDBACK] D1 lookup failed (non-fatal), will retry:', {
+            requestId,
+            error: d1Error.message,
+            attempt: attempt + 1
+          });
+          if (attempt < maxRetries - 1) {
+            await new Promise(resolve => setTimeout(resolve, retryDelay));
           }
         }
-      } catch (d1Error) {
-        // Non-blocking: continue without D1 lookup
-        console.warn('[RESUME-FEEDBACK] D1 lookup failed (non-fatal), will re-score:', d1Error.message);
       }
     }
 
-    // Only re-score if we didn't find valid scores in D1
+    // Only re-score if we didn't find valid scores in D1 after retries
     if (!ruleBasedScores) {
-      console.log('[RESUME-FEEDBACK] Re-scoring resume (no valid D1 scores found)', { requestId });
+      console.log('[RESUME-FEEDBACK] Re-scoring resume (no valid D1 scores found after retries)', { requestId });
       
       // Get rule-based scores first (for AI context) - includes new grammar engine
       ruleBasedScores = await scoreResume(

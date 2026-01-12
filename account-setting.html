@@ -448,7 +448,6 @@
           <a href="/pricing-a">Pricing</a>
           <a href="index.html#blog">Blog</a>
           <a href="login.html">Login</a>
-          <a href="/pricing-a" class="cta-button">Start Free Trial</a>
         </nav>
       </div>
       <button class="mobile-toggle" aria-label="Open navigation menu" aria-expanded="false" aria-controls="mobileNav">
@@ -821,8 +820,11 @@
                   // Trigger navigation update
                   window.dispatchEvent(new CustomEvent('planChanged', { detail: { newPlan: syncData.plan } }));
                   // CRITICAL: Re-initialize navigation to reflect new plan
-                  if (window.JobHackAINavigation && typeof window.JobHackAINavigation.updateNavigation === 'function') {
+                  if (window.JobHackAINavigation && typeof window.JobHackAINavigation.scheduleUpdateNavigation === 'function') {
                     console.log('🔄 [ACCOUNT-SETTINGS] Re-initializing navigation with synced plan:', syncData.plan);
+                    window.JobHackAINavigation.scheduleUpdateNavigation(true);
+                  } else if (window.JobHackAINavigation && typeof window.JobHackAINavigation.updateNavigation === 'function') {
+                    // fallback
                     window.JobHackAINavigation.updateNavigation();
                   }
                 }

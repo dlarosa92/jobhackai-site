@@ -242,12 +242,19 @@ window.selfHealing = {
     const fixes = [];
     
     // Fix navigation issues
-    if (window.updateNavigation) {
+    if (window.JobHackAINavigation && typeof window.JobHackAINavigation.scheduleUpdateNavigation === 'function') {
+      try {
+        window.JobHackAINavigation.scheduleUpdateNavigation();
+        fixes.push('Navigation scheduled');
+      } catch (error) {
+        console.error('Failed to schedule navigation update:', error);
+      }
+    } else if (window.updateNavigation) {
       try {
         updateNavigation();
-        fixes.push('Navigation updated');
+        fixes.push('Navigation updated (fallback)');
       } catch (error) {
-        console.error('Failed to fix navigation:', error);
+        console.error('Failed to fix navigation (fallback):', error);
       }
     }
     

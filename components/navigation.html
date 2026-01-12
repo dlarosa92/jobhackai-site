@@ -31,7 +31,6 @@
 
     <div class="nav-auth">
       <a href="login.html" class="nav-login">Login</a>
-      <a href="login.html?plan=trial" class="nav-signup" data-plan-id="trial">Start Free Trial</a>
     </div>
 
     <button class="mobile-toggle" aria-label="Open navigation menu" aria-expanded="false" aria-controls="mobileNav">
@@ -60,7 +59,6 @@
   <a href="help.html">Help</a>
   <div class="mobile-nav-auth">
     <a href="login.html">Login</a>
-    <a href="login.html?plan=trial" class="mobile-nav-signup" data-plan-id="trial">Start Free Trial</a>
   </div>
 </nav>
 
@@ -246,6 +244,15 @@
 
 .nav-signup:hover {
   background: #00c965;
+}
+
+/* Hide visitor CTAs while navigation is hydrating to avoid flicker */
+html.nav-loading .nav-signup,
+html.nav-loading .mobile-nav-signup,
+html.nav-loading .nav-login {
+  visibility: hidden;
+  pointer-events: none;
+  opacity: 0;
 }
 
 .mobile-toggle {

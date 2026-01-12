@@ -124,6 +124,7 @@ export async function onRequest(context) {
     }
 
     // Check feedback usage (Essential: monthly) -- D1 is authority
+    // Monthly allowance starts from plan activation date (plan_updated_at), not calendar month start
     if (plan === 'essential' && isD1Available(env)) {
       try {
         const d1User = await getOrCreateUserByAuthId(env, uid, userEmail);
@@ -139,14 +140,45 @@ export async function onRequest(context) {
       }
       const lastDayOfMonth = getLastDayOfMonth(year, Number(month));
       const monthEnd = `${year}-${month}-${String(lastDayOfMonth).padStart(2, '0')}`;
+
+          // Determine effective start: later of monthStart and plan_updated_at
+          // This ensures users who upgrade mid-month get a fresh allowance starting at plan activation
+          let effectiveStart = monthStart;
+          try {
+            const userRow = await env.DB.prepare(
+              'SELECT plan_updated_at FROM users WHERE id = ?'
+            ).bind(d1User.id).first();
+
+            if (userRow && userRow.plan_updated_at) {
+              // Normalize to YYYY-MM-DD for date comparison
+              const planUpdatedDate = new Date(userRow.plan_updated_at).toISOString().split('T')[0];
+              if (new Date(planUpdatedDate) > new Date(effectiveStart)) {
+                effectiveStart = planUpdatedDate;
+              }
+            }
+          } catch (e) {
+            // If we cannot read plan_updated_at, fall back to monthStart
+            console.warn('[USAGE] Failed to read plan_updated_at for usage calculation, falling back to monthStart:', e);
+          }
+
+          // Count resume_feedback events in D1 between effectiveStart and monthEnd
           const res = await env.DB.prepare(
-            `SELECT COUNT(*) as count FROM usage_events WHERE user_id = ? AND feature = 'resume_feedback' AND date(created_at) >= date(?) AND date(created_at) <= date(?)`
-          ).bind(d1User.id, monthStart, monthEnd).first();
+            `SELECT COUNT(*) as count FROM usage_events
+             WHERE user_id = ? AND feature = 'resume_feedback'
+               AND date(created_at) >= date(?) AND date(created_at) <= date(?)`
+          ).bind(d1User.id, effectiveStart, monthEnd).first();
+
           feedbackUsed = res?.count || 0;
+
+          // Temporary debug log (remove after verification)
+          console.log('[USAGE] resume_feedback count', { userId: d1User.id, effectiveStart, monthEnd, feedbackUsed });
         }
+
         usage.resumeFeedback.used = feedbackUsed;
         usage.resumeFeedback.remaining = Math.max(0, 3 - feedbackUsed);
       } catch (e) {
+        // On error, be conservative: show full allowance to avoid blocking users
+        console.warn('[USAGE] Error computing resumeFeedback usage for essential plan:', e);
         usage.resumeFeedback.used = 0;
         usage.resumeFeedback.remaining = 3;
       }

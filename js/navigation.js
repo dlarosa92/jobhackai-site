@@ -4,6 +4,238 @@
 // Version stamp for deployment verification
 console.log('🔧 navigation.js VERSION: redirect-fix-v3-SYNC-AND-CLEANUP - ' + new Date().toISOString());
 
+// Hide header until nav is resolved to avoid flicker on first paint.
+// If the user is already authenticated, avoid nav-loading so the full nav persists
+// (prevents the brief centered-logo fallback when navigating to home while logged-in).
+try {
+  const _authDecision = (typeof confidentlyAuthenticatedForNav === 'function') ? confidentlyAuthenticatedForNav() : null;
+  if (_authDecision === true) {
+    // Confidently authenticated -> do not add nav-loading
+  } else if (_authDecision === false) {
+    // Confidently unauthenticated -> preserve existing behavior (hide until reveal)
+    document.documentElement.classList.add('nav-loading');
+  } else {
+    // Unknown (race/load-order) -> default to hiding nav, but re-evaluate when auth becomes ready
+    document.documentElement.classList.add('nav-loading');
+    try {
+      // Re-evaluate when firebase-auth-ready fires
+      const onAuthReady = function () {
+        try { document.removeEventListener('firebase-auth-ready', onAuthReady); } catch (_) {}
+        try { scheduleUpdateNavigation(true); } catch (_) {}
+      };
+      try {
+        if (!window.__jha_nav_auth_ready_listener_registered) {
+          document.addEventListener('firebase-auth-ready', onAuthReady, { once: true });
+          window.__jha_nav_auth_ready_listener_registered = true;
+        }
+      } catch (_) {}
+    } catch (_) {}
+    try {
+      // Also poll briefly for FirebaseAuthManager presence in case it is added later
+      if (!window.__jha_auth_poll_interval) {
+        let __jha_auth_poll_tries = 0;
+        window.__jha_auth_poll_interval = setInterval(() => {
+          __jha_auth_poll_tries++;
+          try {
+            if (window.FirebaseAuthManager && typeof window.FirebaseAuthManager.getCurrentUser === 'function') {
+              clearInterval(window.__jha_auth_poll_interval);
+              window.__jha_auth_poll_interval = null;
+              try { scheduleUpdateNavigation(true); } catch (_) {}
+            } else if (__jha_auth_poll_tries > 50) { // stop after ~5s
+              clearInterval(window.__jha_auth_poll_interval);
+              window.__jha_auth_poll_interval = null;
+            }
+          } catch (_) {
+            // ignore polling errors
+          }
+        }, 100);
+      }
+    } catch (_) {}
+  }
+} catch (e) { /* ignore */ }
+
+// Debounced navigation update scheduler (module-scope)
+let __jha_nav_timer = null;
+const NAV_DEBOUNCE_MS = 200;   // coalesce bursts (tune 150-300ms)
+const NAV_MAX_WAIT_MS = 600;   // reveal nav if nothing authoritative arrives
+
+function revealNav(){
+  try {
+    document.documentElement.classList.remove('nav-loading');
+    document.documentElement.classList.add('nav-ready');
+  } catch (e) { /* ignore in non-browser contexts */ }
+}
+
+function scheduleUpdateNavigation(force) {
+  // If caller requests a forced navigation update, ensure we don't run it while auth is possibly pending.
+  // This avoids the visitor CTA / redirect race during auth restore.
+  if (force) {
+    try {
+      const pending = (typeof isAuthPossiblyPending === 'function' && isAuthPossiblyPending())
+        && !(firebaseAuthReadyFired || window.__firebaseAuthReadyFired || window.__NAV_AUTH_READY);
+
+      if (pending) {
+        // Only set one deferred listener to avoid duplicates; set flag immediately and attach listener on document.
+        if (!window.__NAV_DEFERRED_NAV_UPDATE) {
+          window.__NAV_DEFERRED_NAV_UPDATE = true;
+          navLog('info', 'Forced navigation update deferred until firebase-auth-ready');
+
+          // Handler marks auth-ready flags and schedules the forced update (debounced)
+          const deferredHandler = () => {
+            try {
+              // Sync auth-ready flags to prevent re-deferral
+              try { window.__NAV_AUTH_READY = true; } catch (_) {}
+              try { window.__firebaseAuthReadyFired = true; } catch (_) {}
+              try { firebaseAuthReadyFired = true; } catch (_) {}
+
+              // Clear any fallback timer
+              if (window.__NAV_DEFERRED_TIMEOUT) {
+                clearTimeout(window.__NAV_DEFERRED_TIMEOUT);
+                window.__NAV_DEFERRED_TIMEOUT = null;
+              }
+
+              // Allow a tiny settle window then force the navigation update
+              window.__NAV_DEFERRED_NAV_UPDATE = false;
+              setTimeout(() => scheduleUpdateNavigation(true), 40);
+            } catch (e) { console.error('Deferred navigation error', e); }
+          };
+
+          try {
+            if (typeof document !== 'undefined' && typeof document.addEventListener === 'function') {
+              document.addEventListener('firebase-auth-ready', deferredHandler, { once: true });
+            } else if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+              window.addEventListener('firebase-auth-ready', deferredHandler, { once: true });
+            }
+          } catch (e) {
+            // registration failed - clear defer flag and continue immediately
+            window.__NAV_DEFERRED_NAV_UPDATE = false;
+            navLog('warn', 'Failed to attach deferred firebase-auth-ready handler; proceeding immediately', e);
+            if (__jha_nav_timer) { clearTimeout(__jha_nav_timer); __jha_nav_timer = null; }
+            try { updateNavigation(); } catch (err) { console.error('updateNavigation error', err); }
+            revealNav();
+            return;
+          }
+
+          // Fallback: if auth-ready never fires, force navigation after timeout
+          try {
+            window.__NAV_DEFERRED_TIMEOUT = setTimeout(() => {
+              try {
+                if (window.__NAV_DEFERRED_NAV_UPDATE) {
+                  navLog('warn', 'Deferred nav timeout fired; forcing navigation update');
+                  try { window.__NAV_AUTH_READY = true; } catch (_) {}
+                  try { window.__firebaseAuthReadyFired = true; } catch (_) {}
+                  try { firebaseAuthReadyFired = true; } catch (_) {}
+                  window.__NAV_DEFERRED_NAV_UPDATE = false;
+                  scheduleUpdateNavigation(true);
+                }
+              } catch (e) {
+                console.error('Deferred nav timeout handler error', e);
+              } finally {
+                if (window.__NAV_DEFERRED_TIMEOUT) {
+                  clearTimeout(window.__NAV_DEFERRED_TIMEOUT);
+                  window.__NAV_DEFERRED_TIMEOUT = null;
+                }
+              }
+            }, 5000);
+          } catch (e) { /* ignore timers errors */ }
+        } else {
+          navLog('debug', 'Forced navigation already deferred; skipping duplicate defer');
+        }
+        // Do not run updateNavigation now
+        return;
+      }
+    } catch (e) {
+      // If anything goes wrong, fall back to immediate behavior rather than blocking navigation entirely
+      navLog('warn', 'Error evaluating auth pending state; falling back to immediate force', e);
+    }
+
+    // If we reach here, auth is not pending — proceed with immediate force
+    if (__jha_nav_timer) { clearTimeout(__jha_nav_timer); __jha_nav_timer = null; }
+    try {
+      updateNavigation();
+    } catch (err) {
+      console.error('updateNavigation error', err);
+    }
+    // Only reveal nav if auth is not pending now
+    try {
+      const pendingNow = (typeof isAuthPossiblyPending === 'function' && isAuthPossiblyPending())
+        && !(firebaseAuthReadyFired || window.__firebaseAuthReadyFired || window.__NAV_AUTH_READY);
+      if (!pendingNow) {
+        revealNav();
+      } else {
+        navLog('info', 'Skipped revealNav due to auth pending after forced update');
+      }
+    } catch (e) {
+      // If check fails, reveal to avoid hiding nav indefinitely
+      revealNav();
+    }
+    return;
+  }
+
+  if (__jha_nav_timer) clearTimeout(__jha_nav_timer);
+  __jha_nav_timer = setTimeout(() => {
+    __jha_nav_timer = null;
+    try { updateNavigation(); } catch (err) { console.error('updateNavigation error', err); }
+    // Reveal only if auth is not pending after updateNavigation()
+    try {
+      const pendingNow = (typeof isAuthPossiblyPending === 'function' && isAuthPossiblyPending())
+        && !(firebaseAuthReadyFired || window.__firebaseAuthReadyFired || window.__NAV_AUTH_READY);
+      if (!pendingNow) {
+        revealNav();
+      } else {
+        navLog('info', 'Skipped revealNav due to auth pending after scheduled update');
+      }
+    } catch (e) {
+      revealNav();
+    }
+  }, NAV_DEBOUNCE_MS);
+
+  // ensure nav is revealed eventually to avoid indefinite hiding
+  if (!document.documentElement.dataset.navTimeoutSet) {
+    document.documentElement.dataset.navTimeoutSet = '1';
+    // allow a few conservative retries if auth still appears to be restoring
+    const MAX_RETRIES = 3;
+    const scheduleRevealCheck = (delay) => {
+      setTimeout(() => {
+        try {
+          const retries = parseInt(document.documentElement.dataset.navTimeoutRetries || '0', 10);
+          const pending = (typeof isAuthPossiblyPending === 'function' && isAuthPossiblyPending()) && !(window.__firebaseAuthReadyFired || firebaseAuthReadyFired);
+          if (pending && retries < MAX_RETRIES) {
+            // increment retry count and defer reveal
+            document.documentElement.dataset.navTimeoutRetries = String(retries + 1);
+            navLog('info', 'NAV reveal deferred due to pending auth', { retries: retries + 1 });
+            // try again after another NAV_MAX_WAIT_MS
+            scheduleRevealCheck(NAV_MAX_WAIT_MS);
+            return;
+          }
+
+          // Proceed to reveal (either not pending, or retries exhausted)
+          if (__jha_nav_timer) {
+            clearTimeout(__jha_nav_timer);
+            __jha_nav_timer = null;
+          }
+          try { updateNavigation(); } catch (e) { navLog('warn', 'updateNavigation failed during reveal timeout', e); }
+          try { revealNav(); } catch (e) { navLog('warn', 'revealNav failed during reveal timeout', e); }
+
+          // Cleanup timeout markers now that reveal has been performed
+          try { document.documentElement.removeAttribute('data-nav-timeout-set'); } catch (_) {}
+          try { document.documentElement.removeAttribute('data-nav-timeout-retries'); } catch (_) {}
+        } catch (e) {
+          // best-effort reveal on any unexpected error and cleanup
+          try {
+            if (__jha_nav_timer) { clearTimeout(__jha_nav_timer); __jha_nav_timer = null; }
+            try { updateNavigation(); } catch (ee) {}
+            try { revealNav(); } catch (ee) {}
+          } catch (_) {}
+          try { document.documentElement.removeAttribute('data-nav-timeout-set'); } catch (_) {}
+          try { document.documentElement.removeAttribute('data-nav-timeout-retries'); } catch (_) {}
+        }
+      }, delay);
+    };
+    scheduleRevealCheck(NAV_MAX_WAIT_MS);
+  }
+}
+
 // --- ROBUSTNESS GLOBALS ---
 // Ensure robustness globals are available for smoke tests and agent interface
 window.siteHealth = window.siteHealth || {
@@ -96,9 +328,205 @@ window.stateManager = window.stateManager || (function() {
   return { get, set, watch, unwatch, createBackup, restoreBackup, listBackups };
 })();
 
+// ----------------------- NAV HELPERS -----------------------
+// Detect whether auth may be in-flight: localStorage suggests auth but Firebase not ready yet.
+function isAuthPossiblyPending() {
+  try {
+    const lsAuth = localStorage.getItem('user-authenticated');
+    if (lsAuth !== 'true') return false;
+    // Helper: check for Firebase SDK persistence keys (same pattern used by getAuthState)
+    const hasFirebaseKeys = Object.keys(localStorage).some(k =>
+      k.startsWith('firebase:authUser:') &&
+      localStorage.getItem(k) &&
+      localStorage.getItem(k) !== 'null' &&
+      localStorage.getItem(k).length > 10
+    );
+
+    // If auth already marked ready (either event flag or global fallback), not pending
+    if (firebaseAuthReadyFired || window.__firebaseAuthReadyFired) return false;
+
+    // If persistence keys exist AND local flag is set, session likely restoring
+    if (hasFirebaseKeys) return true;
+
+    // If Firebase manager exists and reports no current user yet, and we haven't seen firebase-auth-ready, treat as pending
+    const fm = window.FirebaseAuthManager;
+    if (fm && typeof fm.getCurrentUser === 'function' && !fm.getCurrentUser()) return true;
+  } catch (e) { /* ignore */ }
+  return false;
+}
+
+// Patch only the parts of the nav that change (cta text/href and plan badge) to avoid full DOM rebuild
+function patchNav(plan) {
+  try {
+    const navActions = document.querySelector('.nav-actions');
+    const mobileNav = document.getElementById('mobileNav') || document.querySelector('.mobile-nav');
+    if (!navActions && !mobileNav) return;
+
+    // Use whichever actions container exists to perform patching work
+    const actionsRoot = navActions || mobileNav;
+
+    // CTA selector - adjust to match your markup
+    const cta = actionsRoot.querySelector('a.btn.btn-primary, a.btn-primary, button.btn-primary, a.cta-button, .btn-primary');
+    // If CTA anchor exists, update it in place
+    if (cta) {
+      if (plan === 'visitor') {
+        try { cta.textContent = 'Start Free Trial'; } catch(_) {}
+        if (cta.tagName === 'A') try { cta.href = '/login.html?plan=trial'; } catch(_) {}
+        cta.classList.remove('plan-premium');
+        cta.classList.add('plan-visitor');
+      } else {
+        try { cta.textContent = (plan === 'premium' ? 'Premium Plan' : (plan === 'pro' ? 'Pro Plan' : 'Open')); } catch(_) {}
+        if (cta.tagName === 'A') try { cta.href = '/dashboard'; } catch(_) {}
+        cta.classList.remove('plan-visitor');
+        cta.classList.add('plan-premium');
+      }
+      // Ensure click handler reflects the new plan - remove any stale handler and attach new one if planConfig specifies planId
+      try {
+        // Remove stale handler (attachPlanSelectionHandler will also clean up if needed)
+        if (cta._jha_plan_handler) {
+          try { cta.removeEventListener('click', cta._jha_plan_handler); } catch(_) {}
+          cta._jha_plan_handler = null;
+        }
+        const planConfig = NAVIGATION_CONFIG[plan] || NAVIGATION_CONFIG.visitor;
+        if (planConfig && planConfig.cta && planConfig.cta.planId) {
+          const handlerSource = (actionsRoot.classList && actionsRoot.classList.contains('mobile-nav')) ? 'navigation-cta-mobile' : 'navigation-cta-desktop';
+          attachPlanSelectionHandler(cta, planConfig.cta.planId, handlerSource);
+        }
+      } catch (e) { /* ignore handler attach errors */ }
+    } else {
+      // No anchor CTA found — maybe there's a skeleton placeholder.
+      const skeleton = actionsRoot ? actionsRoot.querySelector('.cta-skeleton-desktop, .cta-skeleton-mobile') : null;
+      if (skeleton) {
+        const planConfig = NAVIGATION_CONFIG[plan] || NAVIGATION_CONFIG.visitor;
+        // If plan defines a CTA, create and replace; otherwise remove the skeleton to avoid stuck placeholder.
+        if (planConfig && planConfig.cta) {
+          const newCta = document.createElement('a');
+          try { newCta.href = planConfig.cta.href; } catch(_) {}
+          try { newCta.textContent = planConfig.cta.text; } catch(_) {}
+          newCta.className = 'btn btn-primary';
+          newCta.setAttribute('role', 'button');
+          try {
+            if (skeleton.classList && skeleton.classList.contains('cta-skeleton-mobile')) {
+              newCta.style.cssText = 'background: #00E676; color: white !important; padding: 0.75rem 0; border-radius: 8px; text-decoration: none; font-weight: 600; display: block; text-align: center; margin-top: 1.5rem;';
+            } else {
+              newCta.style.cssText = 'background: #00E676; color: white !important; padding: 0.5rem 1rem; border-radius: 8px; text-decoration: none; font-weight: 600; display: inline-block;';
+            }
+          } catch(_) {}
+          if (planConfig.cta.planId) {
+            try {
+              const handlerSource = (skeleton.classList && skeleton.classList.contains('cta-skeleton-mobile')) ? 'navigation-cta-mobile' : 'navigation-cta-desktop';
+              attachPlanSelectionHandler(newCta, planConfig.cta.planId, handlerSource);
+            } catch(_) {}
+          }
+          try { skeleton.replaceWith(newCta); } catch (e) { navLog('warn', 'Failed to replace skeleton with CTA', e); }
+        } else {
+          try { skeleton.remove(); } catch(_) {}
+        }
+      }
+    }
+
+    const badge = actionsRoot.querySelector('.plan-badge, .nav-plan-pill');
+    if (badge) {
+      // Prefer human-friendly name from PLANS config; fallback to capitalized plan id
+      const text = (window.PLANS && PLANS[plan] && PLANS[plan].name) ? PLANS[plan].name : (plan ? (plan.charAt(0).toUpperCase() + plan.slice(1)) : '');
+      try { badge.textContent = text; } catch(_) {}
+      try { badge.dataset.plan = plan; } catch(e){/*ignore*/}
+      badge.classList.toggle('hidden', plan === 'visitor' || !text);
+    }
+    // Ensure dataset.plan reflects the current plan to prevent repeated patch attempts
+    try { if (actionsRoot) actionsRoot.dataset.plan = plan; } catch(_) {}
+
+    // Compute and set nav signature for this plan so patch pre-checks remain coherent
+    try {
+      const planConfig = NAVIGATION_CONFIG[plan] || NAVIGATION_CONFIG.visitor;
+      if (actionsRoot && planConfig && Array.isArray(planConfig.navItems)) {
+        const signature = planConfig.navItems.map(item => {
+          const base = `${item.text}::${item.href || ''}::locked:${!!item.locked}`;
+          if (item.isDropdown && Array.isArray(item.items)) {
+            const children = item.items.map(si => `${si.text}::${si.href || ''}::locked:${!!si.locked}`).join('|');
+            return `${base}::D::${children}`;
+          }
+          return base;
+        }).join('||');
+        try { actionsRoot.dataset.navSignature = signature; } catch(_) {}
+      }
+    } catch (_) {}
+  } catch (err) {
+    console.warn('patchNav error', err);
+  }
+}
+
 // --- FIREBASE AUTH READY TRACKING ---
 // Track when firebase-auth-ready event fires to prevent premature localStorage clearing
 let firebaseAuthReadyFired = false;
+// If a global flag was set before this script loaded, sync it immediately to avoid races
+try {
+  if (typeof window !== 'undefined' && window.__firebaseAuthReadyFired) {
+    firebaseAuthReadyFired = true;
+  }
+} catch (_) {}
+// NAV: defer forced nav updates until auth readiness is known.
+// This prevents callers that pass `force=true` from immediately rendering visitor CTAs
+// while Firebase is still restoring a session.
+window.__NAV_DEFERRED_NAV_UPDATE = window.__NAV_DEFERRED_NAV_UPDATE || false;
+window.__NAV_AUTH_READY = !!(firebaseAuthReadyFired || window.__firebaseAuthReadyFired);
+
+// Mirror firebase-auth-ready to a global for any scripts needing it
+try {
+  if (window && typeof window.addEventListener === 'function') {
+    window.addEventListener('firebase-auth-ready', () => {
+      try {
+        window.__NAV_AUTH_READY = true;
+        firebaseAuthReadyFired = true;
+      } catch (e) { /* ignore */ }
+    });
+  }
+} catch (e) { /* ignore */ }
+
+// Poll interval handle used when waiting for FirebaseAuthManager to be added to window
+window.__jha_auth_poll_interval = window.__jha_auth_poll_interval || null;
+
+// Helper: determine authentication confidence for initial nav decisions.
+// Returns:
+//  - true  => confidently authenticated
+//  - false => confidently not authenticated
+//  - null  => unknown / defer (e.g., Firebase not ready yet)
+function confidentlyAuthenticatedForNav() {
+  try {
+    // 1) Honor explicit logout intent immediately
+    try {
+      if (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('logout-intent') === '1') {
+        return false;
+      }
+    } catch (_) {}
+
+    // 2) If Firebase manager is available, trust it (source of truth)
+    try {
+      if (window.FirebaseAuthManager && typeof window.FirebaseAuthManager.getCurrentUser === 'function') {
+        return !!window.FirebaseAuthManager.getCurrentUser();
+      }
+    } catch (_) {}
+
+    // 3) If firebase-auth-ready has fired, we can use localStorage heuristics safely
+    try {
+      if (typeof window !== 'undefined' && !!window.__firebaseAuthReadyFired) {
+        const storedAuth = (typeof localStorage !== 'undefined' && localStorage.getItem('user-authenticated') === 'true');
+        const hasFirebaseKeys = (typeof localStorage !== 'undefined') && Object.keys(localStorage).some(k =>
+          k.startsWith('firebase:authUser:') &&
+          localStorage.getItem(k) &&
+          localStorage.getItem(k) !== 'null' &&
+          localStorage.getItem(k).length > 10
+        );
+        return storedAuth && hasFirebaseKeys;
+      }
+    } catch (_) {}
+
+    // 4) Otherwise, defer decision - Firebase may still be restoring session
+    return null;
+  } catch (_) {
+    return null;
+  }
+}
 
 // --- LOGGING SYSTEM ---
 const DEBUG = {
@@ -329,10 +757,10 @@ function getAuthState() {
   // will be false when Firebase says logged out, preventing cleanup of stale localStorage
   // CRITICAL FIX: Don't clear localStorage if firebase-auth-ready hasn't fired yet
   // Firebase may still be restoring the session during initialization
-  if (hasFirebaseManager && !firebaseUser) {
+    if (hasFirebaseManager && !firebaseUser) {
     // If firebase-auth-ready hasn't fired yet, Firebase may still be restoring session
     // Use localStorage fallback temporarily instead of clearing it
-    if (!firebaseAuthReadyFired) {
+    if (!(firebaseAuthReadyFired || window.__firebaseAuthReadyFired)) {
       console.log('[AUTH] getAuthState: Firebase not ready yet, using localStorage fallback');
       try {
         const storedAuth = localStorage.getItem('user-authenticated');
@@ -367,8 +795,8 @@ function getAuthState() {
     }
     
     // Only clear localStorage if firebase-auth-ready has fired AND Firebase says logged out
-    // CRITICAL FIX: Check firebaseAuthReadyFired before clearing to prevent premature clearing
-    if (firebaseAuthReadyFired) {
+    // CRITICAL FIX: Check firebaseAuthReadyFired (or global fallback) before clearing to prevent premature clearing
+    if (firebaseAuthReadyFired || window.__firebaseAuthReadyFired) {
       try {
         const storedAuth = localStorage.getItem('user-authenticated');
         if (storedAuth === 'true') {
@@ -447,10 +875,38 @@ function getAuthState() {
 function setAuthState(isAuthenticated, plan = null) {
   navLog('info', 'setAuthState() called', { isAuthenticated, plan });
   
-  localStorage.setItem('user-authenticated', isAuthenticated ? 'true' : 'false');
-  if (plan) {
-    localStorage.setItem('user-plan', plan);
-    localStorage.setItem('dev-plan', plan);
+  try {
+    localStorage.setItem('user-authenticated', isAuthenticated ? 'true' : 'false');
+    if (plan) {
+      const oldPlan = localStorage.getItem('user-plan') || localStorage.getItem('dev-plan');
+      // Only update and dispatch if the plan actually changed
+      if (String(oldPlan) !== String(plan)) {
+        localStorage.setItem('user-plan', plan);
+        localStorage.setItem('dev-plan', plan);
+        
+        // Dispatch planChanged event to notify other components (dashboard, account-settings, etc.)
+        // This ensures immediate UI updates when plan changes, rather than waiting for polling
+        try {
+          const planChangeEvent = new CustomEvent('planChanged', {
+            detail: { oldPlan, newPlan: plan }
+          });
+          window.dispatchEvent(planChangeEvent);
+          navLog('debug', 'setAuthState: Dispatched planChanged event', { oldPlan, newPlan: plan });
+        } catch (eventError) {
+          // Non-critical: if event dispatch fails, don't break auth flow
+          navLog('warn', 'setAuthState: Failed to dispatch planChanged event', { message: eventError?.message });
+        }
+      } else {
+        // Keep localStorage consistent even if no event dispatched (ensure value exists)
+        try {
+          localStorage.setItem('user-plan', plan);
+          localStorage.setItem('dev-plan', plan);
+        } catch (_) {}
+        navLog('debug', 'setAuthState: plan unchanged, skipping planChanged dispatch', { oldPlan, newPlan: plan });
+      }
+    }
+  } catch (e) {
+    navLog('warn', 'Failed to set auth state in localStorage', { message: e?.message });
   }
   
   // Only log on debug level to reduce spam
@@ -461,8 +917,9 @@ function setAuthState(isAuthenticated, plan = null) {
   });
   
   // Trigger navigation update after state change
+  // Trigger navigation update after state change (debounced to avoid flicker)
   setTimeout(() => {
-    updateNavigation();
+    scheduleUpdateNavigation();
     updateDevPlanToggle();
   }, 100);
 }
@@ -629,15 +1086,58 @@ const PLANS = {
 window.PLANS = PLANS;
 
 // --- ENSURE LOCALSTORAGE KEYS ARE ALWAYS SET ---
-if (!localStorage.getItem('user-authenticated')) {
-  localStorage.setItem('user-authenticated', 'false');
-}
-if (!localStorage.getItem('user-plan')) {
-  localStorage.setItem('user-plan', 'free');
-}
+// Delay setting default user-plan until after navigation initialization/hydration to prevent early free plan flicker
+// if (!localStorage.getItem('user-plan')) {
+//   localStorage.setItem('user-plan', 'free');
+// }
 // Ensure dev-plan is always set for consistency
 if (!localStorage.getItem('dev-plan')) {
   localStorage.setItem('dev-plan', localStorage.getItem('user-plan') || 'free');
+}
+
+// At script start, add nav-loading class to keep nav/CTAs hidden
+if (typeof document !== 'undefined') {
+  try {
+    const _authDecision = (typeof confidentlyAuthenticatedForNav === 'function') ? confidentlyAuthenticatedForNav() : null;
+    if (_authDecision === true) {
+      // Confidently authenticated -> do not add nav-loading
+    } else if (_authDecision === false) {
+      document.documentElement.classList.add('nav-loading');
+    } else {
+      // Unknown -> default to hiding nav and re-evaluating when auth is ready
+      document.documentElement.classList.add('nav-loading');
+      try {
+        const onAuthReady = function () {
+          try { document.removeEventListener('firebase-auth-ready', onAuthReady); } catch (_) {}
+          try { scheduleUpdateNavigation(true); } catch (_) {}
+        };
+        try {
+          if (!window.__jha_nav_auth_ready_listener_registered) {
+            document.addEventListener('firebase-auth-ready', onAuthReady, { once: true });
+            window.__jha_nav_auth_ready_listener_registered = true;
+          }
+        } catch (_) {}
+      } catch (_) {}
+      try {
+        if (!window.__jha_auth_poll_interval) {
+          let __jha_auth_poll_tries = 0;
+          window.__jha_auth_poll_interval = setInterval(() => {
+            __jha_auth_poll_tries++;
+            try {
+              if (window.FirebaseAuthManager && typeof window.FirebaseAuthManager.getCurrentUser === 'function') {
+                clearInterval(window.__jha_auth_poll_interval);
+                window.__jha_auth_poll_interval = null;
+                try { scheduleUpdateNavigation(true); } catch (_) {}
+              } else if (__jha_auth_poll_tries > 50) {
+                clearInterval(window.__jha_auth_poll_interval);
+                window.__jha_auth_poll_interval = null;
+              }
+            } catch (_) {}
+          }, 100);
+        }
+      } catch (_) {}
+    }
+  } catch (e) { /* ignore */ }
 }
 
 // --- NAVIGATION CONFIGURATION ---
@@ -826,9 +1326,23 @@ function attachPlanSelectionHandler(element, planId, source) {
   const planSource = source || 'navigation-cta';
   element.dataset.planId = planId;
   element.dataset.planSource = planSource;
+  // Remove any previously attached handler to avoid stale closures capturing old planId
+  try {
+    if (element._jha_plan_handler) {
+      try { element.removeEventListener('click', element._jha_plan_handler); } catch (_) {}
+      element._jha_plan_handler = null;
+    }
+  } catch (e) { /* ignore */ }
 
   const handler = () => persistSelectedPlan(planId, { source: planSource });
-  element.addEventListener('click', handler, { passive: true });
+  try {
+    element.addEventListener('click', handler, { passive: true });
+    // Keep a reference so we can remove it later if the CTA is updated in-place
+    element._jha_plan_handler = handler;
+  } catch (e) {
+    // Fallback: attach without options if browser doesn't support options param
+    try { element.addEventListener('click', handler); element._jha_plan_handler = handler; } catch (_) {}
+  }
 }
 
 // --- UTILITY FUNCTIONS ---
@@ -929,7 +1443,7 @@ function setPlan(plan) {
     });
     window.dispatchEvent(planChangeEvent);
     
-    updateNavigation();
+    scheduleUpdateNavigation();
     updateDevPlanToggle();
   } else {
     navLog('error', 'setPlan: Invalid plan provided', plan);
@@ -1049,12 +1563,32 @@ function showUpgradeModal(targetPlan = 'premium') {
 function updateNavigation() {
   navLog('info', '=== updateNavigation() START ===');
   
+  // Safety: if auth looks like it's still restoring, do not render full nav now.
+  // scheduleUpdateNavigation will retry after auth becomes ready.
+  try {
+    const pending = (typeof isAuthPossiblyPending === 'function' && isAuthPossiblyPending())
+      && !(firebaseAuthReadyFired || window.__firebaseAuthReadyFired || window.__NAV_AUTH_READY);
+
+    if (pending) {
+      navLog('info', 'updateNavigation deferred because auth appears to be pending');
+      // schedule a normal (debounced) nav update to run after the wait period
+      scheduleUpdateNavigation();
+      return;
+    }
+  } catch (e) {
+    // If the check fails, continue — better to try rendering than to silently fail.
+    navLog('warn', 'Auth pending check failed in updateNavigation, proceeding', e);
+  }
+
   // Auto-detect issues before starting
   autoEnableDebugIfNeeded();
   
   const devOverride = getDevPlanOverride();
   const currentPlan = getEffectivePlan();
   const authState = getAuthState();
+  
+  // The plan-only optimization is applied after we determine navConfig below,
+  // so the pre-check has been moved to the post-navConfig section to avoid TDZ.
   
   // Additional debugging for visitor state issues
   if (currentPlan !== 'visitor' && !authState.isAuthenticated) {
@@ -1081,6 +1615,51 @@ function updateNavigation() {
     hasConfig: !!navConfig,
     navItemsCount: navConfig?.navItems?.length || 0 
   });
+ 
+  // --- Plan-only optimization: patch instead of full rebuild ---
+  try {
+    const oldNavActions = document.querySelector('.nav-actions');
+    if (oldNavActions) {
+      // Determine previous plan from multiple possible markers:
+      const existingBadge = oldNavActions.querySelector('.plan-badge, .nav-plan-pill');
+      const badgePlan = existingBadge && (existingBadge.dataset?.plan || (existingBadge.textContent||'').trim().toLowerCase());
+      const navDatasetPlan = (oldNavActions.dataset && oldNavActions.dataset.plan) ? (oldNavActions.dataset.plan || '').toString().toLowerCase() : null;
+      const attrPlan = (oldNavActions.getAttribute && oldNavActions.getAttribute('data-plan')) ? (oldNavActions.getAttribute('data-plan') || '').toString().toLowerCase() : null;
+      const previousPlan = (navDatasetPlan || badgePlan || attrPlan || null);
+
+      // Compute nav signature for current config to ensure structure hasn't changed
+      let newSignature = '';
+      try {
+    if (navConfig && Array.isArray(navConfig.navItems)) {
+      newSignature = navConfig.navItems.map(item => {
+        const base = `${item.text}::${item.href || ''}::locked:${!!item.locked}`;
+        if (item.isDropdown && Array.isArray(item.items)) {
+          const children = item.items.map(si => `${si.text}::${si.href || ''}::locked:${!!si.locked}`).join('|');
+          return `${base}::D::${children}`;
+        }
+        return base;
+      }).join('||');
+    }
+      } catch (e) { /* ignore */ }
+
+      const previousSignature = oldNavActions.dataset?.navSignature || null;
+
+      // Only patch when a previous plan exists, it's different, AND the nav signature is unchanged
+      if (previousPlan && previousPlan !== currentPlan && previousSignature && newSignature && previousSignature === newSignature) {
+        navLog('debug', 'Plan changed only and nav signature unchanged - patching nav', { previousPlan, currentPlan, signature: newSignature });
+        patchNav(currentPlan);
+        // refresh any small stateful parts
+        try { updateQuickPlanSwitcher(); } catch(_) {}
+        try { revealNav(); } catch(_) {}
+        // Ensure plan dataset updated to avoid repeated patch attempts
+        try { oldNavActions.dataset.plan = currentPlan; } catch(_) {}
+        return; // skip full rebuild
+      }
+    }
+  } catch (e) {
+    navLog('warn', 'patchNav pre-check failed', e);
+  }
+
   
   const navGroup = document.querySelector('.nav-group');
   const navLinks = document.querySelector('.nav-links');
@@ -1118,6 +1697,16 @@ function updateNavigation() {
 
   const createVisitorCTA = (isMobile = false) => {
     if (!navConfig?.cta) return null;
+
+    // If auth looks like it might be in-flight, show a neutral skeleton instead of visitor CTA
+    if (isAuthPossiblyPending && isAuthPossiblyPending()) {
+      const placeholder = document.createElement('span');
+      placeholder.className = isMobile ? 'cta-skeleton-mobile' : 'cta-skeleton-desktop';
+      placeholder.setAttribute('aria-hidden', 'true');
+      // minimal inline sizing so layout doesn't jump
+      placeholder.style.cssText = isMobile ? 'display:block;height:36px;width:120px;border-radius:8px;' : 'display:inline-block;height:36px;width:120px;border-radius:8px;';
+      return placeholder;
+    }
 
     const cta = document.createElement('a');
     updateLink(cta, navConfig.cta.href);
@@ -1514,6 +2103,26 @@ function updateNavigation() {
   });
   
   // Setup event delegation for mobile nav triggers (works even after navigation rebuilds)
+  // After the DOM build, ensure nav-actions carries plan and signature so plan-only patches can be validated
+  try {
+    const navActionsEl = document.querySelector('.nav-actions');
+    if (navActionsEl && navConfig && Array.isArray(navConfig.navItems)) {
+      const signature = navConfig.navItems.map(item => {
+        const base = `${item.text}::${item.href || ''}::locked:${!!item.locked}`;
+        if (item.isDropdown && Array.isArray(item.items)) {
+          const children = item.items.map(si => `${si.text}::${si.href || ''}::locked:${!!si.locked}`).join('|');
+          return `${base}::D::${children}`;
+        }
+        return base;
+      }).join('||');
+      try { navActionsEl.dataset.navSignature = signature; } catch(_) {}
+      try { navActionsEl.dataset.plan = currentPlan; } catch(_) {}
+    } else if (navActionsEl) {
+      try { navActionsEl.dataset.plan = currentPlan; } catch(_) {}
+    }
+  } catch (e) {
+    navLog('debug', 'Failed to set nav signature or plan dataset (post-build)', e);
+  }
   setupMobileNavDelegation();
   
   // Auto-detect issues after navigation update
@@ -1620,13 +2229,17 @@ async function initializeNavigation() {
   });
   
   // Initialize required localStorage keys for smoke tests
-  if (!localStorage.getItem('user-authenticated')) {
-    localStorage.setItem('user-authenticated', 'false');
-    navLog('debug', 'Initialized user-authenticated to false');
-  }
-  if (!localStorage.getItem('user-plan')) {
-    localStorage.setItem('user-plan', 'free');
-    navLog('debug', 'Initialized user-plan to free');
+  try {
+    if (!localStorage.getItem('user-authenticated')) {
+      try { localStorage.setItem('user-authenticated', 'false'); } catch (_) {}
+      navLog('debug', 'Initialized user-authenticated to false');
+    }
+    if (!localStorage.getItem('user-plan')) {
+      try { localStorage.setItem('user-plan', 'free'); } catch (_) {}
+      navLog('debug', 'Initialized user-plan to free');
+    }
+  } catch (storageInitError) {
+    navLog('warn', 'localStorage not available during navigation initialization', { error: storageInitError?.message });
   }
 
   // --- Plan persistence fix ---
@@ -1746,9 +2359,9 @@ async function initializeNavigation() {
     }
   }
   
-  // Update navigation
-  navLog('debug', 'Calling updateNavigation()');
-  updateNavigation();
+  // Update navigation (use scheduler to ensure revealNav runs and errors are handled)
+  navLog('debug', 'Calling scheduleUpdateNavigation(true)');
+  scheduleUpdateNavigation(true);
   
   // Ensure mobile nav delegation is set up (in case updateNavigation runs before mobileNav exists)
   // This will be called again in updateNavigation, but this ensures it's ready
@@ -1774,6 +2387,12 @@ async function initializeNavigation() {
   
   // Signal that navigation system is ready
   navLog('info', 'Navigation system initialization complete, dispatching ready event');
+  // Ensure nav is revealed (scheduler calls revealNav); call revealNav as a safe fallback
+  try {
+    revealNav();
+  } catch (e) {
+    navLog('warn', 'Failed to reveal nav after initialization', e);
+  }
   // Set flag to detect if event already fired (for fallback checks)
   window.__navigationReadyFired = true;
   // CRITICAL FIX: Only mark as initialized AFTER successful completion
@@ -1787,7 +2406,7 @@ async function initializeNavigation() {
   window.addEventListener('storage', (e) => {
     if (e.key === 'dev-plan' || e.key === 'user-plan' || e.key === 'user-authenticated') {
       navLog('info', 'Storage event detected', { key: e.key, newValue: e.newValue, oldValue: e.oldValue });
-      updateNavigation();
+      scheduleUpdateNavigation();
       updateQuickPlanSwitcher();
     }
   });
@@ -1820,21 +2439,22 @@ async function initializeNavigation() {
             if (!isAuthenticated && currentAuthState.isAuthenticated) {
               navLog('error', 'Firebase auth mismatch: Firebase says logged out, syncing localStorage');
               setAuthState(false, null);
-              updateNavigation();
+              // Logout is authoritative; force immediate nav update to remove auth UI
+              scheduleUpdateNavigation(true);
             } else if (isAuthenticated && !currentAuthState.isAuthenticated) {
-              // Firebase says logged in - update navigation
-              navLog('debug', 'Firebase auth state changed: User logged in, updating navigation');
-              updateNavigation();
+              // Firebase says logged in - force navigation update (authoritative)
+              navLog('debug', 'Firebase auth state changed: User logged in, forcing navigation update');
+              scheduleUpdateNavigation(true);
             } else if (isAuthenticated && currentAuthState.isAuthenticated) {
-              // Both agree logged in - just update navigation in case plan changed
+              // Both agree logged in - just schedule update in case plan changed
               navLog('debug', 'Auth state consistent, refreshing navigation');
-              updateNavigation();
+              scheduleUpdateNavigation();
             } else if (!isAuthenticated && !currentAuthState.isAuthenticated) {
-              // SECURITY FIX: Both agree logged out - still update navigation to sync UI
+              // SECURITY FIX: Both agree logged out - still schedule navigation to sync UI
               // This handles cross-tab logout where Firebase fires with user=null and getAuthState()
               // has already cleaned up stale localStorage, leaving both as false
               navLog('debug', 'Auth state changed: Both agree logged out, updating navigation');
-              updateNavigation();
+              scheduleUpdateNavigation(true);
             }
           } catch (listenerError) {
             // EDGE CASE FIX: Don't let listener errors break navigation
@@ -2035,7 +2655,7 @@ async function reconcilePlanFromAPI() {
     console.log(`🔄 Updating plan from ${current} to ${plan}`);
     localStorage.setItem('user-plan', plan);
     localStorage.setItem('dev-plan', plan);
-    updateNavigation();
+    scheduleUpdateNavigation(true);
     try { new BroadcastChannel('auth').postMessage({ type: 'plan-update', plan: plan }); } catch (_) {}
   } else if (!plan) {
     console.warn('⚠️ Plan reconciliation failed after all retries, keeping current plan:', current);
@@ -2064,6 +2684,7 @@ window.JobHackAINavigation = {
   checkFeatureAccess,
   showUpgradeModal,
   updateNavigation,
+  scheduleUpdateNavigation,
   initializeNavigation,
   fetchPlanFromAPI,
   reconcilePlanFromAPI,
@@ -2168,7 +2789,6 @@ function renderMarketingNav(desktop, mobile) {
     <a href="/features.html">Features</a>
     <a href="/pricing.html">Pricing</a>
     <a class="btn-link" href="/login.html">Login</a>
-    <a class="btn-primary" href="/signup.html">Start Free Trial</a>
   `;
   if (mobile) mobile.innerHTML = desktop.innerHTML;
 }
@@ -2177,13 +2797,8 @@ function renderUnverifiedNav(desktop, mobile) {
   if (!desktop) return;
   desktop.innerHTML = `
     <span class="nav-status">Verify your email to unlock your account</span>
-    <button id="nav-logout-btn" class="btn-outline">Logout</button>
   `;
   if (mobile) mobile.innerHTML = desktop.innerHTML;
-  const btn = document.getElementById("nav-logout-btn");
-  if (btn && window.FirebaseAuthManager) {
-    btn.onclick = () => window.FirebaseAuthManager.signOut();
-  }
 }
 
 function renderVerifiedNav(desktop, mobile) {
@@ -2193,13 +2808,8 @@ function renderVerifiedNav(desktop, mobile) {
     <a href="/interview-questions.html">Interview Questions</a>
     <a href="/pricing.html">Pricing</a>
     <a href="/account-setting.html" class="nav-account-link">Account</a>
-    <button id="nav-logout-btn" class="btn-outline">Logout</button>
   `;
   if (mobile) mobile.innerHTML = desktop.innerHTML;
-  const btn = document.getElementById("nav-logout-btn");
-  if (btn && window.FirebaseAuthManager) {
-    btn.onclick = () => window.FirebaseAuthManager.signOut();
-  }
 }
 
 function applyNavForUser(user) {

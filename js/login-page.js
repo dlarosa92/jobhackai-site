@@ -4,7 +4,7 @@
  */
 
 // Version stamp for deployment verification
-console.log('🔧 login-page.js VERSION: redirect-fix-v2 - ' + new Date().toISOString());
+console.log('🔧 login-page.js VERSION: auth-tri-state-v1 - ' + new Date().toISOString());
 
 import authManager from './firebase-auth.js';
 import { waitForAuthReady } from './firebase-auth.js';
@@ -239,35 +239,34 @@ document.addEventListener('DOMContentLoaded', async function() {
       return false;
     }
 
-    // ONLY check Firebase, not localStorage
+    // ONLY check Firebase, wait for auth to be ready (tri-state pattern)
     try {
-      console.log('[LOGIN] checkAuth: Starting Firebase auth check (timeout: 2000ms)');
+      console.log('[LOGIN] checkAuth: Starting Firebase auth check (timeout: 10000ms)');
       const startTime = Date.now();
       
-      // EDGE CASE FIX: Handle both timeout and errors from waitForAuthReady
+      // TRI-STATE FIX: Wait for Firebase to resolve auth state before making redirect decision
+      // Use longer timeout to allow Firebase to restore session from persistence
       let user = null;
       try {
-        user = await Promise.race([
-          waitForAuthReady(2000),
-          new Promise((_, reject) => 
-            setTimeout(() => reject(new Error('Auth check timeout')), 2000)
-          )
-        ]);
-      } catch (timeoutError) {
-        console.warn('[LOGIN] checkAuth: Auth check timeout or error:', timeoutError.message);
-        // Try one more quick check
-        try {
-          user = window.FirebaseAuthManager?.getCurrentUser?.();
-          if (user) {
-            console.log('[LOGIN] checkAuth: Found user on retry');
-          }
-        } catch (retryError) {
-          console.warn('[LOGIN] checkAuth: Retry also failed:', retryError.message);
+        // Wait up to 10 seconds for Firebase to restore session
+        user = await waitForAuthReady(10000);
+        if (!user && window.FirebaseAuthManager?.isAuthReady?.()) {
+          // Auth is ready but no user - explicitly unauthenticated
+          console.log('[LOGIN] checkAuth: Firebase auth ready, no authenticated user');
+        } else if (!user) {
+          // Auth not ready yet - don't redirect, show login form
+          console.log('[LOGIN] checkAuth: Firebase auth not ready yet, showing login form');
+        }
+      } catch (error) {
+        console.warn('[LOGIN] checkAuth: Auth check error:', error.message);
+        // Fallback: check if auth is ready but user check failed
+        if (window.FirebaseAuthManager?.isAuthReady?.()) {
+          user = window.FirebaseAuthManager?.getCurrentUser?.() || null;
         }
       }
       
       const elapsed = Date.now() - startTime;
-      console.log(`[LOGIN] checkAuth: Auth check completed in ${elapsed}ms`);
+      console.log(`[LOGIN] checkAuth: Auth check completed in ${elapsed}ms, user:`, user ? user.email : 'null');
       
       if (user && user.email) {
         // Double-check logout intent before redirecting
@@ -495,10 +494,102 @@ document.addEventListener('DOMContentLoaded', async function() {
     } finally { loginInProgress = false; }
   });
   
-  // ===== LinkedIn SIGN-IN (NOT YET IMPLEMENTED) =====
-  linkedinSignInBtn?.addEventListener('click', function(e) {
+  // ===== LinkedIn SIGN-IN =====
+  linkedinSignInBtn?.addEventListener('click', async function(e) {
     e.preventDefault();
-    showError(loginError, 'LinkedIn sign-in coming soon! Please use Google or email/password.');
+    loginInProgress = true;
+    
+    // Show loading state
+    const originalText = this.textContent;
+    this.textContent = 'Signing in...';
+    this.disabled = true;
+    
+    // Fallback redirect timeout - ensures user always gets redirected even if something fails
+    let redirected = false;
+    const fallbackRedirectTimeout = setTimeout(() => {
+      if (!redirected && authManager.getCurrentUser()) {
+        console.log('⚠️ Fallback redirect triggered - redirecting to dashboard');
+        sessionStorage.removeItem('selectedPlan');
+        window.location.href = 'dashboard.html';
+      }
+    }, 8000); // 8 second timeout
+    
+    try {
+      // Call server-side start endpoint which handles state generation and LinkedIn redirect
+      const result = await authManager.signInWithLinkedIn();
+      
+      if (result.success) {
+        redirected = true;
+        clearTimeout(fallbackRedirectTimeout);
+        
+        // Route based on selected plan (only if freshly selected from pricing page)
+        let storedPlan = null;
+        let isFreshSelection = false;
+        try {
+          const stored = sessionStorage.getItem('selectedPlan');
+          if (stored) {
+            const data = JSON.parse(stored);
+            storedPlan = data.planId;
+            const timestamp = data.timestamp || 0;
+            isFreshSelection = Date.now() - timestamp < 5 * 60 * 1000; // 5 minutes
+          }
+        } catch (e) {}
+        
+        // Only use the plan if it was freshly selected
+        const plan = isFreshSelection ? (selectedPlan || storedPlan || 'free') : 'free';
+        
+        // Show loading state with smooth transition
+        document.body.style.opacity = '0.7';
+        document.body.style.transition = 'opacity 0.3s ease';
+        this.textContent = 'Redirecting...';
+        
+        // Longer delay to ensure auth state is fully persisted
+        await new Promise(resolve => setTimeout(resolve, 500));
+        
+        if (planRequiresPayment(plan)) {
+          // Start server-driven checkout; trial requires card
+          try {
+            const idToken = await authManager.getCurrentUser()?.getIdToken?.(true); // Force refresh
+            const res = await fetch('/api/stripe-checkout', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}) },
+              body: JSON.stringify({ plan, startTrial: plan === 'trial' })
+            });
+            const data = await res.json();
+            if (data && data.ok && data.url) { 
+              console.log('🚀 Redirecting to Stripe checkout:', data.url);
+              window.location.href = data.url; 
+              return; 
+            }
+          } catch (error) {
+            console.error('Checkout error:', error);
+          }
+          window.location.href = 'pricing-a.html';
+        } else {
+          // Existing user or free plan -> take user to dashboard
+          sessionStorage.removeItem('selectedPlan');
+          console.log('🚀 Redirecting to dashboard (existing user or free plan)');
+          window.location.href = 'dashboard.html';
+        }
+      } else if (result.error) {
+        clearTimeout(fallbackRedirectTimeout);
+        // Show error (but not if user just closed popup)
+        showError(loginError, result.error);
+        this.textContent = originalText;
+        this.disabled = false;
+      } else {
+        clearTimeout(fallbackRedirectTimeout);
+        // Silent failure (user closed popup)
+        this.textContent = originalText;
+        this.disabled = false;
+      }
+    } catch (error) {
+      clearTimeout(fallbackRedirectTimeout);
+      console.error('LinkedIn sign-in error:', error);
+      showError(loginError, 'An unexpected error occurred. Please try again.');
+      this.textContent = originalText;
+      this.disabled = false;
+    } finally { loginInProgress = false; }
   });
   
   // ===== EMAIL/PASSWORD LOGIN =====

@@ -1,5 +1,5 @@
 import { getBearer, verifyFirebaseIdToken } from '../_lib/firebase-auth.js';
-import { isTrialEligible } from '../_lib/db.js';
+import { isTrialEligible, getUserPlanData } from '../_lib/db.js';
 export async function onRequest(context) {
   const { request, env } = context;
   const origin = request.headers.get('Origin') || '';
@@ -94,17 +94,37 @@ export async function onRequest(context) {
       return json({ ok: false, error: 'Invalid plan' }, 400, origin, env);
     }
 
-    // Reuse or create customer
+    // Step 1: Try KV (cache)
     let customerId = null;
     try {
       customerId = await env.JOBHACKAI_KV?.get(kvCusKey(uid));
     } catch (kvError) {
       console.log('🟡 [CHECKOUT] KV read error (non-fatal)', kvError?.message || kvError);
-      // Continue without cached customer ID - will create new one
     }
     
+    // Step 2: If KV miss, try D1 (authoritative)
     if (!customerId) {
-      console.log('🔵 [CHECKOUT] Creating Stripe customer for uid', uid);
+      console.log('🟡 [CHECKOUT] No customer in KV for uid', uid);
+      try {
+        const userPlan = await getUserPlanData(env, uid);
+        if (userPlan?.stripeCustomerId) {
+          customerId = userPlan.stripeCustomerId;
+          console.log('✅ [CHECKOUT] Found customer ID in D1:', customerId);
+          // Cache it in KV for next time
+          try {
+            await env.JOBHACKAI_KV?.put(kvCusKey(uid), customerId);
+          } catch (kvWriteError) {
+            console.log('🟡 [CHECKOUT] KV cache write error (non-fatal)', kvWriteError?.message || kvWriteError);
+          }
+        }
+      } catch (d1Error) {
+        console.warn('⚠️ [CHECKOUT] D1 lookup failed (non-fatal):', d1Error?.message || d1Error);
+      }
+    }
+    
+    // Step 3: Only create new Stripe customer if both KV and D1 are missing
+    if (!customerId) {
+      console.log('🔵 [CHECKOUT] Creating new Stripe customer for uid', uid);
       try {
         const res = await stripe(env, '/customers', {
           method: 'POST',
