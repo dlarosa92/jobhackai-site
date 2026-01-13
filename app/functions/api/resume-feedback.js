@@ -623,10 +623,14 @@ export async function onRequest(context) {
       console.log('[RESUME-FEEDBACK] Re-scoring resume (no valid D1 scores found after retries)', { requestId });
       
       // Get rule-based scores first (for AI context) - includes new grammar engine
+      const metadata = {
+        isMultiColumn: resumeData.isMultiColumn,
+        previousScore: resumeSession?.ats_score ?? null
+      };
       ruleBasedScores = await scoreResume(
         resumeData.text,
         normalizedJobTitle,
-        { isMultiColumn: resumeData.isMultiColumn },
+        metadata,
         env
       );
       

@@ -130,7 +130,7 @@ function safeQualityPrefix(quality) {
  * @returns {Promise<Object>} Score breakdown
  */
 export async function scoreResume(resumeText, jobTitle, metadata = {}, env) {
-  const { isMultiColumn = false, extractionHint = null } = metadata;
+  const { isMultiColumn = false, extractionHint = null, previousScore = null } = metadata;
   
   // Normalize job title for keyword matching
   const normalizedJobTitle = normalizeJobTitle(jobTitle);
@@ -183,7 +183,22 @@ export async function scoreResume(resumeText, jobTitle, metadata = {}, env) {
   };
   
   // Calculate overall score using shared helper
-  const overallScore = calcOverallScore(scores);
+  const rawOverallScore = calcOverallScore(scores);
+  const semanticScore =
+    keywordScore.score +
+    structureScore.score +
+    toneScore.score +
+    grammarScore.score;
+  const formattingPenalty = Math.max(0, 20 - formattingScore.score);
+
+  // Enforce invariant: formatting can warn but never push the final score below semantic / prior values.
+  let finalScore = Math.max(rawOverallScore, semanticScore);
+  if (typeof previousScore === 'number' && !Number.isNaN(previousScore)) {
+    // Preserve existing upper bound (100) while honoring prior performance.
+    const normalizedPrev = Math.max(0, Math.min(100, Math.round(previousScore)));
+    finalScore = Math.max(finalScore, normalizedPrev);
+  }
+  finalScore = Math.min(100, finalScore);
   
   return {
     keywordScore: {
@@ -212,7 +227,10 @@ export async function scoreResume(resumeText, jobTitle, metadata = {}, env) {
       feedback: grammarScore.feedback,
       flaggedTerms
     },
-    overallScore,
+    overallScore: finalScore,
+    finalScore,
+    semanticScore,
+    formattingPenalty,
     roleFamily,
     extractionQuality,
     detectedHeadings: detectSectionHeadings(resumeText),
