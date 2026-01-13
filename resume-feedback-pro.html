@@ -3463,15 +3463,14 @@ let cachedScore = null;
               return;
             }
             
-            const jobTitleInput = document.getElementById('rf-job-title');
-            const jobTitle = jobTitleInput?.value?.trim() || '';
+            const canonicalJobTitle = getCanonicalJobTitle();
             
             try {
               showLoadingState('Optimizing for ATS compliance…');
               this.disabled = true;
               this.textContent = 'Optimizing...';
               
-              const feedbackResult = await getResumeFeedbackWithAtsWait(currentResumeId, jobTitle, null);
+              const feedbackResult = await getResumeFeedbackWithAtsWait(currentResumeId, canonicalJobTitle, null);
               
               // Update history with new session (D1-backed)
               if (window.JobHackAIHistory && feedbackResult.sessionId) {
@@ -3528,7 +3527,7 @@ let cachedScore = null;
                 if (cachedScore && cachedScore.resumeId === currentResumeId) {
                   window.JobHackAIStatePersistence.saveATSScore({
                     ...cachedScore,
-                    jobTitle: jobTitle || null,
+                    jobTitle: canonicalJobTitle || null,
                     roleSpecificFeedback: feedbackResult.roleSpecificFeedback || null,
                     extractionQuality: cachedScore.extractionQuality
                   });
