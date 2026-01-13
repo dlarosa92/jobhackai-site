@@ -4230,6 +4230,27 @@ let cachedScore = null;
             const feedbackResult = feedbackSettled.value;
             if (!isActiveFeedbackToken(feedbackRunToken)) {
               console.warn('[RESUME-FEEDBACK] Stale feedback response ignored (token mismatch).');
+              // If the active token has been cleared (e.g. user reset or role change),
+              // perform UI cleanup so the user isn't left with disabled controls or loading overlays.
+              if (!window.__rfActiveFeedbackToken) {
+                try {
+                  if (window._currentFeedbackLoading) {
+                    try { window._currentFeedbackLoading(); } catch (e) { /* ignore */ }
+                    window._currentFeedbackLoading = null;
+                  }
+                  if (window._rfToast && window._rfToast.currentId === 'rf:analysis-running' && window._rfToast.currentToast) {
+                    try { if (typeof window._rfToast.currentToast.dismiss === 'function') window._rfToast.currentToast.dismiss(); } catch (e) { /* ignore */ }
+                  }
+                  const generateBtn = document.getElementById('rf-generate-btn');
+                  if (generateBtn) generateBtn.disabled = false;
+                  const regenBtn = document.getElementById('rf-regenerate-btn');
+                  if (regenBtn) { regenBtn.disabled = false; regenBtn.textContent = 'Regenerate Feedback'; }
+                  try { hideLoadingState(); } catch (e) { /* ignore */ }
+                } catch (cleanupErr) {
+                  console.warn('[RESUME-FEEDBACK] Cleanup after stale feedback ignored failed', cleanupErr);
+                }
+              }
+              return;
             } else {
               try {
                 // Update activeRunId with sessionId if available (for proper toast gating)
@@ -4896,6 +4917,25 @@ let cachedScore = null;
             const feedbackResult = feedbackSettled.value;
             if (!isActiveFeedbackToken(feedbackRunToken)) {
               console.warn('[RESUME-FEEDBACK] Stale regen feedback ignored (token mismatch).');
+              // If the token was cleared (user reset/role change), ensure UI cleanup so controls aren't stuck.
+              if (!window.__rfActiveFeedbackToken) {
+                try {
+                  if (window._currentFeedbackLoading) {
+                    try { window._currentFeedbackLoading(); } catch (e) { /* ignore */ }
+                    window._currentFeedbackLoading = null;
+                  }
+                  if (window._rfToast && window._rfToast.currentId === 'rf:analysis-running' && window._rfToast.currentToast) {
+                    try { if (typeof window._rfToast.currentToast.dismiss === 'function') window._rfToast.currentToast.dismiss(); } catch (e) { /* ignore */ }
+                  }
+                  const generateBtn = document.getElementById('rf-generate-btn');
+                  if (generateBtn) generateBtn.disabled = false;
+                  const regenBtn = document.getElementById('rf-regenerate-btn');
+                  if (regenBtn) { regenBtn.disabled = false; regenBtn.textContent = 'Regenerate Feedback'; }
+                  try { hideLoadingState(); } catch (e) { /* ignore */ }
+                } catch (cleanupErr) {
+                  console.warn('[RESUME-FEEDBACK] Cleanup after stale regen feedback ignored failed', cleanupErr);
+                }
+              }
               return;
             } else {
               if (window._rfToast && feedbackResult.sessionId) {
