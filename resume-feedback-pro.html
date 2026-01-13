@@ -4261,83 +4261,30 @@ let cachedScore = null;
               // This ensures progressive display: ATS first, then feedback
               
               // Update role-specific tips state
-              const hasAtsScore = atsScoringSucceeded;
+              const hasAtsScore = !!(atsSettled.status === 'fulfilled' && atsSettled.value && atsSettled.value.success);
               updateRoleTipsState({
                 hasAtsScore,
                 roleSpecificFeedback: feedbackResult.roleSpecificFeedback || null
               });
               
-              // Save role-specific feedback to persistence
-              if (window.JobHackAIStatePersistence && atsScoringSucceeded) {
-                // Use ATS score result if available, otherwise reconstruct
-                const finalScore = atsScoringSucceeded ? 
-                  (atsSettled.status === 'fulfilled' ? atsSettled.value.score : 0) : 0;
-                const finalBreakdown = atsScoringSucceeded && atsSettled.status === 'fulfilled' ?
-                  atsSettled.value.breakdown : {};
-                
-                // Reconstruct breakdown from atsRubric to ensure feedback is included
-                let finalBreakdownWithFeedback = { ...finalBreakdown };
-                
-                if (feedbackResult.atsRubric && Array.isArray(feedbackResult.atsRubric)) {
-                  const reconstructedBreakdown = {};
-                  
-                  feedbackResult.atsRubric.forEach(item => {
-                    const category = (item.category || item.label || '').toLowerCase();
-                    const score = item.score || 0;
-                    const max = item.max || 0;
-                    const feedback = item.feedback || item.tip || '';
-                    
-                    if (category.includes('keyword')) {
-                      reconstructedBreakdown.keywordScore = { 
-                        score, 
-                        max: 40, 
-                        feedback: feedback || finalBreakdown.keywordScore?.feedback || '' 
-                      };
-                    } else if (category.includes('format')) {
-                      reconstructedBreakdown.formattingScore = { 
-                        score, 
-                        max: 20, 
-                        feedback: feedback || finalBreakdown.formattingScore?.feedback || '' 
-                      };
-                    } else if ((category.includes('structure') || category.includes('section'))) {
-                      reconstructedBreakdown.structureScore = { 
-                        score, 
-                        max: 15, 
-                        feedback: feedback || finalBreakdown.structureScore?.feedback || '' 
-                      };
-                    } else if ((category.includes('tone') || category.includes('clarity'))) {
-                      reconstructedBreakdown.toneScore = { 
-                        score, 
-                        max: 15, 
-                        feedback: feedback || finalBreakdown.toneScore?.feedback || '' 
-                      };
-                    } else if ((category.includes('grammar') || category.includes('spelling'))) {
-                      reconstructedBreakdown.grammarScore = { 
-                        score, 
-                        max: 10, 
-                        feedback: feedback || finalBreakdown.grammarScore?.feedback || '' 
-                      };
-                    }
-                  });
-                  
-                  finalBreakdownWithFeedback = {
-                    ...finalBreakdown,
-                    ...reconstructedBreakdown
-                  };
-                }
-                
-                if (window.JobHackAIStatePersistence && atsScoringSucceeded) {
-                  const cachedScore = window.JobHackAIStatePersistence.loadATSScore(null);
-                  if (cachedScore && cachedScore.resumeId === uploadResult.resumeId) {
-                    const persistedJobTitle = canonicalJobTitle || cachedScore.jobTitle || null;
-                    window.JobHackAIStatePersistence.saveATSScore({
-                      ...cachedScore,
-                      jobTitle: persistedJobTitle,
-                      roleSpecificFeedback: feedbackResult.roleSpecificFeedback || null,
-                      timestamp: Date.now()
-                    });
-                  }
-                }
+              // Save role-specific feedback to persistence without depending on ATS handler ordering.
+              // Numeric ATS scores remain single-source (persisted by getAtsScore()).
+              const persistRoleFeedbackIfPossible = () => {
+                if (!window.JobHackAIStatePersistence) return;
+                const cachedScore = window.JobHackAIStatePersistence.loadATSScore(null);
+                if (!cachedScore || cachedScore.resumeId !== uploadResult.resumeId) return;
+                const persistedJobTitle = canonicalJobTitle || cachedScore.jobTitle || null;
+                window.JobHackAIStatePersistence.saveATSScore({
+                  ...cachedScore,
+                  jobTitle: persistedJobTitle,
+                  roleSpecificFeedback: feedbackResult.roleSpecificFeedback || null,
+                  timestamp: Date.now()
+                });
+              };
+              persistRoleFeedbackIfPossible();
+              // If ATS persistence lands slightly later, retry once after ATS settles.
+              if (typeof atsPromise?.finally === 'function') {
+                atsPromise.finally(persistRoleFeedbackIfPossible);
               }
             
               // Trigger fade transition for role feedback
@@ -5156,6 +5103,12 @@ let cachedScore = null;
       return div.innerHTML;
     }
 
+    // Escape for use inside double-quoted HTML attribute values.
+    // escapeHtml() does not escape double quotes, so we must.
+    function escapeHtmlAttr(text) {
+      return escapeHtml(text).replace(/"/g, '&quot;');
+    }
+
     function formatRewriteChangeSummary(summary) {
       if (!summary) return '';
       if (typeof summary === 'string') return summary;
@@ -5203,10 +5156,11 @@ let cachedScore = null;
         const scoreDisplay = (item.score === undefined || item.score === null) ? '— / —' : `${item.score} / ${item.max}`;
         const formattedTip = formatTip(item);
         const safeTip = escapeHtml(formattedTip);
+        const safeTipAttr = escapeHtmlAttr(formattedTip);
         div.innerHTML = `
           <div class="rf-rubric-label">${escapeHtml(item.label)}</div>
           <div class="rf-rubric-score">${escapeHtml(scoreDisplay)}</div>
-          <div class="rf-rubric-tip" data-rubric-tip data-base-tip="${safeTip}" style="color:var(--color-text-secondary);font-size:0.98rem;">${safeTip}</div>
+          <div class="rf-rubric-tip" data-rubric-tip data-base-tip="${safeTipAttr}" style="color:var(--color-text-secondary);font-size:0.98rem;">${safeTip}</div>
         `;
         grid.appendChild(div);
       });
