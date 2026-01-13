@@ -4,20 +4,17 @@
 
 import { getBearer, verifyFirebaseIdToken } from '../_lib/firebase-auth.js';
 import { generateATSFeedback } from '../_lib/openai-client.js';
-import { scoreResume } from '../_lib/ats-scoring-engine.js';
 import { getGrammarDiagnostics } from '../_lib/grammar-engine.js';
 import { errorResponse, successResponse, generateRequestId } from '../_lib/error-handler.js';
 import { sanitizeJobTitle, sanitizeResumeText, sanitizeResumeId } from '../_lib/input-sanitizer.js';
 import { validateAIFeedback, validateFeedbackResult, isValidFeedbackResult, normalizeRole, sanitizeRoleSpecificFeedback, isRoleSpecificFeedbackStrict } from '../_lib/feedback-validator.js';
-import { 
+import {
   getOrCreateUserByAuthId, 
   createResumeSession, 
   createFeedbackSession, 
   logUsageEvent,
   isD1Available,
-  updateResumeSessionAtsScore,
-  getResumeSessionByResumeId,
-  upsertResumeSessionWithScores
+  getResumeSessionByResumeId
 } from '../_lib/db.js';
 
 function corsHeaders(origin, env) {
@@ -547,27 +544,20 @@ export async function onRequest(context) {
 
     // Resume text is already validated by sanitizeResumeText (80,000 char limit)
 
-    // --- Try to load existing ruleBasedScores from D1 (source of truth) ---
-    // OPTIMIZATION: Add retry mechanism to handle race condition with /api/ats-score
-    // When both APIs run in parallel, /api/resume-feedback might check D1 before
-    // /api/ats-score finishes writing. Retries ensure we find the newly written scores.
+    // --- Load ruleBasedScores from D1 (authoritative) ---
     let ruleBasedScores = null;
+    resumeSession = null;
     if (d1User && isD1Available(env)) {
-      const maxRetries = 4; // 4 attempts = 3 waits × 200ms = 600ms max wait
-      const retryDelay = 200; // 200ms between retries (600ms max wait)
-      
+      const maxRetries = 4;
+      const retryDelay = 200;
       for (let attempt = 0; attempt < maxRetries; attempt++) {
         try {
           const existingSession = await getResumeSessionByResumeId(env, d1User.id, sanitizedResumeId);
-          if (existingSession) {
-            resumeSession = existingSession;
-          }
+          resumeSession = existingSession;
           
           if (existingSession?.rule_based_scores_json) {
             try {
               const parsed = JSON.parse(existingSession.rule_based_scores_json);
-              
-              // Validate structure (must have all required fields)
               const isValid = parsed &&
                 typeof parsed.overallScore === 'number' &&
                 parsed.keywordScore?.score !== undefined &&
@@ -575,7 +565,7 @@ export async function onRequest(context) {
                 parsed.structureScore?.score !== undefined &&
                 parsed.toneScore?.score !== undefined &&
                 parsed.grammarScore?.score !== undefined;
-              
+
               if (isValid) {
                 ruleBasedScores = parsed;
                 console.log('[RESUME-FEEDBACK] Reusing ruleBasedScores from D1', {
@@ -584,70 +574,44 @@ export async function onRequest(context) {
                   overallScore: ruleBasedScores.overallScore,
                   attempt: attempt + 1
                 });
-                break; // Found valid scores, exit retry loop
+                break;
               } else {
-                console.warn('[RESUME-FEEDBACK] Invalid ruleBasedScores structure in D1, will retry', {
+                console.warn('[RESUME-FEEDBACK] Invalid ruleBasedScores structure in D1, retrying', {
                   requestId,
                   attempt: attempt + 1
                 });
               }
             } catch (parseError) {
-              console.warn('[RESUME-FEEDBACK] Failed to parse ruleBasedScores from D1, will retry', {
+              console.warn('[RESUME-FEEDBACK] Failed to parse ruleBasedScores from D1, retrying', {
                 requestId,
                 error: parseError.message,
                 attempt: attempt + 1
               });
             }
           }
-          
-          // If scores not found and not last attempt, wait before retrying
-          if (!ruleBasedScores && attempt < maxRetries - 1) {
-            await new Promise(resolve => setTimeout(resolve, retryDelay));
-          }
         } catch (d1Error) {
-          // Non-blocking: continue without D1 lookup
           console.warn('[RESUME-FEEDBACK] D1 lookup failed (non-fatal), will retry:', {
             requestId,
             error: d1Error.message,
             attempt: attempt + 1
           });
-          if (attempt < maxRetries - 1) {
-            await new Promise(resolve => setTimeout(resolve, retryDelay));
-          }
+        }
+
+        if (!ruleBasedScores && attempt < maxRetries - 1) {
+          await new Promise(resolve => setTimeout(resolve, retryDelay));
         }
       }
     }
 
-    // Only re-score if we didn't find valid scores in D1 after retries
     if (!ruleBasedScores) {
-      console.log('[RESUME-FEEDBACK] Re-scoring resume (no valid D1 scores found after retries)', { requestId });
-      
-      // Get rule-based scores first (for AI context) - includes new grammar engine
-      const metadata = {
-        isMultiColumn: resumeData.isMultiColumn,
-        previousScore: resumeSession?.ats_score ?? null
-      };
-      ruleBasedScores = await scoreResume(
-        resumeData.text,
-        normalizedJobTitle,
-        metadata,
-        env
+      console.warn('[RESUME-FEEDBACK] ATS score not yet available in D1 for resumeId', { requestId, resumeId: sanitizedResumeId });
+      return errorResponse(
+        'Please wait for your ATS score to finish processing before requesting feedback.',
+        409,
+        origin,
+        env,
+        requestId
       );
-      
-      // Store in D1 for future reuse (best effort, non-blocking)
-      if (d1User && isD1Available(env)) {
-        try {
-          await upsertResumeSessionWithScores(env, d1User.id, {
-            resumeId: sanitizedResumeId,
-            role: normalizedJobTitle || null,
-            atsScore: ruleBasedScores.overallScore,
-            ruleBasedScores: ruleBasedScores
-          });
-          console.log('[RESUME-FEEDBACK] Stored re-scored ruleBasedScores in D1', { requestId });
-        } catch (d1Error) {
-          console.warn('[RESUME-FEEDBACK] Failed to store re-scored ruleBasedScores in D1 (non-fatal):', d1Error.message);
-        }
-      }
     }
 
   // Ensure extractionQuality is available for UI trust messaging (even when reusing older D1 scores)
@@ -1272,13 +1236,7 @@ export async function onRequest(context) {
           // Use overallScore from ruleBasedScores (already calculated with Math.round via calcOverallScore)
           // This ensures consistency with the score returned by the scoring engine
           const overallAtsScore = ruleBasedScores.overallScore ?? null;
-          
-          // Update session with ATS score if not already set
-          // Use loose equality to handle both null (from DB) and undefined (from createResumeSession RETURNING clause)
-          // This correctly handles score of 0 (falsy but valid)
-          if (overallAtsScore !== null && (resumeSession.ats_score == null)) {
-            await updateResumeSessionAtsScore(env, resumeSession.id, overallAtsScore);
-          }
+          // ATS score is canonical and written only by /api/ats-score.
           
           // Create feedback session with the full result
           // CRITICAL: Final defensive sanitization before D1 storage (result already sanitized, but double-check)
