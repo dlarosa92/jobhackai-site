@@ -3175,14 +3175,8 @@ let cachedScore = null;
               updateRubricGrid(rubric);
             }
 
-            if (cachedScore.roleSpecificFeedback) {
-              const isOldFormat = Array.isArray(cachedScore.roleSpecificFeedback) && cachedScore.roleSpecificFeedback.length > 0;
-              const isNewFormat = isValidRoleTips(cachedScore.roleSpecificFeedback);
-              if (isOldFormat || isNewFormat) {
-                updateFeedbackGrid(cachedScore.roleSpecificFeedback);
-              } else {
-                console.warn('[RESUME-FEEDBACK] Invalid roleSpecificFeedback format in cache:', typeof cachedScore.roleSpecificFeedback);
-              }
+            if (cachedScore.roleSpecificFeedback && !window.__rfActiveFeedbackToken) {
+              updateFeedbackGrid(cachedScore.roleSpecificFeedback, { allowLegacy: true });
               updateRoleTipsState({
                 hasAtsScore: true,
                 roleSpecificFeedback: cachedScore.roleSpecificFeedback || null
@@ -4005,6 +3999,9 @@ let cachedScore = null;
           // --- PARALLEL API CALLS: ATS Score + Feedback ---
           const canonicalJobTitleForApis = canonicalJobTitle;
 
+          const feedbackRunToken = createRunKey('feedback');
+          setActiveFeedbackToken(feedbackRunToken);
+
           // Start both API calls in parallel (ATS handles the numeric score)
           const atsPromise = getAtsScore(uploadResult.resumeId, canonicalJobTitleForApis);
           const feedbackPromise = (async () => {
@@ -4231,120 +4228,116 @@ let cachedScore = null;
           // --- Process Feedback Result (show when ready) ---
           if (feedbackSettled.status === 'fulfilled' && feedbackSettled.value) {
             const feedbackResult = feedbackSettled.value;
-            try {
-              // Update activeRunId with sessionId if available (for proper toast gating)
-              if (window._rfToast && feedbackResult.sessionId) {
-                window._rfToast.activeRunId = feedbackResult.sessionId;
-              }
-              
-              // Update history with new session (D1-backed)
-              if (window.JobHackAIHistory && feedbackResult.sessionId) {
-                window.JobHackAIHistory.addItem(feedbackResult.sessionId, feedbackResult.meta);
-              }
-              
-              // Store latest feedback results for rewrite calls
-              if (feedbackResult.atsIssues) {
-                window.latestAtsIssues = feedbackResult.atsIssues;
-              }
-              if (feedbackResult.roleSpecificFeedback) {
-                window.latestRoleSpecific = feedbackResult.roleSpecificFeedback;
-              }
-              
-              updateFeedbackGrid(feedbackResult.roleSpecificFeedback);
-              applyFeedbackTipsToRubric(feedbackResult.atsRubric);
-              
-              // Hide feedback skeleton now that real content is ready
-              hideFeedbackSkeleton();
-              
-              // Feedback content container is already visible from ATS success handler
-              // This ensures progressive display: ATS first, then feedback
-              
-              // Update role-specific tips state
-              const hasAtsScore = !!(atsSettled.status === 'fulfilled' && atsSettled.value && atsSettled.value.success);
-              updateRoleTipsState({
-                hasAtsScore,
-                roleSpecificFeedback: feedbackResult.roleSpecificFeedback || null
-              });
-              
-              // Save role-specific feedback to persistence without depending on ATS handler ordering.
-              // Numeric ATS scores remain single-source (persisted by getAtsScore()).
-              const persistRoleFeedbackIfPossible = () => {
-                if (!window.JobHackAIStatePersistence) return;
-                const cachedScore = window.JobHackAIStatePersistence.loadATSScore(null);
-                if (!cachedScore || cachedScore.resumeId !== uploadResult.resumeId) return;
-                const persistedJobTitle = canonicalJobTitle || cachedScore.jobTitle || null;
-                window.JobHackAIStatePersistence.saveATSScore({
-                  ...cachedScore,
-                  jobTitle: persistedJobTitle,
-                  roleSpecificFeedback: feedbackResult.roleSpecificFeedback || null,
-                  timestamp: Date.now()
+            if (!isActiveFeedbackToken(feedbackRunToken)) {
+              console.warn('[RESUME-FEEDBACK] Stale feedback response ignored (token mismatch).');
+            } else {
+              try {
+                // Update activeRunId with sessionId if available (for proper toast gating)
+                if (window._rfToast && feedbackResult.sessionId) {
+                  window._rfToast.activeRunId = feedbackResult.sessionId;
+                }
+                
+                // Update history with new session (D1-backed)
+                if (window.JobHackAIHistory && feedbackResult.sessionId) {
+                  window.JobHackAIHistory.addItem(feedbackResult.sessionId, feedbackResult.meta);
+                }
+                
+                if (feedbackResult.atsIssues) {
+                  window.latestAtsIssues = feedbackResult.atsIssues;
+                }
+                if (feedbackResult.roleSpecificFeedback) {
+                  window.latestRoleSpecific = feedbackResult.roleSpecificFeedback;
+                }
+
+                const feedbackGrid = document.getElementById('rf-feedback-grid');
+                if (feedbackGrid) {
+                  feedbackGrid.innerHTML = '';
+                  if (feedbackGrid.dataset) {
+                    delete feedbackGrid.dataset.placeholder;
+                  }
+                }
+
+                updateFeedbackGrid(feedbackResult.roleSpecificFeedback, { token: feedbackRunToken });
+                applyFeedbackTipsToRubric(feedbackResult.atsRubric);
+                hideFeedbackSkeleton();
+
+                const hasAtsScore = !!(atsSettled.status === 'fulfilled' && atsSettled.value && atsSettled.value.success);
+                updateRoleTipsState({
+                  hasAtsScore,
+                  roleSpecificFeedback: feedbackResult.roleSpecificFeedback || null
                 });
-              };
-              persistRoleFeedbackIfPossible();
-              // If ATS persistence lands slightly later, retry once after ATS settles.
-              if (typeof atsPromise?.finally === 'function') {
-                atsPromise.finally(persistRoleFeedbackIfPossible);
+
+                const persistRoleFeedbackIfPossible = () => {
+                  if (!window.JobHackAIStatePersistence) return;
+                  const cachedScore = window.JobHackAIStatePersistence.loadATSScore(null);
+                  if (!cachedScore || cachedScore.resumeId !== uploadResult.resumeId) return;
+                  const persistedJobTitle = canonicalJobTitle || cachedScore.jobTitle || null;
+                  window.JobHackAIStatePersistence.saveATSScore({
+                    ...cachedScore,
+                    jobTitle: persistedJobTitle,
+                    roleSpecificFeedback: feedbackResult.roleSpecificFeedback || null,
+                    timestamp: Date.now()
+                  });
+                };
+                persistRoleFeedbackIfPossible();
+                if (typeof atsPromise?.finally === 'function') {
+                  atsPromise.finally(persistRoleFeedbackIfPossible);
+                }
+
+                setTimeout(() => {
+                  showRoleFeedback();
+                }, 100);
+
+                const toastStatus = toastForAtsAndTips({
+                  atsOk: atsScoringSucceeded,
+                  tips: feedbackResult.roleSpecificFeedback,
+                  suppressSuccess: atsExtractionWarned
+                });
+                if (toastStatus === 'tips_ok' || toastStatus === 'tips_only') {
+                  setRoleStatus('Role-specific tips updated.');
+                } else if (toastStatus === 'ats_only') {
+                  setRoleStatus('');
+                } else if (toastStatus === 'missing') {
+                  setRoleStatus('');
+                }
+              } catch (feedbackError) {
+                console.error('[RESUME-FEEDBACK] Error processing feedback result:', feedbackError);
+                
+                updateRoleTipsState({
+                  hasAtsScore: !!atsScoringSucceeded,
+                  roleSpecificFeedback: null
+                });
               }
-            
-              // Trigger fade transition for role feedback
-              setTimeout(() => {
-                showRoleFeedback();
-              }, 100);
               
-              // Truthful toast + inline status based on ATS/tips state
-              const toastStatus = toastForAtsAndTips({
-                atsOk: atsScoringSucceeded,
-                tips: feedbackResult.roleSpecificFeedback,
-                // If we showed a low-extraction warning, avoid stacking a success toast on top.
-                suppressSuccess: atsExtractionWarned
-              });
-              if (toastStatus === 'tips_ok' || toastStatus === 'tips_only') {
-                setRoleStatus('Role-specific tips updated.');
-              } else if (toastStatus === 'ats_only') {
-                // Don't set status - let updateRoleTipsState handle the message in description area
-                setRoleStatus(''); // Clear status, description area will show helpful message
-            } else if (toastStatus === 'missing') {
-                // Don't set status - let updateRoleTipsState handle the message in description area
-                setRoleStatus(''); // Clear status, description area will show helpful message
-              }
-            } catch (feedbackError) {
-              console.error('[RESUME-FEEDBACK] Error processing feedback result:', feedbackError);
-              
-              // Ensure helpful message is shown in description area even if processing fails
-              updateRoleTipsState({
-                hasAtsScore: !!atsScoringSucceeded,
-                roleSpecificFeedback: null
-              });
-              
-              // Don't show error modal - ATS score is already visible, feedback is optional
+              // Clear feedback token after successful processing
+              clearActiveFeedbackToken();
             }
           } else if (feedbackSettled.status === 'rejected') {
-            // Feedback failed - log but don't block (ATS score is already shown)
             const error = feedbackSettled.reason;
+            if (isFeedbackNotReadyError(error)) {
+              console.warn('[RESUME-FEEDBACK] Feedback still processing - keeping skeleton.', error);
+              return;
+            }
+
             console.warn('[RESUME-FEEDBACK] Feedback generation failed (non-blocking):', error);
-            
-            // Clear status - updateRoleTipsState will handle messaging and container visibility
-            setRoleStatus(''); 
+
+            setRoleStatus('');
 
             updateRoleTipsState({
               hasAtsScore: !!atsScoringSucceeded,
               roleSpecificFeedback: null
             });
 
-            // Use handleApiError to check for upgradeRequired and show appropriate modal
-            // For non-upgrade errors, show feedback-specific messaging
             handleApiError(error, {
               title: 'Feedback Generation Failed',
               message: 'Failed to generate feedback. Your ATS score is still available.'
             });
-            
-            // Clean up feedback loading overlay on feedback failure
+
             if (window._currentFeedbackLoading) {
               window._currentFeedbackLoading();
               window._currentFeedbackLoading = null;
             }
-            
-            // Dismiss "Analysis still running" toast if it exists
+
             if (window._rfToast && window._rfToast.currentId === 'rf:analysis-running' && window._rfToast.currentToast) {
               try {
                 if (typeof window._rfToast.currentToast.dismiss === 'function') {
@@ -4353,12 +4346,10 @@ let cachedScore = null;
               } catch (e) { /* ignore */ }
             }
             
-            // Feedback failed, but ATS scoring may have succeeded
+            // Clear feedback token after error handling (but not for 409/not-ready errors)
+            clearActiveFeedbackToken();
           } else {
-            // Free plan - no feedback
             hideRoleFeedback();
-            
-            // Free plan - ATS scoring may have succeeded
           }
           
           // Hide "Generating AI feedback..." overlay when both API calls complete
@@ -4470,6 +4461,9 @@ let cachedScore = null;
             generateBtn.disabled = !fileStillExists;
           }
           hideLoadingState();
+          
+          // Clear feedback token at end of Promise.allSettled processing
+          clearActiveFeedbackToken();
         } catch (error) {
           // Restore credit ONLY if ATS scoring failed (not for post-scoring errors)
           // If scoring succeeded but UI/feedback generation failed, user already got value
@@ -4735,6 +4729,8 @@ let cachedScore = null;
             }
 
             // Start ATS (if role changed) and feedback in parallel
+            const feedbackRunToken = createRunKey('feedback');
+            setActiveFeedbackToken(feedbackRunToken);
             const atsPromise = roleChanged ? getAtsScore(currentResumeId, canonicalJobTitle) : Promise.resolve(null);
             const feedbackPromise = getResumeFeedbackWithAtsWait(currentResumeId, canonicalJobTitle, atsPromise);
             let roleAtsExtractionWarned = false;
@@ -4818,8 +4814,12 @@ let cachedScore = null;
 
             if (feedbackSettled.status !== 'fulfilled' || !feedbackSettled.value) {
               // Feedback failed - log but don't block (ATS score may be shown)
-              const error = feedbackSettled.status === 'rejected' ? feedbackSettled.reason : new Error('No feedback result');
-              console.warn('[RESUME-FEEDBACK] Feedback generation failed (non-blocking):', error);
+            const error = feedbackSettled.status === 'rejected' ? feedbackSettled.reason : new Error('No feedback result');
+            if (isFeedbackNotReadyError(error)) {
+              console.warn('[RESUME-FEEDBACK] Feedback still processing - keeping skeleton.', error);
+              return;
+            }
+            console.warn('[RESUME-FEEDBACK] Feedback generation failed (non-blocking):', error);
               // Clear status - updateRoleTipsState will handle messaging and container visibility
               setRoleStatus(''); 
 
@@ -4844,42 +4844,50 @@ let cachedScore = null;
               this.textContent = 'Regenerate Feedback';
               this.disabled = false;
               hideLoadingState();
+              
+              // Clear feedback token after error handling (but not for 409/not-ready errors)
+              clearActiveFeedbackToken();
               return;
             }
 
             const feedbackResult = feedbackSettled.value;
-            
-            // Update activeRunId with sessionId if available (for proper toast gating)
-            if (window._rfToast && feedbackResult.sessionId) {
-              window._rfToast.activeRunId = feedbackResult.sessionId;
-            }
-            
-            // Update history with new session (D1-backed)
-            if (window.JobHackAIHistory && feedbackResult.sessionId) {
-              window.JobHackAIHistory.addItem(feedbackResult.sessionId, feedbackResult.meta);
-            }
-            
-            updateFeedbackGrid(feedbackResult.roleSpecificFeedback);
-            applyFeedbackTipsToRubric(feedbackResult.atsRubric);
-            
-            // CRITICAL: Ensure feedback content is visible after feedback is generated (Pro & Premium)
-            const feedbackContentEl = document.getElementById('rf-feedback-content');
-            const userPlanCheck = getCurrentUserPlan();
-            if (feedbackContentEl && ['pro', 'premium'].includes(userPlanCheck)) {
-              feedbackContentEl.style.display = 'block';
-            }
+            if (!isActiveFeedbackToken(feedbackRunToken)) {
+              console.warn('[RESUME-FEEDBACK] Stale regen feedback ignored (token mismatch).');
+            } else {
+              if (window._rfToast && feedbackResult.sessionId) {
+                window._rfToast.activeRunId = feedbackResult.sessionId;
+              }
+              if (window.JobHackAIHistory && feedbackResult.sessionId) {
+                window.JobHackAIHistory.addItem(feedbackResult.sessionId, feedbackResult.meta);
+              }
 
-            // Load cached score to check if ATS score exists (must be loaded before use)
-            let cachedScore = null;
-            if (window.JobHackAIStatePersistence) {
-              cachedScore = window.JobHackAIStatePersistence.loadATSScore(null);
-            }
-            
-            const hasAtsScore = !!(scoreResult?.success || cachedScore?.score);
-            updateRoleTipsState({
-              hasAtsScore,
-              roleSpecificFeedback: feedbackResult.roleSpecificFeedback || null
-            });
+              const feedbackGrid = document.getElementById('rf-feedback-grid');
+              if (feedbackGrid) {
+                feedbackGrid.innerHTML = '';
+                if (feedbackGrid.dataset) {
+                  delete feedbackGrid.dataset.placeholder;
+                }
+              }
+
+              updateFeedbackGrid(feedbackResult.roleSpecificFeedback, { token: feedbackRunToken });
+              applyFeedbackTipsToRubric(feedbackResult.atsRubric);
+
+              const feedbackContentEl = document.getElementById('rf-feedback-content');
+              const userPlanCheck = getCurrentUserPlan();
+              if (feedbackContentEl && ['pro', 'premium'].includes(userPlanCheck)) {
+                feedbackContentEl.style.display = 'block';
+              }
+
+              let cachedScore = null;
+              if (window.JobHackAIStatePersistence) {
+                cachedScore = window.JobHackAIStatePersistence.loadATSScore(null);
+              }
+              
+              const hasAtsScore = !!(scoreResult?.success || cachedScore?.score);
+              updateRoleTipsState({
+                hasAtsScore,
+                roleSpecificFeedback: feedbackResult.roleSpecificFeedback || null
+              });
 
             // Clear target role ONLY after a successful new analysis. History clicks must NOT change this input.
             const jobTitleInput = document.getElementById('rf-job-title');
@@ -4912,6 +4920,10 @@ let cachedScore = null;
                 });
               }
             }
+            
+            // Clear feedback token after successful processing
+            clearActiveFeedbackToken();
+            }
         // Do NOT restore job title from cache; must be explicitly provided each run.
 
             const toastStatus = toastForAtsAndTips({
@@ -4933,6 +4945,9 @@ let cachedScore = null;
             this.textContent = 'Regenerate Feedback';
             this.disabled = false;
             hideLoadingState();
+            
+            // Clear feedback token at end of Promise.allSettled processing
+            clearActiveFeedbackToken();
           } catch (error) {
             handleApiError(error);
             this.textContent = 'Regenerate Feedback';
@@ -5061,6 +5076,31 @@ let cachedScore = null;
       return true;
     }
 
+    // Feedback run authority token lifecycle:
+    // - Set at the start of a generate/regenerate run
+    // - Used to prevent stale or parallel async responses from mutating the UI
+    // - Cleared when the run finishes (success or non-retryable error)
+    // - Also cleared when score/role authority is reset (new resume, role change, reset)
+    // IMPORTANT: Token must not persist after a run completes, or cached/legacy
+    // feedback may be suppressed and duplicate renders may occur.
+    // Feedback render authority token (prevents stale renders from overwriting the UI)
+    let activeFeedbackRunToken = null;
+
+    function setActiveFeedbackToken(token) {
+      activeFeedbackRunToken = token;
+      window.__rfActiveFeedbackToken = token;
+    }
+
+    function clearActiveFeedbackToken() {
+      activeFeedbackRunToken = null;
+      window.__rfActiveFeedbackToken = null;
+    }
+
+    function isActiveFeedbackToken(token) {
+      if (!token) return false;
+      return window.__rfActiveFeedbackToken && token === window.__rfActiveFeedbackToken;
+    }
+
     function clearScoreAuthority(reason) {
       if (typeof clearRunAuthority === 'function') {
         clearRunAuthority();
@@ -5073,6 +5113,7 @@ let cachedScore = null;
       }
       resetAtsAndRoleUIToDefaults();
       setRoleStatus('');
+      clearActiveFeedbackToken();
       if (reason && reason !== '' && runAuthorityDebug) {
         console.debug('[RUN-AUTHORITY] Cleared authority due to', reason);
       }
@@ -5127,10 +5168,20 @@ let cachedScore = null;
       return String(summary);
     }
 
+    function isFeedbackNotReadyError(error) {
+      if (!error) return false;
+      if (error.status === 409) return true;
+      const msg = String(error.message || '').toLowerCase();
+      return /(not ready|still running|processing|analysis)/.test(msg);
+    }
+
     function updateRubricGrid(rubric) {
       const grid = document.getElementById('rf-rubric-grid');
       if (!grid) return;
       grid.innerHTML = '';
+      if (grid.dataset) {
+        delete grid.dataset.placeholder;
+      }
 
       const formatTip = (item) => {
         const baseTip = item.tip || item.feedback || '';
@@ -5366,10 +5417,25 @@ let cachedScore = null;
       }
     }
 
-    function updateFeedbackGrid(roleSpecificFeedback) {
+    function updateFeedbackGrid(roleSpecificFeedback, options = {}) {
+      const { allowLegacy = false, token = null } = options;
       const grid = document.getElementById('rf-feedback-grid');
       if (!grid) return;
-      
+      if (token && !isActiveFeedbackToken(token)) return;
+
+      const liveRunInProgress = Boolean(window.__rfActiveFeedbackToken);
+      const isLegacyStringFormat =
+        typeof roleSpecificFeedback === 'string' ||
+        (Array.isArray(roleSpecificFeedback) && roleSpecificFeedback.every(item => typeof item === 'string'));
+
+      if (isLegacyStringFormat && !allowLegacy && liveRunInProgress) {
+        if (grid.dataset) {
+          grid.dataset.placeholder = 'role-awaiting-structured';
+        }
+        grid.style.display = 'none';
+        return;
+      }
+
       // Distinguish new vs legacy formats to avoid crashing on arrays
       const isOldStructure = roleSpecificFeedback && Array.isArray(roleSpecificFeedback) && roleSpecificFeedback.length > 0;
       const isNewStructure = !Array.isArray(roleSpecificFeedback) && isValidRoleTips(roleSpecificFeedback);
