@@ -4316,6 +4316,29 @@ let cachedScore = null;
             const error = feedbackSettled.reason;
             if (isFeedbackNotReadyError(error)) {
               console.warn('[RESUME-FEEDBACK] Feedback still processing - keeping skeleton.', error);
+              // Ensure UI cleanup so user isn't left stuck while feedback is processing server-side.
+              try {
+                // Dismiss any loading handlers/overlays
+                if (window._currentFeedbackLoading) {
+                  try { window._currentFeedbackLoading(); } catch (e) { /* ignore */ }
+                  window._currentFeedbackLoading = null;
+                }
+                // Dismiss analysis-running toast if present
+                if (window._rfToast && window._rfToast.currentId === 'rf:analysis-running' && window._rfToast.currentToast) {
+                  try { if (typeof window._rfToast.currentToast.dismiss === 'function') window._rfToast.currentToast.dismiss(); } catch (e) { /* ignore */ }
+                }
+                // Re-enable primary buttons
+                const generateBtn = document.getElementById('rf-generate-btn');
+                if (generateBtn) generateBtn.disabled = false;
+                const regenBtn = document.getElementById('rf-regenerate-btn');
+                if (regenBtn) { regenBtn.disabled = false; regenBtn.textContent = 'Regenerate Feedback'; }
+                // Hide any loading overlays
+                try { hideLoadingState(); } catch (e) { /* ignore */ }
+                // Clear active feedback token to avoid blocking future cached/hydrated renders
+                clearActiveFeedbackToken();
+              } catch (cleanupErr) {
+                console.warn('[RESUME-FEEDBACK] Cleanup after not-ready error failed', cleanupErr);
+              }
               return;
             }
 
@@ -4508,6 +4531,8 @@ let cachedScore = null;
               }
             } catch (e) { /* ignore */ }
           }
+          // Ensure token is cleared on unexpected errors so cached/legacy feedback can be shown
+          clearActiveFeedbackToken();
           clearAtsState();
           handleApiError(error);
           uploadInput.disabled = false;
@@ -4817,6 +4842,24 @@ let cachedScore = null;
             const error = feedbackSettled.status === 'rejected' ? feedbackSettled.reason : new Error('No feedback result');
             if (isFeedbackNotReadyError(error)) {
               console.warn('[RESUME-FEEDBACK] Feedback still processing - keeping skeleton.', error);
+              // Ensure UI cleanup so user isn't left stuck while feedback is processing server-side.
+              try {
+                if (window._currentFeedbackLoading) {
+                  try { window._currentFeedbackLoading(); } catch (e) { /* ignore */ }
+                  window._currentFeedbackLoading = null;
+                }
+                if (window._rfToast && window._rfToast.currentId === 'rf:analysis-running' && window._rfToast.currentToast) {
+                  try { if (typeof window._rfToast.currentToast.dismiss === 'function') window._rfToast.currentToast.dismiss(); } catch (e) { /* ignore */ }
+                }
+                const generateBtn = document.getElementById('rf-generate-btn');
+                if (generateBtn) generateBtn.disabled = false;
+                const regenBtn = document.getElementById('rf-regenerate-btn');
+                if (regenBtn) { regenBtn.disabled = false; regenBtn.textContent = 'Regenerate Feedback'; }
+                try { hideLoadingState(); } catch (e) { /* ignore */ }
+                clearActiveFeedbackToken();
+              } catch (cleanupErr) {
+                console.warn('[RESUME-FEEDBACK] Cleanup after not-ready error failed', cleanupErr);
+              }
               return;
             }
             console.warn('[RESUME-FEEDBACK] Feedback generation failed (non-blocking):', error);
@@ -4853,6 +4896,7 @@ let cachedScore = null;
             const feedbackResult = feedbackSettled.value;
             if (!isActiveFeedbackToken(feedbackRunToken)) {
               console.warn('[RESUME-FEEDBACK] Stale regen feedback ignored (token mismatch).');
+              return;
             } else {
               if (window._rfToast && feedbackResult.sessionId) {
                 window._rfToast.activeRunId = feedbackResult.sessionId;
@@ -5171,8 +5215,10 @@ let cachedScore = null;
     function isFeedbackNotReadyError(error) {
       if (!error) return false;
       if (error.status === 409) return true;
-      const msg = String(error.message || '').toLowerCase();
-      return /(not ready|still running|processing|analysis)/.test(msg);
+      const msg = String(error.message || '');
+      // Match only exact phrases that explicitly indicate server-side processing,
+      // avoid overly broad terms that could match unrelated failures.
+      return /\b(?:not ready|still running|processing)\b/i.test(msg);
     }
 
     function updateRubricGrid(rubric) {
