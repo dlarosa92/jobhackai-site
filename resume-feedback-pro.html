@@ -1954,6 +1954,10 @@
           upgradeRequired: error.upgradeRequired
         });
         const errorObj = new Error(errorMessage);
+        // Preserve status + API error fields for upstream arbitration (e.g., wait-for-ATS retries)
+        errorObj.status = response.status;
+        errorObj.apiError = error.error;
+        errorObj.apiMessage = error.message;
         // Preserve upgradeRequired flag for error handler
         if (error.upgradeRequired) {
           errorObj.upgradeRequired = true;
@@ -1962,6 +1966,36 @@
       }
 
       return await response.json();
+    }
+
+    // Feedback depends on ATS being persisted; when backend reports "wait for ATS",
+    // retry after ATS settles to avoid forcing the user to manually retry.
+    function _rfSleep(ms) {
+      return new Promise((resolve) => setTimeout(resolve, ms));
+    }
+
+    function _rfIsWaitForAtsError(err) {
+      const msg = (err && err.message) ? String(err.message) : '';
+      const apiErr = (err && err.apiError) ? String(err.apiError) : '';
+      return err?.status === 409 ||
+        apiErr.toLowerCase().includes('wait') ||
+        /wait\s+for\s+your\s+ats\s+score/i.test(msg);
+    }
+
+    async function getResumeFeedbackWithAtsWait(resumeId, jobTitle, atsPromise) {
+      try {
+        return await getResumeFeedback(resumeId, jobTitle);
+      } catch (err) {
+        if (!_rfIsWaitForAtsError(err)) throw err;
+        // If ATS is still in flight (generate/regenerate role change), wait for it and retry once.
+        if (atsPromise && typeof atsPromise.then === 'function') {
+          try { await atsPromise; } catch (_) { /* ATS failure handled elsewhere */ }
+        } else {
+          // Otherwise backoff briefly and retry once (covers delayed D1 writes / cold starts).
+          await _rfSleep(900);
+        }
+        return await getResumeFeedback(resumeId, jobTitle);
+      }
     }
 
     // Global storage for latest feedback results to use in rewrite
@@ -3977,7 +4011,7 @@ let cachedScore = null;
           const feedbackPromise = (async () => {
             const plan = getCurrentUserPlan();
             if (['trial', 'essential', 'pro', 'premium'].includes(plan)) {
-              return await getResumeFeedback(uploadResult.resumeId, canonicalJobTitleForApis);
+              return await getResumeFeedbackWithAtsWait(uploadResult.resumeId, canonicalJobTitleForApis, atsPromise);
             }
             return null; // Free plan doesn't get feedback
           })();
@@ -4714,7 +4748,7 @@ let cachedScore = null;
             const cachedScore = window.JobHackAIStatePersistence.loadATSScore(null);
             if (cachedScore && cachedScore.resumeId === currentResumeId) {
               const cachedJobTitle = (cachedScore.jobTitle || '').trim();
-              const newJobTitle = (jobTitle || '').trim();
+              const newJobTitle = (canonicalJobTitle || '').trim();
               
               // If resume and role haven't changed, and cached tips are valid, don't call API
               const cachedTips = cachedScore.roleSpecificFeedback;
@@ -4756,7 +4790,7 @@ let cachedScore = null;
 
             // Start ATS (if role changed) and feedback in parallel
             const atsPromise = roleChanged ? getAtsScore(currentResumeId, canonicalJobTitle) : Promise.resolve(null);
-            const feedbackPromise = getResumeFeedback(currentResumeId, canonicalJobTitle);
+            const feedbackPromise = getResumeFeedbackWithAtsWait(currentResumeId, canonicalJobTitle, atsPromise);
             let roleAtsExtractionWarned = false;
             const [atsSettled, feedbackSettled] = await Promise.allSettled([atsPromise, feedbackPromise]);
 
@@ -4767,7 +4801,7 @@ let cachedScore = null;
                 const candidate = {
                   runKey: createRunKey('live'),
                   resumeId: currentResumeId,
-                  role: jobTitle,
+                  role: canonicalJobTitle,
                   score: possibleScore.score,
                   breakdown: possibleScore.breakdown,
                   source: 'live',
@@ -4819,7 +4853,7 @@ let cachedScore = null;
                   },
                   {
                     resumeId: currentResumeId,
-                    role: jobTitle
+                    role: canonicalJobTitle
                   }
                 );
                 if (!applied) {
@@ -4920,10 +4954,10 @@ let cachedScore = null;
             }
             
             // Save role-specific feedback without touching the numeric ATS score
-            if (window.JobHackAIStatePersistence && atsScoringSucceeded) {
+            if (window.JobHackAIStatePersistence) {
               const cachedScore = window.JobHackAIStatePersistence.loadATSScore(null);
-              if (cachedScore && cachedScore.resumeId === uploadResult.resumeId) {
-                const persistedJobTitle = canonicalJobTitleForApis || cachedScore.jobTitle || null;
+              if (cachedScore && cachedScore.resumeId === currentResumeId) {
+                const persistedJobTitle = canonicalJobTitle || cachedScore.jobTitle || null;
                 window.JobHackAIStatePersistence.saveATSScore({
                   ...cachedScore,
                   jobTitle: persistedJobTitle,
@@ -5184,10 +5218,40 @@ let cachedScore = null;
       const grid = document.getElementById('rf-rubric-grid');
       if (!grid) return;
       const normalizeLabel = (value) => (value || '').toLowerCase().trim();
+      const pickRubricCard = (key) => {
+        if (!key) return null;
+        // First try exact match against the label-normalized data-category
+        let card = grid.querySelector(`.rf-rubric-item[data-category="${key}"]`);
+        if (card) return card;
+
+        // Fallback: fuzzy mapping between API category names and the rubric grid categories.
+        const k = key;
+        const tokens = [];
+        if (k.includes('keyword')) tokens.push('keyword');
+        if (k.includes('format')) tokens.push('format');
+        if (k.includes('ats')) tokens.push('format'); // e.g., "ATS Formatting"
+        if (k.includes('structure') || k.includes('section') || k.includes('organization') || k.includes('organis')) tokens.push('structure');
+        if (k.includes('tone') || k.includes('clarity')) tokens.push('tone');
+        if (k.includes('grammar') || k.includes('spelling')) tokens.push('grammar');
+
+        const cards = Array.from(grid.querySelectorAll('.rf-rubric-item[data-category]'));
+        for (const t of tokens) {
+          const hit = cards.find((c) => {
+            const cat = normalizeLabel(c.dataset.category);
+            if (!cat) return false;
+            if (t === 'structure') return cat.includes('structure') || cat.includes('section');
+            if (t === 'tone') return cat.includes('tone') || cat.includes('clarity');
+            if (t === 'grammar') return cat.includes('grammar') || cat.includes('spelling');
+            return cat.includes(t);
+          });
+          if (hit) return hit;
+        }
+        return null;
+      };
       atsRubric.forEach(item => {
         const key = normalizeLabel(item.category || item.label);
         if (!key) return;
-        const card = grid.querySelector(`.rf-rubric-item[data-category="${key}"]`);
+        const card = pickRubricCard(key);
         if (!card) return;
         const tipEl = card.querySelector('[data-rubric-tip]');
         if (!tipEl) return;
