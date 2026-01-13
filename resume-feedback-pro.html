@@ -5175,7 +5175,11 @@ let cachedScore = null;
       const pickRubricCard = (key) => {
         if (!key) return null;
         // First try exact match against the label-normalized data-category
-        let card = grid.querySelector(`.rf-rubric-item[data-category="${key}"]`);
+        const escapedKey =
+          (window.CSS && typeof window.CSS.escape === 'function')
+            ? window.CSS.escape(key)
+            : String(key).replace(/["\\\]\[]/g, '\\$&');
+        let card = grid.querySelector(`.rf-rubric-item[data-category="${escapedKey}"]`);
         if (card) return card;
 
         // Fallback: fuzzy mapping between API category names and the rubric grid categories.
