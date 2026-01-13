@@ -3453,7 +3453,7 @@ let cachedScore = null;
               }
               
               updateFeedbackGrid(feedbackResult.roleSpecificFeedback);
-              updateRubricGridFromFeedback(feedbackResult.atsRubric);
+              applyFeedbackTipsToRubric(feedbackResult.atsRubric);
               
               // CRITICAL: Ensure feedback content is visible after feedback is generated (Pro & Premium)
               const feedbackContentEl = document.getElementById('rf-feedback-content');
@@ -3488,78 +3488,16 @@ let cachedScore = null;
                 fetchLatestFeedbackFromD1();
               }
               
-              // Save role-specific feedback to persistence
-              // Use cached score that was already loaded above
-              // This allows updating feedback even when job title has changed
+              // Save role-specific feedback without recalculating/persisting numeric ATS scores.
+              // Numeric ATS scores are single-source and final: persisted only by /api/ats-score (via getAtsScore()).
               if (window.JobHackAIStatePersistence) {
                 if (cachedScore && cachedScore.resumeId === currentResumeId) {
-                  // Merge feedback text from atsRubric into breakdown
-                  const updatedBreakdown = { ...cachedScore.breakdown };
-                  if (feedbackResult.atsRubric && Array.isArray(feedbackResult.atsRubric)) {
-                    feedbackResult.atsRubric.forEach(item => {
-                      const category = (item.category || item.label || '').toLowerCase();
-                      const feedback = item.feedback || item.tip || '';
-                      
-                      if (category.includes('keyword') && updatedBreakdown.keywordScore) {
-                        updatedBreakdown.keywordScore.feedback = feedback;
-                      } else if (category.includes('format') && updatedBreakdown.formattingScore) {
-                        updatedBreakdown.formattingScore.feedback = feedback;
-                      } else if ((category.includes('structure') || category.includes('section')) && updatedBreakdown.structureScore) {
-                        updatedBreakdown.structureScore.feedback = feedback;
-                      } else if ((category.includes('tone') || category.includes('clarity')) && updatedBreakdown.toneScore) {
-                        updatedBreakdown.toneScore.feedback = feedback;
-                      } else if ((category.includes('grammar') || category.includes('spelling')) && updatedBreakdown.grammarScore) {
-                        updatedBreakdown.grammarScore.feedback = feedback;
-                      }
-                    });
-                  }
-                  
-                  // Update existing cached score with new job title, feedback, and updated breakdown
                   window.JobHackAIStatePersistence.saveATSScore({
                     ...cachedScore,
-                    breakdown: updatedBreakdown,
                     jobTitle: jobTitle || null,
                     roleSpecificFeedback: feedbackResult.roleSpecificFeedback || null,
                     extractionQuality: cachedScore.extractionQuality
                   });
-                } else if (currentResumeId && feedbackResult.atsRubric) {
-                  // If no cached score exists, reconstruct breakdown from atsRubric to save feedback
-                  // This ensures feedback is always saved even if cache is missing
-                  const reconstructedBreakdown = {};
-                  let totalScore = 0;
-                  
-                  // Reconstruct breakdown from atsRubric
-                  feedbackResult.atsRubric.forEach(item => {
-                    const category = (item.category || item.label || '').toLowerCase();
-                    const score = item.score || 0;
-                    const max = item.max || 0;
-                    const feedback = item.feedback || item.tip || '';
-                    
-                    totalScore += score;
-                    
-                    if (category.includes('keyword')) {
-                      reconstructedBreakdown.keywordScore = { score, max: 40, feedback };
-                    } else if (category.includes('format')) {
-                      reconstructedBreakdown.formattingScore = { score, max: 20, feedback };
-                    } else if (category.includes('structure') || category.includes('section')) {
-                      reconstructedBreakdown.structureScore = { score, max: 15, feedback };
-                    } else if (category.includes('tone') || category.includes('clarity')) {
-                      reconstructedBreakdown.toneScore = { score, max: 15, feedback };
-                    } else if (category.includes('grammar') || category.includes('spelling')) {
-                      reconstructedBreakdown.grammarScore = { score, max: 10, feedback };
-                    }
-                  });
-                  
-                  // Save with reconstructed data
-                  window.JobHackAIStatePersistence.saveATSScore({
-                    score: totalScore,
-                    breakdown: reconstructedBreakdown,
-                    resumeId: currentResumeId,
-                    jobTitle: jobTitle || null,
-                    roleSpecificFeedback: feedbackResult.roleSpecificFeedback || null,
-                    extractionQuality: null // No matching cached score, so no quality data for this resume
-                  });
-                  console.log('[RESUME-FEEDBACK] Saved feedback with reconstructed breakdown');
                 }
               }
               
@@ -3583,14 +3521,11 @@ let cachedScore = null;
         }
       });
 
-      // Helper function to limit feedback to 1-2 sentences
-      function limitFeedbackToSentences(text, maxSentences = 2) {
-        if (!text || typeof text !== 'string') return '';
-        const sentences = text.split(/[.!?]+/).filter(s => s.trim().length > 0);
-        if (sentences.length === 0) return '';
-        const result = sentences.slice(0, maxSentences).join('. ').trim();
-        // Always ensure a period at the end if there's content
-        return result + (result.endsWith('.') ? '' : '.');
+      function getCanonicalJobTitle() {
+        const jobTitleInput = document.getElementById('rf-job-title');
+        const trimmed = jobTitleInput?.value?.trim() || '';
+        currentJobTitle = trimmed;
+        return trimmed;
       }
       
       // Helper function to generate ATS score and feedback
@@ -3619,8 +3554,7 @@ let cachedScore = null;
         }
 
         const jobTitleInput = document.getElementById('rf-job-title');
-        const jobTitle = jobTitleInput?.value?.trim() || '';
-        currentJobTitle = jobTitle; // Save for later use (optional, so empty is OK)
+        const canonicalJobTitle = getCanonicalJobTitle(); // Save final job title once per run
         
         // Save job title to state persistence (even if empty)
         if (window.JobHackAIStatePersistence) {
@@ -3904,7 +3838,7 @@ let cachedScore = null;
           // Free users only get ATS scoring, not AI feedback, so show different message
           const userPlan = getCurrentUserPlan();
           const willGetFeedback = ['trial', 'essential', 'pro', 'premium'].includes(userPlan);
-          const hasRole = jobTitleInput?.value?.trim() || currentJobTitle;
+          const hasRole = canonicalJobTitle.length > 0;
           
           // Show skeleton loading states (replaces full-screen overlay)
           // Only show role-specific skeleton if user has a plan AND provided a role
@@ -4036,15 +3970,14 @@ let cachedScore = null;
           }
 
           // --- PARALLEL API CALLS: ATS Score + Feedback ---
-          const jobTitleForScore = currentJobTitle || jobTitleInput?.value?.trim() || '';
-          const jobTitleForFeedback = jobTitleInput?.value?.trim() || '';
+          const canonicalJobTitleForApis = canonicalJobTitle;
 
-          // Start both API calls in parallel
-          const atsPromise = getAtsScore(uploadResult.resumeId, jobTitleForScore);
+          // Start both API calls in parallel (ATS handles the numeric score)
+          const atsPromise = getAtsScore(uploadResult.resumeId, canonicalJobTitleForApis);
           const feedbackPromise = (async () => {
             const plan = getCurrentUserPlan();
             if (['trial', 'essential', 'pro', 'premium'].includes(plan)) {
-              return await getResumeFeedback(uploadResult.resumeId, jobTitleForFeedback);
+              return await getResumeFeedback(uploadResult.resumeId, canonicalJobTitleForApis);
             }
             return null; // Free plan doesn't get feedback
           })();
@@ -4067,7 +4000,7 @@ let cachedScore = null;
                 const candidate = {
                   runKey: createRunKey('live'),
                   resumeId: uploadResult.resumeId,
-                  role: jobTitleForScore,
+                  role: canonicalJobTitleForApis,
                   score: result.score,
                   breakdown: result.breakdown,
                   source: 'live',
@@ -4200,19 +4133,11 @@ let cachedScore = null;
                       window.JobHackAIToast.success('ATS score calculated successfully.');
                     }
 
-                    if (window.JobHackAIStatePersistence) {
-                      window.JobHackAIStatePersistence.saveATSScore({
-                        score: result.score,
-                        breakdown: result.breakdown,
-                        resumeId: uploadResult.resumeId,
-                        jobTitle: jobTitleForScore || null,
-                        extractionQuality: result.extractionQuality
-                      });
-                    }
+                    // NOTE: ATS numeric score persistence is handled inside getAtsScore().
                   },
                   {
                     resumeId: uploadResult.resumeId,
-                    role: jobTitleForScore
+                    role: canonicalJobTitleForApis
                   }
                 );
 
@@ -4293,7 +4218,7 @@ let cachedScore = null;
               }
               
               updateFeedbackGrid(feedbackResult.roleSpecificFeedback);
-              updateRubricGridFromFeedback(feedbackResult.atsRubric);
+              applyFeedbackTipsToRubric(feedbackResult.atsRubric);
               
               // Hide feedback skeleton now that real content is ready
               hideFeedbackSkeleton();
@@ -4367,20 +4292,17 @@ let cachedScore = null;
                   };
                 }
                 
-                // Save with reconstructed breakdown
-                const saveSuccess = window.JobHackAIStatePersistence.saveATSScore({
-                  score: finalScore,
-                  breakdown: finalBreakdownWithFeedback,
-                  resumeId: uploadResult.resumeId,
-                  jobTitle: jobTitleForFeedback || null,
-                  roleSpecificFeedback: feedbackResult.roleSpecificFeedback || null,
-                  extractionQuality: atsSettled.value?.extractionQuality ?? null
-                });
-                
-                if (!saveSuccess) {
-                  console.warn('[RESUME-FEEDBACK] Failed to save ATS score to persistence');
-                } else {
-                  console.log('[RESUME-FEEDBACK] Saved ATS score with breakdown including feedback');
+                if (window.JobHackAIStatePersistence && atsScoringSucceeded) {
+                  const cachedScore = window.JobHackAIStatePersistence.loadATSScore(null);
+                  if (cachedScore && cachedScore.resumeId === uploadResult.resumeId) {
+                    const persistedJobTitle = canonicalJobTitle || cachedScore.jobTitle || null;
+                    window.JobHackAIStatePersistence.saveATSScore({
+                      ...cachedScore,
+                      jobTitle: persistedJobTitle,
+                      roleSpecificFeedback: feedbackResult.roleSpecificFeedback || null,
+                      timestamp: Date.now()
+                    });
+                  }
                 }
               }
             
@@ -4783,9 +4705,8 @@ let cachedScore = null;
           }
 
           const jobTitleInput = document.getElementById('rf-job-title');
-          const jobTitle = jobTitleInput?.value?.trim() || '';
           const previousJobTitle = currentJobTitle || '';
-          currentJobTitle = jobTitle; // Job title is optional, so empty is OK
+          const canonicalJobTitle = getCanonicalJobTitle(); // Reuse the same normalized role
 
           // Check if we need to regenerate (resume changed or role changed)
           // If nothing changed, skip API call to save tokens
@@ -4818,14 +4739,14 @@ let cachedScore = null;
             // Only show "Generating tips..." if user has a plan AND provided a role
             const userPlan = getCurrentUserPlan();
             const willGetFeedback = ['trial', 'essential', 'pro', 'premium'].includes(userPlan);
-            const hasRole = jobTitle && jobTitle.trim().length > 0;
+            const hasRole = canonicalJobTitle.length > 0;
             if (willGetFeedback && hasRole) {
               setRoleStatus('Generating tips…');
             } else {
               setRoleStatus('');
             }
             
-            const roleChanged = previousJobTitle !== jobTitle;
+            const roleChanged = previousJobTitle !== canonicalJobTitle;
 
             // Set active run ID for this regeneration to gate toast notifications
             if (window._rfToast) {
@@ -4834,8 +4755,8 @@ let cachedScore = null;
             }
 
             // Start ATS (if role changed) and feedback in parallel
-            const atsPromise = roleChanged ? getAtsScore(currentResumeId, jobTitle) : Promise.resolve(null);
-            const feedbackPromise = getResumeFeedback(currentResumeId, jobTitle);
+            const atsPromise = roleChanged ? getAtsScore(currentResumeId, canonicalJobTitle) : Promise.resolve(null);
+            const feedbackPromise = getResumeFeedback(currentResumeId, canonicalJobTitle);
             let roleAtsExtractionWarned = false;
             const [atsSettled, feedbackSettled] = await Promise.allSettled([atsPromise, feedbackPromise]);
 
@@ -4959,14 +4880,7 @@ let cachedScore = null;
             }
             
             updateFeedbackGrid(feedbackResult.roleSpecificFeedback);
-            if (scoreUpdated) {
-              updateRubricGridFromFeedback(feedbackResult.atsRubric);
-            } else if (feedbackResult.atsRubric) {
-              console.debug('[RESUME-FEEDBACK] Skipping rubric update until authority applies', {
-                authorityApplied: scoreUpdated,
-                rubricItems: feedbackResult.atsRubric.length
-              });
-            }
+            applyFeedbackTipsToRubric(feedbackResult.atsRubric);
             
             // CRITICAL: Ensure feedback content is visible after feedback is generated (Pro & Premium)
             const feedbackContentEl = document.getElementById('rf-feedback-content');
@@ -5005,137 +4919,19 @@ let cachedScore = null;
               refreshUsageIndicator();
             }
             
-            // Save role-specific feedback to persistence
-            // Use cached score that was already loaded above
-            // This allows updating feedback even when job title has changed
-            if (window.JobHackAIStatePersistence) {
-              // Use updated score if role changed, otherwise use cached score
-              const finalScore = scoreResult?.success ? scoreResult.score : (cachedScore?.score || 0);
-              const finalBreakdown = scoreResult?.success ? scoreResult.breakdown : (cachedScore?.breakdown || {});
-              
-              if (cachedScore && cachedScore.resumeId === currentResumeId) {
-                // Merge feedback text from atsRubric into breakdown
-                const updatedBreakdown = { ...finalBreakdown };
-                if (feedbackResult.atsRubric && Array.isArray(feedbackResult.atsRubric)) {
-                  feedbackResult.atsRubric.forEach(item => {
-                    const category = (item.category || item.label || '').toLowerCase();
-                    const feedback = item.feedback || item.tip || '';
-                    
-                    if (category.includes('keyword') && updatedBreakdown.keywordScore) {
-                      updatedBreakdown.keywordScore.feedback = feedback;
-                    } else if (category.includes('format') && updatedBreakdown.formattingScore) {
-                      updatedBreakdown.formattingScore.feedback = feedback;
-                    } else if ((category.includes('structure') || category.includes('section')) && updatedBreakdown.structureScore) {
-                      updatedBreakdown.structureScore.feedback = feedback;
-                    } else if ((category.includes('tone') || category.includes('clarity')) && updatedBreakdown.toneScore) {
-                      updatedBreakdown.toneScore.feedback = feedback;
-                    } else if ((category.includes('grammar') || category.includes('spelling')) && updatedBreakdown.grammarScore) {
-                      updatedBreakdown.grammarScore.feedback = feedback;
-                    }
-                  });
-                }
-                
-                // Update existing cached score with new job title, feedback, and updated breakdown
+            // Save role-specific feedback without touching the numeric ATS score
+            if (window.JobHackAIStatePersistence && atsScoringSucceeded) {
+              const cachedScore = window.JobHackAIStatePersistence.loadATSScore(null);
+              if (cachedScore && cachedScore.resumeId === uploadResult.resumeId) {
+                const persistedJobTitle = canonicalJobTitleForApis || cachedScore.jobTitle || null;
                 window.JobHackAIStatePersistence.saveATSScore({
                   ...cachedScore,
-                  score: finalScore,
-                  breakdown: updatedBreakdown,
-                  jobTitle: jobTitle || null,
+                  jobTitle: persistedJobTitle,
                   roleSpecificFeedback: feedbackResult.roleSpecificFeedback || null,
-                  extractionQuality: scoreResult?.extractionQuality || cachedScore?.extractionQuality,
-                  timestamp: Date.now() // Update timestamp
-                });
-              } else if (currentResumeId && feedbackResult.atsRubric) {
-                // If no cached score exists, reconstruct breakdown from atsRubric to save feedback
-                // This ensures feedback is always saved even if cache is missing
-                const reconstructedBreakdown = {};
-                let totalScore = 0;
-                
-                // Reconstruct breakdown from atsRubric and calculate total score
-                // Use scoreResult.breakdown if available to ensure consistency with totalScore
-                if (scoreResult?.success && scoreResult.score !== undefined && scoreResult.breakdown) {
-                  // We have a valid score and breakdown from the API call (when role changed)
-                  // Use breakdown from scoreResult to ensure scores match the total
-                  totalScore = scoreResult.score;
-                  
-                  // Build breakdown from scoreResult.breakdown (consistent with totalScore)
-                  reconstructedBreakdown.keywordScore = {
-                    score: scoreResult.breakdown.keywordScore?.score || 0,
-                    max: 40,
-                    feedback: feedbackResult.atsRubric.find(item => 
-                      (item.category || item.label || '').toLowerCase().includes('keyword')
-                    )?.feedback || scoreResult.breakdown.keywordScore?.feedback || ''
-                  };
-                  reconstructedBreakdown.formattingScore = {
-                    score: scoreResult.breakdown.formattingScore?.score || 0,
-                    max: 20,
-                    feedback: feedbackResult.atsRubric.find(item => 
-                      (item.category || item.label || '').toLowerCase().includes('format')
-                    )?.feedback || scoreResult.breakdown.formattingScore?.feedback || ''
-                  };
-                  reconstructedBreakdown.structureScore = {
-                    score: scoreResult.breakdown.structureScore?.score || 0,
-                    max: 15,
-                    feedback: feedbackResult.atsRubric.find(item => 
-                      (item.category || item.label || '').toLowerCase().includes('structure') || 
-                      (item.category || item.label || '').toLowerCase().includes('section')
-                    )?.feedback || scoreResult.breakdown.structureScore?.feedback || ''
-                  };
-                  reconstructedBreakdown.toneScore = {
-                    score: scoreResult.breakdown.toneScore?.score || 0,
-                    max: 15,
-                    feedback: feedbackResult.atsRubric.find(item => 
-                      (item.category || item.label || '').toLowerCase().includes('tone') || 
-                      (item.category || item.label || '').toLowerCase().includes('clarity')
-                    )?.feedback || scoreResult.breakdown.toneScore?.feedback || ''
-                  };
-                  reconstructedBreakdown.grammarScore = {
-                    score: scoreResult.breakdown.grammarScore?.score || 0,
-                    max: 10,
-                    feedback: feedbackResult.atsRubric.find(item => 
-                      (item.category || item.label || '').toLowerCase().includes('grammar') || 
-                      (item.category || item.label || '').toLowerCase().includes('spelling')
-                    )?.feedback || scoreResult.breakdown.grammarScore?.feedback || ''
-                  };
-                } else {
-                  // No valid scoreResult.breakdown - use atsRubric for both scores and breakdown
-                  feedbackResult.atsRubric.forEach(item => {
-                    const category = (item.category || item.label || '').toLowerCase();
-                    const score = item.score || 0;
-                    const max = item.max || 0;
-                    const feedback = item.feedback || item.tip || '';
-                    
-                    // Accumulate score from atsRubric items
-                    totalScore += score;
-                    
-                    if (category.includes('keyword')) {
-                      reconstructedBreakdown.keywordScore = { score, max: 40, feedback };
-                    } else if (category.includes('format')) {
-                      reconstructedBreakdown.formattingScore = { score, max: 20, feedback };
-                    } else if (category.includes('structure') || category.includes('section')) {
-                      reconstructedBreakdown.structureScore = { score, max: 15, feedback };
-                    } else if (category.includes('tone') || category.includes('clarity')) {
-                      reconstructedBreakdown.toneScore = { score, max: 15, feedback };
-                    } else if (category.includes('grammar') || category.includes('spelling')) {
-                      reconstructedBreakdown.grammarScore = { score, max: 10, feedback };
-                    }
-                  });
-                }
-                
-                // Save with reconstructed data
-                window.JobHackAIStatePersistence.saveATSScore({
-                  score: totalScore,
-                  breakdown: reconstructedBreakdown,
-                  resumeId: currentResumeId,
-                  jobTitle: jobTitle || null,
-                  roleSpecificFeedback: feedbackResult.roleSpecificFeedback || null,
-                  extractionQuality: scoreResult?.extractionQuality ?? null, // Prefer scoreResult if available, otherwise null (cachedScore may be from different resume)
                   timestamp: Date.now()
                 });
-                console.log('[RESUME-FEEDBACK] Saved feedback with reconstructed breakdown');
               }
-          
-        }
+            }
         // Do NOT restore job title from cache; must be explicitly provided each run.
 
             const toastStatus = toastForAtsAndTips({
@@ -5195,55 +4991,6 @@ let cachedScore = null;
     }
     
     // Map old field names to new labels
-    const fieldNameToLabel = {
-      'keywordScore': 'Keyword Relevance',
-      'formattingScore': 'Formatting Compliance',
-      'structureScore': 'Structure & Section Completeness',
-      'toneScore': 'Tone & Clarity',
-      'grammarScore': 'Grammar & Spelling'
-    };
-    
-    const fieldNameToMax = {
-      'keywordScore': 40,
-      'formattingScore': 20,
-      'structureScore': 15,
-      'toneScore': 15,
-      'grammarScore': 10
-    };
-    
-    // Update rubric grid from API response
-    function updateRubricGridFromFeedback(atsRubric) {
-      if (!atsRubric || !Array.isArray(atsRubric)) return;
-      
-      const rubric = atsRubric.map(item => {
-        // Try to get field name from category/label or infer from item structure
-        let fieldName = null;
-        const category = (item.category || item.label || '').toLowerCase();
-        
-        // Map common category names to field names
-        if (category.includes('keyword')) fieldName = 'keywordScore';
-        else if (category.includes('format')) fieldName = 'formattingScore';
-        else if (category.includes('structure') || category.includes('section')) fieldName = 'structureScore';
-        else if (category.includes('tone') || category.includes('clarity')) fieldName = 'toneScore';
-        else if (category.includes('grammar') || category.includes('spelling')) fieldName = 'grammarScore';
-        
-        // Use mapped label or fall back to original
-        const label = fieldName ? fieldNameToLabel[fieldName] : (item.category || item.label || '');
-        const max = fieldName ? fieldNameToMax[fieldName] : (item.max || 100);
-        const tip = limitFeedbackToSentences(item.feedback || item.tip || '');
-        
-        return {
-          label: label,
-          // Only use a numeric score when it’s explicitly provided
-          score: (typeof item.score === 'number' ? item.score : null),
-          max: max,
-          tip: tip
-        };
-      });
-      
-      updateRubricGrid(rubric);
-    }
-
     function updateProgressRing(score) {
       // Update SVG ring and text
       const svg = document.querySelector('#rf-ats-score-tile .rf-progress-ring svg');
@@ -5414,16 +5161,46 @@ let cachedScore = null;
       rubric.forEach(item => {
         const div = document.createElement('div');
         div.className = 'rf-rubric-item';
+        const normalizedLabel = (item.label || '').trim().toLowerCase();
+        if (normalizedLabel) {
+          div.dataset.category = normalizedLabel;
+        }
         // Use — / — for empty scores
         const scoreDisplay = (item.score === undefined || item.score === null) ? '— / —' : `${item.score} / ${item.max}`;
         const formattedTip = formatTip(item);
-        
+        const safeTip = escapeHtml(formattedTip);
         div.innerHTML = `
           <div class="rf-rubric-label">${escapeHtml(item.label)}</div>
           <div class="rf-rubric-score">${escapeHtml(scoreDisplay)}</div>
-          <div style="color:var(--color-text-secondary);font-size:0.98rem;">${escapeHtml(formattedTip)}</div>
+          <div class="rf-rubric-tip" data-rubric-tip data-base-tip="${safeTip}" style="color:var(--color-text-secondary);font-size:0.98rem;">${safeTip}</div>
         `;
         grid.appendChild(div);
+      });
+    }
+
+    // ATS numeric scoring is single-source; feedback only augments the textual tips.
+    function applyFeedbackTipsToRubric(atsRubric) {
+      if (!atsRubric || !Array.isArray(atsRubric)) return;
+      const grid = document.getElementById('rf-rubric-grid');
+      if (!grid) return;
+      const normalizeLabel = (value) => (value || '').toLowerCase().trim();
+      atsRubric.forEach(item => {
+        const key = normalizeLabel(item.category || item.label);
+        if (!key) return;
+        const card = grid.querySelector(`.rf-rubric-item[data-category="${key}"]`);
+        if (!card) return;
+        const tipEl = card.querySelector('[data-rubric-tip]');
+        if (!tipEl) return;
+        const baseTip = tipEl.dataset.baseTip || tipEl.textContent || '';
+        const newTip = limitFeedbackToSentences(item.feedback || item.tip || '');
+        const suggestions = Array.isArray(item.suggestions) ? item.suggestions.filter(Boolean) : [];
+        const flaggedTerms = Array.isArray(item.flaggedTerms) ? item.flaggedTerms.filter(Boolean) : [];
+        const extras = [];
+        if (newTip) extras.push(newTip);
+        if (suggestions.length) extras.push(`Suggestions: ${suggestions.join(', ')}`);
+        if (flaggedTerms.length) extras.push(`Flagged terms likely OK: ${flaggedTerms.slice(0, 6).join(', ')}.`);
+        const combined = [baseTip, ...extras].filter(Boolean).join(' ');
+        tipEl.textContent = combined || baseTip;
       });
     }
 
