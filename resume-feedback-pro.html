@@ -4959,7 +4959,14 @@ let cachedScore = null;
             }
             
             updateFeedbackGrid(feedbackResult.roleSpecificFeedback);
-            updateRubricGridFromFeedback(feedbackResult.atsRubric);
+            if (scoreUpdated) {
+              updateRubricGridFromFeedback(feedbackResult.atsRubric);
+            } else if (feedbackResult.atsRubric) {
+              console.debug('[RESUME-FEEDBACK] Skipping rubric update until authority applies', {
+                authorityApplied: scoreUpdated,
+                rubricItems: feedbackResult.atsRubric.length
+              });
+            }
             
             // CRITICAL: Ensure feedback content is visible after feedback is generated (Pro & Premium)
             const feedbackContentEl = document.getElementById('rf-feedback-content');
