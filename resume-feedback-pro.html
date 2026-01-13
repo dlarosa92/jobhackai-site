@@ -4843,7 +4843,6 @@ let cachedScore = null;
               const possibleScore = atsSettled.value;
               if (possibleScore.success && possibleScore.score !== undefined && possibleScore.breakdown) {
                 scoreResult = possibleScore;
-                scoreUpdated = true;
                 const candidate = {
                   runKey: createRunKey('live'),
                   resumeId: currentResumeId,
@@ -4856,6 +4855,7 @@ let cachedScore = null;
                 const applied = attemptApplyScoreCandidate(
                   candidate,
                   () => {
+                    scoreUpdated = true;
                     roleAtsExtractionWarned = maybeWarnLowExtractionQuality(possibleScore.extractionQuality);
                     updateProgressRing(scoreResult.score);
                     updateExtractionQualityIndicator(possibleScore.extractionQuality);
@@ -4985,7 +4985,7 @@ let cachedScore = null;
             if (jobTitleInput) {
               jobTitleInput.value = '';
               currentJobTitle = '';
-              markRoleValueChange('', 'feedback-role-clear');
+              lastNormalizedRoleValue = '';
             }
 
             // Refresh Last analyzed from D1 (guarded to avoid ReferenceError)
