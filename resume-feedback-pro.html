@@ -96,6 +96,7 @@
 
   <!-- Load usage indicator component early (before inline scripts that use it) -->
   <script src="js/components/usage-indicator.js"></script>
+  <script src="js/run-authority.js?v=20260112-1"></script>
 
   <!-- Component overrides -->
   <link rel="stylesheet" href="css/header.css">
@@ -1618,6 +1619,11 @@
     // --- GLOBAL STATE ---
     let currentResumeId = null;
     let currentJobTitle = null;
+    const runAuthority = window.JobHackAIRunAuthority;
+    const runAuthorityDebug = Boolean(window.JobHackAIDebug?.runAuthority || window.__JOBHACKAI_RUN_AUTHORITY_DEBUG__);
+    const tryApplyScore = runAuthority?.tryApplyScore?.bind(runAuthority);
+    const clearRunAuthority = runAuthority?.clearAuthority?.bind(runAuthority);
+    let lastNormalizedRoleValue = '';
 
     // --- API CLIENT FUNCTIONS ---
     async function getAuthToken() {
@@ -2919,6 +2925,7 @@
                 onSelect: function(roleName, isCustom) {
                   // Update currentJobTitle when role is selected
                   currentJobTitle = roleName;
+                  markRoleValueChange(roleName, 'role-select');
                   console.log('[RESUME-FEEDBACK] Role selected:', roleName, isCustom ? '(custom)' : '');
                   
                   // Update the input's aria-expanded attribute
@@ -2945,6 +2952,7 @@
                   // Clear currentJobTitle if input is cleared
                   currentJobTitle = null;
                 }
+                markRoleValueChange(value, 'role-input');
               });
               
               // Prevent default value from being set
@@ -2963,6 +2971,7 @@
                 } else {
                   currentJobTitle = null;
                 }
+                markRoleValueChange(value, 'role-blur');
               });
             } catch (error) {
               console.error('[RESUME-FEEDBACK] Failed to initialize RoleSelector:', error);
@@ -3057,125 +3066,117 @@ let cachedScore = null;
         // Display the score from history
         // FIX: Use != null to correctly handle legitimate 0% scores
         if (cachedScore && cachedScore.score != null) {
-          console.log('[RESUME-FEEDBACK] Loading score from resume feedback history:', cachedScore.score);
-          updateProgressRing(cachedScore.score);
-          
-          // Hide placeholder
-          hidePlaceholder();
-          
-          // Show rubric grid
-          const rubricGrid = document.getElementById('rf-rubric-grid');
-          if (rubricGrid) {
-            rubricGrid.style.display = 'grid';
-          }
-          
-          // Convert breakdown to rubric format if available
-          if (cachedScore.breakdown && Object.keys(cachedScore.breakdown).length > 0) {
-            // Map cached breakdown structure to rubric format
-            // API returns: breakdown.keywordScore = { score, max, feedback }
-            // Also supports legacy format: breakdown.keywordScore = number
-            // Rubric expects: { score, max, tip }
-            
-            // Helper to extract score from either object or number
-            const getScore = (value) => {
-              if (typeof value === 'number') return value;
-              if (value && typeof value === 'object' && typeof value.score === 'number') return value.score;
-              return 0;
-            };
-            
-            // Helper to extract feedback from breakdown object
-            // The breakdown objects should have feedback property directly
-            const getFeedback = (value) => {
-              if (value && typeof value === 'object') {
-                // Check for feedback property first (most common)
-                if (typeof value.feedback === 'string') {
-                  return limitFeedbackToSentences(value.feedback);
-                }
-                // Fallback to tip property if feedback doesn't exist
-                if (typeof value.tip === 'string') {
-                  return limitFeedbackToSentences(value.tip);
-                }
-              }
-              return '';
-            };
-            
-            const rubric = [
-              {
-                label: 'Keyword Relevance',
-                score: getScore(cachedScore.breakdown.keywordScore),
-                max: 40,
-                tip: getFeedback(cachedScore.breakdown.keywordScore)
-              },
-              {
-                label: 'Formatting Compliance',
-                score: getScore(cachedScore.breakdown.formattingScore),
-                max: 20,
-                tip: getFeedback(cachedScore.breakdown.formattingScore)
-              },
-              {
-                label: 'Structure & Section Completeness',
-                score: getScore(cachedScore.breakdown.structureScore),
-                max: 15,
-                tip: getFeedback(cachedScore.breakdown.structureScore)
-              },
-              {
-                label: 'Tone & Clarity',
-                score: getScore(cachedScore.breakdown.toneScore),
-                max: 15,
-                tip: getFeedback(cachedScore.breakdown.toneScore)
-              },
-              {
-                label: 'Grammar & Spelling',
-                score: getScore(cachedScore.breakdown.grammarScore),
-                max: 10,
-                tip: getFeedback(cachedScore.breakdown.grammarScore),
-                flaggedTerms: cachedScore.breakdown.grammarScore?.flaggedTerms
-              }
-            ];
-            updateRubricGrid(rubric);
-          }
-          
-          // Restore role-specific feedback if available (supports both old and new formats)
-          if (cachedScore.roleSpecificFeedback) {
-            const isOldFormat = Array.isArray(cachedScore.roleSpecificFeedback) && 
-                               cachedScore.roleSpecificFeedback.length > 0;
-            const isNewFormat = isValidRoleTips(cachedScore.roleSpecificFeedback);
-            
-            if (isOldFormat || isNewFormat) {
-              updateFeedbackGrid(cachedScore.roleSpecificFeedback);
-            } else {
-              console.warn('[RESUME-FEEDBACK] Invalid roleSpecificFeedback format in cache:', typeof cachedScore.roleSpecificFeedback);
+          const candidate = {
+            runKey: `cache-${cachedScore.resumeId || 'history'}-${cachedScore.timestamp || Date.now()}`,
+            resumeId: cachedScore.resumeId,
+            role: cachedScore.jobTitle || currentJobTitle || '',
+            score: cachedScore.score,
+            breakdown: cachedScore.breakdown,
+            source: 'cache',
+            timestamp: cachedScore.timestamp || Date.now()
+          };
+          const applied = attemptApplyScoreCandidate(candidate, () => {
+            console.log('[RESUME-FEEDBACK] Loading score from resume feedback history:', cachedScore.score);
+            updateProgressRing(cachedScore.score);
+            // Hide placeholder
+            hidePlaceholder();
+            // Show rubric grid
+            const rubricGrid = document.getElementById('rf-rubric-grid');
+            if (rubricGrid) {
+              rubricGrid.style.display = 'grid';
             }
 
-            updateRoleTipsState({
-              hasAtsScore: true,
-              roleSpecificFeedback: cachedScore.roleSpecificFeedback || null
-            });
-          } else {
-            // No role feedback available or no score – hide tips area
-            updateRoleTipsState({
-              hasAtsScore: !!cachedScore?.score,
-              roleSpecificFeedback: null
-            });
-          }
-          
-          // Do NOT restore job title from cache; must be explicitly provided each run
-          // Restore file name if available (display only - don't enable button)
-          // Browsers don't persist file inputs, so user must re-select file
-          const fileNameSpan = document.getElementById('rf-file-name');
-          const lastResumeName = localStorage.getItem('lastUploadedResumeName');
-          if (lastResumeName && fileNameSpan) {
-            fileNameSpan.textContent = lastResumeName + ' (please re-select file)';
-            fileNameSpan.style.color = 'var(--color-text-muted)';
-            fileNameSpan.style.fontWeight = 'normal';
-            
-            // Do NOT enable generate button - file input is empty after page reload
-            // User must select a file again before the button can be enabled
-            
-            // Enable button even without file - click guard will show popup if needed
-            if (generateBtn) {
-              generateBtn.disabled = false;
+            if (cachedScore.breakdown && Object.keys(cachedScore.breakdown).length > 0) {
+              const getScore = (value) => {
+                if (typeof value === 'number') return value;
+                if (value && typeof value === 'object' && typeof value.score === 'number') return value.score;
+                return 0;
+              };
+
+              const getFeedback = (value) => {
+                if (value && typeof value === 'object') {
+                  if (typeof value.feedback === 'string') {
+                    return limitFeedbackToSentences(value.feedback);
+                  }
+                  if (typeof value.tip === 'string') {
+                    return limitFeedbackToSentences(value.tip);
+                  }
+                }
+                return '';
+              };
+
+              const rubric = [
+                {
+                  label: 'Keyword Relevance',
+                  score: getScore(cachedScore.breakdown.keywordScore),
+                  max: 40,
+                  tip: getFeedback(cachedScore.breakdown.keywordScore)
+                },
+                {
+                  label: 'Formatting Compliance',
+                  score: getScore(cachedScore.breakdown.formattingScore),
+                  max: 20,
+                  tip: getFeedback(cachedScore.breakdown.formattingScore)
+                },
+                {
+                  label: 'Structure & Section Completeness',
+                  score: getScore(cachedScore.breakdown.structureScore),
+                  max: 15,
+                  tip: getFeedback(cachedScore.breakdown.structureScore)
+                },
+                {
+                  label: 'Tone & Clarity',
+                  score: getScore(cachedScore.breakdown.toneScore),
+                  max: 15,
+                  tip: getFeedback(cachedScore.breakdown.toneScore)
+                },
+                {
+                  label: 'Grammar & Spelling',
+                  score: getScore(cachedScore.breakdown.grammarScore),
+                  max: 10,
+                  tip: getFeedback(cachedScore.breakdown.grammarScore),
+                  flaggedTerms: cachedScore.breakdown.grammarScore?.flaggedTerms
+                }
+              ];
+              updateRubricGrid(rubric);
             }
+
+            if (cachedScore.roleSpecificFeedback) {
+              const isOldFormat = Array.isArray(cachedScore.roleSpecificFeedback) && cachedScore.roleSpecificFeedback.length > 0;
+              const isNewFormat = isValidRoleTips(cachedScore.roleSpecificFeedback);
+              if (isOldFormat || isNewFormat) {
+                updateFeedbackGrid(cachedScore.roleSpecificFeedback);
+              } else {
+                console.warn('[RESUME-FEEDBACK] Invalid roleSpecificFeedback format in cache:', typeof cachedScore.roleSpecificFeedback);
+              }
+              updateRoleTipsState({
+                hasAtsScore: true,
+                roleSpecificFeedback: cachedScore.roleSpecificFeedback || null
+              });
+            } else {
+              updateRoleTipsState({
+                hasAtsScore: !!cachedScore?.score,
+                roleSpecificFeedback: null
+              });
+            }
+
+            const fileNameSpan = document.getElementById('rf-file-name');
+            const lastResumeName = localStorage.getItem('lastUploadedResumeName');
+            if (lastResumeName && fileNameSpan) {
+              fileNameSpan.textContent = lastResumeName + ' (please re-select file)';
+              fileNameSpan.style.color = 'var(--color-text-muted)';
+              fileNameSpan.style.fontWeight = 'normal';
+              if (generateBtn) {
+                generateBtn.disabled = false;
+              }
+            }
+          }, {
+            resumeId: cachedScore.resumeId,
+            role: candidate.role
+          });
+
+          if (!applied) {
+            console.log('[RESUME-FEEDBACK] Cached score ignored by authority', candidate);
           }
         }
       }
@@ -3186,6 +3187,7 @@ let cachedScore = null;
         jobTitleInput.value = '';
       }
       currentJobTitle = '';
+      clearScoreAuthority('target-role-clear');
       try {
         sessionStorage.removeItem('currentJobTitle');
         localStorage.removeItem('jh_last_job_title');
@@ -3478,6 +3480,7 @@ let cachedScore = null;
               if (jobTitleInput) {
                 jobTitleInput.value = '';
                 currentJobTitle = '';
+                markRoleValueChange('', 'optimize-role-clear');
               }
 
               // Refresh Last analyzed from D1 (guarded to avoid ReferenceError)
@@ -4061,145 +4064,160 @@ let cachedScore = null;
               atsScoringSucceeded = result.success && result.score !== undefined;
               
               if (atsScoringSucceeded) {
-                // Store ATS score in sessionStorage
-                sessionStorage.setItem('currentAtsScore', result.score.toString());
-                if (result.breakdown) {
-                  sessionStorage.setItem('currentAtsBreakdown', JSON.stringify(result.breakdown));
-                }
-                
-                // Also store in localStorage for backward compatibility (extractionQuality-aware)
-                let summary;
-                if (result.extractionQuality) {
-                  // Use extractionQuality-aware summary (consistent with dashboard logic)
-                  const confidence = typeof result.extractionQuality.confidence === 'number' ? result.extractionQuality.confidence : 1.0;
-                  const tokenCount = typeof result.extractionQuality.tokenCount === 'number' ? result.extractionQuality.tokenCount : 0;
-                  const status = result.extractionQuality.extractionStatus || 'ok';
-                  const isHighQuality = status === 'ok' && confidence >= 0.65 && tokenCount >= 80;
-                  
-                  if (isHighQuality) {
-                    // Use confident language
-                    summary = result.score > 85 ? 'Excellent! Your resume is highly ATS compatible.' : 
-                             result.score > 70 ? 'Your resume meets many ATS criteria and is likely to be noticed.' : 
-                             'Your resume needs improvement for better ATS results.';
-                  } else {
-                    // Use softer language when quality is low
-                    summary = 'We may not have detected all sections in your resume. Consider checking formatting.';
-                  }
-                } else {
-                  // Fallback to confident language if no extractionQuality data
-                  summary = result.score > 85 ? 'Excellent! Your resume is highly ATS compatible.' : 
-                           result.score > 70 ? 'Your resume meets many ATS criteria and is likely to be noticed.' : 
-                           'Your resume needs improvement for better ATS results.';
-                }
-                localStorage.setItem('lastATSScore', result.score.toString());
-                localStorage.setItem('lastATSSummary', summary);
-                
-                // Update UI immediately (progress ring, placeholder, etc.)
-                updateProgressRing(result.score);
-                updateExtractionQualityIndicator(result.extractionQuality);
-                hidePlaceholder();
-                
-                // Helper functions to handle both number and object formats (matches existing code pattern)
-                const getScore = (value) => {
-                  if (typeof value === 'number') return value;
-                  if (value && typeof value === 'object' && typeof value.score === 'number') return value.score;
-                  return 0;
+                const candidate = {
+                  runKey: createRunKey('live'),
+                  resumeId: uploadResult.resumeId,
+                  role: jobTitleForScore,
+                  score: result.score,
+                  breakdown: result.breakdown,
+                  source: 'live',
+                  timestamp: Date.now()
                 };
-                
-                const getFeedback = (value, feedbackArray, index) => {
-                  // First try to get feedback from the value object (if it's an object with feedback property)
-                  if (value && typeof value === 'object') {
-                    if (typeof value.feedback === 'string') {
-                      return limitFeedbackToSentences(value.feedback);
+                const applied = attemptApplyScoreCandidate(
+                  candidate,
+                  () => {
+                    sessionStorage.setItem('currentAtsScore', result.score.toString());
+                    if (result.breakdown) {
+                      sessionStorage.setItem('currentAtsBreakdown', JSON.stringify(result.breakdown));
                     }
-                    if (typeof value.tip === 'string') {
-                      return limitFeedbackToSentences(value.tip);
+
+                    let summary;
+                    if (result.extractionQuality) {
+                      const confidence = typeof result.extractionQuality.confidence === 'number' ? result.extractionQuality.confidence : 1.0;
+                      const tokenCount = typeof result.extractionQuality.tokenCount === 'number' ? result.extractionQuality.tokenCount : 0;
+                      const status = result.extractionQuality.extractionStatus || 'ok';
+                      const isHighQuality = status === 'ok' && confidence >= 0.65 && tokenCount >= 80;
+
+                      if (isHighQuality) {
+                        summary = result.score > 85 ? 'Excellent! Your resume is highly ATS compatible.' :
+                          result.score > 70 ? 'Your resume meets many ATS criteria and is likely to be noticed.' :
+                          'Your resume needs improvement for better ATS results.';
+                      } else {
+                        summary = 'We may not have detected all sections in your resume. Consider checking formatting.';
+                      }
+                    } else {
+                      summary = result.score > 85 ? 'Excellent! Your resume is highly ATS compatible.' :
+                        result.score > 70 ? 'Your resume meets many ATS criteria and is likely to be noticed.' :
+                        'Your resume needs improvement for better ATS results.';
                     }
+                    localStorage.setItem('lastATSScore', result.score.toString());
+                    localStorage.setItem('lastATSSummary', summary);
+
+                    updateProgressRing(result.score);
+                    updateExtractionQualityIndicator(result.extractionQuality);
+                    hidePlaceholder();
+
+                    const getScore = (value) => {
+                      if (typeof value === 'number') return value;
+                      if (value && typeof value === 'object' && typeof value.score === 'number') return value.score;
+                      return 0;
+                    };
+
+                    const getFeedback = (value, feedbackArray, index) => {
+                      if (value && typeof value === 'object') {
+                        if (typeof value.feedback === 'string') {
+                          return limitFeedbackToSentences(value.feedback);
+                        }
+                        if (typeof value.tip === 'string') {
+                          return limitFeedbackToSentences(value.tip);
+                        }
+                      }
+                      if (feedbackArray && Array.isArray(feedbackArray) && feedbackArray[index]) {
+                        return limitFeedbackToSentences(feedbackArray[index]);
+                      }
+                      return '';
+                    };
+
+                    const rubric = [
+                      {
+                        label: 'Keyword Relevance',
+                        score: getScore(result.breakdown.keywordScore),
+                        max: 40,
+                        tip: getFeedback(result.breakdown.keywordScore, result.feedback, 0)
+                      },
+                      {
+                        label: 'Formatting Compliance',
+                        score: getScore(result.breakdown.formattingScore),
+                        max: 20,
+                        tip: getFeedback(result.breakdown.formattingScore, result.feedback, 1)
+                      },
+                      {
+                        label: 'Structure & Section Completeness',
+                        score: getScore(result.breakdown.structureScore),
+                        max: 15,
+                        tip: getFeedback(result.breakdown.structureScore, result.feedback, 2)
+                      },
+                      {
+                        label: 'Tone & Clarity',
+                        score: getScore(result.breakdown.toneScore),
+                        max: 15,
+                        tip: getFeedback(result.breakdown.toneScore, result.feedback, 3)
+                      },
+                      {
+                        label: 'Grammar & Spelling',
+                        score: getScore(result.breakdown.grammarScore),
+                        max: 10,
+                        tip: getFeedback(result.breakdown.grammarScore, result.feedback, 4),
+                        flaggedTerms: result.breakdown.grammarScore?.flaggedTerms
+                      }
+                    ];
+                    updateRubricGrid(rubric);
+
+                    if (atsRequestGeneration === skeletonOperationGeneration) {
+                      hideATSSkeleton();
+                    } else {
+                      console.warn('[RESUME-FEEDBACK] ATS skeleton hide skipped due to generation mismatch');
+                    }
+
+                    const skeletonFeedback = document.getElementById('rf-skeleton-feedback');
+                    const skeletonContainer = document.getElementById('rf-skeleton-container');
+                    const shouldHideSkeletonContainer =
+                      skeletonFeedback &&
+                      (skeletonFeedback.style.display === 'none' || skeletonFeedback.childElementCount === 0);
+
+                    if (shouldHideSkeletonContainer && skeletonContainer) {
+                      skeletonContainer.style.display = 'none';
+                    }
+
+                    const feedbackContentEl = document.getElementById('rf-feedback-content');
+                    if (feedbackContentEl) {
+                      feedbackContentEl.style.display = 'block';
+                    }
+
+                    const rubricEl = document.getElementById('rf-rubric-grid');
+                    if (rubricEl) {
+                      rubricEl.style.display = 'grid';
+                    }
+
+                    setTimeout(() => {
+                      showATSFeedback();
+                    }, 100);
+
+                    const warned = maybeWarnLowExtractionQuality(result.extractionQuality);
+                    atsExtractionWarned = warned;
+                    updateExtractionQualityIndicator(result.extractionQuality);
+                    if (!warned && window.JobHackAIToast) {
+                      window.JobHackAIToast.success('ATS score calculated successfully.');
+                    }
+
+                    if (window.JobHackAIStatePersistence) {
+                      window.JobHackAIStatePersistence.saveATSScore({
+                        score: result.score,
+                        breakdown: result.breakdown,
+                        resumeId: uploadResult.resumeId,
+                        jobTitle: jobTitleForScore || null,
+                        extractionQuality: result.extractionQuality
+                      });
+                    }
+                  },
+                  {
+                    resumeId: uploadResult.resumeId,
+                    role: jobTitleForScore
                   }
-                  // Fallback to feedback array (API returns breakdown as numbers, feedback in separate array)
-                  if (feedbackArray && Array.isArray(feedbackArray) && feedbackArray[index]) {
-                    return limitFeedbackToSentences(feedbackArray[index]);
-                  }
-                  return '';
-                };
-                
-                // Convert breakdown to rubric format
-                // Note: API returns breakdown values as numbers, feedback in separate array
-                const rubric = [
-                  {
-                    label: 'Keyword Relevance',
-                    score: getScore(result.breakdown.keywordScore),
-                    max: 40,
-                    tip: getFeedback(result.breakdown.keywordScore, result.feedback, 0)
-                  },
-                  {
-                    label: 'Formatting Compliance',
-                    score: getScore(result.breakdown.formattingScore),
-                    max: 20,
-                    tip: getFeedback(result.breakdown.formattingScore, result.feedback, 1)
-                  },
-                  {
-                    label: 'Structure & Section Completeness',
-                    score: getScore(result.breakdown.structureScore),
-                    max: 15,
-                    tip: getFeedback(result.breakdown.structureScore, result.feedback, 2)
-                  },
-                  {
-                    label: 'Tone & Clarity',
-                    score: getScore(result.breakdown.toneScore),
-                    max: 15,
-                    tip: getFeedback(result.breakdown.toneScore, result.feedback, 3)
-                  },
-                  {
-                    label: 'Grammar & Spelling',
-                    score: getScore(result.breakdown.grammarScore),
-                    max: 10,
-                  tip: getFeedback(result.breakdown.grammarScore, result.feedback, 4),
-                  flaggedTerms: result.breakdown.grammarScore?.flaggedTerms
-                  }
-                ];
-                updateRubricGrid(rubric);
-                
-                // Show ATS content immediately; keep role skeleton visible until role tips arrive
-                if (atsRequestGeneration === skeletonOperationGeneration) {
-                  hideATSSkeleton();
-                } else {
-                  console.warn('[RESUME-FEEDBACK] ATS skeleton hide skipped due to generation mismatch');
-                }
-                
-                const skeletonFeedback = document.getElementById('rf-skeleton-feedback');
-                const skeletonContainer = document.getElementById('rf-skeleton-container');
-                const shouldHideSkeletonContainer =
-                  skeletonFeedback &&
-                  (skeletonFeedback.style.display === 'none' || skeletonFeedback.childElementCount === 0);
-                
-                if (shouldHideSkeletonContainer && skeletonContainer) {
-                  skeletonContainer.style.display = 'none';
-                }
-                
-                // Show content container and ATS rubric
-                const feedbackContentEl = document.getElementById('rf-feedback-content');
-                if (feedbackContentEl) {
-                  feedbackContentEl.style.display = 'block';
-                }
-                
-                const rubricGrid = document.getElementById('rf-rubric-grid');
-                if (rubricGrid) {
-                  rubricGrid.style.display = 'grid';
-                }
-                
-                // Trigger fade transition for ATS feedback
-                setTimeout(() => {
-                  showATSFeedback();
-                }, 100);
-                
-                // Trust-first: if extraction quality is low, show a single warning toast (auto-dismiss 8s)
-                // and avoid stacking a success toast on top.
-                const warned = maybeWarnLowExtractionQuality(result.extractionQuality);
-                atsExtractionWarned = warned;
-                updateExtractionQualityIndicator(result.extractionQuality);
-                if (!warned && window.JobHackAIToast) {
-                  window.JobHackAIToast.success('ATS score calculated successfully.');
+                );
+
+                if (!applied) {
+                  console.log('[RESUME-FEEDBACK] ATS score ignored by authority', candidate);
                 }
               } else {
                 // ATS scoring failed
@@ -4633,7 +4651,7 @@ let cachedScore = null;
         uploadInput.addEventListener('change', async function(e) {
           const file = e.target.files[0];
           const pdfHelper = document.getElementById('rf-pdf-helper');
-          
+          clearScoreAuthority('resume-change');
           if (file) {
             // Hide status pill initially while validating
             hideFileStatus();
@@ -4826,46 +4844,66 @@ let cachedScore = null;
               if (possibleScore.success && possibleScore.score !== undefined && possibleScore.breakdown) {
                 scoreResult = possibleScore;
                 scoreUpdated = true;
-                // Trust-first: warn once when extraction quality is low (auto-dismiss 8s)
-                roleAtsExtractionWarned = maybeWarnLowExtractionQuality(possibleScore.extractionQuality);
-                updateProgressRing(scoreResult.score);
-                updateExtractionQualityIndicator(possibleScore.extractionQuality);
-                const rubric = [
-                  {
-                    label: 'Keyword Relevance',
-                    score: scoreResult.breakdown.keywordScore?.score || 0,
-                    max: 40,
-                    tip: limitFeedbackToSentences(scoreResult.breakdown.keywordScore?.feedback || '')
+                const candidate = {
+                  runKey: createRunKey('live'),
+                  resumeId: currentResumeId,
+                  role: jobTitle,
+                  score: possibleScore.score,
+                  breakdown: possibleScore.breakdown,
+                  source: 'live',
+                  timestamp: Date.now()
+                };
+                const applied = attemptApplyScoreCandidate(
+                  candidate,
+                  () => {
+                    roleAtsExtractionWarned = maybeWarnLowExtractionQuality(possibleScore.extractionQuality);
+                    updateProgressRing(scoreResult.score);
+                    updateExtractionQualityIndicator(possibleScore.extractionQuality);
+                    const rubric = [
+                      {
+                        label: 'Keyword Relevance',
+                        score: scoreResult.breakdown.keywordScore?.score || 0,
+                        max: 40,
+                        tip: limitFeedbackToSentences(scoreResult.breakdown.keywordScore?.feedback || '')
+                      },
+                      {
+                        label: 'Formatting Compliance',
+                        score: scoreResult.breakdown.formattingScore?.score || 0,
+                        max: 20,
+                        tip: limitFeedbackToSentences(scoreResult.breakdown.formattingScore?.feedback || '')
+                      },
+                      {
+                        label: 'Structure & Section Completeness',
+                        score: scoreResult.breakdown.structureScore?.score || 0,
+                        max: 15,
+                        tip: limitFeedbackToSentences(scoreResult.breakdown.structureScore?.feedback || '')
+                      },
+                      {
+                        label: 'Tone & Clarity',
+                        score: scoreResult.breakdown.toneScore?.score || 0,
+                        max: 15,
+                        tip: limitFeedbackToSentences(scoreResult.breakdown.toneScore?.feedback || '')
+                      },
+                      {
+                        label: 'Grammar & Spelling',
+                        score: scoreResult.breakdown.grammarScore?.score || 0,
+                        max: 10,
+                        tip: limitFeedbackToSentences(scoreResult.breakdown.grammarScore?.feedback || ''),
+                        flaggedTerms: scoreResult.breakdown.grammarScore?.flaggedTerms
+                      }
+                    ];
+                    updateRubricGrid(rubric);
+                    sessionStorage.setItem('currentAtsScore', scoreResult.score.toString());
+                    sessionStorage.setItem('currentAtsBreakdown', JSON.stringify(scoreResult.breakdown));
                   },
                   {
-                    label: 'Formatting Compliance',
-                    score: scoreResult.breakdown.formattingScore?.score || 0,
-                    max: 20,
-                    tip: limitFeedbackToSentences(scoreResult.breakdown.formattingScore?.feedback || '')
-                  },
-                  {
-                    label: 'Structure & Section Completeness',
-                    score: scoreResult.breakdown.structureScore?.score || 0,
-                    max: 15,
-                    tip: limitFeedbackToSentences(scoreResult.breakdown.structureScore?.feedback || '')
-                  },
-                  {
-                    label: 'Tone & Clarity',
-                    score: scoreResult.breakdown.toneScore?.score || 0,
-                    max: 15,
-                    tip: limitFeedbackToSentences(scoreResult.breakdown.toneScore?.feedback || '')
-                  },
-                  {
-                    label: 'Grammar & Spelling',
-                    score: scoreResult.breakdown.grammarScore?.score || 0,
-                    max: 10,
-                  tip: limitFeedbackToSentences(scoreResult.breakdown.grammarScore?.feedback || ''),
-                  flaggedTerms: scoreResult.breakdown.grammarScore?.flaggedTerms
+                    resumeId: currentResumeId,
+                    role: jobTitle
                   }
-                ];
-                updateRubricGrid(rubric);
-                sessionStorage.setItem('currentAtsScore', scoreResult.score.toString());
-                sessionStorage.setItem('currentAtsBreakdown', JSON.stringify(scoreResult.breakdown));
+                );
+                if (!applied) {
+                  console.log('[RESUME-FEEDBACK] ATS score update ignored by authority', candidate);
+                }
               } else {
                 console.warn('[RESUME-FEEDBACK] ATS score update incomplete:', {
                   success: possibleScore?.success,
@@ -4947,6 +4985,7 @@ let cachedScore = null;
             if (jobTitleInput) {
               jobTitleInput.value = '';
               currentJobTitle = '';
+              markRoleValueChange('', 'feedback-role-clear');
             }
 
             // Refresh Last analyzed from D1 (guarded to avoid ReferenceError)
@@ -5088,8 +5127,9 @@ let cachedScore = null;
                 });
                 console.log('[RESUME-FEEDBACK] Saved feedback with reconstructed breakdown');
               }
-              
-            }
+          
+        }
+        // Do NOT restore job title from cache; must be explicitly provided each run.
 
             const toastStatus = toastForAtsAndTips({
               atsOk: scoreUpdated,
@@ -5253,6 +5293,69 @@ let cachedScore = null;
       text.textContent = percent + '%';
       
       console.log('[RESUME-FEEDBACK] Updated progress ring to', percent + '%');
+    }
+
+    function normalizeRoleValue(value) {
+      return (value || '').toString().trim().toLowerCase();
+    }
+
+    function getAuthorityRoleValue(override) {
+      if (override && override.trim()) {
+        return override.trim();
+      }
+      const jobTitleInput = document.getElementById('rf-job-title');
+      return jobTitleInput?.value?.trim() || currentJobTitle || '';
+    }
+
+    function getAuthorityContext(candidate = {}, override = {}) {
+      return {
+        resumeId: override.resumeId || candidate.resumeId || currentResumeId,
+        role: override.role || candidate.role || getAuthorityRoleValue()
+      };
+    }
+
+    function attemptApplyScoreCandidate(candidate, applyFn, contextOverride = {}) {
+      if (!candidate || typeof candidate !== 'object') return false;
+      const context = getAuthorityContext(candidate, contextOverride);
+      const applied = tryApplyScore ? tryApplyScore(candidate, context) : true;
+      if (!applied) return false;
+      if (typeof applyFn === 'function') {
+        applyFn();
+      }
+      return true;
+    }
+
+    function clearScoreAuthority(reason) {
+      if (typeof clearRunAuthority === 'function') {
+        clearRunAuthority();
+      }
+      updateProgressRing(0);
+      const headerDesc = document.getElementById('rf-header-desc');
+      const isHistoricalView = window.JobHackAIHistory?.isHistoricalView?.();
+      if (headerDesc && !isHistoricalView) {
+        headerDesc.textContent = 'Get your basic ATS compatibility score.';
+      }
+      resetAtsAndRoleUIToDefaults();
+      setRoleStatus('');
+      if (reason && reason !== '' && runAuthorityDebug) {
+        console.debug('[RUN-AUTHORITY] Cleared authority due to', reason);
+      }
+    }
+
+    function createRunKey(prefix = 'run') {
+      if (window.crypto && typeof window.crypto.randomUUID === 'function') {
+        return window.crypto.randomUUID();
+      }
+      return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    }
+
+    lastNormalizedRoleValue = normalizeRoleValue(getAuthorityRoleValue());
+
+    function markRoleValueChange(newValue, reason = 'role-change') {
+      const normalized = normalizeRoleValue(newValue);
+      if (normalized === lastNormalizedRoleValue) return;
+      lastNormalizedRoleValue = normalized;
+      clearScoreAuthority(reason);
     }
 
     // Helper function to escape HTML to prevent XSS (shared across functions)
@@ -7037,6 +7140,8 @@ let cachedScore = null;
       _currentHistoricalSessionId = null;
       _selectedHistoryItem = null;
       setMode('new');
+
+      clearScoreAuthority('reset-session');
       
       // Hide banner
       const banner = document.getElementById('rf-historical-banner');
@@ -7104,6 +7209,7 @@ let cachedScore = null;
      * Reset form to default state
      */
     function resetFormToDefault() {
+      clearScoreAuthority('reset-form');
       // Reset file input
       const fileInput = document.getElementById('rf-upload');
       const fileName = document.getElementById('rf-file-name');
@@ -7210,15 +7316,35 @@ let cachedScore = null;
 
       // Update ATS score ring using shared logic (clamps/guards inside)
       if (data.atsScore !== null && data.atsScore !== undefined) {
-        updateProgressRing(data.atsScore);
-        // Update score description
-        const scoreDesc = document.getElementById('rf-header-desc');
-        if (scoreDesc) {
-          if (data.role && data.role.trim()) {
-            scoreDesc.innerHTML = `Your resume scored <strong>${data.atsScore}%</strong> for ${escapeHtml(data.role)} roles.`;
-          } else {
-            scoreDesc.innerHTML = `Your resume scored <strong>${data.atsScore}%</strong>.`;
+        const candidate = {
+          runKey: data.sessionId || `history-${data.resumeId || currentResumeId || 'unknown'}-${Date.now()}`,
+          resumeId: data.resumeId || currentResumeId,
+          role: data.role || data.feedback?.role || '',
+          score: data.atsScore,
+          breakdown: data.atsRubric || data.breakdown || null,
+          source: 'history_user',
+          timestamp: data.createdAt ? new Date(data.createdAt).getTime() : Date.now()
+        };
+        const applied = attemptApplyScoreCandidate(
+          candidate,
+          () => {
+            updateProgressRing(data.atsScore);
+            const scoreDesc = document.getElementById('rf-header-desc');
+            if (scoreDesc) {
+              if (data.role && data.role.trim()) {
+                scoreDesc.innerHTML = `Your resume scored <strong>${data.atsScore}%</strong> for ${escapeHtml(data.role)} roles.`;
+              } else {
+                scoreDesc.innerHTML = `Your resume scored <strong>${data.atsScore}%</strong>.`;
+              }
+            }
+          },
+          {
+            resumeId: candidate.resumeId,
+            role: candidate.role
           }
+        );
+        if (!applied) {
+          console.log('[RESUME-FEEDBACK] History score blocked by authority', candidate);
         }
       }
       
