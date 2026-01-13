@@ -5315,10 +5315,12 @@ let cachedScore = null;
     }
 
     function getAuthorityContext(candidate = {}, override = {}) {
-      return {
-        resumeId: override.resumeId || candidate.resumeId || currentResumeId,
-        role: override.role || candidate.role || getAuthorityRoleValue()
-      };
+      // Prefer the current UI state (resume + role) so stale responses are rejected
+      // even when a previous candidate still supplies matching values.
+      const resumeId = currentResumeId || override.resumeId || candidate.resumeId || null;
+      const role =
+        getAuthorityRoleValue() || override.role || candidate.role || '';
+      return { resumeId, role };
     }
 
     function attemptApplyScoreCandidate(candidate, applyFn, contextOverride = {}) {
