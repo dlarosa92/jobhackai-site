@@ -3471,7 +3471,7 @@ let cachedScore = null;
               this.disabled = true;
               this.textContent = 'Optimizing...';
               
-              const feedbackResult = await getResumeFeedback(currentResumeId, jobTitle);
+              const feedbackResult = await getResumeFeedbackWithAtsWait(currentResumeId, jobTitle, null);
               
               // Update history with new session (D1-backed)
               if (window.JobHackAIHistory && feedbackResult.sessionId) {
