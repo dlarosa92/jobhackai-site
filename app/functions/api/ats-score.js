@@ -73,6 +73,8 @@ export async function onRequest(context) {
     // Get resume text - prefer resumeText from request, fall back to KV if available
     let text = resumeText;
     let resumeData = null;
+    // Track whether a free ATS claim was completed for this request
+    let freeAtsClaimed = false;
 
     if (!text && resumeId) {
       // Try to load from KV if resumeText not provided
@@ -178,9 +180,77 @@ export async function onRequest(context) {
       }
     }
 
-    // If cached, return cached result (allow re-reads for free users)
+    // If cached, persist cached result to D1 first, then return cached result.
     if (cachedResult) {
-      console.log(`[ATS-SCORE] Cache hit for ${uid}`, { resumeId, plan });
+      // Missing resumeId -> client error
+      if (!resumeId) {
+        return json({
+          success: false,
+          error: 'missing-resumeId',
+          message: 'resumeId is required'
+        }, 400, origin, env);
+      }
+      // Require D1 to be available to persist cached results.
+      if (!isD1Available(env)) {
+        console.warn('[ATS-SCORE] D1 not available while handling cached result', { resumeId, uid });
+        return json({
+          success: false,
+          error: 'd1-unavailable',
+          message: 'Database not available to persist cached ATS result'
+        }, 503, origin, env);
+      }
+
+      try {
+        const d1User = await getOrCreateUserByAuthId(env, uid, null);
+        if (!d1User) {
+          console.warn('[ATS-SCORE] D1 user resolution failed while handling cached result', { resumeId, uid });
+          return json({
+            success: false,
+            error: 'd1-user-resolution-failed',
+            message: 'Failed to resolve user for persistence'
+          }, 503, origin, env);
+        }
+
+        // Map cachedResult into the helper's expected full ruleBasedScores shape
+        const cachedRuleBasedScores = {
+          overallScore: cachedResult.score,
+          keywordScore: { score: cachedResult.breakdown?.keywordScore ?? 0, feedback: '' },
+          formattingScore: { score: cachedResult.breakdown?.formattingScore ?? 0, feedback: '' },
+          structureScore: { score: cachedResult.breakdown?.structureScore ?? 0, feedback: '' },
+          toneScore: { score: cachedResult.breakdown?.toneScore ?? 0, feedback: '' },
+          grammarScore: { score: cachedResult.breakdown?.grammarScore ?? 0, feedback: '' },
+          recommendations: cachedResult.recommendations || [],
+          detectedHeadings: cachedResult.detectedHeadings || null,
+          extractionQuality: cachedResult.extractionQuality ?? null
+        };
+
+        const session = await upsertResumeSessionWithScores(env, d1User.id, {
+          resumeId,
+          role: normalizedJobTitle || null,
+          atsScore: cachedResult.score ?? null,
+          ruleBasedScores: cachedRuleBasedScores
+        });
+
+        if (!session) {
+          console.warn('[ATS-SCORE] D1 upsert returned null while handling cached result', { resumeId, uid });
+          return json({
+            success: false,
+            error: 'd1-persist-failed',
+            message: 'Failed to persist cached ATS result to database'
+          }, 503, origin, env);
+        }
+        // NOTE: Do not claim free usage on cached-result re-reads; free claims occur only
+        // in the non-cached path after successful persistence to prevent double-consumption.
+      } catch (err) {
+        console.warn('[ATS-SCORE] D1 persistence failed while handling cached result:', err?.message);
+        return json({
+          success: false,
+          error: 'd1-persist-failed',
+          message: 'Failed to persist cached ATS result to database'
+        }, 503, origin, env);
+      }
+
+      console.log(`[ATS-SCORE] Cache hit persisted for ${uid}`, { resumeId, plan });
       return json({
         success: true,
         ...cachedResult,
@@ -215,7 +285,6 @@ export async function onRequest(context) {
 
     // Run rule-based scoring (NO AI TOKENS)
     let ruleBasedScores;
-    let freeAtsClaimed = false;
     try {
       console.log('[ATS-SCORE] Input length:', text.length, 'jobTitle:', normalizedJobTitle);
       console.log('[ATS-SCORE] Starting scoring:', {
@@ -307,39 +376,83 @@ export async function onRequest(context) {
       }, 500, origin, env);
     }
 
-    // If Free: Now perform the atomic claim AFTER successful scoring
-    if (plan === 'free' && d1User) {
-      // Only attempt to claim after a successful score
-      freeAtsClaimed = await claimFreeATSUsage(env, d1User.id);
-      if (!freeAtsClaimed) {
-        return json({
-          success: false,
-          error: 'Usage limit reached',
-          message: 'You have used your free ATS score. Upgrade to Trial or Essential for unlimited scoring.',
-          upgradeRequired: true
-        }, 403, origin, env);
-      }
-    }
+    // NOTE: Free usage claim will occur only after successful D1 persistence (see below).
 
     // --- D1 Persistence: Store ruleBasedScores as source of truth ---
-    // CRITICAL: Await D1 write to ensure it completes before /api/resume-feedback queries
-    // This prevents race condition where parallel calls cause redundant scoring
-    if (isD1Available(env) && resumeId) {
+    // CRITICAL: Require D1 write to succeed for a 200 response.
+    if (!resumeId) {
+      return json({
+        success: false,
+        error: 'missing-resumeId',
+        message: 'resumeId is required'
+      }, 400, origin, env);
+    }
+    if (!isD1Available(env)) {
+      console.warn('[ATS-SCORE] D1 not available before persistence', { resumeId, uid });
+      return json({
+        success: false,
+        error: 'd1-unavailable',
+        message: 'Database not available to persist ATS result'
+      }, 503, origin, env);
+    }
+
+    try {
+      const d1User = await getOrCreateUserByAuthId(env, uid, null);
+      if (!d1User) {
+        console.warn('[ATS-SCORE] D1 user resolution failed before persistence', { resumeId, uid });
+        return json({
+          success: false,
+          error: 'd1-user-resolution-failed',
+          message: 'Failed to resolve user for persistence'
+        }, 503, origin, env);
+      }
+
+      const session = await upsertResumeSessionWithScores(env, d1User.id, {
+        resumeId: resumeId,
+        role: normalizedJobTitle || null,
+        atsScore: ruleBasedScores.overallScore,
+        ruleBasedScores: ruleBasedScores
+      });
+
+      if (!session) {
+        console.warn('[ATS-SCORE] D1 upsert returned null', { resumeId, uid });
+        return json({
+          success: false,
+          error: 'd1-persist-failed',
+          message: 'Failed to persist ATS result to database'
+        }, 503, origin, env);
+      }
+
+      console.log('[ATS-SCORE] Stored ruleBasedScores in D1', { resumeId, uid, sessionId: session.id, ats_ready: session.ats_ready });
+    } catch (d1Error) {
+      console.warn('[ATS-SCORE] D1 persistence failed (fatal):', d1Error?.message);
+      return json({
+        success: false,
+        error: 'd1-persist-failed',
+        message: 'Failed to persist ATS result to database'
+      }, 503, origin, env);
+    }
+
+    // For free plan: claim usage only after successful persistence
+    if (plan === 'free') {
       try {
-        const d1User = await getOrCreateUserByAuthId(env, uid, null);
-        if (d1User) {
-          await upsertResumeSessionWithScores(env, d1User.id, {
-            resumeId: resumeId,
-            role: normalizedJobTitle || null,
-            atsScore: ruleBasedScores.overallScore,
-            ruleBasedScores: ruleBasedScores
-          });
-          console.log('[ATS-SCORE] Stored ruleBasedScores in D1', { resumeId, uid });
+        const claimOk = await claimFreeATSUsage(env, d1User.id);
+        if (!claimOk) {
+          return json({
+            success: false,
+            error: 'Usage limit reached',
+            message: 'You have used your free ATS score. Upgrade to Trial or Essential for unlimited scoring.',
+            upgradeRequired: true
+          }, 403, origin, env);
         }
-      } catch (d1Error) {
-        // Non-blocking: log but don't fail the request
-        // If D1 write fails, /api/resume-feedback will fall back to re-scoring
-        console.warn('[ATS-SCORE] D1 persistence failed (non-fatal):', d1Error.message);
+        freeAtsClaimed = true;
+      } catch (claimErr) {
+        console.warn('[ATS-SCORE] Free ATS claim failed:', claimErr?.message);
+        return json({
+          success: false,
+          error: 'd1-claim-failed',
+          message: 'Failed to record ATS usage'
+        }, 503, origin, env);
       }
     }
 

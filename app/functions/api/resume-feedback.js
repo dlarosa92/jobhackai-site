@@ -456,18 +456,20 @@ export async function onRequest(context) {
       }
     }
 
-    // If cached, still update usage counters (user is consuming the feature)
-    // Then return cached result
+    // If cached, only update usage counters if we already have a persisted session.
+    // Then return cached result.
     if (cachedResult) {
       console.log(`[RESUME-FEEDBACK] Using KV feedback cache hit`, { requestId, resumeId: sanitizedResumeId, plan: effectivePlan });
-      
-      // Update throttles and usage even for cache hits (prevents bypassing limits)
-      await updateUsageCounters(uid, sanitizedResumeId, effectivePlan, env);
-      
+
+      // Update throttles and usage only when a persisted D1 session exists (avoid speculative counting)
+      if (resumeSession && resumeSession.id) {
+        await updateUsageCounters(uid, sanitizedResumeId, effectivePlan, env);
+      }
+
       // Skip D1 persistence for cache hits to prevent duplicate history entries
       // History should only show unique analyses, not every cache hit
       // The original analysis session was already persisted when the cache was created
-      
+
       return successResponse({
         ...cachedResult,
         cached: true
@@ -749,8 +751,10 @@ export async function onRequest(context) {
                 );
               }
 
-              // Count usage for D1-served responses
-              await updateUsageCounters(uid, sanitizedResumeId, effectivePlan, env);
+              // Count usage for D1-served responses (only if we have a persisted session id)
+              if (resumeSession && resumeSession.id) {
+                await updateUsageCounters(uid, sanitizedResumeId, effectivePlan, env);
+              }
 
               console.log('[RESUME-FEEDBACK] Using D1 feedback session', {
                 requestId,
@@ -1254,7 +1258,7 @@ export async function onRequest(context) {
     }
 
     // Update throttles and usage counters (for cache misses)
-    await updateUsageCounters(uid, sanitizedResumeId, effectivePlan, env);
+    // NOTE: moved to after successful D1 persistence to ensure "no results = no usage recorded"
 
     // --- D1 Persistence (best effort, non-blocking) ---
     // Persist resume session, feedback, and usage to D1 for history
@@ -1336,6 +1340,9 @@ export async function onRequest(context) {
             atsScore: overallAtsScore
           });
           
+          // Update throttles and usage counters only after successful D1 persistence/logging
+          await updateUsageCounters(uid, sanitizedResumeId, effectivePlan, env);
+
           console.log('[RESUME-FEEDBACK] D1 persistence complete:', { 
             sessionId: d1SessionId, 
             userId: d1User.id,
