@@ -4414,6 +4414,25 @@ let cachedScore = null;
                   } else if (toastStatus === 'missing') {
                     setRoleStatus('');
                   }
+                  
+                  // Persist role-specific feedback (same as normal fulfilled path)
+                  const persistRoleFeedbackIfPossible = () => {
+                    if (!window.JobHackAIStatePersistence) return;
+                    const cachedScore = window.JobHackAIStatePersistence.loadATSScore(null);
+                    if (!cachedScore || cachedScore.resumeId !== uploadResult.resumeId) return;
+                    const persistedJobTitle = canonicalJobTitleForApis || cachedScore.jobTitle || null;
+                    window.JobHackAIStatePersistence.saveATSScore({
+                      ...cachedScore,
+                      jobTitle: persistedJobTitle,
+                      roleSpecificFeedback: retryResult.roleSpecificFeedback || null,
+                      timestamp: Date.now()
+                    });
+                  };
+                  persistRoleFeedbackIfPossible();
+                  if (typeof atsPromise?.finally === 'function') {
+                    atsPromise.finally(persistRoleFeedbackIfPossible);
+                  }
+                  
                   setTimeout(() => {
                     showRoleFeedback();
                   }, 100);
@@ -4428,16 +4447,29 @@ let cachedScore = null;
                   }
                   return;
                 } else {
-                  // Retry succeeded but token is no longer active (user started new run)
-                  // Clean up UI state for this stale run but don't clear the new run's token
-                  hideFeedbackSkeleton();
-                  setRoleStatus('');
-                  // Re-enable buttons (they may have been disabled by new run)
-                  const generateBtn = document.getElementById('rf-generate-btn');
-                  if (generateBtn) generateBtn.disabled = false;
-                  const regenBtn = document.getElementById('rf-regenerate-btn');
-                  if (regenBtn) { regenBtn.disabled = false; regenBtn.textContent = 'Regenerate Feedback'; }
-                  // Do NOT clear token - new run is active
+                  // Retry completed but either:
+                  // 1) retryResult is falsy (API returned null/undefined), OR
+                  // 2) Token is no longer active (user started new run)
+                  // Only clean up UI if this run's token is still active (case 1)
+                  // If token is stale (case 2), do nothing to avoid interfering with new run
+                  if (isActiveFeedbackToken(feedbackRunToken)) {
+                    // Case 1: Retry returned falsy result but token still active
+                    // Clean up UI and show error state
+                    hideFeedbackSkeleton();
+                    setRoleStatus('Role tips unavailable. Try regenerating feedback.');
+                    const hasAtsScore = !!(atsSettled.status === 'fulfilled' && atsSettled.value && atsSettled.value.success);
+                    updateRoleTipsState({
+                      hasAtsScore,
+                      roleSpecificFeedback: null
+                    });
+                    // Re-enable buttons
+                    const generateBtn = document.getElementById('rf-generate-btn');
+                    if (generateBtn) generateBtn.disabled = false;
+                    const regenBtn = document.getElementById('rf-regenerate-btn');
+                    if (regenBtn) { regenBtn.disabled = false; regenBtn.textContent = 'Regenerate Feedback'; }
+                    clearActiveFeedbackToken();
+                  }
+                  // Case 2: Token is stale - do nothing, let new run handle its own UI
                   return;
                 }
               } catch (retryError) {
