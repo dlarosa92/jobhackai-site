@@ -1258,7 +1258,7 @@ export async function onRequest(context) {
     }
 
     // Update throttles and usage counters (for cache misses)
-    await updateUsageCounters(uid, sanitizedResumeId, effectivePlan, env);
+    // NOTE: moved to after successful D1 persistence to ensure "no results = no usage recorded"
 
     // --- D1 Persistence (best effort, non-blocking) ---
     // Persist resume session, feedback, and usage to D1 for history
