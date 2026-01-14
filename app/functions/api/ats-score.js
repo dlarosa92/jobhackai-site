@@ -178,9 +178,65 @@ export async function onRequest(context) {
       }
     }
 
-    // If cached, return cached result (allow re-reads for free users)
+    // If cached, persist cached result to D1 first, then return cached result.
     if (cachedResult) {
-      console.log(`[ATS-SCORE] Cache hit for ${uid}`, { resumeId, plan });
+      // Require D1 to be available and a resumeId to persist cached results.
+      if (!isD1Available(env) || !resumeId) {
+        console.warn('[ATS-SCORE] D1 not available or missing resumeId while handling cached result', { resumeId, uid });
+        return json({
+          success: false,
+          error: 'd1-unavailable',
+          message: 'Database not available to persist cached ATS result'
+        }, 503, origin, env);
+      }
+
+      try {
+        const d1User = await getOrCreateUserByAuthId(env, uid, null);
+        if (!d1User) {
+          console.warn('[ATS-SCORE] D1 user resolution failed while handling cached result', { resumeId, uid });
+          return json({
+            success: false,
+            error: 'd1-user-resolution-failed',
+            message: 'Failed to resolve user for persistence'
+          }, 503, origin, env);
+        }
+
+        // Map cachedResult into the helper's expected ruleBasedScores shape (minimal)
+        const cachedRuleBasedScores = {
+          overallScore: cachedResult.score,
+          keywordScore: { score: cachedResult.breakdown?.keywordScore ?? 0 },
+          formattingScore: { score: cachedResult.breakdown?.formattingScore ?? 0 },
+          structureScore: { score: cachedResult.breakdown?.structureScore ?? 0 },
+          toneScore: { score: cachedResult.breakdown?.toneScore ?? 0 },
+          grammarScore: { score: cachedResult.breakdown?.grammarScore ?? 0 },
+          extractionQuality: cachedResult.extractionQuality ?? null
+        };
+
+        const session = await upsertResumeSessionWithScores(env, d1User.id, {
+          resumeId,
+          role: normalizedJobTitle || null,
+          atsScore: cachedResult.score ?? null,
+          ruleBasedScores: cachedRuleBasedScores
+        });
+
+        if (!session) {
+          console.warn('[ATS-SCORE] D1 upsert returned null while handling cached result', { resumeId, uid });
+          return json({
+            success: false,
+            error: 'd1-persist-failed',
+            message: 'Failed to persist cached ATS result to database'
+          }, 503, origin, env);
+        }
+      } catch (err) {
+        console.warn('[ATS-SCORE] D1 persistence failed while handling cached result:', err?.message);
+        return json({
+          success: false,
+          error: 'd1-persist-failed',
+          message: 'Failed to persist cached ATS result to database'
+        }, 503, origin, env);
+      }
+
+      console.log(`[ATS-SCORE] Cache hit persisted for ${uid}`, { resumeId, plan });
       return json({
         success: true,
         ...cachedResult,
@@ -322,25 +378,51 @@ export async function onRequest(context) {
     }
 
     // --- D1 Persistence: Store ruleBasedScores as source of truth ---
-    // CRITICAL: Await D1 write to ensure it completes before /api/resume-feedback queries
-    // This prevents race condition where parallel calls cause redundant scoring
-    if (isD1Available(env) && resumeId) {
-      try {
-        const d1User = await getOrCreateUserByAuthId(env, uid, null);
-        if (d1User) {
-          await upsertResumeSessionWithScores(env, d1User.id, {
-            resumeId: resumeId,
-            role: normalizedJobTitle || null,
-            atsScore: ruleBasedScores.overallScore,
-            ruleBasedScores: ruleBasedScores
-          });
-          console.log('[ATS-SCORE] Stored ruleBasedScores in D1', { resumeId, uid });
-        }
-      } catch (d1Error) {
-        // Non-blocking: log but don't fail the request
-        // If D1 write fails, /api/resume-feedback will fall back to re-scoring
-        console.warn('[ATS-SCORE] D1 persistence failed (non-fatal):', d1Error.message);
+    // CRITICAL: Require D1 write to succeed for a 200 response.
+    if (!isD1Available(env) || !resumeId) {
+      console.warn('[ATS-SCORE] D1 not available or missing resumeId before persistence', { resumeId, uid });
+      return json({
+        success: false,
+        error: 'd1-unavailable',
+        message: 'Database not available to persist ATS result'
+      }, 503, origin, env);
+    }
+
+    try {
+      const d1User = await getOrCreateUserByAuthId(env, uid, null);
+      if (!d1User) {
+        console.warn('[ATS-SCORE] D1 user resolution failed before persistence', { resumeId, uid });
+        return json({
+          success: false,
+          error: 'd1-user-resolution-failed',
+          message: 'Failed to resolve user for persistence'
+        }, 503, origin, env);
       }
+
+      const session = await upsertResumeSessionWithScores(env, d1User.id, {
+        resumeId: resumeId,
+        role: normalizedJobTitle || null,
+        atsScore: ruleBasedScores.overallScore,
+        ruleBasedScores: ruleBasedScores
+      });
+
+      if (!session) {
+        console.warn('[ATS-SCORE] D1 upsert returned null', { resumeId, uid });
+        return json({
+          success: false,
+          error: 'd1-persist-failed',
+          message: 'Failed to persist ATS result to database'
+        }, 503, origin, env);
+      }
+
+      console.log('[ATS-SCORE] Stored ruleBasedScores in D1', { resumeId, uid, sessionId: session.id, ats_ready: session.ats_ready });
+    } catch (d1Error) {
+      console.warn('[ATS-SCORE] D1 persistence failed (fatal):', d1Error?.message);
+      return json({
+        success: false,
+        error: 'd1-persist-failed',
+        message: 'Failed to persist ATS result to database'
+      }, 503, origin, env);
     }
 
     // Generate AI feedback (only for narrative, not scores)
