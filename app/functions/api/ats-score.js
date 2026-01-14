@@ -227,6 +227,28 @@ export async function onRequest(context) {
             message: 'Failed to persist cached ATS result to database'
           }, 503, origin, env);
         }
+        // For free plan: claim usage only after successful persistence
+        if (plan === 'free') {
+          try {
+            const claimOk = await claimFreeATSUsage(env, d1User.id);
+            if (!claimOk) {
+              return json({
+                success: false,
+                error: 'Usage limit reached',
+                message: 'You have used your free ATS score. Upgrade to Trial or Essential for unlimited scoring.',
+                upgradeRequired: true
+              }, 403, origin, env);
+            }
+            freeAtsClaimed = true;
+          } catch (claimErr) {
+            console.warn('[ATS-SCORE] Free ATS claim failed while handling cached result:', claimErr?.message);
+            return json({
+              success: false,
+              error: 'd1-claim-failed',
+              message: 'Failed to record ATS usage'
+            }, 503, origin, env);
+          }
+        }
       } catch (err) {
         console.warn('[ATS-SCORE] D1 persistence failed while handling cached result:', err?.message);
         return json({
@@ -363,19 +385,7 @@ export async function onRequest(context) {
       }, 500, origin, env);
     }
 
-    // If Free: Now perform the atomic claim AFTER successful scoring
-    if (plan === 'free' && d1User) {
-      // Only attempt to claim after a successful score
-      freeAtsClaimed = await claimFreeATSUsage(env, d1User.id);
-      if (!freeAtsClaimed) {
-        return json({
-          success: false,
-          error: 'Usage limit reached',
-          message: 'You have used your free ATS score. Upgrade to Trial or Essential for unlimited scoring.',
-          upgradeRequired: true
-        }, 403, origin, env);
-      }
-    }
+    // NOTE: Free usage claim will occur only after successful D1 persistence (see below).
 
     // --- D1 Persistence: Store ruleBasedScores as source of truth ---
     // CRITICAL: Require D1 write to succeed for a 200 response.
@@ -423,6 +433,29 @@ export async function onRequest(context) {
         error: 'd1-persist-failed',
         message: 'Failed to persist ATS result to database'
       }, 503, origin, env);
+    }
+
+    // For free plan: claim usage only after successful persistence
+    if (plan === 'free') {
+      try {
+        const claimOk = await claimFreeATSUsage(env, d1User.id);
+        if (!claimOk) {
+          return json({
+            success: false,
+            error: 'Usage limit reached',
+            message: 'You have used your free ATS score. Upgrade to Trial or Essential for unlimited scoring.',
+            upgradeRequired: true
+          }, 403, origin, env);
+        }
+        freeAtsClaimed = true;
+      } catch (claimErr) {
+        console.warn('[ATS-SCORE] Free ATS claim failed:', claimErr?.message);
+        return json({
+          success: false,
+          error: 'd1-claim-failed',
+          message: 'Failed to record ATS usage'
+        }, 503, origin, env);
+      }
     }
 
     // Generate AI feedback (only for narrative, not scores)
