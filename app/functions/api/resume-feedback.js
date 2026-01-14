@@ -631,15 +631,18 @@ export async function onRequest(context) {
     // If using fallback readiness (ats_score exists but rule_based_scores_json missing),
     // construct minimal ruleBasedScores object to allow feedback generation to proceed
     if (atsFallbackReadiness && !ruleBasedScores && resumeSession?.ats_score !== null && resumeSession?.ats_score !== undefined) {
-      const fallbackAtsScore = resumeSession.ats_score;
+      const fallbackAtsScore = Number(resumeSession.ats_score) || 0;
+      // Helper to compute per-category score proportional to overall ATS score
+      const scoreFor = (max) => Math.round((fallbackAtsScore / 100) * max);
+
       ruleBasedScores = {
         overallScore: fallbackAtsScore,
         // Use canonical category max values to ensure percentages sum to 100
-        keywordScore: { score: null, max: 40, feedback: null },
-        formattingScore: { score: null, max: 20, feedback: null },
-        structureScore: { score: null, max: 15, feedback: null },
-        toneScore: { score: null, max: 15, feedback: null },
-        grammarScore: { score: null, max: 10, feedback: null }
+        keywordScore: { score: scoreFor(40), max: 40, feedback: '' },
+        formattingScore: { score: scoreFor(20), max: 20, feedback: '' },
+        structureScore: { score: scoreFor(15), max: 15, feedback: '' },
+        toneScore: { score: scoreFor(15), max: 15, feedback: '' },
+        grammarScore: { score: scoreFor(10), max: 10, feedback: '' }
       };
       console.log('[RESUME-FEEDBACK] Using fallback ruleBasedScores constructed from ats_score', {
         requestId,
