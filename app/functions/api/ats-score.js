@@ -73,6 +73,8 @@ export async function onRequest(context) {
     // Get resume text - prefer resumeText from request, fall back to KV if available
     let text = resumeText;
     let resumeData = null;
+    // Track whether a free ATS claim was completed for this request
+    let freeAtsClaimed = false;
 
     if (!text && resumeId) {
       // Try to load from KV if resumeText not provided
@@ -180,9 +182,17 @@ export async function onRequest(context) {
 
     // If cached, persist cached result to D1 first, then return cached result.
     if (cachedResult) {
-      // Require D1 to be available and a resumeId to persist cached results.
-      if (!isD1Available(env) || !resumeId) {
-        console.warn('[ATS-SCORE] D1 not available or missing resumeId while handling cached result', { resumeId, uid });
+      // Missing resumeId -> client error
+      if (!resumeId) {
+        return json({
+          success: false,
+          error: 'missing-resumeId',
+          message: 'resumeId is required'
+        }, 400, origin, env);
+      }
+      // Require D1 to be available to persist cached results.
+      if (!isD1Available(env)) {
+        console.warn('[ATS-SCORE] D1 not available while handling cached result', { resumeId, uid });
         return json({
           success: false,
           error: 'd1-unavailable',
@@ -201,14 +211,16 @@ export async function onRequest(context) {
           }, 503, origin, env);
         }
 
-        // Map cachedResult into the helper's expected ruleBasedScores shape (minimal)
+        // Map cachedResult into the helper's expected full ruleBasedScores shape
         const cachedRuleBasedScores = {
           overallScore: cachedResult.score,
-          keywordScore: { score: cachedResult.breakdown?.keywordScore ?? 0 },
-          formattingScore: { score: cachedResult.breakdown?.formattingScore ?? 0 },
-          structureScore: { score: cachedResult.breakdown?.structureScore ?? 0 },
-          toneScore: { score: cachedResult.breakdown?.toneScore ?? 0 },
-          grammarScore: { score: cachedResult.breakdown?.grammarScore ?? 0 },
+          keywordScore: { score: cachedResult.breakdown?.keywordScore ?? 0, feedback: '' },
+          formattingScore: { score: cachedResult.breakdown?.formattingScore ?? 0, feedback: '' },
+          structureScore: { score: cachedResult.breakdown?.structureScore ?? 0, feedback: '' },
+          toneScore: { score: cachedResult.breakdown?.toneScore ?? 0, feedback: '' },
+          grammarScore: { score: cachedResult.breakdown?.grammarScore ?? 0, feedback: '' },
+          recommendations: cachedResult.recommendations || [],
+          detectedHeadings: cachedResult.detectedHeadings || null,
           extractionQuality: cachedResult.extractionQuality ?? null
         };
 
@@ -389,8 +401,15 @@ export async function onRequest(context) {
 
     // --- D1 Persistence: Store ruleBasedScores as source of truth ---
     // CRITICAL: Require D1 write to succeed for a 200 response.
-    if (!isD1Available(env) || !resumeId) {
-      console.warn('[ATS-SCORE] D1 not available or missing resumeId before persistence', { resumeId, uid });
+    if (!resumeId) {
+      return json({
+        success: false,
+        error: 'missing-resumeId',
+        message: 'resumeId is required'
+      }, 400, origin, env);
+    }
+    if (!isD1Available(env)) {
+      console.warn('[ATS-SCORE] D1 not available before persistence', { resumeId, uid });
       return json({
         success: false,
         error: 'd1-unavailable',
