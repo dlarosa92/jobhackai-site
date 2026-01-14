@@ -305,7 +305,6 @@ export async function onRequest(context) {
 
     // Run rule-based scoring (NO AI TOKENS)
     let ruleBasedScores;
-    let freeAtsClaimed = false;
     try {
       console.log('[ATS-SCORE] Input length:', text.length, 'jobTitle:', normalizedJobTitle);
       console.log('[ATS-SCORE] Starting scoring:', {
