@@ -469,35 +469,7 @@ export async function onRequest(context) {
       let canReturnCached = false;
 
       if (isD1Available(env)) {
-        // Ensure we have a D1 user and resume session
-        if (d1User) {
-          if (!resumeSession) {
-            try {
-              resumeSession = await getResumeSessionByResumeId(env, d1User.id, sanitizedResumeId);
-            } catch (e) {
-              resumeSession = null;
-            }
-          }
-          if (resumeSession && resumeSession.id) {
-            try {
-              // Persist a usage event for this cached-served request
-              const usageEvent = await logUsageEvent(env, d1User.id, 'resume_feedback', null, {
-                resumeSessionId: resumeSession.id,
-                plan: effectivePlan,
-                cached: true,
-                jobTitle: normalizedJobTitle || null
-              });
-              if (usageEvent && usageEvent.id) {
-                // Update KV counters (best-effort but treat exceptions as fatal for invariant)
-                await updateUsageCounters(uid, sanitizedResumeId, effectivePlan, env);
-                canReturnCached = true;
-              }
-            } catch (e) {
-              console.warn('[RESUME-FEEDBACK] Failed to persist usage for cached result, will treat as cache miss:', e.message);
-              canReturnCached = false;
-            }
-          }
-        }
+        // persistence for cached result handled in single linear flow
       }
 
       if (canReturnCached) {
@@ -590,10 +562,7 @@ export async function onRequest(context) {
     }
 
     // resumeSession should already exist from the single reservation step above.
-    if (!resumeSession) {
-      // Defensive fetch (should not be needed if reservation ran)
-      resumeSession = await getResumeSessionByResumeId(env, d1User.id, sanitizedResumeId);
-    }
+    // resumeSession should have been reserved earlier in the flow
 
     if (!resumeSession) {
       return errorResponse('Resume session not found', 500, origin, env, requestId);
@@ -678,90 +647,7 @@ export async function onRequest(context) {
     }
   }
 
-  // --- D1 feedback reuse (source of truth) ---
-  if (d1User && isD1Available(env)) {
-    if (!resumeSession) {
-      resumeSession = await getResumeSessionByResumeId(env, d1User.id, sanitizedResumeId);
-    }
-
-    if (resumeSession && env.DB) {
-      const latestFeedback = await env.DB.prepare(`
-        SELECT feedback_json, created_at 
-        FROM feedback_sessions 
-        WHERE resume_session_id = ? 
-        ORDER BY created_at DESC 
-        LIMIT 1
-      `).bind(resumeSession.id).first();
-
-      if (latestFeedback?.feedback_json) {
-        let feedback = null;
-        try {
-          feedback = JSON.parse(latestFeedback.feedback_json);
-        } catch (parseError) {
-          console.warn('[RESUME-FEEDBACK] Ignoring D1 feedback session due to JSON parse error', {
-            requestId,
-            error: parseError.message
-          });
-        }
-
-        if (feedback) {
-          const storedRole = normalizeRole(
-            feedback?.roleSpecificFeedback?.targetRoleUsed || resumeSession.role || null
-          );
-          const roleMatches = requestedRoleNormalized === storedRole;
-
-          const feedbackValid = isValidFeedbackResult(feedback, {
-            requireRoleSpecific: !!requestedRoleNormalized
-          });
-
-          const canReuse = feedbackValid && (
-            requestedRoleNormalized ? roleMatches : (storedRole == null || storedRole === 'general')
-          );
-
-          if (canReuse) {
-            // Optionally re-seed KV for future quick hits (only if valid)
-            if (env.JOBHACKAI_KV) {
-              const cacheHash = await hashString(`${sanitizedResumeId}:${normalizedJobTitle}:feedback`);
-              await env.JOBHACKAI_KV.put(
-                `feedbackCache:${cacheHash}`,
-                JSON.stringify({ result: feedback, timestamp: Date.now() }),
-                { expirationTtl: 86400 }
-              );
-            }
-
-            // Count usage for D1-served responses: persist a usage event and update KV counters
-            if (resumeSession && resumeSession.id) {
-              await logUsageEvent(env, d1User.id, 'resume_feedback', null, {
-                resumeSessionId: resumeSession.id,
-                plan: effectivePlan,
-                cached: false,
-                jobTitle: normalizedJobTitle || null
-              });
-              await updateUsageCounters(uid, sanitizedResumeId, effectivePlan, env);
-            }
-
-            console.log('[RESUME-FEEDBACK] Using D1 feedback session', {
-              requestId,
-              resumeSessionId: resumeSession.id
-            });
-
-            return successResponse({
-              ...feedback,
-              extractionQuality: feedback?.extractionQuality || extractionQuality || null
-            }, 200, origin, env, requestId);
-          } else {
-            console.log('[RESUME-FEEDBACK] Ignoring D1 feedback session (role mismatch or invalid structure)', {
-              requestId,
-              roleMatches,
-              hasRoleSpecificFeedback: !!feedback?.roleSpecificFeedback,
-              storedRole,
-              requestedRoleNormalized
-            });
-          }
-        }
-      }
-    }
-  }
+  // D1 feedback reuse handled via single persistence flow
 
     // Generate AI feedback with exponential backoff retry
     // Token budget logic:
