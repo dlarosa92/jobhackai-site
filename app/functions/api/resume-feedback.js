@@ -581,146 +581,90 @@ export async function onRequest(context) {
 
     // Resume text is already validated by sanitizeResumeText (80,000 char limit)
 
-    // --- Load ruleBasedScores from D1 (authoritative) ---
+    // --- Ensure canonical persistence exists BEFORE reading rule-based scores ---
+    // At this point, require D1 user and resume session to exist (created/resolved earlier if needed).
     let ruleBasedScores = null;
-    resumeSession = null;
     let atsReady = false;
-    if (d1User && isD1Available(env)) {
-      const maxRetries = 4;
-      const retryDelay = 200;
-      for (let attempt = 0; attempt < maxRetries; attempt++) {
-        try {
-          const existingSession = await getResumeSessionByResumeId(env, d1User.id, sanitizedResumeId);
-          resumeSession = existingSession;
-          
-          // Check ATS readiness flag (canonical gate)
-          if (existingSession?.ats_ready === 1) {
-            atsReady = true;
-            
-            // Prefer rule_based_scores_json for content
-            if (existingSession.rule_based_scores_json) {
-              try {
-                const parsed = JSON.parse(existingSession.rule_based_scores_json);
-                const isValid = parsed &&
-                  typeof parsed.overallScore === 'number' &&
-                  parsed.keywordScore?.score !== undefined &&
-                  parsed.formattingScore?.score !== undefined &&
-                  parsed.structureScore?.score !== undefined &&
-                  parsed.toneScore?.score !== undefined &&
-                  parsed.grammarScore?.score !== undefined;
+    if (!d1User || !isD1Available(env)) {
+      return errorResponse('Storage not available for rule-based scores', 500, origin, env, requestId);
+    }
 
-                if (isValid) {
-                  ruleBasedScores = parsed;
-                  console.log('[RESUME-FEEDBACK] Reusing ruleBasedScores from D1', {
-                    requestId,
-                    resumeId: sanitizedResumeId,
-                    overallScore: ruleBasedScores.overallScore,
-                    attempt: attempt + 1
-                  });
-                  break;
-                } else {
-                  console.warn('[RESUME-FEEDBACK] Invalid ruleBasedScores structure in D1', {
-                    requestId,
-                    attempt: attempt + 1
-                  });
-                  // Fall through to ats_score fallback check below
-                }
-              } catch (parseError) {
-                console.warn('[RESUME-FEEDBACK] Failed to parse ruleBasedScores from D1', {
-                  requestId,
-                  error: parseError.message,
-                  attempt: attempt + 1
-                });
-                // Fall through to ats_score fallback check below
-              }
-            }
-            
-            // Fallback: if ruleBasedScores is still null (JSON missing or invalid), try ats_score
-            if (!ruleBasedScores && existingSession.ats_score !== null && existingSession.ats_score !== undefined) {
-              // ATS ready but JSON missing/invalid - log and allow ats_score fallback
-              console.log('[RESUME-FEEDBACK] ATS ready via ats_ready but scores JSON missing or invalid; using ats_score fallback', {
-                requestId,
-                resumeId: sanitizedResumeId,
-                atsScore: existingSession.ats_score,
-                attempt: attempt + 1
-              });
-              break;
-            }
-            
-            // If ats_ready but no usable data (JSON invalid/missing AND ats_score null), break to avoid infinite loop
-            // The gate will handle this case after the loop
-            if (!ruleBasedScores) {
-              console.warn('[RESUME-FEEDBACK] ATS ready but no usable score data (JSON invalid/missing and ats_score null)', {
-                requestId,
-                resumeId: sanitizedResumeId,
-                attempt: attempt + 1
-              });
-              break; // Exit loop - gate will return 409 if no fallback possible
-            }
-          }
-        } catch (d1Error) {
-          console.warn('[RESUME-FEEDBACK] D1 lookup failed (non-fatal), will retry:', {
+    // resumeSession should already exist from the single reservation step above.
+    if (!resumeSession) {
+      // Defensive fetch (should not be needed if reservation ran)
+      resumeSession = await getResumeSessionByResumeId(env, d1User.id, sanitizedResumeId);
+    }
+
+    if (!resumeSession) {
+      return errorResponse('Resume session not found', 500, origin, env, requestId);
+    }
+
+    // ATS readiness is authoritative from the resume_session row
+    if (resumeSession.ats_ready === 1) {
+      atsReady = true;
+    } else {
+      return errorResponse(
+        'Please wait for your ATS score to finish processing before requesting feedback.',
+        409,
+        origin,
+        env,
+        requestId
+      );
+    }
+
+    // Prefer rule_based_scores_json if present and valid
+    if (resumeSession.rule_based_scores_json) {
+      try {
+        const parsed = JSON.parse(resumeSession.rule_based_scores_json);
+        const isValid = parsed &&
+          typeof parsed.overallScore === 'number' &&
+          parsed.keywordScore?.score !== undefined &&
+          parsed.formattingScore?.score !== undefined &&
+          parsed.structureScore?.score !== undefined &&
+          parsed.toneScore?.score !== undefined &&
+          parsed.grammarScore?.score !== undefined;
+        if (isValid) {
+          ruleBasedScores = parsed;
+          console.log('[RESUME-FEEDBACK] Reusing ruleBasedScores from D1', {
             requestId,
-            error: d1Error.message,
-            attempt: attempt + 1
+            resumeId: sanitizedResumeId,
+            overallScore: ruleBasedScores.overallScore
           });
+        } else {
+          console.warn('[RESUME-FEEDBACK] Invalid ruleBasedScores structure in D1');
         }
-
-        if (!atsReady && attempt < maxRetries - 1) {
-          await new Promise(resolve => setTimeout(resolve, retryDelay));
-        }
+      } catch (e) {
+        console.warn('[RESUME-FEEDBACK] Failed to parse ruleBasedScores from D1:', e?.message || e);
       }
     }
 
-    // ATS readiness gate: require ats_ready === 1
-    if (!atsReady) {
-      console.warn('[RESUME-FEEDBACK] ATS score not yet available in D1 for resumeId', { requestId, resumeId: sanitizedResumeId });
-      return errorResponse(
-        'Please wait for your ATS score to finish processing before requesting feedback.',
-        409,
-        origin,
-        env,
-        requestId
-      );
-    }
-
-    // Safety check: if ats_ready but no usable data (JSON invalid/missing AND ats_score null), return 409
-    if (!ruleBasedScores && (resumeSession?.ats_score === null || resumeSession?.ats_score === undefined)) {
-      console.warn('[RESUME-FEEDBACK] ATS ready but no usable score data available', {
-        requestId,
-        resumeId: sanitizedResumeId,
-        hasJson: !!resumeSession?.rule_based_scores_json,
-        hasAtsScore: resumeSession?.ats_score !== null && resumeSession?.ats_score !== undefined
-      });
-      return errorResponse(
-        'Please wait for your ATS score to finish processing before requesting feedback.',
-        409,
-        origin,
-        env,
-        requestId
-      );
-    }
-
-    // If ats_ready but rule_based_scores_json missing, construct minimal ruleBasedScores object from ats_score (Phase I fallback behavior)
-    if (!ruleBasedScores && resumeSession?.ats_score !== null && resumeSession?.ats_score !== undefined) {
-      const fallbackAtsScore = Number(resumeSession.ats_score) || 0;
-      // Helper to compute per-category score proportional to overall ATS score
-      const scoreFor = (max) => Math.round((fallbackAtsScore / 100) * max);
-
-      ruleBasedScores = {
-        overallScore: fallbackAtsScore,
-        // Use canonical category max values to ensure percentages sum to 100
-        keywordScore: { score: scoreFor(40), max: 40, feedback: '' },
-        formattingScore: { score: scoreFor(20), max: 20, feedback: '' },
-        structureScore: { score: scoreFor(15), max: 15, feedback: '' },
-        toneScore: { score: scoreFor(15), max: 15, feedback: '' },
-        grammarScore: { score: scoreFor(10), max: 10, feedback: '' }
-      };
-      console.log('[RESUME-FEEDBACK] Using fallback ruleBasedScores constructed from ats_score', {
-        requestId,
-        resumeId: sanitizedResumeId,
-        atsScore: fallbackAtsScore
-      });
+    // If JSON missing/invalid, fallback to ats_score if present
+    if (!ruleBasedScores) {
+      if (resumeSession.ats_score !== null && resumeSession.ats_score !== undefined) {
+        const fallbackAtsScore = Number(resumeSession.ats_score) || 0;
+        const scoreFor = (max) => Math.round((fallbackAtsScore / 100) * max);
+        ruleBasedScores = {
+          overallScore: fallbackAtsScore,
+          keywordScore: { score: scoreFor(40), max: 40, feedback: '' },
+          formattingScore: { score: scoreFor(20), max: 20, feedback: '' },
+          structureScore: { score: scoreFor(15), max: 15, feedback: '' },
+          toneScore: { score: scoreFor(15), max: 15, feedback: '' },
+          grammarScore: { score: scoreFor(10), max: 10, feedback: '' }
+        };
+        console.log('[RESUME-FEEDBACK] Using fallback ruleBasedScores constructed from ats_score', {
+          requestId,
+          resumeId: sanitizedResumeId,
+          atsScore: fallbackAtsScore
+        });
+      } else {
+        return errorResponse(
+          'Please wait for your ATS score to finish processing before requesting feedback.',
+          409,
+          origin,
+          env,
+          requestId
+        );
+      }
     }
 
   // Ensure extractionQuality is available for UI trust messaging (even when reusing older D1 scores)
@@ -736,98 +680,86 @@ export async function onRequest(context) {
 
   // --- D1 feedback reuse (source of truth) ---
   if (d1User && isD1Available(env)) {
-    try {
-      if (!resumeSession) {
-        resumeSession = await getResumeSessionByResumeId(env, d1User.id, sanitizedResumeId);
-      }
+    if (!resumeSession) {
+      resumeSession = await getResumeSessionByResumeId(env, d1User.id, sanitizedResumeId);
+    }
 
-      if (resumeSession && env.DB) {
-        const latestFeedback = await env.DB.prepare(`
-          SELECT feedback_json, created_at 
-          FROM feedback_sessions 
-          WHERE resume_session_id = ? 
-          ORDER BY created_at DESC 
-          LIMIT 1
-        `).bind(resumeSession.id).first();
+    if (resumeSession && env.DB) {
+      const latestFeedback = await env.DB.prepare(`
+        SELECT feedback_json, created_at 
+        FROM feedback_sessions 
+        WHERE resume_session_id = ? 
+        ORDER BY created_at DESC 
+        LIMIT 1
+      `).bind(resumeSession.id).first();
 
-        if (latestFeedback?.feedback_json) {
-          let feedback = null;
-          try {
-            feedback = JSON.parse(latestFeedback.feedback_json);
-          } catch (parseError) {
-            console.warn('[RESUME-FEEDBACK] Ignoring D1 feedback session due to JSON parse error', {
-              requestId,
-              error: parseError.message
-            });
-          }
+      if (latestFeedback?.feedback_json) {
+        let feedback = null;
+        try {
+          feedback = JSON.parse(latestFeedback.feedback_json);
+        } catch (parseError) {
+          console.warn('[RESUME-FEEDBACK] Ignoring D1 feedback session due to JSON parse error', {
+            requestId,
+            error: parseError.message
+          });
+        }
 
-          if (feedback) {
-            const storedRole = normalizeRole(
-              feedback?.roleSpecificFeedback?.targetRoleUsed || resumeSession.role || null
-            );
-            const roleMatches = requestedRoleNormalized === storedRole;
+        if (feedback) {
+          const storedRole = normalizeRole(
+            feedback?.roleSpecificFeedback?.targetRoleUsed || resumeSession.role || null
+          );
+          const roleMatches = requestedRoleNormalized === storedRole;
 
-            const feedbackValid = isValidFeedbackResult(feedback, {
-              requireRoleSpecific: !!requestedRoleNormalized
-            });
+          const feedbackValid = isValidFeedbackResult(feedback, {
+            requireRoleSpecific: !!requestedRoleNormalized
+          });
 
-            const canReuse = feedbackValid && (
-              requestedRoleNormalized ? roleMatches : (storedRole == null || storedRole === 'general')
-            );
+          const canReuse = feedbackValid && (
+            requestedRoleNormalized ? roleMatches : (storedRole == null || storedRole === 'general')
+          );
 
-            if (canReuse) {
-              // Optionally re-seed KV for future quick hits (only if valid)
-              if (env.JOBHACKAI_KV) {
-                const cacheHash = await hashString(`${sanitizedResumeId}:${normalizedJobTitle}:feedback`);
-                await env.JOBHACKAI_KV.put(
-                  `feedbackCache:${cacheHash}`,
-                  JSON.stringify({ result: feedback, timestamp: Date.now() }),
-                  { expirationTtl: 86400 }
-                );
-              }
-
-              // Count usage for D1-served responses: persist a usage event and update KV counters
-              if (resumeSession && resumeSession.id) {
-                try {
-                  await logUsageEvent(env, d1User.id, 'resume_feedback', null, {
-                    resumeSessionId: resumeSession.id,
-                    plan: effectivePlan,
-                    cached: false,
-                    jobTitle: normalizedJobTitle || null
-                  });
-                  await updateUsageCounters(uid, sanitizedResumeId, effectivePlan, env);
-                } catch (e) {
-                  console.error('[RESUME-FEEDBACK] Failed to persist usage for D1-served response:', e?.message || e);
-                  return errorResponse('Failed to persist usage data', 500, origin, env, requestId);
-                }
-              }
-
-              console.log('[RESUME-FEEDBACK] Using D1 feedback session', {
-                requestId,
-                resumeSessionId: resumeSession.id
-              });
-
-              return successResponse({
-                ...feedback,
-                extractionQuality: feedback?.extractionQuality || extractionQuality || null
-              }, 200, origin, env, requestId);
-            } else {
-              console.log('[RESUME-FEEDBACK] Ignoring D1 feedback session (role mismatch or invalid structure)', {
-                requestId,
-                roleMatches,
-                hasRoleSpecificFeedback: !!feedback?.roleSpecificFeedback,
-                storedRole,
-                requestedRoleNormalized
-              });
+          if (canReuse) {
+            // Optionally re-seed KV for future quick hits (only if valid)
+            if (env.JOBHACKAI_KV) {
+              const cacheHash = await hashString(`${sanitizedResumeId}:${normalizedJobTitle}:feedback`);
+              await env.JOBHACKAI_KV.put(
+                `feedbackCache:${cacheHash}`,
+                JSON.stringify({ result: feedback, timestamp: Date.now() }),
+                { expirationTtl: 86400 }
+              );
             }
+
+            // Count usage for D1-served responses: persist a usage event and update KV counters
+            if (resumeSession && resumeSession.id) {
+              await logUsageEvent(env, d1User.id, 'resume_feedback', null, {
+                resumeSessionId: resumeSession.id,
+                plan: effectivePlan,
+                cached: false,
+                jobTitle: normalizedJobTitle || null
+              });
+              await updateUsageCounters(uid, sanitizedResumeId, effectivePlan, env);
+            }
+
+            console.log('[RESUME-FEEDBACK] Using D1 feedback session', {
+              requestId,
+              resumeSessionId: resumeSession.id
+            });
+
+            return successResponse({
+              ...feedback,
+              extractionQuality: feedback?.extractionQuality || extractionQuality || null
+            }, 200, origin, env, requestId);
+          } else {
+            console.log('[RESUME-FEEDBACK] Ignoring D1 feedback session (role mismatch or invalid structure)', {
+              requestId,
+              roleMatches,
+              hasRoleSpecificFeedback: !!feedback?.roleSpecificFeedback,
+              storedRole,
+              requestedRoleNormalized
+            });
           }
         }
       }
-    } catch (d1FeedbackError) {
-      console.warn('[RESUME-FEEDBACK] D1 feedback lookup failed (non-fatal)', {
-        requestId,
-        error: d1FeedbackError.message
-      });
     }
   }
 
