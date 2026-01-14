@@ -547,7 +547,7 @@ export async function onRequest(context) {
     // --- Load ruleBasedScores from D1 (authoritative) ---
     let ruleBasedScores = null;
     resumeSession = null;
-    let atsFallbackReadiness = false;
+    let atsReady = false;
     if (d1User && isD1Available(env)) {
       const maxRetries = 4;
       const retryDelay = 200;
@@ -556,51 +556,70 @@ export async function onRequest(context) {
           const existingSession = await getResumeSessionByResumeId(env, d1User.id, sanitizedResumeId);
           resumeSession = existingSession;
           
-          if (existingSession?.rule_based_scores_json) {
-            try {
-              const parsed = JSON.parse(existingSession.rule_based_scores_json);
-              const isValid = parsed &&
-                typeof parsed.overallScore === 'number' &&
-                parsed.keywordScore?.score !== undefined &&
-                parsed.formattingScore?.score !== undefined &&
-                parsed.structureScore?.score !== undefined &&
-                parsed.toneScore?.score !== undefined &&
-                parsed.grammarScore?.score !== undefined;
+          // Check ATS readiness flag (canonical gate)
+          if (existingSession?.ats_ready === 1) {
+            atsReady = true;
+            
+            // Prefer rule_based_scores_json for content
+            if (existingSession.rule_based_scores_json) {
+              try {
+                const parsed = JSON.parse(existingSession.rule_based_scores_json);
+                const isValid = parsed &&
+                  typeof parsed.overallScore === 'number' &&
+                  parsed.keywordScore?.score !== undefined &&
+                  parsed.formattingScore?.score !== undefined &&
+                  parsed.structureScore?.score !== undefined &&
+                  parsed.toneScore?.score !== undefined &&
+                  parsed.grammarScore?.score !== undefined;
 
-              if (isValid) {
-                ruleBasedScores = parsed;
-                console.log('[RESUME-FEEDBACK] Reusing ruleBasedScores from D1', {
+                if (isValid) {
+                  ruleBasedScores = parsed;
+                  console.log('[RESUME-FEEDBACK] Reusing ruleBasedScores from D1', {
+                    requestId,
+                    resumeId: sanitizedResumeId,
+                    overallScore: ruleBasedScores.overallScore,
+                    attempt: attempt + 1
+                  });
+                  break;
+                } else {
+                  console.warn('[RESUME-FEEDBACK] Invalid ruleBasedScores structure in D1', {
+                    requestId,
+                    attempt: attempt + 1
+                  });
+                  // Fall through to ats_score fallback check below
+                }
+              } catch (parseError) {
+                console.warn('[RESUME-FEEDBACK] Failed to parse ruleBasedScores from D1', {
                   requestId,
-                  resumeId: sanitizedResumeId,
-                  overallScore: ruleBasedScores.overallScore,
+                  error: parseError.message,
                   attempt: attempt + 1
                 });
-                break;
-              } else {
-                console.warn('[RESUME-FEEDBACK] Invalid ruleBasedScores structure in D1, retrying', {
-                  requestId,
-                  attempt: attempt + 1
-                });
+                // Fall through to ats_score fallback check below
               }
-            } catch (parseError) {
-              console.warn('[RESUME-FEEDBACK] Failed to parse ruleBasedScores from D1, retrying', {
+            }
+            
+            // Fallback: if ruleBasedScores is still null (JSON missing or invalid), try ats_score
+            if (!ruleBasedScores && existingSession.ats_score !== null && existingSession.ats_score !== undefined) {
+              // ATS ready but JSON missing/invalid - log and allow ats_score fallback
+              console.log('[RESUME-FEEDBACK] ATS ready via ats_ready but scores JSON missing or invalid; using ats_score fallback', {
                 requestId,
-                error: parseError.message,
+                resumeId: sanitizedResumeId,
+                atsScore: existingSession.ats_score,
                 attempt: attempt + 1
               });
+              break;
             }
-          }
-          
-          // Fallback readiness check: if rule_based_scores_json not available but ats_score exists, consider ATS ready
-          if (!ruleBasedScores && existingSession?.ats_score !== null && existingSession?.ats_score !== undefined) {
-            atsFallbackReadiness = true;
-            console.log('[RESUME-FEEDBACK] ATS fallback readiness via ats_score', {
-              requestId,
-              resumeId: sanitizedResumeId,
-              atsScore: existingSession.ats_score,
-              attempt: attempt + 1
-            });
-            break;
+            
+            // If ats_ready but no usable data (JSON invalid/missing AND ats_score null), break to avoid infinite loop
+            // The gate will handle this case after the loop
+            if (!ruleBasedScores) {
+              console.warn('[RESUME-FEEDBACK] ATS ready but no usable score data (JSON invalid/missing and ats_score null)', {
+                requestId,
+                resumeId: sanitizedResumeId,
+                attempt: attempt + 1
+              });
+              break; // Exit loop - gate will return 409 if no fallback possible
+            }
           }
         } catch (d1Error) {
           console.warn('[RESUME-FEEDBACK] D1 lookup failed (non-fatal), will retry:', {
@@ -610,14 +629,14 @@ export async function onRequest(context) {
           });
         }
 
-        if (!ruleBasedScores && !atsFallbackReadiness && attempt < maxRetries - 1) {
+        if (!atsReady && attempt < maxRetries - 1) {
           await new Promise(resolve => setTimeout(resolve, retryDelay));
         }
       }
     }
 
-    // ATS readiness gate: require either rule_based_scores_json OR ats_score
-    if (!ruleBasedScores && !atsFallbackReadiness) {
+    // ATS readiness gate: require ats_ready === 1
+    if (!atsReady) {
       console.warn('[RESUME-FEEDBACK] ATS score not yet available in D1 for resumeId', { requestId, resumeId: sanitizedResumeId });
       return errorResponse(
         'Please wait for your ATS score to finish processing before requesting feedback.',
@@ -628,9 +647,25 @@ export async function onRequest(context) {
       );
     }
 
-    // If using fallback readiness (ats_score exists but rule_based_scores_json missing),
-    // construct minimal ruleBasedScores object to allow feedback generation to proceed
-    if (atsFallbackReadiness && !ruleBasedScores && resumeSession?.ats_score !== null && resumeSession?.ats_score !== undefined) {
+    // Safety check: if ats_ready but no usable data (JSON invalid/missing AND ats_score null), return 409
+    if (!ruleBasedScores && (resumeSession?.ats_score === null || resumeSession?.ats_score === undefined)) {
+      console.warn('[RESUME-FEEDBACK] ATS ready but no usable score data available', {
+        requestId,
+        resumeId: sanitizedResumeId,
+        hasJson: !!resumeSession?.rule_based_scores_json,
+        hasAtsScore: resumeSession?.ats_score !== null && resumeSession?.ats_score !== undefined
+      });
+      return errorResponse(
+        'Please wait for your ATS score to finish processing before requesting feedback.',
+        409,
+        origin,
+        env,
+        requestId
+      );
+    }
+
+    // If ats_ready but rule_based_scores_json missing, construct minimal ruleBasedScores object from ats_score (Phase I fallback behavior)
+    if (!ruleBasedScores && resumeSession?.ats_score !== null && resumeSession?.ats_score !== undefined) {
       const fallbackAtsScore = Number(resumeSession.ats_score) || 0;
       // Helper to compute per-category score proportional to overall ATS score
       const scoreFor = (max) => Math.round((fallbackAtsScore / 100) * max);
