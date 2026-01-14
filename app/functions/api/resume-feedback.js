@@ -547,6 +547,7 @@ export async function onRequest(context) {
     // --- Load ruleBasedScores from D1 (authoritative) ---
     let ruleBasedScores = null;
     resumeSession = null;
+    let atsFallbackReadiness = false;
     if (d1User && isD1Available(env)) {
       const maxRetries = 4;
       const retryDelay = 200;
@@ -589,6 +590,18 @@ export async function onRequest(context) {
               });
             }
           }
+          
+          // Fallback readiness check: if rule_based_scores_json not available but ats_score exists, consider ATS ready
+          if (!ruleBasedScores && existingSession?.ats_score !== null && existingSession?.ats_score !== undefined) {
+            atsFallbackReadiness = true;
+            console.log('[RESUME-FEEDBACK] ATS fallback readiness via ats_score', {
+              requestId,
+              resumeId: sanitizedResumeId,
+              atsScore: existingSession.ats_score,
+              attempt: attempt + 1
+            });
+            break;
+          }
         } catch (d1Error) {
           console.warn('[RESUME-FEEDBACK] D1 lookup failed (non-fatal), will retry:', {
             requestId,
@@ -597,13 +610,14 @@ export async function onRequest(context) {
           });
         }
 
-        if (!ruleBasedScores && attempt < maxRetries - 1) {
+        if (!ruleBasedScores && !atsFallbackReadiness && attempt < maxRetries - 1) {
           await new Promise(resolve => setTimeout(resolve, retryDelay));
         }
       }
     }
 
-    if (!ruleBasedScores) {
+    // ATS readiness gate: require either rule_based_scores_json OR ats_score
+    if (!ruleBasedScores && !atsFallbackReadiness) {
       console.warn('[RESUME-FEEDBACK] ATS score not yet available in D1 for resumeId', { requestId, resumeId: sanitizedResumeId });
       return errorResponse(
         'Please wait for your ATS score to finish processing before requesting feedback.',
@@ -612,6 +626,29 @@ export async function onRequest(context) {
         env,
         requestId
       );
+    }
+
+    // If using fallback readiness (ats_score exists but rule_based_scores_json missing),
+    // construct minimal ruleBasedScores object to allow feedback generation to proceed
+    if (atsFallbackReadiness && !ruleBasedScores && resumeSession?.ats_score !== null && resumeSession?.ats_score !== undefined) {
+      const fallbackAtsScore = Number(resumeSession.ats_score) || 0;
+      // Helper to compute per-category score proportional to overall ATS score
+      const scoreFor = (max) => Math.round((fallbackAtsScore / 100) * max);
+
+      ruleBasedScores = {
+        overallScore: fallbackAtsScore,
+        // Use canonical category max values to ensure percentages sum to 100
+        keywordScore: { score: scoreFor(40), max: 40, feedback: '' },
+        formattingScore: { score: scoreFor(20), max: 20, feedback: '' },
+        structureScore: { score: scoreFor(15), max: 15, feedback: '' },
+        toneScore: { score: scoreFor(15), max: 15, feedback: '' },
+        grammarScore: { score: scoreFor(10), max: 10, feedback: '' }
+      };
+      console.log('[RESUME-FEEDBACK] Using fallback ruleBasedScores constructed from ats_score', {
+        requestId,
+        resumeId: sanitizedResumeId,
+        atsScore: fallbackAtsScore
+      });
     }
 
   // Ensure extractionQuality is available for UI trust messaging (even when reusing older D1 scores)
