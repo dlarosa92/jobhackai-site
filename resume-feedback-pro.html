@@ -1983,17 +1983,21 @@
     }
 
     async function getResumeFeedbackWithAtsWait(resumeId, jobTitle, atsPromise) {
+      // If ATS promise is provided, await it BEFORE the first feedback call to prevent 409 race
+      if (atsPromise && typeof atsPromise.then === 'function') {
+        try {
+          await atsPromise;
+        } catch (_) {
+          // ATS failure handled elsewhere - still attempt feedback (may have cached ATS)
+        }
+      }
+      
       try {
         return await getResumeFeedback(resumeId, jobTitle);
       } catch (err) {
         if (!_rfIsWaitForAtsError(err)) throw err;
-        // If ATS is still in flight (generate/regenerate role change), wait for it and retry once.
-        if (atsPromise && typeof atsPromise.then === 'function') {
-          try { await atsPromise; } catch (_) { /* ATS failure handled elsewhere */ }
-        } else {
-          // Otherwise backoff briefly and retry once (covers delayed D1 writes / cold starts).
+        // Residual 409 after ATS wait (D1 lag) - retry once with brief backoff
           await _rfSleep(900);
-        }
         return await getResumeFeedback(resumeId, jobTitle);
       }
     }
@@ -4337,6 +4341,18 @@ let cachedScore = null;
             const error = feedbackSettled.reason;
             if (isFeedbackNotReadyError(error)) {
               console.warn('[RESUME-FEEDBACK] Feedback still processing - keeping skeleton.', error);
+              
+              // Set UI to "waiting_on_ats" state BEFORE any async work
+              const hasRole = canonicalJobTitleForApis && canonicalJobTitleForApis.length > 0;
+              if (hasRole) {
+                showSkeletons(true, true);
+                setRoleStatus('Waiting for ATS score to finish…');
+                const roleContainer = document.getElementById('role-feedback-container');
+                if (roleContainer) {
+                  roleContainer.style.display = 'block';
+                }
+              }
+              
               // Ensure UI cleanup so user isn't left stuck while feedback is processing server-side.
               try {
                 // Dismiss any loading handlers/overlays
@@ -4348,18 +4364,145 @@ let cachedScore = null;
                 if (window._rfToast && window._rfToast.currentId === 'rf:analysis-running' && window._rfToast.currentToast) {
                   try { if (typeof window._rfToast.currentToast.dismiss === 'function') window._rfToast.currentToast.dismiss(); } catch (e) { /* ignore */ }
                 }
-                // Re-enable primary buttons
+                // Hide any loading overlays
+                try { hideLoadingState(); } catch (e) { /* ignore */ }
+                // NOTE: Do NOT re-enable buttons here - wait until retry completes to prevent concurrent operations
+              } catch (cleanupErr) {
+                console.warn('[RESUME-FEEDBACK] Cleanup after not-ready error failed', cleanupErr);
+              }
+              
+              // Do ONE bounded retry after ATS resolves (if still pending)
+              try {
+                // Ensure ATS is complete before retry
+                if (atsPromise && typeof atsPromise.then === 'function') {
+                  try {
+                    await atsPromise;
+                  } catch (_) {
+                    // ATS failure handled elsewhere
+                  }
+                }
+                // Brief backoff for D1 write propagation
+                await _rfSleep(1000);
+                
+                // Single retry attempt
+                const retryResult = await getResumeFeedback(uploadResult.resumeId, canonicalJobTitleForApis);
+                if (retryResult && isActiveFeedbackToken(feedbackRunToken)) {
+                  // Success - update UI
+                  if (retryResult.roleSpecificFeedback) {
+                    window.latestRoleSpecific = retryResult.roleSpecificFeedback;
+                  }
+                  if (retryResult.atsIssues) {
+                    window.latestAtsIssues = retryResult.atsIssues;
+                  }
+                  updateFeedbackGrid(retryResult.roleSpecificFeedback, { token: feedbackRunToken });
+                  applyFeedbackTipsToRubric(retryResult.atsRubric);
+                  hideFeedbackSkeleton();
+                  const hasAtsScore = !!(atsSettled.status === 'fulfilled' && atsSettled.value && atsSettled.value.success);
+                  updateRoleTipsState({
+                    hasAtsScore,
+                    roleSpecificFeedback: retryResult.roleSpecificFeedback || null
+                  });
+                  const toastStatus = toastForAtsAndTips({
+                    atsOk: atsScoringSucceeded,
+                    tips: retryResult.roleSpecificFeedback,
+                    suppressSuccess: atsExtractionWarned
+                  });
+                  if (toastStatus === 'tips_ok' || toastStatus === 'tips_only') {
+                    setRoleStatus('Role-specific tips updated.');
+                  } else if (toastStatus === 'ats_only') {
+                    setRoleStatus('');
+                  } else if (toastStatus === 'missing') {
+                    setRoleStatus('');
+                  }
+                  
+                  // Persist role-specific feedback (same as normal fulfilled path)
+                  const persistRoleFeedbackIfPossible = () => {
+                    if (!window.JobHackAIStatePersistence) return;
+                    const cachedScore = window.JobHackAIStatePersistence.loadATSScore(null);
+                    if (!cachedScore || cachedScore.resumeId !== uploadResult.resumeId) return;
+                    const persistedJobTitle = canonicalJobTitleForApis || cachedScore.jobTitle || null;
+                    window.JobHackAIStatePersistence.saveATSScore({
+                      ...cachedScore,
+                      jobTitle: persistedJobTitle,
+                      roleSpecificFeedback: retryResult.roleSpecificFeedback || null,
+                      timestamp: Date.now()
+                    });
+                  };
+                  persistRoleFeedbackIfPossible();
+                  if (typeof atsPromise?.finally === 'function') {
+                    atsPromise.finally(persistRoleFeedbackIfPossible);
+                  }
+                  
+                  setTimeout(() => {
+                    showRoleFeedback();
+                  }, 100);
+                  // Re-enable buttons now that retry completed successfully
                 const generateBtn = document.getElementById('rf-generate-btn');
                 if (generateBtn) generateBtn.disabled = false;
                 const regenBtn = document.getElementById('rf-regenerate-btn');
                 if (regenBtn) { regenBtn.disabled = false; regenBtn.textContent = 'Regenerate Feedback'; }
-                // Hide any loading overlays
-                try { hideLoadingState(); } catch (e) { /* ignore */ }
-                // Clear active feedback token to avoid blocking future cached/hydrated renders
+                  // Only clear token if this is still the active run
+                  if (isActiveFeedbackToken(feedbackRunToken)) {
                 clearActiveFeedbackToken();
-              } catch (cleanupErr) {
-                console.warn('[RESUME-FEEDBACK] Cleanup after not-ready error failed', cleanupErr);
+                  }
+                  return;
+                } else {
+                  // Retry completed but either:
+                  // 1) retryResult is falsy (API returned null/undefined), OR
+                  // 2) Token is no longer active (user started new run)
+                  if (isActiveFeedbackToken(feedbackRunToken)) {
+                    // Case 1: Retry returned falsy result but token still active
+                    // Clean up UI and show error state
+                    hideFeedbackSkeleton();
+                    setRoleStatus('Role tips unavailable. Try regenerating feedback.');
+                    const hasAtsScore = !!(atsSettled.status === 'fulfilled' && atsSettled.value && atsSettled.value.success);
+                    updateRoleTipsState({
+                      hasAtsScore,
+                      roleSpecificFeedback: null
+                    });
+                    // Re-enable buttons
+                    const generateBtn = document.getElementById('rf-generate-btn');
+                    if (generateBtn) generateBtn.disabled = false;
+                    const regenBtn = document.getElementById('rf-regenerate-btn');
+                    if (regenBtn) { regenBtn.disabled = false; regenBtn.textContent = 'Regenerate Feedback'; }
+                    clearActiveFeedbackToken();
+                  } else {
+                    // Case 2: Token is stale (user started new run)
+                    // Clean up skeleton/status we showed for this stale run, but don't touch role tips state or token
+                    // This prevents UI from being stuck while avoiding interference with the new run
+                    hideFeedbackSkeleton();
+                    setRoleStatus('');
+                    // Do NOT update role tips state, re-enable buttons, or clear token - new run is active
+                  }
+                  return;
+                }
+              } catch (retryError) {
+                // Retry failed - show clear non-stuck message only if this run is still active
+                if (isActiveFeedbackToken(feedbackRunToken)) {
+                  console.warn('[RESUME-FEEDBACK] Retry after ATS wait failed:', retryError);
+                  setRoleStatus('Role tips unavailable. Try regenerating feedback.');
+                  const hasAtsScore = !!(atsSettled.status === 'fulfilled' && atsSettled.value && atsSettled.value.success);
+                  updateRoleTipsState({
+                    hasAtsScore,
+                    roleSpecificFeedback: null
+                  });
+                  hideFeedbackSkeleton();
+                  // Re-enable buttons after retry failure
+                  const generateBtn = document.getElementById('rf-generate-btn');
+                  if (generateBtn) generateBtn.disabled = false;
+                  const regenBtn = document.getElementById('rf-regenerate-btn');
+                  if (regenBtn) { regenBtn.disabled = false; regenBtn.textContent = 'Regenerate Feedback'; }
+                  // Only clear token if this is still the active run
+                  clearActiveFeedbackToken();
+                } else {
+                  // Retry failed but token is no longer active (user started new run)
+                  // Clean up UI state for this stale run
+                  hideFeedbackSkeleton();
+                  setRoleStatus('');
+                  // Do NOT update role tips state or clear token - new run is active
+                }
               }
+              
               return;
             }
 
@@ -4411,10 +4554,21 @@ let cachedScore = null;
             } catch (e) { /* ignore */ }
           }
           
-          // Show "Analysis complete" toast only if ATS scoring succeeded
+          // Show "Analysis complete" toast only when both ATS and feedback are complete (if feedback is expected)
           // If both ATS and feedback failed, error modals are already shown, so don't show misleading success toast
           // Gate toast by activeRunId to prevent showing for history loads or after Start Fresh
-          if (atsScoringSucceeded && window._rfToast && window._rfToast.activeRunId && !window._rfToast.suppress) {
+          const toastPlan = getCurrentUserPlan();
+          const toastExpectsFeedback = ['trial', 'essential', 'pro', 'premium'].includes(toastPlan);
+          const toastHasRole = canonicalJobTitleForApis && canonicalJobTitleForApis.length > 0;
+          const feedbackExpected = toastExpectsFeedback && toastHasRole;
+          const atsDone = atsScoringSucceeded;
+          // Require feedback to be fulfilled AND have valid role-specific tips (same validation UI uses)
+          const feedbackDone = feedbackSettled.status === 'fulfilled' && 
+            feedbackSettled.value && 
+            (feedbackExpected ? isValidRoleTips(feedbackSettled.value.roleSpecificFeedback) : true);
+          const bothComplete = atsDone && (feedbackExpected ? feedbackDone : true);
+          
+          if (bothComplete && window._rfToast && window._rfToast.activeRunId && !window._rfToast.suppress) {
             showRfToast('success', 'Analysis complete — View results', {
               id: 'rf:analysis-finished',
               actionText: 'View',
