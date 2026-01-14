@@ -4364,13 +4364,9 @@ let cachedScore = null;
                 if (window._rfToast && window._rfToast.currentId === 'rf:analysis-running' && window._rfToast.currentToast) {
                   try { if (typeof window._rfToast.currentToast.dismiss === 'function') window._rfToast.currentToast.dismiss(); } catch (e) { /* ignore */ }
                 }
-                // Re-enable primary buttons
-                const generateBtn = document.getElementById('rf-generate-btn');
-                if (generateBtn) generateBtn.disabled = false;
-                const regenBtn = document.getElementById('rf-regenerate-btn');
-                if (regenBtn) { regenBtn.disabled = false; regenBtn.textContent = 'Regenerate Feedback'; }
                 // Hide any loading overlays
                 try { hideLoadingState(); } catch (e) { /* ignore */ }
+                // NOTE: Do NOT re-enable buttons here - wait until retry completes to prevent concurrent operations
               } catch (cleanupErr) {
                 console.warn('[RESUME-FEEDBACK] Cleanup after not-ready error failed', cleanupErr);
               }
@@ -4406,26 +4402,71 @@ let cachedScore = null;
                     hasAtsScore,
                     roleSpecificFeedback: retryResult.roleSpecificFeedback || null
                   });
-                  setRoleStatus('Role-specific tips updated.');
+                  const toastStatus = toastForAtsAndTips({
+                    atsOk: atsScoringSucceeded,
+                    tips: retryResult.roleSpecificFeedback,
+                    suppressSuccess: atsExtractionWarned
+                  });
+                  if (toastStatus === 'tips_ok' || toastStatus === 'tips_only') {
+                    setRoleStatus('Role-specific tips updated.');
+                  } else if (toastStatus === 'ats_only') {
+                    setRoleStatus('');
+                  } else if (toastStatus === 'missing') {
+                    setRoleStatus('');
+                  }
                   setTimeout(() => {
                     showRoleFeedback();
                   }, 100);
-                  clearActiveFeedbackToken();
+                  // Re-enable buttons now that retry completed successfully
+                  const generateBtn = document.getElementById('rf-generate-btn');
+                  if (generateBtn) generateBtn.disabled = false;
+                  const regenBtn = document.getElementById('rf-regenerate-btn');
+                  if (regenBtn) { regenBtn.disabled = false; regenBtn.textContent = 'Regenerate Feedback'; }
+                  // Only clear token if this is still the active run
+                  if (isActiveFeedbackToken(feedbackRunToken)) {
+                    clearActiveFeedbackToken();
+                  }
+                  return;
+                } else {
+                  // Retry succeeded but token is no longer active (user started new run)
+                  // Clean up UI state for this stale run but don't clear the new run's token
+                  hideFeedbackSkeleton();
+                  setRoleStatus('');
+                  // Re-enable buttons (they may have been disabled by new run)
+                  const generateBtn = document.getElementById('rf-generate-btn');
+                  if (generateBtn) generateBtn.disabled = false;
+                  const regenBtn = document.getElementById('rf-regenerate-btn');
+                  if (regenBtn) { regenBtn.disabled = false; regenBtn.textContent = 'Regenerate Feedback'; }
+                  // Do NOT clear token - new run is active
                   return;
                 }
               } catch (retryError) {
-                // Retry failed - show clear non-stuck message
-                console.warn('[RESUME-FEEDBACK] Retry after ATS wait failed:', retryError);
-                setRoleStatus('Role tips unavailable. Try regenerating feedback.');
-                const hasAtsScore = !!(atsSettled.status === 'fulfilled' && atsSettled.value && atsSettled.value.success);
-                updateRoleTipsState({
-                  hasAtsScore,
-                  roleSpecificFeedback: null
-                });
-                hideFeedbackSkeleton();
+                // Retry failed - show clear non-stuck message only if this run is still active
+                if (isActiveFeedbackToken(feedbackRunToken)) {
+                  console.warn('[RESUME-FEEDBACK] Retry after ATS wait failed:', retryError);
+                  setRoleStatus('Role tips unavailable. Try regenerating feedback.');
+                  const hasAtsScore = !!(atsSettled.status === 'fulfilled' && atsSettled.value && atsSettled.value.success);
+                  updateRoleTipsState({
+                    hasAtsScore,
+                    roleSpecificFeedback: null
+                  });
+                  hideFeedbackSkeleton();
+                  // Re-enable buttons after retry failure
+                  const generateBtn = document.getElementById('rf-generate-btn');
+                  if (generateBtn) generateBtn.disabled = false;
+                  const regenBtn = document.getElementById('rf-regenerate-btn');
+                  if (regenBtn) { regenBtn.disabled = false; regenBtn.textContent = 'Regenerate Feedback'; }
+                  // Only clear token if this is still the active run
+                  clearActiveFeedbackToken();
+                } else {
+                  // Retry failed but token is no longer active (user started new run)
+                  // Clean up UI state for this stale run
+                  hideFeedbackSkeleton();
+                  setRoleStatus('');
+                  // Do NOT update role tips state or clear token - new run is active
+                }
               }
               
-              clearActiveFeedbackToken();
               return;
             }
 
