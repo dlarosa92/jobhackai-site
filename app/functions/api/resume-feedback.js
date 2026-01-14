@@ -228,22 +228,15 @@ export async function onRequest(context) {
         d1User = await getOrCreateUserByAuthId(env, uid, userEmail);
         console.log('[RESUME-FEEDBACK] D1 user resolved:', { userId: d1User?.id, authId: uid });
         if (!d1User) {
-          // If D1 binding is present but user resolution returned null, fail in non-dev environments
-          if (!isDevEnvironment) {
-            return errorResponse('Failed to resolve user record', 500, origin, env, requestId);
-          } else {
-            console.warn('[RESUME-FEEDBACK] D1 user resolution returned null in dev environment; continuing in dev mode');
-          }
+          return errorResponse('Failed to resolve user record', 500, origin, env, requestId);
         }
       } catch (d1Error) {
         console.error('[RESUME-FEEDBACK] D1 user resolution failed:', d1Error.message);
-        // If D1 is expected to be authoritative, fail rather than continuing without a writable user.
-        if (!isDevEnvironment) {
-          return errorResponse('Failed to resolve user record', 500, origin, env, requestId);
-        } else {
-          console.warn('[RESUME-FEEDBACK] D1 user resolution failed in dev environment; continuing for dev testing:', d1Error.message);
-        }
+        return errorResponse('Failed to resolve user record', 500, origin, env, requestId);
       }
+    } else {
+      // If D1 is not available, fail immediately to enforce single persistence flow
+      return errorResponse('Storage not available. Retry later.', 500, origin, env, requestId);
     }
 
     // Plan gating: always enforce from D1 (cache is just a performance hint)
@@ -505,9 +498,6 @@ export async function onRequest(context) {
             }
           }
         }
-      } else if (isDevEnvironment) {
-        // In dev, allow cached return even without D1
-        canReturnCached = true;
       }
 
       if (canReturnCached) {
@@ -796,9 +786,20 @@ export async function onRequest(context) {
                 );
               }
 
-              // Count usage for D1-served responses (only if we have a persisted session id)
+              // Count usage for D1-served responses: persist a usage event and update KV counters
               if (resumeSession && resumeSession.id) {
-                await updateUsageCounters(uid, sanitizedResumeId, effectivePlan, env);
+                try {
+                  await logUsageEvent(env, d1User.id, 'resume_feedback', null, {
+                    resumeSessionId: resumeSession.id,
+                    plan: effectivePlan,
+                    cached: false,
+                    jobTitle: normalizedJobTitle || null
+                  });
+                  await updateUsageCounters(uid, sanitizedResumeId, effectivePlan, env);
+                } catch (e) {
+                  console.error('[RESUME-FEEDBACK] Failed to persist usage for D1-served response:', e?.message || e);
+                  return errorResponse('Failed to persist usage data', 500, origin, env, requestId);
+                }
               }
 
               console.log('[RESUME-FEEDBACK] Using D1 feedback session', {
@@ -843,6 +844,9 @@ export async function onRequest(context) {
     // Reservation ids for persistence created BEFORE any AI call
     let preFeedbackSessionId = null;
     let preUsageEventId = null;
+    // D1 session metadata
+    let d1SessionId = null;
+    let d1CreatedAt = null;
     const maxRetries = 3;
     let lastError = null;
     let partialAIFeedback = null; // Capture rubric if tips are missing
@@ -868,6 +872,9 @@ export async function onRequest(context) {
             return errorResponse('Failed to create resume session', 500, origin, env, requestId);
           }
         }
+        // Record canonical session metadata for response
+        d1SessionId = String(resumeSession.id);
+        d1CreatedAt = resumeSession.created_at || new Date().toISOString();
 
         // Create placeholder feedback session to reserve history row
         const placeholder = await createFeedbackSession(env, resumeSession.id, { status: 'in_progress' });
@@ -895,10 +902,7 @@ export async function onRequest(context) {
         console.error('[RESUME-FEEDBACK] Persistence reservation failed:', e?.message || e);
         return errorResponse('Failed to reserve persistence for feedback. Please try again.', 500, origin, env, requestId);
       }
-    } else if (!isDevEnvironment) {
-      // If D1 is not available in non-dev, fail early
-      return errorResponse('Storage not available. Retry later.', 500, origin, env, requestId);
-    }
+    } 
 
     for (let attempt = 0; attempt < maxRetries; attempt++) {
       try {
@@ -1360,127 +1364,7 @@ export async function onRequest(context) {
     // Update throttles and usage counters (for cache misses)
     // NOTE: moved to after successful D1 persistence to ensure "no results = no usage recorded"
 
-    // --- D1 Persistence (best effort, non-blocking) ---
-    // Persist resume session, feedback, and usage to D1 for history
-    let d1SessionId = null;
-    let d1CreatedAt = null;
-    if (d1User && isD1Available(env)) {
-      try {
-        // Check if session already exists (created by /api/ats-score)
-        if (!resumeSession) {
-          resumeSession = await getResumeSessionByResumeId(env, d1User.id, sanitizedResumeId);
-        }
-        
-        if (!resumeSession) {
-          // Create new session (fallback if /api/ats-score didn't create one)
-          resumeSession = await createResumeSession(env, d1User.id, {
-            title: normalizedJobTitle || null,
-            role: normalizedJobTitle || null,
-            rawTextLocation: `resume:${sanitizedResumeId}`
-          });
-        }
-        
-        // Update title/role if they're missing and we have a job title
-        // This ensures history tiles show the correct job title instead of "Untitled role"
-        if (resumeSession && normalizedJobTitle && (!resumeSession.title || !resumeSession.role)) {
-          try {
-            const updated = await env.DB.prepare(
-              `UPDATE resume_sessions 
-               SET title = COALESCE(title, ?),
-                   role = COALESCE(role, ?)
-               WHERE id = ?
-               RETURNING id, title, role`
-            ).bind(
-              normalizedJobTitle,
-              normalizedJobTitle,
-              resumeSession.id
-            ).first();
-            
-            if (updated) {
-              resumeSession.title = updated.title || resumeSession.title;
-              resumeSession.role = updated.role || resumeSession.role;
-            }
-          } catch (updateError) {
-            console.warn('[RESUME-FEEDBACK] Failed to update session title/role (non-blocking):', updateError.message);
-          }
-        }
-        
-        if (resumeSession) {
-          d1SessionId = String(resumeSession.id);
-          d1CreatedAt = resumeSession.created_at;
-          
-          // Use overallScore from ruleBasedScores (already calculated with Math.round via calcOverallScore)
-          // This ensures consistency with the score returned by the scoring engine
-          const overallAtsScore = ruleBasedScores.overallScore ?? null;
-          // ATS score is canonical and written only by /api/ats-score.
-          
-          // Create feedback session with the full result
-          // CRITICAL: Final defensive sanitization before D1 storage (result already sanitized, but double-check)
-          if (result.roleSpecificFeedback) {
-            if (typeof result.roleSpecificFeedback === 'object' && !Array.isArray(result.roleSpecificFeedback)) {
-              const sanitized = sanitizeRoleSpecificFeedback(result.roleSpecificFeedback);
-              result.roleSpecificFeedback = sanitized || null;
-            } else if (Array.isArray(result.roleSpecificFeedback)) {
-              const filtered = result.roleSpecificFeedback.filter(
-                item => item && typeof item === 'object' && !Array.isArray(item)
-              );
-              result.roleSpecificFeedback = filtered.length > 0 ? filtered : null;
-            } else {
-              result.roleSpecificFeedback = null;
-            }
-          }
-          // Finalize feedback session: update the placeholder feedback session with full result
-          if (preFeedbackSessionId) {
-            try {
-              await env.DB.prepare(
-                `UPDATE feedback_sessions SET feedback_json = ? WHERE id = ?`
-              ).bind(JSON.stringify(result), preFeedbackSessionId).run();
-            } catch (updateError) {
-              console.error('[RESUME-FEEDBACK] Failed to update feedback session with AI result:', updateError.message);
-              return errorResponse('Failed to persist feedback result', 500, origin, env, requestId);
-            }
-          } else {
-            // Fallback - try to create (should not happen if reservation succeeded)
-            const created = await createFeedbackSession(env, resumeSession.id, result);
-            if (!created || !created.id) {
-              return errorResponse('Failed to persist feedback result', 500, origin, env, requestId);
-            }
-            preFeedbackSessionId = created.id;
-          }
-
-          // Update usage event with token usage
-          if (preUsageEventId) {
-            try {
-              await env.DB.prepare(
-                `UPDATE usage_events SET tokens_used = ? WHERE id = ?`
-              ).bind(tokenUsage || null, preUsageEventId).run();
-            } catch (usageUpdateError) {
-              console.error('[RESUME-FEEDBACK] Failed to update usage event with token counts:', usageUpdateError.message);
-              return errorResponse('Failed to persist usage data', 500, origin, env, requestId);
-            }
-          } else {
-            // Fallback: create a usage event if missing
-            await logUsageEvent(env, d1User.id, 'resume_feedback', tokenUsage || null, {
-              resumeSessionId: resumeSession.id,
-              plan: effectivePlan,
-              cached: false,
-              jobTitle: normalizedJobTitle || null,
-              atsScore: overallAtsScore
-            });
-          }
-
-          // D1 persistence completed successfully
-          console.log('[RESUME-FEEDBACK] D1 persistence complete:', { 
-            sessionId: d1SessionId || String(resumeSession.id), 
-            userId: d1User.id,
-            atsScore: overallAtsScore
-          });
-        }
-      } catch (d1Error) {
-        console.error('[RESUME-FEEDBACK] D1 persistence failed (non-blocking):', d1Error.message);
-        // Continue - feedback still works, just won't be in history
-      }
-    }
+    // Persistence finalized earlier (placeholder updated and usage recorded). No legacy non-blocking persistence paths remain.
 
     console.log('[RESUME-FEEDBACK] Success', { requestId, uid, resumeId: sanitizedResumeId, tokenUsage });
 
