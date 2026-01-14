@@ -227,9 +227,22 @@ export async function onRequest(context) {
         // Get or create user in D1 with email from Firebase token
         d1User = await getOrCreateUserByAuthId(env, uid, userEmail);
         console.log('[RESUME-FEEDBACK] D1 user resolved:', { userId: d1User?.id, authId: uid });
+        if (!d1User) {
+          // If D1 binding is present but user resolution returned null, fail in non-dev environments
+          if (!isDevEnvironment) {
+            return errorResponse('Failed to resolve user record', 500, origin, env, requestId);
+          } else {
+            console.warn('[RESUME-FEEDBACK] D1 user resolution returned null in dev environment; continuing in dev mode');
+          }
+        }
       } catch (d1Error) {
-        console.warn('[RESUME-FEEDBACK] D1 user resolution failed (non-blocking):', d1Error.message);
-        // Continue without D1 - history won't be saved but feedback will still work
+        console.error('[RESUME-FEEDBACK] D1 user resolution failed:', d1Error.message);
+        // If D1 is expected to be authoritative, fail rather than continuing without a writable user.
+        if (!isDevEnvironment) {
+          return errorResponse('Failed to resolve user record', 500, origin, env, requestId);
+        } else {
+          console.warn('[RESUME-FEEDBACK] D1 user resolution failed in dev environment; continuing for dev testing:', d1Error.message);
+        }
       }
     }
 
@@ -456,24 +469,56 @@ export async function onRequest(context) {
       }
     }
 
-    // If cached, only update usage counters if we already have a persisted session.
-    // Then return cached result.
+    // If cached, ensure persistence & usage for this request before returning cached result.
     if (cachedResult) {
-      console.log(`[RESUME-FEEDBACK] Using KV feedback cache hit`, { requestId, resumeId: sanitizedResumeId, plan: effectivePlan });
+      console.log(`[RESUME-FEEDBACK] KV feedback cache hit`, { requestId, resumeId: sanitizedResumeId, plan: effectivePlan });
 
-      // Update throttles and usage only when a persisted D1 session exists (avoid speculative counting)
-      if (resumeSession && resumeSession.id) {
-        await updateUsageCounters(uid, sanitizedResumeId, effectivePlan, env);
+      let canReturnCached = false;
+
+      if (isD1Available(env)) {
+        // Ensure we have a D1 user and resume session
+        if (d1User) {
+          if (!resumeSession) {
+            try {
+              resumeSession = await getResumeSessionByResumeId(env, d1User.id, sanitizedResumeId);
+            } catch (e) {
+              resumeSession = null;
+            }
+          }
+          if (resumeSession && resumeSession.id) {
+            try {
+              // Persist a usage event for this cached-served request
+              const usageEvent = await logUsageEvent(env, d1User.id, 'resume_feedback', null, {
+                resumeSessionId: resumeSession.id,
+                plan: effectivePlan,
+                cached: true,
+                jobTitle: normalizedJobTitle || null
+              });
+              if (usageEvent && usageEvent.id) {
+                // Update KV counters (best-effort but treat exceptions as fatal for invariant)
+                await updateUsageCounters(uid, sanitizedResumeId, effectivePlan, env);
+                canReturnCached = true;
+              }
+            } catch (e) {
+              console.warn('[RESUME-FEEDBACK] Failed to persist usage for cached result, will treat as cache miss:', e.message);
+              canReturnCached = false;
+            }
+          }
+        }
+      } else if (isDevEnvironment) {
+        // In dev, allow cached return even without D1
+        canReturnCached = true;
       }
 
-      // Skip D1 persistence for cache hits to prevent duplicate history entries
-      // History should only show unique analyses, not every cache hit
-      // The original analysis session was already persisted when the cache was created
+      if (canReturnCached) {
+        return successResponse({
+          ...cachedResult,
+          cached: true
+        }, 200, origin, env, requestId);
+      }
 
-      return successResponse({
-        ...cachedResult,
-        cached: true
-      }, 200, origin, env, requestId);
+      console.log('[RESUME-FEEDBACK] Ignoring KV feedback cache due to missing persistence. Proceeding to generate fresh feedback.');
+      cachedResult = null;
     }
 
     // Retrieve resume from KV or request body (dev fallback)
@@ -795,11 +840,66 @@ export async function onRequest(context) {
       : 3500;
     let aiFeedback = null;
     let tokenUsage = 0;
+    // Reservation ids for persistence created BEFORE any AI call
+    let preFeedbackSessionId = null;
+    let preUsageEventId = null;
     const maxRetries = 3;
     let lastError = null;
     let partialAIFeedback = null; // Capture rubric if tips are missing
     let missingTipsOnly = false;
     
+    // --- Persistence reservation (must succeed before any AI call) ---
+    // Ensure D1 user, resume_session, a feedback_session stub, and a usage_event exist.
+    if (isD1Available(env)) {
+      if (!d1User) {
+        return errorResponse('Cannot resolve user for persistence', 500, origin, env, requestId);
+      }
+      try {
+        if (!resumeSession) {
+          resumeSession = await getResumeSessionByResumeId(env, d1User.id, sanitizedResumeId);
+        }
+        if (!resumeSession) {
+          resumeSession = await createResumeSession(env, d1User.id, {
+            title: normalizedJobTitle || null,
+            role: normalizedJobTitle || null,
+            rawTextLocation: `resume:${sanitizedResumeId}`
+          });
+          if (!resumeSession) {
+            return errorResponse('Failed to create resume session', 500, origin, env, requestId);
+          }
+        }
+
+        // Create placeholder feedback session to reserve history row
+        const placeholder = await createFeedbackSession(env, resumeSession.id, { status: 'in_progress' });
+        if (!placeholder || !placeholder.id) {
+          return errorResponse('Failed to create feedback session', 500, origin, env, requestId);
+        }
+        preFeedbackSessionId = placeholder.id;
+
+        // Persist a usage event (tokens will be updated after AI completes)
+        const usageEvent = await logUsageEvent(env, d1User.id, 'resume_feedback', null, {
+          resumeSessionId: resumeSession.id,
+          plan: effectivePlan,
+          cached: false,
+          jobTitle: normalizedJobTitle || null,
+          atsScore: ruleBasedScores?.overallScore ?? null
+        });
+        if (!usageEvent || !usageEvent.id) {
+          return errorResponse('Failed to log usage event', 500, origin, env, requestId);
+        }
+        preUsageEventId = usageEvent.id;
+
+        // Update KV counters (fatal if this fails to ensure invariant)
+        await updateUsageCounters(uid, sanitizedResumeId, effectivePlan, env);
+      } catch (e) {
+        console.error('[RESUME-FEEDBACK] Persistence reservation failed:', e?.message || e);
+        return errorResponse('Failed to reserve persistence for feedback. Please try again.', 500, origin, env, requestId);
+      }
+    } else if (!isDevEnvironment) {
+      // If D1 is not available in non-dev, fail early
+      return errorResponse('Storage not available. Retry later.', 500, origin, env, requestId);
+    }
+
     for (let attempt = 0; attempt < maxRetries; attempt++) {
       try {
         // Only pass maxOutputTokensOverride on retry attempts to increase budget after truncation
@@ -1329,22 +1429,49 @@ export async function onRequest(context) {
               result.roleSpecificFeedback = null;
             }
           }
-          await createFeedbackSession(env, resumeSession.id, result);
-          
-          // Log usage event
-          await logUsageEvent(env, d1User.id, 'resume_feedback', tokenUsage || null, {
-            resumeSessionId: resumeSession.id,
-            plan: effectivePlan,
-            cached: false,
-            jobTitle: normalizedJobTitle || null,
-            atsScore: overallAtsScore
-          });
-          
-          // Update throttles and usage counters only after successful D1 persistence/logging
-          await updateUsageCounters(uid, sanitizedResumeId, effectivePlan, env);
+          // Finalize feedback session: update the placeholder feedback session with full result
+          if (preFeedbackSessionId) {
+            try {
+              await env.DB.prepare(
+                `UPDATE feedback_sessions SET feedback_json = ? WHERE id = ?`
+              ).bind(JSON.stringify(result), preFeedbackSessionId).run();
+            } catch (updateError) {
+              console.error('[RESUME-FEEDBACK] Failed to update feedback session with AI result:', updateError.message);
+              return errorResponse('Failed to persist feedback result', 500, origin, env, requestId);
+            }
+          } else {
+            // Fallback - try to create (should not happen if reservation succeeded)
+            const created = await createFeedbackSession(env, resumeSession.id, result);
+            if (!created || !created.id) {
+              return errorResponse('Failed to persist feedback result', 500, origin, env, requestId);
+            }
+            preFeedbackSessionId = created.id;
+          }
 
+          // Update usage event with token usage
+          if (preUsageEventId) {
+            try {
+              await env.DB.prepare(
+                `UPDATE usage_events SET tokens_used = ? WHERE id = ?`
+              ).bind(tokenUsage || null, preUsageEventId).run();
+            } catch (usageUpdateError) {
+              console.error('[RESUME-FEEDBACK] Failed to update usage event with token counts:', usageUpdateError.message);
+              return errorResponse('Failed to persist usage data', 500, origin, env, requestId);
+            }
+          } else {
+            // Fallback: create a usage event if missing
+            await logUsageEvent(env, d1User.id, 'resume_feedback', tokenUsage || null, {
+              resumeSessionId: resumeSession.id,
+              plan: effectivePlan,
+              cached: false,
+              jobTitle: normalizedJobTitle || null,
+              atsScore: overallAtsScore
+            });
+          }
+
+          // D1 persistence completed successfully
           console.log('[RESUME-FEEDBACK] D1 persistence complete:', { 
-            sessionId: d1SessionId, 
+            sessionId: d1SessionId || String(resumeSession.id), 
             userId: d1User.id,
             atsScore: overallAtsScore
           });
