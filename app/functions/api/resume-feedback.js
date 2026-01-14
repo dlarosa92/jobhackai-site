@@ -634,11 +634,12 @@ export async function onRequest(context) {
       const fallbackAtsScore = resumeSession.ats_score;
       ruleBasedScores = {
         overallScore: fallbackAtsScore,
-        keywordScore: { score: 0, max: 10, feedback: '' },
-        formattingScore: { score: 0, max: 10, feedback: '' },
-        structureScore: { score: 0, max: 10, feedback: '' },
-        toneScore: { score: 0, max: 10, feedback: '' },
-        grammarScore: { score: 0, max: 10, feedback: '' }
+        // Use canonical category max values to ensure percentages sum to 100
+        keywordScore: { score: null, max: 40, feedback: null },
+        formattingScore: { score: null, max: 20, feedback: null },
+        structureScore: { score: null, max: 15, feedback: null },
+        toneScore: { score: null, max: 15, feedback: null },
+        grammarScore: { score: null, max: 10, feedback: null }
       };
       console.log('[RESUME-FEEDBACK] Using fallback ruleBasedScores constructed from ats_score', {
         requestId,
