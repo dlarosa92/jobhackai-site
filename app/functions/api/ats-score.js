@@ -239,28 +239,8 @@ export async function onRequest(context) {
             message: 'Failed to persist cached ATS result to database'
           }, 503, origin, env);
         }
-        // For free plan: claim usage only after successful persistence
-        if (plan === 'free') {
-          try {
-            const claimOk = await claimFreeATSUsage(env, d1User.id);
-            if (!claimOk) {
-              return json({
-                success: false,
-                error: 'Usage limit reached',
-                message: 'You have used your free ATS score. Upgrade to Trial or Essential for unlimited scoring.',
-                upgradeRequired: true
-              }, 403, origin, env);
-            }
-            freeAtsClaimed = true;
-          } catch (claimErr) {
-            console.warn('[ATS-SCORE] Free ATS claim failed while handling cached result:', claimErr?.message);
-            return json({
-              success: false,
-              error: 'd1-claim-failed',
-              message: 'Failed to record ATS usage'
-            }, 503, origin, env);
-          }
-        }
+        // NOTE: Do not claim free usage on cached-result re-reads; free claims occur only
+        // in the non-cached path after successful persistence to prevent double-consumption.
       } catch (err) {
         console.warn('[ATS-SCORE] D1 persistence failed while handling cached result:', err?.message);
         return json({
