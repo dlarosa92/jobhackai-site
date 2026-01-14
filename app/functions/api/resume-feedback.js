@@ -582,27 +582,43 @@ export async function onRequest(context) {
                   });
                   break;
                 } else {
-                  console.warn('[RESUME-FEEDBACK] Invalid ruleBasedScores structure in D1, retrying', {
+                  console.warn('[RESUME-FEEDBACK] Invalid ruleBasedScores structure in D1', {
                     requestId,
                     attempt: attempt + 1
                   });
+                  // Fall through to ats_score fallback check below
                 }
               } catch (parseError) {
-                console.warn('[RESUME-FEEDBACK] Failed to parse ruleBasedScores from D1, retrying', {
+                console.warn('[RESUME-FEEDBACK] Failed to parse ruleBasedScores from D1', {
                   requestId,
                   error: parseError.message,
                   attempt: attempt + 1
                 });
+                // Fall through to ats_score fallback check below
               }
-            } else if (existingSession.ats_score !== null && existingSession.ats_score !== undefined) {
-              // ATS ready but JSON missing - log and allow ats_score fallback
-              console.log('[RESUME-FEEDBACK] ATS ready via ats_ready but scores JSON missing; using ats_score fallback', {
+            }
+            
+            // Fallback: if ruleBasedScores is still null (JSON missing or invalid), try ats_score
+            if (!ruleBasedScores && existingSession.ats_score !== null && existingSession.ats_score !== undefined) {
+              // ATS ready but JSON missing/invalid - log and allow ats_score fallback
+              console.log('[RESUME-FEEDBACK] ATS ready via ats_ready but scores JSON missing or invalid; using ats_score fallback', {
                 requestId,
                 resumeId: sanitizedResumeId,
                 atsScore: existingSession.ats_score,
                 attempt: attempt + 1
               });
               break;
+            }
+            
+            // If ats_ready but no usable data (JSON invalid/missing AND ats_score null), break to avoid infinite loop
+            // The gate will handle this case after the loop
+            if (!ruleBasedScores) {
+              console.warn('[RESUME-FEEDBACK] ATS ready but no usable score data (JSON invalid/missing and ats_score null)', {
+                requestId,
+                resumeId: sanitizedResumeId,
+                attempt: attempt + 1
+              });
+              break; // Exit loop - gate will return 409 if no fallback possible
             }
           }
         } catch (d1Error) {
@@ -622,6 +638,23 @@ export async function onRequest(context) {
     // ATS readiness gate: require ats_ready === 1
     if (!atsReady) {
       console.warn('[RESUME-FEEDBACK] ATS score not yet available in D1 for resumeId', { requestId, resumeId: sanitizedResumeId });
+      return errorResponse(
+        'Please wait for your ATS score to finish processing before requesting feedback.',
+        409,
+        origin,
+        env,
+        requestId
+      );
+    }
+
+    // Safety check: if ats_ready but no usable data (JSON invalid/missing AND ats_score null), return 409
+    if (!ruleBasedScores && (resumeSession?.ats_score === null || resumeSession?.ats_score === undefined)) {
+      console.warn('[RESUME-FEEDBACK] ATS ready but no usable score data available', {
+        requestId,
+        resumeId: sanitizedResumeId,
+        hasJson: !!resumeSession?.rule_based_scores_json,
+        hasAtsScore: resumeSession?.ats_score !== null && resumeSession?.ats_score !== undefined
+      });
       return errorResponse(
         'Please wait for your ATS score to finish processing before requesting feedback.',
         409,
