@@ -1997,7 +1997,7 @@
       } catch (err) {
         if (!_rfIsWaitForAtsError(err)) throw err;
         // Residual 409 after ATS wait (D1 lag) - retry once with brief backoff
-        await _rfSleep(900);
+          await _rfSleep(900);
         return await getResumeFeedback(resumeId, jobTitle);
       }
     }
@@ -4437,21 +4437,19 @@ let cachedScore = null;
                     showRoleFeedback();
                   }, 100);
                   // Re-enable buttons now that retry completed successfully
-                  const generateBtn = document.getElementById('rf-generate-btn');
-                  if (generateBtn) generateBtn.disabled = false;
-                  const regenBtn = document.getElementById('rf-regenerate-btn');
-                  if (regenBtn) { regenBtn.disabled = false; regenBtn.textContent = 'Regenerate Feedback'; }
+                const generateBtn = document.getElementById('rf-generate-btn');
+                if (generateBtn) generateBtn.disabled = false;
+                const regenBtn = document.getElementById('rf-regenerate-btn');
+                if (regenBtn) { regenBtn.disabled = false; regenBtn.textContent = 'Regenerate Feedback'; }
                   // Only clear token if this is still the active run
                   if (isActiveFeedbackToken(feedbackRunToken)) {
-                    clearActiveFeedbackToken();
+                clearActiveFeedbackToken();
                   }
                   return;
                 } else {
                   // Retry completed but either:
                   // 1) retryResult is falsy (API returned null/undefined), OR
                   // 2) Token is no longer active (user started new run)
-                  // Only clean up UI if this run's token is still active (case 1)
-                  // If token is stale (case 2), do nothing to avoid interfering with new run
                   if (isActiveFeedbackToken(feedbackRunToken)) {
                     // Case 1: Retry returned falsy result but token still active
                     // Clean up UI and show error state
@@ -4468,8 +4466,14 @@ let cachedScore = null;
                     const regenBtn = document.getElementById('rf-regenerate-btn');
                     if (regenBtn) { regenBtn.disabled = false; regenBtn.textContent = 'Regenerate Feedback'; }
                     clearActiveFeedbackToken();
+                  } else {
+                    // Case 2: Token is stale (user started new run)
+                    // Clean up skeleton/status we showed for this stale run, but don't touch role tips state or token
+                    // This prevents UI from being stuck while avoiding interference with the new run
+                    hideFeedbackSkeleton();
+                    setRoleStatus('');
+                    // Do NOT update role tips state, re-enable buttons, or clear token - new run is active
                   }
-                  // Case 2: Token is stale - do nothing, let new run handle its own UI
                   return;
                 }
               } catch (retryError) {
@@ -4558,7 +4562,10 @@ let cachedScore = null;
           const toastHasRole = canonicalJobTitleForApis && canonicalJobTitleForApis.length > 0;
           const feedbackExpected = toastExpectsFeedback && toastHasRole;
           const atsDone = atsScoringSucceeded;
-          const feedbackDone = feedbackSettled.status === 'fulfilled' && feedbackSettled.value !== null;
+          // Require feedback to be fulfilled AND have valid role-specific tips (same validation UI uses)
+          const feedbackDone = feedbackSettled.status === 'fulfilled' && 
+            feedbackSettled.value && 
+            (feedbackExpected ? isValidRoleTips(feedbackSettled.value.roleSpecificFeedback) : true);
           const bothComplete = atsDone && (feedbackExpected ? feedbackDone : true);
           
           if (bothComplete && window._rfToast && window._rfToast.activeRunId && !window._rfToast.suppress) {
