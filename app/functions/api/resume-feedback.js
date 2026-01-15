@@ -747,6 +747,31 @@ export async function onRequest(context) {
         d1SessionId = String(resumeSession.id);
         d1CreatedAt = resumeSession.created_at || new Date().toISOString();
 
+        // Update title/role if they're missing and we have a job title
+        // This ensures history tiles show the correct job title instead of "Untitled role"
+        if (resumeSession && normalizedJobTitle && (!resumeSession.title || !resumeSession.role)) {
+          try {
+            const updated = await env.DB.prepare(
+              `UPDATE resume_sessions 
+               SET title = COALESCE(title, ?),
+                   role = COALESCE(role, ?)
+               WHERE id = ?
+               RETURNING id, title, role`
+            ).bind(
+              normalizedJobTitle,
+              normalizedJobTitle,
+              resumeSession.id
+            ).first();
+
+            if (updated) {
+              resumeSession.title = updated.title || resumeSession.title;
+              resumeSession.role = updated.role || resumeSession.role;
+            }
+          } catch (updateError) {
+            console.warn('[RESUME-FEEDBACK] Failed to update session title/role (non-blocking):', updateError.message);
+          }
+        }
+
         // Create placeholder feedback session to reserve history row
         const placeholder = await createFeedbackSession(env, resumeSession.id, { status: 'in_progress' });
         if (!placeholder || !placeholder.id) {
