@@ -13,8 +13,7 @@ import {
   upsertResumeSessionWithScores,
   createFeedbackSession, 
   logUsageEvent,
-  isD1Available,
-  getResumeSessionByResumeId
+  isD1Available
 } from '../_lib/db.js';
 
 function corsHeaders(origin, env) {
@@ -437,19 +436,14 @@ export async function onRequest(context) {
         return errorResponse('Cannot resolve user for persistence', 500, origin, env, requestId);
       }
       try {
-        resumeSession = await getResumeSessionByResumeId(env, d1User.id, sanitizedResumeId);
+        resumeSession = await upsertResumeSessionWithScores(env, d1User.id, {
+          resumeId: sanitizedResumeId,
+          role: normalizedJobTitle || null,
+          atsScore: null,
+          ruleBasedScores: null
+        });
         if (!resumeSession) {
-          // Use upsert to safely create the canonical resume_session if missing.
-          // Pass nulls for atsScore and ruleBasedScores to avoid overwriting existing data.
-          resumeSession = await upsertResumeSessionWithScores(env, d1User.id, {
-            resumeId: sanitizedResumeId,
-            role: normalizedJobTitle || null,
-            atsScore: null,
-            ruleBasedScores: null
-          });
-        }
-        if (!resumeSession) {
-          return errorResponse('Resume session not found', 500, origin, env, requestId);
+          return errorResponse('Failed to resolve or create resume session', 500, origin, env, requestId);
         }
         d1SessionId = String(resumeSession.id);
         d1CreatedAt = resumeSession.created_at || new Date().toISOString();
