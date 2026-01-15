@@ -217,9 +217,11 @@ export async function onRequest(context) {
     // Track resume session for reuse across D1 reads/writes
     let resumeSession = null;
 
-    // D1 session metadata
+    // D1 session metadata (declared early to avoid TDZ)
     let d1SessionId = null;
     let d1CreatedAt = null;
+    let preFeedbackSessionId = null;
+    let preUsageEventId = null;
 
     // --- D1 User Resolution (best effort, non-blocking) ---
     // Resolve the authenticated user from D1 for session tracking
@@ -727,9 +729,6 @@ export async function onRequest(context) {
       : 3500;
     let aiFeedback = null;
     let tokenUsage = 0;
-    // Reservation ids for persistence created BEFORE any AI call
-    let preFeedbackSessionId = null;
-    let preUsageEventId = null;
     const maxRetries = 3;
     let lastError = null;
     let partialAIFeedback = null; // Capture rubric if tips are missing
