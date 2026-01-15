@@ -2005,6 +2005,8 @@
     // Global storage for latest feedback results to use in rewrite
     window.latestAtsIssues = null;
     window.latestRoleSpecific = null;
+    // Token associated with the latestRoleSpecific value. Scoped to a feedback run token when applicable.
+    window.latestRoleSpecificToken = null;
 
     async function rewriteResume(resumeId, section, jobTitle, atsIssues, roleSpecificFeedback) {
       const token = await getAuthToken();
@@ -3481,6 +3483,8 @@ let cachedScore = null;
               }
               if (feedbackResult.roleSpecificFeedback) {
                 window.latestRoleSpecific = feedbackResult.roleSpecificFeedback;
+                // Associate the stored tips with the active run token to avoid cross-run contamination
+                window.latestRoleSpecificToken = feedbackRunToken || null;
               }
               
               updateFeedbackGrid(feedbackResult.roleSpecificFeedback);
@@ -3863,6 +3867,7 @@ let cachedScore = null;
           // This prevents using feedback from the previous resume with the new one
           window.latestAtsIssues = null;
           window.latestRoleSpecific = null;
+          window.latestRoleSpecificToken = null;
 
           // Step 1 complete: "Reading your resume..." overlay is already hidden by uploadResume()
           // Step 2: Show skeleton loading states instead of full-screen overlay
@@ -4270,9 +4275,10 @@ let cachedScore = null;
                 if (feedbackResult.atsIssues) {
                   window.latestAtsIssues = feedbackResult.atsIssues;
                 }
-                if (feedbackResult.roleSpecificFeedback) {
-                  window.latestRoleSpecific = feedbackResult.roleSpecificFeedback;
-                }
+              if (feedbackResult.roleSpecificFeedback) {
+                window.latestRoleSpecific = feedbackResult.roleSpecificFeedback;
+                window.latestRoleSpecificToken = feedbackRunToken || null;
+              }
 
                 const feedbackGrid = document.getElementById('rf-feedback-grid');
                 if (feedbackGrid) {
@@ -4289,7 +4295,8 @@ let cachedScore = null;
                 const hasAtsScore = !!(atsSettled.status === 'fulfilled' && atsSettled.value && atsSettled.value.success);
                 updateRoleTipsState({
                   hasAtsScore,
-                  roleSpecificFeedback: feedbackResult.roleSpecificFeedback || null
+                  roleSpecificFeedback: feedbackResult.roleSpecificFeedback || null,
+                  token: feedbackRunToken
                 });
 
                 const persistRoleFeedbackIfPossible = () => {
@@ -4316,7 +4323,8 @@ let cachedScore = null;
                 const toastStatus = toastForAtsAndTips({
                   atsOk: atsScoringSucceeded,
                   tips: feedbackResult.roleSpecificFeedback,
-                  suppressSuccess: atsExtractionWarned
+                  suppressSuccess: atsExtractionWarned,
+                  token: feedbackRunToken
                 });
                 if (toastStatus === 'tips_ok' || toastStatus === 'tips_only') {
                   setRoleStatus('Role-specific tips updated.');
@@ -4330,7 +4338,8 @@ let cachedScore = null;
                 
                 updateRoleTipsState({
                   hasAtsScore: !!atsScoringSucceeded,
-                  roleSpecificFeedback: null
+                  roleSpecificFeedback: null,
+                  token: feedbackRunToken
                 });
               }
               
@@ -4388,8 +4397,9 @@ let cachedScore = null;
                 const retryResult = await getResumeFeedback(uploadResult.resumeId, canonicalJobTitleForApis);
                 if (retryResult && isActiveFeedbackToken(feedbackRunToken)) {
                   // Success - update UI
-                  if (retryResult.roleSpecificFeedback) {
+                if (retryResult.roleSpecificFeedback) {
                     window.latestRoleSpecific = retryResult.roleSpecificFeedback;
+                    window.latestRoleSpecificToken = feedbackRunToken || null;
                   }
                   if (retryResult.atsIssues) {
                     window.latestAtsIssues = retryResult.atsIssues;
@@ -4400,12 +4410,14 @@ let cachedScore = null;
                   const hasAtsScore = !!(atsSettled.status === 'fulfilled' && atsSettled.value && atsSettled.value.success);
                   updateRoleTipsState({
                     hasAtsScore,
-                    roleSpecificFeedback: retryResult.roleSpecificFeedback || null
+                    roleSpecificFeedback: retryResult.roleSpecificFeedback || null,
+                    token: feedbackRunToken
                   });
                   const toastStatus = toastForAtsAndTips({
                     atsOk: atsScoringSucceeded,
                     tips: retryResult.roleSpecificFeedback,
-                    suppressSuccess: atsExtractionWarned
+                    suppressSuccess: atsExtractionWarned,
+                    token: feedbackRunToken
                   });
                   if (toastStatus === 'tips_ok' || toastStatus === 'tips_only') {
                     setRoleStatus('Role-specific tips updated.');
@@ -4458,7 +4470,8 @@ let cachedScore = null;
                     const hasAtsScore = !!(atsSettled.status === 'fulfilled' && atsSettled.value && atsSettled.value.success);
                     updateRoleTipsState({
                       hasAtsScore,
-                      roleSpecificFeedback: null
+                      roleSpecificFeedback: null,
+                      token: feedbackRunToken
                     });
                     // Re-enable buttons
                     const generateBtn = document.getElementById('rf-generate-btn');
@@ -4484,7 +4497,8 @@ let cachedScore = null;
                   const hasAtsScore = !!(atsSettled.status === 'fulfilled' && atsSettled.value && atsSettled.value.success);
                   updateRoleTipsState({
                     hasAtsScore,
-                    roleSpecificFeedback: null
+                    roleSpecificFeedback: null,
+                    token: feedbackRunToken
                   });
                   hideFeedbackSkeleton();
                   // Re-enable buttons after retry failure
@@ -4512,7 +4526,8 @@ let cachedScore = null;
 
             updateRoleTipsState({
               hasAtsScore: !!atsScoringSucceeded,
-              roleSpecificFeedback: null
+              roleSpecificFeedback: null,
+              token: feedbackRunToken
             });
 
             handleApiError(error, {
@@ -5050,7 +5065,8 @@ let cachedScore = null;
               
               updateRoleTipsState({
                 hasAtsScore,
-                roleSpecificFeedback: null
+                roleSpecificFeedback: null,
+                token: feedbackRunToken
               });
 
               // Use handleApiError to check for upgradeRequired and show appropriate modal
@@ -5122,10 +5138,11 @@ let cachedScore = null;
               }
               
               const hasAtsScore = !!(scoreResult?.success || cachedScore?.score);
-              updateRoleTipsState({
-                hasAtsScore,
-                roleSpecificFeedback: feedbackResult.roleSpecificFeedback || null
-              });
+                updateRoleTipsState({
+                  hasAtsScore,
+                  roleSpecificFeedback: feedbackResult.roleSpecificFeedback || null,
+                  token: feedbackRunToken
+                });
 
             // Clear target role ONLY after a successful new analysis. History clicks must NOT change this input.
             const jobTitleInput = document.getElementById('rf-job-title');
@@ -5168,7 +5185,8 @@ let cachedScore = null;
               atsOk: scoreUpdated,
               tips: feedbackResult.roleSpecificFeedback,
               // If we showed a low-extraction warning, avoid stacking a success toast on top.
-              suppressSuccess: roleAtsExtractionWarned
+              suppressSuccess: roleAtsExtractionWarned,
+              token: feedbackRunToken
             });
             if (toastStatus === 'tips_ok' || toastStatus === 'tips_only') {
               setRoleStatus('Role-specific tips updated.');
@@ -5204,7 +5222,8 @@ let cachedScore = null;
             
             updateRoleTipsState({
               hasAtsScore,
-              roleSpecificFeedback: null
+              roleSpecificFeedback: null,
+              token: feedbackRunToken
             });
           }
         });
@@ -5534,8 +5553,12 @@ let cachedScore = null;
       return 'missing';
     }
 
-    function toastForAtsAndTips({ atsOk, tips, suppressSuccess = false }) {
+    function toastForAtsAndTips({ atsOk, tips, suppressSuccess = false, token = null }) {
       const status = getRoleTipsStatus({ atsOk, tips });
+      // If a token is provided, only show UI toasts when the token is still the active run.
+      if (token && !isActiveFeedbackToken(token)) {
+        return status;
+      }
       if (!window.JobHackAIToast) return status;
       if (suppressSuccess) return status;
       if (status === 'tips_ok') {
@@ -5833,7 +5856,12 @@ let cachedScore = null;
     
     // Track consecutive role-tip failures to adjust messaging
     // Helper: control Role-Specific Tips state and retry button visibility
-    function updateRoleTipsState({ hasAtsScore, roleSpecificFeedback, allowPlaceholder = false }) {
+    function updateRoleTipsState({ hasAtsScore, roleSpecificFeedback, allowPlaceholder = false, token = null }) {
+      // If this update is associated with a specific feedback run token, ensure it's still the active run.
+      // This prevents stale runs from mutating the UI.
+      if (token && !isActiveFeedbackToken(token)) {
+        return;
+      }
       const roleContainer = document.getElementById('role-feedback-container');
       const feedbackGrid = document.getElementById('rf-feedback-grid');
       const regenBtn = document.getElementById('rf-regenerate-btn');
@@ -7287,6 +7315,7 @@ let cachedScore = null;
       currentResumeId = null;
       window.latestAtsIssues = null;
       window.latestRoleSpecific = null;
+      window.latestRoleSpecificToken = null;
       
       // Show persistent banner to explain destructive reset (BFCache or explicit)
       try {
@@ -7424,6 +7453,8 @@ let cachedScore = null;
       // Sync rewrite context to match the historical record (D1 as source of truth)
       window.latestAtsIssues = atsIssues || null;
       window.latestRoleSpecific = roleSpecificFeedback || null;
+      // History/restored content is not associated with a live run token.
+      window.latestRoleSpecificToken = null;
       // Ensure rewrite actions reference the historical resume, not the last uploaded one
       currentResumeId = data.resumeId || data.resume_id || currentResumeId;
 
