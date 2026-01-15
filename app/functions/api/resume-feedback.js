@@ -463,32 +463,6 @@ export async function onRequest(context) {
 
     // Cache check (all plans)
     let cachedResult = null;
-    // Finalize placeholder feedback session and usage event before caching
-    if (preFeedbackSessionId) {
-      try {
-        await env.DB.prepare(
-          `UPDATE feedback_sessions SET feedback_json = ? WHERE id = ?`
-        ).bind(JSON.stringify(result), preFeedbackSessionId).run();
-      } catch (e) {
-        return errorResponse('Failed to persist feedback result', 500, origin, env, requestId);
-      }
-    } else {
-      // No placeholder to finalize - treat as failure
-      return errorResponse('Missing feedback session placeholder', 500, origin, env, requestId);
-    }
-
-    if (preUsageEventId) {
-      try {
-        await env.DB.prepare(
-          `UPDATE usage_events SET tokens_used = ? WHERE id = ?`
-        ).bind(tokenUsage || null, preUsageEventId).run();
-      } catch (e) {
-        return errorResponse('Failed to persist usage data', 500, origin, env, requestId);
-      }
-    } else {
-      return errorResponse('Missing usage event placeholder', 500, origin, env, requestId);
-    }
-
     if (env.JOBHACKAI_KV) {
       const cacheHash = await hashString(`${sanitizedResumeId}:${normalizedJobTitle}:feedback`);
       const cacheKey = `feedbackCache:${cacheHash}`;
@@ -1253,6 +1227,32 @@ export async function onRequest(context) {
           requireRoleSpecific: !!requestedRoleNormalized
         });
       }
+    }
+
+    // Finalize placeholder feedback session and usage event before caching
+    if (preFeedbackSessionId) {
+      try {
+        await env.DB.prepare(
+          `UPDATE feedback_sessions SET feedback_json = ? WHERE id = ?`
+        ).bind(JSON.stringify(result), preFeedbackSessionId).run();
+      } catch (e) {
+        return errorResponse('Failed to persist feedback result', 500, origin, env, requestId);
+      }
+    } else {
+      // No placeholder to finalize - treat as failure
+      return errorResponse('Missing feedback session placeholder', 500, origin, env, requestId);
+    }
+
+    if (preUsageEventId) {
+      try {
+        await env.DB.prepare(
+          `UPDATE usage_events SET tokens_used = ? WHERE id = ?`
+        ).bind(tokenUsage || null, preUsageEventId).run();
+      } catch (e) {
+        return errorResponse('Failed to persist usage data', 500, origin, env, requestId);
+      }
+    } else {
+      return errorResponse('Missing usage event placeholder', 500, origin, env, requestId);
     }
 
     // Update throttles and usage counters (for cache misses)
