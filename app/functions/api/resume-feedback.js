@@ -10,7 +10,7 @@ import { sanitizeJobTitle, sanitizeResumeText, sanitizeResumeId } from '../_lib/
 import { validateAIFeedback, validateFeedbackResult, isValidFeedbackResult, normalizeRole, sanitizeRoleSpecificFeedback, isRoleSpecificFeedbackStrict } from '../_lib/feedback-validator.js';
 import {
   getOrCreateUserByAuthId, 
-  createResumeSession, 
+  upsertResumeSessionWithScores,
   createFeedbackSession, 
   logUsageEvent,
   isD1Available,
@@ -439,10 +439,13 @@ export async function onRequest(context) {
       try {
         resumeSession = await getResumeSessionByResumeId(env, d1User.id, sanitizedResumeId);
         if (!resumeSession) {
-          resumeSession = await createResumeSession(env, d1User.id, {
-            title: normalizedJobTitle || null,
+          // Use upsert to safely create the canonical resume_session if missing.
+          // Pass nulls for atsScore and ruleBasedScores to avoid overwriting existing data.
+          resumeSession = await upsertResumeSessionWithScores(env, d1User.id, {
+            resumeId: sanitizedResumeId,
             role: normalizedJobTitle || null,
-            rawTextLocation: `resume:${sanitizedResumeId}`
+            atsScore: null,
+            ruleBasedScores: null
           });
         }
         if (!resumeSession) {
@@ -451,6 +454,7 @@ export async function onRequest(context) {
         d1SessionId = String(resumeSession.id);
         d1CreatedAt = resumeSession.created_at || new Date().toISOString();
       } catch (e) {
+        console.error('[RESUME-FEEDBACK] Resume session resolution/create failed:', e?.message || e);
         return errorResponse('Failed to resolve or create resume session', 500, origin, env, requestId);
       }
     } else {
