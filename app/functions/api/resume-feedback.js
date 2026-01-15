@@ -217,6 +217,10 @@ export async function onRequest(context) {
     // Track resume session for reuse across D1 reads/writes
     let resumeSession = null;
 
+    // D1 session metadata
+    let d1SessionId = null;
+    let d1CreatedAt = null;
+
     // --- D1 User Resolution (best effort, non-blocking) ---
     // Resolve the authenticated user from D1 for session tracking
     // This is done early so we have user_id for all D1 operations
@@ -726,9 +730,6 @@ export async function onRequest(context) {
     // Reservation ids for persistence created BEFORE any AI call
     let preFeedbackSessionId = null;
     let preUsageEventId = null;
-    // D1 session metadata
-    let d1SessionId = null;
-    let d1CreatedAt = null;
     const maxRetries = 3;
     let lastError = null;
     let partialAIFeedback = null; // Capture rubric if tips are missing
