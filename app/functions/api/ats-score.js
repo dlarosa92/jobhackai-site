@@ -3,8 +3,9 @@
 
 import { getBearer, verifyFirebaseIdToken } from '../_lib/firebase-auth.js';
 import { scoreResume } from '../_lib/ats-scoring-engine.js';
-import { getOrCreateUserByAuthId, upsertResumeSessionWithScores, isD1Available, getDb, claimFreeATSUsage } from '../_lib/db.js';
+import { getOrCreateUserByAuthId, upsertResumeSessionWithScores, isD1Available, getDb, claimFreeATSUsage, getUserPlan } from '../_lib/db.js';
 import { normalizeRoleToFamily } from '../_lib/role-normalizer.js';
+import { sanitizeResumeId } from '../_lib/input-sanitizer.js';
 
 function corsHeaders(origin, env) {
   const allowedOrigins = [
@@ -37,8 +38,6 @@ function json(data, status = 200, origin, env) {
   });
 }
 
-import { getUserPlan } from '../_lib/db.js';
-
 export async function onRequest(context) {
   const { request, env } = context;
   const origin = request.headers.get('Origin') || '';
@@ -63,7 +62,20 @@ export async function onRequest(context) {
 
     // Parse request body - accept both resumeId (for KV) and resumeText (for direct scoring)
     const body = await request.json();
-    const { resumeId, resumeText, jobTitle } = body;
+    let { resumeId, resumeText, jobTitle } = body;
+
+    // Normalize resumeId to ensure consistent raw_text_location across all code paths
+    if (resumeId) {
+      const resumeIdValidation = sanitizeResumeId(resumeId);
+      if (!resumeIdValidation.valid) {
+        return json({
+          success: false,
+          error: 'invalid-resumeId',
+          message: resumeIdValidation.error || 'Invalid resume ID'
+        }, 400, origin, env);
+      }
+      resumeId = resumeIdValidation.sanitized;
+    }
 
     // Normalize job title - optional for scoring
     const normalizedJobTitle = (jobTitle && typeof jobTitle === 'string')

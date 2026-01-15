@@ -1,5 +1,6 @@
 // Lightweight cron worker to sync KV-cached resume states into D1 when possible.
 import { getDb, getOrCreateUserByAuthId, upsertResumeSessionWithScores, setFirstResumeSnapshot, getFirstResumeSnapshot, isD1Available } from '../_lib/db.js';
+import { sanitizeResumeId } from '../_lib/input-sanitizer.js';
 
 export async function onRequest(context) {
   const { env } = context;
@@ -20,13 +21,26 @@ export async function onRequest(context) {
           if (!raw) continue;
           const record = JSON.parse(raw);
           if (!record || !record.needsSync) continue;
+          
+          // Normalize resumeId to ensure consistent raw_text_location across all code paths
+          if (!record.resumeId) {
+            console.warn('[KV-D1-SYNC] Skipping record with missing resumeId', keyInfo.name);
+            continue;
+          }
+          const resumeIdValidation = sanitizeResumeId(record.resumeId);
+          if (!resumeIdValidation.valid) {
+            console.warn('[KV-D1-SYNC] Skipping record with invalid resumeId', keyInfo.name, resumeIdValidation.error);
+            continue;
+          }
+          const sanitizedResumeId = resumeIdValidation.sanitized;
+          
           // Attempt to mirror into D1
           if (!isD1Available(env)) continue;
           const d1User = await getOrCreateUserByAuthId(env, record.uid, null);
           if (!d1User) continue;
           // Upsert session with scores
           const session = await upsertResumeSessionWithScores(env, d1User.id, {
-            resumeId: record.resumeId,
+            resumeId: sanitizedResumeId,
             role: record.jobTitle || null,
             atsScore: record.score,
             ruleBasedScores: record.breakdown || null
@@ -37,7 +51,7 @@ export async function onRequest(context) {
             if (!existingFirst) {
               await setFirstResumeSnapshot(env, d1User.id, session.id, {
                 uid: record.uid,
-                resumeId: record.resumeId,
+                resumeId: sanitizedResumeId,
                 score: record.score,
                 breakdown: record.breakdown,
                 summary: record.summary || '',
