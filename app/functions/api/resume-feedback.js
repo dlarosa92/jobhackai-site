@@ -431,8 +431,60 @@ export async function onRequest(context) {
       }
     }
 
+    // Obtain authoritative resumeSession (fetch or create) before cache check
+    if (isD1Available(env)) {
+      if (!d1User) {
+        return errorResponse('Cannot resolve user for persistence', 500, origin, env, requestId);
+      }
+      try {
+        resumeSession = await getResumeSessionByResumeId(env, d1User.id, sanitizedResumeId);
+        if (!resumeSession) {
+          resumeSession = await createResumeSession(env, d1User.id, {
+            title: normalizedJobTitle || null,
+            role: normalizedJobTitle || null,
+            rawTextLocation: `resume:${sanitizedResumeId}`
+          });
+        }
+        if (!resumeSession) {
+          return errorResponse('Resume session not found', 500, origin, env, requestId);
+        }
+        d1SessionId = String(resumeSession.id);
+        d1CreatedAt = resumeSession.created_at || new Date().toISOString();
+      } catch (e) {
+        return errorResponse('Failed to resolve or create resume session', 500, origin, env, requestId);
+      }
+    } else {
+      return errorResponse('Storage not available for rule-based scores', 500, origin, env, requestId);
+    }
+
     // Cache check (all plans)
     let cachedResult = null;
+    // Finalize placeholder feedback session and usage event before caching
+    if (preFeedbackSessionId) {
+      try {
+        await env.DB.prepare(
+          `UPDATE feedback_sessions SET feedback_json = ? WHERE id = ?`
+        ).bind(JSON.stringify(result), preFeedbackSessionId).run();
+      } catch (e) {
+        return errorResponse('Failed to persist feedback result', 500, origin, env, requestId);
+      }
+    } else {
+      // No placeholder to finalize - treat as failure
+      return errorResponse('Missing feedback session placeholder', 500, origin, env, requestId);
+    }
+
+    if (preUsageEventId) {
+      try {
+        await env.DB.prepare(
+          `UPDATE usage_events SET tokens_used = ? WHERE id = ?`
+        ).bind(tokenUsage || null, preUsageEventId).run();
+      } catch (e) {
+        return errorResponse('Failed to persist usage data', 500, origin, env, requestId);
+      }
+    } else {
+      return errorResponse('Missing usage event placeholder', 500, origin, env, requestId);
+    }
+
     if (env.JOBHACKAI_KV) {
       const cacheHash = await hashString(`${sanitizedResumeId}:${normalizedJobTitle}:feedback`);
       const cacheKey = `feedbackCache:${cacheHash}`;
@@ -469,7 +521,26 @@ export async function onRequest(context) {
       let canReturnCached = false;
 
       if (isD1Available(env)) {
-        // persistence for cached result handled in single linear flow
+        if (d1User) {
+          try {
+            // resumeSession assumed obtained earlier in flow
+            if (resumeSession && resumeSession.id) {
+              const usageEvent = await logUsageEvent(env, d1User.id, 'resume_feedback', null, {
+                resumeSessionId: resumeSession.id,
+                plan: effectivePlan,
+                cached: true,
+                jobTitle: normalizedJobTitle || null
+              });
+              if (usageEvent && usageEvent.id) {
+                await updateUsageCounters(uid, sanitizedResumeId, effectivePlan, env);
+                canReturnCached = true;
+              }
+            }
+          } catch (e) {
+            console.warn('[RESUME-FEEDBACK] Failed to persist usage for cached result, will treat as cache miss:', e.message);
+            canReturnCached = false;
+          }
+        }
       }
 
       if (canReturnCached) {
@@ -561,12 +632,7 @@ export async function onRequest(context) {
       return errorResponse('Storage not available for rule-based scores', 500, origin, env, requestId);
     }
 
-    // resumeSession should already exist from the single reservation step above.
-    // resumeSession should have been reserved earlier in the flow
-
-    if (!resumeSession) {
-      return errorResponse('Resume session not found', 500, origin, env, requestId);
-    }
+    // resumeSession already obtained above
 
     // ATS readiness is authoritative from the resume_session row
     if (resumeSession.ats_ready === 1) {
@@ -677,19 +743,6 @@ export async function onRequest(context) {
         return errorResponse('Cannot resolve user for persistence', 500, origin, env, requestId);
       }
       try {
-        if (!resumeSession) {
-          resumeSession = await getResumeSessionByResumeId(env, d1User.id, sanitizedResumeId);
-        }
-        if (!resumeSession) {
-          resumeSession = await createResumeSession(env, d1User.id, {
-            title: normalizedJobTitle || null,
-            role: normalizedJobTitle || null,
-            rawTextLocation: `resume:${sanitizedResumeId}`
-          });
-          if (!resumeSession) {
-            return errorResponse('Failed to create resume session', 500, origin, env, requestId);
-          }
-        }
         // Record canonical session metadata for response
         d1SessionId = String(resumeSession.id);
         d1CreatedAt = resumeSession.created_at || new Date().toISOString();
