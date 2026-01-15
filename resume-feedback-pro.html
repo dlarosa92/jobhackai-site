@@ -4005,6 +4005,8 @@ let cachedScore = null;
 
           const feedbackRunToken = createRunKey('feedback');
           setActiveFeedbackToken(feedbackRunToken);
+          // Explicitly own Role-Specific Tips terminal state for this run
+          window.roleTipsState = 'loading'; // 'loading' | 'success' | 'error'
 
           // Start both API calls in parallel (ATS handles the numeric score)
           const atsPromise = getAtsScore(uploadResult.resumeId, canonicalJobTitleForApis);
@@ -4274,7 +4276,7 @@ let cachedScore = null;
                   window.latestRoleSpecific = feedbackResult.roleSpecificFeedback;
                 }
 
-                const feedbackGrid = document.getElementById('rf-feedback-grid');
+          const feedbackGrid = document.getElementById('rf-feedback-grid');
                 if (feedbackGrid) {
                   feedbackGrid.innerHTML = '';
                   if (feedbackGrid.dataset) {
@@ -4566,7 +4568,9 @@ let cachedScore = null;
           const feedbackDone = feedbackSettled.status === 'fulfilled' && 
             feedbackSettled.value && 
             (feedbackExpected ? isValidRoleTips(feedbackSettled.value.roleSpecificFeedback) : true);
-          const bothComplete = atsDone && (feedbackExpected ? feedbackDone : true);
+          // Require role tips terminal 'success' when feedback is expected to consider work complete
+          const roleTipsOk = !feedbackExpected || (window.roleTipsState === 'success');
+          const bothComplete = atsDone && (feedbackExpected ? (feedbackDone && roleTipsOk) : true);
           
           if (bothComplete && window._rfToast && window._rfToast.activeRunId && !window._rfToast.suppress) {
             showRfToast('success', 'Analysis complete — View results', {
@@ -5252,7 +5256,11 @@ let cachedScore = null;
         return;
       }
       // FIX: Use displayScore instead of score to ensure 0% default works correctly
-      const percent = Math.max(0, Math.min(100, displayScore));
+      // Enforce monotonic progress: prevent regressions by tracking last known percent
+      window._rfLastProgress = window._rfLastProgress || 0;
+      const candidatePercent = Math.max(0, Math.min(100, displayScore));
+      const percent = Math.max(window._rfLastProgress, candidatePercent);
+      window._rfLastProgress = percent;
       const radius = 36;
       const circumference = 2 * Math.PI * radius;
       const offset = circumference - (percent / 100) * circumference;
@@ -5858,6 +5866,20 @@ let cachedScore = null;
         : (isOldStructure ? rsf.length : 0);
 
       if (!roleContainer) return;
+
+      // Derive explicit terminal state for role tips to avoid implicit UI-driven loading
+      try {
+        if (isNewStructure || isOldStructure) {
+          window.roleTipsState = 'success';
+        } else if (allowPlaceholder && feedbackGrid && feedbackGrid.dataset && feedbackGrid.dataset.placeholder === 'role-none') {
+          window.roleTipsState = 'success';
+        } else {
+          // No valid tips produced -> mark as error to ensure UI leaves loading state
+          window.roleTipsState = hasAtsScore ? 'error' : 'idle';
+        }
+      } catch (e) {
+        window.roleTipsState = 'error';
+      }
 
       // No ATS score – hide section and button
       if (!hasAtsScore) {
