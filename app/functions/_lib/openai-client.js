@@ -184,13 +184,17 @@ export async function callOpenAI({
             await sleep(waitTime);
             continue;
           } else {
-            throw new Error('Rate limit exceeded. Please try again later.');
+            const rateLimitError = new Error(`HTTP 429: Rate limit exceeded. Please try again later.`);
+            rateLimitError.status = 429;
+            rateLimitError.code = 429;
+            throw rateLimitError;
           }
         }
 
         if (!response.ok) {
           const errorData = await response.json().catch(() => ({}));
           const message = errorData.error?.message || `OpenAI API error: ${response.status}`;
+          const fullMessage = `HTTP ${response.status}: ${message}`;
 
           // Non-429 error: if we have a fallback model and haven't used it yet, switch and retry
           if (!usedFallback && fallbackModel && activeModel !== fallbackModel && attempt < retryLimit - 1) {
@@ -205,7 +209,10 @@ export async function callOpenAI({
             continue;
           }
 
-          throw new Error(message);
+          const httpError = new Error(fullMessage);
+          httpError.status = response.status;
+          httpError.code = response.status;
+          throw httpError;
         }
 
         const data = await response.json();

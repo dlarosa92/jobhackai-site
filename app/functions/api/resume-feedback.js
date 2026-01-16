@@ -1003,10 +1003,12 @@ export async function onRequest(context) {
         
         // PHASE 1: Timeout or other errors - only retry if not last attempt
         // For transient errors (429, 5xx), allow one retry but keep bounded
+        const status = aiError?.status || aiError?.code || aiError?.cause?.status || aiError?.cause?.code;
+        const msg = (aiError?.message || '').toLowerCase();
         const isTransient = !isTimeout && (
-          aiError.message?.includes('429') || 
-          aiError.message?.includes('500') ||
-          aiError.message?.includes('503')
+          status === 429 || status === 500 || status === 503 ||
+          msg.includes('rate limit') || msg.includes('too many requests') ||
+          aiError?.message?.includes('429') || aiError?.message?.includes('500') || aiError?.message?.includes('503')
         );
         
         if (attempt < maxRetries - 1 && isTransient) {
