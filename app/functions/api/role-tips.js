@@ -268,8 +268,8 @@ export async function onRequest(context) {
       };
     }
 
-    // PHASE 2: Generate role tips with timeout (8-10 seconds)
-    const TIER2_TIMEOUT_MS = 9000; // 9 seconds
+    // PHASE 2: Generate role tips with timeout (20-25 seconds)
+    const TIER2_TIMEOUT_MS = 20000; // 20 seconds
     
     let roleSpecificFeedback = null;
     let tokenUsage = 0;
