@@ -2058,10 +2058,13 @@
       setRoleTipsStatus(token, 'generating');
 
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), ROLE_TIPS_TIMEOUT_MS);
+      let timeoutId = null;
 
       try {
         const authToken = await getAuthToken();
+        
+        // Start timeout AFTER auth retrieval, immediately before fetch
+        timeoutId = setTimeout(() => controller.abort(), ROLE_TIPS_TIMEOUT_MS);
         
         // D2: Include sessionId in request body for D1 persistence
         // PHASE 2: Optional resumeText for backward compatibility (backend will use KV/D1 if available)
@@ -2084,7 +2087,7 @@
           signal: controller.signal
         });
 
-        clearTimeout(timeoutId);
+        if (timeoutId) clearTimeout(timeoutId);
 
         if (!response.ok) {
           const error = await response.json();
@@ -2108,7 +2111,7 @@
           return null;
         }
       } catch (error) {
-        clearTimeout(timeoutId);
+        if (timeoutId) clearTimeout(timeoutId);
         const isTimeout = error.name === 'AbortError' || error.message?.includes('timeout');
         console.error('[RESUME-FEEDBACK] Role tips fetch failed', {
           error: error.message,
@@ -4434,6 +4437,20 @@ let cachedScore = null;
                         setTimeout(() => {
                           showRoleFeedback();
                         }, 100);
+                        
+                        // Persist role tips to localStorage
+                        if (window.JobHackAIStatePersistence && isActiveFeedbackToken(feedbackRunToken)) {
+                          const cachedScore = window.JobHackAIStatePersistence.loadATSScore(null);
+                          if (cachedScore && cachedScore.resumeId === uploadResult.resumeId) {
+                            const persistedJobTitle = canonicalJobTitle || cachedScore.jobTitle || null;
+                            window.JobHackAIStatePersistence.saveATSScore({
+                              ...cachedScore,
+                              jobTitle: persistedJobTitle,
+                              roleSpecificFeedback: roleTips,
+                              timestamp: Date.now()
+                            });
+                          }
+                        }
                       } else {
                         // Role tips failed or timed out - update state to failed
                         updateRoleTipsState({
@@ -4592,6 +4609,20 @@ let cachedScore = null;
                             roleSpecificFeedback: roleTips,
                             token: feedbackRunToken
                           });
+                          
+                          // Persist role tips to localStorage
+                          if (window.JobHackAIStatePersistence && isActiveFeedbackToken(feedbackRunToken)) {
+                            const cachedScore = window.JobHackAIStatePersistence.loadATSScore(null);
+                            if (cachedScore && cachedScore.resumeId === uploadResult.resumeId) {
+                              const persistedJobTitle = canonicalJobTitleForApis || cachedScore.jobTitle || null;
+                              window.JobHackAIStatePersistence.saveATSScore({
+                                ...cachedScore,
+                                jobTitle: persistedJobTitle,
+                                roleSpecificFeedback: roleTips,
+                                timestamp: Date.now()
+                              });
+                            }
+                          }
                         } else {
                           // Role tips returned null - update state to failed
                           if (isActiveFeedbackToken(feedbackRunToken)) {
