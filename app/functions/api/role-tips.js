@@ -311,12 +311,16 @@ export async function onRequest(context) {
         role: normalizedRole
       });
 
-      // On timeout or error, return controlled failure (frontend will handle)
-      return successResponse({
-        roleSpecificFeedback: null,
-        error: isTimeout ? 'timeout' : 'generation_failed',
-        message: isTimeout ? 'Role tips generation timed out' : 'Failed to generate role tips'
-      }, 200, origin, env, requestId);
+      // On timeout or error, return non-200 status so frontend can show error UI
+      const statusCode = isTimeout ? 504 : 500;
+      return errorResponse(
+        isTimeout ? 'Role tips generation timed out' : 'Failed to generate role tips',
+        statusCode,
+        origin,
+        env,
+        requestId,
+        { error: isTimeout ? 'timeout' : 'generation_failed' }
+      );
     }
 
     // C4: Persist role tips into D1 feedback_sessions for history consistency
