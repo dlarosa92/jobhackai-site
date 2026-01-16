@@ -2154,9 +2154,15 @@
         if (isActiveFeedbackToken(token)) {
           setRoleTipsStatus(token, 'failed');
           // Show error UI for fetch failures
-          setRoleStatus(isTimeout 
-            ? 'Role tips request timed out. Try regenerating feedback.' 
-            : 'Role tips request failed. Try regenerating feedback.');
+          // Preserve backend-derived error message if it exists (from !response.ok block),
+          // otherwise use generic network/request error message
+          if (error.message && error.name !== 'AbortError') {
+            setRoleStatus(error.message);
+          } else {
+            setRoleStatus(isTimeout 
+              ? 'Role tips request timed out. Try regenerating feedback.' 
+              : 'Role tips request failed. Try regenerating feedback.');
+          }
         }
         return null;
       }
@@ -7998,7 +8004,7 @@ let cachedScore = null;
       };
       
       rubricGrid.innerHTML = atsRubric.map(item => {
-        const canonicalMax = getCanonicalMax(item.category);
+        const canonicalMax = getCanonicalMax(item.category || item.label);
         return `
         <div class="rf-rubric-item">
           <div class="rf-rubric-label">${escapeHtml(item.category || '')}</div>
