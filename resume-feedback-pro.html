@@ -2096,7 +2096,7 @@
         // PHASE 2: Token-gate: only update if token is still active
         if (!isActiveFeedbackToken(token)) {
           console.warn('[RESUME-FEEDBACK] Stale role tips response ignored (token mismatch)');
-          setRoleTipsStatus(token, 'failed');
+          // Do NOT update status for stale tokens - would overwrite newer active run's status
           return null;
         }
 
@@ -4410,10 +4410,11 @@ let cachedScore = null;
                 // PHASE 2: Fetch role tips asynchronously after Tier 1 completes
                 // D2: Pass sessionId from Tier 1 response to role tips endpoint
                 const hasRole = canonicalJobTitleForApis && canonicalJobTitleForApis.trim().length > 0;
+                let roleTipsPromise = null;
                 if (hasRole && hasAtsScore) {
                   // Start role tips fetch in background (non-blocking)
                   const tier1SessionId = feedbackResult.sessionId || null;
-                  getRoleTips(uploadResult.resumeId, canonicalJobTitleForApis, feedbackRunToken, tier1SessionId)
+                  roleTipsPromise = getRoleTips(uploadResult.resumeId, canonicalJobTitleForApis, feedbackRunToken, tier1SessionId)
                     .then((roleTips) => {
                       // PHASE 2: Token-gate: only update if token is still active
                       if (!isActiveFeedbackToken(feedbackRunToken)) {
@@ -4451,6 +4452,13 @@ let cachedScore = null;
                           roleSpecificFeedback: null,
                           token: feedbackRunToken
                         });
+                      }
+                    })
+                    .finally(() => {
+                      // Clear token only after role tips settles (success/failure/timeout)
+                      // Only clear if this is still the active token (not overwritten by new run)
+                      if (isActiveFeedbackToken(feedbackRunToken)) {
+                        clearActiveFeedbackToken();
                       }
                     });
                 }
@@ -4492,8 +4500,11 @@ let cachedScore = null;
                 });
               }
               
-              // Clear feedback token after successful processing
-              clearActiveFeedbackToken();
+              // Clear feedback token only if role tips was not started
+              // If role tips was started, it will clear the token in its .finally() handler
+              if (!roleTipsPromise) {
+                clearActiveFeedbackToken();
+              }
             }
           } else if (feedbackSettled.status === 'rejected') {
             const error = feedbackSettled.reason;
@@ -4566,9 +4577,10 @@ let cachedScore = null;
                   // PHASE 2: Fetch role tips asynchronously after retry succeeds
                   // D2: Pass sessionId from retry result to role tips endpoint
                   const hasRole = canonicalJobTitleForApis && canonicalJobTitleForApis.trim().length > 0;
+                  let retryRoleTipsPromise = null;
                   if (hasRole && hasAtsScore) {
                     const retrySessionId = retryResult.sessionId || null;
-                    getRoleTips(uploadResult.resumeId, canonicalJobTitleForApis, feedbackRunToken, retrySessionId)
+                    retryRoleTipsPromise = getRoleTips(uploadResult.resumeId, canonicalJobTitleForApis, feedbackRunToken, retrySessionId)
                       .then((roleTips) => {
                         if (!isActiveFeedbackToken(feedbackRunToken)) return;
                         if (roleTips) {
@@ -4600,6 +4612,13 @@ let cachedScore = null;
                             roleSpecificFeedback: null,
                             token: feedbackRunToken
                           });
+                        }
+                      })
+                      .finally(() => {
+                        // Clear token only after role tips settles (success/failure/timeout)
+                        // Only clear if this is still the active token (not overwritten by new run)
+                        if (isActiveFeedbackToken(feedbackRunToken)) {
+                          clearActiveFeedbackToken();
                         }
                       });
                   }
@@ -4635,8 +4654,9 @@ let cachedScore = null;
                 if (generateBtn) generateBtn.disabled = false;
                 const regenBtn = document.getElementById('rf-regenerate-btn');
                 if (regenBtn) { regenBtn.disabled = false; regenBtn.textContent = 'Regenerate Feedback'; }
-                  // Only clear token if this is still the active run
-                  if (isActiveFeedbackToken(feedbackRunToken)) {
+                  // Clear token only if role tips was not started
+                  // If role tips was started, it will clear the token in its .finally() handler
+                  if (!retryRoleTipsPromise && isActiveFeedbackToken(feedbackRunToken)) {
                 clearActiveFeedbackToken();
                   }
                   return;
