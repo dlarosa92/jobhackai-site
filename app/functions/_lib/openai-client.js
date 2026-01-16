@@ -622,12 +622,12 @@ ${roleContext}
  * @param {string} jobTitle - Target job title/role (required)
  * @param {Object} env - Environment variables
  * @param {Object} options - Options
- * @param {number} [options.timeoutMs] - Timeout in milliseconds (default 9000ms)
+ * @param {number} [options.timeoutMs] - Timeout in milliseconds (default 20000ms)
  * @returns {Promise<Object>} OpenAI response with roleSpecificFeedback only
  */
 export async function generateRoleTips(resumeText, ruleBasedScores, jobTitle, env, options = {}) {
   const baseModel = env.OPENAI_MODEL_FEEDBACK || 'gpt-4o-mini';
-  const timeoutMs = options.timeoutMs || 9000; // PHASE 2: 8-10s timeout for Tier 2
+  const timeoutMs = options.timeoutMs || 20000; // PHASE 2: 20-25s timeout for Tier 2
 
   if (!jobTitle || jobTitle.trim().length === 0) {
     throw new Error('jobTitle is required for role tips generation');
