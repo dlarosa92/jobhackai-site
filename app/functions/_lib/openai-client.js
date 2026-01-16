@@ -962,9 +962,10 @@ function estimateCost(model, promptTokens, completionTokens, cachedTokens = 0) {
   };
 
   const modelPricing = pricing[model] || pricing['gpt-4o-mini'];
-  const inputCost = (promptTokens - cachedTokens) * modelPricing.input;
+  const inputCost = Math.max(0, promptTokens - cachedTokens) * modelPricing.input;
   const outputCost = completionTokens * modelPricing.output;
-  return inputCost + outputCost;
+  const cost = inputCost + outputCost;
+  return Number.isFinite(cost) ? cost : 0;
 }
 
 function sleep(ms) {
