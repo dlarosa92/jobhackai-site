@@ -4438,18 +4438,15 @@ let cachedScore = null;
                           showRoleFeedback();
                         }, 100);
                         
-                        // Persist role tips to localStorage
-                        if (window.JobHackAIStatePersistence && isActiveFeedbackToken(feedbackRunToken)) {
-                          const cachedScore = window.JobHackAIStatePersistence.loadATSScore(null);
-                          if (cachedScore && cachedScore.resumeId === uploadResult.resumeId) {
-                            const persistedJobTitle = canonicalJobTitle || cachedScore.jobTitle || null;
-                            window.JobHackAIStatePersistence.saveATSScore({
-                              ...cachedScore,
-                              jobTitle: persistedJobTitle,
-                              roleSpecificFeedback: roleTips,
-                              timestamp: Date.now()
-                            });
-                          }
+                        // Persist role tips to localStorage using existing persistence mechanism
+                        if (isActiveFeedbackToken(feedbackRunToken)) {
+                          // Normalize role tips shape: extract roleSpecificFeedback if nested, otherwise use roleTips directly
+                          const roleSpecific = roleTips?.roleSpecificFeedback ?? roleTips ?? null;
+                          const updatedFeedbackResult = {
+                            ...feedbackResult,
+                            roleSpecificFeedback: roleSpecific
+                          };
+                          persistRoleFeedbackIfPossible(updatedFeedbackResult);
                         }
                       } else {
                         // Role tips failed or timed out - update state to failed
@@ -4480,15 +4477,17 @@ let cachedScore = null;
                     });
                 }
 
-                const persistRoleFeedbackIfPossible = () => {
+                const persistRoleFeedbackIfPossible = (updatedFeedbackResult = null) => {
                   if (!window.JobHackAIStatePersistence) return;
                   const cachedScore = window.JobHackAIStatePersistence.loadATSScore(null);
                   if (!cachedScore || cachedScore.resumeId !== uploadResult.resumeId) return;
                   const persistedJobTitle = canonicalJobTitle || cachedScore.jobTitle || null;
+                  // Use updatedFeedbackResult if provided (for role tips), otherwise use feedbackResult
+                  const resultToPersist = updatedFeedbackResult || feedbackResult;
                   window.JobHackAIStatePersistence.saveATSScore({
                     ...cachedScore,
                     jobTitle: persistedJobTitle,
-                    roleSpecificFeedback: feedbackResult.roleSpecificFeedback || null,
+                    roleSpecificFeedback: resultToPersist.roleSpecificFeedback || null,
                     timestamp: Date.now()
                   });
                 };
@@ -4610,18 +4609,15 @@ let cachedScore = null;
                             token: feedbackRunToken
                           });
                           
-                          // Persist role tips to localStorage
-                          if (window.JobHackAIStatePersistence && isActiveFeedbackToken(feedbackRunToken)) {
-                            const cachedScore = window.JobHackAIStatePersistence.loadATSScore(null);
-                            if (cachedScore && cachedScore.resumeId === uploadResult.resumeId) {
-                              const persistedJobTitle = canonicalJobTitleForApis || cachedScore.jobTitle || null;
-                              window.JobHackAIStatePersistence.saveATSScore({
-                                ...cachedScore,
-                                jobTitle: persistedJobTitle,
-                                roleSpecificFeedback: roleTips,
-                                timestamp: Date.now()
-                              });
-                            }
+                          // Persist role tips to localStorage using existing persistence mechanism
+                          if (isActiveFeedbackToken(feedbackRunToken)) {
+                            // Normalize role tips shape: extract roleSpecificFeedback if nested, otherwise use roleTips directly
+                            const roleSpecific = roleTips?.roleSpecificFeedback ?? roleTips ?? null;
+                            const updatedFeedbackResult = {
+                              ...retryResult,
+                              roleSpecificFeedback: roleSpecific
+                            };
+                            persistRoleFeedbackIfPossible(updatedFeedbackResult);
                           }
                         } else {
                           // Role tips returned null - update state to failed
@@ -4660,15 +4656,17 @@ let cachedScore = null;
                   setRoleStatus('');
                   
                   // Persist role-specific feedback (same as normal fulfilled path)
-                  const persistRoleFeedbackIfPossible = () => {
+                  const persistRoleFeedbackIfPossible = (updatedFeedbackResult = null) => {
                     if (!window.JobHackAIStatePersistence) return;
                     const cachedScore = window.JobHackAIStatePersistence.loadATSScore(null);
                     if (!cachedScore || cachedScore.resumeId !== uploadResult.resumeId) return;
                     const persistedJobTitle = canonicalJobTitleForApis || cachedScore.jobTitle || null;
+                    // Use updatedFeedbackResult if provided (for role tips), otherwise use retryResult
+                    const resultToPersist = updatedFeedbackResult || retryResult;
                     window.JobHackAIStatePersistence.saveATSScore({
                       ...cachedScore,
                       jobTitle: persistedJobTitle,
-                      roleSpecificFeedback: retryResult.roleSpecificFeedback || null,
+                      roleSpecificFeedback: resultToPersist.roleSpecificFeedback || null,
                       timestamp: Date.now()
                     });
                   };
