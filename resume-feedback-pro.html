@@ -4812,6 +4812,11 @@ let cachedScore = null;
                 }
               ];
               updateRubricGrid(rubric);
+              // Show rubric grid and hide skeleton (mirror applyFeedbackTipsToRubric behavior)
+              const rubricGrid = document.getElementById('rf-rubric-grid');
+              if (rubricGrid) rubricGrid.style.display = 'grid';
+              const skeletonRubric = document.getElementById('rf-skeleton-rubric');
+              if (skeletonRubric) skeletonRubric.style.display = 'none';
               hideFeedbackSkeleton();
             }
 
