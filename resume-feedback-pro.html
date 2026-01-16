@@ -2005,7 +2005,7 @@
 
     // PHASE 2: Role tips state management (idle | generating | ready | failed)
     const ROLE_TIPS_STATUS_KEY = 'rf_role_tips_status';
-    const ROLE_TIPS_TIMEOUT_MS = 30000; // 30 seconds (allows backend worst-case ~42s with buffer)
+    const ROLE_TIPS_TIMEOUT_MS = 50000; // 50 seconds (exceeds backend worst-case ~42s: 2×20s attempts + 2s backoff, with 8s safety buffer)
 
     function setRoleTipsStatus(token, status) {
       if (!token) return;
