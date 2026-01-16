@@ -120,7 +120,8 @@ export async function callOpenAI({
       temperature,
       responseFormat: responseFormat ? JSON.stringify(responseFormat) : null
     };
-    cacheKey = `openai_cache:${hashString(JSON.stringify(cacheData))}`;
+    const cacheHash = await hashString(JSON.stringify(cacheData));
+    cacheKey = `openai_cache:${cacheHash}`;
     cachedResponse = await env.JOBHACKAI_KV.get(cacheKey);
     if (cachedResponse) {
       const cached = JSON.parse(cachedResponse);
@@ -792,7 +793,7 @@ export async function generateResumeRewrite(resumeText, section, jobTitle, atsIs
   const fallbackModel = 'gpt-4o-mini'; // cheaper fallback if 4o has issues
 
   const maxOutputTokens = Number(env.OPENAI_MAX_TOKENS_REWRITE) > 0
-    ? Number(env.OPENAI_MAX_TOKENS_ATS)
+    ? Number(env.OPENAI_MAX_TOKENS_REWRITE)
     : 2000;
 
   const temperature = Number.isFinite(Number(env.OPENAI_TEMPERATURE_REWRITE))

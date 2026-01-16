@@ -464,7 +464,7 @@ export async function onRequest(context) {
     // Cache check (all plans)
     let cachedResult = null;
     if (env.JOBHACKAI_KV) {
-      const cacheHash = await hashString(`${sanitizedResumeId}:${normalizedJobTitle}:feedback`);
+      const cacheHash = await hashString(`${sanitizedResumeId}:${normalizedJobTitle}:feedback:tier1`);
       const cacheKey = `feedbackCache:${cacheHash}`;
       const cached = await env.JOBHACKAI_KV.get(cacheKey);
       
@@ -1239,7 +1239,8 @@ export async function onRequest(context) {
       tokenUsage: tokenUsage,
       ...result,
       // Add session metadata for history (additive - doesn't break existing response)
-      sessionId: d1SessionId,
+      // Use preFeedbackSessionId (feedback_sessions.id) not d1SessionId (resume_sessions.id) for role-tips persistence
+      sessionId: preFeedbackSessionId || d1SessionId,
       meta: {
         createdAt: d1CreatedAt || new Date().toISOString(),
         title: normalizedJobTitle || null,
