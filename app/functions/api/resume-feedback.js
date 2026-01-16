@@ -476,8 +476,9 @@ export async function onRequest(context) {
         if (cacheAge < 86400000) {
           cachedResult = cachedData.result;
 
+          // Tier 1 cache never includes roleSpecificFeedback (always null), so never require it
           const cacheValid = isValidFeedbackResult(cachedResult, {
-            requireRoleSpecific: !!requestedRoleNormalized
+            requireRoleSpecific: false
           });
 
           if (!cacheValid) {
