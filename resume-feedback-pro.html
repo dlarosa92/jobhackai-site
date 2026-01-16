@@ -4484,10 +4484,15 @@ let cachedScore = null;
                   const persistedJobTitle = canonicalJobTitle || cachedScore.jobTitle || null;
                   // Use updatedFeedbackResult if provided (for role tips), otherwise use feedbackResult
                   const resultToPersist = updatedFeedbackResult || feedbackResult;
+                  // Guard: Never overwrite existing roleSpecificFeedback with null
+                  const newRoleFeedback = resultToPersist?.roleSpecificFeedback;
+                  const roleSpecificFeedback = (newRoleFeedback != null) 
+                    ? newRoleFeedback 
+                    : (cachedScore.roleSpecificFeedback != null ? cachedScore.roleSpecificFeedback : null);
                   window.JobHackAIStatePersistence.saveATSScore({
                     ...cachedScore,
                     jobTitle: persistedJobTitle,
-                    roleSpecificFeedback: resultToPersist.roleSpecificFeedback || null,
+                    roleSpecificFeedback: roleSpecificFeedback,
                     timestamp: Date.now()
                   });
                 };
@@ -4663,10 +4668,15 @@ let cachedScore = null;
                     const persistedJobTitle = canonicalJobTitleForApis || cachedScore.jobTitle || null;
                     // Use updatedFeedbackResult if provided (for role tips), otherwise use retryResult
                     const resultToPersist = updatedFeedbackResult || retryResult;
+                    // Guard: Never overwrite existing roleSpecificFeedback with null
+                    const newRoleFeedback = resultToPersist?.roleSpecificFeedback;
+                    const roleSpecificFeedback = (newRoleFeedback != null) 
+                      ? newRoleFeedback 
+                      : (cachedScore.roleSpecificFeedback != null ? cachedScore.roleSpecificFeedback : null);
                     window.JobHackAIStatePersistence.saveATSScore({
                       ...cachedScore,
                       jobTitle: persistedJobTitle,
-                      roleSpecificFeedback: resultToPersist.roleSpecificFeedback || null,
+                      roleSpecificFeedback: roleSpecificFeedback,
                       timestamp: Date.now()
                     });
                   };
@@ -4769,9 +4779,16 @@ let cachedScore = null;
                 if (value && typeof value === 'object' && typeof value.score === 'number') return value.score;
                 return 0;
               };
-              const getMax = (value) => {
+              const getMax = (value, category = '') => {
                 if (value && typeof value === 'object' && typeof value.max === 'number') return value.max;
-                return 10;
+                // Category-aware fallback max values
+                const cat = (category || '').toLowerCase();
+                if (cat.includes('keyword')) return 40;
+                if (cat.includes('format')) return 20;
+                if (cat.includes('structure') || cat.includes('organization')) return 15;
+                if (cat.includes('tone') || cat.includes('clarity')) return 15;
+                if (cat.includes('grammar') || cat.includes('spelling')) return 10;
+                return 10; // Default fallback
               };
               const getFeedback = (value) => {
                 if (value && typeof value === 'object' && typeof value.feedback === 'string') {
@@ -4783,31 +4800,31 @@ let cachedScore = null;
                 {
                   label: 'Keyword Match',
                   score: getScore(breakdown.keywordScore),
-                  max: getMax(breakdown.keywordScore),
+                  max: getMax(breakdown.keywordScore, 'keyword'),
                   tip: getFeedback(breakdown.keywordScore)
                 },
                 {
                   label: 'ATS Formatting',
                   score: getScore(breakdown.formattingScore),
-                  max: getMax(breakdown.formattingScore),
+                  max: getMax(breakdown.formattingScore, 'formatting'),
                   tip: getFeedback(breakdown.formattingScore)
                 },
                 {
                   label: 'Structure & Organization',
                   score: getScore(breakdown.structureScore),
-                  max: getMax(breakdown.structureScore),
+                  max: getMax(breakdown.structureScore, 'structure'),
                   tip: getFeedback(breakdown.structureScore)
                 },
                 {
                   label: 'Tone & Clarity',
                   score: getScore(breakdown.toneScore),
-                  max: getMax(breakdown.toneScore),
+                  max: getMax(breakdown.toneScore, 'tone'),
                   tip: getFeedback(breakdown.toneScore)
                 },
                 {
                   label: 'Grammar & Spelling',
                   score: getScore(breakdown.grammarScore),
-                  max: getMax(breakdown.grammarScore),
+                  max: getMax(breakdown.grammarScore, 'grammar'),
                   tip: getFeedback(breakdown.grammarScore)
                 }
               ];
