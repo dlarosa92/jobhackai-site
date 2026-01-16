@@ -497,12 +497,40 @@ export async function onRequest(context) {
       console.log(`[RESUME-FEEDBACK] KV feedback cache hit`, { requestId, resumeId: sanitizedResumeId, plan: effectivePlan });
 
       let canReturnCached = false;
+      let cachedSessionId = cachedResult.sessionId || null;
 
       if (isD1Available(env)) {
         if (d1User) {
           try {
             // resumeSession assumed obtained earlier in flow
             if (resumeSession && resumeSession.id) {
+              // If cached result lacks sessionId (legacy cache entry), create a new feedback_session
+              if (!cachedSessionId) {
+                try {
+                  const placeholder = await createFeedbackSession(env, resumeSession.id, { status: 'completed' });
+                  if (placeholder && placeholder.id) {
+                    cachedSessionId = placeholder.id;
+                    // Update cache with sessionId included for future hits
+                    const cacheHash = await hashString(`${sanitizedResumeId}:${normalizedJobTitle}:feedback:tier1`);
+                    const cacheKey = `feedbackCache:${cacheHash}`;
+                    const updatedCacheData = {
+                      result: { ...cachedResult, sessionId: cachedSessionId },
+                      timestamp: Date.now()
+                    };
+                    await env.JOBHACKAI_KV.put(cacheKey, JSON.stringify(updatedCacheData), {
+                      expirationTtl: 86400 // 24 hours
+                    });
+                    console.log('[RESUME-FEEDBACK] Added sessionId to legacy cache entry', {
+                      requestId,
+                      feedbackSessionId: cachedSessionId
+                    });
+                  }
+                } catch (sessionError) {
+                  console.warn('[RESUME-FEEDBACK] Failed to create feedback session for legacy cache entry (non-fatal):', sessionError.message);
+                  // Continue without sessionId - role tips won't persist for this cache hit
+                }
+              }
+
               const usageEvent = await logUsageEvent(env, d1User.id, 'resume_feedback', null, {
                 resumeSessionId: resumeSession.id,
                 plan: effectivePlan,
@@ -524,6 +552,7 @@ export async function onRequest(context) {
       if (canReturnCached) {
         return successResponse({
           ...cachedResult,
+          sessionId: cachedSessionId, // Include sessionId for role-tips persistence
           cached: true
         }, 200, origin, env, requestId);
       }
@@ -1183,8 +1212,13 @@ export async function onRequest(context) {
       if (cacheValid) {
         const cacheHash = await hashString(`${sanitizedResumeId}:${normalizedJobTitle}:feedback:tier1`);
         const cacheKey = `feedbackCache:${cacheHash}`;
+        // Include sessionId in cached result for role-tips persistence
+        const resultWithSessionId = {
+          ...result,
+          sessionId: preFeedbackSessionId || null
+        };
         await env.JOBHACKAI_KV.put(cacheKey, JSON.stringify({
-          result,
+          result: resultWithSessionId,
           timestamp: Date.now()
         }), {
           expirationTtl: 86400 // 24 hours
@@ -1192,7 +1226,8 @@ export async function onRequest(context) {
         console.log('[RESUME-FEEDBACK] Cached Tier 1 result', { 
           requestId,
           resumeId: sanitizedResumeId,
-          jobTitle: normalizedJobTitle
+          jobTitle: normalizedJobTitle,
+          sessionId: preFeedbackSessionId || null
         });
       } else {
         console.warn('[RESUME-FEEDBACK] Skipping cache - incomplete result', {
