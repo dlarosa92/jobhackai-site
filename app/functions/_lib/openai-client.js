@@ -761,7 +761,7 @@ RESUME-AWARE CONSTRAINT (CRITICAL):
       temperature,
       systemPrompt,
       feature: 'role_tips',
-      maxRetries: 1,  // PHASE 2: Allow 1 retry for transient errors only
+      maxRetries: 2,  // PHASE 2: 2 attempts total (1 retry) for transient errors only
       maxBackoffMs: 2000,
       timeoutMs: timeoutMs
     },

@@ -4580,10 +4580,27 @@ let cachedScore = null;
                             roleSpecificFeedback: roleTips,
                             token: feedbackRunToken
                           });
+                        } else {
+                          // Role tips returned null - update state to failed
+                          if (isActiveFeedbackToken(feedbackRunToken)) {
+                            updateRoleTipsState({
+                              hasAtsScore,
+                              roleSpecificFeedback: null,
+                              token: feedbackRunToken
+                            });
+                          }
                         }
                       })
                       .catch((error) => {
                         console.error('[RESUME-FEEDBACK] Role tips fetch error in retry', error);
+                        // Update state to failed on error
+                        if (isActiveFeedbackToken(feedbackRunToken)) {
+                          updateRoleTipsState({
+                            hasAtsScore,
+                            roleSpecificFeedback: null,
+                            token: feedbackRunToken
+                          });
+                        }
                       });
                   }
 
@@ -4694,6 +4711,60 @@ let cachedScore = null;
               roleSpecificFeedback: null,
               token: feedbackRunToken
             });
+
+            // Fallback: Render rubric from rule-based scores if available
+            if (window._pendingAtsScores && window._pendingAtsScores.breakdown) {
+              const breakdown = window._pendingAtsScores.breakdown;
+              const getScore = (value) => {
+                if (typeof value === 'number') return value;
+                if (value && typeof value === 'object' && typeof value.score === 'number') return value.score;
+                return 0;
+              };
+              const getMax = (value) => {
+                if (value && typeof value === 'object' && typeof value.max === 'number') return value.max;
+                return 10;
+              };
+              const getFeedback = (value) => {
+                if (value && typeof value === 'object' && typeof value.feedback === 'string') {
+                  return limitFeedbackToSentences(value.feedback);
+                }
+                return '';
+              };
+              const rubric = [
+                {
+                  label: 'Keyword Match',
+                  score: getScore(breakdown.keywordScore),
+                  max: getMax(breakdown.keywordScore),
+                  tip: getFeedback(breakdown.keywordScore)
+                },
+                {
+                  label: 'ATS Formatting',
+                  score: getScore(breakdown.formattingScore),
+                  max: getMax(breakdown.formattingScore),
+                  tip: getFeedback(breakdown.formattingScore)
+                },
+                {
+                  label: 'Structure & Organization',
+                  score: getScore(breakdown.structureScore),
+                  max: getMax(breakdown.structureScore),
+                  tip: getFeedback(breakdown.structureScore)
+                },
+                {
+                  label: 'Tone & Clarity',
+                  score: getScore(breakdown.toneScore),
+                  max: getMax(breakdown.toneScore),
+                  tip: getFeedback(breakdown.toneScore)
+                },
+                {
+                  label: 'Grammar & Spelling',
+                  score: getScore(breakdown.grammarScore),
+                  max: getMax(breakdown.grammarScore),
+                  tip: getFeedback(breakdown.grammarScore)
+                }
+              ];
+              updateRubricGrid(rubric);
+              hideFeedbackSkeleton();
+            }
 
             handleApiError(error, {
               title: 'Feedback Generation Failed',
