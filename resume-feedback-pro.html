@@ -1668,6 +1668,15 @@
     }
 
     // Status icon definitions - defined once, reused
+    // Canonical ATS rubric max values - single source of truth for denominators
+    const ATS_RUBRIC_MAX = {
+      KEYWORD_RELEVANCE: 40,
+      FORMATTING_COMPLIANCE: 20,
+      STRUCTURE_COMPLETENESS: 15,
+      TONE_CLARITY: 15,
+      GRAMMAR_SPELLING: 10
+    };
+
     const RF_STATUS_ICONS = {
       success: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
       <circle cx="12" cy="12" r="10"/>
@@ -2091,7 +2100,18 @@
 
         if (!response.ok) {
           const error = await response.json();
-          throw new Error(error.error || 'Failed to get role tips');
+          const errorMessage = error.error || 'Failed to get role tips';
+          
+          // PHASE 2: Token-gate: only update status if token is still active
+          if (isActiveFeedbackToken(token)) {
+            setRoleTipsStatus(token, 'failed');
+            // Show error UI
+            const isTimeout = response.status === 504 || error.error === 'timeout';
+            setRoleStatus(isTimeout 
+              ? 'Role tips generation timed out. Try regenerating feedback.' 
+              : 'Role tips generation failed. Try regenerating feedback.');
+          }
+          throw new Error(errorMessage);
         }
 
         const result = await response.json();
@@ -2103,11 +2123,22 @@
           return null;
         }
 
+        // Defensive: Check for error field even in 200 responses
+        if (result.error) {
+          setRoleTipsStatus(token, 'failed');
+          const isTimeout = result.error === 'timeout';
+          setRoleStatus(isTimeout 
+            ? 'Role tips generation timed out. Try regenerating feedback.' 
+            : 'Role tips generation failed. Try regenerating feedback.');
+          return null;
+        }
+
         if (result.roleSpecificFeedback) {
           setRoleTipsStatus(token, 'ready');
           return result.roleSpecificFeedback;
         } else {
           setRoleTipsStatus(token, 'failed');
+          setRoleStatus('Role tips unavailable. Try regenerating feedback.');
           return null;
         }
       } catch (error) {
@@ -2122,6 +2153,16 @@
         // PHASE 2: Token-gate: only update status if token is still active
         if (isActiveFeedbackToken(token)) {
           setRoleTipsStatus(token, 'failed');
+          // Show error UI for fetch failures
+          // Preserve backend-derived error message if it exists (from !response.ok block),
+          // otherwise use generic network/request error message
+          if (error.message && error.name !== 'AbortError') {
+            setRoleStatus(error.message);
+          } else {
+            setRoleStatus(isTimeout 
+              ? 'Role tips request timed out. Try regenerating feedback.' 
+              : 'Role tips request failed. Try regenerating feedback.');
+          }
         }
         return null;
       }
@@ -3268,31 +3309,31 @@ let cachedScore = null;
                 {
                   label: 'Keyword Relevance',
                   score: getScore(cachedScore.breakdown.keywordScore),
-                  max: 40,
+                  max: ATS_RUBRIC_MAX.KEYWORD_RELEVANCE,
                   tip: getFeedback(cachedScore.breakdown.keywordScore)
                 },
                 {
                   label: 'Formatting Compliance',
                   score: getScore(cachedScore.breakdown.formattingScore),
-                  max: 20,
+                  max: ATS_RUBRIC_MAX.FORMATTING_COMPLIANCE,
                   tip: getFeedback(cachedScore.breakdown.formattingScore)
                 },
                 {
                   label: 'Structure & Section Completeness',
                   score: getScore(cachedScore.breakdown.structureScore),
-                  max: 15,
+                  max: ATS_RUBRIC_MAX.STRUCTURE_COMPLETENESS,
                   tip: getFeedback(cachedScore.breakdown.structureScore)
                 },
                 {
                   label: 'Tone & Clarity',
                   score: getScore(cachedScore.breakdown.toneScore),
-                  max: 15,
+                  max: ATS_RUBRIC_MAX.TONE_CLARITY,
                   tip: getFeedback(cachedScore.breakdown.toneScore)
                 },
                 {
                   label: 'Grammar & Spelling',
                   score: getScore(cachedScore.breakdown.grammarScore),
-                  max: 10,
+                  max: ATS_RUBRIC_MAX.GRAMMAR_SPELLING,
                   tip: getFeedback(cachedScore.breakdown.grammarScore),
                   flaggedTerms: cachedScore.breakdown.grammarScore?.flaggedTerms
                 }
@@ -4800,31 +4841,31 @@ let cachedScore = null;
                 {
                   label: 'Keyword Match',
                   score: getScore(breakdown.keywordScore),
-                  max: getMax(breakdown.keywordScore, 'keyword'),
+                  max: ATS_RUBRIC_MAX.KEYWORD_RELEVANCE,
                   tip: getFeedback(breakdown.keywordScore)
                 },
                 {
                   label: 'ATS Formatting',
                   score: getScore(breakdown.formattingScore),
-                  max: getMax(breakdown.formattingScore, 'formatting'),
+                  max: ATS_RUBRIC_MAX.FORMATTING_COMPLIANCE,
                   tip: getFeedback(breakdown.formattingScore)
                 },
                 {
                   label: 'Structure & Organization',
                   score: getScore(breakdown.structureScore),
-                  max: getMax(breakdown.structureScore, 'structure'),
+                  max: ATS_RUBRIC_MAX.STRUCTURE_COMPLETENESS,
                   tip: getFeedback(breakdown.structureScore)
                 },
                 {
                   label: 'Tone & Clarity',
                   score: getScore(breakdown.toneScore),
-                  max: getMax(breakdown.toneScore, 'tone'),
+                  max: ATS_RUBRIC_MAX.TONE_CLARITY,
                   tip: getFeedback(breakdown.toneScore)
                 },
                 {
                   label: 'Grammar & Spelling',
                   score: getScore(breakdown.grammarScore),
-                  max: getMax(breakdown.grammarScore, 'grammar'),
+                  max: ATS_RUBRIC_MAX.GRAMMAR_SPELLING,
                   tip: getFeedback(breakdown.grammarScore)
                 }
               ];
@@ -5282,31 +5323,31 @@ let cachedScore = null;
                       {
                         label: 'Keyword Relevance',
                         score: scoreResult.breakdown.keywordScore?.score || 0,
-                        max: 40,
+                        max: ATS_RUBRIC_MAX.KEYWORD_RELEVANCE,
                         tip: limitFeedbackToSentences(scoreResult.breakdown.keywordScore?.feedback || '')
                       },
                       {
                         label: 'Formatting Compliance',
                         score: scoreResult.breakdown.formattingScore?.score || 0,
-                        max: 20,
+                        max: ATS_RUBRIC_MAX.FORMATTING_COMPLIANCE,
                         tip: limitFeedbackToSentences(scoreResult.breakdown.formattingScore?.feedback || '')
                       },
                       {
                         label: 'Structure & Section Completeness',
                         score: scoreResult.breakdown.structureScore?.score || 0,
-                        max: 15,
+                        max: ATS_RUBRIC_MAX.STRUCTURE_COMPLETENESS,
                         tip: limitFeedbackToSentences(scoreResult.breakdown.structureScore?.feedback || '')
                       },
                       {
                         label: 'Tone & Clarity',
                         score: scoreResult.breakdown.toneScore?.score || 0,
-                        max: 15,
+                        max: ATS_RUBRIC_MAX.TONE_CLARITY,
                         tip: limitFeedbackToSentences(scoreResult.breakdown.toneScore?.feedback || '')
                       },
                       {
                         label: 'Grammar & Spelling',
                         score: scoreResult.breakdown.grammarScore?.score || 0,
-                        max: 10,
+                        max: ATS_RUBRIC_MAX.GRAMMAR_SPELLING,
                         tip: limitFeedbackToSentences(scoreResult.breakdown.grammarScore?.feedback || ''),
                         flaggedTerms: scoreResult.breakdown.grammarScore?.flaggedTerms
                       }
@@ -5795,6 +5836,16 @@ let cachedScore = null;
       
       if (isGridEmpty) {
         // Render rubric for the first time with structured AI feedback
+        // Helper to get canonical max value from category label
+        const getCanonicalMax = (categoryLabel) => {
+          const label = (categoryLabel || '').toLowerCase();
+          if (label.includes('keyword')) return ATS_RUBRIC_MAX.KEYWORD_RELEVANCE;
+          if (label.includes('format')) return ATS_RUBRIC_MAX.FORMATTING_COMPLIANCE;
+          if (label.includes('structure') || label.includes('section') || label.includes('organization')) return ATS_RUBRIC_MAX.STRUCTURE_COMPLETENESS;
+          if (label.includes('tone') || label.includes('clarity')) return ATS_RUBRIC_MAX.TONE_CLARITY;
+          if (label.includes('grammar') || label.includes('spelling')) return ATS_RUBRIC_MAX.GRAMMAR_SPELLING;
+          return ATS_RUBRIC_MAX.GRAMMAR_SPELLING; // Default fallback
+        };
         atsRubric.forEach(item => {
           const div = document.createElement('div');
           div.className = 'rf-rubric-item';
@@ -5802,7 +5853,8 @@ let cachedScore = null;
           if (normalizedLabel) {
             div.dataset.category = normalizedLabel;
           }
-          const scoreDisplay = (item.score === undefined || item.score === null) ? '— / —' : `${item.score} / ${item.max}`;
+          const canonicalMax = getCanonicalMax(item.category || item.label);
+          const scoreDisplay = (item.score === undefined || item.score === null) ? '— / —' : `${item.score} / ${canonicalMax}`;
           const formattedTip = limitFeedbackToSentences(item.feedback || '');
           const safeTip = escapeHtml(formattedTip);
           const safeTipAttr = escapeHtmlAttr(formattedTip);
@@ -7940,10 +7992,23 @@ let cachedScore = null;
       const rubricGrid = document.getElementById('rf-rubric-grid');
       if (!rubricGrid) return;
       
-      rubricGrid.innerHTML = atsRubric.map(item => `
+      // Helper to get canonical max value from category label
+      const getCanonicalMax = (categoryLabel) => {
+        const label = (categoryLabel || '').toLowerCase();
+        if (label.includes('keyword')) return ATS_RUBRIC_MAX.KEYWORD_RELEVANCE;
+        if (label.includes('format')) return ATS_RUBRIC_MAX.FORMATTING_COMPLIANCE;
+        if (label.includes('structure') || label.includes('section') || label.includes('organization')) return ATS_RUBRIC_MAX.STRUCTURE_COMPLETENESS;
+        if (label.includes('tone') || label.includes('clarity')) return ATS_RUBRIC_MAX.TONE_CLARITY;
+        if (label.includes('grammar') || label.includes('spelling')) return ATS_RUBRIC_MAX.GRAMMAR_SPELLING;
+        return ATS_RUBRIC_MAX.GRAMMAR_SPELLING; // Default fallback
+      };
+      
+      rubricGrid.innerHTML = atsRubric.map(item => {
+        const canonicalMax = getCanonicalMax(item.category || item.label);
+        return `
         <div class="rf-rubric-item">
           <div class="rf-rubric-label">${escapeHtml(item.category || '')}</div>
-          <div class="rf-rubric-score">${item.score || 0} / ${item.max || 10}</div>
+          <div class="rf-rubric-score">${item.score || 0} / ${canonicalMax}</div>
           <div style="color:var(--color-text-secondary);font-size:0.95rem;margin-top:0.5rem;">${escapeHtml(item.feedback || '')}</div>
           ${item.suggestions && item.suggestions.length > 0 ? `
             <ul style="margin-top:0.5rem;padding-left:1.25rem;color:var(--color-text-muted);font-size:0.9rem;">
@@ -7951,7 +8016,8 @@ let cachedScore = null;
             </ul>
           ` : ''}
         </div>
-      `).join('');
+      `;
+      }).join('');
       
       rubricGrid.style.display = 'grid';
       applyFadeIn(rubricGrid);
