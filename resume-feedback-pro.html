@@ -1903,25 +1903,11 @@
       
       const token = await getAuthToken();
       
-      // Try to get resumeText from sessionStorage (fallback when KV unavailable)
-      // Use nullish coalescing to only convert null to undefined, preserving empty strings
-      const resumeText = sessionStorage.getItem('currentResumeText') ?? undefined;
-      
-      // Build request body with optional resumeText for dev fallback
-      // Prompt/output shape expectation (lightweight, not a hard contract):
-      // { targetRoleUsed?: string, sections: [{ sectionId, label, priority, insights:[], rewritePreview? }] }
-      // Accept 1–5 sections; partial sections are valid.
+      // PHASE 1: Remove resumeText from request body (backend loads from KV/D1)
+      // Keep backward compatibility: if resumeText is needed for dev/fallback, backend will request it
       const requestBody = { resumeId, jobTitle };
-      if (resumeText) {
-        requestBody.resumeText = resumeText;
-        // Also get isMultiColumn if available from state persistence
-        if (window.JobHackAIStatePersistence) {
-          const resumeData = window.JobHackAIStatePersistence.loadResumeData();
-          if (resumeData && resumeData.isMultiColumn !== undefined) {
-            requestBody.isMultiColumn = resumeData.isMultiColumn;
-          }
-        }
-      }
+      // PHASE 1: Do not send resumeText by default (reduces payload size)
+      // Backend will load from KV/D1 server-side
       
       // Use retry logic for API call
       const response = await window.JobHackAIRetry.fetchWithRetry('/api/resume-feedback', {
@@ -2007,6 +1993,136 @@
     window.latestRoleSpecific = null;
     // Token associated with the latestRoleSpecific value. Scoped to a feedback run token when applicable.
     window.latestRoleSpecificToken = null;
+
+    // PHASE 2: Role tips state management (idle | generating | ready | failed)
+    const ROLE_TIPS_STATUS_KEY = 'rf_role_tips_status';
+    const ROLE_TIPS_TIMEOUT_MS = 9000; // 9 seconds (8-10s range)
+
+    function setRoleTipsStatus(token, status) {
+      if (!token) return;
+      try {
+        const statusData = {
+          token,
+          status,
+          timestamp: Date.now()
+        };
+        sessionStorage.setItem(ROLE_TIPS_STATUS_KEY, JSON.stringify(statusData));
+      } catch (e) {
+        console.warn('[RESUME-FEEDBACK] Failed to persist role tips status', e);
+      }
+    }
+
+    function getRoleTipsStatus() {
+      try {
+        const stored = sessionStorage.getItem(ROLE_TIPS_STATUS_KEY);
+        if (!stored) return null;
+        const statusData = JSON.parse(stored);
+        // Check if status is stale (older than 60 seconds)
+        if (Date.now() - statusData.timestamp > 60000) {
+          sessionStorage.removeItem(ROLE_TIPS_STATUS_KEY);
+          return null;
+        }
+        return statusData;
+      } catch (e) {
+        return null;
+      }
+    }
+
+    function clearRoleTipsStatus() {
+      try {
+        sessionStorage.removeItem(ROLE_TIPS_STATUS_KEY);
+      } catch (e) {
+        // ignore
+      }
+    }
+
+    function isRoleTipsGenerating() {
+      const statusData = getRoleTipsStatus();
+      if (!statusData) return false;
+      // Check if token is still active
+      if (statusData.token && !isActiveFeedbackToken(statusData.token)) {
+        clearRoleTipsStatus();
+        return false;
+      }
+      return statusData.status === 'generating';
+    }
+
+    // PHASE 2: Fetch role tips from separate endpoint
+    // D2: Accept sessionId parameter and pass to backend
+    async function getRoleTips(resumeId, jobTitle, token, sessionId = null) {
+      if (!resumeId || !jobTitle || !jobTitle.trim()) {
+        return null;
+      }
+
+      // PHASE 2: Set status to generating
+      setRoleTipsStatus(token, 'generating');
+
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), ROLE_TIPS_TIMEOUT_MS);
+
+      try {
+        const authToken = await getAuthToken();
+        
+        // D2: Include sessionId in request body for D1 persistence
+        // PHASE 2: Optional resumeText for backward compatibility (backend will use KV/D1 if available)
+        const resumeText = sessionStorage.getItem('currentResumeText') ?? undefined;
+        const requestBody = { resumeId, jobTitle };
+        if (sessionId) {
+          requestBody.sessionId = sessionId; // D2: Pass sessionId for D1 persistence
+        }
+        if (resumeText) {
+          requestBody.resumeText = resumeText; // Optional, for backward compatibility
+        }
+
+        const response = await fetch('/api/role-tips', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${authToken}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(requestBody),
+          signal: controller.signal
+        });
+
+        clearTimeout(timeoutId);
+
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(error.error || 'Failed to get role tips');
+        }
+
+        const result = await response.json();
+        
+        // PHASE 2: Token-gate: only update if token is still active
+        if (!isActiveFeedbackToken(token)) {
+          console.warn('[RESUME-FEEDBACK] Stale role tips response ignored (token mismatch)');
+          setRoleTipsStatus(token, 'failed');
+          return null;
+        }
+
+        if (result.roleSpecificFeedback) {
+          setRoleTipsStatus(token, 'ready');
+          return result.roleSpecificFeedback;
+        } else {
+          setRoleTipsStatus(token, 'failed');
+          return null;
+        }
+      } catch (error) {
+        clearTimeout(timeoutId);
+        const isTimeout = error.name === 'AbortError' || error.message?.includes('timeout');
+        console.error('[RESUME-FEEDBACK] Role tips fetch failed', {
+          error: error.message,
+          isTimeout,
+          token
+        });
+
+        // PHASE 2: Token-gate: only update status if token is still active
+        if (isActiveFeedbackToken(token)) {
+          setRoleTipsStatus(token, 'failed');
+        }
+        return null;
+      }
+    }
 
     async function rewriteResume(resumeId, section, jobTitle, atsIssues, roleSpecificFeedback) {
       const token = await getAuthToken();
@@ -3398,8 +3514,21 @@ let cachedScore = null;
         forceHideOverlays();
         // DO NOT call hideSkeletons() here - let them stay visible while tab is hidden
       } else {
-        // When tab becomes visible again, cancel any skeleton operations but DO NOT wipe the user's session.
-        _cancelPendingSkeletonOperations();
+        // PHASE 2: When tab becomes visible, preserve skeleton if role tips are generating
+        // DO NOT cancel skeleton operations if role tips status == generating
+        if (!isRoleTipsGenerating()) {
+          _cancelPendingSkeletonOperations();
+        } else {
+          // Role tips are generating - restore skeleton visibility if needed
+          const skeletonFeedback = document.getElementById('rf-skeleton-feedback');
+          const skeletonContainer = document.getElementById('rf-skeleton-container');
+          if (skeletonFeedback && skeletonContainer) {
+            skeletonContainer.style.display = 'block';
+            skeletonFeedback.style.display = 'grid';
+            setRoleStatus('Generating tips…');
+          }
+        }
+        
         // Show a lightweight toast instead of resetting session. If analysis is running show running toast,
         // otherwise if finished while away show success toast. This preserves user progress and avoids surprising resets.
         try {
@@ -3440,6 +3569,18 @@ let cachedScore = null;
 
       // Load cached score on page load
       loadCachedATSScore().then(() => {
+        // PHASE 2: Restore role tips skeleton if status == generating
+        const roleTipsStatus = getRoleTipsStatus();
+        if (roleTipsStatus && roleTipsStatus.status === 'generating' && isActiveFeedbackToken(roleTipsStatus.token)) {
+          const skeletonFeedback = document.getElementById('rf-skeleton-feedback');
+          const skeletonContainer = document.getElementById('rf-skeleton-container');
+          if (skeletonFeedback && skeletonContainer) {
+            skeletonContainer.style.display = 'block';
+            skeletonFeedback.style.display = 'grid';
+            setRoleStatus('Generating tips…');
+          }
+        }
+
         // Check if we have resume data after loading
         const rubricScores = document.querySelectorAll('#rf-rubric-grid .rf-rubric-item .rf-rubric-score');
         const hasResumeData = rubricScores.length > 0 && Array.from(rubricScores).some(el => el.textContent !== '— / —');
@@ -4100,66 +4241,32 @@ let cachedScore = null;
                       return '';
                     };
 
-                    const rubric = [
-                      {
-                        label: 'Keyword Relevance',
-                        score: getScore(result.breakdown.keywordScore),
-                        max: 40,
-                        tip: getFeedback(result.breakdown.keywordScore, result.feedback, 0)
-                      },
-                      {
-                        label: 'Formatting Compliance',
-                        score: getScore(result.breakdown.formattingScore),
-                        max: 20,
-                        tip: getFeedback(result.breakdown.formattingScore, result.feedback, 1)
-                      },
-                      {
-                        label: 'Structure & Section Completeness',
-                        score: getScore(result.breakdown.structureScore),
-                        max: 15,
-                        tip: getFeedback(result.breakdown.structureScore, result.feedback, 2)
-                      },
-                      {
-                        label: 'Tone & Clarity',
-                        score: getScore(result.breakdown.toneScore),
-                        max: 15,
-                        tip: getFeedback(result.breakdown.toneScore, result.feedback, 3)
-                      },
-                      {
-                        label: 'Grammar & Spelling',
-                        score: getScore(result.breakdown.grammarScore),
-                        max: 10,
-                        tip: getFeedback(result.breakdown.grammarScore, result.feedback, 4),
-                        flaggedTerms: result.breakdown.grammarScore?.flaggedTerms
-                      }
-                    ];
-                    updateRubricGrid(rubric);
+                    // PHASE 4: Do NOT render rubric with rule-based text here
+                    // Wait for structured AI feedback from /api/resume-feedback
+                    // applyFeedbackTipsToRubric will render the rubric when AI feedback is ready
+                    // This prevents "raw text flash" before structured content
+                    
+                    // Store scores for later use (if needed for fallback)
+                    window._pendingAtsScores = {
+                      score: result.score,
+                      breakdown: result.breakdown
+                    };
 
-                    if (atsRequestGeneration === skeletonOperationGeneration) {
-                      hideATSSkeleton();
-                    } else {
-                      console.warn('[RESUME-FEEDBACK] ATS skeleton hide skipped due to generation mismatch');
-                    }
-
-                    const skeletonFeedback = document.getElementById('rf-skeleton-feedback');
-                    const skeletonContainer = document.getElementById('rf-skeleton-container');
-                    const shouldHideSkeletonContainer =
-                      skeletonFeedback &&
-                      (skeletonFeedback.style.display === 'none' || skeletonFeedback.childElementCount === 0);
-
-                    if (shouldHideSkeletonContainer && skeletonContainer) {
-                      skeletonContainer.style.display = 'none';
-                    }
+                    // PHASE 4: Keep rubric skeleton visible until structured AI feedback arrives
+                    // Do NOT hide rubric skeleton here - applyFeedbackTipsToRubric will hide it when rendering
+                    const skeletonHeader = document.getElementById('rf-skeleton-header');
+                    if (skeletonHeader) skeletonHeader.style.display = 'none';
+                    
+                    // Hide only the ATS score skeleton (progress ring), keep rubric skeleton
+                    // Rubric skeleton will be hidden by applyFeedbackTipsToRubric when structured data is ready
 
                     const feedbackContentEl = document.getElementById('rf-feedback-content');
                     if (feedbackContentEl) {
                       feedbackContentEl.style.display = 'block';
                     }
 
-                    const rubricEl = document.getElementById('rf-rubric-grid');
-                    if (rubricEl) {
-                      rubricEl.style.display = 'grid';
-                    }
+                    // PHASE 4: Do NOT show rubric grid yet - wait for structured AI feedback
+                    // applyFeedbackTipsToRubric will show it when ready
 
                     setTimeout(() => {
                       showATSFeedback();
@@ -4275,11 +4382,9 @@ let cachedScore = null;
                 if (feedbackResult.atsIssues) {
                   window.latestAtsIssues = feedbackResult.atsIssues;
                 }
-              if (feedbackResult.roleSpecificFeedback) {
-                window.latestRoleSpecific = feedbackResult.roleSpecificFeedback;
-                window.latestRoleSpecificToken = feedbackRunToken || null;
-              }
 
+                // PHASE 2: Tier 1 does not include roleSpecificFeedback (it's null)
+                // Role tips will be fetched separately asynchronously
                 const feedbackGrid = document.getElementById('rf-feedback-grid');
                 if (feedbackGrid) {
                   feedbackGrid.innerHTML = '';
@@ -4288,16 +4393,67 @@ let cachedScore = null;
                   }
                 }
 
-                updateFeedbackGrid(feedbackResult.roleSpecificFeedback, { token: feedbackRunToken });
+                // PHASE 4: Only render rubric when AI structured feedback is ready
+                // Do not render rule-based text first - wait for structured data
                 applyFeedbackTipsToRubric(feedbackResult.atsRubric);
                 hideFeedbackSkeleton();
 
                 const hasAtsScore = !!(atsSettled.status === 'fulfilled' && atsSettled.value && atsSettled.value.success);
+                
+                // PHASE 2: Tier 1 returns roleSpecificFeedback: null, so set to null initially
                 updateRoleTipsState({
                   hasAtsScore,
-                  roleSpecificFeedback: feedbackResult.roleSpecificFeedback || null,
+                  roleSpecificFeedback: null,  // PHASE 2: Tier 1 doesn't include role tips
                   token: feedbackRunToken
                 });
+
+                // PHASE 2: Fetch role tips asynchronously after Tier 1 completes
+                // D2: Pass sessionId from Tier 1 response to role tips endpoint
+                const hasRole = canonicalJobTitleForApis && canonicalJobTitleForApis.trim().length > 0;
+                if (hasRole && hasAtsScore) {
+                  // Start role tips fetch in background (non-blocking)
+                  const tier1SessionId = feedbackResult.sessionId || null;
+                  getRoleTips(uploadResult.resumeId, canonicalJobTitleForApis, feedbackRunToken, tier1SessionId)
+                    .then((roleTips) => {
+                      // PHASE 2: Token-gate: only update if token is still active
+                      if (!isActiveFeedbackToken(feedbackRunToken)) {
+                        console.warn('[RESUME-FEEDBACK] Stale role tips update ignored (token mismatch)');
+                        return;
+                      }
+
+                      if (roleTips) {
+                        window.latestRoleSpecific = roleTips;
+                        window.latestRoleSpecificToken = feedbackRunToken;
+                        updateFeedbackGrid(roleTips, { token: feedbackRunToken });
+                        updateRoleTipsState({
+                          hasAtsScore,
+                          roleSpecificFeedback: roleTips,
+                          token: feedbackRunToken
+                        });
+                        setTimeout(() => {
+                          showRoleFeedback();
+                        }, 100);
+                      } else {
+                        // Role tips failed or timed out - update state to failed
+                        updateRoleTipsState({
+                          hasAtsScore,
+                          roleSpecificFeedback: null,
+                          token: feedbackRunToken
+                        });
+                      }
+                    })
+                    .catch((error) => {
+                      console.error('[RESUME-FEEDBACK] Role tips fetch error', error);
+                      // Token-gate error handling
+                      if (isActiveFeedbackToken(feedbackRunToken)) {
+                        updateRoleTipsState({
+                          hasAtsScore,
+                          roleSpecificFeedback: null,
+                          token: feedbackRunToken
+                        });
+                      }
+                    });
+                }
 
                 const persistRoleFeedbackIfPossible = () => {
                   if (!window.JobHackAIStatePersistence) return;
@@ -4320,19 +4476,12 @@ let cachedScore = null;
                   showRoleFeedback();
                 }, 100);
 
-                const toastStatus = toastForAtsAndTips({
-                  atsOk: atsScoringSucceeded,
-                  tips: feedbackResult.roleSpecificFeedback,
-                  suppressSuccess: atsExtractionWarned,
-                  token: feedbackRunToken
-                });
-                if (toastStatus === 'tips_ok' || toastStatus === 'tips_only') {
-                  setRoleStatus('Role-specific tips updated.');
-                } else if (toastStatus === 'ats_only') {
-                  setRoleStatus('');
-                } else if (toastStatus === 'missing') {
-                  setRoleStatus('');
+                // PHASE 2: Tier 1 doesn't include role tips, so only show ATS toast
+                // Role tips toast will be shown when role tips complete (if they succeed)
+                if (atsScoringSucceeded && !atsExtractionWarned && window.JobHackAIToast) {
+                  window.JobHackAIToast.success('ATS score calculated successfully.');
                 }
+                setRoleStatus(''); // Clear status - role tips will update separately
               } catch (feedbackError) {
                 console.error('[RESUME-FEEDBACK] Error processing feedback result:', feedbackError);
                 
@@ -4404,28 +4553,44 @@ let cachedScore = null;
                   if (retryResult.atsIssues) {
                     window.latestAtsIssues = retryResult.atsIssues;
                   }
-                  updateFeedbackGrid(retryResult.roleSpecificFeedback, { token: feedbackRunToken });
+                  // PHASE 2: Retry result also has roleSpecificFeedback: null (Tier 1)
                   applyFeedbackTipsToRubric(retryResult.atsRubric);
                   hideFeedbackSkeleton();
                   const hasAtsScore = !!(atsSettled.status === 'fulfilled' && atsSettled.value && atsSettled.value.success);
                   updateRoleTipsState({
                     hasAtsScore,
-                    roleSpecificFeedback: retryResult.roleSpecificFeedback || null,
+                    roleSpecificFeedback: null,  // PHASE 2: Tier 1 doesn't include role tips
                     token: feedbackRunToken
                   });
-                  const toastStatus = toastForAtsAndTips({
-                    atsOk: atsScoringSucceeded,
-                    tips: retryResult.roleSpecificFeedback,
-                    suppressSuccess: atsExtractionWarned,
-                    token: feedbackRunToken
-                  });
-                  if (toastStatus === 'tips_ok' || toastStatus === 'tips_only') {
-                    setRoleStatus('Role-specific tips updated.');
-                  } else if (toastStatus === 'ats_only') {
-                    setRoleStatus('');
-                  } else if (toastStatus === 'missing') {
-                    setRoleStatus('');
+
+                  // PHASE 2: Fetch role tips asynchronously after retry succeeds
+                  // D2: Pass sessionId from retry result to role tips endpoint
+                  const hasRole = canonicalJobTitleForApis && canonicalJobTitleForApis.trim().length > 0;
+                  if (hasRole && hasAtsScore) {
+                    const retrySessionId = retryResult.sessionId || null;
+                    getRoleTips(uploadResult.resumeId, canonicalJobTitleForApis, feedbackRunToken, retrySessionId)
+                      .then((roleTips) => {
+                        if (!isActiveFeedbackToken(feedbackRunToken)) return;
+                        if (roleTips) {
+                          window.latestRoleSpecific = roleTips;
+                          window.latestRoleSpecificToken = feedbackRunToken;
+                          updateFeedbackGrid(roleTips, { token: feedbackRunToken });
+                          updateRoleTipsState({
+                            hasAtsScore,
+                            roleSpecificFeedback: roleTips,
+                            token: feedbackRunToken
+                          });
+                        }
+                      })
+                      .catch((error) => {
+                        console.error('[RESUME-FEEDBACK] Role tips fetch error in retry', error);
+                      });
                   }
+
+                  if (atsScoringSucceeded && !atsExtractionWarned && window.JobHackAIToast) {
+                    window.JobHackAIToast.success('ATS score calculated successfully.');
+                  }
+                  setRoleStatus('');
                   
                   // Persist role-specific feedback (same as normal fulfilled path)
                   const persistRoleFeedbackIfPossible = () => {
@@ -5476,10 +5641,44 @@ let cachedScore = null;
     }
 
     // ATS numeric scoring is single-source; feedback only augments the textual tips.
+    // PHASE 4: Render rubric only when structured AI feedback is ready (prevents raw text flash)
     function applyFeedbackTipsToRubric(atsRubric) {
       if (!atsRubric || !Array.isArray(atsRubric)) return;
       const grid = document.getElementById('rf-rubric-grid');
       if (!grid) return;
+      
+      // PHASE 4: If grid is empty, render full rubric with structured AI feedback
+      // This ensures we never show rule-based raw text first
+      const isGridEmpty = grid.innerHTML.trim() === '';
+      
+      if (isGridEmpty) {
+        // Render rubric for the first time with structured AI feedback
+        atsRubric.forEach(item => {
+          const div = document.createElement('div');
+          div.className = 'rf-rubric-item';
+          const normalizedLabel = (item.category || item.label || '').trim().toLowerCase();
+          if (normalizedLabel) {
+            div.dataset.category = normalizedLabel;
+          }
+          const scoreDisplay = (item.score === undefined || item.score === null) ? '— / —' : `${item.score} / ${item.max}`;
+          const formattedTip = limitFeedbackToSentences(item.feedback || '');
+          const safeTip = escapeHtml(formattedTip);
+          const safeTipAttr = escapeHtmlAttr(formattedTip);
+          div.innerHTML = `
+            <div class="rf-rubric-label">${escapeHtml(item.category || item.label || '')}</div>
+            <div class="rf-rubric-score">${escapeHtml(scoreDisplay)}</div>
+            <div class="rf-rubric-tip" data-rubric-tip data-base-tip="${safeTipAttr}" style="color:var(--color-text-secondary);font-size:0.98rem;">${safeTip}</div>
+          `;
+          grid.appendChild(div);
+        });
+        // PHASE 4: Hide rubric skeleton now that structured content is rendered
+        const skeletonRubric = document.getElementById('rf-skeleton-rubric');
+        if (skeletonRubric) skeletonRubric.style.display = 'none';
+        grid.style.display = 'grid';
+        return; // Done - rubric rendered with structured data
+      }
+      
+      // Grid already exists - update tips only (existing behavior)
       const normalizeLabel = (value) => (value || '').toLowerCase().trim();
       const pickRubricCard = (key) => {
         if (!key) return null;
