@@ -4581,7 +4581,7 @@
                       // Persist feedback after role tips completes (success or failure)
                       // Use roleTipsResult if available (success with role tips), otherwise use feedbackResult (failure or no role tips)
                       if (isActiveFeedbackToken(feedbackRunToken)) {
-                        persistRoleFeedbackIfPossible(roleTipsResult);
+                        persistRoleFeedbackIfPossible(roleTipsResult ?? feedbackResult);
                       }
                       
                       // Clear token only after role tips settles (success/failure/timeout)
@@ -4591,6 +4591,25 @@
                         clearActiveFeedbackToken();
                       }
                     });
+                } else {
+                  // NO-ROLE path: Clear stale role tips UI when no role is specified
+                  // Ensure role tips section does NOT show stale cards from a previous run
+                  const feedbackGrid = document.getElementById('rf-feedback-grid');
+                  if (feedbackGrid) {
+                    feedbackGrid.innerHTML = '';
+                    if (feedbackGrid.dataset) {
+                      delete feedbackGrid.dataset.placeholder;
+                    }
+                  }
+                  // Set role tips status to non-generating state so skeleton will not show
+                  if (isActiveFeedbackToken(feedbackRunToken)) {
+                    setRoleTipsStatus(feedbackRunToken, 'idle');
+                    updateRoleTipsState({
+                      hasAtsScore,
+                      roleSpecificFeedback: null,
+                      token: feedbackRunToken
+                    });
+                  }
                 }
 
                 const persistRoleFeedbackIfPossible = (updatedFeedbackResult = null) => {
