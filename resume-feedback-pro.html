@@ -4494,26 +4494,7 @@ let cachedScore = null;
                           persistRoleFeedbackIfPossible(updatedFeedbackResult);
                           
                           // FIX 2: Populate original snippet after analysis completes (for Pro/Premium users)
-                          const userPlan = getCurrentUserPlan();
-                          if ((userPlan === 'pro' || userPlan === 'premium') && uploadResult) {
-                            const origBox = document.querySelectorAll('#rf-rewrite-content .rf-snippet-box')[0];
-                            if (origBox) {
-                              const resumeText = sessionStorage.getItem('currentResumeText') || uploadResult.resumeText;
-                              if (resumeText && resumeText.length > 0) {
-                                let cleanText = resumeText.replace(/\s+/g, ' ').trim();
-                                if (cleanText.length > 0) {
-                                  let snippet = cleanText.length > 500 ? cleanText.substring(0, 500) : cleanText;
-                                  const lastSpace = snippet.lastIndexOf(' ');
-                                  if (cleanText.length > 500 && lastSpace > 400) {
-                                    snippet = snippet.substring(0, lastSpace) + '...';
-                                  } else if (cleanText.length > 500) {
-                                    snippet = snippet + '...';
-                                  }
-                                  origBox.value = snippet;
-                                }
-                              }
-                            }
-                          }
+                          populateOriginalSnippetAfterAnalysis(uploadResult);
                         }
                       } else {
                         // Role tips failed or timed out - update state to failed
@@ -4697,26 +4678,7 @@ let cachedScore = null;
                             persistRoleFeedbackIfPossible(updatedFeedbackResult);
                             
                             // FIX 2: Populate original snippet after analysis completes (for Pro/Premium users)
-                            const userPlan = getCurrentUserPlan();
-                            if ((userPlan === 'pro' || userPlan === 'premium') && uploadResult) {
-                              const origBox = document.querySelectorAll('#rf-rewrite-content .rf-snippet-box')[0];
-                              if (origBox) {
-                                const resumeText = sessionStorage.getItem('currentResumeText') || uploadResult.resumeText;
-                                if (resumeText && resumeText.length > 0) {
-                                  let cleanText = resumeText.replace(/\s+/g, ' ').trim();
-                                  if (cleanText.length > 0) {
-                                    let snippet = cleanText.length > 500 ? cleanText.substring(0, 500) : cleanText;
-                                    const lastSpace = snippet.lastIndexOf(' ');
-                                    if (cleanText.length > 500 && lastSpace > 400) {
-                                      snippet = snippet.substring(0, lastSpace) + '...';
-                                    } else if (cleanText.length > 500) {
-                                      snippet = snippet + '...';
-                                    }
-                                    origBox.value = snippet;
-                                  }
-                                }
-                              }
-                            }
+                            populateOriginalSnippetAfterAnalysis(uploadResult);
                           }
                         } else {
                           // Role tips returned null - update state to failed
@@ -6518,6 +6480,30 @@ let cachedScore = null;
       if (!el) return;
       el.style.display = 'none';
       el.classList.remove('fade-enter', 'fade-enter-active');
+    }
+    
+    // Helper: Populate original snippet textarea for Pro/Premium users after analysis completes
+    function populateOriginalSnippetAfterAnalysis(uploadResult) {
+      const userPlan = getCurrentUserPlan();
+      if ((userPlan === 'pro' || userPlan === 'premium') && uploadResult) {
+        const origBox = document.querySelectorAll('#rf-rewrite-content .rf-snippet-box')[0];
+        if (origBox) {
+          const resumeText = sessionStorage.getItem('currentResumeText') || uploadResult.resumeText;
+          if (resumeText && resumeText.length > 0) {
+            let cleanText = resumeText.replace(/\s+/g, ' ').trim();
+            if (cleanText.length > 0) {
+              let snippet = cleanText.length > 500 ? cleanText.substring(0, 500) : cleanText;
+              const lastSpace = snippet.lastIndexOf(' ');
+              if (cleanText.length > 500 && lastSpace > 400) {
+                snippet = snippet.substring(0, lastSpace) + '...';
+              } else if (cleanText.length > 500) {
+                snippet = snippet + '...';
+              }
+              origBox.value = snippet;
+            }
+          }
+        }
+      }
     }
 
     // Skeleton loading state management (performance-optimized, non-blocking)
