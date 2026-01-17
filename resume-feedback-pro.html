@@ -3236,15 +3236,49 @@ let cachedScore = null;
                 
                 console.log('[RESUME-FEEDBACK] Loaded score from history (resume feedback run only):', cachedScore.score);
                 
+                // Fetch full detail payload from D1 to get atsRubric and roleSpecificFeedback
+                if (latestHistoryItem.sessionId) {
+                  try {
+                    const encodedSessionId = encodeURIComponent(String(latestHistoryItem.sessionId));
+                    const detailResponse = await fetch(`/api/resume-feedback/history/${encodedSessionId}`, {
+                      headers: {
+                        'Authorization': `Bearer ${token}`
+                      }
+                    });
+                    
+                    if (detailResponse.ok) {
+                      const detailData = await detailResponse.json();
+                      if (detailData.atsRubric && Array.isArray(detailData.atsRubric)) {
+                        cachedScore.atsRubric = detailData.atsRubric;
+                        console.log('[RESUME-FEEDBACK] Hydrated atsRubric from D1 detail endpoint (sessionId:', latestHistoryItem.sessionId, ')');
+                      }
+                      if (detailData.roleSpecificFeedback) {
+                        cachedScore.roleSpecificFeedback = detailData.roleSpecificFeedback;
+                        console.log('[RESUME-FEEDBACK] Hydrated roleSpecificFeedback from D1 detail endpoint (sessionId:', latestHistoryItem.sessionId, ')');
+                      }
+                    }
+                  } catch (detailError) {
+                    console.warn('[RESUME-FEEDBACK] Detail endpoint fetch failed, falling back to localStorage:', detailError);
+                  }
+                }
+                
                 // Try to restore breakdown from localStorage if available (for backward compatibility)
                 // This allows rubric grid to show breakdown even if history doesn't include it
-                if (window.JobHackAIStatePersistence && cachedScore.resumeId) {
+                // Note: D1 detail data takes precedence over localStorage if both are present
+                if (!cachedScore.atsRubric && window.JobHackAIStatePersistence && cachedScore.resumeId) {
                   const localStorageScore = window.JobHackAIStatePersistence.loadATSScore(null);
                   if (localStorageScore && localStorageScore.breakdown && 
                       localStorageScore.resumeId === cachedScore.resumeId) {
                     // Only use localStorage breakdown if it matches the current resumeId
                     cachedScore.breakdown = localStorageScore.breakdown;
                     cachedScore.extractionQuality = localStorageScore.extractionQuality;
+                  }
+                }
+                // Only use localStorage roleSpecificFeedback if D1 detail didn't provide it
+                if (!cachedScore.roleSpecificFeedback && window.JobHackAIStatePersistence && cachedScore.resumeId) {
+                  const localStorageScore = window.JobHackAIStatePersistence.loadATSScore(null);
+                  if (localStorageScore && localStorageScore.roleSpecificFeedback && 
+                      localStorageScore.resumeId === cachedScore.resumeId) {
                     cachedScore.roleSpecificFeedback = localStorageScore.roleSpecificFeedback;
                   }
                 }
@@ -3287,7 +3321,10 @@ let cachedScore = null;
               rubricGrid.style.display = 'grid';
             }
 
-            if (cachedScore.breakdown && Object.keys(cachedScore.breakdown).length > 0) {
+            // Prefer atsRubric from D1 detail endpoint if available (includes full feedback with bullets)
+            if (cachedScore.atsRubric && Array.isArray(cachedScore.atsRubric) && cachedScore.atsRubric.length > 0) {
+              populateAtsRubric(cachedScore.atsRubric);
+            } else if (cachedScore.breakdown && Object.keys(cachedScore.breakdown).length > 0) {
               const getScore = (value) => {
                 if (typeof value === 'number') return value;
                 if (value && typeof value === 'object' && typeof value.score === 'number') return value.score;
