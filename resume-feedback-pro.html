@@ -2116,17 +2116,6 @@
 
         const result = await response.json();
         
-        // TEMP debug log: print response structure
-        console.log('[ROLE-TIPS][API-RESPONSE]', {
-          token,
-          isActive: isActiveFeedbackToken(token),
-          resultKeys: Object.keys(result || {}),
-          hasRoleSpecificFeedback: !!(result?.roleSpecificFeedback),
-          roleSpecificFeedbackKeys: result?.roleSpecificFeedback ? Object.keys(result.roleSpecificFeedback) : null,
-          sectionsLength: result?.roleSpecificFeedback?.sections?.length ?? result?.sections?.length ?? null,
-          resultDirectSections: result?.sections?.length ?? null
-        });
-        
         // PHASE 2: Token-gate: only update if token is still active
         if (!isActiveFeedbackToken(token)) {
           console.warn('[RESUME-FEEDBACK] Stale role tips response ignored (token mismatch)');
@@ -2147,19 +2136,16 @@
         // Handle both response structures: result.roleSpecificFeedback OR result directly
         const roleSpecificFeedback = result.roleSpecificFeedback || result;
         
-        if (roleSpecificFeedback && (isValidRoleTips(roleSpecificFeedback) || (roleSpecificFeedback.sections && Array.isArray(roleSpecificFeedback.sections)))) {
+        // Validate: must have non-empty sections array (not just empty array)
+        const hasNonEmptySections =
+          Array.isArray(roleSpecificFeedback?.sections) && roleSpecificFeedback.sections.length > 0;
+        
+        if (roleSpecificFeedback && (isValidRoleTips(roleSpecificFeedback) || hasNonEmptySections)) {
           setRoleTipsStatus(token, 'ready');
           return roleSpecificFeedback;
         } else {
           setRoleTipsStatus(token, 'failed');
           setRoleStatus('Role tips unavailable. Try regenerating feedback.');
-          console.warn('[ROLE-TIPS][API-RESPONSE] Invalid structure:', {
-            hasRoleSpecificFeedback: !!roleSpecificFeedback,
-            isObject: typeof roleSpecificFeedback === 'object',
-            isArray: Array.isArray(roleSpecificFeedback),
-            hasSections: !!(roleSpecificFeedback?.sections),
-            sectionsLength: roleSpecificFeedback?.sections?.length
-          });
           return null;
         }
       } catch (error) {
@@ -4283,10 +4269,8 @@
             if (!isActiveFeedbackToken(feedbackRunToken)) return;
             // If role tips were started (or retry started), token must remain active until those promises settle.
             if (roleTipsPromise || retryRoleTipsPromise) {
-              console.log('[ROLE-TIPS][TOKEN KEEP]', { reason, roleTips: !!roleTipsPromise, retry: !!retryRoleTipsPromise });
               return;
             }
-            console.log('[ROLE-TIPS][TOKEN CLEAR]', { reason });
             clearActiveFeedbackToken();
           }
 
@@ -4565,21 +4549,9 @@
                   let roleTipsResult = null; // Track updated result with role tips for persistence
                   roleTipsPromise = getRoleTips(uploadResult.resumeId, canonicalJobTitleForApis, feedbackRunToken, tier1SessionId)
                     .then((roleTips) => {
-                      // TEMP debug log: print role tips received in .then() handler
-                      console.log('[ROLE-TIPS][THEN-HANDLER]', {
-                        feedbackRunToken,
-                        isActive: isActiveFeedbackToken(feedbackRunToken),
-                        hasRoleTips: !!roleTips,
-                        roleTipsKeys: roleTips ? Object.keys(roleTips) : null,
-                        roleSpecificFeedbackKeys: roleTips?.roleSpecificFeedback ? Object.keys(roleTips.roleSpecificFeedback) : null,
-                        sectionsLength: roleTips?.sections?.length ?? roleTips?.roleSpecificFeedback?.sections?.length ?? null,
-                        isValidRoleTips: roleTips ? isValidRoleTips(roleTips) : false
-                      });
-                      
                       // PHASE 2: Token-gate: only update if token is still active
                       if (!isActiveFeedbackToken(feedbackRunToken)) {
                         console.warn('[RESUME-FEEDBACK] Stale role tips update ignored (token mismatch)');
-                        console.log('[ROLE-TIPS][THEN-HANDLER] TOKEN MISMATCH - EARLY RETURN');
                         return;
                       }
 
@@ -4640,7 +4612,6 @@
                       // Only clear if this is still the active token (not overwritten by new run)
                       // Note: Token clearing is safe even after showRoleFeedback() since UI visibility is not token-gated
                       if (isActiveFeedbackToken(feedbackRunToken)) {
-                        console.log('[ROLE-TIPS][CLEAR-TOKEN] Line ~4624: Clearing token in roleTipsPromise.finally()');
                         clearActiveFeedbackToken();
                       }
                     });
@@ -4803,18 +4774,7 @@
                     const retrySessionId = retryResult.feedbackSessionId || null;
                     retryRoleTipsPromise = getRoleTips(uploadResult.resumeId, canonicalJobTitleForApis, feedbackRunToken, retrySessionId)
                       .then((roleTips) => {
-                        // TEMP debug log: print role tips received in retry .then() handler
-                        console.log('[ROLE-TIPS][RETRY-THEN-HANDLER]', {
-                          feedbackRunToken,
-                          isActive: isActiveFeedbackToken(feedbackRunToken),
-                          hasRoleTips: !!roleTips,
-                          roleTipsKeys: roleTips ? Object.keys(roleTips) : null,
-                          sectionsLength: roleTips?.sections?.length ?? null,
-                          isValidRoleTips: roleTips ? isValidRoleTips(roleTips) : false
-                        });
-                        
                         if (!isActiveFeedbackToken(feedbackRunToken)) {
-                          console.log('[ROLE-TIPS][RETRY-THEN-HANDLER] TOKEN MISMATCH - EARLY RETURN');
                           return;
                         }
                         if (roleTips) {
@@ -4871,7 +4831,6 @@
                         // Only clear if this is still the active token (not overwritten by new run)
                         // Note: Token clearing is safe even after showRoleFeedback() since UI visibility is not token-gated
                         if (isActiveFeedbackToken(feedbackRunToken)) {
-                          console.log('[ROLE-TIPS][CLEAR-TOKEN] Line ~4854: Clearing token in retryRoleTipsPromise.finally()');
                           clearActiveFeedbackToken();
                         }
                       });
@@ -5727,10 +5686,7 @@
             const isRoleTipsGenerating = roleTipsStatus && roleTipsStatus.status === 'generating' && 
                                         isActiveFeedbackToken(roleTipsStatus.token);
             if (!isRoleTipsGenerating) {
-              console.log('[ROLE-TIPS][CLEAR-TOKEN] Line ~5709: Clearing token (role tips not generating)');
               clearActiveFeedbackToken();
-            } else {
-              console.log('[ROLE-TIPS][CLEAR-TOKEN] Line ~5709: NOT clearing token (role tips still generating)');
             }
             }
         // Do NOT restore job title from cache; must be explicitly provided each run.
@@ -5762,10 +5718,7 @@
             const isRoleTipsGenerating = roleTipsStatus && roleTipsStatus.status === 'generating' && 
                                         isActiveFeedbackToken(roleTipsStatus.token);
             if (!isRoleTipsGenerating) {
-              console.log('[ROLE-TIPS][CLEAR-TOKEN] Line ~5735: Clearing token (role tips not generating)');
               clearActiveFeedbackToken();
-            } else {
-              console.log('[ROLE-TIPS][CLEAR-TOKEN] Line ~5735: NOT clearing token (role tips still generating)');
             }
           } catch (error) {
             handleApiError(error);
@@ -6364,19 +6317,6 @@
       
       // Handle NEW structure with fitLevel, diagnosis, tips, rewritePreview
       if (isNewStructure) {
-        // TEMP debug log: check sections before filtering
-        const sectionsBeforeFilter = roleSpecificFeedback.sections || [];
-        console.log('[ROLE-TIPS][RENDER]', {
-          sectionsBeforeFilter: sectionsBeforeFilter.length,
-          sectionsStructure: sectionsBeforeFilter.map(s => ({
-            hasSection: !!s?.section,
-            hasDiagnosis: !!(s?.diagnosis?.trim()),
-            hasTips: !!(s?.tips?.length),
-            hasRewritePreview: !!(s?.rewritePreview?.trim()),
-            fitLevel: s?.fitLevel
-          }))
-        });
-        
         // CRITICAL: Filter to only valid object sections to prevent blank "Tunable" cards
         const validSections = roleSpecificFeedback.sections.filter(section => {
           // Must be an object (not string, null, array, etc.)
@@ -6392,16 +6332,6 @@
           return hasDiagnosis || hasTips || hasRewritePreview;
         });
         
-        // TEMP debug log: check render drop
-        if (sectionsBeforeFilter.length > 0 && validSections.length === 0) {
-          console.error('[ROLE-TIPS][RENDER-DROP]', {
-            message: 'All sections filtered out - no valid content',
-            sectionsBeforeFilter: sectionsBeforeFilter.length,
-            validSections: validSections.length,
-            sampleSection: sectionsBeforeFilter[0]
-          });
-        }
-        
         if (validSections.length === 0) {
           // Show helpful message instead of blank cards
           const messageDiv = document.createElement('div');
@@ -6416,9 +6346,6 @@
           grid.style.display = 'grid';
           return;
         }
-        
-        // TEMP debug log: confirm rendering
-        console.log('[ROLE-TIPS][RENDER] Rendering', validSections.length, 'valid sections');
         
         validSections.forEach(section => {
           const div = document.createElement('div');
@@ -6460,20 +6387,6 @@
         });
         // Ensure grid is visible after populating (updateRoleTipsState will also set this, but ensure it's set here too)
         grid.style.display = 'grid';
-        
-        // TEMP debug log: verify cards were actually rendered
-        const renderedCards = grid.querySelectorAll('.rf-feedback-card');
-        console.log('[ROLE-TIPS][RENDER] Cards rendered:', {
-          expected: validSections.length,
-          actual: renderedCards.length,
-          gridDisplay: grid.style.display,
-          gridInnerHTMLLength: grid.innerHTML.length
-        });
-        
-        if (validSections.length > 0 && renderedCards.length === 0) {
-          console.error('[ROLE-TIPS][RENDER-DROP] Expected', validSections.length, 'cards but rendered 0');
-        }
-        
         return;
       }
       
@@ -6553,16 +6466,6 @@
       const sectionCount = isNewStructure
         ? (rsf.sections || []).length
         : (isOldStructure ? rsf.length : 0);
-
-      // TEMP debug logs
-      console.log('[ROLE-TIPS][STATE]', {
-        token,
-        active: !!token && isActiveFeedbackToken(token),
-        status: roleTipsStatus ? roleTipsStatus.status : null,
-        hasAtsScore,
-        hasRoleSpecific: !!roleSpecificFeedback,
-        rsfKeys: roleSpecificFeedback ? Object.keys(roleSpecificFeedback) : null
-      });
 
       if (!roleContainer) return;
 
