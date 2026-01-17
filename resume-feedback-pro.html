@@ -4513,7 +4513,8 @@ let cachedScore = null;
                   });
                   
                   // Start role tips fetch in background (non-blocking)
-                  const tier1SessionId = feedbackResult.sessionId || null;
+                  // Use feedbackSessionId for role-tips endpoint (expects feedback_sessions.id), fallback to null if not available
+                  const tier1SessionId = feedbackResult.feedbackSessionId || null;
                   roleTipsPromise = getRoleTips(uploadResult.resumeId, canonicalJobTitleForApis, feedbackRunToken, tier1SessionId)
                     .then((roleTips) => {
                       // PHASE 2: Token-gate: only update if token is still active
@@ -4698,11 +4699,11 @@ let cachedScore = null;
                   });
 
                   // PHASE 2: Fetch role tips asynchronously after retry succeeds
-                  // D2: Pass sessionId from retry result to role tips endpoint
+                  // D2: Pass feedbackSessionId from retry result to role tips endpoint (expects feedback_sessions.id)
                   const hasRole = canonicalJobTitleForApis && canonicalJobTitleForApis.trim().length > 0;
                   let retryRoleTipsPromise = null;
                   if (hasRole && hasAtsScore) {
-                    const retrySessionId = retryResult.sessionId || null;
+                    const retrySessionId = retryResult.feedbackSessionId || null;
                     retryRoleTipsPromise = getRoleTips(uploadResult.resumeId, canonicalJobTitleForApis, feedbackRunToken, retrySessionId)
                       .then((roleTips) => {
                         if (!isActiveFeedbackToken(feedbackRunToken)) return;

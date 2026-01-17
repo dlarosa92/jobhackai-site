@@ -1277,8 +1277,10 @@ export async function onRequest(context) {
       tokenUsage: tokenUsage,
       ...result,
       // Add session metadata for history (additive - doesn't break existing response)
-      // Use preFeedbackSessionId (feedback_sessions.id) not d1SessionId (resume_sessions.id) for role-tips persistence
-      sessionId: preFeedbackSessionId || d1SessionId,
+      // sessionId is always resumeSessionId (resume_sessions.id) for consistency with history detail endpoint
+      // feedbackSessionId is separate (feedback_sessions.id) for role-tips persistence when needed
+      sessionId: d1SessionId,
+      feedbackSessionId: preFeedbackSessionId || null,
       meta: {
         createdAt: d1CreatedAt || new Date().toISOString(),
         title: normalizedJobTitle || null,
