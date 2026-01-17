@@ -4458,6 +4458,14 @@ let cachedScore = null;
                 // D2: Pass sessionId from Tier 1 response to role tips endpoint
                 const hasRole = canonicalJobTitleForApis && canonicalJobTitleForApis.trim().length > 0;
                 if (hasRole && hasAtsScore) {
+                  // Enter loading state: set status and update UI to show skeleton
+                  setRoleTipsStatus(feedbackRunToken, 'generating');
+                  updateRoleTipsState({
+                    hasAtsScore,
+                    roleSpecificFeedback: null,
+                    token: feedbackRunToken
+                  });
+                  
                   // Start role tips fetch in background (non-blocking)
                   const tier1SessionId = feedbackResult.sessionId || null;
                   roleTipsPromise = getRoleTips(uploadResult.resumeId, canonicalJobTitleForApis, feedbackRunToken, tier1SessionId)
@@ -6290,10 +6298,17 @@ let cachedScore = null;
       const roleInfoBar = document.getElementById('rf-role-info');
       let roleBadge = document.getElementById('rf-role-badge');
       let roleHelper = document.getElementById('rf-role-helper');
+      const skeletonFeedback = document.getElementById('rf-skeleton-feedback');
+      const skeletonContainer = document.getElementById('rf-skeleton-container');
 
       if (roleDescEl && !roleDescEl.dataset.baseText) {
         roleDescEl.dataset.baseText = roleDescEl.textContent || '';
       }
+
+      // Check role tips generation status to manage skeleton visibility
+      const roleTipsStatus = token ? getRoleTipsStatus() : null;
+      const isGenerating = roleTipsStatus && roleTipsStatus.status === 'generating' && 
+                          (!token || isActiveFeedbackToken(roleTipsStatus.token));
 
       const rsf = roleSpecificFeedback;
       const isOldStructure = rsf && Array.isArray(rsf) && rsf.length > 0;
@@ -6307,6 +6322,32 @@ let cachedScore = null;
         : (isOldStructure ? rsf.length : 0);
 
       if (!roleContainer) return;
+
+      // Manage skeleton visibility based on generation status
+      // Show skeleton when generating, hide when role tips are ready or missing
+      if (isGenerating && hasAtsScore) {
+        // Entering loading state: show skeleton, hide grid
+        if (skeletonContainer) skeletonContainer.style.display = 'block';
+        if (skeletonFeedback) skeletonFeedback.style.display = 'grid';
+        if (feedbackGrid) feedbackGrid.style.display = 'none';
+        showRoleFeedback();
+        setRoleStatus('Generating tips…');
+        // Store state on roleDescEl for restoration later
+        if (roleDescEl) {
+          roleDescEl.dataset.lastRoleState = 'generating';
+        }
+        return; // Early return during loading - don't process other states yet
+      } else {
+        // Exiting loading state: hide skeleton
+        if (skeletonFeedback) skeletonFeedback.style.display = 'none';
+        // Hide container only if all skeletons are hidden (checked by hideFeedbackSkeleton logic)
+        if (skeletonContainer) {
+          const skeletonRubric = document.getElementById('rf-skeleton-rubric');
+          if (!skeletonRubric || skeletonRubric.style.display === 'none') {
+            skeletonContainer.style.display = 'none';
+          }
+        }
+      }
 
       // No ATS score – hide section and button
       if (!hasAtsScore) {
