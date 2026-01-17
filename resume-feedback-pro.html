@@ -4479,9 +4479,8 @@ let cachedScore = null;
                         });
                         // FIX 1: Ensure role tips container is visible after grid population
                         // Call showRoleFeedback() directly to guarantee visibility, even if updateRoleTipsState() returned early
-                        if (isActiveFeedbackToken(feedbackRunToken)) {
-                          showRoleFeedback();
-                        }
+                        // Show role feedback unconditionally since we're in success path and token will remain valid until finally
+                        showRoleFeedback();
                         
                         // Persist role tips to localStorage using existing persistence mechanism
                         if (isActiveFeedbackToken(feedbackRunToken)) {
@@ -4519,6 +4518,7 @@ let cachedScore = null;
                     .finally(() => {
                       // Clear token only after role tips settles (success/failure/timeout)
                       // Only clear if this is still the active token (not overwritten by new run)
+                      // Note: showRoleFeedback() is called unconditionally in success path above to avoid token race
                       if (isActiveFeedbackToken(feedbackRunToken)) {
                         clearActiveFeedbackToken();
                       }
@@ -4663,9 +4663,8 @@ let cachedScore = null;
                           });
                           // FIX 1: Ensure role tips container is visible after grid population
                           // Call showRoleFeedback() directly to guarantee visibility, even if updateRoleTipsState() returned early
-                          if (isActiveFeedbackToken(feedbackRunToken)) {
-                            showRoleFeedback();
-                          }
+                          // Show role feedback unconditionally since we're in success path and token will remain valid until finally
+                          showRoleFeedback();
                           
                           // Persist role tips to localStorage using existing persistence mechanism
                           if (isActiveFeedbackToken(feedbackRunToken)) {
@@ -4705,6 +4704,7 @@ let cachedScore = null;
                       .finally(() => {
                         // Clear token only after role tips settles (success/failure/timeout)
                         // Only clear if this is still the active token (not overwritten by new run)
+                        // Note: showRoleFeedback() is called unconditionally in success path above to avoid token race
                         if (isActiveFeedbackToken(feedbackRunToken)) {
                           clearActiveFeedbackToken();
                         }
