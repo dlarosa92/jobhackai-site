@@ -2454,6 +2454,7 @@
       // Store cleanup function (skeleton hide function)
       currentLoadingOverlay = () => {
         hideSkeletons();
+        hideATSSkeleton();
         // Also hide skeleton on original snippet box for Pro/Premium
         if (userPlan === 'pro' || userPlan === 'premium') {
           const rewriteContent = document.getElementById('rf-rewrite-content');
@@ -4110,6 +4111,7 @@ let cachedScore = null;
           // Store cleanup function for error handling (skeleton hide function)
           window._currentFeedbackLoading = () => {
             hideSkeletons();
+            hideATSSkeleton();
           };
 
           // Pre-flight trial limit check (before any API calls)
@@ -7562,8 +7564,8 @@ let cachedScore = null;
           return;
         }
         
-        // Ensure sessionId is URL-encoded for safety
-        const encodedSessionId = encodeURIComponent(String(sessionId));
+        // Ensure sessionId is URL-encoded for safety (use validated numeric value)
+        const encodedSessionId = encodeURIComponent(String(sessionIdNum));
         const response = await fetch(`/api/resume-feedback/history/${encodedSessionId}`, {
           method: 'GET',
           headers: {
