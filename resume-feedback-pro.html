@@ -4505,13 +4505,6 @@
                 hideFeedbackSkeleton();
 
                 const hasAtsScore = !!(atsSettled.status === 'fulfilled' && atsSettled.value && atsSettled.value.success);
-                
-                // PHASE 2: Tier 1 returns roleSpecificFeedback: null, so set to null initially
-                updateRoleTipsState({
-                  hasAtsScore,
-                  roleSpecificFeedback: null,  // PHASE 2: Tier 1 doesn't include role tips
-                  token: feedbackRunToken
-                });
 
                 // PHASE 2: Fetch role tips asynchronously after Tier 1 completes
                 // D2: Pass sessionId from Tier 1 response to role tips endpoint
@@ -4519,9 +4512,10 @@
                 if (hasRole) {
                   // Enter loading state: set status and update UI to show skeleton
                   setRoleTipsStatus(feedbackRunToken, 'generating');
+                  // Don't pass roleSpecificFeedback: null here - updateRoleTipsState will detect 'generating' status
+                  // and show skeleton without resetting/hiding the UI
                   updateRoleTipsState({
                     hasAtsScore,
-                    roleSpecificFeedback: null,
                     token: feedbackRunToken
                   });
                   
@@ -4612,9 +4606,16 @@
                     timestamp: Date.now()
                   });
                 };
-                persistRoleFeedbackIfPossible();
+
+                // Don't persist immediately after Tier 1 - wait for role tips to complete
+                // Persistence happens in roleTipsPromise.then() success path (line 4561) to avoid persisting null
                 if (typeof atsPromise?.finally === 'function') {
-                  atsPromise.finally(persistRoleFeedbackIfPossible);
+                  atsPromise.finally(() => {
+                    // Only persist if role tips didn't start or already completed
+                    if (!roleTipsPromise) {
+                      persistRoleFeedbackIfPossible();
+                    }
+                  });
                 }
 
                 setTimeout(() => {
