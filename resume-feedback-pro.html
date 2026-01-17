@@ -5858,10 +5858,15 @@ let cachedScore = null;
           const formattedTip = limitFeedbackToSentences(item.feedback || '');
           const safeTip = escapeHtml(formattedTip);
           const safeTipAttr = escapeHtmlAttr(formattedTip);
+          const suggestions = Array.isArray(item.suggestions) ? item.suggestions.filter(Boolean) : [];
+          const suggestionsHtml = suggestions.length > 0 
+            ? `<ul style="margin-top:0.5rem;padding-left:1.25rem;color:var(--color-text-muted);font-size:0.9rem;">${suggestions.map(s => `<li>${escapeHtml(s)}</li>`).join('')}</ul>`
+            : '';
           div.innerHTML = `
             <div class="rf-rubric-label">${escapeHtml(item.category || item.label || '')}</div>
             <div class="rf-rubric-score">${escapeHtml(scoreDisplay)}</div>
             <div class="rf-rubric-tip" data-rubric-tip data-base-tip="${safeTipAttr}" style="color:var(--color-text-secondary);font-size:0.98rem;">${safeTip}</div>
+            ${suggestionsHtml}
           `;
           grid.appendChild(div);
         });
@@ -6137,6 +6142,8 @@ let cachedScore = null;
           `;
           grid.appendChild(div);
         });
+        // Ensure grid is visible after populating placeholder content
+        grid.style.display = 'grid';
         return;
       }
       
@@ -6168,6 +6175,7 @@ let cachedScore = null;
             </div>
           `;
           grid.appendChild(messageDiv);
+          grid.style.display = 'grid';
           return;
         }
         
@@ -6209,6 +6217,8 @@ let cachedScore = null;
           `;
           grid.appendChild(div);
         });
+        // Ensure grid is visible after populating (updateRoleTipsState will also set this, but ensure it's set here too)
+        grid.style.display = 'grid';
         return;
       }
       
@@ -6230,6 +6240,7 @@ let cachedScore = null;
             </div>
           `;
           grid.appendChild(messageDiv);
+          grid.style.display = 'grid';
           return;
         }
         
@@ -6243,6 +6254,8 @@ let cachedScore = null;
           `;
           grid.appendChild(div);
         });
+        // Ensure grid is visible after populating (updateRoleTipsState will also set this, but ensure it's set here too)
+        grid.style.display = 'grid';
         return;
       }
     }
@@ -7536,6 +7549,12 @@ let cachedScore = null;
       }
       
       try {
+        // Validate sessionId is a valid number before making the request
+        const sessionIdNum = parseInt(String(sessionId), 10);
+        if (isNaN(sessionIdNum) || sessionIdNum <= 0) {
+          throw new Error('Invalid session ID');
+        }
+        
         const token = await getAuthToken().catch(() => null);
         if (!token) {
           console.warn('[RESUME-FEEDBACK-HISTORY] No auth token for history detail');
@@ -7543,7 +7562,9 @@ let cachedScore = null;
           return;
         }
         
-        const response = await fetch(`/api/resume-feedback/history/${sessionId}`, {
+        // Ensure sessionId is URL-encoded for safety
+        const encodedSessionId = encodeURIComponent(String(sessionId));
+        const response = await fetch(`/api/resume-feedback/history/${encodedSessionId}`, {
           method: 'GET',
           headers: {
             'Authorization': `Bearer ${token}`,
@@ -7553,6 +7574,17 @@ let cachedScore = null;
         
         if (!response.ok) {
           const errorData = await response.json().catch(() => ({}));
+          
+          // Handle 404 - session not found - refresh history list and show clear message
+          if (response.status === 404) {
+            console.warn('[RESUME-FEEDBACK-HISTORY] Session not found, refreshing history list');
+            // Refresh history list to remove stale/deleted items
+            if (window.JobHackAIHistory && typeof window.JobHackAIHistory.refresh === 'function') {
+              window.JobHackAIHistory.refresh();
+            }
+            throw new Error('This session no longer exists. The history list has been refreshed.');
+          }
+          
           throw new Error(errorData.error || `Failed to load history (${response.status})`);
         }
         
@@ -8713,6 +8745,14 @@ let cachedScore = null;
         </div>
         <!-- ATS Rubric -->
         <div id="ats-feedback-container">
+          <!-- ATS Rubric skeleton - 5 cards matching grid layout -->
+          <div class="rf-skeleton-rubric-grid" id="rf-skeleton-rubric" style="display:none;">
+            <div class="rf-skeleton rf-skeleton-rubric-card"></div>
+            <div class="rf-skeleton rf-skeleton-rubric-card"></div>
+            <div class="rf-skeleton rf-skeleton-rubric-card"></div>
+            <div class="rf-skeleton rf-skeleton-rubric-card"></div>
+            <div class="rf-skeleton rf-skeleton-rubric-card"></div>
+          </div>
           <div class="rf-rubric-grid" id="rf-rubric-grid" style="display:none;">
           </div>
         </div>
@@ -8740,15 +8780,6 @@ let cachedScore = null;
           <div id="rf-skeleton-container" style="display:none;">
             <!-- Progress header skeleton -->
             <div class="rf-skeleton rf-skeleton-header" id="rf-skeleton-header"></div>
-            
-            <!-- ATS Rubric skeleton - 5 cards matching grid layout -->
-            <div class="rf-skeleton-rubric-grid" id="rf-skeleton-rubric">
-              <div class="rf-skeleton rf-skeleton-rubric-card"></div>
-              <div class="rf-skeleton rf-skeleton-rubric-card"></div>
-              <div class="rf-skeleton rf-skeleton-rubric-card"></div>
-              <div class="rf-skeleton rf-skeleton-rubric-card"></div>
-              <div class="rf-skeleton rf-skeleton-rubric-card"></div>
-            </div>
             
             <!-- Role-Specific Feedback skeleton - 3 cards -->
             <div class="rf-skeleton-feedback-grid" id="rf-skeleton-feedback" style="margin-top: 3rem;">
