@@ -3334,6 +3334,7 @@
             // Prefer atsRubric from D1 detail endpoint if available (includes full feedback with bullets)
             if (cachedScore.atsRubric && Array.isArray(cachedScore.atsRubric) && cachedScore.atsRubric.length > 0) {
               populateAtsRubric(cachedScore.atsRubric);
+              hideATSSkeleton();
             } else if (cachedScore.breakdown && Object.keys(cachedScore.breakdown).length > 0) {
               const getScore = (value) => {
                 if (typeof value === 'number') return value;
@@ -3723,6 +3724,7 @@
               updateFeedbackGrid(feedbackResult.roleSpecificFeedback);
               if (feedbackResult.atsRubric && Array.isArray(feedbackResult.atsRubric) && feedbackResult.atsRubric.length > 0) {
                 populateAtsRubric(feedbackResult.atsRubric);
+                hideATSSkeleton();
               }
               
               // CRITICAL: Ensure feedback content is visible after feedback is generated (Pro & Premium)
@@ -4493,6 +4495,7 @@
                 // Do not render rule-based text first - wait for structured data
                 if (feedbackResult.atsRubric && Array.isArray(feedbackResult.atsRubric) && feedbackResult.atsRubric.length > 0) {
                   populateAtsRubric(feedbackResult.atsRubric);
+                  hideATSSkeleton();
                 }
                 hideFeedbackSkeleton();
 
@@ -4696,6 +4699,7 @@
                   // PHASE 2: Retry result also has roleSpecificFeedback: null (Tier 1)
                   if (retryResult.atsRubric && Array.isArray(retryResult.atsRubric) && retryResult.atsRubric.length > 0) {
                     populateAtsRubric(retryResult.atsRubric);
+                    hideATSSkeleton();
                   }
                   hideFeedbackSkeleton();
                   const hasAtsScore = !!(atsSettled.status === 'fulfilled' && atsSettled.value && atsSettled.value.success);
@@ -5551,6 +5555,7 @@
               updateFeedbackGrid(feedbackResult.roleSpecificFeedback, { token: feedbackRunToken });
               if (feedbackResult.atsRubric && Array.isArray(feedbackResult.atsRubric) && feedbackResult.atsRubric.length > 0) {
                 populateAtsRubric(feedbackResult.atsRubric);
+                hideATSSkeleton();
               }
 
               const feedbackContentEl = document.getElementById('rf-feedback-content');
@@ -8060,6 +8065,7 @@
       // Populate ATS rubric
       if (atsRubric && Array.isArray(atsRubric)) {
         populateAtsRubric(atsRubric);
+        hideATSSkeleton();
       } else {
         const rubricGrid = document.getElementById('rf-rubric-grid');
         if (rubricGrid) {

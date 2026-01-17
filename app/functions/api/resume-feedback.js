@@ -498,37 +498,37 @@ export async function onRequest(context) {
       console.log(`[RESUME-FEEDBACK] KV feedback cache hit`, { requestId, resumeId: sanitizedResumeId, plan: effectivePlan });
 
       let canReturnCached = false;
-      let cachedSessionId = cachedResult.sessionId || null;
+      let cachedFeedbackSessionId = cachedResult.feedbackSessionId || cachedResult.sessionId || null;
 
       if (isD1Available(env)) {
         if (d1User) {
           try {
             // resumeSession assumed obtained earlier in flow
             if (resumeSession && resumeSession.id) {
-              // If cached result lacks sessionId (legacy cache entry), create a new feedback_session
-              if (!cachedSessionId) {
+              // If cached result lacks feedbackSessionId (legacy cache entry), create a new feedback_session
+              if (!cachedFeedbackSessionId) {
                 try {
                   const placeholder = await createFeedbackSession(env, resumeSession.id, { status: 'completed' });
                   if (placeholder && placeholder.id) {
-                    cachedSessionId = placeholder.id;
-                    // Update cache with sessionId included for future hits
+                    cachedFeedbackSessionId = placeholder.id;
+                    // Update cache with feedbackSessionId included for future hits
                     const cacheHash = await hashString(`${sanitizedResumeId}:${normalizedJobTitle}:feedback:tier1`);
                     const cacheKey = `feedbackCache:${cacheHash}`;
                     const updatedCacheData = {
-                      result: { ...cachedResult, sessionId: cachedSessionId },
+                      result: { ...cachedResult, feedbackSessionId: cachedFeedbackSessionId },
                       timestamp: Date.now()
                     };
                     await env.JOBHACKAI_KV.put(cacheKey, JSON.stringify(updatedCacheData), {
                       expirationTtl: 86400 // 24 hours
                     });
-                    console.log('[RESUME-FEEDBACK] Added sessionId to legacy cache entry', {
+                    console.log('[RESUME-FEEDBACK] Added feedbackSessionId to legacy cache entry', {
                       requestId,
-                      feedbackSessionId: cachedSessionId
+                      feedbackSessionId: cachedFeedbackSessionId
                     });
                   }
                 } catch (sessionError) {
                   console.warn('[RESUME-FEEDBACK] Failed to create feedback session for legacy cache entry (non-fatal):', sessionError.message);
-                  // Continue without sessionId - role tips won't persist for this cache hit
+                  // Continue without feedbackSessionId - role tips won't persist for this cache hit
                 }
               }
 
@@ -553,7 +553,10 @@ export async function onRequest(context) {
       if (canReturnCached) {
         return successResponse({
           ...cachedResult,
-          sessionId: cachedSessionId, // Include sessionId for role-tips persistence
+          // sessionId is always resumeSessionId (resume_sessions.id) for consistency with history detail endpoint
+          // feedbackSessionId is separate (feedback_sessions.id) for role-tips persistence when needed
+          sessionId: resumeSession?.id || null,
+          feedbackSessionId: cachedFeedbackSessionId,
           cached: true
         }, 200, origin, env, requestId);
       }
@@ -1215,10 +1218,10 @@ export async function onRequest(context) {
       if (cacheValid) {
         const cacheHash = await hashString(`${sanitizedResumeId}:${normalizedJobTitle}:feedback:tier1`);
         const cacheKey = `feedbackCache:${cacheHash}`;
-        // Include sessionId in cached result for role-tips persistence
+        // Include feedbackSessionId in cached result for role-tips persistence
         const resultWithSessionId = {
           ...result,
-          sessionId: preFeedbackSessionId || null
+          feedbackSessionId: preFeedbackSessionId || null
         };
         await env.JOBHACKAI_KV.put(cacheKey, JSON.stringify({
           result: resultWithSessionId,
