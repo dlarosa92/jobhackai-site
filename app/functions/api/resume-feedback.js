@@ -555,7 +555,7 @@ export async function onRequest(context) {
           ...cachedResult,
           // sessionId is always resumeSessionId (resume_sessions.id) for consistency with history detail endpoint
           // feedbackSessionId is separate (feedback_sessions.id) for role-tips persistence when needed
-          sessionId: resumeSession?.id ? String(resumeSession.id) : null,
+          sessionId: d1SessionId,
           feedbackSessionId: cachedFeedbackSessionId,
           cached: true
         }, 200, origin, env, requestId);
