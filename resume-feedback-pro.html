@@ -5011,9 +5011,25 @@
             }
             
             // Clear feedback token after error handling (but not for 409/not-ready errors)
-            clearActiveFeedbackToken();
+            // Only clear if role tips aren't generating (role tips will clear token in its .finally() handler)
+            const roleTipsStatus = getRoleTipsStatus();
+            const isRoleTipsGenerating = roleTipsStatus && roleTipsStatus.status === 'generating' && 
+                                        isActiveFeedbackToken(roleTipsStatus.token);
+            if (!isRoleTipsGenerating) {
+              clearActiveFeedbackToken();
+            }
           } else {
-            hideRoleFeedback();
+            // Only hide role feedback if role tips aren't available and aren't generating
+            // Role tips are fetched independently, so they might still be available even if feedback endpoint fails
+            const roleTipsStatus = getRoleTipsStatus();
+            const isRoleTipsGenerating = roleTipsStatus && roleTipsStatus.status === 'generating' && 
+                                        isActiveFeedbackToken(roleTipsStatus.token);
+            const hasAvailableRoleTips = window.latestRoleSpecific && isValidRoleTips(window.latestRoleSpecific);
+            
+            // Don't hide if role tips are generating or already available
+            if (!isRoleTipsGenerating && !hasAvailableRoleTips) {
+              hideRoleFeedback();
+            }
           }
           
           // Hide "Generating AI feedback..." overlay when both API calls complete
@@ -6402,6 +6418,7 @@
       }
 
       // Check role tips generation status to manage skeleton visibility
+      // Role tips skeleton visibility is independent of ATS score - it only depends on generation status
       const roleTipsStatus = token ? getRoleTipsStatus() : null;
       const isGenerating = roleTipsStatus && roleTipsStatus.status === 'generating' && 
                           (!token || isActiveFeedbackToken(roleTipsStatus.token));
@@ -6416,6 +6433,16 @@
       const sectionCount = isNewStructure
         ? (rsf.sections || []).length
         : (isOldStructure ? rsf.length : 0);
+
+      // TEMP debug logs
+      console.log('[ROLE-TIPS][STATE]', {
+        token,
+        active: !!token && isActiveFeedbackToken(token),
+        status: roleTipsStatus ? roleTipsStatus.status : null,
+        hasAtsScore,
+        hasRoleSpecific: !!roleSpecificFeedback,
+        rsfKeys: roleSpecificFeedback ? Object.keys(roleSpecificFeedback) : null
+      });
 
       if (!roleContainer) return;
 
