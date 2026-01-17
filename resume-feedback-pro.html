@@ -4505,13 +4505,6 @@
                 hideFeedbackSkeleton();
 
                 const hasAtsScore = !!(atsSettled.status === 'fulfilled' && atsSettled.value && atsSettled.value.success);
-                
-                // PHASE 2: Tier 1 returns roleSpecificFeedback: null, so set to null initially
-                updateRoleTipsState({
-                  hasAtsScore,
-                  roleSpecificFeedback: null,  // PHASE 2: Tier 1 doesn't include role tips
-                  token: feedbackRunToken
-                });
 
                 // PHASE 2: Fetch role tips asynchronously after Tier 1 completes
                 // D2: Pass sessionId from Tier 1 response to role tips endpoint
@@ -4519,15 +4512,17 @@
                 if (hasRole) {
                   // Enter loading state: set status and update UI to show skeleton
                   setRoleTipsStatus(feedbackRunToken, 'generating');
+                  // Don't pass roleSpecificFeedback: null here - updateRoleTipsState will detect 'generating' status
+                  // and show skeleton without resetting/hiding the UI
                   updateRoleTipsState({
                     hasAtsScore,
-                    roleSpecificFeedback: null,
                     token: feedbackRunToken
                   });
                   
                   // Start role tips fetch in background (non-blocking)
                   // Use feedbackSessionId for role-tips endpoint (expects feedback_sessions.id), fallback to null if not available
                   const tier1SessionId = feedbackResult.feedbackSessionId || null;
+                  let roleTipsResult = null; // Track updated result with role tips for persistence
                   roleTipsPromise = getRoleTips(uploadResult.resumeId, canonicalJobTitleForApis, feedbackRunToken, tier1SessionId)
                     .then((roleTips) => {
                       // PHASE 2: Token-gate: only update if token is still active
@@ -4550,15 +4545,14 @@
                         // updateRoleTipsState() returned early due to token check (which protects against stale data).
                         showRoleFeedback();
                         
-                        // Token-gate persistence and state mutations only (not UI visibility)
+                        // Token-gate state mutations only (not UI visibility)
                         if (isActiveFeedbackToken(feedbackRunToken)) {
                           // Normalize role tips shape: extract roleSpecificFeedback if nested, otherwise use roleTips directly
                           const roleSpecific = roleTips?.roleSpecificFeedback ?? roleTips ?? null;
-                          const updatedFeedbackResult = {
+                          roleTipsResult = {
                             ...feedbackResult,
                             roleSpecificFeedback: roleSpecific
                           };
-                          persistRoleFeedbackIfPossible(updatedFeedbackResult);
                           
                           // FIX 2: Populate original snippet after analysis completes (for Pro/Premium users)
                           populateOriginalSnippetAfterAnalysis(uploadResult);
@@ -4584,6 +4578,12 @@
                       }
                     })
                     .finally(() => {
+                      // Persist feedback after role tips completes (success or failure)
+                      // Use roleTipsResult if available (success with role tips), otherwise use feedbackResult (failure or no role tips)
+                      if (isActiveFeedbackToken(feedbackRunToken)) {
+                        persistRoleFeedbackIfPossible(roleTipsResult ?? feedbackResult);
+                      }
+                      
                       // Clear token only after role tips settles (success/failure/timeout)
                       // Only clear if this is still the active token (not overwritten by new run)
                       // Note: Token clearing is safe even after showRoleFeedback() since UI visibility is not token-gated
@@ -4591,6 +4591,25 @@
                         clearActiveFeedbackToken();
                       }
                     });
+                } else {
+                  // NO-ROLE path: Clear stale role tips UI when no role is specified
+                  // Ensure role tips section does NOT show stale cards from a previous run
+                  const feedbackGrid = document.getElementById('rf-feedback-grid');
+                  if (feedbackGrid) {
+                    feedbackGrid.innerHTML = '';
+                    if (feedbackGrid.dataset) {
+                      delete feedbackGrid.dataset.placeholder;
+                    }
+                  }
+                  // Set role tips status to non-generating state so skeleton will not show
+                  if (isActiveFeedbackToken(feedbackRunToken)) {
+                    setRoleTipsStatus(feedbackRunToken, 'idle');
+                    updateRoleTipsState({
+                      hasAtsScore,
+                      roleSpecificFeedback: null,
+                      token: feedbackRunToken
+                    });
+                  }
                 }
 
                 const persistRoleFeedbackIfPossible = (updatedFeedbackResult = null) => {
@@ -4612,9 +4631,16 @@
                     timestamp: Date.now()
                   });
                 };
-                persistRoleFeedbackIfPossible();
+
+                // Persistence is handled by roleTipsPromise.finally() if role tips were started
+                // If role tips never started (no hasRole), persist after ATS completes
                 if (typeof atsPromise?.finally === 'function') {
-                  atsPromise.finally(persistRoleFeedbackIfPossible);
+                  atsPromise.finally(() => {
+                    // Only persist if role tips didn't start (handles case where hasRole was false)
+                    if (!roleTipsPromise) {
+                      persistRoleFeedbackIfPossible();
+                    }
+                  });
                 }
 
                 setTimeout(() => {
