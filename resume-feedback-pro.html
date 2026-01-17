@@ -6395,8 +6395,8 @@
 
       // Manage skeleton visibility based on generation status
       // Show skeleton when generating, hide when role tips are ready or missing
-      if (isGenerating && hasAtsScore) {
-        // Entering loading state: show skeleton, hide grid
+      if (isGenerating) {
+        // Entering loading state: show skeleton, hide grid (regardless of ATS score)
         if (skeletonContainer) skeletonContainer.style.display = 'block';
         if (skeletonFeedback) skeletonFeedback.style.display = 'grid';
         if (feedbackGrid) feedbackGrid.style.display = 'none';
@@ -6419,27 +6419,7 @@
         }
       }
 
-      // No ATS score – hide section and button
-      if (!hasAtsScore) {
-        if (feedbackGrid) feedbackGrid.style.display = 'none';
-        hideRoleFeedback();
-        if (roleInfoBar) roleInfoBar.style.display = 'none';
-        if (roleBadge) roleBadge.style.display = 'none';
-        if (roleHelper) roleHelper.style.display = 'none';
-        if (regenBtn) {
-          regenBtn.style.display = 'none';
-          regenBtn.textContent = 'Regenerate Feedback';
-        }
-        if (roleDescEl && roleDescEl.dataset.baseText) {
-          roleDescEl.textContent = roleDescEl.dataset.baseText;
-          // Clear any previous state when fully resetting
-          delete roleDescEl.dataset.lastRoleState;
-        }
-        setRoleStatus('');
-        return;
-      }
-
-      // Clean success: ATS + role-specific tips present
+      // Clean success: role-specific tips present (regardless of ATS score)
       if (hasRoleSpecific) {
         if (feedbackGrid) feedbackGrid.style.display = 'grid';
         showRoleFeedback();
