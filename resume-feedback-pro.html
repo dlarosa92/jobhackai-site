@@ -4477,9 +4477,11 @@ let cachedScore = null;
                           roleSpecificFeedback: roleTips,
                           token: feedbackRunToken
                         });
-                        setTimeout(() => {
+                        // FIX 1: Ensure role tips container is visible after grid population
+                        // Call showRoleFeedback() directly to guarantee visibility, even if updateRoleTipsState() returned early
+                        if (isActiveFeedbackToken(feedbackRunToken)) {
                           showRoleFeedback();
-                        }, 100);
+                        }
                         
                         // Persist role tips to localStorage using existing persistence mechanism
                         if (isActiveFeedbackToken(feedbackRunToken)) {
@@ -4490,6 +4492,28 @@ let cachedScore = null;
                             roleSpecificFeedback: roleSpecific
                           };
                           persistRoleFeedbackIfPossible(updatedFeedbackResult);
+                          
+                          // FIX 2: Populate original snippet after analysis completes (for Pro/Premium users)
+                          const userPlan = getCurrentUserPlan();
+                          if ((userPlan === 'pro' || userPlan === 'premium') && uploadResult) {
+                            const origBox = document.querySelectorAll('#rf-rewrite-content .rf-snippet-box')[0];
+                            if (origBox) {
+                              const resumeText = sessionStorage.getItem('currentResumeText') || uploadResult.resumeText;
+                              if (resumeText && resumeText.length > 0) {
+                                let cleanText = resumeText.replace(/\s+/g, ' ').trim();
+                                if (cleanText.length > 0) {
+                                  let snippet = cleanText.length > 500 ? cleanText.substring(0, 500) : cleanText;
+                                  const lastSpace = snippet.lastIndexOf(' ');
+                                  if (cleanText.length > 500 && lastSpace > 400) {
+                                    snippet = snippet.substring(0, lastSpace) + '...';
+                                  } else if (cleanText.length > 500) {
+                                    snippet = snippet + '...';
+                                  }
+                                  origBox.value = snippet;
+                                }
+                              }
+                            }
+                          }
                         }
                       } else {
                         // Role tips failed or timed out - update state to failed
@@ -4656,6 +4680,11 @@ let cachedScore = null;
                             roleSpecificFeedback: roleTips,
                             token: feedbackRunToken
                           });
+                          // FIX 1: Ensure role tips container is visible after grid population
+                          // Call showRoleFeedback() directly to guarantee visibility, even if updateRoleTipsState() returned early
+                          if (isActiveFeedbackToken(feedbackRunToken)) {
+                            showRoleFeedback();
+                          }
                           
                           // Persist role tips to localStorage using existing persistence mechanism
                           if (isActiveFeedbackToken(feedbackRunToken)) {
@@ -4666,6 +4695,28 @@ let cachedScore = null;
                               roleSpecificFeedback: roleSpecific
                             };
                             persistRoleFeedbackIfPossible(updatedFeedbackResult);
+                            
+                            // FIX 2: Populate original snippet after analysis completes (for Pro/Premium users)
+                            const userPlan = getCurrentUserPlan();
+                            if ((userPlan === 'pro' || userPlan === 'premium') && uploadResult) {
+                              const origBox = document.querySelectorAll('#rf-rewrite-content .rf-snippet-box')[0];
+                              if (origBox) {
+                                const resumeText = sessionStorage.getItem('currentResumeText') || uploadResult.resumeText;
+                                if (resumeText && resumeText.length > 0) {
+                                  let cleanText = resumeText.replace(/\s+/g, ' ').trim();
+                                  if (cleanText.length > 0) {
+                                    let snippet = cleanText.length > 500 ? cleanText.substring(0, 500) : cleanText;
+                                    const lastSpace = snippet.lastIndexOf(' ');
+                                    if (cleanText.length > 500 && lastSpace > 400) {
+                                      snippet = snippet.substring(0, lastSpace) + '...';
+                                    } else if (cleanText.length > 500) {
+                                      snippet = snippet + '...';
+                                    }
+                                    origBox.value = snippet;
+                                  }
+                                }
+                              }
+                            }
                           }
                         } else {
                           // Role tips returned null - update state to failed
