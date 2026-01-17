@@ -3248,7 +3248,7 @@ let cachedScore = null;
                     
                     if (detailResponse.ok) {
                       const detailData = await detailResponse.json();
-                      if (detailData.atsRubric && Array.isArray(detailData.atsRubric)) {
+                      if (detailData.atsRubric && Array.isArray(detailData.atsRubric) && detailData.atsRubric.length > 0) {
                         cachedScore.atsRubric = detailData.atsRubric;
                         console.log('[RESUME-FEEDBACK] Hydrated atsRubric from D1 detail endpoint (sessionId:', latestHistoryItem.sessionId, ')');
                       }
@@ -3262,16 +3262,25 @@ let cachedScore = null;
                   }
                 }
                 
-                // Try to restore breakdown from localStorage if available (for backward compatibility)
+                // Restore extractionQuality from localStorage independently (D1 doesn't provide it)
+                if (window.JobHackAIStatePersistence && cachedScore.resumeId) {
+                  const localStorageScore = window.JobHackAIStatePersistence.loadATSScore(null);
+                  if (localStorageScore && localStorageScore.resumeId === cachedScore.resumeId) {
+                    if (localStorageScore.extractionQuality !== undefined) {
+                      cachedScore.extractionQuality = localStorageScore.extractionQuality;
+                    }
+                  }
+                }
+                
+                // Try to restore breakdown from localStorage if D1 atsRubric is missing or empty
                 // This allows rubric grid to show breakdown even if history doesn't include it
-                // Note: D1 detail data takes precedence over localStorage if both are present
-                if (!cachedScore.atsRubric && window.JobHackAIStatePersistence && cachedScore.resumeId) {
+                // Note: D1 detail data takes precedence over localStorage only when atsRubric has content
+                if ((!cachedScore.atsRubric || cachedScore.atsRubric.length === 0) && window.JobHackAIStatePersistence && cachedScore.resumeId) {
                   const localStorageScore = window.JobHackAIStatePersistence.loadATSScore(null);
                   if (localStorageScore && localStorageScore.breakdown && 
                       localStorageScore.resumeId === cachedScore.resumeId) {
                     // Only use localStorage breakdown if it matches the current resumeId
                     cachedScore.breakdown = localStorageScore.breakdown;
-                    cachedScore.extractionQuality = localStorageScore.extractionQuality;
                   }
                 }
                 // Only use localStorage roleSpecificFeedback if D1 detail didn't provide it
