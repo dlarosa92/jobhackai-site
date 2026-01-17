@@ -3206,12 +3206,12 @@
 
       // Load cached ATS score on page load (with KV fallback)
       async function loadCachedATSScore() {
-let cachedScore = null;
-              
-              // ATS score for resume feedback tile and history is always fetched from D1 feedback API.
-              updateProgressRing(0);
-              
-              try {
+        let cachedScore = null;
+        
+        // ATS score for resume feedback tile and history is always fetched from D1 feedback API.
+        updateProgressRing(0);
+        
+        try {
           const token = await getAuthToken();
           if (token) {
             const historyResponse = await fetch('/api/resume-feedback/history?limit=1', {
@@ -3237,7 +3237,12 @@ let cachedScore = null;
                 console.log('[RESUME-FEEDBACK] Loaded score from history (resume feedback run only):', cachedScore.score);
                 
                 // Fetch full detail payload from D1 to get atsRubric and roleSpecificFeedback
-                if (latestHistoryItem.sessionId) {
+                // Guard: Only fetch detail on page load/refresh (rubric grid empty), not after live runs in same session
+                // Prevents 404s due to ID timing/contract issues when sessionId from history list doesn't match D1 state
+                const rubricGrid = document.getElementById('rf-rubric-grid');
+                const isPageLoad = !rubricGrid || rubricGrid.innerHTML.trim() === '';
+                
+                if (latestHistoryItem.sessionId && isPageLoad) {
                   try {
                     const encodedSessionId = encodeURIComponent(String(latestHistoryItem.sessionId));
                     const detailResponse = await fetch(`/api/resume-feedback/history/${encodedSessionId}`, {
@@ -3248,6 +3253,7 @@ let cachedScore = null;
                     
                     if (detailResponse.ok) {
                       const detailData = await detailResponse.json();
+                      // Only set atsRubric if D1 provides a non-empty array (BugBot B fix)
                       if (detailData.atsRubric && Array.isArray(detailData.atsRubric) && detailData.atsRubric.length > 0) {
                         cachedScore.atsRubric = detailData.atsRubric;
                         console.log('[RESUME-FEEDBACK] Hydrated atsRubric from D1 detail endpoint (sessionId:', latestHistoryItem.sessionId, ')');
@@ -3256,39 +3262,34 @@ let cachedScore = null;
                         cachedScore.roleSpecificFeedback = detailData.roleSpecificFeedback;
                         console.log('[RESUME-FEEDBACK] Hydrated roleSpecificFeedback from D1 detail endpoint (sessionId:', latestHistoryItem.sessionId, ')');
                       }
+                    } else if (detailResponse.status === 404) {
+                      // 404 indicates timing/D1 propagation issue - log but continue with localStorage fallback
+                      console.warn('[RESUME-FEEDBACK] Detail endpoint returned 404 for sessionId:', latestHistoryItem.sessionId, '- likely D1 propagation lag, using localStorage fallback');
                     }
                   } catch (detailError) {
                     console.warn('[RESUME-FEEDBACK] Detail endpoint fetch failed, falling back to localStorage:', detailError);
                   }
                 }
                 
-                // Restore extractionQuality from localStorage independently (D1 doesn't provide it)
+                // Consolidate localStorage restoration (single read, multiple field extraction)
+                // Priority: D1 detail > localStorage > undefined
                 if (window.JobHackAIStatePersistence && cachedScore.resumeId) {
                   const localStorageScore = window.JobHackAIStatePersistence.loadATSScore(null);
                   if (localStorageScore && localStorageScore.resumeId === cachedScore.resumeId) {
+                    // BugBot A fix: extractionQuality loaded independently of atsRubric
                     if (localStorageScore.extractionQuality !== undefined) {
                       cachedScore.extractionQuality = localStorageScore.extractionQuality;
                     }
-                  }
-                }
-                
-                // Try to restore breakdown from localStorage if D1 atsRubric is missing or empty
-                // This allows rubric grid to show breakdown even if history doesn't include it
-                // Note: D1 detail data takes precedence over localStorage only when atsRubric has content
-                if ((!cachedScore.atsRubric || cachedScore.atsRubric.length === 0) && window.JobHackAIStatePersistence && cachedScore.resumeId) {
-                  const localStorageScore = window.JobHackAIStatePersistence.loadATSScore(null);
-                  if (localStorageScore && localStorageScore.breakdown && 
-                      localStorageScore.resumeId === cachedScore.resumeId) {
-                    // Only use localStorage breakdown if it matches the current resumeId
-                    cachedScore.breakdown = localStorageScore.breakdown;
-                  }
-                }
-                // Only use localStorage roleSpecificFeedback if D1 detail didn't provide it
-                if (!cachedScore.roleSpecificFeedback && window.JobHackAIStatePersistence && cachedScore.resumeId) {
-                  const localStorageScore = window.JobHackAIStatePersistence.loadATSScore(null);
-                  if (localStorageScore && localStorageScore.roleSpecificFeedback && 
-                      localStorageScore.resumeId === cachedScore.resumeId) {
-                    cachedScore.roleSpecificFeedback = localStorageScore.roleSpecificFeedback;
+                    
+                    // Breakdown fallback only if D1 didn't provide valid atsRubric (BugBot B fix: empty array blocks fallback)
+                    if (!cachedScore.atsRubric && localStorageScore.breakdown) {
+                      cachedScore.breakdown = localStorageScore.breakdown;
+                    }
+                    
+                    // Role-specific feedback fallback only if D1 didn't provide it
+                    if (!cachedScore.roleSpecificFeedback && localStorageScore.roleSpecificFeedback) {
+                      cachedScore.roleSpecificFeedback = localStorageScore.roleSpecificFeedback;
+                    }
                   }
                 }
               }
@@ -3720,7 +3721,9 @@ let cachedScore = null;
               }
               
               updateFeedbackGrid(feedbackResult.roleSpecificFeedback);
-              applyFeedbackTipsToRubric(feedbackResult.atsRubric);
+              if (feedbackResult.atsRubric && Array.isArray(feedbackResult.atsRubric) && feedbackResult.atsRubric.length > 0) {
+                populateAtsRubric(feedbackResult.atsRubric);
+              }
               
               // CRITICAL: Ensure feedback content is visible after feedback is generated (Pro & Premium)
               const feedbackContentEl = document.getElementById('rf-feedback-content');
@@ -4488,7 +4491,9 @@ let cachedScore = null;
 
                 // PHASE 4: Only render rubric when AI structured feedback is ready
                 // Do not render rule-based text first - wait for structured data
-                applyFeedbackTipsToRubric(feedbackResult.atsRubric);
+                if (feedbackResult.atsRubric && Array.isArray(feedbackResult.atsRubric) && feedbackResult.atsRubric.length > 0) {
+                  populateAtsRubric(feedbackResult.atsRubric);
+                }
                 hideFeedbackSkeleton();
 
                 const hasAtsScore = !!(atsSettled.status === 'fulfilled' && atsSettled.value && atsSettled.value.success);
@@ -4689,7 +4694,9 @@ let cachedScore = null;
                     window.latestAtsIssues = retryResult.atsIssues;
                   }
                   // PHASE 2: Retry result also has roleSpecificFeedback: null (Tier 1)
-                  applyFeedbackTipsToRubric(retryResult.atsRubric);
+                  if (retryResult.atsRubric && Array.isArray(retryResult.atsRubric) && retryResult.atsRubric.length > 0) {
+                    populateAtsRubric(retryResult.atsRubric);
+                  }
                   hideFeedbackSkeleton();
                   const hasAtsScore = !!(atsSettled.status === 'fulfilled' && atsSettled.value && atsSettled.value.success);
                   updateRoleTipsState({
@@ -5542,7 +5549,9 @@ let cachedScore = null;
               }
 
               updateFeedbackGrid(feedbackResult.roleSpecificFeedback, { token: feedbackRunToken });
-              applyFeedbackTipsToRubric(feedbackResult.atsRubric);
+              if (feedbackResult.atsRubric && Array.isArray(feedbackResult.atsRubric) && feedbackResult.atsRubric.length > 0) {
+                populateAtsRubric(feedbackResult.atsRubric);
+              }
 
               const feedbackContentEl = document.getElementById('rf-feedback-content');
               const userPlanCheck = getCurrentUserPlan();
