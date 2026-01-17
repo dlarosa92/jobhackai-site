@@ -2116,6 +2116,17 @@
 
         const result = await response.json();
         
+        // TEMP debug log: print response structure
+        console.log('[ROLE-TIPS][API-RESPONSE]', {
+          token,
+          isActive: isActiveFeedbackToken(token),
+          resultKeys: Object.keys(result || {}),
+          hasRoleSpecificFeedback: !!(result?.roleSpecificFeedback),
+          roleSpecificFeedbackKeys: result?.roleSpecificFeedback ? Object.keys(result.roleSpecificFeedback) : null,
+          sectionsLength: result?.roleSpecificFeedback?.sections?.length ?? result?.sections?.length ?? null,
+          resultDirectSections: result?.sections?.length ?? null
+        });
+        
         // PHASE 2: Token-gate: only update if token is still active
         if (!isActiveFeedbackToken(token)) {
           console.warn('[RESUME-FEEDBACK] Stale role tips response ignored (token mismatch)');
@@ -2133,12 +2144,22 @@
           return null;
         }
 
-        if (result.roleSpecificFeedback) {
+        // Handle both response structures: result.roleSpecificFeedback OR result directly
+        const roleSpecificFeedback = result.roleSpecificFeedback || result;
+        
+        if (roleSpecificFeedback && (isValidRoleTips(roleSpecificFeedback) || (roleSpecificFeedback.sections && Array.isArray(roleSpecificFeedback.sections)))) {
           setRoleTipsStatus(token, 'ready');
-          return result.roleSpecificFeedback;
+          return roleSpecificFeedback;
         } else {
           setRoleTipsStatus(token, 'failed');
           setRoleStatus('Role tips unavailable. Try regenerating feedback.');
+          console.warn('[ROLE-TIPS][API-RESPONSE] Invalid structure:', {
+            hasRoleSpecificFeedback: !!roleSpecificFeedback,
+            isObject: typeof roleSpecificFeedback === 'object',
+            isArray: Array.isArray(roleSpecificFeedback),
+            hasSections: !!(roleSpecificFeedback?.sections),
+            sectionsLength: roleSpecificFeedback?.sections?.length
+          });
           return null;
         }
       } catch (error) {
@@ -4251,6 +4272,23 @@
 
           const feedbackRunToken = createRunKey('feedback');
           setActiveFeedbackToken(feedbackRunToken);
+          
+          // Track role tips promises to prevent premature token clearing
+          let roleTipsPromise = null;
+          let retryRoleTipsPromise = null;
+          
+          // Helper: Only clear token if role tips aren't in-flight
+          // Uses closure state (roleTipsPromise/retryRoleTipsPromise) as source of truth
+          function maybeClearFeedbackToken(reason) {
+            if (!isActiveFeedbackToken(feedbackRunToken)) return;
+            // If role tips were started (or retry started), token must remain active until those promises settle.
+            if (roleTipsPromise || retryRoleTipsPromise) {
+              console.log('[ROLE-TIPS][TOKEN KEEP]', { reason, roleTips: !!roleTipsPromise, retry: !!retryRoleTipsPromise });
+              return;
+            }
+            console.log('[ROLE-TIPS][TOKEN CLEAR]', { reason });
+            clearActiveFeedbackToken();
+          }
 
           // Start both API calls in parallel (ATS handles the numeric score)
           const atsPromise = getAtsScore(uploadResult.resumeId, canonicalJobTitleForApis);
@@ -4468,7 +4506,7 @@
               }
               return;
             } else {
-              let roleTipsPromise = null;
+              // roleTipsPromise already declared at function scope
               try {
                 // Update activeRunId with sessionId if available (for proper toast gating)
                 if (window._rfToast && feedbackResult.sessionId) {
@@ -4512,6 +4550,8 @@
                 if (hasRole) {
                   // Enter loading state: set status and update UI to show skeleton
                   setRoleTipsStatus(feedbackRunToken, 'generating');
+                  // Force show role feedback container immediately (not dependent on ATS score)
+                  showRoleFeedback();
                   // Don't pass roleSpecificFeedback: null here - updateRoleTipsState will detect 'generating' status
                   // and show skeleton without resetting/hiding the UI
                   updateRoleTipsState({
@@ -4525,9 +4565,21 @@
                   let roleTipsResult = null; // Track updated result with role tips for persistence
                   roleTipsPromise = getRoleTips(uploadResult.resumeId, canonicalJobTitleForApis, feedbackRunToken, tier1SessionId)
                     .then((roleTips) => {
+                      // TEMP debug log: print role tips received in .then() handler
+                      console.log('[ROLE-TIPS][THEN-HANDLER]', {
+                        feedbackRunToken,
+                        isActive: isActiveFeedbackToken(feedbackRunToken),
+                        hasRoleTips: !!roleTips,
+                        roleTipsKeys: roleTips ? Object.keys(roleTips) : null,
+                        roleSpecificFeedbackKeys: roleTips?.roleSpecificFeedback ? Object.keys(roleTips.roleSpecificFeedback) : null,
+                        sectionsLength: roleTips?.sections?.length ?? roleTips?.roleSpecificFeedback?.sections?.length ?? null,
+                        isValidRoleTips: roleTips ? isValidRoleTips(roleTips) : false
+                      });
+                      
                       // PHASE 2: Token-gate: only update if token is still active
                       if (!isActiveFeedbackToken(feedbackRunToken)) {
                         console.warn('[RESUME-FEEDBACK] Stale role tips update ignored (token mismatch)');
+                        console.log('[ROLE-TIPS][THEN-HANDLER] TOKEN MISMATCH - EARLY RETURN');
                         return;
                       }
 
@@ -4588,6 +4640,7 @@
                       // Only clear if this is still the active token (not overwritten by new run)
                       // Note: Token clearing is safe even after showRoleFeedback() since UI visibility is not token-gated
                       if (isActiveFeedbackToken(feedbackRunToken)) {
+                        console.log('[ROLE-TIPS][CLEAR-TOKEN] Line ~4624: Clearing token in roleTipsPromise.finally()');
                         clearActiveFeedbackToken();
                       }
                     });
@@ -4665,9 +4718,7 @@
               
               // Clear feedback token only if role tips was not started
               // If role tips was started, it will clear the token in its .finally() handler
-              if (!roleTipsPromise) {
-                clearActiveFeedbackToken();
-              }
+              maybeClearFeedbackToken('no-role-tips-started');
             }
           } else if (feedbackSettled.status === 'rejected') {
             const error = feedbackSettled.reason;
@@ -4745,12 +4796,27 @@
                   // PHASE 2: Fetch role tips asynchronously after retry succeeds
                   // D2: Pass feedbackSessionId from retry result to role tips endpoint (expects feedback_sessions.id)
                   const hasRole = canonicalJobTitleForApis && canonicalJobTitleForApis.trim().length > 0;
-                  let retryRoleTipsPromise = null;
+                  // retryRoleTipsPromise already declared at function scope
                   if (hasRole) {
+                    // Force show role feedback container immediately when starting role tips fetch
+                    showRoleFeedback();
                     const retrySessionId = retryResult.feedbackSessionId || null;
                     retryRoleTipsPromise = getRoleTips(uploadResult.resumeId, canonicalJobTitleForApis, feedbackRunToken, retrySessionId)
                       .then((roleTips) => {
-                        if (!isActiveFeedbackToken(feedbackRunToken)) return;
+                        // TEMP debug log: print role tips received in retry .then() handler
+                        console.log('[ROLE-TIPS][RETRY-THEN-HANDLER]', {
+                          feedbackRunToken,
+                          isActive: isActiveFeedbackToken(feedbackRunToken),
+                          hasRoleTips: !!roleTips,
+                          roleTipsKeys: roleTips ? Object.keys(roleTips) : null,
+                          sectionsLength: roleTips?.sections?.length ?? null,
+                          isValidRoleTips: roleTips ? isValidRoleTips(roleTips) : false
+                        });
+                        
+                        if (!isActiveFeedbackToken(feedbackRunToken)) {
+                          console.log('[ROLE-TIPS][RETRY-THEN-HANDLER] TOKEN MISMATCH - EARLY RETURN');
+                          return;
+                        }
                         if (roleTips) {
                           window.latestRoleSpecific = roleTips;
                           window.latestRoleSpecificToken = feedbackRunToken;
@@ -4805,6 +4871,7 @@
                         // Only clear if this is still the active token (not overwritten by new run)
                         // Note: Token clearing is safe even after showRoleFeedback() since UI visibility is not token-gated
                         if (isActiveFeedbackToken(feedbackRunToken)) {
+                          console.log('[ROLE-TIPS][CLEAR-TOKEN] Line ~4854: Clearing token in retryRoleTipsPromise.finally()');
                           clearActiveFeedbackToken();
                         }
                       });
@@ -4850,9 +4917,7 @@
                 if (regenBtn) { regenBtn.disabled = false; regenBtn.textContent = 'Regenerate Feedback'; }
                   // Clear token only if role tips was not started
                   // If role tips was started, it will clear the token in its .finally() handler
-                  if (!retryRoleTipsPromise && isActiveFeedbackToken(feedbackRunToken)) {
-                clearActiveFeedbackToken();
-                  }
+                  maybeClearFeedbackToken('retry-no-role-tips-started');
                   return;
                 } else {
                   // Retry completed but either:
@@ -4874,7 +4939,7 @@
                     if (generateBtn) generateBtn.disabled = false;
                     const regenBtn = document.getElementById('rf-regenerate-btn');
                     if (regenBtn) { regenBtn.disabled = false; regenBtn.textContent = 'Regenerate Feedback'; }
-                    clearActiveFeedbackToken();
+                    maybeClearFeedbackToken('retry-falsy-result');
                   } else {
                     // Case 2: Token is stale (user started new run)
                     // Clean up skeleton/status we showed for this stale run, but don't touch role tips state or token
@@ -4902,8 +4967,8 @@
                   if (generateBtn) generateBtn.disabled = false;
                   const regenBtn = document.getElementById('rf-regenerate-btn');
                   if (regenBtn) { regenBtn.disabled = false; regenBtn.textContent = 'Regenerate Feedback'; }
-                  // Only clear token if this is still the active run
-                  clearActiveFeedbackToken();
+                  // Only clear token if this is still the active run and role tips aren't in-flight
+                  maybeClearFeedbackToken('retry-catch-error');
                 } else {
                   // Retry failed but token is no longer active (user started new run)
                   // Clean up UI state for this stale run
@@ -5011,13 +5076,8 @@
             }
             
             // Clear feedback token after error handling (but not for 409/not-ready errors)
-            // Only clear if role tips aren't generating (role tips will clear token in its .finally() handler)
-            const roleTipsStatus = getRoleTipsStatus();
-            const isRoleTipsGenerating = roleTipsStatus && roleTipsStatus.status === 'generating' && 
-                                        isActiveFeedbackToken(roleTipsStatus.token);
-            if (!isRoleTipsGenerating) {
-              clearActiveFeedbackToken();
-            }
+            // Only clear if role tips aren't in-flight (role tips will clear token in its .finally() handler)
+            maybeClearFeedbackToken('feedback-error-handling');
           } else {
             // Only hide role feedback if role tips aren't available and aren't generating
             // Role tips are fetched independently, so they might still be available even if feedback endpoint fails
@@ -5154,7 +5214,8 @@
           hideLoadingState();
           
           // Clear feedback token at end of Promise.allSettled processing
-          clearActiveFeedbackToken();
+          // Only clear if role tips aren't in-flight (role tips will clear token in its .finally() handler)
+          maybeClearFeedbackToken('promise-all-settled-complete');
         } catch (error) {
           // Restore credit ONLY if ATS scoring failed (not for post-scoring errors)
           // If scoring succeeded but UI/feedback generation failed, user already got value
@@ -5200,7 +5261,8 @@
             } catch (e) { /* ignore */ }
           }
           // Ensure token is cleared on unexpected errors so cached/legacy feedback can be shown
-          clearActiveFeedbackToken();
+          // Only clear if role tips aren't in-flight (role tips will clear token in its .finally() handler)
+          maybeClearFeedbackToken('outer-catch-error');
           clearAtsState();
           handleApiError(error);
           uploadInput.disabled = false;
@@ -5660,7 +5722,16 @@
             }
             
             // Clear feedback token after successful processing
-            clearActiveFeedbackToken();
+            // Only clear if role tips aren't generating (role tips will clear token in its .finally() handler)
+            const roleTipsStatus = getRoleTipsStatus();
+            const isRoleTipsGenerating = roleTipsStatus && roleTipsStatus.status === 'generating' && 
+                                        isActiveFeedbackToken(roleTipsStatus.token);
+            if (!isRoleTipsGenerating) {
+              console.log('[ROLE-TIPS][CLEAR-TOKEN] Line ~5709: Clearing token (role tips not generating)');
+              clearActiveFeedbackToken();
+            } else {
+              console.log('[ROLE-TIPS][CLEAR-TOKEN] Line ~5709: NOT clearing token (role tips still generating)');
+            }
             }
         // Do NOT restore job title from cache; must be explicitly provided each run.
 
@@ -5686,7 +5757,16 @@
             hideLoadingState();
             
             // Clear feedback token at end of Promise.allSettled processing
-            clearActiveFeedbackToken();
+            // Only clear if role tips aren't generating (role tips will clear token in its .finally() handler)
+            const roleTipsStatus = getRoleTipsStatus();
+            const isRoleTipsGenerating = roleTipsStatus && roleTipsStatus.status === 'generating' && 
+                                        isActiveFeedbackToken(roleTipsStatus.token);
+            if (!isRoleTipsGenerating) {
+              console.log('[ROLE-TIPS][CLEAR-TOKEN] Line ~5735: Clearing token (role tips not generating)');
+              clearActiveFeedbackToken();
+            } else {
+              console.log('[ROLE-TIPS][CLEAR-TOKEN] Line ~5735: NOT clearing token (role tips still generating)');
+            }
           } catch (error) {
             handleApiError(error);
             this.textContent = 'Regenerate Feedback';
@@ -6284,6 +6364,19 @@
       
       // Handle NEW structure with fitLevel, diagnosis, tips, rewritePreview
       if (isNewStructure) {
+        // TEMP debug log: check sections before filtering
+        const sectionsBeforeFilter = roleSpecificFeedback.sections || [];
+        console.log('[ROLE-TIPS][RENDER]', {
+          sectionsBeforeFilter: sectionsBeforeFilter.length,
+          sectionsStructure: sectionsBeforeFilter.map(s => ({
+            hasSection: !!s?.section,
+            hasDiagnosis: !!(s?.diagnosis?.trim()),
+            hasTips: !!(s?.tips?.length),
+            hasRewritePreview: !!(s?.rewritePreview?.trim()),
+            fitLevel: s?.fitLevel
+          }))
+        });
+        
         // CRITICAL: Filter to only valid object sections to prevent blank "Tunable" cards
         const validSections = roleSpecificFeedback.sections.filter(section => {
           // Must be an object (not string, null, array, etc.)
@@ -6299,6 +6392,16 @@
           return hasDiagnosis || hasTips || hasRewritePreview;
         });
         
+        // TEMP debug log: check render drop
+        if (sectionsBeforeFilter.length > 0 && validSections.length === 0) {
+          console.error('[ROLE-TIPS][RENDER-DROP]', {
+            message: 'All sections filtered out - no valid content',
+            sectionsBeforeFilter: sectionsBeforeFilter.length,
+            validSections: validSections.length,
+            sampleSection: sectionsBeforeFilter[0]
+          });
+        }
+        
         if (validSections.length === 0) {
           // Show helpful message instead of blank cards
           const messageDiv = document.createElement('div');
@@ -6313,6 +6416,9 @@
           grid.style.display = 'grid';
           return;
         }
+        
+        // TEMP debug log: confirm rendering
+        console.log('[ROLE-TIPS][RENDER] Rendering', validSections.length, 'valid sections');
         
         validSections.forEach(section => {
           const div = document.createElement('div');
@@ -6354,6 +6460,20 @@
         });
         // Ensure grid is visible after populating (updateRoleTipsState will also set this, but ensure it's set here too)
         grid.style.display = 'grid';
+        
+        // TEMP debug log: verify cards were actually rendered
+        const renderedCards = grid.querySelectorAll('.rf-feedback-card');
+        console.log('[ROLE-TIPS][RENDER] Cards rendered:', {
+          expected: validSections.length,
+          actual: renderedCards.length,
+          gridDisplay: grid.style.display,
+          gridInnerHTMLLength: grid.innerHTML.length
+        });
+        
+        if (validSections.length > 0 && renderedCards.length === 0) {
+          console.error('[ROLE-TIPS][RENDER-DROP] Expected', validSections.length, 'cards but rendered 0');
+        }
+        
         return;
       }
       
