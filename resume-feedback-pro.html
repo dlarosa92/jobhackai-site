@@ -4477,12 +4477,12 @@ let cachedScore = null;
                           roleSpecificFeedback: roleTips,
                           token: feedbackRunToken
                         });
-                        // FIX 1: Ensure role tips container is visible after grid population
-                        // Call showRoleFeedback() directly to guarantee visibility, even if updateRoleTipsState() returned early
-                        // Show role feedback unconditionally since we're in success path and token will remain valid until finally
+                        // Architectural rule: UI visibility is NOT token-gated; only data/state mutations are gated.
+                        // showRoleFeedback() is called unconditionally to ensure container visibility even if
+                        // updateRoleTipsState() returned early due to token check (which protects against stale data).
                         showRoleFeedback();
                         
-                        // Persist role tips to localStorage using existing persistence mechanism
+                        // Token-gate persistence and state mutations only (not UI visibility)
                         if (isActiveFeedbackToken(feedbackRunToken)) {
                           // Normalize role tips shape: extract roleSpecificFeedback if nested, otherwise use roleTips directly
                           const roleSpecific = roleTips?.roleSpecificFeedback ?? roleTips ?? null;
@@ -4518,7 +4518,7 @@ let cachedScore = null;
                     .finally(() => {
                       // Clear token only after role tips settles (success/failure/timeout)
                       // Only clear if this is still the active token (not overwritten by new run)
-                      // Note: showRoleFeedback() is called unconditionally in success path above to avoid token race
+                      // Note: Token clearing is safe even after showRoleFeedback() since UI visibility is not token-gated
                       if (isActiveFeedbackToken(feedbackRunToken)) {
                         clearActiveFeedbackToken();
                       }
@@ -4661,12 +4661,12 @@ let cachedScore = null;
                             roleSpecificFeedback: roleTips,
                             token: feedbackRunToken
                           });
-                          // FIX 1: Ensure role tips container is visible after grid population
-                          // Call showRoleFeedback() directly to guarantee visibility, even if updateRoleTipsState() returned early
-                          // Show role feedback unconditionally since we're in success path and token will remain valid until finally
+                          // Architectural rule: UI visibility is NOT token-gated; only data/state mutations are gated.
+                          // showRoleFeedback() is called unconditionally to ensure container visibility even if
+                          // updateRoleTipsState() returned early due to token check (which protects against stale data).
                           showRoleFeedback();
                           
-                          // Persist role tips to localStorage using existing persistence mechanism
+                          // Token-gate persistence and state mutations only (not UI visibility)
                           if (isActiveFeedbackToken(feedbackRunToken)) {
                             // Normalize role tips shape: extract roleSpecificFeedback if nested, otherwise use roleTips directly
                             const roleSpecific = roleTips?.roleSpecificFeedback ?? roleTips ?? null;
@@ -4704,7 +4704,7 @@ let cachedScore = null;
                       .finally(() => {
                         // Clear token only after role tips settles (success/failure/timeout)
                         // Only clear if this is still the active token (not overwritten by new run)
-                        // Note: showRoleFeedback() is called unconditionally in success path above to avoid token race
+                        // Note: Token clearing is safe even after showRoleFeedback() since UI visibility is not token-gated
                         if (isActiveFeedbackToken(feedbackRunToken)) {
                           clearActiveFeedbackToken();
                         }
