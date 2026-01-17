@@ -3723,8 +3723,10 @@
               }
               
               updateFeedbackGrid(feedbackResult.roleSpecificFeedback);
-              if (feedbackResult.atsRubric && Array.isArray(feedbackResult.atsRubric) && feedbackResult.atsRubric.length > 0) {
-                populateAtsRubric(feedbackResult.atsRubric);
+              if (Array.isArray(feedbackResult.atsRubric)) {
+                if (feedbackResult.atsRubric.length > 0) {
+                  populateAtsRubric(feedbackResult.atsRubric);
+                }
                 hideATSSkeleton();
               }
               
@@ -4494,8 +4496,10 @@
 
                 // PHASE 4: Only render rubric when AI structured feedback is ready
                 // Do not render rule-based text first - wait for structured data
-                if (feedbackResult.atsRubric && Array.isArray(feedbackResult.atsRubric) && feedbackResult.atsRubric.length > 0) {
-                  populateAtsRubric(feedbackResult.atsRubric);
+                if (Array.isArray(feedbackResult.atsRubric)) {
+                  if (feedbackResult.atsRubric.length > 0) {
+                    populateAtsRubric(feedbackResult.atsRubric);
+                  }
                   hideATSSkeleton();
                 }
                 hideFeedbackSkeleton();
@@ -4698,8 +4702,10 @@
                     window.latestAtsIssues = retryResult.atsIssues;
                   }
                   // PHASE 2: Retry result also has roleSpecificFeedback: null (Tier 1)
-                  if (retryResult.atsRubric && Array.isArray(retryResult.atsRubric) && retryResult.atsRubric.length > 0) {
-                    populateAtsRubric(retryResult.atsRubric);
+                  if (Array.isArray(retryResult.atsRubric)) {
+                    if (retryResult.atsRubric.length > 0) {
+                      populateAtsRubric(retryResult.atsRubric);
+                    }
                     hideATSSkeleton();
                   }
                   hideFeedbackSkeleton();
@@ -5554,8 +5560,10 @@
               }
 
               updateFeedbackGrid(feedbackResult.roleSpecificFeedback, { token: feedbackRunToken });
-              if (feedbackResult.atsRubric && Array.isArray(feedbackResult.atsRubric) && feedbackResult.atsRubric.length > 0) {
-                populateAtsRubric(feedbackResult.atsRubric);
+              if (Array.isArray(feedbackResult.atsRubric)) {
+                if (feedbackResult.atsRubric.length > 0) {
+                  populateAtsRubric(feedbackResult.atsRubric);
+                }
                 hideATSSkeleton();
               }
 
