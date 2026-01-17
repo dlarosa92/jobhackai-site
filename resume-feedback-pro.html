@@ -5966,7 +5966,7 @@ let cachedScore = null;
       return roleSpecificFeedback.sections.length > 0;
     }
 
-    function getRoleTipsStatus({ atsOk, tips }) {
+    function calculateAtsTipsToastStatus({ atsOk, tips }) {
       const validTips = isValidRoleTips(tips);
       if (validTips && atsOk) return 'tips_ok';
       if (validTips && !atsOk) return 'tips_only';
@@ -5975,7 +5975,7 @@ let cachedScore = null;
     }
 
     function toastForAtsAndTips({ atsOk, tips, suppressSuccess = false, token = null }) {
-      const status = getRoleTipsStatus({ atsOk, tips });
+      const status = calculateAtsTipsToastStatus({ atsOk, tips });
       // If a token is provided, only show UI toasts when the token is still the active run.
       if (token && !isActiveFeedbackToken(token)) {
         return status;
