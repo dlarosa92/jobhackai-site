@@ -2048,8 +2048,10 @@
     function isRoleTipsGenerating() {
       const statusData = getRoleTipsStatus();
       if (!statusData) return false;
-      // FIX: Do NOT clear status here - only check if generating
-      // Status should only be cleared on explicit reset actions (Start Fresh, Clear History, logout)
+      // FIX: Prevent stale status from previous runs
+      if (statusData.token && !isActiveFeedbackToken(statusData.token)) {
+        return false;
+      }
       return statusData.status === 'generating';
     }
 
@@ -5733,6 +5735,18 @@
                   token: feedbackRunToken
                 });
 
+              // FIX: Fetch role tips asynchronously after regenerate completes (mirror main path)
+              if (hasRole) {
+                const regenSessionId = feedbackResult.feedbackSessionId || null;
+                getRoleTips(currentResumeId, canonicalJobTitle, feedbackRunToken, regenSessionId)
+                  .then(() => {
+                    // Status will be updated to 'ready' or 'failed' inside getRoleTips()
+                  })
+                  .catch(() => {
+                    // Errors handled internally in getRoleTips()
+                  });
+              }
+
             // Clear target role ONLY after a successful new analysis. History clicks must NOT change this input.
             const jobTitleInput = document.getElementById('rf-job-title');
             if (jobTitleInput) {
@@ -6519,7 +6533,8 @@
       // FIX: Use token matching instead of isActiveFeedbackToken() to avoid null/undefined issues
       // If token is provided, only proceed if status token matches (or no status exists)
       const roleTipsStatus = getRoleTipsStatus();
-      const tokenMatches = !token || (roleTipsStatus && roleTipsStatus.token === token);
+      // FIX: Allow proceeding when no status exists (or token matches)
+      const tokenMatches = !token || !roleTipsStatus || roleTipsStatus.token === token;
       if (token && !tokenMatches) {
         // Stale run - don't mutate UI
         return;
