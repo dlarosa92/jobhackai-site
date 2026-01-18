@@ -2072,14 +2072,6 @@
         return null;
       }
 
-      // ROLE TIPS SKELETON FIX: Set in-flight flag only if token is still active
-      // Prevents stale async callbacks from overwriting flags belonging to newer runs
-      const activeToken = window.__rfActiveFeedbackToken;
-      if (activeToken && activeToken === token) {
-        window.roleTipsInFlight = true;
-        window.roleTipsInFlightToken = token;
-      }
-
       // FIX: Status already set at run start - don't set again here
       // Only ensure status is 'generating' if somehow missing (defensive)
       const currentStatus = getRoleTipsStatus();
