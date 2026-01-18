@@ -2003,6 +2003,11 @@
     // Token associated with the latestRoleSpecific value. Scoped to a feedback run token when applicable.
     window.latestRoleSpecificToken = null;
 
+    // ROLE TIPS SKELETON FIX: Explicit in-flight tracking for role-tips requests
+    // Tracks actual HTTP request state independent of cached status or history
+    window.roleTipsInFlight = false;
+    window.roleTipsInFlightToken = null;
+
     // PHASE 2: Role tips state management (idle | generating | ready | failed)
     const ROLE_TIPS_STATUS_KEY = 'rf_role_tips_status';
     const ROLE_TIPS_TIMEOUT_MS = 50000; // 50 seconds (exceeds backend worst-case ~42s: 2×20s attempts + 2s backoff, with 8s safety buffer)
@@ -2061,6 +2066,10 @@
       if (!resumeId || !jobTitle || !jobTitle.trim()) {
         return null;
       }
+
+      // ROLE TIPS SKELETON FIX: Set in-flight flag immediately when fetch starts
+      window.roleTipsInFlight = true;
+      window.roleTipsInFlightToken = token;
 
       // FIX: Status already set at run start - don't set again here
       // Only ensure status is 'generating' if somehow missing (defensive)
@@ -2192,6 +2201,12 @@
           }
         }
         return null;
+      } finally {
+        // ROLE TIPS SKELETON FIX: Clear in-flight flag when request resolves (success or error)
+        if (window.roleTipsInFlightToken === token) {
+          window.roleTipsInFlight = false;
+          window.roleTipsInFlightToken = null;
+        }
       }
     }
 
@@ -6611,12 +6626,18 @@
         roleDescEl.dataset.baseText = roleDescEl.textContent || '';
       }
 
+      // ROLE TIPS SKELETON FIX: Skeleton visibility based ONLY on in-flight flag, not cached status
+      // Check if role tips request is actually in-flight for the active token
+      const activeToken = window.__rfActiveFeedbackToken;
+      const isInFlight = window.roleTipsInFlight === true && 
+                         window.roleTipsInFlightToken === activeToken &&
+                         activeToken === token;
+      
       // Check role tips generation status to manage skeleton visibility
-      // Role tips skeleton visibility is independent of ATS score - it only depends on generation status
-      // FIX: Use token matching for isGenerating check
+      // Role tips skeleton visibility is independent of ATS score - it only depends on in-flight state
       // CRITICAL: Skeletons may ONLY appear when a valid feedback token is explicitly provided
       // No-token calls (cache restore, hydration, passive updates) must always treat isGenerating as false
-      const isGenerating = token && tokenMatches && roleTipsStatus && roleTipsStatus.status === 'generating';
+      const isGenerating = isInFlight;
 
       const rsf = roleSpecificFeedback;
       const isOldStructure = rsf && Array.isArray(rsf) && rsf.length > 0;
@@ -6730,8 +6751,8 @@
 
       // Simplified: Show helpful informational message, no button
       // This state should rarely occur since backend always provides fallback tips when job title exists
-      // FIX: Don't hide grid if role tips are still generating (even if token check failed)
-      if (feedbackGrid && !isGenerating) feedbackGrid.style.display = 'none';
+      // ROLE TIPS SKELETON FIX: Don't hide grid if role tips are still in-flight
+      if (feedbackGrid && !isInFlight) feedbackGrid.style.display = 'none';
       roleContainer.style.display = 'block';
       if (roleInfoBar) roleInfoBar.style.display = 'none';
 
