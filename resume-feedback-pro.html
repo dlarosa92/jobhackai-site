@@ -4136,7 +4136,17 @@
               window._currentFeedbackLoading = null;
               // FIX: Restore role tips skeleton if still generating for this token
               const roleTipsStatus = getRoleTipsStatus();
-              if (roleTipsStatus && roleTipsStatus.status === 'generating' && roleTipsStatus.token === feedbackRunToken) {
+              const activeToken = window.__rfActiveFeedbackToken;
+              const isActuallyInFlight =
+                window.roleTipsInFlight === true &&
+                window.roleTipsInFlightToken === activeToken &&
+                Boolean(activeToken);
+              if (
+                roleTipsStatus &&
+                roleTipsStatus.status === 'generating' &&
+                roleTipsStatus.token === feedbackRunToken &&
+                isActuallyInFlight
+              ) {
                 updateRoleTipsState({
                   hasAtsScore: !!atsScoringSucceeded,
                   roleSpecificFeedback: null,
@@ -5091,7 +5101,17 @@
               hideFeedbackSkeleton();
               // FIX: Restore role tips skeleton if still generating for this token
               const roleTipsStatus = getRoleTipsStatus();
-              if (roleTipsStatus && roleTipsStatus.status === 'generating' && roleTipsStatus.token === feedbackRunToken) {
+              const activeToken = window.__rfActiveFeedbackToken;
+              const isActuallyInFlight =
+                window.roleTipsInFlight === true &&
+                window.roleTipsInFlightToken === activeToken &&
+                Boolean(activeToken);
+              if (
+                roleTipsStatus &&
+                roleTipsStatus.status === 'generating' &&
+                roleTipsStatus.token === feedbackRunToken &&
+                isActuallyInFlight
+              ) {
                 updateRoleTipsState({
                   hasAtsScore: !!atsScoringSucceeded,
                   roleSpecificFeedback: null,
@@ -5110,7 +5130,17 @@
               window._currentFeedbackLoading = null;
               // FIX: Restore role tips skeleton if still generating for this token
               const roleTipsStatus = getRoleTipsStatus();
-              if (roleTipsStatus && roleTipsStatus.status === 'generating' && roleTipsStatus.token === feedbackRunToken) {
+              const activeToken = window.__rfActiveFeedbackToken;
+              const isActuallyInFlight =
+                window.roleTipsInFlight === true &&
+                window.roleTipsInFlightToken === activeToken &&
+                Boolean(activeToken);
+              if (
+                roleTipsStatus &&
+                roleTipsStatus.status === 'generating' &&
+                roleTipsStatus.token === feedbackRunToken &&
+                isActuallyInFlight
+              ) {
                 updateRoleTipsState({
                   hasAtsScore: !!atsScoringSucceeded,
                   roleSpecificFeedback: null,
@@ -6924,8 +6954,14 @@
         }
         const skeletonFeedback = document.getElementById('rf-skeleton-feedback');
         if (skeletonFeedback) {
-          // Only show feedback skeleton if user will receive feedback AND has a role
-          skeletonFeedback.style.display = (willGetFeedback && hasRole) ? 'grid' : 'none';
+          // ROLE TIPS SKELETON FIX: Only show if actually in-flight
+          const activeToken = window.__rfActiveFeedbackToken;
+          const isRoleTipsInFlight =
+            window.roleTipsInFlight === true &&
+            window.roleTipsInFlightToken === activeToken &&
+            Boolean(activeToken);
+          skeletonFeedback.style.display =
+            (willGetFeedback && hasRole && isRoleTipsInFlight) ? 'grid' : 'none';
         }
         // Ensure feedback content is visible so skeletons render; hide real grids
         const feedbackContent = document.getElementById('rf-feedback-content');
