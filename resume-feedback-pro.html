@@ -4313,14 +4313,10 @@
             // ROLE TIPS SKELETON FIX: Set in-flight flags BEFORE updateRoleTipsState() so skeleton appears immediately
             window.roleTipsInFlight = true;
             window.roleTipsInFlightToken = feedbackRunToken;
-            updateRoleTipsState(feedbackRunToken);
+            updateRoleTipsState({ token: feedbackRunToken });
             if (DEBUG_ROLE_TIPS) console.debug('[ROLE_TIPS] Start generating', { token: feedbackRunToken.substring(0, 8) + '...', hasRole: true });
             // Show skeleton immediately
             showRoleFeedback();
-            updateRoleTipsState({
-              hasAtsScore: false, // ATS not done yet
-              token: feedbackRunToken
-            });
           } else {
             // FIX: Do NOT clear status when no role - only clear on explicit reset actions
             // Status will remain from previous run, which is fine for UI consistency
@@ -5543,14 +5539,10 @@
               // ROLE TIPS SKELETON FIX: Set in-flight flags BEFORE updateRoleTipsState() so skeleton appears immediately
               window.roleTipsInFlight = true;
               window.roleTipsInFlightToken = feedbackRunToken;
-              updateRoleTipsState(feedbackRunToken);
+              updateRoleTipsState({ token: feedbackRunToken });
               if (DEBUG_ROLE_TIPS) console.debug('[ROLE_TIPS] Regenerate start generating', { token: feedbackRunToken.substring(0, 8) + '...', hasRole: true });
               // Show skeleton immediately
               showRoleFeedback();
-              updateRoleTipsState({
-                hasAtsScore: false, // ATS not done yet
-                token: feedbackRunToken
-              });
             } else {
               // FIX: Do NOT clear status when no role - only clear on explicit reset actions
               if (DEBUG_ROLE_TIPS) console.debug('[ROLE_TIPS] Regenerate start (no role, status preserved)', { token: feedbackRunToken.substring(0, 8) + '...', hasRole: false, existingStatus: getRoleTipsStatus()?.status });
