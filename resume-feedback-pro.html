@@ -2064,6 +2064,11 @@
     // D2: Accept sessionId parameter and pass to backend
     async function getRoleTips(resumeId, jobTitle, token, sessionId = null) {
       if (!resumeId || !jobTitle || !jobTitle.trim()) {
+        // ROLE TIPS SKELETON FIX: Clear flags if early return (caller may have set them)
+        if (window.roleTipsInFlightToken === token) {
+          window.roleTipsInFlight = false;
+          window.roleTipsInFlightToken = null;
+        }
         return null;
       }
 
