@@ -8395,23 +8395,26 @@
       }
       
       // Populate role-specific feedback
-      if (roleSpecificFeedback) {
-        const feedbackGrid = document.getElementById('rf-feedback-grid');
-        if (feedbackGrid && feedbackGrid.dataset) {
-          delete feedbackGrid.dataset.placeholder;
-        }
-        populateRoleSpecificFeedback(roleSpecificFeedback, data.role);
-      } else {
-        const roleContainer = document.getElementById('role-feedback-container');
-        const feedbackGrid = document.getElementById('rf-feedback-grid');
-        if (feedbackGrid) {
-          feedbackGrid.innerHTML = '<div style="color:var(--color-text-secondary);font-size:0.95rem;">No role tips saved for this run.</div>';
-          feedbackGrid.style.display = 'grid';
-          if (feedbackGrid.dataset) {
-            feedbackGrid.dataset.placeholder = 'role-none';
+      // ROLE TIPS LOCK: Don't mutate role tips UI if role tips are in-flight
+      if (!isRoleTipsLocked()) {
+        if (roleSpecificFeedback) {
+          const feedbackGrid = document.getElementById('rf-feedback-grid');
+          if (feedbackGrid && feedbackGrid.dataset) {
+            delete feedbackGrid.dataset.placeholder;
           }
+          populateRoleSpecificFeedback(roleSpecificFeedback, data.role);
+        } else {
+          const roleContainer = document.getElementById('role-feedback-container');
+          const feedbackGrid = document.getElementById('rf-feedback-grid');
+          if (feedbackGrid) {
+            feedbackGrid.innerHTML = '<div style="color:var(--color-text-secondary);font-size:0.95rem;">No role tips saved for this run.</div>';
+            feedbackGrid.style.display = 'grid';
+            if (feedbackGrid.dataset) {
+              feedbackGrid.dataset.placeholder = 'role-none';
+            }
+          }
+          if (roleContainer) roleContainer.style.display = 'block';
         }
-        if (roleContainer) roleContainer.style.display = 'block';
       }
       
       // ROLE TIPS LOCK: Don't restore if role tips are in-flight
