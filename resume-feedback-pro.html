@@ -5739,8 +5739,19 @@
               if (hasRole) {
                 const regenSessionId = feedbackResult.feedbackSessionId || null;
                 getRoleTips(currentResumeId, canonicalJobTitle, feedbackRunToken, regenSessionId)
-                  .then(() => {
-                    // Status will be updated to 'ready' or 'failed' inside getRoleTips()
+                  .then((roleTips) => {
+                    // PHASE 2: Token-gate: only update if token is still active
+                    if (!isActiveFeedbackToken(feedbackRunToken)) {
+                      console.warn('[RESUME-FEEDBACK] Stale regen role tips update ignored (token mismatch)');
+                      return;
+                    }
+
+                    if (roleTips) {
+                      window.latestRoleSpecific = roleTips;
+                      window.latestRoleSpecificToken = feedbackRunToken;
+                      updateFeedbackGrid(roleTips, { token: feedbackRunToken });
+                      // Status updates are handled inside getRoleTips()
+                    }
                   })
                   .catch(() => {
                     // Errors handled internally in getRoleTips()
