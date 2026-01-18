@@ -5750,11 +5750,26 @@
                       window.latestRoleSpecific = roleTips;
                       window.latestRoleSpecificToken = feedbackRunToken;
                       updateFeedbackGrid(roleTips, { token: feedbackRunToken });
-                      // Status updates are handled inside getRoleTips()
+                      // FIX: Update role tips state to hide skeleton and display content
+                      updateRoleTipsState({
+                        hasAtsScore,
+                        roleSpecificFeedback: roleTips,
+                        token: feedbackRunToken
+                      });
+                      // Architectural rule: UI visibility is NOT token-gated
+                      showRoleFeedback();
                     }
                   })
-                  .catch(() => {
-                    // Errors handled internally in getRoleTips()
+                  .catch((error) => {
+                    console.error('[RESUME-FEEDBACK] Regen role tips fetch error', error);
+                    // FIX: Token-gate error handling and update state to show unavailable message
+                    if (isActiveFeedbackToken(feedbackRunToken)) {
+                      updateRoleTipsState({
+                        hasAtsScore,
+                        roleSpecificFeedback: null,
+                        token: feedbackRunToken
+                      });
+                    }
                   })
                   .finally(() => {
                     // FIX: Persist regenerated role tips after fetch completes
@@ -5764,6 +5779,9 @@
                         roleSpecificFeedback: window.latestRoleSpecific
                       } : feedbackResult;
                       persistRoleFeedbackIfPossible(persistedFeedback);
+                      
+                      // FIX: Clear token after role tips completes (success or failure)
+                      clearActiveFeedbackToken();
                     }
                   });
               }
