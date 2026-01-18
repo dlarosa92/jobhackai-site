@@ -3436,15 +3436,21 @@
 
             if (cachedScore.roleSpecificFeedback && !window.__rfActiveFeedbackToken) {
               updateFeedbackGrid(cachedScore.roleSpecificFeedback, { allowLegacy: true });
-              updateRoleTipsState({
-                hasAtsScore: true,
-                roleSpecificFeedback: cachedScore.roleSpecificFeedback || null
-              });
+              // ROLE TIPS LOCK: Don't restore if role tips are in-flight
+              if (!isRoleTipsLocked()) {
+                updateRoleTipsState({
+                  hasAtsScore: true,
+                  roleSpecificFeedback: cachedScore.roleSpecificFeedback || null
+                });
+              }
             } else {
-              updateRoleTipsState({
-                hasAtsScore: !!cachedScore?.score,
-                roleSpecificFeedback: null
-              });
+              // ROLE TIPS LOCK: Don't restore if role tips are in-flight
+              if (!isRoleTipsLocked()) {
+                updateRoleTipsState({
+                  hasAtsScore: !!cachedScore?.score,
+                  roleSpecificFeedback: null
+                });
+              }
             }
 
             const fileNameSpan = document.getElementById('rf-file-name');
@@ -5152,9 +5158,11 @@
           } else {
             // Only hide role feedback if role tips aren't available and aren't generating
             // Role tips are fetched independently, so they might still be available even if feedback endpoint fails
+            // ROLE TIPS LOCK: Check in-flight flag, not just persisted status
             const roleTipsStatus = getRoleTipsStatus();
-            const isRoleTipsGenerating = roleTipsStatus && roleTipsStatus.status === 'generating' && 
-                                        isActiveFeedbackToken(roleTipsStatus.token);
+            const isRoleTipsGenerating = isRoleTipsLocked() ||
+                                        (roleTipsStatus && roleTipsStatus.status === 'generating' && 
+                                         isActiveFeedbackToken(roleTipsStatus.token));
             const hasAvailableRoleTips = window.latestRoleSpecific && isValidRoleTips(window.latestRoleSpecific);
             
             // Don't hide if role tips are generating or already available
@@ -6055,6 +6063,15 @@
       return window.__rfActiveFeedbackToken && token === window.__rfActiveFeedbackToken;
     }
 
+    // ROLE TIPS LOCK GUARD: Prevents mutations during in-flight generation
+    function isRoleTipsLocked(token) {
+      if (!token) token = window.__rfActiveFeedbackToken;
+      return window.roleTipsInFlight === true &&
+             window.roleTipsInFlightToken === token &&
+             token === window.__rfActiveFeedbackToken &&
+             Boolean(window.__rfActiveFeedbackToken);
+    }
+
     function clearScoreAuthority(reason) {
       if (typeof clearRunAuthority === 'function') {
         clearRunAuthority();
@@ -6621,17 +6638,20 @@
       // FIX: No-role runs must clean up UI even with stale status
       // If roleSpecificFeedback is null and we have a token but status doesn't match, this is a no-role run
       // We should clean up stale UI from previous runs
+      // ROLE TIPS LOCK: Don't clean up if role tips are in-flight for active token
       if (roleSpecificFeedback === null && token && roleTipsStatus && roleTipsStatus.token !== token) {
-        // No-role run with stale status - clean up and exit
-        const roleContainer = document.getElementById('role-feedback-container');
-        const feedbackGrid = document.getElementById('rf-feedback-grid');
-        const skeletonFeedback = document.getElementById('rf-skeleton-feedback');
-        const skeletonContainer = document.getElementById('rf-skeleton-container');
-        if (skeletonContainer) skeletonContainer.style.display = 'none';
-        if (skeletonFeedback) skeletonFeedback.style.display = 'none';
-        if (feedbackGrid) feedbackGrid.style.display = 'none';
-        if (roleContainer) roleContainer.style.display = 'none';
-        setRoleStatus('');
+        // No-role run with stale status - clean up and exit ONLY if not in-flight
+        if (!isRoleTipsLocked(token)) {
+          const roleContainer = document.getElementById('role-feedback-container');
+          const feedbackGrid = document.getElementById('rf-feedback-grid');
+          const skeletonFeedback = document.getElementById('rf-skeleton-feedback');
+          const skeletonContainer = document.getElementById('rf-skeleton-container');
+          if (skeletonContainer) skeletonContainer.style.display = 'none';
+          if (skeletonFeedback) skeletonFeedback.style.display = 'none';
+          if (feedbackGrid) feedbackGrid.style.display = 'none';
+          if (roleContainer) roleContainer.style.display = 'none';
+          setRoleStatus('');
+        }
         return;
       }
       
@@ -6794,7 +6814,7 @@
       // Simplified: Show helpful informational message, no button
       // This state should rarely occur since backend always provides fallback tips when job title exists
       // ROLE TIPS SKELETON FIX: Don't hide grid if role tips are still in-flight
-      if (feedbackGrid && !isInFlight) feedbackGrid.style.display = 'none';
+      if (feedbackGrid && !isGenerating) feedbackGrid.style.display = 'none';
       roleContainer.style.display = 'block';
       if (roleInfoBar) roleInfoBar.style.display = 'none';
 
@@ -8266,22 +8286,25 @@
       }
       // Clear role-specific status but keep the tile visible for the next run
       setRoleStatus('');
-      const roleContainer = document.getElementById('role-feedback-container');
-      if (roleContainer) roleContainer.style.display = 'block';
-      const roleBadge = document.getElementById('rf-role-badge');
-      if (roleBadge) roleBadge.style.display = 'none';
-      const roleHelper = document.getElementById('rf-role-helper');
-      if (roleHelper) roleHelper.style.display = 'none';
-      const regenBtn = document.getElementById('rf-regenerate-btn');
-      if (regenBtn) {
-        regenBtn.style.display = 'none';
-        regenBtn.textContent = 'Regenerate Feedback';
-        regenBtn.disabled = false;
-      }
-      const roleDescEl = document.getElementById('rf-role-desc');
-      if (roleDescEl && roleDescEl.dataset.baseText) {
-        roleDescEl.textContent = roleDescEl.dataset.baseText;
-        delete roleDescEl.dataset.lastRoleState;
+      // ROLE TIPS LOCK: Don't mutate role container if role tips are in-flight
+      if (!isRoleTipsLocked()) {
+        const roleContainer = document.getElementById('role-feedback-container');
+        if (roleContainer) roleContainer.style.display = 'block';
+        const roleBadge = document.getElementById('rf-role-badge');
+        if (roleBadge) roleBadge.style.display = 'none';
+        const roleHelper = document.getElementById('rf-role-helper');
+        if (roleHelper) roleHelper.style.display = 'none';
+        const regenBtn = document.getElementById('rf-regenerate-btn');
+        if (regenBtn) {
+          regenBtn.style.display = 'none';
+          regenBtn.textContent = 'Regenerate Feedback';
+          regenBtn.disabled = false;
+        }
+        const roleDescEl = document.getElementById('rf-role-desc');
+        if (roleDescEl && roleDescEl.dataset.baseText) {
+          roleDescEl.textContent = roleDescEl.dataset.baseText;
+          delete roleDescEl.dataset.lastRoleState;
+        }
       }
 
       // Restore default score description and badge when exiting history
@@ -8391,11 +8414,14 @@
         if (roleContainer) roleContainer.style.display = 'block';
       }
       
-      updateRoleTipsState({
-        hasAtsScore: typeof data.atsScore === 'number',
-        roleSpecificFeedback: roleSpecificFeedback || null,
-        allowPlaceholder: !roleSpecificFeedback
-      });
+      // ROLE TIPS LOCK: Don't restore if role tips are in-flight
+      if (!isRoleTipsLocked()) {
+        updateRoleTipsState({
+          hasAtsScore: typeof data.atsScore === 'number',
+          roleSpecificFeedback: roleSpecificFeedback || null,
+          allowPlaceholder: !roleSpecificFeedback
+        });
+      }
       
       // Update plan limit text based on current plan
       updatePlanLimitText();
