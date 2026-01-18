@@ -3651,12 +3651,16 @@
         forceHideOverlays();
         // DO NOT call hideSkeletons() here - let them stay visible while tab is hidden
       } else {
-        // PHASE 2: When tab becomes visible, preserve skeleton if role tips are generating
-        // DO NOT cancel skeleton operations if role tips status == generating
-        if (!isRoleTipsGenerating()) {
+        // PHASE 2: When tab becomes visible, preserve skeleton ONLY if role tips are actually in-flight
+        // CRITICAL: Do NOT use persisted status - check in-flight flags and active token
+        const activeToken = window.__rfActiveFeedbackToken;
+        const isActuallyInFlight = window.roleTipsInFlight === true && 
+                                    window.roleTipsInFlightToken === activeToken &&
+                                    Boolean(activeToken);
+        if (!isActuallyInFlight) {
           _cancelPendingSkeletonOperations();
         } else {
-          // Role tips are generating - restore skeleton visibility if needed
+          // Role tips are actually in-flight - restore skeleton visibility if needed
           const skeletonFeedback = document.getElementById('rf-skeleton-feedback');
           const skeletonContainer = document.getElementById('rf-skeleton-container');
           if (skeletonFeedback && skeletonContainer) {
@@ -3706,9 +3710,13 @@
 
       // Load cached score on page load
       loadCachedATSScore().then(() => {
-        // PHASE 2: Restore role tips skeleton if status == generating
-        const roleTipsStatus = getRoleTipsStatus();
-        if (roleTipsStatus && roleTipsStatus.status === 'generating' && isActiveFeedbackToken(roleTipsStatus.token)) {
+        // PHASE 2: Restore role tips skeleton ONLY if actually in-flight
+        // CRITICAL: Do NOT use persisted status alone - check in-flight flags and active token
+        const activeToken = window.__rfActiveFeedbackToken;
+        const isActuallyInFlight = window.roleTipsInFlight === true && 
+                                    window.roleTipsInFlightToken === activeToken &&
+                                    Boolean(activeToken);
+        if (isActuallyInFlight) {
           const skeletonFeedback = document.getElementById('rf-skeleton-feedback');
           const skeletonContainer = document.getElementById('rf-skeleton-container');
           if (skeletonFeedback && skeletonContainer) {
@@ -6628,17 +6636,31 @@
       }
 
       // ROLE TIPS SKELETON FIX: Skeleton visibility based ONLY on in-flight flag, not cached status
-      // Check if role tips request is actually in-flight for the active token
-      // CRITICAL: Require both token and activeToken to be truthy (no null === null comparisons)
+      // INVARIANT: Skeleton may ONLY be visible during an active role-tips generation tied to the current feedback token.
+      // Persisted or restored state must NEVER show a skeleton.
+      // 
+      // Skeleton visibility MUST require ALL of these:
+      // 1. window.__rfActiveFeedbackToken to be truthy
+      // 2. window.roleTipsInFlight === true
+      // 3. window.roleTipsInFlightToken === window.__rfActiveFeedbackToken
+      // 4. token passed to updateRoleTipsState === window.__rfActiveFeedbackToken
+      //
+      // If ANY of these are false → skeleton MUST be hidden.
       const activeToken = window.__rfActiveFeedbackToken;
-      const isInFlight = window.roleTipsInFlight === true && 
-                         window.roleTipsInFlightToken === activeToken &&
-                         activeToken === token;
       
-      // Skeleton visibility depends only on in-flight state (not sessionStorage or cached status)
-      // CRITICAL: Skeletons may ONLY appear when a valid feedback token is explicitly provided
-      // No-token calls (cache restore, hydration, passive updates) must always treat isGenerating as false
-      const isGenerating = Boolean(token) && Boolean(activeToken) && isInFlight;
+      // Explicitly check all 4 conditions - if token is null OR token !== activeToken, force isGenerating = false
+      const hasActiveToken = Boolean(activeToken);
+      const hasInFlightFlag = window.roleTipsInFlight === true;
+      const inFlightTokenMatches = window.roleTipsInFlightToken === activeToken;
+      const passedTokenMatches = token === activeToken;
+      const hasValidToken = Boolean(token);
+      
+      // isGenerating is ONLY true when ALL conditions are met
+      const isGenerating = hasActiveToken && 
+                           hasInFlightFlag && 
+                           inFlightTokenMatches && 
+                           passedTokenMatches && 
+                           hasValidToken;
 
       const rsf = roleSpecificFeedback;
       const isOldStructure = rsf && Array.isArray(rsf) && rsf.length > 0;
