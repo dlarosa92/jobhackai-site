@@ -5755,6 +5755,16 @@
                   })
                   .catch(() => {
                     // Errors handled internally in getRoleTips()
+                  })
+                  .finally(() => {
+                    // FIX: Persist regenerated role tips after fetch completes
+                    if (isActiveFeedbackToken(feedbackRunToken)) {
+                      const persistedFeedback = window.latestRoleSpecific ? {
+                        ...feedbackResult,
+                        roleSpecificFeedback: window.latestRoleSpecific
+                      } : feedbackResult;
+                      persistRoleFeedbackIfPossible(persistedFeedback);
+                    }
                   });
               }
 
@@ -6546,6 +6556,24 @@
       const roleTipsStatus = getRoleTipsStatus();
       // FIX: Allow proceeding when no status exists (or token matches)
       const tokenMatches = !token || !roleTipsStatus || roleTipsStatus.token === token;
+      
+      // FIX: No-role runs must clean up UI even with stale status
+      // If roleSpecificFeedback is null and we have a token but status doesn't match, this is a no-role run
+      // We should clean up stale UI from previous runs
+      if (roleSpecificFeedback === null && token && roleTipsStatus && roleTipsStatus.token !== token) {
+        // No-role run with stale status - clean up and exit
+        const roleContainer = document.getElementById('role-feedback-container');
+        const feedbackGrid = document.getElementById('rf-feedback-grid');
+        const skeletonFeedback = document.getElementById('rf-skeleton-feedback');
+        const skeletonContainer = document.getElementById('rf-skeleton-container');
+        if (skeletonContainer) skeletonContainer.style.display = 'none';
+        if (skeletonFeedback) skeletonFeedback.style.display = 'none';
+        if (feedbackGrid) feedbackGrid.style.display = 'none';
+        if (roleContainer) roleContainer.style.display = 'none';
+        setRoleStatus('');
+        return;
+      }
+      
       if (token && !tokenMatches) {
         // Stale run - don't mutate UI
         return;
