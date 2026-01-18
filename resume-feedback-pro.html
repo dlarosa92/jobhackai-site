@@ -2048,11 +2048,8 @@
     function isRoleTipsGenerating() {
       const statusData = getRoleTipsStatus();
       if (!statusData) return false;
-      // Check if token is still active
-      if (statusData.token && !isActiveFeedbackToken(statusData.token)) {
-        clearRoleTipsStatus();
-        return false;
-      }
+      // FIX: Do NOT clear status here - only check if generating
+      // Status should only be cleared on explicit reset actions (Start Fresh, Clear History, logout)
       return statusData.status === 'generating';
     }
 
@@ -2144,12 +2141,17 @@
         // Handle both response structures: result.roleSpecificFeedback OR result directly
         const roleSpecificFeedback = result.roleSpecificFeedback || result;
         
-        // FIX: Do not treat {sections: []} as valid - require non-empty sections array
-        const hasNonEmptySections =
-          Array.isArray(roleSpecificFeedback?.sections) && roleSpecificFeedback.sections.length > 0;
+        // FIX: Preserve backward compatibility - validate based on format
+        // Legacy array format: valid when Array.isArray(...) && length > 0
+        // New object format: valid when Array.isArray(sections) && sections.length > 0
+        // Empty object { sections: [] } is invalid
+        const isLegacyArray = Array.isArray(roleSpecificFeedback);
+        const hasNonEmptyContent = isLegacyArray
+          ? roleSpecificFeedback.length > 0
+          : (Array.isArray(roleSpecificFeedback?.sections) && roleSpecificFeedback.sections.length > 0);
         
-        // Validate: must pass isValidRoleTips() check AND have non-empty sections
-        const isValid = isValidRoleTips(roleSpecificFeedback) && hasNonEmptySections;
+        // Validate: must pass isValidRoleTips() check AND have non-empty content
+        const isValid = isValidRoleTips(roleSpecificFeedback) && hasNonEmptyContent;
         const DEBUG_ROLE_TIPS = localStorage.getItem('debugRoleTips') === '1';
         
         if (isValid) {
@@ -4289,9 +4291,9 @@
               token: feedbackRunToken
             });
           } else {
-            // No role: clear status to avoid stale state
-            clearRoleTipsStatus();
-            if (DEBUG_ROLE_TIPS) console.debug('[ROLE_TIPS] Start idle (no role)', { token: feedbackRunToken.substring(0, 8) + '...', hasRole: false });
+            // FIX: Do NOT clear status when no role - only clear on explicit reset actions
+            // Status will remain from previous run, which is fine for UI consistency
+            if (DEBUG_ROLE_TIPS) console.debug('[ROLE_TIPS] Start (no role, status preserved)', { token: feedbackRunToken.substring(0, 8) + '...', hasRole: false, existingStatus: getRoleTipsStatus()?.status });
           }
           
           // Track role tips promises to prevent premature token clearing
@@ -4595,6 +4597,9 @@
                         window.latestRoleSpecific = roleTips;
                         window.latestRoleSpecificToken = feedbackRunToken;
                         updateFeedbackGrid(roleTips, { token: feedbackRunToken });
+                        const DEBUG_ROLE_TIPS = localStorage.getItem('debugRoleTips') === '1';
+                        const sectionCount = roleTips?.sections?.length || (Array.isArray(roleTips) ? roleTips.length : 0);
+                        if (DEBUG_ROLE_TIPS) console.debug('[ROLE_TIPS] Response handled', { token: feedbackRunToken.substring(0, 8) + '...', status: 'ready', sectionCount, hasAtsScore });
                         updateRoleTipsState({
                           hasAtsScore,
                           roleSpecificFeedback: roleTips,
@@ -4661,9 +4666,9 @@
                       delete feedbackGrid.dataset.placeholder;
                     }
                   }
-                  // Set role tips status to non-generating state so skeleton will not show
+                  // FIX: Do NOT set status to 'idle' - let status remain until role tips completes or fails
+                  // Only update UI state, status will be updated when role tips fetch completes
                   if (isActiveFeedbackToken(feedbackRunToken)) {
-                    setRoleTipsStatus(feedbackRunToken, 'idle');
                     updateRoleTipsState({
                       hasAtsScore,
                       roleSpecificFeedback: null,
@@ -5495,9 +5500,8 @@
                 token: feedbackRunToken
               });
             } else {
-              // No role: clear status to avoid stale state
-              clearRoleTipsStatus();
-              if (DEBUG_ROLE_TIPS) console.debug('[ROLE_TIPS] Regenerate start idle (no role)', { token: feedbackRunToken.substring(0, 8) + '...', hasRole: false });
+              // FIX: Do NOT clear status when no role - only clear on explicit reset actions
+              if (DEBUG_ROLE_TIPS) console.debug('[ROLE_TIPS] Regenerate start (no role, status preserved)', { token: feedbackRunToken.substring(0, 8) + '...', hasRole: false, existingStatus: getRoleTipsStatus()?.status });
             }
             
             const atsPromise = roleChanged ? getAtsScore(currentResumeId, canonicalJobTitle) : Promise.resolve(null);
@@ -6486,11 +6490,15 @@
     // Track consecutive role-tip failures to adjust messaging
     // Helper: control Role-Specific Tips state and retry button visibility
     function updateRoleTipsState({ hasAtsScore, roleSpecificFeedback, allowPlaceholder = false, token = null }) {
-      // If this update is associated with a specific feedback run token, ensure it's still the active run.
-      // This prevents stale runs from mutating the UI.
-      if (token && !isActiveFeedbackToken(token)) {
+      // FIX: Use token matching instead of isActiveFeedbackToken() to avoid null/undefined issues
+      // If token is provided, only proceed if status token matches (or no status exists)
+      const roleTipsStatus = getRoleTipsStatus();
+      const tokenMatches = !token || (roleTipsStatus && roleTipsStatus.token === token);
+      if (token && !tokenMatches) {
+        // Stale run - don't mutate UI
         return;
       }
+      
       const roleContainer = document.getElementById('role-feedback-container');
       const feedbackGrid = document.getElementById('rf-feedback-grid');
       const regenBtn = document.getElementById('rf-regenerate-btn');
@@ -6507,10 +6515,8 @@
 
       // Check role tips generation status to manage skeleton visibility
       // Role tips skeleton visibility is independent of ATS score - it only depends on generation status
-      // FIX: Always check status (not gated by token parameter) to prevent null returns during in-flight runs
-      const roleTipsStatus = getRoleTipsStatus();
-      const isGenerating = roleTipsStatus && roleTipsStatus.status === 'generating' && 
-                          (!token || isActiveFeedbackToken(roleTipsStatus.token));
+      // FIX: Use token matching for isGenerating check
+      const isGenerating = tokenMatches && roleTipsStatus && roleTipsStatus.status === 'generating';
 
       const rsf = roleSpecificFeedback;
       const isOldStructure = rsf && Array.isArray(rsf) && rsf.length > 0;
