@@ -4313,7 +4313,7 @@
             // ROLE TIPS SKELETON FIX: Set in-flight flags BEFORE updateRoleTipsState() so skeleton appears immediately
             window.roleTipsInFlight = true;
             window.roleTipsInFlightToken = feedbackRunToken;
-            updateRoleTipsState({ token: feedbackRunToken });
+            updateRoleTipsState(feedbackRunToken);
             if (DEBUG_ROLE_TIPS) console.debug('[ROLE_TIPS] Start generating', { token: feedbackRunToken.substring(0, 8) + '...', hasRole: true });
             // Show skeleton immediately
             showRoleFeedback();
@@ -5543,7 +5543,7 @@
               // ROLE TIPS SKELETON FIX: Set in-flight flags BEFORE updateRoleTipsState() so skeleton appears immediately
               window.roleTipsInFlight = true;
               window.roleTipsInFlightToken = feedbackRunToken;
-              updateRoleTipsState({ token: feedbackRunToken });
+              updateRoleTipsState(feedbackRunToken);
               if (DEBUG_ROLE_TIPS) console.debug('[ROLE_TIPS] Regenerate start generating', { token: feedbackRunToken.substring(0, 8) + '...', hasRole: true });
               // Show skeleton immediately
               showRoleFeedback();
