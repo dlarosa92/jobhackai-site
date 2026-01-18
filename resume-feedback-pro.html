@@ -3660,14 +3660,8 @@
         if (!isActuallyInFlight) {
           _cancelPendingSkeletonOperations();
         } else {
-          // Role tips are actually in-flight - restore skeleton visibility if needed
-          const skeletonFeedback = document.getElementById('rf-skeleton-feedback');
-          const skeletonContainer = document.getElementById('rf-skeleton-container');
-          if (skeletonFeedback && skeletonContainer) {
-            skeletonContainer.style.display = 'block';
-            skeletonFeedback.style.display = 'grid';
-            setRoleStatus('Generating tips…');
-          }
+          // Role tips are actually in-flight - delegate to authoritative controller
+          if (activeToken) updateRoleTipsState({ token: activeToken });
         }
         
         // Show a lightweight toast instead of resetting session. If analysis is running show running toast,
@@ -3717,13 +3711,8 @@
                                     window.roleTipsInFlightToken === activeToken &&
                                     Boolean(activeToken);
         if (isActuallyInFlight) {
-          const skeletonFeedback = document.getElementById('rf-skeleton-feedback');
-          const skeletonContainer = document.getElementById('rf-skeleton-container');
-          if (skeletonFeedback && skeletonContainer) {
-            skeletonContainer.style.display = 'block';
-            skeletonFeedback.style.display = 'grid';
-            setRoleStatus('Generating tips…');
-          }
+          // Delegate to authoritative controller instead of direct DOM manipulation
+          if (activeToken) updateRoleTipsState({ token: activeToken });
         }
 
         // Check if we have resume data after loading
