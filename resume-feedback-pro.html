@@ -2063,8 +2063,12 @@
         return null;
       }
 
-      // PHASE 2: Set status to generating
-      setRoleTipsStatus(token, 'generating');
+      // FIX: Status already set at run start - don't set again here
+      // Only ensure status is 'generating' if somehow missing (defensive)
+      const currentStatus = getRoleTipsStatus();
+      if (!currentStatus || currentStatus.status !== 'generating' || currentStatus.token !== token) {
+        setRoleTipsStatus(token, 'generating');
+      }
 
       const controller = new AbortController();
       let timeoutId = null;
@@ -2105,6 +2109,8 @@
           // PHASE 2: Token-gate: only update status if token is still active
           if (isActiveFeedbackToken(token)) {
             setRoleTipsStatus(token, 'failed');
+            const DEBUG_ROLE_TIPS = localStorage.getItem('debugRoleTips') === '1';
+            if (DEBUG_ROLE_TIPS) console.debug('[ROLE_TIPS] Done (HTTP error)', { token: token.substring(0, 8) + '...', status: 'failed', httpStatus: response.status, error: errorMessage });
             // Show error UI
             const isTimeout = response.status === 504 || error.error === 'timeout';
             setRoleStatus(isTimeout 
@@ -2126,6 +2132,8 @@
         // Defensive: Check for error field even in 200 responses
         if (result.error) {
           setRoleTipsStatus(token, 'failed');
+          const DEBUG_ROLE_TIPS = localStorage.getItem('debugRoleTips') === '1';
+          if (DEBUG_ROLE_TIPS) console.debug('[ROLE_TIPS] Done (result error)', { token: token.substring(0, 8) + '...', status: 'failed', error: result.error });
           const isTimeout = result.error === 'timeout';
           setRoleStatus(isTimeout 
             ? 'Role tips generation timed out. Try regenerating feedback.' 
@@ -2136,15 +2144,21 @@
         // Handle both response structures: result.roleSpecificFeedback OR result directly
         const roleSpecificFeedback = result.roleSpecificFeedback || result;
         
-        // Validate: must have non-empty sections array (not just empty array)
+        // FIX: Do not treat {sections: []} as valid - require non-empty sections array
         const hasNonEmptySections =
           Array.isArray(roleSpecificFeedback?.sections) && roleSpecificFeedback.sections.length > 0;
         
-        if (roleSpecificFeedback && (isValidRoleTips(roleSpecificFeedback) || hasNonEmptySections)) {
+        // Validate: must pass isValidRoleTips() check AND have non-empty sections
+        const isValid = isValidRoleTips(roleSpecificFeedback) && hasNonEmptySections;
+        const DEBUG_ROLE_TIPS = localStorage.getItem('debugRoleTips') === '1';
+        
+        if (isValid) {
           setRoleTipsStatus(token, 'ready');
+          if (DEBUG_ROLE_TIPS) console.debug('[ROLE_TIPS] Done (ready)', { token: token.substring(0, 8) + '...', status: 'ready' });
           return roleSpecificFeedback;
         } else {
           setRoleTipsStatus(token, 'failed');
+          if (DEBUG_ROLE_TIPS) console.debug('[ROLE_TIPS] Done (failed)', { token: token.substring(0, 8) + '...', status: 'failed', hasSections: !!roleSpecificFeedback?.sections, sectionCount: roleSpecificFeedback?.sections?.length || 0 });
           setRoleStatus('Role tips unavailable. Try regenerating feedback.');
           return null;
         }
@@ -2160,6 +2174,8 @@
         // PHASE 2: Token-gate: only update status if token is still active
         if (isActiveFeedbackToken(token)) {
           setRoleTipsStatus(token, 'failed');
+          const DEBUG_ROLE_TIPS = localStorage.getItem('debugRoleTips') === '1';
+          if (DEBUG_ROLE_TIPS) console.debug('[ROLE_TIPS] Done (error)', { token: token.substring(0, 8) + '...', status: 'failed', error: error.message, isTimeout });
           // Show error UI for fetch failures
           // Preserve backend-derived error message if it exists (from !response.ok block),
           // otherwise use generic network/request error message
@@ -4259,6 +4275,25 @@
           const feedbackRunToken = createRunKey('feedback');
           setActiveFeedbackToken(feedbackRunToken);
           
+          // FIX: Seed role tips status IMMEDIATELY at run start (before any API calls)
+          // Use the same role string that will be sent to /api/role-tips
+          const hasRoleForTips = canonicalJobTitleForApis && canonicalJobTitleForApis.trim().length > 0;
+          const DEBUG_ROLE_TIPS = localStorage.getItem('debugRoleTips') === '1';
+          if (hasRoleForTips) {
+            setRoleTipsStatus(feedbackRunToken, 'generating');
+            if (DEBUG_ROLE_TIPS) console.debug('[ROLE_TIPS] Start generating', { token: feedbackRunToken.substring(0, 8) + '...', hasRole: true });
+            // Show skeleton immediately
+            showRoleFeedback();
+            updateRoleTipsState({
+              hasAtsScore: false, // ATS not done yet
+              token: feedbackRunToken
+            });
+          } else {
+            // No role: clear status to avoid stale state
+            clearRoleTipsStatus();
+            if (DEBUG_ROLE_TIPS) console.debug('[ROLE_TIPS] Start idle (no role)', { token: feedbackRunToken.substring(0, 8) + '...', hasRole: false });
+          }
+          
           // Track role tips promises to prevent premature token clearing
           let roleTipsPromise = null;
           let retryRoleTipsPromise = null;
@@ -4527,13 +4562,14 @@
                 hideFeedbackSkeleton();
 
                 const hasAtsScore = !!(atsSettled.status === 'fulfilled' && atsSettled.value && atsSettled.value.success);
+                const DEBUG_ROLE_TIPS = localStorage.getItem('debugRoleTips') === '1';
+                if (DEBUG_ROLE_TIPS) console.debug('[ROLE_TIPS] ATS done', { token: feedbackRunToken.substring(0, 8) + '...', hasAtsScore, roleTipsStatus: getRoleTipsStatus()?.status });
 
                 // PHASE 2: Fetch role tips asynchronously after Tier 1 completes
                 // D2: Pass sessionId from Tier 1 response to role tips endpoint
                 const hasRole = canonicalJobTitleForApis && canonicalJobTitleForApis.trim().length > 0;
                 if (hasRole) {
-                  // Enter loading state: set status and update UI to show skeleton
-                  setRoleTipsStatus(feedbackRunToken, 'generating');
+                  // FIX: Status already set at run start - just update UI with ATS score
                   // Force show role feedback container immediately (not dependent on ATS score)
                   showRoleFeedback();
                   // Don't pass roleSpecificFeedback: null here - updateRoleTipsState will detect 'generating' status
@@ -5427,7 +5463,7 @@
             // Only show "Generating tips..." if user has a plan AND provided a role
             const userPlan = getCurrentUserPlan();
             const willGetFeedback = ['trial', 'essential', 'pro', 'premium'].includes(userPlan);
-            const hasRole = canonicalJobTitle.length > 0;
+            const hasRole = canonicalJobTitle && canonicalJobTitle.trim().length > 0;
             if (willGetFeedback && hasRole) {
               setRoleStatus('Generating tips…');
             } else {
@@ -5445,6 +5481,25 @@
             // Start ATS (if role changed) and feedback in parallel
             const feedbackRunToken = createRunKey('feedback');
             setActiveFeedbackToken(feedbackRunToken);
+            
+            // FIX: Seed role tips status IMMEDIATELY at run start (before any API calls)
+            // Use the same role string that will be sent to /api/role-tips
+            const DEBUG_ROLE_TIPS = localStorage.getItem('debugRoleTips') === '1';
+            if (hasRole) {
+              setRoleTipsStatus(feedbackRunToken, 'generating');
+              if (DEBUG_ROLE_TIPS) console.debug('[ROLE_TIPS] Regenerate start generating', { token: feedbackRunToken.substring(0, 8) + '...', hasRole: true });
+              // Show skeleton immediately
+              showRoleFeedback();
+              updateRoleTipsState({
+                hasAtsScore: false, // ATS not done yet
+                token: feedbackRunToken
+              });
+            } else {
+              // No role: clear status to avoid stale state
+              clearRoleTipsStatus();
+              if (DEBUG_ROLE_TIPS) console.debug('[ROLE_TIPS] Regenerate start idle (no role)', { token: feedbackRunToken.substring(0, 8) + '...', hasRole: false });
+            }
+            
             const atsPromise = roleChanged ? getAtsScore(currentResumeId, canonicalJobTitle) : Promise.resolve(null);
             const feedbackPromise = getResumeFeedbackWithAtsWait(currentResumeId, canonicalJobTitle, atsPromise);
             let roleAtsExtractionWarned = false;
@@ -6452,7 +6507,8 @@
 
       // Check role tips generation status to manage skeleton visibility
       // Role tips skeleton visibility is independent of ATS score - it only depends on generation status
-      const roleTipsStatus = token ? getRoleTipsStatus() : null;
+      // FIX: Always check status (not gated by token parameter) to prevent null returns during in-flight runs
+      const roleTipsStatus = getRoleTipsStatus();
       const isGenerating = roleTipsStatus && roleTipsStatus.status === 'generating' && 
                           (!token || isActiveFeedbackToken(roleTipsStatus.token));
 
@@ -6568,7 +6624,8 @@
 
       // Simplified: Show helpful informational message, no button
       // This state should rarely occur since backend always provides fallback tips when job title exists
-      if (feedbackGrid) feedbackGrid.style.display = 'none';
+      // FIX: Don't hide grid if role tips are still generating (even if token check failed)
+      if (feedbackGrid && !isGenerating) feedbackGrid.style.display = 'none';
       roleContainer.style.display = 'block';
       if (roleInfoBar) roleInfoBar.style.display = 'none';
 
