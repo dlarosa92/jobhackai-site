@@ -4309,6 +4309,9 @@
           const DEBUG_ROLE_TIPS = localStorage.getItem('debugRoleTips') === '1';
           if (hasRoleForTips) {
             setRoleTipsStatus(feedbackRunToken, 'generating');
+            // ROLE TIPS SKELETON FIX: Set in-flight flags BEFORE updateRoleTipsState() so skeleton appears immediately
+            window.roleTipsInFlight = true;
+            window.roleTipsInFlightToken = feedbackRunToken;
             if (DEBUG_ROLE_TIPS) console.debug('[ROLE_TIPS] Start generating', { token: feedbackRunToken.substring(0, 8) + '...', hasRole: true });
             // Show skeleton immediately
             showRoleFeedback();
@@ -5535,6 +5538,9 @@
             const DEBUG_ROLE_TIPS = localStorage.getItem('debugRoleTips') === '1';
             if (hasRole) {
               setRoleTipsStatus(feedbackRunToken, 'generating');
+              // ROLE TIPS SKELETON FIX: Set in-flight flags BEFORE updateRoleTipsState() so skeleton appears immediately
+              window.roleTipsInFlight = true;
+              window.roleTipsInFlightToken = feedbackRunToken;
               if (DEBUG_ROLE_TIPS) console.debug('[ROLE_TIPS] Regenerate start generating', { token: feedbackRunToken.substring(0, 8) + '...', hasRole: true });
               // Show skeleton immediately
               showRoleFeedback();
@@ -6628,16 +6634,16 @@
 
       // ROLE TIPS SKELETON FIX: Skeleton visibility based ONLY on in-flight flag, not cached status
       // Check if role tips request is actually in-flight for the active token
+      // CRITICAL: Require both token and activeToken to be truthy (no null === null comparisons)
       const activeToken = window.__rfActiveFeedbackToken;
       const isInFlight = window.roleTipsInFlight === true && 
                          window.roleTipsInFlightToken === activeToken &&
                          activeToken === token;
       
-      // Check role tips generation status to manage skeleton visibility
-      // Role tips skeleton visibility is independent of ATS score - it only depends on in-flight state
+      // Skeleton visibility depends only on in-flight state (not sessionStorage or cached status)
       // CRITICAL: Skeletons may ONLY appear when a valid feedback token is explicitly provided
       // No-token calls (cache restore, hydration, passive updates) must always treat isGenerating as false
-      const isGenerating = isInFlight;
+      const isGenerating = Boolean(token) && Boolean(activeToken) && isInFlight;
 
       const rsf = roleSpecificFeedback;
       const isOldStructure = rsf && Array.isArray(rsf) && rsf.length > 0;
@@ -6652,8 +6658,8 @@
 
       if (!roleContainer) return;
 
-      // Manage skeleton visibility based on generation status
-      // Show skeleton when generating, hide when role tips are ready or missing
+      // Manage skeleton visibility based on in-flight state
+      // Show skeleton when request is in-flight, hide when role tips are ready or missing
       if (isGenerating) {
         // Entering loading state: show skeleton, hide grid (regardless of ATS score)
         if (skeletonContainer) skeletonContainer.style.display = 'block';
