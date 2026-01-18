@@ -4108,6 +4108,15 @@
             if (window._currentFeedbackLoading) {
               window._currentFeedbackLoading();
               window._currentFeedbackLoading = null;
+              // FIX: Restore role tips skeleton if still generating for this token
+              const roleTipsStatus = getRoleTipsStatus();
+              if (roleTipsStatus && roleTipsStatus.status === 'generating' && roleTipsStatus.token === feedbackRunToken) {
+                updateRoleTipsState({
+                  hasAtsScore: !!atsScoringSucceeded,
+                  roleSpecificFeedback: null,
+                  token: feedbackRunToken
+                });
+              }
             }
             uploadInput.disabled = false;
             // Only enable button if file still exists
@@ -4961,7 +4970,6 @@
                     roleSpecificFeedback: null,
                     token: feedbackRunToken
                   });
-                  hideFeedbackSkeleton();
                   // Re-enable buttons after retry failure
                   const generateBtn = document.getElementById('rf-generate-btn');
                   if (generateBtn) generateBtn.disabled = false;
@@ -5055,6 +5063,15 @@
               const skeletonRubric = document.getElementById('rf-skeleton-rubric');
               if (skeletonRubric) skeletonRubric.style.display = 'none';
               hideFeedbackSkeleton();
+              // FIX: Restore role tips skeleton if still generating for this token
+              const roleTipsStatus = getRoleTipsStatus();
+              if (roleTipsStatus && roleTipsStatus.status === 'generating' && roleTipsStatus.token === feedbackRunToken) {
+                updateRoleTipsState({
+                  hasAtsScore: !!atsScoringSucceeded,
+                  roleSpecificFeedback: null,
+                  token: feedbackRunToken
+                });
+              }
             }
 
             handleApiError(error, {
@@ -5065,6 +5082,15 @@
             if (window._currentFeedbackLoading) {
               window._currentFeedbackLoading();
               window._currentFeedbackLoading = null;
+              // FIX: Restore role tips skeleton if still generating for this token
+              const roleTipsStatus = getRoleTipsStatus();
+              if (roleTipsStatus && roleTipsStatus.status === 'generating' && roleTipsStatus.token === feedbackRunToken) {
+                updateRoleTipsState({
+                  hasAtsScore: !!atsScoringSucceeded,
+                  roleSpecificFeedback: null,
+                  token: feedbackRunToken
+                });
+              }
             }
 
             if (window._rfToast && window._rfToast.currentId === 'rf:analysis-running' && window._rfToast.currentToast) {
