@@ -6614,7 +6614,9 @@
       // Check role tips generation status to manage skeleton visibility
       // Role tips skeleton visibility is independent of ATS score - it only depends on generation status
       // FIX: Use token matching for isGenerating check
-      const isGenerating = tokenMatches && roleTipsStatus && roleTipsStatus.status === 'generating';
+      // CRITICAL: Skeletons may ONLY appear when a valid feedback token is explicitly provided
+      // No-token calls (cache restore, hydration, passive updates) must always treat isGenerating as false
+      const isGenerating = token && tokenMatches && roleTipsStatus && roleTipsStatus.status === 'generating';
 
       const rsf = roleSpecificFeedback;
       const isOldStructure = rsf && Array.isArray(rsf) && rsf.length > 0;
