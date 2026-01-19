@@ -4313,6 +4313,10 @@
                     hideLoadingState();
                     uploadInput.disabled = false;
                     if (generateBtn) generateBtn.disabled = false;
+                    if (window.roleTipsInFlightToken === feedbackRunToken) {
+                      window.roleTipsInFlight = false;
+                      window.roleTipsInFlightToken = null;
+                    }
                     return; // Block all API calls
                   }
                 }
