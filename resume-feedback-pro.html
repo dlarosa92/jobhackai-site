@@ -2065,7 +2065,7 @@
     async function getRoleTips(resumeId, jobTitle, token, sessionId = null) {
       if (!resumeId || !jobTitle || !jobTitle.trim()) {
         // ROLE TIPS SKELETON FIX: Clear flags if early return (caller may have set them)
-        if (window.roleTipsInFlightToken === token) {
+        if (token && window.roleTipsInFlightToken === token) {
           window.roleTipsInFlight = false;
           window.roleTipsInFlightToken = null;
         }
@@ -2204,7 +2204,7 @@
         return null;
       } finally {
         // ROLE TIPS SKELETON FIX: Clear in-flight flag when request resolves (success or error)
-        if (window.roleTipsInFlightToken === token) {
+        if (token && window.roleTipsInFlightToken === token) {
           window.roleTipsInFlight = false;
           window.roleTipsInFlightToken = null;
         }
