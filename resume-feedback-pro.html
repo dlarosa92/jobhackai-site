@@ -7042,6 +7042,34 @@
         
         // Capture the current generation when this hide operation starts
         const operationGeneration = skeletonOperationGeneration;
+        const preserveRoleTipsSkeleton = isRoleTipsLocked();
+        if (preserveRoleTipsSkeleton) {
+          if (skeletonHideTimeout !== null) {
+            clearTimeout(skeletonHideTimeout);
+            skeletonHideTimeout = null;
+          }
+          if (skeletonHideResolvers.length > 0) {
+            skeletonHideResolvers.forEach(({ resolve: resolver, generation }) => {
+              resolver({ generation, cancelled: true });
+            });
+            skeletonHideResolvers = [];
+          }
+          const skeletonHeader = document.getElementById('rf-skeleton-header');
+          if (skeletonHeader) skeletonHeader.style.display = 'none';
+          const skeletonRubric = document.getElementById('rf-skeleton-rubric');
+          if (skeletonRubric) skeletonRubric.style.display = 'none';
+          const skeletonFeedback = document.getElementById('rf-skeleton-feedback');
+          if (skeletonFeedback) {
+            skeletonFeedback.style.display = 'grid';
+            const feedbackSkeletons = skeletonFeedback.querySelectorAll('.rf-skeleton');
+            feedbackSkeletons.forEach((skeleton) => {
+              skeleton.classList.remove('hidden');
+            });
+          }
+          skeletonContainer.style.display = 'block';
+          resolve({ generation: operationGeneration, cancelled: false });
+          return;
+        }
         
         // If a hide operation is already in progress, queue this resolver
         // This prevents race conditions where concurrent calls cancel each other's timeouts
@@ -7100,14 +7128,22 @@
 
     function hideFeedbackSkeleton() {
       const DEBUG_ROLE_TIPS = localStorage.getItem('debugRoleTips') === '1';
+      const activeToken = window.__rfActiveFeedbackToken;
+      const isActuallyInFlight = window.roleTipsInFlight === true &&
+        window.roleTipsInFlightToken === activeToken &&
+        Boolean(activeToken);
       if (DEBUG_ROLE_TIPS) console.debug('[SKELETON-DEBUG] hideFeedbackSkeleton() called', {
         skeletonFound: !!document.getElementById('rf-skeleton-feedback'),
         currentDisplay: document.getElementById('rf-skeleton-feedback')?.style.display || 'N/A',
         roleTipsInFlight: window.roleTipsInFlight,
         roleTipsInFlightToken: window.roleTipsInFlightToken,
         activeToken: window.__rfActiveFeedbackToken,
-        status: getRoleTipsStatus()?.status
+        status: getRoleTipsStatus()?.status,
+        isActuallyInFlight
       });
+      if (isActuallyInFlight) {
+        return;
+      }
       const skeletonFeedback = document.getElementById('rf-skeleton-feedback');
       if (skeletonFeedback) {
         skeletonFeedback.style.display = 'none';
