@@ -6629,6 +6629,8 @@
     // Track consecutive role-tip failures to adjust messaging
     // Helper: control Role-Specific Tips state and retry button visibility
     function updateRoleTipsState({ hasAtsScore, roleSpecificFeedback, allowPlaceholder = false, token = null }) {
+      // Enforce hard invariant: Role Tips skeleton visibility may ONLY be controlled when a Role Tips fetch is actively in flight
+      const hasActiveRoleTipsRequest = window.roleTipsInFlight === true && token && window.roleTipsInFlightToken === token;
       // FIX: Use token matching instead of isActiveFeedbackToken() to avoid null/undefined issues
       // If token is provided, only proceed if status token matches (or no status exists)
       const roleTipsStatus = getRoleTipsStatus();
@@ -6646,8 +6648,10 @@
           const feedbackGrid = document.getElementById('rf-feedback-grid');
           const skeletonFeedback = document.getElementById('rf-skeleton-feedback');
           const skeletonContainer = document.getElementById('rf-skeleton-container');
-          if (skeletonContainer) skeletonContainer.style.display = 'none';
-          if (skeletonFeedback) skeletonFeedback.style.display = 'none';
+          if (hasActiveRoleTipsRequest) {
+            if (skeletonContainer) skeletonContainer.style.display = 'none';
+            if (skeletonFeedback) skeletonFeedback.style.display = 'none';
+          }
           if (feedbackGrid) feedbackGrid.style.display = 'none';
           if (roleContainer) roleContainer.style.display = 'none';
           setRoleStatus('');
@@ -6718,8 +6722,10 @@
       // Show skeleton when request is in-flight, hide when role tips are ready or missing
       if (isGenerating) {
         // Entering loading state: show skeleton, hide grid (regardless of ATS score)
-        if (skeletonContainer) skeletonContainer.style.display = 'block';
-        if (skeletonFeedback) skeletonFeedback.style.display = 'grid';
+        if (hasActiveRoleTipsRequest) {
+          if (skeletonContainer) skeletonContainer.style.display = 'block';
+          if (skeletonFeedback) skeletonFeedback.style.display = 'grid';
+        }
         if (feedbackGrid) feedbackGrid.style.display = 'none';
         showRoleFeedback();
         setRoleStatus('Generating tips…');
@@ -6730,12 +6736,14 @@
         return; // Early return during loading - don't process other states yet
       } else {
         // Exiting loading state: hide skeleton
-        if (skeletonFeedback) skeletonFeedback.style.display = 'none';
-        // Hide container only if all skeletons are hidden (checked by hideFeedbackSkeleton logic)
-        if (skeletonContainer) {
-          const skeletonRubric = document.getElementById('rf-skeleton-rubric');
-          if (!skeletonRubric || skeletonRubric.style.display === 'none') {
-            skeletonContainer.style.display = 'none';
+        if (hasActiveRoleTipsRequest) {
+          if (skeletonFeedback) skeletonFeedback.style.display = 'none';
+          // Hide container only if all skeletons are hidden (checked by hideFeedbackSkeleton logic)
+          if (skeletonContainer) {
+            const skeletonRubric = document.getElementById('rf-skeleton-rubric');
+            if (!skeletonRubric || skeletonRubric.style.display === 'none') {
+              skeletonContainer.style.display = 'none';
+            }
           }
         }
       }
@@ -7006,15 +7014,24 @@
         // Start new hide operation - initialize resolver array with this one
         skeletonHideResolvers = [{ resolve, generation: operationGeneration }];
         
-        // Fade out skeletons smoothly
-        const skeletons = skeletonContainer.querySelectorAll('.rf-skeleton');
+        // Exclude skeletons inside #rf-skeleton-feedback from Tier-1 cleanup
+        const skeletonFeedback = document.getElementById('rf-skeleton-feedback');
+        const allSkeletons = skeletonContainer.querySelectorAll('.rf-skeleton');
+        const skeletons = Array.from(allSkeletons).filter(skeleton => {
+          return !skeletonFeedback || !skeletonFeedback.contains(skeleton);
+        });
+        
+        // Fade out skeletons smoothly (excluding Role Tips skeleton)
         skeletons.forEach(skeleton => {
           skeleton.classList.add('hidden');
         });
         
         // Remove container after fade completes, then resolve all pending Promises
         skeletonHideTimeout = setTimeout(() => {
-          skeletonContainer.style.display = 'none';
+          // Only hide container if Role Tips skeleton is not visible
+          if (!skeletonFeedback || skeletonFeedback.style.display === 'none') {
+            skeletonContainer.style.display = 'none';
+          }
           // Remove hidden class for next use
           skeletons.forEach(skeleton => {
             skeleton.classList.remove('hidden');
@@ -7051,10 +7068,6 @@
     }
 
     function hideFeedbackSkeleton() {
-      const skeletonFeedback = document.getElementById('rf-skeleton-feedback');
-      if (skeletonFeedback) {
-        skeletonFeedback.style.display = 'none';
-      }
       const skeletonContainer = document.getElementById('rf-skeleton-container');
       const skeletonRubric = document.getElementById('rf-skeleton-rubric');
       if (skeletonContainer && skeletonRubric && skeletonRubric.style.display === 'none') {
