@@ -4179,7 +4179,7 @@
           // Free users only get ATS scoring, not AI feedback, so show different message
           const userPlan = getCurrentUserPlan();
           const willGetFeedback = ['trial', 'essential', 'pro', 'premium'].includes(userPlan);
-          const hasRole = canonicalJobTitle.length > 0;
+          const hasRole = Boolean(canonicalJobTitle && canonicalJobTitle.trim().length > 0);
           
           // Ensure feedback token exists BEFORE showSkeletons runs
           const feedbackRunToken = createRunKey('feedback');
