@@ -4611,15 +4611,27 @@
                   }
                   hideATSSkeleton();
                 }
-                hideFeedbackSkeleton();
+                // Only hide role-tips skeleton if role-tips is NOT in-flight
+                // If role-tips is in-flight, updateRoleTipsState() will handle showing/hiding it
+                const hasRole = canonicalJobTitleForApis && canonicalJobTitleForApis.trim().length > 0;
+                const isRoleTipsInFlight = window.roleTipsInFlight === true && window.roleTipsInFlightToken === feedbackRunToken;
+                const DEBUG_ROLE_TIPS = localStorage.getItem('debugRoleTips') === '1';
+                if (DEBUG_ROLE_TIPS) console.debug('[ROLE_TIPS] ATS done - skeleton check', { 
+                  isRoleTipsInFlight, 
+                  roleTipsInFlight: window.roleTipsInFlight, 
+                  token: feedbackRunToken.substring(0, 8) + '...',
+                  hasAtsScore: !!(atsSettled.status === 'fulfilled' && atsSettled.value && atsSettled.value.success),
+                  roleTipsStatus: getRoleTipsStatus()?.status 
+                });
+                if (!isRoleTipsInFlight) {
+                  hideFeedbackSkeleton();
+                }
 
                 const hasAtsScore = !!(atsSettled.status === 'fulfilled' && atsSettled.value && atsSettled.value.success);
-                const DEBUG_ROLE_TIPS = localStorage.getItem('debugRoleTips') === '1';
                 if (DEBUG_ROLE_TIPS) console.debug('[ROLE_TIPS] ATS done', { token: feedbackRunToken.substring(0, 8) + '...', hasAtsScore, roleTipsStatus: getRoleTipsStatus()?.status });
 
                 // PHASE 2: Fetch role tips asynchronously after Tier 1 completes
                 // D2: Pass sessionId from Tier 1 response to role tips endpoint
-                const hasRole = canonicalJobTitleForApis && canonicalJobTitleForApis.trim().length > 0;
                 if (hasRole) {
                   // FIX: Status already set at run start - just update UI with ATS score
                   // Force show role feedback container immediately (not dependent on ATS score)
@@ -4847,7 +4859,21 @@
                     }
                     hideATSSkeleton();
                   }
-                  hideFeedbackSkeleton();
+                  // Only hide role-tips skeleton if role-tips is NOT in-flight
+                  // If role-tips is in-flight, updateRoleTipsState() will handle showing/hiding it
+                  const hasRole = canonicalJobTitleForApis && canonicalJobTitleForApis.trim().length > 0;
+                  const isRoleTipsInFlight = window.roleTipsInFlight === true && window.roleTipsInFlightToken === feedbackRunToken;
+                  const DEBUG_ROLE_TIPS = localStorage.getItem('debugRoleTips') === '1';
+                  if (DEBUG_ROLE_TIPS) console.debug('[ROLE_TIPS] Retry ATS done - skeleton check', { 
+                    isRoleTipsInFlight, 
+                    roleTipsInFlight: window.roleTipsInFlight, 
+                    token: feedbackRunToken.substring(0, 8) + '...',
+                    hasAtsScore: !!(atsSettled.status === 'fulfilled' && atsSettled.value && atsSettled.value.success),
+                    roleTipsStatus: getRoleTipsStatus()?.status 
+                  });
+                  if (!isRoleTipsInFlight) {
+                    hideFeedbackSkeleton();
+                  }
                   const hasAtsScore = !!(atsSettled.status === 'fulfilled' && atsSettled.value && atsSettled.value.success);
                   updateRoleTipsState({
                     hasAtsScore,
@@ -4857,7 +4883,6 @@
 
                   // PHASE 2: Fetch role tips asynchronously after retry succeeds
                   // D2: Pass feedbackSessionId from retry result to role tips endpoint (expects feedback_sessions.id)
-                  const hasRole = canonicalJobTitleForApis && canonicalJobTitleForApis.trim().length > 0;
                   // retryRoleTipsPromise already declared at function scope
                   if (hasRole) {
                     // Force show role feedback container immediately when starting role tips fetch
