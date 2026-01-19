@@ -4191,7 +4191,8 @@
           if (willGetFeedback && hasRole) {
             window.roleTipsInFlight = true;
             window.roleTipsInFlightToken = feedbackRunToken;
-            console.log('[SKELETON-DEBUG] Flags set', {
+            const DEBUG_ROLE_TIPS = localStorage.getItem('debugRoleTips') === '1';
+            if (DEBUG_ROLE_TIPS) console.debug('[SKELETON-DEBUG] Flags set', {
               roleTipsInFlight: window.roleTipsInFlight,
               token: feedbackRunToken.substring(0, 8) + '...',
               willGetFeedback,
@@ -4343,7 +4344,7 @@
           if (hasRoleForTips) {
             setRoleTipsStatus(feedbackRunToken, 'generating');
             updateRoleTipsState({ token: feedbackRunToken });
-            console.log('[SKELETON-DEBUG] Status set to generating', {
+            if (DEBUG_ROLE_TIPS) console.debug('[SKELETON-DEBUG] Status set to generating', {
               token: feedbackRunToken.substring(0, 8) + '...',
               status: getRoleTipsStatus()?.status
             });
@@ -4621,10 +4622,12 @@
                   }
                   hideATSSkeleton();
                 }
+                const hasAtsScore = !!(atsSettled.status === 'fulfilled' && atsSettled.value && atsSettled.value.success);
+                const DEBUG_ROLE_TIPS = localStorage.getItem('debugRoleTips') === '1';
                 const skeletonEl = document.getElementById('rf-skeleton-feedback');
                 const skeletonDisplay = skeletonEl ? skeletonEl.style.display : 'not found';
                 const roleTipsStatus = getRoleTipsStatus();
-                console.log('[SKELETON-DEBUG] BEFORE hideFeedbackSkeleton()', {
+                if (DEBUG_ROLE_TIPS) console.debug('[SKELETON-DEBUG] BEFORE hideFeedbackSkeleton()', {
                   flags: {
                     roleTipsInFlight: window.roleTipsInFlight,
                     roleTipsInFlightToken: window.roleTipsInFlightToken,
@@ -4639,9 +4642,6 @@
                   hasRole: canonicalJobTitleForApis && canonicalJobTitleForApis.trim().length > 0
                 });
                 hideFeedbackSkeleton();
-
-                const hasAtsScore = !!(atsSettled.status === 'fulfilled' && atsSettled.value && atsSettled.value.success);
-                const DEBUG_ROLE_TIPS = localStorage.getItem('debugRoleTips') === '1';
                 if (DEBUG_ROLE_TIPS) console.debug('[ROLE_TIPS] ATS done', { token: feedbackRunToken.substring(0, 8) + '...', hasAtsScore, roleTipsStatus: getRoleTipsStatus()?.status });
 
                 // PHASE 2: Fetch role tips asynchronously after Tier 1 completes
@@ -4657,7 +4657,7 @@
                     hasAtsScore,
                     token: feedbackRunToken
                   });
-                  console.log('[SKELETON-DEBUG] AFTER updateRoleTipsState()', {
+                  if (DEBUG_ROLE_TIPS) console.debug('[SKELETON-DEBUG] AFTER updateRoleTipsState()', {
                     token: feedbackRunToken.substring(0, 8) + '...',
                     hasAtsScore,
                     skeletonDisplay: document.getElementById('rf-skeleton-feedback')?.style.display,
@@ -7099,7 +7099,8 @@
     }
 
     function hideFeedbackSkeleton() {
-      console.log('[SKELETON-DEBUG] hideFeedbackSkeleton() called', {
+      const DEBUG_ROLE_TIPS = localStorage.getItem('debugRoleTips') === '1';
+      if (DEBUG_ROLE_TIPS) console.debug('[SKELETON-DEBUG] hideFeedbackSkeleton() called', {
         skeletonFound: !!document.getElementById('rf-skeleton-feedback'),
         currentDisplay: document.getElementById('rf-skeleton-feedback')?.style.display || 'N/A',
         roleTipsInFlight: window.roleTipsInFlight,
