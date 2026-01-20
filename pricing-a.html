@@ -206,6 +206,20 @@
       setTrialSubtext(button, 'One trial per account.');
     }
 
+    function setTrialUnavailableState(button, message) {
+      button.textContent = 'Trial unavailable';
+      button.disabled = true;
+      button.style.opacity = '0.6';
+      button.style.cursor = 'not-allowed';
+      setTrialSubtext(button, message || 'Available on the free plan only.');
+    }
+
+    function enableButton(button) {
+      button.disabled = false;
+      button.style.opacity = '1';
+      button.style.cursor = 'pointer';
+    }
+
     async function fetchTrialEligibility() {
       try {
         const user = await window.FirebaseAuthManager?.waitForAuthReady?.() || window.FirebaseAuthManager?.currentUser;
@@ -741,9 +755,11 @@
             if (isAuthenticated) {
               button.textContent = 'Dashboard';
               button.onclick = () => window.location.href = 'dashboard.html';
+              enableButton(button);
             } else {
               button.textContent = 'Get Started';
               button.onclick = () => window.location.href = 'login.html';
+              enableButton(button);
             }
           }
         } else if (plan === 'trial') {
@@ -758,13 +774,15 @@
               setTrialUsedState(button);
             } else {
               button.textContent = 'Start Free Trial';
-              button.disabled = false;
-              button.style.opacity = '1';
-              button.style.cursor = 'pointer';
+              enableButton(button);
               setTrialSubtext(button, '');
             }
           } else {
-            setTrialUsedState(button);
+            if (trialEligibility?.trialEndsAt) {
+              setTrialUsedState(button);
+            } else {
+              setTrialUnavailableState(button);
+            }
           }
         } else if (plan === normalizedPlan) {
           button.textContent = `Current Plan`;
@@ -773,6 +791,7 @@
           button.style.cursor = 'not-allowed';
         } else {
           button.textContent = `Upgrade to ${planNames[plan]}`;
+          enableButton(button);
         }
       });
     }
