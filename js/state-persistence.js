@@ -13,8 +13,93 @@
     RESUME_ID: 'jh_last_resume_id',
     RESUME_TEXT: 'jh_last_resume_text',
     JOB_TITLE: 'jh_last_job_title',
-    TIMESTAMP: 'jh_last_score_timestamp'
+    TIMESTAMP: 'jh_last_score_timestamp',
+    EXTRACTION_QUALITY: 'jh_last_extraction_quality'
   };
+
+  // Legacy keys that were not user-scoped; keep for cleanup only
+  const LEGACY_FALLBACK_KEYS = ['lastATSScore', 'lastATSSummary', 'lastATSBreakdown', 'currentAtsScore', 'currentAtsBreakdown'];
+
+  function getActiveUserId(explicitUserId = null) {
+    if (explicitUserId && typeof explicitUserId === 'string') {
+      return explicitUserId;
+    }
+    try {
+      const manager = window.FirebaseAuthManager;
+      if (manager?.currentUser?.uid) return manager.currentUser.uid;
+      if (typeof manager?.getCurrentUser === 'function') {
+        const u = manager.getCurrentUser();
+        if (u?.uid) return u.uid;
+      }
+    } catch (_) {
+      // no-op
+    }
+    return null;
+  }
+
+  function getUserScopedKey(baseKey, userId = null) {
+    const uid = getActiveUserId(userId);
+    if (!uid) return null;
+    return `${baseKey}:${uid}`;
+  }
+
+  function getScopedItem(storage, baseKey, userId = null) {
+    const key = getUserScopedKey(baseKey, userId);
+    if (!key || !storage) return null;
+    try {
+      return storage.getItem(key);
+    } catch (err) {
+      console.warn('[STATE-PERSISTENCE] Failed to read scoped item', { baseKey, err });
+      return null;
+    }
+  }
+
+  function setScopedItem(storage, baseKey, value, userId = null) {
+    const key = getUserScopedKey(baseKey, userId);
+    if (!key || !storage) return false;
+    try {
+      storage.setItem(key, value);
+      return true;
+    } catch (err) {
+      console.warn('[STATE-PERSISTENCE] Failed to write scoped item', { baseKey, err });
+      return false;
+    }
+  }
+
+  function removeScopedItem(storage, baseKey, userId = null) {
+    const key = getUserScopedKey(baseKey, userId);
+    if (!key || !storage) return;
+    try {
+      storage.removeItem(key);
+    } catch (err) {
+      console.warn('[STATE-PERSISTENCE] Failed to remove scoped item', { baseKey, err });
+    }
+  }
+
+  function clearAllScopedItems(storage, baseKey) {
+    if (!storage || typeof storage.length !== 'number') return;
+    try {
+      for (let i = storage.length - 1; i >= 0; i--) {
+        const key = storage.key(i);
+        if (key && key.startsWith(`${baseKey}:`)) {
+          storage.removeItem(key);
+        }
+      }
+    } catch (err) {
+      console.warn('[STATE-PERSISTENCE] Failed to clear scoped items', { baseKey, err });
+    }
+  }
+
+  function clearLegacyFallbackCache() {
+    try {
+      LEGACY_FALLBACK_KEYS.forEach((k) => {
+        try { localStorage.removeItem(k); } catch (_) {}
+        try { sessionStorage.removeItem(k); } catch (_) {}
+      });
+    } catch (err) {
+      console.warn('[STATE-PERSISTENCE] Failed to clear legacy fallback cache', err);
+    }
+  }
 
   // Cache expiration: 24 hours
   const CACHE_EXPIRATION = 24 * 60 * 60 * 1000;
@@ -28,8 +113,9 @@
    * @param {string} [data.jobTitle] - Job title
    * @param {Array} [data.roleSpecificFeedback] - Role-specific feedback array
    * @param {Object} [data.extractionQuality] - Extraction quality metrics
+   * @param {string} [userId] - Optional user ID override (defaults to current auth user)
    */
-  function saveATSScore({ score, breakdown, resumeId, jobTitle, roleSpecificFeedback, extractionQuality }) {
+  function saveATSScore({ score, breakdown, resumeId, jobTitle, roleSpecificFeedback, extractionQuality, userId = null }) {
     try {
       // Validate input
       if (typeof score !== 'number' || isNaN(score)) {
@@ -79,18 +165,24 @@
         timestamp: Date.now()
       };
 
+      const uid = getActiveUserId(userId);
+      if (!uid) {
+        console.warn('[STATE-PERSISTENCE] No user available for ATS cache; skipping save');
+        return false;
+      }
+
       // Try to save with quota error handling
       try {
-        localStorage.setItem(STORAGE_KEYS.ATS_SCORE, score.toString());
-        localStorage.setItem(STORAGE_KEYS.ATS_BREAKDOWN, JSON.stringify(normalizedBreakdown));
-        localStorage.setItem(STORAGE_KEYS.RESUME_ID, resumeId);
+        setScopedItem(localStorage, STORAGE_KEYS.ATS_SCORE, score.toString(), uid);
+        setScopedItem(localStorage, STORAGE_KEYS.ATS_BREAKDOWN, JSON.stringify(normalizedBreakdown), uid);
+        setScopedItem(localStorage, STORAGE_KEYS.RESUME_ID, resumeId, uid);
         
         // Always save job title (even if empty/null) to enable proper cache validation
         if (jobTitle) {
-          localStorage.setItem(STORAGE_KEYS.JOB_TITLE, jobTitle);
+          setScopedItem(localStorage, STORAGE_KEYS.JOB_TITLE, jobTitle, uid);
         } else {
           // Clear job title if not provided (to distinguish between "no job title" and "has job title")
-          localStorage.removeItem(STORAGE_KEYS.JOB_TITLE);
+          removeScopedItem(localStorage, STORAGE_KEYS.JOB_TITLE, uid);
         }
         
         // Save role-specific feedback if provided
@@ -102,25 +194,25 @@
                              Array.isArray(roleSpecificFeedback.sections);
           
           if (isOldFormat || isNewFormat) {
-            localStorage.setItem(STORAGE_KEYS.ROLE_FEEDBACK, JSON.stringify(roleSpecificFeedback));
+            setScopedItem(localStorage, STORAGE_KEYS.ROLE_FEEDBACK, JSON.stringify(roleSpecificFeedback), uid);
           } else {
             // Invalid format - clear it
-            localStorage.removeItem(STORAGE_KEYS.ROLE_FEEDBACK);
+            removeScopedItem(localStorage, STORAGE_KEYS.ROLE_FEEDBACK, uid);
           }
         } else {
           // Clear role feedback if not provided (to distinguish between "no feedback" and "has feedback")
-          localStorage.removeItem(STORAGE_KEYS.ROLE_FEEDBACK);
+          removeScopedItem(localStorage, STORAGE_KEYS.ROLE_FEEDBACK, uid);
         }
         
         // Store extractionQuality separately for easy access
         if (extractionQuality && typeof extractionQuality === 'object') {
-          localStorage.setItem('jh_last_extraction_quality', JSON.stringify(extractionQuality));
+          setScopedItem(localStorage, STORAGE_KEYS.EXTRACTION_QUALITY, JSON.stringify(extractionQuality), uid);
         } else {
           // Clear extractionQuality if not provided
-          localStorage.removeItem('jh_last_extraction_quality');
+          removeScopedItem(localStorage, STORAGE_KEYS.EXTRACTION_QUALITY, uid);
         }
         
-        localStorage.setItem(STORAGE_KEYS.TIMESTAMP, data.timestamp.toString());
+        setScopedItem(localStorage, STORAGE_KEYS.TIMESTAMP, data.timestamp.toString(), uid);
 
         console.log('[STATE-PERSISTENCE] Saved ATS score:', score, 'with role feedback:', !!roleSpecificFeedback, 'with breakdown feedback:', 
           !!(normalizedBreakdown.keywordScore?.feedback || normalizedBreakdown.formattingScore?.feedback), 'with extractionQuality:', !!extractionQuality);
@@ -132,11 +224,11 @@
           // Try to clear old data
           try {
             // Clear expired cache
-            const oldTimestamp = localStorage.getItem(STORAGE_KEYS.TIMESTAMP);
+            const oldTimestamp = getScopedItem(localStorage, STORAGE_KEYS.TIMESTAMP, uid);
             if (oldTimestamp) {
               const age = Date.now() - parseInt(oldTimestamp, 10);
               if (age > CACHE_EXPIRATION) {
-                clearATSScore();
+                clearATSScore(uid);
                 // Retry save
                 return saveATSScore({ score, breakdown: normalizedBreakdown, resumeId, jobTitle, roleSpecificFeedback, extractionQuality });
               }
@@ -157,11 +249,19 @@
   /**
    * Load ATS score from localStorage
    * @param {string} [currentJobTitle] - Current job title to validate against cached score
+   * @param {string} [userId] - Optional user ID override (defaults to current auth user)
    * @returns {Object|null} Score data or null if not found/expired/mismatched
    */
-  function loadATSScore(currentJobTitle = null) {
+  function loadATSScore(currentJobTitle = null, userId = null) {
     try {
-      const timestamp = localStorage.getItem(STORAGE_KEYS.TIMESTAMP);
+      const uid = getActiveUserId(userId);
+      if (!uid) {
+        // Without a user we cannot trust cached data; clear legacy non-scoped caches to prevent leakage
+        clearLegacyFallbackCache();
+        return null;
+      }
+
+      const timestamp = getScopedItem(localStorage, STORAGE_KEYS.TIMESTAMP, uid);
       if (!timestamp) {
         return null;
       }
@@ -169,15 +269,15 @@
       const age = Date.now() - parseInt(timestamp, 10);
       if (age > CACHE_EXPIRATION) {
         // Cache expired, clear it
-        clearATSScore();
+        clearATSScore(uid);
         return null;
       }
 
-      const score = localStorage.getItem(STORAGE_KEYS.ATS_SCORE);
-      const breakdownStr = localStorage.getItem(STORAGE_KEYS.ATS_BREAKDOWN);
-      const resumeId = localStorage.getItem(STORAGE_KEYS.RESUME_ID);
-      const cachedJobTitle = localStorage.getItem(STORAGE_KEYS.JOB_TITLE);
-      const roleFeedback = localStorage.getItem(STORAGE_KEYS.ROLE_FEEDBACK);
+      const score = getScopedItem(localStorage, STORAGE_KEYS.ATS_SCORE, uid);
+      const breakdownStr = getScopedItem(localStorage, STORAGE_KEYS.ATS_BREAKDOWN, uid);
+      const resumeId = getScopedItem(localStorage, STORAGE_KEYS.RESUME_ID, uid);
+      const cachedJobTitle = getScopedItem(localStorage, STORAGE_KEYS.JOB_TITLE, uid);
+      const roleFeedback = getScopedItem(localStorage, STORAGE_KEYS.ROLE_FEEDBACK, uid);
 
       if (!score || !breakdownStr || !resumeId) {
         return null;
@@ -190,14 +290,14 @@
       } catch (parseError) {
         console.warn('[STATE-PERSISTENCE] Failed to parse breakdown JSON:', parseError);
         // Try to recover by clearing corrupted data
-        clearATSScore();
+        clearATSScore(uid);
         return null;
       }
       
       // Validate breakdown structure
       if (!breakdown || typeof breakdown !== 'object') {
         console.warn('[STATE-PERSISTENCE] Invalid breakdown structure');
-        clearATSScore();
+        clearATSScore(uid);
         return null;
       }
       
@@ -279,10 +379,12 @@
 
       // Retrieve extractionQuality from localStorage
       const extractionQualityStr = localStorage.getItem('jh_last_extraction_quality');
+      const extractionQualityScoped = getScopedItem(localStorage, STORAGE_KEYS.EXTRACTION_QUALITY, uid);
       let extractionQuality = null;
-      if (extractionQualityStr) {
+      const qualityStr = extractionQualityScoped || extractionQualityStr;
+      if (qualityStr) {
         try {
-          extractionQuality = JSON.parse(extractionQualityStr);
+          extractionQuality = JSON.parse(qualityStr);
         } catch (e) {
           console.warn('[STATE-PERSISTENCE] Failed to parse extractionQuality:', e);
         }
@@ -302,7 +404,7 @@
       console.warn('[STATE-PERSISTENCE] Failed to load ATS score:', error);
       // Try to clear corrupted data
       try {
-        clearATSScore();
+        clearATSScore(userId);
       } catch (clearError) {
         console.error('[STATE-PERSISTENCE] Failed to clear corrupted data:', clearError);
       }
@@ -313,12 +415,20 @@
   /**
    * Clear ATS score from localStorage
    */
-  function clearATSScore() {
+  function clearATSScore(userId = null) {
     try {
+      const uid = getActiveUserId(userId);
+      if (uid) {
+        Object.values(STORAGE_KEYS).forEach(key => {
+          removeScopedItem(localStorage, key, uid);
+        });
+      }
+      // Also clear any unscoped legacy keys to prevent leakage between users
       Object.values(STORAGE_KEYS).forEach(key => {
-        localStorage.removeItem(key);
+        try { localStorage.removeItem(key); } catch (_) {}
       });
-      localStorage.removeItem('jh_last_extraction_quality');
+      try { localStorage.removeItem('jh_last_extraction_quality'); } catch (_) {}
+      clearLegacyFallbackCache();
       console.log('[STATE-PERSISTENCE] Cleared ATS score');
     } catch (error) {
       console.warn('[STATE-PERSISTENCE] Failed to clear ATS score:', error);
