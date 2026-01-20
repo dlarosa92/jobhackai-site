@@ -199,6 +199,7 @@
     }
 
     function setTrialUsedState(button) {
+      button.style.display = '';
       button.textContent = 'Trial used';
       button.disabled = true;
       button.style.opacity = '0.6';
@@ -207,6 +208,7 @@
     }
 
     function setTrialUnavailableState(button, message) {
+      button.style.display = '';
       button.textContent = 'Trial unavailable';
       button.disabled = true;
       button.style.opacity = '0.6';
@@ -215,9 +217,16 @@
     }
 
     function enableButton(button) {
+      button.style.display = '';
       button.disabled = false;
       button.style.opacity = '1';
       button.style.cursor = 'pointer';
+    }
+
+    function hideTrialCTA(button) {
+      if (!button) return;
+      button.style.display = 'none';
+      setTrialSubtext(button, '');
     }
 
     async function fetchTrialEligibility() {
@@ -741,6 +750,7 @@
     
     function updateButtonsForAuthenticatedUser(currentPlan, trialEligibility = trialEligibilityState) {
       const normalizedPlan = currentPlan === 'pending' ? 'trial' : currentPlan;
+      const isPaidPlan = ['essential', 'pro', 'premium'].includes(normalizedPlan);
       const buttons = document.querySelectorAll('.stripe-checkout-btn');
       const planNames = {
         'trial': '3-Day Free Trial',
@@ -771,7 +781,12 @@
             }
           }
         } else if (plan === 'trial') {
+          if (isPaidPlan) {
+            hideTrialCTA(button);
+            return;
+          }
           if (normalizedPlan === 'trial') {
+            button.style.display = '';
             button.textContent = 'Current Plan';
             button.disabled = true;
             button.style.opacity = '0.6';
@@ -786,11 +801,7 @@
               setTrialSubtext(button, '');
             }
           } else {
-            if (trialEligibility?.trialEndsAt) {
-              setTrialUsedState(button);
-            } else {
-              setTrialUnavailableState(button);
-            }
+            setTrialUsedState(button);
           }
         } else if (plan === normalizedPlan) {
           button.textContent = `Current Plan`;
