@@ -3079,12 +3079,11 @@
             sessionStorage.setItem('currentAtsScore', score.toString());
             sessionStorage.setItem('currentAtsBreakdown', JSON.stringify(breakdown));
 
-            // Also store in localStorage for backward compatibility (but prefer sessionStorage)
-            localStorage.setItem('lastATSScore', score.toString());
-            localStorage.setItem('lastATSSummary', summary);
             localStorage.setItem('hasUploadedResume', 'true');
             
-            // Persist to state persistence utility (handles cache expiration)
+            // Persist to state persistence utility (handles cache expiration and user-scoped keys)
+            // NOTE: Removed unscoped localStorage writes (lastATSScore, lastATSSummary) to prevent cross-user data leakage
+            // All ATS score data is now stored via user-scoped keys in JobHackAIStatePersistence
             if (window.JobHackAIStatePersistence) {
               window.JobHackAIStatePersistence.saveATSScore({
                 score,

@@ -100,10 +100,45 @@
         try { localStorage.removeItem(k); } catch (_) {}
         try { sessionStorage.removeItem(k); } catch (_) {}
       });
+      // Also clear any unscoped STORAGE_KEYS (legacy keys from before user-scoping)
+      Object.values(STORAGE_KEYS).forEach((k) => {
+        try { localStorage.removeItem(k); } catch (_) {}
+      });
+      // Clear unscoped extractionQuality key specifically
+      try { localStorage.removeItem('jh_last_extraction_quality'); } catch (_) {}
     } catch (err) {
       console.warn('[STATE-PERSISTENCE] Failed to clear legacy fallback cache', err);
     }
   }
+
+  // One-time cleanup on initialization: clear all unscoped legacy keys
+  // IMPORTANT: Check for upgrade scenario BEFORE clearing keys to preserve upgrade detection
+  function initializeCleanup() {
+    try {
+      // Check if user is upgrading from free to paid plan (before clearing keys)
+      // This preserves the upgrade detection logic in dashboard.html
+      const previousPlan = localStorage.getItem('previous-plan');
+      const currentPlan = localStorage.getItem('user-plan') || localStorage.getItem('dev-plan');
+      
+      // If upgrading from free to paid, check for ATS score BEFORE clearing keys
+      if (previousPlan === 'free' && (currentPlan === 'trial' || currentPlan === 'essential' || currentPlan === 'pro' || currentPlan === 'premium')) {
+        const hadFreeATSScore = localStorage.getItem('lastATSScore') || sessionStorage.getItem('currentAtsScore');
+        if (hadFreeATSScore) {
+          localStorage.setItem('had-free-ats-score-at-upgrade', 'true');
+          console.log('[STATE-PERSISTENCE] Detected upgrade from free to paid with ATS score - flag set before cleanup');
+        }
+      }
+      
+      // Now safe to clear legacy keys
+      clearLegacyFallbackCache();
+      console.log('[STATE-PERSISTENCE] Initialized: legacy unscoped keys cleaned up');
+    } catch (err) {
+      console.warn('[STATE-PERSISTENCE] Initialization cleanup failed:', err);
+    }
+  }
+
+  // Run cleanup on load
+  initializeCleanup();
 
   // Cache expiration: 24 hours
   const CACHE_EXPIRATION = 24 * 60 * 60 * 1000;
