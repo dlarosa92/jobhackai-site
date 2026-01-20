@@ -387,6 +387,12 @@
                   alert('Your session has expired. Please log in again and try upgrading.');
                 } else if (errorMessage.includes('Trial already used')) {
                   alert('You have already used your free trial. Please select a paid plan.');
+                  trialEligibilityState = {
+                    ...trialEligibilityState,
+                    checked: true,
+                    eligible: false,
+                    plan: trialEligibilityState.plan || localStorage.getItem('user-plan') || 'free'
+                  };
                 } else {
                   alert(`Unable to start checkout: ${errorMessage}. Please try again or contact support.`);
                 }
