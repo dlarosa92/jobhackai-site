@@ -541,7 +541,7 @@
       </div>
       <!-- Actions Row -->
       <div class="settings-actions-row" style="display:flex; gap:1rem; margin-bottom:2.2rem; flex-wrap:wrap;">
-        <a href="#" class="btn-link">Compare Plans</a>
+        <a href="pricing-a.html" class="btn-link">Compare Plans</a>
         <a href="#" class="btn-link">Contact Support</a>
         <button class="btn-outline-grey" type="button" data-action="logout">Log Out</button>
       </div>
@@ -575,6 +575,7 @@
   <!-- Load navigation system -->
   <script src="js/navigation.js?v=20251007-2"></script>
   <script src="js/universal-logout.js?v=20251007-2"></script>
+  <script src="js/stripe-integration.js"></script>
   <!-- Inactivity tracker - auto-logout after 30 minutes of inactivity -->
   <script src="js/inactivity-tracker.js?v=20250115-1"></script>
   <script>
@@ -891,6 +892,9 @@
               html += `<div style="background:#FEF3C7;border-left:4px solid #F59E0B;color:#92400E;padding:0.6rem 0.8rem;border-radius:6px;margin-top:0.8rem;font-size:0.95rem;">
                 ⏰ Your trial will convert to Essential Plan ($29/month) on ${trialEndDateStr}
               </div>`;
+              html += `<div style="margin-top:0.9rem; display:flex; gap:0.75rem; flex-wrap:wrap;">
+                <button class="btn-primary" type="button" onclick="startPaidNow(this)">Start Paid Now</button>
+              </div>`;
             }
           } else {
             html += `<div style="font-size:1.1rem;font-weight:600;color:#232B36;">${planNames[plan]} Plan</div>`;
@@ -925,6 +929,18 @@
         console.error('Error rendering billing section:', e);
         billingSection.innerHTML = '<div style="color: #EF4444;">Error loading subscription details.</div>';
       }
+    }
+
+    async function startPaidNow(buttonEl) {
+      if (typeof window.upgradePlan === 'function') {
+        await window.upgradePlan('essential', {
+          source: 'account-settings',
+          returnUrl: window.location.href,
+          button: buttonEl || null
+        });
+        return;
+      }
+      window.location.href = 'pricing-a.html?plan=essential';
     }
     
     // --- RESET PASSWORD FUNCTION ---

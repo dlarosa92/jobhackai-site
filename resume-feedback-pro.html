@@ -1125,6 +1125,7 @@
   <script src="js/api-retry.js?v=20250115-1"></script>
   <script src="js/state-persistence.js?v=20250115-1"></script>
   <script src="js/free-account-manager.js?v=20250115-1"></script>
+  <script src="js/stripe-integration.js"></script>
   <script>
     if (window.JobHackAINavigation && typeof window.JobHackAINavigation.initializeNavigation === 'function') {
       window.JobHackAINavigation.initializeNavigation();
@@ -2267,10 +2268,18 @@
       return result;
     }
 
-  // Generic helper to start a server-side Stripe Checkout session for a given plan.
-  // Uses the same /api/stripe-checkout endpoint pattern used elsewhere in the app.
+  // Generic helper to start plan changes for a given plan.
+  // Uses /api/upgrade-plan for paid upgrades and falls back to /api/stripe-checkout for trials.
   const startCheckout = async (plan) => {
     try {
+      if (typeof window.upgradePlan === 'function' && plan !== 'trial') {
+        await window.upgradePlan(plan, {
+          source: 'resume-feedback',
+          returnUrl: window.location.href
+        });
+        return;
+      }
+
       if (window.showLoadingOverlay) {
         window._currentLoadingOverlay = window.showLoadingOverlay('Redirecting to checkout...');
       }
@@ -2335,11 +2344,19 @@
       if (upgradeRequired) {
         const upgradeToPro = async () => {
           try {
+            if (typeof window.upgradePlan === 'function') {
+              await window.upgradePlan('pro', {
+                source: 'resume-feedback',
+                returnUrl: window.location.href
+              });
+              return;
+            }
+
             // Show loading state
             if (window.showLoadingOverlay) {
               window._currentLoadingOverlay = window.showLoadingOverlay('Redirecting to checkout...');
             }
-            
+
             const user = window.FirebaseAuthManager?.getCurrentUser?.();
             const idToken = user ? await user.getIdToken() : null;
             const res = await fetch('/api/stripe-checkout', {
@@ -4280,6 +4297,14 @@
                           showUpgrade: true,
                           upgradeCallback: async () => {
                             try {
+                              if (typeof window.upgradePlan === 'function') {
+                                await window.upgradePlan('pro', {
+                                  source: 'resume-feedback',
+                                  returnUrl: window.location.href
+                                });
+                                return;
+                              }
+                              
                               // Show loading state
                               if (window.showLoadingOverlay) {
                                 window._currentLoadingOverlay = window.showLoadingOverlay('Redirecting to checkout...');

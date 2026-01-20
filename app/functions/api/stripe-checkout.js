@@ -176,6 +176,26 @@ export async function onRequest(context) {
       }
     }
 
+    // Guard against duplicate subscriptions for paid plans.
+    const subs = await listSubscriptions(env, customerId);
+    const activeSubs = subs.filter((sub) =>
+      sub && ['active', 'trialing', 'past_due'].includes(sub.status)
+    );
+    if (activeSubs.length > 0 && plan !== 'trial') {
+      const currentPlan = getPlanFromSubscription(activeSubs[0], env);
+      console.log('🟡 [CHECKOUT] Active subscription exists, blocking checkout', {
+        uid,
+        customerId,
+        currentPlan
+      });
+      return json({
+        ok: false,
+        error: 'Already subscribed. Manage your plan in Billing Management.',
+        code: 'ALREADY_SUBSCRIBED',
+        plan: currentPlan
+      }, 409, origin, env);
+    }
+
     // Create Checkout Session (subscription)
     
     // Prepare session body with trial support
@@ -341,6 +361,34 @@ function corsHeaders(origin, env) {
 function json(body, status, origin, env) { return new Response(JSON.stringify(body), { status, headers: corsHeaders(origin, env) }); }
 const kvCusKey = (uid) => `cusByUid:${uid}`;
 const kvEmailKey = (uid) => `emailByUid:${uid}`;
+async function listSubscriptions(env, customerId) {
+  const res = await stripe(env, `/subscriptions?customer=${customerId}&status=all&limit=25`);
+  if (!res.ok) {
+    console.log('🟡 [CHECKOUT] Subscription list failed', res.status);
+    return [];
+  }
+  const data = await res.json();
+  return data?.data || [];
+}
+function priceIdToPlan(env, priceId) {
+  if (!priceId) return null;
+  const essential = planToPrice(env, 'essential');
+  const pro = planToPrice(env, 'pro');
+  const premium = planToPrice(env, 'premium');
+  if (priceId === essential) return 'essential';
+  if (priceId === pro) return 'pro';
+  if (priceId === premium) return 'premium';
+  return null;
+}
+function getPlanFromSubscription(sub, env) {
+  if (!sub) return null;
+  if (sub.status === 'trialing') {
+    const originalPlan = sub.metadata?.original_plan || sub.metadata?.plan;
+    if (originalPlan === 'trial') return 'trial';
+  }
+  const priceId = sub.items?.data?.[0]?.price?.id;
+  return priceIdToPlan(env, priceId) || 'essential';
+}
 function planToPrice(env, plan) {
   // Resolve price IDs from multiple possible env var names to avoid mismatches across environments
   const resolve = (base) => (
@@ -392,5 +440,3 @@ async function makeIdemKey(uid, body) {
     return `${uid}:${body['metadata[plan]'] || 'plan'}`;
   }
 }
-
-

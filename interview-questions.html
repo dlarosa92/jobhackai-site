@@ -1154,6 +1154,13 @@
             (function() {
               async function startCheckoutLocal(plan) {
                 try {
+                  if (typeof window.upgradePlan === 'function') {
+                    await window.upgradePlan(plan, {
+                      source: 'interview-questions',
+                      returnUrl: window.location.href
+                    });
+                    return;
+                  }
                   if (window.showLoadingOverlay) {
                     window._currentLoadingOverlay = window.showLoadingOverlay('Redirecting to checkout...');
                   }
@@ -4259,6 +4266,7 @@ function initIQPage(){
   </script>
   <!-- Load navigation system -->
   <script src="js/navigation.js?v=20251007-2"></script>
+  <script src="js/stripe-integration.js"></script>
   <script src="js/universal-logout.js?v=20251007-2"></script>
   <!-- Load Firebase auth as ES module (required for API authentication) - MUST load before inactivity-tracker -->
   <script type="module" src="js/firebase-auth.js?v=20251011-1"></script>
