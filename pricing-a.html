@@ -135,7 +135,10 @@
             <tr class="pricing-signup-row">
               <td></td>
               <td><button class="btn-primary stripe-checkout-btn" data-plan="free" data-amount="0">Create Free Account</button></td>
-              <td><button class="btn-primary stripe-checkout-btn" data-plan="trial" data-amount="0">Start Free Trial</button></td>
+              <td>
+                <button class="btn-primary stripe-checkout-btn" data-plan="trial" data-amount="0">Start Free Trial</button>
+                <div class="trial-subtext" aria-live="polite"></div>
+              </td>
               <td><button class="btn-primary stripe-checkout-btn" data-plan="essential" data-amount="2900">Get Essential Plan</button></td>
               <td><button class="btn-primary stripe-checkout-btn" data-plan="pro" data-amount="5900">Get Pro Plan</button></td>
               <td><button class="btn-primary stripe-checkout-btn" data-plan="premium" data-amount="9900">Get Premium Plan</button></td>
@@ -177,6 +180,56 @@
   <script src="js/main.js" type="module"></script>
   <script src="js/analytics.js" type="module"></script>
   <script>
+    let trialEligibilityState = { checked: false, eligible: true, plan: null, trialEndsAt: null };
+
+    function getTrialSubtextEl(button) {
+      return button?.closest('td')?.querySelector('.trial-subtext') || null;
+    }
+
+    function setTrialSubtext(button, text) {
+      const subtextEl = getTrialSubtextEl(button);
+      if (!subtextEl) return;
+      if (text) {
+        subtextEl.textContent = text;
+        subtextEl.style.display = 'block';
+      } else {
+        subtextEl.textContent = '';
+        subtextEl.style.display = 'none';
+      }
+    }
+
+    function setTrialUsedState(button) {
+      button.textContent = 'Trial used';
+      button.disabled = true;
+      button.style.opacity = '0.6';
+      button.style.cursor = 'not-allowed';
+      setTrialSubtext(button, 'One trial per account.');
+    }
+
+    async function fetchTrialEligibility() {
+      try {
+        const user = await window.FirebaseAuthManager?.waitForAuthReady?.() || window.FirebaseAuthManager?.currentUser;
+        if (!user || !user.getIdToken) return null;
+        const idToken = await user.getIdToken();
+        const res = await fetch('/api/plan/me', {
+          headers: { Authorization: `Bearer ${idToken}` }
+        });
+        if (!res.ok) return null;
+        const data = await res.json();
+        const plan = data?.plan || localStorage.getItem('user-plan') || 'free';
+        const trialEndsAt = data?.trialEndsAt || null;
+        return {
+          checked: true,
+          eligible: plan === 'free' && !trialEndsAt,
+          plan,
+          trialEndsAt
+        };
+      } catch (error) {
+        console.warn('Failed to fetch trial eligibility:', error);
+        return null;
+      }
+    }
+
     // Initialize pricing page Stripe functionality
     document.addEventListener('DOMContentLoaded', () => {
       // Initialize navigation system
@@ -358,7 +411,19 @@
       // Update button text for authenticated users
       const { isAuthenticated: _isAuthInit, currentPlan: _initPlan } = getAuthState();
       if (_isAuthInit) {
-        updateButtonsForAuthenticatedUser(_initPlan);
+        trialEligibilityState = { ...trialEligibilityState, plan: _initPlan };
+        updateButtonsForAuthenticatedUser(_initPlan, trialEligibilityState);
+        (async () => {
+          const eligibility = await fetchTrialEligibility();
+          if (eligibility) {
+            trialEligibilityState = eligibility;
+            if (eligibility.plan && eligibility.plan !== _initPlan) {
+              localStorage.setItem('user-plan', eligibility.plan);
+              localStorage.setItem('dev-plan', eligibility.plan);
+            }
+            updateButtonsForAuthenticatedUser(eligibility.plan || _initPlan, eligibility);
+          }
+        })();
       }
     });
     
@@ -652,7 +717,8 @@
       }
     }
     
-    function updateButtonsForAuthenticatedUser(currentPlan) {
+    function updateButtonsForAuthenticatedUser(currentPlan, trialEligibility = trialEligibilityState) {
+      const normalizedPlan = currentPlan === 'pending' ? 'trial' : currentPlan;
       const buttons = document.querySelectorAll('.stripe-checkout-btn');
       const planNames = {
         'trial': '3-Day Free Trial',
@@ -664,7 +730,7 @@
       buttons.forEach(button => {
         const plan = button.dataset.plan;
         if (plan === 'free') {
-          if (currentPlan === 'free') {
+          if (normalizedPlan === 'free') {
             button.textContent = 'Current Plan';
             button.disabled = true;
             button.style.opacity = '0.6';
@@ -681,18 +747,26 @@
             }
           }
         } else if (plan === 'trial') {
-          if (currentPlan === 'free') {
-            // Free account users should see "Start Free Trial" not "Current Plan"
-            button.textContent = 'Start Free Trial';
-          } else if (currentPlan === 'trial') {
+          if (normalizedPlan === 'trial') {
             button.textContent = 'Current Plan';
             button.disabled = true;
             button.style.opacity = '0.6';
             button.style.cursor = 'not-allowed';
+            setTrialSubtext(button, '');
+          } else if (normalizedPlan === 'free') {
+            if (trialEligibility?.checked && !trialEligibility.eligible) {
+              setTrialUsedState(button);
+            } else {
+              button.textContent = 'Start Free Trial';
+              button.disabled = false;
+              button.style.opacity = '1';
+              button.style.cursor = 'pointer';
+              setTrialSubtext(button, '');
+            }
           } else {
-            button.textContent = `Upgrade to ${planNames[plan]}`;
+            setTrialUsedState(button);
           }
-        } else if (plan === currentPlan) {
+        } else if (plan === normalizedPlan) {
           button.textContent = `Current Plan`;
           button.disabled = true;
           button.style.opacity = '0.6';
