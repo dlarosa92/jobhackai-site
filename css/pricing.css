@@ -18,11 +18,11 @@
   font-weight: var(--font-weight-semibold);
   font-size: clamp(14px, 1.6vw, 17px); /* responsive font size */
   line-height: 1.25;
-  min-height: 52px;
+  min-height: 66px;
   white-space: normal;        /* allow multi-line labels */
   word-break: normal;         /* prevent breaking inside words */
   overflow-wrap: break-word;  /* allow wrapping on word boundaries if needed */
-  min-width: 120px;         /* keep visual weight on desktop */
+  min-width: 220px;         /* keep visual weight on desktop */
   max-width: 100%;
   box-sizing: border-box;
 }
