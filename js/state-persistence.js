@@ -18,7 +18,7 @@
   };
 
   // Legacy keys that were not user-scoped; keep for cleanup only
-  const LEGACY_FALLBACK_KEYS = ['lastATSScore', 'lastATSSummary', 'lastATSBreakdown', 'currentAtsScore', 'currentAtsBreakdown'];
+  const LEGACY_FALLBACK_KEYS = ['lastATSScore', 'lastATSSummary', 'lastATSBreakdown', 'currentAtsScore', 'currentAtsBreakdown', 'jh_last_extraction_quality'];
 
   function getActiveUserId(explicitUserId = null) {
     if (explicitUserId && typeof explicitUserId === 'string') {
@@ -61,6 +61,10 @@
       storage.setItem(key, value);
       return true;
     } catch (err) {
+      // Re-throw QuotaExceededError so outer catch block can handle cleanup/retry logic
+      if (err.name === 'QuotaExceededError' || err.code === 22) {
+        throw err;
+      }
       console.warn('[STATE-PERSISTENCE] Failed to write scoped item', { baseKey, err });
       return false;
     }
@@ -229,8 +233,8 @@
               const age = Date.now() - parseInt(oldTimestamp, 10);
               if (age > CACHE_EXPIRATION) {
                 clearATSScore(uid);
-                // Retry save
-                return saveATSScore({ score, breakdown: normalizedBreakdown, resumeId, jobTitle, roleSpecificFeedback, extractionQuality });
+                // Retry save (preserve userId parameter if explicitly provided)
+                return saveATSScore({ score, breakdown: normalizedBreakdown, resumeId, jobTitle, roleSpecificFeedback, extractionQuality, userId });
               }
             }
           } catch (cleanupError) {
@@ -377,14 +381,12 @@
         }
       }
 
-      // Retrieve extractionQuality from localStorage
-      const extractionQualityStr = localStorage.getItem('jh_last_extraction_quality');
+      // Retrieve extractionQuality from localStorage (user-scoped only, no legacy fallback to prevent data leakage)
       const extractionQualityScoped = getScopedItem(localStorage, STORAGE_KEYS.EXTRACTION_QUALITY, uid);
       let extractionQuality = null;
-      const qualityStr = extractionQualityScoped || extractionQualityStr;
-      if (qualityStr) {
+      if (extractionQualityScoped) {
         try {
-          extractionQuality = JSON.parse(qualityStr);
+          extractionQuality = JSON.parse(extractionQualityScoped);
         } catch (e) {
           console.warn('[STATE-PERSISTENCE] Failed to parse extractionQuality:', e);
         }
