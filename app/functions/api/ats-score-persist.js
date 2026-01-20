@@ -3,6 +3,7 @@
 
 import { getBearer, verifyFirebaseIdToken } from '../_lib/firebase-auth.js';
 import { getOrCreateUserByAuthId, isD1Available, getDb, upsertResumeSessionWithScores, getFirstResumeSnapshot, setFirstResumeSnapshot } from '../_lib/db.js';
+import { sanitizeResumeId } from '../_lib/input-sanitizer.js';
 
 function corsHeaders(origin, env) {
   const allowedOrigins = [
@@ -174,11 +175,22 @@ export async function onRequest(context) {
 
     // POST: Store ATS score
     const body = await request.json();
-    const { resumeId, score, breakdown, summary, jobTitle, extractionQuality } = body;
+    let { resumeId, score, breakdown, summary, jobTitle, extractionQuality } = body;
 
     if (!resumeId || typeof score !== 'number') {
       return json({ success: false, error: 'resumeId and score required' }, 400, origin, env);
     }
+
+    // Normalize resumeId to ensure consistent raw_text_location across all code paths
+    const resumeIdValidation = sanitizeResumeId(resumeId);
+    if (!resumeIdValidation.valid) {
+      return json({
+        success: false,
+        error: 'invalid-resumeId',
+        message: resumeIdValidation.error || 'Invalid resume ID'
+      }, 400, origin, env);
+    }
+    resumeId = resumeIdValidation.sanitized;
 
     const kv = env.JOBHACKAI_KV;
     if (!kv) {

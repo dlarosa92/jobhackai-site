@@ -4,20 +4,16 @@
 
 import { getBearer, verifyFirebaseIdToken } from '../_lib/firebase-auth.js';
 import { generateATSFeedback } from '../_lib/openai-client.js';
-import { scoreResume } from '../_lib/ats-scoring-engine.js';
 import { getGrammarDiagnostics } from '../_lib/grammar-engine.js';
 import { errorResponse, successResponse, generateRequestId } from '../_lib/error-handler.js';
 import { sanitizeJobTitle, sanitizeResumeText, sanitizeResumeId } from '../_lib/input-sanitizer.js';
-import { validateAIFeedback, validateFeedbackResult, isValidFeedbackResult, normalizeRole } from '../_lib/feedback-validator.js';
-import { 
+import { validateAIFeedback, validateFeedbackResult, isValidFeedbackResult, normalizeRole, sanitizeRoleSpecificFeedback, isRoleSpecificFeedbackStrict } from '../_lib/feedback-validator.js';
+import {
   getOrCreateUserByAuthId, 
-  createResumeSession, 
+  upsertResumeSessionWithScores,
   createFeedbackSession, 
   logUsageEvent,
-  isD1Available,
-  updateResumeSessionAtsScore,
-  getResumeSessionByResumeId,
-  upsertResumeSessionWithScores
+  isD1Available
 } from '../_lib/db.js';
 
 function corsHeaders(origin, env) {
@@ -221,6 +217,12 @@ export async function onRequest(context) {
     // Track resume session for reuse across D1 reads/writes
     let resumeSession = null;
 
+    // D1 session metadata (declared early to avoid TDZ)
+    let d1SessionId = null;
+    let d1CreatedAt = null;
+    let preFeedbackSessionId = null;
+    let preUsageEventId = null;
+
     // --- D1 User Resolution (best effort, non-blocking) ---
     // Resolve the authenticated user from D1 for session tracking
     // This is done early so we have user_id for all D1 operations
@@ -230,10 +232,16 @@ export async function onRequest(context) {
         // Get or create user in D1 with email from Firebase token
         d1User = await getOrCreateUserByAuthId(env, uid, userEmail);
         console.log('[RESUME-FEEDBACK] D1 user resolved:', { userId: d1User?.id, authId: uid });
+        if (!d1User) {
+          return errorResponse('Failed to resolve user record', 500, origin, env, requestId);
+        }
       } catch (d1Error) {
-        console.warn('[RESUME-FEEDBACK] D1 user resolution failed (non-blocking):', d1Error.message);
-        // Continue without D1 - history won't be saved but feedback will still work
+        console.error('[RESUME-FEEDBACK] D1 user resolution failed:', d1Error.message);
+        return errorResponse('Failed to resolve user record', 500, origin, env, requestId);
       }
+    } else {
+      // If D1 is not available, fail immediately to enforce single persistence flow
+      return errorResponse('Storage not available. Retry later.', 500, origin, env, requestId);
     }
 
     // Plan gating: always enforce from D1 (cache is just a performance hint)
@@ -281,7 +289,7 @@ export async function onRequest(context) {
       return errorResponse('Invalid JSON in request body', 400, origin, env, requestId);
     }
 
-    const { resumeId, jobTitle, resumeText, isMultiColumn } = body;
+    const { resumeId, jobTitle, resumeText, isMultiColumn, includeOriginalResume } = body;
 
     // Validate resumeId exists and is not empty before sanitizing
     // Catch all falsy values (null, undefined, empty string, etc.) for consistent error handling
@@ -428,10 +436,35 @@ export async function onRequest(context) {
       }
     }
 
+    // Obtain authoritative resumeSession (fetch or create) before cache check
+    if (isD1Available(env)) {
+      if (!d1User) {
+        return errorResponse('Cannot resolve user for persistence', 500, origin, env, requestId);
+      }
+      try {
+        resumeSession = await upsertResumeSessionWithScores(env, d1User.id, {
+          resumeId: sanitizedResumeId,
+          role: normalizedJobTitle || null,
+          atsScore: null,
+          ruleBasedScores: null
+        });
+        if (!resumeSession) {
+          return errorResponse('Failed to resolve or create resume session', 500, origin, env, requestId);
+        }
+        d1SessionId = String(resumeSession.id);
+        d1CreatedAt = resumeSession.created_at || new Date().toISOString();
+      } catch (e) {
+        console.error('[RESUME-FEEDBACK] Resume session resolution/create failed:', e?.message || e);
+        return errorResponse('Failed to resolve or create resume session', 500, origin, env, requestId);
+      }
+    } else {
+      return errorResponse('Storage not available for rule-based scores', 500, origin, env, requestId);
+    }
+
     // Cache check (all plans)
     let cachedResult = null;
     if (env.JOBHACKAI_KV) {
-      const cacheHash = await hashString(`${sanitizedResumeId}:${normalizedJobTitle}:feedback`);
+      const cacheHash = await hashString(`${sanitizedResumeId}:${normalizedJobTitle}:feedback:tier1`);
       const cacheKey = `feedbackCache:${cacheHash}`;
       const cached = await env.JOBHACKAI_KV.get(cacheKey);
       
@@ -443,8 +476,9 @@ export async function onRequest(context) {
         if (cacheAge < 86400000) {
           cachedResult = cachedData.result;
 
+          // Tier 1 cache never includes roleSpecificFeedback (always null), so never require it
           const cacheValid = isValidFeedbackResult(cachedResult, {
-            requireRoleSpecific: !!requestedRoleNormalized
+            requireRoleSpecific: false
           });
 
           if (!cacheValid) {
@@ -459,22 +493,76 @@ export async function onRequest(context) {
       }
     }
 
-    // If cached, still update usage counters (user is consuming the feature)
-    // Then return cached result
+    // If cached, ensure persistence & usage for this request before returning cached result.
     if (cachedResult) {
-      console.log(`[RESUME-FEEDBACK] Using KV feedback cache hit`, { requestId, resumeId: sanitizedResumeId, plan: effectivePlan });
-      
-      // Update throttles and usage even for cache hits (prevents bypassing limits)
-      await updateUsageCounters(uid, sanitizedResumeId, effectivePlan, env);
-      
-      // Skip D1 persistence for cache hits to prevent duplicate history entries
-      // History should only show unique analyses, not every cache hit
-      // The original analysis session was already persisted when the cache was created
-      
-      return successResponse({
-        ...cachedResult,
-        cached: true
-      }, 200, origin, env, requestId);
+      console.log(`[RESUME-FEEDBACK] KV feedback cache hit`, { requestId, resumeId: sanitizedResumeId, plan: effectivePlan });
+
+      let canReturnCached = false;
+      let cachedFeedbackSessionId = cachedResult.feedbackSessionId || cachedResult.sessionId || null;
+
+      if (isD1Available(env)) {
+        if (d1User) {
+          try {
+            // resumeSession assumed obtained earlier in flow
+            if (resumeSession && resumeSession.id) {
+              // If cached result lacks feedbackSessionId (legacy cache entry), create a new feedback_session
+              if (!cachedFeedbackSessionId) {
+                try {
+                  const placeholder = await createFeedbackSession(env, resumeSession.id, { status: 'completed' });
+                  if (placeholder && placeholder.id) {
+                    cachedFeedbackSessionId = placeholder.id;
+                    // Update cache with feedbackSessionId included for future hits
+                    const cacheHash = await hashString(`${sanitizedResumeId}:${normalizedJobTitle}:feedback:tier1`);
+                    const cacheKey = `feedbackCache:${cacheHash}`;
+                    const updatedCacheData = {
+                      result: { ...cachedResult, feedbackSessionId: cachedFeedbackSessionId },
+                      timestamp: Date.now()
+                    };
+                    await env.JOBHACKAI_KV.put(cacheKey, JSON.stringify(updatedCacheData), {
+                      expirationTtl: 86400 // 24 hours
+                    });
+                    console.log('[RESUME-FEEDBACK] Added feedbackSessionId to legacy cache entry', {
+                      requestId,
+                      feedbackSessionId: cachedFeedbackSessionId
+                    });
+                  }
+                } catch (sessionError) {
+                  console.warn('[RESUME-FEEDBACK] Failed to create feedback session for legacy cache entry (non-fatal):', sessionError.message);
+                  // Continue without feedbackSessionId - role tips won't persist for this cache hit
+                }
+              }
+
+              const usageEvent = await logUsageEvent(env, d1User.id, 'resume_feedback', null, {
+                resumeSessionId: resumeSession.id,
+                plan: effectivePlan,
+                cached: true,
+                jobTitle: normalizedJobTitle || null
+              });
+              if (usageEvent && usageEvent.id) {
+                await updateUsageCounters(uid, sanitizedResumeId, effectivePlan, env);
+                canReturnCached = true;
+              }
+            }
+          } catch (e) {
+            console.warn('[RESUME-FEEDBACK] Failed to persist usage for cached result, will treat as cache miss:', e.message);
+            canReturnCached = false;
+          }
+        }
+      }
+
+      if (canReturnCached) {
+        return successResponse({
+          ...cachedResult,
+          // sessionId is always resumeSessionId (resume_sessions.id) for consistency with history detail endpoint
+          // feedbackSessionId is separate (feedback_sessions.id) for role-tips persistence when needed
+          sessionId: d1SessionId,
+          feedbackSessionId: cachedFeedbackSessionId,
+          cached: true
+        }, 200, origin, env, requestId);
+      }
+
+      console.log('[RESUME-FEEDBACK] Ignoring KV feedback cache due to missing persistence. Proceeding to generate fresh feedback.');
+      cachedResult = null;
     }
 
     // Retrieve resume from KV or request body (dev fallback)
@@ -547,102 +635,81 @@ export async function onRequest(context) {
 
     // Resume text is already validated by sanitizeResumeText (80,000 char limit)
 
-    // --- Try to load existing ruleBasedScores from D1 (source of truth) ---
-    // OPTIMIZATION: Add retry mechanism to handle race condition with /api/ats-score
-    // When both APIs run in parallel, /api/resume-feedback might check D1 before
-    // /api/ats-score finishes writing. Retries ensure we find the newly written scores.
+    // --- Ensure canonical persistence exists BEFORE reading rule-based scores ---
+    // At this point, require D1 user and resume session to exist (created/resolved earlier if needed).
     let ruleBasedScores = null;
-    if (d1User && isD1Available(env)) {
-      const maxRetries = 4; // 4 attempts = 3 waits × 200ms = 600ms max wait
-      const retryDelay = 200; // 200ms between retries (600ms max wait)
-      
-      for (let attempt = 0; attempt < maxRetries; attempt++) {
-        try {
-          const existingSession = await getResumeSessionByResumeId(env, d1User.id, sanitizedResumeId);
-          if (existingSession) {
-            resumeSession = existingSession;
-          }
-          
-          if (existingSession?.rule_based_scores_json) {
-            try {
-              const parsed = JSON.parse(existingSession.rule_based_scores_json);
-              
-              // Validate structure (must have all required fields)
-              const isValid = parsed &&
-                typeof parsed.overallScore === 'number' &&
-                parsed.keywordScore?.score !== undefined &&
-                parsed.formattingScore?.score !== undefined &&
-                parsed.structureScore?.score !== undefined &&
-                parsed.toneScore?.score !== undefined &&
-                parsed.grammarScore?.score !== undefined;
-              
-              if (isValid) {
-                ruleBasedScores = parsed;
-                console.log('[RESUME-FEEDBACK] Reusing ruleBasedScores from D1', {
-                  requestId,
-                  resumeId: sanitizedResumeId,
-                  overallScore: ruleBasedScores.overallScore,
-                  attempt: attempt + 1
-                });
-                break; // Found valid scores, exit retry loop
-              } else {
-                console.warn('[RESUME-FEEDBACK] Invalid ruleBasedScores structure in D1, will retry', {
-                  requestId,
-                  attempt: attempt + 1
-                });
-              }
-            } catch (parseError) {
-              console.warn('[RESUME-FEEDBACK] Failed to parse ruleBasedScores from D1, will retry', {
-                requestId,
-                error: parseError.message,
-                attempt: attempt + 1
-              });
-            }
-          }
-          
-          // If scores not found and not last attempt, wait before retrying
-          if (!ruleBasedScores && attempt < maxRetries - 1) {
-            await new Promise(resolve => setTimeout(resolve, retryDelay));
-          }
-        } catch (d1Error) {
-          // Non-blocking: continue without D1 lookup
-          console.warn('[RESUME-FEEDBACK] D1 lookup failed (non-fatal), will retry:', {
+    let atsReady = false;
+    if (!d1User || !isD1Available(env)) {
+      return errorResponse('Storage not available for rule-based scores', 500, origin, env, requestId);
+    }
+
+    // resumeSession already obtained above
+
+    // ATS readiness is authoritative from the resume_session row
+    if (resumeSession.ats_ready === 1) {
+      atsReady = true;
+    } else {
+      return errorResponse(
+        'Please wait for your ATS score to finish processing before requesting feedback.',
+        409,
+        origin,
+        env,
+        requestId
+      );
+    }
+
+    // Prefer rule_based_scores_json if present and valid
+    if (resumeSession.rule_based_scores_json) {
+      try {
+        const parsed = JSON.parse(resumeSession.rule_based_scores_json);
+        const isValid = parsed &&
+          typeof parsed.overallScore === 'number' &&
+          parsed.keywordScore?.score !== undefined &&
+          parsed.formattingScore?.score !== undefined &&
+          parsed.structureScore?.score !== undefined &&
+          parsed.toneScore?.score !== undefined &&
+          parsed.grammarScore?.score !== undefined;
+        if (isValid) {
+          ruleBasedScores = parsed;
+          console.log('[RESUME-FEEDBACK] Reusing ruleBasedScores from D1', {
             requestId,
-            error: d1Error.message,
-            attempt: attempt + 1
+            resumeId: sanitizedResumeId,
+            overallScore: ruleBasedScores.overallScore
           });
-          if (attempt < maxRetries - 1) {
-            await new Promise(resolve => setTimeout(resolve, retryDelay));
-          }
+        } else {
+          console.warn('[RESUME-FEEDBACK] Invalid ruleBasedScores structure in D1');
         }
+      } catch (e) {
+        console.warn('[RESUME-FEEDBACK] Failed to parse ruleBasedScores from D1:', e?.message || e);
       }
     }
 
-    // Only re-score if we didn't find valid scores in D1 after retries
+    // If JSON missing/invalid, fallback to ats_score if present
     if (!ruleBasedScores) {
-      console.log('[RESUME-FEEDBACK] Re-scoring resume (no valid D1 scores found after retries)', { requestId });
-      
-      // Get rule-based scores first (for AI context) - includes new grammar engine
-      ruleBasedScores = await scoreResume(
-        resumeData.text,
-        normalizedJobTitle,
-        { isMultiColumn: resumeData.isMultiColumn },
-        env
-      );
-      
-      // Store in D1 for future reuse (best effort, non-blocking)
-      if (d1User && isD1Available(env)) {
-        try {
-          await upsertResumeSessionWithScores(env, d1User.id, {
-            resumeId: sanitizedResumeId,
-            role: normalizedJobTitle || null,
-            atsScore: ruleBasedScores.overallScore,
-            ruleBasedScores: ruleBasedScores
-          });
-          console.log('[RESUME-FEEDBACK] Stored re-scored ruleBasedScores in D1', { requestId });
-        } catch (d1Error) {
-          console.warn('[RESUME-FEEDBACK] Failed to store re-scored ruleBasedScores in D1 (non-fatal):', d1Error.message);
-        }
+      if (resumeSession.ats_score !== null && resumeSession.ats_score !== undefined) {
+        const fallbackAtsScore = Number(resumeSession.ats_score) || 0;
+        const scoreFor = (max) => Math.round((fallbackAtsScore / 100) * max);
+        ruleBasedScores = {
+          overallScore: fallbackAtsScore,
+          keywordScore: { score: scoreFor(40), max: 40, feedback: '' },
+          formattingScore: { score: scoreFor(20), max: 20, feedback: '' },
+          structureScore: { score: scoreFor(15), max: 15, feedback: '' },
+          toneScore: { score: scoreFor(15), max: 15, feedback: '' },
+          grammarScore: { score: scoreFor(10), max: 10, feedback: '' }
+        };
+        console.log('[RESUME-FEEDBACK] Using fallback ruleBasedScores constructed from ats_score', {
+          requestId,
+          resumeId: sanitizedResumeId,
+          atsScore: fallbackAtsScore
+        });
+      } else {
+        return errorResponse(
+          'Please wait for your ATS score to finish processing before requesting feedback.',
+          409,
+          origin,
+          env,
+          requestId
+        );
       }
     }
 
@@ -657,112 +724,103 @@ export async function onRequest(context) {
     }
   }
 
-  // --- D1 feedback reuse (source of truth) ---
-  if (d1User && isD1Available(env)) {
-    try {
-      if (!resumeSession) {
-        resumeSession = await getResumeSessionByResumeId(env, d1User.id, sanitizedResumeId);
-      }
+  // D1 feedback reuse handled via single persistence flow
 
-      if (resumeSession && env.DB) {
-        const latestFeedback = await env.DB.prepare(`
-          SELECT feedback_json, created_at 
-          FROM feedback_sessions 
-          WHERE resume_session_id = ? 
-          ORDER BY created_at DESC 
-          LIMIT 1
-        `).bind(resumeSession.id).first();
-
-        if (latestFeedback?.feedback_json) {
-          let feedback = null;
-          try {
-            feedback = JSON.parse(latestFeedback.feedback_json);
-          } catch (parseError) {
-            console.warn('[RESUME-FEEDBACK] Ignoring D1 feedback session due to JSON parse error', {
-              requestId,
-              error: parseError.message
-            });
-          }
-
-          if (feedback) {
-            const storedRole = normalizeRole(
-              feedback?.roleSpecificFeedback?.targetRoleUsed || resumeSession.role || null
-            );
-            const roleMatches = requestedRoleNormalized === storedRole;
-
-            const feedbackValid = isValidFeedbackResult(feedback, {
-              requireRoleSpecific: !!requestedRoleNormalized
-            });
-
-            const canReuse = feedbackValid && (
-              requestedRoleNormalized ? roleMatches : (storedRole == null || storedRole === 'general')
-            );
-
-            if (canReuse) {
-              // Optionally re-seed KV for future quick hits (only if valid)
-              if (env.JOBHACKAI_KV) {
-                const cacheHash = await hashString(`${sanitizedResumeId}:${normalizedJobTitle}:feedback`);
-                await env.JOBHACKAI_KV.put(
-                  `feedbackCache:${cacheHash}`,
-                  JSON.stringify({ result: feedback, timestamp: Date.now() }),
-                  { expirationTtl: 86400 }
-                );
-              }
-
-              // Count usage for D1-served responses
-              await updateUsageCounters(uid, sanitizedResumeId, effectivePlan, env);
-
-              console.log('[RESUME-FEEDBACK] Using D1 feedback session', {
-                requestId,
-                resumeSessionId: resumeSession.id
-              });
-
-              return successResponse({
-                ...feedback,
-                extractionQuality: feedback?.extractionQuality || extractionQuality || null
-              }, 200, origin, env, requestId);
-            } else {
-              console.log('[RESUME-FEEDBACK] Ignoring D1 feedback session (role mismatch or invalid structure)', {
-                requestId,
-                roleMatches,
-                hasRoleSpecificFeedback: !!feedback?.roleSpecificFeedback,
-                storedRole,
-                requestedRoleNormalized
-              });
-            }
-          }
-        }
-      }
-    } catch (d1FeedbackError) {
-      console.warn('[RESUME-FEEDBACK] D1 feedback lookup failed (non-fatal)', {
-        requestId,
-        error: d1FeedbackError.message
-      });
-    }
-  }
-
-    // Generate AI feedback with exponential backoff retry
-    // Token budget logic:
-    // - First attempt (attempt === 0): let generateATSFeedback() use its internal logic
-    //   which applies token optimization (1500 tokens when no role, 3500 when role exists)
-    // - Retry attempts (attempt > 0): override with increased tokens to handle truncation
-    const baseMaxTokens = Number(env.OPENAI_MAX_TOKENS_ATS) > 0
-      ? Number(env.OPENAI_MAX_TOKENS_ATS)
-      : 3500;
+    // PHASE 1: Generate AI feedback with truncation-aware retry (exactly 2 attempts)
+    // Attempt 1: normal structured Tier 1 output
+    // Attempt 2: shortMode structured Tier 1 output (if Attempt 1 truncated)
+    // If both truncated: immediate rule-based fallback (no 3rd attempt)
+    // NO escalating maxTokens, NO exponential backoff for truncation
+    // B2: Use Tier 1 token cap (OPENAI_MAX_TOKENS_ATS_TIER1) for Tier 1 attempts
+    const baseMaxTokens = Number(env.OPENAI_MAX_TOKENS_ATS_TIER1) > 0
+      ? Number(env.OPENAI_MAX_TOKENS_ATS_TIER1)
+      : 800;
     let aiFeedback = null;
     let tokenUsage = 0;
-    const maxRetries = 3;
+    const maxRetries = 2;  // PHASE 1: Exactly 2 attempts (normal + shortMode)
     let lastError = null;
     let partialAIFeedback = null; // Capture rubric if tips are missing
     let missingTipsOnly = false;
     
+    // --- Persistence reservation (must succeed before any AI call) ---
+    // Ensure D1 user, resume_session, a feedback_session stub, and a usage_event exist.
+    if (isD1Available(env)) {
+      if (!d1User) {
+        return errorResponse('Cannot resolve user for persistence', 500, origin, env, requestId);
+      }
+      try {
+        // Record canonical session metadata for response
+        d1SessionId = String(resumeSession.id);
+        d1CreatedAt = resumeSession.created_at || new Date().toISOString();
+
+        // Update title/role if they're missing and we have a job title
+        // This ensures history tiles show the correct job title instead of "Untitled role"
+        if (resumeSession && normalizedJobTitle && (!resumeSession.title || !resumeSession.role)) {
+          try {
+            const updated = await env.DB.prepare(
+              `UPDATE resume_sessions 
+               SET title = COALESCE(title, ?),
+                   role = COALESCE(role, ?)
+               WHERE id = ?
+               RETURNING id, title, role`
+            ).bind(
+              normalizedJobTitle,
+              normalizedJobTitle,
+              resumeSession.id
+            ).first();
+
+            if (updated) {
+              resumeSession.title = updated.title || resumeSession.title;
+              resumeSession.role = updated.role || resumeSession.role;
+            }
+          } catch (updateError) {
+            console.warn('[RESUME-FEEDBACK] Failed to update session title/role (non-blocking):', updateError.message);
+          }
+        }
+
+        // Create placeholder feedback session to reserve history row
+        const placeholder = await createFeedbackSession(env, resumeSession.id, { status: 'in_progress' });
+        if (!placeholder || !placeholder.id) {
+          return errorResponse('Failed to create feedback session', 500, origin, env, requestId);
+        }
+        preFeedbackSessionId = placeholder.id;
+
+        // Persist a usage event (tokens will be updated after AI completes)
+        const usageEvent = await logUsageEvent(env, d1User.id, 'resume_feedback', null, {
+          resumeSessionId: resumeSession.id,
+          plan: effectivePlan,
+          cached: false,
+          jobTitle: normalizedJobTitle || null,
+          atsScore: ruleBasedScores?.overallScore ?? null
+        });
+        if (!usageEvent || !usageEvent.id) {
+          return errorResponse('Failed to log usage event', 500, origin, env, requestId);
+        }
+        preUsageEventId = usageEvent.id;
+
+        // Update KV counters (fatal if this fails to ensure invariant)
+        await updateUsageCounters(uid, sanitizedResumeId, effectivePlan, env);
+      } catch (e) {
+        console.error('[RESUME-FEEDBACK] Persistence reservation failed:', e?.message || e);
+        return errorResponse('Failed to reserve persistence for feedback. Please try again.', 500, origin, env, requestId);
+      }
+    } 
+
+    // PHASE 1: Tier 1 timeout (10-12 seconds)
+    const TIER1_TIMEOUT_MS = 11000; // 11 seconds
+    
     for (let attempt = 0; attempt < maxRetries; attempt++) {
       try {
-        // Only pass maxOutputTokensOverride on retry attempts to increase budget after truncation
-        // First attempt uses generateATSFeedback's internal logic which optimizes for hasRole
-        const options = attempt > 0 
-          ? { maxOutputTokensOverride: baseMaxTokens + (attempt * 600) }
-          : {};
+        // PHASE 1: Attempt 0 = normal mode, Attempt 1 = shortMode
+        // PHASE 1: NO escalating maxTokens - use same baseMaxTokens for both attempts
+        // PHASE 2: skipRoleTips=true to exclude role tips from Tier 1
+        const isShortMode = attempt === 1;
+        const options = {
+          skipRoleTips: true,  // PHASE 2: Tier 1 must not include role tips
+          shortMode: isShortMode,  // PHASE 1: Use shortMode on retry
+          timeoutMs: TIER1_TIMEOUT_MS  // PHASE 1: Add timeout
+        };
+        
         const aiResponse = await generateATSFeedback(
           resumeData.text,
           ruleBasedScores,
@@ -776,31 +834,54 @@ export async function onRequest(context) {
           tokenUsage = aiResponse.usage.totalTokens || 0;
         }
         
-        // Check for truncation BEFORE parsing - truncated JSON will always fail to parse
-        if (aiResponse && aiResponse.finishReason === 'length') {
+        // PHASE 1: Check for truncation BEFORE parsing - detect incomplete JSON
+        const content = aiResponse?.content || '';
+        const finishReason = aiResponse?.finishReason;
+        const isTruncatedByFinishReason = finishReason === 'length';
+        
+        // Check for incomplete JSON (brace/bracket mismatch)
+        const openBraces = (content.match(/{/g) || []).length;
+        const closeBraces = (content.match(/}/g) || []).length;
+        const openBrackets = (content.match(/\[/g) || []).length;
+        const closeBrackets = (content.match(/]/g) || []).length;
+        const likelyIncompleteJson = openBraces !== closeBraces || openBrackets !== closeBrackets;
+        
+        const isTruncated = isTruncatedByFinishReason || likelyIncompleteJson;
+        
+        if (isTruncated) {
           lastError = new Error('Response truncated at token limit');
-          console.warn(`[RESUME-FEEDBACK] Response truncated at token limit (attempt ${attempt + 1}/${maxRetries})`, {
+          console.warn(`[RESUME-FEEDBACK] Response truncated (attempt ${attempt + 1}/${maxRetries})`, {
             requestId,
             finishReason: aiResponse.finishReason,
             completionTokens: aiResponse.usage?.completionTokens,
-            totalTokens: aiResponse.usage?.totalTokens
+            totalTokens: aiResponse.usage?.totalTokens,
+            shortMode: isShortMode,
+            braceMismatch: openBraces - closeBraces,
+            bracketMismatch: openBrackets - closeBrackets,
+            likelyIncompleteJson
           });
+          
+          // PHASE 1: If truncated and not last attempt, retry with shortMode (no backoff, no token escalation)
           if (attempt < maxRetries - 1) {
-            const waitTime = Math.pow(2, attempt) * 1000;
-            await new Promise(resolve => setTimeout(resolve, waitTime));
+            console.log(`[RESUME-FEEDBACK] Retrying with shortMode (no backoff, no token escalation)`, { requestId });
+            continue; // Retry with shortMode - don't try to parse truncated JSON
+          } else {
+            // PHASE 1: Both attempts truncated - immediate fallback to rule-based
+            console.warn(`[RESUME-FEEDBACK] Both attempts truncated, falling back to rule-based`, { requestId });
+            aiFeedback = null;
+            break; // Exit retry loop, will use rule-based fallback
           }
-          continue; // Retry - don't try to parse truncated JSON
         }
         
-        // Handle falsy content: treat as error and apply backoff
+        // Handle falsy content: treat as error
         if (!aiResponse || !aiResponse.content) {
           lastError = new Error('AI response missing content');
           console.error(`[RESUME-FEEDBACK] AI response missing content (attempt ${attempt + 1}/${maxRetries})`);
+          // PHASE 1: For missing content, only retry if not last attempt (no backoff for truncation)
           if (attempt < maxRetries - 1) {
-            const waitTime = Math.pow(2, attempt) * 1000;
-            await new Promise(resolve => setTimeout(resolve, waitTime));
+            continue; // Retry with shortMode
           }
-          continue;
+          break; // Exit, will use rule-based fallback
         }
         
         // Parse AI response (structured output should be JSON)
@@ -809,61 +890,138 @@ export async function onRequest(context) {
             ? JSON.parse(aiResponse.content)
             : aiResponse.content;
           
-          // Validate structure - check ALL required fields before exiting retry loop
-          // When no role is provided, allow missing roleSpecificFeedback (it won't be generated by OpenAI)
-          // This saves ~2000 tokens (~57% reduction) when no role is selected
-          const hasNoRole = !normalizedJobTitle || normalizedJobTitle.trim() === '';
-          const validation = validateAIFeedback(aiFeedback, false, hasNoRole);
+          // PHASE 2: skipRoleTips=true means roleSpecificFeedback should NOT be in response
+          // Remove it if present (defensive cleanup)
+          if (aiFeedback?.roleSpecificFeedback) {
+            console.warn('[RESUME-FEEDBACK] Unexpected roleSpecificFeedback in Tier 1 response (skipRoleTips=true), removing', {
+              requestId,
+              resumeId: sanitizedResumeId
+            });
+            delete aiFeedback.roleSpecificFeedback;
+          }
+          
+          // Legacy cleanup code (should not execute with skipRoleTips=true, but keep for safety)
+          if (false && aiFeedback?.roleSpecificFeedback) {
+            const rsf = aiFeedback.roleSpecificFeedback;
+            
+            // Handle new format (object with sections array)
+            if (typeof rsf === 'object' && !Array.isArray(rsf)) {
+              const sanitized = sanitizeRoleSpecificFeedback(rsf);
+              if (sanitized) {
+                aiFeedback.roleSpecificFeedback = sanitized;
+              } else {
+                // Log malformed data for monitoring (without sensitive content)
+                const sectionTypes = Array.isArray(rsf.sections)
+                  ? rsf.sections.reduce((acc, item) => {
+                      const type = typeof item;
+                      acc[type] = (acc[type] || 0) + 1;
+                      return acc;
+                    }, {})
+                  : { invalid: 1 };
+                console.warn('[RESUME-FEEDBACK] Sanitized roleSpecificFeedback returned null (malformed sections)', {
+                  requestId,
+                  resumeId: sanitizedResumeId,
+                  sectionTypes,
+                  sectionsLength: Array.isArray(rsf.sections) ? rsf.sections.length : 0
+                });
+                // Treat as missing - will trigger fallback if role exists
+                delete aiFeedback.roleSpecificFeedback;
+              }
+            }
+            // Handle old format (array) - validate all items are objects
+            else if (Array.isArray(rsf)) {
+              const allObjects = rsf.every(item => item && typeof item === 'object' && !Array.isArray(item));
+              if (!allObjects) {
+                // Log malformed old format
+                const sectionTypes = rsf.reduce((acc, item) => {
+                  const type = typeof item;
+                  acc[type] = (acc[type] || 0) + 1;
+                  return acc;
+                }, {});
+                console.warn('[RESUME-FEEDBACK] Old format roleSpecificFeedback contains non-objects', {
+                  requestId,
+                  resumeId: sanitizedResumeId,
+                  sectionTypes,
+                  sectionsLength: rsf.length
+                });
+                // Filter to objects only or delete if empty
+                const filtered = rsf.filter(item => item && typeof item === 'object' && !Array.isArray(item));
+                if (filtered.length > 0) {
+                  aiFeedback.roleSpecificFeedback = filtered;
+                } else {
+                  delete aiFeedback.roleSpecificFeedback;
+                }
+              }
+            }
+            // Invalid type - delete it
+            else {
+              console.warn('[RESUME-FEEDBACK] roleSpecificFeedback has invalid type', {
+                requestId,
+                resumeId: sanitizedResumeId,
+                type: typeof rsf
+              });
+              delete aiFeedback.roleSpecificFeedback;
+            }
+          }
+          
+          // PHASE 2: Validate structure - skipRoleTips=true means roleSpecificFeedback is NOT required
+          // Tier 1 only needs atsRubric and atsIssues
+          const validation = validateAIFeedback(aiFeedback, false, true); // hasNoRole=true since skipRoleTips
           
           if (validation.valid) {
             // All required fields present - success, exit retry loop
             break;
           } else {
-            // If only roleSpecificFeedback is missing, keep rubric and bail out to fallback tips
-            // BUT: if we have no role, we don't expect role-specific feedback, so this shouldn't happen
-            const missingOnlyRoleTips = validation.missing.length === 1 && validation.missing[0] === 'roleSpecificFeedback';
-            if (missingOnlyRoleTips && !hasNoRole) {
-              // Only apply fallback logic if we actually expected role-specific feedback
-              partialAIFeedback = aiFeedback;
-              missingTipsOnly = true;
-              break;
-            }
-
             // Invalid structure - log what's missing for diagnostics
             lastError = new Error(`AI response missing required fields: ${validation.missing.join(', ')}`);
             console.error(`[RESUME-FEEDBACK] Invalid AI response structure (attempt ${attempt + 1}/${maxRetries})`, {
               requestId,
               missing: validation.missing,
-              hasNoRole,
               ...validation.details
             });
             // Reset aiFeedback to null to prevent using incomplete response
             aiFeedback = null;
+            // PHASE 1: Only retry if not last attempt (no backoff for structure errors)
             if (attempt < maxRetries - 1) {
-              const waitTime = Math.pow(2, attempt) * 1000;
-              await new Promise(resolve => setTimeout(resolve, waitTime));
+              continue; // Retry with shortMode
             }
+            break; // Exit, will use rule-based fallback
           }
         } catch (parseError) {
           lastError = parseError;
           console.error(`[RESUME-FEEDBACK] Failed to parse AI response (attempt ${attempt + 1}/${maxRetries}):`, parseError);
-          // Apply exponential backoff for parse errors too
+          // PHASE 1: Parse errors may indicate truncation - retry with shortMode if not last attempt
           if (attempt < maxRetries - 1) {
-            const waitTime = Math.pow(2, attempt) * 1000;
-            await new Promise(resolve => setTimeout(resolve, waitTime));
+            continue; // Retry with shortMode (no backoff)
           }
-          // Continue to next attempt if parsing fails
-          continue;
+          break; // Exit, will use rule-based fallback
         }
       } catch (aiError) {
         lastError = aiError;
-        console.error(`[RESUME-FEEDBACK] AI feedback error (attempt ${attempt + 1}/${maxRetries}):`, aiError);
+        const isTimeout = aiError.message?.includes('timeout');
+        console.error(`[RESUME-FEEDBACK] AI feedback error (attempt ${attempt + 1}/${maxRetries}):`, {
+          error: aiError.message,
+          isTimeout,
+          requestId
+        });
         
-        // Exponential backoff: wait 1s, 2s, 4s
-        if (attempt < maxRetries - 1) {
-          const waitTime = Math.pow(2, attempt) * 1000;
-          await new Promise(resolve => setTimeout(resolve, waitTime));
+        // PHASE 1: Timeout or other errors - only retry if not last attempt
+        // For transient errors (429, 5xx), allow one retry but keep bounded
+        const status = aiError?.status || aiError?.code || aiError?.cause?.status || aiError?.cause?.code;
+        const msg = (aiError?.message || '').toLowerCase();
+        const isTransient = !isTimeout && (
+          status === 429 || status === 500 || status === 503 ||
+          msg.includes('rate limit') || msg.includes('too many requests') ||
+          aiError?.message?.includes('429') || aiError?.message?.includes('500') || aiError?.message?.includes('503')
+        );
+        
+        if (attempt < maxRetries - 1 && isTransient) {
+          // Brief wait for transient errors only (not truncation/timeout)
+          await new Promise(resolve => setTimeout(resolve, 500));
+          continue;
         }
+        // Timeout or last attempt - exit, will use rule-based fallback
+        break;
       }
     }
     
@@ -932,9 +1090,9 @@ export async function onRequest(context) {
 
     // Build result with AI feedback if available, otherwise use rule-based scores
     // CRITICAL: Always use rule-based scores for score and max values to prevent AI drift
-    // Store original resume text in D1 for history restoration
+    // PHASE 1: Remove originalResume from response by default (performance + privacy)
     const result = aiFeedback && aiFeedback.atsRubric ? {
-      originalResume: resumeData.text,
+      ...(includeOriginalResume ? { originalResume: resumeData.text } : {}),  // PHASE 1: Only include if explicitly requested
       fileName: resumeData.fileName || null,
       resumeId: sanitizedResumeId,
       extractionQuality: extractionQuality,
@@ -984,40 +1142,8 @@ export async function onRequest(context) {
             suggestions: item.suggestions || []
           };
         }),
-      // Role-specific feedback structure validation
-      // If AI succeeded but didn't provide roleSpecificFeedback, log warning and return null
-      roleSpecificFeedback: (() => {
-        // If no job title provided, return null (no role-specific tips)
-        if (!normalizedJobTitle || normalizedJobTitle.trim() === '') {
-          return null;
-        }
-        
-        const rsf = aiFeedback.roleSpecificFeedback;
-        const hasNewFormat =
-          rsf &&
-          typeof rsf === 'object' &&
-          !Array.isArray(rsf) &&
-          rsf.targetRoleUsed !== undefined &&
-          Array.isArray(rsf.sections) &&
-          rsf.sections.length > 0;
-        const hasOldFormat = rsf && Array.isArray(rsf) && rsf.length > 0;
-        if (hasNewFormat || hasOldFormat) return rsf;
-        if (shouldAddFallbackTips) {
-          console.warn('[RESUME-FEEDBACK] Adding fallback role tips (missing roleSpecificFeedback)', {
-            requestId,
-            resumeId: sanitizedResumeId,
-            role: normalizedJobTitle
-          });
-          return buildFallbackRoleTips(normalizedJobTitle);
-        }
-        console.warn('[RESUME-FEEDBACK] AI succeeded but roleSpecificFeedback missing or invalid', {
-          requestId,
-          resumeId: sanitizedResumeId,
-          hasRoleSpecificFeedback: !!rsf,
-          roleSpecificFeedbackType: typeof rsf
-        });
-        return null;
-      })(),
+      // PHASE 2: Tier 1 does NOT include role tips - they come from separate /api/role-tips endpoint
+      roleSpecificFeedback: null,
       // Extract ATS issues from AI response or generate from rule-based scores
       atsIssues: aiFeedback.atsIssues && Array.isArray(aiFeedback.atsIssues) 
         ? aiFeedback.atsIssues
@@ -1039,7 +1165,7 @@ export async function onRequest(context) {
         : null;
 
       return {
-        originalResume: resumeData.text,
+        ...(includeOriginalResume ? { originalResume: resumeData.text } : {}),  // PHASE 1: Only include if explicitly requested
         fileName: resumeData.fileName || null,
         resumeId: sanitizedResumeId,
         extractionQuality: extractionQuality,
@@ -1075,127 +1201,78 @@ export async function onRequest(context) {
           feedback: ruleBasedScores.grammarScore.feedback
         }
       ],
-      // Provide fallback role-specific feedback when AI fails completely (non-fabricated)
-      roleSpecificFeedback: fallbackRoleTips,
+      // PHASE 2: Tier 1 does NOT include role tips - they come from separate /api/role-tips endpoint
+      roleSpecificFeedback: null,
       atsIssues: generateATSIssuesFromScores(ruleBasedScores, normalizedJobTitle),
       aiFeedback: null
       };
     })();
 
-    // Cache result (24 hours) - only cache complete results to prevent serving incomplete data
+    // PHASE 2: Tier 1 result always has roleSpecificFeedback: null (role tips come from separate endpoint)
+    // No sanitization needed since it's always null
+    
     if (env.JOBHACKAI_KV) {
-      // Validate result is complete before caching
-      const cacheValid = isValidFeedbackResult(result, { requireRoleSpecific: !!requestedRoleNormalized });
+      // PHASE 2: Tier 1 result does not include roleSpecificFeedback, so don't require it for cache
+      const cacheValid = isValidFeedbackResult(result, { requireRoleSpecific: false });
       
       if (cacheValid) {
-        const cacheHash = await hashString(`${sanitizedResumeId}:${normalizedJobTitle}:feedback`);
+        const cacheHash = await hashString(`${sanitizedResumeId}:${normalizedJobTitle}:feedback:tier1`);
         const cacheKey = `feedbackCache:${cacheHash}`;
+        // Include feedbackSessionId in cached result for role-tips persistence
+        const resultWithSessionId = {
+          ...result,
+          feedbackSessionId: preFeedbackSessionId || null
+        };
         await env.JOBHACKAI_KV.put(cacheKey, JSON.stringify({
-          result,
+          result: resultWithSessionId,
           timestamp: Date.now()
         }), {
           expirationTtl: 86400 // 24 hours
         });
-        console.log('[RESUME-FEEDBACK] Cached complete result', { 
+        console.log('[RESUME-FEEDBACK] Cached Tier 1 result', { 
           requestId,
           resumeId: sanitizedResumeId,
-          jobTitle: normalizedJobTitle
+          jobTitle: normalizedJobTitle,
+          sessionId: preFeedbackSessionId || null
         });
       } else {
         console.warn('[RESUME-FEEDBACK] Skipping cache - incomplete result', {
           requestId,
-          resumeId: sanitizedResumeId,
-          requireRoleSpecific: !!requestedRoleNormalized
+          resumeId: sanitizedResumeId
         });
       }
     }
 
-    // Update throttles and usage counters (for cache misses)
-    await updateUsageCounters(uid, sanitizedResumeId, effectivePlan, env);
-
-    // --- D1 Persistence (best effort, non-blocking) ---
-    // Persist resume session, feedback, and usage to D1 for history
-    let d1SessionId = null;
-    let d1CreatedAt = null;
-    if (d1User && isD1Available(env)) {
+    // Finalize placeholder feedback session and usage event before caching
+    if (preFeedbackSessionId) {
       try {
-        // Check if session already exists (created by /api/ats-score)
-        if (!resumeSession) {
-          resumeSession = await getResumeSessionByResumeId(env, d1User.id, sanitizedResumeId);
-        }
-        
-        if (!resumeSession) {
-          // Create new session (fallback if /api/ats-score didn't create one)
-          resumeSession = await createResumeSession(env, d1User.id, {
-            title: normalizedJobTitle || null,
-            role: normalizedJobTitle || null,
-            rawTextLocation: `resume:${sanitizedResumeId}`
-          });
-        }
-        
-        // Update title/role if they're missing and we have a job title
-        // This ensures history tiles show the correct job title instead of "Untitled role"
-        if (resumeSession && normalizedJobTitle && (!resumeSession.title || !resumeSession.role)) {
-          try {
-            const updated = await env.DB.prepare(
-              `UPDATE resume_sessions 
-               SET title = COALESCE(title, ?),
-                   role = COALESCE(role, ?)
-               WHERE id = ?
-               RETURNING id, title, role`
-            ).bind(
-              normalizedJobTitle,
-              normalizedJobTitle,
-              resumeSession.id
-            ).first();
-            
-            if (updated) {
-              resumeSession.title = updated.title || resumeSession.title;
-              resumeSession.role = updated.role || resumeSession.role;
-            }
-          } catch (updateError) {
-            console.warn('[RESUME-FEEDBACK] Failed to update session title/role (non-blocking):', updateError.message);
-          }
-        }
-        
-        if (resumeSession) {
-          d1SessionId = String(resumeSession.id);
-          d1CreatedAt = resumeSession.created_at;
-          
-          // Use overallScore from ruleBasedScores (already calculated with Math.round via calcOverallScore)
-          // This ensures consistency with the score returned by the scoring engine
-          const overallAtsScore = ruleBasedScores.overallScore ?? null;
-          
-          // Update session with ATS score if not already set
-          // Use loose equality to handle both null (from DB) and undefined (from createResumeSession RETURNING clause)
-          // This correctly handles score of 0 (falsy but valid)
-          if (overallAtsScore !== null && (resumeSession.ats_score == null)) {
-            await updateResumeSessionAtsScore(env, resumeSession.id, overallAtsScore);
-          }
-          
-          // Create feedback session with the full result
-          await createFeedbackSession(env, resumeSession.id, result);
-          
-          // Log usage event
-          await logUsageEvent(env, d1User.id, 'resume_feedback', tokenUsage || null, {
-            resumeSessionId: resumeSession.id,
-            plan: effectivePlan,
-            cached: false,
-            jobTitle: normalizedJobTitle || null,
-            atsScore: overallAtsScore
-          });
-          
-          console.log('[RESUME-FEEDBACK] D1 persistence complete:', { 
-            sessionId: d1SessionId, 
-            userId: d1User.id,
-            atsScore: overallAtsScore
-          });
-        }
-      } catch (d1Error) {
-        console.error('[RESUME-FEEDBACK] D1 persistence failed (non-blocking):', d1Error.message);
-        // Continue - feedback still works, just won't be in history
+        await env.DB.prepare(
+          `UPDATE feedback_sessions SET feedback_json = ? WHERE id = ?`
+        ).bind(JSON.stringify(result), preFeedbackSessionId).run();
+      } catch (e) {
+        return errorResponse('Failed to persist feedback result', 500, origin, env, requestId);
       }
+    } else {
+      // No placeholder to finalize - treat as failure
+      return errorResponse('Missing feedback session placeholder', 500, origin, env, requestId);
     }
+
+    if (preUsageEventId) {
+      try {
+        await env.DB.prepare(
+          `UPDATE usage_events SET tokens_used = ? WHERE id = ?`
+        ).bind(tokenUsage || null, preUsageEventId).run();
+      } catch (e) {
+        return errorResponse('Failed to persist usage data', 500, origin, env, requestId);
+      }
+    } else {
+      return errorResponse('Missing usage event placeholder', 500, origin, env, requestId);
+    }
+
+    // Update throttles and usage counters (for cache misses)
+    // NOTE: moved to after successful D1 persistence to ensure "no results = no usage recorded"
+
+    // Persistence finalized earlier (placeholder updated and usage recorded). No legacy non-blocking persistence paths remain.
 
     console.log('[RESUME-FEEDBACK] Success', { requestId, uid, resumeId: sanitizedResumeId, tokenUsage });
 
@@ -1203,7 +1280,10 @@ export async function onRequest(context) {
       tokenUsage: tokenUsage,
       ...result,
       // Add session metadata for history (additive - doesn't break existing response)
+      // sessionId is always resumeSessionId (resume_sessions.id) for consistency with history detail endpoint
+      // feedbackSessionId is separate (feedback_sessions.id) for role-tips persistence when needed
       sessionId: d1SessionId,
+      feedbackSessionId: preFeedbackSessionId || null,
       meta: {
         createdAt: d1CreatedAt || new Date().toISOString(),
         title: normalizedJobTitle || null,

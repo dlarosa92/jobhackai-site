@@ -14,6 +14,8 @@
  * - Uses TEXT for dates (ISO 8601 format) for SQLite/D1 compatibility
  */
 
+import { sanitizeRoleSpecificFeedback } from './feedback-validator.js';
+
 /**
  * Resolve the D1 binding from the environment.
  *
@@ -628,6 +630,39 @@ export async function getFeedbackSessionById(env, sessionId, userId) {
     if (row.feedback_json) {
       try {
         feedbackData = JSON.parse(row.feedback_json);
+        
+        // CRITICAL: Sanitize roleSpecificFeedback on read to prevent returning corrupted legacy data
+        // This ensures history detail never returns malformed sections arrays even if DB row is poisoned
+        if (feedbackData?.roleSpecificFeedback) {
+          const rsf = feedbackData.roleSpecificFeedback;
+          
+          // New format: sanitize
+          if (typeof rsf === 'object' && !Array.isArray(rsf)) {
+            const sanitized = sanitizeRoleSpecificFeedback(rsf);
+            if (sanitized) {
+              feedbackData.roleSpecificFeedback = sanitized;
+            } else {
+              // Malformed - remove it
+              delete feedbackData.roleSpecificFeedback;
+            }
+          }
+          // Old format: filter to objects only
+          else if (Array.isArray(rsf)) {
+            const filtered = rsf.filter(
+              item => item && typeof item === 'object' && !Array.isArray(item)
+            );
+            if (filtered.length > 0) {
+              feedbackData.roleSpecificFeedback = filtered;
+            } else {
+              // No valid objects - remove it
+              delete feedbackData.roleSpecificFeedback;
+            }
+          }
+          // Invalid type - remove it
+          else {
+            delete feedbackData.roleSpecificFeedback;
+          }
+        }
       } catch (e) {
         console.warn('[DB] Failed to parse feedback_json:', e);
       }
@@ -783,7 +818,7 @@ export async function getResumeSessionByResumeId(env, userId, resumeId) {
   try {
     const rawTextLocation = `resume:${resumeId}`;
     const result = await db.prepare(
-      `SELECT id, user_id, title, role, created_at, raw_text_location, ats_score, rule_based_scores_json
+      `SELECT id, user_id, title, role, created_at, raw_text_location, ats_score, rule_based_scores_json, ats_ready
        FROM resume_sessions 
        WHERE user_id = ? AND raw_text_location = ?
        ORDER BY created_at DESC
@@ -823,6 +858,9 @@ export async function upsertResumeSessionWithScores(env, userId, {
   try {
     const rawTextLocation = `resume:${resumeId}`;
     const ruleBasedScoresJson = ruleBasedScores ? JSON.stringify(ruleBasedScores) : null;
+    
+    // Set ats_ready = 1 when ATS data is provided (never reset to 0)
+    const atsReadyValue = (atsScore !== null || ruleBasedScoresJson !== null) ? 1 : null;
 
     // OPTIMIZATION: Use single query with UPDATE + INSERT fallback
     // This reduces database round trips from 2 to 1 (or 2 if UPDATE affects 0 rows)
@@ -831,15 +869,16 @@ export async function upsertResumeSessionWithScores(env, userId, {
       `UPDATE resume_sessions 
        SET ats_score = COALESCE(?, ats_score),
            rule_based_scores_json = COALESCE(?, rule_based_scores_json),
-           role = COALESCE(?, role)
+           role = COALESCE(?, role),
+           ats_ready = COALESCE(?, ats_ready)
        WHERE id = (
          SELECT id FROM resume_sessions
          WHERE user_id = ? AND raw_text_location = ?
          ORDER BY created_at DESC
          LIMIT 1
        )
-       RETURNING id, user_id, title, role, created_at, raw_text_location, ats_score, rule_based_scores_json`
-    ).bind(atsScore, ruleBasedScoresJson, role, userId, rawTextLocation).first();
+       RETURNING id, user_id, title, role, created_at, raw_text_location, ats_score, rule_based_scores_json, ats_ready`
+    ).bind(atsScore, ruleBasedScoresJson, role, atsReadyValue, userId, rawTextLocation).first();
 
     if (updateResult) {
       // Update succeeded - return updated session
@@ -847,11 +886,12 @@ export async function upsertResumeSessionWithScores(env, userId, {
     }
 
     // No existing session found - insert new one
+    const insertAtsReady = atsReadyValue !== null ? 1 : 0;
     const insertResult = await db.prepare(
-      `INSERT INTO resume_sessions (user_id, title, role, raw_text_location, ats_score, rule_based_scores_json)
-       VALUES (?, ?, ?, ?, ?, ?)
-       RETURNING id, user_id, title, role, created_at, raw_text_location, ats_score, rule_based_scores_json`
-    ).bind(userId, role, role, rawTextLocation, atsScore, ruleBasedScoresJson).first();
+      `INSERT INTO resume_sessions (user_id, title, role, raw_text_location, ats_score, rule_based_scores_json, ats_ready)
+       VALUES (?, ?, ?, ?, ?, ?, ?)
+       RETURNING id, user_id, title, role, created_at, raw_text_location, ats_score, rule_based_scores_json, ats_ready`
+    ).bind(userId, role, role, rawTextLocation, atsScore, ruleBasedScoresJson, insertAtsReady).first();
 
     return insertResult || null;
   } catch (error) {
