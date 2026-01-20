@@ -226,7 +226,10 @@ delete_kv_keys_for_uid() {
   
   local total_deleted=$((deleted + resume_deleted))
   echo -e "    ${GREEN}Deleted ${total_deleted} KV keys (${deleted} standard + ${resume_deleted} resume keys)${NC}"
-  return $total_deleted
+  if [ "$total_deleted" -gt 0 ]; then
+    return 0
+  fi
+  return 1
 }
 
 # Main cleanup process
