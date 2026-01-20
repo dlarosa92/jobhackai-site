@@ -3,6 +3,8 @@ set -eo pipefail
 
 # Script to purge test accounts from D1 and KV storage
 # Usage: ./purge-test-accounts.sh
+#   Prompts for email/UID pairs interactively
+#   Database IDs can be set via environment variables (QA_DB_ID, KV_NAMESPACE_ID) or prompted
 
 # Colors
 RED='\033[0;31m'
@@ -11,27 +13,53 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m'
 
-# Test accounts: UID -> Email mapping (using parallel arrays for compatibility)
-TEST_UIDS=(
-  "PWUTqD1ey3Wsl8EXqPkrKpkMp0F2"
-  "pIQaHafB21Vo32LLX8Sjxw05Z6J2"
-  "NlMIaqugd2hM7kRbYtPPlW9tuEk2"
-)
+# Arrays to store test accounts (populated interactively)
+TEST_UIDS=()
+TEST_EMAILS=()
 
-TEST_EMAILS=(
-  "mikedavidmulder@gmail.com"
-  "connorblandford@gmail.com"
-  "kblandford@live.com"
-)
+# Collect test accounts interactively
+echo -e "${BLUE}🧹 Test Account Purge Script${NC}\n"
+echo -e "${YELLOW}Enter test accounts to purge (email and Firebase UID pairs)${NC}"
+echo -e "${YELLOW}Press Enter with empty email to finish adding accounts${NC}\n"
 
-# Database IDs
-# QA database ID (provided by user)
-QA_DB_ID="80d87a73-6615-4823-b7a4-19a8821b4f87"
-# DEV database ID will be auto-detected, or can be set via DEV_DB_ID env var
-# PROD DB ID provided: f9b709fd-56c3-4a0b-8141-4542327c9d4d (not used for dev/qa purge)
+while true; do
+  read -p "Email: " email
+  if [ -z "$email" ]; then
+    break
+  fi
+  
+  read -p "Firebase UID: " uid
+  if [ -z "$uid" ]; then
+    echo -e "${RED}❌ UID is required. Skipping this account.${NC}"
+    continue
+  fi
+  
+  TEST_EMAILS+=("$email")
+  TEST_UIDS+=("$uid")
+  echo -e "${GREEN}✅ Added: ${email} (${uid})${NC}\n"
+done
 
-# KV Namespace ID (shared dev/qa)
-KV_NAMESPACE_ID="5237372648c34aa6880f91e1a0c9708a"
+if [ ${#TEST_UIDS[@]} -eq 0 ]; then
+  echo -e "${RED}❌ No test accounts provided. Exiting.${NC}"
+  exit 1
+fi
+
+# Database IDs - use env vars or prompt
+if [ -z "${QA_DB_ID:-}" ]; then
+  read -p "QA Database ID: " QA_DB_ID
+  if [ -z "$QA_DB_ID" ]; then
+    echo -e "${RED}❌ QA_DB_ID is required${NC}"
+    exit 1
+  fi
+fi
+
+if [ -z "${KV_NAMESPACE_ID:-}" ]; then
+  read -p "KV Namespace ID: " KV_NAMESPACE_ID
+  if [ -z "$KV_NAMESPACE_ID" ]; then
+    echo -e "${RED}❌ KV_NAMESPACE_ID is required${NC}"
+    exit 1
+  fi
+fi
 
 # Cloudflare credentials
 if [ -z "${CLOUDFLARE_API_TOKEN:-}" ]; then
@@ -233,7 +261,7 @@ delete_kv_keys_for_uid() {
 }
 
 # Main cleanup process
-echo -e "${BLUE}🧹 Test Account Purge Script${NC}\n"
+echo ""
 echo -e "${YELLOW}This will delete all D1 and KV data for:${NC}"
 for i in "${!TEST_UIDS[@]}"; do
   echo -e "  - ${TEST_EMAILS[$i]} (${TEST_UIDS[$i]})"
