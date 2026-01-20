@@ -209,7 +209,7 @@ delete_kv_keys_for_uid() {
     
     local success=$(echo "$response" | jq -r '.success // false')
     if [ "$success" = "true" ]; then
-      ((deleted++))
+      deleted=$((deleted + 1))
       echo -e "    ${GREEN}✅ Deleted: $key${NC}"
     fi
   done
@@ -239,7 +239,7 @@ delete_kv_keys_for_uid() {
             -H "Content-Type: application/json" 2>/dev/null || echo '{"success":false}')
           
           if echo "$del_response" | jq -r '.success // false' | grep -q "true"; then
-            ((resume_deleted++))
+            resume_deleted=$((resume_deleted + 1))
             echo -e "    ${GREEN}✅ Deleted: $key${NC}"
           fi
         fi
@@ -293,18 +293,18 @@ for i in "${!TEST_UIDS[@]}"; do
   echo -e "${YELLOW}Deleting D1 records...${NC}"
   if [ -n "$DEV_DB_ID" ]; then
     if delete_d1_user_by_auth_id "$DEV_DB_ID" "$uid" "DEV"; then
-      ((TOTAL_D1_DELETED++))
+      TOTAL_D1_DELETED=$((TOTAL_D1_DELETED + 1))
     fi
   fi
   
   if delete_d1_user_by_auth_id "$QA_DB_ID" "$uid" "QA"; then
-    ((TOTAL_D1_DELETED++))
+    TOTAL_D1_DELETED=$((TOTAL_D1_DELETED + 1))
   fi
   
   # Delete KV keys
   echo -e "${YELLOW}Deleting KV keys...${NC}"
   if delete_kv_keys_for_uid "$uid"; then
-    ((TOTAL_KV_DELETED++))
+    TOTAL_KV_DELETED=$((TOTAL_KV_DELETED + 1))
   fi
   
   echo ""
