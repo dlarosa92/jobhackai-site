@@ -1208,9 +1208,8 @@
           const score = Math.floor(Math.random() * 31) + 60; // 60-90%
           const summary = score > 85 ? 'Excellent! Your resume is highly ATS compatible.' : score > 70 ? 'Your resume meets many ATS criteria and is likely to be noticed.' : 'Your resume needs improvement for better ATS results.';
           
-          // Store score for upgrade popup detection
-          localStorage.setItem('lastATSScore', score.toString());
-          localStorage.setItem('lastATSSummary', summary);
+          // NOTE: Removed unscoped localStorage writes (lastATSScore, lastATSSummary) to prevent cross-user data leakage
+          // For demo/simulation purposes, consider using JobHackAIStatePersistence.saveATSScore() if user-scoped storage is needed
           
           // Update donut
           const donut = document.querySelector('.ats-donut');

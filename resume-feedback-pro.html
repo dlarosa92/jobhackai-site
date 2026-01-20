@@ -4458,8 +4458,8 @@
                         result.score > 70 ? 'Your resume meets many ATS criteria and is likely to be noticed.' :
                         'Your resume needs improvement for better ATS results.';
                     }
-                    localStorage.setItem('lastATSScore', result.score.toString());
-                    localStorage.setItem('lastATSSummary', summary);
+                    // NOTE: Removed unscoped localStorage writes (lastATSScore, lastATSSummary) to prevent cross-user data leakage
+                    // All ATS score data should be stored via user-scoped keys in JobHackAIStatePersistence.saveATSScore()
 
                     updateProgressRing(result.score);
                     updateExtractionQualityIndicator(result.extractionQuality);

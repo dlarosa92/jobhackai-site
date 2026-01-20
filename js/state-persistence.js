@@ -100,10 +100,29 @@
         try { localStorage.removeItem(k); } catch (_) {}
         try { sessionStorage.removeItem(k); } catch (_) {}
       });
+      // Also clear any unscoped STORAGE_KEYS (legacy keys from before user-scoping)
+      Object.values(STORAGE_KEYS).forEach((k) => {
+        try { localStorage.removeItem(k); } catch (_) {}
+      });
+      // Clear unscoped extractionQuality key specifically
+      try { localStorage.removeItem('jh_last_extraction_quality'); } catch (_) {}
     } catch (err) {
       console.warn('[STATE-PERSISTENCE] Failed to clear legacy fallback cache', err);
     }
   }
+
+  // One-time cleanup on initialization: clear all unscoped legacy keys
+  function initializeCleanup() {
+    try {
+      clearLegacyFallbackCache();
+      console.log('[STATE-PERSISTENCE] Initialized: legacy unscoped keys cleaned up');
+    } catch (err) {
+      console.warn('[STATE-PERSISTENCE] Initialization cleanup failed:', err);
+    }
+  }
+
+  // Run cleanup on load
+  initializeCleanup();
 
   // Cache expiration: 24 hours
   const CACHE_EXPIRATION = 24 * 60 * 60 * 1000;
