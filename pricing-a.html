@@ -390,10 +390,12 @@
                 } else {
                   alert(`Unable to start checkout: ${errorMessage}. Please try again or contact support.`);
                 }
-                button.textContent = originalText;
-                button.disabled = false;
-                button.style.opacity = '1';
-                button.style.cursor = 'pointer';
+                if (plan === 'trial' && trialEligibilityState?.checked && !trialEligibilityState.eligible) {
+                  setTrialUsedState(button);
+                } else {
+                  button.textContent = originalText;
+                  enableButton(button);
+                }
               }
             })();
           } else {
