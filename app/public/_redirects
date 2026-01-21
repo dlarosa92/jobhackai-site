@@ -10,5 +10,11 @@
 /auth/action   /auth/action/index.html   200
 /auth/action/   /auth/action/index.html   200
 
+# Redirect deleted pages to account settings
+/add-card   /account-setting.html   301
+/add-card.html   /account-setting.html   301
+/billing-management   /account-setting.html   301
+/billing-management.html   /account-setting.html   301
+
 # Fallback for all other routes
 /*    /index.html   200
