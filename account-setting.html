@@ -943,6 +943,42 @@
       window.location.href = 'pricing-a.html?plan=essential';
     }
     
+    // CRITICAL FIX: Define refreshPlanData function for upgradePlan callback
+    // This ensures the UI updates immediately after a successful plan upgrade
+    window.refreshPlanData = async function() {
+      console.log('🔄 [ACCOUNT-SETTINGS] Refreshing plan data after upgrade...');
+      
+      try {
+        // Re-render the billing section to show updated plan
+        await renderBillingSection();
+        
+        // Update navigation system with new plan from localStorage
+        const newPlan = localStorage.getItem('user-plan') || 'free';
+        if (window.JobHackAINavigation) {
+          if (typeof window.JobHackAINavigation.setAuthState === 'function') {
+            window.JobHackAINavigation.setAuthState(true, newPlan);
+          }
+          if (typeof window.JobHackAINavigation.scheduleUpdateNavigation === 'function') {
+            window.JobHackAINavigation.scheduleUpdateNavigation(true);
+          } else if (typeof window.JobHackAINavigation.updateNavigation === 'function') {
+            window.JobHackAINavigation.updateNavigation();
+          }
+        }
+        
+        // Dispatch planChanged event for other components
+        window.dispatchEvent(new CustomEvent('planChanged', { 
+          detail: { newPlan } 
+        }));
+        
+        console.log('✅ [ACCOUNT-SETTINGS] Plan data refreshed successfully');
+      } catch (error) {
+        console.error('❌ [ACCOUNT-SETTINGS] Failed to refresh plan data:', error);
+        // Fallback: reload the page if refresh fails
+        console.log('🔄 [ACCOUNT-SETTINGS] Falling back to page reload...');
+        window.location.reload();
+      }
+    };
+    
     // --- RESET PASSWORD FUNCTION ---
     async function resetPassword() {
       const user = window.FirebaseAuthManager?.getCurrentUser?.();
