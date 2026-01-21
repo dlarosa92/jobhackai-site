@@ -58,5 +58,7 @@
     padding: 12px 14px;
     margin: 0 auto;
     box-shadow: none;
+    height: auto; /* Allow buttons to grow on mobile when text wraps to 3+ lines */
+    min-height: 52px; /* Ensure minimum height for single-line buttons */
   }
 }
