@@ -18,7 +18,7 @@
   font-weight: var(--font-weight-semibold);
   font-size: clamp(14px, 1.6vw, 17px); /* responsive font size */
   line-height: 1.25;
-  min-height: 52px;
+  height: 64px; /* Fixed height to match buttons with two-line text */
   white-space: normal;        /* allow multi-line labels */
   word-break: normal;         /* prevent breaking inside words */
   overflow-wrap: break-word;  /* allow wrapping on word boundaries if needed */
