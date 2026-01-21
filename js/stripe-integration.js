@@ -192,7 +192,7 @@ class JobHackAIStripe {
       this.handleCardChange(event);
     });
 
-    // Handle form submission for both add-card and checkout pages
+    // Handle form submission for checkout pages
     const cardForm = document.getElementById('cardForm');
     const checkoutForm = document.getElementById('checkoutForm');
     
@@ -581,7 +581,7 @@ class JobHackAIStripe {
       localStorage.setItem('plan-amount', amount);
       
       if (plan === 'trial') {
-        window.location.href = 'add-card.html';
+        window.location.href = 'account-setting.html';
       } else {
         window.location.href = 'checkout.html';
       }
@@ -813,7 +813,7 @@ async function upgradePlan(targetPlan, options = {}) {
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
       if (data?.code === 'ALREADY_ON_PLAN' || data?.code === 'ALREADY_SUBSCRIBED') {
-        showUpgradeInfoBanner('You already have an active subscription for this plan.', 'billing-management.html');
+        showUpgradeInfoBanner('You already have an active subscription for this plan.', 'account-setting.html');
         return;
       }
       throw new Error(data?.error || data?.code || 'upgrade_failed');
