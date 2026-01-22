@@ -146,11 +146,11 @@ export async function onRequest(context) {
         plan = 'trial';
       } else {
         // Regular subscription in trial period - map from price ID
-        plan = priceIdToPlan(env, priceId, { defaultToFree: true });
+        plan = priceIdToPlan(env, priceId, { defaultToEssential: true });
       }
     } else if (latestSub.status === 'active' || latestSub.status === 'past_due') {
       // Active subscription - map from price ID
-      plan = priceIdToPlan(env, priceId, { defaultToFree: true });
+      plan = priceIdToPlan(env, priceId, { defaultToEssential: true });
     }
     
     // Get payment method info - check customer's default payment method

@@ -48,14 +48,14 @@ export function planToPrice(env, plan) {
  * @param {Object} env - Environment variables
  * @param {string} priceId - Stripe price ID
  * @param {Object} options - Options object
- * @param {boolean} options.defaultToFree - If true, returns 'free' for null/unknown prices instead of null (default: false)
- * @returns {string|null} Plan name or null (or 'free' if defaultToFree is true)
+ * @param {boolean} options.defaultToEssential - If true, provides safe defaults: returns 'free' for null/undefined price IDs, and 'essential' for unknown (non-null) price IDs. If false, returns null for both cases (default: false)
+ * @returns {string|null} Plan name ('essential', 'pro', 'premium', 'free', or null)
  */
 export function priceIdToPlan(env, priceId, options = {}) {
-  const { defaultToFree = false } = options;
+  const { defaultToEssential = false } = options;
 
   if (!priceId) {
-    return defaultToFree ? 'free' : null;
+    return defaultToEssential ? 'free' : null;
   }
 
   const essential = planToPrice(env, 'essential');
@@ -67,8 +67,8 @@ export function priceIdToPlan(env, priceId, options = {}) {
   if (priceId === premium) return 'premium';
 
   // Unknown price ID
-  if (defaultToFree) {
-    console.log('🟡 [BILLING-UTILS] Unknown price ID, defaulting to free/essential', priceId);
+  if (defaultToEssential) {
+    console.log('🟡 [BILLING-UTILS] Unknown price ID, defaulting to essential', priceId);
     return 'essential';
   }
 
