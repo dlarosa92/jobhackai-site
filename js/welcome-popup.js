@@ -150,9 +150,10 @@ export function showWelcomePopup(plan = 'free', userName = 'there', onComplete =
 
   const content = getWelcomeContent(plan);
   const escapedUserName = escapeHtml(userName);
-  const escapedTitle = escapeHtml(content.title);
   const escapedSubtitle = escapeHtml(content.subtitle);
   const escapedCta = escapeHtml(content.cta);
+  // Personalize title with user's name
+  const escapedTitle = escapeHtml(`${content.title}${userName && userName !== 'there' ? ', ' + userName : ''}`);
 
   // Create modal overlay
   const modal = document.createElement('div');
@@ -355,7 +356,18 @@ export function showWelcomePopup(plan = 'free', userName = 'there', onComplete =
 
   document.body.appendChild(modal);
 
+  // Close on Escape key
+  const escapeHandler = (e) => {
+    if (e.key === 'Escape') {
+      closePopup();
+    }
+  };
+  document.addEventListener('keydown', escapeHandler);
+
   const closePopup = () => {
+    // Remove escape key listener to prevent memory leak
+    document.removeEventListener('keydown', escapeHandler);
+
     // Mark as shown
     try {
       localStorage.setItem('dashboard-welcome-shown', 'true');
@@ -379,15 +391,6 @@ export function showWelcomePopup(plan = 'free', userName = 'there', onComplete =
       closePopup();
     }
   });
-
-  // Close on Escape key
-  const escapeHandler = (e) => {
-    if (e.key === 'Escape') {
-      closePopup();
-      document.removeEventListener('keydown', escapeHandler);
-    }
-  };
-  document.addEventListener('keydown', escapeHandler);
 }
 
 /**
