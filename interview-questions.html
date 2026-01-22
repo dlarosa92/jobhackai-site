@@ -1154,6 +1154,13 @@
             (function() {
               async function startCheckoutLocal(plan) {
                 try {
+                  if (typeof window.upgradePlan === 'function') {
+                    await window.upgradePlan(plan, {
+                      source: 'interview-questions',
+                      returnUrl: window.location.href
+                    });
+                    return;
+                  }
                   if (window.showLoadingOverlay) {
                     window._currentLoadingOverlay = window.showLoadingOverlay('Redirecting to checkout...');
                   }
@@ -1182,6 +1189,66 @@
               }
               // Expose a global name expected by the inline onclick handler
               window.startCheckout = startCheckoutLocal;
+              
+              // CRITICAL FIX: Define refreshPlanData for upgradePlan callback
+              // This ensures the UI updates immediately after a successful plan upgrade
+              window.refreshPlanData = async function() {
+                console.log('🔄 [INTERVIEW-QUESTIONS] Refreshing plan data after upgrade...');
+                
+                try {
+                  // Get updated plan from API
+                  const user = window.FirebaseAuthManager?.getCurrentUser?.();
+                  if (!user) {
+                    console.warn('⚠️ [INTERVIEW-QUESTIONS] No user found, reloading page...');
+                    window.location.reload();
+                    return;
+                  }
+                  
+                  const idToken = await user.getIdToken();
+                  const planResponse = await fetch('/api/plan/me', {
+                    headers: { 'Authorization': `Bearer ${idToken}` }
+                  });
+                  
+                  if (planResponse.ok) {
+                    const planData = await planResponse.json();
+                    const newPlan = planData.plan || 'free';
+                    
+                    // Update localStorage
+                    localStorage.setItem('user-plan', newPlan);
+                    localStorage.setItem('dev-plan', newPlan);
+                    
+                    // Update navigation system with new plan
+                    if (window.JobHackAINavigation) {
+                      if (typeof window.JobHackAINavigation.setAuthState === 'function') {
+                        window.JobHackAINavigation.setAuthState(true, newPlan);
+                      }
+                      if (typeof window.JobHackAINavigation.scheduleUpdateNavigation === 'function') {
+                        window.JobHackAINavigation.scheduleUpdateNavigation(true);
+                      } else if (typeof window.JobHackAINavigation.updateNavigation === 'function') {
+                        window.JobHackAINavigation.updateNavigation();
+                      }
+                    }
+                    
+                    // Dispatch planChanged event for other components
+                    window.dispatchEvent(new CustomEvent('planChanged', { 
+                      detail: { newPlan } 
+                    }));
+                    
+                    console.log('✅ [INTERVIEW-QUESTIONS] Plan data refreshed successfully:', newPlan);
+                    
+                    // Reload page to show unlocked features
+                    window.location.reload();
+                  } else {
+                    console.warn('⚠️ [INTERVIEW-QUESTIONS] Failed to fetch plan data, reloading page...');
+                    window.location.reload();
+                  }
+                } catch (error) {
+                  console.error('❌ [INTERVIEW-QUESTIONS] Failed to refresh plan data:', error);
+                  // Fallback: reload the page if refresh fails
+                  console.log('🔄 [INTERVIEW-QUESTIONS] Falling back to page reload...');
+                  window.location.reload();
+                }
+              };
             })();
           </script>
           <button id="upsell-cancel-2" class="btn-outline">Maybe later</button>
@@ -4259,6 +4326,7 @@ function initIQPage(){
   </script>
   <!-- Load navigation system -->
   <script src="js/navigation.js?v=20251007-2"></script>
+  <script src="js/stripe-integration.js"></script>
   <script src="js/universal-logout.js?v=20251007-2"></script>
   <!-- Load Firebase auth as ES module (required for API authentication) - MUST load before inactivity-tracker -->
   <script type="module" src="js/firebase-auth.js?v=20251011-1"></script>

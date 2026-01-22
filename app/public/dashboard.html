@@ -844,13 +844,12 @@
           ${(user.plan === 'cancelled') ? `<a href="pricing-a.html" class="upgrade-btn">Reactivate</a>` : ''}
         </div>
       </div>`;
-      // Always load last ATS score/result from localStorage if present
-      let lastScore = localStorage.getItem('lastATSScore');
-      let lastSummary = localStorage.getItem('lastATSSummary');
-      if (lastScore && lastSummary) {
-        atsScore.value = parseInt(lastScore, 10);
-        atsScore.percent = parseInt(lastScore, 10);
-        atsScore.summary = lastSummary;
+      // Always load last ATS score/result from user-scoped storage if present
+      const savedATS = JobHackAIStatePersistence?.loadATSScore?.();
+      if (savedATS && typeof savedATS.score === 'number' && savedATS.summary) {
+        atsScore.value = savedATS.score;
+        atsScore.percent = savedATS.score;
+        atsScore.summary = savedATS.summary;
       }
       // Features
       let featuresHtml = '<div class="dashboard-features">';
@@ -981,7 +980,8 @@
         
         // Check if user had uploaded a resume for free ATS scoring
         // Check multiple indicators that user had a free account with resume upload
-        const hasATSScoreHistory = localStorage.getItem('lastATSScore') || localStorage.getItem('lastATSSummary');
+        const savedATS = JobHackAIStatePersistence?.loadATSScore?.();
+        const hasATSScoreHistory = !!(savedATS && (savedATS.score || savedATS.summary));
         const hasUsedFreeATS = localStorage.getItem('hasUsedFreeATS') === 'true';
         const hasFreeUsageData = localStorage.getItem('free-ats-usage');
         const hasUploadedResume = localStorage.getItem('lastUploadedResume') || localStorage.getItem('hasUploadedResume') === 'true';
@@ -1208,9 +1208,8 @@
           const score = Math.floor(Math.random() * 31) + 60; // 60-90%
           const summary = score > 85 ? 'Excellent! Your resume is highly ATS compatible.' : score > 70 ? 'Your resume meets many ATS criteria and is likely to be noticed.' : 'Your resume needs improvement for better ATS results.';
           
-          // Store score for upgrade popup detection
-          localStorage.setItem('lastATSScore', score.toString());
-          localStorage.setItem('lastATSSummary', summary);
+          // Persist ATS score to user-scoped storage
+          JobHackAIStatePersistence?.saveATSScore?.({ score, summary });
           
           // Update donut
           const donut = document.querySelector('.ats-donut');

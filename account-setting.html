@@ -541,7 +541,7 @@
       </div>
       <!-- Actions Row -->
       <div class="settings-actions-row" style="display:flex; gap:1rem; margin-bottom:2.2rem; flex-wrap:wrap;">
-        <a href="#" class="btn-link">Compare Plans</a>
+        <a href="pricing-a.html" class="btn-link">Compare Plans</a>
         <a href="#" class="btn-link">Contact Support</a>
         <button class="btn-outline-grey" type="button" data-action="logout">Log Out</button>
       </div>
@@ -575,6 +575,7 @@
   <!-- Load navigation system -->
   <script src="js/navigation.js?v=20251007-2"></script>
   <script src="js/universal-logout.js?v=20251007-2"></script>
+  <script src="js/stripe-integration.js"></script>
   <!-- Inactivity tracker - auto-logout after 30 minutes of inactivity -->
   <script src="js/inactivity-tracker.js?v=20250115-1"></script>
   <script>
@@ -891,6 +892,9 @@
               html += `<div style="background:#FEF3C7;border-left:4px solid #F59E0B;color:#92400E;padding:0.6rem 0.8rem;border-radius:6px;margin-top:0.8rem;font-size:0.95rem;">
                 ⏰ Your trial will convert to Essential Plan ($29/month) on ${trialEndDateStr}
               </div>`;
+              html += `<div style="margin-top:0.9rem; display:flex; gap:0.75rem; flex-wrap:wrap;">
+                <button class="btn-primary" type="button" onclick="startPaidNow(this)">Start Paid Now</button>
+              </div>`;
             }
           } else {
             html += `<div style="font-size:1.1rem;font-weight:600;color:#232B36;">${planNames[plan]} Plan</div>`;
@@ -926,6 +930,54 @@
         billingSection.innerHTML = '<div style="color: #EF4444;">Error loading subscription details.</div>';
       }
     }
+
+    async function startPaidNow(buttonEl) {
+      if (typeof window.upgradePlan === 'function') {
+        await window.upgradePlan('essential', {
+          source: 'account-settings',
+          returnUrl: window.location.href,
+          button: buttonEl || null
+        });
+        return;
+      }
+      window.location.href = 'pricing-a.html?plan=essential';
+    }
+    
+    // CRITICAL FIX: Define refreshPlanData function for upgradePlan callback
+    // This ensures the UI updates immediately after a successful plan upgrade
+    window.refreshPlanData = async function() {
+      console.log('🔄 [ACCOUNT-SETTINGS] Refreshing plan data after upgrade...');
+      
+      try {
+        // Re-render the billing section to show updated plan
+        await renderBillingSection();
+        
+        // Update navigation system with new plan from localStorage
+        const newPlan = localStorage.getItem('user-plan') || 'free';
+        if (window.JobHackAINavigation) {
+          if (typeof window.JobHackAINavigation.setAuthState === 'function') {
+            window.JobHackAINavigation.setAuthState(true, newPlan);
+          }
+          if (typeof window.JobHackAINavigation.scheduleUpdateNavigation === 'function') {
+            window.JobHackAINavigation.scheduleUpdateNavigation(true);
+          } else if (typeof window.JobHackAINavigation.updateNavigation === 'function') {
+            window.JobHackAINavigation.updateNavigation();
+          }
+        }
+        
+        // Dispatch planChanged event for other components
+        window.dispatchEvent(new CustomEvent('planChanged', { 
+          detail: { newPlan } 
+        }));
+        
+        console.log('✅ [ACCOUNT-SETTINGS] Plan data refreshed successfully');
+      } catch (error) {
+        console.error('❌ [ACCOUNT-SETTINGS] Failed to refresh plan data:', error);
+        // Fallback: reload the page if refresh fails
+        console.log('🔄 [ACCOUNT-SETTINGS] Falling back to page reload...');
+        window.location.reload();
+      }
+    };
     
     // --- RESET PASSWORD FUNCTION ---
     async function resetPassword() {

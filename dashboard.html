@@ -1191,7 +1191,14 @@
       
       // Continue with existing dashboard logic
       renderDashboard(user);
-      
+
+      // Show welcome popup for first-time dashboard visitors
+      setTimeout(() => {
+        if (typeof window.showWelcomePopup === 'function') {
+          window.showWelcomePopup(user.plan, user.firstName || user.name);
+        }
+      }, 800);
+
       // Add periodic refresh for plan changes (for all users)
       // This ensures plan upgrades/downgrades are detected automatically
       const planState = { 
@@ -1295,6 +1302,10 @@
           console.warn('⚠️ Failed to refresh plan data:', error);
         }
       };
+      
+      // CRITICAL FIX: Expose refreshPlanData on window for upgradePlan callback
+      // This ensures the UI updates immediately after a successful plan upgrade
+      window.refreshPlanData = refreshPlanData;
       
       // Refresh every 2 minutes (120000 ms) - frequent enough to catch upgrades quickly
       // but not so frequent as to cause server load
@@ -3079,12 +3090,11 @@
             sessionStorage.setItem('currentAtsScore', score.toString());
             sessionStorage.setItem('currentAtsBreakdown', JSON.stringify(breakdown));
 
-            // Also store in localStorage for backward compatibility (but prefer sessionStorage)
-            localStorage.setItem('lastATSScore', score.toString());
-            localStorage.setItem('lastATSSummary', summary);
             localStorage.setItem('hasUploadedResume', 'true');
             
-            // Persist to state persistence utility (handles cache expiration)
+            // Persist to state persistence utility (handles cache expiration and user-scoped keys)
+            // NOTE: Removed unscoped localStorage writes (lastATSScore, lastATSSummary) to prevent cross-user data leakage
+            // All ATS score data is now stored via user-scoped keys in JobHackAIStatePersistence
             if (window.JobHackAIStatePersistence) {
               window.JobHackAIStatePersistence.saveATSScore({
                 score,
@@ -3241,98 +3251,21 @@
       }
 
       // Handle upgrade button clicks
-      async function handleUpgradeClick(featureKey) {
-        const user = window.FirebaseAuthManager?.getCurrentUser?.();
-        if (!user) {
-          alert('Please log in to upgrade your plan');
-          window.location.href = 'login.html';
-          return;
-        }
-
+      async function handleUpgradeClick(featureKey, buttonEl) {
         const targetPlan = getMinPlanForFeature(featureKey);
         console.log(`🔄 [DASHBOARD] User clicked upgrade for ${featureKey}, targeting plan: ${targetPlan}`);
 
-        try {
-          // Get fresh token - force refresh if needed
-          let idToken;
-          try {
-            idToken = await user.getIdToken(true); // Force refresh
-          } catch (tokenError) {
-            console.error('❌ [DASHBOARD] Failed to get Firebase token:', tokenError);
-            alert('Your session has expired. Please log in again and try upgrading.');
-            window.location.href = 'login.html';
-            return;
-          }
-
-          if (!idToken) {
-            alert('Your session has expired. Please log in again and try upgrading.');
-            window.location.href = 'login.html';
-            return;
-          }
-
-          // Call Stripe checkout API with the target plan
-          const response = await fetch('/api/stripe-checkout', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${idToken}`
-            },
-            body: JSON.stringify({
-              plan: targetPlan,
-              forceNew: true
-            })
-            });
-
-          // Check if response is ok before parsing JSON
-          if (!response.ok) {
-            const errorText = await response.text();
-            let errorData;
-            try {
-              errorData = JSON.parse(errorText);
-            } catch {
-              errorData = { error: errorText || 'Unknown error' };
-            }
-
-            // Handle specific error cases
-            if (response.status === 401 || response.status === 403) {
-              console.error('❌ [DASHBOARD] Authentication error:', errorData.error);
-              alert('Your session has expired. Please log in again and try upgrading.');
-              window.location.href = 'login.html';
-              return;
-            }
-
-            console.error('❌ [DASHBOARD] Stripe checkout failed:', errorData.error);
-            const rawError = (errorData && typeof errorData.error === 'string') ? errorData.error.trim() : '';
-            const sanitized = rawError.startsWith('<!DOCTYPE') || rawError.startsWith('<html') ? 'server_error' : (rawError || 'Unknown error');
-            alert('Unable to start checkout. Please try again. (' + sanitized + ')');
-            // Fallback to pricing page
-            window.location.href = `pricing-a.html?plan=${targetPlan}`;
-            return;
-          }
-
-          const data = await response.json();
-
-          if (data.ok && data.url) {
-            // Redirect to Stripe Checkout
-            console.log('✅ [DASHBOARD] Redirecting to Stripe Checkout:', data.url);
-            window.location.href = data.url;
-          } else {
-            console.error('❌ [DASHBOARD] Stripe checkout failed:', data.error);
-            alert('Unable to start checkout. Please try again or visit our pricing page.');
-            // Fallback to pricing page
-            window.location.href = `pricing-a.html?plan=${targetPlan}`;
-          }
-        } catch (error) {
-          console.error('❌ [DASHBOARD] Upgrade error:', error);
-          // Check if it's a network error or auth error
-          if (error.message && (error.message.includes('Failed to fetch') || error.message.includes('NetworkError'))) {
-            alert('Network error. Please check your connection and try again.');
-          } else {
-            alert('Failed to start upgrade. Please try again.');
-          }
-          // Fallback to pricing page
-          window.location.href = `pricing-a.html?plan=${targetPlan}`;
+        if (typeof window.upgradePlan === 'function') {
+          await window.upgradePlan(targetPlan, {
+            source: 'dashboard',
+            returnUrl: window.location.href,
+            button: buttonEl || null
+          });
+          return;
         }
+
+        // Fallback to pricing if upgrade helper is unavailable.
+        window.location.href = `pricing-a.html?plan=${targetPlan}`;
       }
 
       // Attach click handlers to all locked upgrade buttons
@@ -3342,7 +3275,7 @@
         if (featureKey) {
           button.addEventListener('click', (e) => {
             e.preventDefault();
-            handleUpgradeClick(featureKey);
+            handleUpgradeClick(featureKey, button);
           });
         }
       });
@@ -3386,6 +3319,7 @@
   <script type="module" src="js/firebase-auth.js?v=20251011-1"></script>
   <!-- Load navigation system -->
   <script src="js/navigation.js?v=20251011-1"></script>
+  <script src="js/stripe-integration.js"></script>
   <script>
     // DO NOT call initializeNavigation synchronously on dashboard
     // Wait for DOMContentLoaded so Firebase auth module has time to load
@@ -3402,6 +3336,7 @@
       }
     });
   </script>
+  <script src="js/welcome-popup.js" type="module"></script>
   <script src="js/main.js" type="module"></script>
   <script src="js/analytics.js" type="module"></script>
   <script type="module">

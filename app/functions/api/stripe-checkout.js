@@ -1,5 +1,11 @@
 import { getBearer, verifyFirebaseIdToken } from '../_lib/firebase-auth.js';
 import { isTrialEligible, getUserPlanData } from '../_lib/db.js';
+import {
+  planToPrice,
+  priceIdToPlan,
+  getPlanFromSubscription,
+  listSubscriptions
+} from '../_lib/billing-utils.js';
 export async function onRequest(context) {
   const { request, env } = context;
   const origin = request.headers.get('Origin') || '';
@@ -176,6 +182,26 @@ export async function onRequest(context) {
       }
     }
 
+    // Guard against duplicate subscriptions for paid plans.
+    const subs = await listSubscriptions(env, customerId);
+    const activeSubs = subs.filter((sub) =>
+      sub && ['active', 'trialing', 'past_due'].includes(sub.status)
+    );
+    if (activeSubs.length > 0) {
+      const currentPlan = getPlanFromSubscription(activeSubs[0], env);
+      console.log('🟡 [CHECKOUT] Active subscription exists, blocking checkout', {
+        uid,
+        customerId,
+        currentPlan
+      });
+      return json({
+        ok: false,
+        error: 'Already subscribed. Manage your plan in Billing Management.',
+        code: 'ALREADY_SUBSCRIBED',
+        plan: currentPlan
+      }, 409, origin, env);
+    }
+
     // Create Checkout Session (subscription)
     
     // Prepare session body with trial support
@@ -341,26 +367,6 @@ function corsHeaders(origin, env) {
 function json(body, status, origin, env) { return new Response(JSON.stringify(body), { status, headers: corsHeaders(origin, env) }); }
 const kvCusKey = (uid) => `cusByUid:${uid}`;
 const kvEmailKey = (uid) => `emailByUid:${uid}`;
-function planToPrice(env, plan) {
-  // Resolve price IDs from multiple possible env var names to avoid mismatches across environments
-  const resolve = (base) => (
-    env[`STRIPE_PRICE_${base}_MONTHLY`] ||
-    env[`PRICE_${base}_MONTHLY`] ||
-    env[`STRIPE_PRICE_${base}`] ||
-    env[`PRICE_${base}`] ||
-    null
-  );
-  const essential = resolve('ESSENTIAL');
-  const pro = resolve('PRO');
-  const premium = resolve('PREMIUM');
-  const map = {
-    trial: essential, // Use Essential price with trial period
-    essential: essential,
-    pro: pro,
-    premium: premium
-  };
-  return map[plan] || null;
-}
 
 // Build a robust Idempotency-Key from stable parameters, so retries succeed
 // and parameter changes (e.g., URLs, price, customer, trial period, payment_method_collection) generate a new key
@@ -392,5 +398,3 @@ async function makeIdemKey(uid, body) {
     return `${uid}:${body['metadata[plan]'] || 'plan'}`;
   }
 }
-
-

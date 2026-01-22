@@ -193,6 +193,43 @@ class AuthManager {
   }
 
   /**
+   * Clear potentially stale auth-related localStorage entries
+   * Used when Firebase initializes with no user to avoid fallback auth state.
+   */
+  _clearStaleAuthStorage(reason = 'unauthenticated') {
+    try {
+      const cleared = [];
+      localStorage.setItem('user-authenticated', 'false');
+      cleared.push('user-authenticated');
+      
+      ['user-email', 'auth-user', 'user-plan', 'dev-plan', 'user-name'].forEach((key) => {
+        try {
+          localStorage.removeItem(key);
+          cleared.push(key);
+        } catch (_) {}
+      });
+      
+      for (let i = localStorage.length - 1; i >= 0; i--) {
+        const key = localStorage.key(i);
+        if (key && key.startsWith('firebase:authUser:')) {
+          try {
+            localStorage.removeItem(key);
+            cleared.push(key);
+          } catch (e) {
+            console.warn('[AUTH] Failed to remove Firebase auth key:', key, e?.message);
+          }
+        }
+      }
+      
+      if (cleared.length > 0) {
+        console.log(`[AUTH] Cleared stale auth storage (${reason}):`, cleared);
+      }
+    } catch (err) {
+      console.warn('[AUTH] Failed to clear stale auth storage:', err?.message || err);
+    }
+  }
+
+  /**
    * Mark auth as ready and resolve waiting promises
    * Called when Firebase onAuthStateChanged fires for the first time
    */
@@ -597,9 +634,7 @@ class AuthManager {
         }
       } else {
         // User is signed out - clear immediately
-        localStorage.setItem('user-authenticated', 'false');
-        localStorage.removeItem('user-email');
-        localStorage.removeItem('auth-user');
+        this._clearStaleAuthStorage('firebase-auth-signed-out');
         
         if (window.JobHackAINavigation) {
           window.JobHackAINavigation.setAuthState(false, 'visitor');

@@ -192,7 +192,7 @@ class JobHackAIStripe {
       this.handleCardChange(event);
     });
 
-    // Handle form submission for both add-card and checkout pages
+    // Handle form submission for checkout pages
     const cardForm = document.getElementById('cardForm');
     const checkoutForm = document.getElementById('checkoutForm');
     
@@ -581,7 +581,7 @@ class JobHackAIStripe {
       localStorage.setItem('plan-amount', amount);
       
       if (plan === 'trial') {
-        window.location.href = 'add-card.html';
+        window.location.href = 'account-setting.html';
       } else {
         window.location.href = 'checkout.html';
       }
@@ -735,6 +735,128 @@ class JobHackAIStripe {
     container.appendChild(modal);
   }
 }
+
+function showUpgradeInfoBanner(message, linkHref) {
+  const existing = document.getElementById('jh-upgrade-info-banner');
+  if (existing) {
+    existing.remove();
+  }
+  const banner = document.createElement('div');
+  banner.id = 'jh-upgrade-info-banner';
+  banner.style.cssText = `
+    position: fixed;
+    top: 16px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 10010;
+    background: #0F172A;
+    color: #F8FAFC;
+    padding: 0.85rem 1rem;
+    border-radius: 10px;
+    box-shadow: 0 12px 24px rgba(15, 23, 42, 0.35);
+    display: flex;
+    gap: 0.75rem;
+    align-items: center;
+    max-width: min(640px, 92vw);
+    font-size: 0.95rem;
+  `;
+  const text = document.createElement('div');
+  text.textContent = message;
+  const link = document.createElement('a');
+  link.href = linkHref;
+  link.textContent = 'Open billing portal';
+  link.style.cssText = 'color: #38BDF8; text-decoration: underline; white-space: nowrap;';
+  const close = document.createElement('button');
+  close.type = 'button';
+  close.textContent = 'Dismiss';
+  close.style.cssText = 'margin-left: auto; background: transparent; color: #F8FAFC; border: 1px solid #475569; border-radius: 999px; padding: 0.25rem 0.6rem; cursor: pointer;';
+  close.addEventListener('click', () => banner.remove());
+  banner.appendChild(text);
+  banner.appendChild(link);
+  banner.appendChild(close);
+  document.body.appendChild(banner);
+}
+
+async function upgradePlan(targetPlan, options = {}) {
+  const source = options.source || 'unknown';
+  const returnUrl = options.returnUrl || window.location.href;
+  const button = options.button || null;
+  let restoreButton = null;
+  if (button) {
+    const originalText = button.textContent;
+    button.disabled = true;
+    button.textContent = 'Processing...';
+    restoreButton = () => {
+      button.disabled = false;
+      button.textContent = originalText;
+    };
+  }
+  const hideLoading = window.showLoadingOverlay
+    ? window.showLoadingOverlay('Updating plan...')
+    : null;
+
+  try {
+    const user = window.FirebaseAuthManager?.getCurrentUser?.();
+    if (!user) {
+      window.location.href = 'login.html';
+      return;
+    }
+    const idToken = await user.getIdToken();
+    const res = await fetch('/api/upgrade-plan', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${idToken}`
+      },
+      body: JSON.stringify({ targetPlan, source, returnUrl })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      if (data?.code === 'ALREADY_ON_PLAN' || data?.code === 'ALREADY_SUBSCRIBED') {
+        showUpgradeInfoBanner('You already have an active subscription for this plan.', 'account-setting.html');
+        return;
+      }
+      if (data?.code === 'DOWNGRADE_NOT_ALLOWED') {
+        showUpgradeInfoBanner('Downgrades are not supported. Please contact support or manage your subscription in the billing portal.', 'account-setting.html');
+        return;
+      }
+      throw new Error(data?.error || data?.code || 'upgrade_failed');
+    }
+
+    if (data?.action === 'redirect' && data?.url) {
+      window.location.href = data.url;
+      return;
+    }
+    if (data?.action === 'updated') {
+      const newPlan = data.plan || targetPlan;
+      localStorage.setItem('user-plan', newPlan);
+      localStorage.setItem('dev-plan', newPlan);
+      window.dispatchEvent(new CustomEvent('planChanged', { detail: { newPlan } }));
+      if (typeof window.refreshPlanData === 'function') {
+        await window.refreshPlanData();
+      }
+      if (window.showToast) {
+        window.showToast('Plan updated. Enjoy the new features!');
+      } else {
+        alert('Plan updated successfully.');
+      }
+      return;
+    }
+    throw new Error('upgrade_failed');
+  } catch (error) {
+    console.error('Upgrade failed:', error);
+    if (window.showToast) {
+      window.showToast('Unable to upgrade. Please try again.');
+    } else {
+      alert('Unable to upgrade. Please try again.');
+    }
+  } finally {
+    if (hideLoading) hideLoading();
+    if (restoreButton) restoreButton();
+  }
+}
+
+window.upgradePlan = upgradePlan;
 
 // Initialize Stripe when DOM is loaded
 document.addEventListener('DOMContentLoaded', () => {
