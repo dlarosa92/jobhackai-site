@@ -7676,14 +7676,8 @@
             const usage = usageData.usage.resumeFeedback;
             const plan = usageData.plan;
             
-            // Detect plan change: if plan changed from trial to essential, usage should reset
-            // Store last known plan to detect changes
-            const lastKnownPlan = sessionStorage.getItem('rf-last-known-plan');
-            if (lastKnownPlan && lastKnownPlan === 'trial' && plan === 'essential') {
-              console.log('[RESUME-FEEDBACK] Plan upgraded from trial to essential - usage should reset');
-              // Usage reset is handled by backend (plan_updated_at), this ensures frontend refreshes
-            }
-            sessionStorage.setItem('rf-last-known-plan', plan);
+            // Note: Usage reset on plan upgrade (trial→essential) is handled by backend via plan_updated_at.
+            // This function always fetches fresh data from the API, so the reset is automatically reflected.
 
             // Clear container first
             usageContainer.innerHTML = '';
