@@ -1,5 +1,15 @@
 import { getBearer, verifyFirebaseIdToken } from '../_lib/firebase-auth.js';
 import { getUserPlanData, updateUserPlan } from '../_lib/db.js';
+import {
+  stripe,
+  planToPrice,
+  priceIdToPlan,
+  planRank,
+  statusRank,
+  getPlanFromSubscription,
+  pickBestSubscription,
+  listSubscriptions
+} from '../_lib/billing-utils.js';
 
 /**
  * POST /api/upgrade-plan
@@ -219,96 +229,6 @@ function normalizePlan(plan) {
   return typeof plan === 'string' ? plan.trim().toLowerCase() : null;
 }
 
-function planToPrice(env, plan) {
-  const resolve = (base) => (
-    env[`STRIPE_PRICE_${base}_MONTHLY`] ||
-    env[`PRICE_${base}_MONTHLY`] ||
-    env[`STRIPE_PRICE_${base}`] ||
-    env[`PRICE_${base}`] ||
-    null
-  );
-  const essential = resolve('ESSENTIAL');
-  const pro = resolve('PRO');
-  const premium = resolve('PREMIUM');
-  const map = {
-    essential,
-    pro,
-    premium
-  };
-  return map[plan] || null;
-}
-
-function priceIdToPlan(env, priceId) {
-  if (!priceId) return null;
-  const essential = planToPrice(env, 'essential');
-  const pro = planToPrice(env, 'pro');
-  const premium = planToPrice(env, 'premium');
-  if (priceId === essential) return 'essential';
-  if (priceId === pro) return 'pro';
-  if (priceId === premium) return 'premium';
-  return null;
-}
-
-function planRank(plan) {
-  const ranks = {
-    trial: 0,
-    essential: 1,
-    pro: 2,
-    premium: 3
-  };
-  return ranks[plan] ?? -1;
-}
-
-function statusRank(status) {
-  const ranks = {
-    active: 3,
-    trialing: 2,
-    past_due: 1
-  };
-  return ranks[status] ?? 0;
-}
-
-function getPlanFromSubscription(sub, env) {
-  if (!sub) return null;
-  if (sub.status === 'trialing') {
-    const originalPlan = sub.metadata?.original_plan || sub.metadata?.plan;
-    if (originalPlan === 'trial') return 'trial';
-  }
-  const priceId = sub.items?.data?.[0]?.price?.id;
-  return priceIdToPlan(env, priceId) || 'essential';
-}
-
-function pickBestSubscription(subs, env) {
-  const scored = subs.map((sub) => {
-    const plan = getPlanFromSubscription(sub, env);
-    return {
-      sub,
-      plan,
-      statusScore: statusRank(sub.status),
-      planScore: planRank(plan),
-      created: sub.created || 0
-    };
-  });
-
-  scored.sort((a, b) => {
-    if (a.statusScore !== b.statusScore) return b.statusScore - a.statusScore;
-    if (a.planScore !== b.planScore) return b.planScore - a.planScore;
-    return b.created - a.created;
-  });
-
-  if (scored.length > 1) {
-    console.log('[BILLING-UPGRADE] Multiple active subscriptions detected', {
-      count: scored.length,
-      chosen: scored[0]?.sub?.id
-    });
-  }
-
-  return {
-    bestSub: scored[0].sub,
-    currentPlan: scored[0].plan
-  };
-}
-
 async function resolveCustomerId(env, uid, email) {
   let customerId = null;
 
@@ -356,16 +276,6 @@ async function resolveCustomerId(env, uid, email) {
   return customerId;
 }
 
-async function listSubscriptions(env, customerId) {
-  const res = await stripe(env, `/subscriptions?customer=${customerId}&status=all&limit=25`);
-  if (!res.ok) {
-    console.log('[BILLING-UPGRADE] Subscription list failed', res.status);
-    return [];
-  }
-  const data = await res.json();
-  return data?.data || [];
-}
-
 async function makeUpgradeIdemKey(uid, seed) {
   try {
     const day = new Date().toISOString().slice(0, 10);
@@ -400,13 +310,6 @@ function safeReturnUrl(returnUrl, env) {
   } catch (_) {
     return fallback;
   }
-}
-
-function stripe(env, path, init) {
-  const url = `https://api.stripe.com/v1${path}`;
-  const headers = new Headers(init?.headers || {});
-  headers.set('Authorization', `Bearer ${env.STRIPE_SECRET_KEY}`);
-  return fetch(url, { ...init, headers });
 }
 
 function stripeFormHeaders(env) {

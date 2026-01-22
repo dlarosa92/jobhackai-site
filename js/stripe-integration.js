@@ -816,6 +816,10 @@ async function upgradePlan(targetPlan, options = {}) {
         showUpgradeInfoBanner('You already have an active subscription for this plan.', 'account-setting.html');
         return;
       }
+      if (data?.code === 'DOWNGRADE_NOT_ALLOWED') {
+        showUpgradeInfoBanner('Downgrades are not supported. Please contact support or manage your subscription in the billing portal.', 'account-setting.html');
+        return;
+      }
       throw new Error(data?.error || data?.code || 'upgrade_failed');
     }
 
