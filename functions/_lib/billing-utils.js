@@ -35,6 +35,7 @@ export function planToPrice(env, plan) {
   const pro = resolve('PRO');
   const premium = resolve('PREMIUM');
   const map = {
+    trial: essential,  // Map trial to Essential price (3-day trial applied via subscription_data)
     essential,
     pro,
     premium

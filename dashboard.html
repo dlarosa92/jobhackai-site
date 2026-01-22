@@ -1303,6 +1303,10 @@
         }
       };
       
+      // CRITICAL FIX: Expose refreshPlanData on window for upgradePlan callback
+      // This ensures the UI updates immediately after a successful plan upgrade
+      window.refreshPlanData = refreshPlanData;
+      
       // Refresh every 2 minutes (120000 ms) - frequent enough to catch upgrades quickly
       // but not so frequent as to cause server load
       setInterval(refreshPlanData, 120000);
