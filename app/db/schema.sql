@@ -18,7 +18,6 @@ CREATE TABLE IF NOT EXISTS users (
 );
 
 CREATE INDEX IF NOT EXISTS idx_users_auth_id ON users(auth_id);
-CREATE INDEX IF NOT EXISTS idx_users_has_seen_welcome_modal ON users(has_seen_welcome_modal);
 
 -- ============================================================
 -- RESUME_SESSIONS TABLE

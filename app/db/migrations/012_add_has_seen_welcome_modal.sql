@@ -17,15 +17,16 @@
 --
 -- Rollback (if needed):
 -- ALTER TABLE users DROP COLUMN has_seen_welcome_modal;
--- DROP INDEX IF EXISTS idx_users_has_seen_welcome_modal;
 
 -- Add the has_seen_welcome_modal column
 ALTER TABLE users ADD COLUMN has_seen_welcome_modal INTEGER NOT NULL DEFAULT 0;
 
--- Create index for faster lookups
-CREATE INDEX IF NOT EXISTS idx_users_has_seen_welcome_modal ON users(has_seen_welcome_modal);
-
--- Update existing users: if they have a plan other than 'free', they've likely seen the modal
--- This prevents re-showing the modal to existing premium users after migration
-UPDATE users SET has_seen_welcome_modal = 1 
-WHERE plan IN ('trial', 'essential', 'pro', 'premium');
+-- Note: We intentionally do NOT backfill existing premium users here because:
+-- 1. The 'plan' column is added by migration 007, which may not exist in fresh databases
+-- 2. Fresh databases created from schema.sql won't have premium users anyway
+-- 3. Existing premium users seeing the modal once after migration is acceptable
+--    (they can dismiss it and it won't show again)
+--
+-- If you need to backfill existing premium users, run this AFTER migration 007:
+-- UPDATE users SET has_seen_welcome_modal = 1 
+-- WHERE plan IN ('trial', 'essential', 'pro', 'premium');
