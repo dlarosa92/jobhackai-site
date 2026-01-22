@@ -5277,6 +5277,11 @@
             });
           }
           
+          // Refresh usage indicator after successful feedback generation
+          if (bothComplete && typeof refreshUsageIndicator === 'function') {
+            refreshUsageIndicator();
+          }
+          
           // Both ATS scoring and feedback completed (successfully or with errors)
 
           // Update original snippet in rewrite section (only if not already loaded)
@@ -5359,6 +5364,11 @@
             generateBtn.disabled = !fileStillExists;
           }
           hideLoadingState();
+          
+          // Refresh usage indicator after feedback completes (to show updated count)
+          if (feedbackSettled.status === 'fulfilled' && feedbackSettled.value && typeof refreshUsageIndicator === 'function') {
+            refreshUsageIndicator();
+          }
           
           // Clear feedback token at end of Promise.allSettled processing
           // Only clear if role tips aren't in-flight (role tips will clear token in its .finally() handler)
@@ -7670,6 +7680,15 @@
           if (usageData.success && usageData.usage && usageData.usage.resumeFeedback) {
             const usage = usageData.usage.resumeFeedback;
             const plan = usageData.plan;
+            
+            // Detect plan change: if plan changed from trial to essential, usage should reset
+            // Store last known plan to detect changes
+            const lastKnownPlan = sessionStorage.getItem('rf-last-known-plan');
+            if (lastKnownPlan && lastKnownPlan === 'trial' && plan === 'essential') {
+              console.log('[RESUME-FEEDBACK] Plan upgraded from trial to essential - usage should reset');
+              // Usage reset is handled by backend (plan_updated_at), this ensures frontend refreshes
+            }
+            sessionStorage.setItem('rf-last-known-plan', plan);
 
             // Clear container first
             usageContainer.innerHTML = '';

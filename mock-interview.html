@@ -2572,12 +2572,64 @@
           savedToHistory: result.savedToHistory 
         });
         
-        // Update usage
+        // Update usage locally for immediate UI feedback
         state.sessionsUsed++;
         updateMeter();
         
         // Refresh history (await to ensure it completes)
         await fetchHistory();
+        
+        // Refresh usage from API to ensure accurate count (with retry logic)
+        const refreshUsageFromAPI = async (retries = 3, delay = 1000) => {
+          try {
+            const token = await getToken();
+            if (!token) return;
+            
+            const response = await fetch('/api/usage', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+              }
+            });
+            
+            if (!response.ok) {
+              throw new Error(`Usage API returned ${response.status}`);
+            }
+            
+            const data = await response.json();
+            if (data.success && data.usage && data.usage.mockInterviews) {
+              const usage = data.usage.mockInterviews;
+              // Update state from authoritative API data
+              if (usage.used !== null && usage.used !== undefined) {
+                state.sessionsUsed = usage.used;
+              }
+              if (usage.limit !== null && usage.limit !== undefined) {
+                state.sessionLimit = usage.limit;
+              } else if (usage.limit === null) {
+                // Unlimited plan - set a high limit for display purposes
+                state.sessionLimit = Infinity;
+              }
+              updateMeter();
+              return true; // Success
+            }
+            
+            // If we didn't get valid data and have retries left, try again
+            if (retries > 0) {
+              console.log(`[MI] Usage refresh retry (${retries} attempts remaining)`);
+              setTimeout(() => refreshUsageFromAPI(retries - 1, delay), delay);
+            }
+          } catch (error) {
+            console.error('[MI] Error refreshing usage from API:', error);
+            // Retry on error if we have attempts left
+            if (retries > 0) {
+              setTimeout(() => refreshUsageFromAPI(retries - 1, delay), delay);
+            }
+          }
+        };
+        
+        // Initial refresh with delay to allow backend write to complete
+        setTimeout(() => refreshUsageFromAPI(), 1000);
         
         // Show summary
         showSummary();
