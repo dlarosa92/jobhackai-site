@@ -1676,6 +1676,82 @@ export async function incrementMockInterviewMonthlyUsage(env, userId) {
 }
 
 // ============================================================
+// USER PREFERENCES HELPERS
+// ============================================================
+
+/**
+ * Check if user has seen the welcome modal
+ * @param {Object} env - Cloudflare environment with DB binding
+ * @param {string} authId - Firebase UID
+ * @returns {Promise<boolean>} True if user has seen the modal
+ */
+export async function hasSeenWelcomeModal(env, authId) {
+  const db = getDb(env);
+  if (!db) {
+    console.warn('[DB] D1 binding not available');
+    return false; // Default to not seen if DB unavailable
+  }
+
+  try {
+    const user = await db.prepare(
+      'SELECT has_seen_welcome_modal FROM users WHERE auth_id = ?'
+    ).bind(authId).first();
+
+    if (!user) {
+      return false; // User doesn't exist yet
+    }
+
+    return user.has_seen_welcome_modal === 1;
+  } catch (error) {
+    // Handle case where column doesn't exist yet (migration not run)
+    const errorMessage = error?.message || String(error);
+    if (errorMessage.includes('no such column: has_seen_welcome_modal')) {
+      console.warn('[DB] has_seen_welcome_modal column not found. Migration 012 needs to be run.');
+      return false; // Graceful fallback
+    }
+    
+    console.error('[DB] Error in hasSeenWelcomeModal:', error);
+    return false; // Default to not seen on error
+  }
+}
+
+/**
+ * Mark that user has seen the welcome modal
+ * @param {Object} env - Cloudflare environment with DB binding
+ * @param {string} authId - Firebase UID
+ * @returns {Promise<boolean>} Success
+ */
+export async function markWelcomeModalAsSeen(env, authId) {
+  const db = getDb(env);
+  if (!db) {
+    console.warn('[DB] D1 binding not available');
+    return false;
+  }
+
+  try {
+    // Ensure user exists first
+    await getOrCreateUserByAuthId(env, authId);
+
+    await db.prepare(
+      'UPDATE users SET has_seen_welcome_modal = 1, updated_at = datetime(\'now\') WHERE auth_id = ?'
+    ).bind(authId).run();
+
+    console.log('[DB] Marked welcome modal as seen:', { authId });
+    return true;
+  } catch (error) {
+    // Handle case where column doesn't exist yet (migration not run)
+    const errorMessage = error?.message || String(error);
+    if (errorMessage.includes('no such column: has_seen_welcome_modal')) {
+      console.warn('[DB] has_seen_welcome_modal column not found. Migration 012 needs to be run.');
+      return false;
+    }
+    
+    console.error('[DB] Error in markWelcomeModalAsSeen:', error);
+    return false;
+  }
+}
+
+// ============================================================
 // COOKIE CONSENT HELPERS
 // ============================================================
 

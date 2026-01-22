@@ -14,6 +14,104 @@ function escapeHtml(text) {
 }
 
 /**
+ * Get Firebase ID token (tries multiple methods)
+ * @returns {Promise<string|null>} Firebase ID token or null
+ */
+async function getFirebaseIdToken() {
+  try {
+    // Try window.getFirebaseIdToken if available
+    if (typeof window.getFirebaseIdToken === 'function') {
+      return await window.getFirebaseIdToken();
+    }
+    
+    // Try FirebaseAuthManager pattern
+    const user = window.FirebaseAuthManager?.getCurrentUser?.();
+    if (user && typeof user.getIdToken === 'function') {
+      return await user.getIdToken();
+    }
+    
+    // Try firebase.auth().currentUser pattern
+    if (window.firebase?.auth?.().currentUser) {
+      return await window.firebase.auth().currentUser.getIdToken();
+    }
+    
+    return null;
+  } catch (error) {
+    console.warn('[WelcomePopup] Error getting Firebase token:', error);
+    return null;
+  }
+}
+
+/**
+ * Check if user has seen welcome modal on server (source of truth)
+ * @returns {Promise<boolean>} True if user has seen the modal
+ */
+async function checkWelcomeModalSeenServerSide() {
+  try {
+    const idToken = await getFirebaseIdToken();
+    if (!idToken) {
+      console.warn('[WelcomePopup] No Firebase token available for server-side check');
+      return false;
+    }
+
+    const response = await fetch('/api/user-preferences?preference=welcomeModalSeen', {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${idToken}`,
+        'Content-Type': 'application/json'
+      }
+    });
+
+    if (response.ok) {
+      const data = await response.json();
+      return data.value === true;
+    }
+    
+    return false;
+  } catch (error) {
+    console.warn('[WelcomePopup] Failed to check server-side modal status:', error);
+    return false;
+  }
+}
+
+/**
+ * Mark welcome modal as seen on server (source of truth)
+ * @returns {Promise<boolean>} Success
+ */
+async function markWelcomeModalSeenServerSide() {
+  try {
+    const idToken = await getFirebaseIdToken();
+    if (!idToken) {
+      console.warn('[WelcomePopup] No Firebase token available for server-side update');
+      return false;
+    }
+
+    const response = await fetch('/api/user-preferences', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${idToken}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        preference: 'welcomeModalSeen',
+        value: true
+      })
+    });
+
+    if (response.ok) {
+      console.log('[WelcomePopup] Successfully marked as seen on server');
+      return true;
+    } else {
+      console.warn('[WelcomePopup] Failed to mark as seen on server:', response.status);
+      return false;
+    }
+  } catch (error) {
+    console.warn('[WelcomePopup] Failed to update server-side modal status:', error);
+    return false;
+  }
+}
+
+/**
  * Get plan-specific welcome content
  * @param {string} plan - User's plan (free, trial, essential, pro, premium)
  * @returns {Object} Content object with title, features, and CTA
@@ -134,10 +232,23 @@ function getWelcomeContent(plan) {
  * @param {string} userName - User's display name
  * @param {Function} onComplete - Callback when popup is closed
  */
-export function showWelcomePopup(plan = 'free', userName = 'there', onComplete = null) {
-  // Check if already shown
-  const hasSeenWelcome = localStorage.getItem('dashboard-welcome-shown');
-  if (hasSeenWelcome === 'true') {
+export async function showWelcomePopup(plan = 'free', userName = 'there', onComplete = null) {
+  // PRIORITY 1: Check server-side (source of truth)
+  const hasSeenServerSide = await checkWelcomeModalSeenServerSide();
+  if (hasSeenServerSide) {
+    console.log('[WelcomePopup] User has seen modal (server-side)');
+    if (onComplete) onComplete();
+    return;
+  }
+
+  // PRIORITY 2: Check localStorage (fallback/cache)
+  const hasSeenLocalStorage = localStorage.getItem('dashboard-welcome-shown');
+  if (hasSeenLocalStorage === 'true') {
+    console.log('[WelcomePopup] User has seen modal (localStorage)');
+    // Sync to server in background if not already there
+    markWelcomeModalSeenServerSide().catch(err => 
+      console.warn('[WelcomePopup] Background sync to server failed:', err)
+    );
     if (onComplete) onComplete();
     return;
   }
@@ -364,17 +475,25 @@ export function showWelcomePopup(plan = 'free', userName = 'there', onComplete =
   };
   document.addEventListener('keydown', escapeHandler);
 
-  const closePopup = () => {
+  const closePopup = async () => {
     // Remove escape key listener to prevent memory leak
     document.removeEventListener('keydown', escapeHandler);
 
-    // Mark as shown
+    // PRIORITY 1: Mark as shown on server (source of truth)
+    const serverUpdateSuccess = await markWelcomeModalSeenServerSide();
+    
+    // PRIORITY 2: Mark as shown in localStorage (fallback/cache)
     try {
       localStorage.setItem('dashboard-welcome-shown', 'true');
     } catch (e) {
-      console.warn('Could not save welcome popup state:', e);
+      console.warn('Could not save welcome popup state to localStorage:', e);
     }
 
+    if (!serverUpdateSuccess) {
+      console.warn('[WelcomePopup] Failed to save to server, but localStorage saved as fallback');
+    }
+    
+    // Animate and remove modal
     modal.style.animation = 'fadeOut 0.3s ease';
     setTimeout(() => {
       modal.remove();
@@ -395,13 +514,20 @@ export function showWelcomePopup(plan = 'free', userName = 'there', onComplete =
 
 /**
  * Reset welcome popup state (for testing)
+ * Note: This only clears client-side cache. Server-side reset requires manual database update or admin API.
  */
 export function resetWelcomePopup() {
+  // Clear localStorage
   try {
     localStorage.removeItem('dashboard-welcome-shown');
+    console.log('[WelcomePopup] Cleared localStorage flag');
   } catch (e) {
-    console.warn('Could not reset welcome popup state:', e);
+    console.warn('Could not reset welcome popup localStorage state:', e);
   }
+
+  // Note: Server-side reset requires manual database update or admin API
+  // This function only clears client-side cache for testing
+  console.warn('[WelcomePopup] Note: Server-side flag not reset. User will not see modal again unless database is updated.');
 }
 
 // Make functions available globally

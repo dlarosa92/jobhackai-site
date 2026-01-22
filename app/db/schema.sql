@@ -13,10 +13,12 @@ CREATE TABLE IF NOT EXISTS users (
   auth_id TEXT UNIQUE NOT NULL,          -- Firebase UID
   email TEXT,                            -- User email (from Firebase)
   created_at TEXT DEFAULT (datetime('now')),
-  updated_at TEXT DEFAULT (datetime('now'))
+  updated_at TEXT DEFAULT (datetime('now')),
+  has_seen_welcome_modal INTEGER NOT NULL DEFAULT 0  -- Tracks if user has seen welcome modal (0 = not seen, 1 = seen)
 );
 
 CREATE INDEX IF NOT EXISTS idx_users_auth_id ON users(auth_id);
+CREATE INDEX IF NOT EXISTS idx_users_has_seen_welcome_modal ON users(has_seen_welcome_modal);
 
 -- ============================================================
 -- RESUME_SESSIONS TABLE
