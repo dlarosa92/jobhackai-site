@@ -404,6 +404,21 @@ export default function Dashboard() {
     }
   }, []);
 
+  // Show welcome popup on first dashboard visit
+  useEffect(() => {
+    // Wait for user data to be loaded before showing welcome popup
+    if (user.email !== "user@example.com" && user.plan) {
+      // Small delay to ensure page is fully rendered
+      const timer = setTimeout(() => {
+        if (typeof window !== 'undefined' && (window as any).showWelcomePopup) {
+          (window as any).showWelcomePopup(user.plan, user.name);
+        }
+      }, 500);
+
+      return () => clearTimeout(timer);
+    }
+  }, [user.email, user.plan, user.name]);
+
   const persistentScoreValue = atsScoreData?.score ?? null;
   const hasPersistentScore = !scoreLoading && persistentScoreValue != null;
   const displayScorePercent = scoreLoading
@@ -427,6 +442,7 @@ export default function Dashboard() {
         <link rel="stylesheet" href="/footer.css" />
         <link rel="icon" type="image/png" href="/assets/jobhackai_icon_only_128.png" />
         <link rel="apple-touch-icon" href="/assets/jobhackai_icon_only_128.png" />
+        <script src="/js/welcome-popup.js" type="module"></script>
       </Head>
 
       <style jsx>{`

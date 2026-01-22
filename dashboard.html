@@ -1191,7 +1191,14 @@
       
       // Continue with existing dashboard logic
       renderDashboard(user);
-      
+
+      // Show welcome popup for first-time dashboard visitors
+      setTimeout(() => {
+        if (typeof window.showWelcomePopup === 'function') {
+          window.showWelcomePopup(user.plan, user.firstName || user.name);
+        }
+      }, 800);
+
       // Add periodic refresh for plan changes (for all users)
       // This ensures plan upgrades/downgrades are detected automatically
       const planState = { 
@@ -3325,6 +3332,7 @@
       }
     });
   </script>
+  <script src="js/welcome-popup.js" type="module"></script>
   <script src="js/main.js" type="module"></script>
   <script src="js/analytics.js" type="module"></script>
   <script type="module">
