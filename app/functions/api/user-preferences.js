@@ -88,7 +88,18 @@ export async function onRequest(context) {
       }
 
       // Handle different preference types
-      if (preference === 'welcomeModalSeen' && value === true) {
+      if (preference === 'welcomeModalSeen') {
+        // Validate value - must be boolean true
+        if (value !== true) {
+          return new Response(
+            JSON.stringify({ 
+              error: 'Invalid value for welcomeModalSeen',
+              message: 'Value must be boolean true'
+            }),
+            { status: 400, headers: corsHeaders(origin, env) }
+          );
+        }
+
         const success = await markWelcomeModalAsSeen(env, authId);
         
         if (success) {

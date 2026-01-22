@@ -237,6 +237,12 @@ export async function showWelcomePopup(plan = 'free', userName = 'there', onComp
   const hasSeenServerSide = await checkWelcomeModalSeenServerSide();
   if (hasSeenServerSide) {
     console.log('[WelcomePopup] User has seen modal (server-side)');
+    // Sync to localStorage for fallback if server becomes unavailable
+    try {
+      localStorage.setItem('dashboard-welcome-shown', 'true');
+    } catch (e) {
+      console.warn('[WelcomePopup] Could not sync server state to localStorage:', e);
+    }
     if (onComplete) onComplete();
     return;
   }
@@ -475,7 +481,25 @@ export async function showWelcomePopup(plan = 'free', userName = 'there', onComp
   };
   document.addEventListener('keydown', escapeHandler);
 
+  // Flag to prevent duplicate calls during async operations
+  let isClosing = false;
+
   const closePopup = async () => {
+    // Prevent duplicate calls
+    if (isClosing) {
+      return;
+    }
+    isClosing = true;
+
+    // Immediately disable interactions to prevent duplicate calls
+    modal.style.pointerEvents = 'none';
+    const ctaButton = document.getElementById('jh-welcome-cta');
+    if (ctaButton) {
+      ctaButton.style.pointerEvents = 'none';
+      ctaButton.style.opacity = '0.6';
+      ctaButton.style.cursor = 'not-allowed';
+    }
+
     // Remove escape key listener to prevent memory leak
     document.removeEventListener('keydown', escapeHandler);
 
