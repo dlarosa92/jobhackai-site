@@ -187,7 +187,7 @@ export async function onRequest(context) {
     const activeSubs = subs.filter((sub) =>
       sub && ['active', 'trialing', 'past_due'].includes(sub.status)
     );
-    if (activeSubs.length > 0 && plan !== 'trial') {
+    if (activeSubs.length > 0) {
       const currentPlan = getPlanFromSubscription(activeSubs[0], env);
       console.log('🟡 [CHECKOUT] Active subscription exists, blocking checkout', {
         uid,
