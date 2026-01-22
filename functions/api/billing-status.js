@@ -1,4 +1,5 @@
 import { getBearer, verifyFirebaseIdToken } from '../_lib/firebase-auth';
+import { stripe, priceIdToPlan } from '../_lib/billing-utils.js';
 
 /**
  * GET /api/billing-status
@@ -145,11 +146,11 @@ export async function onRequest(context) {
         plan = 'trial';
       } else {
         // Regular subscription in trial period - map from price ID
-        plan = priceIdToPlan(env, priceId) || 'essential';
+        plan = priceIdToPlan(env, priceId, { defaultToFree: true });
       }
     } else if (latestSub.status === 'active' || latestSub.status === 'past_due') {
       // Active subscription - map from price ID
-      plan = priceIdToPlan(env, priceId) || 'essential';
+      plan = priceIdToPlan(env, priceId, { defaultToFree: true });
     }
     
     // Get payment method info - check customer's default payment method
@@ -183,14 +184,7 @@ export async function onRequest(context) {
   }
 }
 
-// Helper functions (copied from stripe-checkout.js)
-function stripe(env, path, init) {
-  const url = `https://api.stripe.com/v1${path}`;
-  const headers = new Headers(init?.headers || {});
-  headers.set('Authorization', `Bearer ${env.STRIPE_SECRET_KEY}`);
-  return fetch(url, { ...init, headers });
-}
-
+// Helper functions
 function corsHeaders(origin, env) {
   const expected = (env && env.FRONTEND_URL) ? env.FRONTEND_URL : 'https://dev.jobhackai.io';
   const allowed = origin === expected ? origin : expected;
@@ -208,17 +202,4 @@ function json(body, status, origin, env) {
 }
 
 const kvCusKey = (uid) => `cusByUid:${uid}`;
-
-function priceIdToPlan(env, priceId) {
-  if (!priceId) return 'free';
-  
-  // Map price IDs back to plan names
-  if (priceId === env.STRIPE_PRICE_ESSENTIAL_MONTHLY) return 'essential';
-  if (priceId === env.STRIPE_PRICE_PRO_MONTHLY) return 'pro';
-  if (priceId === env.STRIPE_PRICE_PREMIUM_MONTHLY) return 'premium';
-  
-  // Default to essential if we can't match (shouldn't happen)
-  console.log('🟡 [BILLING-STATUS] Unknown price ID', priceId);
-  return 'essential';
-}
 

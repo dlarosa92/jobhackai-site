@@ -1,5 +1,11 @@
 import { getBearer, verifyFirebaseIdToken } from '../_lib/firebase-auth.js';
 import { isTrialEligible, getUserPlanData } from '../_lib/db.js';
+import {
+  planToPrice,
+  priceIdToPlan,
+  getPlanFromSubscription,
+  listSubscriptions
+} from '../_lib/billing-utils.js';
 export async function onRequest(context) {
   const { request, env } = context;
   const origin = request.headers.get('Origin') || '';
@@ -361,54 +367,6 @@ function corsHeaders(origin, env) {
 function json(body, status, origin, env) { return new Response(JSON.stringify(body), { status, headers: corsHeaders(origin, env) }); }
 const kvCusKey = (uid) => `cusByUid:${uid}`;
 const kvEmailKey = (uid) => `emailByUid:${uid}`;
-async function listSubscriptions(env, customerId) {
-  const res = await stripe(env, `/subscriptions?customer=${customerId}&status=all&limit=25`);
-  if (!res.ok) {
-    console.log('🟡 [CHECKOUT] Subscription list failed', res.status);
-    return [];
-  }
-  const data = await res.json();
-  return data?.data || [];
-}
-function priceIdToPlan(env, priceId) {
-  if (!priceId) return null;
-  const essential = planToPrice(env, 'essential');
-  const pro = planToPrice(env, 'pro');
-  const premium = planToPrice(env, 'premium');
-  if (priceId === essential) return 'essential';
-  if (priceId === pro) return 'pro';
-  if (priceId === premium) return 'premium';
-  return null;
-}
-function getPlanFromSubscription(sub, env) {
-  if (!sub) return null;
-  if (sub.status === 'trialing') {
-    const originalPlan = sub.metadata?.original_plan || sub.metadata?.plan;
-    if (originalPlan === 'trial') return 'trial';
-  }
-  const priceId = sub.items?.data?.[0]?.price?.id;
-  return priceIdToPlan(env, priceId) || 'essential';
-}
-function planToPrice(env, plan) {
-  // Resolve price IDs from multiple possible env var names to avoid mismatches across environments
-  const resolve = (base) => (
-    env[`STRIPE_PRICE_${base}_MONTHLY`] ||
-    env[`PRICE_${base}_MONTHLY`] ||
-    env[`STRIPE_PRICE_${base}`] ||
-    env[`PRICE_${base}`] ||
-    null
-  );
-  const essential = resolve('ESSENTIAL');
-  const pro = resolve('PRO');
-  const premium = resolve('PREMIUM');
-  const map = {
-    trial: essential, // Use Essential price with trial period
-    essential: essential,
-    pro: pro,
-    premium: premium
-  };
-  return map[plan] || null;
-}
 
 // Build a robust Idempotency-Key from stable parameters, so retries succeed
 // and parameter changes (e.g., URLs, price, customer, trial period, payment_method_collection) generate a new key
