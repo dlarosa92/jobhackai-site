@@ -501,7 +501,7 @@ function filterPdfMetadata(text) {
 
     // Check for CMYK color value patterns (e.g., "C=15 M=100 Y=90 K=10")
     // These are lines with multiple color channel values
-    if (/^[CKMY]=\d/.test(trimmedLine) || /\b[CKMY]=\d+(\.\d+)?\s+[CKMY]=\d/i.test(trimmedLine)) {
+    if (/^[CKMY]=\d/i.test(trimmedLine) || /\b[CKMY]=\d+(\.\d+)?\s+[CKMY]=\d/i.test(trimmedLine)) {
       continue;
     }
 
@@ -535,8 +535,11 @@ function filterPdfMetadata(text) {
     if (inMetadataBlock) {
       // Check for key=value patterns (with or without spaces)
       if (trimmedLine.includes('=')) {
-        // Allow lines that look like actual content (email addresses, URLs)
-        if (!/@/.test(trimmedLine) && !/https?:\/\//.test(trimmedLine)) {
+        // Allow lines that look like actual content (email addresses, URLs with or without protocol)
+        const hasEmail = /@/.test(trimmedLine);
+        const hasProtocolUrl = /https?:\/\//.test(trimmedLine);
+        const hasUrlDomain = /\b[a-z0-9-]+\.(com|org|net|io|edu|gov|co|me|info|biz|dev|app)\b/i.test(trimmedLine);
+        if (!hasEmail && !hasProtocolUrl && !hasUrlDomain) {
           continue;
         }
       }
