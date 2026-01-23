@@ -98,9 +98,11 @@ export default {
           }
 
           // Use Cloudflare Workers AI toMarkdown() for PDF extraction
+          // API expects: { name: string, blob: Blob }
+          const blob = new Blob([buffer], { type: "application/pdf" });
           const result = await env.AI.toMarkdown([{
-            data: buffer,
-            filename: fileName || "resume.pdf"
+            name: fileName || "resume.pdf",
+            blob: blob
           }]);
 
           // toMarkdown returns an array of results

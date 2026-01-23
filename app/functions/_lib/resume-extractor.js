@@ -262,9 +262,11 @@ async function extractPdfText(arrayBuffer, env) {
     }
 
     // Use Cloudflare Workers AI toMarkdown() for PDF extraction
+    // API expects: { name: string, blob: Blob }
+    const blob = new Blob([arrayBuffer], { type: 'application/pdf' });
     const result = await env.AI.toMarkdown([{
-      data: new Uint8Array(arrayBuffer),
-      filename: 'resume.pdf'
+      name: 'resume.pdf',
+      blob: blob
     }]);
 
     // toMarkdown returns an array of results
