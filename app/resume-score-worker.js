@@ -4,6 +4,8 @@
 
 // Constants - aligned with resume-extractor.js
 const SCANNED_PDF_THRESHOLD = 400; // If text < 400 chars after cleaning, likely scanned
+const PDF_TEXT_LIMIT = 40000; // Match extractPdfText truncation
+const MIN_TEXT_LENGTH = 50; // Match extractor minimum readable text
 
 export default {
   async fetch(request, env, ctx) {
@@ -108,7 +110,8 @@ export default {
             throw new Error(pdfResult?.error || "toMarkdown returned no result");
           }
 
-          text = (pdfResult.data || pdfResult.text || "").trim();
+          const rawPdfText = pdfResult.data || pdfResult.text || "";
+          text = rawPdfText.slice(0, PDF_TEXT_LIMIT).trim();
         } catch (pdfError) {
           console.error("[RESUME-SCORE-WORKER] PDF extraction failed:", pdfError);
           return new Response(
@@ -162,8 +165,7 @@ export default {
 
       // Check if PDF appears to be scanned (only for PDF files, after cleanText for consistency with resume-extractor.js)
       // This check happens at the same stage in both files: after stripMarkdown and cleanText
-      // For TXT files, we validate text length separately below
-      if (isPdf && text && text.trim().length < SCANNED_PDF_THRESHOLD) {
+      if (isPdf && text && text.length < SCANNED_PDF_THRESHOLD) {
         return new Response(
           JSON.stringify({
             error: "This PDF appears to be image-based (scanned). Please upload a text-based PDF for best results."
@@ -178,8 +180,8 @@ export default {
         );
       }
 
-      // Detect multi-column layout for TXT files (after cleaning, since they don't have markdown)
-      if (!isPdf && text && text.length >= SCANNED_PDF_THRESHOLD) {
+      // Fallback multi-column detection post-cleaning (matches extractor behavior)
+      if (!isMultiColumn && text) {
         isMultiColumn = detectMultiColumnLayout(text);
       }
 
@@ -187,7 +189,7 @@ export default {
       text = text.replace(/\s+/g, " ").trim();
 
       // Validate text quality
-      if (!text || text.length < 500) {
+      if (!text || text.length < MIN_TEXT_LENGTH) {
         return new Response(
           JSON.stringify({
             error: "Unreadable resume. Please upload a higher-quality file.",
@@ -411,8 +413,16 @@ function grammarCheck(text) {
  * @returns {boolean} - True if multi-column layout detected
  */
 function detectMultiColumnLayout(text) {
-  const lines = text.split("\n");
-  const avgLineLength = lines.reduce((sum, line) => sum + line.trim().length, 0) / lines.length;
+  const lines = text
+    .split("\n")
+    .map(line => line.trim())
+    .filter(line => line.length > 0);
+
+  if (lines.length === 0) {
+    return false;
+  }
+
+  const avgLineLength = lines.reduce((sum, line) => sum + line.length, 0) / lines.length;
   
   // If average line length is very short (< 30 chars), likely multi-column
   if (avgLineLength < 30 && lines.length > 20) {
@@ -420,7 +430,7 @@ function detectMultiColumnLayout(text) {
   }
   
   // Check for many lines with similar short lengths (column pattern)
-  const shortLines = lines.filter(line => line.trim().length > 0 && line.trim().length < 40);
+  const shortLines = lines.filter(line => line.length < 40);
   if (shortLines.length > lines.length * 0.6) {
     return true;
   }
@@ -517,4 +527,3 @@ function cleanText(text) {
 
   return text.trim();
 }
-
