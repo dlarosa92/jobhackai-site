@@ -591,7 +591,8 @@ function filterPdfMetadata(text) {
 
     // Check for color swatch group names and definitions
     // Patterns like "Grays0C=", "Brights0C=", "Default Swatch Group0White"
-    if (/^(Grays|Brights|Default Swatch Group)/i.test(trimmedLine)) {
+    // Must include digit after name to avoid filtering legitimate content like "Grays Harbor College"
+    if (/^(Grays|Brights)\d+[CMYK]=/i.test(trimmedLine) || /^Default Swatch Group\d+/i.test(trimmedLine)) {
       continue;
     }
 
