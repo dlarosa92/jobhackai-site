@@ -404,6 +404,7 @@ async function extractPdfWithOCR() {
  * - Section headers like "Metadata" and "Contents" that precede metadata blocks
  * - Base64-encoded image data (long alphanumeric strings)
  * - File name references at the start (e.g., "resume.pdf")
+ * - Adobe Illustrator CMYK color metadata (CMYKPROCESS, color values)
  */
 function filterPdfMetadata(text) {
   if (!text) return '';
@@ -436,6 +437,7 @@ function filterPdfMetadata(text) {
     /^photoshop:/i,
     /^illustrator:/i,
     /^xmpTPg:/i,
+    /^xmptpg:/i,
     // Section headers that indicate metadata blocks
     /^Metadata$/i,
     /^Contents$/i,
@@ -470,8 +472,8 @@ function filterPdfMetadata(text) {
     // Check if this line looks like actual content (ends metadata block)
     // Content typically has spaces, punctuation, or is a recognizable section header
     const looksLikeContent = (
-      // Has multiple words (not a key=value pair)
-      (trimmedLine.split(/\s+/).length > 2 && !trimmedLine.includes('=')) ||
+      // Has multiple words (not a key=value pair) and doesn't contain CMYK metadata
+      (trimmedLine.split(/\s+/).length > 2 && !trimmedLine.includes('=') && !trimmedLine.includes('CMYKPROCESS')) ||
       // Is a resume section header
       /^(EXPERIENCE|EDUCATION|SKILLS|PROJECTS|AWARDS|CERTIFICATIONS|SUMMARY|OBJECTIVE|PROFILE|ABOUT|CONTACT|WORK|EMPLOYMENT|PROFESSIONAL|TECHNICAL|QUALIFICATIONS)/i.test(trimmedLine) ||
       // Contains common resume text patterns (phone, email, name patterns)
@@ -487,6 +489,25 @@ function filterPdfMetadata(text) {
     const isMetadataLine = metadataPatterns.some(pattern => pattern.test(trimmedLine));
     if (isMetadataLine) {
       inMetadataBlock = true;
+      continue;
+    }
+
+    // Check for Adobe Illustrator CMYK color metadata
+    // Patterns like: "K=40CMYKPROCESS55.00000060...", "C=15 M=100 Y=90 K=10CMYKPROCESS"
+    // Also matches color swatch names like "Grays0C=0 M=0 Y=0 K=100CMYKPROCESS"
+    if (/CMYKPROCESS/i.test(trimmedLine)) {
+      continue;
+    }
+
+    // Check for CMYK color value patterns (e.g., "C=15 M=100 Y=90 K=10")
+    // These are lines with multiple color channel values
+    if (/^[CKMY]=\d/.test(trimmedLine) || /\b[CKMY]=\d+(\.\d+)?\s+[CKMY]=\d/i.test(trimmedLine)) {
+      continue;
+    }
+
+    // Check for color swatch group names and definitions
+    // Patterns like "Grays0C=", "Brights0C=", "Default Swatch Group0White"
+    if (/^(Grays|Brights|Default Swatch Group)/i.test(trimmedLine)) {
       continue;
     }
 
@@ -510,9 +531,15 @@ function filterPdfMetadata(text) {
       continue;
     }
 
-    // Skip if still in metadata block
-    if (inMetadataBlock && trimmedLine.includes('=') && !trimmedLine.includes(' ')) {
-      continue;
+    // Skip if still in metadata block (key=value pairs, even with spaces for CMYK-like values)
+    if (inMetadataBlock) {
+      // Check for key=value patterns (with or without spaces)
+      if (trimmedLine.includes('=')) {
+        // Allow lines that look like actual content (email addresses, URLs)
+        if (!/@/.test(trimmedLine) && !/https?:\/\//.test(trimmedLine)) {
+          continue;
+        }
+      }
     }
 
     // This line looks like actual content
