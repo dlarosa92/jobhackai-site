@@ -75,11 +75,11 @@ export async function onRequest(context) {
       }, 400, origin, env);
     }
 
-    // Extract text with OCR fallback
+    // Extract text using Cloudflare Workers AI toMarkdown()
     let extractionResult;
     try {
       const arrayBuffer = await file.arrayBuffer();
-      extractionResult = await extractResumeText(arrayBuffer, fileName);
+      extractionResult = await extractResumeText(arrayBuffer, fileName, env);
     } catch (extractError) {
       // Return appropriate HTTP status code for extraction failures
       // 400 for client errors (unsupported format, file too large, etc.)

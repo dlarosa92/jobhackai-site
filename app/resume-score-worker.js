@@ -1,8 +1,6 @@
 // JobHackAI ATS Resume Scoring Worker
-// Edge-based resume scoring with Tesseract OCR + unpdf
+// Edge-based resume scoring using Cloudflare Workers AI toMarkdown()
 // Rule-based scoring engine (no AI tokens) - AI feedback available via OpenAI binding
-
-import Tesseract from "tesseract.js";
 
 export default {
   async fetch(request, env, ctx) {
@@ -85,48 +83,39 @@ export default {
       let ocrUsed = false;
       let isMultiColumn = false;
 
-      // 1️⃣ Extract text (or fallback to OCR)
+      // 1️⃣ Extract text using Cloudflare Workers AI toMarkdown()
       if (mime === "application/pdf" || fileName.toLowerCase().endsWith(".pdf")) {
         try {
-          // Try unpdf first for text-based PDFs (serverless-optimized PDF.js wrapper)
-          const { extractText, getDocumentProxy } = await import('unpdf');
-          const pdf = await getDocumentProxy(buffer);
-          const { text: extractedText } = await extractText(pdf, { mergePages: true });
-          text = extractedText?.trim() || "";
-          
+          // Verify AI binding is available
+          if (!env?.AI) {
+            throw new Error("AI binding not configured");
+          }
+
+          // Use Cloudflare Workers AI toMarkdown() for PDF extraction
+          const result = await env.AI.toMarkdown([{
+            data: buffer,
+            filename: fileName || "resume.pdf"
+          }]);
+
+          // toMarkdown returns an array of results
+          const pdfResult = Array.isArray(result) ? result[0] : result;
+
+          if (!pdfResult || pdfResult.error) {
+            throw new Error(pdfResult?.error || "toMarkdown returned no result");
+          }
+
+          text = (pdfResult.data || pdfResult.text || "").trim();
+
           // Detect multi-column layout (only if we have sufficient text)
           if (text && text.length >= 200) {
             isMultiColumn = detectMultiColumnLayout(text);
           }
 
-          // Fallback to OCR if text not selectable or too short
+          // Check if PDF appears to be scanned (very little text)
           if (text.length < 200) {
-            const { data: ocr } = await Tesseract.recognize(buffer, "eng", {
-              logger: m => {} // Suppress logs
-            });
-            text = ocr.text;
-            ocrUsed = true;
-            // Recalculate multi-column detection on OCR-extracted text
-            if (text && text.length >= 200) {
-              isMultiColumn = detectMultiColumnLayout(text);
-            }
-          }
-        } catch (pdfError) {
-          // If unpdf fails, try OCR
-          try {
-            const { data: ocr } = await Tesseract.recognize(buffer, "eng", {
-              logger: m => {}
-            });
-            text = ocr.text;
-            ocrUsed = true;
-            // Detect multi-column layout on OCR-extracted text
-            if (text && text.length >= 200) {
-              isMultiColumn = detectMultiColumnLayout(text);
-            }
-          } catch (ocrError) {
             return new Response(
               JSON.stringify({
-                error: "Failed to extract text from PDF. Please upload a text-based PDF or higher-quality scan."
+                error: "This PDF appears to be image-based (scanned). Please upload a text-based PDF for best results."
               }),
               {
                 status: 400,
@@ -137,6 +126,21 @@ export default {
               }
             );
           }
+        } catch (pdfError) {
+          console.error("[RESUME-SCORE-WORKER] PDF extraction failed:", pdfError);
+          return new Response(
+            JSON.stringify({
+              error: "Failed to extract text from PDF. Please upload a text-based PDF.",
+              details: pdfError.message
+            }),
+            {
+              status: 400,
+              headers: {
+                "Content-Type": "application/json",
+                ...corsHeaders
+              }
+            }
+          );
         }
       } else if (mime.includes("text") || fileName.toLowerCase().endsWith(".txt")) {
         // Plain text file
