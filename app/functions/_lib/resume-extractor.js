@@ -398,28 +398,171 @@ async function extractPdfWithOCR() {
  * The toMarkdown() API can include PDF internal metadata and embedded images
  * which corrupt the resume text and cause rewrite hallucinations.
  *
- * Filters:
- * - PDF metadata fields (PDFFormatVersion=, CreationDate=, Producer=, etc.)
- * - XMP metadata (xmp:, xmpmm:, dc:, etc.)
- * - Section headers like "Metadata" and "Contents" that precede metadata blocks
- * - Base64-encoded image data (long alphanumeric strings)
- * - File name references at the start (e.g., "resume.pdf")
- * - Adobe Illustrator CMYK color metadata (CMYKPROCESS, color values)
+ * This filter uses a robust two-phase approach:
+ * 1. Find where actual resume content starts (after metadata block)
+ * 2. Filter any remaining embedded metadata/base64 from content
+ *
+ * Handles various toMarkdown output formats including:
+ * - Plain text headers (Metadata, Contents)
+ * - Markdown headers (# Metadata, ## Contents)
+ * - Various PDF creator metadata (Adobe, XMP, etc.)
+ * - CMYK color definitions from design software
+ * - Base64 encoded thumbnails and images
  */
 function filterPdfMetadata(text) {
   if (!text) return '';
 
-  // Known PDF metadata field prefixes (case-insensitive)
-  const metadataPatterns = [
+  const lines = text.split('\n');
+
+  // Phase 1: Find where actual resume content starts
+  // toMarkdown typically outputs: filename, Metadata section, Contents, Page N, then actual content
+  let contentStartIndex = findContentStartIndex(lines);
+
+  // If we found a clear content start, slice from there
+  // Otherwise, fall back to line-by-line filtering from the beginning
+  const startIndex = contentStartIndex !== -1 ? contentStartIndex : 0;
+
+  // Phase 2: Filter the content section for any remaining metadata/base64
+  const filteredLines = [];
+  let inMetadataBlock = contentStartIndex === -1; // If no clear start found, assume we might be in metadata
+
+  for (let i = startIndex; i < lines.length; i++) {
+    const line = lines[i];
+    const trimmedLine = line.trim();
+
+    // Skip empty lines at the beginning
+    if (trimmedLine.length === 0) {
+      if (filteredLines.length > 0) {
+        filteredLines.push(line);
+      }
+      continue;
+    }
+
+    // Strip markdown header syntax for pattern checking
+    const cleanLine = stripMarkdownHeaderPrefix(trimmedLine);
+
+    // Skip if this is definitely metadata
+    if (isDefinitelyMetadataLine(cleanLine)) {
+      continue;
+    }
+
+    // Skip base64 encoded data
+    if (isBase64Data(cleanLine)) {
+      continue;
+    }
+
+    // Skip CMYK/color metadata
+    if (isCMYKMetadata(cleanLine)) {
+      continue;
+    }
+
+    // If we haven't confirmed we're in content yet, check if this looks like resume content
+    if (inMetadataBlock) {
+      if (looksLikeResumeContent(cleanLine)) {
+        inMetadataBlock = false;
+      } else if (cleanLine.includes('=') && !hasEmailOrUrl(cleanLine)) {
+        // Still looks like metadata key=value
+        continue;
+      } else {
+        // Not clearly content, but also not clearly metadata - allow it and exit metadata mode
+        inMetadataBlock = false;
+      }
+    }
+
+    filteredLines.push(line);
+  }
+
+  return filteredLines.join('\n').trim();
+}
+
+/**
+ * Find the index where actual resume content starts
+ * Returns -1 if no clear content start marker is found
+ */
+function findContentStartIndex(lines) {
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+    const cleanLine = stripMarkdownHeaderPrefix(line);
+
+    // "Page N" markers indicate content is about to start (next line)
+    if (/^Page\s*\d+$/i.test(cleanLine)) {
+      // Content starts after "Page N"
+      // Skip any empty lines after "Page N"
+      let nextIndex = i + 1;
+      while (nextIndex < lines.length && lines[nextIndex].trim().length === 0) {
+        nextIndex++;
+      }
+      return nextIndex;
+    }
+
+    // Common resume section headers indicate content has started
+    if (/^(EXPERIENCE|EDUCATION|SKILLS|PROJECTS|AWARDS|CERTIFICATIONS|SUMMARY|OBJECTIVE|PROFILE|ABOUT ME|CONTACT|WORK HISTORY|EMPLOYMENT|PROFESSIONAL EXPERIENCE|TECHNICAL SKILLS|CORE COMPETENCIES|CAREER SUMMARY)/i.test(cleanLine)) {
+      return i;
+    }
+
+    // A line that looks like a person's name (2-4 capitalized words, no special chars)
+    // followed by job title or contact info pattern
+    if (looksLikePersonName(cleanLine) && i + 1 < lines.length) {
+      const nextLine = stripMarkdownHeaderPrefix(lines[i + 1].trim());
+      // Check if next line looks like job title, email, phone, or location
+      if (looksLikeJobTitle(nextLine) || hasEmailOrPhone(nextLine) || looksLikeLocation(nextLine)) {
+        return i;
+      }
+    }
+
+    // Email + Phone on same line often indicates header/contact section start
+    if (hasEmailAndPhone(cleanLine)) {
+      // This might be the start or there's a name before it
+      // Look back for a potential name
+      for (let j = i - 1; j >= 0 && j >= i - 3; j--) {
+        const prevClean = stripMarkdownHeaderPrefix(lines[j].trim());
+        if (looksLikePersonName(prevClean)) {
+          return j;
+        }
+      }
+      return i;
+    }
+  }
+
+  return -1;
+}
+
+/**
+ * Strip markdown header prefix (# ## ### etc) from a line
+ */
+function stripMarkdownHeaderPrefix(line) {
+  return line.replace(/^#{1,6}\s*/, '').trim();
+}
+
+/**
+ * Check if a line is definitely PDF metadata (should always be filtered)
+ */
+function isDefinitelyMetadataLine(line) {
+  const patterns = [
+    // PDF filename
+    /^[a-zA-Z0-9_\-\s]+\.pdf$/i,
+    // Section headers
+    /^Metadata$/i,
+    /^Contents$/i,
+    /^Page\s*\d+$/i,
+    // PDF structure fields
     /^PDFFormatVersion=/i,
     /^IsLinearized=/i,
     /^IsAcroFormPresent=/i,
     /^IsXFAPresent=/i,
     /^IsCollectionPresent=/i,
     /^IsSignaturesPresent=/i,
+    /^HasXFA=/i,
+    /^Linearized=/i,
+    /^Tagged=/i,
+    /^Encrypted=/i,
+    /^PageCount=/i,
+    /^PageLayout=/i,
+    /^PageMode=/i,
+    // Document metadata
     /^CreationDate=/i,
-    /^Creator=/i,
     /^ModDate=/i,
+    /^Creator=/i,
     /^Producer=/i,
     /^Title=/i,
     /^Author=/i,
@@ -427,131 +570,200 @@ function filterPdfMetadata(text) {
     /^Keywords=/i,
     /^Trapped=/i,
     /^AAPL:/i,
-    // XMP metadata prefixes
+    // XMP metadata namespaces
     /^xmp:/i,
     /^xmpmm:/i,
     /^xmpMM:/i,
+    /^xmpTPg:/i,
+    /^xmptpg:/i,
+    /^xmpRights:/i,
+    /^xmpidq:/i,
     /^dc:/i,
     /^pdf:/i,
     /^pdfx:/i,
+    /^pdfaid:/i,
+    /^pdfuaid:/i,
     /^photoshop:/i,
     /^illustrator:/i,
-    /^xmpTPg:/i,
-    /^xmptpg:/i,
-    // Section headers that indicate metadata blocks
-    /^Metadata$/i,
-    /^Contents$/i,
-    // File name at start (e.g., "resume.pdf", "document.pdf")
-    /^[a-zA-Z0-9_-]+\.pdf$/i
+    /^crs:/i,
+    /^aux:/i,
+    /^exif:/i,
+    /^tiff:/i,
+    /^stRef:/i,
+    /^stEvt:/i,
+    // UUID/GUIDs that appear in metadata
+    /^uuid:[a-f0-9-]+$/i,
+    /^urn:uuid:/i,
   ];
 
-  // Split into lines and filter
-  const lines = text.split('\n');
-  const filteredLines = [];
-  let inMetadataBlock = false;
+  return patterns.some(p => p.test(line));
+}
 
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    const trimmedLine = line.trim();
+/**
+ * Check if a line contains base64 encoded data
+ */
+function isBase64Data(line) {
+  // Pure base64 string (50+ chars)
+  if (/^[A-Za-z0-9+/=]{50,}$/.test(line)) return true;
 
-    // Skip empty lines in metadata context (but keep them in content)
-    if (trimmedLine.length === 0) {
-      // Only add empty lines if we're not in a metadata block
-      if (!inMetadataBlock && filteredLines.length > 0) {
-        filteredLines.push(line);
-      }
-      continue;
-    }
+  // Long string without spaces that looks like encoded data
+  if (line.length > 60 && !/\s/.test(line) && /^[A-Za-z0-9+/=]+$/.test(line)) return true;
 
-    // Check if this line is a metadata section header
-    if (/^Metadata$/i.test(trimmedLine)) {
-      inMetadataBlock = true;
-      continue;
-    }
+  // Embedded base64 after key= (e.g., xmp:thumbnails=200256JPEG/9j/4AAQ...)
+  if (/^[\w:]+=[A-Za-z0-9+/]{40,}/.test(line)) return true;
 
-    // Check if this line looks like actual content (ends metadata block)
-    // Content typically has spaces, punctuation, or is a recognizable section header
-    const looksLikeContent = (
-      // Has multiple words (not a key=value pair) and doesn't contain CMYK metadata
-      (trimmedLine.split(/\s+/).length > 2 && !trimmedLine.includes('=') && !/CMYKPROCESS/i.test(trimmedLine)) ||
-      // Is a resume section header
-      /^(EXPERIENCE|EDUCATION|SKILLS|PROJECTS|AWARDS|CERTIFICATIONS|SUMMARY|OBJECTIVE|PROFILE|ABOUT|CONTACT|WORK|EMPLOYMENT|PROFESSIONAL|TECHNICAL|QUALIFICATIONS)/i.test(trimmedLine) ||
-      // Contains common resume text patterns (phone, email, name patterns)
-      /[@.]\w+\.(com|edu|org|net|io)/i.test(trimmedLine) ||
-      /\d{3}[-.\s]?\d{3}[-.\s]?\d{4}/.test(trimmedLine)
-    );
+  // JPEG/PNG data signature patterns
+  if (/\/9j\/[A-Za-z0-9+/]+/.test(line)) return true; // JPEG
+  if (/iVBORw0KGgo[A-Za-z0-9+/]+/.test(line)) return true; // PNG
 
-    if (looksLikeContent) {
-      inMetadataBlock = false;
-    }
+  return false;
+}
 
-    // Check if this line matches any metadata pattern
-    const isMetadataLine = metadataPatterns.some(pattern => pattern.test(trimmedLine));
-    if (isMetadataLine) {
-      inMetadataBlock = true;
-      continue;
-    }
+/**
+ * Check if a line is CMYK color metadata (from design software)
+ */
+function isCMYKMetadata(line) {
+  // CMYKPROCESS indicator
+  if (/CMYKPROCESS/i.test(line)) return true;
 
-    // Check for Adobe Illustrator CMYK color metadata
-    // Patterns like: "K=40CMYKPROCESS55.00000060...", "C=15 M=100 Y=90 K=10CMYKPROCESS"
-    // Also matches color swatch names like "Grays0C=0 M=0 Y=0 K=100CMYKPROCESS"
-    if (/CMYKPROCESS/i.test(trimmedLine)) {
-      continue;
-    }
+  // CMYK color values (C=15 M=100 Y=90 K=10)
+  if (/^[CKMY]=\d/i.test(line)) return true;
+  if (/\b[CKMY]=\d+(\.\d+)?(\s+[CKMY]=\d+(\.\d+)?){2,}/i.test(line)) return true;
 
-    // Check for CMYK color value patterns (e.g., "C=15 M=100 Y=90 K=10")
-    // These are lines with multiple color channel values
-    if (/^[CKMY]=\d/i.test(trimmedLine) || /\b[CKMY]=\d+(\.\d+)?\s+[CKMY]=\d/i.test(trimmedLine)) {
-      continue;
-    }
+  // Color swatch definitions (Grays0C=, Brights0C=)
+  // Must have digit after name to avoid filtering "Grays Harbor" etc
+  if (/^(Grays|Brights)\d+[CMYK]=/i.test(line)) return true;
+  if (/^Default Swatch Group\d+/i.test(line)) return true;
 
-    // Check for color swatch group names and definitions
-    // Patterns like "Grays0C=", "Brights0C=", "Default Swatch Group0White"
-    // Must include digit after name to avoid filtering legitimate content like "Grays Harbor College"
-    if (/^(Grays|Brights)\d+[CMYK]=/i.test(trimmedLine) || /^Default Swatch Group\d+/i.test(trimmedLine)) {
-      continue;
-    }
+  // Spot color definitions
+  if (/^(PANTONE|Spot|Process)\s*(Color)?\s*\d/i.test(line)) return true;
 
-    // Check for base64-encoded data (very long alphanumeric strings without spaces)
-    // Base64 data is typically 50+ chars of continuous alphanumeric/+/= characters
-    const base64Pattern = /^[A-Za-z0-9+/=]{50,}$/;
-    if (base64Pattern.test(trimmedLine)) {
-      continue;
-    }
+  return false;
+}
 
-    // Check for lines that contain embedded base64 (e.g., xmp:thumbnails=200256JPEG/9j/4AAQ...)
-    // These have a short prefix followed by long alphanumeric string
-    const embeddedBase64Pattern = /^[\w:]+=[A-Za-z0-9+/]{40,}/;
-    if (embeddedBase64Pattern.test(trimmedLine)) {
-      continue;
-    }
-
-    // Check for partial base64 data (continuation lines)
-    // These are long lines without spaces that look like encoded data
-    if (trimmedLine.length > 60 && !/\s/.test(trimmedLine) && /^[A-Za-z0-9+/=]+$/.test(trimmedLine)) {
-      continue;
-    }
-
-    // Skip if still in metadata block (key=value pairs, even with spaces for CMYK-like values)
-    if (inMetadataBlock) {
-      // Check for key=value patterns (with or without spaces)
-      if (trimmedLine.includes('=')) {
-        // Allow lines that look like actual content (email addresses, URLs with or without protocol)
-        const hasEmail = /@/.test(trimmedLine);
-        const hasProtocolUrl = /https?:\/\//.test(trimmedLine);
-        const hasUrlDomain = /\b[a-z0-9-]+\.(com|org|net|io|edu|gov|co|me|info|biz|dev|app)\b/i.test(trimmedLine);
-        if (!hasEmail && !hasProtocolUrl && !hasUrlDomain) {
-          continue;
-        }
-      }
-    }
-
-    // This line looks like actual content
-    inMetadataBlock = false;
-    filteredLines.push(line);
+/**
+ * Check if a line looks like actual resume content
+ */
+function looksLikeResumeContent(line) {
+  // Common resume section headers
+  if (/^(EXPERIENCE|EDUCATION|SKILLS|PROJECTS|AWARDS|CERTIFICATIONS|SUMMARY|OBJECTIVE|PROFILE|ABOUT|CONTACT|WORK|EMPLOYMENT|PROFESSIONAL|TECHNICAL|QUALIFICATIONS|LANGUAGES|INTERESTS|HOBBIES|VOLUNTEER|REFERENCES|PUBLICATIONS)/i.test(line)) {
+    return true;
   }
 
-  return filteredLines.join('\n').trim();
+  // Has email pattern
+  if (/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/.test(line)) {
+    return true;
+  }
+
+  // Has phone pattern
+  if (/\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}/.test(line)) {
+    return true;
+  }
+
+  // Has multiple words and no = sign (likely prose/content)
+  if (line.split(/\s+/).length >= 3 && !line.includes('=')) {
+    return true;
+  }
+
+  // Date range patterns common in resumes (2020 - 2023, Jan 2020 - Present)
+  if (/\b(19|20)\d{2}\s*[-–—]\s*(Present|\d{4}|Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)/i.test(line)) {
+    return true;
+  }
+
+  // Bullet points (common in resumes)
+  if (/^[•\-\*]\s+\w/.test(line)) {
+    return true;
+  }
+
+  return false;
+}
+
+/**
+ * Check if a line looks like a person's name
+ */
+function looksLikePersonName(line) {
+  // 2-4 words, each starting with capital letter
+  // Allow common suffixes like Jr., Sr., III, PhD
+  const words = line.split(/\s+/);
+  if (words.length < 2 || words.length > 5) return false;
+
+  // Each word should be capitalized (or be a suffix/initial)
+  const suffixes = /^(Jr\.?|Sr\.?|II|III|IV|PhD|MD|MBA|CPA|Esq\.?|[A-Z]\.)$/i;
+  const isCapitalized = words.every(w =>
+    /^[A-Z][a-z]*$/.test(w) || // Normal capitalized word
+    suffixes.test(w) || // Known suffix
+    /^[A-Z]\.?$/.test(w) || // Initial
+    /^O'[A-Z]/.test(w) || // O'Brien etc
+    /^Mc[A-Z]/.test(w) || // McDonald etc
+    /^Mac[A-Z]/.test(w) // MacArthur etc
+  );
+
+  if (!isCapitalized) return false;
+
+  // Should not contain special characters (except apostrophe, hyphen, period for initials)
+  if (/[=@#$%^&*(){}[\]|\\<>\/]/.test(line)) return false;
+
+  // Should not look like metadata
+  if (/:/.test(line) && /=/.test(line)) return false;
+
+  return true;
+}
+
+/**
+ * Check if a line looks like a job title
+ */
+function looksLikeJobTitle(line) {
+  const jobTitlePatterns = [
+    /\b(engineer|developer|manager|director|analyst|designer|consultant|specialist|coordinator|administrator|assistant|associate|executive|officer|lead|senior|junior|intern|architect|scientist|researcher)\b/i,
+    /\b(software|web|mobile|frontend|backend|fullstack|full-stack|data|product|project|program|marketing|sales|hr|human resources|finance|operations|it|ux|ui)\b/i,
+  ];
+
+  return jobTitlePatterns.some(p => p.test(line));
+}
+
+/**
+ * Check if a line looks like a location (city, state/country)
+ */
+function looksLikeLocation(line) {
+  // City, STATE or City, Country patterns
+  if (/^[A-Z][a-z]+(\s+[A-Z][a-z]+)?,\s*[A-Z]{2}(\s+\d{5})?$/i.test(line)) return true;
+  if (/^[A-Z][a-z]+(\s+[A-Z][a-z]+)?,\s*[A-Z][a-z]+$/i.test(line)) return true;
+
+  // Common location indicators
+  if (/\b(remote|hybrid|onsite|on-site)\b/i.test(line)) return true;
+
+  return false;
+}
+
+/**
+ * Check if a line has email or URL (but not in metadata context)
+ */
+function hasEmailOrUrl(line) {
+  const hasEmail = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/.test(line);
+  const hasProtocolUrl = /https?:\/\//.test(line);
+  const hasUrlDomain = /\b[a-z0-9-]+\.(com|org|net|io|edu|gov|co|me|info|biz|dev|app)\b/i.test(line);
+
+  return hasEmail || hasProtocolUrl || hasUrlDomain;
+}
+
+/**
+ * Check if a line has email or phone number
+ */
+function hasEmailOrPhone(line) {
+  const hasEmail = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/.test(line);
+  const hasPhone = /\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}/.test(line);
+
+  return hasEmail || hasPhone;
+}
+
+/**
+ * Check if a line has both email and phone (common in resume headers)
+ */
+function hasEmailAndPhone(line) {
+  const hasEmail = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/.test(line);
+  const hasPhone = /\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}/.test(line);
+
+  return hasEmail && hasPhone;
 }
 
 /**
