@@ -148,6 +148,12 @@ export default {
       }
 
       // 2️⃣ Clean and sanitize text
+      // For PDFs: Filter out metadata and base64 image data FIRST
+      // This must happen before any other processing to prevent metadata from affecting scoring
+      if (isPdf && text && text.trim().length > 0) {
+        text = filterPdfMetadata(text);
+      }
+
       // For PDFs: Multi-column detection BEFORE stripMarkdown (to preserve list markers for accurate line length)
       // This matches resume-extractor.js behavior and prevents false positives from shortened lines
       if (isPdf && text && text.trim().length > 0) {
@@ -469,6 +475,136 @@ function detectIssues(text, isMultiColumn) {
   }
 
   return issues;
+}
+
+/**
+ * Filter out PDF metadata and base64 image data from extracted text
+ * The toMarkdown() API can include PDF internal metadata and embedded images
+ * which corrupt the resume text and cause rewrite hallucinations.
+ *
+ * Filters:
+ * - PDF metadata fields (PDFFormatVersion=, CreationDate=, Producer=, etc.)
+ * - XMP metadata (xmp:, xmpmm:, dc:, etc.)
+ * - Section headers like "Metadata" and "Contents" that precede metadata blocks
+ * - Base64-encoded image data (long alphanumeric strings)
+ * - File name references at the start (e.g., "resume.pdf")
+ */
+function filterPdfMetadata(text) {
+  if (!text) return "";
+
+  // Known PDF metadata field prefixes (case-insensitive)
+  const metadataPatterns = [
+    /^PDFFormatVersion=/i,
+    /^IsLinearized=/i,
+    /^IsAcroFormPresent=/i,
+    /^IsXFAPresent=/i,
+    /^IsCollectionPresent=/i,
+    /^IsSignaturesPresent=/i,
+    /^CreationDate=/i,
+    /^Creator=/i,
+    /^ModDate=/i,
+    /^Producer=/i,
+    /^Title=/i,
+    /^Author=/i,
+    /^Subject=/i,
+    /^Keywords=/i,
+    /^Trapped=/i,
+    /^AAPL:/i,
+    // XMP metadata prefixes
+    /^xmp:/i,
+    /^xmpmm:/i,
+    /^xmpMM:/i,
+    /^dc:/i,
+    /^pdf:/i,
+    /^pdfx:/i,
+    /^photoshop:/i,
+    /^illustrator:/i,
+    /^xmpTPg:/i,
+    // Section headers that indicate metadata blocks
+    /^Metadata$/i,
+    /^Contents$/i,
+    // File name at start (e.g., "resume.pdf", "document.pdf")
+    /^[a-zA-Z0-9_-]+\.pdf$/i
+  ];
+
+  // Split into lines and filter
+  const lines = text.split("\n");
+  const filteredLines = [];
+  let inMetadataBlock = false;
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const trimmedLine = line.trim();
+
+    // Skip empty lines in metadata context (but keep them in content)
+    if (trimmedLine.length === 0) {
+      // Only add empty lines if we're not in a metadata block
+      if (!inMetadataBlock && filteredLines.length > 0) {
+        filteredLines.push(line);
+      }
+      continue;
+    }
+
+    // Check if this line is a metadata section header
+    if (/^Metadata$/i.test(trimmedLine)) {
+      inMetadataBlock = true;
+      continue;
+    }
+
+    // Check if this line looks like actual content (ends metadata block)
+    // Content typically has spaces, punctuation, or is a recognizable section header
+    const looksLikeContent = (
+      // Has multiple words (not a key=value pair)
+      (trimmedLine.split(/\s+/).length > 2 && !trimmedLine.includes("=")) ||
+      // Is a resume section header
+      /^(EXPERIENCE|EDUCATION|SKILLS|PROJECTS|AWARDS|CERTIFICATIONS|SUMMARY|OBJECTIVE|PROFILE|ABOUT|CONTACT|WORK|EMPLOYMENT|PROFESSIONAL|TECHNICAL|QUALIFICATIONS)/i.test(trimmedLine) ||
+      // Contains common resume text patterns (phone, email, name patterns)
+      /[@.]\w+\.(com|edu|org|net|io)/i.test(trimmedLine) ||
+      /\d{3}[-.\s]?\d{3}[-.\s]?\d{4}/.test(trimmedLine)
+    );
+
+    if (looksLikeContent) {
+      inMetadataBlock = false;
+    }
+
+    // Check if this line matches any metadata pattern
+    const isMetadataLine = metadataPatterns.some(pattern => pattern.test(trimmedLine));
+    if (isMetadataLine) {
+      inMetadataBlock = true;
+      continue;
+    }
+
+    // Check for base64-encoded data (very long alphanumeric strings without spaces)
+    // Base64 data is typically 50+ chars of continuous alphanumeric/+/= characters
+    const base64Pattern = /^[A-Za-z0-9+/=]{50,}$/;
+    if (base64Pattern.test(trimmedLine)) {
+      continue;
+    }
+
+    // Check for lines that contain embedded base64 (e.g., xmp:thumbnails=200256JPEG/9j/4AAQ...)
+    // These have a short prefix followed by long alphanumeric string
+    const embeddedBase64Pattern = /^[\w:]+=[A-Za-z0-9+/]{40,}/;
+    if (embeddedBase64Pattern.test(trimmedLine)) {
+      continue;
+    }
+
+    // Check for partial base64 data (continuation lines)
+    // These are long lines without spaces that look like encoded data
+    if (trimmedLine.length > 60 && !/\s/.test(trimmedLine) && /^[A-Za-z0-9+/=]+$/.test(trimmedLine)) {
+      continue;
+    }
+
+    // Skip if still in metadata block
+    if (inMetadataBlock && trimmedLine.includes("=") && !trimmedLine.includes(" ")) {
+      continue;
+    }
+
+    // This line looks like actual content
+    inMetadataBlock = false;
+    filteredLines.push(line);
+  }
+
+  return filteredLines.join("\n").trim();
 }
 
 /**
