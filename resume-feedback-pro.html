@@ -5414,11 +5414,17 @@
           }
           // Ensure token is cleared on unexpected errors so cached/legacy feedback can be shown
           // Only clear if role tips aren't in-flight (role tips will clear token in its .finally() handler)
-          // Guard: maybeClearFeedbackToken may not be defined if error occurred before its declaration
+          // Guard: maybeClearFeedbackToken is declared at line ~4391 inside this try block.
+          // If an error is thrown before that line (e.g., uploadResume fails at line ~4114),
+          // the function declaration is never executed. Function declarations inside blocks
+          // have undefined hoisting behavior in non-strict mode - some browsers hoist them,
+          // others don't. This guard handles both cases correctly.
+          // Evidence: Users encountered "TypeError: maybeClearFeedbackToken is not a function"
           if (typeof maybeClearFeedbackToken === 'function') {
             maybeClearFeedbackToken('outer-catch-error');
           } else {
             // Fallback: directly clear token if the function isn't available
+            // (error occurred before function declaration was reached)
             clearActiveFeedbackToken();
           }
           clearAtsState();
