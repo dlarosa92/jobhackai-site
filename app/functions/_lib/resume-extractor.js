@@ -315,22 +315,25 @@ async function extractPdfText(arrayBuffer, env) {
 
     const trimmedText = extractedText.trim();
 
+    // If we got minimal text, return empty (check before scanned PDF detection)
+    // This handles truly empty or corrupted PDFs
+    if (trimmedText.length < 100) {
+      console.warn('[PDF] Extracted text too short', {
+        length: trimmedText.length
+      });
+      return { text: '', isMultiColumn: false, numPages: 0 };
+    }
+
     // Smart scanned PDF detection (after cleaning for consistency with resume-score-worker.js)
     // This check happens after stripMarkdown and cleanText to match resume-score-worker.js behavior
+    // Only flag as scanned if text is between 100-399 chars (very short but not empty)
+    // PDFs with < 100 chars are handled above as empty/corrupted
     if (trimmedText.length < SCANNED_PDF_THRESHOLD) {
       console.warn('[PDF] Scanned PDF detected', {
         textLength: trimmedText.length,
         threshold: SCANNED_PDF_THRESHOLD
       });
       return { text: '', isMultiColumn: false, numPages: 0, isScanned: true };
-    }
-
-    // If we got minimal text, return empty
-    if (trimmedText.length < 100) {
-      console.warn('[PDF] Extracted text too short', {
-        length: trimmedText.length
-      });
-      return { text: '', isMultiColumn: false, numPages: 0 };
     }
 
     console.log('[PDF] Successfully extracted text via toMarkdown', {

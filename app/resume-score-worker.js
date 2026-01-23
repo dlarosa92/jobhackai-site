@@ -85,9 +85,10 @@ export default {
       let text = "";
       let ocrUsed = false;
       let isMultiColumn = false;
+      const isPdf = mime === "application/pdf" || fileName.toLowerCase().endsWith(".pdf");
 
       // 1️⃣ Extract text using Cloudflare Workers AI toMarkdown()
-      if (mime === "application/pdf" || fileName.toLowerCase().endsWith(".pdf")) {
+      if (isPdf) {
         try {
           // Verify AI binding is available
           if (!env?.AI) {
@@ -143,13 +144,17 @@ export default {
 
       // 2️⃣ Clean and sanitize text
       // Strip markdown syntax (toMarkdown returns markdown-formatted text)
-      text = stripMarkdown(text);
+      // Note: Only PDFs need markdown stripping (toMarkdown returns markdown)
+      if (isPdf) {
+        text = stripMarkdown(text);
+      }
       // Fix encoding issues and normalize whitespace
       text = cleanText(text);
 
-      // Check if PDF appears to be scanned (after cleanText for consistency with resume-extractor.js)
+      // Check if PDF appears to be scanned (only for PDF files, after cleanText for consistency with resume-extractor.js)
       // This check happens at the same stage in both files: after stripMarkdown and cleanText
-      if (text && text.trim().length < SCANNED_PDF_THRESHOLD) {
+      // For TXT files, we validate text length separately below
+      if (isPdf && text && text.trim().length < SCANNED_PDF_THRESHOLD) {
         return new Response(
           JSON.stringify({
             error: "This PDF appears to be image-based (scanned). Please upload a text-based PDF for best results."
