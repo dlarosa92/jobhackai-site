@@ -279,8 +279,9 @@ async function extractPdfText(arrayBuffer, env) {
       };
     }
 
-    // Extract text from markdown result
+    // Extract text from markdown result and strip markdown syntax
     let extractedText = pdfResult.data || pdfResult.text || '';
+    extractedText = stripMarkdown(extractedText);
 
     // Check if PDF appears empty
     if (!extractedText || extractedText.trim().length === 0) {
@@ -370,6 +371,38 @@ async function extractPdfWithOCR() {
       requiresOcr: true
     }
   );
+}
+
+/**
+ * Strip markdown syntax from text
+ * toMarkdown() returns markdown-formatted text which can affect scoring
+ */
+function stripMarkdown(text) {
+  if (!text) return '';
+
+  return text
+    // Remove headers (# ## ### etc)
+    .replace(/^#{1,6}\s+/gm, '')
+    // Remove bold/italic (**text**, *text*, __text__, _text_)
+    .replace(/(\*\*|__)(.*?)\1/g, '$2')
+    .replace(/(\*|_)(.*?)\1/g, '$2')
+    // Remove inline code (`code`)
+    .replace(/`([^`]+)`/g, '$1')
+    // Remove code blocks (```code```)
+    .replace(/```[\s\S]*?```/g, '')
+    // Remove links [text](url) -> text
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+    // Remove images ![alt](url)
+    .replace(/!\[([^\]]*)\]\([^)]+\)/g, '$1')
+    // Remove horizontal rules (---, ***, ___)
+    .replace(/^[-*_]{3,}\s*$/gm, '')
+    // Remove blockquotes (> text)
+    .replace(/^>\s+/gm, '')
+    // Remove list markers (-, *, +, 1.)
+    .replace(/^[\s]*[-*+]\s+/gm, '')
+    .replace(/^[\s]*\d+\.\s+/gm, '')
+    // Remove strikethrough (~~text~~)
+    .replace(/~~(.*?)~~/g, '$1');
 }
 
 /**

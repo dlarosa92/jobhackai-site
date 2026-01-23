@@ -2,6 +2,9 @@
 // Edge-based resume scoring using Cloudflare Workers AI toMarkdown()
 // Rule-based scoring engine (no AI tokens) - AI feedback available via OpenAI binding
 
+// Constants - aligned with resume-extractor.js
+const SCANNED_PDF_THRESHOLD = 400; // If text < 400 chars after cleaning, likely scanned
+
 export default {
   async fetch(request, env, ctx) {
     // CORS headers
@@ -105,27 +108,6 @@ export default {
           }
 
           text = (pdfResult.data || pdfResult.text || "").trim();
-
-          // Detect multi-column layout (only if we have sufficient text)
-          if (text && text.length >= 200) {
-            isMultiColumn = detectMultiColumnLayout(text);
-          }
-
-          // Check if PDF appears to be scanned (very little text)
-          if (text.length < 200) {
-            return new Response(
-              JSON.stringify({
-                error: "This PDF appears to be image-based (scanned). Please upload a text-based PDF for best results."
-              }),
-              {
-                status: 400,
-                headers: {
-                  "Content-Type": "application/json",
-                  ...corsHeaders
-                }
-              }
-            );
-          }
         } catch (pdfError) {
           console.error("[RESUME-SCORE-WORKER] PDF extraction failed:", pdfError);
           return new Response(
@@ -159,8 +141,35 @@ export default {
         );
       }
 
-      // 2️⃣ Sanitize text
+      // 2️⃣ Clean and sanitize text
+      // Strip markdown syntax (toMarkdown returns markdown-formatted text)
+      text = stripMarkdown(text);
+      // Fix encoding issues and normalize whitespace
+      text = cleanText(text);
+
+      // Detect multi-column layout before final sanitization (needs newlines)
+      if (text && text.length >= SCANNED_PDF_THRESHOLD) {
+        isMultiColumn = detectMultiColumnLayout(text);
+      }
+
+      // Final sanitization for scoring
       text = text.replace(/\s+/g, " ").trim();
+
+      // Check if PDF appears to be scanned (very little text after cleaning)
+      if (text.length < SCANNED_PDF_THRESHOLD) {
+        return new Response(
+          JSON.stringify({
+            error: "This PDF appears to be image-based (scanned). Please upload a text-based PDF for best results."
+          }),
+          {
+            status: 400,
+            headers: {
+              "Content-Type": "application/json",
+              ...corsHeaders
+            }
+          }
+        );
+      }
 
       // Validate text quality
       if (!text || text.length < 500) {
@@ -407,31 +416,86 @@ function detectMultiColumnLayout(text) {
 function detectIssues(text, isMultiColumn) {
   const issues = [];
   const textLower = text.toLowerCase();
-  
+
   if (text.length < 1000) {
     issues.push("Resume too short (<1 page)");
   }
-  
+
   if (!textLower.match(/experience|work|employment/i)) {
     issues.push("Missing 'Experience' section");
   }
-  
+
   if (!textLower.match(/education|degree|university/i)) {
     issues.push("Missing 'Education' section");
   }
-  
+
   if (isMultiColumn) {
     issues.push("Detected 2-column layout");
   }
-  
+
   // Check for date formatting
   const datePattern = /\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+\d{4}\b/gi;
   const datesFound = (text.match(datePattern) || []).length;
-  
+
   if (datesFound < 2) {
     issues.push("Inconsistent or missing date formatting");
   }
-  
+
   return issues;
+}
+
+/**
+ * Strip markdown syntax from text
+ * toMarkdown() returns markdown-formatted text which can affect scoring
+ */
+function stripMarkdown(text) {
+  if (!text) return "";
+
+  return text
+    // Remove headers (# ## ### etc)
+    .replace(/^#{1,6}\s+/gm, "")
+    // Remove bold/italic (**text**, *text*, __text__, _text_)
+    .replace(/(\*\*|__)(.*?)\1/g, "$2")
+    .replace(/(\*|_)(.*?)\1/g, "$2")
+    // Remove inline code (`code`)
+    .replace(/`([^`]+)`/g, "$1")
+    // Remove code blocks (```code```)
+    .replace(/```[\s\S]*?```/g, "")
+    // Remove links [text](url) -> text
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+    // Remove images ![alt](url)
+    .replace(/!\[([^\]]*)\]\([^)]+\)/g, "$1")
+    // Remove horizontal rules (---, ***, ___)
+    .replace(/^[-*_]{3,}\s*$/gm, "")
+    // Remove blockquotes (> text)
+    .replace(/^>\s+/gm, "")
+    // Remove list markers (-, *, +, 1.)
+    .replace(/^[\s]*[-*+]\s+/gm, "")
+    .replace(/^[\s]*\d+\.\s+/gm, "")
+    // Remove strikethrough (~~text~~)
+    .replace(/~~(.*?)~~/g, "$1");
+}
+
+/**
+ * Clean extracted text - fix encoding issues and normalize whitespace
+ * Matches resume-extractor.js cleanText function
+ */
+function cleanText(text) {
+  if (!text) return "";
+
+  // Remove excessive line breaks (more than 2 consecutive)
+  text = text.replace(/\n{3,}/g, "\n\n");
+
+  // Normalize whitespace (but preserve newlines for multi-column detection)
+  text = text.replace(/[ \t]+/g, " ");
+
+  // Fix common encoding issues (UTF-8 decoded as Latin-1 mojibake)
+  text = text.replace(/â\x80\x99/g, "'");  // Right single quotation mark
+  text = text.replace(/â\x80\x9C/g, '"');  // Left double quotation mark
+  text = text.replace(/â\x80\x9D/g, '"');  // Right double quotation mark
+  text = text.replace(/â\x80\x94/g, "—");  // Em dash
+  text = text.replace(/â\x80\x93/g, "–");  // En dash
+
+  return text.trim();
 }
 
