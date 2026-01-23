@@ -147,16 +147,9 @@ export default {
       // Fix encoding issues and normalize whitespace
       text = cleanText(text);
 
-      // Detect multi-column layout before final sanitization (needs newlines)
-      if (text && text.length >= SCANNED_PDF_THRESHOLD) {
-        isMultiColumn = detectMultiColumnLayout(text);
-      }
-
-      // Final sanitization for scoring
-      text = text.replace(/\s+/g, " ").trim();
-
-      // Check if PDF appears to be scanned (very little text after cleaning)
-      if (text.length < SCANNED_PDF_THRESHOLD) {
+      // Check if PDF appears to be scanned (after cleanText for consistency with resume-extractor.js)
+      // This check happens at the same stage in both files: after stripMarkdown and cleanText
+      if (text && text.trim().length < SCANNED_PDF_THRESHOLD) {
         return new Response(
           JSON.stringify({
             error: "This PDF appears to be image-based (scanned). Please upload a text-based PDF for best results."
@@ -170,6 +163,14 @@ export default {
           }
         );
       }
+
+      // Detect multi-column layout before final sanitization (needs newlines)
+      if (text && text.length >= SCANNED_PDF_THRESHOLD) {
+        isMultiColumn = detectMultiColumnLayout(text);
+      }
+
+      // Final sanitization for scoring (collapses all whitespace)
+      text = text.replace(/\s+/g, " ").trim();
 
       // Validate text quality
       if (!text || text.length < 500) {
@@ -457,10 +458,14 @@ function stripMarkdown(text) {
     // Remove bold/italic (**text**, *text*, __text__, _text_)
     .replace(/(\*\*|__)(.*?)\1/g, "$2")
     .replace(/(\*|_)(.*?)\1/g, "$2")
-    // Remove inline code (`code`)
+    // Remove inline code (`code`) - extract content only
     .replace(/`([^`]+)`/g, "$1")
-    // Remove code blocks (```code```)
-    .replace(/```[\s\S]*?```/g, "")
+    // Remove code blocks (```code```) - extract content only, preserve newlines
+    .replace(/```[\s\S]*?```/g, (match) => {
+      // Extract content between triple backticks, preserving it as plain text
+      const content = match.replace(/^```[\s\S]*?\n?/, "").replace(/\n?```$/, "");
+      return content;
+    })
     // Remove links [text](url) -> text
     .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
     // Remove images ![alt](url)

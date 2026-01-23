@@ -105,14 +105,16 @@ export async function extractResumeText(file, fileName, env) {
       
       // If PDF.js parse failed (corruption, encryption, password protection, etc.)
       if (pdfResult.parseFailed) {
-        // Use more specific error message if available from PDF.js
+        // Use more specific error message based on errorMessage content
+        // Note: toMarkdown API always sets errorName to 'ToMarkdownError', so we check errorMessage instead
         let userMessage = 'This PDF could not be processed. It may be corrupted, password-protected, or encrypted. Please try a different file or ensure the PDF is not password-protected.';
         
-        if (pdfResult.errorName === 'PasswordException' || pdfResult.errorMessage?.toLowerCase().includes('password')) {
+        const errorMsgLower = (pdfResult.errorMessage || '').toLowerCase();
+        if (errorMsgLower.includes('password') || errorMsgLower.includes('encrypted')) {
           userMessage = 'This PDF is password-protected. Please remove the password and try again.';
-        } else if (pdfResult.errorName === 'InvalidPDFException' || pdfResult.errorMessage?.toLowerCase().includes('invalid')) {
+        } else if (errorMsgLower.includes('invalid') || errorMsgLower.includes('corrupt')) {
           userMessage = 'This PDF appears to be corrupted or invalid. Please try re-saving the file or use a different PDF.';
-        } else if (pdfResult.errorName === 'MissingPDFException' || pdfResult.errorMessage?.toLowerCase().includes('missing')) {
+        } else if (errorMsgLower.includes('missing') || errorMsgLower.includes('empty')) {
           userMessage = 'The PDF file appears to be empty or incomplete. Please check the file and try again.';
         }
         
@@ -190,6 +192,8 @@ export async function extractResumeText(file, fileName, env) {
     }
     
     // Detect multi-column layout (heuristic: many short lines)
+    // For consistency: multi-column detection happens after cleanText for all file types
+    // (PDFs already detected before stripMarkdown, but we re-check here for consistency)
     if (!isMultiColumn) {
       isMultiColumn = detectMultiColumnLayout(text);
     }
@@ -279,11 +283,10 @@ async function extractPdfText(arrayBuffer, env) {
       };
     }
 
-    // Extract text from markdown result and strip markdown syntax
+    // Extract text from markdown result
     let extractedText = pdfResult.data || pdfResult.text || '';
-    extractedText = stripMarkdown(extractedText);
 
-    // Check if PDF appears empty
+    // Check if PDF appears empty (before processing)
     if (!extractedText || extractedText.trim().length === 0) {
       console.warn('[PDF] PDF has no extractable text');
       return { text: '', isMultiColumn: false, numPages: 0, isEmpty: true };
@@ -298,9 +301,22 @@ async function extractPdfText(arrayBuffer, env) {
       extractedText = extractedText.substring(0, MAX_CHARS);
     }
 
+    // Multi-column detection BEFORE stripMarkdown (to preserve list markers for accurate line length)
+    // This ensures consistent detection regardless of markdown formatting
+    const linesForDetection = extractedText.split('\n').filter(line => line.trim().length > 0);
+    const avgLineLengthForDetection = linesForDetection.reduce((sum, line) => sum + line.trim().length, 0) / Math.max(linesForDetection.length, 1);
+    const isMultiColumn = avgLineLengthForDetection < 30 && linesForDetection.length > 20;
+
+    // Now strip markdown syntax (after multi-column detection)
+    extractedText = stripMarkdown(extractedText);
+
+    // Clean text (fix encoding issues, normalize whitespace)
+    extractedText = cleanText(extractedText);
+
     const trimmedText = extractedText.trim();
 
-    // Smart scanned PDF detection (very little text extracted)
+    // Smart scanned PDF detection (after cleaning for consistency with resume-score-worker.js)
+    // This check happens after stripMarkdown and cleanText to match resume-score-worker.js behavior
     if (trimmedText.length < SCANNED_PDF_THRESHOLD) {
       console.warn('[PDF] Scanned PDF detected', {
         textLength: trimmedText.length,
@@ -316,11 +332,6 @@ async function extractPdfText(arrayBuffer, env) {
       });
       return { text: '', isMultiColumn: false, numPages: 0 };
     }
-
-    // Multi-column detection using text-based heuristic
-    const lines = trimmedText.split('\n').filter(line => line.trim().length > 0);
-    const avgLineLength = lines.reduce((sum, line) => sum + line.trim().length, 0) / Math.max(lines.length, 1);
-    const isMultiColumn = avgLineLength < 30 && lines.length > 20;
 
     console.log('[PDF] Successfully extracted text via toMarkdown', {
       textLength: trimmedText.length,
@@ -386,10 +397,14 @@ function stripMarkdown(text) {
     // Remove bold/italic (**text**, *text*, __text__, _text_)
     .replace(/(\*\*|__)(.*?)\1/g, '$2')
     .replace(/(\*|_)(.*?)\1/g, '$2')
-    // Remove inline code (`code`)
+    // Remove inline code (`code`) - extract content only
     .replace(/`([^`]+)`/g, '$1')
-    // Remove code blocks (```code```)
-    .replace(/```[\s\S]*?```/g, '')
+    // Remove code blocks (```code```) - extract content only, preserve newlines
+    .replace(/```[\s\S]*?```/g, (match) => {
+      // Extract content between triple backticks, preserving it as plain text
+      const content = match.replace(/^```[\s\S]*?\n?/, '').replace(/\n?```$/, '');
+      return content;
+    })
     // Remove links [text](url) -> text
     .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
     // Remove images ![alt](url)
