@@ -557,7 +557,7 @@ function filterPdfMetadata(text) {
     // Content typically has spaces, punctuation, or is a recognizable section header
     const looksLikeContent = (
       // Has multiple words (not a key=value pair) and doesn't contain CMYK metadata
-      (trimmedLine.split(/\s+/).length > 2 && !trimmedLine.includes("=") && !trimmedLine.includes("CMYKPROCESS")) ||
+      (trimmedLine.split(/\s+/).length > 2 && !trimmedLine.includes("=") && !/CMYKPROCESS/i.test(trimmedLine)) ||
       // Is a resume section header
       /^(EXPERIENCE|EDUCATION|SKILLS|PROJECTS|AWARDS|CERTIFICATIONS|SUMMARY|OBJECTIVE|PROFILE|ABOUT|CONTACT|WORK|EMPLOYMENT|PROFESSIONAL|TECHNICAL|QUALIFICATIONS)/i.test(trimmedLine) ||
       // Contains common resume text patterns (phone, email, name patterns)
