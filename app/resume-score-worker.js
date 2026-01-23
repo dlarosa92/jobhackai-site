@@ -143,6 +143,15 @@ export default {
       }
 
       // 2️⃣ Clean and sanitize text
+      // For PDFs: Multi-column detection BEFORE stripMarkdown (to preserve list markers for accurate line length)
+      // This matches resume-extractor.js behavior and prevents false positives from shortened lines
+      if (isPdf && text && text.trim().length > 0) {
+        // Multi-column detection using original text with markdown (preserves list markers)
+        const linesForDetection = text.split('\n').filter(line => line.trim().length > 0);
+        const avgLineLengthForDetection = linesForDetection.reduce((sum, line) => sum + line.trim().length, 0) / Math.max(linesForDetection.length, 1);
+        isMultiColumn = avgLineLengthForDetection < 30 && linesForDetection.length > 20;
+      }
+
       // Strip markdown syntax (toMarkdown returns markdown-formatted text)
       // Note: Only PDFs need markdown stripping (toMarkdown returns markdown)
       if (isPdf) {
@@ -169,8 +178,8 @@ export default {
         );
       }
 
-      // Detect multi-column layout before final sanitization (needs newlines)
-      if (text && text.length >= SCANNED_PDF_THRESHOLD) {
+      // Detect multi-column layout for TXT files (after cleaning, since they don't have markdown)
+      if (!isPdf && text && text.length >= SCANNED_PDF_THRESHOLD) {
         isMultiColumn = detectMultiColumnLayout(text);
       }
 
