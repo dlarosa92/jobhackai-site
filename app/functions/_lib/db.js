@@ -1418,6 +1418,49 @@ export async function incrementFeatureDailyUsage(env, userId, feature, increment
   }
 }
 
+/**
+ * Reset feature daily usage for a specific feature and user
+ * Used when upgrading from trial to paid plan to clear trial usage
+ * @param {Object} env - Cloudflare environment with DB binding
+ * @param {string} authId - Firebase UID
+ * @param {string} feature - Feature name (e.g., 'interview_questions')
+ * @returns {Promise<boolean>} True if reset was successful
+ */
+export async function resetFeatureDailyUsage(env, authId, feature) {
+  const db = getDb(env);
+  if (!db) {
+    console.warn('[DB] D1 binding not available for resetFeatureDailyUsage');
+    return false;
+  }
+
+  try {
+    // Get user ID from auth ID
+    const d1User = await getOrCreateUserByAuthId(env, authId);
+    if (!d1User || !d1User.id) {
+      console.warn('[DB] User not found for resetFeatureDailyUsage:', authId);
+      return false;
+    }
+
+    // Delete all usage records for this user and feature
+    const result = await db.prepare(
+      `DELETE FROM feature_daily_usage
+       WHERE user_id = ? AND feature = ?`
+    ).bind(d1User.id, feature).run();
+
+    console.log('[DB] Reset feature daily usage:', {
+      authId,
+      userId: d1User.id,
+      feature,
+      deletedRows: result.meta?.changes || 0
+    });
+
+    return true;
+  } catch (error) {
+    console.error('[DB] Error in resetFeatureDailyUsage:', error);
+    return false;
+  }
+}
+
 // ============================================================
 // MOCK INTERVIEW SESSION HELPERS
 // ============================================================

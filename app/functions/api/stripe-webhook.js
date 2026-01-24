@@ -1,4 +1,4 @@
-import { updateUserPlan, getUserPlanData } from '../_lib/db.js';
+import { updateUserPlan, getUserPlanData, resetFeatureDailyUsage } from '../_lib/db.js';
 
 export async function onRequest(context) {
   const { request, env } = context;
@@ -307,6 +307,20 @@ export async function onRequest(context) {
       
       if (previousPlan === 'trial' && effectivePlan !== 'trial' && status === 'active') {
         console.log(`🎉 TRIAL CONVERTED: ${uid} → ${effectivePlan} (trial expired, subscription now active)`);
+        
+        // Reset interview questions usage when converting from trial to paid plan
+        // This ensures users get a fresh start with their new plan limits
+        if (['essential', 'pro', 'premium'].includes(effectivePlan)) {
+          console.log('[WEBHOOK] Resetting interview questions usage for trial conversion', {
+            uid,
+            fromPlan: previousPlan,
+            toPlan: effectivePlan
+          });
+          await resetFeatureDailyUsage(env, uid, 'interview_questions').catch((error) => {
+            // Log but don't fail the webhook if usage reset fails
+            console.error('[WEBHOOK] Failed to reset usage (non-blocking):', error);
+          });
+        }
       }
       
       console.log(`✍️ UPDATING D1: users.plan = ${effectivePlan} for uid=${uid}`);
