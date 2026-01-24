@@ -1022,12 +1022,17 @@ export default function Dashboard() {
                 : 'plan';
               
               const messageText = hadResumeUpload
-                ? `Your previous ATS resume score from your free account is still available. Welcome to your ${planName}! ${user.plan === 'trial' ? 'You now have 3 resume feedback assessments (inclusive of ATS scans) and unlimited interview questions. Some features remain locked until you upgrade to a paid plan.' : 'You now have access to all features included in your plan.'}`
-                : `Welcome to your ${planName}! ${user.plan === 'trial' ? 'You now have 3 resume feedback assessments (inclusive of ATS scans) and unlimited interview questions. Some features remain locked until you upgrade to a paid plan.' : 'You now have access to all features included in your plan.'}`;
+                ? `Your previous ATS resume score from your free account is still available. Welcome to your ${planName}!`
+                : `Welcome to your ${planName}!`;
+              
+              const contentText = user.plan === 'trial'
+                ? 'You now have 3 resume feedback assessments (inclusive of ATS scans) and unlimited interview questions. Some features remain locked until you upgrade to a paid plan.'
+                : 'You now have access to all features included in your plan.';
               
               return (
                 <div className="plan-transition-message">
-                  {messageText}
+                  <div className="plan-transition-heading">{messageText}</div>
+                  <div className="plan-transition-content">{contentText}</div>
                 </div>
               );
             })()}
