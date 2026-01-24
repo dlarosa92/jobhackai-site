@@ -204,11 +204,15 @@ export async function onRequest(context) {
 
     // Reset usage when upgrading from trial to paid plan
     // This ensures users get a fresh start with their new plan limits
-    if (currentPlan === 'trial' && ['essential', 'pro', 'premium'].includes(targetPlan)) {
+    // Use isTrialing instead of currentPlan === 'trial' because currentPlan relies on
+    // subscription metadata which may be missing/incorrect, while isTrialing directly
+    // checks the subscription status which is the reliable source of truth
+    if (isTrialing && ['essential', 'pro', 'premium'].includes(targetPlan)) {
       console.log('[BILLING-UPGRADE] Resetting usage for trial upgrade', {
         uid,
         fromPlan: currentPlan,
-        toPlan: targetPlan
+        toPlan: targetPlan,
+        subscriptionStatus: bestSub.status
       });
       
       // Reset interview questions usage (uses feature_daily_usage table)
