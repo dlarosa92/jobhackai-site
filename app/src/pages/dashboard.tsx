@@ -999,7 +999,17 @@ export default function Dashboard() {
               
               const hasATSScoreHistory = localStorage.getItem('lastATSScore') || localStorage.getItem('lastATSSummary');
               const hasUsedFreeATS = localStorage.getItem('hasUsedFreeATS') === 'true';
-              const hasFreeUsageData = localStorage.getItem('free-ats-usage');
+              const freeUsageDataRaw = localStorage.getItem('free-ats-usage');
+              let hasUsedLegacyFreeATS = false;
+              if (freeUsageDataRaw) {
+                try {
+                  const usageData = JSON.parse(freeUsageDataRaw);
+                  hasUsedLegacyFreeATS = usageData?.used === true;
+                } catch {
+                  // If data is malformed, assume used to avoid missing prior usage
+                  hasUsedLegacyFreeATS = true;
+                }
+              }
               const hasUploadedResume = localStorage.getItem('lastUploadedResume') || localStorage.getItem('hasUploadedResume') === 'true';
               const currentUser = (window as any)?.FirebaseAuthManager?.getCurrentUser?.() || null;
               const creditKey = currentUser?.uid ? `creditsByUid:${currentUser.uid}` : null;
@@ -1019,8 +1029,8 @@ export default function Dashboard() {
               }
               
               // Check if user had a free account
-              const wasFreeAccount = hasFreeUsageData || hadFreeAccountWithCredit || localStorage.getItem('was-free-user') === 'true';
-              const hadResumeUpload = hasATSScoreHistory || hasUsedFreeATS || hasFreeUsageData || hasUploadedResume || hasUsedFreeCredit;
+              const wasFreeAccount = !!freeUsageDataRaw || hadFreeAccountWithCredit || localStorage.getItem('was-free-user') === 'true';
+              const hadResumeUpload = hasATSScoreHistory || hasUsedFreeATS || hasUsedLegacyFreeATS || hasUploadedResume || hasUsedFreeCredit;
               
               // Show banner if user upgraded from free account
               if (!wasFreeAccount) return null;

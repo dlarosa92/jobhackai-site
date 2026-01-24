@@ -983,7 +983,17 @@
         const savedATS = JobHackAIStatePersistence?.loadATSScore?.();
         const hasATSScoreHistory = !!(savedATS && (savedATS.score || savedATS.summary));
         const hasUsedFreeATS = localStorage.getItem('hasUsedFreeATS') === 'true';
-        const hasFreeUsageData = localStorage.getItem('free-ats-usage');
+        const freeUsageDataRaw = localStorage.getItem('free-ats-usage');
+        let hasUsedLegacyFreeATS = false;
+        if (freeUsageDataRaw) {
+          try {
+            const usageData = JSON.parse(freeUsageDataRaw);
+            hasUsedLegacyFreeATS = usageData?.used === true;
+          } catch (e) {
+            // If data is malformed, assume used to avoid missing prior usage
+            hasUsedLegacyFreeATS = true;
+          }
+        }
         const hasUploadedResume = localStorage.getItem('lastUploadedResume') || localStorage.getItem('hasUploadedResume') === 'true';
         
         // Try to get user UID from Firebase Auth Manager
@@ -1005,8 +1015,8 @@
         }
         
         // Check if user had a free account (even if they didn't upload resume)
-        const wasFreeAccount = hasFreeUsageData || hadFreeAccountWithCredit || localStorage.getItem('was-free-user') === 'true';
-        const hadResumeUpload = hasATSScoreHistory || hasUsedFreeATS || hasFreeUsageData || hasUploadedResume || hasUsedFreeCredit;
+        const wasFreeAccount = !!freeUsageDataRaw || hadFreeAccountWithCredit || localStorage.getItem('was-free-user') === 'true';
+        const hadResumeUpload = hasATSScoreHistory || hasUsedFreeATS || hasUsedLegacyFreeATS || hasUploadedResume || hasUsedFreeCredit;
         
         // Show popup for all free account users who upgraded
         if (!wasFreeAccount) {
