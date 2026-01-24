@@ -989,7 +989,7 @@ export default function Dashboard() {
               const hasATSScoreHistory = localStorage.getItem('lastATSScore') || localStorage.getItem('lastATSSummary');
               const hasUsedFreeATS = localStorage.getItem('hasUsedFreeATS') === 'true';
               const hasFreeUsageData = localStorage.getItem('free-ats-usage');
-              const hasUploadedResume = localStorage.getItem('lastUploadedResume');
+              const hasUploadedResume = localStorage.getItem('lastUploadedResume') || localStorage.getItem('hasUploadedResume') === 'true';
               const currentUser = (window as any)?.FirebaseAuthManager?.getCurrentUser?.() || null;
               const creditKey = currentUser?.uid ? `creditsByUid:${currentUser.uid}` : null;
               let hasUsedFreeCredit = false;
@@ -1027,7 +1027,7 @@ export default function Dashboard() {
               
               const contentText = user.plan === 'trial'
                 ? 'You now have 3 resume feedback assessments (inclusive of ATS scans) and unlimited interview questions. Some features remain locked until you upgrade to a paid plan.'
-                : 'You now have access to all features included in your plan.';
+                : 'You now have access to all features included in your plan. Upload resumes for ATS scoring, get detailed feedback, and generate unlimited interview questions.';
               
               return (
                 <div className="plan-transition-message">
