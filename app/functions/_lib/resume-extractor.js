@@ -682,28 +682,47 @@ function looksLikeResumeContent(line) {
  * Check if a line looks like a person's name
  */
 function looksLikePersonName(line) {
-  // 2-4 words, each starting with capital letter
+  // 2-5 words, each starting with capital letter
   // Allow common suffixes like Jr., Sr., III, PhD
   const words = line.split(/\s+/);
   if (words.length < 2 || words.length > 5) return false;
 
-  // Each word should be capitalized (or be a suffix/initial)
+  // First, exclude lines that look like job titles (common false positives)
+  // Job titles like "Project Lead", "Product Manager", "Chief Executive" would otherwise match
+  if (looksLikeJobTitle(line)) return false;
+
+  // Each word should be a valid name component
   const suffixes = /^(Jr\.?|Sr\.?|II|III|IV|PhD|MD|MBA|CPA|Esq\.?|[A-Z]\.)$/i;
-  const isCapitalized = words.every(w =>
-    /^[A-Z][a-z]*$/.test(w) || // Normal capitalized word
-    suffixes.test(w) || // Known suffix
-    /^[A-Z]\.?$/.test(w) || // Initial
-    /^O'[A-Z]/.test(w) || // O'Brien etc
-    /^Mc[A-Z]/.test(w) || // McDonald etc
-    /^Mac[A-Z]/.test(w) // MacArthur etc
-  );
+  const isValidNameWord = words.every(w => {
+    // Normal title-case word (John, Smith)
+    if (/^[A-Z][a-z]+$/.test(w)) return true;
+    // All-caps word (JOHN, SMITH) - common in resumes
+    if (/^[A-Z]{2,}$/.test(w)) return true;
+    // Hyphenated names (Mary-Jane, Jean-Pierre, both title-case and all-caps)
+    if (/^[A-Z][a-z]+-[A-Z][a-z]+$/.test(w)) return true;
+    if (/^[A-Z]+-[A-Z]+$/.test(w)) return true;
+    // Known suffixes
+    if (suffixes.test(w)) return true;
+    // Single initial with optional period
+    if (/^[A-Z]\.?$/.test(w)) return true;
+    // O'Brien, O'Connor etc
+    if (/^O'[A-Z][a-z]+$/i.test(w)) return true;
+    // McDonald, McArthur etc
+    if (/^Mc[A-Z][a-z]+$/.test(w)) return true;
+    // MacArthur, MacDonald etc
+    if (/^Mac[A-Z][a-z]+$/.test(w)) return true;
+    // De La Cruz, Van Der Berg etc
+    if (/^(de|la|van|der|von|del|di|da|le|du)$/i.test(w)) return true;
 
-  if (!isCapitalized) return false;
+    return false;
+  });
 
-  // Should not contain special characters (except apostrophe, hyphen, period for initials)
+  if (!isValidNameWord) return false;
+
+  // Should not contain special characters used in metadata
   if (/[=@#$%^&*(){}[\]|\\<>\/]/.test(line)) return false;
 
-  // Should not look like metadata
+  // Should not look like metadata (has both : and =)
   if (/:/.test(line) && /=/.test(line)) return false;
 
   return true;
