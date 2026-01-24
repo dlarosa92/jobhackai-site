@@ -6,10 +6,9 @@ main = "resume-score-worker.js"
 compatibility_date = "2024-11-08"
 compatibility_flags = ["nodejs_compat"]
 
-# Workers AI binding (for future OpenAI integration)
-# Uncomment when ready to use Cloudflare Workers AI
-# [ai]
-# binding = "AI"
+# Workers AI binding for PDF text extraction via toMarkdown()
+[ai]
+binding = "AI"
 
 # OpenAI API binding (for Pro-tier AI feedback)
 # Store OpenAI API key as secret: wrangler secret put OPENAI_API_KEY

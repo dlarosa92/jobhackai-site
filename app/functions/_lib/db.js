@@ -1418,6 +1418,92 @@ export async function incrementFeatureDailyUsage(env, userId, feature, increment
   }
 }
 
+/**
+ * Reset feature daily usage for a specific feature and user
+ * Used when upgrading from trial to paid plan to clear trial usage
+ * @param {Object} env - Cloudflare environment with DB binding
+ * @param {string} authId - Firebase UID
+ * @param {string} feature - Feature name (e.g., 'interview_questions')
+ * @returns {Promise<boolean>} True if reset was successful
+ */
+export async function resetFeatureDailyUsage(env, authId, feature) {
+  const db = getDb(env);
+  if (!db) {
+    console.warn('[DB] D1 binding not available for resetFeatureDailyUsage');
+    return false;
+  }
+
+  try {
+    // Get user ID from auth ID
+    const d1User = await getOrCreateUserByAuthId(env, authId);
+    if (!d1User || !d1User.id) {
+      console.warn('[DB] User not found for resetFeatureDailyUsage:', authId);
+      return false;
+    }
+
+    // Delete all usage records for this user and feature
+    const result = await db.prepare(
+      `DELETE FROM feature_daily_usage
+       WHERE user_id = ? AND feature = ?`
+    ).bind(d1User.id, feature).run();
+
+    console.log('[DB] Reset feature daily usage:', {
+      authId,
+      userId: d1User.id,
+      feature,
+      deletedRows: result.meta?.changes || 0
+    });
+
+    return true;
+  } catch (error) {
+    console.error('[DB] Error in resetFeatureDailyUsage:', error);
+    return false;
+  }
+}
+
+/**
+ * Reset usage events for a specific feature and user
+ * Used when upgrading from trial to paid plan to clear trial usage
+ * @param {Object} env - Cloudflare environment with DB binding
+ * @param {string} authId - Firebase UID
+ * @param {string} feature - Feature name (e.g., 'resume_feedback')
+ * @returns {Promise<boolean>} True if reset was successful
+ */
+export async function resetUsageEvents(env, authId, feature) {
+  const db = getDb(env);
+  if (!db) {
+    console.warn('[DB] D1 binding not available for resetUsageEvents');
+    return false;
+  }
+
+  try {
+    // Get user ID from auth ID
+    const d1User = await getOrCreateUserByAuthId(env, authId);
+    if (!d1User || !d1User.id) {
+      console.warn('[DB] User not found for resetUsageEvents:', authId);
+      return false;
+    }
+
+    // Delete all usage events for this user and feature
+    const result = await db.prepare(
+      `DELETE FROM usage_events
+       WHERE user_id = ? AND feature = ?`
+    ).bind(d1User.id, feature).run();
+
+    console.log('[DB] Reset usage events:', {
+      authId,
+      userId: d1User.id,
+      feature,
+      deletedRows: result.meta?.changes || 0
+    });
+
+    return true;
+  } catch (error) {
+    console.error('[DB] Error in resetUsageEvents:', error);
+    return false;
+  }
+}
+
 // ============================================================
 // MOCK INTERVIEW SESSION HELPERS
 // ============================================================
@@ -1672,6 +1758,82 @@ export async function incrementMockInterviewMonthlyUsage(env, userId) {
   } catch (error) {
     console.error('[DB] Error in incrementMockInterviewMonthlyUsage:', error);
     return 1;
+  }
+}
+
+// ============================================================
+// USER PREFERENCES HELPERS
+// ============================================================
+
+/**
+ * Check if user has seen the welcome modal
+ * @param {Object} env - Cloudflare environment with DB binding
+ * @param {string} authId - Firebase UID
+ * @returns {Promise<boolean>} True if user has seen the modal
+ */
+export async function hasSeenWelcomeModal(env, authId) {
+  const db = getDb(env);
+  if (!db) {
+    console.warn('[DB] D1 binding not available');
+    return false; // Default to not seen if DB unavailable
+  }
+
+  try {
+    const user = await db.prepare(
+      'SELECT has_seen_welcome_modal FROM users WHERE auth_id = ?'
+    ).bind(authId).first();
+
+    if (!user) {
+      return false; // User doesn't exist yet
+    }
+
+    return user.has_seen_welcome_modal === 1;
+  } catch (error) {
+    // Handle case where column doesn't exist yet (migration not run)
+    const errorMessage = error?.message || String(error);
+    if (errorMessage.includes('no such column: has_seen_welcome_modal')) {
+      console.warn('[DB] has_seen_welcome_modal column not found. Migration 012 needs to be run.');
+      return false; // Graceful fallback
+    }
+    
+    console.error('[DB] Error in hasSeenWelcomeModal:', error);
+    return false; // Default to not seen on error
+  }
+}
+
+/**
+ * Mark that user has seen the welcome modal
+ * @param {Object} env - Cloudflare environment with DB binding
+ * @param {string} authId - Firebase UID
+ * @returns {Promise<boolean>} Success
+ */
+export async function markWelcomeModalAsSeen(env, authId) {
+  const db = getDb(env);
+  if (!db) {
+    console.warn('[DB] D1 binding not available');
+    return false;
+  }
+
+  try {
+    // Ensure user exists first
+    await getOrCreateUserByAuthId(env, authId);
+
+    await db.prepare(
+      'UPDATE users SET has_seen_welcome_modal = 1, updated_at = datetime(\'now\') WHERE auth_id = ?'
+    ).bind(authId).run();
+
+    console.log('[DB] Marked welcome modal as seen:', { authId });
+    return true;
+  } catch (error) {
+    // Handle case where column doesn't exist yet (migration not run)
+    const errorMessage = error?.message || String(error);
+    if (errorMessage.includes('no such column: has_seen_welcome_modal')) {
+      console.warn('[DB] has_seen_welcome_modal column not found. Migration 012 needs to be run.');
+      return false;
+    }
+    
+    console.error('[DB] Error in markWelcomeModalAsSeen:', error);
+    return false;
   }
 }
 

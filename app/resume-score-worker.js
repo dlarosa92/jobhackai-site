@@ -1,8 +1,14 @@
 // JobHackAI ATS Resume Scoring Worker
-// Edge-based resume scoring with Tesseract OCR + unpdf
+// Edge-based resume scoring using Cloudflare Workers AI toMarkdown()
 // Rule-based scoring engine (no AI tokens) - AI feedback available via OpenAI binding
 
-import Tesseract from "tesseract.js";
+// Import shared PDF metadata filtering
+import { filterPdfMetadata, stripMarkdown, cleanText } from "./functions/_lib/pdf-metadata-filter.js";
+
+// Constants - aligned with resume-extractor.js
+const SCANNED_PDF_THRESHOLD = 400; // If text < 400 chars after cleaning, likely scanned
+const PDF_TEXT_LIMIT = 40000; // Match extractPdfText truncation
+const MIN_TEXT_LENGTH = 50; // Match extractor minimum readable text
 
 export default {
   async fetch(request, env, ctx) {
@@ -84,59 +90,48 @@ export default {
       let text = "";
       let ocrUsed = false;
       let isMultiColumn = false;
+      const isPdf = mime === "application/pdf" || fileName.toLowerCase().endsWith(".pdf");
 
-      // 1️⃣ Extract text (or fallback to OCR)
-      if (mime === "application/pdf" || fileName.toLowerCase().endsWith(".pdf")) {
+      // 1️⃣ Extract text using Cloudflare Workers AI toMarkdown()
+      if (isPdf) {
         try {
-          // Try unpdf first for text-based PDFs (serverless-optimized PDF.js wrapper)
-          const { extractText, getDocumentProxy } = await import('unpdf');
-          const pdf = await getDocumentProxy(buffer);
-          const { text: extractedText } = await extractText(pdf, { mergePages: true });
-          text = extractedText?.trim() || "";
-          
-          // Detect multi-column layout (only if we have sufficient text)
-          if (text && text.length >= 200) {
-            isMultiColumn = detectMultiColumnLayout(text);
+          // Verify AI binding is available
+          if (!env?.AI) {
+            throw new Error("AI binding not configured");
           }
 
-          // Fallback to OCR if text not selectable or too short
-          if (text.length < 200) {
-            const { data: ocr } = await Tesseract.recognize(buffer, "eng", {
-              logger: m => {} // Suppress logs
-            });
-            text = ocr.text;
-            ocrUsed = true;
-            // Recalculate multi-column detection on OCR-extracted text
-            if (text && text.length >= 200) {
-              isMultiColumn = detectMultiColumnLayout(text);
-            }
+          // Use Cloudflare Workers AI toMarkdown() for PDF extraction
+          // API expects: { name: string, blob: Blob }
+          const blob = new Blob([buffer], { type: "application/pdf" });
+          const result = await env.AI.toMarkdown([{
+            name: fileName || "resume.pdf",
+            blob: blob
+          }]);
+
+          // toMarkdown returns an array of results
+          const pdfResult = Array.isArray(result) ? result[0] : result;
+
+          if (!pdfResult || pdfResult.error) {
+            throw new Error(pdfResult?.error || "toMarkdown returned no result");
           }
+
+          const rawPdfText = pdfResult.data || pdfResult.text || "";
+          text = rawPdfText.slice(0, PDF_TEXT_LIMIT).trim();
         } catch (pdfError) {
-          // If unpdf fails, try OCR
-          try {
-            const { data: ocr } = await Tesseract.recognize(buffer, "eng", {
-              logger: m => {}
-            });
-            text = ocr.text;
-            ocrUsed = true;
-            // Detect multi-column layout on OCR-extracted text
-            if (text && text.length >= 200) {
-              isMultiColumn = detectMultiColumnLayout(text);
-            }
-          } catch (ocrError) {
-            return new Response(
-              JSON.stringify({
-                error: "Failed to extract text from PDF. Please upload a text-based PDF or higher-quality scan."
-              }),
-              {
-                status: 400,
-                headers: {
-                  "Content-Type": "application/json",
-                  ...corsHeaders
-                }
+          console.error("[RESUME-SCORE-WORKER] PDF extraction failed:", pdfError);
+          return new Response(
+            JSON.stringify({
+              error: "Failed to extract text from PDF. Please upload a text-based PDF.",
+              details: pdfError.message
+            }),
+            {
+              status: 400,
+              headers: {
+                "Content-Type": "application/json",
+                ...corsHeaders
               }
-            );
-          }
+            }
+          );
         }
       } else if (mime.includes("text") || fileName.toLowerCase().endsWith(".txt")) {
         // Plain text file
@@ -155,11 +150,57 @@ export default {
         );
       }
 
-      // 2️⃣ Sanitize text
+      // 2️⃣ Clean and sanitize text
+      // For PDFs: Filter out metadata and base64 image data FIRST
+      // This must happen before any other processing to prevent metadata from affecting scoring
+      if (isPdf && text && text.trim().length > 0) {
+        text = filterPdfMetadata(text);
+      }
+
+      // For PDFs: Multi-column detection BEFORE stripMarkdown (to preserve list markers for accurate line length)
+      // This matches resume-extractor.js behavior and prevents false positives from shortened lines
+      if (isPdf && text && text.trim().length > 0) {
+        // Multi-column detection using original text with markdown (preserves list markers)
+        const linesForDetection = text.split('\n').filter(line => line.trim().length > 0);
+        const avgLineLengthForDetection = linesForDetection.reduce((sum, line) => sum + line.trim().length, 0) / Math.max(linesForDetection.length, 1);
+        isMultiColumn = avgLineLengthForDetection < 30 && linesForDetection.length > 20;
+      }
+
+      // Strip markdown syntax (toMarkdown returns markdown-formatted text)
+      // Note: Only PDFs need markdown stripping (toMarkdown returns markdown)
+      if (isPdf) {
+        text = stripMarkdown(text);
+      }
+      // Fix encoding issues and normalize whitespace
+      text = cleanText(text);
+
+      // Check if PDF appears to be scanned (only for PDF files, after cleanText for consistency with resume-extractor.js)
+      // This check happens at the same stage in both files: after stripMarkdown and cleanText
+      if (isPdf && text && text.length < SCANNED_PDF_THRESHOLD) {
+        return new Response(
+          JSON.stringify({
+            error: "This PDF appears to be image-based (scanned). Please upload a text-based PDF for best results."
+          }),
+          {
+            status: 400,
+            headers: {
+              "Content-Type": "application/json",
+              ...corsHeaders
+            }
+          }
+        );
+      }
+
+      // Fallback multi-column detection post-cleaning (matches extractor behavior)
+      if (!isMultiColumn && text) {
+        isMultiColumn = detectMultiColumnLayout(text);
+      }
+
+      // Final sanitization for scoring (collapses all whitespace)
       text = text.replace(/\s+/g, " ").trim();
 
       // Validate text quality
-      if (!text || text.length < 500) {
+      if (!text || text.length < MIN_TEXT_LENGTH) {
         return new Response(
           JSON.stringify({
             error: "Unreadable resume. Please upload a higher-quality file.",
@@ -383,8 +424,16 @@ function grammarCheck(text) {
  * @returns {boolean} - True if multi-column layout detected
  */
 function detectMultiColumnLayout(text) {
-  const lines = text.split("\n");
-  const avgLineLength = lines.reduce((sum, line) => sum + line.trim().length, 0) / lines.length;
+  const lines = text
+    .split("\n")
+    .map(line => line.trim())
+    .filter(line => line.length > 0);
+
+  if (lines.length === 0) {
+    return false;
+  }
+
+  const avgLineLength = lines.reduce((sum, line) => sum + line.length, 0) / lines.length;
   
   // If average line length is very short (< 30 chars), likely multi-column
   if (avgLineLength < 30 && lines.length > 20) {
@@ -392,7 +441,7 @@ function detectMultiColumnLayout(text) {
   }
   
   // Check for many lines with similar short lengths (column pattern)
-  const shortLines = lines.filter(line => line.trim().length > 0 && line.trim().length < 40);
+  const shortLines = lines.filter(line => line.length < 40);
   if (shortLines.length > lines.length * 0.6) {
     return true;
   }
@@ -403,31 +452,32 @@ function detectMultiColumnLayout(text) {
 function detectIssues(text, isMultiColumn) {
   const issues = [];
   const textLower = text.toLowerCase();
-  
+
   if (text.length < 1000) {
     issues.push("Resume too short (<1 page)");
   }
-  
+
   if (!textLower.match(/experience|work|employment/i)) {
     issues.push("Missing 'Experience' section");
   }
-  
+
   if (!textLower.match(/education|degree|university/i)) {
     issues.push("Missing 'Education' section");
   }
-  
+
   if (isMultiColumn) {
     issues.push("Detected 2-column layout");
   }
-  
+
   // Check for date formatting
   const datePattern = /\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+\d{4}\b/gi;
   const datesFound = (text.match(datePattern) || []).length;
-  
+
   if (datesFound < 2) {
     issues.push("Inconsistent or missing date formatting");
   }
-  
+
   return issues;
 }
 
+// Note: filterPdfMetadata, stripMarkdown, cleanText from ./functions/_lib/pdf-metadata-filter.js

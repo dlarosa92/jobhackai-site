@@ -755,14 +755,44 @@
       }
     }
 
+    // --- FIREBASE AUTH WAIT HELPERS ---
+    async function waitForFirebaseAuthReady(timeoutMs = 30000) {
+      const authManager = window.FirebaseAuthManager;
+      if (authManager?.isAuthReady?.()) return true;
+      if (window.__firebaseAuthReadyFired) return true;
+
+      return new Promise((resolve) => {
+        let done = false;
+        const finish = (value) => {
+          if (done) return;
+          done = true;
+          clearTimeout(timer);
+          document.removeEventListener('firebase-auth-ready', onReady);
+          resolve(value);
+        };
+        const onReady = () => finish(true);
+        const timer = setTimeout(() => finish(false), timeoutMs);
+        document.addEventListener('firebase-auth-ready', onReady, { once: true });
+      });
+    }
+
+    async function waitForFirebaseUser(authManager, timeoutMs = 30000) {
+      const start = Date.now();
+      while (Date.now() - start < timeoutMs) {
+        const user = authManager.getCurrentUser?.();
+        if (user && user.email) return user;
+        await new Promise((r) => setTimeout(r, 250));
+      }
+      return authManager.getCurrentUser?.() || null;
+    }
+
     // --- ENHANCED AUTHENTICATION CHECK ---
     async function checkAuthentication() {
-      console.log('🔧 dashboard.html VERSION: auth-race-fix-v4 - ' + new Date().toISOString());
+      console.log('🔧 dashboard.html VERSION: auth-race-fix-v5 - ' + new Date().toISOString());
 
-      // Wait for FirebaseAuthManager to be available
       let waitCount = 0;
-      while (!window.FirebaseAuthManager && waitCount < 50) {
-        await new Promise(resolve => setTimeout(resolve, 100));
+      while (!window.FirebaseAuthManager && waitCount < 80) {
+        await new Promise((resolve) => setTimeout(resolve, 100));
         waitCount++;
       }
 
@@ -772,29 +802,49 @@
         return false;
       }
 
-      // If localStorage indicates we're authenticated, give Firebase a moment to restore session
+      const authManager = window.FirebaseAuthManager;
+      let isAuthInStorage = false;
+      let hasTokens = false;
+
       try {
-        const isAuthInStorage = localStorage.getItem('user-authenticated') === 'true';
-        if (isAuthInStorage) {
-          console.log('⏳ localStorage says authenticated; waiting for Firebase to restore session...');
-          try { await window.FirebaseAuthManager.waitForAuthReady?.(2000); } catch (_) {}
-          if (!window.FirebaseAuthManager.getCurrentUser?.()) {
-            // Small extra grace period to avoid ping-pong
-            await new Promise(resolve => setTimeout(resolve, 500));
-          }
-        }
+        isAuthInStorage = localStorage.getItem('user-authenticated') === 'true';
       } catch (_) {}
 
-      const user = window.FirebaseAuthManager.getCurrentUser();
+      try {
+        hasTokens = !!(
+          sessionStorage.getItem('firebase_id_token') ||
+          sessionStorage.getItem('firebase_refresh_token') ||
+          sessionStorage.getItem('linkedin_oidc_id_token') ||
+          sessionStorage.getItem('linkedin_pending_init')
+        );
+      } catch (_) {}
+
+      if (isAuthInStorage || hasTokens) {
+        await waitForFirebaseAuthReady(30000);
+        await waitForFirebaseUser(authManager, 30000);
+      } else {
+        await waitForFirebaseAuthReady(5000);
+      }
+
+      const user = authManager.getCurrentUser?.();
       if (!user || !user.email) {
+        const authReady = authManager.isAuthReady?.() || window.__firebaseAuthReadyFired;
+        if (authReady || !isAuthInStorage) {
+          console.error('❌ No Firebase user available');
+          window.location.href = 'login.html';
+          return false;
+        }
+        await waitForFirebaseUser(authManager, 5000);
+      }
+
+      const finalUser = authManager.getCurrentUser?.();
+      if (!finalUser || !finalUser.email) {
         console.error('❌ No Firebase user available');
         window.location.href = 'login.html';
         return false;
       }
 
-      console.log('✅ Authenticated:', user.email);
-      // Sync to localStorage for other components
-      // SECURITY: Do NOT store user-email in localStorage - email available via Firebase auth
+      console.log('✅ Authenticated:', finalUser.email);
       try {
         localStorage.setItem('user-authenticated', 'true');
       } catch (_) {}

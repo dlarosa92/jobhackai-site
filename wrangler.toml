@@ -3,6 +3,10 @@ name = "jobhackai-site"
 account_id = "fabf4409ef32f8c64354a1a099bef2a2"
 compatibility_date = "2024-12-11"
 
+# Workers AI binding for PDF text extraction via toMarkdown()
+[ai]
+binding = "AI"
+
 [env.dev]
 name = "jobhackai-site-dev"
 d1_databases = [

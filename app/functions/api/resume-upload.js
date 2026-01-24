@@ -75,11 +75,11 @@ export async function onRequest(context) {
       }, 400, origin, env);
     }
 
-    // Extract text
+    // Extract text using Cloudflare Workers AI toMarkdown()
     let extractionResult;
     try {
       const arrayBuffer = await file.arrayBuffer();
-      extractionResult = await extractResumeText(arrayBuffer, fileName);
+      extractionResult = await extractResumeText(arrayBuffer, fileName, env);
     } catch (extractError) {
       // Return HTTP 200 with success: false for extraction failures (graceful error)
       // This allows frontend to handle errors without treating them as HTTP errors

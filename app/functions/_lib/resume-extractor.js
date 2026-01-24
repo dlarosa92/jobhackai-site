@@ -1,8 +1,10 @@
 // Resume text extraction utility for PDF/DOCX/TXT files
-// Supports OCR for image-based PDFs using Tesseract.js
+// Uses Cloudflare Workers AI toMarkdown() for PDF extraction
 
 import mammoth from 'mammoth';
-// Use dynamic import for unpdf to avoid top-level await bundling issues in Cloudflare Workers
+
+// Import shared PDF metadata filtering
+import { filterPdfMetadata, stripMarkdown, cleanText } from './pdf-metadata-filter.js';
 
 /**
  * Structured error codes for resume extraction
@@ -38,9 +40,10 @@ function createExtractionError(code, message, details = {}) {
  * Extract text from resume file
  * @param {File|Blob|ArrayBuffer} file - The file to extract text from
  * @param {string} fileName - Original filename
+ * @param {Object} env - Cloudflare Workers environment (for AI binding)
  * @returns {Promise<{text: string, wordCount: number, fileType: string, hasText: boolean, isMultiColumn: boolean, ocrUsed: boolean}>}
  */
-export async function extractResumeText(file, fileName) {
+export async function extractResumeText(file, fileName, env) {
   const fileExt = fileName.toLowerCase().split('.').pop();
   const mimeType = file.type || getMimeTypeFromExtension(fileExt);
   
@@ -98,21 +101,23 @@ export async function extractResumeText(file, fileName) {
         );
       }
     } else if (fileExt === 'pdf') {
-      // PDF file - try text extraction first, detect scanned PDFs
-      const pdfResult = await extractPdfText(arrayBuffer);
+      // PDF file - use Cloudflare Workers AI toMarkdown()
+      const pdfResult = await extractPdfText(arrayBuffer, env);
       text = pdfResult.text;
       isMultiColumn = pdfResult.isMultiColumn;
       
       // If PDF.js parse failed (corruption, encryption, password protection, etc.)
       if (pdfResult.parseFailed) {
-        // Use more specific error message if available from PDF.js
+        // Use more specific error message based on errorMessage content
+        // Note: toMarkdown API always sets errorName to 'ToMarkdownError', so we check errorMessage instead
         let userMessage = 'This PDF could not be processed. It may be corrupted, password-protected, or encrypted. Please try a different file or ensure the PDF is not password-protected.';
         
-        if (pdfResult.errorName === 'PasswordException' || pdfResult.errorMessage?.toLowerCase().includes('password')) {
+        const errorMsgLower = (pdfResult.errorMessage || '').toLowerCase();
+        if (errorMsgLower.includes('password') || errorMsgLower.includes('encrypted')) {
           userMessage = 'This PDF is password-protected. Please remove the password and try again.';
-        } else if (pdfResult.errorName === 'InvalidPDFException' || pdfResult.errorMessage?.toLowerCase().includes('invalid')) {
+        } else if (errorMsgLower.includes('invalid') || errorMsgLower.includes('corrupt')) {
           userMessage = 'This PDF appears to be corrupted or invalid. Please try re-saving the file or use a different PDF.';
-        } else if (pdfResult.errorName === 'MissingPDFException' || pdfResult.errorMessage?.toLowerCase().includes('missing')) {
+        } else if (errorMsgLower.includes('missing') || errorMsgLower.includes('empty')) {
           userMessage = 'The PDF file appears to be empty or incomplete. Please check the file and try again.';
         }
         
@@ -190,6 +195,8 @@ export async function extractResumeText(file, fileName) {
     }
     
     // Detect multi-column layout (heuristic: many short lines)
+    // For consistency: multi-column detection happens after cleanText for all file types
+    // (PDFs already detected before stripMarkdown, but we re-check here for consistency)
     if (!isMultiColumn) {
       isMultiColumn = detectMultiColumnLayout(text);
     }
@@ -230,114 +237,139 @@ export async function extractResumeText(file, fileName) {
 
 
 /**
- * Extract text from PDF file using unpdf (serverless-optimized PDF.js wrapper)
- * 
- * Uses unpdf which is purpose-built for Cloudflare Workers and edge environments.
- * Provides reliable text extraction without Web Worker dependencies.
- * 
+ * Extract text from PDF file using Cloudflare Workers AI toMarkdown()
+ *
+ * Uses native Cloudflare Workers AI binding for reliable PDF text extraction.
+ * No external npm dependencies - maintained by Cloudflare.
+ *
  * Handles text-based PDFs including:
  * - Google Docs exports
  * - Microsoft Word exports
  * - Canva PDFs
  * - LaTeX-generated PDFs
  * - Most modern PDF generators
- * 
+ *
  * Performance optimizations:
  * - Character limit (40k chars) for early exit on very large PDFs
- * - Smart scanned PDF detection (text < 400 chars AND pages >= 1)
+ * - Smart scanned PDF detection (text < 400 chars)
  * - Text-based multi-column detection (heuristic)
- * 
- * If extraction fails or returns minimal text, scanned PDF detection will be triggered
  */
-async function extractPdfText(arrayBuffer) {
+async function extractPdfText(arrayBuffer, env) {
   const MAX_CHARS = 40000; // Character limit for early exit
-  const SCANNED_PDF_THRESHOLD = 400; // If text < 400 chars and pages >= 1, likely scanned
-  
+  const SCANNED_PDF_THRESHOLD = 400; // If text < 400 chars, likely scanned
+
   try {
-    // Dynamic import for Cloudflare Workers compatibility
-    const { extractText, getDocumentProxy } = await import('unpdf');
-    
-    // Load PDF document
-    const pdf = await getDocumentProxy(new Uint8Array(arrayBuffer));
-    
-    // Extract text from all pages (unpdf handles this efficiently)
-    const { text, totalPages } = await extractText(pdf, { 
-      mergePages: true 
-    });
-    
-    const numPages = totalPages || 0;
-    
-    if (numPages === 0) {
-      console.warn('[PDF] PDF has no pages');
+    // Verify AI binding is available
+    if (!env?.AI) {
+      throw new Error('AI binding not configured. Please add [ai] binding to wrangler.toml');
+    }
+
+    // Use Cloudflare Workers AI toMarkdown() for PDF extraction
+    // API expects: { name: string, blob: Blob }
+    const blob = new Blob([arrayBuffer], { type: 'application/pdf' });
+    const result = await env.AI.toMarkdown([{
+      name: 'resume.pdf',
+      blob: blob
+    }]);
+
+    // toMarkdown returns an array of results
+    const pdfResult = Array.isArray(result) ? result[0] : result;
+
+    if (!pdfResult || pdfResult.error) {
+      const errorMessage = pdfResult?.error || 'toMarkdown returned no result';
+      console.error('[PDF] toMarkdown failed', { error: errorMessage });
+      return {
+        text: '',
+        isMultiColumn: false,
+        numPages: 0,
+        parseFailed: true,
+        errorName: 'ToMarkdownError',
+        errorMessage
+      };
+    }
+
+    // Extract text from markdown result
+    let extractedText = pdfResult.data || pdfResult.text || '';
+
+    // Check if PDF appears empty (before processing)
+    if (!extractedText || extractedText.trim().length === 0) {
+      console.warn('[PDF] PDF has no extractable text');
       return { text: '', isMultiColumn: false, numPages: 0, isEmpty: true };
     }
-    
+
     // Apply character limit (early exit for very large PDFs)
-    let extractedText = text || '';
     if (extractedText.length > MAX_CHARS) {
-      console.log('[PDF] Text limit reached, truncating', { 
+      console.log('[PDF] Text limit reached, truncating', {
         originalLength: extractedText.length,
         truncatedLength: MAX_CHARS
       });
       extractedText = extractedText.substring(0, MAX_CHARS);
     }
-    
+
+    // Filter out PDF metadata and base64 image data FIRST
+    // This must happen before any other processing to prevent metadata from affecting scoring
+    extractedText = filterPdfMetadata(extractedText);
+
+    // Multi-column detection BEFORE stripMarkdown (to preserve list markers for accurate line length)
+    // This ensures consistent detection regardless of markdown formatting
+    const linesForDetection = extractedText.split('\n').filter(line => line.trim().length > 0);
+    const avgLineLengthForDetection = linesForDetection.reduce((sum, line) => sum + line.trim().length, 0) / Math.max(linesForDetection.length, 1);
+    const isMultiColumn = avgLineLengthForDetection < 30 && linesForDetection.length > 20;
+
+    // Now strip markdown syntax (after multi-column detection)
+    extractedText = stripMarkdown(extractedText);
+
+    // Clean text (fix encoding issues, normalize whitespace)
+    extractedText = cleanText(extractedText);
+
     const trimmedText = extractedText.trim();
-    
-    // Smart scanned PDF detection
-    if (trimmedText.length < SCANNED_PDF_THRESHOLD && numPages >= 1) {
-      console.warn('[PDF] Scanned PDF detected', { 
-        textLength: trimmedText.length, 
-        pages: numPages,
+
+    // If we got minimal text, return empty (check before scanned PDF detection)
+    // This handles truly empty or corrupted PDFs
+    if (trimmedText.length < 100) {
+      console.warn('[PDF] Extracted text too short', {
+        length: trimmedText.length
+      });
+      return { text: '', isMultiColumn: false, numPages: 0 };
+    }
+
+    // Smart scanned PDF detection (after cleaning for consistency with resume-score-worker.js)
+    // This check happens after stripMarkdown and cleanText to match resume-score-worker.js behavior
+    // Only flag as scanned if text is between 100-399 chars (very short but not empty)
+    // PDFs with < 100 chars are handled above as empty/corrupted
+    if (trimmedText.length < SCANNED_PDF_THRESHOLD) {
+      console.warn('[PDF] Scanned PDF detected', {
+        textLength: trimmedText.length,
         threshold: SCANNED_PDF_THRESHOLD
       });
-      return { text: '', isMultiColumn: false, numPages, isScanned: true };
+      return { text: '', isMultiColumn: false, numPages: 0, isScanned: true };
     }
-    
-    // If we got minimal text, return empty
-    if (trimmedText.length < 100) {
-      console.warn('[PDF] Extracted text too short', { 
-        length: trimmedText.length, 
-        pages: numPages 
-      });
-      return { text: '', isMultiColumn: false, numPages };
-    }
-    
-    // Multi-column detection using text-based heuristic
-    // (We lose coordinate-based detection, but text-based is sufficient)
-    const lines = trimmedText.split('\n').filter(line => line.trim().length > 0);
-    const avgLineLength = lines.reduce((sum, line) => sum + line.trim().length, 0) / Math.max(lines.length, 1);
-    const isMultiColumn = avgLineLength < 30 && lines.length > 20;
-    
-    console.log('[PDF] Successfully extracted text', { 
-      pages: numPages,
-      textLength: trimmedText.length, 
+
+    console.log('[PDF] Successfully extracted text via toMarkdown', {
+      textLength: trimmedText.length,
       isMultiColumn
     });
-    
+
     return {
       text: trimmedText,
       isMultiColumn,
-      numPages
+      numPages: 0 // toMarkdown doesn't provide page count
     };
   } catch (error) {
     // PDF parse failure (corruption, encryption, password protection, etc.)
-    // Distinguish from scanned PDFs by setting parseFailed flag
-    // Capture full error details for debugging
     const errorName = error?.name || 'UnknownError';
     const errorMessage = error?.message || String(error);
-    
-    console.error('[PDF] unpdf extraction failed', {
+
+    console.error('[PDF] toMarkdown extraction failed', {
       errorName,
       errorMessage,
-      stack: error?.stack,
-      code: error?.code
+      stack: error?.stack
     });
-    
-    return { 
-      text: '', 
-      isMultiColumn: false, 
-      numPages: 0, 
+
+    return {
+      text: '',
+      isMultiColumn: false,
+      numPages: 0,
       parseFailed: true,
       errorName,
       errorMessage
@@ -346,58 +378,25 @@ async function extractPdfText(arrayBuffer) {
 }
 
 /**
- * Extract text from PDF using OCR (Tesseract.js)
- * 
- * NOTE: This function is intentionally not implemented for MVP.
- * OCR in Cloudflare Workers has compatibility issues (no OffscreenCanvas, no Web Workers).
- * 
- * For scanned PDFs, we return a helpful error message directing users to upload
+ * OCR extraction placeholder
+ *
+ * NOTE: OCR is not implemented. For scanned PDFs, users are directed to upload
  * text-based PDFs or Word documents instead.
- * 
- * Future V2: Implement client-side OCR using Tesseract.js in the browser,
- * or use an external OCR API service.
+ *
+ * Future: Consider Cloudflare Workers AI image-to-text capabilities.
  */
-async function extractPdfWithOCR(arrayBuffer) {
-  // This function is kept for API compatibility but should not be called
-  // Scanned PDF detection happens in extractPdfText() and throws OCR_REQUIRED error
+async function extractPdfWithOCR() {
   throw createExtractionError(
     EXTRACTION_ERRORS.OCR_REQUIRED,
-    'This PDF appears to be image-based (scanned). Please upload a text-based PDF or Word document for best results. We\'re working on scan support for a future update.',
-    { 
-      isScanned: true, 
-      requiresOcr: true 
+    'This PDF appears to be image-based (scanned). Please upload a text-based PDF or Word document for best results.',
+    {
+      isScanned: true,
+      requiresOcr: true
     }
   );
 }
 
-/**
- * Clean extracted text
- */
-function cleanText(text) {
-  // Remove excessive line breaks (more than 2 consecutive)
-  text = text.replace(/\n{3,}/g, '\n\n');
-  
-  // Normalize whitespace
-  text = text.replace(/[ \t]+/g, ' ');
-  
-  // Fix common encoding issues (UTF-8 decoded as Latin-1 mojibake)
-  // When UTF-8 bytes are decoded as Latin-1, byte 0x80 becomes U+0080, not U+20AC (€)
-  // Pattern: UTF-8 0xE2 0x80 0x99 -> Latin-1: U+00E2 U+0080 U+0099 -> "â\x80\x99"
-  text = text.replace(/â\x80\x99/g, "'"); // Right single quotation mark
-  text = text.replace(/â\x80\x9C/g, '"'); // Left double quotation mark
-  text = text.replace(/â\x80\x9D/g, '"'); // Right double quotation mark
-  // Fix em dash mojibake (UTF-8 0xE2 0x80 0x94 decoded as Latin-1)
-  // UTF-8: 0xE2 0x80 0x94 -> Latin-1: U+00E2 U+0080 U+0094 -> "â\x80\x94"
-  text = text.replace(/â\x80\x94/g, '—');
-  // Fix en dash mojibake (UTF-8 0xE2 0x80 0x93 decoded as Latin-1)
-  // UTF-8: 0xE2 0x80 0x93 -> Latin-1: U+00E2 U+0080 U+0093 -> "â\x80\x93"
-  text = text.replace(/â\x80\x93/g, '–');
-  
-  // Trim
-  text = text.trim();
-  
-  return text;
-}
+// Note: filterPdfMetadata, stripMarkdown, cleanText from ./pdf-metadata-filter.js
 
 /**
  * Detect multi-column layout
