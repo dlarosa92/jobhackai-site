@@ -990,9 +990,11 @@
         const currentUser = window.FirebaseAuthManager?.getCurrentUser?.();
         const creditKey = currentUser?.uid ? `creditsByUid:${currentUser.uid}` : null;
         let hasUsedFreeCredit = false;
+        let hadFreeAccountWithCredit = false;
         if (creditKey) {
           const creditsData = localStorage.getItem(creditKey);
           if (creditsData) {
+            hadFreeAccountWithCredit = true;
             try {
               const credits = JSON.parse(creditsData);
               hasUsedFreeCredit = credits.ats_free_lifetime === 0;
@@ -1003,7 +1005,7 @@
         }
         
         // Check if user had a free account (even if they didn't upload resume)
-        const wasFreeAccount = hasFreeUsageData || creditKey !== null || localStorage.getItem('was-free-user') === 'true';
+        const wasFreeAccount = hasFreeUsageData || hadFreeAccountWithCredit || localStorage.getItem('was-free-user') === 'true';
         const hadResumeUpload = hasATSScoreHistory || hasUsedFreeATS || hasFreeUsageData || hasUploadedResume || hasUsedFreeCredit;
         
         // Show popup for all free account users who upgraded

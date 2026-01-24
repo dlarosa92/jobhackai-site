@@ -990,10 +990,26 @@ export default function Dashboard() {
               const hasUsedFreeATS = localStorage.getItem('hasUsedFreeATS') === 'true';
               const hasFreeUsageData = localStorage.getItem('free-ats-usage');
               const hasUploadedResume = localStorage.getItem('lastUploadedResume');
+              const currentUser = (window as any)?.FirebaseAuthManager?.getCurrentUser?.() || null;
+              const creditKey = currentUser?.uid ? `creditsByUid:${currentUser.uid}` : null;
+              let hasUsedFreeCredit = false;
+              let hadFreeAccountWithCredit = false;
+              if (creditKey) {
+                const creditsData = localStorage.getItem(creditKey);
+                if (creditsData) {
+                  hadFreeAccountWithCredit = true;
+                  try {
+                    const credits = JSON.parse(creditsData);
+                    hasUsedFreeCredit = credits?.ats_free_lifetime === 0;
+                  } catch {
+                    // ignore parse errors
+                  }
+                }
+              }
               
               // Check if user had a free account
-              const wasFreeAccount = hasFreeUsageData || localStorage.getItem('was-free-user') === 'true';
-              const hadResumeUpload = hasATSScoreHistory || hasUsedFreeATS || hasUploadedResume;
+              const wasFreeAccount = hasFreeUsageData || hadFreeAccountWithCredit || localStorage.getItem('was-free-user') === 'true';
+              const hadResumeUpload = hasATSScoreHistory || hasUsedFreeATS || hasFreeUsageData || hasUploadedResume || hasUsedFreeCredit;
               
               // Show banner if user upgraded from free account
               if (!wasFreeAccount) return null;
