@@ -733,16 +733,19 @@ function looksLikePersonName(line) {
 
 /**
  * Check if a word is a valid name word, supporting Unicode/accented characters
- * Matches patterns like: John, JOHN, José, JOSÉ, Mary-Jane, O'Brien, D'Angelo, McDonald, MacArthur
+ * Matches patterns like: John, JOHN, José, JOSÉ, Mary-Jane, O'Brien, O'BRIEN, D'Angelo, McDonald, MacArthur
  */
 function isValidNameWordWithUnicode(word) {
-  // Apostrophe names - single letter prefix followed by apostrophe and capitalized name
+  // Apostrophe names - title case
   // O'Brien, O'Connor, O'Neil (Irish)
   // D'Angelo, D'Arcy, D'Souza (Italian/Portuguese)
   // L'Amour, L'Esperance (French)
   // N'Dour, N'Golo, N'Diaye (West African)
   // Also handles accented versions like Ó'Brien
   if (/^[\p{Lu}]'[\p{Lu}][\p{Ll}]+$/u.test(word)) return true;
+
+  // Apostrophe names - all caps (O'BRIEN, D'ANGELO, N'GOLO)
+  if (/^[\p{Lu}]'[\p{Lu}]+$/u.test(word)) return true;
 
   // McDonald, McArthur, McNeil etc
   if (/^Mc[\p{Lu}][\p{Ll}]+$/u.test(word)) return true;
