@@ -1427,7 +1427,7 @@ class AuthManager {
   async requireVerifiedEmail() {
     try {
       // Wait for auth to be ready
-      const user = await this.waitForAuthReady(4000);
+      let user = await this.waitForAuthReady(4000);
       if (user === AUTH_PENDING) {
         // wait a little longer once
         const lateUser = await this.waitForAuthReady(4000);
@@ -1436,6 +1436,7 @@ class AuthManager {
           window.location.href = '/login.html';
           return false;
         }
+        user = lateUser; // adopt resolved user (could be null or a real user)
       }
       
       if (!user || user === AUTH_PENDING) {
