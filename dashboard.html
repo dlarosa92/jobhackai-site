@@ -2349,10 +2349,6 @@
         // Check if user was previously on free plan (stored when they upgrade)
         const wasFreeUser = localStorage.getItem('was-free-user') === 'true';
         
-        // CRITICAL: Only show if user had a free ATS score AT THE TIME OF UPGRADE
-        // This flag is set when user upgrades from free, and only if they had a score then
-        const hadFreeATSScoreAtUpgrade = localStorage.getItem('had-free-ats-score-at-upgrade') === 'true';
-        
         // Try to get user UID from Firebase Auth Manager to check credit usage (legacy support)
         const currentUser = window.FirebaseAuthManager?.getCurrentUser?.();
         const creditKey = currentUser?.uid ? `creditsByUid:${currentUser.uid}` : null;
@@ -2376,15 +2372,6 @@
         
         // Check legacy free usage data
         const hasFreeUsageData = localStorage.getItem('free-ats-usage');
-        let legacyUsedFreeATS = false;
-        if (hasFreeUsageData) {
-          try {
-            const usageData = JSON.parse(hasFreeUsageData);
-            legacyUsedFreeATS = usageData.used === true;
-          } catch (e) {
-            // Ignore parse errors
-          }
-        }
         
         // Determine if user had a free account
         const wasFreeAccount = wasFreeUser || hasFreeUsageData || hadFreeAccountWithCredit;

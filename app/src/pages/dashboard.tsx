@@ -903,6 +903,17 @@ export default function Dashboard() {
           margin-bottom: 0.7em;
           font-size: 1.01rem;
         }
+        .plan-transition-heading {
+          font-weight: 700;
+          font-size: 1.02rem;
+          margin-bottom: 0.15em;
+          color: #0F4AA2;
+        }
+        .plan-transition-content {
+          font-size: 0.96rem;
+          line-height: 1.45;
+          color: #11519C;
+        }
       `}</style>
 
       {/* JobHackAI HEADER (canonical) */}
