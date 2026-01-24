@@ -483,3 +483,48 @@ export function hasEmailAndPhone(line) {
 
   return hasEmail && hasPhone;
 }
+
+/**
+ * Strip markdown syntax from text.
+ * toMarkdown() returns markdown-formatted text which can affect scoring.
+ * Used by resume-extractor.js and resume-score-worker.js.
+ */
+export function stripMarkdown(text) {
+  if (!text) return '';
+
+  return text
+    .replace(/^#{1,6}\s+/gm, '')
+    .replace(/(\*\*|__)(.*?)\1/g, '$2')
+    .replace(/(\*|_)(.*?)\1/g, '$2')
+    .replace(/`([^`]+)`/g, '$1')
+    .replace(/```[\s\S]*?```/g, (match) => {
+      const content = match.replace(/^```[\s\S]*?\n?/, '').replace(/\n?```$/, '');
+      return content;
+    })
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+    .replace(/!\[([^\]]*)\]\([^)]+\)/g, '$1')
+    .replace(/^[-*_]{3,}\s*$/gm, '')
+    .replace(/^>\s+/gm, '')
+    .replace(/^[\s]*[-*+]\s+/gm, '')
+    .replace(/^[\s]*\d+\.\s+/gm, '')
+    .replace(/~~(.*?)~~/g, '$1');
+}
+
+/**
+ * Clean extracted text: fix encoding issues and normalize whitespace.
+ * Preserves newlines for multi-column detection. Used by resume-extractor.js and resume-score-worker.js.
+ */
+export function cleanText(text) {
+  if (!text) return '';
+
+  let t = text
+    .replace(/\n{3,}/g, '\n\n')
+    .replace(/[ \t]+/g, ' ')
+    .replace(/â\x80\x99/g, "'")
+    .replace(/â\x80\x9C/g, '"')
+    .replace(/â\x80\x9D/g, '"')
+    .replace(/â\x80\x94/g, '—')
+    .replace(/â\x80\x93/g, '–');
+
+  return t.trim();
+}

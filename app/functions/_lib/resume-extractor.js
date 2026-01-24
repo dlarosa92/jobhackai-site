@@ -4,7 +4,7 @@
 import mammoth from 'mammoth';
 
 // Import shared PDF metadata filtering
-import { filterPdfMetadata } from './pdf-metadata-filter.js';
+import { filterPdfMetadata, stripMarkdown, cleanText } from './pdf-metadata-filter.js';
 
 /**
  * Structured error codes for resume extraction
@@ -396,72 +396,7 @@ async function extractPdfWithOCR() {
   );
 }
 
-// Note: PDF metadata filtering functions are imported from ./pdf-metadata-filter.js
-
-/**
- * Strip markdown syntax from text
- * toMarkdown() returns markdown-formatted text which can affect scoring
- */
-function stripMarkdown(text) {
-  if (!text) return '';
-
-  return text
-    // Remove headers (# ## ### etc)
-    .replace(/^#{1,6}\s+/gm, '')
-    // Remove bold/italic (**text**, *text*, __text__, _text_)
-    .replace(/(\*\*|__)(.*?)\1/g, '$2')
-    .replace(/(\*|_)(.*?)\1/g, '$2')
-    // Remove inline code (`code`) - extract content only
-    .replace(/`([^`]+)`/g, '$1')
-    // Remove code blocks (```code```) - extract content only, preserve newlines
-    .replace(/```[\s\S]*?```/g, (match) => {
-      // Extract content between triple backticks, preserving it as plain text
-      const content = match.replace(/^```[\s\S]*?\n?/, '').replace(/\n?```$/, '');
-      return content;
-    })
-    // Remove links [text](url) -> text
-    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
-    // Remove images ![alt](url)
-    .replace(/!\[([^\]]*)\]\([^)]+\)/g, '$1')
-    // Remove horizontal rules (---, ***, ___)
-    .replace(/^[-*_]{3,}\s*$/gm, '')
-    // Remove blockquotes (> text)
-    .replace(/^>\s+/gm, '')
-    // Remove list markers (-, *, +, 1.)
-    .replace(/^[\s]*[-*+]\s+/gm, '')
-    .replace(/^[\s]*\d+\.\s+/gm, '')
-    // Remove strikethrough (~~text~~)
-    .replace(/~~(.*?)~~/g, '$1');
-}
-
-/**
- * Clean extracted text
- */
-function cleanText(text) {
-  // Remove excessive line breaks (more than 2 consecutive)
-  text = text.replace(/\n{3,}/g, '\n\n');
-  
-  // Normalize whitespace
-  text = text.replace(/[ \t]+/g, ' ');
-  
-  // Fix common encoding issues (UTF-8 decoded as Latin-1 mojibake)
-  // When UTF-8 bytes are decoded as Latin-1, byte 0x80 becomes U+0080, not U+20AC (€)
-  // Pattern: UTF-8 0xE2 0x80 0x99 -> Latin-1: U+00E2 U+0080 U+0099 -> "â\x80\x99"
-  text = text.replace(/â\x80\x99/g, "'"); // Right single quotation mark
-  text = text.replace(/â\x80\x9C/g, '"'); // Left double quotation mark
-  text = text.replace(/â\x80\x9D/g, '"'); // Right double quotation mark
-  // Fix em dash mojibake (UTF-8 0xE2 0x80 0x94 decoded as Latin-1)
-  // UTF-8: 0xE2 0x80 0x94 -> Latin-1: U+00E2 U+0080 U+0094 -> "â\x80\x94"
-  text = text.replace(/â\x80\x94/g, '—');
-  // Fix en dash mojibake (UTF-8 0xE2 0x80 0x93 decoded as Latin-1)
-  // UTF-8: 0xE2 0x80 0x93 -> Latin-1: U+00E2 U+0080 U+0093 -> "â\x80\x93"
-  text = text.replace(/â\x80\x93/g, '–');
-  
-  // Trim
-  text = text.trim();
-  
-  return text;
-}
+// Note: filterPdfMetadata, stripMarkdown, cleanText from ./pdf-metadata-filter.js
 
 /**
  * Detect multi-column layout

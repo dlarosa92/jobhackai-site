@@ -3,7 +3,7 @@
 // Rule-based scoring engine (no AI tokens) - AI feedback available via OpenAI binding
 
 // Import shared PDF metadata filtering
-import { filterPdfMetadata } from "./functions/_lib/pdf-metadata-filter.js";
+import { filterPdfMetadata, stripMarkdown, cleanText } from "./functions/_lib/pdf-metadata-filter.js";
 
 // Constants - aligned with resume-extractor.js
 const SCANNED_PDF_THRESHOLD = 400; // If text < 400 chars after cleaning, likely scanned
@@ -480,63 +480,4 @@ function detectIssues(text, isMultiColumn) {
   return issues;
 }
 
-// Note: filterPdfMetadata is imported from ./functions/_lib/pdf-metadata-filter.js
-
-/**
- * Strip markdown syntax from text
- * toMarkdown() returns markdown-formatted text which can affect scoring
- */
-function stripMarkdown(text) {
-  if (!text) return "";
-
-  return text
-    // Remove headers (# ## ### etc)
-    .replace(/^#{1,6}\s+/gm, "")
-    // Remove bold/italic (**text**, *text*, __text__, _text_)
-    .replace(/(\*\*|__)(.*?)\1/g, "$2")
-    .replace(/(\*|_)(.*?)\1/g, "$2")
-    // Remove inline code (`code`) - extract content only
-    .replace(/`([^`]+)`/g, "$1")
-    // Remove code blocks (```code```) - extract content only, preserve newlines
-    .replace(/```[\s\S]*?```/g, (match) => {
-      // Extract content between triple backticks, preserving it as plain text
-      const content = match.replace(/^```[\s\S]*?\n?/, "").replace(/\n?```$/, "");
-      return content;
-    })
-    // Remove links [text](url) -> text
-    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
-    // Remove images ![alt](url)
-    .replace(/!\[([^\]]*)\]\([^)]+\)/g, "$1")
-    // Remove horizontal rules (---, ***, ___)
-    .replace(/^[-*_]{3,}\s*$/gm, "")
-    // Remove blockquotes (> text)
-    .replace(/^>\s+/gm, "")
-    // Remove list markers (-, *, +, 1.)
-    .replace(/^[\s]*[-*+]\s+/gm, "")
-    .replace(/^[\s]*\d+\.\s+/gm, "")
-    // Remove strikethrough (~~text~~)
-    .replace(/~~(.*?)~~/g, "$1");
-}
-
-/**
- * Clean extracted text - fix encoding issues and normalize whitespace
- * Matches resume-extractor.js cleanText function
- */
-function cleanText(text) {
-  if (!text) return "";
-
-  // Remove excessive line breaks (more than 2 consecutive)
-  text = text.replace(/\n{3,}/g, "\n\n");
-
-  // Normalize whitespace (but preserve newlines for multi-column detection)
-  text = text.replace(/[ \t]+/g, " ");
-
-  // Fix common encoding issues (UTF-8 decoded as Latin-1 mojibake)
-  text = text.replace(/â\x80\x99/g, "'");  // Right single quotation mark
-  text = text.replace(/â\x80\x9C/g, '"');  // Left double quotation mark
-  text = text.replace(/â\x80\x9D/g, '"');  // Right double quotation mark
-  text = text.replace(/â\x80\x94/g, "—");  // Em dash
-  text = text.replace(/â\x80\x93/g, "–");  // En dash
-
-  return text.trim();
-}
+// Note: filterPdfMetadata, stripMarkdown, cleanText from ./functions/_lib/pdf-metadata-filter.js
