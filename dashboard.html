@@ -18,23 +18,82 @@
   <link rel="stylesheet" href="css/footer.css">
   <script src="js/components/usage-indicator.js"></script>
   <script type="module">
-    import authManager from './js/firebase-auth.js';
+    import authManager, { AUTH_PENDING } from './js/firebase-auth.js';
     document.documentElement.classList.add('auth-pending');
-    (async () => {
+    const ensurePendingIndicator = () => {
+      let el = document.getElementById('auth-pending-indicator');
+      if (!el) {
+        el = document.createElement('div');
+        el.id = 'auth-pending-indicator';
+        el.textContent = 'Restoring session…';
+        el.style.cssText = 'position:fixed;inset:0;display:flex;align-items:center;justify-content:center;font-family:Inter,-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;font-size:16px;color:#1f2937;background:rgba(255,255,255,0.82);backdrop-filter:blur(2px);z-index:9999;';
+        document.body.appendChild(el);
+      }
+    };
+    const clearPendingIndicator = () => {
+      const el = document.getElementById('auth-pending-indicator');
+      if (el) el.remove();
+    };
+    const finalizeReady = () => {
+      document.documentElement.classList.remove('auth-pending');
+      clearPendingIndicator();
+    };
+
+    const guardDashboard = async (attemptGroup = 1) => {
+      let resolved = false;
       try {
-        const user = await authManager.waitForAuthReady(4000);
-        if (!user) {
+        const TIMEOUT_PER_ATTEMPT = 12000;
+        const MAX_ATTEMPTS = 2;
+        let user = null;
+        for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+          const result = await authManager.waitForAuthReady(TIMEOUT_PER_ATTEMPT);
+          if (result === AUTH_PENDING) {
+            ensurePendingIndicator();
+            continue;
+          }
+          user = result;
+          break;
+        }
+
+        if (user === AUTH_PENDING || (!user && !window.__REAL_AUTH_READY)) {
+          ensurePendingIndicator();
+          // Keep waiting a bit longer before deciding
+          const lateResult = await authManager.waitForAuthReady(5000);
+          if (lateResult !== AUTH_PENDING) {
+            user = lateResult;
+          }
+        }
+
+        if (window.__REAL_AUTH_READY && !user) {
           location.replace('/login');
+          resolved = true;
+          return;
+        } else if (!user) {
+          ensurePendingIndicator();
+          // give it one more grouped retry after a short pause
+          if (attemptGroup < 3) {
+            setTimeout(() => guardDashboard(attemptGroup + 1), 2000);
+          }
           return;
         }
+        // User is available
+        resolved = true;
       } catch (_) {
         // Conservative fallback
         location.replace('/login');
+        resolved = true;
         return;
       } finally {
-        document.documentElement.classList.remove('auth-pending');
+        if (resolved) {
+          finalizeReady();
+        } else {
+          // keep pending indicator/class active while we wait
+          ensurePendingIndicator();
+        }
       }
-    })();
+    };
+
+    guardDashboard();
   </script>
   <style>
     .dashboard-banner {

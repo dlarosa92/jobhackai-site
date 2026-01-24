@@ -59,6 +59,14 @@ let __jha_nav_timer = null;
 const NAV_DEBOUNCE_MS = 200;   // coalesce bursts (tune 150-300ms)
 const NAV_MAX_WAIT_MS = 600;   // reveal nav if nothing authoritative arrives
 
+function isRealAuthReady() {
+  try {
+    return !!(window.__REAL_AUTH_READY || window.__firebaseAuthReadyFired || firebaseAuthReadyFired || window.__NAV_AUTH_READY);
+  } catch (_) {
+    return false;
+  }
+}
+
 function revealNav(){
   try {
     document.documentElement.classList.remove('nav-loading');
@@ -72,7 +80,7 @@ function scheduleUpdateNavigation(force) {
   if (force) {
     try {
       const pending = (typeof isAuthPossiblyPending === 'function' && isAuthPossiblyPending())
-        && !(firebaseAuthReadyFired || window.__firebaseAuthReadyFired || window.__NAV_AUTH_READY);
+        && !isRealAuthReady();
 
       if (pending) {
         // Only set one deferred listener to avoid duplicates; set flag immediately and attach listener on document.
@@ -80,14 +88,9 @@ function scheduleUpdateNavigation(force) {
           window.__NAV_DEFERRED_NAV_UPDATE = true;
           navLog('info', 'Forced navigation update deferred until firebase-auth-ready');
 
-          // Handler marks auth-ready flags and schedules the forced update (debounced)
+          // Handler schedules the forced update (debounced) once real auth-ready fires
           const deferredHandler = () => {
             try {
-              // Sync auth-ready flags to prevent re-deferral
-              try { window.__NAV_AUTH_READY = true; } catch (_) {}
-              try { window.__firebaseAuthReadyFired = true; } catch (_) {}
-              try { firebaseAuthReadyFired = true; } catch (_) {}
-
               // Clear any fallback timer
               if (window.__NAV_DEFERRED_TIMEOUT) {
                 clearTimeout(window.__NAV_DEFERRED_TIMEOUT);
@@ -122,9 +125,6 @@ function scheduleUpdateNavigation(force) {
               try {
                 if (window.__NAV_DEFERRED_NAV_UPDATE) {
                   navLog('warn', 'Deferred nav timeout fired; forcing navigation update');
-                  try { window.__NAV_AUTH_READY = true; } catch (_) {}
-                  try { window.__firebaseAuthReadyFired = true; } catch (_) {}
-                  try { firebaseAuthReadyFired = true; } catch (_) {}
                   window.__NAV_DEFERRED_NAV_UPDATE = false;
                   scheduleUpdateNavigation(true);
                 }
@@ -159,7 +159,7 @@ function scheduleUpdateNavigation(force) {
     // Only reveal nav if auth is not pending now
     try {
       const pendingNow = (typeof isAuthPossiblyPending === 'function' && isAuthPossiblyPending())
-        && !(firebaseAuthReadyFired || window.__firebaseAuthReadyFired || window.__NAV_AUTH_READY);
+        && !isRealAuthReady();
       if (!pendingNow) {
         revealNav();
       } else {
@@ -179,7 +179,7 @@ function scheduleUpdateNavigation(force) {
     // Reveal only if auth is not pending after updateNavigation()
     try {
       const pendingNow = (typeof isAuthPossiblyPending === 'function' && isAuthPossiblyPending())
-        && !(firebaseAuthReadyFired || window.__firebaseAuthReadyFired || window.__NAV_AUTH_READY);
+        && !isRealAuthReady();
       if (!pendingNow) {
         revealNav();
       } else {
@@ -199,7 +199,7 @@ function scheduleUpdateNavigation(force) {
       setTimeout(() => {
         try {
           const retries = parseInt(document.documentElement.dataset.navTimeoutRetries || '0', 10);
-          const pending = (typeof isAuthPossiblyPending === 'function' && isAuthPossiblyPending()) && !(window.__firebaseAuthReadyFired || firebaseAuthReadyFired);
+          const pending = (typeof isAuthPossiblyPending === 'function' && isAuthPossiblyPending()) && !isRealAuthReady();
           if (pending && retries < MAX_RETRIES) {
             // increment retry count and defer reveal
             document.documentElement.dataset.navTimeoutRetries = String(retries + 1);
@@ -343,7 +343,7 @@ function isAuthPossiblyPending() {
     );
 
     // If auth already marked ready (either event flag or global fallback), not pending
-    if (firebaseAuthReadyFired || window.__firebaseAuthReadyFired) return false;
+    if (isRealAuthReady()) return false;
 
     // If persistence keys exist AND local flag is set, session likely restoring
     if (hasFirebaseKeys) return true;
@@ -461,7 +461,7 @@ function patchNav(plan) {
 let firebaseAuthReadyFired = false;
 // If a global flag was set before this script loaded, sync it immediately to avoid races
 try {
-  if (typeof window !== 'undefined' && window.__firebaseAuthReadyFired) {
+  if (typeof window !== 'undefined' && window.__REAL_AUTH_READY) {
     firebaseAuthReadyFired = true;
   }
 } catch (_) {}
@@ -469,13 +469,14 @@ try {
 // This prevents callers that pass `force=true` from immediately rendering visitor CTAs
 // while Firebase is still restoring a session.
 window.__NAV_DEFERRED_NAV_UPDATE = window.__NAV_DEFERRED_NAV_UPDATE || false;
-window.__NAV_AUTH_READY = !!(firebaseAuthReadyFired || window.__firebaseAuthReadyFired);
+window.__NAV_AUTH_READY = isRealAuthReady();
 
 // Mirror firebase-auth-ready to a global for any scripts needing it
 try {
   if (window && typeof window.addEventListener === 'function') {
     window.addEventListener('firebase-auth-ready', () => {
       try {
+        window.__REAL_AUTH_READY = true;
         window.__NAV_AUTH_READY = true;
         firebaseAuthReadyFired = true;
       } catch (e) { /* ignore */ }
@@ -509,7 +510,7 @@ function confidentlyAuthenticatedForNav() {
 
     // 3) If firebase-auth-ready has fired, we can use localStorage heuristics safely
     try {
-      if (typeof window !== 'undefined' && !!window.__firebaseAuthReadyFired) {
+      if (typeof window !== 'undefined' && isRealAuthReady()) {
         const storedAuth = (typeof localStorage !== 'undefined' && localStorage.getItem('user-authenticated') === 'true');
         const hasFirebaseKeys = (typeof localStorage !== 'undefined') && Object.keys(localStorage).some(k =>
           k.startsWith('firebase:authUser:') &&
@@ -760,7 +761,7 @@ function getAuthState() {
     if (hasFirebaseManager && !firebaseUser) {
     // If firebase-auth-ready hasn't fired yet, Firebase may still be restoring session
     // Use localStorage fallback temporarily instead of clearing it
-    if (!(firebaseAuthReadyFired || window.__firebaseAuthReadyFired)) {
+    if (!isRealAuthReady()) {
       console.log('[AUTH] getAuthState: Firebase not ready yet, using localStorage fallback');
       try {
         const storedAuth = localStorage.getItem('user-authenticated');
@@ -796,7 +797,7 @@ function getAuthState() {
     
     // Only clear localStorage if firebase-auth-ready has fired AND Firebase says logged out
     // CRITICAL FIX: Check firebaseAuthReadyFired (or global fallback) before clearing to prevent premature clearing
-    if (firebaseAuthReadyFired || window.__firebaseAuthReadyFired) {
+    if (isRealAuthReady()) {
       try {
         const storedAuth = localStorage.getItem('user-authenticated');
         if (storedAuth === 'true') {
@@ -1567,7 +1568,7 @@ function updateNavigation() {
   // scheduleUpdateNavigation will retry after auth becomes ready.
   try {
     const pending = (typeof isAuthPossiblyPending === 'function' && isAuthPossiblyPending())
-      && !(firebaseAuthReadyFired || window.__firebaseAuthReadyFired || window.__NAV_AUTH_READY);
+      && !isRealAuthReady();
 
     if (pending) {
       navLog('info', 'updateNavigation deferred because auth appears to be pending');
@@ -2839,7 +2840,8 @@ function applyNavForUser(user) {
 document.addEventListener('firebase-auth-ready', async (event) => {
   firebaseAuthReadyFired = true; // Mark as fired - Firebase has restored session
   // Set flag on window to detect if event already fired (for fallback check)
-  window.__firebaseAuthReadyFired = true;
+  window.__REAL_AUTH_READY = true;
+  window.__firebaseAuthReadyFired = true; // legacy compat
   console.log('🔥 Firebase auth ready, initializing navigation');
   try {
     const user = window.FirebaseAuthManager
@@ -2865,7 +2867,7 @@ if (document.readyState === 'loading') {
     // Only initialize if firebase-auth-ready event has already fired (indicated by flag)
     // AND navigation hasn't been initialized yet (prevent duplicate calls)
     // This ensures Firebase has actually checked auth state via onAuthStateChanged
-    if (window.__firebaseAuthReadyFired && !navigationInitialized && window.FirebaseAuthManager && typeof window.FirebaseAuthManager.getCurrentUser === 'function') {
+    if (window.__REAL_AUTH_READY && !navigationInitialized && window.FirebaseAuthManager && typeof window.FirebaseAuthManager.getCurrentUser === 'function') {
       const firebaseUser = window.FirebaseAuthManager.getCurrentUser();
       firebaseAuthReadyFired = true; // Sync flag
       console.log('🔥 Firebase already ready (event fired before script load), initializing navigation', firebaseUser ? '(with user)' : '(logged out)');
@@ -2876,7 +2878,7 @@ if (document.readyState === 'loading') {
 } else {
   // DOM already loaded, check if firebase-auth-ready event already fired
   // AND navigation hasn't been initialized yet (prevent duplicate calls)
-  if (window.__firebaseAuthReadyFired && !navigationInitialized && window.FirebaseAuthManager && typeof window.FirebaseAuthManager.getCurrentUser === 'function') {
+  if (window.__REAL_AUTH_READY && !navigationInitialized && window.FirebaseAuthManager && typeof window.FirebaseAuthManager.getCurrentUser === 'function') {
     const firebaseUser = window.FirebaseAuthManager.getCurrentUser();
     firebaseAuthReadyFired = true; // Sync flag
     console.log('🔥 Firebase already ready (event fired before script load), initializing navigation', firebaseUser ? '(with user)' : '(logged out)');

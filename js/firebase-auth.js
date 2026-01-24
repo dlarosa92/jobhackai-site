@@ -25,6 +25,7 @@ import {
   updateProfile,
   setPersistence,
   browserLocalPersistence,
+  inMemoryPersistence,
   sendEmailVerification,
   applyActionCode,
   checkActionCode,
@@ -39,6 +40,9 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/12.1.0/firebas
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
+
+// Single authoritative auth-ready sentinel shared by consumers
+const AUTH_PENDING = Object.freeze({ _authPending: true });
 
 // --- DIRECT PLAN FETCH FROM D1 VIA API (navigation-independent) ---
 async function fetchPlanFromAPI() {
@@ -69,10 +73,20 @@ async function fetchPlanFromAPI() {
   }
 }
 
-// Set persistence to local (stays logged in across sessions)
-setPersistence(auth, browserLocalPersistence).catch((error) => {
-  console.error('Error setting persistence:', error);
-});
+// Set persistence once; fallback to in-memory if browser persistence fails (e.g., IndexedDB blocked)
+(async () => {
+  try {
+    await setPersistence(auth, browserLocalPersistence);
+  } catch (error) {
+    console.error('Error setting persistence (browserLocalPersistence). Falling back to inMemoryPersistence:', error);
+    try {
+      await setPersistence(auth, inMemoryPersistence);
+      console.log('✅ Using in-memory persistence fallback');
+    } catch (memErr) {
+      console.error('Failed to set inMemoryPersistence:', memErr);
+    }
+  }
+})();
 
 // Google Auth Provider
 const googleProvider = new GoogleAuthProvider();
@@ -243,6 +257,10 @@ class AuthManager {
     if (window.FirebaseAuthManager) {
       window.FirebaseAuthManager.currentUser = this.currentUser;
     }
+    try {
+      window.__REAL_AUTH_READY = true;       // authoritative flag used across app
+      window.__firebaseAuthReadyFired = true; // legacy flag for backward compatibility (real only)
+    } catch (_) {}
     // Resolve the promise
     if (this._authReadyResolver) {
       this._authReadyResolver(user || null);
@@ -381,10 +399,11 @@ class AuthManager {
         console.log('🔥 Dispatching firebase-auth-ready event');
         // CRITICAL FIX: Set flag on window before dispatching event
         // This allows navigation.js fallback to detect if event fired before script loaded
-        window.__firebaseAuthReadyFired = true;
+        window.__REAL_AUTH_READY = true;
+        window.__firebaseAuthReadyFired = true; // legacy flag (now only set from real event)
         // Dispatch event with effectiveUser (already null if logout-intent detected)
         document.dispatchEvent(new CustomEvent("firebase-auth-ready", {
-          detail: { user: effectiveUser || null }
+          detail: { user: effectiveUser || null, realAuthReady: true }
         }));
       }
       
@@ -1336,8 +1355,8 @@ class AuthManager {
     
     // Wait for auth to be ready with timeout
     try {
-      const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('Auth ready timeout')), timeoutMs)
+      const timeoutPromise = new Promise((resolve) => 
+        setTimeout(() => resolve(AUTH_PENDING), timeoutMs)
       );
       
       const user = await Promise.race([
@@ -1352,17 +1371,19 @@ class AuthManager {
         return null;
       }
       
-      console.log('🔥 waitForAuthReady finished, currentUser:', user);
+      if (user === AUTH_PENDING) {
+        console.warn('🔥 waitForAuthReady timeout after', timeoutMs, 'ms, Firebase not ready yet');
+      } else {
+        console.log('🔥 waitForAuthReady finished, currentUser:', user);
+      }
       return user;
     } catch (error) {
-      // Timeout occurred - Firebase hasn't resolved auth state yet
-      console.warn('🔥 waitForAuthReady timeout after', timeoutMs, 'ms, Firebase not ready yet');
-      // Return currentUser if available (may be null if Firebase still initializing)
+      // Error occurred - treat as pending unless logout intent
       const finalLogoutIntent = sessionStorage.getItem('logout-intent');
       if (finalLogoutIntent === '1') {
         return null;
       }
-      return this.currentUser; // May be null if Firebase hasn't resolved
+      return AUTH_PENDING;
     }
   }
 
@@ -1407,8 +1428,17 @@ class AuthManager {
     try {
       // Wait for auth to be ready
       const user = await this.waitForAuthReady(4000);
+      if (user === AUTH_PENDING) {
+        // wait a little longer once
+        const lateUser = await this.waitForAuthReady(4000);
+        if (lateUser === AUTH_PENDING) {
+          console.log('Auth still pending during requireVerifiedEmail, showing login');
+          window.location.href = '/login.html';
+          return false;
+        }
+      }
       
-      if (!user) {
+      if (!user || user === AUTH_PENDING) {
         console.log('No authenticated user, redirecting to login');
         window.location.href = '/login.html';
         return false;
@@ -1445,9 +1475,8 @@ const authManager = new AuthManager();
 
 // Export for use in pages
 export default authManager;
-export { auth, UserDatabase };
+export { auth, UserDatabase, AUTH_PENDING };
 // Back-compat: some modules import named waitForAuthReady; provide a proxy
 export async function waitForAuthReady(timeoutMs = 10000) {
   return authManager.waitForAuthReady(timeoutMs);
 }
-
