@@ -1034,6 +1034,22 @@
         if (shouldStartPolling) {
           // Store initial plan before any updates
           const initialPlanAfterPayment = currentPlanAfterPayment;
+          // Optimistic: if checkout intent exists, surface it immediately for nav/badges
+          if (checkoutPlanFromSelected) {
+            try {
+              localStorage.setItem('user-plan', checkoutPlanFromSelected);
+              localStorage.setItem('dev-plan', checkoutPlanFromSelected);
+              window.dispatchEvent(new CustomEvent('planChanged', { detail: { newPlan: checkoutPlanFromSelected } }));
+              if (window.JobHackAINavigation?.setAuthState) {
+                window.JobHackAINavigation.setAuthState(true, checkoutPlanFromSelected);
+              }
+              if (window.JobHackAINavigation?.scheduleUpdateNavigation) {
+                window.JobHackAINavigation.scheduleUpdateNavigation(true);
+              }
+            } catch (_) {}
+          }
+          // Flag welcome popup to show inline "setting up" copy instead of floating pill
+          window.__jhPlanSettingUp = true;
 
           // OPTION 1: Schedule welcome popup BEFORE polling/redirect so it shows on first dashboard visit.
           // Otherwise the poll can redirect before we ever reach the later showWelcomePopup call.
@@ -1057,16 +1073,10 @@
             }
           }, 800);
           
-          // Show loading indicator
-          const loadingIndicator = document.createElement('div');
-          loadingIndicator.id = 'plan-update-loading';
-          loadingIndicator.style.cssText = 'position:fixed;top:20px;right:20px;background:#007BFF;color:#fff;padding:12px 24px;border-radius:8px;z-index:10000;box-shadow:0 4px 12px rgba(0,0,0,0.15);font-family:var(--font-family-base,Inter,sans-serif);font-size:0.95rem;font-weight:500;';
-          loadingIndicator.textContent = 'Updating your plan...';
-          document.body.appendChild(loadingIndicator);
-          
           // Poll for plan update
           let retries = 0;
-          const maxRetries = 10; // 30 seconds total (3s intervals)
+          const maxRetries = 18; // ~30s at 1.7s cadence
+          const pollIntervalMs = 1700;
           
           const pollForPlanUpdate = async () => {
             retries++;
@@ -1076,7 +1086,6 @@
               // Authentication issue - check if we should stop polling
               if (retries >= maxRetries) {
                 console.warn('⚠️ Plan update timeout - authentication failed');
-                loadingIndicator.remove();
                 // Mark as processed to prevent infinite polling on refresh
                 sessionStorage.setItem('payment-processed', 'true');
                 // Clean up URL parameter
@@ -1088,7 +1097,7 @@
                 return;
               }
               // Retry after delay even if auth fails (might be temporary)
-              setTimeout(pollForPlanUpdate, 3000);
+              setTimeout(pollForPlanUpdate, pollIntervalMs);
               return;
             }
             
@@ -1106,7 +1115,6 @@
                   // Plan updated! Mark as processed and reload without ?paid=1
                   console.log('✅ Plan updated after payment, reloading...');
                   sessionStorage.setItem('payment-processed', 'true');
-                  loadingIndicator.textContent = 'Plan updated! Reloading...';
                   setTimeout(() => {
                     // Fix Issue 2: Remove ?paid=1 from URL to prevent re-triggering on reload
                     const url = new URL(window.location.href);
@@ -1122,10 +1130,9 @@
             
             // Check if we should continue polling
             if (retries < maxRetries) {
-              setTimeout(pollForPlanUpdate, 3000); // Poll every 3 seconds
+              setTimeout(pollForPlanUpdate, pollIntervalMs); // Faster cadence
             } else {
               console.warn('⚠️ Plan update timeout - will refresh on next poll');
-              loadingIndicator.remove();
               // Mark as processed even on timeout to prevent infinite polling
               sessionStorage.setItem('payment-processed', 'true');
               // Clean up URL parameter to prevent restarting polling in new sessions
@@ -1137,8 +1144,8 @@
             }
           };
           
-          // Start polling after initial billing status fetch (wait 2s for webhook to process)
-          setTimeout(pollForPlanUpdate, 2000);
+          // Start polling after initial billing status fetch (faster start: 0.8s)
+          setTimeout(pollForPlanUpdate, 800);
         } else {
           // Plan already updated or payment already processed - clean up URL
           if (hasAlreadyProcessedPayment || (currentPlanAfterPayment !== 'free' && currentPlanAfterPayment !== 'trial')) {

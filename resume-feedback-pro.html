@@ -2279,6 +2279,10 @@
         });
         return;
       }
+      const confirmed = typeof window.requestUpgradeConfirmation === 'function'
+        ? await window.requestUpgradeConfirmation(plan, { mode: 'checkout', currentPlan: localStorage.getItem('user-plan') || 'free' })
+        : true;
+      if (!confirmed) return;
 
       if (window.showLoadingOverlay) {
         window._currentLoadingOverlay = window.showLoadingOverlay('Redirecting to checkout...');
@@ -2359,6 +2363,13 @@
 
             const user = window.FirebaseAuthManager?.getCurrentUser?.();
             const idToken = user ? await user.getIdToken() : null;
+            const confirmed = typeof window.requestUpgradeConfirmation === 'function'
+              ? await window.requestUpgradeConfirmation('pro', { mode: 'checkout', currentPlan: localStorage.getItem('user-plan') || 'free' })
+              : true;
+            if (!confirmed) {
+              if (window._currentLoadingOverlay) { window._currentLoadingOverlay(); window._currentLoadingOverlay = null; }
+              return;
+            }
             const res = await fetch('/api/stripe-checkout', {
               method: 'POST',
               headers: { 
@@ -4312,6 +4323,13 @@
                               
                               const user = window.FirebaseAuthManager?.getCurrentUser?.();
                               const idToken = user ? await user.getIdToken() : null;
+                              const confirmed = typeof window.requestUpgradeConfirmation === 'function'
+                                ? await window.requestUpgradeConfirmation('pro', { mode: 'checkout', currentPlan: localStorage.getItem('user-plan') || 'free' })
+                                : true;
+                              if (!confirmed) {
+                                if (window._currentLoadingOverlay) { window._currentLoadingOverlay(); window._currentLoadingOverlay = null; }
+                                return;
+                              }
                               const res = await fetch('/api/stripe-checkout', {
                                 method: 'POST',
                                 headers: { 

@@ -2411,6 +2411,17 @@ async function initializeNavigation() {
       updateQuickPlanSwitcher();
     }
   });
+
+  // NEW: React to same-tab plan change broadcasts so badges update instantly
+  window.addEventListener('planChanged', (e) => {
+    navLog('info', 'planChanged event detected', { detail: e?.detail });
+    try {
+      scheduleUpdateNavigation(true);
+      updateQuickPlanSwitcher();
+    } catch (err) {
+      navLog('warn', 'planChanged handler failed', err);
+    }
+  });
   
   // SECURITY FIX: Listen to Firebase auth state changes to keep UI in sync
   // This ensures navigation updates immediately when user logs out in another tab

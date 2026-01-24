@@ -1161,6 +1161,10 @@
                     });
                     return;
                   }
+                  const confirmed = typeof window.requestUpgradeConfirmation === 'function'
+                    ? await window.requestUpgradeConfirmation(plan, { mode: 'checkout', currentPlan: localStorage.getItem('user-plan') || 'free' })
+                    : true;
+                  if (!confirmed) return;
                   if (window.showLoadingOverlay) {
                     window._currentLoadingOverlay = window.showLoadingOverlay('Redirecting to checkout...');
                   }

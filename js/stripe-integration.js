@@ -777,6 +777,178 @@ function showUpgradeInfoBanner(message, linkHref) {
   document.body.appendChild(banner);
 }
 
+// -------- Shared upgrade confirmation + toast utilities --------
+
+const PLAN_COPY = {
+  trial: { label: '3-Day Trial', price: '$0 for 3 days', benefit: 'Try everything before you commit.' },
+  essential: { label: 'Essential', price: '$29/mo', benefit: 'Unlock resume feedback and interview prep.' },
+  pro: { label: 'Pro', price: '$59/mo', benefit: 'Add rewriting, cover letters, and mock interviews.' },
+  premium: { label: 'Premium', price: '$99/mo', benefit: 'Full suite plus LinkedIn optimizer and priority review.' }
+};
+
+function createInlineToast(message, variant = 'success') {
+  const existing = document.getElementById('jh-inline-toast');
+  if (existing) existing.remove();
+
+  const toast = document.createElement('div');
+  toast.id = 'jh-inline-toast';
+  const bg = variant === 'error' ? '#EF4444' : '#00E676';
+  toast.style.cssText = `
+    position: fixed;
+    bottom: 1.5rem;
+    right: 1.5rem;
+    background: ${bg};
+    color: #fff;
+    padding: 0.9rem 1.2rem;
+    border-radius: 10px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.14);
+    z-index: 10020;
+    font-family: var(--font-family-base, Inter, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif);
+    font-weight: 600;
+    letter-spacing: 0.01em;
+    display: flex;
+    gap: 0.6rem;
+    align-items: center;
+    animation: slideInUp 0.22s ease;
+  `;
+  toast.innerHTML = `
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3">
+      ${variant === 'error'
+        ? '<circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>'
+        : '<polyline points="20 6 9 17 4 12" />'}
+    </svg>
+    <span>${message}</span>
+  `;
+
+  let style = document.getElementById('jh-inline-toast-styles');
+  if (!style) {
+    style = document.createElement('style');
+    style.id = 'jh-inline-toast-styles';
+    style.textContent = `@keyframes slideInUp { from { transform: translateY(12px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }`;
+    document.head.appendChild(style);
+  }
+
+  document.body.appendChild(toast);
+  setTimeout(() => {
+    toast.style.opacity = '0';
+    toast.style.transform = 'translateY(10px)';
+    setTimeout(() => toast.remove(), 200);
+  }, 3200);
+}
+
+function getPlanCopy(plan) {
+  return PLAN_COPY[plan] || { label: plan ? plan.charAt(0).toUpperCase() + plan.slice(1) : 'Plan', price: '', benefit: 'Unlock more JobHackAI features.' };
+}
+
+function showUpgradeConfirmation(plan, options = {}) {
+  const {
+    context = 'upgrade',
+    mode = 'checkout',
+    currentPlan = (localStorage.getItem('user-plan') || 'free'),
+    detail,
+    showPricing = true
+  } = options;
+
+  return new Promise((resolve) => {
+    const existing = document.getElementById('jh-upgrade-confirmation');
+    if (existing) existing.remove();
+
+    const copy = getPlanCopy(plan);
+    const heading = options.title || `Upgrade to ${copy.label}?`;
+    const sub = options.subtitle || (mode === 'checkout'
+      ? 'You will be redirected to secure checkout to complete your upgrade.'
+      : 'Your plan will update and your new benefits will unlock right away.');
+    const benefitLine = options.benefit || copy.benefit;
+
+    const overlay = document.createElement('div');
+    overlay.id = 'jh-upgrade-confirmation';
+    overlay.style.cssText = `
+      position: fixed;
+      inset: 0;
+      background: rgba(12, 18, 38, 0.58);
+      backdrop-filter: blur(3px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 1rem;
+      z-index: 10030;
+    `;
+
+    overlay.innerHTML = `
+      <div style="
+        background: #FFFFFF;
+        border-radius: 18px;
+        padding: 1.75rem;
+        width: min(520px, 96vw);
+        box-shadow: 0 24px 60px rgba(0,0,0,0.16);
+        font-family: var(--font-family-base, 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif);
+        animation: fadeIn 0.2s ease, rise 0.25s ease;
+      ">
+        <div style="display:flex; gap:0.9rem; align-items:center; margin-bottom:1rem;">
+          <div style="width:48px;height:48px;border-radius:14px;background:linear-gradient(135deg,#00E676,#00c965);display:grid;place-items:center;">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.4"><polyline points="20 6 9 17 4 12" /></svg>
+          </div>
+          <div>
+            <div style="font-size:1.2rem;font-weight:800;color:#0F172A;">${heading}</div>
+            <div style="font-size:0.98rem;color:#475569;">${sub}</div>
+          </div>
+        </div>
+
+        <div style="background:#F8FAFC;border:1px solid #E2E8F0;border-radius:12px;padding:1rem;margin-bottom:1rem;">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.6rem;">
+            <span style="color:#64748B;">Current plan</span>
+            <span style="color:#0F172A;font-weight:700;">${currentPlan.charAt(0).toUpperCase() + currentPlan.slice(1)}</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <div>
+              <div style="color:#0F172A;font-weight:800;">${copy.label}</div>
+              <div style="color:#64748B;font-size:0.95rem;">${benefitLine}</div>
+            </div>
+            ${showPricing && copy.price ? `<div style="text-align:right; color:#0F172A; font-weight:800;">${copy.price}<div style="color:#94A3B8;font-size:0.85rem;font-weight:600;">Renews monthly</div></div>` : ''}
+          </div>
+        </div>
+
+        ${detail ? `<div style=\"margin-bottom:1rem;color:#475569;font-size:0.95rem;line-height:1.4;\">${detail}</div>` : ''}
+
+        <div style="display:flex;gap:0.75rem;">
+          <button id="jh-upgrade-cancel" style="flex:1;border:1px solid #E2E8F0;background:#fff;color:#475569;border-radius:10px;padding:0.85rem;font-weight:700;cursor:pointer;">Cancel</button>
+          <button id="jh-upgrade-confirm" style="flex:1;border:none;background:#0EA5E9;color:#fff;border-radius:10px;padding:0.9rem;font-weight:800;cursor:pointer;box-shadow:0 10px 30px rgba(14,165,233,0.35);">Continue</button>
+        </div>
+      </div>
+    `;
+
+    let style = document.getElementById('jh-upgrade-confirmation-styles');
+    if (!style) {
+      style = document.createElement('style');
+      style.id = 'jh-upgrade-confirmation-styles';
+      style.textContent = `@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } } @keyframes rise { from { transform: translateY(10px); } to { transform: translateY(0); } }`;
+      document.head.appendChild(style);
+    }
+
+    const cleanup = (value) => {
+      overlay.remove();
+      resolve(value);
+    };
+
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) cleanup(false);
+    });
+    overlay.querySelector('#jh-upgrade-cancel').addEventListener('click', () => cleanup(false));
+    overlay.querySelector('#jh-upgrade-confirm').addEventListener('click', () => cleanup(true));
+
+    document.body.appendChild(overlay);
+  });
+}
+
+async function requestUpgradeConfirmation(plan, options = {}) {
+  if (options.skipConfirmation) return true;
+  try {
+    return await showUpgradeConfirmation(plan, options);
+  } catch (_) {
+    return true; // fail-open to avoid blocking upgrades if modal fails
+  }
+}
+
 async function upgradePlan(targetPlan, options = {}) {
   const source = options.source || 'unknown';
   const returnUrl = options.returnUrl || window.location.href;
@@ -791,6 +963,18 @@ async function upgradePlan(targetPlan, options = {}) {
       button.textContent = originalText;
     };
   }
+
+  const confirmed = await requestUpgradeConfirmation(targetPlan, {
+    context: options.context || source,
+    mode: 'upgrade',
+    currentPlan: localStorage.getItem('user-plan') || 'free'
+  });
+
+  if (!confirmed) {
+    if (restoreButton) restoreButton();
+    return;
+  }
+
   const hideLoading = window.showLoadingOverlay
     ? window.showLoadingOverlay('Updating plan...')
     : null;
@@ -832,23 +1016,30 @@ async function upgradePlan(targetPlan, options = {}) {
       localStorage.setItem('user-plan', newPlan);
       localStorage.setItem('dev-plan', newPlan);
       window.dispatchEvent(new CustomEvent('planChanged', { detail: { newPlan } }));
+      if (window.JobHackAINavigation?.setAuthState) {
+        try { window.JobHackAINavigation.setAuthState(true, newPlan); } catch (_) {}
+      }
+      if (window.JobHackAINavigation?.scheduleUpdateNavigation) {
+        try { window.JobHackAINavigation.scheduleUpdateNavigation(true); } catch (_) {}
+      }
       if (typeof window.refreshPlanData === 'function') {
         await window.refreshPlanData();
       }
       if (window.showToast) {
         window.showToast('Plan updated. Enjoy the new features!');
       } else {
-        alert('Plan updated successfully.');
+        createInlineToast('Plan updated. Enjoy the new features!');
       }
       return;
     }
     throw new Error('upgrade_failed');
   } catch (error) {
     console.error('Upgrade failed:', error);
+    const message = 'Unable to upgrade. Please try again.';
     if (window.showToast) {
-      window.showToast('Unable to upgrade. Please try again.');
+      window.showToast(message);
     } else {
-      alert('Unable to upgrade. Please try again.');
+      createInlineToast(message, 'error');
     }
   } finally {
     if (hideLoading) hideLoading();
@@ -857,6 +1048,7 @@ async function upgradePlan(targetPlan, options = {}) {
 }
 
 window.upgradePlan = upgradePlan;
+window.requestUpgradeConfirmation = requestUpgradeConfirmation;
 
 // Initialize Stripe when DOM is loaded
 document.addEventListener('DOMContentLoaded', () => {
