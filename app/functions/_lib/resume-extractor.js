@@ -706,12 +706,12 @@ function looksLikePersonName(line) {
 
   // Each word should be a valid name component
   // Using Unicode property escapes for international name support
-  const suffixes = /^(Jr\.?|Sr\.?|II|III|IV|PhD|MD|MBA|CPA|Esq\.?|[A-Z]\.)$/i;
+  const suffixes = /^(Jr\.?|Sr\.?|II|III|IV|PhD|MD|MBA|CPA|Esq\.?|[\p{Lu}]\.)$/iu;
   const isValidNameWord = words.every(w => {
     // Known suffixes (check first to avoid false negatives)
     if (suffixes.test(w)) return true;
-    // Single initial with optional period
-    if (/^[A-Z]\.?$/.test(w)) return true;
+    // Single initial with optional period (Unicode support for É., Ø., etc.)
+    if (/^[\p{Lu}]\.?$/u.test(w)) return true;
     // Name particles (de, la, van, der, von, etc.)
     if (/^(de|la|van|der|von|del|di|da|le|du|dos|das|el|al|bin|ibn|ben)$/i.test(w)) return true;
 
@@ -736,11 +736,16 @@ function looksLikePersonName(line) {
 
 /**
  * Check if a word is a valid name word, supporting Unicode/accented characters
- * Matches patterns like: John, JOHN, José, JOSÉ, Mary-Jane, O'Brien, McDonald, MacArthur
+ * Matches patterns like: John, JOHN, José, JOSÉ, Mary-Jane, O'Brien, D'Angelo, McDonald, MacArthur
  */
 function isValidNameWordWithUnicode(word) {
-  // O'Brien, O'Connor, O'Neil etc (with Unicode support for accented versions)
-  if (/^O'[\p{Lu}][\p{Ll}]+$/u.test(word)) return true;
+  // Apostrophe names - single letter prefix followed by apostrophe and capitalized name
+  // O'Brien, O'Connor, O'Neil (Irish)
+  // D'Angelo, D'Arcy, D'Souza (Italian/Portuguese)
+  // L'Amour, L'Esperance (French)
+  // N'Dour, N'Golo, N'Diaye (West African)
+  // Also handles accented versions like Ó'Brien
+  if (/^[\p{Lu}]'[\p{Lu}][\p{Ll}]+$/u.test(word)) return true;
 
   // McDonald, McArthur, McNeil etc
   if (/^Mc[\p{Lu}][\p{Ll}]+$/u.test(word)) return true;
@@ -775,10 +780,14 @@ function isPrimarilyJobTitle(line) {
   const words = line.split(/\s+/);
 
   // Job title role keywords (the "what you do" part)
+  // Note: assistant, associate, executive, lead can be standalone roles OR modifiers
+  // We keep them here as roles since "Lead" alone is a valid job title
   const roleKeywords = /^(engineer|developer|manager|director|analyst|designer|consultant|specialist|coordinator|administrator|assistant|associate|executive|officer|lead|architect|scientist|researcher|accountant|attorney|lawyer|nurse|doctor|teacher|professor|chef|writer|editor|producer|technician|mechanic|electrician|plumber|carpenter|supervisor|foreman|clerk|secretary|receptionist|representative|agent|broker|advisor|counselor|therapist|pharmacist|veterinarian|dentist|surgeon|physician|pilot|captain|driver|operator)$/i;
 
   // Job title modifier keywords (the "level/area" part)
-  const modifierKeywords = /^(senior|junior|lead|chief|head|principal|staff|associate|assistant|executive|managing|general|regional|national|global|vice|deputy|interim|acting|software|web|mobile|frontend|backend|fullstack|full-stack|data|product|project|program|marketing|sales|hr|human|resources|finance|financial|operations|it|ux|ui|qa|quality|devops|cloud|security|network|systems|database|machine|learning|ai|ml)$/i;
+  // Note: Removed assistant, associate, executive, lead to avoid duplication with roleKeywords
+  // The if/else-if logic means duplicates would always count as roles anyway
+  const modifierKeywords = /^(senior|junior|chief|head|principal|staff|managing|general|regional|national|global|vice|deputy|interim|acting|software|web|mobile|frontend|backend|fullstack|full-stack|data|product|project|program|marketing|sales|hr|human|resources|finance|financial|operations|it|ux|ui|qa|quality|devops|cloud|security|network|systems|database|machine|learning|ai|ml)$/i;
 
   // Count how many words are job-related
   let roleCount = 0;
