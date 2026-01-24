@@ -500,13 +500,20 @@ function findContentStartIndex(lines) {
       return i;
     }
 
-    // A line that looks like a person's name (2-4 capitalized words, no special chars)
+    // A line that looks like a person's name (2-5 capitalized words, no special chars)
     // followed by job title or contact info pattern
     if (looksLikePersonName(cleanLine) && i + 1 < lines.length) {
-      const nextLine = stripMarkdownHeaderPrefix(lines[i + 1].trim());
-      // Check if next line looks like job title, email, phone, or location
-      if (looksLikeJobTitle(nextLine) || hasEmailOrPhone(nextLine) || looksLikeLocation(nextLine)) {
-        return i;
+      // Skip any empty lines after the name (like "Page N" detection does)
+      let nextIndex = i + 1;
+      while (nextIndex < lines.length && lines[nextIndex].trim().length === 0) {
+        nextIndex++;
+      }
+      if (nextIndex < lines.length) {
+        const nextLine = stripMarkdownHeaderPrefix(lines[nextIndex].trim());
+        // Check if next non-empty line looks like job title, email, phone, or location
+        if (looksLikeJobTitle(nextLine) || hasEmailOrPhone(nextLine) || looksLikeLocation(nextLine)) {
+          return i;
+        }
       }
     }
 
@@ -680,39 +687,38 @@ function looksLikeResumeContent(line) {
 
 /**
  * Check if a line looks like a person's name
+ * Supports:
+ * - Title case (John Smith), all-caps (JOHN SMITH), and mixed
+ * - Hyphenated names (Mary-Jane, Jean-Pierre)
+ * - Unicode/accented characters (José García, François Müller, Björk Guðmundsdóttir)
+ * - Name prefixes (O'Brien, McDonald, MacArthur, de la Cruz, van der Berg)
+ * - Suffixes (Jr., Sr., III, PhD, MD)
  */
 function looksLikePersonName(line) {
   // 2-5 words, each starting with capital letter
-  // Allow common suffixes like Jr., Sr., III, PhD
   const words = line.split(/\s+/);
   if (words.length < 2 || words.length > 5) return false;
 
-  // First, exclude lines that look like job titles (common false positives)
-  // Job titles like "Project Lead", "Product Manager", "Chief Executive" would otherwise match
-  if (looksLikeJobTitle(line)) return false;
+  // Exclude lines that are PRIMARILY job titles (not just containing a job keyword)
+  // "Project Lead" and "Senior Developer" should be rejected
+  // "Junior Martinez" and "John Senior" should be allowed (names that happen to contain job keywords)
+  if (isPrimarilyJobTitle(line)) return false;
 
   // Each word should be a valid name component
+  // Using Unicode property escapes for international name support
   const suffixes = /^(Jr\.?|Sr\.?|II|III|IV|PhD|MD|MBA|CPA|Esq\.?|[A-Z]\.)$/i;
   const isValidNameWord = words.every(w => {
-    // Normal title-case word (John, Smith)
-    if (/^[A-Z][a-z]+$/.test(w)) return true;
-    // All-caps word (JOHN, SMITH) - common in resumes
-    if (/^[A-Z]{2,}$/.test(w)) return true;
-    // Hyphenated names (Mary-Jane, Jean-Pierre, both title-case and all-caps)
-    if (/^[A-Z][a-z]+-[A-Z][a-z]+$/.test(w)) return true;
-    if (/^[A-Z]+-[A-Z]+$/.test(w)) return true;
-    // Known suffixes
+    // Known suffixes (check first to avoid false negatives)
     if (suffixes.test(w)) return true;
     // Single initial with optional period
     if (/^[A-Z]\.?$/.test(w)) return true;
-    // O'Brien, O'Connor etc
-    if (/^O'[A-Z][a-z]+$/i.test(w)) return true;
-    // McDonald, McArthur etc
-    if (/^Mc[A-Z][a-z]+$/.test(w)) return true;
-    // MacArthur, MacDonald etc
-    if (/^Mac[A-Z][a-z]+$/.test(w)) return true;
-    // De La Cruz, Van Der Berg etc
-    if (/^(de|la|van|der|von|del|di|da|le|du)$/i.test(w)) return true;
+    // Name particles (de, la, van, der, von, etc.)
+    if (/^(de|la|van|der|von|del|di|da|le|du|dos|das|el|al|bin|ibn|ben)$/i.test(w)) return true;
+
+    // For actual name words, check structure with Unicode support
+    // Title-case or all-caps word with Unicode letter support
+    // Matches: John, JOHN, José, JOSÉ, François, Müller, Björk, Guðmundsdóttir
+    if (isValidNameWordWithUnicode(w)) return true;
 
     return false;
   });
@@ -726,6 +732,72 @@ function looksLikePersonName(line) {
   if (/:/.test(line) && /=/.test(line)) return false;
 
   return true;
+}
+
+/**
+ * Check if a word is a valid name word, supporting Unicode/accented characters
+ * Matches patterns like: John, JOHN, José, JOSÉ, Mary-Jane, O'Brien, McDonald, MacArthur
+ */
+function isValidNameWordWithUnicode(word) {
+  // O'Brien, O'Connor, O'Neil etc (with Unicode support for accented versions)
+  if (/^O'[\p{Lu}][\p{Ll}]+$/u.test(word)) return true;
+
+  // McDonald, McArthur, McNeil etc
+  if (/^Mc[\p{Lu}][\p{Ll}]+$/u.test(word)) return true;
+
+  // MacArthur, MacDonald, MacNeil etc
+  if (/^Mac[\p{Lu}][\p{Ll}]+$/u.test(word)) return true;
+
+  // Hyphenated names - title case (Mary-Jane, Jean-Pierre, Anne-Marie)
+  if (/^[\p{Lu}][\p{Ll}]+-[\p{Lu}][\p{Ll}]+$/u.test(word)) return true;
+
+  // Hyphenated names - all caps (MARY-JANE)
+  if (/^[\p{Lu}]+-[\p{Lu}]+$/u.test(word)) return true;
+
+  // Standard title-case word (John, José, François, Müller)
+  // Must start with uppercase, followed by lowercase letters
+  if (/^[\p{Lu}][\p{Ll}]+$/u.test(word)) return true;
+
+  // All-caps word (JOHN, JOSÉ, FRANÇOIS) - 2+ uppercase letters
+  if (/^[\p{Lu}]{2,}$/u.test(word)) return true;
+
+  return false;
+}
+
+/**
+ * Check if a line is primarily a job title (not just a name containing a job keyword)
+ * "Senior Developer" -> true (job title)
+ * "Junior Martinez" -> false (name with "Junior" as first name)
+ * "Project Lead" -> true (job title)
+ * "John Senior" -> false (name with "Senior" as last name or suffix)
+ */
+function isPrimarilyJobTitle(line) {
+  const words = line.split(/\s+/);
+
+  // Job title role keywords (the "what you do" part)
+  const roleKeywords = /^(engineer|developer|manager|director|analyst|designer|consultant|specialist|coordinator|administrator|assistant|associate|executive|officer|lead|architect|scientist|researcher|accountant|attorney|lawyer|nurse|doctor|teacher|professor|chef|writer|editor|producer|technician|mechanic|electrician|plumber|carpenter|supervisor|foreman|clerk|secretary|receptionist|representative|agent|broker|advisor|counselor|therapist|pharmacist|veterinarian|dentist|surgeon|physician|pilot|captain|driver|operator)$/i;
+
+  // Job title modifier keywords (the "level/area" part)
+  const modifierKeywords = /^(senior|junior|lead|chief|head|principal|staff|associate|assistant|executive|managing|general|regional|national|global|vice|deputy|interim|acting|software|web|mobile|frontend|backend|fullstack|full-stack|data|product|project|program|marketing|sales|hr|human|resources|finance|financial|operations|it|ux|ui|qa|quality|devops|cloud|security|network|systems|database|machine|learning|ai|ml)$/i;
+
+  // Count how many words are job-related
+  let roleCount = 0;
+  let modifierCount = 0;
+
+  for (const word of words) {
+    if (roleKeywords.test(word)) roleCount++;
+    else if (modifierKeywords.test(word)) modifierCount++;
+  }
+
+  // It's primarily a job title if:
+  // 1. Has at least one role keyword AND at least one modifier (e.g., "Senior Developer", "Project Manager")
+  // 2. Has 2+ role keywords (e.g., "Manager Director" - rare but possible)
+  // 3. All words are job-related (e.g., "Software Engineer", "Data Analyst")
+  if (roleCount >= 1 && modifierCount >= 1) return true;
+  if (roleCount >= 2) return true;
+  if (roleCount + modifierCount === words.length && words.length >= 2) return true;
+
+  return false;
 }
 
 /**
