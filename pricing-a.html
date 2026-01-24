@@ -319,15 +319,7 @@
           button.disabled = true;
           button.style.opacity = '0.7';
           button.style.cursor = 'wait';
-          
-          const { isAuthenticated, userEmail, currentPlan } = getAuthState();
-          const confirmed = await confirmUpgrade(plan, currentPlan);
-          if (!confirmed) {
-            button.textContent = originalText;
-            enableButton(button);
-            return;
-          }
-          
+
           if (plan === 'free') {
             // Store normalized plan selection in sessionStorage
             function selectPlan(planId, planName, price) {
@@ -347,6 +339,14 @@
           }
           
           // If user is authenticated, handle upgrade directly
+          const { isAuthenticated, userEmail, currentPlan } = getAuthState();
+          const confirmed = await confirmUpgrade(plan, currentPlan);
+          if (!confirmed) {
+            button.textContent = originalText;
+            enableButton(button);
+            return;
+          }
+
           if (isAuthenticated && userEmail) {
             button.textContent = originalText;
             button.disabled = false;
