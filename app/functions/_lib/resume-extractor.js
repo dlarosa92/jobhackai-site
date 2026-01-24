@@ -610,11 +610,8 @@ function isDefinitelyMetadataLine(line) {
  * Check if a line contains base64 encoded data
  */
 function isBase64Data(line) {
-  // Pure base64 string (50+ chars)
+  // Pure base64 string (50+ chars) - covers full-line base64 data
   if (/^[A-Za-z0-9+/=]{50,}$/.test(line)) return true;
-
-  // Long string without spaces that looks like encoded data
-  if (line.length > 60 && !/\s/.test(line) && /^[A-Za-z0-9+/=]+$/.test(line)) return true;
 
   // Embedded base64 after key= (e.g., xmp:thumbnails=200256JPEG/9j/4AAQ...)
   if (/^[\w:]+=[A-Za-z0-9+/]{40,}/.test(line)) return true;
