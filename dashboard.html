@@ -879,6 +879,10 @@
       // Clear selectedPlan when arriving from successful checkout
       const urlParams = new URLSearchParams(window.location.search);
 
+      // Tracks if we already scheduled welcome popup in ?paid=1 block (before polling).
+      // Skip the later popup call when true to avoid duplicate.
+      let welcomePopupScheduledInPaid1Block = false;
+
       async function fetchBillingStatus(reason) {
         try {
           const firebaseToken = await getFirebaseIdToken();
@@ -953,6 +957,23 @@
         if (shouldStartPolling) {
           // Store initial plan before any updates
           const initialPlanAfterPayment = currentPlanAfterPayment;
+
+          // OPTION 1: Schedule welcome popup BEFORE polling/redirect so it shows on first dashboard visit.
+          // Otherwise the poll can redirect before we ever reach the later showWelcomePopup call.
+          let paid1UserName = 'there';
+          try {
+            const u = window.FirebaseAuthManager?.getCurrentUser?.();
+            if (u?.displayName) {
+              const parts = String(u.displayName).trim().split(/\s+/);
+              paid1UserName = parts[0] || 'there';
+            }
+          } catch (_) {}
+          welcomePopupScheduledInPaid1Block = true;
+          setTimeout(() => {
+            if (typeof window.showWelcomePopup === 'function') {
+              window.showWelcomePopup(initialPlanAfterPayment, paid1UserName);
+            }
+          }, 800);
           
           // Show loading indicator
           const loadingIndicator = document.createElement('div');
@@ -1242,12 +1263,14 @@
       // Continue with existing dashboard logic
       renderDashboard(user);
 
-      // Show welcome popup for first-time dashboard visitors
-      setTimeout(() => {
-        if (typeof window.showWelcomePopup === 'function') {
-          window.showWelcomePopup(user.plan, user.firstName || user.name);
-        }
-      }, 800);
+      // Show welcome popup for first-time dashboard visitors (skip if already shown in ?paid=1 block)
+      if (!welcomePopupScheduledInPaid1Block) {
+        setTimeout(() => {
+          if (typeof window.showWelcomePopup === 'function') {
+            window.showWelcomePopup(user.plan, user.firstName || user.name);
+          }
+        }, 800);
+      }
 
       // Add periodic refresh for plan changes (for all users)
       // This ensures plan upgrades/downgrades are detected automatically
