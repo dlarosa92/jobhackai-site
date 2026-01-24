@@ -272,7 +272,7 @@ export async function showWelcomePopup(plan = 'free', userName = 'there', onComp
   // Personalize title with user's name
   const escapedTitle = escapeHtml(`${content.title}${userName && userName !== 'there' ? ', ' + userName : ''}`);
   const settingUpLine = window.__jhPlanSettingUp === true
-    ? '<p style="margin:0.4rem 0 0;color:#0EA5E9;font-weight:600;font-size:1rem;font-family: \\'Inter\\', sans-serif;">Setting up your plan…</p>'
+    ? '<p style="margin:0.4rem 0 0;color:#0EA5E9;font-weight:600;font-size:1rem;font-family: Inter, sans-serif;">Setting up your plan…</p>'
     : '';
 
   // Create modal overlay

@@ -5,7 +5,7 @@
  */
 
 // Version stamp for deployment verification
-console.log('🔧 firebase-auth.js VERSION: auth-tri-state-v1 - ' + new Date().toISOString());
+console.log('🔧 firebase-auth.js VERSION: fix-auth-cache-loop-v1 - ' + new Date().toISOString());
 
 import { firebaseConfig } from './firebase-config.js';
 
