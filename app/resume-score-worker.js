@@ -2,13 +2,8 @@
 // Edge-based resume scoring using Cloudflare Workers AI toMarkdown()
 // Rule-based scoring engine (no AI tokens) - AI feedback available via OpenAI binding
 
-// Import shared PDF metadata filtering functions
-import {
-  filterPdfMetadata,
-  stripMarkdownHeaderPrefix,
-  isBase64Data,
-  looksLikeResumeContent,
-} from "./functions/_lib/pdf-metadata-filter.js";
+// Import shared PDF metadata filtering
+import { filterPdfMetadata } from "./functions/_lib/pdf-metadata-filter.js";
 
 // Constants - aligned with resume-extractor.js
 const SCANNED_PDF_THRESHOLD = 400; // If text < 400 chars after cleaning, likely scanned
@@ -485,8 +480,7 @@ function detectIssues(text, isMultiColumn) {
   return issues;
 }
 
-// Note: PDF metadata filtering functions (filterPdfMetadata, stripMarkdownHeaderPrefix, etc.)
-// are imported from ./functions/_lib/pdf-metadata-filter.js
+// Note: filterPdfMetadata is imported from ./functions/_lib/pdf-metadata-filter.js
 
 /**
  * Strip markdown syntax from text

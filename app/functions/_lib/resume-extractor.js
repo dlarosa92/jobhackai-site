@@ -3,24 +3,8 @@
 
 import mammoth from 'mammoth';
 
-// Import shared PDF metadata filtering functions
-import {
-  filterPdfMetadata,
-  findContentStartIndex,
-  stripMarkdownHeaderPrefix,
-  isDefinitelyMetadataLine,
-  isBase64Data,
-  isCMYKMetadata,
-  looksLikeResumeContent,
-  looksLikePersonName,
-  isValidNameWordWithUnicode,
-  isPrimarilyJobTitle,
-  looksLikeJobTitle,
-  looksLikeLocation,
-  hasEmailOrUrl,
-  hasEmailOrPhone,
-  hasEmailAndPhone,
-} from './pdf-metadata-filter.js';
+// Import shared PDF metadata filtering
+import { filterPdfMetadata } from './pdf-metadata-filter.js';
 
 /**
  * Structured error codes for resume extraction

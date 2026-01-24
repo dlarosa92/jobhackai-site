@@ -436,11 +436,14 @@ export function looksLikeJobTitle(line) {
 
 /**
  * Check if a line looks like a location (city, state/country)
+ * Uses case-sensitive [A-Z]/[a-z] for title-case (e.g. "San Francisco, CA");
+ * the 'i' flag is intentionally omitted so "hello, world" / "foo, bar" are not
+ * misclassified as locations.
  */
 export function looksLikeLocation(line) {
-  // City, STATE or City, Country patterns
-  if (/^[A-Z][a-z]+(\s+[A-Z][a-z]+)?,\s*[A-Z]{2}(\s+\d{5})?$/i.test(line)) return true;
-  if (/^[A-Z][a-z]+(\s+[A-Z][a-z]+)?,\s*[A-Z][a-z]+$/i.test(line)) return true;
+  // City, STATE or City, Country patterns (case-sensitive for title-case)
+  if (/^[A-Z][a-z]+(\s+[A-Z][a-z]+)?,\s*[A-Z]{2}(\s+\d{5})?$/.test(line)) return true;
+  if (/^[A-Z][a-z]+(\s+[A-Z][a-z]+)?,\s*[A-Z][a-z]+$/.test(line)) return true;
 
   // Common location indicators
   if (/\b(remote|hybrid|onsite|on-site)\b/i.test(line)) return true;
