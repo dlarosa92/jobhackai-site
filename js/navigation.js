@@ -74,12 +74,12 @@ function revealNav(){
   } catch (e) { /* ignore in non-browser contexts */ }
 }
 
-function scheduleUpdateNavigation(force) {
+function scheduleUpdateNavigation(force, skipPendingCheck = false) {
   // If caller requests a forced navigation update, ensure we don't run it while auth is possibly pending.
   // This avoids the visitor CTA / redirect race during auth restore.
   if (force) {
     try {
-      const pending = (typeof isAuthPossiblyPending === 'function' && isAuthPossiblyPending())
+      const pending = !skipPendingCheck && (typeof isAuthPossiblyPending === 'function' && isAuthPossiblyPending())
         && !isRealAuthReady();
 
       if (pending) {
@@ -126,7 +126,7 @@ function scheduleUpdateNavigation(force) {
                 if (window.__NAV_DEFERRED_NAV_UPDATE) {
                   navLog('warn', 'Deferred nav timeout fired; forcing navigation update');
                   window.__NAV_DEFERRED_NAV_UPDATE = false;
-                  scheduleUpdateNavigation(true);
+                  scheduleUpdateNavigation(true, true); // force even if auth still pending
                 }
               } catch (e) {
                 console.error('Deferred nav timeout handler error', e);

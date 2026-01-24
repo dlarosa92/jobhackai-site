@@ -73,7 +73,11 @@
           // give it one more grouped retry after a short pause
           if (attemptGroup < 3) {
             setTimeout(() => guardDashboard(attemptGroup + 1), 2000);
+            return;
           }
+          // Exhausted retries: treat as unresolved auth; send to login to unblock
+          location.replace('/login');
+          resolved = true;
           return;
         }
         // User is available
