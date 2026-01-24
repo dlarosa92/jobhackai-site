@@ -1002,10 +1002,33 @@
           }
         }
         
-        // Only show popup if user had uploaded a resume for free ATS scoring
+        // Check if user had a free account (even if they didn't upload resume)
+        const wasFreeAccount = hasFreeUsageData || creditKey !== null || localStorage.getItem('was-free-user') === 'true';
         const hadResumeUpload = hasATSScoreHistory || hasUsedFreeATS || hasFreeUsageData || hasUploadedResume || hasUsedFreeCredit;
-        if (!hadResumeUpload) {
+        
+        // Show popup for all free account users who upgraded
+        if (!wasFreeAccount) {
           return;
+        }
+        
+        // Determine plan-specific greeting
+        const planName = user.plan === 'trial' ? '3-day trial' 
+          : user.plan === 'essential' ? 'Essential plan'
+          : user.plan === 'pro' ? 'Pro plan'
+          : user.plan === 'premium' ? 'Premium plan'
+          : 'plan';
+        
+        // Determine which message to show
+        const messageText = hadResumeUpload 
+          ? `Your previous ATS resume score from your free account is still available. Welcome to your ${planName}!`
+          : `Welcome to your ${planName}!`;
+        
+        // Determine content text based on plan
+        let contentText = '';
+        if (user.plan === 'trial') {
+          contentText = 'You now have 3 resume feedback assessments (inclusive of ATS scans) and unlimited interview questions. Some features remain locked until you upgrade to a paid plan.';
+        } else {
+          contentText = 'You now have access to all features included in your plan. Upload resumes for ATS scoring, get detailed feedback, and generate unlimited interview questions.';
         }
         
         // Create and show popup
@@ -1015,10 +1038,10 @@
               <button class="close-btn" id="upgrade-popup-close" aria-label="Close">×</button>
               <h2>Hi, ${user.name || 'User'}</h2>
               <div class="popup-message">
-                Your previous ATS resume score has been carried over from your free account. You now have access to more features and unlimited scoring!
+                ${messageText}
               </div>
               <div class="popup-content">
-                <p>You can now upload unlimited resumes for ATS scoring and access additional features like detailed resume feedback and interview question generation.</p>
+                <p>${contentText}</p>
               </div>
               <button class="popup-ok-btn" id="upgrade-popup-ok">OK</button>
             </div>

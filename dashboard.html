@@ -2389,25 +2389,41 @@
         // Determine if user had a free account
         const wasFreeAccount = wasFreeUser || hasFreeUsageData || hadFreeAccountWithCredit;
         
-        // CRITICAL: Show popup ONLY if:
-        // 1. User upgraded from free account, AND
-        // 2. User had a free ATS score AT THE TIME OF UPGRADE (not after)
-        // This prevents showing the modal when users upload resumes after upgrading
+        // Show popup if user upgraded from free account (trial or paid plan)
+        // Show different message based on whether they uploaded a resume and their plan type
         const uploadedResumeForFreeATS = hadFreeATSScoreAtUpgrade || hasUsedFreeCredit || legacyUsedFreeATS;
-        const shouldShowPopup = wasFreeAccount && uploadedResumeForFreeATS;
+        const shouldShowPopup = wasFreeAccount;
         
         if (!shouldShowPopup) {
           console.log('ℹ️ [UPGRADE-BANNER] Not showing banner:', {
             wasFreeAccount,
-            uploadedResumeForFreeATS,
-            hadFreeATSScoreAtUpgrade,
-            hasUsedFreeCredit,
-            legacyUsedFreeATS
+            uploadedResumeForFreeATS
           });
           return;
         }
         
-        console.log('✅ [UPGRADE-BANNER] Showing banner - user upgraded from free and uploaded resume');
+        // Determine plan-specific greeting
+        const planName = user.plan === 'trial' ? '3-day trial' 
+          : user.plan === 'essential' ? 'Essential plan'
+          : user.plan === 'pro' ? 'Pro plan'
+          : user.plan === 'premium' ? 'Premium plan'
+          : 'plan';
+        
+        // Determine which message to show
+        const messageText = uploadedResumeForFreeATS 
+          ? `Your previous ATS resume score from your free account is still available. Welcome to your ${planName}!`
+          : `Welcome to your ${planName}!`;
+        
+        // Determine content text based on plan
+        let contentText = '';
+        if (user.plan === 'trial') {
+          contentText = 'You now have 3 resume feedback assessments (inclusive of ATS scans) and unlimited interview questions. Some features remain locked until you upgrade to a paid plan.';
+        } else {
+          // For paid plans, mention they have access to all features for their plan
+          contentText = 'You now have access to all features included in your plan. Upload resumes for ATS scoring, get detailed feedback, and generate unlimited interview questions.';
+        }
+        
+        console.log(`✅ [UPGRADE-BANNER] Showing banner - user upgraded from free to ${user.plan}${uploadedResumeForFreeATS ? ' and uploaded resume' : ' (no resume uploaded)'}`);
         
         // Create and show popup
         const popupHTML = `
@@ -2416,10 +2432,10 @@
               <button class="close-btn" id="upgrade-popup-close" aria-label="Close">×</button>
               <h2>Hi, ${user.name || 'User'}</h2>
               <div class="popup-message">
-                Your previous ATS resume score has been carried over from your free account. You now have access to more features and unlimited scoring!
+                ${messageText}
               </div>
               <div class="popup-content">
-                <p>You can now upload unlimited resumes for ATS scoring and access additional features like detailed resume feedback and interview question generation.</p>
+                <p>${contentText}</p>
               </div>
               <button class="popup-ok-btn" id="upgrade-popup-ok">OK</button>
             </div>

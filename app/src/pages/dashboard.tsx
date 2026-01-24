@@ -982,8 +982,7 @@ export default function Dashboard() {
           <div className="welcome-row">
             <h2>Hi, {user.name}</h2>
             {(() => {
-              // Show blue banner if user upgraded from free to trial/subscription
-              // Check multiple indicators that user had a free account with resume upload
+              // Check multiple indicators that user had a free account
               const hasUpgradedPlan = user.plan === 'trial' || user.plan === 'essential' || user.plan === 'pro' || user.plan === 'premium';
               if (typeof window === 'undefined' || !hasUpgradedPlan) return null;
               
@@ -991,14 +990,30 @@ export default function Dashboard() {
               const hasUsedFreeATS = localStorage.getItem('hasUsedFreeATS') === 'true';
               const hasFreeUsageData = localStorage.getItem('free-ats-usage');
               const hasUploadedResume = localStorage.getItem('lastUploadedResume');
-              // Show banner if user is on upgraded plan AND has any indication of previous free account usage
-              const shouldShowBanner = hasATSScoreHistory || hasUsedFreeATS || hasFreeUsageData || hasUploadedResume;
               
-              return shouldShowBanner ? (
+              // Check if user had a free account
+              const wasFreeAccount = hasFreeUsageData || localStorage.getItem('was-free-user') === 'true';
+              const hadResumeUpload = hasATSScoreHistory || hasUsedFreeATS || hasUploadedResume;
+              
+              // Show banner if user upgraded from free account
+              if (!wasFreeAccount) return null;
+              
+              // Determine plan-specific greeting
+              const planName = user.plan === 'trial' ? '3-day trial' 
+                : user.plan === 'essential' ? 'Essential plan'
+                : user.plan === 'pro' ? 'Pro plan'
+                : user.plan === 'premium' ? 'Premium plan'
+                : 'plan';
+              
+              const messageText = hadResumeUpload
+                ? `Your previous ATS resume score from your free account is still available. Welcome to your ${planName}! ${user.plan === 'trial' ? 'You now have 3 resume feedback assessments (inclusive of ATS scans) and unlimited interview questions. Some features remain locked until you upgrade to a paid plan.' : 'You now have access to all features included in your plan.'}`
+                : `Welcome to your ${planName}! ${user.plan === 'trial' ? 'You now have 3 resume feedback assessments (inclusive of ATS scans) and unlimited interview questions. Some features remain locked until you upgrade to a paid plan.' : 'You now have access to all features included in your plan.'}`;
+              
+              return (
                 <div className="plan-transition-message">
-                  Your previous ATS resume score has been carried over from your free account. You now have access to more features and unlimited scoring!
+                  {messageText}
                 </div>
-              ) : null;
+              );
             })()}
             <div className="user-email">{user.email}</div>
           </div>
