@@ -1,4 +1,4 @@
-import { updateUserPlan, getUserPlanData, resetFeatureDailyUsage } from '../_lib/db.js';
+import { updateUserPlan, getUserPlanData, resetFeatureDailyUsage, resetUsageEvents } from '../_lib/db.js';
 
 export async function onRequest(context) {
   const { request, env } = context;
@@ -308,17 +308,23 @@ export async function onRequest(context) {
       if (previousPlan === 'trial' && effectivePlan !== 'trial' && status === 'active') {
         console.log(`🎉 TRIAL CONVERTED: ${uid} → ${effectivePlan} (trial expired, subscription now active)`);
         
-        // Reset interview questions usage when converting from trial to paid plan
+        // Reset usage when converting from trial to paid plan
         // This ensures users get a fresh start with their new plan limits
         if (['essential', 'pro', 'premium'].includes(effectivePlan)) {
-          console.log('[WEBHOOK] Resetting interview questions usage for trial conversion', {
+          console.log('[WEBHOOK] Resetting usage for trial conversion', {
             uid,
             fromPlan: previousPlan,
             toPlan: effectivePlan
           });
+          
+          // Reset interview questions usage (uses feature_daily_usage table)
           await resetFeatureDailyUsage(env, uid, 'interview_questions').catch((error) => {
-            // Log but don't fail the webhook if usage reset fails
-            console.error('[WEBHOOK] Failed to reset usage (non-blocking):', error);
+            console.error('[WEBHOOK] Failed to reset interview questions usage (non-blocking):', error);
+          });
+          
+          // Reset resume feedback usage (uses usage_events table)
+          await resetUsageEvents(env, uid, 'resume_feedback').catch((error) => {
+            console.error('[WEBHOOK] Failed to reset resume feedback usage (non-blocking):', error);
           });
         }
       }

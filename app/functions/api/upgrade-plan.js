@@ -1,5 +1,5 @@
 import { getBearer, verifyFirebaseIdToken } from '../_lib/firebase-auth.js';
-import { getUserPlanData, updateUserPlan, resetFeatureDailyUsage } from '../_lib/db.js';
+import { getUserPlanData, updateUserPlan, resetFeatureDailyUsage, resetUsageEvents } from '../_lib/db.js';
 import {
   stripe,
   planToPrice,
@@ -202,17 +202,23 @@ export async function onRequest(context) {
 
     await invalidateBillingCaches(env, uid);
 
-    // Reset interview questions usage when upgrading from trial to paid plan
+    // Reset usage when upgrading from trial to paid plan
     // This ensures users get a fresh start with their new plan limits
     if (currentPlan === 'trial' && ['essential', 'pro', 'premium'].includes(targetPlan)) {
-      console.log('[BILLING-UPGRADE] Resetting interview questions usage for trial upgrade', {
+      console.log('[BILLING-UPGRADE] Resetting usage for trial upgrade', {
         uid,
         fromPlan: currentPlan,
         toPlan: targetPlan
       });
+      
+      // Reset interview questions usage (uses feature_daily_usage table)
       await resetFeatureDailyUsage(env, uid, 'interview_questions').catch((error) => {
-        // Log but don't fail the upgrade if usage reset fails
-        console.error('[BILLING-UPGRADE] Failed to reset usage (non-blocking):', error);
+        console.error('[BILLING-UPGRADE] Failed to reset interview questions usage (non-blocking):', error);
+      });
+      
+      // Reset resume feedback usage (uses usage_events table)
+      await resetUsageEvents(env, uid, 'resume_feedback').catch((error) => {
+        console.error('[BILLING-UPGRADE] Failed to reset resume feedback usage (non-blocking):', error);
       });
     }
 
