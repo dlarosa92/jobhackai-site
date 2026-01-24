@@ -18,23 +18,86 @@
   <link rel="stylesheet" href="css/footer.css">
   <script src="js/components/usage-indicator.js"></script>
   <script type="module">
-    import authManager from './js/firebase-auth.js';
+    import authManager, { AUTH_PENDING } from './js/firebase-auth.js';
     document.documentElement.classList.add('auth-pending');
-    (async () => {
+    const ensurePendingIndicator = () => {
+      let el = document.getElementById('auth-pending-indicator');
+      if (!el) {
+        el = document.createElement('div');
+        el.id = 'auth-pending-indicator';
+        el.textContent = 'Restoring session…';
+        el.style.cssText = 'position:fixed;inset:0;display:flex;align-items:center;justify-content:center;font-family:Inter,-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;font-size:16px;color:#1f2937;background:rgba(255,255,255,0.82);backdrop-filter:blur(2px);z-index:9999;';
+        document.body.appendChild(el);
+      }
+    };
+    const clearPendingIndicator = () => {
+      const el = document.getElementById('auth-pending-indicator');
+      if (el) el.remove();
+    };
+    const finalizeReady = () => {
+      document.documentElement.classList.remove('auth-pending');
+      clearPendingIndicator();
+    };
+
+    const guardDashboard = async (attemptGroup = 1) => {
+      let resolved = false;
       try {
-        const user = await authManager.waitForAuthReady(4000);
-        if (!user) {
+        const TIMEOUT_PER_ATTEMPT = 12000;
+        const MAX_ATTEMPTS = 2;
+        let user = null;
+        for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+          const result = await authManager.waitForAuthReady(TIMEOUT_PER_ATTEMPT);
+          if (result === AUTH_PENDING) {
+            ensurePendingIndicator();
+            continue;
+          }
+          user = result;
+          break;
+        }
+
+        if (user === AUTH_PENDING || (!user && !window.__REAL_AUTH_READY)) {
+          ensurePendingIndicator();
+          // Keep waiting a bit longer before deciding
+          const lateResult = await authManager.waitForAuthReady(5000);
+          if (lateResult !== AUTH_PENDING) {
+            user = lateResult;
+          }
+        }
+
+        if (window.__REAL_AUTH_READY && !user) {
           location.replace('/login');
+          resolved = true;
+          return;
+        } else if (!user) {
+          ensurePendingIndicator();
+          // give it one more grouped retry after a short pause
+          if (attemptGroup < 3) {
+            setTimeout(() => guardDashboard(attemptGroup + 1), 2000);
+            return;
+          }
+          // Exhausted retries: treat as unresolved auth; send to login to unblock
+          location.replace('/login');
+          resolved = true;
           return;
         }
+        // User is available
+        resolved = true;
       } catch (_) {
         // Conservative fallback
         location.replace('/login');
+        resolved = true;
         return;
       } finally {
-        document.documentElement.classList.remove('auth-pending');
+        if (resolved) {
+          finalizeReady();
+        } else {
+          // keep pending indicator/class active while we wait
+          ensurePendingIndicator();
+        }
       }
-    })();
+    };
+
+    guardDashboard();
   </script>
   <style>
     .dashboard-banner {
@@ -879,6 +942,10 @@
       // Clear selectedPlan when arriving from successful checkout
       const urlParams = new URLSearchParams(window.location.search);
 
+      // Tracks if we already scheduled welcome popup in ?paid=1 block (before polling).
+      // Skip the later popup call when true to avoid duplicate.
+      let welcomePopupScheduledInPaid1Block = false;
+
       async function fetchBillingStatus(reason) {
         try {
           const firebaseToken = await getFirebaseIdToken();
@@ -930,6 +997,20 @@
       let billingStatusData = null;
 
       if (urlParams.get('paid') === '1') {
+        // Read checkout intent from selectedPlan BEFORE clearing (webhook may not have run yet).
+        // Use it for welcome popup when billing still says free/trial so we show correct plan content.
+        let checkoutPlanFromSelected = null;
+        try {
+          const raw = sessionStorage.getItem('selectedPlan') || localStorage.getItem('selectedPlan');
+          if (raw) {
+            const parsed = JSON.parse(raw);
+            const id = parsed?.planId;
+            if (id && ['trial', 'essential', 'pro', 'premium'].includes(id)) {
+              checkoutPlanFromSelected = id;
+            }
+          }
+        } catch (_) {}
+
         console.log('✅ [DASHBOARD] Cleared selectedPlan after successful checkout');
         try {
           sessionStorage.removeItem('selectedPlan');
@@ -953,6 +1034,28 @@
         if (shouldStartPolling) {
           // Store initial plan before any updates
           const initialPlanAfterPayment = currentPlanAfterPayment;
+
+          // OPTION 1: Schedule welcome popup BEFORE polling/redirect so it shows on first dashboard visit.
+          // Otherwise the poll can redirect before we ever reach the later showWelcomePopup call.
+          // When webhook hasn't processed yet, billing says free/trial; use checkout intent (selectedPlan)
+          // so Essential/Pro/Premium purchasers see correct welcome content instead of free/trial messaging.
+          const displayPlanForPopup = (initialPlanAfterPayment === 'free' || initialPlanAfterPayment === 'trial') && checkoutPlanFromSelected
+            ? checkoutPlanFromSelected
+            : initialPlanAfterPayment;
+          let paid1UserName = 'there';
+          try {
+            const u = window.FirebaseAuthManager?.getCurrentUser?.();
+            if (u?.displayName) {
+              const parts = String(u.displayName).trim().split(/\s+/);
+              paid1UserName = parts[0] || 'there';
+            }
+          } catch (_) {}
+          welcomePopupScheduledInPaid1Block = true;
+          setTimeout(() => {
+            if (typeof window.showWelcomePopup === 'function') {
+              window.showWelcomePopup(displayPlanForPopup, paid1UserName);
+            }
+          }, 800);
           
           // Show loading indicator
           const loadingIndicator = document.createElement('div');
@@ -1242,12 +1345,14 @@
       // Continue with existing dashboard logic
       renderDashboard(user);
 
-      // Show welcome popup for first-time dashboard visitors
-      setTimeout(() => {
-        if (typeof window.showWelcomePopup === 'function') {
-          window.showWelcomePopup(user.plan, user.firstName || user.name);
-        }
-      }, 800);
+      // Show welcome popup for first-time dashboard visitors (skip if already shown in ?paid=1 block)
+      if (!welcomePopupScheduledInPaid1Block) {
+        setTimeout(() => {
+          if (typeof window.showWelcomePopup === 'function') {
+            window.showWelcomePopup(user.plan, user.firstName || user.name);
+          }
+        }, 800);
+      }
 
       // Add periodic refresh for plan changes (for all users)
       // This ensures plan upgrades/downgrades are detected automatically

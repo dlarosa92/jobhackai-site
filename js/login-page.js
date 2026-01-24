@@ -6,8 +6,7 @@
 // Version stamp for deployment verification
 console.log('🔧 login-page.js VERSION: auth-tri-state-v1 - ' + new Date().toISOString());
 
-import authManager from './firebase-auth.js';
-import { waitForAuthReady } from './firebase-auth.js';
+import authManager, { waitForAuthReady, AUTH_PENDING } from './firebase-auth.js';
 
 // Helper function to check if plan requires payment (only for NEW signups, not existing subscribers)
 function planRequiresPayment(plan) {
@@ -241,28 +240,30 @@ document.addEventListener('DOMContentLoaded', async function() {
 
     // ONLY check Firebase, wait for auth to be ready (tri-state pattern)
     try {
-      console.log('[LOGIN] checkAuth: Starting Firebase auth check (timeout: 10000ms)');
+      const TIMEOUT_PER_ATTEMPT = 12000;
+      const MAX_ATTEMPTS = 2;
+      console.log(`[LOGIN] checkAuth: Starting Firebase auth check (timeout per attempt: ${TIMEOUT_PER_ATTEMPT}ms)`);
       const startTime = Date.now();
-      
-      // TRI-STATE FIX: Wait for Firebase to resolve auth state before making redirect decision
-      // Use longer timeout to allow Firebase to restore session from persistence
+
       let user = null;
-      try {
-        // Wait up to 10 seconds for Firebase to restore session
-        user = await waitForAuthReady(10000);
-        if (!user && window.FirebaseAuthManager?.isAuthReady?.()) {
-          // Auth is ready but no user - explicitly unauthenticated
-          console.log('[LOGIN] checkAuth: Firebase auth ready, no authenticated user');
-        } else if (!user) {
-          // Auth not ready yet - don't redirect, show login form
-          console.log('[LOGIN] checkAuth: Firebase auth not ready yet, showing login form');
+      for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+        const result = await waitForAuthReady(TIMEOUT_PER_ATTEMPT);
+        if (result === AUTH_PENDING) {
+          console.log(`[LOGIN] checkAuth: Auth still initializing (attempt ${attempt}/${MAX_ATTEMPTS}) — keeping login form visible`);
+          // small backoff before retry
+          if (attempt < MAX_ATTEMPTS) {
+            await new Promise(res => setTimeout(res, 500));
+          }
+          continue;
         }
-      } catch (error) {
-        console.warn('[LOGIN] checkAuth: Auth check error:', error.message);
-        // Fallback: check if auth is ready but user check failed
-        if (window.FirebaseAuthManager?.isAuthReady?.()) {
-          user = window.FirebaseAuthManager?.getCurrentUser?.() || null;
-        }
+        user = result;
+        break;
+      }
+
+      if (!user && window.FirebaseAuthManager?.isAuthReady?.()) {
+        console.log('[LOGIN] checkAuth: Firebase auth ready, no authenticated user');
+      } else if (user === null) {
+        console.log('[LOGIN] checkAuth: Firebase auth not ready yet, showing login form');
       }
       
       const elapsed = Date.now() - startTime;
@@ -1169,4 +1170,3 @@ window.addEventListener('beforeunload', () => {
     }
   } catch (_) {}
 });
-
