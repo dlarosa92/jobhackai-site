@@ -934,6 +934,20 @@
       let billingStatusData = null;
 
       if (urlParams.get('paid') === '1') {
+        // Read checkout intent from selectedPlan BEFORE clearing (webhook may not have run yet).
+        // Use it for welcome popup when billing still says free/trial so we show correct plan content.
+        let checkoutPlanFromSelected = null;
+        try {
+          const raw = sessionStorage.getItem('selectedPlan') || localStorage.getItem('selectedPlan');
+          if (raw) {
+            const parsed = JSON.parse(raw);
+            const id = parsed?.planId;
+            if (id && ['trial', 'essential', 'pro', 'premium'].includes(id)) {
+              checkoutPlanFromSelected = id;
+            }
+          }
+        } catch (_) {}
+
         console.log('✅ [DASHBOARD] Cleared selectedPlan after successful checkout');
         try {
           sessionStorage.removeItem('selectedPlan');
@@ -960,6 +974,11 @@
 
           // OPTION 1: Schedule welcome popup BEFORE polling/redirect so it shows on first dashboard visit.
           // Otherwise the poll can redirect before we ever reach the later showWelcomePopup call.
+          // When webhook hasn't processed yet, billing says free/trial; use checkout intent (selectedPlan)
+          // so Essential/Pro/Premium purchasers see correct welcome content instead of free/trial messaging.
+          const displayPlanForPopup = (initialPlanAfterPayment === 'free' || initialPlanAfterPayment === 'trial') && checkoutPlanFromSelected
+            ? checkoutPlanFromSelected
+            : initialPlanAfterPayment;
           let paid1UserName = 'there';
           try {
             const u = window.FirebaseAuthManager?.getCurrentUser?.();
@@ -971,7 +990,7 @@
           welcomePopupScheduledInPaid1Block = true;
           setTimeout(() => {
             if (typeof window.showWelcomePopup === 'function') {
-              window.showWelcomePopup(initialPlanAfterPayment, paid1UserName);
+              window.showWelcomePopup(displayPlanForPopup, paid1UserName);
             }
           }, 800);
           
