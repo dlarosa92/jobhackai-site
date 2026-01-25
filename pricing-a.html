@@ -170,7 +170,7 @@
   </footer>
   <!-- Load Firebase auth modules -->
   <script src="js/firebase-config.js" type="module"></script>
-  <script src="js/firebase-auth.js?v=20251011-1" type="module"></script>
+  <script src="js/firebase-auth.js?v=20260124-1" type="module"></script>
   <!-- Load navigation system -->
   <script src="js/navigation.js?v=20251011-1"></script>
   <script src="js/universal-logout.js?v=20251007-2"></script>
@@ -261,6 +261,12 @@
       }
       
       const checkoutButtons = document.querySelectorAll('.stripe-checkout-btn');
+      const confirmUpgrade = async (plan, currentPlan) => {
+        if (typeof window.requestUpgradeConfirmation === 'function') {
+          return await window.requestUpgradeConfirmation(plan, { mode: 'checkout', currentPlan });
+        }
+        return true;
+      };
       
       // Check if user is already authenticated (compute at click-time for freshness)
       const getAuthState = () => {
@@ -303,7 +309,7 @@
       };
       
       checkoutButtons.forEach(button => {
-        button.addEventListener('click', (e) => {
+        button.addEventListener('click', async (e) => {
           e.preventDefault();
           const plan = button.dataset.plan;
           const amount = parseInt(button.dataset.amount);
@@ -313,7 +319,7 @@
           button.disabled = true;
           button.style.opacity = '0.7';
           button.style.cursor = 'wait';
-          
+
           if (plan === 'free') {
             // Store normalized plan selection in sessionStorage
             function selectPlan(planId, planName, price) {
@@ -334,6 +340,13 @@
           
           // If user is authenticated, handle upgrade directly
           const { isAuthenticated, userEmail, currentPlan } = getAuthState();
+          const confirmed = await confirmUpgrade(plan, currentPlan);
+          if (!confirmed) {
+            button.textContent = originalText;
+            enableButton(button);
+            return;
+          }
+
           if (isAuthenticated && userEmail) {
             button.textContent = originalText;
             button.disabled = false;

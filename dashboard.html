@@ -18,7 +18,7 @@
   <link rel="stylesheet" href="css/footer.css">
   <script src="js/components/usage-indicator.js"></script>
   <script type="module">
-    import authManager, { AUTH_PENDING } from './js/firebase-auth.js';
+    import authManager, { AUTH_PENDING } from './js/firebase-auth.js?v=20260124-1';
     document.documentElement.classList.add('auth-pending');
     const ensurePendingIndicator = () => {
       let el = document.getElementById('auth-pending-indicator');
@@ -851,7 +851,7 @@
 
     // --- ENHANCED AUTHENTICATION CHECK ---
     async function checkAuthentication() {
-      console.log('🔧 dashboard.html VERSION: auth-race-fix-v5 - ' + new Date().toISOString());
+      console.log('🔧 dashboard.html VERSION: fix-auth-cache-loop-v1 - ' + new Date().toISOString());
 
       let waitCount = 0;
       while (!window.FirebaseAuthManager && waitCount < 80) {
@@ -1034,6 +1034,22 @@
         if (shouldStartPolling) {
           // Store initial plan before any updates
           const initialPlanAfterPayment = currentPlanAfterPayment;
+          // Optimistic: if checkout intent exists, surface it immediately for nav/badges
+          if (checkoutPlanFromSelected) {
+            try {
+              localStorage.setItem('user-plan', checkoutPlanFromSelected);
+              localStorage.setItem('dev-plan', checkoutPlanFromSelected);
+              window.dispatchEvent(new CustomEvent('planChanged', { detail: { newPlan: checkoutPlanFromSelected } }));
+              if (window.JobHackAINavigation?.setAuthState) {
+                window.JobHackAINavigation.setAuthState(true, checkoutPlanFromSelected);
+              }
+              if (window.JobHackAINavigation?.scheduleUpdateNavigation) {
+                window.JobHackAINavigation.scheduleUpdateNavigation(true);
+              }
+            } catch (_) {}
+          }
+          // Flag welcome popup to show inline "setting up" copy instead of floating pill
+          window.__jhPlanSettingUp = true;
 
           // OPTION 1: Schedule welcome popup BEFORE polling/redirect so it shows on first dashboard visit.
           // Otherwise the poll can redirect before we ever reach the later showWelcomePopup call.
@@ -1057,16 +1073,10 @@
             }
           }, 800);
           
-          // Show loading indicator
-          const loadingIndicator = document.createElement('div');
-          loadingIndicator.id = 'plan-update-loading';
-          loadingIndicator.style.cssText = 'position:fixed;top:20px;right:20px;background:#007BFF;color:#fff;padding:12px 24px;border-radius:8px;z-index:10000;box-shadow:0 4px 12px rgba(0,0,0,0.15);font-family:var(--font-family-base,Inter,sans-serif);font-size:0.95rem;font-weight:500;';
-          loadingIndicator.textContent = 'Updating your plan...';
-          document.body.appendChild(loadingIndicator);
-          
           // Poll for plan update
           let retries = 0;
-          const maxRetries = 10; // 30 seconds total (3s intervals)
+          const maxRetries = 18; // ~30s at 1.7s cadence
+          const pollIntervalMs = 1700;
           
           const pollForPlanUpdate = async () => {
             retries++;
@@ -1076,7 +1086,6 @@
               // Authentication issue - check if we should stop polling
               if (retries >= maxRetries) {
                 console.warn('⚠️ Plan update timeout - authentication failed');
-                loadingIndicator.remove();
                 // Mark as processed to prevent infinite polling on refresh
                 sessionStorage.setItem('payment-processed', 'true');
                 // Clean up URL parameter
@@ -1088,7 +1097,7 @@
                 return;
               }
               // Retry after delay even if auth fails (might be temporary)
-              setTimeout(pollForPlanUpdate, 3000);
+              setTimeout(pollForPlanUpdate, pollIntervalMs);
               return;
             }
             
@@ -1106,7 +1115,6 @@
                   // Plan updated! Mark as processed and reload without ?paid=1
                   console.log('✅ Plan updated after payment, reloading...');
                   sessionStorage.setItem('payment-processed', 'true');
-                  loadingIndicator.textContent = 'Plan updated! Reloading...';
                   setTimeout(() => {
                     // Fix Issue 2: Remove ?paid=1 from URL to prevent re-triggering on reload
                     const url = new URL(window.location.href);
@@ -1122,10 +1130,9 @@
             
             // Check if we should continue polling
             if (retries < maxRetries) {
-              setTimeout(pollForPlanUpdate, 3000); // Poll every 3 seconds
+              setTimeout(pollForPlanUpdate, pollIntervalMs); // Faster cadence
             } else {
               console.warn('⚠️ Plan update timeout - will refresh on next poll');
-              loadingIndicator.remove();
               // Mark as processed even on timeout to prevent infinite polling
               sessionStorage.setItem('payment-processed', 'true');
               // Clean up URL parameter to prevent restarting polling in new sessions
@@ -1137,8 +1144,8 @@
             }
           };
           
-          // Start polling after initial billing status fetch (wait 2s for webhook to process)
-          setTimeout(pollForPlanUpdate, 2000);
+          // Start polling after initial billing status fetch (faster start: 0.8s)
+          setTimeout(pollForPlanUpdate, 800);
         } else {
           // Plan already updated or payment already processed - clean up URL
           if (hasAlreadyProcessedPayment || (currentPlanAfterPayment !== 'free' && currentPlanAfterPayment !== 'trial')) {
@@ -2349,10 +2356,6 @@
         // Check if user was previously on free plan (stored when they upgrade)
         const wasFreeUser = localStorage.getItem('was-free-user') === 'true';
         
-        // CRITICAL: Only show if user had a free ATS score AT THE TIME OF UPGRADE
-        // This flag is set when user upgrades from free, and only if they had a score then
-        const hadFreeATSScoreAtUpgrade = localStorage.getItem('had-free-ats-score-at-upgrade') === 'true';
-        
         // Try to get user UID from Firebase Auth Manager to check credit usage (legacy support)
         const currentUser = window.FirebaseAuthManager?.getCurrentUser?.();
         const creditKey = currentUser?.uid ? `creditsByUid:${currentUser.uid}` : null;
@@ -2375,39 +2378,63 @@
         }
         
         // Check legacy free usage data
-        const hasFreeUsageData = localStorage.getItem('free-ats-usage');
-        let legacyUsedFreeATS = false;
-        if (hasFreeUsageData) {
+        const freeUsageDataRaw = localStorage.getItem('free-ats-usage');
+        let hasUsedLegacyFreeATS = false;
+        if (freeUsageDataRaw) {
           try {
-            const usageData = JSON.parse(hasFreeUsageData);
-            legacyUsedFreeATS = usageData.used === true;
+            const usageData = JSON.parse(freeUsageDataRaw);
+            hasUsedLegacyFreeATS = usageData?.used === true;
           } catch (e) {
-            // Ignore parse errors
+            // If data is malformed, assume used to avoid missing prior usage
+            hasUsedLegacyFreeATS = true;
           }
         }
         
         // Determine if user had a free account
-        const wasFreeAccount = wasFreeUser || hasFreeUsageData || hadFreeAccountWithCredit;
+        const wasFreeAccount = wasFreeUser || !!freeUsageDataRaw || hadFreeAccountWithCredit;
         
-        // CRITICAL: Show popup ONLY if:
-        // 1. User upgraded from free account, AND
-        // 2. User had a free ATS score AT THE TIME OF UPGRADE (not after)
-        // This prevents showing the modal when users upload resumes after upgrading
-        const uploadedResumeForFreeATS = hadFreeATSScoreAtUpgrade || hasUsedFreeCredit || legacyUsedFreeATS;
-        const shouldShowPopup = wasFreeAccount && uploadedResumeForFreeATS;
+        // Check resume/ATS usage signals to align with other dashboard variants
+        const savedATS = window.JobHackAIStatePersistence?.loadATSScore?.();
+        const hasATSScoreHistory = !!(savedATS && (savedATS.score || savedATS.summary));
+        const hasUsedFreeATS = localStorage.getItem('hasUsedFreeATS') === 'true';
+        const hasUploadedResume = localStorage.getItem('lastUploadedResume') || localStorage.getItem('hasUploadedResume') === 'true';
+        const hadResumeUpload = hasATSScoreHistory || hasUsedFreeATS || hasUsedLegacyFreeATS || hasUploadedResume || hasUsedFreeCredit;
+        
+        // Show popup if user upgraded from free account (trial or paid plan)
+        // Show different message based on whether they uploaded a resume and their plan type
+        const uploadedResumeForFreeATS = hadResumeUpload;
+        const shouldShowPopup = wasFreeAccount;
         
         if (!shouldShowPopup) {
           console.log('ℹ️ [UPGRADE-BANNER] Not showing banner:', {
             wasFreeAccount,
-            uploadedResumeForFreeATS,
-            hadFreeATSScoreAtUpgrade,
-            hasUsedFreeCredit,
-            legacyUsedFreeATS
+            uploadedResumeForFreeATS
           });
           return;
         }
         
-        console.log('✅ [UPGRADE-BANNER] Showing banner - user upgraded from free and uploaded resume');
+        // Determine plan-specific greeting
+        const planName = user.plan === 'trial' ? '3-day trial' 
+          : user.plan === 'essential' ? 'Essential plan'
+          : user.plan === 'pro' ? 'Pro plan'
+          : user.plan === 'premium' ? 'Premium plan'
+          : 'plan';
+        
+        // Determine which message to show
+        const messageText = uploadedResumeForFreeATS 
+          ? `Your previous ATS resume score from your free account is still available. Welcome to your ${planName}!`
+          : `Welcome to your ${planName}!`;
+        
+        // Determine content text based on plan
+        let contentText = '';
+        if (user.plan === 'trial') {
+          contentText = 'You now have 3 resume feedback assessments (inclusive of ATS scans) and unlimited interview questions. Some features remain locked until you upgrade to a paid plan.';
+        } else {
+          // For paid plans, mention they have access to all features for their plan
+          contentText = 'You now have access to all features included in your plan. Upload resumes for ATS scoring, get detailed feedback, and generate unlimited interview questions.';
+        }
+        
+        console.log(`✅ [UPGRADE-BANNER] Showing banner - user upgraded from free to ${user.plan}${uploadedResumeForFreeATS ? ' and uploaded resume' : ' (no resume uploaded)'}`);
         
         // Create and show popup
         const popupHTML = `
@@ -2416,10 +2443,10 @@
               <button class="close-btn" id="upgrade-popup-close" aria-label="Close">×</button>
               <h2>Hi, ${user.name || 'User'}</h2>
               <div class="popup-message">
-                Your previous ATS resume score has been carried over from your free account. You now have access to more features and unlimited scoring!
+                ${messageText}
               </div>
               <div class="popup-content">
-                <p>You can now upload unlimited resumes for ATS scoring and access additional features like detailed resume feedback and interview question generation.</p>
+                <p>${contentText}</p>
               </div>
               <button class="popup-ok-btn" id="upgrade-popup-ok">OK</button>
             </div>
@@ -3471,7 +3498,7 @@
     }
   </script>
   <!-- Load Firebase auth for token retrieval -->
-  <script type="module" src="js/firebase-auth.js?v=20251011-1"></script>
+  <script type="module" src="js/firebase-auth.js?v=20260124-1"></script>
   <!-- Load navigation system -->
   <script src="js/navigation.js?v=20251011-1"></script>
   <script src="js/stripe-integration.js"></script>
@@ -3495,7 +3522,7 @@
   <script src="js/main.js" type="module"></script>
   <script src="js/analytics.js" type="module"></script>
   <script type="module">
-    import authManager from './js/firebase-auth.js';
+    import authManager from './js/firebase-auth.js?v=20260124-1';
 
     (async () => {
       console.log('📋 dashboard guard v3 running');

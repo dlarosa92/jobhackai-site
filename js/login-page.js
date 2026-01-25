@@ -4,7 +4,7 @@
  */
 
 // Version stamp for deployment verification
-console.log('🔧 login-page.js VERSION: auth-tri-state-v1 - ' + new Date().toISOString());
+console.log('🔧 login-page.js VERSION: fix-auth-cache-loop-v1 - ' + new Date().toISOString());
 
 import authManager, { waitForAuthReady, AUTH_PENDING } from './firebase-auth.js';
 

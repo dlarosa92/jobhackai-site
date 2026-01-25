@@ -1108,7 +1108,7 @@
   <script src="js/mobile-menu.js?v=20250115-1"></script>
   
   <!-- Load Firebase auth as ES module (same pattern as dashboard.html) -->
-  <script type="module" src="js/firebase-auth.js?v=20251011-1"></script>
+  <script type="module" src="js/firebase-auth.js?v=20260124-1"></script>
   
   <!-- DEV-ONLY PLAN TOGGLE will be added by navigation.js -->
   <script src="js/navigation.js?v=20251007-2"></script>
@@ -2279,6 +2279,10 @@
         });
         return;
       }
+      const confirmed = typeof window.requestUpgradeConfirmation === 'function'
+        ? await window.requestUpgradeConfirmation(plan, { mode: 'checkout', currentPlan: localStorage.getItem('user-plan') || 'free' })
+        : true;
+      if (!confirmed) return;
 
       if (window.showLoadingOverlay) {
         window._currentLoadingOverlay = window.showLoadingOverlay('Redirecting to checkout...');
@@ -2352,13 +2356,18 @@
               return;
             }
 
-            // Show loading state
+            const user = window.FirebaseAuthManager?.getCurrentUser?.();
+            const idToken = user ? await user.getIdToken() : null;
+            const confirmed = typeof window.requestUpgradeConfirmation === 'function'
+              ? await window.requestUpgradeConfirmation('pro', { mode: 'checkout', currentPlan: localStorage.getItem('user-plan') || 'free' })
+              : true;
+            if (!confirmed) {
+              return;
+            }
+            // Show loading state only after confirmation
             if (window.showLoadingOverlay) {
               window._currentLoadingOverlay = window.showLoadingOverlay('Redirecting to checkout...');
             }
-
-            const user = window.FirebaseAuthManager?.getCurrentUser?.();
-            const idToken = user ? await user.getIdToken() : null;
             const res = await fetch('/api/stripe-checkout', {
               method: 'POST',
               headers: { 
@@ -4297,26 +4306,31 @@
                           showUpgrade: true,
                           upgradeCallback: async () => {
                             try {
-                              if (typeof window.upgradePlan === 'function') {
-                                await window.upgradePlan('pro', {
-                                  source: 'resume-feedback',
-                                  returnUrl: window.location.href
-                                });
-                                return;
-                              }
-                              
-                              // Show loading state
-                              if (window.showLoadingOverlay) {
-                                window._currentLoadingOverlay = window.showLoadingOverlay('Redirecting to checkout...');
-                              }
-                              
-                              const user = window.FirebaseAuthManager?.getCurrentUser?.();
-                              const idToken = user ? await user.getIdToken() : null;
-                              const res = await fetch('/api/stripe-checkout', {
-                                method: 'POST',
-                                headers: { 
-                                  'Content-Type': 'application/json', 
-                                  ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}) 
+                          if (typeof window.upgradePlan === 'function') {
+                            await window.upgradePlan('pro', {
+                              source: 'resume-feedback',
+                              returnUrl: window.location.href
+                            });
+                            return;
+                          }
+                          
+                          const user = window.FirebaseAuthManager?.getCurrentUser?.();
+                          const idToken = user ? await user.getIdToken() : null;
+                          const confirmed = typeof window.requestUpgradeConfirmation === 'function'
+                            ? await window.requestUpgradeConfirmation('pro', { mode: 'checkout', currentPlan: localStorage.getItem('user-plan') || 'free' })
+                            : true;
+                          if (!confirmed) {
+                            return;
+                          }
+                          // Show loading state after confirmation
+                          if (window.showLoadingOverlay) {
+                            window._currentLoadingOverlay = window.showLoadingOverlay('Redirecting to checkout...');
+                          }
+                          const res = await fetch('/api/stripe-checkout', {
+                            method: 'POST',
+                            headers: { 
+                              'Content-Type': 'application/json', 
+                              ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}) 
                                 },
                                 body: JSON.stringify({ plan: 'pro' })
                               });

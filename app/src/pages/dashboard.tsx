@@ -903,6 +903,17 @@ export default function Dashboard() {
           margin-bottom: 0.7em;
           font-size: 1.01rem;
         }
+        .plan-transition-heading {
+          font-weight: 700;
+          font-size: 1.02rem;
+          margin-bottom: 0.15em;
+          color: #0F4AA2;
+        }
+        .plan-transition-content {
+          font-size: 0.96rem;
+          line-height: 1.45;
+          color: #11519C;
+        }
       `}</style>
 
       {/* JobHackAI HEADER (canonical) */}
@@ -982,23 +993,69 @@ export default function Dashboard() {
           <div className="welcome-row">
             <h2>Hi, {user.name}</h2>
             {(() => {
-              // Show blue banner if user upgraded from free to trial/subscription
-              // Check multiple indicators that user had a free account with resume upload
+              // Check multiple indicators that user had a free account
               const hasUpgradedPlan = user.plan === 'trial' || user.plan === 'essential' || user.plan === 'pro' || user.plan === 'premium';
               if (typeof window === 'undefined' || !hasUpgradedPlan) return null;
               
               const hasATSScoreHistory = localStorage.getItem('lastATSScore') || localStorage.getItem('lastATSSummary');
               const hasUsedFreeATS = localStorage.getItem('hasUsedFreeATS') === 'true';
-              const hasFreeUsageData = localStorage.getItem('free-ats-usage');
-              const hasUploadedResume = localStorage.getItem('lastUploadedResume');
-              // Show banner if user is on upgraded plan AND has any indication of previous free account usage
-              const shouldShowBanner = hasATSScoreHistory || hasUsedFreeATS || hasFreeUsageData || hasUploadedResume;
+              const freeUsageDataRaw = localStorage.getItem('free-ats-usage');
+              let hasUsedLegacyFreeATS = false;
+              if (freeUsageDataRaw) {
+                try {
+                  const usageData = JSON.parse(freeUsageDataRaw);
+                  hasUsedLegacyFreeATS = usageData?.used === true;
+                } catch {
+                  // If data is malformed, assume used to avoid missing prior usage
+                  hasUsedLegacyFreeATS = true;
+                }
+              }
+              const hasUploadedResume = localStorage.getItem('lastUploadedResume') || localStorage.getItem('hasUploadedResume') === 'true';
+              const currentUser = (window as any)?.FirebaseAuthManager?.getCurrentUser?.() || null;
+              const creditKey = currentUser?.uid ? `creditsByUid:${currentUser.uid}` : null;
+              let hasUsedFreeCredit = false;
+              let hadFreeAccountWithCredit = false;
+              if (creditKey) {
+                const creditsData = localStorage.getItem(creditKey);
+                if (creditsData) {
+                  hadFreeAccountWithCredit = true;
+                  try {
+                    const credits = JSON.parse(creditsData);
+                    hasUsedFreeCredit = credits?.ats_free_lifetime === 0;
+                  } catch {
+                    // ignore parse errors
+                  }
+                }
+              }
               
-              return shouldShowBanner ? (
+              // Check if user had a free account
+              const wasFreeAccount = !!freeUsageDataRaw || hadFreeAccountWithCredit || localStorage.getItem('was-free-user') === 'true';
+              const hadResumeUpload = hasATSScoreHistory || hasUsedFreeATS || hasUsedLegacyFreeATS || hasUploadedResume || hasUsedFreeCredit;
+              
+              // Show banner if user upgraded from free account
+              if (!wasFreeAccount) return null;
+              
+              // Determine plan-specific greeting
+              const planName = user.plan === 'trial' ? '3-day trial' 
+                : user.plan === 'essential' ? 'Essential plan'
+                : user.plan === 'pro' ? 'Pro plan'
+                : user.plan === 'premium' ? 'Premium plan'
+                : 'plan';
+              
+              const messageText = hadResumeUpload
+                ? `Your previous ATS resume score from your free account is still available. Welcome to your ${planName}!`
+                : `Welcome to your ${planName}!`;
+              
+              const contentText = user.plan === 'trial'
+                ? 'You now have 3 resume feedback assessments (inclusive of ATS scans) and unlimited interview questions. Some features remain locked until you upgrade to a paid plan.'
+                : 'You now have access to all features included in your plan. Upload resumes for ATS scoring, get detailed feedback, and generate unlimited interview questions.';
+              
+              return (
                 <div className="plan-transition-message">
-                  Your previous ATS resume score has been carried over from your free account. You now have access to more features and unlimited scoring!
+                  <div className="plan-transition-heading">{messageText}</div>
+                  <div className="plan-transition-content">{contentText}</div>
                 </div>
-              ) : null;
+              );
             })()}
             <div className="user-email">{user.email}</div>
           </div>

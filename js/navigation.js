@@ -2,7 +2,7 @@
 // Handles dynamic navigation based on authentication state and user plan
 
 // Version stamp for deployment verification
-console.log('🔧 navigation.js VERSION: redirect-fix-v3-SYNC-AND-CLEANUP - ' + new Date().toISOString());
+console.log('🔧 navigation.js VERSION: fix-auth-cache-loop-v1 - ' + new Date().toISOString());
 
 // Hide header until nav is resolved to avoid flicker on first paint.
 // If the user is already authenticated, avoid nav-loading so the full nav persists
@@ -2409,6 +2409,17 @@ async function initializeNavigation() {
       navLog('info', 'Storage event detected', { key: e.key, newValue: e.newValue, oldValue: e.oldValue });
       scheduleUpdateNavigation();
       updateQuickPlanSwitcher();
+    }
+  });
+
+  // NEW: React to same-tab plan change broadcasts so badges update instantly
+  window.addEventListener('planChanged', (e) => {
+    navLog('info', 'planChanged event detected', { detail: e?.detail });
+    try {
+      scheduleUpdateNavigation(true);
+      updateQuickPlanSwitcher();
+    } catch (err) {
+      navLog('warn', 'planChanged handler failed', err);
     }
   });
   
