@@ -965,10 +965,122 @@
       root.innerHTML = banner + featuresHtml;
       
       // --- Upgrade Pop-up Logic ---
-      function showUpgradePopup() {
-        // Check if popup was already shown
+      async function checkUpgradePopupSeenServerSide({ attempt = 1, maxAttempts = 3 } = {}) {
+        const wait = (ms) => new Promise(res => setTimeout(res, ms));
+        try {
+          const user = window.FirebaseAuthManager?.getCurrentUser?.();
+          const idToken = user && typeof user.getIdToken === 'function' ? await user.getIdToken() : null;
+          if (!idToken) {
+            if (attempt < maxAttempts) {
+              await wait(300);
+              return checkUpgradePopupSeenServerSide({ attempt: attempt + 1, maxAttempts });
+            }
+            console.warn('[UPGRADE-BANNER] No Firebase token available for server-side check after retries');
+            return 'unknown';
+          }
+
+          const response = await fetch('/api/user-preferences?preference=upgradePopupSeen', {
+            method: 'GET',
+            headers: {
+              'Authorization': `Bearer ${idToken}`,
+              'Content-Type': 'application/json'
+            }
+          });
+
+          if (response.ok) {
+            const data = await response.json();
+            return data.value === true ? 'seen' : 'not_seen';
+          }
+
+          if (response.status >= 500 || response.status === 429) {
+            if (attempt < maxAttempts) {
+              await wait(300 * attempt);
+              return checkUpgradePopupSeenServerSide({ attempt: attempt + 1, maxAttempts });
+            }
+          }
+
+          console.warn('[UPGRADE-BANNER] Unexpected server response for upgradePopupSeen:', response.status);
+          return 'unknown';
+        } catch (error) {
+          if (attempt < maxAttempts) {
+            await wait(300 * attempt);
+            return checkUpgradePopupSeenServerSide({ attempt: attempt + 1, maxAttempts });
+          }
+          console.warn('[UPGRADE-BANNER] Failed to check server-side popup status:', error);
+          return 'unknown';
+        }
+      }
+
+      async function markUpgradePopupSeenServerSide() {
+        try {
+          const user = window.FirebaseAuthManager?.getCurrentUser?.();
+          const idToken = user && typeof user.getIdToken === 'function' ? await user.getIdToken() : null;
+          if (!idToken) {
+            console.warn('[UPGRADE-BANNER] No Firebase token available for server-side update');
+            return false;
+          }
+
+          const response = await fetch('/api/user-preferences', {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${idToken}`,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              preference: 'upgradePopupSeen',
+              value: true
+            })
+          });
+
+          if (response.ok) {
+            console.log('[UPGRADE-BANNER] Successfully marked upgrade popup as seen on server');
+            return true;
+          }
+          console.warn('[UPGRADE-BANNER] Failed to mark upgrade popup as seen on server:', response.status);
+          return false;
+        } catch (error) {
+          console.warn('[UPGRADE-BANNER] Failed to update server-side popup status:', error);
+          return false;
+        }
+      }
+
+      async function showUpgradePopup(attempt = 1) {
+        const MAX_SHOW_ATTEMPTS = 3;
         const popupShownKey = 'upgrade-popup-shown';
+
+        const serverStatus = await checkUpgradePopupSeenServerSide();
+        if (serverStatus === 'seen') {
+          try {
+            localStorage.setItem(popupShownKey, 'true');
+          } catch (e) {
+            console.warn('[UPGRADE-BANNER] Could not sync server state to localStorage:', e);
+          }
+          return;
+        }
+
+        if (serverStatus === 'unknown') {
+          const hasSeenLocalStorage = localStorage.getItem(popupShownKey) === 'true';
+          if (hasSeenLocalStorage) {
+            markUpgradePopupSeenServerSide().catch(err =>
+              console.warn('[UPGRADE-BANNER] Background sync to server failed:', err)
+            );
+            return;
+          }
+          if (attempt < MAX_SHOW_ATTEMPTS) {
+            console.warn('[UPGRADE-BANNER] Deferring popup due to unknown server state; retrying soon');
+            setTimeout(() => {
+              showUpgradePopup(attempt + 1);
+            }, 700 * attempt);
+            return;
+          }
+          console.warn('[UPGRADE-BANNER] Aborting popup after repeated unknown server status');
+          return;
+        }
+
         if (localStorage.getItem(popupShownKey) === 'true') {
+          markUpgradePopupSeenServerSide().catch(err =>
+            console.warn('[UPGRADE-BANNER] Background sync to server failed:', err)
+          );
           return;
         }
         
@@ -1072,14 +1184,22 @@
           }
         };
         
-        function closePopup() {
+        async function closePopup() {
           overlay.classList.remove('show');
           // Remove Escape key listener to prevent memory leak
           document.removeEventListener('keydown', escapeKeyHandler);
+          const serverUpdateSuccess = await markUpgradePopupSeenServerSide();
           setTimeout(() => {
             overlay.remove();
-            localStorage.setItem(popupShownKey, 'true');
+            try {
+              localStorage.setItem(popupShownKey, 'true');
+            } catch (e) {
+              console.warn('[UPGRADE-BANNER] Could not save popup state to localStorage:', e);
+            }
           }, 300);
+          if (!serverUpdateSuccess) {
+            console.warn('[UPGRADE-BANNER] Failed to save popup state to server, localStorage saved as fallback');
+          }
         }
         
         // Show popup with fade-in animation

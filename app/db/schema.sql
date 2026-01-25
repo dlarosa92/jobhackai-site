@@ -14,7 +14,8 @@ CREATE TABLE IF NOT EXISTS users (
   email TEXT,                            -- User email (from Firebase)
   created_at TEXT DEFAULT (datetime('now')),
   updated_at TEXT DEFAULT (datetime('now')),
-  has_seen_welcome_modal INTEGER NOT NULL DEFAULT 0  -- Tracks if user has seen welcome modal (0 = not seen, 1 = seen)
+  has_seen_welcome_modal INTEGER NOT NULL DEFAULT 0,  -- Tracks if user has seen welcome modal (0 = not seen, 1 = seen)
+  has_seen_upgrade_popup INTEGER NOT NULL DEFAULT 0   -- Tracks if user has seen free→paid upgrade popup (0 = not seen, 1 = seen)
 );
 
 CREATE INDEX IF NOT EXISTS idx_users_auth_id ON users(auth_id);
@@ -155,4 +156,3 @@ CREATE TABLE IF NOT EXISTS mock_interview_usage (
 );
 
 CREATE INDEX IF NOT EXISTS idx_mock_interview_usage_user_month ON mock_interview_usage(user_id, month);
-
