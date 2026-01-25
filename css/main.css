@@ -312,6 +312,8 @@ section {
   padding: 2.5rem 2rem 2rem 2rem;
   margin: 0 auto;
   max-width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .pricing-title {
@@ -329,6 +331,7 @@ section {
   background: none;
   font-size: 1.08rem;
   color: #1F2937;
+  min-width: 700px; /* Prevent table from being too narrow */
 }
 
 .pricing-table th,
@@ -408,20 +411,24 @@ section {
   }
   .pricing-table-wrapper {
     padding: 1.2rem 0.2rem 1.2rem 0.2rem;
+    overflow-x: auto;
   }
   .pricing-title {
     font-size: 1.3rem;
     margin-bottom: 1.2rem;
   }
+  .pricing-table {
+    min-width: 700px; /* Maintain minimum width for readability */
+  }
   .pricing-table th,
   .pricing-table td {
-    padding: 0.7rem 0.2rem;
+    padding: 0.7rem 0.4rem;
     font-size: 0.98rem;
   }
   .pricing-signup-row .btn-primary {
-    min-width: 90px;
-    font-size: 0.98rem;
-    padding: 0.6rem 0;
+    min-width: 100px;
+    font-size: 0.9rem;
+    padding: 0.6rem 0.5rem;
   }
 }
 
