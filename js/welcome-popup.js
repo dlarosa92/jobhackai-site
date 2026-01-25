@@ -44,14 +44,21 @@ async function getFirebaseIdToken() {
 
 /**
  * Check if user has seen welcome modal on server (source of truth)
- * @returns {Promise<boolean>} True if user has seen the modal
+ * Returns a status instead of defaulting to false so we can be conservative on errors.
+ * @returns {Promise<'seen' | 'not_seen' | 'unknown'>}
  */
-async function checkWelcomeModalSeenServerSide() {
+async function checkWelcomeModalSeenServerSide({ attempt = 1, maxAttempts = 3 } = {}) {
+  const wait = (ms) => new Promise(res => setTimeout(res, ms));
+
   try {
     const idToken = await getFirebaseIdToken();
     if (!idToken) {
-      console.warn('[WelcomePopup] No Firebase token available for server-side check');
-      return false;
+      if (attempt < maxAttempts) {
+        await wait(300);
+        return checkWelcomeModalSeenServerSide({ attempt: attempt + 1, maxAttempts });
+      }
+      console.warn('[WelcomePopup] No Firebase token available for server-side check after retries');
+      return 'unknown';
     }
 
     const response = await fetch('/api/user-preferences?preference=welcomeModalSeen', {
@@ -64,13 +71,27 @@ async function checkWelcomeModalSeenServerSide() {
 
     if (response.ok) {
       const data = await response.json();
-      return data.value === true;
+      return data.value === true ? 'seen' : 'not_seen';
     }
-    
-    return false;
+
+    // Retry on transient 5xx/429 responses
+    if (response.status >= 500 || response.status === 429) {
+      if (attempt < maxAttempts) {
+        await wait(300 * attempt);
+        return checkWelcomeModalSeenServerSide({ attempt: attempt + 1, maxAttempts });
+      }
+    }
+
+    // Non-OK but not retriable (e.g. 401/403) – treat as unknown to avoid showing spuriously
+    console.warn('[WelcomePopup] Unexpected server response for welcomeModalSeen:', response.status);
+    return 'unknown';
   } catch (error) {
+    if (attempt < maxAttempts) {
+      await wait(300 * attempt);
+      return checkWelcomeModalSeenServerSide({ attempt: attempt + 1, maxAttempts });
+    }
     console.warn('[WelcomePopup] Failed to check server-side modal status:', error);
-    return false;
+    return 'unknown';
   }
 }
 
@@ -232,10 +253,12 @@ function getWelcomeContent(plan) {
  * @param {string} userName - User's display name
  * @param {Function} onComplete - Callback when popup is closed
  */
-export async function showWelcomePopup(plan = 'free', userName = 'there', onComplete = null) {
+export async function showWelcomePopup(plan = 'free', userName = 'there', onComplete = null, attempt = 1) {
+  const MAX_SHOW_ATTEMPTS = 3; // prevents infinite retry loops
+
   // PRIORITY 1: Check server-side (source of truth)
-  const hasSeenServerSide = await checkWelcomeModalSeenServerSide();
-  if (hasSeenServerSide) {
+  const serverStatus = await checkWelcomeModalSeenServerSide();
+  if (serverStatus === 'seen') {
     console.log('[WelcomePopup] User has seen modal (server-side)');
     // Sync to localStorage for fallback if server becomes unavailable
     try {
@@ -243,6 +266,32 @@ export async function showWelcomePopup(plan = 'free', userName = 'there', onComp
     } catch (e) {
       console.warn('[WelcomePopup] Could not sync server state to localStorage:', e);
     }
+    if (onComplete) onComplete();
+    return;
+  }
+
+  // If server status is unknown (network/auth timing issues), be conservative and retry before showing
+  if (serverStatus === 'unknown') {
+    const hasSeenLocalStorage = localStorage.getItem('dashboard-welcome-shown');
+    if (hasSeenLocalStorage === 'true') {
+      console.log('[WelcomePopup] User has seen modal (localStorage) while server status unknown');
+      markWelcomeModalSeenServerSide().catch(err =>
+        console.warn('[WelcomePopup] Background sync to server failed:', err)
+      );
+      if (onComplete) onComplete();
+      return;
+    }
+
+    if (attempt < MAX_SHOW_ATTEMPTS) {
+      console.warn('[WelcomePopup] Deferring welcome popup due to unknown server state; retrying soon');
+      setTimeout(() => {
+        showWelcomePopup(plan, userName, onComplete, attempt + 1);
+      }, 700 * attempt);
+      return;
+    }
+
+    // After exhausting retries, bail silently to avoid spurious popup
+    console.warn('[WelcomePopup] Aborting welcome popup after repeated unknown server status');
     if (onComplete) onComplete();
     return;
   }
