@@ -954,25 +954,28 @@ async function upgradePlan(targetPlan, options = {}) {
   const returnUrl = options.returnUrl || window.location.href;
   const button = options.button || null;
   let restoreButton = null;
+  let originalText = null;
   if (button) {
-    const originalText = button.textContent;
+    originalText = button.textContent;
+  }
+
+  const confirmed = await requestUpgradeConfirmation(targetPlan, {
+    context: options.context || source,
+    mode: options.confirmationMode || 'checkout',
+    currentPlan: localStorage.getItem('user-plan') || 'free'
+  });
+
+  if (!confirmed) {
+    return;
+  }
+
+  if (button) {
     button.disabled = true;
     button.textContent = 'Processing...';
     restoreButton = () => {
       button.disabled = false;
       button.textContent = originalText;
     };
-  }
-
-  const confirmed = await requestUpgradeConfirmation(targetPlan, {
-    context: options.context || source,
-    mode: 'upgrade',
-    currentPlan: localStorage.getItem('user-plan') || 'free'
-  });
-
-  if (!confirmed) {
-    if (restoreButton) restoreButton();
-    return;
   }
 
   const hideLoading = window.showLoadingOverlay
