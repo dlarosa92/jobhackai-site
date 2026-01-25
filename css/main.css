@@ -411,14 +411,10 @@ section {
   }
   .pricing-table-wrapper {
     padding: 1.2rem 0.2rem 1.2rem 0.2rem;
-    overflow-x: auto;
   }
   .pricing-title {
     font-size: 1.3rem;
     margin-bottom: 1.2rem;
-  }
-  .pricing-table {
-    min-width: 700px; /* Maintain minimum width for readability */
   }
   .pricing-table th,
   .pricing-table td {
