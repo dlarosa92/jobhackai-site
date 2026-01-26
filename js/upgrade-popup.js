@@ -36,7 +36,7 @@
   async function checkUpgradePopupSeenServerSide({ attempt = 1, maxAttempts = 3 } = {}) {
     const wait = (ms) => new Promise((res) => setTimeout(res, ms));
     try {
-      const idToken = await getIdTokenWithRetry({ attempt, maxAttempts });
+      const idToken = await getIdTokenWithRetry();
       if (!idToken) {
         console.warn('[UPGRADE-BANNER] No Firebase token available for server-side check after retries');
         return 'unknown';
