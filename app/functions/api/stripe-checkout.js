@@ -134,7 +134,7 @@ export async function onRequest(context) {
       try {
         const res = await stripe(env, '/customers', {
           method: 'POST',
-          headers: stripeFormHeaders(env),
+          headers: { ...stripeFormHeaders(env), 'Idempotency-Key': `cust:${uid}` },
           body: form({ email, 'metadata[firebaseUid]': uid })
         });
         

@@ -21,12 +21,40 @@ document.addEventListener('DOMContentLoaded', async () => {
   const resendBtn = document.getElementById('resendVerifyBtn');
   const alreadyVerifiedLink = document.getElementById('alreadyVerifiedLink');
   const statusEl = document.getElementById('verifyStatus');
+  const ROUTE_LOCK_KEY = 'jh_email_verification_route_lock';
+  const ROUTE_LOCK_TTL_MS = 2 * 60 * 1000;
   let routingInProgress = false;
 
   function setStatus(msg, isError = false) {
     if (!statusEl) return;
     statusEl.textContent = msg;
     statusEl.style.color = isError ? '#DC2626' : '#6B7280';
+  }
+
+  function acquireRouteLock(origin) {
+    try {
+      const now = Date.now();
+      const raw = localStorage.getItem(ROUTE_LOCK_KEY);
+      if (raw) {
+        const existing = JSON.parse(raw);
+        if (existing?.ts && now - existing.ts < ROUTE_LOCK_TTL_MS) {
+          return false;
+        }
+      }
+      localStorage.setItem(ROUTE_LOCK_KEY, JSON.stringify({ ts: now, origin }));
+      return true;
+    } catch (_) {
+      // If storage fails, allow routing rather than blocking
+      return true;
+    }
+  }
+
+  function broadcastRouteStart() {
+    try {
+      const ch = new BroadcastChannel('auth');
+      ch.postMessage({ type: 'verification-route-started' });
+      ch.close();
+    } catch (_) {}
   }
 
   function clearVerificationSignal() {
@@ -71,6 +99,9 @@ document.addEventListener('DOMContentLoaded', async () => {
       if (e?.data?.type === 'email-verified') {
         handleVerifiedSignal('broadcast');
       }
+      if (e?.data?.type === 'verification-route-started') {
+        setStatus('Verification in progress in another tab. You can close this tab.', false);
+      }
     };
   } catch (_) {}
 
@@ -101,6 +132,12 @@ document.addEventListener('DOMContentLoaded', async () => {
   });
 
   async function routeAfterVerification() {
+    if (!acquireRouteLock('verify-email')) {
+      setStatus('Verification in progress in another tab. You can close this tab.', false);
+      return;
+    }
+    broadcastRouteStart();
+
     // First check billing status to see if user already has an active subscription or trial
     try {
       const idToken = await authManager.getCurrentUser()?.getIdToken?.(true);
@@ -182,7 +219,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   }
 });
-
 
 
 
