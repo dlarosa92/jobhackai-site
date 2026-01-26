@@ -232,6 +232,7 @@
         markUpgradePopupSeenServerSide().catch((err) =>
           console.warn('[UPGRADE-BANNER] Background sync to server failed:', err)
         );
+        if (onComplete) onComplete();
         return;
       }
       if (attempt < MAX_SHOW_ATTEMPTS) {
