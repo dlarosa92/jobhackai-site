@@ -121,7 +121,7 @@
     return 'You now have access to all features included in your plan. Upload resumes for ATS scoring, get detailed feedback, and generate unlimited interview questions.';
   }
 
-  function buildPopup({ userName, messageText, contentText }) {
+  function buildPopup({ userName, messageText, contentText, onComplete }) {
     const popupHTML = `
       <div class="upgrade-popup-overlay" id="upgrade-popup-overlay">
         <div class="upgrade-popup-modal">
@@ -165,6 +165,7 @@
 
       setTimeout(() => {
         overlay.remove();
+        if (onComplete) onComplete();
       }, FADE_OUT_MS);
     }
 
@@ -184,23 +185,45 @@
     document.addEventListener('keydown', escapeKeyHandler);
   }
 
-  async function showUpgradePopup({ user, wasFreeAccount, hadResumeUpload, attempt = 1 } = {}) {
+  async function showUpgradePopup({ user, wasFreeAccount, hadResumeUpload, attempt = 1, onComplete = null, _queued = false } = {}) {
     if (!user || !user.plan) {
+      if (onComplete) onComplete();
+      return;
+    }
+
+    // Use shared popup queue if available to avoid overlaps
+    if (!_queued && window.JobHackAIPopupQueue?.enqueue) {
+      window.JobHackAIPopupQueue.enqueue((done) => {
+        showUpgradePopup({
+          user,
+          wasFreeAccount,
+          hadResumeUpload,
+          attempt,
+          onComplete: () => {
+            if (onComplete) onComplete();
+            done();
+          },
+          _queued: true
+        });
+      });
       return;
     }
 
     const hasUpgradedPlan = user.plan === 'trial' || user.plan === 'essential' || user.plan === 'pro' || user.plan === 'premium';
     if (!hasUpgradedPlan) {
+      if (onComplete) onComplete();
       return;
     }
 
     if (!wasFreeAccount) {
+      if (onComplete) onComplete();
       return;
     }
 
     const serverStatus = await checkUpgradePopupSeenServerSide();
     if (serverStatus === 'seen') {
       setLocalSeen();
+      if (onComplete) onComplete();
       return;
     }
 
@@ -214,11 +237,12 @@
       if (attempt < MAX_SHOW_ATTEMPTS) {
         console.warn('[UPGRADE-BANNER] Deferring popup due to unknown server state; retrying soon');
         setTimeout(() => {
-          showUpgradePopup({ user, wasFreeAccount, hadResumeUpload, attempt: attempt + 1 });
+          showUpgradePopup({ user, wasFreeAccount, hadResumeUpload, attempt: attempt + 1, onComplete, _queued: true });
         }, 700 * attempt);
         return;
       }
       console.warn('[UPGRADE-BANNER] Aborting popup after repeated unknown server status');
+      if (onComplete) onComplete();
       return;
     }
 
@@ -226,6 +250,7 @@
       markUpgradePopupSeenServerSide().catch((err) =>
         console.warn('[UPGRADE-BANNER] Background sync to server failed:', err)
       );
+      if (onComplete) onComplete();
       return;
     }
 
@@ -239,7 +264,8 @@
     buildPopup({
       userName: user.name,
       messageText,
-      contentText
+      contentText,
+      onComplete
     });
   }
 

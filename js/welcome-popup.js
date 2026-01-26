@@ -253,8 +253,19 @@ function getWelcomeContent(plan) {
  * @param {string} userName - User's display name
  * @param {Function} onComplete - Callback when popup is closed
  */
-export async function showWelcomePopup(plan = 'free', userName = 'there', onComplete = null, attempt = 1) {
+export async function showWelcomePopup(plan = 'free', userName = 'there', onComplete = null, attempt = 1, _queued = false) {
   const MAX_SHOW_ATTEMPTS = 3; // prevents infinite retry loops
+
+  // Use shared popup queue if available to avoid overlaps
+  if (!_queued && window.JobHackAIPopupQueue?.enqueue) {
+    window.JobHackAIPopupQueue.enqueue((done) => {
+      showWelcomePopup(plan, userName, () => {
+        if (onComplete) onComplete();
+        done();
+      }, attempt, true);
+    });
+    return;
+  }
 
   // PRIORITY 1: Check server-side (source of truth)
   const serverStatus = await checkWelcomeModalSeenServerSide();
@@ -285,7 +296,7 @@ export async function showWelcomePopup(plan = 'free', userName = 'there', onComp
     if (attempt < MAX_SHOW_ATTEMPTS) {
       console.warn('[WelcomePopup] Deferring welcome popup due to unknown server state; retrying soon');
       setTimeout(() => {
-        showWelcomePopup(plan, userName, onComplete, attempt + 1);
+        showWelcomePopup(plan, userName, onComplete, attempt + 1, true);
       }, 700 * attempt);
       return;
     }
