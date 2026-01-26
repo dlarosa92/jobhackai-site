@@ -263,7 +263,13 @@ async function handleEmailVerification() {
     
     // Try to refresh current user session if available
     try { await auth.currentUser?.reload?.(); } catch (_) {}
-    try { sessionStorage.setItem('emailJustVerified', '1'); } catch(_) {}
+    try { sessionStorage.setItem('emailJustVerified', '1'); } catch (_) {}
+    try { localStorage.setItem('emailJustVerified', String(Date.now())); } catch (_) {}
+    try {
+      const ch = new BroadcastChannel('auth');
+      ch.postMessage({ type: 'email-verified' });
+      ch.close();
+    } catch (_) {}
 
     showSuccess("✅ Email verified successfully!");
     pageTitle.textContent = "Email Verified";

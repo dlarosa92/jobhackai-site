@@ -21,11 +21,62 @@ document.addEventListener('DOMContentLoaded', async () => {
   const resendBtn = document.getElementById('resendVerifyBtn');
   const alreadyVerifiedLink = document.getElementById('alreadyVerifiedLink');
   const statusEl = document.getElementById('verifyStatus');
+  let routingInProgress = false;
 
   function setStatus(msg, isError = false) {
     if (!statusEl) return;
     statusEl.textContent = msg;
     statusEl.style.color = isError ? '#DC2626' : '#6B7280';
+  }
+
+  function clearVerificationSignal() {
+    try {
+      localStorage.removeItem('emailJustVerified');
+    } catch (_) {}
+  }
+
+  async function handleVerifiedSignal(source = 'storage') {
+    if (routingInProgress) return;
+    routingInProgress = true;
+    setStatus('Verified — redirecting...', false);
+    try {
+      const current = authManager.getCurrentUser();
+      if (current && current.reload) {
+        await current.reload();
+      }
+      const refreshed = authManager.getCurrentUser();
+      if (refreshed && refreshed.emailVerified) {
+        clearVerificationSignal();
+        await routeAfterVerification();
+        return;
+      }
+      routingInProgress = false;
+      setStatus('Verification detected, syncing status... Please wait a moment and try again.', true);
+    } catch (err) {
+      routingInProgress = false;
+      console.warn('[VERIFY-EMAIL] Failed to handle verification signal:', err);
+    }
+  }
+
+  // Listen for verification from email link tab
+  window.addEventListener('storage', (e) => {
+    if (e.key === 'emailJustVerified' && e.newValue) {
+      handleVerifiedSignal('storage');
+    }
+  });
+
+  try {
+    const ch = new BroadcastChannel('auth');
+    ch.onmessage = (e) => {
+      if (e?.data?.type === 'email-verified') {
+        handleVerifiedSignal('broadcast');
+      }
+    };
+  } catch (_) {}
+
+  // Handle already-verified signal on initial load
+  if (localStorage.getItem('emailJustVerified')) {
+    handleVerifiedSignal('initial');
   }
 
   resendBtn?.addEventListener('click', async () => {
@@ -131,8 +182,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   }
 });
-
-
 
 
 

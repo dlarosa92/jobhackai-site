@@ -3441,7 +3441,7 @@
       // Require verified email before allowing dashboard access
       const isVerified = await authManager.requireVerifiedEmail();
       if (!isVerified) {
-        console.log('🚫 User not verified or auth not ready yet');
+        console.log('🚫 User not verified or not authenticated — redirecting');
         return;
       }
       

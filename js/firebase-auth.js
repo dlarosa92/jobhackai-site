@@ -1429,7 +1429,8 @@ class AuthManager {
       // Wait for auth to be ready
       let user = await this.waitForAuthReady(12000);
       if (user === AUTH_PENDING) {
-        console.log('Auth still pending during requireVerifiedEmail, deferring decision');
+        console.log('Auth still pending during requireVerifiedEmail, redirecting to login');
+        window.location.href = '/login.html';
         return false;
       }
       
