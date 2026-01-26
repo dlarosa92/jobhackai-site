@@ -4,6 +4,13 @@
   const MAX_SHOW_ATTEMPTS = 3;
   const FADE_OUT_MS = 300;
 
+  function escapeHtml(text) {
+    if (typeof text !== 'string') return '';
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+  }
+
   function setLocalSeen() {
     try {
       localStorage.setItem(POPUP_SHOWN_KEY, 'true');
@@ -122,11 +129,12 @@
   }
 
   function buildPopup({ userName, messageText, contentText, onComplete }) {
+    const safeUserName = escapeHtml(userName);
     const popupHTML = `
       <div class="upgrade-popup-overlay" id="upgrade-popup-overlay">
         <div class="upgrade-popup-modal">
           <button class="close-btn" id="upgrade-popup-close" aria-label="Close">×</button>
-          <h2>Hi, ${userName || 'User'}</h2>
+          <h2>Hi, ${safeUserName || 'User'}</h2>
           <div class="popup-message">
             ${messageText}
           </div>
