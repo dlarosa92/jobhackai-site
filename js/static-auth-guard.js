@@ -53,34 +53,71 @@
 
     // Decide after actively waiting for Firebase auth to appear
     var startTime = Date.now();
-    var maxWait = 10000; // Increased to 10 seconds to allow Firebase auth to initialize
-    var checkInterval = 100; // 100ms polling
+    var maxWait = 20000; // Allow extra time for Firebase to rehydrate after cache clears
+    var checkInterval = 120; // 120ms polling
+    var resolved = false;
+
+    function resolveDecision(isAuthenticated) {
+      if (resolved) return;
+      resolved = true;
+      if (isAuthenticated) {
+        document.documentElement.classList.remove('auth-pending');
+      } else {
+        console.log('⏰ Static auth guard resolved unauthenticated, redirecting to login');
+        location.replace('/login.html');
+      }
+    }
+
+    function resolveFromAuthManager() {
+      try {
+        if (window.FirebaseAuthManager && typeof window.FirebaseAuthManager.isAuthReady === 'function') {
+          if (window.FirebaseAuthManager.isAuthReady()) {
+            var user = window.FirebaseAuthManager.getCurrentUser && window.FirebaseAuthManager.getCurrentUser();
+            resolveDecision(!!user);
+            return true;
+          }
+        }
+        if (window.__REAL_AUTH_READY === true) {
+          var fallbackUser = window.FirebaseAuthManager && window.FirebaseAuthManager.getCurrentUser && window.FirebaseAuthManager.getCurrentUser();
+          resolveDecision(!!fallbackUser);
+          return true;
+        }
+      } catch (_) {}
+      return false;
+    }
+
+    // Listen for the real auth-ready signal to avoid premature redirects
+    try {
+      document.addEventListener('firebase-auth-ready', function (e) {
+        var user = e && e.detail ? e.detail.user : null;
+        resolveDecision(!!user);
+      }, { once: true });
+    } catch (_) {}
 
     function checkAndReveal() {
-      var elapsed = Date.now() - startTime;
+      if (resolved) return;
 
       if (hasFirebaseAuth()) {
-        // Firebase auth confirmed - reveal page
-        // But still wait for firebase-auth-ready event to ensure proper initialization
-        // The page content visibility is controlled by account-protected class
-        document.documentElement.classList.remove('auth-pending');
+        resolveDecision(true);
         return;
       }
 
+      if (resolveFromAuthManager()) {
+        return;
+      }
+
+      var elapsed = Date.now() - startTime;
       if (elapsed >= maxWait) {
-        // Timeout - check one more time before redirecting
-        // Sometimes Firebase auth takes a moment to initialize even if localStorage is set
-        var finalCheck = hasFirebaseAuth();
-        if (!finalCheck) {
-          // Still no auth after timeout - redirect to login
-          console.log('⏰ Static auth guard timeout - no auth found, redirecting to login');
-          location.replace('/login.html');
-          return;
-        } else {
-          // Auth found on final check - reveal page
-          document.documentElement.classList.remove('auth-pending');
+        // Final check before redirecting
+        if (hasFirebaseAuth()) {
+          resolveDecision(true);
           return;
         }
+        if (resolveFromAuthManager()) {
+          return;
+        }
+        resolveDecision(false);
+        return;
       }
 
       // Keep checking
@@ -93,5 +130,4 @@
     try { location.replace('/login.html'); } catch (_) {}
   }
 })();
-
 

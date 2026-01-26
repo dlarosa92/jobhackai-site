@@ -3,12 +3,14 @@
  * Handles user preference updates like welcome modal seen status
  * 
  * GET /api/user-preferences?preference=welcomeModalSeen
+ * GET /api/user-preferences?preference=upgradePopupSeen
  * POST /api/user-preferences
  * Body: { preference: 'welcomeModalSeen', value: true }
+ * Body: { preference: 'upgradePopupSeen', value: true }
  */
 
 import { getBearer, verifyFirebaseIdToken } from '../_lib/firebase-auth.js';
-import { markWelcomeModalAsSeen, hasSeenWelcomeModal } from '../_lib/db.js';
+import { markWelcomeModalAsSeen, hasSeenWelcomeModal, markUpgradePopupAsSeen, hasSeenUpgradePopup } from '../_lib/db.js';
 
 function corsHeaders(origin, env) {
   const fallbackOrigins = ['https://dev.jobhackai.io', 'https://qa.jobhackai.io'];
@@ -61,7 +63,14 @@ export async function onRequest(context) {
 
       if (preference === 'welcomeModalSeen') {
         const hasSeen = await hasSeenWelcomeModal(env, authId);
-        
+        return new Response(
+          JSON.stringify({ preference, value: hasSeen }),
+          { status: 200, headers: corsHeaders(origin, env) }
+        );
+      }
+
+      if (preference === 'upgradePopupSeen') {
+        const hasSeen = await hasSeenUpgradePopup(env, authId);
         return new Response(
           JSON.stringify({ preference, value: hasSeen }),
           { status: 200, headers: corsHeaders(origin, env) }
@@ -105,6 +114,32 @@ export async function onRequest(context) {
         if (success) {
           return new Response(
             JSON.stringify({ success: true, message: 'Welcome modal marked as seen' }),
+            { status: 200, headers: corsHeaders(origin, env) }
+          );
+        } else {
+          return new Response(
+            JSON.stringify({ success: false, error: 'Failed to update preference' }),
+            { status: 500, headers: corsHeaders(origin, env) }
+          );
+        }
+      }
+
+      if (preference === 'upgradePopupSeen') {
+        if (value !== true) {
+          return new Response(
+            JSON.stringify({
+              error: 'Invalid value for upgradePopupSeen',
+              message: 'Value must be boolean true'
+            }),
+            { status: 400, headers: corsHeaders(origin, env) }
+          );
+        }
+
+        const success = await markUpgradePopupAsSeen(env, authId);
+
+        if (success) {
+          return new Response(
+            JSON.stringify({ success: true, message: 'Upgrade popup marked as seen' }),
             { status: 200, headers: corsHeaders(origin, env) }
           );
         } else {

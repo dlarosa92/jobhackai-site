@@ -30,6 +30,8 @@ const passwordResetForm = document.getElementById("passwordResetForm");
 const actionButtons = document.getElementById("actionButtons");
 const goToLoginBtn = document.getElementById("goToLoginBtn");
 const goToDashboardBtn = document.getElementById("goToDashboardBtn");
+const ROUTE_LOCK_KEY = 'jh_email_verification_route_lock';
+const ROUTE_LOCK_TTL_MS = 2 * 60 * 1000;
 
 // Password reset form elements
 const newPasswordInput = document.getElementById("newPassword");
@@ -139,8 +141,39 @@ function planRequiresPayment(plan) {
   return ['essential', 'pro', 'premium', 'trial'].includes(plan);
 }
 
+function acquireRouteLock(origin) {
+  try {
+    const now = Date.now();
+    const raw = localStorage.getItem(ROUTE_LOCK_KEY);
+    if (raw) {
+      const existing = JSON.parse(raw);
+      if (existing?.ts && now - existing.ts < ROUTE_LOCK_TTL_MS) {
+        return false;
+      }
+    }
+    localStorage.setItem(ROUTE_LOCK_KEY, JSON.stringify({ ts: now, origin }));
+    return true;
+  } catch (_) {
+    return true;
+  }
+}
+
+function broadcastRouteStart() {
+  try {
+    const ch = new BroadcastChannel('auth');
+    ch.postMessage({ type: 'verification-route-started' });
+    ch.close();
+  } catch (_) {}
+}
+
 // Route user after email verification based on plan selection
 async function routeAfterVerification() {
+  if (!acquireRouteLock('auth-action')) {
+    status.textContent = "Verification is already in progress in another tab. You can close this tab.";
+    return;
+  }
+  broadcastRouteStart();
+
   // Check for selected plan in sessionStorage
   let storedSelection = null;
   try {
@@ -263,7 +296,13 @@ async function handleEmailVerification() {
     
     // Try to refresh current user session if available
     try { await auth.currentUser?.reload?.(); } catch (_) {}
-    try { sessionStorage.setItem('emailJustVerified', '1'); } catch(_) {}
+    try { sessionStorage.setItem('emailJustVerified', '1'); } catch (_) {}
+    try { localStorage.setItem('emailJustVerified', String(Date.now())); } catch (_) {}
+    try {
+      const ch = new BroadcastChannel('auth');
+      ch.postMessage({ type: 'email-verified' });
+      ch.close();
+    } catch (_) {}
 
     showSuccess("✅ Email verified successfully!");
     pageTitle.textContent = "Email Verified";

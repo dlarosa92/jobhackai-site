@@ -6,7 +6,7 @@
  *   node sync-plan.js <test-email> <test-password> <base-url>
  * 
  * Example:
- *   node sync-plan.js jobshackai@gmail.com password123 https://dev.jobhackai.io
+ *   node sync-plan.js test.user@example.com password123 https://dev.jobhackai.io
  */
 
 const { chromium } = require('playwright');
@@ -200,8 +200,8 @@ if (require.main === module) {
   if (!email || !password) {
     console.error('Usage: node sync-plan.js [email] [password] [base-url]');
     console.error('Or set environment variables: TEST_EMAIL, TEST_PASSWORD, TEST_ENV');
-    console.error('Example: node sync-plan.js jobshackai@gmail.com password123 https://dev.jobhackai.io');
-    console.error('Or: TEST_EMAIL=jobshackai@gmail.com TEST_PASSWORD=password123 node sync-plan.js');
+    console.error('Example: node sync-plan.js test.user@example.com password123 https://dev.jobhackai.io');
+    console.error('Or: TEST_EMAIL=test.user@example.com TEST_PASSWORD=password123 node sync-plan.js');
     process.exit(1);
   }
   
@@ -217,4 +217,3 @@ if (require.main === module) {
 }
 
 module.exports = { syncPlan };
-

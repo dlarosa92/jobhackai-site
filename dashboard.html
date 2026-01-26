@@ -6,11 +6,13 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <style>html.auth-pending{visibility:hidden}</style>
   <script src="js/redirect-tracer.js?v=1"></script>
-  <script src="js/static-auth-guard.js?v=20251007-2"></script>
+  <script src="js/static-auth-guard.js?v=20260125-1"></script>
   <title>JobHackAI</title>
   <link rel="icon" type="image/png" href="assets/jobhackai_icon_only_128.png">
   <link rel="apple-touch-icon" href="assets/jobhackai_icon_only_128.png">
   <script src="js/dynamic-favicon.js?v=20250111-1"></script>
+  <script src="js/popup-queue.js"></script>
+  <script src="js/upgrade-popup.js"></script>
   <script src="js/cookie-consent.js?v=20250128-1" defer></script>
   <link rel="stylesheet" href="css/tokens.css">
   <link rel="stylesheet" href="css/main.css">
@@ -18,7 +20,7 @@
   <link rel="stylesheet" href="css/footer.css">
   <script src="js/components/usage-indicator.js"></script>
   <script type="module">
-    import authManager, { AUTH_PENDING } from './js/firebase-auth.js?v=20260124-1';
+    import authManager, { AUTH_PENDING } from './js/firebase-auth.js?v=20260125-1';
     document.documentElement.classList.add('auth-pending');
     const ensurePendingIndicator = () => {
       let el = document.getElementById('auth-pending-indicator');
@@ -2338,30 +2340,23 @@
         // ignore
       }
 
-// --- Upgrade Pop-up Logic ---
+      // --- Upgrade Pop-up Logic ---
       function showUpgradePopup() {
-        // Check if popup was already shown
-        const popupShownKey = 'upgrade-popup-shown';
-        if (localStorage.getItem(popupShownKey) === 'true') {
-          return;
-        }
-        
         // Check if user upgraded from free to trial/subscription
         const hasUpgradedPlan = user.plan === 'trial' || user.plan === 'essential' || user.plan === 'pro' || user.plan === 'premium';
         if (!hasUpgradedPlan) {
           return;
         }
-        
+
         // CRITICAL: Banner should ONLY show if user uploaded a resume for free ATS BEFORE upgrading
-        // Check if user was previously on free plan (stored when they upgrade)
         const wasFreeUser = localStorage.getItem('was-free-user') === 'true';
-        
+
         // Try to get user UID from Firebase Auth Manager to check credit usage (legacy support)
         const currentUser = window.FirebaseAuthManager?.getCurrentUser?.();
         const creditKey = currentUser?.uid ? `creditsByUid:${currentUser.uid}` : null;
         let hasUsedFreeCredit = false;
         let hadFreeAccountWithCredit = false;
-        
+
         if (creditKey) {
           const creditsData = localStorage.getItem(creditKey);
           if (creditsData) {
@@ -2376,7 +2371,7 @@
             }
           }
         }
-        
+
         // Check legacy free usage data
         const freeUsageDataRaw = localStorage.getItem('free-ats-usage');
         let hasUsedLegacyFreeATS = false;
@@ -2389,115 +2384,32 @@
             hasUsedLegacyFreeATS = true;
           }
         }
-        
+
         // Determine if user had a free account
         const wasFreeAccount = wasFreeUser || !!freeUsageDataRaw || hadFreeAccountWithCredit;
-        
+
         // Check resume/ATS usage signals to align with other dashboard variants
         const savedATS = window.JobHackAIStatePersistence?.loadATSScore?.();
         const hasATSScoreHistory = !!(savedATS && (savedATS.score || savedATS.summary));
         const hasUsedFreeATS = localStorage.getItem('hasUsedFreeATS') === 'true';
         const hasUploadedResume = localStorage.getItem('lastUploadedResume') || localStorage.getItem('hasUploadedResume') === 'true';
         const hadResumeUpload = hasATSScoreHistory || hasUsedFreeATS || hasUsedLegacyFreeATS || hasUploadedResume || hasUsedFreeCredit;
-        
-        // Show popup if user upgraded from free account (trial or paid plan)
-        // Show different message based on whether they uploaded a resume and their plan type
-        const uploadedResumeForFreeATS = hadResumeUpload;
-        const shouldShowPopup = wasFreeAccount;
-        
-        if (!shouldShowPopup) {
+
+        if (!wasFreeAccount) {
           console.log('ℹ️ [UPGRADE-BANNER] Not showing banner:', {
             wasFreeAccount,
-            uploadedResumeForFreeATS
+            hadResumeUpload
           });
           return;
         }
-        
-        // Determine plan-specific greeting
-        const planName = user.plan === 'trial' ? '3-day trial' 
-          : user.plan === 'essential' ? 'Essential plan'
-          : user.plan === 'pro' ? 'Pro plan'
-          : user.plan === 'premium' ? 'Premium plan'
-          : 'plan';
-        
-        // Determine which message to show
-        const messageText = uploadedResumeForFreeATS 
-          ? `Your previous ATS resume score from your free account is still available. Welcome to your ${planName}!`
-          : `Welcome to your ${planName}!`;
-        
-        // Determine content text based on plan
-        let contentText = '';
-        if (user.plan === 'trial') {
-          contentText = 'You now have 3 resume feedback assessments (inclusive of ATS scans) and unlimited interview questions. Some features remain locked until you upgrade to a paid plan.';
-        } else {
-          // For paid plans, mention they have access to all features for their plan
-          contentText = 'You now have access to all features included in your plan. Upload resumes for ATS scoring, get detailed feedback, and generate unlimited interview questions.';
-        }
-        
-        console.log(`✅ [UPGRADE-BANNER] Showing banner - user upgraded from free to ${user.plan}${uploadedResumeForFreeATS ? ' and uploaded resume' : ' (no resume uploaded)'}`);
-        
-        // Create and show popup
-        const popupHTML = `
-          <div class="upgrade-popup-overlay" id="upgrade-popup-overlay">
-            <div class="upgrade-popup-modal">
-              <button class="close-btn" id="upgrade-popup-close" aria-label="Close">×</button>
-              <h2>Hi, ${user.name || 'User'}</h2>
-              <div class="popup-message">
-                ${messageText}
-              </div>
-              <div class="popup-content">
-                <p>${contentText}</p>
-              </div>
-              <button class="popup-ok-btn" id="upgrade-popup-ok">OK</button>
-            </div>
-          </div>
-        `;
-        
-        document.body.insertAdjacentHTML('beforeend', popupHTML);
-        const overlay = document.getElementById('upgrade-popup-overlay');
-        const closeBtn = document.getElementById('upgrade-popup-close');
-        const okBtn = document.getElementById('upgrade-popup-ok');
-        
-        // Escape key handler - stored so it can be removed later
-        const escapeKeyHandler = function(e) {
-          if (e.key === 'Escape' && overlay.classList.contains('show')) {
-            closePopup();
-          }
-        };
-        
-        function closePopup() {
-          // Fade out animation
-          overlay.classList.remove('show');
-          // Remove Escape key listener to prevent memory leak
-          document.removeEventListener('keydown', escapeKeyHandler);
-          // Wait for fade-out animation to complete before removing
-          setTimeout(() => {
-            overlay.remove();
-            localStorage.setItem(popupShownKey, 'true');
-          }, 350); // Slightly longer than transition duration for smooth fade-out
-        }
-        
-        // Show popup with smooth fade-in animation
-        // Use requestAnimationFrame to ensure DOM is ready
-        requestAnimationFrame(() => {
-          setTimeout(() => {
-            overlay.classList.add('show');
-          }, 50);
+
+        window.JobHackAIUpgradePopup?.showUpgradePopup({
+          user,
+          wasFreeAccount,
+          hadResumeUpload
         });
-        
-        // Close handlers
-        closeBtn.addEventListener('click', closePopup);
-        okBtn.addEventListener('click', closePopup);
-        overlay.addEventListener('click', function(e) {
-          if (e.target === overlay) {
-            closePopup();
-          }
-        });
-        
-        // Close on Escape key
-        document.addEventListener('keydown', escapeKeyHandler);
       }
-      
+
       // Show popup after a short delay to ensure page is rendered
       setTimeout(() => {
         showUpgradePopup();
@@ -3498,7 +3410,7 @@
     }
   </script>
   <!-- Load Firebase auth for token retrieval -->
-  <script type="module" src="js/firebase-auth.js?v=20260124-1"></script>
+  <script type="module" src="js/firebase-auth.js?v=20260125-1"></script>
   <!-- Load navigation system -->
   <script src="js/navigation.js?v=20251011-1"></script>
   <script src="js/stripe-integration.js"></script>
@@ -3522,7 +3434,7 @@
   <script src="js/main.js" type="module"></script>
   <script src="js/analytics.js" type="module"></script>
   <script type="module">
-    import authManager from './js/firebase-auth.js?v=20260124-1';
+    import authManager from './js/firebase-auth.js?v=20260125-1';
 
     (async () => {
       console.log('📋 dashboard guard v3 running');
@@ -3531,7 +3443,7 @@
       const isVerified = await authManager.requireVerifiedEmail();
       if (!isVerified) {
         console.log('🚫 User not verified or not authenticated — redirecting');
-        return; // requireVerifiedEmail handles the redirect
+        return;
       }
       
       console.log('✅ Verified user accessing dashboard');

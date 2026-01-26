@@ -19,7 +19,7 @@ NC='\033[0m'
 # Check arguments
 if [ $# -lt 2 ]; then
   echo -e "${RED}Usage: $0 <UID> <EMAIL>${NC}"
-  echo -e "${YELLOW}Example: $0 TJYr7Hmq5VdRkjP7ZQPJ2QXqm983 jobshackai@gmail.com${NC}"
+  echo -e "${YELLOW}Example: $0 REPLACE_WITH_UID test.user@example.com${NC}"
   exit 1
 fi
 

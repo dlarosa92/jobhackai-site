@@ -1837,6 +1837,75 @@ export async function markWelcomeModalAsSeen(env, authId) {
   }
 }
 
+/**
+ * Check if user has seen the free→paid upgrade popup
+ * @param {Object} env - Cloudflare environment with DB binding
+ * @param {string} authId - Firebase UID
+ * @returns {Promise<boolean>} True if user has seen the popup
+ */
+export async function hasSeenUpgradePopup(env, authId) {
+  const db = getDb(env);
+  if (!db) {
+    console.warn('[DB] D1 binding not available');
+    return false;
+  }
+
+  try {
+    const user = await db.prepare(
+      'SELECT has_seen_upgrade_popup FROM users WHERE auth_id = ?'
+    ).bind(authId).first();
+
+    if (!user) {
+      return false;
+    }
+
+    return user.has_seen_upgrade_popup === 1;
+  } catch (error) {
+    const errorMessage = error?.message || String(error);
+    if (errorMessage.includes('no such column: has_seen_upgrade_popup')) {
+      console.warn('[DB] has_seen_upgrade_popup column not found. Migration 013 needs to be run.');
+      return false;
+    }
+
+    console.error('[DB] Error in hasSeenUpgradePopup:', error);
+    return false;
+  }
+}
+
+/**
+ * Mark that user has seen the free→paid upgrade popup
+ * @param {Object} env - Cloudflare environment with DB binding
+ * @param {string} authId - Firebase UID
+ * @returns {Promise<boolean>} Success
+ */
+export async function markUpgradePopupAsSeen(env, authId) {
+  const db = getDb(env);
+  if (!db) {
+    console.warn('[DB] D1 binding not available');
+    return false;
+  }
+
+  try {
+    await getOrCreateUserByAuthId(env, authId);
+
+    await db.prepare(
+      'UPDATE users SET has_seen_upgrade_popup = 1, updated_at = datetime(\'now\') WHERE auth_id = ?'
+    ).bind(authId).run();
+
+    console.log('[DB] Marked upgrade popup as seen:', { authId });
+    return true;
+  } catch (error) {
+    const errorMessage = error?.message || String(error);
+    if (errorMessage.includes('no such column: has_seen_upgrade_popup')) {
+      console.warn('[DB] has_seen_upgrade_popup column not found. Migration 013 needs to be run.');
+      return false;
+    }
+
+    console.error('[DB] Error in markUpgradePopupAsSeen:', error);
+    return false;
+  }
+}
+
 // ============================================================
 // COOKIE CONSENT HELPERS
 // ============================================================
@@ -2017,4 +2086,3 @@ export async function getCookieConsent(env, userId, clientId) {
     return null;
   }
 }
-

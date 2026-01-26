@@ -8,6 +8,8 @@
   <link rel="icon" type="image/png" href="assets/jobhackai_icon_only_128.png">
   <link rel="apple-touch-icon" href="assets/jobhackai_icon_only_128.png">
   <script src="js/dynamic-favicon.js?v=20250111-1"></script>
+  <script src="js/popup-queue.js"></script>
+  <script src="js/upgrade-popup.js"></script>
   <link rel="stylesheet" href="css/tokens.css">
   <link rel="stylesheet" href="css/main.css">
   <link rel="stylesheet" href="css/header.css">
@@ -966,20 +968,13 @@
       
       // --- Upgrade Pop-up Logic ---
       function showUpgradePopup() {
-        // Check if popup was already shown
-        const popupShownKey = 'upgrade-popup-shown';
-        if (localStorage.getItem(popupShownKey) === 'true') {
-          return;
-        }
-        
         // Check if user upgraded from free to trial/subscription
         const hasUpgradedPlan = user.plan === 'trial' || user.plan === 'essential' || user.plan === 'pro' || user.plan === 'premium';
         if (!hasUpgradedPlan) {
           return;
         }
-        
+
         // Check if user had uploaded a resume for free ATS scoring
-        // Check multiple indicators that user had a free account with resume upload
         const savedATS = JobHackAIStatePersistence?.loadATSScore?.();
         const hasATSScoreHistory = !!(savedATS && (savedATS.score || savedATS.summary));
         const hasUsedFreeATS = localStorage.getItem('hasUsedFreeATS') === 'true';
@@ -995,7 +990,7 @@
           }
         }
         const hasUploadedResume = localStorage.getItem('lastUploadedResume') || localStorage.getItem('hasUploadedResume') === 'true';
-        
+
         // Try to get user UID from Firebase Auth Manager
         const currentUser = window.FirebaseAuthManager?.getCurrentUser?.();
         const creditKey = currentUser?.uid ? `creditsByUid:${currentUser.uid}` : null;
@@ -1013,93 +1008,22 @@
             }
           }
         }
-        
+
         // Check if user had a free account (even if they didn't upload resume)
         const wasFreeAccount = !!freeUsageDataRaw || hadFreeAccountWithCredit || localStorage.getItem('was-free-user') === 'true';
         const hadResumeUpload = hasATSScoreHistory || hasUsedFreeATS || hasUsedLegacyFreeATS || hasUploadedResume || hasUsedFreeCredit;
-        
-        // Show popup for all free account users who upgraded
+
         if (!wasFreeAccount) {
           return;
         }
-        
-        // Determine plan-specific greeting
-        const planName = user.plan === 'trial' ? '3-day trial' 
-          : user.plan === 'essential' ? 'Essential plan'
-          : user.plan === 'pro' ? 'Pro plan'
-          : user.plan === 'premium' ? 'Premium plan'
-          : 'plan';
-        
-        // Determine which message to show
-        const messageText = hadResumeUpload 
-          ? `Your previous ATS resume score from your free account is still available. Welcome to your ${planName}!`
-          : `Welcome to your ${planName}!`;
-        
-        // Determine content text based on plan
-        let contentText = '';
-        if (user.plan === 'trial') {
-          contentText = 'You now have 3 resume feedback assessments (inclusive of ATS scans) and unlimited interview questions. Some features remain locked until you upgrade to a paid plan.';
-        } else {
-          contentText = 'You now have access to all features included in your plan. Upload resumes for ATS scoring, get detailed feedback, and generate unlimited interview questions.';
-        }
-        
-        // Create and show popup
-        const popupHTML = `
-          <div class="upgrade-popup-overlay" id="upgrade-popup-overlay">
-            <div class="upgrade-popup-modal">
-              <button class="close-btn" id="upgrade-popup-close" aria-label="Close">×</button>
-              <h2>Hi, ${user.name || 'User'}</h2>
-              <div class="popup-message">
-                ${messageText}
-              </div>
-              <div class="popup-content">
-                <p>${contentText}</p>
-              </div>
-              <button class="popup-ok-btn" id="upgrade-popup-ok">OK</button>
-            </div>
-          </div>
-        `;
-        
-        document.body.insertAdjacentHTML('beforeend', popupHTML);
-        const overlay = document.getElementById('upgrade-popup-overlay');
-        const closeBtn = document.getElementById('upgrade-popup-close');
-        const okBtn = document.getElementById('upgrade-popup-ok');
-        
-        // Escape key handler - stored so it can be removed later
-        const escapeKeyHandler = function(e) {
-          if (e.key === 'Escape' && overlay.classList.contains('show')) {
-            closePopup();
-          }
-        };
-        
-        function closePopup() {
-          overlay.classList.remove('show');
-          // Remove Escape key listener to prevent memory leak
-          document.removeEventListener('keydown', escapeKeyHandler);
-          setTimeout(() => {
-            overlay.remove();
-            localStorage.setItem(popupShownKey, 'true');
-          }, 300);
-        }
-        
-        // Show popup with fade-in animation
-        setTimeout(() => {
-          overlay.classList.add('show');
-        }, 100);
-        
-        // Close handlers
-        closeBtn.addEventListener('click', closePopup);
-        okBtn.addEventListener('click', closePopup);
-        overlay.addEventListener('click', function(e) {
-          if (e.target === overlay) {
-            closePopup();
-          }
+
+        window.JobHackAIUpgradePopup?.showUpgradePopup({
+          user,
+          wasFreeAccount,
+          hadResumeUpload
         });
-        
-        // Close on Escape key
-        document.addEventListener('keydown', escapeKeyHandler);
       }
-      
+
       // Show popup after a short delay to ensure page is rendered
       setTimeout(() => {
         showUpgradePopup();
