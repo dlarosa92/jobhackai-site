@@ -7,7 +7,7 @@ KV_DEV="5237372648c34aa6880f91e1a0c9708a"
 DEV_DB_ID="c5c0eee5-a223-4ea2-974e-f4aee5a28bab"
 QA_DB_ID="80d87a73-6615-4823-b7a4-19a8821b4f87"
 
-emails=("jobshackai@gmail.com" "dlarosa92@gmail.com" "sebastian.larosa@jobhackai.io")
+emails=("test.user@example.com" "test.user2@example.com" "test.user3@example.com")
 
 echo "🧹 Cleaning up test user data..."
 echo ""
@@ -40,7 +40,6 @@ echo "✅ D1 cleanup complete"
 echo ""
 echo "For KV cleanup, the keys may not exist or may be in a different namespace."
 echo "If you have CLOUDFLARE_API_TOKEN, you can run the full cleanup script."
-
 
 
 

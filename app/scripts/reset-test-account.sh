@@ -7,8 +7,8 @@ set -eo pipefail
 #   ACCOUNT_ID: Cloudflare account ID (optional - will try to auto-detect)
 
 # Test account details
-TEST_UID="CRe8mbQ94GRgTAOgo0Sz7LYYJtC3"
-TEST_EMAIL="jobshackai@gmail.com"
+TEST_UID="REPLACE_WITH_AUTH_ID"
+TEST_EMAIL="test.user@example.com"
 
 # Database names (for wrangler commands)
 DEV_DB_NAME="jobhackai-dev-db"

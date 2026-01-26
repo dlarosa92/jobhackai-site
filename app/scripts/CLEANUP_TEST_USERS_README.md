@@ -3,9 +3,9 @@
 This document explains how to clear KV and D1 data for test email addresses.
 
 ## Test Email Addresses
-- jobshackai@gmail.com
-- dlarosa92@gmail.com
-- sebastian.larosa@jobhackai.io
+- test.user@example.com
+- test.user2@example.com
+- test.user3@example.com
 
 ## Prerequisites
 
@@ -59,21 +59,21 @@ wrangler d1 list
 **DEV Database:**
 ```bash
 wrangler d1 execute <DEV_DB_ID> \
-  --command="DELETE FROM users WHERE email = 'jobshackai@gmail.com';"
+  --command="DELETE FROM users WHERE email = 'test.user@example.com';"
 wrangler d1 execute <DEV_DB_ID> \
-  --command="DELETE FROM users WHERE email = 'dlarosa92@gmail.com';"
+  --command="DELETE FROM users WHERE email = 'test.user2@example.com';"
 wrangler d1 execute <DEV_DB_ID> \
-  --command="DELETE FROM users WHERE email = 'sebastian.larosa@jobhackai.io';"
+  --command="DELETE FROM users WHERE email = 'test.user3@example.com';"
 ```
 
 **QA Database:**
 ```bash
 wrangler d1 execute <QA_DB_ID> \
-  --command="DELETE FROM users WHERE email = 'jobshackai@gmail.com';"
+  --command="DELETE FROM users WHERE email = 'test.user@example.com';"
 wrangler d1 execute <QA_DB_ID> \
-  --command="DELETE FROM users WHERE email = 'dlarosa92@gmail.com';"
+  --command="DELETE FROM users WHERE email = 'test.user2@example.com';"
 wrangler d1 execute <QA_DB_ID> \
-  --command="DELETE FROM users WHERE email = 'sebastian.larosa@jobhackai.io';"
+  --command="DELETE FROM users WHERE email = 'test.user3@example.com';"
 ```
 
 **Note:** Deleting from `users` table will cascade delete related records in:
@@ -90,7 +90,7 @@ First, query D1 to get the Firebase UIDs (auth_id) for each email:
 ```bash
 # For each email, get the auth_id
 wrangler d1 execute <DB_ID> \
-  --command="SELECT auth_id FROM users WHERE email = 'jobshackai@gmail.com';"
+  --command="SELECT auth_id FROM users WHERE email = 'test.user@example.com';"
 ```
 
 ### Delete KV Keys by UID
@@ -158,7 +158,7 @@ After cleanup, verify:
 1. **D1:**
    ```bash
    wrangler d1 execute <DB_ID> \
-     --command="SELECT * FROM users WHERE email IN ('jobshackai@gmail.com', 'dlarosa92@gmail.com', 'sebastian.larosa@jobhackai.io');"
+     --command="SELECT * FROM users WHERE email IN ('test.user@example.com', 'test.user2@example.com', 'test.user3@example.com');"
    ```
    Should return no rows.
 
@@ -187,7 +187,6 @@ After cleanup, verify:
 - Users may not exist in D1 yet (only created on first API call)
 - This is normal - just means there's no D1 data to clean
 - Still need to clean KV data if it exists
-
 
 
 

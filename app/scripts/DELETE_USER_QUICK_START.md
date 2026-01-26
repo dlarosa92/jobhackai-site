@@ -21,7 +21,7 @@ export CLOUDFLARE_ACCOUNT_ID="fabf4409ef32f8c64354a1a099bef2a2"
 ./delete-user-by-name.sh <USER_ID> [email]
 
 # Example:
-./delete-user-by-name.sh qEueeTjiwRcRuVcguhKL3QwxAqD3 jobshackai@gmail.com
+./delete-user-by-name.sh REPLACE_WITH_USER_ID test.user@example.com
 ```
 
 ## What Gets Deleted

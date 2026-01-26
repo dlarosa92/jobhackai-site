@@ -13,9 +13,9 @@ NC='\033[0m'
 
 # Test email addresses
 TEST_EMAILS=(
-  "jobshackai@gmail.com"
-  "dlarosa92@gmail.com"
-  "sebastian.larosa@jobhackai.io"
+  "test.user@example.com"
+  "test.user2@example.com"
+  "test.user3@example.com"
 )
 
 # Cloudflare credentials
@@ -357,4 +357,3 @@ echo -e "${GREEN}✅ Cleanup Complete!${NC}"
 echo -e "${GREEN}════════════════════════════════════════${NC}"
 echo -e "${GREEN}D1 records deleted: ${TOTAL_D1_DELETED}${NC}"
 echo -e "${GREEN}════════════════════════════════════════${NC}"
-

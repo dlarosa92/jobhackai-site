@@ -20,7 +20,7 @@ async function globalSetup() {
         '1. Go to your GitHub repository\n' +
         '2. Navigate to Settings → Secrets and variables → Actions\n' +
         '3. Click "New repository secret"\n' +
-        '4. Add TEST_EMAIL with value: jobshackai@gmail.com\n' +
+        '4. Add TEST_EMAIL with value: test.user@example.com\n' +
         '5. Add TEST_PASSWORD with value: Password1234\n' +
         '6. Re-run the workflow'
       );
@@ -218,4 +218,3 @@ async function globalSetup() {
 }
 
 module.exports = globalSetup;
-
