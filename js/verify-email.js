@@ -75,7 +75,10 @@ document.addEventListener('DOMContentLoaded', async () => {
       const refreshed = authManager.getCurrentUser();
       if (refreshed && refreshed.emailVerified) {
         clearVerificationSignal();
-        await routeAfterVerification();
+        const routed = await routeAfterVerification();
+        if (!routed) {
+          routingInProgress = false;
+        }
         return;
       }
       routingInProgress = false;
@@ -134,7 +137,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   async function routeAfterVerification() {
     if (!acquireRouteLock('verify-email')) {
       setStatus('Verification in progress in another tab. You can close this tab.', false);
-      return;
+      return false;
     }
     broadcastRouteStart();
 
@@ -168,7 +171,7 @@ document.addEventListener('DOMContentLoaded', async () => {
               }
 
               window.location.replace('dashboard.html');
-              return;
+              return true;
             }
           }
         }
@@ -205,20 +208,21 @@ document.addEventListener('DOMContentLoaded', async () => {
           body: JSON.stringify({ plan, startTrial: plan === 'trial' })
         });
         const data = await res.json();
-        if (data && data.ok && data.url) { window.location.href = data.url; return; }
+        if (data && data.ok && data.url) { window.location.href = data.url; return true; }
       } catch (err) {
         console.error('Checkout error from verify-email flow:', err);
       }
       window.location.href = 'pricing-a.html';
+      return true;
     } else {
       try {
         sessionStorage.removeItem('selectedPlan');
         localStorage.removeItem('selectedPlan');
       } catch (_) {}
       window.location.href = 'dashboard.html';
+      return true;
     }
   }
 });
-
 
 
