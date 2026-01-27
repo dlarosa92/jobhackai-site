@@ -189,7 +189,12 @@ class AuthManager {
     this._authReady = false; // Flag indicating Firebase has resolved initial auth state
     this._authReadyPromise = null;
     this._authReadyResolver = null;
+    this._authReadyDispatched = false;
+    this._redirectProcessing = false;
+    this._pendingAuthUser = null;
+    this._pendingAuthState = null;
     this._initializeAuthReady();
+    this._redirectProcessing = this._isGoogleRedirectInProgress();
     this.setupAuthStateListener();
     this._redirectResultHandled = false;
     this._handleRedirectResult();
@@ -315,6 +320,10 @@ class AuthManager {
   async _handleRedirectResult() {
     if (this._redirectResultHandled) return;
     this._redirectResultHandled = true;
+    const redirectExpected = this._isGoogleRedirectInProgress();
+    if (redirectExpected) {
+      this._redirectProcessing = true;
+    }
     try {
       const result = await getRedirectResult(auth);
       if (!result || !result.user) {
@@ -322,15 +331,50 @@ class AuthManager {
           console.log('ℹ️ No redirect result returned; clearing redirect-in-progress flag');
           this._clearGoogleRedirectInProgress();
         }
+        if (redirectExpected) {
+          this._finishRedirectProcessing();
+        }
         return;
       }
-      this._clearGoogleRedirectInProgress();
       console.log('✅ Google redirect sign-in result received');
       await this._completeGoogleSignIn(result.user);
+      this._finishRedirectProcessing();
     } catch (error) {
       console.warn('Google redirect result handling failed:', error);
       this._clearGoogleRedirectInProgress();
+      if (redirectExpected) {
+        this._finishRedirectProcessing();
+      }
     }
+  }
+
+  _finalizeAuthReady(user) {
+    if (this._authReadyDispatched) return;
+    this._markAuthReady(user || null);
+    this._authReadyDispatched = true;
+    console.log('🔥 Dispatching firebase-auth-ready event');
+    document.dispatchEvent(new CustomEvent("firebase-auth-ready", {
+      detail: { user: user || null, realAuthReady: true }
+    }));
+  }
+
+  _finishRedirectProcessing() {
+    if (!this._redirectProcessing) return;
+    this._redirectProcessing = false;
+    this._clearGoogleRedirectInProgress();
+    if (!this._authReadyDispatched) {
+      const readyUser = this._pendingAuthUser || this.currentUser || null;
+      this._pendingAuthUser = null;
+      this._finalizeAuthReady(readyUser);
+    }
+    this._flushPendingAuthState();
+  }
+
+  _flushPendingAuthState() {
+    if (!this._pendingAuthState) return;
+    const { user, userRecord } = this._pendingAuthState;
+    this._pendingAuthState = null;
+    this.notifyAuthStateChange(user, userRecord, { force: true });
   }
 
   _shouldUseRedirectFallback(error) {
@@ -388,8 +432,6 @@ class AuthManager {
   }
 
   setupAuthStateListener() {
-    let authReadyDispatched = false;
-    
     onAuthStateChanged(auth, async (user) => {
       console.log('🔥 Firebase auth state changed:', user ? `User: ${user.email}` : 'No user');
       
@@ -474,24 +516,16 @@ class AuthManager {
       
       // ✅ TRI-STATE PATTERN: Mark auth as ready on first onAuthStateChanged call
       // This ensures waitForAuthReady() resolves even if user is null
-      if (!authReadyDispatched) {
-        this._markAuthReady(effectiveUser);
-      }
-      
-      // ✅ CRITICAL: Dispatch firebase-auth-ready event AFTER currentUser is set
-      // This ensures pages waiting for this event (like navigation.js) can reliably call getCurrentUser()
-      // The event represents "auth state is ready", not necessarily "user is logged in".
-      if (!authReadyDispatched) {
-        authReadyDispatched = true;
-        console.log('🔥 Dispatching firebase-auth-ready event');
-        // CRITICAL FIX: Set flag on window before dispatching event
-        // This allows navigation.js fallback to detect if event fired before script loaded
-        window.__REAL_AUTH_READY = true;
-        window.__firebaseAuthReadyFired = true; // legacy flag (now only set from real event)
-        // Dispatch event with effectiveUser (already null if logout-intent detected)
-        document.dispatchEvent(new CustomEvent("firebase-auth-ready", {
-          detail: { user: effectiveUser || null, realAuthReady: true }
-        }));
+      if (!this._authReadyDispatched) {
+        if (this._redirectProcessing) {
+          this._pendingAuthUser = effectiveUser;
+          console.log('⏳ Auth ready deferred until redirect processing completes');
+        } else {
+          // ✅ CRITICAL: Dispatch firebase-auth-ready event AFTER currentUser is set
+          // This ensures pages waiting for this event (like navigation.js) can reliably call getCurrentUser()
+          // The event represents "auth state is ready", not necessarily "user is logged in".
+          this._finalizeAuthReady(effectiveUser);
+        }
       }
       
       // If logout-intent was detected, stop processing here
@@ -751,7 +785,12 @@ class AuthManager {
     });
   }
 
-  notifyAuthStateChange(user, userRecord) {
+  notifyAuthStateChange(user, userRecord, options = {}) {
+    if (this._redirectProcessing && !options.force) {
+      this._pendingAuthState = { user, userRecord };
+      console.log('⏳ Deferring auth state change notification until redirect processing completes');
+      return;
+    }
     this.authStateListeners.forEach(listener => {
       try {
         listener(user, userRecord);
@@ -765,11 +804,13 @@ class AuthManager {
     this.authStateListeners.push(callback);
     
     // Immediately call with current state
-    if (this.currentUser) {
+    if (this.currentUser && !this._redirectProcessing) {
       // Note: UserDatabase.getUser is only for non-plan data (name, etc.)
       // Plan data comes from D1 via API, not from email-based lookup
       const userRecord = UserDatabase.getUser(this.currentUser.email);
       callback(this.currentUser, userRecord);
+    } else if (this.currentUser && this._redirectProcessing) {
+      console.log('⏳ Skipping immediate auth state callback during redirect processing');
     }
   }
 
