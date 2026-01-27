@@ -991,9 +991,13 @@ class AuthManager {
       // FIX: Wait for auth to be ready before fetching plan to prevent race condition
       let kvPlan = null;
       try {
-        // Wait for Firebase auth to be fully ready (max 3 seconds)
-        console.log('🔄 Waiting for Firebase auth to be ready during Google sign-in...');
-        await this.waitForAuthReady(3000);
+        if (this._redirectProcessing) {
+          console.log('🔄 Redirect sign-in detected; skipping waitForAuthReady to avoid delay');
+        } else {
+          // Wait for Firebase auth to be fully ready (max 3 seconds)
+          console.log('🔄 Waiting for Firebase auth to be ready during Google sign-in...');
+          await this.waitForAuthReady(3000);
+        }
         
         if (window.JobHackAINavigation && typeof window.JobHackAINavigation.fetchPlanFromAPI === 'function') {
           kvPlan = await window.JobHackAINavigation.fetchPlanFromAPI();
