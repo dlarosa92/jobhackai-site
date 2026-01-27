@@ -18,6 +18,8 @@ import {
   signInWithEmailAndPassword, 
   createUserWithEmailAndPassword,
   signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult,
   GoogleAuthProvider,
   onAuthStateChanged,
   signOut,
@@ -189,6 +191,8 @@ class AuthManager {
     this._authReadyResolver = null;
     this._initializeAuthReady();
     this.setupAuthStateListener();
+    this._redirectResultHandled = false;
+    this._handleRedirectResult();
     // Expose globally for consumers that can't import modules
     try { 
       window.FirebaseAuthManager = this;
@@ -274,6 +278,89 @@ class AuthManager {
    */
   isAuthReady() {
     return this._authReady;
+  }
+
+  _isEdgeBrowser() {
+    try {
+      return /Edg\//.test(navigator.userAgent);
+    } catch (_) {
+      return false;
+    }
+  }
+
+  _getGoogleRedirectFlagKey() {
+    return 'google-redirect-in-progress';
+  }
+
+  _isGoogleRedirectInProgress() {
+    try {
+      return sessionStorage.getItem(this._getGoogleRedirectFlagKey()) === '1';
+    } catch (_) {
+      return false;
+    }
+  }
+
+  _setGoogleRedirectInProgress() {
+    try {
+      sessionStorage.setItem(this._getGoogleRedirectFlagKey(), '1');
+    } catch (_) { /* no-op */ }
+  }
+
+  _clearGoogleRedirectInProgress() {
+    try {
+      sessionStorage.removeItem(this._getGoogleRedirectFlagKey());
+    } catch (_) { /* no-op */ }
+  }
+
+  async _handleRedirectResult() {
+    if (this._redirectResultHandled) return;
+    this._redirectResultHandled = true;
+    try {
+      const result = await getRedirectResult(auth);
+      if (!result || !result.user) {
+        if (this._isGoogleRedirectInProgress()) {
+          console.log('ℹ️ No redirect result returned; clearing redirect-in-progress flag');
+          this._clearGoogleRedirectInProgress();
+        }
+        return;
+      }
+      this._clearGoogleRedirectInProgress();
+      console.log('✅ Google redirect sign-in result received');
+      await this._completeGoogleSignIn(result.user);
+    } catch (error) {
+      console.warn('Google redirect result handling failed:', error);
+      this._clearGoogleRedirectInProgress();
+    }
+  }
+
+  _shouldUseRedirectFallback(error) {
+    if (!error) return false;
+    const code = error.code || '';
+    const redirectEligible = new Set([
+      'auth/popup-closed-by-user',
+      'auth/cancelled-popup-request',
+      'auth/popup-blocked'
+    ]);
+    if (!redirectEligible.has(code)) return false;
+    if (code === 'auth/popup-blocked') return true;
+    return this._isEdgeBrowser();
+  }
+
+  async _startGoogleRedirectFallback(error) {
+    if (this._isGoogleRedirectInProgress()) {
+      console.warn('Google redirect fallback already in progress');
+      return false;
+    }
+    console.warn('Starting Google redirect fallback:', error?.code || error?.message || 'unknown error');
+    this._setGoogleRedirectInProgress();
+    try {
+      await signInWithRedirect(auth, googleProvider);
+      return true;
+    } catch (err) {
+      this._clearGoogleRedirectInProgress();
+      console.error('Google redirect fallback failed to start:', err);
+      return false;
+    }
   }
 
   // Initialize free ATS credit for new users
@@ -848,124 +935,133 @@ class AuthManager {
   /**
    * Sign in with Google
    */
+  async _completeGoogleSignIn(user) {
+    // Extract name from display name
+    const nameParts = user.displayName ? user.displayName.split(' ') : ['', ''];
+    
+    // CRITICAL: Prioritize newly selected plan over existing plans
+    const selectedPlan = this.getSelectedPlan();
+    let actualPlan = 'free';
+
+    if (selectedPlan && selectedPlan !== 'free') {
+      actualPlan = selectedPlan === 'trial' ? 'pending' : selectedPlan;
+      console.log('✅ Using newly selected plan for Google sign-in:', actualPlan);
+    } else {
+      // FIX: Wait for auth to be ready before fetching plan to prevent race condition
+      let kvPlan = null;
+      try {
+        // Wait for Firebase auth to be fully ready (max 3 seconds)
+        console.log('🔄 Waiting for Firebase auth to be ready during Google sign-in...');
+        await this.waitForAuthReady(3000);
+        
+        if (window.JobHackAINavigation && typeof window.JobHackAINavigation.fetchPlanFromAPI === 'function') {
+          kvPlan = await window.JobHackAINavigation.fetchPlanFromAPI();
+          if (kvPlan) console.log('✅ Fetched plan via navigation system during Google sign-in:', kvPlan);
+        }
+        // Fallback: fetch directly from API if navigation not ready
+        if (!kvPlan) {
+          kvPlan = await fetchPlanFromAPI();
+          if (kvPlan) console.log('✅ Fetched plan directly from API during Google sign-in:', kvPlan);
+        }
+      } catch (e) {
+        console.warn('Could not fetch plan from API during Google sign-in:', e);
+        // Add retry mechanism for failed API fetches
+        try {
+          console.log('🔄 Retrying plan fetch during Google sign-in after 1 second...');
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          if (window.JobHackAINavigation && typeof window.JobHackAINavigation.fetchPlanFromAPI === 'function') {
+            kvPlan = await window.JobHackAINavigation.fetchPlanFromAPI();
+          }
+          if (!kvPlan) {
+            kvPlan = await fetchPlanFromAPI();
+          }
+          if (kvPlan) console.log('✅ Retry successful during Google sign-in, fetched plan:', kvPlan);
+        } catch (retryError) {
+          console.warn('Retry also failed during Google sign-in:', retryError);
+        }
+      }
+      
+      if (kvPlan && kvPlan !== 'free') {
+        actualPlan = kvPlan;
+        console.log('✅ Retrieved user plan from D1 (via API) during Google sign-in:', actualPlan);
+      } else {
+        // API fetch returned null or 'free' - try Firestore as fallback (but NOT email-based lookup)
+        const profileResult = await UserProfileManager.getProfile(user.uid);
+        if (profileResult.success && profileResult.profile) {
+          actualPlan = profileResult.profile.plan || 'free';
+          console.log('✅ Retrieved user plan from Firestore during Google sign-in (API fallback):', actualPlan);
+        } else {
+          // All sources unavailable - default to 'free' (D1 is source of truth, no email-based fallback)
+          actualPlan = 'free';
+          console.log('ℹ️ All plan sources failed during Google sign-in, defaulting to free. D1 is source of truth - no email-based fallback.');
+        }
+      }
+    }
+    
+    const userData = {
+      uid: user.uid,
+      firstName: nameParts[0] || '',
+      lastName: nameParts.slice(1).join(' ') || '',
+      plan: actualPlan
+    };
+
+    UserDatabase.createOrUpdateUser(user.email, userData);
+
+    // Ensure navigation/auth state is updated immediately (avoid redirect race)
+    try {
+      localStorage.setItem('user-authenticated', 'true');
+      // SECURITY: Do NOT store email in localStorage
+      if (user.displayName) {
+        localStorage.setItem('user-name', user.displayName);
+      }
+      if (window.JobHackAINavigation) {
+        window.JobHackAINavigation.setAuthState(true, actualPlan);
+      }
+    } catch (e) {
+      console.warn('auth state persist failed during Google sign-in:', e);
+    }
+
+    // Initialize free account tracking for new free users
+    if (userData.plan === 'free') {
+      if (window.freeAccountManager) {
+        window.freeAccountManager.initializeForNewUser();
+      }
+    }
+
+    // Create or update Firestore profile
+    const firestoreData = {
+      email: user.email,
+      displayName: user.displayName || '',
+      firstName: nameParts[0] || '',
+      lastName: nameParts.slice(1).join(' ') || '',
+      photoURL: user.photoURL || null,
+      plan: selectedPlan === 'trial' ? 'pending' : (selectedPlan || 'free'), // Don't set trial immediately, wait for webhook
+      signupSource: 'google_oauth',
+      pendingPlan: selectedPlan === 'trial' ? 'trial' : null // Track what they selected
+    };
+    
+    try {
+      await UserProfileManager.upsertProfile(user.uid, firestoreData);
+    } catch (err) {
+      console.warn('Could not sync Firestore profile:', err);
+    }
+
+    return { success: true, user };
+  }
+
   async signInWithGoogle() {
     try {
       const result = await signInWithPopup(auth, googleProvider);
-      const user = result.user;
-
-      // Extract name from display name
-      const nameParts = user.displayName ? user.displayName.split(' ') : ['', ''];
-      
-      // CRITICAL: Prioritize newly selected plan over existing plans
-      const selectedPlan = this.getSelectedPlan();
-      let actualPlan = 'free';
-
-      if (selectedPlan && selectedPlan !== 'free') {
-        actualPlan = selectedPlan === 'trial' ? 'pending' : selectedPlan;
-        console.log('✅ Using newly selected plan for Google sign-in:', actualPlan);
-      } else {
-        // FIX: Wait for auth to be ready before fetching plan to prevent race condition
-        let kvPlan = null;
-        try {
-          // Wait for Firebase auth to be fully ready (max 3 seconds)
-          console.log('🔄 Waiting for Firebase auth to be ready during Google sign-in...');
-          await this.waitForAuthReady(3000);
-          
-          if (window.JobHackAINavigation && typeof window.JobHackAINavigation.fetchPlanFromAPI === 'function') {
-            kvPlan = await window.JobHackAINavigation.fetchPlanFromAPI();
-            if (kvPlan) console.log('✅ Fetched plan via navigation system during Google sign-in:', kvPlan);
-          }
-          // Fallback: fetch directly from API if navigation not ready
-          if (!kvPlan) {
-            kvPlan = await fetchPlanFromAPI();
-            if (kvPlan) console.log('✅ Fetched plan directly from API during Google sign-in:', kvPlan);
-          }
-        } catch (e) {
-          console.warn('Could not fetch plan from API during Google sign-in:', e);
-          // Add retry mechanism for failed API fetches
-          try {
-            console.log('🔄 Retrying plan fetch during Google sign-in after 1 second...');
-            await new Promise(resolve => setTimeout(resolve, 1000));
-            if (window.JobHackAINavigation && typeof window.JobHackAINavigation.fetchPlanFromAPI === 'function') {
-              kvPlan = await window.JobHackAINavigation.fetchPlanFromAPI();
-            }
-            if (!kvPlan) {
-              kvPlan = await fetchPlanFromAPI();
-            }
-            if (kvPlan) console.log('✅ Retry successful during Google sign-in, fetched plan:', kvPlan);
-          } catch (retryError) {
-            console.warn('Retry also failed during Google sign-in:', retryError);
-          }
-        }
-        
-        if (kvPlan && kvPlan !== 'free') {
-          actualPlan = kvPlan;
-          console.log('✅ Retrieved user plan from D1 (via API) during Google sign-in:', actualPlan);
-        } else {
-          // API fetch returned null or 'free' - try Firestore as fallback (but NOT email-based lookup)
-          const profileResult = await UserProfileManager.getProfile(user.uid);
-          if (profileResult.success && profileResult.profile) {
-            actualPlan = profileResult.profile.plan || 'free';
-            console.log('✅ Retrieved user plan from Firestore during Google sign-in (API fallback):', actualPlan);
-          } else {
-            // All sources unavailable - default to 'free' (D1 is source of truth, no email-based fallback)
-            actualPlan = 'free';
-            console.log('ℹ️ All plan sources failed during Google sign-in, defaulting to free. D1 is source of truth - no email-based fallback.');
-          }
-        }
-      }
-      
-      const userData = {
-        uid: user.uid,
-        firstName: nameParts[0] || '',
-        lastName: nameParts.slice(1).join(' ') || '',
-        plan: actualPlan
-      };
-
-      UserDatabase.createOrUpdateUser(user.email, userData);
-
-      // Ensure navigation/auth state is updated immediately (avoid redirect race)
-      try {
-        localStorage.setItem('user-authenticated', 'true');
-        // SECURITY: Do NOT store email in localStorage
-        if (user.displayName) {
-          localStorage.setItem('user-name', user.displayName);
-        }
-        if (window.JobHackAINavigation) {
-          window.JobHackAINavigation.setAuthState(true, actualPlan);
-        }
-      } catch (e) {
-        console.warn('auth state persist failed during Google sign-in:', e);
-      }
-
-      // Initialize free account tracking for new free users
-      if (userData.plan === 'free') {
-        if (window.freeAccountManager) {
-          window.freeAccountManager.initializeForNewUser();
-        }
-      }
-
-      // Create or update Firestore profile
-      const firestoreData = {
-        email: user.email,
-        displayName: user.displayName || '',
-        firstName: nameParts[0] || '',
-        lastName: nameParts.slice(1).join(' ') || '',
-        photoURL: user.photoURL || null,
-        plan: selectedPlan === 'trial' ? 'pending' : (selectedPlan || 'free'), // Don't set trial immediately, wait for webhook
-        signupSource: 'google_oauth',
-        pendingPlan: selectedPlan === 'trial' ? 'trial' : null // Track what they selected
-      };
-      
-      try {
-        await UserProfileManager.upsertProfile(user.uid, firestoreData);
-      } catch (err) {
-        console.warn('Could not sync Firestore profile:', err);
-      }
-
-      return { success: true, user };
+      return await this._completeGoogleSignIn(result.user);
     } catch (error) {
       console.error('Google sign in error:', error);
+
+      if (this._shouldUseRedirectFallback(error)) {
+        const started = await this._startGoogleRedirectFallback(error);
+        if (started) {
+          return { success: false, error: null };
+        }
+      }
       
       // Handle popup closed by user
       if (error.code === 'auth/popup-closed-by-user' || error.code === 'auth/cancelled-popup-request') {
