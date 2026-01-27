@@ -109,6 +109,7 @@ export async function onRequest(context) {
       fileType: extractionResult.fileType,
       isMultiColumn: extractionResult.isMultiColumn,
       ocrUsed: extractionResult.ocrUsed,
+      extractionStatus: extractionResult.extractionStatus,
       uploadedAt: timestamp,
       textPreview: extractionResult.text.length > 200 
         ? extractionResult.text.substring(0, 200) + '...'
@@ -143,6 +144,14 @@ export async function onRequest(context) {
 
     // Return success with resumeText for direct scoring (bypasses KV requirement)
     // Note: resumeText is returned to enable scoring without KV in dev environments
+    const warnings = [];
+    if (extractionResult.ocrUsed) {
+      warnings.push('This document was processed using OCR. Please verify accuracy.');
+    }
+    if (extractionResult.extractionStatus === 'low_text') {
+      warnings.push('Low amount of extractable text detected; results may be incomplete.');
+    }
+
     return json({
       success: true,
       resumeId,
@@ -151,7 +160,9 @@ export async function onRequest(context) {
       wordCount: extractionResult.wordCount,
       fileType: extractionResult.fileType,
       isMultiColumn: extractionResult.isMultiColumn,
-      ocrUsed: extractionResult.ocrUsed
+      ocrUsed: extractionResult.ocrUsed,
+      extractionStatus: extractionResult.extractionStatus,
+      warnings
     }, 200, origin, env);
 
   } catch (error) {
@@ -163,4 +174,3 @@ export async function onRequest(context) {
     }, 500, origin, env);
   }
 }
-

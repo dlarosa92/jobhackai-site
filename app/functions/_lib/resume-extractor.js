@@ -117,10 +117,10 @@ export async function extractResumeText(file, fileName, env) {
         const result = await mammoth.extractRawText({ arrayBuffer });
         text = result.value;
       } catch (docxError) {
-        // Retry with images skipped (can salvage partially corrupted DOCX)
+        // Retry using convertToHtml with images skipped, then strip HTML to text
         try {
-          const retryResult = await mammoth.extractRawText({ arrayBuffer, convertImage: mammoth.images ? mammoth.images.skip : undefined });
-          text = retryResult.value;
+          const retryResult = await mammoth.convertToHtml({ arrayBuffer }, { convertImage: () => null });
+          text = stripHtmlToText(retryResult.value);
         } catch (secondError) {
           // Final fallback: best-effort unzip of word/document.xml without new deps
           const fallbackText = await extractDocxXmlFallback(arrayBuffer);
@@ -498,4 +498,19 @@ function indexOfSubarray(haystack, needle) {
     return i;
   }
   return -1;
+}
+
+// Minimal HTML stripper used for the convertToHtml retry path
+function stripHtmlToText(html) {
+  if (!html) return '';
+  return html
+    .replace(/<style[^>]*>[^<]*<\\/style>/gi, ' ')
+    .replace(/<script[^>]*>[^<]*<\\/script>/gi, ' ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/\\s+/g, ' ')
+    .trim();
 }
