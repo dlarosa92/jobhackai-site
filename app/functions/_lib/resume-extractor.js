@@ -54,12 +54,21 @@ export async function extractResumeText(file, fileName, env) {
     fileExt = inferExtensionFromMime(mimeType);
   }
   
-  // Validate file type
-  if (!['pdf', 'docx', 'doc', 'txt'].includes(fileExt)) {
+  // Explicitly block legacy .doc (OLE) files to avoid misleading DOCX errors
+  if (fileExt === 'doc') {
     throw createExtractionError(
       EXTRACTION_ERRORS.UNSUPPORTED_TYPE,
-      `Unsupported file type: ${fileExt}. Please upload PDF, DOCX, DOC, or TXT.`,
-      { fileType: fileExt, supportedTypes: ['pdf', 'docx', 'doc', 'txt'] }
+      'Legacy .doc files are not supported. Please re-save as DOCX or PDF.',
+      { fileType: fileExt, supportedTypes: ['pdf', 'docx', 'txt'] }
+    );
+  }
+  
+  // Validate file type
+  if (!['pdf', 'docx', 'txt'].includes(fileExt)) {
+    throw createExtractionError(
+      EXTRACTION_ERRORS.UNSUPPORTED_TYPE,
+      `Unsupported file type: ${fileExt}. Please upload PDF, DOCX, or TXT.`,
+      { fileType: fileExt, supportedTypes: ['pdf', 'docx', 'txt'] }
     );
   }
 
@@ -102,7 +111,7 @@ export async function extractResumeText(file, fileName, env) {
       // Plain text file
       const decoder = new TextDecoder('utf-8');
       text = decoder.decode(arrayBuffer);
-    } else if (fileExt === 'docx' || fileExt === 'doc') {
+    } else if (fileExt === 'docx') {
       // DOCX file - use mammoth
       try {
         const result = await mammoth.extractRawText({ arrayBuffer });
@@ -172,10 +181,7 @@ export async function extractResumeText(file, fileName, env) {
       }
       
       // Flag likely scanned/low-text PDFs but continue (only block when zero text)
-      if (pdfResult.isScanned) {
-        extractionStatus = 'low_text';
-      }
-      if (pdfResult.lowText) {
+      if (pdfResult.isScanned || pdfResult.lowText) {
         extractionStatus = 'low_text';
       }
     }
@@ -345,7 +351,7 @@ async function extractPdfText(arrayBuffer, env) {
         textLength: trimmedText.length,
         threshold: SCANNED_PDF_THRESHOLD
       });
-      return { text: trimmedText, isMultiColumn, numPages: 0, lowText: true };
+      return { text: trimmedText, isMultiColumn, numPages: 0, lowText: true, isScanned: true };
     }
 
     console.log('[PDF] Successfully extracted text via toMarkdown', {
@@ -429,7 +435,6 @@ function getMimeTypeFromExtension(ext) {
   const mimeTypes = {
     'pdf': 'application/pdf',
     'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-    'doc': 'application/msword',
     'txt': 'text/plain'
   };
   return mimeTypes[ext] || 'application/octet-stream';
@@ -442,7 +447,7 @@ function inferExtensionFromMime(mimeType) {
   const map = {
     'application/pdf': 'pdf',
     'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'docx',
-    'application/msword': 'doc',
+    'application/msword': 'doc', // still mapped so we can show the explicit .doc warning
     'text/plain': 'txt'
   };
   return map[mimeType] || '';
