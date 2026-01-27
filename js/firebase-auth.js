@@ -18,6 +18,8 @@ import {
   signInWithEmailAndPassword, 
   createUserWithEmailAndPassword,
   signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult,
   GoogleAuthProvider,
   onAuthStateChanged,
   signOut,
@@ -187,8 +189,15 @@ class AuthManager {
     this._authReady = false; // Flag indicating Firebase has resolved initial auth state
     this._authReadyPromise = null;
     this._authReadyResolver = null;
+    this._authReadyDispatched = false;
+    this._redirectProcessing = false;
+    this._pendingAuthUser = null;
+    this._pendingAuthState = null;
     this._initializeAuthReady();
+    this._redirectProcessing = this._isGoogleRedirectInProgress();
     this.setupAuthStateListener();
+    this._redirectResultHandled = false;
+    this._handleRedirectResult();
     // Expose globally for consumers that can't import modules
     try { 
       window.FirebaseAuthManager = this;
@@ -276,6 +285,128 @@ class AuthManager {
     return this._authReady;
   }
 
+  _isEdgeBrowser() {
+    try {
+      return /Edg\//.test(navigator.userAgent);
+    } catch (_) {
+      return false;
+    }
+  }
+
+  _getGoogleRedirectFlagKey() {
+    return 'google-redirect-in-progress';
+  }
+
+  _isGoogleRedirectInProgress() {
+    try {
+      return sessionStorage.getItem(this._getGoogleRedirectFlagKey()) === '1';
+    } catch (_) {
+      return false;
+    }
+  }
+
+  _setGoogleRedirectInProgress() {
+    try {
+      sessionStorage.setItem(this._getGoogleRedirectFlagKey(), '1');
+    } catch (_) { /* no-op */ }
+  }
+
+  _clearGoogleRedirectInProgress() {
+    try {
+      sessionStorage.removeItem(this._getGoogleRedirectFlagKey());
+    } catch (_) { /* no-op */ }
+  }
+
+  async _handleRedirectResult() {
+    if (this._redirectResultHandled) return;
+    this._redirectResultHandled = true;
+    const redirectExpected = this._isGoogleRedirectInProgress();
+    if (redirectExpected) {
+      this._redirectProcessing = true;
+    }
+    try {
+      const result = await getRedirectResult(auth);
+      if (!result || !result.user) {
+        if (this._isGoogleRedirectInProgress()) {
+          console.log('ℹ️ No redirect result returned; clearing redirect-in-progress flag');
+          this._clearGoogleRedirectInProgress();
+        }
+        if (redirectExpected) {
+          this._finishRedirectProcessing();
+        }
+        return;
+      }
+      console.log('✅ Google redirect sign-in result received');
+      await this._completeGoogleSignIn(result.user);
+      this._finishRedirectProcessing();
+    } catch (error) {
+      console.warn('Google redirect result handling failed:', error);
+      this._clearGoogleRedirectInProgress();
+      if (redirectExpected) {
+        this._finishRedirectProcessing();
+      }
+    }
+  }
+
+  _finalizeAuthReady(user) {
+    if (this._authReadyDispatched) return;
+    this._markAuthReady(user || null);
+    this._authReadyDispatched = true;
+    console.log('🔥 Dispatching firebase-auth-ready event');
+    document.dispatchEvent(new CustomEvent("firebase-auth-ready", {
+      detail: { user: user || null, realAuthReady: true }
+    }));
+  }
+
+  _finishRedirectProcessing() {
+    if (!this._redirectProcessing) return;
+    this._redirectProcessing = false;
+    this._clearGoogleRedirectInProgress();
+    if (!this._authReadyDispatched) {
+      const readyUser = this._pendingAuthUser || this.currentUser || null;
+      this._pendingAuthUser = null;
+      this._finalizeAuthReady(readyUser);
+    }
+    this._flushPendingAuthState();
+  }
+
+  _flushPendingAuthState() {
+    if (!this._pendingAuthState) return;
+    const { user, userRecord } = this._pendingAuthState;
+    this._pendingAuthState = null;
+    this.notifyAuthStateChange(user, userRecord, { force: true });
+  }
+
+  _shouldUseRedirectFallback(error) {
+    if (!error) return false;
+    const code = error.code || '';
+    const redirectEligible = new Set([
+      'auth/popup-closed-by-user',
+      'auth/cancelled-popup-request',
+      'auth/popup-blocked'
+    ]);
+    if (!redirectEligible.has(code)) return false;
+    if (code === 'auth/popup-blocked') return true;
+    return this._isEdgeBrowser();
+  }
+
+  async _startGoogleRedirectFallback(error) {
+    if (this._isGoogleRedirectInProgress()) {
+      console.warn('Google redirect fallback already in progress');
+      return false;
+    }
+    console.warn('Starting Google redirect fallback:', error?.code || error?.message || 'unknown error');
+    this._setGoogleRedirectInProgress();
+    try {
+      await signInWithRedirect(auth, googleProvider);
+      return true;
+    } catch (err) {
+      this._clearGoogleRedirectInProgress();
+      console.error('Google redirect fallback failed to start:', err);
+      return false;
+    }
+  }
+
   // Initialize free ATS credit for new users
   async initializeFreeATSCredit(uid) {
     try {
@@ -301,8 +432,6 @@ class AuthManager {
   }
 
   setupAuthStateListener() {
-    let authReadyDispatched = false;
-    
     onAuthStateChanged(auth, async (user) => {
       console.log('🔥 Firebase auth state changed:', user ? `User: ${user.email}` : 'No user');
       
@@ -387,24 +516,16 @@ class AuthManager {
       
       // ✅ TRI-STATE PATTERN: Mark auth as ready on first onAuthStateChanged call
       // This ensures waitForAuthReady() resolves even if user is null
-      if (!authReadyDispatched) {
-        this._markAuthReady(effectiveUser);
-      }
-      
-      // ✅ CRITICAL: Dispatch firebase-auth-ready event AFTER currentUser is set
-      // This ensures pages waiting for this event (like navigation.js) can reliably call getCurrentUser()
-      // The event represents "auth state is ready", not necessarily "user is logged in".
-      if (!authReadyDispatched) {
-        authReadyDispatched = true;
-        console.log('🔥 Dispatching firebase-auth-ready event');
-        // CRITICAL FIX: Set flag on window before dispatching event
-        // This allows navigation.js fallback to detect if event fired before script loaded
-        window.__REAL_AUTH_READY = true;
-        window.__firebaseAuthReadyFired = true; // legacy flag (now only set from real event)
-        // Dispatch event with effectiveUser (already null if logout-intent detected)
-        document.dispatchEvent(new CustomEvent("firebase-auth-ready", {
-          detail: { user: effectiveUser || null, realAuthReady: true }
-        }));
+      if (!this._authReadyDispatched) {
+        if (this._redirectProcessing) {
+          this._pendingAuthUser = effectiveUser;
+          console.log('⏳ Auth ready deferred until redirect processing completes');
+        } else {
+          // ✅ CRITICAL: Dispatch firebase-auth-ready event AFTER currentUser is set
+          // This ensures pages waiting for this event (like navigation.js) can reliably call getCurrentUser()
+          // The event represents "auth state is ready", not necessarily "user is logged in".
+          this._finalizeAuthReady(effectiveUser);
+        }
       }
       
       // If logout-intent was detected, stop processing here
@@ -664,7 +785,12 @@ class AuthManager {
     });
   }
 
-  notifyAuthStateChange(user, userRecord) {
+  notifyAuthStateChange(user, userRecord, options = {}) {
+    if (this._redirectProcessing && !options.force) {
+      this._pendingAuthState = { user, userRecord };
+      console.log('⏳ Deferring auth state change notification until redirect processing completes');
+      return;
+    }
     this.authStateListeners.forEach(listener => {
       try {
         listener(user, userRecord);
@@ -678,11 +804,13 @@ class AuthManager {
     this.authStateListeners.push(callback);
     
     // Immediately call with current state
-    if (this.currentUser) {
+    if (this.currentUser && !this._redirectProcessing) {
       // Note: UserDatabase.getUser is only for non-plan data (name, etc.)
       // Plan data comes from D1 via API, not from email-based lookup
       const userRecord = UserDatabase.getUser(this.currentUser.email);
       callback(this.currentUser, userRecord);
+    } else if (this.currentUser && this._redirectProcessing) {
+      console.log('⏳ Skipping immediate auth state callback during redirect processing');
     }
   }
 
@@ -848,124 +976,137 @@ class AuthManager {
   /**
    * Sign in with Google
    */
-  async signInWithGoogle() {
-    try {
-      const result = await signInWithPopup(auth, googleProvider);
-      const user = result.user;
+  async _completeGoogleSignIn(user) {
+    // Extract name from display name
+    const nameParts = user.displayName ? user.displayName.split(' ') : ['', ''];
+    
+    // CRITICAL: Prioritize newly selected plan over existing plans
+    const selectedPlan = this.getSelectedPlan();
+    let actualPlan = 'free';
 
-      // Extract name from display name
-      const nameParts = user.displayName ? user.displayName.split(' ') : ['', ''];
-      
-      // CRITICAL: Prioritize newly selected plan over existing plans
-      const selectedPlan = this.getSelectedPlan();
-      let actualPlan = 'free';
-
-      if (selectedPlan && selectedPlan !== 'free') {
-        actualPlan = selectedPlan === 'trial' ? 'pending' : selectedPlan;
-        console.log('✅ Using newly selected plan for Google sign-in:', actualPlan);
-      } else {
-        // FIX: Wait for auth to be ready before fetching plan to prevent race condition
-        let kvPlan = null;
-        try {
+    if (selectedPlan && selectedPlan !== 'free') {
+      actualPlan = selectedPlan === 'trial' ? 'pending' : selectedPlan;
+      console.log('✅ Using newly selected plan for Google sign-in:', actualPlan);
+    } else {
+      // FIX: Wait for auth to be ready before fetching plan to prevent race condition
+      let kvPlan = null;
+      try {
+        if (this._redirectProcessing) {
+          console.log('🔄 Redirect sign-in detected; skipping waitForAuthReady to avoid delay');
+        } else {
           // Wait for Firebase auth to be fully ready (max 3 seconds)
           console.log('🔄 Waiting for Firebase auth to be ready during Google sign-in...');
           await this.waitForAuthReady(3000);
-          
-          if (window.JobHackAINavigation && typeof window.JobHackAINavigation.fetchPlanFromAPI === 'function') {
-            kvPlan = await window.JobHackAINavigation.fetchPlanFromAPI();
-            if (kvPlan) console.log('✅ Fetched plan via navigation system during Google sign-in:', kvPlan);
-          }
-          // Fallback: fetch directly from API if navigation not ready
-          if (!kvPlan) {
-            kvPlan = await fetchPlanFromAPI();
-            if (kvPlan) console.log('✅ Fetched plan directly from API during Google sign-in:', kvPlan);
-          }
-        } catch (e) {
-          console.warn('Could not fetch plan from API during Google sign-in:', e);
-          // Add retry mechanism for failed API fetches
-          try {
-            console.log('🔄 Retrying plan fetch during Google sign-in after 1 second...');
-            await new Promise(resolve => setTimeout(resolve, 1000));
-            if (window.JobHackAINavigation && typeof window.JobHackAINavigation.fetchPlanFromAPI === 'function') {
-              kvPlan = await window.JobHackAINavigation.fetchPlanFromAPI();
-            }
-            if (!kvPlan) {
-              kvPlan = await fetchPlanFromAPI();
-            }
-            if (kvPlan) console.log('✅ Retry successful during Google sign-in, fetched plan:', kvPlan);
-          } catch (retryError) {
-            console.warn('Retry also failed during Google sign-in:', retryError);
-          }
         }
         
-        if (kvPlan && kvPlan !== 'free') {
-          actualPlan = kvPlan;
-          console.log('✅ Retrieved user plan from D1 (via API) during Google sign-in:', actualPlan);
-        } else {
-          // API fetch returned null or 'free' - try Firestore as fallback (but NOT email-based lookup)
-          const profileResult = await UserProfileManager.getProfile(user.uid);
-          if (profileResult.success && profileResult.profile) {
-            actualPlan = profileResult.profile.plan || 'free';
-            console.log('✅ Retrieved user plan from Firestore during Google sign-in (API fallback):', actualPlan);
-          } else {
-            // All sources unavailable - default to 'free' (D1 is source of truth, no email-based fallback)
-            actualPlan = 'free';
-            console.log('ℹ️ All plan sources failed during Google sign-in, defaulting to free. D1 is source of truth - no email-based fallback.');
-          }
+        if (window.JobHackAINavigation && typeof window.JobHackAINavigation.fetchPlanFromAPI === 'function') {
+          kvPlan = await window.JobHackAINavigation.fetchPlanFromAPI();
+          if (kvPlan) console.log('✅ Fetched plan via navigation system during Google sign-in:', kvPlan);
         }
-      }
-      
-      const userData = {
-        uid: user.uid,
-        firstName: nameParts[0] || '',
-        lastName: nameParts.slice(1).join(' ') || '',
-        plan: actualPlan
-      };
-
-      UserDatabase.createOrUpdateUser(user.email, userData);
-
-      // Ensure navigation/auth state is updated immediately (avoid redirect race)
-      try {
-        localStorage.setItem('user-authenticated', 'true');
-        // SECURITY: Do NOT store email in localStorage
-        if (user.displayName) {
-          localStorage.setItem('user-name', user.displayName);
-        }
-        if (window.JobHackAINavigation) {
-          window.JobHackAINavigation.setAuthState(true, actualPlan);
+        // Fallback: fetch directly from API if navigation not ready
+        if (!kvPlan) {
+          kvPlan = await fetchPlanFromAPI();
+          if (kvPlan) console.log('✅ Fetched plan directly from API during Google sign-in:', kvPlan);
         }
       } catch (e) {
-        console.warn('auth state persist failed during Google sign-in:', e);
-      }
-
-      // Initialize free account tracking for new free users
-      if (userData.plan === 'free') {
-        if (window.freeAccountManager) {
-          window.freeAccountManager.initializeForNewUser();
+        console.warn('Could not fetch plan from API during Google sign-in:', e);
+        // Add retry mechanism for failed API fetches
+        try {
+          console.log('🔄 Retrying plan fetch during Google sign-in after 1 second...');
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          if (window.JobHackAINavigation && typeof window.JobHackAINavigation.fetchPlanFromAPI === 'function') {
+            kvPlan = await window.JobHackAINavigation.fetchPlanFromAPI();
+          }
+          if (!kvPlan) {
+            kvPlan = await fetchPlanFromAPI();
+          }
+          if (kvPlan) console.log('✅ Retry successful during Google sign-in, fetched plan:', kvPlan);
+        } catch (retryError) {
+          console.warn('Retry also failed during Google sign-in:', retryError);
         }
       }
-
-      // Create or update Firestore profile
-      const firestoreData = {
-        email: user.email,
-        displayName: user.displayName || '',
-        firstName: nameParts[0] || '',
-        lastName: nameParts.slice(1).join(' ') || '',
-        photoURL: user.photoURL || null,
-        plan: selectedPlan === 'trial' ? 'pending' : (selectedPlan || 'free'), // Don't set trial immediately, wait for webhook
-        signupSource: 'google_oauth',
-        pendingPlan: selectedPlan === 'trial' ? 'trial' : null // Track what they selected
-      };
       
-      try {
-        await UserProfileManager.upsertProfile(user.uid, firestoreData);
-      } catch (err) {
-        console.warn('Could not sync Firestore profile:', err);
+      if (kvPlan && kvPlan !== 'free') {
+        actualPlan = kvPlan;
+        console.log('✅ Retrieved user plan from D1 (via API) during Google sign-in:', actualPlan);
+      } else {
+        // API fetch returned null or 'free' - try Firestore as fallback (but NOT email-based lookup)
+        const profileResult = await UserProfileManager.getProfile(user.uid);
+        if (profileResult.success && profileResult.profile) {
+          actualPlan = profileResult.profile.plan || 'free';
+          console.log('✅ Retrieved user plan from Firestore during Google sign-in (API fallback):', actualPlan);
+        } else {
+          // All sources unavailable - default to 'free' (D1 is source of truth, no email-based fallback)
+          actualPlan = 'free';
+          console.log('ℹ️ All plan sources failed during Google sign-in, defaulting to free. D1 is source of truth - no email-based fallback.');
+        }
       }
+    }
+    
+    const userData = {
+      uid: user.uid,
+      firstName: nameParts[0] || '',
+      lastName: nameParts.slice(1).join(' ') || '',
+      plan: actualPlan
+    };
 
-      return { success: true, user };
+    UserDatabase.createOrUpdateUser(user.email, userData);
+
+    // Ensure navigation/auth state is updated immediately (avoid redirect race)
+    try {
+      localStorage.setItem('user-authenticated', 'true');
+      // SECURITY: Do NOT store email in localStorage
+      if (user.displayName) {
+        localStorage.setItem('user-name', user.displayName);
+      }
+      if (window.JobHackAINavigation) {
+        window.JobHackAINavigation.setAuthState(true, actualPlan);
+      }
+    } catch (e) {
+      console.warn('auth state persist failed during Google sign-in:', e);
+    }
+
+    // Initialize free account tracking for new free users
+    if (userData.plan === 'free') {
+      if (window.freeAccountManager) {
+        window.freeAccountManager.initializeForNewUser();
+      }
+    }
+
+    // Create or update Firestore profile
+    const firestoreData = {
+      email: user.email,
+      displayName: user.displayName || '',
+      firstName: nameParts[0] || '',
+      lastName: nameParts.slice(1).join(' ') || '',
+      photoURL: user.photoURL || null,
+      plan: selectedPlan === 'trial' ? 'pending' : (selectedPlan || 'free'), // Don't set trial immediately, wait for webhook
+      signupSource: 'google_oauth',
+      pendingPlan: selectedPlan === 'trial' ? 'trial' : null // Track what they selected
+    };
+    
+    try {
+      await UserProfileManager.upsertProfile(user.uid, firestoreData);
+    } catch (err) {
+      console.warn('Could not sync Firestore profile:', err);
+    }
+
+    return { success: true, user };
+  }
+
+  async signInWithGoogle() {
+    try {
+      const result = await signInWithPopup(auth, googleProvider);
+      return await this._completeGoogleSignIn(result.user);
     } catch (error) {
       console.error('Google sign in error:', error);
+
+      if (this._shouldUseRedirectFallback(error)) {
+        const started = await this._startGoogleRedirectFallback(error);
+        if (started) {
+          return { success: false, error: null };
+        }
+      }
       
       // Handle popup closed by user
       if (error.code === 'auth/popup-closed-by-user' || error.code === 'auth/cancelled-popup-request') {
