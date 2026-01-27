@@ -44,8 +44,24 @@ function createExtractionError(code, message, details = {}) {
  * @returns {Promise<{text: string, wordCount: number, fileType: string, hasText: boolean, isMultiColumn: boolean, ocrUsed: boolean}>}
  */
 export async function extractResumeText(file, fileName, env) {
-  const fileExt = fileName.toLowerCase().split('.').pop();
+  let fileExt = (fileName.toLowerCase().includes('.')
+    ? fileName.toLowerCase().split('.').pop()
+    : '').trim();
   const mimeType = file.type || getMimeTypeFromExtension(fileExt);
+
+  // If no extension, infer from mimeType
+  if (!fileExt && mimeType) {
+    fileExt = inferExtensionFromMime(mimeType);
+  }
+  
+  // Explicitly block legacy .doc (OLE) files to avoid misleading DOCX errors
+  if (fileExt === 'doc') {
+    throw createExtractionError(
+      EXTRACTION_ERRORS.UNSUPPORTED_TYPE,
+      'Legacy .doc files are not supported. Please re-save as DOCX or PDF.',
+      { fileType: fileExt, supportedTypes: ['pdf', 'docx', 'txt'] }
+    );
+  }
   
   // Validate file type
   if (!['pdf', 'docx', 'txt'].includes(fileExt)) {
@@ -62,11 +78,17 @@ export async function extractResumeText(file, fileName, env) {
     arrayBuffer = file;
   } else if (file instanceof Blob) {
     arrayBuffer = await file.arrayBuffer();
+  } else if (typeof Buffer !== 'undefined' && Buffer.isBuffer(file)) {
+    // Node/edge Buffer -> ArrayBuffer
+    arrayBuffer = file.buffer.slice(file.byteOffset, file.byteOffset + file.byteLength);
+  } else if (ArrayBuffer.isView(file)) {
+    // TypedArray/DataView
+    arrayBuffer = file.buffer.slice(file.byteOffset, file.byteOffset + file.byteLength);
   } else {
     throw createExtractionError(
       EXTRACTION_ERRORS.INVALID_FORMAT,
       'Invalid file format. Expected File, Blob, or ArrayBuffer.',
-      { receivedType: typeof file, isArrayBuffer: file instanceof ArrayBuffer, isBlob: file instanceof Blob }
+      { receivedType: typeof file, isArrayBuffer: file instanceof ArrayBuffer, isBlob: file instanceof Blob, isView: ArrayBuffer.isView(file) }
     );
   }
 
@@ -82,6 +104,7 @@ export async function extractResumeText(file, fileName, env) {
   let text = '';
   let ocrUsed = false;
   let isMultiColumn = false;
+  let extractionStatus = 'ok';
 
   try {
     if (fileExt === 'txt') {
@@ -94,11 +117,23 @@ export async function extractResumeText(file, fileName, env) {
         const result = await mammoth.extractRawText({ arrayBuffer });
         text = result.value;
       } catch (docxError) {
-        throw createExtractionError(
-          EXTRACTION_ERRORS.PARSE_ERROR,
-          `Failed to extract text from DOCX: ${docxError.message}`,
-          { originalError: docxError.message, fileType: 'docx' }
-        );
+        // Retry using convertToHtml with images skipped, then strip HTML to text
+        try {
+          const retryResult = await mammoth.convertToHtml({ arrayBuffer }, { convertImage: () => null });
+          text = stripHtmlToText(retryResult.value);
+        } catch (secondError) {
+          // Final fallback: best-effort unzip of word/document.xml without new deps
+          const fallbackText = await extractDocxXmlFallback(arrayBuffer);
+          if (fallbackText) {
+            text = fallbackText;
+          } else {
+            throw createExtractionError(
+              EXTRACTION_ERRORS.PARSE_ERROR,
+              `Failed to extract text from DOCX: ${secondError.message}`,
+              { originalError: secondError.message, fileType: 'docx' }
+            );
+          }
+        }
       }
     } else if (fileExt === 'pdf') {
       // PDF file - use Cloudflare Workers AI toMarkdown()
@@ -145,31 +180,9 @@ export async function extractResumeText(file, fileName, env) {
         );
       }
       
-      // If scanned PDF detected, return helpful error (no OCR attempt)
-      if (pdfResult.isScanned) {
-        throw createExtractionError(
-          EXTRACTION_ERRORS.OCR_REQUIRED,
-          'This PDF appears to be image-based (scanned). Please upload a text-based PDF or Word document for best results. We\'re working on scan support for a future update.',
-          { 
-            isScanned: true, 
-            requiresOcr: true,
-            numPages: pdfResult.numPages || 0
-          }
-        );
-      }
-      
-      // If no text extracted (but not necessarily scanned), try OCR detection
-      if (!text || text.trim().length < 100) {
-        // This will throw a helpful error message instead of attempting OCR
-        throw createExtractionError(
-          EXTRACTION_ERRORS.OCR_REQUIRED,
-          'This PDF appears to be image-based (scanned). Please upload a text-based PDF or Word document for best results. We\'re working on scan support for a future update.',
-          { 
-            isScanned: true, 
-            requiresOcr: true,
-            numPages: pdfResult.numPages || 0
-          }
-        );
+      // Flag likely scanned/low-text PDFs but continue (only block when zero text)
+      if (pdfResult.isScanned || pdfResult.lowText) {
+        extractionStatus = 'low_text';
       }
     }
 
@@ -177,11 +190,11 @@ export async function extractResumeText(file, fileName, env) {
     text = cleanText(text);
     
     // Validate extracted text (after cleaning for consistency)
-    if (!text || text.length < 50) {
+    if (!text || text.length < 25) {
       throw createExtractionError(
         EXTRACTION_ERRORS.EMPTY_TEXT,
         'Could not extract readable text from file. Please upload a text-based résumé or use our DOCX template.',
-        { extractedLength: text ? text.length : 0, minimumRequired: 50 }
+        { extractedLength: text ? text.length : 0, minimumRequired: 25 }
       );
     }
 
@@ -202,11 +215,11 @@ export async function extractResumeText(file, fileName, env) {
     }
 
     // Validate text length (80k chars limit)
-    if (text.length > 80000) {
+    if (text.length > 100000) {
       throw createExtractionError(
         EXTRACTION_ERRORS.TEXT_TOO_LONG,
-        'Extracted text exceeds 80,000 character limit. Please use a shorter résumé.',
-        { extractedLength: text.length, maxLength: 80000 }
+        'Extracted text exceeds 100,000 character limit. Please use a shorter résumé.',
+        { extractedLength: text.length, maxLength: 100000 }
       );
     }
 
@@ -218,7 +231,8 @@ export async function extractResumeText(file, fileName, env) {
       fileType: fileExt,
       hasText: true,
       isMultiColumn,
-      ocrUsed
+      ocrUsed,
+      extractionStatus
     };
 
   } catch (error) {
@@ -255,8 +269,8 @@ export async function extractResumeText(file, fileName, env) {
  * - Text-based multi-column detection (heuristic)
  */
 async function extractPdfText(arrayBuffer, env) {
-  const MAX_CHARS = 40000; // Character limit for early exit
-  const SCANNED_PDF_THRESHOLD = 400; // If text < 400 chars, likely scanned
+  const MAX_CHARS = 100000; // Character limit for early exit (aligned with overall limit)
+  const SCANNED_PDF_THRESHOLD = 200; // If text < 200 chars, likely scanned
 
   try {
     // Verify AI binding is available
@@ -326,23 +340,18 @@ async function extractPdfText(arrayBuffer, env) {
 
     // If we got minimal text, return empty (check before scanned PDF detection)
     // This handles truly empty or corrupted PDFs
-    if (trimmedText.length < 100) {
-      console.warn('[PDF] Extracted text too short', {
-        length: trimmedText.length
-      });
-      return { text: '', isMultiColumn: false, numPages: 0 };
+    if (trimmedText.length === 0) {
+      console.warn('[PDF] Extracted text empty after cleaning');
+      return { text: '', isMultiColumn: false, numPages: 0, isEmpty: true };
     }
 
-    // Smart scanned PDF detection (after cleaning for consistency with resume-score-worker.js)
-    // This check happens after stripMarkdown and cleanText to match resume-score-worker.js behavior
-    // Only flag as scanned if text is between 100-399 chars (very short but not empty)
-    // PDFs with < 100 chars are handled above as empty/corrupted
+    // Smart low-text detection (soft flag)
     if (trimmedText.length < SCANNED_PDF_THRESHOLD) {
-      console.warn('[PDF] Scanned PDF detected', {
+      console.warn('[PDF] Low-text PDF detected', {
         textLength: trimmedText.length,
         threshold: SCANNED_PDF_THRESHOLD
       });
-      return { text: '', isMultiColumn: false, numPages: 0, isScanned: true };
+      return { text: trimmedText, isMultiColumn, numPages: 0, lowText: true, isScanned: true };
     }
 
     console.log('[PDF] Successfully extracted text via toMarkdown', {
@@ -431,3 +440,77 @@ function getMimeTypeFromExtension(ext) {
   return mimeTypes[ext] || 'application/octet-stream';
 }
 
+/**
+ * Infer file extension from MIME type when no extension is present
+ */
+function inferExtensionFromMime(mimeType) {
+  const map = {
+    'application/pdf': 'pdf',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'docx',
+    'application/msword': 'doc', // still mapped so we can show the explicit .doc warning
+    'text/plain': 'txt'
+  };
+  return map[mimeType] || '';
+}
+
+/**
+ * Minimal DOCX fallback: unzip word/document.xml and strip tags
+ * Avoids new deps by using Web Crypto-friendly unzip via Uint8Array + TextDecoder
+ */
+async function extractDocxXmlFallback(arrayBuffer) {
+  try {
+    // DOCX is a zip; look for the central header of word/document.xml via simple search
+    const bytes = new Uint8Array(arrayBuffer);
+    const decoder = new TextDecoder('utf-8');
+
+    // Very small ad-hoc parser: find "word/document.xml" bytes
+    const marker = new TextEncoder().encode('word/document.xml');
+    const idx = indexOfSubarray(bytes, marker);
+    if (idx === -1) return '';
+
+    // Heuristic: document.xml usually follows the filename entry; grab next ~512KB window
+    const window = bytes.slice(idx, Math.min(bytes.length, idx + 512 * 1024));
+    const asString = decoder.decode(window);
+    const xmlStart = asString.indexOf('<?xml');
+    if (xmlStart === -1) return '';
+    const xml = asString.slice(xmlStart);
+
+    // Strip XML tags to get plain text
+    const text = xml
+      .replace(/<w:t[^>]*>/g, '')
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    return text;
+  } catch (err) {
+    console.warn('[DOCX] XML fallback failed', err);
+    return '';
+  }
+}
+
+// Find subarray within Uint8Array (naive search, sufficient for fallback)
+function indexOfSubarray(haystack, needle) {
+  outer: for (let i = 0; i <= haystack.length - needle.length; i++) {
+    for (let j = 0; j < needle.length; j++) {
+      if (haystack[i + j] !== needle[j]) continue outer;
+    }
+    return i;
+  }
+  return -1;
+}
+
+// Minimal HTML stripper used for the convertToHtml retry path
+function stripHtmlToText(html) {
+  if (!html) return '';
+  return html
+    .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/\s+/g, ' ')
+    .trim();
+}

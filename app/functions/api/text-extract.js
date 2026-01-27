@@ -99,6 +99,14 @@ export async function onRequest(context) {
     }
 
     // Return clean JSON response
+    const warnings = [];
+    if (extractionResult.ocrUsed) {
+      warnings.push('This document was processed using OCR. Please verify accuracy.');
+    }
+    if (extractionResult.extractionStatus === 'low_text') {
+      warnings.push('Low amount of extractable text detected; results may be incomplete.');
+    }
+
     return json({
       success: true,
       text: extractionResult.text,
@@ -107,7 +115,8 @@ export async function onRequest(context) {
       fileType: extractionResult.fileType,
       isMultiColumn: extractionResult.isMultiColumn,
       ocrUsed: extractionResult.ocrUsed,
-      warnings: extractionResult.ocrUsed ? ['This document was processed using OCR. Please verify accuracy.'] : []
+      extractionStatus: extractionResult.extractionStatus,
+      warnings
     }, 200, origin, env);
 
   } catch (error) {
@@ -119,4 +128,3 @@ export async function onRequest(context) {
     }, 500, origin, env);
   }
 }
-
