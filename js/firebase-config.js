@@ -42,10 +42,6 @@ function selectFirebaseConfig() {
 
 const firebaseConfig = selectFirebaseConfig();
 
-if (typeof window !== 'undefined') {
-  window.firebaseConfig = firebaseConfig;
-}
-
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
 
