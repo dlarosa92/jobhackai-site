@@ -13,14 +13,8 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m'
 
-# Check arguments
-if [ $# -lt 1 ]; then
-  echo -e "${RED}Usage: $0 <UID>${NC}"
-  echo -e "${YELLOW}Example: $0 KvObI7SJWiO9tcdvvnPOMeudFZC3${NC}"
-  exit 1
-fi
-
-USER_UID="$1"
+# Reject missing or empty UID (empty would match every key and delete entire namespace)
+USER_UID="${1:?Usage: $0 <UID>. Example: $0 KvObI7SJWiO9tcdvvnPOMeudFZC3}"
 
 # Check if KV_NAMESPACE_ID is set
 if [ -z "${KV_NAMESPACE_ID:-}" ]; then
