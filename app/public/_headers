@@ -1,16 +1,6 @@
 # Cloudflare Pages Headers
 # This file configures HTTP headers for different paths
 
-# Login pages - allow popup communication for OAuth
-/login
-  Cross-Origin-Opener-Policy: same-origin-allow-popups
-
-/login.html
-  Cross-Origin-Opener-Policy: same-origin-allow-popups
-
-/login/*
-  Cross-Origin-Opener-Policy: same-origin-allow-popups
-
 # API routes - no caching, secure headers
 /api/*
   Cache-Control: no-store, no-cache, must-revalidate
