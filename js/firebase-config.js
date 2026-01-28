@@ -8,9 +8,11 @@ import { getAnalytics, setAnalyticsCollectionEnabled } from "https://www.gstatic
 // TODO: Add SDKs for Firebase products that you want to use
 // https://firebase.google.com/docs/web/setup#available-libraries
 
-// Your web app's Firebase configuration
-// For Firebase JS SDK v7.20.0 and later, measurementId is optional
-const firebaseConfig = {
+// Environment-specific Firebase configs (hostname-based)
+// DEV: jobhackai-qa (jobhackai-90558) — dev.jobhackai.io
+// QA:  jobhackai-true-qa — qa.jobhackai.io
+// PROD: jobhackai-prod — app.jobhackai.io (add when ready)
+const configDev = {
   apiKey: "AIzaSyCDZksp8XpRJaYnoihiuXT5Uvd0YrbLdfw",
   authDomain: "jobhackai-90558.firebaseapp.com",
   projectId: "jobhackai-90558",
@@ -19,6 +21,26 @@ const firebaseConfig = {
   appId: "1:40538124818:web:cd61fc1d120ec79d4ddecb",
   measurementId: "G-X48E90B00S"
 };
+
+const configQA = {
+  apiKey: "AIzaSyD5KLYGV0p6FJ_AcIocUcrBkk7WUjf_iQ0",
+  authDomain: "jobhackai-true-qa.firebaseapp.com",
+  projectId: "jobhackai-true-qa",
+  storageBucket: "jobhackai-true-qa.firebasestorage.app",
+  messagingSenderId: "556272888843",
+  appId: "1:556272888843:web:bd77898b14234c55eaab0e"
+  // measurementId optional — add if QA has Analytics
+};
+
+function selectFirebaseConfig() {
+  if (typeof window === "undefined") return configDev;
+  const h = window.location.hostname;
+  if (h === "qa.jobhackai.io") return configQA;
+  if (h === "app.jobhackai.io") return configDev; // TODO: swap for configProd when ready
+  return configDev; // dev.jobhackai.io, localhost, etc.
+}
+
+const firebaseConfig = selectFirebaseConfig();
 
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
