@@ -47,6 +47,7 @@ async function handlePostAuthRedirect(plan) {
     window.location.href = 'pricing-a.html';
   } else {
     sessionStorage.removeItem('selectedPlan');
+    try { localStorage.removeItem('selectedPlan'); } catch (_) {}
     window.location.href = 'dashboard.html';
   }
 }
@@ -186,6 +187,15 @@ document.addEventListener('DOMContentLoaded', async function() {
       source: 'login-page',
       timestamp: Date.now()
     }));
+    try {
+      localStorage.setItem('selectedPlan', JSON.stringify({
+        planId: selectedPlan,
+        planName: planNames[selectedPlan] || 'Selected Plan',
+        price: planPrices[selectedPlan] || '$0/mo',
+        source: 'login-page',
+        timestamp: Date.now()
+      }));
+    } catch (_) {}
     
     // Show banner IMMEDIATELY with fade-in effect
     showSelectedPlanBanner(selectedPlan);
@@ -221,6 +231,8 @@ document.addEventListener('DOMContentLoaded', async function() {
   // Clean up if no plan
   if (!selectedPlan) {
     sessionStorage.removeItem('selectedPlan');
+    try { localStorage.removeItem('selectedPlan'); } catch (_) {}
+    try { localStorage.removeItem('selectedPlan'); } catch (_) {}
   }
   
   // === AUTH CHECK (RUN IN BACKGROUND, DON'T BLOCK UI) ===
@@ -396,6 +408,7 @@ document.addEventListener('DOMContentLoaded', async function() {
     // Clear plan selection when manually switching to login
     sessionStorage.removeItem('selectedPlan');
     try { localStorage.removeItem('selectedPlan'); } catch (_) {}
+    try { localStorage.removeItem('selectedPlan'); } catch (_) {}
     showLoginForm();
   });
   
@@ -414,6 +427,7 @@ document.addEventListener('DOMContentLoaded', async function() {
       if (!redirected && authManager.getCurrentUser()) {
         console.log('⚠️ Fallback redirect triggered - redirecting to dashboard');
         sessionStorage.removeItem('selectedPlan');
+        try { localStorage.removeItem('selectedPlan'); } catch (_) {}
         window.location.href = 'dashboard.html';
       }
     }, 8000); // 8 second timeout
@@ -471,6 +485,7 @@ document.addEventListener('DOMContentLoaded', async function() {
         } else {
           // Existing user or free plan -> take user to dashboard
           sessionStorage.removeItem('selectedPlan');
+          try { localStorage.removeItem('selectedPlan'); } catch (_) {}
           console.log('🚀 Redirecting to dashboard (existing user or free plan)');
           window.location.href = 'dashboard.html';
         }
@@ -511,6 +526,7 @@ document.addEventListener('DOMContentLoaded', async function() {
       if (!redirected && authManager.getCurrentUser()) {
         console.log('⚠️ Fallback redirect triggered - redirecting to dashboard');
         sessionStorage.removeItem('selectedPlan');
+        try { localStorage.removeItem('selectedPlan'); } catch (_) {}
         window.location.href = 'dashboard.html';
       }
     }, 8000); // 8 second timeout
@@ -569,6 +585,7 @@ document.addEventListener('DOMContentLoaded', async function() {
         } else {
           // Existing user or free plan -> take user to dashboard
           sessionStorage.removeItem('selectedPlan');
+          try { localStorage.removeItem('selectedPlan'); } catch (_) {}
           console.log('🚀 Redirecting to dashboard (existing user or free plan)');
           window.location.href = 'dashboard.html';
         }
@@ -1166,6 +1183,7 @@ window.addEventListener('beforeunload', () => {
     const user = authManager.getCurrentUser();
     if (!user) {
       sessionStorage.removeItem('selectedPlan');
+      try { localStorage.removeItem('selectedPlan'); } catch (_) {}
       localStorage.removeItem('selectedPlan');
     }
   } catch (_) {}

@@ -141,6 +141,20 @@ function planRequiresPayment(plan) {
   return ['essential', 'pro', 'premium', 'trial'].includes(plan);
 }
 
+function getSelectedPlanFromStorage() {
+  try {
+    const localStored = localStorage.getItem('selectedPlan');
+    if (localStored) {
+      return JSON.parse(localStored).planId || null;
+    }
+  } catch (_) {}
+  try {
+    const sessionStored = sessionStorage.getItem('selectedPlan');
+    return sessionStored ? JSON.parse(sessionStored).planId : null;
+  } catch (_) {}
+  return null;
+}
+
 function acquireRouteLock(origin) {
   try {
     const now = Date.now();
@@ -166,6 +180,27 @@ function broadcastRouteStart() {
   } catch (_) {}
 }
 
+function canHandoffToOpener() {
+  try {
+    if (!window.opener || window.opener.closed) return false;
+    return window.opener.location?.origin === window.location.origin;
+  } catch (_) {
+    return false;
+  }
+}
+
+function notifyOpenerOfVerification(plan) {
+  try {
+    window.opener.postMessage({ type: 'email-verified-handoff', plan }, window.location.origin);
+  } catch (_) {}
+  try {
+    const ch = new BroadcastChannel('auth');
+    ch.postMessage({ type: 'email-verified-handoff', plan });
+    ch.close();
+  } catch (_) {}
+  try { window.opener.focus(); } catch (_) {}
+}
+
 // Route user after email verification based on plan selection
 async function routeAfterVerification() {
   if (!acquireRouteLock('auth-action')) {
@@ -178,13 +213,7 @@ async function routeAfterVerification() {
   let storedSelection = null;
   try {
     // Prefer localStorage to allow cross-tab access when email link opens a new tab
-    const localStored = localStorage.getItem('selectedPlan');
-    if (localStored) {
-      storedSelection = JSON.parse(localStored).planId;
-    } else {
-      const sessionStored = sessionStorage.getItem('selectedPlan');
-      storedSelection = sessionStored ? JSON.parse(sessionStored).planId : null;
-    }
+    storedSelection = getSelectedPlanFromStorage();
   } catch (e) {
     console.warn('Failed to parse selectedPlan:', e);
   }
@@ -310,13 +339,7 @@ async function handleEmailVerification() {
     // Check for selected plan to determine redirect destination
     let storedSelection = null;
     try {
-      const localStored = localStorage.getItem('selectedPlan');
-      if (localStored) {
-        storedSelection = JSON.parse(localStored).planId;
-      } else {
-        const sessionStored = sessionStorage.getItem('selectedPlan');
-        storedSelection = sessionStored ? JSON.parse(sessionStored).planId : null;
-      }
+      storedSelection = getSelectedPlanFromStorage();
     } catch (e) {}
     
     const plan = storedSelection || 'free';
@@ -324,10 +347,33 @@ async function handleEmailVerification() {
     
     if (requiresPayment) {
       status.textContent = "Your email has been verified. Redirecting to complete your subscription...";
+      if (actionButtons) actionButtons.style.display = 'none';
+      if (goToDashboardBtn) {
+        goToDashboardBtn.style.display = 'none';
+        goToDashboardBtn.disabled = true;
+      }
     } else {
       status.textContent = "Your email has been verified. You can now access your dashboard.";
+      if (actionButtons) actionButtons.style.display = 'block';
+      if (goToDashboardBtn) {
+        goToDashboardBtn.style.display = 'block';
+        goToDashboardBtn.disabled = false;
+      }
     }
     
+    const hasOpener = canHandoffToOpener();
+
+    if (hasOpener) {
+      // Prefer routing in the original tab to avoid double-tab flows
+      notifyOpenerOfVerification(plan);
+      status.textContent = "Email verified. Please continue in your original tab.";
+      actionButtons.style.display = 'none';
+      setTimeout(() => {
+        try { window.close(); } catch (_) {}
+      }, 600);
+      return;
+    }
+
     // Show action buttons (but we'll redirect automatically)
     actionButtons.style.display = 'block';
     goToLoginBtn.style.display = 'none'; // Hide login button for verified users
@@ -489,7 +535,13 @@ async function initialize() {
     window.location.href = '/login.html';
   });
   
-  goToDashboardBtn.addEventListener('click', () => {
+  goToDashboardBtn.addEventListener('click', (e) => {
+    const selectedPlan = getSelectedPlanFromStorage();
+    if (planRequiresPayment(selectedPlan)) {
+      e.preventDefault();
+      routeAfterVerification();
+      return;
+    }
     window.location.href = '/dashboard.html';
   });
   
