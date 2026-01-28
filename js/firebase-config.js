@@ -23,7 +23,7 @@ const configDev = {
 };
 
 const configQA = {
-  apiKey: "AIzaSyD5KLYGV0p6FJ_AcIocUcrBkk7WUjf_iQ0",
+  apiKey: "AIzaSyD5KLYGVOp6FJ_AcIocUcrBkk7WUjf_iQ0",
   authDomain: "jobhackai-true-qa.firebaseapp.com",
   projectId: "jobhackai-true-qa",
   storageBucket: "jobhackai-true-qa.firebasestorage.app",
