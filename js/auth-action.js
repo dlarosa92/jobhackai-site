@@ -147,11 +147,15 @@ function getSelectedPlanFromStorage() {
     if (localStored) {
       return JSON.parse(localStored).planId || null;
     }
-  } catch (_) {}
+  } catch (e) {
+    console.warn('Failed to parse selectedPlan from localStorage:', e);
+  }
   try {
     const sessionStored = sessionStorage.getItem('selectedPlan');
     return sessionStored ? JSON.parse(sessionStored).planId : null;
-  } catch (_) {}
+  } catch (e) {
+    console.warn('Failed to parse selectedPlan from sessionStorage:', e);
+  }
   return null;
 }
 
@@ -210,13 +214,8 @@ async function routeAfterVerification() {
   broadcastRouteStart();
 
   // Check for selected plan in sessionStorage
-  let storedSelection = null;
-  try {
-    // Prefer localStorage to allow cross-tab access when email link opens a new tab
-    storedSelection = getSelectedPlanFromStorage();
-  } catch (e) {
-    console.warn('Failed to parse selectedPlan:', e);
-  }
+  // Prefer localStorage to allow cross-tab access when email link opens a new tab
+  const storedSelection = getSelectedPlanFromStorage();
   
   const plan = storedSelection || 'free';
   console.log('🔍 Plan detected after email verification:', plan);
@@ -337,10 +336,7 @@ async function handleEmailVerification() {
     pageTitle.textContent = "Email Verified";
     
     // Check for selected plan to determine redirect destination
-    let storedSelection = null;
-    try {
-      storedSelection = getSelectedPlanFromStorage();
-    } catch (e) {}
+    const storedSelection = getSelectedPlanFromStorage();
     
     const plan = storedSelection || 'free';
     const requiresPayment = planRequiresPayment(plan);
@@ -367,7 +363,7 @@ async function handleEmailVerification() {
       // Prefer routing in the original tab to avoid double-tab flows
       notifyOpenerOfVerification(plan);
       status.textContent = "Email verified. Please continue in your original tab.";
-      actionButtons.style.display = 'none';
+      if (actionButtons) actionButtons.style.display = 'none';
       setTimeout(() => {
         try { window.close(); } catch (_) {}
       }, 600);
@@ -375,9 +371,9 @@ async function handleEmailVerification() {
     }
 
     // Show action buttons (but we'll redirect automatically)
-    actionButtons.style.display = 'block';
-    goToLoginBtn.style.display = 'none'; // Hide login button for verified users
-    goToDashboardBtn.style.display = 'block';
+    if (actionButtons) actionButtons.style.display = 'block';
+    if (goToLoginBtn) goToLoginBtn.style.display = 'none'; // Hide login button for verified users
+    if (goToDashboardBtn) goToDashboardBtn.style.display = 'block';
     
     // Wait a moment for UI feedback, then route based on plan
     setTimeout(() => {
