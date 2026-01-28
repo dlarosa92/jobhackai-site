@@ -23,19 +23,14 @@ function getFirebaseApiKey() {
   if (cachedApiKey) {
     return cachedApiKey;
   }
-  
-  if (typeof window !== 'undefined' && window.firebaseConfig?.apiKey) {
-    cachedApiKey = window.firebaseConfig.apiKey;
-    return cachedApiKey;
-  }
 
   if (firebaseConfig?.apiKey) {
     cachedApiKey = firebaseConfig.apiKey;
     return cachedApiKey;
   }
-  
-  // Fallback - keep the legacy DEV key just in case nothing else is available
-  cachedApiKey = 'AIzaSyCDZksp8XpRJaYnoihiuXT5Uvd0YrbLdfw';
+
+  console.warn('Firebase API key missing from config; token refresh cannot complete.');
+  cachedApiKey = '';
   return cachedApiKey;
 }
 
