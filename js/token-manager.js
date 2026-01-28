@@ -1,3 +1,5 @@
+import { firebaseConfig } from './firebase-config.js';
+
 /**
  * Token Manager - Client-authority token storage and refresh
  * Manages Firebase idToken and refreshToken in sessionStorage
@@ -22,13 +24,17 @@ function getFirebaseApiKey() {
     return cachedApiKey;
   }
   
-  // Try window.firebaseConfig (set by pages that import firebase-config.js)
-  if (typeof window !== 'undefined' && window.firebaseConfig && window.firebaseConfig.apiKey) {
+  if (typeof window !== 'undefined' && window.firebaseConfig?.apiKey) {
     cachedApiKey = window.firebaseConfig.apiKey;
     return cachedApiKey;
   }
+
+  if (firebaseConfig?.apiKey) {
+    cachedApiKey = firebaseConfig.apiKey;
+    return cachedApiKey;
+  }
   
-  // Fallback - this is the public API key from firebase-config.js, safe to use client-side
+  // Fallback - keep the legacy DEV key just in case nothing else is available
   cachedApiKey = 'AIzaSyCDZksp8XpRJaYnoihiuXT5Uvd0YrbLdfw';
   return cachedApiKey;
 }
