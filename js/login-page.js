@@ -232,7 +232,6 @@ document.addEventListener('DOMContentLoaded', async function() {
   if (!selectedPlan) {
     sessionStorage.removeItem('selectedPlan');
     try { localStorage.removeItem('selectedPlan'); } catch (_) {}
-    try { localStorage.removeItem('selectedPlan'); } catch (_) {}
   }
   
   // === AUTH CHECK (RUN IN BACKGROUND, DON'T BLOCK UI) ===
@@ -407,7 +406,6 @@ document.addEventListener('DOMContentLoaded', async function() {
     e.preventDefault();
     // Clear plan selection when manually switching to login
     sessionStorage.removeItem('selectedPlan');
-    try { localStorage.removeItem('selectedPlan'); } catch (_) {}
     try { localStorage.removeItem('selectedPlan'); } catch (_) {}
     showLoginForm();
   });
@@ -1184,7 +1182,6 @@ window.addEventListener('beforeunload', () => {
     if (!user) {
       sessionStorage.removeItem('selectedPlan');
       try { localStorage.removeItem('selectedPlan'); } catch (_) {}
-      localStorage.removeItem('selectedPlan');
     }
   } catch (_) {}
 });
