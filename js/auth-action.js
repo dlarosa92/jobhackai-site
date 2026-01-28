@@ -297,6 +297,7 @@ async function routeAfterVerification() {
     // Clear selectedPlan since we're going to dashboard
     try {
       sessionStorage.removeItem('selectedPlan');
+      localStorage.removeItem('selectedPlan');
     } catch (e) {}
     
     // Close opener window if it exists
@@ -373,7 +374,10 @@ async function handleEmailVerification() {
     // Show action buttons (but we'll redirect automatically)
     if (actionButtons) actionButtons.style.display = 'block';
     if (goToLoginBtn) goToLoginBtn.style.display = 'none'; // Hide login button for verified users
-    if (goToDashboardBtn) goToDashboardBtn.style.display = 'block';
+    if (goToDashboardBtn) {
+      goToDashboardBtn.style.display = 'block';
+      goToDashboardBtn.disabled = false;
+    }
     
     // Wait a moment for UI feedback, then route based on plan
     setTimeout(() => {
