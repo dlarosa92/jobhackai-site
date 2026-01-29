@@ -193,13 +193,13 @@ function canHandoffToOpener() {
   }
 }
 
-function notifyOpenerOfVerification(plan) {
+function notifyOpenerOfVerification() {
   try {
-    window.opener.postMessage({ type: 'email-verified-handoff', plan }, window.location.origin);
+    window.opener.postMessage({ type: 'email-verified-handoff' }, window.location.origin);
   } catch (_) {}
   try {
     const ch = new BroadcastChannel('auth');
-    ch.postMessage({ type: 'email-verified-handoff', plan });
+    ch.postMessage({ type: 'email-verified-handoff' });
     ch.close();
   } catch (_) {}
   try { window.opener.focus(); } catch (_) {}
@@ -362,21 +362,36 @@ async function handleEmailVerification() {
 
     if (hasOpener) {
       // Prefer routing in the original tab to avoid double-tab flows
-      notifyOpenerOfVerification(plan);
+      notifyOpenerOfVerification();
       status.textContent = "Email verified. Please continue in your original tab.";
       if (actionButtons) actionButtons.style.display = 'none';
       setTimeout(() => {
         try { window.close(); } catch (_) {}
       }, 600);
+      // Fallback: if opener doesn't take over, continue routing here
+      setTimeout(() => {
+        try {
+          const raw = localStorage.getItem(ROUTE_LOCK_KEY);
+          const lock = raw ? JSON.parse(raw) : null;
+          const lockActive = !!(lock?.ts && Date.now() - lock.ts < ROUTE_LOCK_TTL_MS);
+          if (!lockActive) {
+            routeAfterVerification();
+          }
+        } catch (_) {
+          routeAfterVerification();
+        }
+      }, 1500);
       return;
     }
 
-    // Show action buttons (but we'll redirect automatically)
-    if (actionButtons) actionButtons.style.display = 'block';
-    if (goToLoginBtn) goToLoginBtn.style.display = 'none'; // Hide login button for verified users
-    if (goToDashboardBtn) {
-      goToDashboardBtn.style.display = 'block';
-      goToDashboardBtn.disabled = false;
+    // Show action buttons (but we'll redirect automatically) for free plans only
+    if (!requiresPayment) {
+      if (actionButtons) actionButtons.style.display = 'block';
+      if (goToLoginBtn) goToLoginBtn.style.display = 'none'; // Hide login button for verified users
+      if (goToDashboardBtn) {
+        goToDashboardBtn.style.display = 'block';
+        goToDashboardBtn.disabled = false;
+      }
     }
     
     // Wait a moment for UI feedback, then route based on plan

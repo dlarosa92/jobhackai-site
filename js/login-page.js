@@ -180,21 +180,16 @@ document.addEventListener('DOMContentLoaded', async function() {
       'premium': '$99/mo',
       'free': '$0/mo'
     };
-    sessionStorage.setItem('selectedPlan', JSON.stringify({
+    const selectedPlanPayload = {
       planId: selectedPlan,
       planName: planNames[selectedPlan] || 'Selected Plan',
       price: planPrices[selectedPlan] || '$0/mo',
       source: 'login-page',
       timestamp: Date.now()
-    }));
+    };
+    sessionStorage.setItem('selectedPlan', JSON.stringify(selectedPlanPayload));
     try {
-      localStorage.setItem('selectedPlan', JSON.stringify({
-        planId: selectedPlan,
-        planName: planNames[selectedPlan] || 'Selected Plan',
-        price: planPrices[selectedPlan] || '$0/mo',
-        source: 'login-page',
-        timestamp: Date.now()
-      }));
+      localStorage.setItem('selectedPlan', JSON.stringify(selectedPlanPayload));
     } catch (_) {}
     
     // Show banner IMMEDIATELY with fade-in effect
