@@ -250,9 +250,6 @@
       font-size: 0.9rem;
       margin-left: 0.7rem;
     }
-    #rf-header-plan-badge {
-      visibility: hidden;
-    }
     html.plan-pending #rf-header-plan-badge,
     html.auth-pending #rf-header-plan-badge {
       visibility: hidden;
@@ -7430,14 +7427,15 @@
         element.innerHTML = text + tooltipHtml;
       }
 
-      // Free Plan Logic (resume feedback page is gated to trial/essential/pro/premium; free users redirected)
+      // Free Plan Logic
       if (plan === 'free') {
         const headerBadge = document.getElementById('rf-header-plan-badge');
         const headerDesc = document.getElementById('rf-header-desc');
         
         if (headerBadge) {
-          headerBadge.textContent = '';
-          headerBadge.style.visibility = 'hidden';
+          headerBadge.textContent = 'Free Plan';
+          headerBadge.style.background = 'var(--color-text-muted)';
+          headerBadge.style.visibility = 'visible';
         }
         if (headerDesc && !isHistoricalView) {
           headerDesc.textContent = 'Get your basic ATS compatibility score.';
@@ -9242,7 +9240,7 @@
         <section class="rf-card" id="rf-header-card">
           <div class="rf-title" id="rf-header-title" style="margin-bottom:0.2rem;">
             Smart Resume Tools
-            <span class="rf-plan-badge" id="rf-header-plan-badge" aria-hidden="true"></span>
+            <span class="rf-plan-badge" id="rf-header-plan-badge">Free Plan</span>
           </div>
           
           <div style="color:var(--color-text-secondary);margin:0.35rem 0 0.7rem;" id="rf-header-desc">
