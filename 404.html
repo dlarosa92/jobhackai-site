@@ -78,12 +78,7 @@
       </a>
       <div class="nav-group">
         <nav class="nav-links" role="navigation">
-          <a href="index.html">Home</a>
-          <a href="#what-you-get">What You Get</a>
-          <a href="pricing-a.html">Pricing</a>
-          <a href="#blog">Blog</a>
-          <a href="login.html">Login</a>
-          <a href="pricing-a.html" class="cta-button">Start Free Trial</a>
+          <!-- Navigation will be dynamically populated by navigation.js -->
         </nav>
       </div>
       <button class="mobile-toggle" aria-label="Open navigation menu" aria-expanded="false" aria-controls="mobileNav">
@@ -96,31 +91,11 @@
     </div>
   </header>
   <nav class="mobile-nav" id="mobileNav">
-    <a href="index.html">Home</a>
-    <a href="#what-you-get">What You Get</a>
-    <a href="pricing-a.html">Pricing</a>
-    <a href="blog.html">Blog</a>
-    <a href="login.html">Login</a>
-    <a href="pricing-a.html" class="cta-button">Start Free Trial</a>
+    <!-- Mobile navigation will be dynamically populated by navigation.js -->
   </nav>
-  <script>
-    // Hamburger menu toggle
-    const mobileToggle = document.querySelector('.mobile-toggle');
-    const mobileNav = document.getElementById('mobileNav');
-    if (mobileToggle && mobileNav) {
-      mobileToggle.addEventListener('click', () => {
-        const isOpen = mobileNav.classList.toggle('open');
-        mobileToggle.setAttribute('aria-expanded', isOpen);
-      });
-      // Close mobile nav on link click
-      document.querySelectorAll('.mobile-nav a').forEach(link => {
-        link.addEventListener('click', () => {
-          mobileNav.classList.remove('open');
-          mobileToggle.setAttribute('aria-expanded', 'false');
-        });
-      });
-    }
-  </script>
+  <div class="mobile-nav-backdrop" id="mobileNavBackdrop"></div>
+  <!-- Centralized mobile menu handler -->
+  <script src="js/mobile-menu.js?v=20250115-1"></script>
 
   <main class="page-404">
     <section class="hero" aria-labelledby="page-not-found-title">
@@ -185,6 +160,22 @@
         cta.setAttribute('aria-label', 'Go to homepage');
       }
     })();
+  </script>
+  <!-- Load Firebase auth (required for navigation auth state detection) -->
+  <script type="module" src="js/firebase-auth.js?v=20260124-1"></script>
+  <!-- Load navigation system -->
+  <script src="js/navigation.js?v=20251007-2"></script>
+  <script src="js/universal-logout.js?v=20251007-2"></script>
+  <script>
+    if (window.JobHackAINavigation && typeof window.JobHackAINavigation.initializeNavigation === 'function') {
+      window.JobHackAINavigation.initializeNavigation();
+    } else {
+      window.addEventListener('DOMContentLoaded', function() {
+        if (window.JobHackAINavigation && typeof window.JobHackAINavigation.initializeNavigation === 'function') {
+          window.JobHackAINavigation.initializeNavigation();
+        }
+      });
+    }
   </script>
 </body>
 </html>
