@@ -9,8 +9,7 @@ import { getAnalytics, setAnalyticsCollectionEnabled } from "https://www.gstatic
 // https://firebase.google.com/docs/web/setup#available-libraries
 
 // Environment-specific Firebase configs (hostname-based)
-// DEV: jobhackai-qa (jobhackai-90558) — dev.jobhackai.io
-// QA:  jobhackai-true-qa — qa.jobhackai.io
+// DEV & QA: jobhackai-90558 — dev.jobhackai.io, qa.jobhackai.io (QA uses dev project for now)
 // PROD: jobhackai-prod — app.jobhackai.io (add when ready)
 const configDev = {
   apiKey: "AIzaSyCDZksp8XpRJaYnoihiuXT5Uvd0YrbLdfw",
@@ -22,20 +21,10 @@ const configDev = {
   measurementId: "G-X48E90B00S"
 };
 
-const configQA = {
-  apiKey: "AIzaSyD5KLYGVOp6FJ_AcIocUcrBkk7WUjf_iQ0",
-  authDomain: "jobhackai-true-qa.firebaseapp.com",
-  projectId: "jobhackai-true-qa",
-  storageBucket: "jobhackai-true-qa.firebasestorage.app",
-  messagingSenderId: "556272888843",
-  appId: "1:556272888843:web:bd77898b14234c55eaab0e"
-  // measurementId optional — add if QA has Analytics
-};
-
 function selectFirebaseConfig() {
   if (typeof window === "undefined") return configDev;
   const h = window.location.hostname;
-  if (h === "qa.jobhackai.io") return configQA;
+  if (h === "qa.jobhackai.io") return configDev;
   if (h === "app.jobhackai.io") return configDev; // TODO: swap for configProd when ready
   return configDev; // dev.jobhackai.io, localhost, etc.
 }
