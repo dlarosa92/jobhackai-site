@@ -7446,10 +7446,7 @@
 
       // Free Plan Logic
       if (plan === 'free') {
-        if (headerBadge && !headerBadge.classList.contains('rf-plan-badge--pending')) {
-          headerBadge.textContent = 'Free Plan';
-          headerBadge.style.background = 'var(--color-text-muted)';
-        }
+        // Badge stays hidden via setHeaderBadgePending(true) above; no pill for free.
         if (headerDesc && !isHistoricalView) {
           headerDesc.textContent = 'Get your basic ATS compatibility score.';
         }
