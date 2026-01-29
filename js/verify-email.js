@@ -102,11 +102,22 @@ document.addEventListener('DOMContentLoaded', async () => {
       if (e?.data?.type === 'email-verified') {
         handleVerifiedSignal('broadcast');
       }
+      if (e?.data?.type === 'email-verified-handoff') {
+        handleVerifiedSignal('broadcast-handoff');
+      }
       if (e?.data?.type === 'verification-route-started') {
         setStatus('Verification in progress in another tab. You can close this tab.', false);
       }
     };
   } catch (_) {}
+
+  // Listen for direct postMessage handoff from auth/action tab
+  window.addEventListener('message', (e) => {
+    if (e.origin !== window.location.origin) return;
+    if (e?.data?.type === 'email-verified-handoff') {
+      handleVerifiedSignal('postMessage');
+    }
+  });
 
   // Handle already-verified signal on initial load
   if (localStorage.getItem('emailJustVerified')) {
@@ -224,5 +235,4 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   }
 });
-
 
