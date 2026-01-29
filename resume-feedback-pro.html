@@ -250,6 +250,9 @@
       font-size: 0.9rem;
       margin-left: 0.7rem;
     }
+    .rf-plan-badge.rf-plan-badge--pending {
+      display: none;
+    }
     .rf-plan-limit {
       display: flex;
       align-items: center;
@@ -7335,6 +7338,24 @@
       const rewriteContent = document.getElementById('rf-rewrite-content');
       const plan = getCurrentUserPlan();
       const roleDescEl = document.getElementById('rf-role-desc');
+      const headerBadge = document.getElementById('rf-header-plan-badge');
+      const headerDesc = document.getElementById('rf-header-desc');
+      
+      function setHeaderBadgePending(isPending) {
+        if (!headerBadge) return;
+        if (isPending) {
+          headerBadge.classList.add('rf-plan-badge--pending');
+          headerBadge.setAttribute('aria-hidden', 'true');
+          headerBadge.textContent = '';
+          headerBadge.style.background = 'transparent';
+          return;
+        }
+        headerBadge.classList.remove('rf-plan-badge--pending');
+        headerBadge.removeAttribute('aria-hidden');
+      }
+      
+      // Hide the header badge while plan is unknown or free to prevent blue flash.
+      setHeaderBadgePending(plan === 'free' || plan === 'visitor' || !plan || plan === 'undefined');
       
       // Check if we're viewing historical feedback - don't overwrite score description
       const isHistoricalView = typeof window.JobHackAIHistory?.isHistoricalView === 'function' 
@@ -7425,13 +7446,7 @@
 
       // Free Plan Logic
       if (plan === 'free') {
-        const headerBadge = document.getElementById('rf-header-plan-badge');
-        const headerDesc = document.getElementById('rf-header-desc');
-        
-        if (headerBadge) {
-          headerBadge.textContent = 'Free Plan';
-          headerBadge.style.background = 'var(--color-text-muted)';
-        }
+        // Badge stays hidden via setHeaderBadgePending(true) above; no pill for free.
         if (headerDesc && !isHistoricalView) {
           headerDesc.textContent = 'Get your basic ATS compatibility score.';
         }
@@ -7461,9 +7476,7 @@
 
       // Trial Plan Logic
       else if (plan === 'trial') {
-        const headerBadge = document.getElementById('rf-header-plan-badge');
-        const headerDesc = document.getElementById('rf-header-desc');
-        
+        setHeaderBadgePending(false);
         if (headerBadge) {
           headerBadge.textContent = 'Trial Plan';
           headerBadge.style.setProperty('background', '#FF9100', 'important');
@@ -7523,9 +7536,7 @@
 
       // Essential Plan Logic
       else if (plan === 'essential') {
-        const headerBadge = document.getElementById('rf-header-plan-badge');
-        const headerDesc = document.getElementById('rf-header-desc');
-        
+        setHeaderBadgePending(false);
         if (headerBadge) {
           headerBadge.textContent = 'Essential Plan';
           headerBadge.style.background = '#0077B5';
@@ -7608,9 +7619,7 @@
         const planLabel = plan.charAt(0).toUpperCase() + plan.slice(1) + ' Plan';
         const planColor = isProPlan ? '#388E3C' : '#C62828';
         
-        const headerBadge = document.getElementById('rf-header-plan-badge');
-        const headerDesc = document.getElementById('rf-header-desc');
-        
+        setHeaderBadgePending(false);
         if (headerBadge) {
           headerBadge.textContent = planLabel;
           headerBadge.style.background = planColor;
@@ -9232,7 +9241,7 @@
         <section class="rf-card" id="rf-header-card">
           <div class="rf-title" id="rf-header-title" style="margin-bottom:0.2rem;">
             Smart Resume Tools
-            <span class="rf-plan-badge" id="rf-header-plan-badge">Free Plan</span>
+            <span class="rf-plan-badge rf-plan-badge--pending" id="rf-header-plan-badge" aria-hidden="true"></span>
           </div>
           
           <div style="color:var(--color-text-secondary);margin:0.35rem 0 0.7rem;" id="rf-header-desc">
