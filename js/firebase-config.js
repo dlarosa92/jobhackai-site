@@ -21,16 +21,6 @@ const configDev = {
   measurementId: "G-X48E90B00S"
 };
 
-// Reserved for when QA uses its own Firebase project again
-const configQA = {
-  apiKey: "AIzaSyD5KLYGVOp6FJ_AcIocUcrBkk7WUjf_iQ0",
-  authDomain: "jobhackai-true-qa.firebaseapp.com",
-  projectId: "jobhackai-true-qa",
-  storageBucket: "jobhackai-true-qa.firebasestorage.app",
-  messagingSenderId: "556272888843",
-  appId: "1:556272888843:web:bd77898b14234c55eaab0e"
-};
-
 function selectFirebaseConfig() {
   if (typeof window === "undefined") return configDev;
   const h = window.location.hostname;
