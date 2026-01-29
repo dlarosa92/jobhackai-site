@@ -253,6 +253,10 @@
     #rf-header-plan-badge {
       visibility: hidden;
     }
+    html.plan-pending #rf-header-plan-badge,
+    html.auth-pending #rf-header-plan-badge {
+      visibility: hidden;
+    }
     .rf-plan-limit {
       display: flex;
       align-items: center;
@@ -7434,7 +7438,6 @@
         if (headerBadge) {
           headerBadge.textContent = '';
           headerBadge.style.visibility = 'hidden';
-          headerBadge.setAttribute('aria-hidden', 'true');
         }
         if (headerDesc && !isHistoricalView) {
           headerDesc.textContent = 'Get your basic ATS compatibility score.';
@@ -7472,7 +7475,6 @@
           headerBadge.textContent = 'Trial Plan';
           headerBadge.style.setProperty('background', '#FF9100', 'important');
           headerBadge.style.visibility = 'visible';
-          headerBadge.removeAttribute('aria-hidden');
         }
         if (headerDesc && !isHistoricalView) {
           headerDesc.textContent = 'Your trial includes 3 full ATS score & feedback runs. Each run combines ATS scoring with detailed feedback, so you know exactly what to fix before you apply.';
@@ -7536,7 +7538,6 @@
           headerBadge.textContent = 'Essential Plan';
           headerBadge.style.background = '#0077B5';
           headerBadge.style.visibility = 'visible';
-          headerBadge.removeAttribute('aria-hidden');
         }
         if (headerDesc && !isHistoricalView) {
           headerDesc.textContent = 'Get comprehensive ATS scoring and role-specific feedback. Your Essential plan includes 3 detailed feedback runs per month.';
@@ -7623,7 +7624,6 @@
           headerBadge.textContent = planLabel;
           headerBadge.style.background = planColor;
           headerBadge.style.visibility = 'visible';
-          headerBadge.removeAttribute('aria-hidden');
         }
         if (headerDesc && !isHistoricalView) {
           if (isPremiumPlan) {
