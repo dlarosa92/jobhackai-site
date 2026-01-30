@@ -5,15 +5,15 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Page not found | JobHackAI</title>
-  <link rel="icon" type="image/png" href="assets/jobhackai_icon_only_128.png">
-  <link rel="apple-touch-icon" href="assets/jobhackai_icon_only_128.png">
-  <script src="js/dynamic-favicon.js?v=20250111-1"></script>
+  <link rel="icon" type="image/png" href="/assets/jobhackai_icon_only_128.png">
+  <link rel="apple-touch-icon" href="/assets/jobhackai_icon_only_128.png">
+  <script src="/js/dynamic-favicon.js?v=20250111-1"></script>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/reset.css" />
-  <link rel="stylesheet" href="css/tokens.css" />
-  <link rel="stylesheet" href="css/main.css" />
-  <link rel="stylesheet" href="css/header.css" />
-  <link rel="stylesheet" href="css/footer.css" />
+  <link rel="stylesheet" href="/css/reset.css" />
+  <link rel="stylesheet" href="/css/tokens.css" />
+  <link rel="stylesheet" href="/css/main.css" />
+  <link rel="stylesheet" href="/css/header.css" />
+  <link rel="stylesheet" href="/css/footer.css" />
   <style>
     html, body {
       height: 100%;
@@ -69,7 +69,7 @@
   <!-- Header -->
   <header class="site-header">
     <div class="container">
-      <a href="index.html" class="nav-logo" aria-label="Go to homepage">
+      <a href="/" class="nav-logo" aria-label="Go to homepage">
         <svg width="24" height="24" fill="none" stroke="#1F2937" stroke-width="2" xmlns="http://www.w3.org/2000/svg">
           <rect x="3" y="7" width="18" height="13" rx="2"/>
           <path d="M8 7V5a2 2 0 012-2h4a2 2 0 012 2v2"/>
@@ -95,19 +95,19 @@
   </nav>
   <div class="mobile-nav-backdrop" id="mobileNavBackdrop"></div>
   <!-- Centralized mobile menu handler -->
-  <script src="js/mobile-menu.js?v=20250115-1"></script>
+  <script src="/js/mobile-menu.js?v=20250115-1"></script>
 
   <main class="page-404">
     <section class="hero" aria-labelledby="page-not-found-title">
       <h1 id="page-not-found-title">Page not found</h1>
       <p>This page doesn’t exist. Let’s get you back to your JobHackAI workspace.</p>
       <div class="buttons">
-        <a class="btn-primary" id="primary-cta" href="index.html">Go to homepage</a>
+        <a class="btn-primary" id="primary-cta" href="/">Go to homepage</a>
         <button class="btn-outline" type="button" onclick="history.back()">Go back</button>
       </div>
       <p class="muted">
         If you followed a link from an email or another page, it may be outdated. Visit the
-        <a href="help.html">Help Center</a> if you need assistance.
+        <a href="/help.html">Help Center</a> if you need assistance.
       </p>
     </section>
   </main>
@@ -126,10 +126,10 @@
         <p>© 2026 JobHackAI. All rights reserved.</p>
       </div>
       <div class="footer-links">
-        <a href="index.html">Home</a>
-        <a href="help.html">Help</a>
-        <a href="privacy.html">Privacy</a>
-        <a href="cookies.html">Cookies</a>
+        <a href="/">Home</a>
+        <a href="/help.html">Help</a>
+        <a href="/privacy.html">Privacy</a>
+        <a href="/cookies.html">Cookies</a>
       </div>
     </div>
   </footer>
@@ -153,20 +153,20 @@
       const isAuthenticated = localStorage.getItem('user-authenticated') === 'true' || hasFirebaseAuthKeys();
       if (isAuthenticated) {
         cta.textContent = 'Go to dashboard';
-        cta.setAttribute('href', 'dashboard.html');
+        cta.setAttribute('href', '/dashboard.html');
         cta.setAttribute('aria-label', 'Go to dashboard');
       } else {
         cta.textContent = 'Go to homepage';
-        cta.setAttribute('href', 'index.html');
+        cta.setAttribute('href', '/');
         cta.setAttribute('aria-label', 'Go to homepage');
       }
     })();
   </script>
   <!-- Load Firebase auth (required for navigation auth state detection) -->
-  <script type="module" src="js/firebase-auth.js?v=20260124-1"></script>
+  <script type="module" src="/js/firebase-auth.js?v=20260124-1"></script>
   <!-- Load navigation system -->
-  <script src="js/navigation.js?v=20251007-2"></script>
-  <script src="js/universal-logout.js?v=20251007-2"></script>
+  <script src="/js/navigation.js?v=20251007-2"></script>
+  <script src="/js/universal-logout.js?v=20251007-2"></script>
   <script>
     if (window.JobHackAINavigation && typeof window.JobHackAINavigation.initializeNavigation === 'function') {
       window.JobHackAINavigation.initializeNavigation();
