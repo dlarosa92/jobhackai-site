@@ -58,7 +58,7 @@ export function showErrorModal(title, message, options = {}) {
   const escapedUpgradeText = escapeHtml(upgradeButtonText);
 
   // Use green checkmark for upgrade modals, red error icon for others
-  const iconColor = showUpgrade ? '#00E676' : '#EF4444';
+  const iconColor = showUpgrade ? '#007A30' : '#EF4444';
   const iconSvg = showUpgrade ? `
     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="${iconColor}" stroke-width="2" style="margin-right: 0.75rem;">
       <circle cx="12" cy="12" r="10"/>
@@ -94,7 +94,7 @@ export function showErrorModal(title, message, options = {}) {
       <div style="display: flex; gap: 0.75rem; justify-content: ${showUpgrade ? 'space-between' : 'flex-end'};">
         ${showUpgrade ? `
           <button id="jh-error-upgrade" style="
-            background: #00E676;
+            background: #007A30;
             color: #FFFFFF;
             border: none;
             border-radius: 8px;
@@ -106,8 +106,8 @@ export function showErrorModal(title, message, options = {}) {
             transition: all 0.18s;
             flex: 1;
             box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
-          " onmouseover="this.style.background='#006335'; this.style.boxShadow='0 4px 12px rgba(0, 230, 118, 0.2)'" 
-             onmouseout="this.style.background='#00E676'; this.style.boxShadow='0 2px 8px rgba(0, 0, 0, 0.04)'">
+          " onmouseover="this.style.background='#006335'; this.style.boxShadow='0 4px 12px rgba(0, 122, 48, 0.2)'" 
+             onmouseout="this.style.background='#007A30'; this.style.boxShadow='0 2px 8px rgba(0, 0, 0, 0.04)'">
             ${escapedUpgradeText}
           </button>
           <button id="jh-error-close" style="
@@ -128,7 +128,7 @@ export function showErrorModal(title, message, options = {}) {
         ` : `
           ${showRetry && retryCallback ? `
             <button id="jh-error-retry" style="
-              background: #00E676;
+              background: #007A30;
               color: #fff;
               border: none;
               border-radius: 8px;
@@ -141,7 +141,7 @@ export function showErrorModal(title, message, options = {}) {
             ">Try Again</button>
           ` : ''}
           <button id="jh-error-close" style="
-            background: ${showRetry ? '#F3F4F6' : '#00E676'};
+            background: ${showRetry ? '#F3F4F6' : '#007A30'};
             color: ${showRetry ? '#1F2937' : '#fff'};
             border: none;
             border-radius: 8px;
@@ -244,11 +244,11 @@ export function showToast(message, duration = 3000) {
     position: fixed;
     bottom: 2rem;
     right: 2rem;
-    background: #00E676;
+    background: #007A30;
     color: #fff;
     padding: 1rem 1.5rem;
     border-radius: 8px;
-    box-shadow: 0 4px 16px rgba(0, 230, 118, 0.3);
+    box-shadow: 0 4px 16px rgba(0, 122, 48, 0.3);
     z-index: 10001;
     animation: slideInRight 0.3s ease;
     display: flex;
@@ -331,7 +331,7 @@ export function showLoadingOverlay(message = 'Loading...', id = 'jh-loading-over
         width: 48px;
         height: 48px;
         border: 4px solid #E5E7EB;
-        border-top: 4px solid #00E676;
+        border-top: 4px solid #007A30;
         border-radius: 50%;
         animation: spin 1s linear infinite;
         margin: 0 auto 1rem;

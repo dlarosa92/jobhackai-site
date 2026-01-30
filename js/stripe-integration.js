@@ -287,7 +287,7 @@ class JobHackAIStripe {
       errorDiv.style.display = 'block';
     } else {
       submitBtn.disabled = false;
-      submitBtn.style.background = '#00E676';
+      submitBtn.style.background = '#007A30';
       errorDiv.textContent = '';
       errorDiv.style.display = 'none';
     }
@@ -518,7 +518,7 @@ class JobHackAIStripe {
       
       container.innerHTML = `
         <div style="text-align: center; padding: 2rem;">
-          <div style="color: #00E676; font-size: 3rem; margin-bottom: 1rem;">✓</div>
+          <div style="color: #007A30; font-size: 3rem; margin-bottom: 1rem;">✓</div>
           <h2 style="color: #232B36; margin-bottom: 1rem;">Payment Successful!</h2>
           <p style="color: #4B5563;">Your ${planName} has been activated. Redirecting to dashboard...</p>
         </div>
@@ -726,7 +726,7 @@ class JobHackAIStripe {
         <p style="color: #4B5563; margin-bottom: 1.5rem;">This is a demo of subscription management. In production, this would redirect to Stripe's customer portal.</p>
         <div style="display: flex; gap: 1rem;">
           <button onclick="this.closest('.subscription-modal').remove()" style="padding: 0.5rem 1rem; border: 1px solid #E5E7EB; background: white; border-radius: 6px; cursor: pointer;">Close</button>
-          <button onclick="window.location.href='account-setting.html'" style="padding: 0.5rem 1rem; background: #00E676; color: white; border: none; border-radius: 6px; cursor: pointer;">Account Settings</button>
+          <button onclick="window.location.href='account-setting.html'" style="padding: 0.5rem 1rem; background: #007A30; color: white; border: none; border-radius: 6px; cursor: pointer;">Account Settings</button>
         </div>
       </div>
     `;
@@ -792,7 +792,7 @@ function createInlineToast(message, variant = 'success') {
 
   const toast = document.createElement('div');
   toast.id = 'jh-inline-toast';
-  const bg = variant === 'error' ? '#EF4444' : '#00E676';
+  const bg = variant === 'error' ? '#EF4444' : '#007A30';
   toast.style.cssText = `
     position: fixed;
     bottom: 1.5rem;
@@ -885,7 +885,7 @@ function showUpgradeConfirmation(plan, options = {}) {
         animation: fadeIn 0.2s ease, rise 0.25s ease;
       ">
         <div style="display:flex; gap:0.9rem; align-items:center; margin-bottom:1rem;">
-          <div style="width:48px;height:48px;border-radius:14px;background:linear-gradient(135deg,#00E676,#00c965);display:grid;place-items:center;">
+          <div style="width:48px;height:48px;border-radius:14px;background:linear-gradient(135deg,#007A30,#006B28);display:grid;place-items:center;">
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.4"><polyline points="20 6 9 17 4 12" /></svg>
           </div>
           <div>

@@ -84,7 +84,7 @@
 }
 
 .nav-links a.cta-button:hover {
-  background: #00c965;
+  background: #006B28;
   box-shadow: var(--shadow-button-hover);
 }
 
@@ -182,7 +182,7 @@
   /* CTA button styling */
   .mobile-nav a.cta-button {
     display: block;
-    background: #00E676;
+    background: #007A30;
     color: #fff !important;
     margin-top: 1.5rem;
     text-align: center;
@@ -297,7 +297,7 @@
 /* Footer styles */
 
 .btn-primary {
-  background: #00E676;
+  background: #007A30;
   color: #fff !important;
   font-weight: 700;
   border: none;
@@ -312,8 +312,8 @@
   text-decoration: none;
 }
 .btn-primary:hover {
-  background: #00c965;
-  box-shadow: 0 4px 16px rgba(0,230,118,0.10);
+  background: #006B28;
+  box-shadow: 0 4px 16px rgba(0,122,48,0.10);
 }
 
 .btn-secondary {

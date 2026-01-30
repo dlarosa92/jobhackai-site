@@ -183,7 +183,7 @@
     .rf-section-title { font-size: var(--font-size-xl); font-weight: var(--font-weight-bold); margin-bottom: var(--space-xs); color: var(--color-text-main); }
     .rf-progress-ring { width: 80px; min-height: 80px; display: inline-flex; flex-direction: column; align-items: center; vertical-align: middle; margin-right: 1.5rem; }
     .rf-progress-ring svg { flex-shrink: 0; width: 80px; height: 80px; }
-    .rf-score-badge { display: inline-block; background: #00E676; color: #fff; font-weight: 700; border-radius: 999px; padding: 0.3em 1em; font-size: 1.2rem; margin-left: 0.7rem; }
+    .rf-score-badge { display: inline-block; background: #007A30; color: #fff; font-weight: 700; border-radius: 999px; padding: 0.3em 1em; font-size: 1.2rem; margin-left: 0.7rem; }
     /* Status pill component - matches existing .rf-score-badge pattern */
     .rf-status-pill {
       display: inline-flex;
@@ -230,7 +230,7 @@
     .rf-feedback-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 1.2rem; margin-top: 1.5rem; }
     .rf-feedback-card { background: #fff; border-radius: var(--radius-lg); box-shadow: 0 1px 3px rgba(0,0,0,0.07); padding: 1.2rem 1.2rem 1rem 1.2rem; }
     .rf-feedback-label { font-weight: 700; color: var(--color-text-main); margin-bottom: 0.2rem; }
-    .rf-feedback-score { display: inline-block; background: #00E676; color: #fff; font-weight: 700; border-radius: 999px; padding: 0.2em 0.8em; font-size: 1rem; margin-left: 0.5rem; }
+    .rf-feedback-score { display: inline-block; background: #007A30; color: #fff; font-weight: 700; border-radius: 999px; padding: 0.2em 0.8em; font-size: 1rem; margin-left: 0.5rem; }
     .rf-feedback-tip { color: var(--color-text-secondary); font-size: 1.01rem; margin-top: 0.3rem; }
     .rf-snippet-box { width: 100%; min-height: 120px; border: 2px solid var(--color-divider); border-radius: var(--radius-lg); padding: 1rem; font-family: var(--font-family-base); font-size: var(--font-size-base); font-weight: var(--font-weight-regular); margin-bottom: 1.2rem; background: #F9FAFB; color: var(--color-text-main); resize: vertical; }
     /* Ensure rewrite buttons are same size */
@@ -6132,7 +6132,7 @@
       const offset = circumference - (percent / 100) * circumference;
       
       // Ensure circle is visible and green (use direct color value for SVG compatibility)
-      circle.setAttribute('stroke', '#00E676');
+      circle.setAttribute('stroke', '#007A30');
       circle.setAttribute('stroke-width', '8');
       circle.setAttribute('stroke-dasharray', String(circumference));
       circle.setAttribute('stroke-dashoffset', offset);
@@ -8472,7 +8472,7 @@
       if (scoreRing) {
         scoreRing.style.strokeDashoffset = '';
         scoreRing.setAttribute('stroke-dashoffset', '226.2');
-        scoreRing.setAttribute('stroke', '#00E676');
+        scoreRing.setAttribute('stroke', '#007A30');
       }
       if (scoreText) scoreText.textContent = '0%';
       
@@ -9309,7 +9309,7 @@
         <div class="rf-progress-ring">
           <svg viewBox="0 0 80 80">
             <circle cx="40" cy="40" r="36" stroke="#E5E7EB" stroke-width="8" fill="none"/>
-            <circle cx="40" cy="40" r="36" stroke="#00E676" stroke-width="8" fill="none" stroke-dasharray="226.2" stroke-dashoffset="226.2" stroke-linecap="round"/>
+            <circle cx="40" cy="40" r="36" stroke="#007A30" stroke-width="8" fill="none" stroke-dasharray="226.2" stroke-dashoffset="226.2" stroke-linecap="round"/>
             <text x="40" y="48" text-anchor="middle" font-size="1.6rem" font-weight="700" fill="#1F2937">0%</text>
            </svg>
            <div id="rf-extraction-quality-indicator" class="rf-status-pill" style="display:none;margin-top:0.5rem;width:100%;justify-content:center;flex-shrink:0;">

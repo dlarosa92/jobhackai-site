@@ -402,7 +402,7 @@ section {
   border-radius: 12px;
   padding: 0.7rem 0;
   margin: 0 auto;
-  box-shadow: 0 2px 8px rgba(0,230,118,0.08);
+  box-shadow: 0 2px 8px rgba(0,122,48,0.08);
 }
 
 @media (max-width: 900px) {
@@ -507,7 +507,7 @@ section {
 }
 
 .cta-button {
-  background: #00E676;
+  background: #007A30;
   color: #fff !important;
   font-weight: 700;
   border: none;
@@ -523,7 +523,7 @@ section {
 }
 
 .cta-button:hover {
-  background: #00c965;
+  background: #006B28;
 }
 
 /* --- PRICING B CARDS (A/B TEST) --- */
@@ -589,7 +589,7 @@ textarea:focus {
 
 /* Base .btn-primary definition to ensure consistent styling */
 .btn-primary {
-  background: #00E676;
+  background: #007A30;
   color: #fff !important;
   font-weight: 700;
   border: none;

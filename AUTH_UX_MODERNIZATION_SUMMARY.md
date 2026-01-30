@@ -30,7 +30,7 @@
 ### 4. Password Reset UI Modernization
 **Files Modified:** `app/out/auth/action.html`
 - Applied design system styling to reset card
-- Updated button to use green CTA color (#00E676)
+- Updated button to use green CTA color (#007A30)
 - Added font-weight: 700 for "Save new password" button
 - Added cursor: progress for loading states
 - Improved spacing and typography
@@ -83,7 +83,7 @@
 
 ### ✅ Reset Page Typography
 - Applied font-weight: 700 to "Save new password" button
-- Matches green hover state (#00c965)
+- Matches green hover state (#006B28)
 
 ## Manual Validation Checklist
 

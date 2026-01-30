@@ -33,7 +33,7 @@
 
 - `mode=verifyEmail`: `applyActionCode` → `user.reload()` → set `sessionStorage.emailJustVerified = "1"` → redirect `/dashboard.html` (friendly error + back to login on failure)
 - `mode=resetPassword`: Show reset UI (eye toggles), `confirmPasswordReset` → redirect `/login.html` with success banner
-- Design system: white card, radius 16px, Inter font, green CTA (#00E676)
+- Design system: white card, radius 16px, Inter font, green CTA (#007A30)
 - Password strength validation (min 8 chars, uppercase, lowercase, number)
 
 ### 2. Email Verification Gating (Security)
@@ -96,7 +96,7 @@ const planData = JSON.parse(sessionStorage.getItem("selectedPlan") || "{}");
 if (planData.planName) showSelectedPlanBanner(planData);
 ```
 
-- Paint banner instantly (green #00E676, DS-compliant), no Firebase wait
+- Paint banner instantly (green #007A30, DS-compliant), no Firebase wait
 
 ### 6. Password Toggle Consistency
 

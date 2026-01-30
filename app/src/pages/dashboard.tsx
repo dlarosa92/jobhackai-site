@@ -147,7 +147,7 @@ export default function Dashboard() {
       <div className="ats-donut" aria-label="ATS Score">
         <svg viewBox="0 0 54 54">
           <circle cx="27" cy="27" r={radius} stroke="#E5E7EB" strokeWidth={stroke} fill="none"/>
-          <circle cx="27" cy="27" r={radius} stroke="#00E676" strokeWidth={stroke} fill="none" 
+          <circle cx="27" cy="27" r={radius} stroke="#007A30" strokeWidth={stroke} fill="none" 
                   strokeDasharray={norm} strokeDashoffset={norm - progress} strokeLinecap="round"/>
         </svg>
         <span className="ats-score-text">{percent}%</span>
@@ -519,7 +519,7 @@ export default function Dashboard() {
           margin-top: 0.2rem;
         }
         .dashboard-banner .upgrade-btn {
-          background: #00E676;
+          background: #007A30;
           color: #fff;
           font-weight: 700;
           border: none;
@@ -535,7 +535,7 @@ export default function Dashboard() {
         }
         .dashboard-banner .upgrade-btn:hover,
         .dashboard-banner .upgrade-btn:focus {
-          background: #00c965;
+          background: #006B28;
           text-decoration: none;
           outline: none;
         }
@@ -670,7 +670,7 @@ export default function Dashboard() {
           text-decoration: none;
         }
         .feature-card .feature-action .btn-locked {
-          background: #00E676;
+          background: #007A30;
           color: #fff;
           border: none;
           display: flex;
@@ -687,7 +687,7 @@ export default function Dashboard() {
         }
         .feature-card .feature-action .btn-locked:hover,
         .feature-card .feature-action .btn-locked:focus {
-          background: #00c965;
+          background: #006B28;
           outline: none;
         }
         .feature-card .included-badge {

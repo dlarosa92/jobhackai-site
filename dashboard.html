@@ -157,7 +157,7 @@
       margin-top: 0.2rem;
     }
     .dashboard-banner .upgrade-btn {
-      background: #00E676;
+      background: #007A30;
       color: #fff;
       font-weight: 700;
       border: none;
@@ -173,7 +173,7 @@
     }
     .dashboard-banner .upgrade-btn:hover,
     .dashboard-banner .upgrade-btn:focus {
-      background: #00c965;
+      background: #006B28;
       text-decoration: none;
       outline: none;
     }
@@ -257,7 +257,7 @@
       text-decoration: none;
     }
     .feature-card .feature-action .btn-locked {
-      background: #00E676;
+      background: #007A30;
       color: #fff;
       border: none;
       display: flex;
@@ -274,7 +274,7 @@
     }
     .feature-card .feature-action .btn-locked:hover,
     .feature-card .feature-action .btn-locked:focus {
-      background: #00c965;
+      background: #006B28;
       outline: none;
     }
     .first-ats-milestone {
@@ -479,7 +479,7 @@
       vertical-align: middle;
     }
     .dashboard-banner-footer .upgrade-btn {
-      background: #00E676;
+      background: #007A30;
       color: #fff;
       font-weight: 700;
       border: none;
@@ -495,7 +495,7 @@
     }
     .dashboard-banner-footer .upgrade-btn:hover,
     .dashboard-banner-footer .upgrade-btn:focus {
-      background: #00c965;
+      background: #006B28;
     }
     .status-action-row {
       display: flex;
@@ -667,7 +667,7 @@
       margin-bottom: 1.5rem;
     }
     .upgrade-popup-modal .popup-ok-btn {
-      background: #00E676;
+      background: #007A30;
       color: #fff;
       font-weight: 700;
       border: none;
@@ -681,7 +681,7 @@
     }
     .upgrade-popup-modal .popup-ok-btn:hover,
     .upgrade-popup-modal .popup-ok-btn:focus {
-      background: #00c965;
+      background: #006B28;
       outline: none;
     }
     .upgrade-popup-modal .popup-cancel-btn {
@@ -2016,7 +2016,7 @@
           <div class="ats-donut" aria-label="ATS Score">
             <svg viewBox="0 0 54 54">
               <circle cx="27" cy="27" r="${radius}" stroke="#E5E7EB" stroke-width="${stroke}" fill="none"/>
-              <circle cx="27" cy="27" r="${radius}" stroke="#00E676" stroke-width="${stroke}" fill="none" stroke-dasharray="${norm}" stroke-dashoffset="${norm - progress}" stroke-linecap="round"/>
+              <circle cx="27" cy="27" r="${radius}" stroke="#007A30" stroke-width="${stroke}" fill="none" stroke-dasharray="${norm}" stroke-dashoffset="${norm - progress}" stroke-linecap="round"/>
             </svg>
             <span class="ats-score-text">${percent}%</span>
           </div>
@@ -2054,7 +2054,7 @@
           const shouldShow = user.plan === 'free' && !hasRoleFeedback && atsScore.percent !== null;
           
           if (shouldShow) {
-            unlockInsightsHTML = '<div style="margin-top:1rem;padding:1rem;background:rgba(5,150,105,0.08);border:1px solid rgba(5,150,105,0.2);border-radius:8px;"><div style="display:flex;align-items:flex-start;gap:0.75rem;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0;margin-top:0.125rem;color:#00E676;"><path d="M12 2L2 7l10 5 10-5-10-5z"></path><path d="M2 17l10 5 10-5"></path><path d="M2 12l10 5 10-5"></path></svg><div style="flex:1;"><div style="font-weight:600;color:#232B36;margin-bottom:0.25rem;font-size:0.95rem;">Unlock Deeper Insights</div><div style="color:#6B7280;margin-bottom:0.75rem;line-height:1.4;font-size:0.9rem;">We\'ve scored this resume against ATS rules. Get detailed feedback and role-specific suggestions.</div><a href="resume-feedback-pro.html" class="btn-primary" style="display:inline-block;padding:0.5rem 1rem;font-size:0.9rem;text-decoration:none;white-space:nowrap;">Get Detailed Feedback</a></div></div></div>';
+            unlockInsightsHTML = '<div style="margin-top:1rem;padding:1rem;background:rgba(5,150,105,0.08);border:1px solid rgba(5,150,105,0.2);border-radius:8px;"><div style="display:flex;align-items:flex-start;gap:0.75rem;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0;margin-top:0.125rem;color:#007A30;"><path d="M12 2L2 7l10 5 10-5-10-5z"></path><path d="M2 17l10 5 10-5"></path><path d="M2 12l10 5 10-5"></path></svg><div style="flex:1;"><div style="font-weight:600;color:#232B36;margin-bottom:0.25rem;font-size:0.95rem;">Unlock Deeper Insights</div><div style="color:#6B7280;margin-bottom:0.75rem;line-height:1.4;font-size:0.9rem;">We\'ve scored this resume against ATS rules. Get detailed feedback and role-specific suggestions.</div><a href="resume-feedback-pro.html" class="btn-primary" style="display:inline-block;padding:0.5rem 1rem;font-size:0.9rem;text-decoration:none;white-space:nowrap;">Get Detailed Feedback</a></div></div></div>';
           }
         } catch (e) {
           // If state persistence not available, don't show the box
@@ -2156,7 +2156,7 @@
         const hasSeenTrialCarriedOverMessage = localStorage.getItem('hasSeenTrialCarriedOverMessage') === 'true';
         if (!hasSeenTrialCarriedOverMessage) {
           const trialCarriedOverHTML = `
-            <div style="background:#F0FDF4;border-left:3px solid #00E676;padding:0.75rem 1rem;border-radius:8px;margin-top:1rem;font-size:0.875rem;color:#166534;">
+            <div style="background:#F0FDF4;border-left:3px solid #007A30;padding:0.75rem 1rem;border-radius:8px;margin-top:1rem;font-size:0.875rem;color:#166534;">
               <strong>Trial History Preserved</strong> — Your trial history (ATS scores and feedback) has been preserved. Continue where you left off!
             </div>
           `;
@@ -2450,25 +2450,25 @@
                 <p style="margin-bottom: 1rem; font-weight: 600; color: #232B36;">With a subscription, you'll get:</p>
                 <ul style="list-style: none; padding: 0; margin: 0 0 1.5rem 0;">
                   <li style="padding: 0.5rem 0; display: flex; align-items: center; gap: 0.75rem;">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#00E676" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#007A30" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
                       <path d="M20 6L9 17l-5-5"/>
                     </svg>
                     <span>Unlimited ATS resume scoring</span>
                   </li>
                   <li style="padding: 0.5rem 0; display: flex; align-items: center; gap: 0.75rem;">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#00E676" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#007A30" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
                       <path d="M20 6L9 17l-5-5"/>
                     </svg>
                     <span>Detailed resume feedback</span>
                   </li>
                   <li style="padding: 0.5rem 0; display: flex; align-items: center; gap: 0.75rem;">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#00E676" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#007A30" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
                       <path d="M20 6L9 17l-5-5"/>
                     </svg>
                     <span>Interview question generator</span>
                   </li>
                   <li style="padding: 0.5rem 0; display: flex; align-items: center; gap: 0.75rem;">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#00E676" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#007A30" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
                       <path d="M20 6L9 17l-5-5"/>
                     </svg>
                     <span>Priority support</span>

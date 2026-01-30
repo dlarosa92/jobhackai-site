@@ -84,8 +84,8 @@
 }
 
 .history-item.is-selected {
-  background: rgba(0, 230, 118, 0.08);
-  border-color: rgba(0, 230, 118, 0.35);
+  background: rgba(0, 122, 48, 0.08);
+  border-color: rgba(0, 122, 48, 0.35);
 }
 
 .history-main {
