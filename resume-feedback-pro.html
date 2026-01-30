@@ -31,8 +31,6 @@
 
       async function handleAuthReadyOrTimeout() {
         if (done) return;
-        done = true;
-        try { clearTimeout(timeoutHandle); } catch (_) {}
 
         // TRI-STATE FIX: Wait for Firebase auth to be ready before redirecting
         // This prevents race conditions where Firebase is still initializing
@@ -60,8 +58,13 @@
           window.location.href = 'pricing-a.html?plan=essential';
           return;
         }
-        document.documentElement.classList.remove('auth-pending');
-        document.documentElement.classList.remove('plan-pending');
+        // Only reveal page when we have a definitive allowed plan
+        if (hydratedPlan && allowedPlans.includes(hydratedPlan)) {
+          document.documentElement.classList.remove('auth-pending');
+          document.documentElement.classList.remove('plan-pending');
+          done = true;
+          try { clearTimeout(timeoutHandle); } catch (_) {}
+        }
       }
 
       if (!isAuthenticated) {
@@ -7376,6 +7379,8 @@
     function updateRfTileForPlan() {
       // Don't update plan badge/tiles during logout; prevents pill/CTA flicker
       if (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('logout-intent') === '1') return;
+      // Don't update tiles while plan is unknown—avoids showing "Locked" during plan hydration race
+      if (document.documentElement.classList.contains('plan-pending')) return;
       const atsScoreTile = document.getElementById('rf-ats-score-tile');
       const feedbackTile = document.getElementById('rf-feedback-tile');
       const rewriteTile = document.getElementById('rf-rewrite-tile');
