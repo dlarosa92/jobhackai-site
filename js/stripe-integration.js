@@ -1018,12 +1018,27 @@ async function upgradePlan(targetPlan, options = {}) {
       const newPlan = data.plan || targetPlan;
       localStorage.setItem('user-plan', newPlan);
       localStorage.setItem('dev-plan', newPlan);
-      window.dispatchEvent(new CustomEvent('planChanged', { detail: { newPlan } }));
+      window.dispatchEvent(new CustomEvent('planChanged', { detail: { newPlan, source: 'upgrade' } }));
       if (window.JobHackAINavigation?.setAuthState) {
         try { window.JobHackAINavigation.setAuthState(true, newPlan); } catch (_) {}
       }
       if (window.JobHackAINavigation?.scheduleUpdateNavigation) {
         try { window.JobHackAINavigation.scheduleUpdateNavigation(true); } catch (_) {}
+      }
+      try {
+        const syncRes = await fetch('/api/sync-stripe-plan', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${idToken}`
+          }
+        });
+        if (!syncRes.ok) {
+          const errText = await syncRes.text().catch(() => '');
+          console.warn('[UPGRADE] sync-stripe-plan failed:', errText || syncRes.status);
+        }
+      } catch (syncError) {
+        console.warn('[UPGRADE] sync-stripe-plan error:', syncError?.message || syncError);
       }
       if (typeof window.refreshPlanData === 'function') {
         await window.refreshPlanData();
