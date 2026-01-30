@@ -1932,7 +1932,24 @@
         body: JSON.stringify(requestBody)
       }, {
         maxRetries: 3,
-        initialDelay: 1000
+        initialDelay: 1000,
+        shouldRetry: (error) => {
+          if (error?.status === 429) {
+            return false;
+          }
+          if (error instanceof TypeError && error.message.includes('fetch')) {
+            return true;
+          }
+          if (typeof error?.status === 'number') {
+            if (error.status >= 500) {
+              return true;
+            }
+            if (error.status === 408) {
+              return true;
+            }
+          }
+          return false;
+        }
       });
 
       if (!response.ok) {
@@ -4360,6 +4377,12 @@
                       );
                     }
                     hideLoadingState();
+                    if (typeof window._currentFeedbackLoading === 'function') {
+                      window._currentFeedbackLoading();
+                    }
+                    window._currentFeedbackLoading = null;
+                    setRoleStatus('');
+                    clearActiveFeedbackToken();
                     uploadInput.disabled = false;
                     if (generateBtn) generateBtn.disabled = false;
                     if (window.roleTipsInFlightToken === feedbackRunToken) {
