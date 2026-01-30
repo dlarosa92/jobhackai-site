@@ -5130,6 +5130,12 @@
 
             console.warn('[RESUME-FEEDBACK] Feedback generation failed (non-blocking):', error);
 
+            if (window.roleTipsInFlightToken === feedbackRunToken) {
+              window.roleTipsInFlight = false;
+              window.roleTipsInFlightToken = null;
+            }
+            setRoleTipsStatus(feedbackRunToken, 'failed');
+
             setRoleStatus('');
 
             updateRoleTipsState({
@@ -5820,6 +5826,11 @@
               return;
             }
             console.warn('[RESUME-FEEDBACK] Feedback generation failed (non-blocking):', error);
+              if (window.roleTipsInFlightToken === feedbackRunToken) {
+                window.roleTipsInFlight = false;
+                window.roleTipsInFlightToken = null;
+              }
+              setRoleTipsStatus(feedbackRunToken, 'failed');
               // Clear status - updateRoleTipsState will handle messaging and container visibility
               setRoleStatus(''); 
 
