@@ -3584,6 +3584,16 @@
       activeRunId: null,   // sessionId for the user-started analysis currently considered "active"
       suppress: false      // set true when user loads history / clicks Start Fresh to prevent toasts
     };
+    function clearRfToastState() {
+      if (!window._rfToast) return;
+      window._rfToast.activeRunId = null;
+      window._rfToast.suppress = true;
+      if (window._rfToast.currentToast && typeof window._rfToast.currentToast.dismiss === 'function') {
+        try { window._rfToast.currentToast.dismiss(); } catch (e) { /* ignore */ }
+      }
+      window._rfToast.currentId = null;
+      window._rfToast.currentToast = null;
+    }
     function showRfToast(type, title, opts = {}) {
       // type: 'info' | 'success' | 'error'
       const toastId = opts.id || `${type}:${title}`;
@@ -4381,15 +4391,7 @@
                       window.roleTipsInFlight = false;
                       window.roleTipsInFlightToken = null;
                     }
-                    if (window._rfToast) {
-                      window._rfToast.activeRunId = null;
-                      window._rfToast.suppress = true;
-                      if (window._rfToast.currentToast && typeof window._rfToast.currentToast.dismiss === 'function') {
-                        try { window._rfToast.currentToast.dismiss(); } catch (e) { /* ignore */ }
-                      }
-                      window._rfToast.currentId = null;
-                      window._rfToast.currentToast = null;
-                    }
+                    clearRfToastState();
                     if (typeof window._currentFeedbackLoading === 'function') {
                       window._currentFeedbackLoading();
                     }
@@ -5504,15 +5506,7 @@
       if (startFreshBtn) {
         startFreshBtn.addEventListener('click', function() {
           // User reset - suppress any pending analysis-toasts
-          if (window._rfToast) {
-            window._rfToast.activeRunId = null;
-            window._rfToast.suppress = true;
-            if (window._rfToast.currentToast && typeof window._rfToast.currentToast.dismiss === 'function') {
-              try { window._rfToast.currentToast.dismiss(); } catch (e) { /* ignore */ }
-            }
-            window._rfToast.currentId = null;
-            window._rfToast.currentToast = null;
-          }
+          clearRfToastState();
           resetSession();
         });
       }
