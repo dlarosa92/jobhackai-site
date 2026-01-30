@@ -25,43 +25,51 @@
 
       // Wait for firebase-auth-ready or hydration before irreversible action
       let done = false;
+      let inFlight = false;
       const timeoutHandle = setTimeout(() => {
         if (!done) handleAuthReadyOrTimeout();
       }, 3000);
 
       async function handleAuthReadyOrTimeout() {
-        if (done) return;
-        done = true;
+        if (done || inFlight) return;
+        inFlight = true;
         try { clearTimeout(timeoutHandle); } catch (_) {}
-
-        // TRI-STATE FIX: Wait for Firebase auth to be ready before redirecting
-        // This prevents race conditions where Firebase is still initializing
-        let user = null;
-        if (window.FirebaseAuthManager && typeof window.FirebaseAuthManager.waitForAuthReady === 'function') {
-          try {
-            user = await window.FirebaseAuthManager.waitForAuthReady(5000);
-          } catch (error) {
-            console.warn('[RESUME-FEEDBACK] waitForAuthReady error in immediate check:', error);
+        try {
+          // TRI-STATE FIX: Wait for Firebase auth to be ready before redirecting
+          // This prevents race conditions where Firebase is still initializing
+          let user = null;
+          if (window.FirebaseAuthManager && typeof window.FirebaseAuthManager.waitForAuthReady === 'function') {
+            try {
+              user = await window.FirebaseAuthManager.waitForAuthReady(5000);
+            } catch (error) {
+              console.warn('[RESUME-FEEDBACK] waitForAuthReady error in immediate check:', error);
+            }
           }
-        }
 
-        const navAuth = window.JobHackAINavigation && window.JobHackAINavigation.getAuthState && window.JobHackAINavigation.getAuthState();
-        const effectivePlan = window.JobHackAINavigation && window.JobHackAINavigation.getEffectivePlan && window.JobHackAINavigation.getEffectivePlan();
-        const hydratedPlan = effectivePlan || cachedPlan;
+          const navAuth = window.JobHackAINavigation && window.JobHackAINavigation.getAuthState && window.JobHackAINavigation.getAuthState();
+          const effectivePlan = window.JobHackAINavigation && window.JobHackAINavigation.getEffectivePlan && window.JobHackAINavigation.getEffectivePlan();
+          const hydratedPlan = effectivePlan || cachedPlan;
 
-        // Check authentication: prefer Firebase user, then navigation, then localStorage
-        const isAuthenticated = user || (navAuth && navAuth.isAuthenticated);
-        
-        if (!isAuthenticated) {
-          window.location.href = 'login.html';
-          return;
+          // Check authentication: prefer Firebase user, then navigation, then localStorage
+          const isAuthenticated = user || (navAuth && navAuth.isAuthenticated);
+          
+          if (!isAuthenticated) {
+            window.location.href = 'login.html';
+            return;
+          }
+          if (hydratedPlan && !allowedPlans.includes(hydratedPlan)) {
+            window.location.href = 'pricing-a.html?plan=essential';
+            return;
+          }
+          // Only reveal page when we have a definitive allowed plan
+          if (hydratedPlan && allowedPlans.includes(hydratedPlan)) {
+            document.documentElement.classList.remove('auth-pending');
+            document.documentElement.classList.remove('plan-pending');
+            done = true;
+          }
+        } finally {
+          inFlight = false;
         }
-        if (hydratedPlan && !allowedPlans.includes(hydratedPlan)) {
-          window.location.href = 'pricing-a.html?plan=essential';
-          return;
-        }
-        document.documentElement.classList.remove('auth-pending');
-        document.documentElement.classList.remove('plan-pending');
       }
 
       if (!isAuthenticated) {
@@ -77,6 +85,7 @@
           document.documentElement.classList.add('plan-pending');
           document.addEventListener('firebase-auth-ready', handleAuthReadyOrTimeout, { once: true });
         } else {
+          window.__JOBHACKAI_PLAN_PENDING__ = false;
           document.documentElement.classList.remove('auth-pending');
           document.documentElement.classList.remove('plan-pending');
           done = true;
@@ -7376,6 +7385,8 @@
     function updateRfTileForPlan() {
       // Don't update plan badge/tiles during logout; prevents pill/CTA flicker
       if (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('logout-intent') === '1') return;
+      // Don't update tiles while plan is unknown—avoids showing "Locked" during plan hydration race
+      if (document.documentElement.classList.contains('plan-pending')) return;
       const atsScoreTile = document.getElementById('rf-ats-score-tile');
       const feedbackTile = document.getElementById('rf-feedback-tile');
       const rewriteTile = document.getElementById('rf-rewrite-tile');
@@ -7385,6 +7396,7 @@
       const roleDescEl = document.getElementById('rf-role-desc');
       const headerBadge = document.getElementById('rf-header-plan-badge');
       const headerDesc = document.getElementById('rf-header-desc');
+      const feedbackBadge = feedbackTile ? feedbackTile.querySelector('.rf-title .rf-plan-badge') : null;
       
       function setHeaderBadgePending(isPending) {
         if (!headerBadge) return;
@@ -7716,6 +7728,11 @@
           }
         }
       }
+      if (feedbackBadge) {
+        feedbackBadge.classList.remove('rf-plan-badge--pending');
+        feedbackBadge.removeAttribute('aria-hidden');
+      }
+
       // Always update Priority Review CTA
       updatePriorityReviewCTA();
     }
@@ -9388,7 +9405,7 @@
     <section class="rf-card" id="rf-feedback-tile">
       <div class="rf-title">
         ATS Score & Feedback
-        <span class="rf-plan-badge" style="background:#6B7280;">Locked</span>
+        <span class="rf-plan-badge rf-plan-badge--pending" style="background:#6B7280;" aria-hidden="true">Locked</span>
       </div>
       <div style="color:var(--color-text-secondary);margin:0.25rem 0 1.2rem;">
         Run ATS Score &amp; Feedback to see your detailed breakdown here.
