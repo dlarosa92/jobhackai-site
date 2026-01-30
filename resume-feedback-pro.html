@@ -25,45 +25,50 @@
 
       // Wait for firebase-auth-ready or hydration before irreversible action
       let done = false;
+      let inFlight = false;
       const timeoutHandle = setTimeout(() => {
         if (!done) handleAuthReadyOrTimeout();
       }, 3000);
 
       async function handleAuthReadyOrTimeout() {
-        if (done) return;
-
-        // TRI-STATE FIX: Wait for Firebase auth to be ready before redirecting
-        // This prevents race conditions where Firebase is still initializing
-        let user = null;
-        if (window.FirebaseAuthManager && typeof window.FirebaseAuthManager.waitForAuthReady === 'function') {
-          try {
-            user = await window.FirebaseAuthManager.waitForAuthReady(5000);
-          } catch (error) {
-            console.warn('[RESUME-FEEDBACK] waitForAuthReady error in immediate check:', error);
+        if (done || inFlight) return;
+        inFlight = true;
+        try { clearTimeout(timeoutHandle); } catch (_) {}
+        try {
+          // TRI-STATE FIX: Wait for Firebase auth to be ready before redirecting
+          // This prevents race conditions where Firebase is still initializing
+          let user = null;
+          if (window.FirebaseAuthManager && typeof window.FirebaseAuthManager.waitForAuthReady === 'function') {
+            try {
+              user = await window.FirebaseAuthManager.waitForAuthReady(5000);
+            } catch (error) {
+              console.warn('[RESUME-FEEDBACK] waitForAuthReady error in immediate check:', error);
+            }
           }
-        }
 
-        const navAuth = window.JobHackAINavigation && window.JobHackAINavigation.getAuthState && window.JobHackAINavigation.getAuthState();
-        const effectivePlan = window.JobHackAINavigation && window.JobHackAINavigation.getEffectivePlan && window.JobHackAINavigation.getEffectivePlan();
-        const hydratedPlan = effectivePlan || cachedPlan;
+          const navAuth = window.JobHackAINavigation && window.JobHackAINavigation.getAuthState && window.JobHackAINavigation.getAuthState();
+          const effectivePlan = window.JobHackAINavigation && window.JobHackAINavigation.getEffectivePlan && window.JobHackAINavigation.getEffectivePlan();
+          const hydratedPlan = effectivePlan || cachedPlan;
 
-        // Check authentication: prefer Firebase user, then navigation, then localStorage
-        const isAuthenticated = user || (navAuth && navAuth.isAuthenticated);
-        
-        if (!isAuthenticated) {
-          window.location.href = 'login.html';
-          return;
-        }
-        if (hydratedPlan && !allowedPlans.includes(hydratedPlan)) {
-          window.location.href = 'pricing-a.html?plan=essential';
-          return;
-        }
-        // Only reveal page when we have a definitive allowed plan
-        if (hydratedPlan && allowedPlans.includes(hydratedPlan)) {
-          document.documentElement.classList.remove('auth-pending');
-          document.documentElement.classList.remove('plan-pending');
-          done = true;
-          try { clearTimeout(timeoutHandle); } catch (_) {}
+          // Check authentication: prefer Firebase user, then navigation, then localStorage
+          const isAuthenticated = user || (navAuth && navAuth.isAuthenticated);
+          
+          if (!isAuthenticated) {
+            window.location.href = 'login.html';
+            return;
+          }
+          if (hydratedPlan && !allowedPlans.includes(hydratedPlan)) {
+            window.location.href = 'pricing-a.html?plan=essential';
+            return;
+          }
+          // Only reveal page when we have a definitive allowed plan
+          if (hydratedPlan && allowedPlans.includes(hydratedPlan)) {
+            document.documentElement.classList.remove('auth-pending');
+            document.documentElement.classList.remove('plan-pending');
+            done = true;
+          }
+        } finally {
+          inFlight = false;
         }
       }
 
