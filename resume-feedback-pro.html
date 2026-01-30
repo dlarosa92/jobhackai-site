@@ -7395,6 +7395,7 @@
       const roleDescEl = document.getElementById('rf-role-desc');
       const headerBadge = document.getElementById('rf-header-plan-badge');
       const headerDesc = document.getElementById('rf-header-desc');
+      const feedbackBadge = feedbackTile ? feedbackTile.querySelector('.rf-title .rf-plan-badge') : null;
       
       function setHeaderBadgePending(isPending) {
         if (!headerBadge) return;
@@ -7726,6 +7727,11 @@
           }
         }
       }
+      if (feedbackBadge) {
+        feedbackBadge.classList.remove('rf-plan-badge--pending');
+        feedbackBadge.removeAttribute('aria-hidden');
+      }
+
       // Always update Priority Review CTA
       updatePriorityReviewCTA();
     }
@@ -9398,7 +9404,7 @@
     <section class="rf-card" id="rf-feedback-tile">
       <div class="rf-title">
         ATS Score & Feedback
-        <span class="rf-plan-badge" style="background:#6B7280;">Locked</span>
+        <span class="rf-plan-badge rf-plan-badge--pending" style="background:#6B7280;" aria-hidden="true">Locked</span>
       </div>
       <div style="color:var(--color-text-secondary);margin:0.25rem 0 1.2rem;">
         Run ATS Score &amp; Feedback to see your detailed breakdown here.
