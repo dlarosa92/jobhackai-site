@@ -276,6 +276,7 @@
   <script>
     (function hideTrialCTAsWhenSubscribed() {
       var SUBSCRIBED_PLANS = ['trial', 'essential', 'pro', 'premium'];
+      var AUTH_STORAGE_KEYS = ['user-plan', 'user-authenticated', 'dev-plan'];
       function apply() {
         var nav = window.JobHackAINavigation;
         if (!nav || typeof nav.getEffectivePlan !== 'function') return;
@@ -292,6 +293,11 @@
         window.addEventListener('navigationReady', apply, { once: true });
       }
       window.addEventListener('planChanged', apply);
+      // Cross-tab: navigation.js storage handler does not dispatch planChanged,
+      // so we must react to storage ourselves to keep CTA visibility in sync.
+      window.addEventListener('storage', function (e) {
+        if (e.key && AUTH_STORAGE_KEYS.indexOf(e.key) !== -1) apply();
+      });
     })();
   </script>
   <script src="js/error-reporting.js?v=20251006-1"></script>
