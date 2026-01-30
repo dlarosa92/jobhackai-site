@@ -4377,6 +4377,19 @@
                       );
                     }
                     hideLoadingState();
+                    if (window.roleTipsInFlightToken === feedbackRunToken) {
+                      window.roleTipsInFlight = false;
+                      window.roleTipsInFlightToken = null;
+                    }
+                    if (window._rfToast) {
+                      window._rfToast.activeRunId = null;
+                      window._rfToast.suppress = true;
+                      if (window._rfToast.currentToast && typeof window._rfToast.currentToast.dismiss === 'function') {
+                        try { window._rfToast.currentToast.dismiss(); } catch (e) { /* ignore */ }
+                      }
+                      window._rfToast.currentId = null;
+                      window._rfToast.currentToast = null;
+                    }
                     if (typeof window._currentFeedbackLoading === 'function') {
                       window._currentFeedbackLoading();
                     }
@@ -4385,10 +4398,6 @@
                     clearActiveFeedbackToken();
                     uploadInput.disabled = false;
                     if (generateBtn) generateBtn.disabled = false;
-                    if (window.roleTipsInFlightToken === feedbackRunToken) {
-                      window.roleTipsInFlight = false;
-                      window.roleTipsInFlightToken = null;
-                    }
                     return; // Block all API calls
                   }
                 }
