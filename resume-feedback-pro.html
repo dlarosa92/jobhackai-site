@@ -85,6 +85,7 @@
           document.documentElement.classList.add('plan-pending');
           document.addEventListener('firebase-auth-ready', handleAuthReadyOrTimeout, { once: true });
         } else {
+          window.__JOBHACKAI_PLAN_PENDING__ = false;
           document.documentElement.classList.remove('auth-pending');
           document.documentElement.classList.remove('plan-pending');
           done = true;
