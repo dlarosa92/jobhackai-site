@@ -1531,7 +1531,7 @@ function showUpgradeModal(targetPlan = 'premium') {
           cursor: pointer;
           font-weight: 600;
         ">Cancel</button>
-        <a href="/pricing-a?plan=${targetPlan}" style="
+        <button id="upgrade-confirm-btn" type="button" style="
           background: #007A30;
           color: white;
           border: none;
@@ -1539,9 +1539,7 @@ function showUpgradeModal(targetPlan = 'premium') {
           border-radius: 8px;
           cursor: pointer;
           font-weight: 600;
-          text-decoration: none;
-          display: inline-block;
-        ">Upgrade Now</a>
+        ">Upgrade Now</button>
       </div>
     </div>
   `;
@@ -1551,6 +1549,15 @@ function showUpgradeModal(targetPlan = 'premium') {
   // Cancel button closes modal
   modal.querySelector('#upgrade-cancel-btn').addEventListener('click', () => {
     modal.remove();
+  });
+  // Upgrade button uses standard upgrade flow when available
+  modal.querySelector('#upgrade-confirm-btn').addEventListener('click', () => {
+    modal.remove();
+    if (typeof window.upgradePlan === 'function') {
+      window.upgradePlan(targetPlan, { source: 'nav-upgrade', returnUrl: window.location.href });
+      return;
+    }
+    window.location.href = `/pricing-a?plan=${encodeURIComponent(targetPlan)}`;
   });
   // Close on background click
   modal.addEventListener('click', (e) => {
