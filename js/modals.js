@@ -106,7 +106,7 @@ export function showErrorModal(title, message, options = {}) {
             transition: all 0.18s;
             flex: 1;
             box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
-          " onmouseover="this.style.background='#006335'; this.style.boxShadow='0 4px 12px rgba(0, 122, 48, 0.2)'" 
+          " onmouseover="this.style.background='#006B28'; this.style.boxShadow='0 4px 12px rgba(0, 122, 48, 0.2)'" 
              onmouseout="this.style.background='#007A30'; this.style.boxShadow='0 2px 8px rgba(0, 0, 0, 0.04)'">
             ${escapedUpgradeText}
           </button>

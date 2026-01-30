@@ -605,8 +605,8 @@ textarea:focus {
 }
 
 .btn-primary:hover {
-  background-color: #006335; /* Darker shade of cta-green */
-  border-color: #006335;
+  background-color: #006B28; /* --color-cta-green-hover */
+  border-color: #006B28;
   color: var(--color-card-bg);
 }
 
