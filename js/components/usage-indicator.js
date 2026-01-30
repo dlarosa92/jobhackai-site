@@ -119,7 +119,7 @@ function renderUsageIndicator({ feature, usage, plan, container, customText }) {
     const isMediumUsage = percentage >= 33 && percentage < 66; // 33-66% used = warning (yellow)
     
     const remainingText = usage.remaining !== null ? usage.remaining : usage.limit - used;
-    ariaLabelParts.push(`${used} of ${usage.limit} used, ${remainingText} remaining${plan === 'trial' ? ' in your trial' : ''}`);
+    ariaLabelParts.push(`${used} of ${usage.limit} used, ${remainingText} remaining this month${plan === 'trial' ? ' in your trial' : ''}`);
     
     // Circular progress indicator
     const radius = 16;
@@ -149,7 +149,7 @@ function renderUsageIndicator({ feature, usage, plan, container, customText }) {
         </svg>
         <span style="color: var(--color-text-secondary); font-size: 0.95rem;">
           ${customText || `${used} / ${usage.limit} used`}
-          ${usage.remaining !== null ? ` • ${usage.remaining} remaining${plan === 'trial' ? ' in your trial' : ''}` : ''}
+          ${usage.remaining !== null ? ` • ${usage.remaining} remaining this month${plan === 'trial' ? ' in your trial' : ''}` : ''}
         </span>
       </div>
     `);

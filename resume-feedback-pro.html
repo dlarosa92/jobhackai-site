@@ -3151,6 +3151,9 @@
           window.addEventListener('planChanged', function(e) {
             const newPlan = e.detail?.newPlan || getCurrentUserPlan();
             handlePlanChange(newPlan, 'planChanged');
+            if (typeof refreshUsageIndicator === 'function') {
+              setTimeout(refreshUsageIndicator, 150);
+            }
             // Re-attach button listeners after plan change
             setTimeout(attachRewriteButtonListeners, 100);
           });
@@ -7786,6 +7789,7 @@
 
     // Initialize usage indicator when DOM is ready (fires earlier than 'load')
     document.addEventListener('DOMContentLoaded', refreshUsageIndicator);
+    window.refreshPlanData = refreshUsageIndicator;
 
     // --- PLAN UI ---
     // Plan badge + gating are handled by the navigation-driven plan system via `updateRfTileForPlan()`.
