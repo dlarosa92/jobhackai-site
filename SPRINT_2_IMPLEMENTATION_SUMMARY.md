@@ -132,7 +132,7 @@ const selector = new RoleSelector(document.getElementById('job-title-input'), {
   - `LoadingMessages.UPLOADING_RESUME`: "Analyzing your résumé..."
   - `LoadingMessages.GENERATING_FEEDBACK`: "Optimizing for ATS compliance..."
   - `LoadingMessages.PROCESSING_OCR`: "We're scanning your résumé — this may take up to 20 seconds."
-- ✅ Design system colors: #00E676 (primary), #007BFF (blue), #1F2937 (text), #F9FAFB (background)
+- ✅ Design system colors: #007A30 (primary), #007BFF (blue), #1F2937 (text), #F9FAFB (background)
 - ✅ Smooth animations and transitions
 - ✅ Keyboard support (Escape to close)
 - ✅ Retry functionality in error modals

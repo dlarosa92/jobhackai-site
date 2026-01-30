@@ -343,7 +343,7 @@
         }
         
         #inactivity-stay-logged-in {
-          background: var(--color-cta-green, #00E676);
+          background: var(--color-cta-green, #007A30);
           color: #FFFFFF !important;
           font-weight: var(--font-weight-bold, 700);
           font-size: var(--font-size-base, 1rem);
@@ -360,13 +360,13 @@
         }
         
         #inactivity-stay-logged-in:hover {
-          background: var(--color-cta-green-hover, #00c965);
-          box-shadow: var(--shadow-button-hover, 0 4px 16px rgba(0,230,118,0.10));
+          background: var(--color-cta-green-hover, #006B28);
+          box-shadow: var(--shadow-button-hover, 0 4px 16px rgba(0,122,48,0.10));
           transform: translateY(-1px);
         }
         
         #inactivity-stay-logged-in:focus {
-          outline: 3px solid rgba(0, 230, 118, 0.3);
+          outline: 3px solid rgba(0, 122, 48, 0.3);
           outline-offset: 2px;
         }
         

@@ -407,9 +407,9 @@ function patchNav(plan) {
           newCta.setAttribute('role', 'button');
           try {
             if (skeleton.classList && skeleton.classList.contains('cta-skeleton-mobile')) {
-              newCta.style.cssText = 'background: #00E676; color: white !important; padding: 0.75rem 0; border-radius: 8px; text-decoration: none; font-weight: 600; display: block; text-align: center; margin-top: 1.5rem;';
+              newCta.style.cssText = 'background: #007A30; color: white !important; padding: 0.75rem 0; border-radius: 8px; text-decoration: none; font-weight: 600; display: block; text-align: center; margin-top: 1.5rem;';
             } else {
-              newCta.style.cssText = 'background: #00E676; color: white !important; padding: 0.5rem 1rem; border-radius: 8px; text-decoration: none; font-weight: 600; display: inline-block;';
+              newCta.style.cssText = 'background: #007A30; color: white !important; padding: 0.5rem 1rem; border-radius: 8px; text-decoration: none; font-weight: 600; display: inline-block;';
             }
           } catch(_) {}
           if (planConfig.cta.planId) {
@@ -1532,7 +1532,7 @@ function showUpgradeModal(targetPlan = 'premium') {
           font-weight: 600;
         ">Cancel</button>
         <a href="/pricing-a?plan=${targetPlan}" style="
-          background: #00E676;
+          background: #007A30;
           color: white;
           border: none;
           padding: 0.75rem 1.5rem;
@@ -1716,9 +1716,9 @@ function updateNavigation() {
     cta.setAttribute('role', 'button');
 
     if (isMobile) {
-      cta.style.cssText = 'background: #00E676; color: white !important; padding: 0.75rem 0; border-radius: 8px; text-decoration: none; font-weight: 600; display: block; text-align: center; margin-top: 1.5rem;';
+      cta.style.cssText = 'background: #007A30; color: white !important; padding: 0.75rem 0; border-radius: 8px; text-decoration: none; font-weight: 600; display: block; text-align: center; margin-top: 1.5rem;';
     } else {
-      cta.style.cssText = 'background: #00E676; color: white !important; padding: 0.5rem 1rem; border-radius: 8px; text-decoration: none; font-weight: 600; display: inline-block;';
+      cta.style.cssText = 'background: #007A30; color: white !important; padding: 0.5rem 1rem; border-radius: 8px; text-decoration: none; font-weight: 600; display: inline-block;';
     }
 
     if (navConfig.cta.planId) {

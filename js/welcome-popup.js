@@ -478,7 +478,7 @@ export async function showWelcomePopup(plan = 'free', userName = 'there', onComp
 
       <div style="display: flex; gap: 0.75rem; justify-content: center;">
         <button id="jh-welcome-cta" style="
-          background: #00E676;
+          background: #007A30;
           color: #FFFFFF;
           border: none;
           border-radius: 12px;
@@ -488,9 +488,9 @@ export async function showWelcomePopup(plan = 'free', userName = 'there', onComp
           font-family: 'Inter', sans-serif;
           cursor: pointer;
           transition: all 0.2s;
-          box-shadow: 0 4px 14px rgba(0, 230, 118, 0.3);
-        " onmouseover="this.style.background='#00c965'; this.style.transform='translateY(-2px)'; this.style.boxShadow='0 6px 20px rgba(0, 230, 118, 0.4)'"
-           onmouseout="this.style.background='#00E676'; this.style.transform='translateY(0)'; this.style.boxShadow='0 4px 14px rgba(0, 230, 118, 0.3)'">
+          box-shadow: 0 4px 14px rgba(0, 122, 48, 0.3);
+        " onmouseover="this.style.background='#006B28'; this.style.transform='translateY(-2px)'; this.style.boxShadow='0 6px 20px rgba(0, 122, 48, 0.4)'"
+           onmouseout="this.style.background='#007A30'; this.style.transform='translateY(0)'; this.style.boxShadow='0 4px 14px rgba(0, 122, 48, 0.3)'">
           ${escapedCta}
         </button>
       </div>

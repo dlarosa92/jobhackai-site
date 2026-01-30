@@ -233,7 +233,7 @@ class HelpCenterSearch {
       questionEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
       // Highlight briefly
       const originalBg = questionEl.style.backgroundColor;
-      questionEl.style.backgroundColor = 'rgba(0, 230, 118, 0.1)';
+      questionEl.style.backgroundColor = 'rgba(0, 122, 48, 0.1)';
       questionEl.style.transition = 'background-color 0.3s';
       setTimeout(() => {
         questionEl.style.backgroundColor = originalBg;

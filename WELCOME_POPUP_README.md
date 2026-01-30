@@ -95,7 +95,7 @@ The welcome popup is a first-time user experience feature that displays importan
 
 The popup follows the existing JobHackAI design system:
 
-- **Colors**: Primary green (#00E676), text colors from tokens.css
+- **Colors**: Primary green (#007A30), text colors from tokens.css
 - **Typography**: Inter font family, consistent weights
 - **Spacing**: 8-point spacing scale
 - **Shadows**: Consistent with existing modals

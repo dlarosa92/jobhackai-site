@@ -138,7 +138,7 @@ _Update this file when a snippet is improved or the design system changes._
   transition: background var(--trans-fast);
 }
 .btn-primary:hover {
-  background: #00c965;
+  background: #006B28;
 }
 
 <!-- CARD COMPONENT -->
