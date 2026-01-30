@@ -3128,6 +3128,8 @@
           
           // Unified plan change handler
           function handlePlanChange(newPlan, source) {
+            // Don't update plan UI during logout; prevents pill/CTA flicker
+            if (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('logout-intent') === '1') return;
             if (newPlan && newPlan !== lastKnownPlan && newPlan !== 'undefined') {
               console.log(`[RESUME-FEEDBACK] Plan change detected (${source}):`, lastKnownPlan, '->', newPlan);
               lastKnownPlan = newPlan;
@@ -7372,6 +7374,8 @@
 
     // Hide details for Free plan
     function updateRfTileForPlan() {
+      // Don't update plan badge/tiles during logout; prevents pill/CTA flicker
+      if (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('logout-intent') === '1') return;
       const atsScoreTile = document.getElementById('rf-ats-score-tile');
       const feedbackTile = document.getElementById('rf-feedback-tile');
       const rewriteTile = document.getElementById('rf-rewrite-tile');
