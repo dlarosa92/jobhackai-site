@@ -88,7 +88,7 @@
     <section class="hero" id="what-you-get">
       <h1>AI-Powered Resume Optimization that beats ATS filters</h1>
       <p>Generate an Application Tracking System compliant resume in 60 seconds and increase recruiter visibility.</p>
-      <div class="buttons">
+      <div class="buttons" id="hero-cta-trial">
         <a class="btn-primary" href="pricing-a.html">Try JobHackAI Free</a>
       </div>
     </section>
@@ -154,8 +154,8 @@
       </div>
     </section>
 
-    <!-- Callout -->
-    <section class="callout">
+    <!-- Callout (hidden when user has a subscription) -->
+    <section class="callout" id="callout-section">
       <h2>Get Results Fast – Risk-Free</h2>
       <p>Join 5,000+ job seekers who landed interviews in 7 days or less.</p>
       <a class="btn-primary" href="pricing-a.html">Start Free Trial Now</a>
@@ -272,6 +272,33 @@
         }
       });
     }
+  </script>
+  <script>
+    (function hideTrialCTAsWhenSubscribed() {
+      var SUBSCRIBED_PLANS = ['trial', 'essential', 'pro', 'premium'];
+      var AUTH_STORAGE_KEYS = ['user-plan', 'user-authenticated', 'dev-plan'];
+      function apply() {
+        var nav = window.JobHackAINavigation;
+        if (!nav || typeof nav.getEffectivePlan !== 'function') return;
+        var plan = nav.getEffectivePlan();
+        var hide = SUBSCRIBED_PLANS.indexOf(plan) !== -1;
+        var hero = document.getElementById('hero-cta-trial');
+        var callout = document.getElementById('callout-section');
+        if (hero) hero.style.display = hide ? 'none' : '';
+        if (callout) callout.style.display = hide ? 'none' : '';
+      }
+      if (window.__navigationReadyFired) {
+        apply();
+      } else {
+        window.addEventListener('navigationReady', apply, { once: true });
+      }
+      window.addEventListener('planChanged', apply);
+      // Cross-tab: navigation.js storage handler does not dispatch planChanged,
+      // so we must react to storage ourselves to keep CTA visibility in sync.
+      window.addEventListener('storage', function (e) {
+        if (e.key && AUTH_STORAGE_KEYS.indexOf(e.key) !== -1) apply();
+      });
+    })();
   </script>
   <script src="js/error-reporting.js?v=20251006-1"></script>
   <script src="js/self-healing.js?v=20251006-1"></script>
