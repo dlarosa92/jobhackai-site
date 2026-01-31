@@ -582,9 +582,9 @@ async function fetchHistory() {
 async function generateCoverLetter() {
   if (isGenerating) return;
   const payload = readFormInputs();
-  if (!payload.role || !payload.seniority || !payload.jobDescription) {
+  if (!payload.role || !payload.seniority || !payload.jobDescription || !payload.resumeText) {
     // Minimal client-side validation: rely on server for canonical validation.
-    alert('Please fill in Target Role, Seniority, and Job Description.');
+    alert('Please fill in Target Role, Seniority, Job Description, and Resume Text.');
     return;
   }
 
@@ -734,17 +734,53 @@ async function copyPreview() {
 }
 
 function downloadPdf() {
-  // Matches Interview Questions page behavior.
-  // Print CSS ensures only the preview prints cleanly.
-  const item = getSelectedItem();
-  const prevTitle = document.title;
-  if (item?.title) {
-    document.title = item.title;
+  const coverLetterText = String(els.preview?.value || '').trim();
+  if (!coverLetterText) return;
+
+  const safeText = escapeHtml(coverLetterText).replace(/\n/g, '<br/>');
+  const printHtml = `
+    <div class="cl-print-header">
+      <div class="cl-print-logo">
+        <svg class="cl-print-logo-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+          <rect x="3" y="7" width="18" height="13" rx="2" ry="2" fill="none" stroke="currentColor" stroke-width="1.8"/>
+          <path d="M9 7V5a3 3 0 0 1 6 0v2" fill="none" stroke="currentColor" stroke-width="1.8"/>
+        </svg>
+        <span>JobHackAI</span>
+      </div>
+    </div>
+    <section class="cl-print-section">
+      <div class="cl-print-body">${safeText}</div>
+    </section>
+    <footer class="cl-print-footer">jobhackai.io</footer>
+  `;
+
+  const existingPrint = document.getElementById('cl-print');
+  let printContainer = existingPrint;
+  let createdTempPrintContainer = false;
+
+  if (!printContainer) {
+    printContainer = document.createElement('div');
+    printContainer.id = 'cl-print';
+    printContainer.style.display = 'none';
+    createdTempPrintContainer = true;
   }
+
+  if (printContainer.parentElement !== document.body) {
+    document.body.appendChild(printContainer);
+  }
+
+  printContainer.innerHTML = printHtml;
+
+  const prevTitle = document.title;
+  document.title = ' ';
   window.print();
-  // Restore title shortly after print dialog opens.
   setTimeout(() => {
     document.title = prevTitle;
+    if (createdTempPrintContainer && printContainer && printContainer.parentNode) {
+      printContainer.parentNode.removeChild(printContainer);
+    } else if (printContainer) {
+      printContainer.innerHTML = '';
+    }
   }, 500);
 }
 
@@ -980,4 +1016,3 @@ if (document.readyState === 'loading') {
 } else {
   init();
 }
-

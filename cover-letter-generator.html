@@ -127,8 +127,8 @@
               </div>
 
               <div class="cl-field">
-                <label class="cl-label" for="cl-resume-text">Resume Text <span class="cl-optional">(optional)</span></label>
-                <textarea id="cl-resume-text" class="cl-textarea" rows="6" placeholder="Optional: paste your resume text to make the cover letter more specific…"></textarea>
+                <label class="cl-label" for="cl-resume-text">Resume Text <span class="cl-required">*</span></label>
+                <textarea id="cl-resume-text" class="cl-textarea" rows="6" placeholder="Paste your resume text to make the cover letter more specific…" required></textarea>
               </div>
 
               <div class="cl-actions">
@@ -253,6 +253,9 @@
         <button id="cl-delete-confirm" class="cl-history-danger-btn" type="button">Delete permanently</button>
       </div>
     </div>
+
+    <!-- Print container used by window.print() -->
+    <div id="cl-print" aria-hidden="true"></div>
   </main>
 
   <!-- Footer -->

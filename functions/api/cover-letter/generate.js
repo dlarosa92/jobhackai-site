@@ -187,6 +187,7 @@ export async function onRequest(context) {
   if (!role) return jsonResponse(env, { error: 'invalid_request', field: 'role' }, 400);
   if (!seniority || !validSeniorities.has(seniority)) return jsonResponse(env, { error: 'invalid_request', field: 'seniority' }, 400);
   if (!jobDescription) return jsonResponse(env, { error: 'invalid_request', field: 'jobDescription' }, 400);
+  if (!resumeText) return jsonResponse(env, { error: 'invalid_request', field: 'resumeText' }, 400);
   if (tone && !validTones.has(tone)) return jsonResponse(env, { error: 'invalid_request', field: 'tone' }, 400);
 
   try {
@@ -335,4 +336,3 @@ export async function onRequest(context) {
     return jsonResponse(env, { error: 'server_error', reason: e?.message || 'unknown' }, 500);
   }
 }
-

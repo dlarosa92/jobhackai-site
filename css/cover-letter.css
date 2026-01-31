@@ -701,39 +701,73 @@
   }
 }
 
-/* Print-to-PDF: only print the preview text cleanly */
+/* Print-to-PDF: only print the cover letter content */
+#cl-print {
+  display: none;
+}
+
 @media print {
+  @page { margin: 0.2in 0.45in 0.45in; }
   header.site-header,
   nav.mobile-nav,
   .mobile-nav-backdrop,
-  footer.site-footer,
-  .cl-right,
-  .cl-card:not(.cl-preview-card),
-  .cl-preview-actions,
-  .cl-save-indicator {
+  footer.site-footer {
     display: none !important;
   }
 
   body {
     background: #fff !important;
+    margin: 0 !important;
+    padding: 0 !important;
   }
 
   .cl-main {
     padding: 0 !important;
   }
 
-  .cl-card.cl-preview-card {
-    box-shadow: none !important;
-    border-radius: 0 !important;
-    padding: 0 !important;
-    margin: 0 !important;
+  .cl-main > :not(#cl-print) {
+    display: none !important;
   }
 
-  .cl-preview-textarea {
-    border: none !important;
-    background: #fff !important;
+  #cl-print {
+    display: block !important;
+    margin: 0 !important;
     padding: 0 !important;
-    min-height: auto !important;
+  }
+
+  #cl-print .cl-print-header {
+    display: flex !important;
+    align-items: center !important;
+    margin: 0 0 8px 0 !important;
+  }
+
+  #cl-print .cl-print-logo {
+    display: flex !important;
+    align-items: center !important;
+    gap: 8px !important;
+  }
+
+  #cl-print .cl-print-logo-icon {
+    width: 18px !important;
+    height: 18px !important;
+    color: #111827 !important;
+  }
+
+  #cl-print .cl-print-logo span {
+    font-size: 12px !important;
+    font-weight: 700 !important;
+    letter-spacing: 0.03em !important;
+    color: #111827 !important;
+  }
+
+  #cl-print .cl-print-body {
+    white-space: pre-wrap !important;
+    font-family: inherit !important;
+  }
+
+  #cl-print .cl-print-footer {
+    margin-top: 16px !important;
+    font-size: 11px !important;
+    color: #6b7280 !important;
   }
 }
-
