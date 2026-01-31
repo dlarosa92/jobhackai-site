@@ -707,7 +707,7 @@
 }
 
 @media print {
-  @page { margin: 0.2in 0.5in 0.45in; }
+  @page { margin: 0.1in 0.4in 0.4in; }
   header.site-header,
   nav.mobile-nav,
   .mobile-nav-backdrop,
@@ -738,7 +738,7 @@
   #cl-print .cl-print-header {
     display: flex !important;
     align-items: center !important;
-    margin: 0 0 8px 0 !important;
+    margin: 0 0 4px 0 !important;
   }
 
   #cl-print .cl-print-logo {
