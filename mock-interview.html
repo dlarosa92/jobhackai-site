@@ -1151,18 +1151,32 @@
       cursor: pointer;
       display: flex;
       justify-content: space-between;
-      align-items: center;
+      align-items: flex-start;
+      gap: 0.75rem;
       font-size: 0.95rem;
       color: var(--color-text-main);
       transition: background var(--transition-fast);
     }
-    
+
+    .mi-accordion-question {
+      flex: 1;
+      min-width: 0;
+      line-height: 1.5;
+      color: var(--color-text-secondary, #64748B);
+      overflow: hidden;
+      display: -webkit-box;
+      -webkit-line-clamp: 3;
+      line-clamp: 3;
+      -webkit-box-orient: vertical;
+    }
+
     .mi-accordion-header:hover {
       background: #F8FAFC;
     }
     
     .mi-accordion-header svg {
       transition: transform var(--transition-fast);
+      flex-shrink: 0;
     }
     
     .mi-accordion-item.open .mi-accordion-header svg {
@@ -1172,8 +1186,8 @@
     .mi-accordion-q-score {
       font-weight: var(--font-weight-bold);
       color: var(--color-accent-blue);
-      margin-left: auto;
       margin-right: 0.5rem;
+      flex-shrink: 0;
     }
     
     .mi-accordion-content {
@@ -2774,7 +2788,7 @@
         return `
           <div class="mi-accordion-item">
             <button class="mi-accordion-header" type="button">
-              <span>Q${i + 1} · "${escapeHtml(truncate(q.text, 50))}"</span>
+              <span class="mi-accordion-question">Q${i + 1} · "${escapeHtml(q.text)}"</span>
               <span class="mi-accordion-q-score">${pq.score || 0}/10</span>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
             </button>
