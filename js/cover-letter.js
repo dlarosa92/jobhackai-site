@@ -751,6 +751,7 @@ function downloadPdf() {
     <section class="cl-print-section">
       <div class="cl-print-body">${safeText}</div>
     </section>
+    <footer class="cl-print-footer">jobhackai.io</footer>
   `;
 
   const existingPrint = document.getElementById('cl-print');

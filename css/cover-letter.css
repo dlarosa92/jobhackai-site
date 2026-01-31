@@ -707,7 +707,7 @@
 }
 
 @media print {
-  @page { margin: 0.1in 0.4in 0.4in; }
+  @page { margin: 0.2in 0.45in 0.45in; }
   header.site-header,
   nav.mobile-nav,
   .mobile-nav-backdrop,
@@ -722,10 +722,6 @@
   }
 
   .cl-main {
-    padding: 0 !important;
-  }
-
-  .cl-main > :not(#cl-print) {
     display: none !important;
   }
 
@@ -772,5 +768,11 @@
     line-height: 1.5 !important;
     margin: 0 !important;
     padding: 0 !important;
+  }
+
+  #cl-print .cl-print-footer {
+    margin-top: 12px !important;
+    font-size: 11px !important;
+    color: #6b7280 !important;
   }
 }
