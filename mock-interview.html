@@ -2821,13 +2821,9 @@
       if (score >= 50) return 'score-yellow';
       return 'score-red';
     }
-    
-    function truncate(str, len) {
-      if (!str) return '';
-      return str.length > len ? str.slice(0, len) + '...' : str;
-    }
-    
+
     function escapeHtml(str) {
+      if (!str) return '';
       const div = document.createElement('div');
       div.textContent = str;
       return div.innerHTML;
