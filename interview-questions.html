@@ -1112,6 +1112,108 @@
     .btn-mock-cta[data-locked="true"] .lock svg {
       color: #fff; /* White lock icon when button is locked */
     }
+
+    /* Print-to-PDF: only print the questions content */
+    #iq-print {
+      display: none;
+    }
+
+    @media print {
+      @page {
+        margin: 0.2in 0.45in 0.45in;
+      }
+
+      /* Hide all page content */
+      header.site-header,
+      nav.mobile-nav,
+      .mobile-nav-backdrop,
+      footer.site-footer,
+      .iq-main,
+      #iq-questions,
+      .iq-questions-section,
+      #iq-saved-panel,
+      #iq-upsell {
+        display: none !important;
+      }
+
+      body {
+        background: #fff !important;
+        margin: 0 !important;
+        padding: 0 !important;
+      }
+
+      /* Show only print container */
+      #iq-print {
+        display: block !important;
+        margin: 0 !important;
+        padding: 0 !important;
+      }
+
+      /* Header styling */
+      #iq-print .iq-print-header {
+        display: flex !important;
+        align-items: center !important;
+        margin: 0 0 4px 0 !important;
+      }
+
+      #iq-print .iq-print-logo {
+        display: flex !important;
+        align-items: center !important;
+        gap: 8px !important;
+      }
+
+      #iq-print .iq-print-logo-icon {
+        width: 18px !important;
+        height: 18px !important;
+        color: #111827 !important;
+      }
+
+      #iq-print .iq-print-logo span {
+        font-size: 12px !important;
+        font-weight: 700 !important;
+        letter-spacing: 0.03em !important;
+        color: #111827 !important;
+      }
+
+      /* Body styling */
+      #iq-print .iq-print-section {
+        margin: 0 !important;
+        padding: 0 !important;
+      }
+
+      #iq-print .iq-print-body {
+        font-family: inherit !important;
+        font-size: 12px !important;
+        line-height: 1.5 !important;
+        margin: 0 !important;
+        padding: 0 !important;
+      }
+
+      #iq-print .iq-print-question {
+        margin-bottom: 12px !important;
+        page-break-inside: avoid !important;
+      }
+
+      #iq-print .iq-print-qtext {
+        font-weight: 400 !important;
+        color: #111827 !important;
+        margin-bottom: 4px !important;
+      }
+
+      #iq-print .iq-print-hint {
+        font-size: 11px !important;
+        color: #6b7280 !important;
+        margin-left: 16px !important;
+        font-style: italic !important;
+      }
+
+      /* Footer styling */
+      #iq-print .iq-print-footer {
+        margin-top: 12px !important;
+        font-size: 11px !important;
+        color: #6b7280 !important;
+      }
+    }
   </style>
 </head>
 <body>
@@ -1524,6 +1626,10 @@
     <!-- Toast container -->
     <div id="iq-toast" role="status" aria-live="polite" aria-atomic="true"></div>
   </main>
+
+  <!-- Print container for PDF download -->
+  <div id="iq-print" style="display: none;"></div>
+
   <!-- Footer (canonical) -->
   <footer class="site-footer">
     <div class="footer-container">
@@ -1793,6 +1899,102 @@
       iqState.timers.toast = setTimeout(()=> el.classList.remove('show'), 1600);
     }
     function iqEsc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
+
+    /**
+     * Builds HTML content for print container
+     * @param {Array} questions - Array of question objects [{q, hint, example}]
+     * @param {boolean} showGuidance - Whether to include hint text
+     * @returns {string} HTML string for print container
+     */
+    function buildIqPrintHtml(questions, showGuidance) {
+      if (!Array.isArray(questions) || questions.length === 0) {
+        return '';
+      }
+
+      const questionsList = questions
+        .map((q, idx) => {
+          const questionText = iqEsc(q.q);
+          const hintText = showGuidance && q.hint ? `<div class="iq-print-hint">Hint: ${iqEsc(q.hint)}</div>` : '';
+          return `<div class="iq-print-question">
+        <div class="iq-print-qtext">${idx + 1}. ${questionText}</div>
+        ${hintText}
+      </div>`;
+        })
+        .join('');
+
+      return `
+    <div class="iq-print-header">
+      <div class="iq-print-logo">
+        <svg class="iq-print-logo-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+          <rect x="3" y="7" width="18" height="13" rx="2" ry="2" fill="none" stroke="currentColor" stroke-width="1.8"/>
+          <path d="M9 7V5a3 3 0 0 1 6 0v2" fill="none" stroke="currentColor" stroke-width="1.8"/>
+        </svg>
+        <span>JobHackAI</span>
+      </div>
+    </div>
+    <section class="iq-print-section">
+      <div class="iq-print-body">${questionsList}</div>
+    </section>
+    <footer class="iq-print-footer">jobhackai.io</footer>
+  `;
+    }
+
+    /**
+     * Downloads questions as PDF
+     * @param {Array} questions - Array of question objects to print
+     * @param {string} titlePrefix - Optional prefix for document title (e.g., "Saved Questions")
+     */
+    function downloadIqPdf(questions, titlePrefix = '') {
+      if (!Array.isArray(questions) || questions.length === 0) {
+        return; // Silent fail if no questions
+      }
+
+      const showGuidance = iqState.prefs.showGuidance;
+      const printHtml = buildIqPrintHtml(questions, showGuidance);
+
+      if (!printHtml) return;
+
+      // Container management - same pattern as Cover Letter
+      const existingPrint = document.getElementById('iq-print');
+      let printContainer = existingPrint;
+      let createdTempPrintContainer = false;
+
+      if (!printContainer) {
+        printContainer = document.createElement('div');
+        printContainer.id = 'iq-print';
+        printContainer.style.display = 'none';
+        createdTempPrintContainer = true;
+      }
+
+      if (printContainer.parentElement !== document.body) {
+        document.body.appendChild(printContainer);
+      }
+
+      printContainer.innerHTML = printHtml;
+
+      // Set document title for PDF filename
+      const role = iqState?.set?.role || $IQ('#iq-role')?.value || '';
+      const seniority = iqState?.set?.seniority || '';
+      const titleParts = [];
+      if (titlePrefix) titleParts.push(titlePrefix);
+      if (role) titleParts.push(role);
+      if (seniority) titleParts.push(seniority);
+      const printTitle = titleParts.length > 0 ? titleParts.join(' - ') : 'Interview Questions';
+
+      const prevTitle = document.title;
+      document.title = printTitle;
+      window.print();
+
+      setTimeout(() => {
+        document.title = prevTitle;
+        if (createdTempPrintContainer && printContainer && printContainer.parentNode) {
+          printContainer.parentNode.removeChild(printContainer);
+        } else if (printContainer) {
+          printContainer.innerHTML = '';
+        }
+      }, 500);
+    }
+
     // Helper to disable all question generation buttons when daily limit is reached
     // Note: Replace buttons remain enabled as replacements are free and don't count toward daily limit
     function iqDisableAllButtons(){
@@ -3673,7 +3875,15 @@
           iqTrack('iq_copy_all',{ count: questions.length });
         }catch{ iqToast('Clipboard blocked'); }
       });
-      $IQ('#btn-download')?.addEventListener('click', ()=>{ window.print(); iqTrack('iq_download'); });
+      // Main questions download
+      $IQ('#btn-download')?.addEventListener('click', ()=>{
+        const questions = iqGetValidQuestions();
+        if (questions.length === 0) {
+          return; // Silent fail - no questions to download
+        }
+        downloadIqPdf(questions);
+        iqTrack('iq_download', { count: questions.length });
+      });
       // Saved panel open
       const openSaved = ()=>{ iqRenderSavedPanel(true); iqTrack('iq_saved_opened'); };
       $IQ('#btn-save-set')?.addEventListener('click', openSaved);
@@ -3685,7 +3895,16 @@
       $IQ('#iq-seniority')?.addEventListener('change', ()=>{ iqState.prefs.seniority=$IQ('#iq-seniority').value; iqSavePrefs(); });
       // Saved panel actions
       $IQ('#saved-copy-all')?.addEventListener('click', async ()=>{ try{ const arr=iqGetSavedItems().map(it=>it.q); await navigator.clipboard.writeText(arr.map((t,i)=>`${i+1}. ${t}`).join('\n')); iqToast('Copied'); }catch{ iqToast('Clipboard blocked'); } });
-      $IQ('#saved-download')?.addEventListener('click', ()=>{ window.print(); });
+      // Saved questions download
+      $IQ('#saved-download')?.addEventListener('click', ()=>{
+        const savedQuestions = iqGetSavedItems();
+        if (savedQuestions.length === 0) {
+          iqToast('No saved questions');
+          return;
+        }
+        downloadIqPdf(savedQuestions, 'Saved Questions');
+        iqTrack('iq_download_saved', { count: savedQuestions.length });
+      });
       $IQ('#saved-mock')?.addEventListener('click', ()=>{ iqHandleMock(true); });
       $IQ('#saved-close')?.addEventListener('click', ()=>{ const p=$IQ('#iq-saved-panel'); if(p){ p.hidden=true; }});
       // Mock
