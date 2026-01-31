@@ -2750,12 +2750,13 @@
       function buildRfPrintHtml() {
         const rewrittenText = rewrittenBox.value || rewrittenBox.textContent || '';
         const safeRewritten = escapeHtml(rewrittenText).replace(/\n/g, '<br/>');
+        const logoSrc = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAIAAAD8GO2jAAACfklEQVR4nGP8//8/Ay0BE01NH7Vg1IJRCxgYGBgYWJA5kDzNiKoCLaOjyRIEKD5gxGY6I5I4I8w+4osXFAtevX7z9t17NCvR2IwY4vgBC9zovQcOHT568u+/f4G+npbmJvx8fP9hBv3795+JifHXr19sbGyYRvz+84eVBWrOv3//mJhQQ+X///9fv36bOnueuqoKFyfH33//fnz/8fDJ0/zM1CfPnh84dPTd+w/fvn9TV1U9dOSYtpYGJweHkYHuo8dPP33+/OvXbxVlxU1bdujqaH779v33nz9RoUHdE6cG+XlfvX7T18uNj5eXhYGB4fuPH2IiIv7eHnBrZ8xZ8PPnzy9fvu7ad9DRztrIQHf2giUC/PyPHj959ebtxYuXpGVl791/8PPnzyvXbmSnJb54+SqzsCI6PPjb9+8XLl3h5eX98+fP799/oEHEyMj469dvuOn/////9///sxcv5y5c6u/tcf/hwydPn7k5O5w/f0lAQEBeTtbG0mzz9l1aGmqMjIw/f/6aNW+xsrJCemLMfwaGnXv2B/p6vfvwgZuLk5WVBRpEv3//XrR89d8/f5iZmRkYGH79/i0mKhLs7/Pjx08ODvY/f//+/fOXnZ3ty9evPNzc//7/Z2Rk/IMU7t++fefi4oSkq58/f3Kws/9n+P/3z19mFhZGiAUQdb9+IzzBxspKdDIhABixVplEJnNGJJVYMxADZlHxH0kOzSxcJGb2RLYPZ1HBiMMmrO7FA9CLCjTuf4rLIhZcEv9xc7GWibgAzuKaEYlBScuJqPoAbhlJbocAFrhO5LSBGSBoNpFsAbIbsSY7sm1CDyIy3EiaBVQHJFhAnudo7gMAoa0EMv++w/IAAAAASUVORK5CYII=';
 
         // Basic template - keep inline styles minimal and rely on print CSS
         return `
           <div class="rf-print-header">
             <div class="rf-print-logo">
-              <img src="assets/JobHackAI_Logo_favicon-32x32.png" alt="JobHackAI logo">
+              <img src="${logoSrc}" alt="JobHackAI logo">
               <span>JobHackAI</span>
             </div>
           </div>
@@ -9601,7 +9602,7 @@
         /* Print container for Resume Rewriting (matches other product print rules) */
         #rf-print { display: none; }
         @media print {
-          @page { margin: 0.35in 0.5in 0.55in; }
+          @page { margin: 0.2in 0.45in 0.45in; }
           header.site-header,
           nav.mobile-nav,
           .mobile-nav-backdrop,
@@ -9619,9 +9620,9 @@
           /* Ensure print container card styles are neutral for multi-page output
              and explicitly make print cards visible even though .rf-card is hidden above. */
           #rf-print .rf-card { display: block !important; box-shadow: none !important; border-radius: 0 !important; padding: 0 !important; margin: 0 0 1rem 0 !important; }
-          #rf-print .rf-print-header { display: flex !important; align-items: center !important; margin: 0 0 12px 0 !important; }
+          #rf-print .rf-print-header { display: flex !important; align-items: center !important; margin: 0 0 8px 0 !important; }
           #rf-print .rf-print-logo { display: flex !important; align-items: center !important; gap: 8px !important; }
-          #rf-print .rf-print-logo img { width: 20px !important; height: 20px !important; }
+          #rf-print .rf-print-logo img { width: 18px !important; height: 18px !important; }
           #rf-print .rf-print-logo span { font-size: 12px !important; font-weight: 700 !important; letter-spacing: 0.03em !important; color: #111827 !important; }
           #rf-print .rf-print-body { white-space: pre-wrap !important; font-family: inherit !important; }
           #rf-print .rf-print-footer { margin-top: 16px !important; font-size: 11px !important; color: #6b7280 !important; }
