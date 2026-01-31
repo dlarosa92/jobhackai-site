@@ -7551,12 +7551,15 @@
       };
 
       // Reset all tiles to default state
+      // During historical view, preserve feedback/rewrite content visibility to avoid flicker
       const resetTiles = () => {
         if (atsScoreTile) atsScoreTile.style.display = 'block';
         if (feedbackTile) feedbackTile.style.display = 'block';
         if (rewriteTile) rewriteTile.style.display = 'block';
-        if (feedbackContent) feedbackContent.style.display = 'none';
-        if (rewriteContent) rewriteContent.style.display = 'none';
+        if (!isHistoricalView) {
+          if (feedbackContent) feedbackContent.style.display = 'none';
+          if (rewriteContent) rewriteContent.style.display = 'none';
+        }
         cleanupOldBanners();
       };
 
@@ -8771,10 +8774,15 @@
           rewriteDescInline.style.display = hasRewriteContent ? 'block' : 'none';
         }
         setCopyRewriteVisibility(hasRewriteContent);
-        
-        // Also populate original snippet if available
-        if (originalTextarea && original) {
-          originalTextarea.value = original;
+
+        // Populate original snippet from history, or show appropriate placeholder
+        if (originalTextarea) {
+          if (original) {
+            originalTextarea.value = original;
+          } else {
+            // No original saved for this session - show contextual placeholder
+            originalTextarea.value = 'No original snippet saved for this session.';
+          }
         }
       }
 
