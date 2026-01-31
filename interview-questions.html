@@ -1116,8 +1116,8 @@
 </head>
 <body>
   <!-- Upsell Overlay (direct child of body for reliable viewport centering) -->
-  <div id="iq-upsell" hidden style="position:fixed; inset:0; min-height:100vh; background:rgba(17,24,39,.55); z-index:1100; display:flex; align-items:center; justify-content:center;">
-    <div role="dialog" aria-modal="true" aria-labelledby="upsell-title" class="card" style="max-width:560px; width:92%; box-shadow:0 14px 40px rgba(0,0,0,.25);">
+  <div id="iq-upsell" hidden style="position:fixed; inset:0; min-height:100vh; background:rgba(17,24,39,.55); z-index:1100;">
+    <div role="dialog" aria-modal="true" aria-labelledby="upsell-title" class="card" style="position:absolute; top:50%; left:50%; transform:translate(-50%, -50%); max-width:560px; width:92%; box-shadow:0 14px 40px rgba(0,0,0,.25);">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:.75rem;">
           <h3 id="upsell-title" style="margin:0;">Unlock Mock Interviews</h3>
           <button id="upsell-cancel" class="icon-btn" aria-label="Close" style="padding:.35rem;">
