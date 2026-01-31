@@ -291,6 +291,14 @@ export async function onRequest(context) {
 
     const { resumeId, jobTitle, resumeText, isMultiColumn, includeOriginalResume } = body;
 
+    // Enforce required target role for paid plans (defense-in-depth against client bypass)
+    if (['trial', 'essential', 'pro', 'premium'].includes(effectivePlan)) {
+      const hasJobTitle = typeof jobTitle === 'string' && jobTitle.trim().length > 0;
+      if (!hasJobTitle) {
+        return errorResponse('Target role is required for feedback on your plan.', 400, origin, env, requestId);
+      }
+    }
+
     // Validate resumeId exists and is not empty before sanitizing
     // Catch all falsy values (null, undefined, empty string, etc.) for consistent error handling
     if (!resumeId) {
@@ -1382,4 +1390,3 @@ async function hashString(str) {
   const hashArray = Array.from(new Uint8Array(hashBuffer));
   return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
 }
-

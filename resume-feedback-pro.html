@@ -1637,6 +1637,101 @@
     const tryApplyScore = runAuthority?.tryApplyScore?.bind(runAuthority);
     const clearRunAuthority = runAuthority?.clearAuthority?.bind(runAuthority);
     let lastNormalizedRoleValue = '';
+    const ROLE_REQUIRED_PLANS = ['trial', 'essential', 'pro', 'premium'];
+    let resumeFileIsValid = false;
+
+    function isRoleRequiredPlan(plan) {
+      return ROLE_REQUIRED_PLANS.includes(String(plan || '').toLowerCase());
+    }
+
+    function getRoleInputValue() {
+      const input = document.getElementById('rf-job-title');
+      return input?.value?.trim() || '';
+    }
+
+    function updateGenerateButtonState({ plan, roleValue, fileSelected, fileValid } = {}) {
+      const resolvedPlan = (plan || getCurrentUserPlan() || '').toLowerCase();
+      const roleRequired = isRoleRequiredPlan(resolvedPlan);
+      const jobTitleInput = document.getElementById('rf-job-title');
+      const helper = document.getElementById('rf-role-required-helper');
+      const resolvedRole = typeof roleValue === 'string' ? roleValue.trim() : getRoleInputValue();
+      const hasRole = resolvedRole.length > 0;
+      const uploadInput = document.getElementById('rf-upload');
+      const hasFile = typeof fileSelected === 'boolean' ? fileSelected : !!uploadInput?.files?.[0];
+      const hasValidFile = typeof fileValid === 'boolean' ? fileValid : (hasFile && resumeFileIsValid);
+
+      if (jobTitleInput) {
+        if (roleRequired) {
+          jobTitleInput.setAttribute('aria-required', 'true');
+        } else {
+          jobTitleInput.removeAttribute('aria-required');
+        }
+        const isInvalid = roleRequired && !hasRole;
+        if (isInvalid) {
+          jobTitleInput.setAttribute('aria-invalid', 'true');
+        } else {
+          jobTitleInput.removeAttribute('aria-invalid');
+        }
+
+        const helperId = 'rf-role-required-helper';
+        let describedBy = (jobTitleInput.getAttribute('aria-describedby') || '')
+          .split(/\s+/)
+          .filter(Boolean);
+        if (isInvalid) {
+          if (!describedBy.includes(helperId)) describedBy.push(helperId);
+        } else {
+          describedBy = describedBy.filter(id => id !== helperId);
+        }
+        if (describedBy.length) {
+          jobTitleInput.setAttribute('aria-describedby', describedBy.join(' '));
+        } else {
+          jobTitleInput.removeAttribute('aria-describedby');
+        }
+      }
+
+      if (helper) {
+        helper.style.display = roleRequired && !hasRole ? 'block' : 'none';
+      }
+
+      const generateBtn = document.getElementById('rf-generate-btn');
+      if (generateBtn) {
+        const shouldEnable = hasValidFile && (!roleRequired || hasRole);
+        const isProcessing = generateBtn.dataset.processing === 'true';
+        if (isProcessing) {
+          generateBtn.disabled = true;
+        } else {
+          generateBtn.disabled = !shouldEnable;
+        }
+      }
+
+      const roleGateDisabled = roleRequired && !hasRole;
+      const applyRoleGate = (btn) => {
+        if (!btn) return;
+        if (roleGateDisabled) {
+          btn.disabled = true;
+          btn.setAttribute('aria-disabled', 'true');
+          btn.dataset.roleRequiredDisabled = 'true';
+        } else if (btn.dataset.roleRequiredDisabled === 'true') {
+          btn.disabled = false;
+          btn.removeAttribute('aria-disabled');
+          delete btn.dataset.roleRequiredDisabled;
+        }
+      };
+      applyRoleGate(document.getElementById('rf-regenerate-btn'));
+      applyRoleGate(document.getElementById('rf-optimize-btn'));
+    }
+
+    function ensureTargetRoleForPlan({ showHelper = true, showToast = false } = {}) {
+      const plan = getCurrentUserPlan();
+      if (!isRoleRequiredPlan(plan)) return true;
+      const roleValue = getRoleInputValue();
+      if (roleValue) return true;
+      if (showHelper) updateGenerateButtonState({ plan, roleValue: '' });
+      if (showToast && window.JobHackAIToast) {
+        window.JobHackAIToast.info('Target role is required for feedback on your plan.');
+      }
+      return false;
+    }
 
     // --- API CLIENT FUNCTIONS ---
     async function getAuthToken() {
@@ -3237,11 +3332,7 @@
                   jobTitleInput.setAttribute('aria-expanded', 'false');
                   
                   // Enable generate button if file is selected
-                  const fileInput = document.getElementById('rf-upload');
-                  const generateBtn = document.getElementById('rf-generate-btn');
-                  if (fileInput && generateBtn && fileInput.files && fileInput.files.length > 0) {
-                    generateBtn.disabled = false;
-                  }
+                  updateGenerateButtonState({ roleValue: roleName });
                 }
               });
               jobTitleInput.dataset.roleSelectorInitialized = 'true';
@@ -3306,6 +3397,13 @@
       } else {
         // DOM already ready, but wait a bit for scripts to load
         setTimeout(initializeRoleSelector, 100);
+      }
+
+      // Initialize role-required gating once the DOM is ready
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', () => updateGenerateButtonState());
+      } else {
+        updateGenerateButtonState();
       }
 
       // Load cached ATS score on page load (with KV fallback)
@@ -3520,9 +3618,8 @@
               fileNameSpan.textContent = lastResumeName + ' (please re-select file)';
               fileNameSpan.style.color = 'var(--color-text-muted)';
               fileNameSpan.style.fontWeight = 'normal';
-              if (generateBtn) {
-                generateBtn.disabled = false;
-              }
+              resumeFileIsValid = false;
+              updateGenerateButtonState();
             }
           }, {
             resumeId: cachedScore.resumeId,
@@ -3534,6 +3631,8 @@
           }
         }
       }
+
+      updateGenerateButtonState();
       
     function clearTargetRoleState() {
       const jobTitleInput = document.getElementById('rf-job-title');
@@ -3542,6 +3641,7 @@
       }
       currentJobTitle = '';
       clearScoreAuthority('target-role-clear');
+      updateGenerateButtonState({ roleValue: '' });
       try {
         sessionStorage.removeItem('currentJobTitle');
         localStorage.removeItem('jh_last_job_title');
@@ -3814,6 +3914,10 @@
               }
               return;
             }
+
+            if (!ensureTargetRoleForPlan({ showHelper: true, showToast: true })) {
+              return;
+            }
             
             const canonicalJobTitle = getCanonicalJobTitle();
             
@@ -3945,6 +4049,10 @@
           return;
         }
 
+        if (!ensureTargetRoleForPlan({ showHelper: true, showToast: true })) {
+          return;
+        }
+
         const jobTitleInput = document.getElementById('rf-job-title');
         const canonicalJobTitle = getCanonicalJobTitle(); // Save final job title once per run
         
@@ -3969,7 +4077,10 @@
         let atsScoringSucceeded = false;
         
         try {
-          generateBtn.disabled = true;
+          if (generateBtn) {
+            generateBtn.dataset.processing = 'true';
+            generateBtn.disabled = true;
+          }
           if (statusDiv) {
             statusDiv.style.display = 'none';
           }
@@ -4028,11 +4139,7 @@
               if (!hasCredit) {
                 // Free account limit reached - show upgrade message
                 uploadInput.disabled = false;
-                // Only enable button if file still exists
-                const fileStillExists = uploadInput?.files?.[0];
-                if (generateBtn) {
-                  generateBtn.disabled = !fileStillExists;
-                }
+                updateGenerateButtonState();
                 hideLoadingState();
                 handleApiError(new Error('You have used your 1 free lifetime ATS score. Upgrade to continue scoring unlimited resumes.'));
                 // Redirect to pricing page after showing error
@@ -4124,11 +4231,7 @@
               if (!hasCredit) {
                 // Free account limit reached - show upgrade message
                 uploadInput.disabled = false;
-                // Only enable button if file still exists
-                const fileStillExists = uploadInput?.files?.[0];
-                if (generateBtn) {
-                  generateBtn.disabled = !fileStillExists;
-                }
+                updateGenerateButtonState();
                 hideLoadingState();
                 handleApiError(new Error('You have used your 1 free lifetime ATS score. Upgrade to continue scoring unlimited resumes.'));
                 // Redirect to pricing page after showing error
@@ -4221,11 +4324,7 @@
               }
             }
             uploadInput.disabled = false;
-            // Only enable button if file still exists
-            const fileStillExists = uploadInput?.files?.[0];
-            if (generateBtn) {
-              generateBtn.disabled = !fileStillExists;
-            }
+            updateGenerateButtonState();
             hideLoadingState();
             return;
           }
@@ -4414,7 +4513,7 @@
                     setRoleStatus('');
                     clearActiveFeedbackToken();
                     uploadInput.disabled = false;
-                    if (generateBtn) generateBtn.disabled = false;
+                    updateGenerateButtonState();
                     return; // Block all API calls
                   }
                 }
@@ -4668,8 +4767,7 @@
                   if (window._rfToast && window._rfToast.currentId === 'rf:analysis-running' && window._rfToast.currentToast) {
                     try { if (typeof window._rfToast.currentToast.dismiss === 'function') window._rfToast.currentToast.dismiss(); } catch (e) { /* ignore */ }
                   }
-                  const generateBtn = document.getElementById('rf-generate-btn');
-                  if (generateBtn) generateBtn.disabled = false;
+                  updateGenerateButtonState();
                   const regenBtn = document.getElementById('rf-regenerate-btn');
                   if (regenBtn) { regenBtn.disabled = false; regenBtn.textContent = 'Regenerate Feedback'; }
                   try { hideLoadingState(); } catch (e) { /* ignore */ }
@@ -5085,8 +5183,7 @@
                     showRoleFeedback();
                   }, 100);
                   // Re-enable buttons now that retry completed successfully
-                const generateBtn = document.getElementById('rf-generate-btn');
-                if (generateBtn) generateBtn.disabled = false;
+                updateGenerateButtonState();
                 const regenBtn = document.getElementById('rf-regenerate-btn');
                 if (regenBtn) { regenBtn.disabled = false; regenBtn.textContent = 'Regenerate Feedback'; }
                   // Clear token only if role tips was not started
@@ -5109,8 +5206,7 @@
                       token: feedbackRunToken
                     });
                     // Re-enable buttons
-                    const generateBtn = document.getElementById('rf-generate-btn');
-                    if (generateBtn) generateBtn.disabled = false;
+                    updateGenerateButtonState();
                     const regenBtn = document.getElementById('rf-regenerate-btn');
                     if (regenBtn) { regenBtn.disabled = false; regenBtn.textContent = 'Regenerate Feedback'; }
                     maybeClearFeedbackToken('retry-falsy-result');
@@ -5136,8 +5232,7 @@
                     token: feedbackRunToken
                   });
                   // Re-enable buttons after retry failure
-                  const generateBtn = document.getElementById('rf-generate-btn');
-                  if (generateBtn) generateBtn.disabled = false;
+                  updateGenerateButtonState();
                   const regenBtn = document.getElementById('rf-regenerate-btn');
                   if (regenBtn) { regenBtn.disabled = false; regenBtn.textContent = 'Regenerate Feedback'; }
                   // Only clear token if this is still the active run and role tips aren't in-flight
@@ -5425,11 +5520,7 @@
           */
 
           uploadInput.disabled = false;
-          // Only enable button if file still exists
-          const fileStillExists = uploadInput?.files?.[0];
-          if (generateBtn) {
-            generateBtn.disabled = !fileStillExists;
-          }
+          updateGenerateButtonState();
           hideLoadingState();
           
           // Refresh usage indicator after feedback completes (to show updated count)
@@ -5502,12 +5593,14 @@
           clearAtsState();
           handleApiError(error);
           uploadInput.disabled = false;
-          // Only enable button if file still exists
-          const fileStillExists = uploadInput?.files?.[0];
-          if (generateBtn) {
-            generateBtn.disabled = !fileStillExists;
-          }
+          updateGenerateButtonState();
           hideLoadingState();
+        }
+        finally {
+          if (generateBtn) {
+            delete generateBtn.dataset.processing;
+          }
+          updateGenerateButtonState();
         }
       }
 
@@ -5532,6 +5625,7 @@
           const pdfHelper = document.getElementById('rf-pdf-helper');
           clearScoreAuthority('resume-change');
           if (file) {
+            resumeFileIsValid = false;
             // Hide status pill initially while validating
             hideFileStatus();
             
@@ -5561,9 +5655,8 @@
                   fileNameSpan.style.color = 'var(--color-error)';
                   fileNameSpan.style.fontWeight = '600';
                 }
-                if (generateBtn) {
-                  generateBtn.disabled = true;
-                }
+                resumeFileIsValid = false;
+                updateGenerateButtonState({ fileSelected: true, fileValid: false });
                 if (statusDiv) {
                   statusDiv.style.display = 'none';
                 }
@@ -5590,10 +5683,8 @@
                 fileNameSpan.style.fontWeight = '600';
               }
               
-              // Enable generate button
-              if (generateBtn) {
-                generateBtn.disabled = false;
-              }
+              resumeFileIsValid = true;
+              updateGenerateButtonState({ fileSelected: true, fileValid: true });
               
               // Show ready status (legacy status div - keep for compatibility)
               if (statusDiv) {
@@ -5613,16 +5704,15 @@
                 fileNameSpan.style.color = 'var(--color-error)';
                 fileNameSpan.style.fontWeight = '600';
               }
-              if (generateBtn) {
-                // Keep button clickable; validation failure is shown via status and name color
-                // generateBtn.disabled = true;
-              }
+              resumeFileIsValid = false;
+              updateGenerateButtonState({ fileSelected: true, fileValid: false });
               if (statusDiv) {
                 statusDiv.style.display = 'none';
               }
             }
           } else {
             // Reset if file cleared
+            resumeFileIsValid = false;
             hideFileStatus();
             if (pdfHelper) {
               pdfHelper.style.display = 'none';
@@ -5632,10 +5722,7 @@
               fileNameSpan.style.color = 'var(--color-text-muted)';
               fileNameSpan.style.fontWeight = 'normal';
             }
-            // Leave generate button clickable; click guard will show modal if no file
-            // if (generateBtn) {
-            //   generateBtn.disabled = true;
-            // }
+            updateGenerateButtonState({ fileSelected: false, fileValid: false });
             if (statusDiv) {
               statusDiv.style.display = 'none';
             }
@@ -5647,10 +5734,7 @@
       // Generate Button Click Handler
       if (generateBtn) {
         generateBtn.addEventListener('click', generateATSAndFeedback);
-        
-        // Enable button on page load - click guard will handle missing file
-        // This ensures the popup works even when no file is selected
-        generateBtn.disabled = false;
+        updateGenerateButtonState();
       }
       // Regenerate Feedback Button
       const regenBtn = document.getElementById('rf-regenerate-btn');
@@ -5658,6 +5742,10 @@
         regenBtn.addEventListener('click', async function() {
           if (!currentResumeId) {
             handleApiError(new Error('Please upload a resume first'));
+            return;
+          }
+
+          if (!ensureTargetRoleForPlan({ showHelper: true, showToast: true })) {
             return;
           }
 
@@ -5832,8 +5920,7 @@
                 if (window._rfToast && window._rfToast.currentId === 'rf:analysis-running' && window._rfToast.currentToast) {
                   try { if (typeof window._rfToast.currentToast.dismiss === 'function') window._rfToast.currentToast.dismiss(); } catch (e) { /* ignore */ }
                 }
-                const generateBtn = document.getElementById('rf-generate-btn');
-                if (generateBtn) generateBtn.disabled = false;
+                updateGenerateButtonState();
                 const regenBtn = document.getElementById('rf-regenerate-btn');
                 if (regenBtn) { regenBtn.disabled = false; regenBtn.textContent = 'Regenerate Feedback'; }
                 try { hideLoadingState(); } catch (e) { /* ignore */ }
@@ -5893,8 +5980,7 @@
                   if (window._rfToast && window._rfToast.currentId === 'rf:analysis-running' && window._rfToast.currentToast) {
                     try { if (typeof window._rfToast.currentToast.dismiss === 'function') window._rfToast.currentToast.dismiss(); } catch (e) { /* ignore */ }
                   }
-                  const generateBtn = document.getElementById('rf-generate-btn');
-                  if (generateBtn) generateBtn.disabled = false;
+                  updateGenerateButtonState();
                   const regenBtn = document.getElementById('rf-regenerate-btn');
                   if (regenBtn) { regenBtn.disabled = false; regenBtn.textContent = 'Regenerate Feedback'; }
                   try { hideLoadingState(); } catch (e) { /* ignore */ }
@@ -6003,6 +6089,7 @@
               currentJobTitle = '';
               lastNormalizedRoleValue = '';
             }
+            updateGenerateButtonState({ roleValue: '' });
 
             // Refresh Last analyzed from D1 (guarded to avoid ReferenceError)
             if (typeof fetchLatestFeedbackFromD1 === 'function') {
@@ -6263,6 +6350,7 @@
       if (normalized === lastNormalizedRoleValue) return;
       lastNormalizedRoleValue = normalized;
       clearScoreAuthority(reason);
+      updateGenerateButtonState({ roleValue: newValue });
     }
 
     // Helper function to escape HTML to prevent XSS (shared across functions)
@@ -7733,6 +7821,9 @@
         feedbackBadge.removeAttribute('aria-hidden');
       }
 
+      // Ensure role-required gating reflects the latest plan
+      updateGenerateButtonState({ plan });
+
       // Always update Priority Review CTA
       updatePriorityReviewCTA();
     }
@@ -8176,13 +8267,7 @@
           : 'Generate ATS Score & Feedback';
       }
       
-      // Keep generate button clickable; click guard handles missing file case
-      // if (generateBtn) {
-      //   const hasFile = fileInput && fileInput.files && fileInput.files.length > 0;
-      //   if (_mode === 'saved' && !hasFile) {
-      //     generateBtn.disabled = true;
-      //   }
-      // }
+      // Generate button state is handled centrally by updateGenerateButtonState().
       
       if (savedLine) {
         savedLine.style.display = _mode === 'saved' ? 'block' : 'none';
@@ -8312,6 +8397,7 @@
         if (fileInput) {
           fileInput.value = '';
         }
+        resumeFileIsValid = false;
         if (fileNameSpan) {
           fileNameSpan.textContent = 'No file selected';
           fileNameSpan.style.color = 'var(--color-text-muted)';
@@ -8330,12 +8416,13 @@
             jobTitleInput.value = '';
           }
         }
+
+        updateGenerateButtonState({ roleValue: jobTitleInput?.value || '' });
         
-        // Require a new file before re-running (enforced by click guard instead of disabling button)
+        // Require a new file before re-running (handled by updateGenerateButtonState)
         const generateBtn = document.getElementById('rf-generate-btn');
         if (generateBtn) {
-          // Keep button clickable; generateATSAndFeedback will show a modal if no file is selected
-          // generateBtn.disabled = true;
+          // No-op: state is controlled centrally
         }
         
         // Mark active history item
@@ -8468,9 +8555,8 @@
       const pdfHelper = document.getElementById('rf-pdf-helper');
       if (fileInput) fileInput.value = '';
       if (fileName) fileName.textContent = 'No file selected';
-      
-      // Enable button - click guard will handle missing file
-      if (generateBtn) generateBtn.disabled = false;
+      resumeFileIsValid = false;
+      updateGenerateButtonState();
       
       if (statusDiv) statusDiv.style.display = 'none';
       if (fileStatus) fileStatus.style.display = 'none';
@@ -9351,6 +9437,9 @@
                 autocomplete="off"
                 value="">
               <div id="rf-role-list" class="rf-role-dropdown" role="listbox" style="display:none;position:absolute;left:0;right:0;background:#fff;border:1.5px solid #E5E7EB;border-top:none;border-radius:0 0 10px 10px;box-shadow:0 2px 8px rgba(31,41,55,0.07);z-index:10;max-height:220px;overflow-y:auto;margin-top:-2px;top:100%;"></div>
+              <div id="rf-role-required-helper" role="status" aria-live="polite" style="display:none;font-size:0.85rem;color:var(--color-error);margin-top:0.4rem;line-height:1.4;">
+                Target role is required for feedback on your plan.
+              </div>
             </div>
             <div style="font-size:0.85rem;color:var(--color-text-muted);margin-bottom:1rem;line-height:1.4;">Adding a role helps us provide role-specific keyword suggestions, tailored feedback, and optimized resume rewriting.</div>
             <label for="rf-upload" style="font-weight:600;display:block;margin-bottom:0.5rem;">Resume File</label>

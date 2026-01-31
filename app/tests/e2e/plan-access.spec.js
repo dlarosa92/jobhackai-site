@@ -82,6 +82,74 @@ test.describe('Plan-Based Access Control', () => {
     }
     await expect(uploadArea).toBeVisible({ timeout: 10000 });
   });
+
+  test('should require target role for resume feedback API on paid plans', async ({ page }) => {
+    await page.goto('/resume-feedback-pro.html');
+    await page.waitForLoadState('domcontentloaded');
+
+    // Wait for auth to be ready using FirebaseAuthManager or localStorage fallback
+    await page.waitForFunction(() => {
+      const mgr = window.FirebaseAuthManager;
+      if (mgr && typeof mgr.getCurrentUser === 'function') {
+        const u = mgr.getCurrentUser();
+        return u !== null && u !== undefined;
+      }
+
+      try {
+        const isAuth = localStorage.getItem('user-authenticated') === 'true';
+        const email = localStorage.getItem('user-email');
+        return isAuth && !!email;
+      } catch {
+        return false;
+      }
+    }, { timeout: 10000 });
+
+    const token = await page.evaluate(async () => {
+      const user = window.FirebaseAuthManager?.getCurrentUser?.();
+      if (user) {
+        return await user.getIdToken();
+      }
+      return null;
+    });
+
+    if (!token) {
+      test.info().skip('No auth token available for API test');
+      return;
+    }
+
+    const planResponse = await page.request.get('/api/plan/me', {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+
+    if (!planResponse.ok()) {
+      test.info().skip(`Plan API unavailable (status ${planResponse.status()})`);
+      return;
+    }
+
+    const planData = await planResponse.json();
+    const plan = (planData.plan || '').toLowerCase();
+    const requiredPlans = ['trial', 'essential', 'pro', 'premium'];
+
+    if (!requiredPlans.includes(plan)) {
+      test.info().skip(`Current plan (${plan || 'unknown'}) does not require role gating`);
+      return;
+    }
+
+    const response = await page.request.post('/api/resume-feedback', {
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      data: {
+        resumeId: 'test:123',
+        jobTitle: ''
+      }
+    });
+
+    expect(response.status()).toBe(400);
+    const data = await response.json();
+    expect(data.error).toBe('Target role is required for feedback on your plan.');
+  });
   
   test('should show plan badge on dashboard', async ({ page }) => {
     await page.goto('/dashboard');
@@ -148,4 +216,3 @@ test.describe('Plan-Based Access Control', () => {
     }
   });
 });
-

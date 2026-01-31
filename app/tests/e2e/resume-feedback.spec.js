@@ -507,6 +507,24 @@ test.describe('Resume Feedback', () => {
     }
     
     // Now check if button is enabled
+    const planForRoleGate = await page.evaluate(() => (localStorage.getItem('user-plan') || '').toLowerCase());
+    const roleRequiredPlans = ['trial', 'essential', 'pro', 'premium'];
+    const roleHelper = page.locator('#rf-role-required-helper');
+
+    if (roleRequiredPlans.includes(planForRoleGate)) {
+      await expect(generateBtn).toBeDisabled({ timeout: 10000 });
+      await expect(roleHelper).toBeVisible({ timeout: 5000 });
+      await expect(roleHelper).toHaveText('Target role is required for feedback on your plan.');
+    }
+
+    const jobTitleInput = page.locator('#rf-job-title');
+    await jobTitleInput.fill('Software Engineer');
+    await jobTitleInput.blur();
+
+    if (roleRequiredPlans.includes(planForRoleGate)) {
+      await expect(roleHelper).toBeHidden({ timeout: 5000 });
+    }
+
     await expect(generateBtn).toBeEnabled({ timeout: 10000 });
     await generateBtn.click();
     
@@ -574,4 +592,3 @@ test.describe('Resume Feedback', () => {
     expect(progressText).toMatch(/\d+(\.\d+)?%/);
   });
 });
-
