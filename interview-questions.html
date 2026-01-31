@@ -1115,25 +1115,9 @@
   </style>
 </head>
 <body>
-  <!-- Header -->
-  <header class="site-header">
-    <div class="container">
-      <a href="index.html" class="nav-logo" aria-label="Go to homepage">
-        <svg width="24" height="24" fill="none" stroke="#1F2937" stroke-width="2" xmlns="http://www.w3.org/2000/svg">
-          <rect x="3" y="7" width="18" height="13" rx="2"/>
-          <path d="M8 7V5a2 2 0 012-2h4a2 2 0 012 2v2"/>
-        </svg>
-        <span>JOBHACKAI</span>
-      </a>
-      <div class="nav-group">
-        <nav class="nav-links" role="navigation">
-          <!-- Navigation will be dynamically populated by navigation.js -->
-        </nav>
-      </div>
-
-    <!-- Upsell Overlay (shown when plan is not eligible for Mock Interview) -->
-    <div id="iq-upsell" hidden style="position:fixed; inset:0; background:rgba(17,24,39,.55); z-index:1100; display:flex; align-items:center; justify-content:center;">
-      <div role="dialog" aria-modal="true" aria-labelledby="upsell-title" class="card" style="max-width:560px; width:92%; box-shadow:0 14px 40px rgba(0,0,0,.25);">
+  <!-- Upsell Overlay (direct child of body for reliable viewport centering) -->
+  <div id="iq-upsell" hidden style="position:fixed; inset:0; min-height:100vh; background:rgba(17,24,39,.55); z-index:1100;">
+    <div role="dialog" aria-modal="true" aria-labelledby="upsell-title" class="card" style="position:absolute; top:50%; left:50%; transform:translate(-50%, -50%); max-width:560px; width:92%; box-shadow:0 14px 40px rgba(0,0,0,.25);">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:.75rem;">
           <h3 id="upsell-title" style="margin:0;">Unlock Mock Interviews</h3>
           <button id="upsell-cancel" class="icon-btn" aria-label="Close" style="padding:.35rem;">
@@ -1147,7 +1131,7 @@
           <li>Works with your starred questions</li>
         </ul>
         <div style="display:flex; gap:.5rem; flex-wrap:wrap;">
-          <a id="upsell-upgrade" href="#" class="btn-primary" style="text-decoration:none;" onclick="startCheckout('pro'); return false;">Upgrade to Pro</a>
+          <a id="upsell-upgrade" href="#" class="btn-primary" style="text-decoration:none; display:flex; align-items:center; justify-content:center;" onclick="startCheckout('pro'); return false;">Upgrade to Pro</a>
           <script>
             // Inline helper b/c this page doesn't include the global checkout helper by default.
             // Starts server-side Stripe Checkout using /api/stripe-checkout so sessions are created dynamically.
@@ -1259,6 +1243,21 @@
         </div>
       </div>
     </div>
+  <!-- Header -->
+  <header class="site-header">
+    <div class="container">
+      <a href="index.html" class="nav-logo" aria-label="Go to homepage">
+        <svg width="24" height="24" fill="none" stroke="#1F2937" stroke-width="2" xmlns="http://www.w3.org/2000/svg">
+          <rect x="3" y="7" width="18" height="13" rx="2"/>
+          <path d="M8 7V5a2 2 0 012-2h4a2 2 0 012 2v2"/>
+        </svg>
+        <span>JOBHACKAI</span>
+      </a>
+      <div class="nav-group">
+        <nav class="nav-links" role="navigation">
+          <!-- Navigation will be dynamically populated by navigation.js -->
+        </nav>
+      </div>
       <button class="mobile-toggle" aria-label="Open navigation menu" aria-expanded="false" aria-controls="mobileNav">
         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <line x1="3" y1="12" x2="21" y2="12"></line>
