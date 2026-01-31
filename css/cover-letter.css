@@ -707,7 +707,7 @@
 }
 
 @media print {
-  @page { margin: 0.3in 0.5in; }
+  @page { margin: 0.2in 0.5in 0.45in; }
   header.site-header,
   nav.mobile-nav,
   .mobile-nav-backdrop,
@@ -735,10 +735,42 @@
     padding: 0 !important;
   }
 
+  #cl-print .cl-print-header {
+    display: flex !important;
+    align-items: center !important;
+    margin: 0 0 8px 0 !important;
+  }
+
+  #cl-print .cl-print-logo {
+    display: flex !important;
+    align-items: center !important;
+    gap: 8px !important;
+  }
+
+  #cl-print .cl-print-logo-icon {
+    width: 18px !important;
+    height: 18px !important;
+    color: #111827 !important;
+  }
+
+  #cl-print .cl-print-logo span {
+    font-size: 12px !important;
+    font-weight: 700 !important;
+    letter-spacing: 0.03em !important;
+    color: #111827 !important;
+  }
+
+  #cl-print .cl-print-section {
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
   #cl-print .cl-print-body {
     white-space: pre-wrap !important;
     font-family: inherit !important;
     font-size: 12px !important;
     line-height: 1.5 !important;
+    margin: 0 !important;
+    padding: 0 !important;
   }
 }

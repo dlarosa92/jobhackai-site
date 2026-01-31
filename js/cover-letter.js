@@ -739,6 +739,15 @@ function downloadPdf() {
 
   const safeText = escapeHtml(coverLetterText).replace(/\n/g, '<br/>');
   const printHtml = `
+    <div class="cl-print-header">
+      <div class="cl-print-logo">
+        <svg class="cl-print-logo-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+          <rect x="3" y="7" width="18" height="13" rx="2" ry="2" fill="none" stroke="currentColor" stroke-width="1.8"/>
+          <path d="M9 7V5a3 3 0 0 1 6 0v2" fill="none" stroke="currentColor" stroke-width="1.8"/>
+        </svg>
+        <span>JobHackAI</span>
+      </div>
+    </div>
     <section class="cl-print-section">
       <div class="cl-print-body">${safeText}</div>
     </section>
@@ -761,8 +770,13 @@ function downloadPdf() {
 
   printContainer.innerHTML = printHtml;
 
+  const item = getSelectedItem();
+  const role = String(item?.role || els.role?.value || '').trim();
+  const company = String(item?.company || els.company?.value || '').trim();
+  const printTitle = role ? (company ? `${role} — ${company}` : role) : 'Cover Letter';
+
   const prevTitle = document.title;
-  document.title = ' ';
+  document.title = printTitle;
   window.print();
   setTimeout(() => {
     document.title = prevTitle;
