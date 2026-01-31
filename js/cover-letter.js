@@ -739,19 +739,9 @@ function downloadPdf() {
 
   const safeText = escapeHtml(coverLetterText).replace(/\n/g, '<br/>');
   const printHtml = `
-    <div class="cl-print-header">
-      <div class="cl-print-logo">
-        <svg class="cl-print-logo-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-          <rect x="3" y="7" width="18" height="13" rx="2" ry="2" fill="none" stroke="currentColor" stroke-width="1.8"/>
-          <path d="M9 7V5a3 3 0 0 1 6 0v2" fill="none" stroke="currentColor" stroke-width="1.8"/>
-        </svg>
-        <span>JobHackAI</span>
-      </div>
-    </div>
     <section class="cl-print-section">
       <div class="cl-print-body">${safeText}</div>
     </section>
-    <footer class="cl-print-footer">jobhackai.io</footer>
   `;
 
   const existingPrint = document.getElementById('cl-print');
