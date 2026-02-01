@@ -2511,7 +2511,7 @@
           overlay.classList.add('show');
         }, 100);
         
-        // CTA button - use centralized upgrade flow
+        // CTA button - use stripe-checkout for trial (creates new subscription with trial period)
         ctaBtn.addEventListener('click', async () => {
           const user = window.FirebaseAuthManager?.getCurrentUser?.();
           if (!user) {
@@ -2524,46 +2524,23 @@
             ctaBtn.disabled = true;
             ctaBtn.textContent = 'Starting trial...';
 
-            // Use centralized upgradePlan if available
-            if (typeof window.upgradePlan === 'function') {
-              await window.upgradePlan('trial', {
-                source: 'dashboard-trial-popup',
-                returnUrl: window.location.href,
-                button: ctaBtn,
-                skipConfirmation: true
-              });
-              return;
-            }
-
-            // Fallback to manual upgrade-plan endpoint call
+            // Trial plans must use stripe-checkout to create new subscription with trial period
             const idToken = await user.getIdToken();
-            const res = await fetch('/api/upgrade-plan', {
+            const res = await fetch('/api/stripe-checkout', {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${idToken}`
               },
-              body: JSON.stringify({
-                targetPlan: 'trial',
-                source: 'dashboard-trial-popup',
-                returnUrl: window.location.href
-              })
+              body: JSON.stringify({ plan: 'trial' })
             });
 
             const data = await res.json();
-            if (!res.ok) {
-              throw new Error(data?.error || data?.code || 'Trial activation failed');
-            }
-            if (data?.action === 'redirect' && data?.url) {
+            if (data?.ok && data?.url) {
               window.location.href = data.url;
               return;
             }
-            if (data?.action === 'updated') {
-              // Trial activated successfully, reload to refresh UI
-              window.location.reload();
-              return;
-            }
-            throw new Error('Unexpected response from upgrade endpoint');
+            throw new Error(data?.error || data?.code || 'Checkout failed');
           } catch (error) {
             console.error('Trial activation error:', error);
             // Restore button state
