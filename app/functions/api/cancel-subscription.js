@@ -40,8 +40,12 @@ export async function onRequest(context) {
   if (trialSubs.length > 0) {
     for (const sub of trialSubs) {
       try {
-        await stripe(env, `/subscriptions/${sub.id}`, { method: 'DELETE' });
-        canceledTrialCount += 1;
+        const res = await stripe(env, `/subscriptions/${sub.id}`, { method: 'DELETE' });
+        if (res.ok) {
+          canceledTrialCount += 1;
+        } else {
+          console.warn('[CANCEL] Trial cancellation failed', sub.id, res.status);
+        }
       } catch (_) {}
     }
   }
