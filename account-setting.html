@@ -837,6 +837,14 @@
           // Non-critical, continue rendering
         }
         
+        let planMeta = null;
+        try {
+          const metaRes = await fetch('/api/plan/me', { headers: { Authorization: `Bearer ${idToken}` } });
+          if (metaRes.ok) {
+            planMeta = await metaRes.json();
+          }
+        } catch (_) {}
+
         // Plan name mapping
         const planNames = {
           free: 'Free Account',
@@ -906,6 +914,25 @@
                 year: 'numeric', month: 'long', day: 'numeric' 
               });
               html += `<div style="color:#6B7280;font-size:0.92rem;margin-top:0.4rem;">Renews on ${renewDate}</div>`;
+            }
+
+            if (planMeta?.cancelAt) {
+              const cancelDateStr = new Date(planMeta.cancelAt).toLocaleDateString('en-US', {
+                year: 'numeric', month: 'long', day: 'numeric'
+              });
+              html += `<div style="background:#FEF3C7;border-left:4px solid #F59E0B;color:#92400E;padding:0.6rem 0.8rem;border-radius:6px;margin-top:0.8rem;font-size:0.95rem;">
+                ⚠️ Your subscription will cancel on ${cancelDateStr}
+              </div>`;
+            }
+
+            if (planMeta?.scheduledPlanChange?.newPlan && planMeta?.scheduledPlanChange?.effectiveDate) {
+              const scheduledDateStr = new Date(planMeta.scheduledPlanChange.effectiveDate).toLocaleDateString('en-US', {
+                year: 'numeric', month: 'long', day: 'numeric'
+              });
+              const nextPlanName = planNames[planMeta.scheduledPlanChange.newPlan] || planMeta.scheduledPlanChange.newPlan;
+              html += `<div style="background:#E0F2FE;border-left:4px solid #0EA5E9;color:#0F172A;padding:0.6rem 0.8rem;border-radius:6px;margin-top:0.8rem;font-size:0.95rem;">
+                🔔 Your plan will change to ${nextPlanName} on ${scheduledDateStr}
+              </div>`;
             }
           }
           

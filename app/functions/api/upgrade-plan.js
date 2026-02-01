@@ -130,13 +130,23 @@ export async function onRequest(context) {
     const isTrialing = bestSub.status === 'trialing';
 
     if (currentPlanRank > targetPlanRank) {
-      console.log('[BILLING-UPGRADE] Downgrade blocked', {
+      console.log('[BILLING-UPGRADE] Downgrade requested', {
         uid,
         currentPlan,
         targetPlan,
         subId: bestSub.id
       });
-      return json({ ok: false, code: 'DOWNGRADE_NOT_ALLOWED', plan: currentPlan }, 409, origin, env);
+      const scheduleResult = await scheduleDowngrade(env, bestSub, targetPlan, source);
+      if (!scheduleResult.ok) {
+        return json({ ok: false, code: scheduleResult.code || 'DOWNGRADE_SCHEDULE_FAILED' }, 502, origin, env);
+      }
+      return json({
+        ok: true,
+        action: 'scheduled',
+        plan: currentPlan,
+        scheduledPlan: targetPlan,
+        scheduledAt: scheduleResult.scheduledAt || null
+      }, 200, origin, env);
     }
 
     if (currentPlanRank === targetPlanRank && !isTrialing) {
@@ -182,6 +192,7 @@ export async function onRequest(context) {
     }
 
     const idem = await makeUpgradeIdemKey(uid, `${bestSub.id}:${targetPlan}`);
+
     const updateRes = await stripe(env, `/subscriptions/${bestSub.id}`, {
       method: 'POST',
       headers: { ...stripeFormHeaders(env), 'Idempotency-Key': idem },
@@ -201,7 +212,30 @@ export async function onRequest(context) {
       return json({ ok: false, code: 'UPDATE_FAILED' }, 502, origin, env);
     }
 
+    const updatedSub = await updateRes.json();
     await invalidateBillingCaches(env, uid);
+
+    // Update D1 immediately for upgrades (webhook will still confirm later)
+    try {
+      await updateUserPlan(env, uid, {
+        plan: targetPlan,
+        stripeCustomerId: customerId,
+        stripeSubscriptionId: updatedSub?.id || bestSub.id,
+        subscriptionStatus: updatedSub?.status || bestSub.status,
+        trialEndsAt: updatedSub?.trial_end ? new Date(updatedSub.trial_end * 1000).toISOString() : null,
+        currentPeriodEnd: updatedSub?.current_period_end ? new Date(updatedSub.current_period_end * 1000).toISOString() : null,
+        cancelAt: (updatedSub?.cancel_at_period_end && updatedSub?.cancel_at)
+          ? new Date(updatedSub.cancel_at * 1000).toISOString()
+          : null,
+        scheduledPlan: null,
+        scheduledAt: null
+      });
+    } catch (e) {
+      console.warn('[BILLING-UPGRADE] D1 update failed (non-blocking):', e?.message || e);
+    }
+
+    // Cancel other active subscriptions immediately to prevent duplicate billing
+    await cancelOtherSubscriptions(env, activeSubs, updatedSub?.id || bestSub.id);
 
     // Reset usage when upgrading from trial to paid plan
     // This ensures users get a fresh start with their new plan limits
@@ -238,7 +272,7 @@ export async function onRequest(context) {
       ok: true,
       action: 'updated',
       plan: targetPlan,
-      subscriptionId: bestSub.id,
+      subscriptionId: updatedSub?.id || bestSub.id,
       customerId
     }, 200, origin, env);
   } catch (error) {
@@ -439,3 +473,82 @@ function json(body, status, origin, env) {
 
 const kvCusKey = (uid) => `cusByUid:${uid}`;
 const kvEmailKey = (uid) => `emailByUid:${uid}`;
+
+async function cancelOtherSubscriptions(env, subs, keepSubId) {
+  const toCancel = (subs || []).filter((sub) =>
+    sub && sub.id && sub.id !== keepSubId && ['active', 'trialing', 'past_due'].includes(sub.status)
+  );
+  for (const sub of toCancel) {
+    try {
+      const res = await stripe(env, `/subscriptions/${sub.id}`, { method: 'DELETE' });
+      if (!res.ok) {
+        console.warn('[BILLING-UPGRADE] Failed to cancel extra subscription', sub.id, res.status);
+      }
+    } catch (e) {
+      console.warn('[BILLING-UPGRADE] Error canceling extra subscription', sub.id, e?.message || e);
+    }
+  }
+}
+
+async function scheduleDowngrade(env, sub, targetPlan, source) {
+  const targetPriceId = planToPrice(env, targetPlan);
+  if (!targetPriceId) {
+    return { ok: false, code: 'INVALID_PLAN' };
+  }
+
+  const item = sub?.items?.data?.[0];
+  const currentPriceId = item?.price?.id || null;
+  const quantity = item?.quantity || 1;
+  const periodStart = sub?.current_period_start || Math.floor(Date.now() / 1000);
+  const periodEnd = sub?.current_period_end || null;
+  if (!currentPriceId || !periodEnd) {
+    return { ok: false, code: 'SUBSCRIPTION_ITEM_MISSING' };
+  }
+
+  let scheduleId = sub.schedule || null;
+  if (!scheduleId) {
+    const createRes = await stripe(env, '/subscription_schedules', {
+      method: 'POST',
+      headers: stripeFormHeaders(env),
+      body: form({ from_subscription: sub.id })
+    });
+    if (!createRes.ok) {
+      return { ok: false, code: 'SCHEDULE_CREATE_FAILED' };
+    }
+    const created = await createRes.json();
+    scheduleId = created?.id || null;
+  }
+
+  if (!scheduleId) {
+    return { ok: false, code: 'SCHEDULE_CREATE_FAILED' };
+  }
+
+  const updateBody = {
+    end_behavior: 'release',
+    'phases[0][items][0][price]': currentPriceId,
+    'phases[0][items][0][quantity]': quantity,
+    'phases[0][start_date]': periodStart,
+    'phases[0][end_date]': periodEnd,
+    'phases[1][items][0][price]': targetPriceId,
+    'phases[1][items][0][quantity]': quantity,
+    'phases[1][start_date]': periodEnd,
+    'phases[1][proration_behavior]': 'none',
+    'metadata[scheduled_plan]': targetPlan,
+    'metadata[upgrade_source]': source || 'unknown'
+  };
+
+  const updateRes = await stripe(env, `/subscription_schedules/${scheduleId}`, {
+    method: 'POST',
+    headers: stripeFormHeaders(env),
+    body: form(updateBody)
+  });
+
+  if (!updateRes.ok) {
+    return { ok: false, code: 'SCHEDULE_UPDATE_FAILED' };
+  }
+
+  return {
+    ok: true,
+    scheduledAt: new Date(periodEnd * 1000).toISOString()
+  };
+}

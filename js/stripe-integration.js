@@ -1021,6 +1021,18 @@ async function upgradePlan(targetPlan, options = {}) {
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
       if (data?.code === 'ALREADY_ON_PLAN' || data?.code === 'ALREADY_SUBSCRIBED') {
+        const existingPlan = data?.plan || plan;
+        try {
+          localStorage.setItem('user-plan', existingPlan);
+          localStorage.setItem('dev-plan', existingPlan);
+          window.dispatchEvent(new CustomEvent('planChanged', { detail: { newPlan: existingPlan, source: 'upgrade' } }));
+          if (window.JobHackAINavigation?.setAuthState) {
+            try { window.JobHackAINavigation.setAuthState(true, existingPlan); } catch (_) {}
+          }
+          if (window.JobHackAINavigation?.scheduleUpdateNavigation) {
+            try { window.JobHackAINavigation.scheduleUpdateNavigation(true); } catch (_) {}
+          }
+        } catch (_) {}
         showUpgradeInfoBanner('You already have an active subscription for this plan.', 'account-setting.html');
         return;
       }
@@ -1068,6 +1080,22 @@ async function upgradePlan(targetPlan, options = {}) {
         window.showToast('Plan updated. Enjoy the new features!');
       } else {
         createInlineToast('Plan updated. Enjoy the new features!');
+      }
+      return;
+    }
+    if (data?.action === 'scheduled') {
+      const scheduledPlan = data.scheduledPlan || plan;
+      const scheduledAt = data.scheduledAt ? new Date(data.scheduledAt).toLocaleDateString('en-US', {
+        year: 'numeric', month: 'long', day: 'numeric'
+      }) : 'the end of your billing period';
+      const msg = `Your plan will change to ${scheduledPlan.charAt(0).toUpperCase() + scheduledPlan.slice(1)} on ${scheduledAt}.`;
+      if (window.showToast) {
+        window.showToast(msg);
+      } else {
+        createInlineToast(msg);
+      }
+      if (typeof window.refreshPlanData === 'function') {
+        await window.refreshPlanData();
       }
       return;
     }

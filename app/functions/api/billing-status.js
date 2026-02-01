@@ -1,6 +1,6 @@
 import { getBearer, verifyFirebaseIdToken } from '../_lib/firebase-auth.js';
 import { getUserPlanData } from '../_lib/db.js';
-import { stripe, priceIdToPlan } from '../_lib/billing-utils.js';
+import { stripe, pickBestSubscription } from '../_lib/billing-utils.js';
 
 /**
  * GET /api/billing-status
@@ -173,40 +173,22 @@ export async function onRequest(context) {
       }, 200, origin, env);
     }
 
-    // Get the latest subscription (most recent created_at)
-    const latestSub = activeOrTrialing.sort((a, b) => b.created - a.created)[0];
-    console.log('🔵 [BILLING-STATUS] Latest subscription', {
-      id: latestSub.id,
-      status: latestSub.status,
-      priceId: latestSub.items?.data?.[0]?.price?.id,
-      metadata: latestSub.metadata
+    const { bestSub, currentPlan } = pickBestSubscription(activeOrTrialing, env);
+    console.log('🔵 [BILLING-STATUS] Best subscription', {
+      id: bestSub.id,
+      status: bestSub.status,
+      priceId: bestSub.items?.data?.[0]?.price?.id,
+      metadata: bestSub.metadata
     });
-
-    // Determine plan based on subscription status and metadata
-    const priceId = latestSub.items?.data?.[0]?.price?.id;
-    let plan = 'free';
-    
-    if (latestSub.status === 'trialing') {
-      // Check if this was originally a trial subscription
-      const originalPlan = latestSub.metadata?.original_plan || latestSub.metadata?.plan;
-      if (originalPlan === 'trial') {
-        plan = 'trial';
-      } else {
-        // Regular subscription in trial period - map from price ID
-        plan = priceIdToPlan(env, priceId, { defaultToEssential: true });
-      }
-    } else if (latestSub.status === 'active' || latestSub.status === 'past_due') {
-      // Active subscription - map from price ID
-      plan = priceIdToPlan(env, priceId, { defaultToEssential: true });
-    }
+    const plan = currentPlan || 'free';
     
     // Get payment method info - check customer's default payment method
     let hasPaymentMethod = false;
-    if (latestSub.default_payment_method) {
+    if (bestSub.default_payment_method) {
       hasPaymentMethod = true;
-    } else if (latestSub.customer) {
+    } else if (bestSub.customer) {
       // Expand customer to check invoice_settings
-      const custRes = await stripe(env, `/customers/${latestSub.customer}`);
+      const custRes = await stripe(env, `/customers/${bestSub.customer}`);
       if (custRes.ok) {
         const customer = await custRes.json();
         hasPaymentMethod = !!(customer.invoice_settings?.default_payment_method || customer.default_source);
@@ -216,9 +198,9 @@ export async function onRequest(context) {
     const result = {
       ok: true,
       plan: plan,
-      status: latestSub.status,
-      trialEndsAt: latestSub.trial_end ? latestSub.trial_end * 1000 : null,
-      currentPeriodEnd: latestSub.current_period_end ? latestSub.current_period_end * 1000 : null,
+      status: bestSub.status,
+      trialEndsAt: bestSub.trial_end ? bestSub.trial_end * 1000 : null,
+      currentPeriodEnd: bestSub.current_period_end ? bestSub.current_period_end * 1000 : null,
       hasPaymentMethod: hasPaymentMethod
     };
 
