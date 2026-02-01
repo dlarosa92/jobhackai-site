@@ -2396,7 +2396,7 @@
   // Uses centralized window.upgradePlan() when available, falls back to /api/upgrade-plan endpoint.
   const startCheckout = async (plan) => {
     try {
-      if (typeof window.upgradePlan === 'function' && plan !== 'trial') {
+      if (typeof window.upgradePlan === 'function') {
         await window.upgradePlan(plan, {
           source: 'resume-feedback',
           returnUrl: window.location.href
