@@ -99,7 +99,8 @@ export async function onRequest(context) {
         'metadata[upgrade_source]': source
       };
 
-      const idem = await makeUpgradeIdemKey(uid, `checkout-${targetPlan}`);
+      const sessionSeed = `checkout-${targetPlan}:${(crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`)}`;
+      const idem = await makeUpgradeIdemKey(uid, sessionSeed);
       const sessionRes = await stripe(env, '/checkout/sessions', {
         method: 'POST',
         headers: { ...stripeFormHeaders(env), 'Idempotency-Key': idem },
@@ -255,6 +256,7 @@ function normalizePlan(plan) {
 
 async function resolveCustomerId(env, uid, email) {
   let customerId = null;
+  let matchedCustomer = null;
 
   try {
     customerId = await env.JOBHACKAI_KV?.get(kvCusKey(uid));
@@ -274,6 +276,52 @@ async function resolveCustomerId(env, uid, email) {
     }
   }
 
+  if (!customerId && email) {
+    try {
+      const searchRes = await stripe(env, `/customers?email=${encodeURIComponent(email)}&limit=100`);
+      const searchData = await searchRes.json();
+      const customers = searchRes.ok ? (searchData?.data || []) : [];
+      if (customers.length > 0) {
+        const uidMatches = customers.filter((c) => c?.metadata?.firebaseUid === uid);
+        const candidates = uidMatches.length > 0 ? uidMatches : customers;
+        if (uidMatches.length > 0) {
+          console.log('[BILLING-UPGRADE] Found customers matching firebaseUid', { count: uidMatches.length });
+        }
+
+        if (candidates.length > 1) {
+          for (const candidate of candidates) {
+            const subsRes = await stripe(env, `/subscriptions?customer=${candidate.id}&status=all&limit=10`);
+            if (subsRes.ok) {
+              const subsData = await subsRes.json();
+              const hasActive = (subsData?.data || []).some((sub) =>
+                sub && ['active', 'trialing', 'past_due'].includes(sub.status)
+              );
+              if (hasActive) {
+                matchedCustomer = candidate;
+                break;
+              }
+            }
+          }
+          if (!matchedCustomer) {
+            matchedCustomer = candidates.sort((a, b) => b.created - a.created)[0];
+          }
+        } else {
+          matchedCustomer = candidates[0];
+        }
+
+        if (matchedCustomer?.id) {
+          customerId = matchedCustomer.id;
+          console.log('[BILLING-UPGRADE] Found Stripe customer by email fallback', {
+            customerId,
+            matchedUid: matchedCustomer?.metadata?.firebaseUid || null
+          });
+        }
+      }
+    } catch (e) {
+      console.log('[BILLING-UPGRADE] Stripe email search failed', e?.message || e);
+    }
+  }
+
   if (!customerId) {
     const res = await stripe(env, '/customers', {
       method: 'POST',
@@ -286,13 +334,27 @@ async function resolveCustomerId(env, uid, email) {
     }
     const customer = await res.json();
     customerId = customer?.id || null;
-    if (customerId) {
-      await env.JOBHACKAI_KV?.put(kvCusKey(uid), customerId);
-      await env.JOBHACKAI_KV?.put(kvEmailKey(uid), email);
+    matchedCustomer = customerId ? customer : null;
+  }
+
+  if (customerId) {
+    await env.JOBHACKAI_KV?.put(kvCusKey(uid), customerId);
+    await env.JOBHACKAI_KV?.put(kvEmailKey(uid), email);
+    try {
+      await updateUserPlan(env, uid, { stripeCustomerId: customerId });
+    } catch (e) {
+      console.log('[BILLING-UPGRADE] D1 customer update failed', e?.message || e);
+    }
+
+    if (matchedCustomer && !matchedCustomer?.metadata?.firebaseUid) {
       try {
-        await updateUserPlan(env, uid, { stripeCustomerId: customerId });
+        await stripe(env, `/customers/${customerId}`, {
+          method: 'POST',
+          headers: stripeFormHeaders(env),
+          body: form({ 'metadata[firebaseUid]': uid })
+        });
       } catch (e) {
-        console.log('[BILLING-UPGRADE] D1 customer update failed', e?.message || e);
+        console.log('[BILLING-UPGRADE] Failed to backfill customer metadata', e?.message || e);
       }
     }
   }

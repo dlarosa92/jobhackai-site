@@ -156,7 +156,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     try {
       const idToken = await authManager.getCurrentUser()?.getIdToken?.(true);
         if (idToken) {
-          const billingRes = await fetch('/api/billing-status', {
+          const billingRes = await fetch('/api/billing-status?force=1', {
             method: 'GET',
             headers: { 'Authorization': `Bearer ${idToken}` }
           });
@@ -235,4 +235,3 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   }
 });
-

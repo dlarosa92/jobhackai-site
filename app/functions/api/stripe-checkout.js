@@ -1,5 +1,5 @@
 import { getBearer, verifyFirebaseIdToken } from '../_lib/firebase-auth.js';
-import { isTrialEligible, getUserPlanData } from '../_lib/db.js';
+import { isTrialEligible, getUserPlanData, updateUserPlan } from '../_lib/db.js';
 import {
   planToPrice,
   priceIdToPlan,
@@ -128,7 +128,52 @@ export async function onRequest(context) {
       }
     }
     
-    // Step 3: Only create new Stripe customer if both KV and D1 are missing
+    // Step 3: Only if both KV and D1 miss, fallback to Stripe email search (last resort)
+    let matchedCustomer = null;
+    if (!customerId && email) {
+      try {
+        const searchRes = await stripe(env, `/customers?email=${encodeURIComponent(email)}&limit=100`);
+        const searchData = await searchRes.json();
+        const customers = searchRes.ok ? (searchData?.data || []) : [];
+        if (customers.length > 0) {
+          const uidMatches = customers.filter((c) => c?.metadata?.firebaseUid === uid);
+          const candidates = uidMatches.length > 0 ? uidMatches : customers;
+          if (uidMatches.length > 0) {
+            console.log('🟡 [CHECKOUT] Found customers matching firebaseUid', { count: uidMatches.length });
+          }
+
+          if (candidates.length > 1) {
+            for (const candidate of candidates) {
+              const subsCheckRes = await stripe(env, `/subscriptions?customer=${candidate.id}&status=all&limit=10`);
+              if (subsCheckRes.ok) {
+                const subsCheckData = await subsCheckRes.json();
+                const hasActive = (subsCheckData?.data || []).some((s) =>
+                  s && ['active', 'trialing', 'past_due'].includes(s.status)
+                );
+                if (hasActive) {
+                  matchedCustomer = candidate;
+                  break;
+                }
+              }
+            }
+            if (!matchedCustomer) {
+              matchedCustomer = candidates.sort((a, b) => b.created - a.created)[0];
+            }
+          } else {
+            matchedCustomer = candidates[0];
+          }
+
+          if (matchedCustomer?.id) {
+            customerId = matchedCustomer.id;
+            console.log('✅ [CHECKOUT] Found customer by email fallback', customerId);
+          }
+        }
+      } catch (searchError) {
+        console.log('🟡 [CHECKOUT] Email fallback failed (non-fatal)', searchError?.message || searchError);
+      }
+    }
+
+    // Step 4: Only create new Stripe customer if all lookups are missing
     if (!customerId) {
       console.log('🔵 [CHECKOUT] Creating new Stripe customer for uid', uid);
       try {
@@ -164,6 +209,7 @@ export async function onRequest(context) {
         }
         
         customerId = c.id;
+        matchedCustomer = c;
         
         // Try to cache customer ID (non-blocking)
         try {
@@ -179,6 +225,28 @@ export async function onRequest(context) {
           stack: customerError?.stack?.substring(0, 200)
         });
         return json({ ok: false, error: 'Failed to create customer' }, 500, origin, env);
+      }
+    }
+
+    if (customerId) {
+      try {
+        await env.JOBHACKAI_KV?.put(kvCusKey(uid), customerId);
+        await env.JOBHACKAI_KV?.put(kvEmailKey(uid), email);
+      } catch (_) {}
+      try {
+        await updateUserPlan(env, uid, { stripeCustomerId: customerId });
+      } catch (_) {}
+
+      if (matchedCustomer && !matchedCustomer?.metadata?.firebaseUid) {
+        try {
+          await stripe(env, `/customers/${customerId}`, {
+            method: 'POST',
+            headers: stripeFormHeaders(env),
+            body: form({ 'metadata[firebaseUid]': uid })
+          });
+        } catch (e) {
+          console.log('🟡 [CHECKOUT] Failed to backfill customer metadata', e?.message || e);
+        }
       }
     }
 
