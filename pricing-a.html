@@ -352,54 +352,77 @@
             button.disabled = false;
             button.style.opacity = '1';
             button.style.cursor = 'pointer';
-            // Authenticated path → server checkout (using SECURE endpoints)
+            // Authenticated path → use centralized upgrade flow
             (async () => {
               try {
-                console.log('🔥 Starting checkout for plan:', plan);
-                
-                // Wait for Firebase to be ready
-                const user = await window.FirebaseAuthManager?.waitForAuthReady?.() || window.FirebaseAuthManager?.currentUser;
-                console.log('🔥 User after waitForAuthReady:', user ? `User: ${user.email}` : 'null');
-                
-                if (!user) {
-                  throw new Error('Not authenticated');
+                console.log('🔥 Starting upgrade for plan:', plan);
+
+                // Use centralized upgradePlan function (handles duplicate subscriptions properly)
+                if (typeof window.upgradePlan === 'function') {
+                  await window.upgradePlan(plan, {
+                    source: 'pricing-page',
+                    returnUrl: window.location.href,
+                    button: button,
+                    skipConfirmation: true // Already confirmed above
+                  });
+                } else {
+                  console.error('upgradePlan not available, falling back to manual flow');
+                  // Fallback: wait for Firebase and redirect to login if needed
+                  const user = await window.FirebaseAuthManager?.waitForAuthReady?.() || window.FirebaseAuthManager?.currentUser;
+                  if (!user) {
+                    throw new Error('Not authenticated');
+                  }
+
+                  const idToken = await user.getIdToken(true);
+                  if (!idToken) {
+                    throw new Error('Could not get ID token');
+                  }
+
+                  // Use upgrade-plan endpoint (not stripe-checkout) to avoid duplicates
+                  const res = await fetch('/api/upgrade-plan', {
+                    method: 'POST',
+                    headers: {
+                      'Content-Type': 'application/json',
+                      'Authorization': `Bearer ${idToken}`
+                    },
+                    body: JSON.stringify({
+                      targetPlan: plan,
+                      source: 'pricing-page',
+                      returnUrl: window.location.href
+                    })
+                  });
+
+                  const data = await res.json();
+
+                  if (!res.ok) {
+                    throw new Error(data?.error || data?.code || 'Upgrade failed');
+                  }
+
+                  if (data?.action === 'redirect' && data?.url) {
+                    window.location.href = data.url;
+                    return;
+                  }
+
+                  if (data?.action === 'updated') {
+                    // Plan updated successfully
+                    const newPlan = data.plan || plan;
+                    localStorage.setItem('user-plan', newPlan);
+                    localStorage.setItem('dev-plan', newPlan);
+                    if (window.showToast) {
+                      window.showToast('Plan updated successfully!');
+                    } else {
+                      alert('Plan updated successfully!');
+                    }
+                    window.location.reload();
+                    return;
+                  }
+
+                  throw new Error('Unexpected response from upgrade endpoint');
                 }
-                
-                // Force refresh token to ensure it's valid
-                const idToken = await user.getIdToken(true);
-                console.log('🔥 ID Token obtained:', idToken ? `${idToken.substring(0, 20)}...` : 'null');
-                
-                if (!idToken) {
-                  throw new Error('Could not get ID token');
-                }
-                
-                const res = await fetch('/api/stripe-checkout', {
-                  method: 'POST',
-                  headers: { 
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${idToken}`
-                  },
-                  body: JSON.stringify({ 
-                    plan, 
-                    startTrial: plan === 'trial',
-                    forceNew: true 
-                  })
-                });
-                
-                console.log('🔥 Stripe checkout response status:', res.status);
-                const data = await res.json();
-                console.log('🔥 Stripe checkout response data:', data);
-                
-                if (data && data.ok && data.url) { 
-                  console.log('🔥 Redirecting to Stripe:', data.url);
-                  window.location.href = data.url; 
-                  return; 
-                }
-                throw new Error(data?.error || 'Checkout failed');
               } catch (e) {
-                console.error('Checkout error:', e);
-                const errorMessage = e?.message || 'Checkout failed';
-                console.error('Full checkout error details:', {
+                console.error('Upgrade error:', e);
+                const errorMessage = e?.message || 'Upgrade failed';
+                console.error('Full upgrade error details:', {
                   message: errorMessage,
                   stack: e?.stack,
                   response: e?.response
@@ -416,7 +439,7 @@
                     plan: trialEligibilityState.plan || localStorage.getItem('user-plan') || 'free'
                   };
                 } else {
-                  alert(`Unable to start checkout: ${errorMessage}. Please try again or contact support.`);
+                  alert(`Unable to upgrade: ${errorMessage}. Please try again or contact support.`);
                 }
                 if (plan === 'trial' && trialEligibilityState?.checked && !trialEligibilityState.eligible) {
                   setTrialUsedState(button);
@@ -476,37 +499,7 @@
       if (!db[userEmail]) return false;
       return Array.isArray(db[userEmail].cards) && db[userEmail].cards.length > 0;
     }
-    
-    function handleAuthenticatedUserUpgrade(newPlan, amount, currentPlan) {
-      // Don't allow downgrading to same or lower plan
-      const planHierarchy = ['free', 'trial', 'essential', 'pro', 'premium'];
-      const currentIndex = planHierarchy.indexOf(currentPlan);
-      const newIndex = planHierarchy.indexOf(newPlan);
-      
-      if (newIndex <= currentIndex) {
-        showUpgradeErrorModal(currentPlan, newPlan);
-        return;
-      }
-      
-      // Directly start server Checkout (Stripe handles payment methods)
-      (async () => {
-        try {
-          const idToken = await window.FirebaseAuthManager?.getCurrentUser?.()?.getIdToken?.();
-          const res = await fetch('/api/stripe-checkout', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}) },
-            body: JSON.stringify({ plan: newPlan, startTrial: newPlan === 'trial', forceNew: true })
-          });
-          const data = await res.json();
-          if (data && data.ok && data.url) { window.location.href = data.url; return; }
-          throw new Error(data?.error || 'Checkout failed');
-        } catch (e) {
-          console.error('Checkout error:', e);
-          alert('Unable to start checkout. Please try again.');
-        }
-      })();
-    }
-    
+
     function showUpgradeConfirmationModal(newPlan, currentPlan, amount) {
       const planNames = {
         'trial': '3-Day Free Trial',

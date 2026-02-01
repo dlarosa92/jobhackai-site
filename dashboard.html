@@ -2511,38 +2511,65 @@
           overlay.classList.add('show');
         }, 100);
         
-        // CTA button - redirect directly to Stripe checkout (Phase 1.2)
+        // CTA button - use centralized upgrade flow
         ctaBtn.addEventListener('click', async () => {
           const user = window.FirebaseAuthManager?.getCurrentUser?.();
           if (!user) {
             window.location.href = 'login.html';
             return;
           }
-          
+
           try {
             // Show loading state
             ctaBtn.disabled = true;
-            ctaBtn.textContent = 'Redirecting...';
-            
+            ctaBtn.textContent = 'Starting trial...';
+
+            // Use centralized upgradePlan if available
+            if (typeof window.upgradePlan === 'function') {
+              await window.upgradePlan('trial', {
+                source: 'dashboard-trial-popup',
+                returnUrl: window.location.href,
+                button: ctaBtn,
+                skipConfirmation: true
+              });
+              return;
+            }
+
+            // Fallback to manual upgrade-plan endpoint call
             const idToken = await user.getIdToken();
-            const res = await fetch('/api/stripe-checkout', {
+            const res = await fetch('/api/upgrade-plan', {
               method: 'POST',
-              headers: { 
+              headers: {
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${idToken}`
               },
-              body: JSON.stringify({ plan: 'trial' })
+              body: JSON.stringify({
+                targetPlan: 'trial',
+                source: 'dashboard-trial-popup',
+                returnUrl: window.location.href
+              })
             });
-            
+
             const data = await res.json();
-            if (data?.ok && data?.url) {
-              window.location.href = data.url; // Go directly to Stripe
+            if (!res.ok) {
+              throw new Error(data?.error || data?.code || 'Trial activation failed');
+            }
+            if (data?.action === 'redirect' && data?.url) {
+              window.location.href = data.url;
               return;
             }
-            throw new Error(data?.error || 'Checkout failed');
+            if (data?.action === 'updated') {
+              // Trial activated successfully, reload to refresh UI
+              window.location.reload();
+              return;
+            }
+            throw new Error('Unexpected response from upgrade endpoint');
           } catch (error) {
-            console.error('Checkout error:', error);
-            // Fallback to pricing page only if checkout fails
+            console.error('Trial activation error:', error);
+            // Restore button state
+            ctaBtn.disabled = false;
+            ctaBtn.textContent = 'Start Free Trial';
+            // Fallback to pricing page only if activation fails
             window.location.href = 'pricing-a.html';
           }
         });
