@@ -2511,38 +2511,42 @@
           overlay.classList.add('show');
         }, 100);
         
-        // CTA button - redirect directly to Stripe checkout (Phase 1.2)
+        // CTA button - use stripe-checkout for trial (creates new subscription with trial period)
         ctaBtn.addEventListener('click', async () => {
           const user = window.FirebaseAuthManager?.getCurrentUser?.();
           if (!user) {
             window.location.href = 'login.html';
             return;
           }
-          
+
           try {
             // Show loading state
             ctaBtn.disabled = true;
-            ctaBtn.textContent = 'Redirecting...';
-            
+            ctaBtn.textContent = 'Starting trial...';
+
+            // Trial plans must use stripe-checkout to create new subscription with trial period
             const idToken = await user.getIdToken();
             const res = await fetch('/api/stripe-checkout', {
               method: 'POST',
-              headers: { 
+              headers: {
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${idToken}`
               },
               body: JSON.stringify({ plan: 'trial' })
             });
-            
+
             const data = await res.json();
             if (data?.ok && data?.url) {
-              window.location.href = data.url; // Go directly to Stripe
+              window.location.href = data.url;
               return;
             }
-            throw new Error(data?.error || 'Checkout failed');
+            throw new Error(data?.error || data?.code || 'Checkout failed');
           } catch (error) {
-            console.error('Checkout error:', error);
-            // Fallback to pricing page only if checkout fails
+            console.error('Trial activation error:', error);
+            // Restore button state
+            ctaBtn.disabled = false;
+            ctaBtn.textContent = 'Start Free Trial';
+            // Fallback to pricing page only if activation fails
             window.location.href = 'pricing-a.html';
           }
         });

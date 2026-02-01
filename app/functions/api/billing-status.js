@@ -10,6 +10,8 @@ import { stripe, priceIdToPlan } from '../_lib/billing-utils.js';
 export async function onRequest(context) {
   const { request, env } = context;
   const origin = request.headers.get('Origin') || '';
+  const url = new URL(request.url);
+  const force = url.searchParams.get('force') === '1';
 
   if (request.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders(origin, env) });
@@ -37,7 +39,10 @@ export async function onRequest(context) {
 
     // Check cache first (session duration cache - 5 minutes)
     const cacheKey = `billingStatus:${uid}`;
-    const cached = await env.JOBHACKAI_KV?.get(cacheKey);
+    const cached = force ? null : await env.JOBHACKAI_KV?.get(cacheKey);
+    if (force) {
+      console.log('🟡 [BILLING-STATUS] Force refresh requested, bypassing cache');
+    }
     if (cached) {
       try {
         const cachedData = JSON.parse(cached);
@@ -81,13 +86,20 @@ export async function onRequest(context) {
       
       if (searchRes.ok && searchData.data && searchData.data.length > 0) {
         console.log('🟡 [BILLING-STATUS] Found', searchData.data.length, 'customers with email', email);
-        
+
+        const emailMatches = searchData.data;
+        const uidMatches = emailMatches.filter((c) => c?.metadata?.firebaseUid === uid);
+        const candidates = uidMatches.length > 0 ? uidMatches : emailMatches;
+        if (uidMatches.length > 0) {
+          console.log('🟡 [BILLING-STATUS] Found customers matching firebaseUid', { count: uidMatches.length });
+        }
+
         // If multiple customers exist, find the one with an active subscription
-        if (searchData.data.length > 1) {
+        if (candidates.length > 1) {
           console.log('🟡 [BILLING-STATUS] Multiple customers found, checking subscriptions...');
           
           // Check each customer for active subscriptions
-          for (const customer of searchData.data) {
+          for (const customer of candidates) {
             // Query all subscriptions and filter for active ones (Stripe status param accepts only single value)
             const subsCheckRes = await stripe(env, `/subscriptions?customer=${customer.id}&status=all&limit=10`);
             const subsCheckData = await subsCheckRes.json();
@@ -108,11 +120,11 @@ export async function onRequest(context) {
           
           // If no customer with active subscription found, use the most recent one
           if (!customerId) {
-            customerId = searchData.data.sort((a, b) => b.created - a.created)[0].id;
+            customerId = candidates.sort((a, b) => b.created - a.created)[0].id;
             console.log('🟡 [BILLING-STATUS] No active subscriptions found, using most recent customer', customerId);
           }
         } else {
-          customerId = searchData.data[0].id;
+          customerId = candidates[0].id;
           console.log('🟡 [BILLING-STATUS] Found single customer by email', customerId);
         }
         
@@ -253,4 +265,3 @@ function json(body, status, origin, env) {
 }
 
 const kvCusKey = (uid) => `cusByUid:${uid}`;
-

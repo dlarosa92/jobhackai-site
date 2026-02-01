@@ -70,12 +70,19 @@ export async function onRequest(context) {
           if (searchRes.ok) {
             const searchData = await searchRes.json();
             if (searchData.data && searchData.data.length > 0) {
+              const emailMatches = searchData.data;
+              const uidMatches = emailMatches.filter((c) => c?.metadata?.firebaseUid === uid);
+              const candidates = uidMatches.length > 0 ? uidMatches : emailMatches;
+              if (uidMatches.length > 0) {
+                console.log('🟡 [SYNC-STRIPE-PLAN] Found customers matching firebaseUid', { count: uidMatches.length });
+              }
+
               // Find customer with active subscription, or use most recent
               let foundCustomer = null;
               
-              if (searchData.data.length > 1) {
+              if (candidates.length > 1) {
                 // Check each customer for active subscriptions
-                for (const customer of searchData.data) {
+                for (const customer of candidates) {
                   const subsCheckRes = await fetch(`https://api.stripe.com/v1/subscriptions?customer=${customer.id}&status=all&limit=10`, {
                     headers: { Authorization: `Bearer ${env.STRIPE_SECRET_KEY}` }
                   });
@@ -95,10 +102,10 @@ export async function onRequest(context) {
                 
                 // If no active subscription found, use most recent
                 if (!foundCustomer) {
-                  foundCustomer = searchData.data.sort((a, b) => b.created - a.created)[0].id;
+                  foundCustomer = candidates.sort((a, b) => b.created - a.created)[0].id;
                 }
               } else {
-                foundCustomer = searchData.data[0].id;
+                foundCustomer = candidates[0].id;
               }
               
               if (foundCustomer) {
@@ -149,8 +156,17 @@ export async function onRequest(context) {
       return json({ ok: true, plan: 'free', trialEndsAt: null }, 200, origin, env);
     }
 
-    // Get the most recent subscription
-    const latestSub = subscriptions[0];
+    const activeSubs = subscriptions.filter((sub) =>
+      sub && ['active', 'trialing', 'past_due'].includes(sub.status)
+    );
+    if (activeSubs.length === 0) {
+      await updateUserPlan(env, uid, { plan: 'free' });
+      await env.JOBHACKAI_KV?.put(`planByUid:${uid}`, 'free');
+      return json({ ok: true, plan: 'free', trialEndsAt: null }, 200, origin, env);
+    }
+
+    // Get the most recent active subscription
+    const latestSub = activeSubs.sort((a, b) => b.created - a.created)[0];
     
     // Fetch the full subscription object to ensure we get metadata
     // (list endpoint might not include all fields)

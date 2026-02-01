@@ -2304,7 +2304,7 @@ async function initializeNavigation() {
             // If plan is free, double-check with billing-status as fallback
             if (planData.plan === 'free') {
               navLog('info', 'Plan is free, checking billing-status as fallback');
-              const billingRes = await fetch('/api/billing-status', {
+              const billingRes = await fetch('/api/billing-status?force=1', {
                 headers: { Authorization: `Bearer ${token}` }
               });
               if (billingRes.ok) {
@@ -2324,7 +2324,7 @@ async function initializeNavigation() {
           } else {
             // plan/me returned successfully but without plan field - use billing-status as fallback
             navLog('info', 'plan/me response missing plan field, checking billing-status as fallback');
-            const billingRes = await fetch('/api/billing-status', {
+            const billingRes = await fetch('/api/billing-status?force=1', {
               headers: { Authorization: `Bearer ${token}` }
             });
             if (billingRes.ok) {
@@ -2344,7 +2344,7 @@ async function initializeNavigation() {
         } else {
           // plan/me failed - use billing-status as fallback
           navLog('info', 'plan/me request failed, checking billing-status as fallback');
-          const billingRes = await fetch('/api/billing-status', {
+          const billingRes = await fetch('/api/billing-status?force=1', {
             headers: { Authorization: `Bearer ${token}` }
           });
           if (billingRes.ok) {
@@ -2587,7 +2587,7 @@ async function fetchPlanFromAPI() {
     if (plan === 'free' && currentUser) {
       console.log('🔍 fetchPlanFromAPI: Plan is free, checking billing-status as fallback...');
       try {
-        const billingRes = await fetch('/api/billing-status', { 
+        const billingRes = await fetch('/api/billing-status?force=1', { 
           headers: { Authorization: `Bearer ${idToken}` } 
         });
         if (billingRes.ok) {

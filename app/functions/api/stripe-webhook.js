@@ -1,4 +1,5 @@
 import { updateUserPlan, getUserPlanData, resetFeatureDailyUsage, resetUsageEvents } from '../_lib/db.js';
+import { stripe, pickBestSubscription } from '../_lib/billing-utils.js';
 
 export async function onRequest(context) {
   const { request, env } = context;
@@ -79,6 +80,7 @@ export async function onRequest(context) {
           await env.JOBHACKAI_KV.delete(kvPlanKey(uid));
           await env.JOBHACKAI_KV.delete(`trialUsedByUid:${uid}`);
           await env.JOBHACKAI_KV.delete(`trialEndByUid:${uid}`);
+          await env.JOBHACKAI_KV.delete(`billingStatus:${uid}`);
           // Delete all monthly feedbackUsage keys for this UID
           const monthsToDelete = [];
           const today = new Date();
@@ -350,21 +352,62 @@ export async function onRequest(context) {
       const customerId = event.data.object.customer || null;
       const uid = await fetchUidFromCustomer(customerId);
       console.log(`📝 DELETION DATA: customerId=${customerId}, uid=${uid}`);
-      console.log(`✍️ WRITING TO D1: users.plan = free for uid=${uid}`);
-      
-      await updatePlanInD1(uid, {
-        plan: 'free',
-        stripeSubscriptionId: null,
-        subscriptionStatus: 'canceled',
-        cancelAt: null, // Clear cancellation date
-        scheduledPlan: null, // Clear scheduled plan
-        scheduledAt: null // Clear scheduled date
-      }, event.created);
-      
-      // Clean up resume data when subscription is deleted (KV cleanup)
-      await env.JOBHACKAI_KV?.delete(`user:${uid}:lastResume`);
-      await env.JOBHACKAI_KV?.delete(`usage:${uid}`);
-      console.log(`✅ D1 WRITE SUCCESS: ${uid} → free (resume data cleaned up)`);
+
+      let handledByActiveSub = false;
+      if (customerId && uid) {
+        try {
+          const subsRes = await stripe(env, `/subscriptions?customer=${customerId}&status=all&limit=25`);
+          if (subsRes.ok) {
+            const subsData = await subsRes.json();
+            const activeSubs = (subsData.data || []).filter((sub) =>
+              sub && ['active', 'trialing', 'past_due'].includes(sub.status)
+            );
+            if (activeSubs.length > 0) {
+              const { bestSub, currentPlan } = pickBestSubscription(activeSubs, env);
+              const trialEndsAtISO = bestSub.trial_end ? new Date(bestSub.trial_end * 1000).toISOString() : null;
+              const currentPeriodEnd = bestSub.current_period_end ? new Date(bestSub.current_period_end * 1000).toISOString() : null;
+              const cancelAt = (bestSub.cancel_at_period_end && bestSub.cancel_at)
+                ? new Date(bestSub.cancel_at * 1000).toISOString()
+                : null;
+
+              console.log(`✍️ [WEBHOOK] Remaining active subscription found, keeping plan ${currentPlan} for uid=${uid}`);
+              await updatePlanInD1(uid, {
+                plan: currentPlan,
+                stripeCustomerId: customerId,
+                stripeSubscriptionId: bestSub.id,
+                subscriptionStatus: bestSub.status,
+                trialEndsAt: trialEndsAtISO,
+                currentPeriodEnd,
+                cancelAt,
+                scheduledPlan: null,
+                scheduledAt: null
+              }, event.created);
+              handledByActiveSub = true;
+            }
+          } else {
+            console.warn('[WEBHOOK] Failed to list subscriptions on deletion', subsRes.status);
+          }
+        } catch (subErr) {
+          console.warn('[WEBHOOK] Subscription lookup error on deletion', subErr?.message || subErr);
+        }
+      }
+
+      if (!handledByActiveSub) {
+        console.log(`✍️ WRITING TO D1: users.plan = free for uid=${uid}`);
+        await updatePlanInD1(uid, {
+          plan: 'free',
+          stripeSubscriptionId: null,
+          subscriptionStatus: 'canceled',
+          cancelAt: null, // Clear cancellation date
+          scheduledPlan: null, // Clear scheduled plan
+          scheduledAt: null // Clear scheduled date
+        }, event.created);
+        
+        // Clean up resume data when subscription is deleted (KV cleanup)
+        await env.JOBHACKAI_KV?.delete(`user:${uid}:lastResume`);
+        await env.JOBHACKAI_KV?.delete(`usage:${uid}`);
+        console.log(`✅ D1 WRITE SUCCESS: ${uid} → free (resume data cleaned up)`);
+      }
     }
 
   } catch (err) {
@@ -403,6 +446,5 @@ function priceToPlan(env, priceId) {
   if (priceId === premium) return 'premium';
   return null;
 }
-
 
 

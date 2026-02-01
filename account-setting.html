@@ -603,20 +603,17 @@
       if (user) {
         // Try to get token and check plan
         user.getIdToken().then(token => {
-          fetch('/api/billing-status', { headers: { Authorization: `Bearer ${token}` } })
+          fetch('/api/billing-status?force=1', { headers: { Authorization: `Bearer ${token}` } })
             .then(res => res.ok ? res.json() : null)
             .then(data => {
-              if (data?.ok && data?.plan && data?.plan !== 'free') {
+              if (data?.ok && data?.plan) {
                 // Plan found, sync it before navigation
                 console.log('🔄 [ACCOUNT-SETTINGS] Syncing plan before navigation init:', data.plan);
                 localStorage.setItem('user-plan', data.plan);
                 localStorage.setItem('dev-plan', data.plan);
-                // Initialize navigation after sync
-                initNav();
-              } else {
-                // No plan found or already free, initialize navigation normally
-                initNav();
               }
+              // Initialize navigation after sync (or if sync fails)
+              initNav();
             })
             .catch(() => {
               // If sync check fails, initialize navigation anyway
@@ -764,8 +761,8 @@
         }
         
         const idToken = await user.getIdToken();
-        // Use billing-status API to get authoritative plan from Stripe
-        const res = await fetch('/api/billing-status', {
+        // Use billing-status API to get authoritative plan from Stripe (force refresh)
+        const res = await fetch('/api/billing-status?force=1', {
           headers: { Authorization: `Bearer ${idToken}` }
         });
         
@@ -788,53 +785,56 @@
         }
         
         const plan = data.plan || 'free';
+        const storedPlan = localStorage.getItem('user-plan');
         
-        // CRITICAL FIX: Sync plan from billing-status to localStorage/KV
+        // CRITICAL FIX: Sync plan from billing-status to localStorage/KV (including free)
         // This ensures navigation and other components have the correct plan
-        if (plan !== 'free') {
-          console.log(`🔄 [ACCOUNT-SETTINGS] Syncing plan from billing-status: ${plan}`);
-          try {
-            // Only update localStorage if plan changed
-            if (localStorage.getItem('user-plan') !== plan) {
-              localStorage.setItem('user-plan', plan);
-            }
-            // Also sync to navigation system if available
-            if (window.JobHackAINavigation) {
-              // Trigger plan sync by calling sync-stripe-plan API
-              const syncRes = await fetch('/api/sync-stripe-plan', {
-                method: 'POST',
-                headers: { Authorization: `Bearer ${idToken}` }
+        console.log(`🔄 [ACCOUNT-SETTINGS] Syncing plan from billing-status: ${plan}`);
+        try {
+          if (storedPlan !== plan) {
+            localStorage.setItem('user-plan', plan);
+            localStorage.setItem('dev-plan', plan);
+          } else if (localStorage.getItem('dev-plan') !== plan) {
+            localStorage.setItem('dev-plan', plan);
+          }
+
+          const shouldSync = plan === 'free' || storedPlan !== plan;
+          if (window.JobHackAINavigation && shouldSync) {
+            // Trigger plan sync by calling sync-stripe-plan API
+            const syncRes = await fetch('/api/sync-stripe-plan', {
+              method: 'POST',
+              headers: { Authorization: `Bearer ${idToken}` }
+            });
+            if (syncRes.ok) {
+              console.log('✅ [ACCOUNT-SETTINGS] Plan synced to KV storage');
+              // Update navigation with new plan
+              const syncData = await syncRes.json().catch((err) => {
+                console.error('❌ [ACCOUNT-SETTINGS] Failed to parse sync-stripe-plan response JSON:', err);
+                return { ok: false };
               });
-              if (syncRes.ok) {
-                console.log('✅ [ACCOUNT-SETTINGS] Plan synced to KV storage');
-                // Update navigation with new plan
-                const syncData = await syncRes.json().catch((err) => {
-                  console.error('❌ [ACCOUNT-SETTINGS] Failed to parse sync-stripe-plan response JSON:', err);
-                  return { ok: false };
-                });
-                if (syncData.ok && syncData.plan) {
-                  // Only update localStorage if plan changed
-                  if (localStorage.getItem('user-plan') !== syncData.plan) {
-                    localStorage.setItem('user-plan', syncData.plan);
-                    localStorage.setItem('dev-plan', syncData.plan); // Also update dev-plan for consistency
-                  }
-                  // Trigger navigation update
-                  window.dispatchEvent(new CustomEvent('planChanged', { detail: { newPlan: syncData.plan } }));
-                  // CRITICAL: Re-initialize navigation to reflect new plan
-                  if (window.JobHackAINavigation && typeof window.JobHackAINavigation.scheduleUpdateNavigation === 'function') {
-                    console.log('🔄 [ACCOUNT-SETTINGS] Re-initializing navigation with synced plan:', syncData.plan);
-                    window.JobHackAINavigation.scheduleUpdateNavigation(true);
-                  } else if (window.JobHackAINavigation && typeof window.JobHackAINavigation.updateNavigation === 'function') {
-                    // fallback
-                    window.JobHackAINavigation.updateNavigation();
-                  }
+              if (syncData.ok && syncData.plan) {
+                if (localStorage.getItem('user-plan') !== syncData.plan) {
+                  localStorage.setItem('user-plan', syncData.plan);
+                  localStorage.setItem('dev-plan', syncData.plan);
+                } else if (localStorage.getItem('dev-plan') !== syncData.plan) {
+                  localStorage.setItem('dev-plan', syncData.plan);
+                }
+                // Trigger navigation update
+                window.dispatchEvent(new CustomEvent('planChanged', { detail: { newPlan: syncData.plan } }));
+                // CRITICAL: Re-initialize navigation to reflect new plan
+                if (window.JobHackAINavigation && typeof window.JobHackAINavigation.scheduleUpdateNavigation === 'function') {
+                  console.log('🔄 [ACCOUNT-SETTINGS] Re-initializing navigation with synced plan:', syncData.plan);
+                  window.JobHackAINavigation.scheduleUpdateNavigation(true);
+                } else if (window.JobHackAINavigation && typeof window.JobHackAINavigation.updateNavigation === 'function') {
+                  // fallback
+                  window.JobHackAINavigation.updateNavigation();
                 }
               }
             }
-          } catch (syncError) {
-            console.warn('⚠️ [ACCOUNT-SETTINGS] Failed to sync plan:', syncError);
-            // Non-critical, continue rendering
           }
+        } catch (syncError) {
+          console.warn('⚠️ [ACCOUNT-SETTINGS] Failed to sync plan:', syncError);
+          // Non-critical, continue rendering
         }
         
         // Plan name mapping

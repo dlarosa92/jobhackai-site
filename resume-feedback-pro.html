@@ -2393,10 +2393,10 @@
     }
 
   // Generic helper to start plan changes for a given plan.
-  // Uses /api/upgrade-plan for paid upgrades and falls back to /api/stripe-checkout for trials.
+  // Uses centralized window.upgradePlan() when available, falls back to /api/upgrade-plan endpoint.
   const startCheckout = async (plan) => {
     try {
-      if (typeof window.upgradePlan === 'function' && plan !== 'trial') {
+      if (typeof window.upgradePlan === 'function') {
         await window.upgradePlan(plan, {
           source: 'resume-feedback',
           returnUrl: window.location.href
@@ -2419,17 +2419,45 @@
         return;
       }
       const idToken = await user.getIdToken();
-      const res = await fetch('/api/stripe-checkout', {
+      // Trial plans must use stripe-checkout to create a subscription with trial period.
+      if (plan === 'trial') {
+        const res = await fetch('/api/stripe-checkout', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}) },
+          body: JSON.stringify({ plan: 'trial' })
+        });
+        const data = await res.json();
+        if (data?.ok && data?.url) {
+          window.location.href = data.url;
+          return;
+        }
+        throw new Error(data?.error || data?.code || 'Checkout failed');
+      }
+
+      // Paid plans use upgrade-plan endpoint to handle existing subscriptions.
+      const res = await fetch('/api/upgrade-plan', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}) },
-        body: JSON.stringify({ plan })
+        body: JSON.stringify({
+          targetPlan: plan,
+          source: 'resume-feedback',
+          returnUrl: window.location.href
+        })
       });
       const data = await res.json();
-      if (data && data.ok && data.url) {
+      if (!res.ok) {
+        throw new Error(data?.error || data?.code || 'Upgrade failed');
+      }
+      if (data?.action === 'redirect' && data.url) {
         window.location.href = data.url;
         return;
       }
-      throw new Error(data?.error || 'Checkout failed');
+      if (data?.action === 'updated') {
+        // Plan updated successfully, reload to refresh UI
+        window.location.reload();
+        return;
+      }
+      throw new Error('Unexpected response from upgrade endpoint');
     } catch (e) {
       console.error('Start checkout error:', e);
       if (window._currentLoadingOverlay) {
@@ -2490,22 +2518,35 @@
             }
             // Show loading state only after confirmation
             if (window.showLoadingOverlay) {
-              window._currentLoadingOverlay = window.showLoadingOverlay('Redirecting to checkout...');
+              window._currentLoadingOverlay = window.showLoadingOverlay('Upgrading plan...');
             }
-            const res = await fetch('/api/stripe-checkout', {
+            // Use upgrade-plan endpoint to properly handle existing subscriptions
+            const res = await fetch('/api/upgrade-plan', {
               method: 'POST',
-              headers: { 
-                'Content-Type': 'application/json', 
-                ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}) 
+              headers: {
+                'Content-Type': 'application/json',
+                ...(idToken ? { Authorization: `Bearer ${idToken}` } : {})
               },
-              body: JSON.stringify({ plan: 'pro' })
+              body: JSON.stringify({
+                targetPlan: 'pro',
+                source: 'resume-feedback',
+                returnUrl: window.location.href
+              })
             });
             const data = await res.json();
-            if (data && data.ok && data.url) {
+            if (!res.ok) {
+              throw new Error(data?.error || data?.code || 'Upgrade failed');
+            }
+            if (data?.action === 'redirect' && data.url) {
               window.location.href = data.url;
               return;
             }
-            throw new Error(data?.error || 'Checkout failed');
+            if (data?.action === 'updated') {
+              // Plan updated successfully, reload to refresh UI
+              window.location.reload();
+              return;
+            }
+            throw new Error('Unexpected response from upgrade endpoint');
           } catch (e) {
             console.error('Upgrade checkout error:', e);
             // Hide loading overlay
@@ -4455,22 +4496,35 @@
                           }
                           // Show loading state after confirmation
                           if (window.showLoadingOverlay) {
-                            window._currentLoadingOverlay = window.showLoadingOverlay('Redirecting to checkout...');
+                            window._currentLoadingOverlay = window.showLoadingOverlay('Upgrading plan...');
                           }
-                          const res = await fetch('/api/stripe-checkout', {
+                          // Use upgrade-plan endpoint to properly handle existing subscriptions
+                          const res = await fetch('/api/upgrade-plan', {
                             method: 'POST',
-                            headers: { 
-                              'Content-Type': 'application/json', 
-                              ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}) 
+                            headers: {
+                              'Content-Type': 'application/json',
+                              ...(idToken ? { Authorization: `Bearer ${idToken}` } : {})
                                 },
-                                body: JSON.stringify({ plan: 'pro' })
+                                body: JSON.stringify({
+                                  targetPlan: 'pro',
+                                  source: 'resume-feedback',
+                                  returnUrl: window.location.href
+                                })
                               });
                               const data = await res.json();
-                              if (data && data.ok && data.url) {
+                              if (!res.ok) {
+                                throw new Error(data?.error || data?.code || 'Upgrade failed');
+                              }
+                              if (data?.action === 'redirect' && data.url) {
                                 window.location.href = data.url;
                                 return;
                               }
-                              throw new Error(data?.error || 'Checkout failed');
+                              if (data?.action === 'updated') {
+                                // Plan updated successfully, reload to refresh UI
+                                window.location.reload();
+                                return;
+                              }
+                              throw new Error('Unexpected response from upgrade endpoint');
                             } catch (e) {
                               console.error('Upgrade checkout error:', e);
                               // Hide loading overlay
