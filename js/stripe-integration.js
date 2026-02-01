@@ -962,7 +962,8 @@ async function upgradePlan(targetPlan, options = {}) {
   const confirmed = await requestUpgradeConfirmation(targetPlan, {
     context: options.context || source,
     mode: options.confirmationMode || 'checkout',
-    currentPlan: localStorage.getItem('user-plan') || 'free'
+    currentPlan: localStorage.getItem('user-plan') || 'free',
+    skipConfirmation: options.skipConfirmation
   });
 
   if (!confirmed) {
