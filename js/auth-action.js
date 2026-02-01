@@ -245,7 +245,7 @@ async function routeAfterVerification() {
           'Content-Type': 'application/json', 
           ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}) 
         },
-        body: JSON.stringify({ plan, startTrial: plan === 'trial' })
+        body: JSON.stringify({ plan, startTrial: plan === 'trial', forceNew: plan === 'trial' })
       });
       
       const data = await res.json();

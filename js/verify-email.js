@@ -216,7 +216,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         const res = await fetch('/api/stripe-checkout', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}) },
-          body: JSON.stringify({ plan, startTrial: plan === 'trial' })
+          body: JSON.stringify({ plan, startTrial: plan === 'trial', forceNew: plan === 'trial' })
         });
         const data = await res.json();
         if (data && data.ok && data.url) { window.location.href = data.url; return true; }

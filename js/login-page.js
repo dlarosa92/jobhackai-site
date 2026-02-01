@@ -37,7 +37,7 @@ async function handlePostAuthRedirect(plan) {
       const res = await fetch('/api/stripe-checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}) },
-        body: JSON.stringify({ plan, startTrial: plan === 'trial' })
+        body: JSON.stringify({ plan, startTrial: plan === 'trial', forceNew: plan === 'trial' })
       });
       const data = await res.json();
       if (data && data.ok && data.url) { window.location.href = data.url; return; }
@@ -463,7 +463,7 @@ document.addEventListener('DOMContentLoaded', async function() {
             const res = await fetch('/api/stripe-checkout', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json', ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}) },
-              body: JSON.stringify({ plan, startTrial: plan === 'trial' })
+              body: JSON.stringify({ plan, startTrial: plan === 'trial', forceNew: plan === 'trial' })
             });
             const data = await res.json();
             if (data && data.ok && data.url) { 
@@ -563,7 +563,7 @@ document.addEventListener('DOMContentLoaded', async function() {
             const res = await fetch('/api/stripe-checkout', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json', ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}) },
-              body: JSON.stringify({ plan, startTrial: plan === 'trial' })
+              body: JSON.stringify({ plan, startTrial: plan === 'trial', forceNew: plan === 'trial' })
             });
             const data = await res.json();
             if (data && data.ok && data.url) { 

@@ -635,7 +635,8 @@ class JobHackAIStripe {
         body: JSON.stringify({
           plan: plan,
           firebaseUid: authUser.uid,
-          email: authUser.email
+          email: authUser.email,
+          forceNew: plan === 'trial'
         }),
       });
 
@@ -1000,7 +1001,7 @@ async function upgradePlan(targetPlan, options = {}) {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${idToken}`
         },
-        body: JSON.stringify({ plan: 'trial' })
+        body: JSON.stringify({ plan: 'trial', forceNew: true })
       });
       const data = await res.json().catch(() => ({}));
       if (data?.ok && data?.url) {

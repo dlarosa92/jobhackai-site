@@ -1378,14 +1378,23 @@ function getDevPlanOverride() {
 
   const urlParams = new URLSearchParams(window.location.search);
   const planParam = urlParams.get('plan');
+  const devFlag = ['1', 'true', 'yes'].includes((urlParams.get('dev') || '').toLowerCase());
+  const host = window.location.hostname || '';
+  const isLocal = host === 'localhost' || host === '127.0.0.1' || host.endsWith('.local');
+  const isNonProd = isLocal || host.startsWith('dev.') || host.startsWith('qa.');
+  const allowDevOverride = devFlag || isNonProd;
+
   if (planParam && PLANS[planParam]) {
-    navLog('info', 'getDevPlanOverride: Plan found in URL params', planParam);
-    localStorage.setItem('dev-plan', planParam);
-    return planParam;
+    if (allowDevOverride) {
+      navLog('info', 'getDevPlanOverride: Plan found in URL params', planParam);
+      localStorage.setItem('dev-plan', planParam);
+      return planParam;
+    }
+    navLog('info', 'getDevPlanOverride: Ignoring plan param (prod)', planParam);
   }
   const devPlan = localStorage.getItem('dev-plan');
-  // Only allow dev-plan override if explicitly set and not visitor
-  if (devPlan && devPlan !== 'visitor' && PLANS[devPlan]) {
+  // Only allow dev-plan override if explicitly allowed
+  if (allowDevOverride && devPlan && devPlan !== 'visitor' && PLANS[devPlan]) {
     navLog('debug', 'getDevPlanOverride: Plan found in localStorage', devPlan);
     return devPlan;
   }

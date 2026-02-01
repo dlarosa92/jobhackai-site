@@ -373,7 +373,7 @@
                       'Content-Type': 'application/json',
                       'Authorization': `Bearer ${idToken}`
                     },
-                    body: JSON.stringify({ plan: 'trial' })
+                    body: JSON.stringify({ plan: 'trial', forceNew: true })
                   });
                   const data = await res.json();
                   if (data?.ok && data?.url) {
