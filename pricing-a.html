@@ -348,10 +348,6 @@
           }
 
           if (isAuthenticated && userEmail) {
-            button.textContent = originalText;
-            button.disabled = false;
-            button.style.opacity = '1';
-            button.style.cursor = 'pointer';
             // Authenticated path → use appropriate upgrade flow
             (async () => {
               try {
