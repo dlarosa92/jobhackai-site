@@ -950,6 +950,8 @@ async function requestUpgradeConfirmation(plan, options = {}) {
 }
 
 async function upgradePlan(targetPlan, options = {}) {
+  const normalizedPlan = typeof targetPlan === 'string' ? targetPlan.trim().toLowerCase() : targetPlan;
+  const plan = normalizedPlan || targetPlan;
   const source = options.source || 'unknown';
   const returnUrl = options.returnUrl || window.location.href;
   const button = options.button || null;
@@ -959,7 +961,7 @@ async function upgradePlan(targetPlan, options = {}) {
     originalText = button.textContent;
   }
 
-  const confirmed = await requestUpgradeConfirmation(targetPlan, {
+  const confirmed = await requestUpgradeConfirmation(plan, {
     context: options.context || source,
     mode: options.confirmationMode || 'checkout',
     currentPlan: localStorage.getItem('user-plan') || 'free',
@@ -990,13 +992,31 @@ async function upgradePlan(targetPlan, options = {}) {
       return;
     }
     const idToken = await user.getIdToken();
+    // Trial plans must use stripe-checkout (creates a new subscription with trial period)
+    if (plan === 'trial') {
+      const res = await fetch('/api/stripe-checkout', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${idToken}`
+        },
+        body: JSON.stringify({ plan: 'trial' })
+      });
+      const data = await res.json().catch(() => ({}));
+      if (data?.ok && data?.url) {
+        window.location.href = data.url;
+        return;
+      }
+      throw new Error(data?.error || data?.code || 'Checkout failed');
+    }
+
     const res = await fetch('/api/upgrade-plan', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${idToken}`
       },
-      body: JSON.stringify({ targetPlan, source, returnUrl })
+      body: JSON.stringify({ targetPlan: plan, source, returnUrl })
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
@@ -1016,7 +1036,7 @@ async function upgradePlan(targetPlan, options = {}) {
       return;
     }
     if (data?.action === 'updated') {
-      const newPlan = data.plan || targetPlan;
+      const newPlan = data.plan || plan;
       localStorage.setItem('user-plan', newPlan);
       localStorage.setItem('dev-plan', newPlan);
       window.dispatchEvent(new CustomEvent('planChanged', { detail: { newPlan, source: 'upgrade' } }));
