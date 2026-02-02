@@ -4,13 +4,14 @@ import { getUserPlan } from '../../_lib/db.js';
 
 const DB_BINDING_NAMES = ['JOBHACKAI_DB', 'INTERVIEW_QUESTIONS_DB', 'IQ_D1', 'DB'];
 
+// Match LinkedIn's actual limits: headline 220, About 2600, experience 2000/position (6000 for ~3 positions), skills no char limit (2000 for paste)
 const MAX = {
   requestId: 80,
   role: 120,
-  headline: 120,
-  summary: 400,
-  experience: 800,
-  skills: 300,
+  headline: 220,
+  summary: 2600,
+  experience: 6000,
+  skills: 2000,
   recommendations: 400
 };
 
@@ -158,11 +159,11 @@ Rules:
 - feedbackBullets per section: 2-3 items max.
  - Return section scores on a 0-100 scale if possible; the server will normalize and rescale when needed.
 
-Length caps:
+Length caps (LinkedIn limits):
 - headline optimizedText <= 220 chars
-- summary optimizedText <= 1200 chars
-- experience optimizedText <= 1200 chars total
-- skills optimizedText <= 350 chars`;
+- summary optimizedText <= 2600 chars (About section)
+- experience optimizedText <= 2000 chars per position (6000 total for multiple)
+- skills optimizedText <= 500 chars`;
 
   const user =
     `TARGET ROLE: ${role}\n\n` +

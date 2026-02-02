@@ -148,11 +148,11 @@ Rules:
 - feedbackBullets: 2-3 items max.
 - Keep optimizedText paste-ready for LinkedIn.
 
-Length caps:
+Length caps (LinkedIn limits):
 - headline optimizedText <= 220 chars
-- summary optimizedText <= 1200 chars
-- experience optimizedText <= 1200 chars total
-- skills optimizedText <= 350 chars`;
+- summary optimizedText <= 2600 chars (About section)
+- experience optimizedText <= 2000 chars per position (6000 total for multiple)
+- skills optimizedText <= 500 chars`;
 
   const user =
     `TARGET ROLE: ${role}\n\n` +
@@ -442,7 +442,8 @@ export async function onRequest(context) {
       computedOverall = Math.round(weightedSum / weightSum);
     }
 
-    const overallScore = computedOverall !== null ? computedOverall : null;
+    const aiOverall = Number.isFinite(out.overallScore) ? normalizeTo100(out.overallScore) : null;
+    const overallScore = computedOverall !== null ? computedOverall : aiOverall !== null ? aiOverall : null;
     next.overallScore = overallScore;
 
     if (seenSmallScale) {
