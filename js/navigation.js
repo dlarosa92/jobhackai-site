@@ -1150,10 +1150,7 @@ const NAVIGATION_CONFIG = {
       { text: 'Blog', href: 'index.html#blog' },
       { text: 'Features', href: 'features.html' },
       { text: 'Pricing', href: '/pricing-a' },
-      { text: 'Login', href: 'login.html' },
-      { text: 'Help', href: '/help.html' },
-      { text: 'Privacy', href: '/privacy.html' },
-      { text: 'Cookies', href: '/cookies.html' }
+      { text: 'Login', href: 'login.html' }
     ],
     cta: { text: 'Start Free Trial', href: '/login.html?plan=trial', isCTA: true, planId: 'trial' }
   },
@@ -1164,10 +1161,7 @@ const NAVIGATION_CONFIG = {
       { text: 'Dashboard', href: 'dashboard.html' },
       { text: 'Blog', href: 'index.html#blog' },
       { text: 'Resume Feedback', href: 'resume-feedback-pro.html', locked: true },
-      { text: 'Interview Questions', href: 'interview-questions.html', locked: true },
-      { text: 'Help', href: '/help.html' },
-      { text: 'Privacy', href: '/privacy.html' },
-      { text: 'Cookies', href: '/cookies.html' }
+      { text: 'Interview Questions', href: 'interview-questions.html', locked: true }
     ],
     userNav: {
       menuItems: [
@@ -1183,10 +1177,7 @@ const NAVIGATION_CONFIG = {
       { text: 'Dashboard', href: 'dashboard.html' },
       { text: 'Blog', href: 'index.html#blog' },
       { text: 'Resume Feedback', href: 'resume-feedback-pro.html' },
-      { text: 'Interview Questions', href: 'interview-questions.html' },
-      { text: 'Help', href: '/help.html' },
-      { text: 'Privacy', href: '/privacy.html' },
-      { text: 'Cookies', href: '/cookies.html' }
+      { text: 'Interview Questions', href: 'interview-questions.html' }
     ],
     userNav: {
       menuItems: [
@@ -1202,10 +1193,7 @@ const NAVIGATION_CONFIG = {
       { text: 'Dashboard', href: 'dashboard.html' },
       { text: 'Blog', href: 'index.html#blog' },
       { text: 'Resume Feedback', href: 'resume-feedback-pro.html' },
-      { text: 'Interview Questions', href: 'interview-questions.html' },
-      { text: 'Help', href: '/help.html' },
-      { text: 'Privacy', href: '/privacy.html' },
-      { text: 'Cookies', href: '/cookies.html' }
+      { text: 'Interview Questions', href: 'interview-questions.html' }
     ],
     userNav: {
       menuItems: [
@@ -1235,10 +1223,7 @@ const NAVIGATION_CONFIG = {
           { text: 'Interview Questions', href: 'interview-questions.html' },
           { text: 'Mock Interviews', href: 'mock-interview.html' },
         ]
-      },
-      { text: 'Help', href: '/help.html' },
-      { text: 'Privacy', href: '/privacy.html' },
-      { text: 'Cookies', href: '/cookies.html' }
+      }
     ],
     userNav: {
       menuItems: [
@@ -1269,10 +1254,7 @@ const NAVIGATION_CONFIG = {
           { text: 'Mock Interviews', href: 'mock-interview.html' },
         ]
       },
-      { text: 'LinkedIn Optimizer', href: 'linkedin-optimizer.html' },
-      { text: 'Help', href: '/help.html' },
-      { text: 'Privacy', href: '/privacy.html' },
-      { text: 'Cookies', href: '/cookies.html' }
+      { text: 'LinkedIn Optimizer', href: 'linkedin-optimizer.html' }
     ],
     userNav: {
       menuItems: [
