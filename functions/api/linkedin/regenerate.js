@@ -148,11 +148,11 @@ Rules:
 - feedbackBullets: 2-3 items max.
 - Keep optimizedText paste-ready for LinkedIn.
 
-Length caps:
+Length caps (LinkedIn limits):
 - headline optimizedText <= 220 chars
-- summary optimizedText <= 1200 chars
-- experience optimizedText <= 1200 chars total
-- skills optimizedText <= 350 chars`;
+- summary optimizedText <= 2600 chars (About section)
+- experience optimizedText <= 2000 chars per position (6000 total for multiple)
+- skills optimizedText <= 500 chars`;
 
   const user =
     `TARGET ROLE: ${role}\n\n` +
@@ -396,12 +396,71 @@ export async function onRequest(context) {
 
     // Patch output_json in-place
     const next = { ...currentOutput };
-    next.overallScore = out.overallScore;
     next.sections = { ...(currentOutput.sections || {}) };
     next.sections[section] = out.data;
 
+    // --- Normalize section scores and compute weighted overall (server authoritative) ---
+    const WEIGHTS = {
+      headline: 20,
+      summary: 30,
+      experience: 25,
+      skills: 15,
+      recommendations: 10
+    };
+
+    function normalizeTo100(n) {
+      if (typeof n !== 'number' || !Number.isFinite(n)) return null;
+      if (n < 0) return 0;
+      if (n <= 10) return Math.round(n * 10);
+      return Math.round(Math.max(0, Math.min(100, n)));
+    }
+
+    function clampTo100(n) {
+      if (typeof n !== 'number' || !Number.isFinite(n)) return null;
+      if (n < 0) return 0;
+      return Math.round(Math.max(0, Math.min(100, n)));
+    }
+
+    let scaledRegenerated = false;
+    let weightSum = 0;
+    let weightedSum = 0;
+    if (next.sections && typeof next.sections === 'object') {
+      for (const [k, sec] of Object.entries(next.sections)) {
+        if (sec && typeof sec.score === 'number') {
+          const originalScore = sec.score;
+          const isRegenerated = k === section;
+          const norm = isRegenerated ? normalizeTo100(originalScore) : clampTo100(originalScore);
+          if (norm === null) {
+            console.warn('[LINKEDIN] section score not numeric for', k, originalScore);
+          } else {
+            if (isRegenerated && originalScore <= 10) scaledRegenerated = true;
+            next.sections[k].score = norm;
+            if (Object.prototype.hasOwnProperty.call(WEIGHTS, k)) {
+              weightSum += WEIGHTS[k];
+              weightedSum += norm * WEIGHTS[k];
+            }
+          }
+        }
+      }
+    }
+
+    let computedOverall = null;
+    if (weightSum > 0) {
+      computedOverall = Math.round(weightedSum / weightSum);
+    }
+
+    const aiOverall = Number.isFinite(out.overallScore) ? normalizeTo100(out.overallScore) : null;
+    const overallScore = computedOverall !== null ? computedOverall : aiOverall !== null ? aiOverall : null;
+    next.overallScore = overallScore;
+
+    if (scaledRegenerated) {
+      console.info('[LINKEDIN] Regenerated section appears to be 0-10 scale; normalized to 0-100', {
+        runId: nextRunId,
+        detectedSections: Object.keys(next.sections || {})
+      });
+    }
+
     const updatedAt = Date.now();
-    const overallScore = Number.isFinite(out.overallScore) ? Math.round(out.overallScore) : null;
 
     await db
       .prepare(
@@ -440,4 +499,3 @@ export async function onRequest(context) {
     return jsonResponse(env, { error: 'server_error', reason: e?.message || 'unknown' }, 500);
   }
 }
-

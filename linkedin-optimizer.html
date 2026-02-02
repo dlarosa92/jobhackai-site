@@ -89,22 +89,36 @@
 
               <div class="lo-field">
                 <label class="lo-label" for="lo-headline">Headline <span class="lo-required">*</span></label>
-                <input id="lo-headline" class="lo-input" type="text" maxlength="120" required>
+                <p class="lo-helper-text">Short tagline under your name on LinkedIn.</p>
+                <input
+                  id="lo-headline"
+                  class="lo-input"
+                  type="text"
+                  maxlength="220"
+                  placeholder="Short tagline under your name (e.g., Principal Software Engineer | Cybersecurity)"
+                  required>
               </div>
 
               <div class="lo-field">
                 <label class="lo-label" for="lo-summary">Summary <span class="lo-required">*</span></label>
-                <textarea id="lo-summary" class="lo-textarea" rows="3" maxlength="400" required></textarea>
+                <p class="lo-helper-text">Your LinkedIn About section: 2-3 short paragraphs about experience and goals.</p>
+                <textarea
+                  id="lo-summary"
+                  class="lo-textarea"
+                  rows="3"
+                  maxlength="2600"
+                  placeholder="About section: 2-3 short paragraphs about your experience and goals (LinkedIn max 2,600 chars)."
+                  required></textarea>
               </div>
 
               <div class="lo-field">
                 <label class="lo-label" for="lo-experience">Experience <span class="lo-required">*</span></label>
-                <textarea id="lo-experience" class="lo-textarea" rows="4" maxlength="800" required></textarea>
+                <textarea id="lo-experience" class="lo-textarea" rows="4" maxlength="6000" required></textarea>
               </div>
 
               <div class="lo-field">
                 <label class="lo-label" for="lo-skills">Skills <span class="lo-required">*</span></label>
-                <textarea id="lo-skills" class="lo-textarea" rows="2" maxlength="300" required></textarea>
+                <textarea id="lo-skills" class="lo-textarea" rows="2" maxlength="2000" required></textarea>
               </div>
 
               <div class="lo-field">
@@ -140,7 +154,13 @@
                 </div>
               </div>
               <div>
-                <button id="lo-download" class="btn-outline" type="button">Download PDF</button>
+                <button
+                  id="lo-download"
+                  class="btn-outline"
+                  type="button"
+                  title="Print or save as PDF for offline reference while editing your LinkedIn profile.">
+                  Print / Save as PDF
+                </button>
               </div>
             </div>
 
