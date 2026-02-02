@@ -293,13 +293,13 @@
   font-size: var(--font-size-sm);
 }
 
-/* Upgrade Links */
+/* Upgrade Links - match design system: green bg, white text (override .help-a a blue) */
 .help-upgrade-link {
   display: inline-block;
   margin-top: var(--space-sm);
   padding: var(--space-xs) var(--space-md);
   background: var(--color-cta-green);
-  color: white;
+  color: #fff !important;
   text-decoration: none !important;
   border-radius: var(--radius-button);
   font-weight: var(--font-weight-semibold);
@@ -311,6 +311,7 @@
 .help-upgrade-link:hover {
   background: var(--color-cta-green-hover);
   box-shadow: var(--shadow-button-hover);
+  color: #fff !important;
   text-decoration: none !important;
 }
 
