@@ -1,5 +1,5 @@
 import { getBearer, verifyFirebaseIdToken } from '../../_lib/firebase-auth.js';
-import { getUserPlanData } from '../../_lib/db.js';
+import { getUserPlanData, isTrialEligible } from '../../_lib/db.js';
 
 export async function onRequest(context) {
   const { request, env } = context;
@@ -18,13 +18,15 @@ export async function onRequest(context) {
 
     // Fetch plan data from D1 (source of truth)
     const planData = await getUserPlanData(env, uid);
+    const trialEligible = await isTrialEligible(env, uid);
 
     return new Response(JSON.stringify({ 
       plan: planData?.plan || 'free',
       trialEndsAt: planData?.trialEndsAt || null,
       cancelAt: planData?.cancelAt || null,
       currentPeriodEnd: planData?.currentPeriodEnd || null,
-      scheduledPlanChange: planData?.scheduledPlanChange || null
+      scheduledPlanChange: planData?.scheduledPlanChange || null,
+      trialEligible
     }), {
       headers: corsHeaders(origin, env)
     });
@@ -50,5 +52,4 @@ function corsHeaders(origin, env) {
     'Vary': 'Origin'
   };
 }
-
 
