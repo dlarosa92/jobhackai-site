@@ -416,18 +416,25 @@ export async function onRequest(context) {
       return Math.round(Math.max(0, Math.min(100, n)));
     }
 
-    let seenSmallScale = false;
+    function clampTo100(n) {
+      if (typeof n !== 'number' || !Number.isFinite(n)) return null;
+      if (n < 0) return 0;
+      return Math.round(Math.max(0, Math.min(100, n)));
+    }
+
+    let scaledRegenerated = false;
     let weightSum = 0;
     let weightedSum = 0;
     if (next.sections && typeof next.sections === 'object') {
       for (const [k, sec] of Object.entries(next.sections)) {
         if (sec && typeof sec.score === 'number') {
           const originalScore = sec.score;
-          const norm = normalizeTo100(originalScore);
+          const isRegenerated = k === section;
+          const norm = isRegenerated ? normalizeTo100(originalScore) : clampTo100(originalScore);
           if (norm === null) {
             console.warn('[LINKEDIN] section score not numeric for', k, originalScore);
           } else {
-            if (originalScore <= 10) seenSmallScale = true;
+            if (isRegenerated && originalScore <= 10) scaledRegenerated = true;
             next.sections[k].score = norm;
             if (Object.prototype.hasOwnProperty.call(WEIGHTS, k)) {
               weightSum += WEIGHTS[k];
@@ -447,8 +454,8 @@ export async function onRequest(context) {
     const overallScore = computedOverall !== null ? computedOverall : aiOverall !== null ? aiOverall : null;
     next.overallScore = overallScore;
 
-    if (seenSmallScale) {
-      console.info('[LINKEDIN] AI appears to return 0-10 scale for section scores; normalized to 0-100', {
+    if (scaledRegenerated) {
+      console.info('[LINKEDIN] Regenerated section appears to be 0-10 scale; normalized to 0-100', {
         runId: nextRunId,
         detectedSections: Object.keys(next.sections || {})
       });
