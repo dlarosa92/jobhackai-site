@@ -133,18 +133,49 @@ export async function onRequest(context) {
 
     console.log('🔍 Found customer ID:', customerId);
 
-    // Get current subscriptions from Stripe
-    const stripeResponse = await fetch(`https://api.stripe.com/v1/subscriptions?customer=${customerId}&status=all&limit=10`, {
-      headers: { Authorization: `Bearer ${env.STRIPE_SECRET_KEY}` }
-    });
+    // Get all subscriptions from Stripe (paginate to avoid missing older paid subs)
+    const subscriptions = [];
+    let startingAfter = null;
+    let hasMore = true;
+    let pageCount = 0;
+    const maxPages = 20; // Safety cap to avoid runaway loops (up to 2000 subs)
+    while (hasMore && pageCount < maxPages) {
+      const params = new URLSearchParams({
+        customer: customerId,
+        status: 'all',
+        limit: '100'
+      });
+      if (startingAfter) params.append('starting_after', startingAfter);
 
-    if (!stripeResponse.ok) {
-      console.error('❌ Stripe API error:', stripeResponse.status);
-      return json({ ok: false, error: 'Failed to fetch subscription data' }, 500, origin, env);
+      const stripeResponse = await fetch(`https://api.stripe.com/v1/subscriptions?${params.toString()}`, {
+        headers: { Authorization: `Bearer ${env.STRIPE_SECRET_KEY}` }
+      });
+
+      if (!stripeResponse.ok) {
+        console.error('❌ Stripe API error:', stripeResponse.status);
+        return json({ ok: false, error: 'Failed to fetch subscription data' }, 500, origin, env);
+      }
+
+      const stripeData = await stripeResponse.json();
+      const pageSubs = stripeData.data || [];
+      subscriptions.push(...pageSubs);
+      hasMore = stripeData.has_more === true;
+      startingAfter = pageSubs.length > 0 ? pageSubs[pageSubs.length - 1].id : null;
+      pageCount += 1;
+
+      if (hasMore && !startingAfter) {
+        console.warn('⚠️ [SYNC-STRIPE-PLAN] Pagination stopped early due to missing starting_after');
+        break;
+      }
     }
 
-    const stripeData = await stripeResponse.json();
-    const subscriptions = stripeData.data || [];
+    if (hasMore) {
+      console.warn('⚠️ [SYNC-STRIPE-PLAN] Subscription pagination capped', {
+        customerId,
+        pagesFetched: pageCount,
+        subscriptionsFetched: subscriptions.length
+      });
+    }
     const everPaidFromStripe = subscriptions.some((sub) => {
       const items = sub?.items?.data || [];
       const priceId = items[0]?.price?.id || '';

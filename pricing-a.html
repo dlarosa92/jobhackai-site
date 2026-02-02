@@ -220,6 +220,12 @@
       setTrialSubtext(button, message || 'Available on the free plan only.');
     }
 
+    function inferTrialIneligibleReason(state) {
+      if (state?.trialEndsAt) return 'already_used';
+      if (state?.trialEligible === false) return 'ever_paid';
+      return null;
+    }
+
     function enableButton(button) {
       button.style.display = '';
       button.disabled = false;
@@ -466,14 +472,19 @@
                 if (errorMessage.includes('unauthorized') || errorMessage.includes('token')) {
                   alert('Your session has expired. Please log in again and try upgrading.');
                 } else if (errorMessage.includes('Trial already used')) {
-                  alert('You have already used your free trial. Please select a paid plan.');
+                  const inferredReason = trialEligibilityState.ineligibleReason || inferTrialIneligibleReason(trialEligibilityState);
+                  const alertMessage = inferredReason === 'ever_paid'
+                    ? 'Trial is for new users only. Please select a paid plan.'
+                    : inferredReason === 'already_used'
+                      ? 'You have already used your free trial. Please select a paid plan.'
+                      : 'Trial is not available. Please select a paid plan.';
+                  alert(alertMessage);
                   trialEligibilityState = {
                     ...trialEligibilityState,
                     checked: true,
                     eligible: false,
                     plan: trialEligibilityState.plan || localStorage.getItem('user-plan') || 'free',
-                    ineligibleReason: trialEligibilityState.ineligibleReason
-                      || (trialEligibilityState.trialEndsAt ? 'already_used' : 'ever_paid')
+                    ineligibleReason: inferredReason || trialEligibilityState.ineligibleReason
                   };
                 } else {
                   alert(`Unable to upgrade: ${errorMessage}. Please try again or contact support.`);
@@ -481,8 +492,10 @@
                 if (plan === 'trial' && trialEligibilityState?.checked && !trialEligibilityState.eligible) {
                   if (trialEligibilityState.ineligibleReason === 'ever_paid') {
                     setTrialEverPaidState(button);
-                  } else {
+                  } else if (trialEligibilityState.ineligibleReason === 'already_used') {
                     setTrialUsedState(button);
+                  } else {
+                    setTrialUnavailableState(button, 'Trial is not available.');
                   }
                 } else {
                   button.textContent = originalText;
