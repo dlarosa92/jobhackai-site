@@ -174,7 +174,8 @@ export async function onRequest(context) {
           stripeSubscriptionId: subscriptionId,
           subscriptionStatus: subscription?.status || 'active',
           trialEndsAt: trialEndsAtISO,
-          currentPeriodEnd: subscription?.current_period_end ? new Date(subscription.current_period_end * 1000).toISOString() : null
+          currentPeriodEnd: subscription?.current_period_end ? new Date(subscription.current_period_end * 1000).toISOString() : null,
+          hasEverPaid: isPaidPlan(effectivePlan) ? 1 : undefined
         }, event.created);
         console.log(`✅ D1 WRITE SUCCESS: ${uid} → ${effectivePlan}`);
       } else {
@@ -223,7 +224,8 @@ export async function onRequest(context) {
         stripeSubscriptionId: sub.id,
         subscriptionStatus: status,
         trialEndsAt: trialEndsAtISO,
-        currentPeriodEnd: sub.current_period_end ? new Date(sub.current_period_end * 1000).toISOString() : null
+        currentPeriodEnd: sub.current_period_end ? new Date(sub.current_period_end * 1000).toISOString() : null,
+        hasEverPaid: isPaidPlan(effectivePlan) ? 1 : undefined
       }, event.created);
       
       console.log(`✅ D1 WRITE SUCCESS: ${uid} → ${effectivePlan}${trialEndsAtISO ? ` (trial ends: ${trialEndsAtISO})` : ''}`);
@@ -341,7 +343,8 @@ export async function onRequest(context) {
         currentPeriodEnd: sub.current_period_end ? new Date(sub.current_period_end * 1000).toISOString() : null,
         cancelAt: cancelAt || null, // null clears the field (undefined is skipped)
         scheduledPlan: scheduledPlan || null, // null clears the field (undefined is skipped)
-        scheduledAt: scheduledAt || null // null clears the field (undefined is skipped)
+        scheduledAt: scheduledAt || null, // null clears the field (undefined is skipped)
+        hasEverPaid: isPaidPlan(effectivePlan) ? 1 : undefined
       }, event.created);
       
       console.log(`✅ D1 UPDATE SUCCESS: ${uid} → ${effectivePlan}${trialEndsAtISO ? ` (trial ends: ${trialEndsAtISO})` : ''}`);
@@ -349,9 +352,13 @@ export async function onRequest(context) {
 
     if (event.type === 'customer.subscription.deleted') {
       console.log('🎯 WEBHOOK: customer.subscription.deleted received');
-      const customerId = event.data.object.customer || null;
+      const deletedSub = event.data?.object || {};
+      const customerId = deletedSub.customer || null;
       const uid = await fetchUidFromCustomer(customerId);
       console.log(`📝 DELETION DATA: customerId=${customerId}, uid=${uid}`);
+      const deletedItems = deletedSub?.items?.data || [];
+      const deletedPriceId = deletedItems[0]?.price?.id || '';
+      const deletedPlan = priceToPlan(env, deletedPriceId);
 
       let handledByActiveSub = false;
       if (customerId && uid) {
@@ -380,7 +387,8 @@ export async function onRequest(context) {
                 currentPeriodEnd,
                 cancelAt,
                 scheduledPlan: null,
-                scheduledAt: null
+                scheduledAt: null,
+                hasEverPaid: isPaidPlan(currentPlan) ? 1 : undefined
               }, event.created);
               handledByActiveSub = true;
             }
@@ -400,7 +408,8 @@ export async function onRequest(context) {
           subscriptionStatus: 'canceled',
           cancelAt: null, // Clear cancellation date
           scheduledPlan: null, // Clear scheduled plan
-          scheduledAt: null // Clear scheduled date
+          scheduledAt: null, // Clear scheduled date
+          hasEverPaid: isPaidPlan(deletedPlan) ? 1 : undefined
         }, event.created);
         
         // Clean up resume data when subscription is deleted (KV cleanup)
@@ -447,4 +456,6 @@ function priceToPlan(env, priceId) {
   return null;
 }
 
-
+function isPaidPlan(plan) {
+  return ['essential', 'pro', 'premium'].includes(plan);
+}

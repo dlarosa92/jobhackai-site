@@ -145,12 +145,21 @@ export async function onRequest(context) {
 
     const stripeData = await stripeResponse.json();
     const subscriptions = stripeData.data || [];
+    const everPaidFromStripe = subscriptions.some((sub) => {
+      const items = sub?.items?.data || [];
+      const priceId = items[0]?.price?.id || '';
+      const mappedPlan = priceToPlan(env, priceId);
+      return isPaidPlan(mappedPlan);
+    });
     
     console.log('🔍 Found subscriptions:', subscriptions.length);
 
     if (subscriptions.length === 0) {
       // No active subscriptions, set to free
-      await updateUserPlan(env, uid, { plan: 'free' });
+      await updateUserPlan(env, uid, {
+        plan: 'free',
+        hasEverPaid: everPaidFromStripe ? 1 : undefined
+      });
       // TEMPORARY: Also write to KV during migration
       await env.JOBHACKAI_KV?.put(`planByUid:${uid}`, 'free');
       return json({ ok: true, plan: 'free', trialEndsAt: null }, 200, origin, env);
@@ -160,7 +169,10 @@ export async function onRequest(context) {
       sub && ['active', 'trialing', 'past_due'].includes(sub.status)
     );
     if (activeSubs.length === 0) {
-      await updateUserPlan(env, uid, { plan: 'free' });
+      await updateUserPlan(env, uid, {
+        plan: 'free',
+        hasEverPaid: everPaidFromStripe ? 1 : undefined
+      });
       await env.JOBHACKAI_KV?.put(`planByUid:${uid}`, 'free');
       return json({ ok: true, plan: 'free', trialEndsAt: null }, 200, origin, env);
     }
@@ -283,7 +295,8 @@ export async function onRequest(context) {
         currentPeriodEnd: currentPeriodEnd ? new Date(currentPeriodEnd * 1000).toISOString() : null, // null clears the field (undefined is skipped)
         cancelAt: (cancelAtPeriodEnd && cancelAt) ? new Date(cancelAt * 1000).toISOString() : null, // null clears the field (undefined is skipped)
         scheduledPlan: scheduledPlan || null, // null clears the field (undefined is skipped)
-        scheduledAt: scheduledAt || null // null clears the field (undefined is skipped)
+        scheduledAt: scheduledAt || null, // null clears the field (undefined is skipped)
+        hasEverPaid: (isPaidPlan(plan) || everPaidFromStripe) ? 1 : undefined
       });
       console.log(`✅ [SYNC-STRIPE-PLAN] D1 write completed: ${plan}`);
       
@@ -334,6 +347,10 @@ function priceToPlan(env, priceId) {
   if (priceId === pro) return 'pro';
   if (priceId === premium) return 'premium';
   return null;
+}
+
+function isPaidPlan(plan) {
+  return ['essential', 'pro', 'premium'].includes(plan);
 }
 
 function corsHeaders(origin, env) {

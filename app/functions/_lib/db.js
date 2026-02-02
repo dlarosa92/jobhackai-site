@@ -160,6 +160,8 @@ export async function getUserPlan(env, authId) {
  * @param {string|null} planData.cancelAt - ISO 8601 datetime
  * @param {string|null} planData.scheduledPlan - Scheduled plan change
  * @param {string|null} planData.scheduledAt - ISO 8601 datetime for scheduled change
+ * @param {number|boolean|null} planData.hasEverPaid - Whether user has ever been on a paid plan (1/true)
+ * @param {number|boolean|null} planData.has_ever_paid - Alias for hasEverPaid
  * @returns {Promise<boolean>} Success
  */
 export async function updateUserPlan(env, authId, {
@@ -172,7 +174,9 @@ export async function updateUserPlan(env, authId, {
   cancelAt = undefined,
   scheduledPlan = undefined,
   scheduledAt = undefined,
-  planEventTimestamp = undefined // ISO 8601 datetime string from Stripe event.created
+  planEventTimestamp = undefined, // ISO 8601 datetime string from Stripe event.created
+  hasEverPaid = undefined,
+  has_ever_paid = undefined
 }) {
   const db = getDb(env);
   if (!db) {
@@ -223,6 +227,30 @@ export async function updateUserPlan(env, authId, {
     if (scheduledAt !== undefined) {
       updates.push('scheduled_at = ?');
       binds.push(scheduledAt);
+    }
+
+    const paidPlans = new Set(['essential', 'pro', 'premium']);
+    const normalizedHasEverPaid = hasEverPaid !== undefined ? hasEverPaid : has_ever_paid;
+    const shouldMarkEverPaid = (plan !== undefined && paidPlans.has(plan))
+      || (normalizedHasEverPaid !== undefined && Number(normalizedHasEverPaid) === 1);
+    if (shouldMarkEverPaid) {
+      let hasEverPaidColumn = true;
+      try {
+        await db.prepare(
+          'SELECT has_ever_paid FROM users WHERE auth_id = ?'
+        ).bind(authId).first();
+      } catch (colErr) {
+        const msg = String(colErr?.message || '').toLowerCase();
+        if (msg.includes('no such column') || msg.includes('unknown column') || msg.includes('no such')) {
+          hasEverPaidColumn = false;
+        } else {
+          throw colErr;
+        }
+      }
+      if (hasEverPaidColumn) {
+        updates.push('has_ever_paid = ?');
+        binds.push(1);
+      }
     }
 
     // Always update timestamps

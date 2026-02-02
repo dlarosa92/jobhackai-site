@@ -228,7 +228,8 @@ export async function onRequest(context) {
           ? new Date(updatedSub.cancel_at * 1000).toISOString()
           : null,
         scheduledPlan: null,
-        scheduledAt: null
+        scheduledAt: null,
+        hasEverPaid: 1
       });
     } catch (e) {
       console.warn('[BILLING-UPGRADE] D1 update failed (non-blocking):', e?.message || e);

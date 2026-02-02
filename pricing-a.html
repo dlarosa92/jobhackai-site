@@ -180,7 +180,7 @@
   <script src="js/main.js" type="module"></script>
   <script src="js/analytics.js" type="module"></script>
   <script>
-    let trialEligibilityState = { checked: false, eligible: true, plan: null, trialEndsAt: null };
+    let trialEligibilityState = { checked: false, eligible: true, plan: null, trialEndsAt: null, trialEligible: null, ineligibleReason: null };
 
     function getTrialSubtextEl(button) {
       return button?.closest('td')?.querySelector('.trial-subtext') || null;
@@ -205,6 +205,10 @@
       button.style.opacity = '0.6';
       button.style.cursor = 'not-allowed';
       setTrialSubtext(button, 'One trial per account.');
+    }
+
+    function setTrialEverPaidState(button) {
+      setTrialUnavailableState(button, 'Trial is for new users only.');
     }
 
     function setTrialUnavailableState(button, message) {
@@ -241,11 +245,26 @@
         const data = await res.json();
         const plan = data?.plan || localStorage.getItem('user-plan') || 'free';
         const trialEndsAt = data?.trialEndsAt || null;
+        const trialEligible = data?.trialEligible;
+        let eligible = plan === 'free' && !trialEndsAt;
+        if (trialEligible === false) {
+          eligible = false;
+        }
+        let ineligibleReason = null;
+        if (!eligible) {
+          if (trialEndsAt) {
+            ineligibleReason = 'already_used';
+          } else if (trialEligible === false) {
+            ineligibleReason = 'ever_paid';
+          }
+        }
         return {
           checked: true,
-          eligible: plan === 'free' && !trialEndsAt,
+          eligible,
           plan,
-          trialEndsAt
+          trialEndsAt,
+          trialEligible: typeof trialEligible === 'boolean' ? trialEligible : null,
+          ineligibleReason
         };
       } catch (error) {
         console.warn('Failed to fetch trial eligibility:', error);
@@ -452,13 +471,19 @@
                     ...trialEligibilityState,
                     checked: true,
                     eligible: false,
-                    plan: trialEligibilityState.plan || localStorage.getItem('user-plan') || 'free'
+                    plan: trialEligibilityState.plan || localStorage.getItem('user-plan') || 'free',
+                    ineligibleReason: trialEligibilityState.ineligibleReason
+                      || (trialEligibilityState.trialEndsAt ? 'already_used' : 'ever_paid')
                   };
                 } else {
                   alert(`Unable to upgrade: ${errorMessage}. Please try again or contact support.`);
                 }
                 if (plan === 'trial' && trialEligibilityState?.checked && !trialEligibilityState.eligible) {
-                  setTrialUsedState(button);
+                  if (trialEligibilityState.ineligibleReason === 'ever_paid') {
+                    setTrialEverPaidState(button);
+                  } else {
+                    setTrialUsedState(button);
+                  }
                 } else {
                   button.textContent = originalText;
                   enableButton(button);
@@ -816,7 +841,11 @@
             setTrialSubtext(button, '');
           } else if (normalizedPlan === 'free') {
             if (trialEligibility?.checked && !trialEligibility.eligible) {
-              setTrialUsedState(button);
+              if (trialEligibility.ineligibleReason === 'ever_paid') {
+                setTrialEverPaidState(button);
+              } else {
+                setTrialUsedState(button);
+              }
             } else {
               button.textContent = 'Start Free Trial';
               enableButton(button);
