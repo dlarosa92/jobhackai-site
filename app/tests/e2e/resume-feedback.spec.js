@@ -509,12 +509,12 @@ test.describe('Resume Feedback', () => {
     // Now check if button is enabled
     const planForRoleGate = await page.evaluate(() => (localStorage.getItem('user-plan') || '').toLowerCase());
     const roleRequiredPlans = ['trial', 'essential', 'pro', 'premium'];
-    const roleHelper = page.locator('#rf-role-required-helper');
+    const roleRequiredStar = page.locator('#rf-role-required-star');
 
     if (roleRequiredPlans.includes(planForRoleGate)) {
       await expect(generateBtn).toBeDisabled({ timeout: 10000 });
-      await expect(roleHelper).toBeVisible({ timeout: 5000 });
-      await expect(roleHelper).toHaveText('Target role is required for feedback on your plan.');
+      await expect(roleRequiredStar).toBeVisible({ timeout: 5000 });
+      await expect(roleRequiredStar).toHaveText('*');
     }
 
     const jobTitleInput = page.locator('#rf-job-title');
@@ -522,7 +522,7 @@ test.describe('Resume Feedback', () => {
     await jobTitleInput.blur();
 
     if (roleRequiredPlans.includes(planForRoleGate)) {
-      await expect(roleHelper).toBeHidden({ timeout: 5000 });
+      await expect(roleRequiredStar).toBeHidden({ timeout: 5000 });
     }
 
     await expect(generateBtn).toBeEnabled({ timeout: 10000 });

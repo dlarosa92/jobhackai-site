@@ -190,6 +190,7 @@
     .rf-card { background: var(--color-card-bg); border-radius: var(--radius-xl); box-shadow: var(--shadow-card); padding: var(--space-lg); margin-bottom: var(--space-lg); }
     .rf-title { font-size: var(--font-size-2xl); font-weight: var(--font-weight-extrabold); margin-bottom: var(--space-xs); color: var(--color-text-main); }
     .rf-section-title { font-size: var(--font-size-xl); font-weight: var(--font-weight-bold); margin-bottom: var(--space-xs); color: var(--color-text-main); }
+    .rf-required { color: var(--color-error); font-weight: var(--font-weight-bold); }
     .rf-progress-ring { width: 80px; min-height: 80px; display: inline-flex; flex-direction: column; align-items: center; vertical-align: middle; margin-right: 1.5rem; }
     .rf-progress-ring svg { flex-shrink: 0; width: 80px; height: 80px; }
     .rf-score-badge { display: inline-block; background: #007A30; color: #fff; font-weight: 700; border-radius: 999px; padding: 0.3em 1em; font-size: 1.2rem; margin-left: 0.7rem; }
@@ -1654,6 +1655,7 @@
       const roleRequired = isRoleRequiredPlan(resolvedPlan);
       const jobTitleInput = document.getElementById('rf-job-title');
       const helper = document.getElementById('rf-role-required-helper');
+      const requiredStar = document.getElementById('rf-role-required-star');
       const resolvedRole = typeof roleValue === 'string' ? roleValue.trim() : getRoleInputValue();
       const hasRole = resolvedRole.length > 0;
       const uploadInput = document.getElementById('rf-upload');
@@ -1672,25 +1674,13 @@
         } else {
           jobTitleInput.removeAttribute('aria-invalid');
         }
-
-        const helperId = 'rf-role-required-helper';
-        let describedBy = (jobTitleInput.getAttribute('aria-describedby') || '')
-          .split(/\s+/)
-          .filter(Boolean);
-        if (isInvalid) {
-          if (!describedBy.includes(helperId)) describedBy.push(helperId);
-        } else {
-          describedBy = describedBy.filter(id => id !== helperId);
-        }
-        if (describedBy.length) {
-          jobTitleInput.setAttribute('aria-describedby', describedBy.join(' '));
-        } else {
-          jobTitleInput.removeAttribute('aria-describedby');
-        }
       }
 
       if (helper) {
         helper.style.display = roleRequired && !hasRole ? 'block' : 'none';
+      }
+      if (requiredStar) {
+        requiredStar.style.display = roleRequired && !hasRole ? 'inline' : 'none';
       }
 
       const generateBtn = document.getElementById('rf-generate-btn');
@@ -1721,15 +1711,12 @@
       applyRoleGate(document.getElementById('rf-optimize-btn'));
     }
 
-    function ensureTargetRoleForPlan({ showHelper = true, showToast = false } = {}) {
+    function ensureTargetRoleForPlan({ showHelper = true } = {}) {
       const plan = getCurrentUserPlan();
       if (!isRoleRequiredPlan(plan)) return true;
       const roleValue = getRoleInputValue();
       if (roleValue) return true;
       if (showHelper) updateGenerateButtonState({ plan, roleValue: '' });
-      if (showToast && window.JobHackAIToast) {
-        window.JobHackAIToast.info('Target role is required for feedback on your plan.');
-      }
       return false;
     }
 
@@ -3943,7 +3930,7 @@
               return;
             }
 
-            if (!ensureTargetRoleForPlan({ showHelper: true, showToast: true })) {
+            if (!ensureTargetRoleForPlan({ showHelper: true })) {
               return;
             }
             
@@ -4077,7 +4064,7 @@
           return;
         }
 
-        if (!ensureTargetRoleForPlan({ showHelper: true, showToast: true })) {
+        if (!ensureTargetRoleForPlan({ showHelper: true })) {
           return;
         }
 
@@ -5786,7 +5773,7 @@
             return;
           }
 
-          if (!ensureTargetRoleForPlan({ showHelper: true, showToast: true })) {
+          if (!ensureTargetRoleForPlan({ showHelper: true })) {
             return;
           }
 
@@ -9471,7 +9458,7 @@
         </div>
         <div style="flex:1;min-width:220px;">
           <form id="rf-upload-form" style="margin:1rem 0 0.7rem 0;">
-            <label for="rf-job-title" style="font-weight:600;display:block;margin-bottom:0.5rem;">Target Role</label>
+            <label for="rf-job-title" style="font-weight:600;display:block;margin-bottom:0.5rem;">Target Role <span class="rf-required" id="rf-role-required-star" style="display:none;">*</span></label>
             <div style="position:relative;max-width:400px;margin-bottom:1rem;">
               <input 
                 id="rf-job-title" 
@@ -9486,9 +9473,7 @@
                 autocomplete="off"
                 value="">
               <div id="rf-role-list" class="rf-role-dropdown" role="listbox" style="display:none;position:absolute;left:0;right:0;background:#fff;border:1.5px solid #E5E7EB;border-top:none;border-radius:0 0 10px 10px;box-shadow:0 2px 8px rgba(31,41,55,0.07);z-index:10;max-height:220px;overflow-y:auto;margin-top:-2px;top:100%;"></div>
-              <div id="rf-role-required-helper" role="status" aria-live="polite" style="display:none;font-size:0.85rem;color:var(--color-error);margin-top:0.4rem;line-height:1.4;">
-                Target role is required for feedback on your plan.
-              </div>
+              <div id="rf-role-required-helper" style="display:none;" aria-hidden="true"></div>
             </div>
             <div style="font-size:0.85rem;color:var(--color-text-muted);margin-bottom:1rem;line-height:1.4;">Adding a role helps us provide role-specific keyword suggestions, tailored feedback, and optimized resume rewriting.</div>
             <label for="rf-upload" style="font-weight:600;display:block;margin-bottom:0.5rem;">Resume File</label>
