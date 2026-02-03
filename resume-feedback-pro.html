@@ -1654,7 +1654,6 @@
       const resolvedPlan = (plan || getCurrentUserPlan() || '').toLowerCase();
       const roleRequired = isRoleRequiredPlan(resolvedPlan);
       const jobTitleInput = document.getElementById('rf-job-title');
-      const helper = document.getElementById('rf-role-required-helper');
       const requiredStar = document.getElementById('rf-role-required-star');
       const resolvedRole = typeof roleValue === 'string' ? roleValue.trim() : getRoleInputValue();
       const hasRole = resolvedRole.length > 0;
@@ -1676,9 +1675,6 @@
         }
       }
 
-      if (helper) {
-        helper.style.display = roleRequired && !hasRole ? 'block' : 'none';
-      }
       if (requiredStar) {
         requiredStar.style.display = roleRequired && !hasRole ? 'inline' : 'none';
       }
@@ -9473,7 +9469,6 @@
                 autocomplete="off"
                 value="">
               <div id="rf-role-list" class="rf-role-dropdown" role="listbox" style="display:none;position:absolute;left:0;right:0;background:#fff;border:1.5px solid #E5E7EB;border-top:none;border-radius:0 0 10px 10px;box-shadow:0 2px 8px rgba(31,41,55,0.07);z-index:10;max-height:220px;overflow-y:auto;margin-top:-2px;top:100%;"></div>
-              <div id="rf-role-required-helper" style="display:none;" aria-hidden="true"></div>
             </div>
             <div style="font-size:0.85rem;color:var(--color-text-muted);margin-bottom:1rem;line-height:1.4;">Adding a role helps us provide role-specific keyword suggestions, tailored feedback, and optimized resume rewriting.</div>
             <label for="rf-upload" style="font-weight:600;display:block;margin-bottom:0.5rem;">Resume File</label>
