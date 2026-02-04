@@ -56,7 +56,7 @@
   transition: color 0.2s;
 }
 
-.nav-links a::after {
+.nav-links a:not(.cta-button)::after {
   content: '';
   display: block;
   position: absolute;
@@ -68,18 +68,13 @@
   transition: width 0.2s;
 }
 
-.nav-links a:hover::after {
+.nav-links a:not(.cta-button):hover::after {
   width: 100%;
 }
 
-.nav-actions {
-  display: flex;
-  align-items: center;
-}
-
-.nav-actions .btn {
+.nav-links a.cta-button {
   background: var(--color-cta-green);
-  color: #ffffff;
+  color: white !important;
   text-decoration: none;
   padding: 0.5rem 1rem;
   border-radius: var(--radius-button);
@@ -88,7 +83,7 @@
   box-shadow: var(--shadow-button);
 }
 
-.nav-actions .btn:hover {
+.nav-links a.cta-button:hover {
   background: #006B28;
   box-shadow: var(--shadow-button-hover);
 }
@@ -114,7 +109,7 @@
   .nav-links {
     display: none;
   }
-  .nav-actions {
+  .cta-button {
     display: none;
   }
   .mobile-toggle {
@@ -166,8 +161,8 @@
     visibility: visible;
     pointer-events: auto;
   }
-  /* Base mobile nav link styling - applies to Home, Dashboard, Blog, Account, Logout */
-  .mobile-nav > a:not(.btn) {
+  /* Base mobile nav link styling - applies to Home, Blog, Features, etc. */
+  .mobile-nav > a:not(.cta-button) {
     color: #1F2937;
     font-weight: 700;
     text-decoration: none;
@@ -179,13 +174,13 @@
     margin-bottom: 0.25rem;
   }
   
-  .mobile-nav > a:not(.btn):hover {
+  .mobile-nav > a:not(.cta-button):hover {
     background: #F9FAFB;
     color: #007BFF;
   }
   
   /* CTA button styling */
-  .mobile-nav a.btn {
+  .mobile-nav a.cta-button {
     display: block;
     background: #007A30;
     color: #fff !important;
