@@ -24,9 +24,6 @@ main .container {
   justify-content: flex-start;
 }
 
-.site-header .nav-links a {
-  font-weight: 400;
-}
 
 .hero {
   padding: var(--space-2xl) 0 var(--space-xl);
@@ -250,12 +247,6 @@ main .container {
 .cta-band p {
   margin: var(--space-xs) 0 0;
   color: var(--color-text-secondary);
-}
-
-.site-footer .footer-note {
-  font-size: 0.85rem;
-  color: var(--color-text-muted);
-  margin-top: 0.25rem;
 }
 
 @keyframes fade-up {

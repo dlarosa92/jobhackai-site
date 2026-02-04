@@ -47,10 +47,10 @@
 
 .nav-links a {
   text-decoration: none;
-  color: #1F2937;
-  font-weight: 500;
+  color: var(--color-text-main);
+  font-weight: var(--font-weight-medium);
   padding: 0.25rem 0.3rem;
-  font-size: 0.95rem;
+  font-size: var(--font-size-sm);
   white-space: nowrap;
   position: relative;
   transition: color 0.2s;
