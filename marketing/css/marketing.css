@@ -17,6 +17,11 @@ main {
 main .container {
   max-width: 1120px;
   margin: 0 auto;
+  display: block;
+  height: auto;
+  padding: 0;
+  align-items: stretch;
+  justify-content: flex-start;
 }
 
 .hero {
@@ -64,8 +69,7 @@ main .container {
   flex-wrap: wrap;
 }
 
-.hero-actions a,
-.cta-band a {
+.btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -77,27 +81,25 @@ main .container {
   transition: background var(--transition-fast), box-shadow var(--transition-fast), color var(--transition-fast), border-color var(--transition-fast);
 }
 
-.hero-actions a,
-.cta-band a {
+.btn-primary {
   background: var(--color-cta-green);
   color: #ffffff;
   box-shadow: var(--shadow-button);
 }
 
-.hero-actions a:hover,
-.cta-band a:hover {
+.btn-primary:hover {
   background: var(--color-cta-green-hover);
   box-shadow: var(--shadow-button-hover);
 }
 
-.hero-actions a + a {
+.btn-ghost {
   background: #ffffff;
   color: var(--color-accent-blue);
   border-color: var(--color-accent-blue);
   box-shadow: none;
 }
 
-.hero-actions a + a:hover {
+.btn-ghost:hover {
   background: #f0f8ff;
   color: #0056b3;
 }

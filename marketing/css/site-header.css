@@ -434,28 +434,6 @@
   .blog-section h2 {
     padding-left: 0.5rem;
   }
-  .footer-container {
-    grid-template-columns: 1fr;
-    text-align: center;
-    padding: 0 1rem;
-    row-gap: 1.2rem;
-    min-height: unset;
-  }
-  .footer-brand,
-  .footer-legal,
-  .footer-links {
-    justify-self: center;
-    margin: 0 auto;
-  }
-  .footer-links {
-    justify-content: center;
-    width: 100%;
-    white-space: normal;
-  }
-  .footer-links {
-    order: 1;
-    margin-top: 1rem;
-  }
 }
 
 /* User Menu & Nav Actions styles */
