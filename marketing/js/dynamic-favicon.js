@@ -1,5 +1,5 @@
 /**
- * Dynamic Favicon Switcher
+ * Favicon Loader
  * Uses the same favicon for all browser tabs (light and dark mode)
  */
 (function() {
