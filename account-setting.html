@@ -492,16 +492,15 @@
       <div class="settings-block" style="margin-bottom:2.2rem;">
         <div class="settings-label" style="margin-bottom:0.5rem;">Profile Information</div>
         <div class="profile-info-row" style="display:flex; flex-direction:row; gap:2.5rem; flex-wrap:wrap;">
-          <div style="flex:1 1 260px; max-width:340px;">
+          <div style="flex:1 1 260px; max-width:340px; min-width:0;">
             <span class="settings-label" style="font-weight:600; font-size:1.01rem; margin-bottom:0.1rem;">Full Name</span>
             <div id="profile-name" class="settings-readonly" style="background:#F3F4F6; font-size:1.04rem; padding:0.6rem 1rem;">Loading...</div>
           </div>
-          <div style="flex:1 1 260px; max-width:340px;">
+          <div style="flex:1 1 260px; max-width:340px; min-width:0; margin-right:1rem;">
             <span class="settings-label" style="font-weight:600; font-size:1.01rem; margin-bottom:0.1rem;">Email</span>
             <div id="profile-email" class="settings-readonly" style="background:#F3F4F6; font-size:1.04rem; padding:0.6rem 1rem;">Loading...</div>
           </div>
         </div>
-        <div class="settings-note" style="margin-top:0.5rem;">Need to update your name or email? <a class="settings-support-link" href="#">Contact Support</a></div>
       </div>
       <!-- Security Card -->
       <div class="settings-block" style="margin-bottom:2.2rem;">
@@ -520,16 +519,18 @@
       <!-- Privacy & Cookies Section -->
       <div class="settings-block" style="margin-bottom:2.2rem;">
         <div class="settings-label" style="margin-bottom:0.5rem;">Privacy & Cookies</div>
-        <a href="/cookies.html" class="settings-support-link" style="display:inline-flex;align-items:center;gap:0.3rem;">
-          <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="flex-shrink:0;">
-            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
-            <path d="M9 12l2 2 4-4"/>
-          </svg>
-          View Cookie Policy
-        </a>
-        <button class="btn-outline" type="button" id="open-cookie-preferences" style="margin-top:0.8rem;">
+        <button class="btn-outline" type="button" id="open-cookie-preferences" style="margin-bottom:0.2rem;">
           Cookie Preferences
         </button>
+        <div class="settings-note" style="margin-top:0.8rem;">
+          <a href="/cookies.html" class="settings-support-link" style="display:inline-flex;align-items:center;gap:0.3rem;">
+            <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="flex-shrink:0;">
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+              <path d="M9 12l2 2 4-4"/>
+            </svg>
+            View Cookie Policy
+          </a>
+        </div>
         <div class="settings-note" style="margin-top:0.8rem;">
           Manage your cookie preferences and learn how we use cookies.
         </div>

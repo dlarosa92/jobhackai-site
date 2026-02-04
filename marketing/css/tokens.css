@@ -1,0 +1,40 @@
+:root {
+  --font-family-base: "Manrope", "Segoe UI", sans-serif;
+  --font-family-display: "Fraunces", "Times New Roman", serif;
+
+  --color-bg-light: #f7faf9;
+  --color-bg-hero: #ffffff;
+  --color-card-bg: #ffffff;
+  --color-text-main: #17212a;
+  --color-text-secondary: #4b5563;
+  --color-text-muted: #6b7280;
+  --color-primary: #007a30;
+  --color-primary-hover: #006b28;
+  --color-accent: #007bff;
+  --color-divider: #e5e7eb;
+  --color-success: #059669;
+  --color-warning: #d97706;
+  --color-error: #dc2626;
+
+  --space-2xs: 0.25rem;
+  --space-xs: 0.5rem;
+  --space-sm: 0.75rem;
+  --space-md: 1rem;
+  --space-lg: 1.5rem;
+  --space-xl: 2rem;
+  --space-2xl: 3rem;
+  --space-3xl: 4rem;
+  --space-4xl: 5rem;
+
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 20px;
+  --radius-pill: 999px;
+
+  --shadow-soft: 0 12px 30px rgba(15, 23, 42, 0.08);
+  --shadow-card: 0 8px 24px rgba(15, 23, 42, 0.1);
+  --shadow-float: 0 18px 40px rgba(15, 23, 42, 0.12);
+
+  --max-width: 1120px;
+  --header-height: 72px;
+}
