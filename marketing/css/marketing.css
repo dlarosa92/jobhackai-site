@@ -269,7 +269,9 @@ main .container {
 
 .jha-cookie-inner p {
   margin: 0;
-  color: var(--color-text-secondary);
+  color: var(--color-text-main);
+  flex: 1 1 240px;
+  line-height: 1.5;
 }
 
 .jha-cookie-inner a {
@@ -284,12 +286,15 @@ main .container {
 }
 
 .jha-cookie-actions button {
+  flex: 1 1 0;
+  min-width: 140px;
   border-radius: var(--radius-button);
   padding: 0.5rem 1.1rem;
-  border: 1px solid var(--color-divider);
-  background: #ffffff;
+  border: 1.5px solid var(--color-divider);
+  background: var(--color-card-bg);
   color: var(--color-text-main);
   font-weight: var(--font-weight-semibold);
+  text-align: center;
   cursor: pointer;
   transition: background var(--transition-fast), color var(--transition-fast), border-color var(--transition-fast), box-shadow var(--transition-fast);
 }
@@ -311,13 +316,13 @@ main .container {
 }
 
 .jha-btn-reject {
-  border-color: rgba(0, 122, 48, 0.4);
-  color: var(--color-cta-green);
+  border-color: var(--color-divider);
+  color: var(--color-text-main);
 }
 
 .jha-btn-manage {
-  border-color: rgba(0, 123, 255, 0.4);
-  color: var(--color-accent-blue);
+  border-color: var(--color-divider);
+  color: var(--color-text-main);
 }
 
 @keyframes fade-up {
