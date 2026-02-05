@@ -4,8 +4,11 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>JobHackAI - Land Your Dream Job</title>
-  <link rel="icon" type="image/png" href="assets/JobHackAI_Logo_favicon-32x32.png">
+  <title>JobHackAI</title>
+  <link rel="icon" type="image/png" href="assets/jobhackai_icon_only_128.png">
+  <link rel="apple-touch-icon" href="assets/jobhackai_icon_only_128.png">
+  <script src="js/dynamic-favicon.js?v=20250111-1"></script>
+  <script src="js/cookie-consent.js?v=20250128-1" defer></script>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/tokens.css" />
   <link rel="stylesheet" href="css/reset.css" />
@@ -76,32 +79,16 @@
   <nav class="mobile-nav" id="mobileNav">
     <!-- Mobile navigation will be dynamically populated by navigation.js -->
   </nav>
-
-  <script>
-    // Hamburger menu toggle
-    const mobileToggle = document.querySelector('.mobile-toggle');
-    const mobileNav = document.getElementById('mobileNav');
-    if (mobileToggle && mobileNav) {
-      mobileToggle.addEventListener('click', () => {
-        const isOpen = mobileNav.classList.toggle('open');
-        mobileToggle.setAttribute('aria-expanded', isOpen);
-      });
-      // Close mobile nav on link click
-      document.querySelectorAll('.mobile-nav a').forEach(link => {
-        link.addEventListener('click', () => {
-          mobileNav.classList.remove('open');
-          mobileToggle.setAttribute('aria-expanded', 'false');
-        });
-      });
-    }
-  </script>
+  <div class="mobile-nav-backdrop" id="mobileNavBackdrop"></div>
+  <!-- Centralized mobile menu handler -->
+  <script src="js/mobile-menu.js?v=20250115-1"></script>
 
   <!-- Main Content -->
   <main>
     <section class="hero" id="what-you-get">
       <h1>AI-Powered Resume Optimization that beats ATS filters</h1>
-      <p>Generate an ATS-compliant resume in 60 seconds and increase recruiter visibility by 3×.</p>
-      <div class="buttons">
+      <p>Generate an Application Tracking System compliant resume in 60 seconds and increase recruiter visibility.</p>
+      <div class="buttons" id="hero-cta-trial">
         <a class="btn-primary" href="pricing-a.html">Try JobHackAI Free</a>
       </div>
     </section>
@@ -167,8 +154,8 @@
       </div>
     </section>
 
-    <!-- Callout -->
-    <section class="callout">
+    <!-- Callout (hidden when user has a subscription) -->
+    <section class="callout" id="callout-section">
       <h2>Get Results Fast – Risk-Free</h2>
       <p>Join 5,000+ job seekers who landed interviews in 7 days or less.</p>
       <a class="btn-primary" href="pricing-a.html">Start Free Trial Now</a>
@@ -200,7 +187,7 @@
         </div>
         <div class="faq-card">
           <h3>Will my resume data be kept private?</h3>
-          <p>Yes. JobHackAI keeps your resume data private and secure. We never share your information or documents with third parties. You have full control over your data at all times.</p>
+          <p>Yes. We do not sell your personal info or share it for cross-context ads. We only share your resume data with vetted service providers to run the product (e.g., AI processing), and your tool history is auto-deleted after 90 days (you can delete it sooner). You can also request export or deletion anytime.</p>
         </div>
       </div>
     </section>
@@ -217,12 +204,13 @@
         <span class="footer-name">JOBHACKAI</span>
       </div>
       <div class="footer-legal">
-        <p>© 2025 JobHackAI. All rights reserved.</p>
+        <p>© 2026 JobHackAI. All rights reserved.</p>
       </div>
       <div class="footer-links">
         <a href="index.html">Home</a>
-        <a href="support.html">Support</a>
+        <a href="help.html">Help</a>
         <a href="privacy.html">Privacy</a>
+        <a href="cookies.html">Cookies</a>
       </div>
     </div>
   </footer>
@@ -269,8 +257,11 @@
   }
   </script>
 
+  <!-- Load Firebase auth (required for navigation auth state detection) -->
+  <script type="module" src="js/firebase-auth.js?v=20260124-1"></script>
   <!-- Load navigation system -->
-  <script src="js/navigation.js"></script>
+  <script src="js/navigation.js?v=20251007-2"></script>
+  <script src="js/universal-logout.js?v=20251007-2"></script>
   <script>
     if (window.JobHackAINavigation && typeof window.JobHackAINavigation.initializeNavigation === 'function') {
       window.JobHackAINavigation.initializeNavigation();
@@ -282,11 +273,38 @@
       });
     }
   </script>
-  <script src="js/error-reporting.js"></script>
-  <script src="js/self-healing.js"></script>
-  <script src="js/audit-trail.js"></script>
-  <script src="js/smoke-tests.js"></script>
-  <script src="js/main.js" type="module"></script>
-  <script src="js/analytics.js" type="module"></script>
+  <script>
+    (function hideTrialCTAsWhenSubscribed() {
+      var SUBSCRIBED_PLANS = ['trial', 'essential', 'pro', 'premium'];
+      var AUTH_STORAGE_KEYS = ['user-plan', 'user-authenticated', 'dev-plan'];
+      function apply() {
+        var nav = window.JobHackAINavigation;
+        if (!nav || typeof nav.getEffectivePlan !== 'function') return;
+        var plan = nav.getEffectivePlan();
+        var hide = SUBSCRIBED_PLANS.indexOf(plan) !== -1;
+        var hero = document.getElementById('hero-cta-trial');
+        var callout = document.getElementById('callout-section');
+        if (hero) hero.style.display = hide ? 'none' : '';
+        if (callout) callout.style.display = hide ? 'none' : '';
+      }
+      if (window.__navigationReadyFired) {
+        apply();
+      } else {
+        window.addEventListener('navigationReady', apply, { once: true });
+      }
+      window.addEventListener('planChanged', apply);
+      // Cross-tab: navigation.js storage handler does not dispatch planChanged,
+      // so we must react to storage ourselves to keep CTA visibility in sync.
+      window.addEventListener('storage', function (e) {
+        if (e.key && AUTH_STORAGE_KEYS.indexOf(e.key) !== -1) apply();
+      });
+    })();
+  </script>
+  <script src="js/error-reporting.js?v=20251006-1"></script>
+  <script src="js/self-healing.js?v=20251006-1"></script>
+  <script src="js/audit-trail.js?v=20251006-1"></script>
+  <script src="js/smoke-tests.js?v=20251006-1"></script>
+  <script src="js/main.js?v=20251006-1" type="module"></script>
+  <script src="js/analytics.js?v=20251006-1" type="module"></script>
 </body>
 </html>

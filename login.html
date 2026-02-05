@@ -4,8 +4,10 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Login or Sign Up – JobHackAI</title>
-  <link rel="icon" type="image/png" href="assets/JobHackAI_Logo_favicon-32x32.png">
+  <title>JobHackAI</title>
+  <link rel="icon" type="image/png" href="assets/jobhackai_icon_only_128.png">
+  <link rel="apple-touch-icon" href="assets/jobhackai_icon_only_128.png">
+  <script src="js/dynamic-favicon.js?v=20250111-1"></script>
 
   <!-- Design tokens & global styles -->
   <link rel="stylesheet" href="css/tokens.css">
@@ -15,6 +17,55 @@
   <link rel="stylesheet" href="css/header.css">
   <link rel="stylesheet" href="css/footer.css">
   <style>
+    /* Page transitions */
+    body {
+      transition: opacity 0.3s ease;
+    }
+    .page-transition-out {
+      opacity: 0;
+    }
+    
+    /* Plan banner animations - improved */
+    .selected-plan-banner {
+      opacity: 0;
+      transform: translateY(-10px);
+      transition: opacity 0.25s ease-in-out, transform 0.25s ease-in-out;
+    }
+    .selected-plan-banner.show {
+      opacity: 1;
+      transform: translateY(0);
+    }
+    
+    /* Loading states */
+    .auth-form.loading {
+      opacity: 0.7;
+      pointer-events: none;
+    }
+    
+    .auth-continue-btn.loading {
+      position: relative;
+      color: transparent;
+      cursor: progress;
+    }
+    
+    .auth-continue-btn.loading::after {
+      content: '';
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 20px;
+      height: 20px;
+      margin: -10px 0 0 -10px;
+      border: 2px solid #ffffff;
+      border-radius: 50%;
+      border-top-color: transparent;
+      animation: spin 1s linear infinite;
+    }
+    
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+    
     .auth-container {
       max-width: 400px;
       margin: 3.5rem auto 2.5rem auto;
@@ -44,7 +95,7 @@
     /* NEW: Selected plan indicator */
     .selected-plan-banner {
       width: 100%;
-      background: linear-gradient(135deg, #00E676 0%, #00c965 100%);
+      background: linear-gradient(135deg, #007A30 0%, #006B28 100%);
       color: white;
       padding: 1rem;
       border-radius: 12px;
@@ -122,7 +173,7 @@
       margin: 0;
     }
     .auth-input:focus {
-      border-color: #00E676;
+      border-color: #007A30;
       outline: none;
     }
     .auth-error {
@@ -142,7 +193,7 @@
     }
     .auth-continue-btn {
       width: 100%;
-      background: #00E676;
+      background: #007A30;
       color: #fff;
       font-weight: 700;
       border: none;
@@ -155,8 +206,8 @@
     }
     .auth-continue-btn:hover,
     .auth-continue-btn:focus {
-      background: #00c965;
-      box-shadow: 0 4px 16px rgba(0,230,118,0.10);
+      background: #006B28;
+      box-shadow: 0 4px 16px rgba(0,122,48,0.10);
       outline: none;
     }
     .auth-continue-btn:disabled {
@@ -245,323 +296,24 @@
     <a href="pricing-a.html">Pricing</a>
     <a href="index.html#blog">Blog</a>
   </nav>
-  <!-- INTEGRATION: ZAPIER - On login, lookup user in Google Sheets via Zapier -->
-  <!-- INTEGRATION: GOOGLE SHEETS - Store and retrieve user data for authentication and plan management -->
-  <script>
-    // Hamburger menu toggle (leave outside DOMContentLoaded for header)
-    const mobileToggle = document.querySelector('.mobile-toggle');
-    const mobileNav = document.getElementById('mobileNav');
-    if (mobileToggle && mobileNav) {
-      mobileToggle.addEventListener('click', () => {
-        const isOpen = mobileNav.classList.toggle('open');
-        mobileToggle.setAttribute('aria-expanded', isOpen);
-      });
-      document.querySelectorAll('.mobile-nav a').forEach(link => {
-        link.addEventListener('click', () => {
-          mobileNav.classList.remove('open');
-          mobileToggle.setAttribute('aria-expanded', 'false');
-        });
-      });
-    }
-
-    // --- MAIN AUTH LOGIC ---
-    document.addEventListener('DOMContentLoaded', function() {
-      // --- SMART USER FLOW DETECTION ---
-      const selectedPlan = localStorage.getItem('selected-plan');
-      const isAuthenticated = localStorage.getItem('user-authenticated') === 'true';
-      const userEmail = localStorage.getItem('user-email'); // Track if user exists
-      
-      // Show selected plan banner if coming from pricing
-      if (selectedPlan && selectedPlan !== 'create-account') {
-        showSelectedPlanBanner(selectedPlan);
-      }
-      
-      // Determine if this is a new user or existing user
-      const isNewUser = !isAuthenticated && !userEmail;
-      
-      // Smart flow: If new user with plan selected, show signup form directly
-      if (isNewUser && selectedPlan && selectedPlan !== 'create-account') {
-        showSignupForm();
-        updateSignupButtonText(selectedPlan);
-      }
-      // Note: Authenticated users should handle upgrades directly on pricing page
-      
-      // --- FORM TOGGLING LOGIC ---
-      const loginForm = document.getElementById('loginForm');
-      const signupForm = document.getElementById('signupForm');
-      const loginLinks = document.getElementById('loginLinks');
-      const signupLinks = document.getElementById('signupLinks');
-      const showSignUpLink = document.getElementById('showSignUpLink');
-      const showLoginLink = document.getElementById('showLoginLink');
-      
-      if (showSignUpLink && showLoginLink) {
-        showSignUpLink.addEventListener('click', function(e) {
-          e.preventDefault();
-          showSignupForm();
-        });
-        showLoginLink.addEventListener('click', function(e) {
-          e.preventDefault();
-          showLoginForm();
-        });
-      }
-
-      // --- LOGIN LOGIC ---
-      loginForm.addEventListener('submit', function(e) {
-        e.preventDefault();
-        const email = document.getElementById('loginEmail').value.trim();
-        const password = document.getElementById('loginPassword').value.trim();
-        const loginError = document.getElementById('loginError');
-        loginError.style.display = 'none';
-        
-        if (!email || !password) {
-          loginError.textContent = 'Please enter both email and password';
-          loginError.style.display = 'block';
-          return;
-        }
-        
-        // INTEGRATION: ZAPIER/GOOGLE SHEETS - Authenticate user
-        const db = getUserDB();
-        if (!db[email]) {
-          loginError.textContent = 'No account found with that email. Please sign up.';
-          loginError.style.display = 'block';
-          return;
-        }
-        
-        // Update user login timestamp and ensure user exists
-        const userData = ensureUserExists(email);
-        
-        // Store user authentication state
-        localStorage.setItem('user-email', email);
-        localStorage.setItem('user-authenticated', 'true');
-        localStorage.setItem('user-plan', userData.plan || 'free');
-        localStorage.setItem('dev-plan', userData.plan || 'free');
-        
-        // Sync with navigation system
-        if (window.JobHackAINavigation) {
-          window.JobHackAINavigation.setAuthState(true, userData.plan);
-        }
-        
-        // Redirect to dashboard (no upgrade logic here)
-        window.location.href = 'dashboard.html';
-      });
-
-      // --- SIGNUP LOGIC ---
-      signupForm.addEventListener('submit', function(e) {
-        e.preventDefault();
-        const firstName = document.getElementById('firstName').value.trim();
-        const lastName = document.getElementById('lastName').value.trim();
-        const email = document.getElementById('signupEmail').value.trim();
-        const password = document.getElementById('signupPassword').value.trim();
-        const confirmPassword = document.getElementById('confirmPassword').value.trim();
-        const signupError = document.getElementById('signupError');
-        signupError.style.display = 'none';
-        
-        if (!firstName || !lastName || !email || !password || !confirmPassword) {
-          signupError.textContent = 'Please fill in all fields';
-          signupError.style.display = 'block';
-          return;
-        }
-        if (password.length < 8) {
-          signupError.textContent = 'Password must be at least 8 characters';
-          signupError.style.display = 'block';
-          return;
-        }
-        if (password !== confirmPassword) {
-          signupError.textContent = 'Passwords do not match';
-          signupError.style.display = 'block';
-          return;
-        }
-        
-        // INTEGRATION: ZAPIER/GOOGLE SHEETS - Check if email already exists
-        const db = getUserDB();
-        if (db[email]) {
-          signupError.textContent = 'An account with this email already exists. Please log in.';
-          signupError.style.display = 'block';
-          return;
-        }
-        
-        // Store user info for card step
-        localStorage.setItem('pending-signup-email', email);
-        localStorage.setItem('pending-signup-firstName', firstName);
-        localStorage.setItem('pending-signup-lastName', lastName);
-        localStorage.setItem('user-email', email);
-        
-        // Only show card step if plan requires payment
-        const planToUse = selectedPlan || 'free';
-        if (planRequiresCard(planToUse)) {
-          // Redirect to real add-card.html UI
-          window.location.href = 'add-card.html';
-        } else {
-          // Create user account with improved persistence
-          const userData = ensureUserExists(email, {
-            plan: planToUse,
-            firstName: firstName,
-            lastName: lastName
-          });
-          
-          // Set authentication state
-          localStorage.setItem('user-authenticated', 'true');
-          localStorage.setItem('user-plan', planToUse);
-          localStorage.setItem('dev-plan', planToUse);
-          
-          // Sync with navigation system
-          if (window.JobHackAINavigation) {
-            window.JobHackAINavigation.setAuthState(true, planToUse);
-          }
-          
-          // Clear selected plan after successful signup
-          localStorage.removeItem('selected-plan');
-          localStorage.removeItem('plan-amount');
-          
-          window.location.href = 'dashboard.html';
-        }
-      });
-
-      // --- REMOVE CARD STEP LOGIC ---
-      // (No longer needed, all card entry uses add-card.html)
-
-      // --- HELPER FUNCTIONS ---
-      function showSelectedPlanBanner(plan) {
-        const banner = document.getElementById('selectedPlanBanner');
-        const planName = document.getElementById('selectedPlanName');
-        const planPrice = document.getElementById('selectedPlanPrice');
-        
-        const planNames = {
-          'trial': '3-Day Free Trial',
-          'essential': 'Essential Plan',
-          'pro': 'Pro Plan',
-          'premium': 'Premium Plan',
-          'free': 'Free Account'
-        };
-        
-        const planPrices = {
-          'trial': '$0 for 3 days',
-          'essential': '$29/mo',
-          'pro': '$59/mo',
-          'premium': '$99/mo',
-          'free': '$0/mo'
-        };
-        
-        planName.textContent = planNames[plan] || 'Selected Plan';
-        planPrice.textContent = planPrices[plan] || '$0/mo';
-        banner.style.display = 'block';
-      }
-      
-      function showSignupForm() {
-        document.getElementById('loginForm').style.display = 'none';
-        document.getElementById('loginLinks').style.display = 'none';
-        document.getElementById('signupForm').style.display = 'flex';
-        document.getElementById('signupLinks').style.display = 'block';
-        document.getElementById('auth-title').textContent = 'Create your account';
-      }
-      
-      function showLoginForm() {
-        document.getElementById('signupForm').style.display = 'none';
-        document.getElementById('signupLinks').style.display = 'none';
-        document.getElementById('loginForm').style.display = 'flex';
-        document.getElementById('loginLinks').style.display = 'block';
-        document.getElementById('auth-title').textContent = 'Log in to continue';
-      }
-      
-      function updateSignupButtonText(plan) {
-        const btn = document.getElementById('signupContinueBtn');
-        const planNames = {
-          'trial': 'Start Free Trial',
-          'essential': 'Create Essential Account',
-          'pro': 'Create Pro Account',
-          'premium': 'Create Premium Account',
-          'free': 'Create Free Account'
-        };
-        btn.textContent = planNames[plan] || 'Create Account';
-      }
-      
-      // Note: Upgrade logic moved to pricing page for authenticated users
-
-      // --- DEV PLAN TOGGLE LOGIC ---
-      function syncDevPlanWithUserPlan() {
-        const plan = localStorage.getItem('user-plan') || 'free';
-        localStorage.setItem('dev-plan', plan);
-      }
-      window.addEventListener('storage', syncDevPlanWithUserPlan);
-
-      // --- ERROR HANDLING FOR TROUBLESHOOTING ---
-      window.addEventListener('error', function(event) {
-        // INTEGRATION: ERROR REPORTING (e.g., Sentry, Cloudflare Workers Logpush)
-        console.error('Global error captured:', event.message, event.error);
-      });
-
-      // --- UTILS (Mock DB, Plan, Card Step, etc.) ---
-      function getUserDB() {
-        try {
-          const db = JSON.parse(localStorage.getItem('user-db') || '{}');
-          // Initialize with demo user if empty
-          if (Object.keys(db).length === 0) {
-            const demoUser = {
-              'demo@jobhackai.com': {
-                plan: 'free',
-                firstName: 'Demo',
-                lastName: 'User',
-                cards: [],
-                created: new Date().toISOString()
-              }
-            };
-            setUserDB(demoUser);
-            return demoUser;
-          }
-          return db;
-        } catch (error) {
-          console.error('Error loading user database:', error);
-          return {};
-        }
-      }
-      
-      function setUserDB(db) {
-        try {
-          localStorage.setItem('user-db', JSON.stringify(db));
-          // Also store a backup
-          localStorage.setItem('user-db-backup', JSON.stringify(db));
-        } catch (error) {
-          console.error('Error saving user database:', error);
-        }
-      }
-      
-      function planRequiresCard(plan) {
-        return plan === 'essential' || plan === 'pro' || plan === 'premium' || plan === 'trial';
-      }
-      
-      // --- IMPROVED USER PERSISTENCE ---
-      function ensureUserExists(email, userData = {}) {
-        const db = getUserDB();
-        if (!db[email]) {
-          db[email] = {
-            plan: userData.plan || 'free',
-            firstName: userData.firstName || 'User',
-            lastName: userData.lastName || '',
-            cards: userData.cards || [],
-            created: new Date().toISOString(),
-            lastLogin: new Date().toISOString()
-          };
-          setUserDB(db);
-        } else {
-          // Update last login
-          db[email].lastLogin = new Date().toISOString();
-          setUserDB(db);
-        }
-        return db[email];
-      }
-    });
-  </script>
+  <div class="mobile-nav-backdrop" id="mobileNavBackdrop"></div>
+  <!-- Centralized mobile menu handler -->
+  <script src="js/mobile-menu.js?v=20250115-1"></script>
+  <!-- INTEGRATION: Firebase Authentication for secure user login (see js/login-page.js) -->
   <!-- page content -->
   <main>
     <div class="auth-container" role="main" aria-labelledby="auth-title">
       <a href="index.html" class="btn-secondary" style="margin-bottom:1.2rem; font-size:1rem; padding:0.4rem 1.1rem; border-radius:6px; display:inline-block; text-decoration:none;">&larr; Back to homepage</a>
       <div class="auth-logo" style="margin-bottom:0.2rem;">
-        <span aria-hidden="true" style="font-size:1.3rem;">&#128274;</span>
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#1F2937" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;" aria-hidden="true">
+          <rect x="5" y="10" width="14" height="10" rx="2"/>
+          <path d="M8 10V8a4 4 0 0 1 8 0v2"/>
+        </svg>
         <span style="font-weight:800; letter-spacing:0.5px;">JOBHACKAI</span>
       </div>
-      <div class="auth-title" id="auth-title">Log in or sign up</div>
+      <div class="auth-title" id="auth-title" style="display: none;"></div>
       <!-- NEW: Selected plan banner -->
-      <div class="selected-plan-banner" id="selectedPlanBanner">
+      <div class="selected-plan-banner" id="selectedPlanBanner" aria-live="polite">
         <h3 id="selectedPlanName">Selected Plan</h3>
         <p>You're signing up for: <span class="plan-price" id="selectedPlanPrice">$0/mo</span></p>
       </div>
@@ -574,13 +326,21 @@
         Continue with LinkedIn
       </a>
       <div class="auth-separator"><span>or</span></div>
-      <!-- Login Form -->
+      <!-- Login Form (default visible; JS may toggle) -->
       <form class="auth-form" id="loginForm" autocomplete="on" aria-label="Login form">
         <div class="auth-error" id="loginError" aria-live="polite"></div>
         <label for="loginEmail" class="sr-only">Email address</label>
         <input type="email" id="loginEmail" class="auth-input" name="loginEmail" placeholder="Email address" required autocomplete="email" />
         <label for="loginPassword" class="sr-only">Password</label>
-        <input type="password" id="loginPassword" class="auth-input" name="loginPassword" placeholder="Password" required autocomplete="current-password" minlength="8" />
+        <div style="position: relative; width: 100%;">
+          <input type="password" id="loginPassword" class="auth-input" name="loginPassword" placeholder="Password" required autocomplete="current-password" minlength="8" style="padding-right: 45px;" />
+          <button type="button" class="password-toggle" id="toggleLoginPassword" aria-label="Show password" aria-pressed="false" tabindex="0" style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); background: none; border: none; cursor: pointer; padding: 4px; display: flex; align-items: center; color: #6B7280;">
+            <svg id="loginPasswordEyeIcon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+              <circle cx="12" cy="12" r="3"/>
+            </svg>
+          </button>
+        </div>
         <button type="submit" class="auth-continue-btn" id="loginContinueBtn">Log In</button>
       </form>
       <div class="auth-links" id="loginLinks">
@@ -589,7 +349,7 @@
         <br />
         <a href="#" id="forgotPasswordLink">Forgot your password?</a>
       </div>
-      <!-- Signup Form (hidden by default) -->
+      <!-- Signup Form (hidden by default; JS may toggle) -->
       <form class="auth-form" id="signupForm" autocomplete="on" aria-label="Sign up form" style="display:none;">
         <div class="auth-error" id="signupError" aria-live="polite"></div>
         <label for="firstName" class="sr-only">First Name</label>
@@ -599,9 +359,25 @@
         <label for="signupEmail" class="sr-only">Email address</label>
         <input type="email" id="signupEmail" class="auth-input" name="signupEmail" placeholder="Email address" required autocomplete="email" />
         <label for="signupPassword" class="sr-only">Password</label>
-        <input type="password" id="signupPassword" class="auth-input" name="signupPassword" placeholder="Password" required autocomplete="new-password" minlength="8" />
+        <div style="position: relative; width: 100%;">
+          <input type="password" id="signupPassword" class="auth-input" name="signupPassword" placeholder="Password" required autocomplete="new-password" minlength="8" style="padding-right: 45px;" />
+          <button type="button" class="password-toggle" id="toggleSignupPassword" aria-label="Show password" aria-pressed="false" tabindex="0" style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); background: none; border: none; cursor: pointer; padding: 4px; display: flex; align-items: center; color: #6B7280;">
+            <svg id="signupPasswordEyeIcon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+              <circle cx="12" cy="12" r="3"/>
+            </svg>
+          </button>
+        </div>
         <label for="confirmPassword" class="sr-only">Confirm Password</label>
-        <input type="password" id="confirmPassword" class="auth-input" name="confirmPassword" placeholder="Confirm Password" required autocomplete="new-password" minlength="8" />
+        <div style="position: relative; width: 100%;">
+          <input type="password" id="confirmPassword" class="auth-input" name="confirmPassword" placeholder="Confirm Password" required autocomplete="new-password" minlength="8" style="padding-right: 45px;" />
+          <button type="button" class="password-toggle" id="toggleConfirmPassword" aria-label="Show password" aria-pressed="false" tabindex="0" style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); background: none; border: none; cursor: pointer; padding: 4px; display: flex; align-items: center; color: #6B7280;">
+            <svg id="confirmPasswordEyeIcon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+              <circle cx="12" cy="12" r="3"/>
+            </svg>
+          </button>
+        </div>
         <button type="submit" class="auth-continue-btn" id="signupContinueBtn">Sign Up</button>
       </form>
       <div class="auth-links" id="signupLinks" style="display:none;">
@@ -609,7 +385,7 @@
         <a href="#" id="showLoginLink">Back to Login</a>
       </div>
       <div class="auth-footer">
-        © 2025 JobHackAI. All rights reserved.<br />
+        © 2026 JobHackAI. All rights reserved.<br />
         <a href="terms.html">Terms</a> · <a href="privacy.html">Privacy</a>
       </div>
     </div>
@@ -625,19 +401,121 @@
         <span class="footer-name">JOBHACKAI</span>
       </div>
       <div class="footer-legal">
-        <p>© 2025 JobHackAI. All rights reserved.</p>
+        <p>© 2026 JobHackAI. All rights reserved.</p>
       </div>
       <div class="footer-links">
         <a href="index.html">Home</a>
-        <a href="support.html">Support</a>
+        <a href="help.html">Help</a>
         <a href="privacy.html">Privacy</a>
+        <a href="cookies.html">Cookies</a>
       </div>
     </div>
   </footer>
   <!-- scripts -->
-  <script src="js/navigation.js"></script>
-  <script src="js/main.js" type="module"></script>
-  <script src="js/analytics.js" type="module"></script>
-  <!-- include firebase-config.js & Firebase SDK here if using auth -->
+  <script src="js/redirect-tracer.js?v=1"></script>
+  <script src="js/navigation.js?v=20251007-2"></script>
+  <script src="js/universal-logout.js?v=20251007-2"></script>
+  <script src="js/main.js?v=20251006-1" type="module"></script>
+  <script src="js/analytics.js?v=20251006-1" type="module"></script>
+  <!-- Initialize navigation early to render correct visitor nav with CTA -->
+  <script>
+    if (window.JobHackAINavigation && typeof window.JobHackAINavigation.initializeNavigation === 'function') {
+      window.JobHackAINavigation.initializeNavigation();
+    } else {
+      window.addEventListener('DOMContentLoaded', function() {
+        if (window.JobHackAINavigation && typeof window.JobHackAINavigation.initializeNavigation === 'function') {
+          window.JobHackAINavigation.initializeNavigation();
+        }
+      });
+    }
+  </script>
+  <!-- Firebase Authentication -->
+  <script src="js/login-page.js?v=20251011-1" type="module"></script>
+  
+  <!-- Forgot Password Modal -->
+  <div id="forgotPasswordOverlay" style="
+    position:fixed;
+    inset:0;
+    background:rgba(0,0,0,0.4);
+    display:none;
+    align-items:center;
+    justify-content:center;
+    z-index:10000;
+    font-family:Inter,system-ui,sans-serif;
+  ">
+    <div role="dialog" aria-modal="true" aria-labelledby="forgotPasswordTitle" style="
+      background:#FFFFFF;
+      border:1px solid #E5E7EB;
+      border-radius:16px;
+      box-shadow:0 20px 30px rgba(0,0,0,0.05);
+      max-width:400px;
+      width:90%;
+      padding:24px;
+      color:#1F2937;
+    ">
+      <h2 id="forgotPasswordTitle" style="margin:0 0 0.5rem 0;font-size:1.125rem;font-weight:600;color:#1F2937;">
+        Reset your password
+      </h2>
+      <p style="margin:0 0 1rem 0;font-size:0.9rem;line-height:1.4;color:#6B7280;">
+        Enter the email you used for JobHackAI. We’ll send you a link to create a new password.
+      </p>
+
+      <label for="forgotPasswordEmail" style="display:block;font-size:0.8rem;font-weight:500;color:#1F2937;margin-bottom:0.25rem;">
+        Email address
+      </label>
+      <input id="forgotPasswordEmail" type="email" style="
+        width:100%;
+        box-sizing:border-box;
+        border:1.5px solid #E5E7EB;
+        border-radius:8px;
+        padding:0.6rem 0.75rem;
+        font-size:1rem;
+        background:#F9FAFB;
+        color:#1F2937;
+        margin-bottom:0.75rem;
+      " />
+
+      <div id="forgotPasswordError" style="color:#DC2626;font-size:0.85rem;display:none;margin-bottom:0.75rem;"></div>
+
+      <button id="forgotPasswordSendBtn" style="
+        width:100%;
+        background:#007A30;
+        color:#FFFFFF;
+        font-weight:700;
+        border:none;
+        border-radius:8px;
+        padding:0.75rem;
+        font-size:1rem;
+        cursor:pointer;
+        margin-bottom:0.75rem;
+      ">
+        Send reset link
+      </button>
+
+      <div id="forgotPasswordSuccess" style="
+        display:none;
+        font-size:0.9rem;
+        line-height:1.4;
+        color:#6B7280;
+        margin-bottom:0.75rem;
+      ">
+        Check your inbox. If an account exists for that email, you’ll get a reset link shortly. Be sure to check spam.
+      </div>
+
+      <button id="forgotPasswordCloseBtn" style="
+        width:100%;
+        background:#F3F4F6;
+        color:#6B7280;
+        font-weight:600;
+        border:none;
+        border-radius:8px;
+        padding:0.75rem;
+        font-size:1rem;
+        cursor:pointer;
+      ">
+        Back to login
+      </button>
+    </div>
+  </div>
 </body>
 </html>

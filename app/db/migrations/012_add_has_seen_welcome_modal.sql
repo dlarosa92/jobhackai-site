@@ -1,0 +1,32 @@
+-- Migration 012: Add has_seen_welcome_modal flag to users table
+-- Date: 2025-01-XX
+-- Description: This tracks whether a user has seen the premium welcome modal
+-- Stored server-side to persist across cache clears and devices
+--
+-- This migration adds an INTEGER column (SQLite boolean) to explicitly track
+-- whether the welcome modal has been shown to a user. The column defaults to 0
+-- (not seen) and is set to 1 when the user dismisses the modal.
+--
+-- To run this migration:
+-- wrangler d1 execute <database-name> --remote --file app/db/migrations/012_add_has_seen_welcome_modal.sql
+--
+-- For each environment:
+-- wrangler d1 execute DB --file app/db/migrations/012_add_has_seen_welcome_modal.sql --env=dev
+-- wrangler d1 execute DB --file app/db/migrations/012_add_has_seen_welcome_modal.sql --env=qa
+-- wrangler d1 execute DB --file app/db/migrations/012_add_has_seen_welcome_modal.sql --env=prod
+--
+-- Rollback (if needed):
+-- ALTER TABLE users DROP COLUMN has_seen_welcome_modal;
+
+-- Add the has_seen_welcome_modal column
+ALTER TABLE users ADD COLUMN has_seen_welcome_modal INTEGER NOT NULL DEFAULT 0;
+
+-- Note: We intentionally do NOT backfill existing premium users here because:
+-- 1. The 'plan' column is added by migration 007, which may not exist in fresh databases
+-- 2. Fresh databases created from schema.sql won't have premium users anyway
+-- 3. Existing premium users seeing the modal once after migration is acceptable
+--    (they can dismiss it and it won't show again)
+--
+-- If you need to backfill existing premium users, run this AFTER migration 007:
+-- UPDATE users SET has_seen_welcome_modal = 1 
+-- WHERE plan IN ('trial', 'essential', 'pro', 'premium');

@@ -1,0 +1,47 @@
+MARÍA GONZÁLEZ
+Email: maria.gonzalez@email.com | Teléfono: (555) 444-5555 | Ubicación: Miami, FL
+
+EXPERIENCIA
+
+Ingeniera de Software Senior | EmpresaTech SA | Enero 2019 - Presente
+• Desarrollé arquitecturas de microservicios escalables usando Java y Spring Boot, aumentando el rendimiento del sistema en un 40%
+• Implementé APIs RESTful que sirven más de 2 millones de solicitudes diarias con 99.9% de tiempo de actividad
+• Lideré revisiones de código y mentoré a 3 ingenieros junior, mejorando la velocidad del equipo en un 25%
+• Diseñé e implementé un framework de pruebas unitarias, logrando 85% de cobertura de código
+• Optimicé consultas de base de datos usando SQL, reduciendo el tiempo de consulta en un 60%
+• Colaboré en un entorno de desarrollo ágil usando Git y pipelines de integración continua
+
+Ingeniera de Software | StartupXYZ | Junio 2016 - Diciembre 2018
+• Construí aplicaciones web responsivas usando JavaScript, TypeScript, HTML y CSS
+• Creé componentes de front-end usando el framework React, mejorando el compromiso del usuario en un 30%
+• Desarrollé APIs del lado del servidor usando Node.js y PostgreSQL
+• Implementé estrategias de pruebas automatizadas, reduciendo los informes de errores en un 45%
+
+EDUCACIÓN
+
+Licenciatura en Ciencias de la Computación | Universidad Estatal | Mayo 2016
+GPA: 3.8/4.0
+
+HABILIDADES
+
+Lenguajes de Programación: JavaScript, TypeScript, Java, Python, SQL
+Frameworks: React, Node.js, Spring Boot
+Herramientas: Git, GitHub, Docker, Jenkins, PostgreSQL, MySQL
+Conceptos: Programación orientada a objetos, patrones de diseño de software, APIs RESTful, control de versiones, pruebas unitarias, depuración, revisiones de código, integración continua, desarrollo ágil
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

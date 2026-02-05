@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>JobHackAI</title>
+  <link rel="icon" type="image/png" href="/assets/jobhackai_icon_only_128.png">
+  <link rel="apple-touch-icon" href="/assets/jobhackai_icon_only_128.png">
+  <script src="/js/dynamic-favicon.js?v=20250111-1"></script>
+  <link rel="stylesheet" href="/css/tokens.css" />
+  <style>
+    body { 
+      font-family: 'Inter', system-ui, sans-serif; 
+      display: flex; 
+      justify-content: center; 
+      align-items: center; 
+      min-height: 100vh; 
+      background: #F9FAFB; 
+      margin: 0;
+      padding: 1rem;
+    }
+    .card { 
+      background: #fff; 
+      padding: 2rem 2.5rem; 
+      border-radius: 16px; 
+      box-shadow: 0 4px 24px rgba(31,41,55,0.07); 
+      text-align: center; 
+      max-width: 400px; 
+      width: 100%;
+    }
+    h1 { 
+      font-size: 1.25rem; 
+      margin-bottom: 1rem; 
+      color: #1F2937; 
+      font-weight: 700;
+    }
+    p { 
+      color: #4B5563; 
+      line-height: 1.5; 
+      margin-bottom: 1rem;
+    }
+    .error { 
+      color: #DC2626; 
+      background: #FEF2F2; 
+      border: 1px solid #FECACA; 
+      border-radius: 8px; 
+      padding: 0.75rem; 
+      margin: 1rem 0;
+    }
+    .success { 
+      color: #059669; 
+      background: #F0FDF4; 
+      border: 1px solid #BBF7D0; 
+      border-radius: 8px; 
+      padding: 0.75rem; 
+      margin: 1rem 0;
+    }
+    .form-group {
+      margin-bottom: 1rem;
+      text-align: left;
+    }
+    .form-group label {
+      display: block;
+      font-size: 0.875rem;
+      font-weight: 500;
+      color: #1F2937;
+      margin-bottom: 0.25rem;
+    }
+    .password-input-container {
+      position: relative;
+      width: 100%;
+    }
+    .password-input {
+      width: 100%;
+      padding: 0.75rem 2.5rem 0.75rem 0.75rem;
+      border: 1.5px solid #E5E7EB;
+      border-radius: 8px;
+      font-size: 1rem;
+      font-family: inherit;
+      color: #1F2937;
+      background: #F9FAFB;
+      transition: border 0.18s;
+      box-sizing: border-box;
+    }
+    .password-input:focus {
+      border-color: #007A30;
+      outline: none;
+    }
+    .password-toggle {
+      position: absolute;
+      right: 10px;
+      top: 50%;
+      transform: translateY(-50%);
+      background: none;
+      border: none;
+      cursor: pointer;
+      padding: 4px;
+      display: flex;
+      align-items: center;
+      color: #6B7280;
+    }
+    .password-toggle:hover {
+      color: #1F2937;
+    }
+    .btn {
+      width: 100%;
+      background: #007A30;
+      color: #fff;
+      font-weight: 700;
+      border: none;
+      border-radius: 8px;
+      padding: 0.75rem;
+      font-size: 1rem;
+      cursor: pointer;
+      transition: background 0.18s;
+      margin-top: 0.5rem;
+    }
+    .btn:hover { background: #006B28; }
+    .btn:disabled { background: #BDBDBD; cursor: not-allowed; }
+    .btn-secondary { background: #F3F4F6; color: #6B7280; font-weight: 600; }
+    .btn-secondary:hover { background: #E5E7EB; }
+    .password-strength { font-size: 0.75rem; margin-top: 0.25rem; }
+    .strength-weak { color: #DC2626; }
+    .strength-medium { color: #F59E0B; }
+    .strength-strong { color: #059669; }
+    @media (max-width: 600px) {
+      .card { padding: 1.5rem 1rem; margin: 0.5rem; }
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1 id="pageTitle">Verifying your request...</h1>
+    <p id="status">Please wait a moment.</p>
+    <div id="errorMessage" class="error" style="display: none;"></div>
+    <div id="successMessage" class="success" style="display: none;"></div>
+    <form id="passwordResetForm" style="display: none;">
+      <div class="form-group">
+        <label for="newPassword">New Password</label>
+        <div class="password-input-container">
+          <input type="password" id="newPassword" class="password-input" placeholder="Enter new password" minlength="8" required />
+          <button type="button" class="password-toggle" id="toggleNewPassword" aria-label="Show password" aria-pressed="false">
+            <svg id="newPasswordEyeIcon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+              <circle cx="12" cy="12" r="3"/>
+            </svg>
+          </button>
+        </div>
+        <div id="passwordStrength" class="password-strength"></div>
+      </div>
+      <div class="form-group">
+        <label for="confirmPassword">Confirm Password</label>
+        <div class="password-input-container">
+          <input type="password" id="confirmPassword" class="password-input" placeholder="Confirm new password" minlength="8" required />
+          <button type="button" class="password-toggle" id="toggleConfirmPassword" aria-label="Show password" aria-pressed="false">
+            <svg id="confirmPasswordEyeIcon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+              <circle cx="12" cy="12" r="3"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+      <button type="submit" class="btn" id="resetPasswordBtn">Reset Password</button>
+      <button type="button" class="btn btn-secondary" id="cancelResetBtn">Cancel</button>
+    </form>
+    <div id="actionButtons" style="display: none;">
+      <button class="btn" id="goToLoginBtn">Go to Login</button>
+      <button class="btn btn-secondary" id="goToDashboardBtn">Go to Dashboard</button>
+    </div>
+  </div>
+  <script src="/js/auth-action.js" type="module"></script>
+</body>
+</html>
+
+

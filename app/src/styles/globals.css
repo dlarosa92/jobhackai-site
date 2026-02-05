@@ -5,7 +5,7 @@
   --color-text-secondary: #4B5563;
   --color-text-muted: #6B7280;
   --color-card-bg: #FFFFFF;
-  --color-cta-green: #00E676;
+  --color-cta-green: #007A30;
   --color-accent-blue: #007BFF;
   --color-divider: #E5E7EB;
   --space-xs: 0.5rem;
@@ -140,6 +140,9 @@ a {
   color: var(--color-text-secondary);
   line-height: 1.6;
 }
+
+/* Import dashboard styles */
+@import './dashboard.css';
 
 @media (max-width: 768px) {
   .hero h1 {

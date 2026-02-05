@@ -3,8 +3,10 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Checkout – JobHackAI</title>
-  <link rel="icon" type="image/png" href="assets/JobHackAI_Logo_favicon-32x32.png">
+  <title>JobHackAI</title>
+  <link rel="icon" type="image/png" href="assets/jobhackai_icon_only_128.png">
+  <link rel="apple-touch-icon" href="assets/jobhackai_icon_only_128.png">
+  <script src="js/dynamic-favicon.js?v=20250111-1"></script>
   <link rel="stylesheet" href="css/tokens.css" />
   <link rel="stylesheet" href="css/main.css" />
   <link rel="stylesheet" href="css/header.css" />
@@ -71,7 +73,7 @@
     }
     .checkout-btn {
       width: 100%;
-      background: #00E676;
+      background: #007A30;
       color: #fff;
       font-weight: 700;
       border: none;
@@ -178,18 +180,21 @@
         <span class="footer-name">JOBHACKAI</span>
       </div>
       <div class="footer-legal">
-        <p>© 2025 JobHackAI. All rights reserved.</p>
+        <p>© 2026 JobHackAI. All rights reserved.</p>
       </div>
       <div class="footer-links">
         <a href="index.html">Home</a>
-        <a href="support.html">Support</a>
+        <a href="help.html">Help</a>
         <a href="privacy.html">Privacy</a>
+        <a href="cookies.html">Cookies</a>
       </div>
     </div>
   </footer>
   
   <!-- Load Stripe integration -->
   <script src="js/stripe-integration.js"></script>
+  <!-- Load Firebase auth for token retrieval -->
+  <script type="module" src="js/firebase-auth.js?v=20260124-1"></script>
   <script>
     // Update checkout page with plan details
     document.addEventListener('DOMContentLoaded', () => {
@@ -197,8 +202,8 @@
       const planAmount = localStorage.getItem('plan-amount');
       
       if (!selectedPlan || selectedPlan === 'trial') {
-        // Redirect to add-card page for trial
-        window.location.href = 'add-card.html';
+        // Deprecated page: use pricing to start Checkout
+        window.location.href = 'pricing-a.html';
         return;
       }
       
@@ -229,7 +234,7 @@
             if (container) {
               container.innerHTML = `
                 <div style="text-align: center; padding: 2rem;">
-                  <div style="color: #00E676; font-size: 3rem; margin-bottom: 1rem;">✓</div>
+                  <div style="color: #007A30; font-size: 3rem; margin-bottom: 1rem;">✓</div>
                   <h2 style="color: #232B36; margin-bottom: 1rem;">Payment Successful!</h2>
                   <p style="color: #4B5563;">Your payment with Apple Pay / Google Pay (Demo) was successful. Redirecting to dashboard...</p>
                 </div>
@@ -252,15 +257,165 @@
       }
     });
 
-    // Spinner logic for checkout submit button
-    var checkoutForm = document.getElementById('checkoutForm');
-    var checkoutBtn = document.getElementById('checkoutSubmitBtn');
-    var btnSpinner = document.getElementById('btnSpinner');
-    var btnText = document.getElementById('btnText');
-    if (checkoutForm && checkoutBtn && btnSpinner && btnText) {
-      checkoutForm.addEventListener('submit', function() {
+    // Stripe Checkout: plan → price mapping (Test mode IDs)
+    const PLAN_PRICE_MAP = {
+      essential: 'price_1S4MsxApMPhcB1Y6sC4oQzNL',
+      pro: 'price_1S4MwlApMPhcB1Y6ejrHX2g9',
+      premium: 'price_1S4MykApMPhcB1Y6g4OStoSy'
+    };
+
+    function getAuthUser() {
+      try {
+        // SECURITY: Try FirebaseAuthManager first, then fallback to Firebase SDK keys
+        // FirebaseAuthManager.getCurrentUser() returns null until onAuthStateChanged fires
+        const user = window.FirebaseAuthManager?.getCurrentUser?.();
+        if (user) {
+          return {
+            email: user.email,
+            uid: user.uid,
+            displayName: user.displayName
+          };
+        }
+        // Fallback: Get user data from Firebase SDK keys (works synchronously)
+        function getEmailFromFirebaseKeys() {
+          try {
+            const firebaseKeys = Object.keys(localStorage).filter(k => k.startsWith('firebase:authUser:'));
+            if (firebaseKeys.length > 0) {
+              const keyData = JSON.parse(localStorage.getItem(firebaseKeys[0]) || '{}');
+              return {
+                email: keyData.email || null,
+                uid: keyData.uid || null,
+                displayName: keyData.displayName || null
+              };
+            }
+          } catch (e) {
+            console.warn('Failed to get user from Firebase keys:', e);
+          }
+          return null;
+        }
+        const firebaseUser = getEmailFromFirebaseKeys();
+        if (firebaseUser && firebaseUser.email && firebaseUser.uid) {
+          return firebaseUser;
+        }
+        return null;
+      } catch (e) {
+        return null;
+      }
+    }
+
+    async function startStripeCheckout() {
+      const errorDiv = document.getElementById('checkoutError');
+      const checkoutBtn = document.getElementById('checkoutSubmitBtn');
+      const btnSpinner = document.getElementById('btnSpinner');
+      const btnText = document.getElementById('btnText');
+
+      const selectedPlan = localStorage.getItem('selected-plan');
+      if (!selectedPlan) {
+        errorDiv.textContent = 'No plan selected. Please choose a plan.';
+        errorDiv.style.display = 'block';
+        return;
+      }
+      if (selectedPlan === 'trial') { window.location.href = 'pricing-a.html'; return; }
+
+      const priceId = PLAN_PRICE_MAP[selectedPlan];
+      if (!priceId) {
+        errorDiv.textContent = 'There was a problem loading pricing for your plan. Please try again.';
+        errorDiv.style.display = 'block';
+        return;
+      }
+
+      // Check authentication using Firebase (with fallback to Firebase SDK keys)
+      const authUser = getAuthUser();
+      if (!authUser) {
+        errorDiv.textContent = 'Please sign in to continue to checkout.';
+        errorDiv.style.display = 'block';
+        setTimeout(() => { window.location.href = 'login.html'; }, 1200);
+        return;
+      }
+
+      if (btnSpinner && btnText) {
         btnSpinner.style.display = 'inline-block';
         btnText.textContent = 'Processing...';
+      }
+      if (checkoutBtn) checkoutBtn.disabled = true;
+      errorDiv.style.display = 'none';
+
+      try {
+        // Get Firebase ID token for authentication
+        // If FirebaseAuthManager isn't ready yet, wait briefly for it to initialize
+        let user = window.FirebaseAuthManager?.getCurrentUser?.();
+        if (!user && authUser) {
+          // User is authenticated (from Firebase keys) but FirebaseAuthManager not ready yet
+          // Wait up to 2 seconds for FirebaseAuthManager to initialize
+          for (let i = 0; i < 20 && !user; i++) {
+            await new Promise(resolve => setTimeout(resolve, 100));
+            user = window.FirebaseAuthManager?.getCurrentUser?.();
+          }
+        }
+        if (!user) {
+          errorDiv.textContent = 'Please sign in to continue to checkout.';
+          errorDiv.style.display = 'block';
+          setTimeout(() => { window.location.href = 'login.html'; }, 1200);
+          return;
+        }
+
+        const idToken = await user.getIdToken();
+        if (!idToken) {
+          errorDiv.textContent = 'Authentication error. Please sign in again.';
+          errorDiv.style.display = 'block';
+          setTimeout(() => { window.location.href = 'login.html'; }, 1200);
+          return;
+        }
+
+        const res = await fetch('/api/stripe', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${idToken}`
+          },
+          body: JSON.stringify({
+            action: 'create-checkout-session',
+            data: {
+              priceId: priceId
+              // userId and userEmail are now retrieved from the authenticated token
+            }
+          })
+        });
+
+        const data = await res.json();
+        if (data && data.success && data.url) {
+          window.location.href = data.url;
+          return;
+        }
+
+        throw new Error(data && data.error ? data.error : 'Checkout failed.');
+      } catch (err) {
+        errorDiv.textContent = 'Unable to start checkout. Please try again or contact support.';
+        errorDiv.style.display = 'block';
+      } finally {
+        if (btnSpinner && btnText) {
+          btnSpinner.style.display = 'none';
+          btnText.textContent = `Subscribe to ${selectedPlan.charAt(0).toUpperCase() + selectedPlan.slice(1)}`;
+        }
+        if (checkoutBtn) checkoutBtn.disabled = false;
+      }
+    }
+
+    // Auto-start checkout on load
+    document.addEventListener('DOMContentLoaded', () => {
+      const selectedPlan = localStorage.getItem('selected-plan');
+      if (selectedPlan && selectedPlan !== 'trial') {
+        // Delay slightly to ensure UI renders, then kick off
+        setTimeout(() => startStripeCheckout(), 150);
+      }
+    });
+
+    // Hook submit to retry start if needed
+    var checkoutForm = document.getElementById('checkoutForm');
+    if (checkoutForm) {
+      checkoutForm.addEventListener('submit', function(e) {
+        e.preventDefault();
+        startStripeCheckout();
       });
     }
   </script>

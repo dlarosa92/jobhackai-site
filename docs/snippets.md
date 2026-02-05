@@ -89,12 +89,13 @@ _Update this file when a snippet is improved or the design system changes._
       <span class="footer-name">JOBHACKAI</span>
     </div>
     <div class="footer-legal">
-      <p>© 2025 JobHackAI. All rights reserved.</p>
+      <p>© 2026 JobHackAI. All rights reserved.</p>
     </div>
     <div class="footer-links">
       <a href="index.html">Home</a>
-      <a href="support.html">Support</a>
+      <a href="help.html">Help</a>
       <a href="privacy.html">Privacy</a>
+      <a href="cookies.html">Cookies</a>
     </div>
   </div>
 </footer>
@@ -137,7 +138,7 @@ _Update this file when a snippet is improved or the design system changes._
   transition: background var(--trans-fast);
 }
 .btn-primary:hover {
-  background: #00c965;
+  background: #006B28;
 }
 
 <!-- CARD COMPONENT -->

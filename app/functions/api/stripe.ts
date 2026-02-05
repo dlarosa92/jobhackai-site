@@ -27,45 +27,134 @@ export async function onRequest(context: any) {
 }
 
 async function createCheckoutSession(data: any, env: any) {
-  const { priceId, userId, userEmail } = data;
-  
-  const stripe = require('stripe')(env.STRIPE_SECRET_KEY);
-  
-  const session = await stripe.checkout.sessions.create({
-    customer_email: userEmail,
-    payment_method_types: ['card'],
-    line_items: [
-      {
-        price: priceId,
-        quantity: 1,
+  try {
+    const { priceId, userId, userEmail } = data;
+    
+    if (!env.STRIPE_SECRET_KEY) {
+      throw new Error('STRIPE_SECRET_KEY is not configured');
+    }
+    
+    const stripe = require('stripe')(env.STRIPE_SECRET_KEY);
+    
+    const session = await stripe.checkout.sessions.create({
+      customer_email: userEmail,
+      payment_method_types: ['card'],
+      line_items: [
+        {
+          price: priceId,
+          quantity: 1,
+        },
+      ],
+      mode: 'subscription',
+      success_url: `${env.FRONTEND_URL}/dashboard?success=true`,
+      cancel_url: `${env.FRONTEND_URL}/pricing?canceled=true`,
+      metadata: {
+        userId: userId,
       },
-    ],
-    mode: 'subscription',
-    success_url: `${env.FRONTEND_URL}/dashboard?success=true`,
-    cancel_url: `${env.FRONTEND_URL}/pricing?canceled=true`,
-    metadata: {
-      userId: userId,
-    },
-  });
+    });
 
-  return new Response(JSON.stringify({ sessionId: session.id }), {
-    headers: { 'Content-Type': 'application/json' },
-  });
+    return new Response(JSON.stringify({ 
+      success: true, 
+      url: session.url,
+      sessionId: session.id 
+    }), {
+      headers: { 'Content-Type': 'application/json' },
+    });
+  } catch (error) {
+    console.error('Stripe checkout error:', error);
+    return new Response(JSON.stringify({ 
+      success: false, 
+      error: `Stripe API error: ${error.message}` 
+    }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
 }
 
 async function createCustomerPortal(data: any, env: any) {
-  const { customerId } = data;
-  
-  const stripe = require('stripe')(env.STRIPE_SECRET_KEY);
-  
-  const session = await stripe.billingPortal.sessions.create({
-    customer: customerId,
-    return_url: `${env.FRONTEND_URL}/dashboard`,
-  });
+  try {
+    const { customerId, userEmail, userId } = data || {};
+    
+    if (!env.STRIPE_SECRET_KEY) {
+      throw new Error('STRIPE_SECRET_KEY is not configured');
+    }
+    
+    const stripe = require('stripe')(env.STRIPE_SECRET_KEY);
 
-  return new Response(JSON.stringify({ url: session.url }), {
-    headers: { 'Content-Type': 'application/json' },
-  });
+    // Resolve a customer to open the portal for
+    let customer: any = null;
+
+    if (customerId) {
+      try {
+        customer = await stripe.customers.retrieve(customerId);
+      } catch {}
+    }
+
+    if (!customer && userEmail) {
+      // Try to find by email
+      const list = await stripe.customers.list({ email: userEmail, limit: 1 });
+      if (list.data && list.data.length > 0) {
+        customer = list.data[0];
+      }
+    }
+
+    if (!customer && userEmail) {
+      // Create a lightweight customer if not found
+      customer = await stripe.customers.create({
+        email: userEmail,
+        metadata: userId ? { userId } : undefined,
+      });
+    }
+
+    if (!customer) {
+      throw new Error('Unable to resolve Stripe customer');
+    }
+    
+    // Ensure there is a portal configuration in test mode; create a basic one if missing
+    let configurationId: string | undefined;
+    try {
+      const configs = await stripe.billingPortal.configurations.list({ limit: 1 });
+      if (configs.data && configs.data.length > 0) {
+        configurationId = configs.data[0].id;
+      } else {
+        const created = await stripe.billingPortal.configurations.create({
+          business_profile: { headline: 'JobHackAI Billing' },
+          features: {
+            payment_method_update: { enabled: true },
+            subscription_cancel: { enabled: true },
+            subscription_update: { enabled: true },
+            invoice_history: { enabled: true },
+          },
+        });
+        configurationId = created.id;
+      }
+    } catch {
+      // If listing/creating fails, proceed without configuration and let Stripe use default (if present)
+    }
+
+    const session = await stripe.billingPortal.sessions.create({
+      customer: customer.id,
+      return_url: `${env.FRONTEND_URL || ''}/dashboard`,
+      ...(configurationId ? { configuration: configurationId } : {}),
+    });
+
+    return new Response(JSON.stringify({ 
+      success: true, 
+      url: session.url 
+    }), {
+      headers: { 'Content-Type': 'application/json' },
+    });
+  } catch (error) {
+    console.error('Stripe portal error:', error);
+    return new Response(JSON.stringify({ 
+      success: false, 
+      error: `Stripe API error: ${error.message}` 
+    }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
 }
 
 async function handleWebhook(data: any, env: any) {

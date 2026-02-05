@@ -1,0 +1,851 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Resume Feedback - Pro Plan (With Feedback) | JobHackAI</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --color-bg-light: #F9FAFB;
+      --color-text-main: #1F2937;
+      --color-text-secondary: #4B5563;
+      --color-text-muted: #6B7280;
+      --color-card-bg: #FFFFFF;
+      --color-cta-green: #007A30;
+      --color-cta-green-hover: #006B28;
+      --color-accent-blue: #007BFF;
+      --color-divider: #E5E7EB;
+      --color-error: #DC2626;
+      --color-success: #059669;
+      --font-family-base: 'Inter', sans-serif;
+      --font-weight-regular: 400;
+      --font-weight-medium: 500;
+      --font-weight-semibold: 600;
+      --font-weight-bold: 700;
+      --font-weight-extrabold: 800;
+      --font-size-xs: 0.875rem;
+      --font-size-sm: 0.95rem;
+      --font-size-base: 1rem;
+      --font-size-lg: 1.05rem;
+      --font-size-xl: 1.2rem;
+      --font-size-2xl: 1.5rem;
+      --radius-sm: 4px;
+      --radius-md: 8px;
+      --radius-lg: 12px;
+      --radius-xl: 16px;
+      --radius-full: 9999px;
+      --shadow-sm: 0 1px 2px rgba(0,0,0,0.05);
+      --shadow-md: 0 2px 6px rgba(0,0,0,0.05);
+      --shadow-lg: 0 4px 12px rgba(0,0,0,0.07);
+      --shadow-card: 0 4px 24px rgba(31,41,55,0.07);
+      --space-xs: 0.5rem;
+      --space-sm: 1rem;
+      --space-md: 1.5rem;
+      --space-lg: 2rem;
+      --space-xl: 3rem;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: var(--font-family-base);
+      color: var(--color-text-main);
+      background: var(--color-bg-light);
+      line-height: 1.6;
+      min-height: 100vh;
+    }
+
+    /* Header */
+    header {
+      background: var(--color-card-bg);
+      border-bottom: 1px solid var(--color-divider);
+      padding: 1rem var(--space-lg);
+      position: sticky;
+      top: 0;
+      z-index: 1000;
+      box-shadow: var(--shadow-sm);
+    }
+
+    .header-container {
+      max-width: 1200px;
+      margin: 0 auto;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .nav-logo {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-weight: var(--font-weight-bold);
+      font-size: 1.3rem;
+      color: var(--color-text-main);
+      text-decoration: none;
+    }
+
+    /* Main Layout */
+    main {
+      max-width: 1200px;
+      margin: 2rem auto;
+      padding: 0 var(--space-md);
+    }
+
+    .layout-container {
+      display: grid;
+      grid-template-columns: 1fr 380px;
+      gap: var(--space-lg);
+      align-items: start;
+    }
+
+    @media (max-width: 1024px) {
+      .layout-container {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    /* Cards */
+    .card {
+      background: var(--color-card-bg);
+      border-radius: var(--radius-xl);
+      box-shadow: var(--shadow-card);
+      padding: var(--space-lg);
+      margin-bottom: var(--space-lg);
+    }
+
+    .card-title {
+      font-size: var(--font-size-2xl);
+      font-weight: var(--font-weight-extrabold);
+      margin-bottom: var(--space-xs);
+      color: var(--color-text-main);
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+    }
+
+    .card-subtitle {
+      color: var(--color-text-secondary);
+      margin-bottom: var(--space-md);
+      font-size: var(--font-size-base);
+    }
+
+    .section-title {
+      font-size: var(--font-size-xl);
+      font-weight: var(--font-weight-bold);
+      margin-top: 3rem;
+      margin-bottom: var(--space-xs);
+      color: var(--color-text-main);
+    }
+
+    /* Plan Badge */
+    .plan-badge {
+      display: inline-block;
+      background: #388E3C;
+      color: #fff;
+      font-weight: var(--font-weight-semibold);
+      border-radius: var(--radius-full);
+      padding: 0.2em 0.8em;
+      font-size: 0.9rem;
+      margin-left: 0.7rem;
+    }
+
+    /* Progress Ring */
+    .progress-ring {
+      width: 80px;
+      height: 80px;
+      display: inline-block;
+      vertical-align: middle;
+      margin-right: 1.5rem;
+    }
+
+    .progress-ring svg {
+      width: 100%;
+      height: 100%;
+    }
+
+    /* ATS Rubric Grid */
+    .rf-rubric-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 1.2rem;
+      margin-top: 1.5rem;
+    }
+
+    .rf-rubric-item {
+      background: #F8FAFC;
+      border-radius: var(--radius-lg);
+      padding: 1rem 1.2rem;
+    }
+
+    .rf-rubric-label {
+      font-weight: 600;
+      color: var(--color-text-main);
+      margin-bottom: 0.2rem;
+    }
+
+    .rf-rubric-score {
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: #1976D2;
+      margin-bottom: 0.5rem;
+    }
+
+    .rf-rubric-feedback {
+      color: var(--color-text-secondary);
+      font-size: 0.98rem;
+      line-height: 1.5;
+    }
+
+    /* Role-Specific Feedback Grid */
+    .rf-feedback-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 1.2rem;
+      margin-top: 1.5rem;
+    }
+
+    .rf-feedback-card {
+      background: #fff;
+      border-radius: var(--radius-lg);
+      box-shadow: 0 1px 3px rgba(0,0,0,0.07);
+      padding: 1.2rem;
+    }
+
+    .rf-feedback-label {
+      font-weight: 700;
+      color: var(--color-text-main);
+      margin-bottom: 0.75rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .rf-feedback-diagnosis {
+      color: var(--color-text-main);
+      margin-bottom: 0.75rem;
+      font-weight: 500;
+      line-height: 1.5;
+    }
+
+    .rf-feedback-tips {
+      margin-bottom: 0.75rem;
+    }
+
+    .rf-feedback-tips ul {
+      margin: 0;
+      padding-left: 1.25rem;
+      color: var(--color-text-secondary);
+      line-height: 1.6;
+    }
+
+    .rf-feedback-tips li {
+      margin-bottom: 0.5rem;
+    }
+
+    .rf-rewrite-preview {
+      margin-top: 0.75rem;
+      padding-top: 0.75rem;
+      border-top: 1px solid var(--color-divider);
+    }
+
+    .rf-rewrite-preview-label {
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: var(--color-text-muted);
+      margin-bottom: 0.5rem;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .rf-rewrite-preview-text {
+      color: var(--color-text-secondary);
+      font-style: italic;
+      font-size: 0.9rem;
+      line-height: 1.5;
+    }
+
+    /* Fit Level Chips */
+    .rf-fit-chip-big-impact {
+      background: #FEF3C7;
+      color: #92400E;
+      border: 1px solid #F59E0B;
+      padding: 0.25rem 0.75rem;
+      border-radius: 12px;
+      font-size: 0.75rem;
+      font-weight: 600;
+    }
+
+    .rf-fit-chip-tunable {
+      background: #DBEAFE;
+      color: #1E40AF;
+      border: 1px solid #3B82F6;
+      padding: 0.25rem 0.75rem;
+      border-radius: 12px;
+      font-size: 0.75rem;
+      font-weight: 600;
+    }
+
+    .rf-fit-chip-strong {
+      background: #D1FAE5;
+      color: #065F46;
+      border: 1px solid #10B981;
+      padding: 0.25rem 0.75rem;
+      border-radius: 12px;
+      font-size: 0.75rem;
+      font-weight: 600;
+    }
+
+    /* Buttons */
+    .btn-primary {
+      background: var(--color-cta-green);
+      color: #fff;
+      font-weight: var(--font-weight-semibold);
+      border: none;
+      border-radius: var(--radius-lg);
+      padding: 0.75rem 2rem;
+      font-size: var(--font-size-base);
+      cursor: pointer;
+      transition: background 0.18s;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-family: var(--font-family-base);
+    }
+
+    .btn-primary:hover:not(:disabled) {
+      background: var(--color-cta-green-hover);
+    }
+
+    .btn-secondary {
+      background: transparent;
+      color: var(--color-accent-blue);
+      font-weight: var(--font-weight-semibold);
+      border: 1px solid var(--color-accent-blue);
+      border-radius: var(--radius-md);
+      padding: 0.5rem 1rem;
+      font-size: 0.95rem;
+      cursor: pointer;
+      transition: all 0.18s;
+      font-family: var(--font-family-base);
+      text-decoration: none;
+    }
+
+    .btn-secondary:hover {
+      background: rgba(0, 123, 255, 0.05);
+    }
+
+    /* Snippet Box */
+    .snippet-box {
+      width: 100%;
+      min-height: 120px;
+      border: 2px solid var(--color-divider);
+      border-radius: var(--radius-lg);
+      padding: 1rem;
+      font-size: 1.05rem;
+      margin-bottom: 1.2rem;
+      background: #F9FAFB;
+      color: var(--color-text-main);
+      resize: vertical;
+      font-family: var(--font-family-base);
+    }
+
+    /* History Section */
+    .history-card {
+      position: sticky;
+      top: 80px;
+    }
+
+    .history-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: var(--space-sm);
+    }
+
+    .history-list {
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+      margin-top: var(--space-sm);
+    }
+
+    .history-item {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      padding: 0.875rem 1rem;
+      background: #F9FAFB;
+      border-radius: var(--radius-md);
+      border: 1px solid var(--color-divider);
+      transition: all 0.18s ease;
+      cursor: pointer;
+    }
+
+    .history-item:hover {
+      background: #F3F4F6;
+      border-color: var(--color-accent-blue);
+    }
+
+    .history-icon {
+      width: 40px;
+      height: 40px;
+      border-radius: var(--radius-md);
+      background: linear-gradient(135deg, #E0E7FF 0%, #C7D2FE 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    .history-icon svg {
+      width: 20px;
+      height: 20px;
+      color: #4F46E5;
+    }
+
+    .history-details {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .history-title {
+      font-weight: var(--font-weight-semibold);
+      color: var(--color-text-main);
+      font-size: 0.95rem;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .history-meta {
+      font-size: 0.8rem;
+      color: var(--color-text-muted);
+      margin-top: 0.15rem;
+    }
+
+    .history-score {
+      font-weight: var(--font-weight-bold);
+      color: var(--color-cta-green);
+      font-size: 1.1rem;
+    }
+
+    /* Priority Review Banner */
+    .priority-banner {
+      background: #F0F7FF;
+      border-radius: var(--radius-lg);
+      padding: 0.75rem 1rem;
+      margin-top: var(--space-md);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      font-size: 0.9rem;
+      color: var(--color-text-main);
+    }
+
+    .priority-banner-text {
+      flex: 1;
+    }
+
+    /* Responsive */
+    @media (max-width: 768px) {
+      main {
+        padding: 0 var(--space-sm);
+      }
+
+      .card {
+        padding: var(--space-md);
+      }
+
+      .layout-container {
+        gap: var(--space-md);
+      }
+
+      .history-card {
+        position: static;
+      }
+
+      .rf-rubric-grid,
+      .rf-feedback-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <!-- Header -->
+  <header>
+    <div class="header-container">
+      <a href="#" class="nav-logo">
+        <svg width="24" height="24" fill="none" stroke="#1F2937" stroke-width="2" xmlns="http://www.w3.org/2000/svg">
+          <rect x="3" y="7" width="18" height="13" rx="2"/>
+          <path d="M8 7V5a2 2 0 012-2h4a2 2 0 012 2v2"/>
+        </svg>
+        <span>JOBHACKAI</span>
+      </a>
+      <nav style="display: flex; gap: 1.5rem;">
+        <a href="#" style="color: var(--color-text-secondary); text-decoration: none;">Dashboard</a>
+        <a href="#" style="color: var(--color-text-secondary); text-decoration: none;">Pricing</a>
+      </nav>
+    </div>
+  </header>
+
+  <!-- Main Content -->
+  <main>
+    <div class="layout-container">
+      <!-- Left Column: Main Flow -->
+      <div>
+        <!-- Step 1: Upload & Score (Collapsed/Summary View) -->
+        <section class="card">
+          <div style="display: flex; align-items: center; gap: 2.5rem; flex-wrap: wrap;">
+            <div class="progress-ring">
+              <svg viewBox="0 0 80 80">
+                <circle cx="40" cy="40" r="36" stroke="#E5E7EB" stroke-width="8" fill="none"/>
+                <circle cx="40" cy="40" r="36" stroke="#007A30" stroke-width="8" fill="none" 
+                        stroke-dasharray="226.2" stroke-dashoffset="45.24" stroke-linecap="round" transform="rotate(-90 40 40)"/>
+                <text x="40" y="48" text-anchor="middle" font-size="1.6rem" font-weight="700" fill="#1F2937">80%</text>
+              </svg>
+            </div>
+            <div style="flex: 1; min-width: 220px;">
+              <h2 class="card-title">
+                Run ATS Score & Feedback
+                <span class="plan-badge">Pro Plan</span>
+              </h2>
+              <p class="card-subtitle">
+                Your resume scored <strong>80/100</strong> for Software Engineer roles. Review the detailed breakdown below.
+              </p>
+              <div style="color: var(--color-text-secondary); font-size: 0.95rem; margin-top: 0.5rem;">
+                Your Pro plan includes <strong>unlimited detailed feedback runs</strong>.
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Step 2: ATS Score & Feedback -->
+        <section class="card">
+          <h2 class="card-title">
+            ATS Score & Feedback
+            <span class="plan-badge">Pro Plan</span>
+          </h2>
+          <p class="card-subtitle">
+            Get detailed ATS feedback and role-specific insights.
+          </p>
+
+          <!-- ATS Rubric Grid -->
+          <div class="rf-rubric-grid">
+            <div class="rf-rubric-item">
+              <div class="rf-rubric-label">Keyword Relevance</div>
+              <div class="rf-rubric-score">16 / 40</div>
+              <div class="rf-rubric-feedback">Add more industry keywords for your target job.</div>
+            </div>
+            <div class="rf-rubric-item">
+              <div class="rf-rubric-label">Formatting Compliance</div>
+              <div class="rf-rubric-score">20 / 20</div>
+              <div class="rf-rubric-feedback">Excellent formatting. Avoid tables, graphics, and use standard headings.</div>
+            </div>
+            <div class="rf-rubric-item">
+              <div class="rf-rubric-label">Structure & Section Completeness</div>
+              <div class="rf-rubric-score">13 / 15</div>
+              <div class="rf-rubric-feedback">Well-structured resume. Order sections: Contact, Experience, Education, Skills.</div>
+            </div>
+            <div class="rf-rubric-item">
+              <div class="rf-rubric-label">Tone & Clarity</div>
+              <div class="rf-rubric-score">14 / 15</div>
+              <div class="rf-rubric-feedback">Excellent tone and clarity. Use action verbs and concise bullet points.</div>
+            </div>
+            <div class="rf-rubric-item">
+              <div class="rf-rubric-label">Grammar & Spelling</div>
+              <div class="rf-rubric-score">8 / 10</div>
+              <div class="rf-rubric-feedback">Minor grammar issues detected. Review for consistency.</div>
+            </div>
+          </div>
+
+          <!-- Role-Specific Feedback -->
+          <h3 class="section-title">Role-Specific Tailoring Tips</h3>
+          <p class="card-subtitle" style="margin-top: 0; margin-bottom: 1.2rem;">
+            How to tune your resume for Software Engineer roles.
+          </p>
+
+          <div class="rf-feedback-grid">
+            <div class="rf-feedback-card">
+              <div class="rf-feedback-label">
+                <span>Professional Summary</span>
+                <span class="rf-fit-chip-big-impact">Big Impact Opportunity</span>
+              </div>
+              <div class="rf-feedback-diagnosis">
+                Your summary lacks role-specific keywords and quantifiable achievements that Software Engineer recruiters scan for.
+              </div>
+              <div class="rf-feedback-tips">
+                <ul>
+                  <li>Lead with "Software Engineer" or "Full-Stack Developer" to match job titles</li>
+                  <li>Include specific technologies: React, Node.js, Python, AWS</li>
+                  <li>Add metrics: "5+ years" or "scaled systems to 1M+ users"</li>
+                </ul>
+              </div>
+              <div class="rf-rewrite-preview">
+                <div class="rf-rewrite-preview-label">AI Rewrite Preview</div>
+                <div class="rf-rewrite-preview-text">"Experienced Software Engineer with 5+ years building scalable web applications using React, Node.js, and AWS. Led development of systems handling 1M+ daily users, improving performance by 40%."</div>
+              </div>
+            </div>
+
+            <div class="rf-feedback-card">
+              <div class="rf-feedback-label">
+                <span>Experience Section</span>
+                <span class="rf-fit-chip-tunable">Good but Tunable</span>
+              </div>
+              <div class="rf-feedback-diagnosis">
+                Your experience descriptions are solid but could better highlight technical depth and impact for Software Engineer roles.
+              </div>
+              <div class="rf-feedback-tips">
+                <ul>
+                  <li>Start each bullet with strong action verbs: "Architected", "Engineered", "Optimized"</li>
+                  <li>Include specific frameworks and tools: "React.js", "PostgreSQL", "Docker"</li>
+                  <li>Quantify impact: "reduced load time by 35%", "increased API throughput by 2x"</li>
+                </ul>
+              </div>
+              <div class="rf-rewrite-preview">
+                <div class="rf-rewrite-preview-label">AI Rewrite Preview</div>
+                <div class="rf-rewrite-preview-text">"Architected and deployed microservices using Node.js and Docker, reducing API response time by 35% and supporting 2x user growth."</div>
+              </div>
+            </div>
+
+            <div class="rf-feedback-card">
+              <div class="rf-feedback-label">
+                <span>Skills Section</span>
+                <span class="rf-fit-chip-strong">Strong Match</span>
+              </div>
+              <div class="rf-feedback-diagnosis">
+                Your skills list aligns well with Software Engineer requirements. Consider adding cloud platforms and CI/CD tools.
+              </div>
+              <div class="rf-feedback-tips">
+                <ul>
+                  <li>Group skills: "Languages: JavaScript, Python, TypeScript"</li>
+                  <li>Add DevOps tools: "AWS, Docker, Kubernetes, GitHub Actions"</li>
+                  <li>Include testing frameworks: "Jest, Cypress, pytest"</li>
+                </ul>
+              </div>
+              <div class="rf-rewrite-preview">
+                <div class="rf-rewrite-preview-label">AI Rewrite Preview</div>
+                <div class="rf-rewrite-preview-text">"Languages: JavaScript, TypeScript, Python | Frameworks: React, Node.js, Express | Cloud: AWS (EC2, S3, Lambda) | Tools: Docker, Kubernetes, GitHub Actions"</div>
+              </div>
+            </div>
+
+            <div class="rf-feedback-card">
+              <div class="rf-feedback-label">
+                <span>Education</span>
+                <span class="rf-fit-chip-tunable">Good but Tunable</span>
+              </div>
+              <div class="rf-feedback-diagnosis">
+                Education section is complete. For Software Engineer roles, highlight relevant coursework or projects if you're early career.
+              </div>
+              <div class="rf-feedback-tips">
+                <ul>
+                  <li>Add relevant coursework: "Data Structures, Algorithms, Database Systems"</li>
+                  <li>Include GPA if 3.5+ (optional but can help)</li>
+                  <li>Mention capstone projects or thesis if relevant</li>
+                </ul>
+              </div>
+              <div class="rf-rewrite-preview">
+                <div class="rf-rewrite-preview-label">AI Rewrite Preview</div>
+                <div class="rf-rewrite-preview-text">"B.S. Computer Science, University Name | Relevant Coursework: Data Structures, Algorithms, Software Engineering | GPA: 3.7"</div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Step 3: Resume Rewriting (Pro Feature - Unlocked) -->
+        <section class="card">
+          <h2 class="card-title">
+            Resume Rewriting
+            <span class="plan-badge">Pro</span>
+          </h2>
+          <p class="card-subtitle">
+            AI rewrites your resume line-by-line using this ATS feedback and your target role. Unlimited with your Pro plan.
+          </p>
+          
+          <!-- Unlocked content for Pro users -->
+          <div>
+            <div style="color: var(--color-text-secondary); margin-bottom: 1.2rem;">
+              Below is your fully optimized resume draft. We used ATS best-practice language, injected relevant keywords, and tightened formatting so it's ready to paste into your next application.
+            </div>
+            <div style="font-weight: 600; margin-bottom: 0.5rem;">Your Original Snippet</div>
+            <textarea class="snippet-box" readonly>• Developed and maintained web applications using React and Node.js
+• Collaborated with cross-functional teams to deliver high-quality software
+• Implemented responsive designs and optimized application performance</textarea>
+            <div style="font-weight: 600; margin-bottom: 0.5rem; margin-top: 1rem;">Rewritten Snippet</div>
+            <textarea class="snippet-box" readonly>• Architected and engineered scalable web applications leveraging React.js and Node.js, resulting in 40% performance improvement
+• Orchestrated cross-functional collaboration with product, design, and engineering teams to deliver enterprise-grade software solutions
+• Designed and implemented responsive, mobile-first UI/UX patterns and optimized application performance, reducing load times by 35%</textarea>
+            <div style="margin-top: 1.2rem; display: flex; gap: 1rem; flex-wrap: wrap;">
+              <button class="btn-primary" id="copy-rewrite-btn">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+                </svg>
+                Copy Rewritten Resume
+              </button>
+              <button class="btn-secondary" id="regenerate-rewrite-btn">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M23 4v6h-6"/>
+                  <path d="M1 20v-6h6"/>
+                  <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
+                </svg>
+                Regenerate Rewrite
+              </button>
+            </div>
+            <div style="margin-top: 1rem; padding: 0.75rem; background: #E8F5E9; border-radius: var(--radius-md); color: #2E7D32; font-size: 0.9rem;">
+              <strong>Pro Feature:</strong> You have unlimited resume rewrites. Generate feedback first, then request a rewrite for any section.
+            </div>
+          </div>
+        </section>
+
+        <!-- Priority Review Banner -->
+        <div class="priority-banner">
+          <div class="priority-banner-text">
+            Need faster, deeper reviews? Priority Review is included with Premium.
+          </div>
+          <a href="#" class="btn-secondary" style="white-space: nowrap;">Upgrade to Premium</a>
+        </div>
+      </div>
+
+      <!-- Right Column: History -->
+      <aside class="card history-card">
+        <div class="history-header">
+          <h3 class="card-title" style="font-size: var(--font-size-xl); margin: 0;">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align: text-bottom; margin-right: 0.5rem;">
+              <circle cx="12" cy="12" r="10"/>
+              <polyline points="12 6 12 12 16 14"/>
+            </svg>
+            Your Feedback History
+          </h3>
+          <button class="btn-secondary" id="refresh-history" style="padding: 0.4rem 0.75rem; font-size: 0.85rem;" title="Refresh history">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M23 4v6h-6"/>
+              <path d="M1 20v-6h6"/>
+              <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
+            </svg>
+          </button>
+        </div>
+        <p class="card-subtitle" style="margin-bottom: var(--space-sm);">
+          We automatically save your past feedback so you can come back and compare improvements.
+        </p>
+        <div id="history-list" class="history-list">
+          <!-- Mock history items -->
+          <div class="history-item" data-score="80" data-role="Software Engineer" data-date="2025-01-20" style="background: #F0F7FF; border-color: var(--color-accent-blue);">
+            <div class="history-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+                <line x1="16" y1="2" x2="16" y2="6"/>
+                <line x1="8" y1="2" x2="8" y2="6"/>
+                <line x1="3" y1="10" x2="21" y2="10"/>
+              </svg>
+            </div>
+            <div class="history-details">
+              <div class="history-title">Software Engineer</div>
+              <div class="history-meta">Jan 20, 2025 (Current)</div>
+            </div>
+            <div class="history-score">80</div>
+          </div>
+          <div class="history-item" data-score="85" data-role="Software Engineer" data-date="2025-01-15">
+            <div class="history-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+                <line x1="16" y1="2" x2="16" y2="6"/>
+                <line x1="8" y1="2" x2="8" y2="6"/>
+                <line x1="3" y1="10" x2="21" y2="10"/>
+              </svg>
+            </div>
+            <div class="history-details">
+              <div class="history-title">Software Engineer</div>
+              <div class="history-meta">Jan 15, 2025</div>
+            </div>
+            <div class="history-score">85</div>
+          </div>
+          <div class="history-item" data-score="72" data-role="Product Manager" data-date="2025-01-10">
+            <div class="history-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+                <line x1="16" y1="2" x2="16" y2="6"/>
+                <line x1="8" y1="2" x2="8" y2="6"/>
+                <line x1="3" y1="10" x2="21" y2="10"/>
+              </svg>
+            </div>
+            <div class="history-details">
+              <div class="history-title">Product Manager</div>
+              <div class="history-meta">Jan 10, 2025</div>
+            </div>
+            <div class="history-score">72</div>
+          </div>
+        </div>
+      </aside>
+    </div>
+  </main>
+
+  <script>
+    // Copy rewrite button
+    document.getElementById('copy-rewrite-btn').addEventListener('click', () => {
+      const rewrittenText = document.querySelector('.snippet-box:last-of-type').value;
+      navigator.clipboard.writeText(rewrittenText).then(() => {
+        const btn = document.getElementById('copy-rewrite-btn');
+        const originalText = btn.innerHTML;
+        btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg> Copied!';
+        setTimeout(() => {
+          btn.innerHTML = originalText;
+        }, 2000);
+      });
+    });
+
+    // Regenerate rewrite button
+    document.getElementById('regenerate-rewrite-btn').addEventListener('click', async () => {
+      const btn = document.getElementById('regenerate-rewrite-btn');
+      btn.disabled = true;
+      btn.innerHTML = '<div style="width: 14px; height: 14px; border: 2px solid var(--color-divider); border-top-color: var(--color-accent-blue); border-radius: 50%; animation: spin 0.8s linear infinite; margin-right: 0.5rem;"></div> Regenerating...';
+      
+      // Simulate API call
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      
+      const rewrittenSnippet = document.querySelector('.snippet-box:last-of-type');
+      rewrittenSnippet.value = `• Engineered and scaled production web applications utilizing React.js and Node.js frameworks, driving 45% performance enhancement
+• Led cross-functional team initiatives with product managers, designers, and engineers to ship mission-critical software products
+• Crafted responsive, accessibility-compliant user interfaces and fine-tuned application performance metrics, achieving 40% faster load times`;
+      
+      btn.disabled = false;
+      btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg> Regenerate Rewrite';
+    });
+
+    // History item click handlers
+    document.querySelectorAll('.history-item').forEach(item => {
+      item.addEventListener('click', () => {
+        const role = item.getAttribute('data-role');
+        const score = item.getAttribute('data-score');
+        alert(`Loading feedback for ${role} (Score: ${score})`);
+      });
+    });
+
+    // Refresh history button
+    document.getElementById('refresh-history').addEventListener('click', () => {
+      alert('Refreshing history...');
+    });
+  </script>
+</body>
+</html>
+
+
+
+
+
+
+
+
+
+
+
+

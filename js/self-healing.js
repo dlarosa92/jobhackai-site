@@ -1,44 +1,49 @@
 // JobHackAI Self-Healing System
 // Automatically fixes common issues and provides user guidance
 
-// Ensure global selfHealing object exists
-if (!window.selfHealing) window.selfHealing = {};
-if (typeof window.selfHealing.showUserAlert !== 'function') {
-  window.selfHealing.showUserAlert = function(errors) {
-    // Show a modal alert to the user
-    let modal = document.getElementById('selfHealingUserAlert');
-    if (!modal) {
-      modal = document.createElement('div');
-      modal.id = 'selfHealingUserAlert';
-      modal.style.position = 'fixed';
-      modal.style.top = '0';
-      modal.style.left = '0';
-      modal.style.width = '100vw';
-      modal.style.height = '100vh';
-      modal.style.background = 'rgba(0,0,0,0.35)';
-      modal.style.display = 'flex';
-      modal.style.alignItems = 'center';
-      modal.style.justifyContent = 'center';
-      modal.style.zIndex = '9999';
-      modal.innerHTML = `
-        <div style="background:#fff; padding:2rem 2.5rem; border-radius:16px; box-shadow:0 4px 32px rgba(0,0,0,0.13); max-width:400px; text-align:center;">
-          <h2 style="color:#232B36; font-size:1.2rem; margin-bottom:0.7rem;">Something went wrong</h2>
-          <div id="selfHealingUserAlertMsg" style="color:#4B5563; font-size:1rem; margin-bottom:1.2rem;"></div>
-          <button id="closeSelfHealingUserAlert" style="background:#00E676; color:#fff; border:none; border-radius:8px; padding:0.8rem 1.5rem; font-size:1.05rem; font-weight:700; cursor:pointer;">Close</button>
-        </div>
-      `;
-      document.body.appendChild(modal);
-      document.getElementById('closeSelfHealingUserAlert').onclick = function() {
-        modal.style.display = 'none';
-      };
-    } else {
-      modal.style.display = 'flex';
-    }
-    // Show error messages
-    const msgDiv = document.getElementById('selfHealingUserAlertMsg');
-    msgDiv.innerHTML = Array.isArray(errors) ? errors.map(e => `<div>${typeof e === 'string' ? e : (e.message || JSON.stringify(e))}</div>`).join('') : (errors.message || JSON.stringify(errors));
-  };
+// Ensure global selfHealing object exists and initialize showUserAlert first
+if (!window.selfHealing) {
+  window.selfHealing = {};
 }
+
+// Initialize showUserAlert function immediately to prevent errors
+window.selfHealing.showUserAlert = function(errors) {
+  // Show a modal alert to the user
+  let modal = document.getElementById('selfHealingUserAlert');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'selfHealingUserAlert';
+    modal.style.position = 'fixed';
+    modal.style.top = '0';
+    modal.style.left = '0';
+    modal.style.width = '100vw';
+    modal.style.height = '100vh';
+    modal.style.background = 'rgba(0,0,0,0.35)';
+    modal.style.display = 'flex';
+    modal.style.alignItems = 'center';
+    modal.style.justifyContent = 'center';
+    modal.style.zIndex = '9999';
+    modal.innerHTML = `
+      <div style="background:#fff; padding:2rem 2.5rem; border-radius:16px; box-shadow:0 4px 32px rgba(0,0,0,0.13); max-width:400px; text-align:center;">
+        <h2 style="color:#232B36; font-size:1.2rem; margin-bottom:0.7rem;">Something went wrong</h2>
+        <div id="selfHealingUserAlertMsg" style="color:#4B5563; font-size:1rem; margin-bottom:1.2rem;"></div>
+        <button id="closeSelfHealingUserAlert" style="background:#007A30; color:#fff; border:none; border-radius:8px; padding:0.8rem 1.5rem; font-size:1.05rem; font-weight:700; cursor:pointer;">Close</button>
+      </div>
+    `;
+    document.body.appendChild(modal);
+    document.getElementById('closeSelfHealingUserAlert').onclick = function() {
+      modal.style.display = 'none';
+    };
+  } else {
+    modal.style.display = 'flex';
+  }
+  // Show error messages
+  const msgDiv = document.getElementById('selfHealingUserAlertMsg');
+  msgDiv.innerHTML = Array.isArray(errors) ? errors.map(e => `<div>${typeof e === 'string' ? e : (e.message || JSON.stringify(e))}</div>`).join('') : (errors.message || JSON.stringify(errors));
+};
+
+// Preserve the previously defined alert function
+const preservedShowUserAlert = window.selfHealing.showUserAlert;
 
 window.selfHealing = {
   // Configuration
@@ -49,6 +54,9 @@ window.selfHealing = {
     maxFixAttempts: 3,
     fixCooldown: 10000 // 10 seconds between fix attempts
   },
+  
+  // Expose alert API on the main object
+  showUserAlert: preservedShowUserAlert,
   
   // State tracking
   fixAttempts: 0,
@@ -98,6 +106,16 @@ window.selfHealing = {
     
     selfHealing.isChecking = true;
     
+    // Respect forced logout cooldown (prevents auto rehydrate immediately after logout)
+    try {
+      const ts = parseInt(localStorage.getItem('force-logged-out') || '0', 10);
+      if (ts && (Date.now() - ts) < 15000) {
+        console.info('[self-heal] In logout cooldown; skipping auth rehydrate checks');
+        setTimeout(() => { selfHealing.isChecking = false; }, 100);
+        return;
+      }
+    } catch (_) {}
+
     const issues = [];
     
     // Check navigation (only if not already fixing)
@@ -115,11 +133,18 @@ window.selfHealing = {
       }
     }
     
-    // Check localStorage
+    // Check localStorage - but don't flag as user-facing issues since these are auto-fixed
+    // The keys are initialized by navigation.js and auto-fixed below, so missing keys
+    // are normal for fresh sessions and don't warrant user alerts
     const requiredKeys = ['user-authenticated', 'user-plan'];
     requiredKeys.forEach(key => {
       if (!localStorage.getItem(key)) {
-        issues.push(`Missing localStorage key: ${key}`);
+        // Auto-fix immediately without user alert
+        if (key === 'user-authenticated') {
+          localStorage.setItem(key, 'false');
+        } else if (key === 'user-plan') {
+          localStorage.setItem(key, 'free');
+        }
       }
     });
     
@@ -169,16 +194,26 @@ window.selfHealing = {
   
   // Handle issues
   handleIssues: (issues) => {
-    console.warn('🔧 Issues detected:', issues);
+    // Filter out localStorage issues - these are auto-fixed silently
+    const filteredIssues = issues.filter(issue => 
+      !issue.includes('Missing localStorage key:')
+    );
+    
+    if (filteredIssues.length === 0) {
+      // All issues were localStorage-related and are being auto-fixed silently
+      return;
+    }
+    
+    console.warn('🔧 Issues detected:', filteredIssues);
     
     // Try to auto-fix
     if (selfHealing.config.autoFix && selfHealing.canAttemptFix()) {
-      selfHealing.attemptAutoFix(issues);
+      selfHealing.attemptAutoFix(filteredIssues);
     }
     
-    // Show user alert
+    // Show user alert only for non-localStorage issues
     if (selfHealing.config.showUserAlerts) {
-      selfHealing.showUserAlert(issues);
+      selfHealing.showUserAlert(filteredIssues);
     }
   },
   
@@ -207,12 +242,19 @@ window.selfHealing = {
     const fixes = [];
     
     // Fix navigation issues
-    if (window.updateNavigation) {
+    if (window.JobHackAINavigation && typeof window.JobHackAINavigation.scheduleUpdateNavigation === 'function') {
+      try {
+        window.JobHackAINavigation.scheduleUpdateNavigation();
+        fixes.push('Navigation scheduled');
+      } catch (error) {
+        console.error('Failed to schedule navigation update:', error);
+      }
+    } else if (window.updateNavigation) {
       try {
         updateNavigation();
-        fixes.push('Navigation updated');
+        fixes.push('Navigation updated (fallback)');
       } catch (error) {
-        console.error('Failed to fix navigation:', error);
+        console.error('Failed to fix navigation (fallback):', error);
       }
     }
     
@@ -226,6 +268,19 @@ window.selfHealing = {
       localStorage.setItem('user-plan', 'free');
       fixes.push('Set default user plan');
     }
+    
+    // Fix missing keys that are required by smoke tests
+    const requiredKeys = ['user-authenticated', 'user-plan'];
+    requiredKeys.forEach(key => {
+      if (!localStorage.getItem(key)) {
+        if (key === 'user-authenticated') {
+          localStorage.setItem(key, 'false');
+        } else if (key === 'user-plan') {
+          localStorage.setItem(key, 'free');
+        }
+        fixes.push(`Set default ${key}`);
+      }
+    });
     
     // Fix DOM issues
     if (!document.querySelector('.nav-group') && document.querySelector('.site-header')) {

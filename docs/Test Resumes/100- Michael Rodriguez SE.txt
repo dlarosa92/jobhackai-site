@@ -1,0 +1,47 @@
+Michael Rodriguez
+michael.rodriguez@email.com | (415) 555-0123 | San Francisco, CA
+LinkedIn: linkedin.com/in/michaelrodriguez | GitHub: github.com/mrodriguez
+
+PROFESSIONAL SUMMARY
+
+Experienced Software Engineer with 6+ years building scalable web applications and distributed systems. Proven track record leading cross-functional teams using agile methodologies to deliver high-impact features. Expertise in full-stack development with JavaScript, Python, and Java, specializing in React-based frontends and microservices architecture.
+
+EXPERIENCE
+
+Senior Software Engineer at CloudScale Technologies
+March 2021 - Present
+• Architected and developed a React-based dashboard serving 500K+ daily active users, improving page load time by 45% through code splitting and lazy loading
+• Designed RESTful API services using Python and Node.js, processing 10M+ requests per day with 99.9% uptime
+• Led migration from monolithic Java application to microservices, reducing deployment time by 60% and enabling independent team releases
+• Implemented comprehensive Git workflows and CI/CD pipelines using Jenkins, reducing production bugs by 35%
+• Mentored 3 junior engineers using agile and Scrum best practices, improving team sprint velocity by 25%
+• Collaborated with product managers and designers to define technical roadmaps, delivering 12 major features ahead of schedule
+
+Software Engineer at DataFlow Systems
+June 2018 - February 2021
+• Built responsive web applications using JavaScript and React, increasing mobile user engagement by 40%
+• Developed scalable backend services with Python and Node.js, handling peak loads of 50K concurrent users
+• Created automated testing frameworks using Java and Jest, achieving 85% code coverage across all services
+• Participated in daily standups and sprint planning using agile methodologies, consistently delivering features on time
+• Utilized Git for version control across 5+ repositories, establishing branching strategies that reduced merge conflicts by 50%
+
+Junior Software Engineer at StartupHub Inc
+August 2016 - May 2018
+• Developed frontend components using JavaScript and React, contributing to a product used by 100K+ users
+• Assisted in building API endpoints with Node.js and Python, learning best practices for scalable architecture
+• Gained experience with Git workflows and agile development processes in a fast-paced startup environment
+
+EDUCATION
+
+Bachelor of Science in Computer Science
+Stanford University, Stanford, CA
+Graduated: May 2016
+Relevant Coursework: Data Structures, Algorithms, Software Engineering, Database Systems
+
+TECHNICAL SKILLS
+
+Programming Languages: JavaScript, Python, Java, TypeScript, SQL
+Frontend: React, Redux, HTML5, CSS3, Webpack
+Backend: Node.js, Express, Django, Spring Boot
+Tools & Technologies: Git, Jenkins, Docker, AWS, RESTful API, Agile, Scrum
+Databases: PostgreSQL, MongoDB, Redis

@@ -1,0 +1,568 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Resume Feedback UX Mockup - Improved Flow</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #F3F4F6;
+      padding: 2rem;
+      line-height: 1.6;
+      color: #1F2937;
+    }
+
+    .container {
+      max-width: 900px;
+      margin: 0 auto;
+    }
+
+    .mockup-section {
+      background: white;
+      border-radius: 12px;
+      padding: 2rem;
+      margin-bottom: 2rem;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+
+    .mockup-title {
+      font-size: 1.5rem;
+      font-weight: 700;
+      margin-bottom: 1rem;
+      color: #111827;
+      border-bottom: 2px solid #E5E7EB;
+      padding-bottom: 0.5rem;
+    }
+
+    .card {
+      background: white;
+      border-radius: 12px;
+      padding: 2rem;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+      margin-bottom: 1.5rem;
+    }
+
+    .card-header {
+      display: flex;
+      align-items: center;
+      gap: 2.5rem;
+      flex-wrap: wrap;
+      margin-bottom: 1.5rem;
+    }
+
+    .progress-ring {
+      width: 80px;
+      height: 80px;
+      position: relative;
+    }
+
+    .progress-ring svg {
+      width: 100%;
+      height: 100%;
+    }
+
+    .card-content {
+      flex: 1;
+      min-width: 220px;
+    }
+
+    .title {
+      font-size: 1.5rem;
+      font-weight: 700;
+      margin-bottom: 0.5rem;
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 0.25rem 0.75rem;
+      border-radius: 6px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      background: #FEE2E2;
+      color: #DC2626;
+    }
+
+    .badge.premium {
+      background: #FEE2E2;
+      color: #DC2626;
+    }
+
+    .description {
+      color: #6B7280;
+      margin-bottom: 1rem;
+      font-size: 0.95rem;
+    }
+
+    .plan-limit {
+      color: #6B7280;
+      font-size: 0.875rem;
+      margin-bottom: 1rem;
+    }
+
+    .form-group {
+      margin-bottom: 1.5rem;
+    }
+
+    .form-label {
+      display: block;
+      font-weight: 600;
+      margin-bottom: 0.5rem;
+      color: #374151;
+    }
+
+    .form-input {
+      width: 100%;
+      max-width: 400px;
+      padding: 0.75rem;
+      border: 1px solid #D1D5DB;
+      border-radius: 8px;
+      font-size: 1rem;
+      transition: border-color 0.2s;
+    }
+
+    .form-input:focus {
+      outline: none;
+      border-color: #3B82F6;
+      box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+    }
+
+    .file-upload-wrapper {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      flex-wrap: wrap;
+    }
+
+    .file-input-wrapper {
+      position: relative;
+      display: inline-block;
+    }
+
+    .file-input {
+      position: absolute;
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+
+    .file-button {
+      display: inline-block;
+      padding: 0.75rem 1.5rem;
+      background: white;
+      border: 2px solid #D1D5DB;
+      border-radius: 8px;
+      cursor: pointer;
+      font-weight: 600;
+      color: #374151;
+      transition: all 0.2s;
+    }
+
+    .file-button:hover {
+      border-color: #9CA3AF;
+      background: #F9FAFB;
+    }
+
+    .file-name {
+      color: #6B7280;
+      font-size: 0.95rem;
+    }
+
+    .file-name.has-file {
+      color: #059669;
+      font-weight: 500;
+    }
+
+    .file-name.has-file::before {
+      content: "✓ ";
+      color: #059669;
+    }
+
+    .generate-button {
+      padding: 0.875rem 2rem;
+      background: #3B82F6;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      margin-top: 1rem;
+    }
+
+    .generate-button:hover:not(:disabled) {
+      background: #2563EB;
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+    }
+
+    .generate-button:active:not(:disabled) {
+      transform: translateY(0);
+    }
+
+    .generate-button:disabled {
+      background: #9CA3AF;
+      cursor: not-allowed;
+      opacity: 0.6;
+    }
+
+    .generate-button.loading {
+      position: relative;
+      color: transparent;
+    }
+
+    .generate-button.loading::after {
+      content: "";
+      position: absolute;
+      width: 20px;
+      height: 20px;
+      top: 50%;
+      left: 50%;
+      margin-left: -10px;
+      margin-top: -10px;
+      border: 2px solid #ffffff;
+      border-radius: 50%;
+      border-top-color: transparent;
+      animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    .state-indicator {
+      display: inline-block;
+      padding: 0.5rem 1rem;
+      border-radius: 6px;
+      font-size: 0.875rem;
+      font-weight: 500;
+      margin-top: 0.5rem;
+    }
+
+    .state-indicator.ready {
+      background: #D1FAE5;
+      color: #065F46;
+    }
+
+    .state-indicator.processing {
+      background: #DBEAFE;
+      color: #1E40AF;
+    }
+
+    .state-indicator.complete {
+      background: #D1FAE5;
+      color: #065F46;
+    }
+
+    .ux-note {
+      background: #FEF3C7;
+      border-left: 4px solid #F59E0B;
+      padding: 1rem;
+      border-radius: 6px;
+      margin-top: 1rem;
+    }
+
+    .ux-note strong {
+      color: #92400E;
+    }
+
+    .ux-note p {
+      color: #78350F;
+      margin-top: 0.5rem;
+    }
+
+    .comparison {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1.5rem;
+      margin-top: 2rem;
+    }
+
+    .comparison-card {
+      background: white;
+      border-radius: 8px;
+      padding: 1.5rem;
+      border: 2px solid #E5E7EB;
+    }
+
+    .comparison-card.bad {
+      border-color: #FEE2E2;
+    }
+
+    .comparison-card.good {
+      border-color: #D1FAE5;
+    }
+
+    .comparison-title {
+      font-weight: 700;
+      margin-bottom: 1rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .comparison-title.bad::before {
+      content: "❌";
+    }
+
+    .comparison-title.good::before {
+      content: "✅";
+    }
+
+    .flow-step {
+      padding: 0.75rem;
+      background: #F9FAFB;
+      border-radius: 6px;
+      margin-bottom: 0.5rem;
+      font-size: 0.9rem;
+    }
+
+    .flow-step::before {
+      content: counter(step-counter);
+      counter-increment: step-counter;
+      display: inline-block;
+      width: 24px;
+      height: 24px;
+      background: #3B82F6;
+      color: white;
+      border-radius: 50%;
+      text-align: center;
+      line-height: 24px;
+      font-weight: 600;
+      font-size: 0.75rem;
+      margin-right: 0.75rem;
+    }
+
+    .flow-list {
+      counter-reset: step-counter;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="mockup-section">
+      <h1 class="mockup-title">Improved Resume Feedback UX Flow</h1>
+      <p style="color: #6B7280; margin-bottom: 2rem;">
+        This mockup demonstrates a better user experience where users have explicit control over when feedback generation begins.
+      </p>
+
+      <!-- Improved Design -->
+      <div class="card">
+        <div class="card-header">
+          <div class="progress-ring">
+            <svg viewBox="0 0 80 80">
+              <circle cx="40" cy="40" r="36" stroke="#E5E7EB" stroke-width="8" fill="none"/>
+              <circle cx="40" cy="40" r="36" stroke="#007A30" stroke-width="8" fill="none" 
+                      stroke-dasharray="226.2" stroke-dashoffset="86" stroke-linecap="round"/>
+              <text x="40" y="48" text-anchor="middle" font-size="1.6rem" font-weight="700" fill="#1F2937">62%</text>
+            </svg>
+          </div>
+          <div class="card-content">
+            <div class="title">
+              ATS Resume Score
+              <span class="badge premium">Premium Plan</span>
+            </div>
+            <div class="description">
+              Unlimited ATS scoring - you're getting maximum visibility!
+            </div>
+            <div class="plan-limit">
+              <span>Unlimited ATS checks available</span>
+            </div>
+
+            <form id="upload-form">
+              <div class="form-group">
+                <label for="job-title" class="form-label">
+                  Target Job Title (recommended for better feedback):
+                </label>
+                <input 
+                  id="job-title" 
+                  type="text" 
+                  class="form-input" 
+                  placeholder="Start typing your target role (e.g., Data Engineer, Product Manager)"
+                  value="Data Engineer"
+                />
+              </div>
+
+              <div class="form-group">
+                <label for="resume-upload" class="form-label">
+                  Upload your resume (PDF, DOCX, or TXT, max 2 MB):
+                </label>
+                <div class="file-upload-wrapper">
+                  <div class="file-input-wrapper">
+                    <input 
+                      type="file" 
+                      id="resume-upload" 
+                      class="file-input"
+                      accept=".pdf,.docx,.txt,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain"
+                    />
+                    <label for="resume-upload" class="file-button">
+                      Choose File
+                    </label>
+                  </div>
+                  <span id="file-name" class="file-name">No file chosen</span>
+                </div>
+              </div>
+
+              <!-- NEW: Generate Feedback Button -->
+              <button 
+                type="button" 
+                id="generate-btn" 
+                class="generate-button"
+                disabled
+              >
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+                </svg>
+                Generate ATS Score & Feedback
+              </button>
+
+              <div id="state-indicator" class="state-indicator ready" style="display: none;">
+                Ready to generate feedback
+              </div>
+            </form>
+
+            <div class="ux-note">
+              <strong>UX Improvement:</strong>
+              <p>
+                The "Generate ATS Score & Feedback" button is disabled until a file is selected. 
+                This gives users control over when processing begins and allows them to review their 
+                file selection and job title before committing to analysis.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Comparison Section -->
+    <div class="mockup-section">
+      <h2 class="mockup-title">Flow Comparison</h2>
+      
+      <div class="comparison">
+        <div class="comparison-card bad">
+          <div class="comparison-title bad">Current Flow (Auto-trigger)</div>
+          <div class="flow-list">
+            <div class="flow-step">User selects file</div>
+            <div class="flow-step">Processing starts immediately</div>
+            <div class="flow-step">User has no control</div>
+            <div class="flow-step">Cannot change job title after upload</div>
+            <div class="flow-step">Unexpected processing begins</div>
+          </div>
+          <div style="margin-top: 1rem; padding: 1rem; background: #FEE2E2; border-radius: 6px; font-size: 0.875rem; color: #991B1B;">
+            <strong>Issues:</strong> No user control, unexpected behavior, cannot review before processing
+          </div>
+        </div>
+
+        <div class="comparison-card good">
+          <div class="comparison-title good">Improved Flow (Button-trigger)</div>
+          <div class="flow-list">
+            <div class="flow-step">User selects file</div>
+            <div class="flow-step">File name is displayed</div>
+            <div class="flow-step">Button becomes enabled</div>
+            <div class="flow-step">User can review/edit job title</div>
+            <div class="flow-step">User clicks "Generate" when ready</div>
+            <div class="flow-step">Processing begins with user intent</div>
+          </div>
+          <div style="margin-top: 1rem; padding: 1rem; background: #D1FAE5; border-radius: 6px; font-size: 0.875rem; color: #065F46;">
+            <strong>Benefits:</strong> User control, clear expectations, review opportunity, intentional action
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- States Section -->
+    <div class="mockup-section">
+      <h2 class="mockup-title">Button States</h2>
+      
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1.5rem;">
+        <div>
+          <h3 style="font-size: 1rem; font-weight: 600; margin-bottom: 0.75rem;">1. Initial State</h3>
+          <button class="generate-button" disabled>
+            Generate ATS Score & Feedback
+          </button>
+          <p style="font-size: 0.875rem; color: #6B7280; margin-top: 0.5rem;">
+            Disabled until file is selected
+          </p>
+        </div>
+
+        <div>
+          <h3 style="font-size: 1rem; font-weight: 600; margin-bottom: 0.75rem;">2. Ready State</h3>
+          <button class="generate-button">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+            </svg>
+            Generate ATS Score & Feedback
+          </button>
+          <p style="font-size: 0.875rem; color: #6B7280; margin-top: 0.5rem;">
+            Enabled after file selection
+          </p>
+        </div>
+
+        <div>
+          <h3 style="font-size: 1rem; font-weight: 600; margin-bottom: 0.75rem;">3. Loading State</h3>
+          <button class="generate-button loading" disabled>
+            Generate ATS Score & Feedback
+          </button>
+          <p style="font-size: 0.875rem; color: #6B7280; margin-top: 0.5rem;">
+            Shows spinner during processing
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Interactive demo
+    const fileInput = document.getElementById('resume-upload');
+    const fileName = document.getElementById('file-name');
+    const generateBtn = document.getElementById('generate-btn');
+    const stateIndicator = document.getElementById('state-indicator');
+
+    fileInput.addEventListener('change', function(e) {
+      const file = e.target.files[0];
+      if (file) {
+        fileName.textContent = file.name;
+        fileName.classList.add('has-file');
+        generateBtn.disabled = false;
+        stateIndicator.textContent = 'Ready to generate feedback';
+        stateIndicator.className = 'state-indicator ready';
+        stateIndicator.style.display = 'inline-block';
+      } else {
+        fileName.textContent = 'No file chosen';
+        fileName.classList.remove('has-file');
+        generateBtn.disabled = true;
+        stateIndicator.style.display = 'none';
+      }
+    });
+
+    generateBtn.addEventListener('click', function() {
+      // Simulate processing
+      generateBtn.classList.add('loading');
+      generateBtn.disabled = true;
+      stateIndicator.textContent = 'Processing your resume...';
+      stateIndicator.className = 'state-indicator processing';
+      
+      setTimeout(() => {
+        generateBtn.classList.remove('loading');
+        stateIndicator.textContent = 'Feedback generated successfully!';
+        stateIndicator.className = 'state-indicator complete';
+        generateBtn.disabled = false;
+        generateBtn.textContent = 'Regenerate Feedback';
+      }, 3000);
+    });
+  </script>
+</body>
+</html>

@@ -4,8 +4,10 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Pricing – JobHackAI</title>
-  <link rel="icon" type="image/png" href="assets/JobHackAI_Logo_favicon-32x32.png">
+  <title>JobHackAI</title>
+  <link rel="icon" type="image/png" href="assets/jobhackai_icon_only_128.png">
+  <link rel="apple-touch-icon" href="assets/jobhackai_icon_only_128.png">
+  <script src="js/dynamic-favicon.js?v=20250111-1"></script>
   <link rel="stylesheet" href="css/tokens.css">
   <link rel="stylesheet" href="css/main.css">
   <link rel="stylesheet" href="css/header.css">
@@ -29,7 +31,6 @@
           <a href="pricing-a.html">Pricing</a>
           <a href="#blog">Blog</a>
           <a href="login.html">Login</a>
-          <a href="pricing-a.html" class="cta-button">Start Free Trial</a>
         </nav>
       </div>
       <button class="mobile-toggle" aria-label="Open navigation menu" aria-expanded="false" aria-controls="mobileNav">
@@ -47,25 +48,84 @@
     <a href="pricing-a.html">Pricing</a>
     <a href="blog.html">Blog</a>
     <a href="login.html">Login</a>
-    <a href="pricing-a.html" class="cta-button">Start Free Trial</a>
   </nav>
+  <div class="mobile-nav-backdrop" id="mobileNavBackdrop"></div>
   <script>
-    // Hamburger menu toggle
-    const mobileToggle = document.querySelector('.mobile-toggle');
-    const mobileNav = document.getElementById('mobileNav');
-    if (mobileToggle && mobileNav) {
-      mobileToggle.addEventListener('click', () => {
-        const isOpen = mobileNav.classList.toggle('open');
-        mobileToggle.setAttribute('aria-expanded', isOpen);
+    // Hamburger menu toggle with proper state management and click-outside handling
+    (function initMobileMenu() {
+      const mobileToggle = document.querySelector('.mobile-toggle');
+      const mobileNav = document.getElementById('mobileNav');
+      const backdrop = document.getElementById('mobileNavBackdrop');
+      
+      if (!mobileToggle || !mobileNav) return;
+      
+      let isMenuOpen = false;
+      
+      // Function to open menu
+      function openMenu() {
+        if (isMenuOpen) return;
+        isMenuOpen = true;
+        mobileNav.classList.add('open');
+        if (backdrop) backdrop.classList.add('show');
+        mobileToggle.setAttribute('aria-expanded', 'true');
+        // Prevent body scroll when menu is open
+        document.body.style.overflow = 'hidden';
+      }
+      
+      // Function to close menu
+      function closeMenu() {
+        if (!isMenuOpen) return;
+        isMenuOpen = false;
+        mobileNav.classList.remove('open');
+        if (backdrop) backdrop.classList.remove('show');
+        mobileToggle.setAttribute('aria-expanded', 'false');
+        // Restore body scroll
+        document.body.style.overflow = '';
+      }
+      
+      // Toggle menu on button click
+      mobileToggle.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (isMenuOpen) {
+          closeMenu();
+        } else {
+          openMenu();
+        }
       });
-      // Close mobile nav on link click
-      document.querySelectorAll('.mobile-nav a').forEach(link => {
-        link.addEventListener('click', () => {
-          mobileNav.classList.remove('open');
-          mobileToggle.setAttribute('aria-expanded', 'false');
-        });
+      
+      // Close menu when clicking on a link
+      mobileNav.addEventListener('click', (e) => {
+        if (e.target.tagName === 'A') {
+          closeMenu();
+        }
       });
-    }
+      
+      // Close menu when clicking on backdrop or outside
+      if (backdrop) {
+        backdrop.addEventListener('click', closeMenu);
+      }
+      document.addEventListener('click', (e) => {
+        if (isMenuOpen && 
+            !mobileNav.contains(e.target) && 
+            !mobileToggle.contains(e.target)) {
+          closeMenu();
+        }
+      });
+      
+      // Close menu on Escape key
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && isMenuOpen) {
+          closeMenu();
+        }
+      });
+      
+      // Close menu on window resize (if resizing to desktop)
+      window.addEventListener('resize', () => {
+        if (window.innerWidth > 900 && isMenuOpen) {
+          closeMenu();
+        }
+      });
+    })();
   </script>
   <!-- Main Content -->
   <main>
@@ -121,17 +181,19 @@
         <span class="footer-name">JOBHACKAI</span>
       </div>
       <div class="footer-legal">
-        <p>© 2025 JobHackAI. All rights reserved.</p>
+        <p>© 2026 JobHackAI. All rights reserved.</p>
       </div>
       <div class="footer-links">
         <a href="index.html">Home</a>
-        <a href="support.html">Support</a>
+        <a href="help.html">Help</a>
         <a href="privacy.html">Privacy</a>
+        <a href="cookies.html">Cookies</a>
       </div>
     </div>
   </footer>
   <!-- Load navigation system -->
-  <script src="js/navigation.js"></script>
+  <script src="js/navigation.js?v=20251007-2"></script>
+  <script src="js/universal-logout.js?v=20251007-2"></script>
   <!-- Load Stripe integration -->
   <script src="js/stripe-integration.js"></script>
   <script src="js/main.js" type="module"></script>
@@ -144,7 +206,18 @@
       if (freeTrialBtn) {
         freeTrialBtn.addEventListener('click', (e) => {
           e.preventDefault();
-          window.location.href = 'add-card.html';
+          // Store normalized plan selection in sessionStorage
+          function selectPlan(planId, planName, price) {
+            sessionStorage.setItem("selectedPlan", JSON.stringify({
+              planId,
+              planName,
+              price,
+              source: "pricing-page",
+              timestamp: Date.now()
+            }));
+            window.location.href = "/login.html?plan=" + encodeURIComponent(planId);
+          }
+          selectPlan('trial', '3-Day Trial', '$0');
         });
       }
 
@@ -167,17 +240,24 @@
     });
 
     function handlePaidSubscription(plan, amount) {
-      // Store plan info for checkout
-      localStorage.setItem('selected-plan', plan);
-      localStorage.setItem('plan-amount', amount);
-      
-      // Redirect to checkout page or open Stripe checkout
-      if (window.jobHackAIStripe) {
-        window.jobHackAIStripe.openCheckout(plan, amount);
-      } else {
-        // Fallback to add-card page
-        window.location.href = 'add-card.html';
+      // Store normalized plan selection in sessionStorage
+      function selectPlan(planId, planName, price) {
+        sessionStorage.setItem("selectedPlan", JSON.stringify({
+          planId,
+          planName,
+          price,
+          source: "pricing-page",
+          timestamp: Date.now()
+        }));
+        window.location.href = "/login.html?plan=" + encodeURIComponent(planId);
       }
+      const planMap = {
+        essential: { planId: 'essential', planName: 'Essential Plan', price: '$29/mo' },
+        pro: { planId: 'pro', planName: 'Pro Plan', price: '$59/mo' },
+        premium: { planId: 'premium', planName: 'Premium Plan', price: '$99/mo' }
+      };
+      const payload = planMap[plan] || { planId: plan, planName: 'Selected Plan', price: '' };
+      selectPlan(payload.planId, payload.planName, payload.price);
     }
   </script>
 </body>

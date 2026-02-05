@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>JobHackAI</title>
+  <link rel="icon" type="image/png" href="assets/jobhackai_icon_only_128.png">
+  <link rel="apple-touch-icon" href="assets/jobhackai_icon_only_128.png">
+  <script src="js/dynamic-favicon.js?v=20250111-1"></script>
+  <link rel="stylesheet" href="css/tokens.css">
+  <link rel="stylesheet" href="css/main.css">
+  <link rel="stylesheet" href="css/header.css">
+  <link rel="stylesheet" href="css/footer.css">
+  <style>
+    body { min-height: 100vh; display: flex; flex-direction: column; }
+    .onboarding-container {
+      max-width: 600px;
+      margin: 2rem auto;
+      background: #fff;
+      border-radius: 20px;
+      box-shadow: 0 4px 24px rgba(31,41,55,0.07);
+      padding: 3rem 2.5rem;
+      text-align: center;
+    }
+    .welcome-icon {
+      font-size: 4rem;
+      margin-bottom: 1.5rem;
+      display: block;
+    }
+    .welcome-title {
+      font-size: 2rem;
+      font-weight: 800;
+      color: #232B36;
+      margin-bottom: 1rem;
+    }
+    .welcome-subtitle {
+      font-size: 1.1rem;
+      color: #4B5563;
+      margin-bottom: 2rem;
+      line-height: 1.6;
+    }
+    .feature-card {
+      background: #F9FAFB;
+      border: 1px solid #E5E7EB;
+      border-radius: 12px;
+      padding: 1.5rem;
+      margin-bottom: 1.5rem;
+      text-align: left;
+    }
+    .feature-title {
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: #232B36;
+      margin-bottom: 0.5rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .feature-description {
+      color: #4B5563;
+      line-height: 1.5;
+    }
+    .usage-indicator {
+      background: #E6F7FF;
+      border: 1px solid #91D5FF;
+      border-radius: 8px;
+      padding: 1rem;
+      margin: 1.5rem 0;
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+    .usage-text {
+      color: #1890FF;
+      font-weight: 600;
+    }
+    .cta-buttons {
+      display: flex;
+      gap: 1rem;
+      justify-content: center;
+      margin-top: 2rem;
+      flex-wrap: wrap;
+    }
+    .btn-primary {
+      background: #007A30;
+      color: #fff;
+      padding: 0.8rem 2rem;
+      border: none;
+      border-radius: 8px;
+      font-weight: 700;
+      text-decoration: none;
+      display: inline-block;
+      transition: background 0.2s;
+    }
+    .btn-primary:hover {
+      background: #006B28;
+    }
+    .btn-outline {
+      background: transparent;
+      color: #007A30;
+      padding: 0.8rem 2rem;
+      border: 2px solid #007A30;
+      border-radius: 8px;
+      font-weight: 700;
+      text-decoration: none;
+      display: inline-block;
+      transition: all 0.2s;
+    }
+    .btn-outline:hover {
+      background: #007A30;
+      color: #fff;
+    }
+    .upgrade-card {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      border-radius: 12px;
+      padding: 2rem;
+      margin-top: 2rem;
+      text-align: center;
+    }
+    .upgrade-title {
+      font-size: 1.3rem;
+      font-weight: 700;
+      margin-bottom: 0.5rem;
+    }
+    .upgrade-description {
+      opacity: 0.9;
+      margin-bottom: 1.5rem;
+    }
+    .upgrade-features {
+      list-style: none;
+      padding: 0;
+      margin: 1rem 0;
+    }
+    .upgrade-features li {
+      padding: 0.3rem 0;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .upgrade-features li:before {
+      content: "✓";
+      font-weight: bold;
+    }
+    @media (max-width: 600px) {
+      .onboarding-container { padding: 2rem 1.5rem; margin: 1rem; }
+      .cta-buttons { flex-direction: column; }
+      .btn-primary, .btn-outline { width: 100%; text-align: center; }
+    }
+  </style>
+</head>
+<body>
+  <!-- Header -->
+  <header class="site-header">
+    <div class="container">
+      <a href="index.html" class="nav-logo" aria-label="Go to homepage">
+        <svg width="24" height="24" fill="none" stroke="#1F2937" stroke-width="2" xmlns="http://www.w3.org/2000/svg">
+          <rect x="3" y="7" width="18" height="13" rx="2"/>
+          <path d="M8 7V5a2 2 0 012-2h4a2 2 0 012 2v2"/>
+        </svg>
+        <span>JOBHACKAI</span>
+      </a>
+    </div>
+  </header>
+
+  <main>
+    <div class="onboarding-container">
+      <div class="welcome-icon">🎉</div>
+      <h1 class="welcome-title">Welcome to JobHackAI!</h1>
+      <p class="welcome-subtitle">
+        Your free account is ready. You now have access to basic ATS resume scoring to help improve your job applications.
+      </p>
+
+      <div class="feature-card">
+        <div class="feature-title">
+          📊 ATS Resume Scoring
+        </div>
+        <div class="feature-description">
+          Upload your resume to get an instant ATS compatibility score. This helps you understand how well your resume will perform in applicant tracking systems used by most employers.
+        </div>
+      </div>
+
+      <div class="usage-indicator">
+        <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <circle cx="12" cy="12" r="10"/>
+          <path d="M12 6v6l4 2"/>
+        </svg>
+        <div>
+          <div class="usage-text" id="usageText">1 ATS score remaining this month</div>
+          <div style="font-size: 0.9rem; opacity: 0.8;">Resets on the 1st of each month</div>
+        </div>
+      </div>
+
+      <div class="cta-buttons">
+        <a href="dashboard.html" class="btn-primary">Start Scoring My Resume</a>
+        <a href="pricing-a.html" class="btn-outline">View All Plans</a>
+      </div>
+
+      <div class="upgrade-card">
+        <div class="upgrade-title">Ready for More?</div>
+        <div class="upgrade-description">
+          Upgrade to unlock unlimited ATS scoring, detailed feedback, and advanced career tools.
+        </div>
+        <ul class="upgrade-features">
+          <li>Unlimited ATS resume scoring</li>
+          <li>Detailed resume feedback & optimization</li>
+          <li>Interview question generator</li>
+          <li>Cover letter generator</li>
+          <li>Priority support</li>
+        </ul>
+        <a href="pricing-a.html" class="btn-primary" style="background: rgba(255,255,255,0.2); border: 2px solid white;">
+          Upgrade Now
+        </a>
+      </div>
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer class="site-footer">
+    <div class="footer-container">
+      <div class="footer-brand">
+        <svg class="footer-logo" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect x="3" y="7" width="18" height="13" rx="2" stroke="#1F2937" stroke-width="2"/>
+          <path d="M8 7V5a2 2 0 012-2h4a2 2 0 012 2v2" stroke="#1F2937" stroke-width="2"/>
+        </svg>
+        <span class="footer-name">JOBHACKAI</span>
+      </div>
+      <div class="footer-legal">
+        <p>© 2026 JobHackAI. All rights reserved.</p>
+      </div>
+      <div class="footer-links">
+        <a href="index.html">Home</a>
+        <a href="support.html">Support</a>
+        <a href="privacy.html">Privacy</a>
+      </div>
+    </div>
+  </footer>
+
+  <script src="js/free-account-manager.js"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      // Update usage display
+      const usageText = document.getElementById('usageText');
+      if (usageText && window.freeAccountManager) {
+        const usageStats = window.freeAccountManager.getUsageStats();
+        if (usageStats.atsScoring.remaining > 0) {
+          usageText.textContent = `${usageStats.atsScoring.remaining} ATS score${usageStats.atsScoring.remaining === 1 ? '' : 's'} remaining this month`;
+        } else {
+          usageText.textContent = 'Monthly limit reached - upgrade for unlimited scoring';
+          usageText.style.color = '#FF6B6B';
+        }
+      }
+
+      // Set up auto-redirect after 10 seconds if user doesn't interact
+      let autoRedirectTimer = setTimeout(() => {
+        window.location.href = 'dashboard.html';
+      }, 10000);
+
+      // Cancel auto-redirect on any interaction
+      document.addEventListener('click', () => {
+        clearTimeout(autoRedirectTimer);
+      });
+
+      document.addEventListener('keydown', () => {
+        clearTimeout(autoRedirectTimer);
+      });
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,605 @@
+// ATS Score endpoint
+// Rule-based scoring only (no AI grammar verification)
+
+import { getBearer, verifyFirebaseIdToken } from '../_lib/firebase-auth.js';
+import { scoreResume } from '../_lib/ats-scoring-engine.js';
+import { getOrCreateUserByAuthId, upsertResumeSessionWithScores, isD1Available, getDb, claimFreeATSUsage, getUserPlan } from '../_lib/db.js';
+import { normalizeRoleToFamily } from '../_lib/role-normalizer.js';
+import { sanitizeResumeId } from '../_lib/input-sanitizer.js';
+
+function corsHeaders(origin, env) {
+  const allowedOrigins = [
+    'https://dev.jobhackai.io',
+    'https://qa.jobhackai.io',
+    'https://app.jobhackai.io',
+    'http://localhost:3003',
+    'http://localhost:8788'
+  ];
+  
+  const allowedOrigin = allowedOrigins.includes(origin) ? origin : allowedOrigins[0];
+  
+  return {
+    'Access-Control-Allow-Origin': allowedOrigin,
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    'Access-Control-Max-Age': '86400',
+    'Vary': 'Origin'
+  };
+}
+
+function json(data, status = 200, origin, env) {
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: {
+      'Content-Type': 'application/json',
+      'Cache-Control': 'no-store',
+      ...corsHeaders(origin, env)
+    }
+  });
+}
+
+export async function onRequest(context) {
+  const { request, env } = context;
+  const origin = request.headers.get('Origin') || '';
+
+  if (request.method === 'OPTIONS') {
+    return new Response(null, { headers: corsHeaders(origin, env) });
+  }
+
+  if (request.method !== 'POST') {
+    return json({ success: false, error: 'Method not allowed' }, 405, origin, env);
+  }
+
+  try {
+    // Verify authentication
+    const token = getBearer(request);
+    if (!token) {
+      return json({ success: false, error: 'Unauthorized' }, 401, origin, env);
+    }
+
+    const { uid } = await verifyFirebaseIdToken(token, env.FIREBASE_PROJECT_ID);
+    const plan = await getUserPlan(env, uid);
+
+    // Parse request body - accept both resumeId (for KV) and resumeText (for direct scoring)
+    const body = await request.json();
+    let { resumeId, resumeText, jobTitle } = body;
+
+    // Normalize resumeId to ensure consistent raw_text_location across all code paths
+    if (resumeId) {
+      const resumeIdValidation = sanitizeResumeId(resumeId);
+      if (!resumeIdValidation.valid) {
+        return json({
+          success: false,
+          error: 'invalid-resumeId',
+          message: resumeIdValidation.error || 'Invalid resume ID'
+        }, 400, origin, env);
+      }
+      resumeId = resumeIdValidation.sanitized;
+    }
+
+    // Normalize job title - optional for scoring
+    const normalizedJobTitle = (jobTitle && typeof jobTitle === 'string')
+      ? jobTitle.trim()
+      : '';
+
+    // Get resume text - prefer resumeText from request, fall back to KV if available
+    let text = resumeText;
+    let resumeData = null;
+    // Track whether a free ATS claim was completed for this request
+    let freeAtsClaimed = false;
+
+    if (!text && resumeId) {
+      // Try to load from KV if resumeText not provided
+      const kv = env.JOBHACKAI_KV;
+      if (kv) {
+        try {
+          const resumeKey = `resume:${resumeId}`;
+          const resumeDataStr = await kv.get(resumeKey);
+          if (resumeDataStr) {
+            resumeData = JSON.parse(resumeDataStr);
+            // Verify resume belongs to user
+            if (resumeData.uid !== uid) {
+              return json({ success: false, error: 'Unauthorized' }, 403, origin, env);
+            }
+            text = resumeData.text;
+          }
+        } catch (kvError) {
+          console.warn('[ATS-SCORE] KV read failed (non-fatal):', kvError);
+          // Continue without KV - will use resumeText if provided
+        }
+      } else {
+        console.warn('[ATS-SCORE] KV missing and no resumeText provided');
+      }
+    }
+
+    // Validate text is available
+    if (!text || typeof text !== 'string' || text.trim().length < 100) {
+      return json({ 
+        success: false, 
+        error: 'invalid-text',
+        message: 'Resume text not available for scoring. Please upload a text-based PDF, DOCX, or TXT file.' 
+      }, 400, origin, env);
+    }
+
+    // Cost guardrails
+    if (text.length > 80000) {
+      return json({ 
+        success: false, 
+        error: 'Resume text exceeds 80,000 character limit' 
+      }, 400, origin, env);
+    }
+
+    // KV-based features (optional - only if KV is available)
+    const kv = env.JOBHACKAI_KV;
+    
+    // Throttle check (Trial only) - best effort, skip if KV unavailable
+    if (plan === 'trial' && kv) {
+      try {
+        const throttleKey = `atsThrottle:${uid}`;
+        const lastRun = await kv.get(throttleKey);
+        
+        if (lastRun) {
+          const lastRunTime = parseInt(lastRun, 10);
+          const now = Date.now();
+          const timeSinceLastRun = now - lastRunTime;
+          
+          if (timeSinceLastRun < 30000) { // 30 seconds
+            const retryAfter = Math.ceil((30000 - timeSinceLastRun) / 1000);
+            return json({
+              success: false,
+              error: 'Rate limit exceeded',
+              message: 'Please wait before running another ATS score.',
+              retryAfter
+            }, 429, origin, env);
+          }
+        }
+      } catch (throttleError) {
+        console.warn('[ATS-SCORE] Throttle check failed (non-fatal):', throttleError);
+        // Continue without throttling if KV unavailable
+      }
+    }
+
+    // Cache check (all plans) - best effort, skip if KV unavailable
+    let cachedResult = null;
+    if (kv) {
+      try {
+        // FIX: Use content-based hash instead of resumeId to ensure same resume = same cache
+        // This prevents different users from getting different cached scores for the same resume
+        // Use first 2000 chars for better uniqueness while keeping hash fast
+        const textHash = await hashString(text.substring(0, 2000));
+        const cacheKeyBase = `${textHash}:${normalizedJobTitle}:ats`;
+        const cacheHash = await hashString(cacheKeyBase);
+        const cacheKey = `atsCache:${cacheHash}`;
+        const cached = await kv.get(cacheKey);
+        
+        if (cached) {
+          try {
+            const cachedData = JSON.parse(cached);
+            const cacheAge = Date.now() - cachedData.timestamp;
+            
+            // Cache valid for 24 hours
+            if (cacheAge < 86400000) {
+              cachedResult = cachedData.result;
+            }
+          } catch (parseError) {
+            console.error('[ATS-SCORE] Cache parse error:', parseError);
+            // Continue without cache if parse fails
+          }
+        }
+      } catch (cacheError) {
+        console.warn('[ATS-SCORE] Cache check failed (non-fatal):', cacheError);
+        // Continue without cache if KV unavailable
+      }
+    }
+
+    // If cached, persist cached result to D1 first, then return cached result.
+    if (cachedResult) {
+      // Missing resumeId -> client error
+      if (!resumeId) {
+        return json({
+          success: false,
+          error: 'missing-resumeId',
+          message: 'resumeId is required'
+        }, 400, origin, env);
+      }
+      // Require D1 to be available to persist cached results.
+      if (!isD1Available(env)) {
+        console.warn('[ATS-SCORE] D1 not available while handling cached result', { resumeId, uid });
+        return json({
+          success: false,
+          error: 'd1-unavailable',
+          message: 'Database not available to persist cached ATS result'
+        }, 503, origin, env);
+      }
+
+      try {
+        const d1User = await getOrCreateUserByAuthId(env, uid, null);
+        if (!d1User) {
+          console.warn('[ATS-SCORE] D1 user resolution failed while handling cached result', { resumeId, uid });
+          return json({
+            success: false,
+            error: 'd1-user-resolution-failed',
+            message: 'Failed to resolve user for persistence'
+          }, 503, origin, env);
+        }
+
+        // Map cachedResult into the helper's expected full ruleBasedScores shape
+        const cachedRuleBasedScores = {
+          overallScore: cachedResult.score,
+          keywordScore: { score: cachedResult.breakdown?.keywordScore ?? 0, feedback: '' },
+          formattingScore: { score: cachedResult.breakdown?.formattingScore ?? 0, feedback: '' },
+          structureScore: { score: cachedResult.breakdown?.structureScore ?? 0, feedback: '' },
+          toneScore: { score: cachedResult.breakdown?.toneScore ?? 0, feedback: '' },
+          grammarScore: { score: cachedResult.breakdown?.grammarScore ?? 0, feedback: '' },
+          recommendations: cachedResult.recommendations || [],
+          detectedHeadings: cachedResult.detectedHeadings || null,
+          extractionQuality: cachedResult.extractionQuality ?? null
+        };
+
+        const session = await upsertResumeSessionWithScores(env, d1User.id, {
+          resumeId,
+          role: normalizedJobTitle || null,
+          atsScore: cachedResult.score ?? null,
+          ruleBasedScores: cachedRuleBasedScores
+        });
+
+        if (!session) {
+          console.warn('[ATS-SCORE] D1 upsert returned null while handling cached result', { resumeId, uid });
+          return json({
+            success: false,
+            error: 'd1-persist-failed',
+            message: 'Failed to persist cached ATS result to database'
+          }, 503, origin, env);
+        }
+        // NOTE: Do not claim free usage on cached-result re-reads; free claims occur only
+        // in the non-cached path after successful persistence to prevent double-consumption.
+      } catch (err) {
+        console.warn('[ATS-SCORE] D1 persistence failed while handling cached result:', err?.message);
+        return json({
+          success: false,
+          error: 'd1-persist-failed',
+          message: 'Failed to persist cached ATS result to database'
+        }, 503, origin, env);
+      }
+
+      console.log(`[ATS-SCORE] Cache hit persisted for ${uid}`, { resumeId, plan });
+      return json({
+        success: true,
+        ...cachedResult,
+        cached: true
+      }, 200, origin, env);
+    }
+
+    // ATOMIC Usage limits (Free plan - 1 lifetime): D1 is final source of truth, KV is only cache
+    let d1User = null;
+    if (plan === 'free') {
+      if (!isD1Available(env))
+        return json({ success: false, error: 'Cannot verify free ATS usage', message: 'Please try again or contact support.' }, 500, origin, env);
+      const db = getDb(env);
+      d1User = await getOrCreateUserByAuthId(env, uid, null);
+      if (!db || !d1User)
+        return json({ success: false, error: 'Cannot verify free ATS usage', message: 'Please try again or contact support.' }, 500, origin, env);
+      // Pre-flight check to provide user a proper 403 if already used
+      const result = await db.prepare(`SELECT COUNT(*) as count FROM usage_events WHERE user_id = ? AND feature = 'ats_score'`).bind(d1User.id).first();
+      const d1FreeCount = result?.count || 0;
+      if (d1FreeCount >= 1) {
+        return json({
+          success: false,
+          error: 'Usage limit reached',
+          message: 'You have used your free ATS score. Upgrade to Trial or Essential for unlimited scoring.',
+          upgradeRequired: true
+        }, 403, origin, env);
+      }
+    }
+
+    // Get isMultiColumn from resumeData if available, otherwise default to false
+    const isMultiColumn = resumeData?.isMultiColumn || false;
+
+    // Run rule-based scoring (NO AI TOKENS)
+    let ruleBasedScores;
+    try {
+      console.log('[ATS-SCORE] Input length:', text.length, 'jobTitle:', normalizedJobTitle);
+      console.log('[ATS-SCORE] Starting scoring:', {
+        textLength: text.length,
+        jobTitle: normalizedJobTitle,
+        isMultiColumn
+      });
+      
+      ruleBasedScores = await scoreResume(
+        text,
+        normalizedJobTitle,
+        { isMultiColumn },
+        env
+      );
+      
+      console.log('[ATS-SCORE] Score result:', {
+        overallScore: ruleBasedScores?.overallScore,
+        keywordScore: ruleBasedScores?.keywordScore?.score,
+        formattingScore: ruleBasedScores?.formattingScore?.score,
+        structureScore: ruleBasedScores?.structureScore?.score,
+        toneScore: ruleBasedScores?.toneScore?.score,
+        grammarScore: ruleBasedScores?.grammarScore?.score
+      });
+      
+      // Validate scoreResume returned a valid object
+      if (!ruleBasedScores || typeof ruleBasedScores !== 'object') {
+        console.error('[ATS-SCORE] scoreResume returned invalid result:', ruleBasedScores);
+        throw new Error('Scoring engine returned invalid result');
+      }
+      
+      // Validate required properties exist
+      if (typeof ruleBasedScores.overallScore !== 'number' ||
+          !ruleBasedScores.keywordScore ||
+          typeof ruleBasedScores.keywordScore.score !== 'number' ||
+          !ruleBasedScores.formattingScore ||
+          typeof ruleBasedScores.formattingScore.score !== 'number' ||
+          !ruleBasedScores.structureScore ||
+          typeof ruleBasedScores.structureScore.score !== 'number' ||
+          !ruleBasedScores.toneScore ||
+          typeof ruleBasedScores.toneScore.score !== 'number' ||
+          !ruleBasedScores.grammarScore ||
+          typeof ruleBasedScores.grammarScore.score !== 'number') {
+        console.error('[ATS-SCORE] scoreResume missing required properties:', {
+          overallScore: ruleBasedScores.overallScore,
+          keywordScore: ruleBasedScores.keywordScore,
+          formattingScore: ruleBasedScores.formattingScore,
+          structureScore: ruleBasedScores.structureScore,
+          toneScore: ruleBasedScores.toneScore,
+          grammarScore: ruleBasedScores.grammarScore
+        });
+        throw new Error('Scoring engine returned incomplete result');
+      }
+
+      console.log('[ATS-SCORE] Scoring completed successfully');
+      
+      // Log role usage for gap detection (non-blocking)
+      if (uid && normalizedJobTitle && ruleBasedScores?.keywordScore?.score !== undefined) {
+        try {
+          const db = getDb(env);
+          if (db) {
+            const roleFamily = normalizeRoleToFamily(normalizedJobTitle);
+            // Async fire-and-forget (don't await)
+            db.prepare(
+              'INSERT INTO role_usage_log (user_id, role_label, role_family, keyword_score, created_at) VALUES (?, ?, ?, ?, datetime(\'now\'))'
+            ).bind(uid, normalizedJobTitle, roleFamily, ruleBasedScores.keywordScore.score).run()
+              .catch(err => console.warn('[ATS-SCORE] Role usage log failed (non-fatal):', err.message));
+          }
+        } catch (telemetryError) {
+          // Non-blocking: log but don't fail the request
+          console.warn('[ATS-SCORE] Telemetry logging failed (non-fatal):', telemetryError.message);
+        }
+      }
+    } catch (scoreError) {
+      console.error('[ATS-SCORE] Scoring error:', scoreError);
+      return json({ 
+        success: false, 
+        error: 'scoring-failed',
+        message: 'Unable to score resume at this time. Please try again in a few minutes.'
+      }, 500, origin, env);
+    }
+
+    // Validate scoring result
+    if (!ruleBasedScores || typeof ruleBasedScores.overallScore !== 'number') {
+      console.error('[ATS-SCORE] Invalid scoring result:', ruleBasedScores);
+      return json({ 
+        success: false, 
+        error: 'invalid-result',
+        message: 'Scoring engine returned invalid data. Please try again.'
+      }, 500, origin, env);
+    }
+
+    // NOTE: Free usage claim will occur only after successful D1 persistence (see below).
+
+    // --- D1 Persistence: Store ruleBasedScores as source of truth ---
+    // CRITICAL: Require D1 write to succeed for a 200 response.
+    if (!resumeId) {
+      return json({
+        success: false,
+        error: 'missing-resumeId',
+        message: 'resumeId is required'
+      }, 400, origin, env);
+    }
+    if (!isD1Available(env)) {
+      console.warn('[ATS-SCORE] D1 not available before persistence', { resumeId, uid });
+      return json({
+        success: false,
+        error: 'd1-unavailable',
+        message: 'Database not available to persist ATS result'
+      }, 503, origin, env);
+    }
+
+    try {
+      const d1User = await getOrCreateUserByAuthId(env, uid, null);
+      if (!d1User) {
+        console.warn('[ATS-SCORE] D1 user resolution failed before persistence', { resumeId, uid });
+        return json({
+          success: false,
+          error: 'd1-user-resolution-failed',
+          message: 'Failed to resolve user for persistence'
+        }, 503, origin, env);
+      }
+
+      const session = await upsertResumeSessionWithScores(env, d1User.id, {
+        resumeId: resumeId,
+        role: normalizedJobTitle || null,
+        atsScore: ruleBasedScores.overallScore,
+        ruleBasedScores: ruleBasedScores
+      });
+
+      if (!session) {
+        console.warn('[ATS-SCORE] D1 upsert returned null', { resumeId, uid });
+        return json({
+          success: false,
+          error: 'd1-persist-failed',
+          message: 'Failed to persist ATS result to database'
+        }, 503, origin, env);
+      }
+
+      console.log('[ATS-SCORE] Stored ruleBasedScores in D1', { resumeId, uid, sessionId: session.id, ats_ready: session.ats_ready });
+    } catch (d1Error) {
+      console.warn('[ATS-SCORE] D1 persistence failed (fatal):', d1Error?.message);
+      return json({
+        success: false,
+        error: 'd1-persist-failed',
+        message: 'Failed to persist ATS result to database'
+      }, 503, origin, env);
+    }
+
+    // For free plan: claim usage only after successful persistence
+    if (plan === 'free') {
+      try {
+        const claimOk = await claimFreeATSUsage(env, d1User.id);
+        if (!claimOk) {
+          return json({
+            success: false,
+            error: 'Usage limit reached',
+            message: 'You have used your free ATS score. Upgrade to Trial or Essential for unlimited scoring.',
+            upgradeRequired: true
+          }, 403, origin, env);
+        }
+        freeAtsClaimed = true;
+      } catch (claimErr) {
+        console.warn('[ATS-SCORE] Free ATS claim failed:', claimErr?.message);
+        return json({
+          success: false,
+          error: 'd1-claim-failed',
+          message: 'Failed to record ATS usage'
+        }, 503, origin, env);
+      }
+    }
+
+    // Generate AI feedback (only for narrative, not scores)
+    // TODO: [OPENAI INTEGRATION POINT] - Uncomment when OpenAI is configured
+    // let aiFeedback = null;
+    // try {
+    //   aiFeedback = await generateATSFeedback(
+    //     resumeData.text,
+    //     ruleBasedScores,
+    //     jobTitle,
+    //     env
+    //   );
+    // } catch (aiError) {
+    //   console.error('[ATS-SCORE] AI feedback error:', aiError);
+    //   // Continue without AI feedback if it fails
+    // }
+
+    // For now, use rule-based scores only (AI integration pending)
+    // Build feedback array while preserving legacy behavior:
+    // - Only include categories that actually have feedback (non-empty strings)
+    // - Avoid emitting bare empty-string placeholders that can confuse consumers
+    const feedback = [
+      ruleBasedScores.keywordScore.feedback,
+      ruleBasedScores.formattingScore.feedback,
+      ruleBasedScores.structureScore.feedback,
+      ruleBasedScores.toneScore.feedback,
+      ruleBasedScores.grammarScore.feedback
+    ].filter((item) => typeof item === 'string' && item.trim().length > 0);
+
+    const result = {
+      score: ruleBasedScores.overallScore,
+      breakdown: {
+        keywordScore: ruleBasedScores.keywordScore.score,
+        formattingScore: ruleBasedScores.formattingScore.score,
+        structureScore: ruleBasedScores.structureScore.score,
+        toneScore: ruleBasedScores.toneScore.score,
+        grammarScore: ruleBasedScores.grammarScore.score
+      },
+      feedback,
+      recommendations: ruleBasedScores.recommendations || [],
+      // Trust-first: surface extraction confidence to drive UI messaging (non-breaking additive fields)
+      extractionQuality: ruleBasedScores.extractionQuality || null,
+      detectedHeadings: ruleBasedScores.detectedHeadings || null
+    };
+
+    // Cache result (24 hours) - best effort, skip if KV unavailable
+    if (kv) {
+      try {
+        // FIX: Use same content-based hash for cache write
+        const textHash = await hashString(text.substring(0, 2000));
+        const cacheKeyBase = `${textHash}:${normalizedJobTitle}:ats`;
+        const cacheHash = await hashString(cacheKeyBase);
+        const cacheKey = `atsCache:${cacheHash}`;
+        await kv.put(cacheKey, JSON.stringify({
+          result,
+          timestamp: Date.now()
+        }), {
+          expirationTtl: 86400 // 24 hours
+        });
+      } catch (cacheError) {
+        console.warn('[ATS-SCORE] Cache write failed (non-fatal):', cacheError);
+        // Continue without caching if write fails
+      }
+    }
+
+    // Update throttle (Trial only) - best effort, skip if KV unavailable
+    if (plan === 'trial' && kv) {
+      try {
+        const throttleKey = `atsThrottle:${uid}`;
+        await kv.put(throttleKey, String(Date.now()), {
+          expirationTtl: 60 // 1 minute
+        });
+      } catch (throttleError) {
+        console.warn('[ATS-SCORE] Throttle write failed (non-fatal):', throttleError);
+        // Continue without throttling if write fails
+      }
+    }
+
+    // Track usage (Free plan only) - best effort, skip if KV unavailable
+    if (plan === 'free' && kv) {
+      try {
+        const usageKey = `atsUsage:${uid}:lifetime`;
+        await kv.put(usageKey, '1'); // No expiration - lifetime limit
+      } catch (usageError) {
+        console.warn('[ATS-SCORE] Usage tracking failed (non-fatal):', usageError);
+        // Continue without tracking if write fails
+      }
+    }
+
+    // Persist ATS score to KV + Firestore hybrid (best effort)
+    if (kv && resumeId) {
+      try {
+        const lastResumeKey = `user:${uid}:lastResume`;
+        const resumeState = {
+          uid,
+          resumeId,
+          score: result.score,
+          breakdown: result.breakdown,
+          summary: result.feedback?.[0] || '',
+          jobTitle: normalizedJobTitle,
+          extractionQuality: result.extractionQuality || null, // Include extractionQuality for consistency
+          timestamp: Date.now(),
+          syncedAt: Date.now()
+        };
+        await kv.put(lastResumeKey, JSON.stringify(resumeState), {
+          expirationTtl: 2592000 // 30 days
+        });
+      } catch (persistError) {
+        console.warn('[ATS-SCORE] Persistence failed (non-fatal):', persistError);
+        // Continue without persistence if write fails
+      }
+    }
+
+    return json({
+      success: true,
+      ...result
+    }, 200, origin, env);
+
+  } catch (error) {
+    console.error('[ATS-SCORE] Error:', error);
+    return json({ 
+      success: false, 
+      error: 'Internal server error',
+      message: error.message 
+    }, 500, origin, env);
+  }
+}
+
+// Simple hash function for cache keys
+async function hashString(str) {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(str);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+}
+

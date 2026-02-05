@@ -9,7 +9,7 @@
 --color-text-secondary: #4B5563;     /* Secondary text (gray) */
 --color-text-muted: #6B7280;         /* Muted text */
 --color-card-bg: #FFFFFF;            /* Cards, nav, footer */
---color-cta-green: #00E676;          /* Primary CTA (button green) */
+--color-cta-green: #007A30;          /* Primary CTA (button green), WCAG AA */
 --color-accent-blue: #007BFF;        /* Accent blue (links, outlines) */
 --color-divider: #E5E7EB;            /* Dividers, borders */
 ```

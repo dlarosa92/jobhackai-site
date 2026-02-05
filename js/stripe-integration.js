@@ -9,7 +9,12 @@ class JobHackAIStripe {
     this.stripe = null;
     this.elements = null;
     this.cardElement = null;
-    this.isDemoMode = true; // Set to false for production
+    // Auto-detect demo vs real mode:
+    // - Use REAL mode on dev.jobhackai.io to exercise the new API endpoints
+    // - Allow overriding via window.__forceStripeDemo = true
+    this.isDemoMode = (typeof window !== 'undefined' && window.__forceStripeDemo === true)
+      ? true
+      : (location.hostname !== 'dev.jobhackai.io');
     this.demoStripeKey = 'pk_test_demo_key_for_wix_compatibility';
     this.productionStripeKey = 'pk_live_your_actual_stripe_key';
     
@@ -187,7 +192,7 @@ class JobHackAIStripe {
       this.handleCardChange(event);
     });
 
-    // Handle form submission for both add-card and checkout pages
+    // Handle form submission for checkout pages
     const cardForm = document.getElementById('cardForm');
     const checkoutForm = document.getElementById('checkoutForm');
     
@@ -282,7 +287,7 @@ class JobHackAIStripe {
       errorDiv.style.display = 'block';
     } else {
       submitBtn.disabled = false;
-      submitBtn.style.background = '#00E676';
+      submitBtn.style.background = '#007A30';
       errorDiv.textContent = '';
       errorDiv.style.display = 'none';
     }
@@ -336,7 +341,12 @@ class JobHackAIStripe {
       this.handlePaymentError(error.message, isCheckout);
     } finally {
       submitBtn.disabled = false;
-      const selectedPlan = localStorage.getItem('selected-plan');
+      // Get selected plan from sessionStorage
+      let selectedPlan = null;
+      try {
+        const stored = sessionStorage.getItem('selectedPlan');
+        selectedPlan = stored ? JSON.parse(stored).planId : null;
+      } catch (e) {}
       if (isCheckout && selectedPlan && selectedPlan !== 'trial') {
         submitBtn.textContent = `Subscribe to ${selectedPlan.charAt(0).toUpperCase() + selectedPlan.slice(1)}`;
       } else {
@@ -363,7 +373,12 @@ class JobHackAIStripe {
       this.handlePaymentError(error.message, isCheckout);
     } finally {
       submitBtn.disabled = false;
-      const selectedPlan = localStorage.getItem('selected-plan');
+      // Get selected plan from sessionStorage
+      let selectedPlan = null;
+      try {
+        const stored = sessionStorage.getItem('selectedPlan');
+        selectedPlan = stored ? JSON.parse(stored).planId : null;
+      } catch (e) {}
       if (isCheckout && selectedPlan && selectedPlan !== 'trial') {
         submitBtn.textContent = `Subscribe to ${selectedPlan.charAt(0).toUpperCase() + selectedPlan.slice(1)}`;
       } else {
@@ -386,8 +401,12 @@ class JobHackAIStripe {
   }
 
   async handleSuccessfulPayment(paymentIntent) {
-    // Get selected plan info
-    const selectedPlan = localStorage.getItem('selected-plan');
+    // Get selected plan info from sessionStorage
+    let selectedPlan = null;
+    try {
+      const stored = sessionStorage.getItem('selectedPlan');
+      selectedPlan = stored ? JSON.parse(stored).planId : null;
+    } catch (e) {}
     const planAmount = localStorage.getItem('plan-amount');
     
     // Store user plan and payment info
@@ -499,7 +518,7 @@ class JobHackAIStripe {
       
       container.innerHTML = `
         <div style="text-align: center; padding: 2rem;">
-          <div style="color: #00E676; font-size: 3rem; margin-bottom: 1rem;">✓</div>
+          <div style="color: #007A30; font-size: 3rem; margin-bottom: 1rem;">✓</div>
           <h2 style="color: #232B36; margin-bottom: 1rem;">Payment Successful!</h2>
           <p style="color: #4B5563;">Your ${planName} has been activated. Redirecting to dashboard...</p>
         </div>
@@ -538,11 +557,31 @@ class JobHackAIStripe {
   async openCheckout(plan, amount) {
     if (this.isDemoMode) {
       // Demo mode - redirect to checkout page with plan info
-      localStorage.setItem('selected-plan', plan);
+      const planNames = {
+        'trial': '3-Day Free Trial',
+        'essential': 'Essential Plan',
+        'pro': 'Pro Plan',
+        'premium': 'Premium Plan',
+        'free': 'Free Account'
+      };
+      const planPrices = {
+        'trial': '$0 for 3 days',
+        'essential': '$29/mo',
+        'pro': '$59/mo',
+        'premium': '$99/mo',
+        'free': '$0/mo'
+      };
+      sessionStorage.setItem('selectedPlan', JSON.stringify({
+        planId: plan,
+        planName: planNames[plan] || 'Selected Plan',
+        price: planPrices[plan] || amount ? `$${amount / 100}/mo` : '$0/mo',
+        source: 'stripe-integration',
+        timestamp: Date.now()
+      }));
       localStorage.setItem('plan-amount', amount);
       
       if (plan === 'trial') {
-        window.location.href = 'add-card.html';
+        window.location.href = 'account-setting.html';
       } else {
         window.location.href = 'checkout.html';
       }
@@ -555,32 +594,56 @@ class JobHackAIStripe {
     }
 
     try {
-      // Create checkout session (would call your backend)
-      const response = await fetch('/api/create-checkout-session', {
+      // Resolve auth user for backend mapping
+      const authUser = (function getAuthUser(){
+        try {
+          const u = window.FirebaseAuthManager?.getCurrentUser?.();
+          if (u && u.uid && u.email) return { uid: u.uid, email: u.email };
+        } catch(_){}
+        // Fallback: Get user data from Firebase SDK keys (works synchronously)
+        // FirebaseAuthManager.getCurrentUser() returns null until onAuthStateChanged fires
+        function getUserFromFirebaseKeys() {
+          try {
+            const firebaseKeys = Object.keys(localStorage).filter(k => k.startsWith('firebase:authUser:'));
+            if (firebaseKeys.length > 0) {
+              const keyData = JSON.parse(localStorage.getItem(firebaseKeys[0]) || '{}');
+              if (keyData.uid && keyData.email) {
+                return { uid: keyData.uid, email: keyData.email };
+              }
+            }
+          } catch (e) {
+            console.warn('Failed to get user from Firebase keys:', e);
+          }
+          return null;
+        }
+        return getUserFromFirebaseKeys();
+      })();
+
+      if (!authUser) {
+        console.error('Missing authenticated user for checkout');
+        alert('Please log in to start your subscription.');
+        window.location.href = 'login.html';
+        return;
+      }
+
+      // Create checkout session (Cloudflare Pages Function)
+      const response = await fetch('/api/stripe-checkout', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
           plan: plan,
-          amount: amount,
-          success_url: window.location.origin + '/dashboard.html',
-          cancel_url: window.location.origin + '/pricing-a.html',
+          firebaseUid: authUser.uid,
+          email: authUser.email,
+          forceNew: plan === 'trial'
         }),
       });
 
-      const session = await response.json();
-
+      const { ok, url, error } = await response.json();
+      if (!ok || !url) throw new Error(error || 'Failed to create checkout session');
       // Redirect to Stripe Checkout
-      const result = await this.stripe.redirectToCheckout({
-        sessionId: session.id,
-      });
-
-      if (result.error) {
-        console.error('Checkout error:', result.error);
-        // Fallback to checkout page
-        window.location.href = 'checkout.html';
-      }
+      window.location.href = url;
     } catch (error) {
       console.error('Failed to create checkout session:', error);
       // Fallback to checkout page
@@ -602,21 +665,40 @@ class JobHackAIStripe {
     }
 
     try {
-      // Create customer portal session (would call your backend)
-      const response = await fetch('/api/create-portal-session', {
+      // Resolve current user
+      let uid = null;
+      try { uid = window.FirebaseAuthManager?.getCurrentUser?.()?.uid || null; } catch(_){}
+      // Fallback: Get UID from Firebase SDK keys (works synchronously)
+      // FirebaseAuthManager.getCurrentUser() returns null until onAuthStateChanged fires
+      if (!uid) {
+        try {
+          const firebaseKeys = Object.keys(localStorage).filter(k => k.startsWith('firebase:authUser:'));
+          if (firebaseKeys.length > 0) {
+            const keyData = JSON.parse(localStorage.getItem(firebaseKeys[0]) || '{}');
+            uid = keyData.uid || null;
+          }
+        } catch (e) {
+          console.warn('Failed to get UID from Firebase keys:', e);
+        }
+      }
+      if (!uid) {
+        alert('Please log in to manage your subscription.');
+        window.location.href = 'login.html';
+        return;
+      }
+
+      // Create customer portal session (Cloudflare Pages Function)
+      const response = await fetch('/api/billing-portal', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          return_url: window.location.origin + '/account-setting.html',
-        }),
+        body: JSON.stringify({ firebaseUid: uid }),
       });
 
-      const session = await response.json();
-
-      // Redirect to Stripe Customer Portal
-      window.location.href = session.url;
+      const { ok, url, error } = await response.json();
+      if (!ok || !url) throw new Error(error || 'Failed to create billing portal session');
+      window.location.href = url;
     } catch (error) {
       console.error('Failed to create portal session:', error);
     }
@@ -645,7 +727,7 @@ class JobHackAIStripe {
         <p style="color: #4B5563; margin-bottom: 1.5rem;">This is a demo of subscription management. In production, this would redirect to Stripe's customer portal.</p>
         <div style="display: flex; gap: 1rem;">
           <button onclick="this.closest('.subscription-modal').remove()" style="padding: 0.5rem 1rem; border: 1px solid #E5E7EB; background: white; border-radius: 6px; cursor: pointer;">Close</button>
-          <button onclick="window.location.href='account-setting.html'" style="padding: 0.5rem 1rem; background: #00E676; color: white; border: none; border-radius: 6px; cursor: pointer;">Account Settings</button>
+          <button onclick="window.location.href='account-setting.html'" style="padding: 0.5rem 1rem; background: #007A30; color: white; border: none; border-radius: 6px; cursor: pointer;">Account Settings</button>
         </div>
       </div>
     `;
@@ -654,6 +736,387 @@ class JobHackAIStripe {
     container.appendChild(modal);
   }
 }
+
+function showUpgradeInfoBanner(message, linkHref) {
+  const existing = document.getElementById('jh-upgrade-info-banner');
+  if (existing) {
+    existing.remove();
+  }
+  const banner = document.createElement('div');
+  banner.id = 'jh-upgrade-info-banner';
+  banner.style.cssText = `
+    position: fixed;
+    top: 16px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 10010;
+    background: #0F172A;
+    color: #F8FAFC;
+    padding: 0.85rem 1rem;
+    border-radius: 10px;
+    box-shadow: 0 12px 24px rgba(15, 23, 42, 0.35);
+    display: flex;
+    gap: 0.75rem;
+    align-items: center;
+    max-width: min(640px, 92vw);
+    font-size: 0.95rem;
+  `;
+  const text = document.createElement('div');
+  text.textContent = message;
+  const link = document.createElement('a');
+  link.href = linkHref;
+  link.textContent = 'Open billing portal';
+  link.style.cssText = 'color: #38BDF8; text-decoration: underline; white-space: nowrap;';
+  const close = document.createElement('button');
+  close.type = 'button';
+  close.textContent = 'Dismiss';
+  close.style.cssText = 'margin-left: auto; background: transparent; color: #F8FAFC; border: 1px solid #475569; border-radius: 999px; padding: 0.25rem 0.6rem; cursor: pointer;';
+  close.addEventListener('click', () => banner.remove());
+  banner.appendChild(text);
+  banner.appendChild(link);
+  banner.appendChild(close);
+  document.body.appendChild(banner);
+}
+
+// -------- Shared upgrade confirmation + toast utilities --------
+
+const PLAN_COPY = {
+  trial: { label: '3-Day Trial', price: '$0 for 3 days', benefit: 'Try everything before you commit.' },
+  essential: { label: 'Essential', price: '$29/mo', benefit: 'Unlock resume feedback and interview prep.' },
+  pro: { label: 'Pro', price: '$59/mo', benefit: 'Add rewriting, cover letters, and mock interviews.' },
+  premium: { label: 'Premium', price: '$99/mo', benefit: 'Full suite plus LinkedIn optimizer and priority review.' }
+};
+
+function createInlineToast(message, variant = 'success') {
+  const existing = document.getElementById('jh-inline-toast');
+  if (existing) existing.remove();
+
+  const toast = document.createElement('div');
+  toast.id = 'jh-inline-toast';
+  const bg = variant === 'error' ? '#EF4444' : '#007A30';
+  toast.style.cssText = `
+    position: fixed;
+    bottom: 1.5rem;
+    right: 1.5rem;
+    background: ${bg};
+    color: #fff;
+    padding: 0.9rem 1.2rem;
+    border-radius: 10px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.14);
+    z-index: 10020;
+    font-family: var(--font-family-base, Inter, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif);
+    font-weight: 600;
+    letter-spacing: 0.01em;
+    display: flex;
+    gap: 0.6rem;
+    align-items: center;
+    animation: slideInUp 0.22s ease;
+  `;
+  toast.innerHTML = `
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3">
+      ${variant === 'error'
+        ? '<circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>'
+        : '<polyline points="20 6 9 17 4 12" />'}
+    </svg>
+    <span>${message}</span>
+  `;
+
+  let style = document.getElementById('jh-inline-toast-styles');
+  if (!style) {
+    style = document.createElement('style');
+    style.id = 'jh-inline-toast-styles';
+    style.textContent = `@keyframes slideInUp { from { transform: translateY(12px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }`;
+    document.head.appendChild(style);
+  }
+
+  document.body.appendChild(toast);
+  setTimeout(() => {
+    toast.style.opacity = '0';
+    toast.style.transform = 'translateY(10px)';
+    setTimeout(() => toast.remove(), 200);
+  }, 3200);
+}
+
+function getPlanCopy(plan) {
+  return PLAN_COPY[plan] || { label: plan ? plan.charAt(0).toUpperCase() + plan.slice(1) : 'Plan', price: '', benefit: 'Unlock more JobHackAI features.' };
+}
+
+function showUpgradeConfirmation(plan, options = {}) {
+  const {
+    context = 'upgrade',
+    mode = 'checkout',
+    currentPlan = (localStorage.getItem('user-plan') || 'free'),
+    detail,
+    showPricing = true
+  } = options;
+
+  return new Promise((resolve) => {
+    const existing = document.getElementById('jh-upgrade-confirmation');
+    if (existing) existing.remove();
+
+    const copy = getPlanCopy(plan);
+    const heading = options.title || `Upgrade to ${copy.label}?`;
+    const sub = options.subtitle || (mode === 'checkout'
+      ? 'You will be redirected to secure checkout to complete your upgrade.'
+      : 'Your plan will update and your new benefits will unlock right away.');
+    const benefitLine = options.benefit || copy.benefit;
+
+    const overlay = document.createElement('div');
+    overlay.id = 'jh-upgrade-confirmation';
+    overlay.style.cssText = `
+      position: fixed;
+      inset: 0;
+      background: rgba(12, 18, 38, 0.58);
+      backdrop-filter: blur(3px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 1rem;
+      z-index: 10030;
+    `;
+
+    overlay.innerHTML = `
+      <div style="
+        background: #FFFFFF;
+        border-radius: 18px;
+        padding: 1.75rem;
+        width: min(520px, 96vw);
+        box-shadow: 0 24px 60px rgba(0,0,0,0.16);
+        font-family: var(--font-family-base, 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif);
+        animation: fadeIn 0.2s ease, rise 0.25s ease;
+      ">
+        <div style="display:flex; gap:0.9rem; align-items:center; margin-bottom:1rem;">
+          <div style="width:48px;height:48px;border-radius:14px;background:linear-gradient(135deg,#007A30,#006B28);display:grid;place-items:center;">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.4"><polyline points="20 6 9 17 4 12" /></svg>
+          </div>
+          <div>
+            <div style="font-size:1.2rem;font-weight:800;color:#0F172A;">${heading}</div>
+            <div style="font-size:0.98rem;color:#475569;">${sub}</div>
+          </div>
+        </div>
+
+        <div style="background:#F8FAFC;border:1px solid #E2E8F0;border-radius:12px;padding:1rem;margin-bottom:1rem;">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.6rem;">
+            <span style="color:#64748B;">Current plan</span>
+            <span style="color:#0F172A;font-weight:700;">${currentPlan.charAt(0).toUpperCase() + currentPlan.slice(1)}</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <div>
+              <div style="color:#0F172A;font-weight:800;">${copy.label}</div>
+              <div style="color:#64748B;font-size:0.95rem;">${benefitLine}</div>
+            </div>
+            ${showPricing && copy.price ? `<div style="text-align:right; color:#0F172A; font-weight:800;">${copy.price}<div style="color:#94A3B8;font-size:0.85rem;font-weight:600;">Renews monthly</div></div>` : ''}
+          </div>
+        </div>
+
+        ${detail ? `<div style=\"margin-bottom:1rem;color:#475569;font-size:0.95rem;line-height:1.4;\">${detail}</div>` : ''}
+
+        <div style="display:flex;gap:0.75rem;">
+          <button id="jh-upgrade-cancel" style="flex:1;border:1px solid #E2E8F0;background:#fff;color:#475569;border-radius:10px;padding:0.85rem;font-weight:700;cursor:pointer;">Cancel</button>
+          <button id="jh-upgrade-confirm" style="flex:1;border:none;background:#0EA5E9;color:#fff;border-radius:10px;padding:0.9rem;font-weight:800;cursor:pointer;box-shadow:0 10px 30px rgba(14,165,233,0.35);">Continue</button>
+        </div>
+      </div>
+    `;
+
+    let style = document.getElementById('jh-upgrade-confirmation-styles');
+    if (!style) {
+      style = document.createElement('style');
+      style.id = 'jh-upgrade-confirmation-styles';
+      style.textContent = `@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } } @keyframes rise { from { transform: translateY(10px); } to { transform: translateY(0); } }`;
+      document.head.appendChild(style);
+    }
+
+    const cleanup = (value) => {
+      overlay.remove();
+      resolve(value);
+    };
+
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) cleanup(false);
+    });
+    overlay.querySelector('#jh-upgrade-cancel').addEventListener('click', () => cleanup(false));
+    overlay.querySelector('#jh-upgrade-confirm').addEventListener('click', () => cleanup(true));
+
+    document.body.appendChild(overlay);
+  });
+}
+
+async function requestUpgradeConfirmation(plan, options = {}) {
+  if (options.skipConfirmation) return true;
+  try {
+    return await showUpgradeConfirmation(plan, options);
+  } catch (_) {
+    return true; // fail-open to avoid blocking upgrades if modal fails
+  }
+}
+
+async function upgradePlan(targetPlan, options = {}) {
+  const normalizedPlan = typeof targetPlan === 'string' ? targetPlan.trim().toLowerCase() : targetPlan;
+  const plan = normalizedPlan || targetPlan;
+  const source = options.source || 'unknown';
+  const returnUrl = options.returnUrl || window.location.href;
+  const button = options.button || null;
+  let restoreButton = null;
+  let originalText = null;
+  if (button) {
+    originalText = button.textContent;
+  }
+
+  const confirmed = await requestUpgradeConfirmation(plan, {
+    context: options.context || source,
+    mode: options.confirmationMode || 'checkout',
+    currentPlan: localStorage.getItem('user-plan') || 'free',
+    skipConfirmation: options.skipConfirmation
+  });
+
+  if (!confirmed) {
+    return;
+  }
+
+  if (button) {
+    button.disabled = true;
+    button.textContent = 'Processing...';
+    restoreButton = () => {
+      button.disabled = false;
+      button.textContent = originalText;
+    };
+  }
+
+  const hideLoading = window.showLoadingOverlay
+    ? window.showLoadingOverlay('Updating plan...')
+    : null;
+
+  try {
+    const user = window.FirebaseAuthManager?.getCurrentUser?.();
+    if (!user) {
+      window.location.href = 'login.html';
+      return;
+    }
+    const idToken = await user.getIdToken();
+    // Trial plans must use stripe-checkout (creates a new subscription with trial period)
+    if (plan === 'trial') {
+      const res = await fetch('/api/stripe-checkout', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${idToken}`
+        },
+        body: JSON.stringify({ plan: 'trial', forceNew: true })
+      });
+      const data = await res.json().catch(() => ({}));
+      if (data?.ok && data?.url) {
+        window.location.href = data.url;
+        return;
+      }
+      throw new Error(data?.error || data?.code || 'Checkout failed');
+    }
+
+    const res = await fetch('/api/upgrade-plan', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${idToken}`
+      },
+      body: JSON.stringify({ targetPlan: plan, source, returnUrl })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      if (data?.code === 'ALREADY_ON_PLAN' || data?.code === 'ALREADY_SUBSCRIBED') {
+        const existingPlan = data?.plan || plan;
+        try {
+          localStorage.setItem('user-plan', existingPlan);
+          localStorage.setItem('dev-plan', existingPlan);
+          window.dispatchEvent(new CustomEvent('planChanged', { detail: { newPlan: existingPlan, source: 'upgrade' } }));
+          if (window.JobHackAINavigation?.setAuthState) {
+            try { window.JobHackAINavigation.setAuthState(true, existingPlan); } catch (_) {}
+          }
+          if (window.JobHackAINavigation?.scheduleUpdateNavigation) {
+            try { window.JobHackAINavigation.scheduleUpdateNavigation(true); } catch (_) {}
+          }
+        } catch (_) {}
+        showUpgradeInfoBanner('You already have an active subscription for this plan.', 'account-setting.html');
+        return;
+      }
+      if (data?.code === 'DOWNGRADE_NOT_ALLOWED') {
+        showUpgradeInfoBanner('Downgrades are not supported. Please contact support or manage your subscription in the billing portal.', 'account-setting.html');
+        return;
+      }
+      throw new Error(data?.error || data?.code || 'upgrade_failed');
+    }
+
+    if (data?.action === 'redirect' && data?.url) {
+      window.location.href = data.url;
+      return;
+    }
+    if (data?.action === 'updated') {
+      const newPlan = data.plan || plan;
+      localStorage.setItem('user-plan', newPlan);
+      localStorage.setItem('dev-plan', newPlan);
+      window.dispatchEvent(new CustomEvent('planChanged', { detail: { newPlan, source: 'upgrade' } }));
+      if (window.JobHackAINavigation?.setAuthState) {
+        try { window.JobHackAINavigation.setAuthState(true, newPlan); } catch (_) {}
+      }
+      if (window.JobHackAINavigation?.scheduleUpdateNavigation) {
+        try { window.JobHackAINavigation.scheduleUpdateNavigation(true); } catch (_) {}
+      }
+      try {
+        const syncRes = await fetch('/api/sync-stripe-plan', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${idToken}`
+          }
+        });
+        if (!syncRes.ok) {
+          const errText = await syncRes.text().catch(() => '');
+          console.warn('[UPGRADE] sync-stripe-plan failed:', errText || syncRes.status);
+        }
+      } catch (syncError) {
+        console.warn('[UPGRADE] sync-stripe-plan error:', syncError?.message || syncError);
+      }
+      if (typeof window.refreshPlanData === 'function') {
+        await window.refreshPlanData();
+      }
+      if (window.showToast) {
+        window.showToast('Plan updated. Enjoy the new features!');
+      } else {
+        createInlineToast('Plan updated. Enjoy the new features!');
+      }
+      return;
+    }
+    if (data?.action === 'scheduled') {
+      const scheduledPlan = data.scheduledPlan || plan;
+      const scheduledAt = data.scheduledAt ? new Date(data.scheduledAt).toLocaleDateString('en-US', {
+        year: 'numeric', month: 'long', day: 'numeric'
+      }) : 'the end of your billing period';
+      const msg = `Your plan will change to ${scheduledPlan.charAt(0).toUpperCase() + scheduledPlan.slice(1)} on ${scheduledAt}.`;
+      if (window.showToast) {
+        window.showToast(msg);
+      } else {
+        createInlineToast(msg);
+      }
+      if (typeof window.refreshPlanData === 'function') {
+        await window.refreshPlanData();
+      }
+      return;
+    }
+    throw new Error('upgrade_failed');
+  } catch (error) {
+    console.error('Upgrade failed:', error);
+    const message = 'Unable to upgrade. Please try again.';
+    if (window.showToast) {
+      window.showToast(message);
+    } else {
+      createInlineToast(message, 'error');
+    }
+  } finally {
+    if (hideLoading) hideLoading();
+    if (restoreButton) restoreButton();
+  }
+}
+
+window.upgradePlan = upgradePlan;
+window.requestUpgradeConfirmation = requestUpgradeConfirmation;
 
 // Initialize Stripe when DOM is loaded
 document.addEventListener('DOMContentLoaded', () => {

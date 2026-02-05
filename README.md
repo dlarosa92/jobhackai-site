@@ -209,3 +209,34 @@ const PLANS = {
 3. **Error Handling**: Basic error handling, needs more robust implementation
 4. **Code Comments**: Some files have extensive comments, others need documentation
 
+---
+
+## 🔌 Dev Stripe Endpoints (Cloudflare Pages Functions)
+
+Dev uses Stripe test mode via Pages Functions under `functions/api/`:
+
+- `POST /api/stripe-checkout` → Create subscription Checkout Session
+- `POST /api/billing-portal` → Create Billing Portal session
+- `POST /api/stripe-webhook` → Webhook receiver (HMAC verified)
+
+Required environment variables (Cloudflare):
+
+- `STRIPE_SECRET_KEY` (sk_test_...)
+- `STRIPE_WEBHOOK_SECRET` (whsec_...)
+- `PRICE_ESSENTIAL_MONTHLY`, `PRICE_PRO_MONTHLY`, `PRICE_PREMIUM_MONTHLY`
+- `FRONTEND_URL` (e.g., https://dev.jobhackai.io)
+
+KV binding (wrangler-managed): edit `app/wrangler.toml`
+
+```
+[[kv_namespaces]]
+binding = "JOBHACKAI_KV"
+id = "<dev_kv_id>"
+preview_id = "<dev_kv_preview_id>"
+```
+
+KV namespaces (bind as `JOBHACKAI_KV`):
+
+- `cusByUid:<uid>` → Stripe customer id
+- `planByUid:<uid>` → current plan string
+

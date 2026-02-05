@@ -4,8 +4,10 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Pricing – JobHackAI</title>
-  <link rel="icon" type="image/png" href="assets/JobHackAI_Logo_favicon-32x32.png">
+  <title>JobHackAI</title>
+  <link rel="icon" type="image/png" href="assets/jobhackai_icon_only_128.png">
+  <link rel="apple-touch-icon" href="assets/jobhackai_icon_only_128.png">
+  <script src="js/dynamic-favicon.js?v=20250111-1"></script>
 
   <!-- Design tokens & global styles -->
   <link rel="stylesheet" href="css/tokens.css">
@@ -14,6 +16,7 @@
   <!-- Component overrides -->
   <link rel="stylesheet" href="css/header.css">
   <link rel="stylesheet" href="css/footer.css">
+  <link rel="stylesheet" href="css/pricing.css">
 </head>
 <body>
   <!-- Header -->
@@ -43,24 +46,9 @@
   <nav class="mobile-nav" id="mobileNav">
     <!-- Mobile navigation will be dynamically populated by navigation.js -->
   </nav>
-  <script>
-    // Hamburger menu toggle
-    const mobileToggle = document.querySelector('.mobile-toggle');
-    const mobileNav = document.getElementById('mobileNav');
-    if (mobileToggle && mobileNav) {
-      mobileToggle.addEventListener('click', () => {
-        const isOpen = mobileNav.classList.toggle('open');
-        mobileToggle.setAttribute('aria-expanded', isOpen);
-      });
-      // Close mobile nav on link click
-      document.querySelectorAll('.mobile-nav a').forEach(link => {
-        link.addEventListener('click', () => {
-          mobileNav.classList.remove('open');
-          mobileToggle.setAttribute('aria-expanded', 'false');
-        });
-      });
-    }
-  </script>
+  <div class="mobile-nav-backdrop" id="mobileNavBackdrop"></div>
+  <!-- Centralized mobile menu handler -->
+  <script src="js/mobile-menu.js?v=20250115-1"></script>
   <!-- page content -->
   <main>
     <section class="pricing-section">
@@ -146,8 +134,11 @@
             </tr>
             <tr class="pricing-signup-row">
               <td></td>
-              <td><button class="btn-primary stripe-checkout-btn" data-plan="create-account" data-amount="0">Create Free Account</button></td>
-              <td><button class="btn-primary stripe-checkout-btn" data-plan="trial" data-amount="0">Start Free Trial</button></td>
+              <td><button class="btn-primary stripe-checkout-btn" data-plan="free" data-amount="0">Create Free Account</button></td>
+              <td>
+                <button class="btn-primary stripe-checkout-btn" data-plan="trial" data-amount="0">Start Free Trial</button>
+                <div class="trial-subtext" aria-live="polite"></div>
+              </td>
               <td><button class="btn-primary stripe-checkout-btn" data-plan="essential" data-amount="2900">Get Essential Plan</button></td>
               <td><button class="btn-primary stripe-checkout-btn" data-plan="pro" data-amount="5900">Get Pro Plan</button></td>
               <td><button class="btn-primary stripe-checkout-btn" data-plan="premium" data-amount="9900">Get Premium Plan</button></td>
@@ -168,23 +159,126 @@
         <span class="footer-name">JOBHACKAI</span>
       </div>
       <div class="footer-legal">
-        <p>© 2025 JobHackAI. All rights reserved.</p>
+        <p>© 2026 JobHackAI. All rights reserved.</p>
       </div>
       <div class="footer-links">
         <a href="index.html">Home</a>
-        <a href="support.html">Support</a>
+        <a href="help.html">Help</a>
         <a href="privacy.html">Privacy</a>
+        <a href="cookies.html">Cookies</a>
       </div>
     </div>
   </footer>
+  <!-- Load Firebase auth modules -->
+  <script src="js/firebase-config.js" type="module"></script>
+  <script src="js/firebase-auth.js?v=20260124-1" type="module"></script>
   <!-- Load navigation system -->
-  <script src="js/navigation.js"></script>
+  <script src="js/navigation.js?v=20251011-1"></script>
+  <script src="js/universal-logout.js?v=20251007-2"></script>
   <!-- Load Stripe integration -->
   <script src="js/stripe-integration.js"></script>
   <!-- scripts -->
   <script src="js/main.js" type="module"></script>
   <script src="js/analytics.js" type="module"></script>
   <script>
+    let trialEligibilityState = { checked: false, eligible: true, plan: null, trialEndsAt: null, trialEligible: null, ineligibleReason: null };
+
+    function getTrialSubtextEl(button) {
+      return button?.closest('td')?.querySelector('.trial-subtext') || null;
+    }
+
+    function setTrialSubtext(button, text) {
+      const subtextEl = getTrialSubtextEl(button);
+      if (!subtextEl) return;
+      if (text) {
+        subtextEl.textContent = text;
+        subtextEl.style.display = 'block';
+      } else {
+        subtextEl.textContent = '';
+        subtextEl.style.display = 'none';
+      }
+    }
+
+    function setTrialUsedState(button) {
+      button.style.display = '';
+      button.textContent = 'Trial used';
+      button.disabled = true;
+      button.style.opacity = '0.6';
+      button.style.cursor = 'not-allowed';
+      setTrialSubtext(button, 'One trial per account.');
+    }
+
+    function setTrialEverPaidState(button) {
+      setTrialUnavailableState(button, 'Trial is for new users only.');
+    }
+
+    function setTrialUnavailableState(button, message) {
+      button.style.display = '';
+      button.textContent = 'Trial unavailable';
+      button.disabled = true;
+      button.style.opacity = '0.6';
+      button.style.cursor = 'not-allowed';
+      setTrialSubtext(button, message || 'Available on the free plan only.');
+    }
+
+    function inferTrialIneligibleReason(state) {
+      if (state?.trialEndsAt) return 'already_used';
+      if (state?.trialEligible === false) return 'ever_paid';
+      return null;
+    }
+
+    function enableButton(button) {
+      button.style.display = '';
+      button.disabled = false;
+      button.style.opacity = '1';
+      button.style.cursor = 'pointer';
+    }
+
+    function hideTrialCTA(button) {
+      if (!button) return;
+      button.style.display = 'none';
+      setTrialSubtext(button, '');
+    }
+
+    async function fetchTrialEligibility() {
+      try {
+        const user = await window.FirebaseAuthManager?.waitForAuthReady?.() || window.FirebaseAuthManager?.currentUser;
+        if (!user || !user.getIdToken) return null;
+        const idToken = await user.getIdToken();
+        const res = await fetch('/api/plan/me', {
+          headers: { Authorization: `Bearer ${idToken}` }
+        });
+        if (!res.ok) return null;
+        const data = await res.json();
+        const plan = data?.plan || localStorage.getItem('user-plan') || 'free';
+        const trialEndsAt = data?.trialEndsAt || null;
+        const trialEligible = data?.trialEligible;
+        let eligible = plan === 'free' && !trialEndsAt;
+        if (trialEligible === false) {
+          eligible = false;
+        }
+        let ineligibleReason = null;
+        if (!eligible) {
+          if (trialEndsAt) {
+            ineligibleReason = 'already_used';
+          } else if (trialEligible === false) {
+            ineligibleReason = 'ever_paid';
+          }
+        }
+        return {
+          checked: true,
+          eligible,
+          plan,
+          trialEndsAt,
+          trialEligible: typeof trialEligible === 'boolean' ? trialEligible : null,
+          ineligibleReason
+        };
+      } catch (error) {
+        console.warn('Failed to fetch trial eligibility:', error);
+        return null;
+      }
+    }
+
     // Initialize pricing page Stripe functionality
     document.addEventListener('DOMContentLoaded', () => {
       // Initialize navigation system
@@ -193,38 +287,265 @@
       }
       
       const checkoutButtons = document.querySelectorAll('.stripe-checkout-btn');
+      const confirmUpgrade = async (plan, currentPlan) => {
+        if (typeof window.requestUpgradeConfirmation === 'function') {
+          return await window.requestUpgradeConfirmation(plan, { mode: 'checkout', currentPlan });
+        }
+        return true;
+      };
       
-      // Check if user is already authenticated
-      const isAuthenticated = localStorage.getItem('user-authenticated') === 'true';
-      const userEmail = localStorage.getItem('user-email');
-      const currentPlan = localStorage.getItem('user-plan') || 'free';
+      // Check if user is already authenticated (compute at click-time for freshness)
+      const getAuthState = () => {
+        // SECURITY: Check Firebase SDK keys synchronously (works before FirebaseAuthManager is ready)
+        // FirebaseAuthManager.getCurrentUser() returns null until onAuthStateChanged fires
+        function hasFirebaseAuthKeys() {
+          try {
+            return Object.keys(localStorage).some(k => 
+              k.startsWith('firebase:authUser:') && 
+              localStorage.getItem(k) && 
+              localStorage.getItem(k) !== 'null' &&
+              localStorage.getItem(k).length > 10
+            );
+          } catch (e) {
+            return false;
+          }
+        }
+        function getEmailFromFirebaseKeys() {
+          try {
+            const firebaseKeys = Object.keys(localStorage).filter(k => k.startsWith('firebase:authUser:'));
+            if (firebaseKeys.length > 0) {
+              const keyData = JSON.parse(localStorage.getItem(firebaseKeys[0]) || '{}');
+              return keyData.email || null;
+            }
+          } catch (e) {
+            console.warn('Failed to get email from Firebase keys:', e);
+          }
+          return null;
+        }
+        const hasLocalStorageAuth = localStorage.getItem('user-authenticated') === 'true';
+        const hasFirebaseKeys = hasFirebaseAuthKeys();
+        const user = window.FirebaseAuthManager?.getCurrentUser?.();
+        // Use FirebaseAuthManager email if available, otherwise fallback to Firebase SDK keys
+        const userEmail = user?.email || getEmailFromFirebaseKeys();
+        return {
+          isAuthenticated: hasLocalStorageAuth || hasFirebaseKeys,
+          userEmail: userEmail,
+          currentPlan: localStorage.getItem('user-plan') || 'free'
+        };
+      };
       
       checkoutButtons.forEach(button => {
-        button.addEventListener('click', (e) => {
+        button.addEventListener('click', async (e) => {
           e.preventDefault();
           const plan = button.dataset.plan;
           const amount = parseInt(button.dataset.amount);
           
-          if (plan === 'create-account') {
-            window.location.href = 'login.html';
+          // Add loading state
+          const originalText = button.textContent;
+          button.disabled = true;
+          button.style.opacity = '0.7';
+          button.style.cursor = 'wait';
+
+          if (plan === 'free') {
+            // Store normalized plan selection in sessionStorage
+            function selectPlan(planId, planName, price) {
+              const selectedPlanPayload = {
+                planId,
+                planName,
+                price,
+                source: "pricing-page",
+                timestamp: Date.now()
+              };
+              sessionStorage.setItem("selectedPlan", JSON.stringify(selectedPlanPayload));
+              try { localStorage.setItem("selectedPlan", JSON.stringify(selectedPlanPayload)); } catch (_) {}
+              window.location.href = "/login.html?plan=" + encodeURIComponent(planId);
+            }
+            selectPlan('free', 'Free Plan', '$0/mo');
             return;
           }
           
           // If user is authenticated, handle upgrade directly
+          const { isAuthenticated, userEmail, currentPlan } = getAuthState();
+          const confirmed = await confirmUpgrade(plan, currentPlan);
+          if (!confirmed) {
+            button.textContent = originalText;
+            enableButton(button);
+            return;
+          }
+
           if (isAuthenticated && userEmail) {
-            handleAuthenticatedUserUpgrade(plan, amount, currentPlan);
+            // Authenticated path → use appropriate upgrade flow
+            (async () => {
+              try {
+                console.log('🔥 Starting upgrade for plan:', plan);
+
+                // Get Firebase user for authentication
+                const user = await window.FirebaseAuthManager?.waitForAuthReady?.() || window.FirebaseAuthManager?.currentUser;
+                if (!user) {
+                  throw new Error('Not authenticated');
+                }
+                const idToken = await user.getIdToken(true);
+                if (!idToken) {
+                  throw new Error('Could not get ID token');
+                }
+
+                // Trial plans must use stripe-checkout (creates new subscription with trial period)
+                // Paid plans use upgrade-plan (handles existing subscriptions properly)
+                if (plan === 'trial') {
+                  console.log('🔥 Using stripe-checkout for trial plan');
+                  const res = await fetch('/api/stripe-checkout', {
+                    method: 'POST',
+                    headers: {
+                      'Content-Type': 'application/json',
+                      'Authorization': `Bearer ${idToken}`
+                    },
+                    body: JSON.stringify({ plan: 'trial', forceNew: true })
+                  });
+                  const data = await res.json();
+                  if (data?.ok && data?.url) {
+                    window.location.href = data.url;
+                    return;
+                  }
+                  throw new Error(data?.error || data?.code || 'Checkout failed');
+                }
+
+                // Paid plans: use centralized upgradePlan function
+                if (typeof window.upgradePlan === 'function') {
+                  await window.upgradePlan(plan, {
+                    source: 'pricing-page',
+                    returnUrl: window.location.href,
+                    button: button,
+                    skipConfirmation: true // Already confirmed above
+                  });
+                  return; // Prevent fallthrough after upgradePlan completes
+                }
+
+                // Fallback for paid plans if upgradePlan not available
+                console.error('upgradePlan not available, falling back to manual flow');
+                const res = await fetch('/api/upgrade-plan', {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${idToken}`
+                  },
+                  body: JSON.stringify({
+                    targetPlan: plan,
+                    source: 'pricing-page',
+                    returnUrl: window.location.href
+                  })
+                });
+
+                const data = await res.json();
+
+                if (!res.ok) {
+                  throw new Error(data?.error || data?.code || 'Upgrade failed');
+                }
+
+                if (data?.action === 'redirect' && data?.url) {
+                  window.location.href = data.url;
+                  return;
+                }
+
+                if (data?.action === 'updated') {
+                  // Plan updated successfully
+                  const newPlan = data.plan || plan;
+                  localStorage.setItem('user-plan', newPlan);
+                  localStorage.setItem('dev-plan', newPlan);
+                  if (window.showToast) {
+                    window.showToast('Plan updated successfully!');
+                  } else {
+                    alert('Plan updated successfully!');
+                  }
+                  window.location.reload();
+                  return;
+                }
+
+                throw new Error('Unexpected response from upgrade endpoint');
+              } catch (e) {
+                console.error('Upgrade error:', e);
+                const errorMessage = e?.message || 'Upgrade failed';
+                console.error('Full upgrade error details:', {
+                  message: errorMessage,
+                  stack: e?.stack,
+                  response: e?.response
+                });
+                // Provide more helpful error message
+                if (errorMessage.includes('unauthorized') || errorMessage.includes('token')) {
+                  alert('Your session has expired. Please log in again and try upgrading.');
+                } else if (errorMessage.includes('Trial already used')) {
+                  const inferredReason = trialEligibilityState.ineligibleReason || inferTrialIneligibleReason(trialEligibilityState);
+                  const alertMessage = inferredReason === 'ever_paid'
+                    ? 'Trial is for new users only. Please select a paid plan.'
+                    : inferredReason === 'already_used'
+                      ? 'You have already used your free trial. Please select a paid plan.'
+                      : 'Trial is not available. Please select a paid plan.';
+                  alert(alertMessage);
+                  trialEligibilityState = {
+                    ...trialEligibilityState,
+                    checked: true,
+                    eligible: false,
+                    plan: trialEligibilityState.plan || localStorage.getItem('user-plan') || 'free',
+                    ineligibleReason: inferredReason || trialEligibilityState.ineligibleReason
+                  };
+                } else {
+                  alert(`Unable to upgrade: ${errorMessage}. Please try again or contact support.`);
+                }
+                if (plan === 'trial' && trialEligibilityState?.checked && !trialEligibilityState.eligible) {
+                  if (trialEligibilityState.ineligibleReason === 'ever_paid') {
+                    setTrialEverPaidState(button);
+                  } else if (trialEligibilityState.ineligibleReason === 'already_used') {
+                    setTrialUsedState(button);
+                  } else {
+                    setTrialUnavailableState(button, 'Trial is not available.');
+                  }
+                } else {
+                  button.textContent = originalText;
+                  enableButton(button);
+                }
+              }
+            })();
           } else {
-            // New user - redirect to login with plan selected
-            localStorage.setItem('selected-plan', plan);
-            localStorage.setItem('plan-amount', amount);
-            window.location.href = 'login.html';
+            // New user - store normalized plan selection in sessionStorage
+            function selectPlan(planId, planName, price) {
+              const selectedPlanPayload = {
+                planId,
+                planName,
+                price,
+                source: "pricing-page",
+                timestamp: Date.now()
+              };
+              sessionStorage.setItem("selectedPlan", JSON.stringify(selectedPlanPayload));
+              try { localStorage.setItem("selectedPlan", JSON.stringify(selectedPlanPayload)); } catch (_) {}
+              window.location.href = "/login.html?plan=" + encodeURIComponent(planId);
+            }
+            const planMap = {
+              trial: { planId: 'trial', planName: '3-Day Trial', price: '$0' },
+              essential: { planId: 'essential', planName: 'Essential Plan', price: '$29/mo' },
+              pro: { planId: 'pro', planName: 'Pro Plan', price: '$59/mo' },
+              premium: { planId: 'premium', planName: 'Premium Plan', price: '$99/mo' }
+            };
+            const payload = planMap[plan] || { planId: plan, planName: 'Selected Plan', price: '' };
+            selectPlan(payload.planId, payload.planName, payload.price);
           }
         });
       });
       
       // Update button text for authenticated users
-      if (isAuthenticated) {
-        updateButtonsForAuthenticatedUser(currentPlan);
+      const { isAuthenticated: _isAuthInit, currentPlan: _initPlan } = getAuthState();
+      if (_isAuthInit) {
+        trialEligibilityState = { ...trialEligibilityState, plan: _initPlan };
+        updateButtonsForAuthenticatedUser(_initPlan, trialEligibilityState);
+        (async () => {
+          const eligibility = await fetchTrialEligibility();
+          if (eligibility) {
+            trialEligibilityState = eligibility;
+            if (eligibility.plan && eligibility.plan !== _initPlan) {
+              localStorage.setItem('user-plan', eligibility.plan);
+              localStorage.setItem('dev-plan', eligibility.plan);
+            }
+            updateButtonsForAuthenticatedUser(eligibility.plan || _initPlan, eligibility);
+          }
+        })();
       }
     });
     
@@ -233,37 +554,214 @@
       if (!db[userEmail]) return false;
       return Array.isArray(db[userEmail].cards) && db[userEmail].cards.length > 0;
     }
-    
-    function handleAuthenticatedUserUpgrade(newPlan, amount, currentPlan) {
-      // Don't allow downgrading to same or lower plan
-      const planHierarchy = ['free', 'trial', 'essential', 'pro', 'premium'];
-      const currentIndex = planHierarchy.indexOf(currentPlan);
-      const newIndex = planHierarchy.indexOf(newPlan);
-      
-      if (newIndex <= currentIndex) {
-        alert(`You're already on the ${currentPlan} plan. Please select a higher tier to upgrade.`);
-        return;
-      }
-      
-      // Only free plan doesn't require a card - all others (including trial) need a card
-      const plansRequiringCard = ['trial', 'essential', 'pro', 'premium'];
-      const userEmail = localStorage.getItem('user-email');
-      if (plansRequiringCard.includes(newPlan) && !userHasCard(userEmail)) {
-        showAddCardModal();
-        return;
-      }
-      
-      // Show confirmation dialog
+
+    function showUpgradeConfirmationModal(newPlan, currentPlan, amount) {
       const planNames = {
         'trial': '3-Day Free Trial',
-        'essential': 'Essential Plan ($29/mo)',
-        'pro': 'Pro Plan ($59/mo)',
-        'premium': 'Premium Plan ($99/mo)'
+        'essential': 'Essential Plan',
+        'pro': 'Pro Plan',
+        'premium': 'Premium Plan'
       };
       
-      const confirmMessage = `Upgrade from ${currentPlan} to ${planNames[newPlan]}?\n\nThis will start your new plan immediately.`;
+      const planPrices = {
+        'trial': '$0 for 3 days',
+        'essential': '$29/month',
+        'pro': '$59/month',
+        'premium': '$99/month'
+      };
       
-      if (confirm(confirmMessage)) {
+      const modal = document.createElement('div');
+      modal.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100vw;
+        height: 100vh;
+        background: rgba(0,0,0,0.5);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 10000;
+        animation: fadeIn 0.2s ease-out;
+      `;
+      
+      modal.innerHTML = `
+        <style>
+          @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+          @keyframes slideUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+        </style>
+        <div style="
+          background: white;
+          border-radius: 16px;
+          padding: 2rem;
+          max-width: 450px;
+          margin: 1rem;
+          box-shadow: 0 20px 25px -5px rgba(0,0,0,0.15);
+          animation: slideUp 0.3s ease-out;
+        ">
+          <div style="text-align: center; margin-bottom: 1.5rem;">
+            <div style="width: 60px; height: 60px; background: linear-gradient(135deg, #007A30 0%, #006B28 100%); border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 1rem;">
+              <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3">
+                <path d="M5 12l5 5L20 7"/>
+              </svg>
+            </div>
+            <h3 style="margin: 0 0 0.5rem 0; color: #232B36; font-size: 1.5rem; font-weight: 700;">Upgrade Your Plan</h3>
+            <p style="margin: 0; color: #64748B; font-size: 1rem;">You're about to upgrade to a better plan</p>
+          </div>
+          
+          <div style="background: #F8FAFC; border-radius: 12px; padding: 1.25rem; margin-bottom: 1.5rem;">
+            <div style="display: flex; justify-content: space-between; margin-bottom: 0.75rem; padding-bottom: 0.75rem; border-bottom: 1px solid #E2E8F0;">
+              <span style="color: #64748B; font-size: 0.95rem;">Current Plan:</span>
+              <span style="color: #232B36; font-weight: 600;">${currentPlan.charAt(0).toUpperCase() + currentPlan.slice(1)}</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+              <span style="color: #64748B; font-size: 0.95rem;">New Plan:</span>
+              <div style="text-align: right;">
+                <div style="color: #007A30; font-weight: 700; font-size: 1.1rem;">${planNames[newPlan]}</div>
+                <div style="color: #232B36; font-size: 0.9rem;">${planPrices[newPlan]}</div>
+              </div>
+            </div>
+          </div>
+          
+          <div style="background: #FFF7ED; border: 1px solid #FED7AA; border-radius: 8px; padding: 0.875rem; margin-bottom: 1.5rem;">
+            <p style="margin: 0; color: #9A3412; font-size: 0.9rem; line-height: 1.5;">
+              <strong>Note:</strong> Your new plan will start immediately and you'll be charged ${planPrices[newPlan]} starting today.
+            </p>
+          </div>
+          
+          <div style="display: flex; gap: 0.75rem;">
+            <button id="cancelUpgrade" style="
+              flex: 1;
+              background: white;
+              color: #64748B;
+              border: 1px solid #CBD5E1;
+              padding: 0.875rem;
+              border-radius: 8px;
+              cursor: pointer;
+              font-weight: 600;
+              font-size: 1rem;
+              transition: all 0.2s;
+            " onmouseover="this.style.background='#F8FAFC'" onmouseout="this.style.background='white'">
+              Cancel
+            </button>
+            <button id="confirmUpgrade" style="
+              flex: 1;
+              background: #007A30;
+              color: white;
+              border: none;
+              padding: 0.875rem;
+              border-radius: 8px;
+              cursor: pointer;
+              font-weight: 700;
+              font-size: 1rem;
+              transition: all 0.2s;
+            " onmouseover="this.style.background='#006B28'" onmouseout="this.style.background='#007A30'">
+              Confirm Upgrade
+            </button>
+          </div>
+        </div>
+      `;
+      
+      document.body.appendChild(modal);
+      
+      // Handle cancel
+      modal.querySelector('#cancelUpgrade').addEventListener('click', () => {
+        modal.remove();
+      });
+      
+      // Handle confirm
+      modal.querySelector('#confirmUpgrade').addEventListener('click', () => {
+        modal.remove();
+        processUpgrade(newPlan, currentPlan);
+      });
+      
+      // Close on background click
+      modal.addEventListener('click', (e) => {
+        if (e.target === modal) {
+          modal.remove();
+        }
+      });
+    }
+    
+    function showUpgradeErrorModal(currentPlan, newPlan) {
+      const modal = document.createElement('div');
+      modal.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100vw;
+        height: 100vh;
+        background: rgba(0,0,0,0.5);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 10000;
+      `;
+      
+      modal.innerHTML = `
+        <div style="
+          background: white;
+          border-radius: 16px;
+          padding: 2rem;
+          max-width: 400px;
+          margin: 1rem;
+          text-align: center;
+          box-shadow: 0 20px 25px -5px rgba(0,0,0,0.15);
+        ">
+          <div style="width: 60px; height: 60px; background: #FEF2F2; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 1rem;">
+            <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#DC2626" stroke-width="2">
+              <circle cx="12" cy="12" r="10"/>
+              <line x1="12" y1="8" x2="12" y2="12"/>
+              <line x1="12" y1="16" x2="12.01" y2="16"/>
+            </svg>
+          </div>
+          <h3 style="margin: 0 0 0.75rem 0; color: #232B36; font-size: 1.3rem; font-weight: 700;">Already on This Plan</h3>
+          <p style="margin: 0 0 1.5rem 0; color: #64748B; line-height: 1.6;">
+            You're currently on the <strong>${currentPlan}</strong> plan. Please select a higher tier to upgrade your account.
+          </p>
+          <button onclick="this.closest('div').parentElement.remove()" style="
+            width: 100%;
+            background: #007A30;
+            color: white;
+            border: none;
+            padding: 0.875rem;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 1rem;
+          ">
+            Got it
+          </button>
+        </div>
+      `;
+      
+      document.body.appendChild(modal);
+      
+      modal.addEventListener('click', (e) => {
+        if (e.target === modal) {
+          modal.remove();
+        }
+      });
+    }
+    
+    function processUpgrade(newPlan, currentPlan) {
+      // SECURITY: Get email from Firebase auth with fallback to Firebase SDK keys
+      // FirebaseAuthManager.getCurrentUser() returns null until onAuthStateChanged fires
+      function getEmailFromFirebaseKeys() {
+        try {
+          const firebaseKeys = Object.keys(localStorage).filter(k => k.startsWith('firebase:authUser:'));
+          if (firebaseKeys.length > 0) {
+            const keyData = JSON.parse(localStorage.getItem(firebaseKeys[0]) || '{}');
+            return keyData.email || null;
+          }
+        } catch (e) {
+          console.warn('Failed to get email from Firebase keys:', e);
+        }
+        return null;
+      }
+      const user = window.FirebaseAuthManager?.getCurrentUser?.();
+      const userEmail = user?.email || getEmailFromFirebaseKeys();
+      if (true) {
         // INTEGRATION: STRIPE - Handle subscription upgrade here
         // For demo, just update the user's plan
         const getUserDB = () => {
@@ -302,8 +800,8 @@
             window.JobHackAINavigation.setAuthState(true, newPlan);
           }
           
-          alert(`Successfully upgraded to ${planNames[newPlan]}! Redirecting to dashboard...`);
-          window.location.href = 'dashboard.html';
+          // Show success modal
+          showUpgradeSuccessModal(newPlan);
         } else {
           alert('Error: User data not found. Please try logging in again.');
           window.location.href = 'login.html';
@@ -311,7 +809,9 @@
       }
     }
     
-    function updateButtonsForAuthenticatedUser(currentPlan) {
+    function updateButtonsForAuthenticatedUser(currentPlan, trialEligibility = trialEligibilityState) {
+      const normalizedPlan = currentPlan === 'pending' ? 'trial' : currentPlan;
+      const isPaidPlan = ['essential', 'pro', 'premium'].includes(normalizedPlan);
       const buttons = document.querySelectorAll('.stripe-checkout-btn');
       const planNames = {
         'trial': '3-Day Free Trial',
@@ -322,55 +822,138 @@
       
       buttons.forEach(button => {
         const plan = button.dataset.plan;
-        if (plan === 'create-account') {
-          button.textContent = 'Dashboard';
-          button.onclick = () => window.location.href = 'dashboard.html';
-        } else if (plan === currentPlan) {
+        if (plan === 'free') {
+          if (normalizedPlan === 'free') {
+            button.textContent = 'Current Plan';
+            button.disabled = true;
+            button.style.opacity = '0.6';
+            button.style.cursor = 'not-allowed';
+          } else {
+            // For non-free plans, show Dashboard button
+            const isAuthenticated = localStorage.getItem('user-authenticated') === 'true';
+            if (isAuthenticated) {
+              button.textContent = 'Dashboard';
+              button.onclick = () => window.location.href = 'dashboard.html';
+              enableButton(button);
+            } else {
+              button.textContent = 'Get Started';
+              button.onclick = () => window.location.href = 'login.html';
+              enableButton(button);
+            }
+          }
+        } else if (plan === 'trial') {
+          if (isPaidPlan) {
+            hideTrialCTA(button);
+            return;
+          }
+          if (normalizedPlan === 'trial') {
+            button.style.display = '';
+            button.textContent = 'Current Plan';
+            button.disabled = true;
+            button.style.opacity = '0.6';
+            button.style.cursor = 'not-allowed';
+            setTrialSubtext(button, '');
+          } else if (normalizedPlan === 'free') {
+            if (trialEligibility?.checked && !trialEligibility.eligible) {
+              if (trialEligibility.ineligibleReason === 'ever_paid') {
+                setTrialEverPaidState(button);
+              } else {
+                setTrialUsedState(button);
+              }
+            } else {
+              button.textContent = 'Start Free Trial';
+              enableButton(button);
+              setTrialSubtext(button, '');
+            }
+          } else {
+            setTrialUsedState(button);
+          }
+        } else if (plan === normalizedPlan) {
           button.textContent = `Current Plan`;
           button.disabled = true;
           button.style.opacity = '0.6';
           button.style.cursor = 'not-allowed';
         } else {
           button.textContent = `Upgrade to ${planNames[plan]}`;
+          enableButton(button);
         }
       });
     }
     
-    // Modal for adding card
-    function showAddCardModal() {
-      let modal = document.getElementById('addCardModal');
-      if (!modal) {
-        modal = document.createElement('div');
-        modal.id = 'addCardModal';
-        modal.style.position = 'fixed';
-        modal.style.top = '0';
-        modal.style.left = '0';
-        modal.style.width = '100vw';
-        modal.style.height = '100vh';
-        modal.style.background = 'rgba(0,0,0,0.35)';
-        modal.style.display = 'flex';
-        modal.style.alignItems = 'center';
-        modal.style.justifyContent = 'center';
-        modal.style.zIndex = '9999';
-        modal.innerHTML = `
-          <div style="background:#fff; padding:2rem 2.5rem; border-radius:16px; box-shadow:0 4px 32px rgba(0,0,0,0.13); max-width:350px; text-align:center;">
-            <h2 style="color:#232B36; font-size:1.2rem; margin-bottom:0.7rem;">Add a Payment Method</h2>
-            <p style="color:#4B5563; font-size:1rem; margin-bottom:1.2rem;">You must add a payment method to upgrade your plan.</p>
-            <button id="goToBillingBtn" style="background:#00E676; color:#fff; border:none; border-radius:8px; padding:0.8rem 1.5rem; font-size:1.05rem; font-weight:700; cursor:pointer; margin-bottom:0.7rem;">Go to Billing</button><br>
-            <button id="closeAddCardModal" style="background:#f0f0f0; color:#232B36; border:none; border-radius:8px; padding:0.7rem 1.2rem; font-size:1rem; font-weight:600; cursor:pointer;">Cancel</button>
+    function showUpgradeSuccessModal(newPlan) {
+      const planNames = {
+        'trial': '3-Day Free Trial',
+        'essential': 'Essential Plan',
+        'pro': 'Pro Plan',
+        'premium': 'Premium Plan'
+      };
+      
+      const modal = document.createElement('div');
+      modal.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100vw;
+        height: 100vh;
+        background: rgba(0,0,0,0.6);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 10000;
+        animation: fadeIn 0.2s ease-out;
+      `;
+      
+      modal.innerHTML = `
+        <style>
+          @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+          @keyframes scaleIn { from { transform: scale(0.9); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+          @keyframes checkmark {
+            0% { stroke-dashoffset: 100; }
+            100% { stroke-dashoffset: 0; }
+          }
+        </style>
+        <div style="
+          background: white;
+          border-radius: 20px;
+          padding: 3rem 2rem;
+          max-width: 400px;
+          margin: 1rem;
+          text-align: center;
+          box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25);
+          animation: scaleIn 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+        ">
+          <div style="width: 80px; height: 80px; background: linear-gradient(135deg, #007A30 0%, #006B28 100%); border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 1.5rem; box-shadow: 0 10px 25px rgba(0, 122, 48, 0.3);">
+            <svg width="40" height="40" viewBox="0 0 52 52" style="stroke-dasharray: 100; stroke-dashoffset: 0; animation: checkmark 0.6s cubic-bezier(0.65, 0, 0.45, 1) 0.2s forwards;">
+              <circle cx="26" cy="26" r="25" fill="none" stroke="white" stroke-width="3" opacity="0.3"/>
+              <path fill="none" stroke="white" stroke-width="4" stroke-linecap="round" d="M14 27l8 8 16-16" style="stroke-dasharray: 50; stroke-dashoffset: 50; animation: checkmark 0.5s ease-out 0.3s forwards;"/>
+            </svg>
           </div>
-        `;
-        document.body.appendChild(modal);
-        document.getElementById('goToBillingBtn').onclick = function() {
-          window.location.href = 'billing-management.html';
-        };
-        document.getElementById('closeAddCardModal').onclick = function() {
-          modal.style.display = 'none';
-        };
-      } else {
-        modal.style.display = 'flex';
-      }
+          <h2 style="margin: 0 0 0.75rem 0; color: #232B36; font-size: 1.75rem; font-weight: 800;">Upgrade Successful!</h2>
+          <p style="margin: 0 0 0.5rem 0; color: #64748B; font-size: 1.1rem; line-height: 1.6;">
+            You're now on the <strong style="color: #007A30;">${planNames[newPlan]}</strong>
+          </p>
+          <p style="margin: 0 0 2rem 0; color: #94A3B8; font-size: 0.95rem;">
+            Redirecting you to your dashboard...
+          </p>
+          <div style="width: 40px; height: 4px; background: linear-gradient(90deg, #007A30 0%, #006B28 100%); border-radius: 2px; margin: 0 auto; animation: progressBar 1.5s ease-out;"></div>
+        </div>
+        <style>
+          @keyframes progressBar {
+            from { width: 0%; }
+            to { width: 100%; }
+          }
+        </style>
+      `;
+      
+      document.body.appendChild(modal);
+      
+      // Redirect after animation
+      setTimeout(() => {
+        window.location.href = 'account-setting.html';
+      }, 2000);
     }
+    
+    // Removed add-card modal; Stripe Portal handles payment methods
   </script>
   
 </body>

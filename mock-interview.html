@@ -4,234 +4,1284 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Mock Interviews – JobHackAI</title>
-  <link rel="icon" type="image/png" href="assets/JobHackAI_Logo_favicon-32x32.png">
+  <style>html.auth-pending{visibility:hidden}</style>
+  <script src="js/static-auth-guard.js?v=20260125-1"></script>
+  <script>
+    // Canonical plan/auth check using JobHackAINavigation
+    function ensureMockInterviewAccess() {
+      const nav = window.JobHackAINavigation;
+      if (!nav || !nav.getEffectivePlan || !nav.getAuthState) {
+        return false; // wait until navigation is ready
+      }
+      const plan = nav.getEffectivePlan();
+      const auth = nav.getAuthState();
+      const allowed = ['pro', 'premium'];
+      if (!auth.isAuthenticated || !allowed.includes(plan)) {
+        window.location.href = 'interview-questions.html?upgrade=mock-interview';
+        return false;
+      }
+      return true;
+    }
+
+    document.addEventListener('navigationReady', ensureMockInterviewAccess);
+    document.addEventListener('DOMContentLoaded', ensureMockInterviewAccess);
+  </script>
+  <title>Mock Interviews with AI - JobHackAI</title>
+  <link rel="icon" type="image/png" href="assets/jobhackai_icon_only_128.png">
+  <link rel="apple-touch-icon" href="assets/jobhackai_icon_only_128.png">
+  <script src="js/dynamic-favicon.js?v=20250111-1"></script>
   <link rel="stylesheet" href="css/tokens.css">
   <link rel="stylesheet" href="css/main.css">
+  <link rel="stylesheet" href="css/components.css">
   <link rel="stylesheet" href="css/header.css">
   <link rel="stylesheet" href="css/footer.css">
+  <link rel="stylesheet" href="css/history-tile.css">
+  <script src="js/custom-select.js?v=20251212-1" defer></script>
   <style>
+    /* Mock Interview Styles */
     .mi-main {
-      max-width: 900px;
-      margin: 2.5rem auto 4rem auto;
+      max-width: 1100px;
+      margin: 2rem auto 4rem auto;
       padding: 0 1rem;
     }
+    
+    .mi-layout {
+      display: grid;
+      grid-template-columns: 1fr 380px;
+      gap: 1.5rem;
+      align-items: start;
+    }
+    
+    @media (max-width: 900px) {
+      .mi-layout {
+        grid-template-columns: 1fr;
+      }
+    }
+    
     .mi-card {
-      background: #fff;
-      border-radius: 16px;
-      box-shadow: 0 2px 12px rgba(31,41,55,0.07);
-      padding: 2rem;
-      margin-bottom: 2rem;
+      background: var(--color-card-bg);
+      border-radius: var(--radius-xl);
+      box-shadow: var(--shadow-card);
+      padding: 1.75rem;
     }
-    .mi-locked {
-      display: flex;
-      align-items: center;
-      gap: 0.8rem;
-      background: #FFF7E6;
-      border: 1px solid #F59E0B;
-      border-radius: 12px;
-      padding: 1rem 1.25rem;
-      font-size: 1.04rem;
-      color: #92400E;
+    
+    .mi-card.history-card {
+      padding: var(--space-lg);
     }
-    .mi-locked-message {
-      flex: 1;
+    
+    .mi-title {
+      font-size: 1.75rem;
+      font-weight: var(--font-weight-extrabold);
+      color: var(--color-text-main);
+      margin: 0 0 0.5rem 0;
     }
-    .mi-upgrade-btn {
-      background: #F59E0B;
-      color: #fff;
-      border: none;
-      border-radius: 8px;
-      padding: 0.5rem 1rem;
-      font-size: 0.9rem;
-      font-weight: 600;
-      cursor: pointer;
-      transition: background 0.18s;
+    
+    .mi-subtitle {
+      font-size: 1.05rem;
+      color: var(--color-text-secondary);
+      margin: 0 0 1.5rem 0;
+      line-height: 1.5;
     }
-    .mi-upgrade-btn:hover,
-    .mi-upgrade-btn:focus {
-      background: #D97706;
+    
+    /* Form Fields */
+    .mi-form-group {
+      margin-bottom: 1.25rem;
     }
-    .mi-role-autocomplete {
-      position: relative;
-      width: 100%;
-      max-width: 300px;
-      margin-bottom: 1.5rem;
-    }
-    .mi-role-label {
+    
+    .mi-label {
       display: block;
-      font-weight: 600;
+      font-weight: var(--font-weight-semibold);
+      color: var(--color-text-main);
       margin-bottom: 0.5rem;
-      color: #232B36;
+      font-size: 0.95rem;
     }
-    .mi-role-input {
+    
+    .mi-input, .mi-select {
       width: 100%;
-      padding: 0.85rem 1.1rem;
-      border: 2px solid #E5E7EB;
-      border-radius: 10px;
-      font-size: 1.08rem;
-      transition: border 0.18s;
-      background: #fff;
-      color: #232B36;
+      padding: 0.75rem 1rem;
+      border: 2px solid var(--color-divider);
+      border-radius: var(--radius-lg);
+      font-size: 1rem;
+      background: var(--color-card-bg);
+      color: var(--color-text-main);
+      transition: border-color var(--transition-fast);
       box-sizing: border-box;
     }
-    .mi-role-input:focus {
-      border-color: #1976D2;
+    
+    .mi-input:focus, .mi-select:focus {
+      border-color: var(--color-accent-blue);
       outline: none;
     }
+    
+    /* Segmented Control */
+    .mi-segmented {
+      display: flex;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+    }
+    
+    .mi-segment {
+      flex: 1;
+      min-width: 80px;
+      padding: 0.7rem 1.25rem;
+      border: 2px solid #007BFF;
+      border-radius: 12px;
+      background: #fff;
+      color: #007BFF;
+      font-size: 1rem;
+      font-weight: 700;
+      cursor: pointer;
+      text-align: center;
+      transition: background 0.18s, color 0.18s, box-shadow 0.18s;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 44px;
+    }
+    
+    .mi-segment:hover {
+      background: #F0F8FF;
+      color: #0056b3;
+      box-shadow: 0 4px 16px rgba(0,123,255,0.10);
+    }
+    
+    .mi-segment.active {
+      background: #F0F8FF;
+      border-color: #007BFF;
+      color: #0056b3;
+      box-shadow: 0 4px 16px rgba(0,123,255,0.10);
+    }
+    
+    .mi-segment:focus-visible {
+      outline: none;
+      box-shadow: 0 0 0 3px rgba(0,123,255,0.25);
+    }
+    
+    /* Radio Options */
+    .mi-radio-group {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+    
+    .mi-radio-option {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      cursor: pointer;
+      font-size: 0.95rem;
+      color: var(--color-text-main);
+    }
+    
+    .mi-radio-option input[type="radio"] {
+      width: 18px;
+      height: 18px;
+      accent-color: var(--color-accent-blue);
+    }
+    
+    /* Checklist */
+    .mi-checklist {
+      background: #F8FAFC;
+      border-radius: var(--radius-lg);
+      padding: 1rem 1.25rem;
+      margin-bottom: 1.5rem;
+    }
+    
+    .mi-checklist-title {
+      font-weight: var(--font-weight-semibold);
+      color: var(--color-text-main);
+      margin-bottom: 0.75rem;
+      font-size: 0.9rem;
+    }
+    
+    .mi-checklist-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 0.5rem;
+      font-size: 0.9rem;
+      color: var(--color-text-secondary);
+      margin-bottom: 0.5rem;
+      line-height: 1.4;
+    }
+    
+    .mi-checklist-item:last-child {
+      margin-bottom: 0;
+    }
+    
+    .mi-checklist-item svg {
+      flex-shrink: 0;
+      margin-top: 2px;
+      color: var(--color-cta-green);
+    }
+    
+    /* Primary CTA Button */
+    .mi-btn-primary {
+      width: 100%;
+      background: var(--color-cta-green);
+      color: #fff;
+      border: none;
+      border-radius: var(--radius-lg);
+      font-size: 1.1rem;
+      padding: 1rem;
+      font-weight: var(--font-weight-bold);
+      cursor: pointer;
+      transition: background var(--transition-fast);
+      box-shadow: var(--shadow-button);
+    }
+    
+    .mi-btn-primary:hover:not(:disabled) {
+      background: var(--color-cta-green-hover);
+    }
+    
+    .mi-btn-primary:disabled {
+      background: var(--color-disabled);
+      cursor: not-allowed;
+    }
+    
+    /* Session Meter */
+    .mi-meter {
+      background: #F8FAFC;
+      border: 1px solid var(--color-divider);
+      border-radius: var(--radius-lg);
+      padding: 1rem;
+      margin-top: 1rem;
+    }
+    
+    .mi-meter-text {
+      font-size: 0.9rem;
+      color: var(--color-text-secondary);
+      margin-bottom: 0;
+    }
+    
+    .mi-meter-warning {
+      font-size: 0.85rem;
+      color: var(--color-warning);
+      margin-top: 0.5rem;
+      font-weight: var(--font-weight-medium);
+    }
+    
+    /* Skeleton Loading Animation */
+    @keyframes rf-shimmer {
+      0% { background-position: 200% 0; }
+      100% { background-position: -200% 0; }
+    }
+    .rf-skeleton {
+      background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+      background-size: 200% 100%;
+      animation: rf-shimmer 1.5s infinite;
+      border-radius: var(--radius-lg);
+      opacity: 1;
+      transition: opacity 0.3s ease;
+    }
+    .rf-skeleton.hidden {
+      opacity: 0;
+      pointer-events: none;
+    }
+    
+    /* Session History Sidebar - HistoryPanel v1 */
+    .mi-history {
+      position: sticky;
+      top: 1rem;
+    }
+    
+    .mi-history-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+    
+    .mi-history-title-wrap {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 0;
+    }
+
+    .mi-history-title-text {
+      font-weight: 800;
+      color: var(--color-text-main);
+      font-size: 1.05rem;
+      line-height: 1.2;
+    }
+
+    .mi-history-header-actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-shrink: 0;
+    }
+
+    .mi-history-icon-btn {
+      width: 40px;
+      height: 40px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border: 1px solid var(--color-divider);
+      border-radius: var(--radius-md);
+      background: transparent;
+      cursor: pointer;
+      transition: background 0.18s ease, border-color 0.18s ease;
+    }
+    .mi-history-icon-btn:hover {
+      background: #F9FAFB;
+      border-color: #D1D5DB;
+    }
+
+    .mi-history-manage-btn {
+      text-decoration: none;
+      color: var(--color-text-secondary);
+      font-weight: 700;
+      border: 1px solid var(--color-divider);
+      border-radius: var(--radius-md);
+      padding: 0.5rem 1rem;
+      background: transparent;
+      transition: background 0.18s ease, border-color 0.18s ease;
+      cursor: pointer;
+    }
+    .mi-history-manage-btn:hover { 
+      color: var(--color-text-main);
+      background: #F9FAFB;
+      border-color: #D1D5DB;
+    }
+
+    .mi-history-panel--manage .mi-history-header-actions { display: none; }
+    .mi-history-manage-actions {
+      display: none;
+      flex-shrink: 0;
+    }
+    .mi-history-manage-actions__actions {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    .mi-history-panel--manage .mi-history-manage-actions { 
+      display: flex;
+      justify-content: flex-end;
+      align-items: center;
+    }
+    .mi-history-panel--manage .mi-history-row-actions { display: none; }
+
+    .mi-history-danger-btn {
+      background: rgba(220, 38, 38, 0.10);
+      border: 1px solid rgba(220, 38, 38, 0.25);
+      color: var(--color-error);
+      font-weight: 800;
+      border-radius: var(--radius-md);
+      padding: 0.7rem 1rem;
+      cursor: pointer;
+      transition: background 0.18s ease, border-color 0.18s ease, opacity 0.18s ease;
+    }
+    .mi-history-danger-btn:disabled {
+      opacity: 0.55;
+      cursor: not-allowed;
+    }
+    .mi-history-danger-btn:hover:not(:disabled) {
+      background: rgba(220, 38, 38, 0.14);
+      border-color: rgba(220, 38, 38, 0.35);
+    }
+
+    .mi-history-neutral-btn {
+      background: #fff;
+      border: 1px solid var(--color-divider);
+      color: var(--color-text-main);
+      font-weight: 700;
+      border-radius: var(--radius-md);
+      padding: 0.7rem 1rem;
+      cursor: pointer;
+      transition: background 0.18s ease, border-color 0.18s ease;
+    }
+    .mi-history-neutral-btn:hover {
+      background: #F9FAFB;
+      border-color: #D1D5DB;
+    }
+
+    @media (max-width: 520px) {
+      .mi-history-panel--manage .mi-history-manage-actions {
+        flex-direction: column;
+        align-items: stretch;
+      }
+      #mi-history-delete-selected,
+      #mi-history-cancel-manage {
+        width: 100%;
+      }
+    }
+    
+    .mi-history-subtitle {
+      margin-top: 10px;
+      font-size: 0.875rem; /* ~14px */
+      color: var(--color-text-muted);
+    }
+
+    .mi-history-body {
+      margin-top: 16px;
+    }
+    
+    .mi-history-list {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    
+    .mi-history-item {
+      position: relative;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 0.875rem 1rem;
+      background: #fff;
+      border-radius: var(--radius-md);
+      border: 1px solid #E5E7EB;
+      transition: background 0.18s ease, border-color 0.18s ease, outline 0.18s ease;
+      cursor: pointer;
+      min-height: 56px;
+    }
+    .mi-history-item:hover {
+      background: #F9FAFB;
+      border-color: #D1D5DB;
+    }
+    .mi-history-item.is-selected {
+      outline: 2px solid var(--color-accent-blue);
+      outline-offset: 0;
+      border-color: var(--color-divider);
+      background: #fff;
+    }
+
+    .mi-history-checkbox-wrap {
+      display: none;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+    .mi-history-checkbox {
+      width: 18px;
+      height: 18px;
+      accent-color: var(--color-accent-blue);
+      cursor: pointer;
+    }
+    .mi-history-panel--manage .mi-history-checkbox-wrap {
+      display: inline-flex;
+    }
+
+    .mi-history-icon {
+      width: 40px;
+      height: 40px;
+      border-radius: var(--radius-md);
+      background: linear-gradient(135deg, #E0E7FF 0%, #C7D2FE 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+    .mi-history-icon svg {
+      width: 20px;
+      height: 20px;
+      color: #4F46E5;
+    }
+    
+    .mi-history-text {
+      flex: 1;
+      min-width: 0;
+    }
+    .mi-history-line1 {
+      font-weight: 700;
+      color: var(--color-text-main);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      font-size: 0.95rem;
+      line-height: 1.25;
+    }
+    .mi-history-line2 {
+      margin-top: 2px;
+      font-size: 0.85rem;
+      color: var(--color-text-muted);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    
+    .mi-history-score {
+      font-weight: 800;
+      color: var(--color-text-main);
+      font-size: 0.95rem;
+      flex-shrink: 0;
+      min-width: fit-content;
+    }
+
+    .mi-history-row-actions {
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      margin-left: 2px;
+    }
+
+    .mi-history-kebab {
+      width: 40px;
+      height: 40px;
+      border: 1px solid transparent;
+      border-radius: var(--radius-md);
+      background: transparent;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.18s ease, border-color 0.18s ease, opacity 0.18s ease;
+      opacity: 0;
+    }
+    .mi-history-item:hover .mi-history-kebab,
+    .mi-history-item:focus-within .mi-history-kebab {
+      opacity: 1;
+    }
+    .mi-history-kebab:hover {
+      background: #F3F4F6;
+      border-color: #E5E7EB;
+    }
+
+    /* Mobile (no hover): kebab always visible */
+    @media (hover: none), (pointer: coarse) {
+      .mi-history-kebab { opacity: 1; }
+    }
+
+    .mi-history-menu {
+      position: absolute;
+      right: 0;
+      top: calc(100% + 6px);
+      min-width: 170px;
+      background: #fff;
+      border: 1px solid var(--color-divider);
+      border-radius: 12px;
+      box-shadow: var(--shadow-dropdown);
+      padding: 6px;
+      z-index: var(--z-popover);
+    }
+    .mi-history-menu[hidden] { display: none; }
+    .mi-history-menu-item {
+      width: 100%;
+      text-align: left;
+      background: transparent;
+      border: none;
+      padding: 10px 10px;
+      border-radius: 10px;
+      cursor: pointer;
+      font-weight: 600;
+      color: var(--color-text-main);
+    }
+    .mi-history-menu-item:hover {
+      background: #F9FAFB;
+    }
+    .mi-history-menu-item--danger {
+      color: var(--color-error);
+    }
+    .mi-history-menu-item--danger:hover {
+      background: rgba(220, 38, 38, 0.06);
+    }
+
+    .mi-history-loading {
+      display: none;
+    }
+    .mi-history-loading.is-visible {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .mi-history-skeleton-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 0.875rem 1rem;
+      border-radius: var(--radius-md);
+      border: 1px solid var(--color-divider);
+      background: #fff;
+      min-height: 56px;
+    }
+    .mi-history-skeleton-pill {
+      height: 16px;
+      border-radius: 8px;
+      width: 60%;
+    }
+    .mi-history-skeleton-pill.sm {
+      width: 40%;
+    }
+    .mi-history-skeleton-score {
+      width: 32px;
+      height: 20px;
+      border-radius: 4px;
+    }
+
+    .mi-history-error {
+      padding: 10px 12px;
+      border: 1px solid rgba(220, 38, 38, 0.22);
+      background: rgba(220, 38, 38, 0.06);
+      border-radius: 12px;
+      color: var(--color-text-main);
+      font-size: 0.95rem;
+      margin-bottom: 12px;
+    }
+    .mi-history-error[hidden] { display: none; }
+    .mi-history-link-btn {
+      background: transparent;
+      border: none;
+      padding: 0;
+      cursor: pointer;
+      font-weight: 600;
+      color: var(--color-accent-blue);
+      text-decoration: underline;
+      font-size: inherit;
+    }
+
+    .mi-history-empty {
+      text-align: center;
+      padding: 20px 12px;
+      color: var(--color-text-muted);
+      border: 1px dashed var(--color-divider);
+      border-radius: 12px;
+    }
+    .mi-history-empty[hidden] { display: none; }
+
+    .mi-history-footer {
+      margin-top: 16px;
+      font-size: 0.875rem; /* 13–14px */
+      color: var(--color-text-muted);
+      line-height: 1.45;
+    }
+    .mi-history-footer a,
+    .mi-history-footer button {
+      font-size: inherit;
+    }
+    .mi-history-footer-links {
+      display: inline-flex;
+      gap: 6px;
+      align-items: center;
+      margin-left: 4px;
+    }
+    .mi-history-footer-link {
+      color: var(--color-accent-blue);
+      text-decoration: underline;
+      background: transparent;
+      border: none;
+      padding: 0;
+      cursor: pointer;
+    }
+    .mi-history-footer-separator {
+      color: var(--color-text-muted);
+      font-weight: 600;
+    }
+    .mi-history-footer-link--danger {
+      color: var(--color-error);
+      font-weight: 600;
+    }
+    .mi-history-footer-link--danger:hover {
+      text-decoration: underline;
+    }
+
+    /* Modal */
+    .mi-history-modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(17, 24, 39, 0.45);
+      z-index: var(--z-modal-backdrop);
+    }
+
+    .mi-history-modal-backdrop[hidden] {
+      display: none !important;
+    }
+
+    .mi-history-delete-modal {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: min(520px, calc(100vw - 32px));
+      background: #fff;
+      border: 1px solid var(--color-divider);
+      border-radius: var(--radius-xl);
+      box-shadow: var(--shadow-xl);
+      padding: 20px;
+      z-index: var(--z-modal);
+    }
+
+    .mi-history-delete-modal[hidden] {
+      display: none !important;
+    }
+
+    .mi-history-delete-modal-content {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .mi-history-delete-modal-title {
+      font-size: 1.15rem;
+      font-weight: 800;
+      margin: 0 0 8px 0;
+      color: var(--color-text-main);
+    }
+
+    .mi-history-delete-modal-body {
+      margin: 6px 0;
+      color: var(--color-text-secondary);
+      line-height: 1.5;
+    }
+
+    .mi-history-delete-modal-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+      margin-top: 16px;
+      flex-wrap: wrap;
+    }
+    .mi-history-delete-modal-actions button {
+      min-height: 44px;
+    }
+    @media (max-width: 520px) {
+      .mi-history-delete-modal-actions {
+        flex-direction: column;
+        align-items: stretch;
+      }
+    }
+    
+    /* Interview In-Progress */
+    .mi-progress-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 1rem;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+    }
+    
+    .mi-progress-pill {
+      background: var(--color-accent-blue);
+      color: #fff;
+      padding: 0.4rem 0.8rem;
+      border-radius: var(--radius-full);
+      font-size: 0.85rem;
+      font-weight: var(--font-weight-semibold);
+    }
+    
+    .mi-progress-meta {
+      font-size: 0.9rem;
+      color: var(--color-text-secondary);
+    }
+    
+    .mi-question-container {
+      margin-bottom: 1.25rem;
+    }
+    
+    .mi-question-text {
+      font-size: 1.25rem;
+      font-weight: var(--font-weight-semibold);
+      color: var(--color-text-main);
+      line-height: 1.4;
+      display: flex;
+      align-items: flex-start;
+      gap: 0.75rem;
+    }
+    
+    .mi-ai-badge {
+      flex-shrink: 0;
+      width: 36px;
+      height: 36px;
+      background: var(--color-accent-blue);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #fff;
+      font-weight: var(--font-weight-bold);
+      font-size: 0.85rem;
+    }
+    
+    .mi-answer-area {
+      width: 100%;
+      min-height: 150px;
+      padding: 1rem;
+      border: 2px solid var(--color-divider);
+      border-radius: var(--radius-lg);
+      font-size: 1rem;
+      font-family: inherit;
+      line-height: 1.6;
+      resize: vertical;
+      transition: border-color var(--transition-fast);
+      box-sizing: border-box;
+    }
+    
+    .mi-answer-area:focus {
+      border-color: var(--color-accent-blue);
+      outline: none;
+    }
+    
+    /* S+A=O Helper Strip */
+    .mi-sao-strip {
+      display: flex;
+      justify-content: space-between;
+      background: #F0F9FF;
+      border: 1px solid #BFDBFE;
+      border-radius: var(--radius-md);
+      padding: 0.6rem 1rem;
+      margin-top: 0.75rem;
+      font-size: 0.85rem;
+    }
+    
+    .mi-sao-item {
+      text-align: center;
+      color: var(--color-text-secondary);
+    }
+    
+    .mi-sao-label {
+      font-weight: var(--font-weight-semibold);
+      color: var(--color-accent-blue);
+    }
+    
+    /* Word Counter */
+    .mi-word-counter {
+      text-align: right;
+      font-size: 0.85rem;
+      color: var(--color-text-muted);
+      margin-top: 0.5rem;
+    }
+    
+    .mi-word-counter.short {
+      color: var(--color-warning);
+    }
+    
+    /* Low word nudge */
+    .mi-short-nudge {
+      background: #FEF3C7;
+      border: 1px solid var(--color-warning);
+      border-radius: var(--radius-md);
+      padding: 0.6rem 0.8rem;
+      font-size: 0.9rem;
+      color: #92400E;
+      margin-top: 0.75rem;
+      display: none;
+    }
+    
+    .mi-short-nudge.visible {
+      display: block;
+    }
+    
+    /* Navigation Buttons */
+    .mi-nav-buttons {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 1.25rem;
+      gap: 1rem;
+    }
+    
+    .mi-btn-secondary {
+      background: none;
+      border: 2px solid var(--color-divider);
+      color: var(--color-text-secondary);
+      padding: 0.75rem 1.5rem;
+      border-radius: var(--radius-lg);
+      font-size: 1rem;
+      font-weight: var(--font-weight-semibold);
+      cursor: pointer;
+      transition: all var(--transition-fast);
+    }
+    
+    .mi-btn-secondary:hover:not(:disabled) {
+      border-color: var(--color-accent-blue);
+      color: var(--color-accent-blue);
+    }
+    
+    .mi-btn-secondary:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    
+    .mi-btn-next {
+      background: var(--color-cta-green);
+      color: #fff;
+      border: none;
+      padding: 0.75rem 2rem;
+      border-radius: var(--radius-lg);
+      font-size: 1rem;
+      font-weight: var(--font-weight-bold);
+      cursor: pointer;
+      transition: background var(--transition-fast);
+    }
+    
+    .mi-btn-next:hover {
+      background: var(--color-cta-green-hover);
+    }
+    
+    /* Scoring Overlay */
+    .mi-scoring-overlay {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.5);
+      z-index: var(--z-modal-backdrop);
+      align-items: center;
+      justify-content: center;
+    }
+    
+    .mi-scoring-overlay.visible {
+      display: flex;
+    }
+    
+    .mi-scoring-modal {
+      background: var(--color-card-bg);
+      border-radius: var(--radius-xl);
+      padding: 2rem;
+      max-width: 400px;
+      width: 90%;
+      text-align: center;
+    }
+    
+    .mi-scoring-title {
+      font-size: 1.25rem;
+      font-weight: var(--font-weight-bold);
+      color: var(--color-text-main);
+      margin-bottom: 0.75rem;
+    }
+    
+    .mi-scoring-text {
+      font-size: 0.95rem;
+      color: var(--color-text-secondary);
+      line-height: 1.5;
+    }
+    
+    .mi-scoring-spinner {
+      width: 48px;
+      height: 48px;
+      border: 4px solid var(--color-divider);
+      border-top-color: var(--color-accent-blue);
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      margin: 1.5rem auto 0;
+    }
+    
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+    
+    /* Summary View */
+    .mi-summary {
+      display: none;
+    }
+    
+    .mi-summary.visible {
+      display: block;
+    }
+    
+    .mi-score-hero {
+      text-align: center;
+      padding: 1.5rem;
+      background: linear-gradient(135deg, #F0F9FF 0%, #E0F2FE 100%);
+      border-radius: var(--radius-xl);
+      margin-bottom: 1.5rem;
+    }
+    
+    .mi-score-value {
+      font-size: 3rem;
+      font-weight: var(--font-weight-extrabold);
+      line-height: 1;
+      margin-bottom: 0.5rem;
+    }
+    
+    .mi-score-value.score-red { color: var(--color-error); }
+    .mi-score-value.score-yellow { color: var(--color-warning); }
+    .mi-score-value.score-green { color: var(--color-success); }
+    .mi-score-value.score-blue { color: var(--color-accent-blue); }
+    
+    .mi-score-label {
+      font-size: 1rem;
+      color: var(--color-text-secondary);
+      margin-bottom: 0.75rem;
+    }
+    
+    .mi-score-coaching {
+      font-size: 0.95rem;
+      color: var(--color-text-main);
+      line-height: 1.5;
+    }
+    
+    .mi-score-badge {
+      font-size: 0.8rem;
+      color: var(--color-text-muted);
+      margin-top: 0.75rem;
+    }
+    
+    /* Rubric Grid */
+    .mi-rubric-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+    }
+    
+    .mi-rubric-card {
+      background: #F8FAFC;
+      border-radius: var(--radius-lg);
+      padding: 1rem;
+      text-align: center;
+    }
+    
+    .mi-rubric-label {
+      font-size: 0.85rem;
+      color: var(--color-text-secondary);
+      margin-bottom: 0.5rem;
+    }
+    
+    .mi-rubric-score {
+      font-size: 1.5rem;
+      font-weight: var(--font-weight-bold);
+      color: var(--color-accent-blue);
+    }
+    
+    .mi-rubric-note {
+      font-size: 0.8rem;
+      color: var(--color-text-muted);
+      margin-top: 0.5rem;
+      line-height: 1.4;
+    }
+    
+    /* S+A=O Analysis Card */
+    .mi-sao-card {
+      background: #F0F9FF;
+      border: 1px solid #BFDBFE;
+      border-radius: var(--radius-lg);
+      padding: 1.25rem;
+      margin-bottom: 1.5rem;
+    }
+    
+    .mi-sao-title {
+      font-weight: var(--font-weight-semibold);
+      color: var(--color-text-main);
+      margin-bottom: 1rem;
+    }
+    
+    .mi-sao-breakdown {
+      display: flex;
+      justify-content: space-around;
+      margin-bottom: 1rem;
+      flex-wrap: wrap;
+      gap: 1rem;
+    }
+    
+    .mi-sao-stat {
+      text-align: center;
+    }
+    
+    .mi-sao-pct {
+      font-size: 1.5rem;
+      font-weight: var(--font-weight-bold);
+      color: var(--color-accent-blue);
+    }
+    
+    .mi-sao-name {
+      font-size: 0.85rem;
+      color: var(--color-text-secondary);
+    }
+    
+    .mi-sao-target {
+      font-size: 0.75rem;
+      color: var(--color-text-muted);
+    }
+    
+    .mi-sao-coaching {
+      list-style: disc;
+      padding-left: 1.25rem;
+      margin: 0;
+    }
+    
+    .mi-sao-coaching li {
+      font-size: 0.9rem;
+      color: var(--color-text-secondary);
+      margin-bottom: 0.5rem;
+      line-height: 1.4;
+    }
+    
+    /* Improvements Section */
+    .mi-section-title {
+      font-weight: var(--font-weight-semibold);
+      color: var(--color-text-main);
+      margin-bottom: 0.75rem;
+      font-size: 1rem;
+    }
+    
+    .mi-improvements-list {
+      list-style: decimal;
+      padding-left: 1.5rem;
+      margin: 0 0 1.5rem 0;
+    }
+    
+    .mi-improvements-list li {
+      font-size: 0.95rem;
+      color: var(--color-text-secondary);
+      margin-bottom: 0.5rem;
+      line-height: 1.4;
+    }
+    
+    /* Per-Question Accordion */
+    .mi-accordion {
+      border: 1px solid var(--color-divider);
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+      margin-bottom: 1.5rem;
+    }
+    
+    .mi-accordion-item {
+      border-bottom: 1px solid var(--color-divider);
+    }
+    
+    .mi-accordion-item:last-child {
+      border-bottom: none;
+    }
+    
+    .mi-accordion-header {
+      width: 100%;
+      background: none;
+      border: none;
+      padding: 1rem;
+      text-align: left;
+      cursor: pointer;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 0.75rem;
+      font-size: 0.95rem;
+      color: var(--color-text-main);
+      transition: background var(--transition-fast);
+    }
+
+    .mi-accordion-question {
+      flex: 1;
+      min-width: 0;
+      line-height: 1.5;
+      color: var(--color-text-secondary, #64748B);
+      overflow: hidden;
+      display: -webkit-box;
+      -webkit-line-clamp: 3;
+      line-clamp: 3;
+      -webkit-box-orient: vertical;
+    }
+
+    .mi-accordion-header:hover {
+      background: #F8FAFC;
+    }
+    
+    .mi-accordion-header svg {
+      transition: transform var(--transition-fast);
+      flex-shrink: 0;
+    }
+    
+    .mi-accordion-item.open .mi-accordion-header svg {
+      transform: rotate(180deg);
+    }
+    
+    .mi-accordion-q-score {
+      font-weight: var(--font-weight-bold);
+      color: var(--color-accent-blue);
+      margin-right: 0.5rem;
+      flex-shrink: 0;
+    }
+    
+    .mi-accordion-content {
+      display: none;
+      padding: 0 1rem 1rem;
+    }
+    
+    .mi-accordion-item.open .mi-accordion-content {
+      display: block;
+    }
+    
+    .mi-accordion-answer {
+      background: #F8FAFC;
+      border-radius: var(--radius-md);
+      padding: 0.75rem;
+      font-size: 0.9rem;
+      color: var(--color-text-secondary);
+      margin-bottom: 0.75rem;
+      line-height: 1.5;
+      max-height: 100px;
+      overflow-y: auto;
+    }
+    
+    .mi-accordion-notes {
+      list-style: disc;
+      padding-left: 1.25rem;
+      margin: 0;
+    }
+    
+    .mi-accordion-notes li {
+      font-size: 0.85rem;
+      color: var(--color-text-secondary);
+      margin-bottom: 0.35rem;
+    }
+    
+    /* Summary Actions */
+    .mi-summary-actions {
+      display: flex;
+      gap: 1rem;
+      flex-wrap: wrap;
+      margin-top: 1.5rem;
+    }
+    
+    .mi-summary-actions .mi-btn-primary {
+      flex: 1;
+      min-width: 200px;
+    }
+    
+    .mi-summary-actions .mi-btn-secondary {
+      flex: 1;
+      min-width: 150px;
+    }
+    
+    /* Hidden state */
+    .hidden {
+      display: none !important;
+    }
+    
+    /* Role Autocomplete */
+    .mi-role-autocomplete {
+      position: relative;
+    }
+    
     .mi-role-dropdown {
       position: absolute;
       left: 0;
       right: 0;
       top: 100%;
-      background: #fff;
-      border: 1.5px solid #E5E7EB;
+      background: var(--color-card-bg);
+      border: 2px solid var(--color-divider);
       border-top: none;
-      border-radius: 0 0 10px 10px;
-      box-shadow: 0 2px 8px rgba(31,41,55,0.07);
-      z-index: 10;
+      border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+      box-shadow: var(--shadow-dropdown);
+      z-index: var(--z-dropdown);
       max-height: 220px;
       overflow-y: auto;
       display: none;
     }
+    
     .mi-role-item {
-      padding: 0.85rem 1.1rem;
+      padding: 0.75rem 1rem;
       cursor: pointer;
-      font-size: 1.08rem;
-      color: #232B36;
-      transition: background 0.15s;
+      font-size: 0.95rem;
+      color: var(--color-text-main);
+      transition: background var(--transition-fast);
     }
-    .mi-role-item:hover,
-    .mi-role-item.active {
+    
+    .mi-role-item:hover, .mi-role-item.active {
       background: #F3F4F6;
     }
-    .mi-question {
-      font-size: 1.2rem;
-      font-weight: 600;
-      color: #232B36;
-      line-height: 1.4;
-    }
-    .mi-answer-input {
-      width: 100%;
-      min-height: 120px;
-      padding: 1rem;
-      border: 2px solid #E5E7EB;
-      border-radius: 10px;
-      font-size: 1rem;
-      background: #fff;
-      color: #232B36;
-      resize: vertical;
-      box-sizing: border-box;
-      font-family: inherit;
-      line-height: 1.5;
-    }
-    .mi-answer-input:focus {
-      border-color: #1976D2;
-      outline: none;
-    }
-    .mi-history-list {
-      list-style: none;
-      padding: 0;
-      margin: 0;
-    }
-    .mi-history-item {
-      padding: 0.75rem;
-      border-radius: 8px;
-      margin-bottom: 0.5rem;
-      background: #fff;
-      border: 1px solid #E5E7EB;
-      cursor: pointer;
-      transition: background 0.15s;
-    }
-    .mi-history-item:hover {
-      background: #F9FAFB;
-    }
-    .mi-history-empty {
-      color: #6B7280;
-      font-style: italic;
-      text-align: center;
-      padding: 1rem;
-    }
-    .mi-usage-meter {
-      background: #F8FAFC;
-      border-radius: 8px;
-      padding: 1rem;
-      border: 1px solid #E5E7EB;
-    }
-    .mi-usage-text {
-      font-size: 0.9rem;
-      color: #6B7280;
-      margin-bottom: 0.5rem;
-    }
-    .mi-usage-bar {
-      width: 100%;
-      height: 8px;
-      background: #E5E7EB;
-      border-radius: 4px;
-      overflow: hidden;
-      margin-bottom: 0.5rem;
-    }
-    .mi-usage-progress {
-      height: 100%;
-      background: #00E676;
-      transition: width 0.3s ease;
-    }
-    .mi-usage-warning {
-      font-size: 0.85rem;
-      color: #F59E0B;
-      font-weight: 600;
-    }
-    .mi-usage-upsell {
-      font-size: 0.85rem;
-      color: #DC2626;
-      font-weight: 600;
-    }
-    .mi-score-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-      gap: 1rem;
-      margin-bottom: 1rem;
-    }
-    .mi-score-item {
-      background: #F8FAFC;
-      border-radius: 8px;
-      padding: 1rem;
-      text-align: center;
-    }
-    .mi-score-label {
-      font-size: 0.9rem;
-      color: #6B7280;
-      margin-bottom: 0.5rem;
-    }
-    .mi-score-value {
-      font-size: 1.5rem;
-      font-weight: 700;
-      color: #1976D2;
-    }
-    .mi-total-score {
-      text-align: center;
-      font-size: 1.2rem;
-      font-weight: 700;
-      color: #232B36;
-    }
-    .clg-btn {
-      background: #00E676;
-      color: #fff;
-      border: none;
-      border-radius: 12px;
-      font-size: 1.13rem;
-      padding: 1rem 2rem;
-      font-weight: 700;
-      cursor: pointer;
-      transition: background 0.18s;
-    }
-    .clg-btn:hover,
-    .clg-btn:focus {
-      background: #00c965;
-    }
-    .clg-btn:disabled {
-      background: #9CA3AF;
-      cursor: not-allowed;
+    
+    .mi-role-item-sub {
+      font-size: 0.8rem;
+      color: var(--color-text-muted);
     }
   </style>
 </head>
@@ -247,9 +1297,7 @@
         <span>JOBHACKAI</span>
       </a>
       <div class="nav-group">
-        <nav class="nav-links" role="navigation">
-          <!-- Navigation will be dynamically populated by navigation.js -->
-        </nav>
+        <nav class="nav-links" role="navigation"></nav>
       </div>
       <button class="mobile-toggle" aria-label="Open navigation menu" aria-expanded="false" aria-controls="mobileNav">
         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -260,233 +1308,297 @@
       </button>
     </div>
   </header>
-  <nav class="mobile-nav" id="mobileNav">
-    <!-- Mobile navigation will be dynamically populated by navigation.js -->
-  </nav>
-  <script>
-    // Hamburger menu toggle
-    const mobileToggle = document.querySelector('.mobile-toggle');
-    const mobileNav = document.getElementById('mobileNav');
-    if (mobileToggle && mobileNav) {
-      mobileToggle.addEventListener('click', () => {
-        const isOpen = mobileNav.classList.toggle('open');
-        mobileToggle.setAttribute('aria-expanded', isOpen);
-      });
-      // Close mobile nav on link click
-      document.querySelectorAll('.mobile-nav a').forEach(link => {
-        link.addEventListener('click', () => {
-          mobileNav.classList.remove('open');
-          mobileToggle.setAttribute('aria-expanded', 'false');
-        });
-      });
-    }
-
-    // --- AUTHENTICATION CHECK ---
-    function checkAuthentication() {
-      // Use navigation system's authentication check for consistency
-      if (window.JobHackAINavigation) {
-        const authState = window.JobHackAINavigation.getAuthState();
-        if (!authState.isAuthenticated) {
-          const mainContent = document.querySelector('main');
-          mainContent.innerHTML = `
-            <div style="max-width: 600px; margin: 4rem auto; text-align: center; padding: 2rem;">
-              <div style="font-size: 4rem; margin-bottom: 1rem;">🔒</div>
-              <h1 style="font-size: 2rem; font-weight: 700; color: var(--color-text-main); margin-bottom: 1rem;">
-                Login Required
-              </h1>
-              <p style="font-size: 1.1rem; color: var(--color-text-secondary); margin-bottom: 2rem; line-height: 1.6;">
-                Mock Interviews requires you to be logged in to access this tool. 
-                Please sign in to get started.
-              </p>
-              <div style="display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap;">
-                <a href="login.html" class="btn-primary" style="text-decoration: none;">
-                  Sign In
-                </a>
-                <a href="pricing-a.html" class="btn-outline" style="text-decoration: none;">
-                  View Pricing
-                </a>
-              </div>
-            </div>
-          `;
-          return false;
-        }
-        return true;
-      } else {
-        // Fallback to localStorage check if navigation system not available
-        const isAuthenticated = localStorage.getItem('user-authenticated') === 'true';
-        if (!isAuthenticated) {
-          const mainContent = document.querySelector('main');
-          mainContent.innerHTML = `
-            <div style="max-width: 600px; margin: 4rem auto; text-align: center; padding: 2rem;">
-              <div style="font-size: 4rem; margin-bottom: 1rem;">🔒</div>
-              <h1 style="font-size: 2rem; font-weight: 700; color: var(--color-text-main); margin-bottom: 1rem;">
-                Login Required
-              </h1>
-              <p style="font-size: 1.1rem; color: var(--color-text-secondary); margin-bottom: 2rem; line-height: 1.6;">
-                Mock Interviews requires you to be logged in to access this tool. 
-                Please sign in to get started.
-              </p>
-              <div style="display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap;">
-                <a href="login.html" class="btn-primary" style="text-decoration: none;">
-                  Sign In
-                </a>
-                <a href="pricing-a.html" class="btn-outline" style="text-decoration: none;">
-                  View Pricing
-                </a>
-              </div>
-            </div>
-          `;
-          return false;
-        }
-        return true;
-      }
-    }
-
-    // --- USER PLAN LOGIC ---
-    function getUserPlan() {
-      // Use navigation system's plan detection for consistency
-      if (window.JobHackAINavigation) {
-        return window.JobHackAINavigation.getEffectivePlan();
-      } else {
-        return localStorage.getItem('user-plan') || 'free';
-      }
-    }
-
-    // --- PLAN LOGIC ---
-    function updateMockInterviewUIForPlan() {
-      const userPlan = getUserPlan();
-      
-      // Show/hide locked content based on plan
-      if (['pro', 'premium'].includes(userPlan)) {
-        // Show mock interview functionality
-        document.getElementById('mi-locked').style.display = 'none';
-        document.getElementById('mi-setup').style.display = 'block';
-      } else {
-        // Show locked message
-        document.getElementById('mi-locked').style.display = 'flex';
-        document.getElementById('mi-setup').style.display = 'none';
-      }
-    }
-    
-    // --- PAGE ACCESS CONTROL ---
-    function enforceAccess() {
-      const authState = window.JobHackAINavigation ? 
-        window.JobHackAINavigation.getAuthState() : 
-        { isAuthenticated: localStorage.getItem('user-authenticated') === 'true' };
-      
-      const userPlan = getUserPlan();
-      const allowedPlans = ['pro', 'premium'];
-      
-      if (!authState.isAuthenticated || !allowedPlans.includes(userPlan)) {
-        window.location.href = 'login.html';
-      }
-    }
-    
-    // Initialize page when DOM is ready
-    document.addEventListener('DOMContentLoaded', function() {
-      // Wait for navigation system to be ready
-      const initPage = () => {
-        // Check authentication first
-        if (!checkAuthentication()) {
-          return; // Stop here if not authenticated
-        }
-        
-        // Update UI based on plan
-        updateMockInterviewUIForPlan();
-        checkPlanAccess();
-        
-        // Enforce access control
-        enforceAccess();
-      };
-      
-      // Try to initialize immediately, then retry after a short delay
-      initPage();
-      setTimeout(initPage, 100);
-      
-      // Listen for plan changes from navigation system
-      window.addEventListener('planChanged', function(event) {
-        updateMockInterviewUIForPlan();
-        checkPlanAccess();
-      });
-    });
-  </script>
+  <nav class="mobile-nav" id="mobileNav"></nav>
+  <div class="mobile-nav-backdrop" id="mobileNavBackdrop"></div>
 
   <!-- Main Content -->
   <main class="mi-main">
-    <div class="mi-card mi-locked" id="mi-locked" style="display:none;">
-      <svg width="22" height="22" fill="none" stroke="#b59f00" stroke-width="2" style="flex-shrink:0;" viewBox="0 0 24 24"><path d="M6 10V7a5 5 0 1110 0v3"/><rect x="5" y="10" width="12" height="8" rx="2"/></svg>
-      <span class="mi-locked-message">This feature is only available on <strong>Pro</strong> and <strong>Premium</strong> plans.</span>
-      <button class="mi-upgrade-btn" onclick="window.location.href='pricing-a.html'">Upgrade</button>
-    </div>
-    <div class="mi-card" id="mi-setup">
-      <div style="display:flex;align-items:flex-start;gap:2.5rem;">
-        <div style="flex:1;display:flex;flex-direction:column;align-items:center;">
-          <div style="margin-bottom:1.5rem;">
-            <svg width="120" height="120" viewBox="0 0 120 120" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <circle cx="60" cy="60" r="60" fill="#E5F0FF"/>
-              <ellipse cx="60" cy="52" rx="28" ry="28" fill="#1976D2"/>
-              <ellipse cx="60" cy="52" rx="20" ry="20" fill="#FFD6A0"/>
-              <rect x="40" y="80" width="40" height="20" rx="10" fill="#1976D2"/>
-            </svg>
+    <div class="mi-layout">
+      <!-- Left Column: Main Content Area -->
+      <div>
+        <!-- Setup Screen -->
+        <div class="mi-card" id="mi-setup">
+          <h1 class="mi-title">Mock Interviews with AI</h1>
+          <p class="mi-subtitle">Practice 10 real interview questions, then get scored and coached on how to improve.</p>
+          
+          <!-- Target Role -->
+          <div class="mi-form-group">
+            <label class="mi-label" for="mi-role">Target Role</label>
+            <div class="mi-role-autocomplete">
+              <input type="text" id="mi-role" class="mi-input" placeholder="Start typing a role..." autocomplete="off">
+              <div class="mi-role-dropdown" id="mi-role-dropdown"></div>
+            </div>
           </div>
-          <div class="mi-role-autocomplete" id="mi-role-autocomplete">
-            <label for="mi-role-input" class="mi-role-label">Target Role</label>
-            <input id="mi-role-input" class="mi-role-input" type="text" placeholder="e.g., Software Engineer" autocomplete="off" aria-autocomplete="list" aria-haspopup="listbox" aria-expanded="false" />
-            <div id="mi-role-dropdown" class="mi-role-dropdown" role="listbox"></div>
+          
+          <!-- Seniority -->
+          <div class="mi-form-group">
+            <label class="mi-label" for="mi-seniority">Seniority</label>
+            <select id="mi-seniority" class="mi-select">
+              <option value="">Select level...</option>
+              <option value="intern">Intern</option>
+              <option value="junior">Junior</option>
+              <option value="mid">Mid</option>
+              <option value="senior">Senior</option>
+              <option value="lead">Lead</option>
+              <option value="director">Director+</option>
+            </select>
           </div>
-          <button class="clg-btn" id="mi-begin" type="button" style="width:220px;">Start Interview</button>
+          
+          <!-- Interview Style -->
+          <div class="mi-form-group">
+            <label class="mi-label">Interview Style</label>
+            <div class="mi-segmented" id="mi-style">
+              <button type="button" class="mi-segment active" data-value="mixed">Mixed</button>
+              <button type="button" class="mi-segment" data-value="behavioral">Behavioral</button>
+              <button type="button" class="mi-segment" data-value="technical">Technical</button>
+              <button type="button" class="mi-segment" data-value="leadership">Leadership</button>
+            </div>
+          </div>
+          
+          <!-- Question Source -->
+          <div class="mi-form-group">
+            <label class="mi-label">Question Source</label>
+            <div class="mi-radio-group">
+              <label class="mi-radio-option">
+                <input type="radio" name="mi-source" value="ai" checked>
+                Use AI-generated questions
+              </label>
+              <label class="mi-radio-option">
+                <input type="radio" name="mi-source" value="saved">
+                Use my saved set
+              </label>
+            </div>
+            <select id="mi-saved-set" class="mi-select hidden" style="margin-top: 1rem;">
+              <option value="">Select a saved set...</option>
+            </select>
+          </div>
+          
+          <!-- What to Expect -->
+          <div class="mi-checklist">
+            <div class="mi-checklist-title">What to expect</div>
+            <div class="mi-checklist-item">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20,6 9,17 4,12"/></svg>
+              <span>10 questions, about 10–15 minutes.</span>
+            </div>
+            <div class="mi-checklist-item">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20,6 9,17 4,12"/></svg>
+              <span>Use Situation → Action → Outcome to structure your answers.</span>
+            </div>
+            <div class="mi-checklist-item">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20,6 9,17 4,12"/></svg>
+              <span>We'll score you out of 100 and save this session to your history.</span>
+            </div>
+          </div>
+          
+          <!-- Start Button -->
+          <button type="button" class="mi-btn-primary" id="mi-start" disabled>Start Mock Interview</button>
+          
+          <!-- Session Meter -->
+          <div class="mi-meter" id="mi-meter">
+            <div class="mi-meter-text">Sessions used this month: <span id="mi-sessions-used">0</span></div>
+            <div class="mi-meter-warning hidden" id="mi-meter-warning"></div>
+          </div>
         </div>
-        <aside style="min-width:220px;max-width:260px;width:100%;background:#F8FAFC;border-radius:var(--radius-card);box-shadow:var(--shadow-card);padding:1.2rem 1.2rem 1rem 1.2rem;">
-          <div style="font-weight:700;font-size:1.1rem;margin-bottom:1.1rem;color:var(--color-text-main);">Session History</div>
-          <ul id="mi-history-list" class="mi-history-list">
-            <li class="mi-history-empty">No previous sessions yet.</li>
-          </ul>
-        </aside>
+        
+        <!-- Interview In-Progress -->
+        <div class="mi-card hidden" id="mi-interview">
+          <div class="mi-progress-header">
+            <span class="mi-progress-pill" id="mi-q-pill">Question 1 of 10</span>
+            <span class="mi-progress-meta" id="mi-q-meta">Role: Software Engineer · Senior · Mixed</span>
+          </div>
+          
+          <div class="mi-question-container">
+            <div class="mi-question-text">
+              <span class="mi-ai-badge">AI</span>
+              <span id="mi-question">Loading question...</span>
+            </div>
+          </div>
+          
+          <textarea id="mi-answer" class="mi-answer-area" placeholder="Use Situation → Action → Outcome. Focus most on what changed because of your work."></textarea>
+          
+          <!-- S+A=O Helper Strip -->
+          <div class="mi-sao-strip">
+            <div class="mi-sao-item"><span class="mi-sao-label">Situation</span><br>goal ≈ 5%</div>
+            <div class="mi-sao-item"><span class="mi-sao-label">Action</span><br>goal ≈ 10%</div>
+            <div class="mi-sao-item"><span class="mi-sao-label">Outcome</span><br>goal ≈ 85%</div>
+          </div>
+          
+          <div class="mi-word-counter" id="mi-word-counter">0 words · Aim for 150–250 words (≈ 60–90 seconds)</div>
+          
+          <div class="mi-short-nudge" id="mi-short-nudge">
+            This answer is quite short. Consider adding more detail before moving on.
+          </div>
+          
+          <div class="mi-nav-buttons">
+            <button type="button" class="mi-btn-secondary" id="mi-back" disabled>Back</button>
+            <button type="button" class="mi-btn-next" id="mi-next">Next</button>
+          </div>
+          
+          <!-- Meter during interview -->
+          <div class="mi-meter" style="margin-top: 1.5rem;">
+            <div class="mi-meter-text">Sessions used this month: <span id="mi-sessions-used-2">0</span></div>
+          </div>
+        </div>
+        
+        <!-- Summary View -->
+        <div class="mi-card mi-summary hidden" id="mi-summary">
+          <div class="mi-score-hero">
+            <div class="mi-score-value score-blue" id="mi-final-score">74 / 100</div>
+            <div class="mi-score-label">Mock Interview Score</div>
+            <div class="mi-score-coaching" id="mi-score-coaching">Loading feedback...</div>
+            <div class="mi-score-badge" id="mi-score-badge">Saved to history · Today · Data Engineer · Senior</div>
+          </div>
+          
+          <!-- Rubric Breakdown -->
+          <div class="mi-rubric-grid" id="mi-rubric-grid">
+            <!-- Populated by JS -->
+          </div>
+          
+          <!-- S+A=O Analysis -->
+          <div class="mi-sao-card">
+            <div class="mi-sao-title">How you balanced Situation, Action, and Outcome</div>
+            <div class="mi-sao-breakdown" id="mi-sao-breakdown">
+              <!-- Populated by JS -->
+            </div>
+            <ul class="mi-sao-coaching" id="mi-sao-coaching-list">
+              <!-- Populated by JS -->
+            </ul>
+          </div>
+          
+          <!-- Top Improvements -->
+          <div>
+            <div class="mi-section-title">Next time, focus on:</div>
+            <ol class="mi-improvements-list" id="mi-improvements-list">
+              <!-- Populated by JS -->
+            </ol>
+          </div>
+          
+          <!-- Per-Question Accordion -->
+          <div class="mi-accordion" id="mi-accordion">
+            <!-- Populated by JS -->
+          </div>
+          
+          <!-- Summary Actions -->
+          <div class="mi-summary-actions">
+            <button type="button" class="mi-btn-primary" id="mi-retake">Retake this interview</button>
+            <button type="button" class="mi-btn-secondary" id="mi-new-questions">Practice new questions</button>
+            <a href="dashboard.html" class="mi-btn-secondary" style="text-decoration: none; text-align: center;">Back to Dashboard</a>
+          </div>
+        </div>
       </div>
-    </div>
-    <div class="mi-card" id="mi-session" style="display:none;">
-      <div style="display:flex;align-items:flex-start;gap:2.5rem;">
-        <div style="flex:1;">
-          <div style="display:flex;align-items:center;gap:0.7rem;margin-bottom:1.2rem;">
-            <div style="width:44px;height:44px;border-radius:50%;background:#1976D2;display:flex;align-items:center;justify-content:center;">
-              <span style="color:#fff;font-weight:700;font-size:1.2rem;">AI</span>
-            </div>
-            <div id="mi-question" class="mi-question">Tell me about yourself and your experience.</div>
+      
+      <!-- Right Column: Session History -->
+      <aside class="mi-card mi-history history-card" id="mi-history-panel" data-history-panel="v1">
+        <div class="mi-history-header" data-history-header>
+          <div class="mi-history-title-wrap">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <circle cx="12" cy="12" r="10"/>
+              <polyline points="12 6 12 12 16 14"/>
+            </svg>
+            <span class="mi-history-title-text" id="mi-history-header-title">History</span>
           </div>
-          <textarea class="mi-answer-input" id="mi-answer" placeholder="Type your response..."></textarea>
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-top:0.5rem;">
-            <div id="mi-role-qcount" style="color:var(--color-text-secondary);font-size:1.01rem;font-weight:500;">Role: <span id="mi-role-label">Software Engineer</span> | Question <span id="mi-qnum">1</span> of <span id="mi-qtotal">10</span></div>
-            <button class="clg-btn" id="mi-next" type="button" style="min-width:120px;">Next</button>
-          </div>
-          <div class="mi-usage-meter" id="mi-usage-meter" style="display:none;margin-top:1.2rem;">
-            <div class="mi-usage-text">Sessions used this month: <span id="mi-sessions-used">0</span>/20</div>
-            <div class="mi-usage-bar"><div class="mi-usage-progress" id="mi-usage-progress" style="width:0%"></div></div>
-            <div id="mi-usage-warning" class="mi-usage-warning" style="display:none;">You've used over half your monthly interviews.</div>
-            <div id="mi-usage-upsell" class="mi-usage-upsell" style="display:none;">Almost out! <b>Upgrade to Premium</b> for unlimited interviews.</div>
-          </div>
-          <div id="mi-score-breakdown" style="display:none;margin-top:2rem;">
-            <div class="mi-score-grid">
-              <div class="mi-score-item"><div class="mi-score-label">Relevance of Answer</div><div class="mi-score-value" id="score-relevance">0</div></div>
-              <div class="mi-score-item"><div class="mi-score-label">Structure & Delivery</div><div class="mi-score-value" id="score-structure">0</div></div>
-              <div class="mi-score-item"><div class="mi-score-label">Confidence & Clarity</div><div class="mi-score-value" id="score-confidence">0</div></div>
-              <div class="mi-score-item"><div class="mi-score-label">Depth & Insight</div><div class="mi-score-value" id="score-depth">0</div></div>
-              <div class="mi-score-item"><div class="mi-score-label">Grammar & Pace</div><div class="mi-score-value" id="score-grammar">0</div></div>
-            </div>
-            <div class="mi-total-score">Total: <span id="score-total">0</span> / 100</div>
+
+          <div class="mi-history-header-actions" data-history-header-actions>
+            <button id="mi-history-refresh" class="mi-history-icon-btn" title="Refresh history" aria-label="Refresh history" type="button">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <path d="M23 4v6h-6"/>
+              <path d="M1 20v-6h6"/>
+              <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
+            </svg>
+          </button>
+            <button id="mi-history-manage" class="mi-history-manage-btn" type="button">Manage</button>
+        </div>
+
+          <div class="mi-history-manage-actions" id="mi-history-manage-actions" data-history-manage-controls>
+            <div class="mi-history-manage-actions__actions">
+              <button id="mi-history-delete-selected" class="mi-history-danger-btn" type="button" disabled>Delete selected</button>
+              <button id="mi-history-cancel-manage" class="mi-history-neutral-btn" type="button">Cancel</button>
+        </div>
           </div>
         </div>
-        <aside style="min-width:220px;max-width:260px;width:100%;background:#F8FAFC;border-radius:var(--radius-card);box-shadow:var(--shadow-card);padding:1.2rem 1.2rem 1rem 1.2rem;">
-          <div style="font-weight:700;font-size:1.1rem;margin-bottom:1.1rem;color:var(--color-text-main);">Session History</div>
-          <ul id="mi-history-list-session" class="mi-history-list">
-            <li class="mi-history-empty">No previous sessions yet.</li>
-          </ul>
-        </aside>
+
+        <div class="mi-history-subtitle" data-history-subtitle>
+          Last 10 sessions • Auto-saved
+        </div>
+
+        <div class="mi-history-body" data-history-body>
+          <div class="mi-history-loading" id="mi-history-loading" data-history-loading>
+            <div class="mi-history-skeleton-row">
+              <div class="rf-skeleton" style="width:40px;height:40px;border-radius:var(--radius-md);"></div>
+              <div style="flex:1;min-width:0;">
+                <div class="rf-skeleton mi-history-skeleton-pill"></div>
+                <div class="rf-skeleton mi-history-skeleton-pill sm" style="margin-top:8px;"></div>
+              </div>
+              <div class="rf-skeleton mi-history-skeleton-score"></div>
+            </div>
+            <div class="mi-history-skeleton-row">
+              <div class="rf-skeleton" style="width:40px;height:40px;border-radius:var(--radius-md);"></div>
+              <div style="flex:1;min-width:0;">
+                <div class="rf-skeleton mi-history-skeleton-pill"></div>
+                <div class="rf-skeleton mi-history-skeleton-pill sm" style="margin-top:8px;"></div>
+              </div>
+              <div class="rf-skeleton mi-history-skeleton-score"></div>
+            </div>
+            <div class="mi-history-skeleton-row">
+              <div class="rf-skeleton" style="width:40px;height:40px;border-radius:var(--radius-md);"></div>
+              <div style="flex:1;min-width:0;">
+                <div class="rf-skeleton mi-history-skeleton-pill"></div>
+                <div class="rf-skeleton mi-history-skeleton-pill sm" style="margin-top:8px;"></div>
+              </div>
+              <div class="rf-skeleton mi-history-skeleton-score"></div>
+            </div>
+          </div>
+
+          <div class="mi-history-error" id="mi-history-error" data-history-error hidden>
+            <span data-default-message="Couldn't load history.">Couldn't load history. </span>
+            <button id="mi-history-retry" class="mi-history-link-btn" type="button">Retry.</button>
+          </div>
+
+          <div class="mi-history-list" id="mi-history-list" data-history-list></div>
+
+          <div class="mi-history-empty" id="mi-history-empty" data-history-empty hidden>
+            <div style="font-weight:800;margin-bottom:0.25rem;color:var(--color-text-main);">No history yet</div>
+            <div>Your last 10 mock interview sessions will appear here automatically.</div>
+          </div>
+        </div>
+
+        <div class="mi-history-footer" data-history-footer>
+          <span>Data retention: JobHackAI shows your last 10 mock interview sessions. Runs are automatically deleted after 90 days.</span>
+          <div class="mi-history-footer-links">
+            <a class="mi-history-footer-link" href="privacy.html" data-history-learn-more>Learn more</a>
+            <span class="mi-history-footer-separator" aria-hidden="true">·</span>
+            <button id="mi-history-clear" class="mi-history-footer-link mi-history-footer-link--danger" type="button">Clear history</button>
+          </div>
+        </div>
+      </aside>
+
+      <!-- Delete confirmation modal -->
+      <div class="mi-history-modal-backdrop" id="mi-history-modal-backdrop" hidden></div>
+      <div class="mi-history-delete-modal" id="mi-history-delete-modal" role="dialog" aria-labelledby="mi-history-delete-modal-title" aria-modal="true" hidden>
+        <div class="mi-history-delete-modal-content">
+          <h3 class="mi-history-delete-modal-title" id="mi-history-delete-modal-title">Permanently delete history?</h3>
+          <p class="mi-history-delete-modal-body">This will remove the selected items from your account.</p>
+          <p class="mi-history-delete-modal-body">This cannot be undone.</p>
+          <div class="mi-history-delete-modal-actions">
+            <button id="mi-history-delete-cancel" class="mi-history-neutral-btn" type="button">Cancel</button>
+            <button id="mi-history-delete-confirm" class="mi-history-danger-btn" type="button">Delete permanently</button>
+          </div>
+        </div>
       </div>
     </div>
   </main>
+  
+  <!-- Scoring Overlay -->
+  <div class="mi-scoring-overlay" id="mi-scoring-overlay">
+    <div class="mi-scoring-modal">
+      <div class="mi-scoring-title">Scoring your interview…</div>
+      <div class="mi-scoring-text">We're reviewing your 10 answers using our S + A = O formula and interview rubric. This usually takes a few seconds.</div>
+      <div class="mi-scoring-spinner"></div>
+    </div>
+  </div>
 
   <!-- Footer -->
-  <footer class="site-footer" style="position:sticky;bottom:0;width:100%;background:var(--color-card-bg);">
+  <footer class="site-footer">
     <div class="footer-container">
       <div class="footer-brand">
         <svg class="footer-logo" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -496,270 +1608,1456 @@
         <span class="footer-name">JOBHACKAI</span>
       </div>
       <div class="footer-legal">
-        <p>© 2025 JobHackAI. All rights reserved.</p>
+        <p>© 2026 JobHackAI. All rights reserved.</p>
       </div>
       <div class="footer-links">
         <a href="index.html">Home</a>
-        <a href="support.html">Support</a>
+        <a href="help.html">Help</a>
         <a href="privacy.html">Privacy</a>
+        <a href="cookies.html">Cookies</a>
       </div>
     </div>
   </footer>
 
-  <script>
-    // --- AUTHENTICATION CHECK ---
-    function checkAuthentication() {
-      const isAuthenticated = localStorage.getItem('user-authenticated') === 'true';
-      const mainContent = document.querySelector('main');
+  <!-- Scripts -->
+  <script src="js/navigation.js?v=20251007-2"></script>
+  <script src="js/universal-logout.js?v=20251007-2"></script>
+  <script type="module" src="js/firebase-auth.js?v=20260124-1"></script>
+  <script src="js/role-selector.js?v=20250115-1" type="module"></script>
+  <script src="js/main.js" type="module"></script>
+  <script src="js/analytics.js" type="module"></script>
+  
+  <script type="module">
+    // ============================================================
+    // MOCK INTERVIEW PAGE LOGIC
+    // ============================================================
+    
+    // State
+    const state = {
+      currentScreen: 'setup', // 'setup' | 'interview' | 'summary'
+      role: '',
+      seniority: '',
+      interviewStyle: 'mixed',
+      questionSource: 'ai',
+      savedSetId: null,
+      savedSets: [],
+      savedSetsLoaded: false,
+      questions: [],
+      answers: [],
+      currentQuestionIndex: 0,
+      sessionsUsed: 0,
+      sessionLimit: 20,
+      scoringResult: null,
+      sessionId: null,
+      shortNudgeAcknowledged: false,
+      prefillSetId: null,
+      prefillSource: null
+    };
+    
+    // HistoryPanel v1 state
+    let _historyManageMode = false;
+    let _historySelectedIds = new Set();
+    let _historyPendingDeleteIds = [];
+    let _historyMenuOpenForId = null;
+    let _historyHasError = false;
+    let historyItems = [];
+    let isLoadingHistory = false;
+    
+    // DOM Elements
+    const els = {
+      setup: document.getElementById('mi-setup'),
+      interview: document.getElementById('mi-interview'),
+      summary: document.getElementById('mi-summary'),
+      scoringOverlay: document.getElementById('mi-scoring-overlay'),
+      roleInput: document.getElementById('mi-role'),
+      senioritySelect: document.getElementById('mi-seniority'),
+      styleSegments: document.querySelectorAll('#mi-style .mi-segment'),
+      sourceRadios: document.querySelectorAll('input[name="mi-source"]'),
+      savedSetSelect: document.getElementById('mi-saved-set'),
+      startBtn: document.getElementById('mi-start'),
+      sessionsUsed: document.getElementById('mi-sessions-used'),
+      sessionsUsed2: document.getElementById('mi-sessions-used-2'),
+      meterWarning: document.getElementById('mi-meter-warning'),
+      qPill: document.getElementById('mi-q-pill'),
+      qMeta: document.getElementById('mi-q-meta'),
+      questionText: document.getElementById('mi-question'),
+      answerArea: document.getElementById('mi-answer'),
+      wordCounter: document.getElementById('mi-word-counter'),
+      shortNudge: document.getElementById('mi-short-nudge'),
+      backBtn: document.getElementById('mi-back'),
+      nextBtn: document.getElementById('mi-next'),
+      historyList: document.getElementById('mi-history-list'),
+      historyRefresh: document.getElementById('mi-history-refresh'),
+      historyLoading: document.getElementById('mi-history-loading'),
+      historyEmpty: document.getElementById('mi-history-empty'),
+      historyError: document.getElementById('mi-history-error'),
+      historyManage: document.getElementById('mi-history-manage'),
+      historyCancelManage: document.getElementById('mi-history-cancel-manage'),
+      historyDeleteSelected: document.getElementById('mi-history-delete-selected'),
+      historyClear: document.getElementById('mi-history-clear'),
+      historyRetry: document.getElementById('mi-history-retry'),
+      modalBackdrop: document.getElementById('mi-history-modal-backdrop'),
+      deleteModal: document.getElementById('mi-history-delete-modal'),
+      deleteCancel: document.getElementById('mi-history-delete-cancel'),
+      deleteConfirm: document.getElementById('mi-history-delete-confirm')
+    };
+    
+    // API endpoints
+    const API = {
+      generateQuestions: '/api/mock-interview/generate-questions',
+      score: '/api/mock-interview/score',
+      sessions: '/api/mock-interview/sessions',
+      sessionDetail: (id) => `/api/mock-interview/sessions/${id}`,
+      savedSets: '/api/interview-questions/get-set'
+    };
+
+    let localPayload = null;
+    
+    // Get Firebase token
+    async function getToken() {
+      try {
+        if (window.FirebaseAuthManager && window.FirebaseAuthManager.waitForAuthReady) {
+          await window.FirebaseAuthManager.waitForAuthReady(3000);
+        }
+        if (window.FirebaseAuthManager && window.FirebaseAuthManager.getCurrentUser) {
+          const user = window.FirebaseAuthManager.getCurrentUser();
+          if (user) {
+            return await user.getIdToken();
+          }
+        }
+      } catch (e) {
+        console.warn('[MI] Failed to get Firebase token:', e);
+      }
+      return null;
+    }
+    
+    function readLocalPayload() {
+      try {
+        const raw = localStorage.getItem('mi_payload');
+        if (!raw) return null;
+        const parsed = JSON.parse(raw);
+        return parsed && typeof parsed === 'object' ? parsed : null;
+      } catch {
+        return null;
+      }
+    }
+    
+    function hydrateFromParams() {
+      const params = new URL(window.location.href).searchParams;
+      const roleParam = params.get('role');
+      const seniorityParam = params.get('seniority');
+      const setParam = params.get('set');
+      const sourceParam = params.get('source') || null;
       
-      if (!isAuthenticated) {
-        mainContent.innerHTML = `
-          <div style="max-width: 600px; margin: 4rem auto; text-align: center; padding: 2rem;">
-            <div style="font-size: 4rem; margin-bottom: 1rem;">🔒</div>
-            <h1 style="font-size: 2rem; font-weight: 700; color: var(--color-text-main); margin-bottom: 1rem;">
-              Login Required
-            </h1>
-            <p style="font-size: 1.1rem; color: var(--color-text-secondary); margin-bottom: 2rem; line-height: 1.6;">
-              Mock Interviews requires you to be logged in to access this tool. 
-              Please sign in to get started.
-            </p>
-            <div style="display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap;">
-              <a href="login.html" class="btn-primary" style="text-decoration: none;">
-                Sign In
-              </a>
-              <a href="pricing-a.html" class="btn-outline" style="text-decoration: none;">
-                View Pricing
-              </a>
-            </div>
-          </div>
-        `;
-        return false;
+      if (roleParam) {
+        state.role = roleParam;
+        if (els.roleInput) els.roleInput.value = roleParam;
+      }
+      if (seniorityParam) {
+        const safeSeniority = (typeof CSS !== 'undefined' && CSS.escape) ? CSS.escape(seniorityParam) : seniorityParam.replace(/["\\]/g, '');
+        if (els.senioritySelect?.querySelector(`option[value="${safeSeniority}"]`)) {
+          els.senioritySelect.value = seniorityParam;
+          state.seniority = seniorityParam;
+        }
+      }
+      if (setParam) {
+        state.questionSource = 'saved';
+        state.savedSetId = setParam;
+        state.prefillSetId = setParam;
+        state.prefillSource = sourceParam;
+      }
+    }
+    
+    // Initialize Role Selector
+    function initRoleSelector() {
+      if (window.RoleSelector && !els.roleInput.dataset.roleSelectorInitialized) {
+        try {
+          new window.RoleSelector(els.roleInput, {
+            minChars: 2,
+            maxResults: 8,
+            showCustomOption: true,
+            onSelect: (roleName) => {
+              state.role = roleName;
+              checkCanStart();
+            }
+          });
+          els.roleInput.dataset.roleSelectorInitialized = 'true';
+        } catch (e) {
+          console.warn('[MI] RoleSelector init failed:', e);
+        }
+      } else {
+        // Retry
+        setTimeout(initRoleSelector, 200);
+      }
+    }
+    
+    // Check if user can start interview
+    function checkCanStart() {
+      const roleValid = els.roleInput.value.trim().length > 0;
+      const seniorityValid = els.senioritySelect.value !== '';
+      const canStart = roleValid && seniorityValid && state.sessionsUsed < state.sessionLimit;
+      els.startBtn.disabled = !canStart;
+    }
+    
+    // Update session meter
+    function updateMeter() {
+      // Update session count displays
+      els.sessionsUsed.textContent = state.sessionsUsed;
+      if (els.sessionsUsed2) {
+        els.sessionsUsed2.textContent = state.sessionsUsed;
+      }
+      
+      // Check if limit reached (still need to disable button if limit hit)
+      const pct = Math.min(100, (state.sessionsUsed / state.sessionLimit) * 100);
+      
+      if (pct >= 100) {
+        els.meterWarning.textContent = 'Monthly session limit reached. Next reset: ' + getNextResetDate();
+        els.meterWarning.classList.remove('hidden');
+        els.startBtn.disabled = true;
+        els.startBtn.textContent = 'Monthly session limit reached';
+      } else {
+        els.meterWarning.classList.add('hidden');
+        // Only reset button text if it's currently showing the limit-reached message
+        // This prevents overriding other states like "Loading questions..."
+        if (els.startBtn.textContent === 'Monthly session limit reached') {
+          els.startBtn.textContent = 'Start Mock Interview';
+        }
+        checkCanStart();
+      }
+    }
+    
+    function getNextResetDate() {
+      const now = new Date();
+      const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+      return nextMonth.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    }
+    
+    // HistoryPanel v1 helper functions
+    function getVisibleHistoryItems(items) {
+      return (items || []).slice(0, 10);
+    }
+
+    function getVisibleHistoryIds() {
+      return getVisibleHistoryItems(historyItems)
+        .map((x) => String(x?.id || ''))
+        .filter(Boolean);
+    }
+
+    function setHistoryLoading(isLoading) {
+      const loadingEl = els.historyLoading;
+      if (!loadingEl) return;
+      loadingEl.classList.toggle('is-visible', !!isLoading);
+    }
+
+    function showHistoryEmpty(show) {
+      if (!els.historyEmpty) return;
+      els.historyEmpty.hidden = !show;
+    }
+
+    function setHistoryErrorVisible(isVisible, message) {
+      const errEl = els.historyError;
+      if (!errEl) return;
+      const textEl = errEl.querySelector('span[data-default-message]') || errEl.querySelector('span');
+      if (textEl) {
+        if (message) {
+          textEl.textContent = message;
+        } else if (textEl.dataset.defaultMessage) {
+          textEl.textContent = textEl.dataset.defaultMessage;
+        }
+      }
+      errEl.hidden = !isVisible;
+      _historyHasError = isVisible;
+    }
+
+    function setHistoryManageMode(next) {
+      const panel = document.getElementById('mi-history-panel');
+      const titleEl = document.getElementById('mi-history-header-title');
+      _historyManageMode = !!next;
+      if (panel) {
+        panel.classList.toggle('mi-history-panel--manage', _historyManageMode);
+      }
+      if (titleEl) {
+        titleEl.textContent = _historyManageMode ? 'Select items' : 'History';
+      }
+      if (!_historyManageMode) {
+        _historySelectedIds.clear();
+        _historyMenuOpenForId = null;
+      }
+      syncBulkDeleteState();
+      renderHistory();
+    }
+
+    function syncBulkDeleteState() {
+      const btn = els.historyDeleteSelected;
+      if (!btn) return;
+      btn.disabled = _historySelectedIds.size < 1;
+    }
+
+    function closeAllHistoryMenus() {
+      const listEl = els.historyList;
+      if (!listEl) return;
+      listEl.querySelectorAll('.mi-history-menu').forEach((menu) => {
+        menu.hidden = true;
+      });
+      _historyMenuOpenForId = null;
+    }
+
+    function openDeleteModalFor(ids) {
+      const unique = Array.from(new Set((ids || []).map(String).filter(Boolean)));
+      if (!unique.length) {
+        _historyPendingDeleteIds = [];
+        return;
+      }
+      _historyPendingDeleteIds = unique;
+
+      const backdrop = els.modalBackdrop;
+      const modal = els.deleteModal;
+      const cancelBtn = els.deleteCancel;
+      if (backdrop) backdrop.hidden = false;
+      if (modal) modal.hidden = false;
+      setTimeout(() => cancelBtn?.focus?.(), 0);
+    }
+
+    function closeDeleteModal() {
+      _historyPendingDeleteIds = [];
+      if (els.modalBackdrop) els.modalBackdrop.hidden = true;
+      if (els.deleteModal) els.deleteModal.hidden = true;
+    }
+
+    async function deleteMockInterviewSession(id) {
+      // TODO: DELETE endpoint doesn't exist yet - fail gracefully
+      const token = await getToken();
+      if (!token) throw new Error('Unauthorized');
+
+      const res = await fetch(`/api/mock-interview/sessions/${encodeURIComponent(String(id))}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        const message = (data && (data.error || data.message)) || `Delete failed (${res.status})`;
+        const err = new Error(message);
+        err.status = res.status;
+        throw err;
       }
       return true;
     }
 
-    // --- PLAN-BASED ACCESS CONTROL ---
-    function checkPlanAccess() {
-      const currentPlan = getUserPlan();
-      const lockedDiv = document.getElementById('mi-locked');
-      const setupDiv = document.getElementById('mi-setup');
-      const sessionDiv = document.getElementById('mi-session');
-      const historySidebar = document.getElementById('mi-history-sidebar');
-      const usageMeter = document.getElementById('mi-usage-meter');
-      
-      if (!lockedDiv || !setupDiv || !sessionDiv) return;
-      
-      const locked = (currentPlan === 'trial' || currentPlan === 'essential' || currentPlan === 'free');
-      lockedDiv.style.display = locked ? 'flex' : 'none';
-      setupDiv.style.display = locked ? 'none' : '';
-      sessionDiv.style.display = 'none';
-      
-      if (historySidebar) historySidebar.style.display = (currentPlan === 'pro' || currentPlan === 'premium') ? 'block' : 'none';
-      if (usageMeter) usageMeter.style.display = (currentPlan === 'pro' || currentPlan === 'premium') ? '' : 'none';
+    async function deleteMockInterviewSessions(ids) {
+      const uniqueIds = Array.from(new Set((ids || []).map(String).filter(Boolean)));
+      if (!uniqueIds.length) return { success: [], failures: [] };
+      const results = await Promise.allSettled(uniqueIds.map((id) => deleteMockInterviewSession(id)));
+      const successIds = results.reduce((acc, result, index) => {
+        if (result.status === 'fulfilled') {
+          acc.push(uniqueIds[index]);
+        }
+        return acc;
+      }, []);
+      const failures = results
+        .map((result, index) => ({ result, id: uniqueIds[index] }))
+        .filter(({ result }) => result.status === 'rejected');
+
+      if (successIds.length) {
+        historyItems = historyItems.filter(item => !successIds.includes(String(item.id)));
+        renderHistory();
+      }
+
+      return { success: successIds, failures };
     }
 
-    // --- Initialize on load ---
-    document.addEventListener('DOMContentLoaded', function() {
-      // Check authentication first
-      if (!checkAuthentication()) {
-        return; // Stop here if not authenticated
+    async function handleDeleteConfirm() {
+      const ids = Array.from(new Set(_historyPendingDeleteIds));
+      if (!ids.length) return;
+
+      const confirmBtn = els.deleteConfirm;
+      if (confirmBtn) confirmBtn.disabled = true;
+
+      try {
+        const { failures } = await deleteMockInterviewSessions(ids);
+        ids.forEach((id) => {
+          _historySelectedIds.delete(id);
+        });
+        syncBulkDeleteState();
+        closeDeleteModal();
+        const hadErrorBeforeFetch = _historyHasError;
+        await fetchHistory();
+        if (failures.length) {
+          const failureReason = failures[0].result?.reason;
+          const failureMessage = failureReason?.message
+            || 'Some selected entries could not be deleted. History refreshed to reflect the current state.';
+          setHistoryErrorVisible(true, failureMessage);
+        } else if (!_historyHasError) {
+          setHistoryErrorVisible(false);
+        }
+      } catch (e) {
+        console.warn('[MI] Delete failed:', e);
+        closeDeleteModal();
+        const failureMessage = e?.message || 'Failed to delete selected history.';
+        setHistoryErrorVisible(true, failureMessage);
+        await fetchHistory().catch(() => {});
+        _historySelectedIds.clear();
+        syncBulkDeleteState();
+      } finally {
+        if (confirmBtn) confirmBtn.disabled = false;
+      }
+    }
+    
+    // Fetch session history
+    async function fetchHistory() {
+      if (isLoadingHistory) return;
+      isLoadingHistory = true;
+      setHistoryLoading(true);
+      setHistoryErrorVisible(false);
+      showHistoryEmpty(false);
+      if (els.historyList) els.historyList.innerHTML = '';
+
+      try {
+        const token = await getToken();
+        if (!token) {
+          historyItems = [];
+          setHistoryLoading(false);
+          renderHistory();
+          return;
+        }
+        
+        const url = `${API.sessions}?limit=10`;
+        const res = await fetch(url, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        
+        if (!res.ok) {
+          throw new Error(`Failed to fetch history: ${res.status} ${res.statusText}`);
+        }
+        
+        const data = await res.json();
+        
+        if (data.usage) {
+          state.sessionsUsed = data.usage.sessionsUsed || 0;
+          state.sessionLimit = data.usage.sessionLimit || 20;
+          updateMeter();
+        }
+        
+        historyItems = data.sessions || [];
+        setHistoryLoading(false);
+        renderHistory();
+      } catch (e) {
+        console.error('[MI] History fetch error:', e);
+        historyItems = [];
+        setHistoryLoading(false);
+        setHistoryErrorVisible(true, "Couldn't load history.");
+        renderHistory();
+      } finally {
+        isLoadingHistory = false;
+      }
+    }
+    
+    // Fetch saved question sets for dropdown
+    async function fetchSavedSets() {
+      try {
+        const token = await getToken();
+        if (!token) return;
+        
+        const res = await fetch(`${API.savedSets}?list=1`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        
+        if (!res.ok) throw new Error('Failed to load saved sets');
+        
+        const data = await res.json();
+        const sets = data.sets || [];
+        state.savedSets = sets;
+        state.savedSetsLoaded = true;
+        renderSavedSets(sets);
+      } catch (e) {
+        console.error('[MI] Saved sets fetch error:', e);
+        state.savedSetsLoaded = true;
+        renderSavedSets([]);
+      }
+    }
+    
+    function renderSavedSets(sets) {
+      const options = [];
+      if (localPayload && Array.isArray(localPayload.questions) && localPayload.questions.length > 0) {
+        const count = Array.isArray(localPayload.selectedIndices) && localPayload.selectedIndices.length
+          ? localPayload.selectedIndices.length
+          : localPayload.questions.length;
+        options.push({
+          id: localPayload.id,
+          label: `${escapeHtml(localPayload.role || 'Saved set (local)')} (${count} questions)`,
+          source: 'local'
+        });
       }
       
-      // Wait for navigation system to be ready
-      setTimeout(checkPlanAccess, 100);
-
-      // Add Pro plan mock interview usage indicator
-      const main = document.querySelector('main');
-      const userPlan = getUserPlan();
-      if (userPlan === 'pro' && main) {
-        // For demo, assume 20 left (replace with dynamic count if available)
-        const usageDiv = document.createElement('div');
-        usageDiv.className = 'mi-plan-limit';
-        usageDiv.innerHTML = `
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false" style="vertical-align:middle"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="8"/><line x1="12" y1="12" x2="12" y2="16"/></svg>
-          <span style="margin-left:0.4em;vertical-align:middle;">20 mock interviews left this month.</span>
-          <span class="jh-tooltip-trigger" tabindex="0" aria-label="More info" style="margin-left:0.4em;vertical-align:middle;">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false" style="vertical-align:middle"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="8"/><line x1="12" y1="12" x2="12" y2="16"/></svg>
-            <span class="jh-tooltip-text">Upgrade to Premium for unlimited mock interviews.</span>
-          </span>
-        `;
-        main.prepend(usageDiv);
-      }
-    });
-
-    // --- Mock Interview Logic ---
-    // Read context from Interview Questions page
-    const url = new URL(window.location.href);
-    const mode = url.searchParams.get('mode') || 'current';
-    const setId = url.searchParams.get('set') || '';
-    const roleParam = url.searchParams.get('role') || '';
-    const roles = [
-      'Software Engineer', 'Data Analyst', 'Product Manager', 'Marketing Specialist',
-      'Sales Representative', 'Customer Success Manager', 'UX Designer', 'DevOps Engineer',
-      'Data Scientist', 'Business Analyst', 'Project Manager', 'Content Writer',
-      'Graphic Designer', 'HR Specialist', 'Financial Analyst', 'Operations Manager'
-    ];
-
-    const roleInput = document.getElementById('mi-role-input');
-    const roleDropdown = document.getElementById('mi-role-dropdown');
-    const beginBtn = document.getElementById('mi-begin');
-    const setupDiv = document.getElementById('mi-setup');
-    const sessionDiv = document.getElementById('mi-session');
-
-    // Role autocomplete
-    roleInput.addEventListener('input', function() {
-      const value = this.value.toLowerCase();
-      if (value.length < 2) {
-        roleDropdown.style.display = 'none';
+      sets.forEach(s => {
+        const count = typeof s.selectedCount === 'number'
+          ? s.selectedCount
+          : (Array.isArray(s.selectedIndices) ? s.selectedIndices.length : (Array.isArray(s.questions) ? s.questions.length : 0));
+        options.push({
+          id: s.id,
+          label: `${escapeHtml(s.role || 'Saved set')} (${count || 0} questions)`,
+          source: 'd1'
+        });
+      });
+      
+      if (!options.length) {
+        els.savedSetSelect.innerHTML = '<option value="">No saved sets yet</option>';
         return;
       }
-      const filteredRoles = roles.filter(role => 
-        role.toLowerCase().includes(value)
-      );
-      if (filteredRoles.length > 0) {
-        roleDropdown.innerHTML = filteredRoles.map(role => 
-          `<div class="mi-role-item" data-role="${role}">${role}</div>`
-        ).join('');
-        roleDropdown.style.display = 'block';
-      } else {
-        roleDropdown.style.display = 'none';
+      
+      const desired = state.savedSetId || state.prefillSetId || '';
+      els.savedSetSelect.innerHTML = [
+        '<option value="">Select a saved set...</option>',
+        ...options.map(opt => `<option value="${escapeHtml(opt.id || '')}">${opt.label}</option>`)
+      ].join('');
+      
+      if (desired && options.some(o => o.id === desired)) {
+        els.savedSetSelect.value = desired;
       }
-    });
-
-    roleDropdown.addEventListener('click', function(e) {
-      if (e.target.classList.contains('mi-role-item')) {
-        const role = e.target.dataset.role;
-        roleInput.value = role;
-        roleDropdown.style.display = 'none';
+    }
+    
+    function renderHistory() {
+      const listEl = els.historyList;
+      const emptyEl = els.historyEmpty;
+      
+      if (!listEl) return;
+      
+      // Always hide loading when rendering
+      setHistoryLoading(false);
+      
+      if (!historyItems || historyItems.length === 0) {
+        listEl.innerHTML = '';
+        if (emptyEl) {
+          emptyEl.hidden = _historyHasError ? true : false;
+        }
+        return;
       }
-    });
+    
+      if (emptyEl) emptyEl.hidden = true;
+      
+      const visibleItems = getVisibleHistoryItems(historyItems);
 
-    document.addEventListener('click', function(e) {
-      if (!roleInput.contains(e.target) && !roleDropdown.contains(e.target)) {
-        roleDropdown.style.display = 'none';
-      }
-    });
+      listEl.innerHTML = visibleItems.map(item => {
+        const itemId = String(item?.id || '');
+        const roleName = String(item?.role || '').trim() || 'Untitled role';
+        const createdAt = item.createdAt ? (typeof item.createdAt === 'string' ? new Date(item.createdAt).getTime() : Number(item.createdAt)) : null;
+        const when = createdAt ? timeAgo(createdAt) : '—';
+        const secondaryLine = `Mock interview • ${when}`;
 
-    // Pre-populate role from query
-    if (roleParam) { roleInput.value = roleParam; }
+        const normalizedScore = item?.overallScore != null && Number.isFinite(Number(item.overallScore))
+          ? Number(item.overallScore)
+          : null;
 
-    // Build questions from context (saved or set) with fallbacks
-    function buildQuestionsFromContext(){
-      // Default bank
-      const fallback = [
-        'Tell me about yourself and your experience.',
-        'What are your biggest strengths and weaknesses?',
-        'Why are you interested in this position?',
-        'Where do you see yourself in 5 years?',
-        'Tell me about a challenging project you worked on.',
-        'How do you handle stress and pressure?',
-        'Describe a time when you had to learn something quickly.',
-        'What is your leadership style?',
-        'How do you stay organized and prioritize tasks?',
-        'Do you have any questions for me?'
-      ];
-      let dyn = [];
-      if (mode === 'saved') {
-        try {
-          const p = JSON.parse(localStorage.getItem('mi_payload')||'null');
-          if (p && Array.isArray(p.questions) && p.questions.length) {
-            dyn = p.questions.filter(q=>typeof q==='string' && q.trim());
+        const isSelected = _historySelectedIds.has(itemId);
+        const isChecked = isSelected;
+
+        const menuHidden = _historyMenuOpenForId !== itemId;
+
+        const scoreHtml = normalizedScore !== null
+          ? `<div class="mi-history-score" aria-label="Score ${Math.round(normalizedScore)}">${Math.round(normalizedScore)}</div>`
+          : '';
+          
+          return `
+          <div class="mi-history-item ${isSelected ? 'is-selected' : ''}" data-id="${escapeHtml(itemId)}" tabindex="0" data-history-row>
+            <span class="mi-history-checkbox-wrap" aria-hidden="${_historyManageMode ? 'false' : 'true'}">
+              <input
+                class="mi-history-checkbox"
+                type="checkbox"
+                data-action="toggle-select"
+                data-id="${escapeHtml(itemId)}"
+                aria-label="Select ${escapeHtml(roleName)}"
+                ${isChecked ? 'checked' : ''}
+              />
+            </span>
+
+            <div class="mi-history-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
+                <polyline points="14 2 14 8 20 8"/>
+                <line x1="16" y1="13" x2="8" y2="13"/>
+                <line x1="16" y1="17" x2="8" y2="17"/>
+              </svg>
+              </div>
+
+            <div class="mi-history-text">
+              <div class="mi-history-line1">${escapeHtml(roleName)}</div>
+              <div class="mi-history-line2">${escapeHtml(secondaryLine)}</div>
+            </div>
+
+            ${scoreHtml}
+
+            <div class="mi-history-row-actions" aria-label="Row actions">
+              <button
+                class="mi-history-kebab"
+                type="button"
+                aria-label="Row actions"
+                data-action="menu-toggle"
+                data-id="${escapeHtml(itemId)}"
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                  <circle cx="5" cy="12" r="2"></circle>
+                  <circle cx="12" cy="12" r="2"></circle>
+                  <circle cx="19" cy="12" r="2"></circle>
+                </svg>
+              </button>
+              <div class="mi-history-menu" role="menu" ${menuHidden ? 'hidden' : ''} data-action="menu-container">
+                <button class="mi-history-menu-item" type="button" data-action="open" data-id="${escapeHtml(itemId)}">Open / Restore</button>
+                <button class="mi-history-menu-item mi-history-menu-item--danger" type="button" data-action="delete" data-id="${escapeHtml(itemId)}">Delete</button>
+              </div>
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      // Attach event listeners
+      listEl.querySelectorAll('[data-history-row]').forEach((row) => {
+        const itemId = row.dataset.id;
+        const item = historyItems.find((x) => String(x.id) === itemId);
+        if (!item) return;
+
+        const onSelect = () => {
+          if (_historyManageMode) return;
+          loadHistoricalSession(itemId);
+        };
+
+        row.addEventListener('click', (e) => {
+          const actionEl = e.target.closest('[data-action]');
+          if (actionEl) {
+            const action = actionEl.dataset.action;
+            if (action === 'menu-container') {
+              e.stopPropagation();
+              return;
+            }
+            if (action === 'toggle-select') {
+              e.stopPropagation();
+              const checkbox = actionEl;
+              if ((checkbox instanceof HTMLInputElement) && checkbox.type === 'checkbox') {
+                if (checkbox.checked) {
+                  _historySelectedIds.add(itemId);
+                } else {
+                  _historySelectedIds.delete(itemId);
+                }
+                syncBulkDeleteState();
+                renderHistory();
+              }
+              return;
+            }
+            if (action === 'menu-toggle') {
+              e.stopPropagation();
+              const previouslyOpen = _historyMenuOpenForId;
+              closeAllHistoryMenus();
+              _historyMenuOpenForId = previouslyOpen === itemId ? null : itemId;
+              renderHistory();
+              return;
+            }
+            if (action === 'open') {
+              e.stopPropagation();
+              closeAllHistoryMenus();
+              onSelect();
+              return;
+            }
+            if (action === 'delete') {
+              e.stopPropagation();
+              closeAllHistoryMenus();
+              openDeleteModalFor([itemId]);
+              return;
+            }
+            return;
           }
-        } catch {}
-        try { localStorage.removeItem('mi_payload'); } catch {}
-      } else if (setId) {
-        try {
-          const raw = localStorage.getItem(`iq_set_${setId}`);
-          if (raw) {
-            const s = JSON.parse(raw);
-            if (Array.isArray(s.questions)) {
-              dyn = s.questions.map(q=> typeof q==='string'? q : (q?.q||'')).filter(Boolean);
+          if (_historyManageMode) {
+            // In manage mode, clicking row toggles checkbox
+            const checkbox = row.querySelector('.mi-history-checkbox');
+            if (checkbox) {
+              checkbox.checked = !checkbox.checked;
+              if (checkbox.checked) {
+                _historySelectedIds.add(itemId);
+              } else {
+                _historySelectedIds.delete(itemId);
+              }
+              syncBulkDeleteState();
+              renderHistory();
+            }
+          } else {
+            onSelect();
+          }
+        });
+
+        row.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            if (_historyManageMode) {
+              const checkbox = row.querySelector('.mi-history-checkbox');
+              if (checkbox) {
+                checkbox.checked = !checkbox.checked;
+                if (checkbox.checked) {
+                  _historySelectedIds.add(itemId);
+                } else {
+                  _historySelectedIds.delete(itemId);
+                }
+                syncBulkDeleteState();
+                renderHistory();
+              }
+            } else {
+              onSelect();
             }
           }
-        } catch {}
-      }
-      return (dyn && dyn.length) ? dyn : fallback;
+        });
+      });
     }
-
-    let questions = buildQuestionsFromContext();
-
-    // --- QA: Integration verification ---
-    function miRunIntegrationQA(){
-      const qa = new URL(window.location.href).searchParams.get('qa');
-      if(!qa) return;
-      try { localStorage.setItem('qa_flag','1'); } catch {}
-      const expectMode = sessionStorage.getItem('qa_expect_mode') || '';
-      const expectCount = Number(sessionStorage.getItem('qa_expect_count') || '0');
-      const expectRole = sessionStorage.getItem('qa_expect_role') || '';
-      const actualMode = (mode || '');
-      const actualCount = Array.isArray(questions)? questions.length : 0;
-      const actualRole = roleParam || (roleInput?.value || '');
-      const results = {
-        mode: expectMode ? (expectMode === actualMode ? 'pass' : 'fail') : 'n/a',
-        count: expectCount ? (expectCount === actualCount ? 'pass' : 'fail') : 'n/a',
-        role: expectRole ? (expectRole === actualRole ? 'pass' : 'fail') : 'n/a',
-        payloadCleared: (actualMode === 'saved') ? (localStorage.getItem('mi_payload') ? 'fail' : 'pass') : 'n/a'
-      };
+    
+    // Load a historical session
+    async function loadHistoricalSession(sessionId) {
       try {
-        Object.entries(results).forEach(([k,v])=> sessionStorage.setItem(`qa_mi_${k}`, String(v)));
-      } catch {}
-      console.log('[QA] Mock Interview integration', { expectMode, expectCount, expectRole, actualMode, actualCount, actualRole, results });
+        const token = await getToken();
+        if (!token) return;
+        
+        els.scoringOverlay.classList.add('visible');
+        
+        const res = await fetch(API.sessionDetail(sessionId), {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        
+        if (!res.ok) throw new Error('Failed to load session');
+        
+        const data = await res.json();
+        
+        // Populate state from loaded session
+        state.role = data.role;
+        state.seniority = data.seniority;
+        state.interviewStyle = data.interviewStyle;
+        state.questions = data.qaPairs.map(qa => ({ text: qa.q }));
+        state.answers = data.qaPairs.map(qa => qa.a);
+        state.scoringResult = {
+          overallScore: data.overallScore,
+          rubric: data.rubric,
+          saoOverall: data.saoOverall,
+          strengths: data.strengths,
+          improvements: data.improvements,
+          perQuestion: data.perQuestion
+        };
+        state.sessionId = data.sessionId;
+        
+        els.scoringOverlay.classList.remove('visible');
+        showSummary();
+      } catch (e) {
+        console.error('[MI] Load session error:', e);
+        els.scoringOverlay.classList.remove('visible');
+        alert('Failed to load session. Please try again.');
+      }
     }
-    // Run shortly after load so DOM is ready
-    setTimeout(miRunIntegrationQA, 50);
-
+    
     // Start interview
-    beginBtn.addEventListener('click', function() {
-      if (roleInput.value.trim()) {
-        setupDiv.style.display = 'none';
-        sessionDiv.style.display = 'block';
-        document.getElementById('mi-role-label').textContent = roleInput.value;
-        document.getElementById('mi-qtotal').textContent = String(questions.length);
-        // Initialize first question explicitly
-        currentQuestion = 0;
-        questionEl.textContent = questions[currentQuestion];
-        qnumEl.textContent = currentQuestion + 1;
-      }
-    });
-
-    // Question navigation uses `questions` built from context
-
-    let currentQuestion = 0;
-    const questionEl = document.getElementById('mi-question');
-    const qnumEl = document.getElementById('mi-qnum');
-    const nextBtn = document.getElementById('mi-next');
-
-    nextBtn.addEventListener('click', function() {
-      if (currentQuestion < questions.length - 1) {
-        currentQuestion++;
-        questionEl.textContent = questions[currentQuestion];
-        qnumEl.textContent = currentQuestion + 1;
+    async function startInterview() {
+      state.role = els.roleInput.value.trim();
+      state.seniority = els.senioritySelect.value;
+      state.answers = [];
+      state.currentQuestionIndex = 0;
+      state.savedSetId = null;
+      
+      els.startBtn.disabled = true;
+      els.startBtn.textContent = 'Loading questions...';
+      
+      try {
+        const token = await getToken();
+        if (!token) throw new Error('Not authenticated');
         
-        // Clear answer input
-        document.getElementById('mi-answer').value = '';
-        
-        // Show score breakdown on last question
-        if (currentQuestion === questions.length - 1) {
-          document.getElementById('mi-score-breakdown').style.display = 'block';
-          nextBtn.textContent = 'Finish';
+        // Check question source
+        if (state.questionSource === 'ai') {
+          // Generate questions via API
+          const res = await fetch(API.generateQuestions, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({
+              role: state.role,
+              seniority: state.seniority,
+              interviewStyle: state.interviewStyle
+            })
+          });
+          
+          if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            throw new Error(err.error || 'Failed to generate questions');
+          }
+          
+          const data = await res.json();
+          state.questions = data.questions || [];
+        } else {
+          // Use saved set - prefer local payload if matching, otherwise fetch
+          const setId = els.savedSetSelect.value;
+          if (!setId) throw new Error('Please select a saved question set');
+          
+          const matchesLocal =
+            localPayload &&
+            (setId === localPayload.id || setId === localPayload.d1Id);
+          
+          if (matchesLocal) {
+            const localQs = Array.isArray(localPayload.questions) ? localPayload.questions : [];
+            const selectedIdx = Array.isArray(localPayload.selectedIndices) ? localPayload.selectedIndices : [];
+            const looksFiltered =
+              Boolean(localPayload?.questionsFiltered) ||
+              (selectedIdx.length > 0 && localQs.length === selectedIdx.length);
+            // Guard against legacy payloads where questions were already filtered but indices were not
+            const useSelected =
+              selectedIdx.length > 0 &&
+              !looksFiltered &&
+              selectedIdx.every(idx => Number.isInteger(idx) && idx >= 0 && idx < localQs.length);
+            const picked = useSelected
+              ? selectedIdx
+                  .map(idx => localQs[idx])
+              : localQs;
+            state.role = state.role || localPayload.role || '';
+            state.seniority = state.seniority || localPayload.seniority || '';
+            state.questions = picked
+              .map(q => {
+                if (typeof q === 'string') return { text: q };
+                if (q && typeof q.q === 'string') return { text: q.q };
+                if (q && typeof q.text === 'string') return { text: q.text };
+                return null;
+              })
+              .filter(Boolean);
+            state.savedSetId = setId;
+          } else {
+            const res = await fetch(`${API.savedSets}?id=${encodeURIComponent(setId)}`, {
+              headers: { 'Authorization': `Bearer ${token}` }
+            });
+            
+            if (!res.ok) throw new Error('Failed to load saved questions');
+            
+            const data = await res.json();
+            const rawQuestions = data.questions || [];
+            const selectedIdx = Array.isArray(data.selectedIndices) ? data.selectedIndices : [];
+            const useSelected = selectedIdx.length > 0;
+            const picked = useSelected
+              ? selectedIdx
+                  .filter(idx => Number.isInteger(idx) && idx >= 0 && idx < rawQuestions.length)
+                  .map(idx => rawQuestions[idx])
+              : rawQuestions;
+            state.questions = picked.map(q => ({ text: typeof q === 'string' ? q : q?.q }));
+            state.savedSetId = setId;
+          }
         }
+        
+        if (!state.questions.length) throw new Error('No questions available');
+        
+        // Initialize answers array
+        state.answers = new Array(state.questions.length).fill('');
+        
+        // Show interview screen
+        showInterview();
+      } catch (e) {
+        console.error('[MI] Start error:', e);
+        alert(e.message || 'Failed to start interview. Please try again.');
+      } finally {
+        els.startBtn.disabled = false;
+        els.startBtn.textContent = 'Start Mock Interview';
+        checkCanStart();
+      }
+    }
+    
+    // Show interview screen
+    function showInterview() {
+      state.currentScreen = 'interview';
+      els.setup.classList.add('hidden');
+      els.summary.classList.add('hidden');
+      els.summary.classList.remove('visible');
+      els.interview.classList.remove('hidden');
+      
+      updateInterviewUI();
+    }
+    
+    // Update interview UI for current question
+    function updateInterviewUI() {
+      const q = state.questions[state.currentQuestionIndex];
+      const isLast = state.currentQuestionIndex === state.questions.length - 1;
+      els.shortNudge.classList.remove('visible');
+      state.shortNudgeAcknowledged = false;
+      
+      els.qPill.textContent = `Question ${state.currentQuestionIndex + 1} of ${state.questions.length}`;
+      els.qMeta.textContent = `Role: ${state.role} · ${state.seniority} · ${state.interviewStyle}`;
+      els.questionText.textContent = q.text;
+      els.answerArea.value = state.answers[state.currentQuestionIndex] || '';
+      
+      els.backBtn.disabled = state.currentQuestionIndex === 0;
+      els.nextBtn.textContent = isLast ? 'Finish' : 'Next';
+      
+      updateWordCounter();
+    }
+    
+    // Update word counter
+    function updateWordCounter() {
+      const text = els.answerArea.value.trim();
+      const words = text ? text.split(/\s+/).length : 0;
+      els.wordCounter.textContent = `${words} words · Aim for 150–250 words (≈ 60–90 seconds)`;
+      els.wordCounter.classList.toggle('short', words > 0 && words < 50);
+    }
+    
+    // Save current answer and navigate
+    function saveCurrentAnswer() {
+      state.answers[state.currentQuestionIndex] = els.answerArea.value;
+    }
+    
+    // Go to next question or finish
+    async function handleNext() {
+      saveCurrentAnswer();
+      
+      const answer = state.answers[state.currentQuestionIndex];
+      const wordCount = answer.trim() ? answer.trim().split(/\s+/).length : 0;
+      const isLast = state.currentQuestionIndex === state.questions.length - 1;
+      
+      // Show short nudge if < 20 words
+      if (wordCount < 20 && wordCount > 0) {
+        els.shortNudge.classList.add('visible');
+        // Require one acknowledgement click, then allow navigation/finish
+        if (!state.shortNudgeAcknowledged) {
+          state.shortNudgeAcknowledged = true;
+          return;
+        }
+      }
+      
+      if (isLast) {
+        // Finish interview - score it
+        await scoreInterview();
       } else {
-        // Interview complete
-        alert('Interview completed! Check your scores above.');
+        state.currentQuestionIndex++;
+        updateInterviewUI();
       }
-    });
-  </script>
-  <!-- Load navigation system -->
-  <script src="js/navigation.js"></script>
-  <script>
-    // Initialize navigation system when DOM is ready
-    document.addEventListener('DOMContentLoaded', function() {
-      if (window.JobHackAINavigation && window.JobHackAINavigation.initializeNavigation) {
-        window.JobHackAINavigation.initializeNavigation();
+    }
+    
+    // Go to previous question
+    function handleBack() {
+      if (state.currentQuestionIndex > 0) {
+        saveCurrentAnswer();
+        state.currentQuestionIndex--;
+        updateInterviewUI();
       }
-    });
+    }
+    
+    // Score the interview
+    async function scoreInterview() {
+      els.scoringOverlay.classList.add('visible');
+      
+      try {
+        const token = await getToken();
+        if (!token) throw new Error('Not authenticated');
+        
+        // Build Q&A pairs
+        const qaPairs = state.questions.map((q, i) => ({
+          q: q.text,
+          a: state.answers[i] || ''
+        }));
+        
+        const res = await fetch(API.score, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            role: state.role,
+            seniority: state.seniority,
+            interviewStyle: state.interviewStyle,
+            questionSetId: state.savedSetId,
+            questionSetName: state.questionSource === 'saved' ? els.savedSetSelect.options[els.savedSetSelect.selectedIndex]?.text : null,
+            qaPairs
+          })
+        });
+        
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.error || 'Failed to score interview');
+        }
+        
+        const data = await res.json();
+        
+        // successResponse spreads data at the top level, so data is already in the correct format
+        const result = data;
+        
+        state.scoringResult = result;
+        state.sessionId = result.sessionId;
+        
+        console.log('[MI] Scoring response received:', { 
+          sessionId: result.sessionId, 
+          overallScore: result.overallScore,
+          savedToHistory: result.savedToHistory 
+        });
+        
+        // Update usage locally for immediate UI feedback
+        state.sessionsUsed++;
+        updateMeter();
+        
+        // Refresh history (await to ensure it completes)
+        await fetchHistory();
+        
+        // Refresh usage from API to ensure accurate count (with retry logic)
+        const refreshUsageFromAPI = async (retries = 3, delay = 1000) => {
+          try {
+            const token = await getToken();
+            if (!token) return;
+            
+            const response = await fetch('/api/usage', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+              }
+            });
+            
+            if (!response.ok) {
+              throw new Error(`Usage API returned ${response.status}`);
+            }
+            
+            const data = await response.json();
+            if (data.success && data.usage && data.usage.mockInterviews) {
+              const usage = data.usage.mockInterviews;
+              // Update state from authoritative API data
+              if (usage.used !== null && usage.used !== undefined) {
+                state.sessionsUsed = usage.used;
+              }
+              if (usage.limit !== null && usage.limit !== undefined) {
+                state.sessionLimit = usage.limit;
+              } else if (usage.limit === null) {
+                // Unlimited plan - set a high limit for display purposes
+                state.sessionLimit = Infinity;
+              }
+              updateMeter();
+              return true; // Success
+            }
+            
+            // If we didn't get valid data and have retries left, try again
+            if (retries > 0) {
+              console.log(`[MI] Usage refresh retry (${retries} attempts remaining)`);
+              setTimeout(() => refreshUsageFromAPI(retries - 1, delay), delay);
+            }
+          } catch (error) {
+            console.error('[MI] Error refreshing usage from API:', error);
+            // Retry on error if we have attempts left
+            if (retries > 0) {
+              setTimeout(() => refreshUsageFromAPI(retries - 1, delay), delay);
+            }
+          }
+        };
+        
+        // Initial refresh with delay to allow backend write to complete
+        setTimeout(() => refreshUsageFromAPI(), 1000);
+        
+        // Show summary
+        showSummary();
+      } catch (e) {
+        console.error('[MI] Scoring error:', e);
+        alert(e.message || 'Failed to score interview. Please try again.');
+      } finally {
+        els.scoringOverlay.classList.remove('visible');
+      }
+    }
+    
+    // Show summary screen
+    function showSummary() {
+      try {
+        state.currentScreen = 'summary';
+        els.setup.classList.add('hidden');
+        els.interview.classList.add('hidden');
+        els.summary.classList.remove('hidden');
+        els.summary.classList.add('visible');
+        
+        const r = state.scoringResult;
+        if (!r) {
+          console.error('[MI] No scoring result available');
+          alert('No scoring data available. Please try again.');
+          return;
+        }
+        
+        console.log('[MI] Showing summary with result:', r);
+        
+        // Score hero
+        const scoreEl = document.getElementById('mi-final-score');
+        if (!scoreEl) {
+          console.error('[MI] Score element not found');
+          return;
+        }
+        
+        const overallScore = r.overallScore ?? r.overall_score ?? 0;
+        scoreEl.textContent = `${overallScore} / 100`;
+        scoreEl.className = 'mi-score-value ' + getScoreColorClass(overallScore);
+        
+        // Coaching
+        const coaching = r.improvements?.[0] || 'Great job completing the interview!';
+        const coachingEl = document.getElementById('mi-score-coaching');
+        if (coachingEl) {
+          coachingEl.textContent = coaching;
+        } else {
+          console.warn('[MI] Coaching element not found');
+        }
+        
+        // Badge
+        const date = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        const badgeEl = document.getElementById('mi-score-badge');
+        if (badgeEl) {
+          badgeEl.textContent = `Saved to history · ${date} · ${state.role} · ${state.seniority}`;
+        } else {
+          console.warn('[MI] Badge element not found');
+        }
+        
+        // Rubric grid
+        const rubricGrid = document.getElementById('mi-rubric-grid');
+        if (!rubricGrid) {
+          console.error('[MI] Rubric grid element not found');
+          return;
+        }
+      const rubricItems = [
+        { label: 'Relevance of Answer', score: r.rubric?.relevance?.score || 0, of: 30, note: r.rubric?.relevance?.note || '' },
+        { label: 'Structure & Delivery', score: r.rubric?.structure?.score || 0, of: 25, note: r.rubric?.structure?.note || '' },
+        { label: 'Confidence & Clarity', score: r.rubric?.clarity?.score || 0, of: 20, note: r.rubric?.clarity?.note || '' },
+        { label: 'Depth & Insight', score: r.rubric?.insight?.score || 0, of: 15, note: r.rubric?.insight?.note || '' },
+        { label: 'Grammar & Pace', score: r.rubric?.grammar?.score || 0, of: 10, note: r.rubric?.grammar?.note || '' }
+      ];
+      rubricGrid.innerHTML = rubricItems.map(item => `
+        <div class="mi-rubric-card">
+          <div class="mi-rubric-label">${item.label}</div>
+          <div class="mi-rubric-score">${item.score} / ${item.of}</div>
+          <div class="mi-rubric-note">${escapeHtml(item.note || '')}</div>
+        </div>
+      `).join('');
+      
+      // S+A=O breakdown
+      const saoBreakdown = document.getElementById('mi-sao-breakdown');
+      if (!saoBreakdown) {
+        console.error('[MI] SAO breakdown element not found');
+        return;
+      }
+      
+      const sao = r.saoOverall || r.sao_overall || { situationPct: 0, actionPct: 0, outcomePct: 0 };
+      saoBreakdown.innerHTML = `
+        <div class="mi-sao-stat">
+          <div class="mi-sao-pct">${Math.round(sao.situationPct || sao.situation_pct || 0)}%</div>
+          <div class="mi-sao-name">Situation</div>
+          <div class="mi-sao-target">target ≈ 5%</div>
+        </div>
+        <div class="mi-sao-stat">
+          <div class="mi-sao-pct">${Math.round(sao.actionPct || sao.action_pct || 0)}%</div>
+          <div class="mi-sao-name">Action</div>
+          <div class="mi-sao-target">target ≈ 10%</div>
+        </div>
+        <div class="mi-sao-stat">
+          <div class="mi-sao-pct">${Math.round(sao.outcomePct || sao.outcome_pct || 0)}%</div>
+          <div class="mi-sao-name">Outcome</div>
+          <div class="mi-sao-target">target ≈ 85%</div>
+        </div>
+      `;
+      
+      // S+A=O coaching
+      const saoCoachingList = document.getElementById('mi-sao-coaching-list');
+      if (saoCoachingList) {
+        const saoCoaching = sao.coaching || [];
+        saoCoachingList.innerHTML = saoCoaching.map(c => `<li>${escapeHtml(c || '')}</li>`).join('');
+      } else {
+        console.warn('[MI] SAO coaching list element not found');
+      }
+      
+      // Improvements
+      const improvementsList = document.getElementById('mi-improvements-list');
+      if (improvementsList) {
+        const improvements = r.improvements || [];
+        improvementsList.innerHTML = improvements.map(i => `<li>${escapeHtml(i || '')}</li>`).join('');
+      } else {
+        console.warn('[MI] Improvements list element not found');
+      }
+      
+      // Per-question accordion
+      const accordion = document.getElementById('mi-accordion');
+      if (!accordion) {
+        console.error('[MI] Accordion element not found');
+        return;
+      }
+      const perQRaw = r.perQuestion || [];
+      // Normalize per-question feedback using q_index so we don't rely on array order
+      const perQByIndex = {};
+      perQRaw.forEach((item, idx) => {
+        const qIdx = typeof item.q_index === 'number' ? item.q_index : idx;
+        if (perQByIndex[qIdx] === undefined) {
+          perQByIndex[qIdx] = item;
+        }
+      });
+      accordion.innerHTML = state.questions.map((q, i) => {
+        const pq = perQByIndex[i] || {};
+        const notes = pq.notes || [];
+        return `
+          <div class="mi-accordion-item">
+            <button class="mi-accordion-header" type="button">
+              <span class="mi-accordion-question">Q${i + 1} · "${escapeHtml(q.text)}"</span>
+              <span class="mi-accordion-q-score">${pq.score || 0}/10</span>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
+            </button>
+            <div class="mi-accordion-content">
+              <div class="mi-accordion-answer">${escapeHtml(state.answers[i] || '(No answer)')}</div>
+              <ul class="mi-accordion-notes">
+                ${notes.map(n => `<li>${escapeHtml(n || '')}</li>`).join('')}
+              </ul>
+            </div>
+          </div>
+        `;
+      }).join('');
+      
+      // Accordion toggle
+      accordion.querySelectorAll('.mi-accordion-header').forEach(btn => {
+        btn.addEventListener('click', () => {
+          btn.parentElement.classList.toggle('open');
+        });
+      });
+      
+      } catch (error) {
+        console.error('[MI] Error in showSummary:', error);
+        alert('Failed to display summary. Please try again.');
+      }
+    }
+    
+    function getScoreColorClass(score) {
+      if (score >= 85) return 'score-blue';
+      if (score >= 70) return 'score-green';
+      if (score >= 50) return 'score-yellow';
+      return 'score-red';
+    }
+
+    function escapeHtml(str) {
+      if (!str) return '';
+      const div = document.createElement('div');
+      div.textContent = str;
+      return div.innerHTML;
+    }
+    
+    function timeAgo(tsMs) {
+      const ts = Number(tsMs || 0);
+      if (!ts || !Number.isFinite(ts)) return '';
+      const diff = Date.now() - ts;
+      const s = Math.floor(diff / 1000);
+      if (s < 60) return 'just now';
+      const m = Math.floor(s / 60);
+      if (m < 60) return `${m}m ago`;
+      const h = Math.floor(m / 60);
+      if (h < 24) return `${h}h ago`;
+      const d = Math.floor(h / 24);
+      if (d < 30) return `${d}d ago`;
+      const mo = Math.floor(d / 30);
+      if (mo < 12) return `${mo}mo ago`;
+      const y = Math.floor(mo / 12);
+      return `${y}y ago`;
+    }
+    
+    // Reset to setup
+    function resetToSetup() {
+      state.currentScreen = 'setup';
+      state.questions = [];
+      state.answers = [];
+      state.currentQuestionIndex = 0;
+      state.scoringResult = null;
+      state.sessionId = null;
+      
+      els.setup.classList.remove('hidden');
+      els.interview.classList.add('hidden');
+      els.summary.classList.add('hidden');
+      els.summary.classList.remove('visible');
+      
+      checkCanStart();
+    }
+    
+    // Retake interview (same questions)
+    function retakeInterview() {
+      state.answers = new Array(state.questions.length).fill('');
+      state.currentQuestionIndex = 0;
+      state.scoringResult = null;
+      state.sessionId = null;
+      
+      showInterview();
+    }
+    
+    // Event Listeners
+    function setupEventListeners() {
+      // Role input
+      els.roleInput.addEventListener('input', () => {
+        state.role = els.roleInput.value.trim();
+        checkCanStart();
+      });
+      
+      // Seniority select
+      els.senioritySelect.addEventListener('change', () => {
+        state.seniority = els.senioritySelect.value;
+        checkCanStart();
+      });
+      
+      // Style segments
+      els.styleSegments.forEach(seg => {
+        seg.addEventListener('click', () => {
+          els.styleSegments.forEach(s => s.classList.remove('active'));
+          seg.classList.add('active');
+          state.interviewStyle = seg.dataset.value;
+        });
+      });
+      
+      // Source radios
+      els.sourceRadios.forEach(radio => {
+        radio.addEventListener('change', () => {
+          state.questionSource = radio.value;
+          els.savedSetSelect.classList.toggle('hidden', radio.value !== 'saved');
+          if (radio.value === 'saved' && !state.savedSetsLoaded) {
+            fetchSavedSets();
+          }
+        });
+      });
+      
+      // Start button
+      els.startBtn.addEventListener('click', startInterview);
+      
+      // Answer area
+      els.answerArea.addEventListener('input', () => {
+        updateWordCounter();
+        els.shortNudge.classList.remove('visible');
+      });
+      
+      // Navigation buttons
+      els.nextBtn.addEventListener('click', handleNext);
+      els.backBtn.addEventListener('click', handleBack);
+      
+      // Summary actions
+      document.getElementById('mi-retake')?.addEventListener('click', retakeInterview);
+      document.getElementById('mi-new-questions')?.addEventListener('click', () => {
+        window.location.href = `interview-questions.html?role=${encodeURIComponent(state.role)}`;
+      });
+      
+      // History refresh button
+      els.historyRefresh?.addEventListener('click', (e) => {
+        e.preventDefault();
+        if (_historyManageMode) return;
+        fetchHistory();
+      });
+
+      // History manage mode controls
+      els.historyManage?.addEventListener('click', (e) => {
+        e.preventDefault();
+        setHistoryManageMode(true);
+      });
+
+      els.historyCancelManage?.addEventListener('click', (e) => {
+        e.preventDefault();
+        setHistoryManageMode(false);
+      });
+
+      els.historyDeleteSelected?.addEventListener('click', (e) => {
+        e.preventDefault();
+        if (_historySelectedIds.size < 1) return;
+        openDeleteModalFor(Array.from(_historySelectedIds));
+      });
+
+      // Retention footer: Clear history
+      els.historyClear?.addEventListener('click', (e) => {
+        e.preventDefault();
+        const ids = getVisibleHistoryIds();
+        if (!ids.length) {
+          return;
+        }
+        if (!_historyManageMode) setHistoryManageMode(true);
+        _historySelectedIds = new Set(ids);
+        syncBulkDeleteState();
+        renderHistory();
+        openDeleteModalFor(ids);
+      });
+
+      // Retry link
+      els.historyRetry?.addEventListener('click', (e) => {
+        e.preventDefault();
+        fetchHistory();
+      });
+
+      // Modal handlers
+      els.modalBackdrop?.addEventListener('click', closeDeleteModal);
+      els.deleteCancel?.addEventListener('click', closeDeleteModal);
+      els.deleteConfirm?.addEventListener('click', handleDeleteConfirm);
+
+      // Focus trap + ESC close for modal
+      const modal = els.deleteModal;
+      if (modal && !modal.dataset.bound) {
+        modal.dataset.bound = '1';
+        modal.addEventListener('keydown', function(e) {
+          if (e.key === 'Escape') {
+            e.preventDefault();
+            closeDeleteModal();
+            return;
+          }
+          if (e.key !== 'Tab') return;
+          const focusables = modal.querySelectorAll('button,[href],input,select,textarea,[tabindex]:not([tabindex="-1"])');
+          const list = Array.from(focusables).filter((el) => !el.disabled && el.offsetParent !== null);
+          if (!list.length) return;
+          const first = list[0];
+          const last = list[list.length - 1];
+          const active = document.activeElement;
+          if (e.shiftKey && active === first) {
+            e.preventDefault();
+            last.focus();
+          } else if (!e.shiftKey && active === last) {
+            e.preventDefault();
+            first.focus();
+          }
+        });
+      }
+
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+          const backdropEl = els.modalBackdrop;
+          if (backdropEl && !backdropEl.hidden) {
+            closeDeleteModal();
+          }
+        }
+      });
+
+      // Close menus when clicking outside
+      document.addEventListener('click', (e) => {
+        if (!_historyManageMode && _historyMenuOpenForId) {
+          const menu = els.historyList?.querySelector('.mi-history-menu:not([hidden])');
+          if (menu && !menu.contains(e.target)) {
+            closeAllHistoryMenus();
+            renderHistory();
+          }
+        }
+      });
+    }
+    
+    // Initialize
+    async function init() {
+      localPayload = readLocalPayload();
+      hydrateFromParams();
+      setupEventListeners();
+      initRoleSelector();
+      
+      // Safety: ensure delete modal/backdrop are never stuck visible on cold load
+      closeDeleteModal();
+      
+      await fetchHistory();
+      await fetchSavedSets();
+      
+      // Sync source controls if prefilled
+      els.sourceRadios.forEach(radio => {
+        if (radio.value === state.questionSource) {
+          radio.checked = true;
+        }
+      });
+      els.savedSetSelect.classList.toggle('hidden', state.questionSource !== 'saved');
+      if (state.savedSetId && els.savedSetSelect.value !== state.savedSetId) {
+        els.savedSetSelect.value = state.savedSetId;
+      }
+      
+      checkCanStart();
+    }
+    
+    // Wait for DOM and Firebase
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', init);
+    } else {
+      init();
+    }
   </script>
-  <script src="js/main.js" type="module"></script>
-  <script src="js/analytics.js" type="module"></script>
 </body>
 </html>

@@ -1,0 +1,142 @@
+DAVID THOMPSON
+Email: david.thompson@email.com | Phone: (555) 333-4444 | LinkedIn: linkedin.com/in/davidthompson
+Location: New York, NY | Portfolio: davidthompson.dev | GitHub: github.com/dthompson
+
+PROFESSIONAL SUMMARY
+
+Highly experienced full-stack software engineer with over 15 years of experience building scalable web applications, microservices architectures, and cloud-native solutions. Expert in JavaScript, TypeScript, Python, Java, and Go. Proven track record of leading engineering teams, architecting complex systems, and delivering high-impact products that serve millions of users. Passionate about clean code, test-driven development, and mentoring junior engineers.
+
+EXPERIENCE
+
+Principal Software Engineer | MegaTech Corporation | January 2018 - Present
+• Architected and led development of next-generation e-commerce platform serving 50M+ monthly active users
+• Designed microservices architecture using Kubernetes, Docker, and service mesh, reducing infrastructure costs by 35%
+• Built RESTful APIs and GraphQL endpoints handling 100M+ requests daily with sub-100ms latency
+• Implemented comprehensive CI/CD pipelines using Jenkins, GitHub Actions, and GitLab CI, reducing deployment time from 4 hours to 15 minutes
+• Led migration from monolithic architecture to microservices, improving system reliability from 99.5% to 99.95%
+• Mentored team of 12 engineers across 3 product teams, establishing best practices and code review standards
+• Introduced automated testing framework achieving 90% code coverage, reducing production bugs by 60%
+• Optimized database performance using PostgreSQL, Redis caching, and query optimization, improving response times by 50%
+• Implemented real-time analytics pipeline using Apache Kafka and Spark, processing 1TB of data daily
+• Collaborated with product managers and designers to define technical requirements and sprint planning
+• Conducted technical interviews and hiring decisions, growing engineering team from 5 to 25 engineers
+• Presented technical architecture decisions to C-level executives and stakeholders
+• Managed on-call rotation and incident response, reducing MTTR from 2 hours to 20 minutes
+• Implemented security best practices including OAuth 2.0, JWT tokens, and rate limiting
+• Optimized front-end performance using React, Next.js, and Webpack, improving Lighthouse scores from 60 to 95
+
+Senior Software Engineer | CloudScale Inc | March 2014 - December 2017
+• Developed cloud-native SaaS platform using AWS, Docker, and Kubernetes, serving 10M+ users
+• Built scalable backend services using Node.js, Python, and Go, handling 50M API requests daily
+• Designed and implemented data pipeline using Apache Airflow and Snowflake, processing 500GB daily
+• Created responsive web applications using React, TypeScript, and Tailwind CSS
+• Implemented authentication and authorization systems using OAuth 2.0 and RBAC
+• Optimized database queries and indexing strategies, reducing query time by 70%
+• Led migration from MongoDB to PostgreSQL, improving data consistency and query performance
+• Implemented comprehensive logging and monitoring using ELK stack and Datadog
+• Built automated testing infrastructure using Jest, Cypress, and Selenium
+• Collaborated with DevOps team to implement infrastructure as code using Terraform
+• Mentored 5 junior engineers, conducting code reviews and pair programming sessions
+• Participated in agile development processes including daily standups, sprint planning, and retrospectives
+• Contributed to open-source projects and published technical blog posts
+
+Software Engineer | StartupHub | June 2011 - February 2014
+• Developed full-stack web applications using Ruby on Rails, JavaScript, and PostgreSQL
+• Built RESTful APIs and integrated third-party services including Stripe, SendGrid, and AWS S3
+• Implemented real-time features using WebSockets and Redis pub/sub
+• Created responsive front-end interfaces using jQuery, Bootstrap, and custom CSS
+• Optimized application performance using caching strategies and database indexing
+• Deployed applications to AWS EC2, RDS, and S3 using Capistrano and Ansible
+• Implemented automated testing using RSpec, Capybara, and FactoryBot
+• Participated in code reviews and pair programming to maintain code quality
+• Collaborated with designers to implement pixel-perfect UI/UX designs
+• Managed production deployments and monitored application health
+• Troubleshot production issues and implemented bug fixes
+• Documented technical specifications and API documentation
+
+Junior Software Engineer | WebDev Agency | August 2009 - May 2011
+• Developed custom WordPress themes and plugins for client websites
+• Built responsive websites using HTML, CSS, JavaScript, and PHP
+• Integrated third-party APIs including Google Maps, Facebook, and Twitter
+• Optimized website performance using caching plugins and CDN integration
+• Implemented SEO best practices and Google Analytics tracking
+• Collaborated with designers and project managers to deliver client projects
+• Maintained and updated existing websites with new features and bug fixes
+• Participated in client meetings to gather requirements and provide technical input
+
+EDUCATION
+
+Master of Science in Computer Science | Tech University | May 2009
+Thesis: "Distributed Systems Architecture for High-Availability Web Applications"
+GPA: 3.9/4.0
+Relevant Coursework: Algorithms, Data Structures, Database Systems, Computer Networks, Software Engineering, Distributed Systems, Machine Learning
+
+Bachelor of Science in Computer Science | State College | May 2007
+GPA: 3.7/4.0
+Dean's List: Fall 2005, Spring 2006, Fall 2006, Spring 2007
+
+CERTIFICATIONS
+
+AWS Certified Solutions Architect - Professional (2020)
+Kubernetes Certified Application Developer (2019)
+Google Cloud Professional Cloud Architect (2018)
+Certified Scrum Master (2017)
+
+TECHNICAL SKILLS
+
+Programming Languages: JavaScript, TypeScript, Python, Java, Go, Ruby, PHP, SQL, HTML, CSS
+Front-End Frameworks: React, Next.js, Vue.js, Angular, jQuery, Bootstrap, Tailwind CSS
+Back-End Frameworks: Node.js, Express, NestJS, Django, Flask, Spring Boot, Ruby on Rails
+Databases: PostgreSQL, MySQL, MongoDB, Redis, DynamoDB, Snowflake, BigQuery
+Cloud Platforms: AWS (EC2, S3, RDS, Lambda, ECS, EKS), Google Cloud Platform, Azure
+DevOps Tools: Docker, Kubernetes, Jenkins, GitHub Actions, GitLab CI, Terraform, Ansible
+Message Queues: Apache Kafka, RabbitMQ, AWS SQS
+Monitoring & Logging: Datadog, New Relic, ELK Stack, Prometheus, Grafana
+Testing: Jest, Mocha, Cypress, Selenium, RSpec, JUnit, PyTest
+Version Control: Git, GitHub, GitLab, Bitbucket
+Methodologies: Agile, Scrum, Kanban, Test-Driven Development, Continuous Integration, Continuous Deployment
+
+PROJECTS
+
+Open Source Contributions
+• Maintainer of popular npm package with 1M+ weekly downloads
+• Contributor to React, Next.js, and Kubernetes open-source projects
+• Published 20+ technical blog posts on Medium and Dev.to
+
+Personal Projects
+• Built real-time collaboration tool using WebSockets and React (5K+ users)
+• Developed machine learning model for stock prediction using Python and TensorFlow
+• Created developer productivity tool using Electron and React (10K+ downloads)
+
+PUBLICATIONS
+
+• "Scaling Microservices: Lessons Learned from Building at Scale" - Tech Conference 2020
+• "Kubernetes Best Practices for Production Workloads" - DevOps Summit 2019
+• "Building Resilient Systems with Circuit Breakers" - Engineering Blog 2018
+
+AWARDS & RECOGNITION
+
+• Engineering Excellence Award - MegaTech Corporation (2020, 2021, 2022)
+• Top Performer - CloudScale Inc (2015, 2016, 2017)
+• Best Technical Blog Post - Dev Community (2019)
+
+LANGUAGES
+
+English (Native), Spanish (Conversational), French (Basic)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -1,27 +1,55 @@
-import { useState, useEffect } from 'react'
+import { useEffect } from 'react'
+import { useRouter } from 'next/router'
 import Head from 'next/head'
+import { onAuthStateChanged } from 'firebase/auth'
+import { auth } from '../lib/firebase'
 
 export default function Home() {
-  const [isAuthenticated, setIsAuthenticated] = useState(false)
-  const [userPlan, setUserPlan] = useState('free')
+  const router = useRouter()
 
   useEffect(() => {
-    // Check authentication status
-    const checkAuth = async () => {
-      // This will be implemented with Firebase Auth
-      console.log('Checking authentication...')
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      if (user) {
+        // User is signed in, redirect to dashboard
+        router.push('/dashboard')
+      }
+      // If user is not signed in, stay on landing page
+    })
+
+    return () => unsubscribe()
+  }, [router])
+
+  // Use the same favicon for all tabs
+  useEffect(() => {
+    const FAVICON = '/assets/jobhackai_icon_only_128.png'
+
+    const updateFavicon = () => {
+      const existingFavicons = document.querySelectorAll('link[rel="icon"], link[rel="apple-touch-icon"]')
+      existingFavicons.forEach(link => link.remove())
+
+      const faviconLink = document.createElement('link')
+      faviconLink.rel = 'icon'
+      faviconLink.type = 'image/png'
+      faviconLink.href = FAVICON
+      document.head.appendChild(faviconLink)
+
+      const appleTouchLink = document.createElement('link')
+      appleTouchLink.rel = 'apple-touch-icon'
+      appleTouchLink.href = FAVICON
+      document.head.appendChild(appleTouchLink)
     }
-    
-    checkAuth()
+
+    updateFavicon()
   }, [])
 
   return (
     <>
       <Head>
-        <title>JobHackAI - ATS Resume Optimization</title>
+        <title>JobHackAI</title>
         <meta name="description" content="Optimize your resume for ATS systems and land more interviews" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <link rel="icon" href="/favicon.ico" />
+        <link rel="icon" type="image/png" href="/assets/jobhackai_icon_only_128.png" />
+        <link rel="apple-touch-icon" href="/assets/jobhackai_icon_only_128.png" />
       </Head>
       
       <main className="container">
@@ -29,31 +57,39 @@ export default function Home() {
           <h1>Welcome to JobHackAI</h1>
           <p>Your ATS-optimized resume starts here</p>
           
-          {!isAuthenticated ? (
-            <div className="auth-section">
-              <button className="btn-primary">Start Free Trial</button>
-              <button className="btn-secondary">Login</button>
+          <div className="auth-section">
+            <button 
+              className="btn-primary"
+              onClick={() => router.push('/dashboard')}
+            >
+              Get Started
+            </button>
+            <button 
+              className="btn-secondary"
+              onClick={() => router.push('/dashboard')}
+            >
+              Sign In
+            </button>
+          </div>
+
+          <div className="features">
+            <div className="feature-card">
+              <h3>ATS Resume Scoring</h3>
+              <p>Get your resume scored for ATS compatibility and receive detailed feedback on how to improve.</p>
             </div>
-          ) : (
-            <div className="dashboard-preview">
-              <h2>Dashboard</h2>
-              <p>Current Plan: {userPlan}</p>
-              <div className="features">
-                <div className="feature-card">
-                  <h3>ATS Resume Scoring</h3>
-                  <p>Get your resume scored for ATS compatibility</p>
-                </div>
-                <div className="feature-card">
-                  <h3>Resume Feedback</h3>
-                  <p>Detailed feedback on how to improve your resume</p>
-                </div>
-                <div className="feature-card">
-                  <h3>Interview Questions</h3>
-                  <p>Practice with AI-generated interview questions</p>
-                </div>
-              </div>
+            <div className="feature-card">
+              <h3>Resume Feedback</h3>
+              <p>AI-powered feedback system that helps you optimize your resume for maximum impact.</p>
             </div>
-          )}
+            <div className="feature-card">
+              <h3>Cover Letter Generator</h3>
+              <p>Create personalized cover letters for any job posting with our AI-powered generator.</p>
+            </div>
+            <div className="feature-card">
+              <h3>Interview Questions</h3>
+              <p>Practice with AI-generated interview questions tailored to your target role.</p>
+            </div>
+          </div>
         </div>
       </main>
     </>

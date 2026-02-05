@@ -1,0 +1,20 @@
+# Handle client-side routing for Next.js static export
+/dashboard/   /dashboard/index.html    200
+/dashboard-simple/   /dashboard-simple/index.html    200
+
+# Stripe checkout redirects (preserve query params)
+# NOTE: /pricing-a is handled by functions/pricing-a.js to prevent redirect loops
+# Do NOT add a redirect rule here for /pricing-a
+
+# Auth routes - Firebase sends /auth/action but Cloudflare needs /auth/action/
+/auth/action   /auth/action/index.html   200
+/auth/action/   /auth/action/index.html   200
+
+# Redirect deleted pages to account settings
+/add-card   /account-setting.html   301
+/add-card.html   /account-setting.html   301
+/billing-management   /account-setting.html   301
+/billing-management.html   /account-setting.html   301
+
+# Fallback for all other routes
+/*    /index.html   200

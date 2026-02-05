@@ -7,7 +7,7 @@ _All diagrams use Mermaid syntax. Paste this markdown into any Mermaid‑enabled
 
 | User State | Primary Nav Items (left ➜ right) | Notes |
 |------------|----------------------------------|-------|
-| **Logged‑out / Visitor** | Home · What You Get · Pricing · Blog · **Login** · **Start Free Trial (CTA)** | CTA styled with primary green `#00E676` |
+| **Logged‑out / Visitor** | Home · What You Get · Pricing · Blog · **Login** · **Start Free Trial (CTA)** | CTA styled with primary green `#007A30` |
 | **Free Account (no plan)** | Dashboard · ATS Scoring · Resume Feedback 🔒 · Interview Questions 🔒 · Pricing/Upgrade (CTA) · Account · Logout | Locked items show gray 🔒 icon; clicking triggers Upgrade modal |
 | **3‑Day Trial** | Dashboard · ATS Scoring · Resume Feedback · Interview Questions · Pricing/Upgrade (reminder) · Account · Logout | Trial ribbon top‑right; lock icons persist on premium‑only tools |
 | **Basic $29** | Dashboard · ATS Scoring · Resume Feedback · Interview Questions · Upgrade → Pro (CTA) · Account · Logout | Resume Rewrite et al. appear with 🔒 |

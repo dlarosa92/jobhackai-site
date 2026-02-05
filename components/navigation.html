@@ -26,12 +26,11 @@
       </div>
       <a href="pricing.html">Pricing</a>
       <a href="blog.html">Blog</a>
-      <a href="support.html">Support</a>
+      <a href="help.html">Help</a>
     </nav>
 
     <div class="nav-auth">
       <a href="login.html" class="nav-login">Login</a>
-      <a href="signup.html" class="nav-signup">Start Free Trial</a>
     </div>
 
     <button class="mobile-toggle" aria-label="Open navigation menu" aria-expanded="false" aria-controls="mobileNav">
@@ -57,18 +56,17 @@
   </div>
   <a href="pricing.html">Pricing</a>
   <a href="blog.html">Blog</a>
-  <a href="support.html">Support</a>
+  <a href="help.html">Help</a>
   <div class="mobile-nav-auth">
     <a href="login.html">Login</a>
-    <a href="signup.html" class="mobile-nav-signup">Start Free Trial</a>
   </div>
 </nav>
 
 <!-- User Navigation (shown when logged in) -->
-<nav class="user-nav" style="display: none;">
+<nav class="user-nav" id="userNav" style="display: none;">
   <div class="container">
     <div class="user-nav-links">
-      <a href="dashboard.html">Dashboard</a>
+      <a href="dashboard.html" class="auth-required">Dashboard</a>
       <div class="nav-dropdown">
         <button class="nav-dropdown-trigger" aria-expanded="false">
           Resume Builder
@@ -120,7 +118,7 @@
         <div class="nav-dropdown-menu">
           <a href="profile.html">Profile</a>
           <a href="settings.html">Settings</a>
-          <a href="billing.html">Billing</a>
+          <a href="account-setting.html">Billing</a>
           <div class="nav-divider"></div>
           <a href="logout.html" class="nav-logout">Logout</a>
         </div>
@@ -245,7 +243,16 @@
 }
 
 .nav-signup:hover {
-  background: #00c965;
+  background: #006B28;
+}
+
+/* Hide visitor CTAs while navigation is hydrating to avoid flicker */
+html.nav-loading .nav-signup,
+html.nav-loading .mobile-nav-signup,
+html.nav-loading .nav-login {
+  visibility: hidden;
+  pointer-events: none;
+  opacity: 0;
 }
 
 .mobile-toggle {
@@ -376,4 +383,36 @@ document.addEventListener('click', (e) => {
     });
   }
 });
+
+// Authentication-based navigation control
+function checkAuthenticationAndUpdateNav() {
+  const isAuthenticated = localStorage.getItem('user-authenticated') === 'true';
+  const userNav = document.getElementById('userNav');
+  const authRequiredLinks = document.querySelectorAll('.auth-required');
+  
+  if (isAuthenticated) {
+    // Show user navigation for authenticated users
+    if (userNav) {
+      userNav.style.display = 'block';
+    }
+  } else {
+    // Hide user navigation for non-authenticated users
+    if (userNav) {
+      userNav.style.display = 'none';
+    }
+    
+    // Remove any auth-required links from main navigation
+    authRequiredLinks.forEach(link => {
+      if (link.parentNode) {
+        link.parentNode.removeChild(link);
+      }
+    });
+  }
+}
+
+// Run on page load
+document.addEventListener('DOMContentLoaded', checkAuthenticationAndUpdateNav);
+
+// Also run when localStorage changes (for SPA-like behavior)
+window.addEventListener('storage', checkAuthenticationAndUpdateNav);
 </script> 

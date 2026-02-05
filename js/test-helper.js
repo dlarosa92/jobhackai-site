@@ -147,7 +147,7 @@ class TestHelper {
     localStorage.removeItem('user-email');
     localStorage.removeItem('user-plan');
     localStorage.removeItem('dev-plan');
-    localStorage.removeItem('selected-plan');
+    sessionStorage.removeItem('selectedPlan');
     localStorage.removeItem('plan-amount');
 
     if (window.JobHackAINavigation) {
@@ -157,6 +157,7 @@ class TestHelper {
 
   resetTestState() {
     localStorage.clear();
+    sessionStorage.clear();
     this.updateCurrentState();
     setTimeout(() => {
       window.location.reload();

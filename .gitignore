@@ -1,4 +1,58 @@
+# Node / Next.js
 node_modules/
+.next/
+out/
+app/.next/
+app/out/
+dist/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnp
+.pnp.js
+
+# Build outputs
 *.log
-jobhackai-site/
+*.lock
 .DS_Store
+*.cache
+.cache/
+coverage/
+*.tgz
+
+# Cloudflare Wrangler
+.wrangler/
+worker/
+_worker.bundle
+worker/
+
+# Local env files
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+.env.qa
+
+# Local wrangler config
+wrangler.local.toml
+
+# IDE/editor cruft
+.vscode/
+.idea/
+*.swp
+*.swo
+*.iml
+
+# OS/system files
+Thumbs.db
+Desktop.ini
+
+# local helper scripts
+harden_cf.sh
+harden_cf_v2.sh
+qa_pages_vars_and_firebase_fix.sh
+test-results/
+playwright-report/
+app/tests/.auth/
+*.bak

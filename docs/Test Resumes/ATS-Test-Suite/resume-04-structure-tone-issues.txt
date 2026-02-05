@@ -1,0 +1,35 @@
+JENNIFER WILSON
+jennifer.wilson@email.com
+(555) 234-5678
+
+EDUCATION
+
+Master of Science in Data Science | Data University | 2020
+
+EXPERIENCE
+
+Data Engineer | Analytics Corp | 2019 - 2022
+I was responsible for working on data pipelines and databases, and I also did some work with SQL queries and data modeling, and I worked on ETL processes that moved data from various sources into our data warehouse, and I also helped with some data quality checks and monitoring tasks, and I worked with batch processing systems and sometimes streaming data, and I collaborated with data scientists and analysts to understand their requirements.
+
+Data Analyst | Research Inc | 2017-2019
+I analyzed data and created reports for stakeholders.
+
+SKILLS
+SQL, Python, data pipelines
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

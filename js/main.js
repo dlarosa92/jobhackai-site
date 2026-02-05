@@ -15,11 +15,15 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   // Example: track when report is downloaded
-  const downloadBtn = document.querySelector('#download-report-btn');
-  if (downloadBtn) {
-    downloadBtn.addEventListener('click', () => {
-      trackEvent('Report', 'Download', 'LinkedIn Optimizer Report');
-    });
+  try {
+    const downloadBtn = document.querySelector('#download-report-btn');
+    if (downloadBtn) {
+      downloadBtn.addEventListener('click', () => {
+        trackEvent('Report', 'Download', 'LinkedIn Optimizer Report');
+      });
+    }
+  } catch (e) {
+    // Defensive: avoid throwing on pages without this selector
   }
 });
 
@@ -45,6 +49,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (!sameOrigin || !samePage) return;
 
+    // Guard against empty hash
+    if (!url.hash || url.hash === '#') return;
+    
     const target = document.querySelector(url.hash);
     if (!target) return;
 
@@ -54,9 +61,13 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   window.addEventListener('load', () => {
-    if (location.hash) {
-      const target = document.querySelector(location.hash);
-      if (target) setTimeout(() => smoothTo(target), 0);
+    if (location.hash && location.hash !== '#') {
+      try {
+        const target = document.querySelector(location.hash);
+        if (target) setTimeout(() => smoothTo(target), 0);
+      } catch (e) {
+        // Invalid selector, ignore
+      }
     }
   });
 })();

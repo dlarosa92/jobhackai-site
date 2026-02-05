@@ -1,0 +1,44 @@
+# JobHackAI ATS Resume Scoring Worker Configuration
+# Standalone Cloudflare Worker for edge-based resume scoring
+
+name = "jobhackai-resume-worker"
+main = "resume-score-worker.js"
+compatibility_date = "2024-11-08"
+compatibility_flags = ["nodejs_compat"]
+
+# Workers AI binding for PDF text extraction via toMarkdown()
+[ai]
+binding = "AI"
+
+# OpenAI API binding (for Pro-tier AI feedback)
+# Store OpenAI API key as secret: wrangler secret put OPENAI_API_KEY
+# [vars]
+# OPENAI_MODEL = "gpt-4-turbo-preview"
+
+# KV namespaces for storing scan history & feedback summaries
+# Create namespaces via: wrangler kv:namespace create "RESUME_SCANS"
+# [[kv_namespaces]]
+# binding = "RESUME_SCANS"
+# id = "your-kv-namespace-id"
+# preview_id = "your-preview-kv-namespace-id"
+
+# Durable Objects (optional - for future rate limiting per user)
+# [[durable_objects.bindings]]
+# name = "RATE_LIMITER"
+# class_name = "RateLimiter"
+
+# Environment-specific configurations
+[env.development]
+name = "jobhackai-resume-worker-dev"
+
+[env.production]
+name = "jobhackai-resume-worker-prod"
+
+# Limits
+# CPU time limit increased to accommodate OCR processing (1-3 seconds)
+# Text-based PDFs process in <200ms, but OCR can take 1-3 seconds
+# NOTE: CPU limits require a paid Cloudflare Workers plan
+# Uncomment below when upgrading to a paid plan for OCR processing
+# [limits]
+# cpu_ms = 10000  # 10 seconds - sufficient buffer for OCR + text extraction + scoring
+

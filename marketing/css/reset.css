@@ -1,0 +1,27 @@
+/* CSS RESET */
+*, *::before, *::after {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+  }
+  
+  html {
+    font-family: var(--font-family-base);
+    background: var(--color-bg-light);
+    color: var(--color-text-main);
+    line-height: 1.6;
+  }
+  
+  body {
+    min-height: 100vh;
+    background: var(--color-bg-light);
+  }
+  
+  a {
+    color: inherit;
+    text-decoration: none;
+  }
+  
+  button, input, textarea {
+    font-family: inherit;
+  }

@@ -4,43 +4,117 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Dashboard – JobHackAI</title>
-  <link rel="icon" type="image/png" href="assets/JobHackAI_Logo_favicon-32x32.png">
+  <style>html.auth-pending{visibility:hidden}</style>
+  <script src="js/redirect-tracer.js?v=1"></script>
+  <script src="js/static-auth-guard.js?v=20260125-1"></script>
+  <title>JobHackAI</title>
+  <link rel="icon" type="image/png" href="assets/jobhackai_icon_only_128.png">
+  <link rel="apple-touch-icon" href="assets/jobhackai_icon_only_128.png">
+  <script src="js/dynamic-favicon.js?v=20250111-1"></script>
+  <script src="js/popup-queue.js"></script>
+  <script src="js/upgrade-popup.js"></script>
+  <script src="js/cookie-consent.js?v=20250128-1" defer></script>
   <link rel="stylesheet" href="css/tokens.css">
   <link rel="stylesheet" href="css/main.css">
   <link rel="stylesheet" href="css/header.css">
   <link rel="stylesheet" href="css/footer.css">
+  <script src="js/components/usage-indicator.js"></script>
+  <script type="module">
+    import authManager, { AUTH_PENDING } from './js/firebase-auth.js?v=20260125-1';
+    document.documentElement.classList.add('auth-pending');
+    const ensurePendingIndicator = () => {
+      let el = document.getElementById('auth-pending-indicator');
+      if (!el) {
+        el = document.createElement('div');
+        el.id = 'auth-pending-indicator';
+        el.textContent = 'Restoring session…';
+        el.style.cssText = 'position:fixed;inset:0;display:flex;align-items:center;justify-content:center;font-family:Inter,-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;font-size:16px;color:#1f2937;background:rgba(255,255,255,0.82);backdrop-filter:blur(2px);z-index:9999;';
+        document.body.appendChild(el);
+      }
+    };
+    const clearPendingIndicator = () => {
+      const el = document.getElementById('auth-pending-indicator');
+      if (el) el.remove();
+    };
+    const finalizeReady = () => {
+      document.documentElement.classList.remove('auth-pending');
+      clearPendingIndicator();
+    };
+
+    const guardDashboard = async (attemptGroup = 1) => {
+      let resolved = false;
+      try {
+        const TIMEOUT_PER_ATTEMPT = 12000;
+        const MAX_ATTEMPTS = 2;
+        let user = null;
+        for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+          const result = await authManager.waitForAuthReady(TIMEOUT_PER_ATTEMPT);
+          if (result === AUTH_PENDING) {
+            ensurePendingIndicator();
+            continue;
+          }
+          user = result;
+          break;
+        }
+
+        if (user === AUTH_PENDING || (!user && !window.__REAL_AUTH_READY)) {
+          ensurePendingIndicator();
+          // Keep waiting a bit longer before deciding
+          const lateResult = await authManager.waitForAuthReady(5000);
+          if (lateResult !== AUTH_PENDING) {
+            user = lateResult;
+          }
+        }
+
+        if (window.__REAL_AUTH_READY && !user) {
+          location.replace('/login');
+          resolved = true;
+          return;
+        } else if (!user) {
+          ensurePendingIndicator();
+          // give it one more grouped retry after a short pause
+          if (attemptGroup < 3) {
+            setTimeout(() => guardDashboard(attemptGroup + 1), 2000);
+            return;
+          }
+          // Exhausted retries: treat as unresolved auth; send to login to unblock
+          location.replace('/login');
+          resolved = true;
+          return;
+        }
+        // User is available
+        resolved = true;
+      } catch (_) {
+        // Conservative fallback
+        location.replace('/login');
+        resolved = true;
+        return;
+      } finally {
+        if (resolved) {
+          finalizeReady();
+        } else {
+          // keep pending indicator/class active while we wait
+          ensurePendingIndicator();
+        }
+      }
+    };
+
+    guardDashboard();
+  </script>
   <style>
     .dashboard-banner {
-      background: #fff;
-      border-radius: 16px;
-      box-shadow: 0 2px 12px rgba(31,41,55,0.07);
-      padding: 1.2rem 2rem 1.2rem 2rem;
-      margin: 2rem auto 2.2rem auto;
+      background: var(--color-card-bg);
+      border-radius: var(--radius-xl);
+      box-shadow: var(--shadow-lg);
+      padding: var(--space-md) var(--space-lg);
+      margin: var(--space-lg) auto var(--space-lg) auto;
       max-width: 540px;
       display: flex;
       flex-direction: column;
-      gap: 0.5rem;
+      gap: var(--space-xs);
       position: relative;
       align-items: flex-start;
-    }
-    .dashboard-banner .settings-link {
-      position: absolute;
-      top: 1.1rem;
-      right: 1.2rem;
-      color: #6B7280;
-      font-size: 1.1rem;
-      text-decoration: none;
-      display: flex;
-      align-items: center;
-      gap: 0.2rem;
-      transition: color 0.18s;
-      opacity: 0.7;
-    }
-    .dashboard-banner .settings-link:hover {
-      color: #232B36;
-      text-decoration: underline;
-      opacity: 1;
+      min-height: fit-content;
     }
     .dashboard-banner .welcome-row {
       display: flex;
@@ -83,7 +157,7 @@
       margin-top: 0.2rem;
     }
     .dashboard-banner .upgrade-btn {
-      background: #00E676;
+      background: #007A30;
       color: #fff;
       font-weight: 700;
       border: none;
@@ -99,7 +173,7 @@
     }
     .dashboard-banner .upgrade-btn:hover,
     .dashboard-banner .upgrade-btn:focus {
-      background: #00c965;
+      background: #006B28;
       text-decoration: none;
       outline: none;
     }
@@ -183,7 +257,7 @@
       text-decoration: none;
     }
     .feature-card .feature-action .btn-locked {
-      background: #00E676;
+      background: #007A30;
       color: #fff;
       border: none;
       display: flex;
@@ -200,20 +274,38 @@
     }
     .feature-card .feature-action .btn-locked:hover,
     .feature-card .feature-action .btn-locked:focus {
-      background: #00c965;
+      background: #006B28;
       outline: none;
     }
-    .feature-card .included-badge {
-      color: #00C853;
-      font-size: 0.98rem;
-      font-weight: 600;
-      margin-top: 0.5rem;
+    .first-ats-milestone {
+      font-size: 0.95rem;
+      color: #4B5563;
+      margin-bottom: 0.6rem;
       display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+    }
+    .first-ats-score-value {
+      font-size: 1.35rem;
+      font-weight: 700;
+      color: #111827;
+    }
+    .first-ats-score-meta {
+      display: inline-flex;
       align-items: center;
       gap: 0.3rem;
+      font-size: 0.9rem;
+      color: #6B7280;
     }
-    .feature-card .included-badge svg {
-      vertical-align: middle;
+    .first-ats-score-role {
+      font-size: 0.85rem;
+      color: #6B7280;
+    }
+    .first-ats-tooltip svg {
+      width: 16px;
+      height: 16px;
+      flex-shrink: 0;
+      stroke: #6B7280;
     }
     @media (max-width: 700px) {
       .dashboard-banner, .dashboard-features {
@@ -260,18 +352,41 @@
     .ats-score-details {
       display: flex;
       flex-direction: column;
-      gap: 0.1rem;
+      gap: var(--space-2xs);
+      flex: 1;
+      min-width: 0;
     }
     .ats-score-details .ats-score-label {
-      font-size: 1.05rem;
-      font-weight: 700;
-      color: #232B36;
-      margin-bottom: 0.1rem;
+      font-size: var(--font-size-lg);
+      font-weight: var(--font-weight-bold);
+      color: var(--color-text-main);
+      margin-bottom: var(--space-2xs);
+    }
+    .ats-score-details .ats-score-secondary {
+      font-size: var(--font-size-sm);
+      font-weight: var(--font-weight-medium);
+      color: var(--color-text-muted);
+      margin-bottom: var(--space-xs);
     }
     .ats-score-details .ats-score-summary {
-      font-size: 1rem;
-      color: #4B5563;
-      max-width: 340px;
+      font-size: var(--font-size-base);
+      color: var(--color-text-secondary);
+      max-width: calc(100% - 20px);
+      padding-right: 0;
+      line-height: 1.5;
+      opacity: 0;
+      animation: feedback-fade-in var(--transition-slow) forwards;
+      animation-delay: 0.2s;
+    }
+    @keyframes feedback-fade-in {
+      from {
+        opacity: 0;
+        transform: translateY(10px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
     }
     .user-plan-status {
       display: flex;
@@ -364,7 +479,7 @@
       vertical-align: middle;
     }
     .dashboard-banner-footer .upgrade-btn {
-      background: #00E676;
+      background: #007A30;
       color: #fff;
       font-weight: 700;
       border: none;
@@ -380,16 +495,18 @@
     }
     .dashboard-banner-footer .upgrade-btn:hover,
     .dashboard-banner-footer .upgrade-btn:focus {
-      background: #00c965;
+      background: #006B28;
     }
     .status-action-row {
       display: flex;
       flex-direction: row;
       align-items: center;
       justify-content: flex-end;
-      gap: 0.7rem;
-      margin-top: 0.5rem;
+      gap: var(--space-sm);
+      margin-top: auto;
+      margin-bottom: 0;
       width: 100%;
+      padding-top: var(--space-md);
     }
     .user-plan-badge {
       display: flex;
@@ -459,6 +576,153 @@
       display: block;
       pointer-events: auto;
     }
+    .feature-card .feature-action     .usage-indicator {
+      flex-basis: 100%;
+      margin-top: 0.45rem;
+      color: #6B7280;
+      line-height: 1.35;
+      font-size: 0.95rem;
+    }
+    /* Upgrade Pop-up Modal Styles */
+    .upgrade-popup-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.5);
+      z-index: 10000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      opacity: 0;
+      visibility: hidden;
+      transition: opacity 0.3s ease, visibility 0.3s ease;
+    }
+    .upgrade-popup-overlay.show {
+      opacity: 1;
+      visibility: visible;
+    }
+    .upgrade-popup-modal {
+      background: #fff;
+      border-radius: 16px;
+      box-shadow: 0 8px 32px rgba(31, 41, 55, 0.2);
+      max-width: 500px;
+      width: 90%;
+      max-height: 90vh;
+      overflow-y: auto;
+      padding: 2rem;
+      position: relative;
+      transform: scale(0.9) translateY(20px);
+      opacity: 0;
+      transition: transform 0.3s ease, opacity 0.3s ease;
+    }
+    .upgrade-popup-overlay.show .upgrade-popup-modal {
+      transform: scale(1) translateY(0);
+      opacity: 1;
+    }
+    .upgrade-popup-modal .close-btn {
+      position: absolute;
+      top: 1rem;
+      right: 1rem;
+      background: none;
+      border: none;
+      font-size: 1.5rem;
+      color: #6B7280;
+      cursor: pointer;
+      padding: 0.25rem;
+      line-height: 1;
+      transition: color 0.18s;
+      width: 32px;
+      height: 32px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 4px;
+    }
+    .upgrade-popup-modal .close-btn:hover {
+      color: #232B36;
+      background: #F3F4F6;
+    }
+    .upgrade-popup-modal h2 {
+      font-size: 1.5rem;
+      font-weight: 800;
+      color: #232B36;
+      margin: 0 0 1rem 0;
+      padding-right: 2rem;
+    }
+    .upgrade-popup-modal .popup-message {
+      background: #E6F7FF;
+      color: #1976D2;
+      padding: 1em 1.2em;
+      border-radius: 8px;
+      margin-bottom: 1.5rem;
+      font-size: 1.01rem;
+      line-height: 1.5;
+    }
+    .upgrade-popup-modal .popup-content {
+      color: #4B5563;
+      font-size: 1rem;
+      line-height: 1.6;
+      margin-bottom: 1.5rem;
+    }
+    .upgrade-popup-modal .popup-ok-btn {
+      background: #007A30;
+      color: #fff;
+      font-weight: 700;
+      border: none;
+      border-radius: 8px;
+      padding: 0.75rem 2rem;
+      font-size: 1.02rem;
+      cursor: pointer;
+      transition: background 0.18s;
+      width: 100%;
+      margin-top: 0.5rem;
+    }
+    .upgrade-popup-modal .popup-ok-btn:hover,
+    .upgrade-popup-modal .popup-ok-btn:focus {
+      background: #006B28;
+      outline: none;
+    }
+    .upgrade-popup-modal .popup-cancel-btn {
+      background: transparent;
+      color: #6B7280;
+      font-weight: 600;
+      border: 1px solid #D1D5DB;
+      border-radius: 8px;
+      padding: 0.75rem 2rem;
+      font-size: 1.02rem;
+      cursor: pointer;
+      transition: all 0.18s;
+      width: 100%;
+    }
+    .upgrade-popup-modal .popup-cancel-btn:hover,
+    .upgrade-popup-modal .popup-cancel-btn:focus {
+      background: #F3F4F6;
+      border-color: #9CA3AF;
+      outline: none;
+    }
+    
+    /* Loading skeleton */
+    .loading-skeleton {
+      background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+      background-size: 200% 100%;
+      animation: loading 1.5s infinite;
+    }
+    @keyframes loading {
+      0% { background-position: 200% 0; }
+      100% { background-position: -200% 0; }
+    }
+    .skeleton-banner {
+      height: 200px;
+      border-radius: 16px;
+      margin: 2rem auto;
+      max-width: 540px;
+    }
+    .skeleton-card {
+      height: 210px;
+      border-radius: 16px;
+    }
   </style>
 </head>
 <body>
@@ -490,27 +754,20 @@
   <nav class="mobile-nav" id="mobileNav">
     <!-- Mobile navigation will be dynamically populated by navigation.js -->
   </nav>
-  <script>
-    // Hamburger menu toggle
-    const mobileToggle = document.querySelector('.mobile-toggle');
-    const mobileNav = document.getElementById('mobileNav');
-    if (mobileToggle && mobileNav) {
-      mobileToggle.addEventListener('click', () => {
-        const isOpen = mobileNav.classList.toggle('open');
-        mobileToggle.setAttribute('aria-expanded', isOpen);
-      });
-      // Close mobile nav on link click
-      document.querySelectorAll('.mobile-nav a').forEach(link => {
-        link.addEventListener('click', () => {
-          mobileNav.classList.remove('open');
-          mobileToggle.setAttribute('aria-expanded', 'false');
-        });
-      });
-    }
-  </script>
+  <div class="mobile-nav-backdrop" id="mobileNavBackdrop"></div>
+  <!-- Centralized mobile menu handler -->
+  <script src="js/mobile-menu.js?v=20250115-1"></script>
   <!-- Main Content -->
   <main>
-    <div id="dashboard-root"></div>
+    <div id="dashboard-root">
+      <!-- Loading skeleton while auth loads -->
+      <div class="loading-skeleton skeleton-banner"></div>
+      <div class="dashboard-features">
+        <div class="loading-skeleton skeleton-card"></div>
+        <div class="loading-skeleton skeleton-card"></div>
+        <div class="loading-skeleton skeleton-card"></div>
+      </div>
+    </div>
   </main>
   <!-- Footer (canonical) -->
   <footer class="site-footer">
@@ -523,44 +780,140 @@
         <span class="footer-name">JOBHACKAI</span>
       </div>
       <div class="footer-legal">
-        <p>© 2025 JobHackAI. All rights reserved.</p>
+        <p>© 2026 JobHackAI. All rights reserved.</p>
       </div>
       <div class="footer-links">
         <a href="index.html">Home</a>
-        <a href="support.html">Support</a>
+        <a href="help.html">Help</a>
         <a href="privacy.html">Privacy</a>
+        <a href="cookies.html">Cookies</a>
       </div>
     </div>
   </footer>
+  <script src="js/free-account-manager.js"></script>
+  <script src="js/universal-logout.js?v=20251007-2"></script>
+  <!-- Inactivity tracker - auto-logout after 30 minutes of inactivity -->
+  <script src="js/inactivity-tracker.js?v=20250115-1"></script>
+  
+  <!-- UX Enhancement Components -->
+  <script src="js/state-persistence.js?v=20250115-1"></script>
   <script>
-    // --- AUTHENTICATION CHECK ---
-    function checkAuthentication() {
-      const isAuthenticated = localStorage.getItem('user-authenticated') === 'true';
-      const mainContent = document.querySelector('main');
-      
-      if (!isAuthenticated) {
-        mainContent.innerHTML = `
-          <div style="max-width: 600px; margin: 4rem auto; text-align: center; padding: 2rem;">
-            <div style="font-size: 4rem; margin-bottom: 1rem;">🔒</div>
-            <h1 style="font-size: 2rem; font-weight: 700; color: var(--color-text-main); margin-bottom: 1rem;">
-              Login Required
-            </h1>
-            <p style="font-size: 1.1rem; color: var(--color-text-secondary); margin-bottom: 2rem; line-height: 1.6;">
-              You need to be logged in to access your dashboard. 
-              Please sign in to view your account and tools.
-            </p>
-            <div style="display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap;">
-              <a href="login.html" class="btn-primary" style="text-decoration: none;">
-                Sign In
-              </a>
-              <a href="pricing-a.html" class="btn-outline" style="text-decoration: none;">
-                View Pricing
-              </a>
-            </div>
-          </div>
-        `;
+    // --- CROSS-TAB LOGOUT SYNC ONLY ---
+    (function(){
+      try {
+        // Cross-tab logout sync only - removed problematic auth guard
+        const ch = new BroadcastChannel('auth');
+        ch.onmessage = (e) => { 
+          if (e?.data?.type === 'logout') location.replace('login.html'); 
+        };
+      } catch(_) {}
+    })();
+
+    // --- HELPER FUNCTIONS ---
+    async function getFirebaseIdToken() {
+      try {
+        const u = window.FirebaseAuthManager?.getCurrentUser?.();
+        return u ? await u.getIdToken() : null;
+      } catch (error) {
+        console.warn('Could not get Firebase token:', error);
+        return null;
+      }
+    }
+
+    // --- FIREBASE AUTH WAIT HELPERS ---
+    async function waitForFirebaseAuthReady(timeoutMs = 30000) {
+      const authManager = window.FirebaseAuthManager;
+      if (authManager?.isAuthReady?.()) return true;
+      if (window.__firebaseAuthReadyFired) return true;
+
+      return new Promise((resolve) => {
+        let done = false;
+        const finish = (value) => {
+          if (done) return;
+          done = true;
+          clearTimeout(timer);
+          document.removeEventListener('firebase-auth-ready', onReady);
+          resolve(value);
+        };
+        const onReady = () => finish(true);
+        const timer = setTimeout(() => finish(false), timeoutMs);
+        document.addEventListener('firebase-auth-ready', onReady, { once: true });
+      });
+    }
+
+    async function waitForFirebaseUser(authManager, timeoutMs = 30000) {
+      const start = Date.now();
+      while (Date.now() - start < timeoutMs) {
+        const user = authManager.getCurrentUser?.();
+        if (user && user.email) return user;
+        await new Promise((r) => setTimeout(r, 250));
+      }
+      return authManager.getCurrentUser?.() || null;
+    }
+
+    // --- ENHANCED AUTHENTICATION CHECK ---
+    async function checkAuthentication() {
+      console.log('🔧 dashboard.html VERSION: fix-auth-cache-loop-v1 - ' + new Date().toISOString());
+
+      let waitCount = 0;
+      while (!window.FirebaseAuthManager && waitCount < 80) {
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        waitCount++;
+      }
+
+      if (!window.FirebaseAuthManager) {
+        console.error('❌ FirebaseAuthManager not available');
+        window.location.href = 'login.html';
         return false;
       }
+
+      const authManager = window.FirebaseAuthManager;
+      let isAuthInStorage = false;
+      let hasTokens = false;
+
+      try {
+        isAuthInStorage = localStorage.getItem('user-authenticated') === 'true';
+      } catch (_) {}
+
+      try {
+        hasTokens = !!(
+          sessionStorage.getItem('firebase_id_token') ||
+          sessionStorage.getItem('firebase_refresh_token') ||
+          sessionStorage.getItem('linkedin_oidc_id_token') ||
+          sessionStorage.getItem('linkedin_pending_init')
+        );
+      } catch (_) {}
+
+      if (isAuthInStorage || hasTokens) {
+        await waitForFirebaseAuthReady(30000);
+        await waitForFirebaseUser(authManager, 30000);
+      } else {
+        await waitForFirebaseAuthReady(5000);
+      }
+
+      const user = authManager.getCurrentUser?.();
+      if (!user || !user.email) {
+        const authReady = authManager.isAuthReady?.() || window.__firebaseAuthReadyFired;
+        if (authReady || !isAuthInStorage) {
+          console.error('❌ No Firebase user available');
+          window.location.href = 'login.html';
+          return false;
+        }
+        await waitForFirebaseUser(authManager, 5000);
+      }
+
+      const finalUser = authManager.getCurrentUser?.();
+      if (!finalUser || !finalUser.email) {
+        console.error('❌ No Firebase user available');
+        window.location.href = 'login.html';
+        return false;
+      }
+
+      console.log('✅ Authenticated:', finalUser.email);
+      try {
+        localStorage.setItem('user-authenticated', 'true');
+      } catch (_) {}
+
       return true;
     }
 
@@ -578,28 +931,626 @@
     }
 
     // --- Initialize on load ---
-    document.addEventListener('DOMContentLoaded', function() {
+    document.addEventListener('DOMContentLoaded', async function() {
       // Check authentication first
-      if (!checkAuthentication()) {
+      const authOk = await checkAuthentication();
+      if (!authOk) {
         return; // Stop here if not authenticated
       }
       
       // Get user data from authentication system
       const authState = getAuthState();
-      const currentPlan = window.JobHackAINavigation ? window.JobHackAINavigation.getEffectivePlan() : 'free';
+      
+      // Clear selectedPlan when arriving from successful checkout
+      const urlParams = new URLSearchParams(window.location.search);
+
+      // Tracks if we already scheduled welcome popup in ?paid=1 block (before polling).
+      // Skip the later popup call when true to avoid duplicate.
+      let welcomePopupScheduledInPaid1Block = false;
+
+      async function fetchBillingStatus(reason) {
+        try {
+          const firebaseToken = await getFirebaseIdToken();
+          if (!firebaseToken) {
+            console.warn(`⚠️ [DASHBOARD] Billing status sync skipped (${reason}): missing token`);
+            return null;
+          }
+
+          const billingRes = await fetch('/api/billing-status', {
+            method: 'GET',
+            headers: { 'Authorization': `Bearer ${firebaseToken}` }
+          });
+
+          if (!billingRes.ok) {
+            console.warn(`⚠️ [DASHBOARD] Billing status response not ok (${reason}):`, billingRes.status);
+            return null;
+          }
+
+          const billingData = await billingRes.json();
+          if (!billingData?.ok) {
+            console.warn(`⚠️ [DASHBOARD] Billing status payload not ok (${reason})`);
+            return null;
+          }
+
+          return billingData;
+        } catch (e) {
+          console.warn(`⚠️ [DASHBOARD] Billing status sync failed (${reason}):`, e);
+          return null;
+        }
+      }
+
+      function applyBillingData(billingData, logLabel) {
+        if (!billingData) return;
+
+        console.log(`✅ [DASHBOARD] Synced plan from Stripe ${logLabel}:`, billingData.plan);
+        localStorage.setItem('user-plan', billingData.plan);
+        localStorage.setItem('dev-plan', billingData.plan);
+
+        if (billingData.trialEndsAt) {
+          localStorage.setItem('trial-ends-at', new Date(billingData.trialEndsAt).toISOString());
+        }
+
+        // Update navigation state
+        if (window.JobHackAINavigation?.setAuthState) {
+          window.JobHackAINavigation.setAuthState(true, billingData.plan);
+        }
+      }
+
+      let billingStatusData = null;
+
+      if (urlParams.get('paid') === '1') {
+        // Read checkout intent from selectedPlan BEFORE clearing (webhook may not have run yet).
+        // Use it for welcome popup when billing still says free/trial so we show correct plan content.
+        let checkoutPlanFromSelected = null;
+        try {
+          const raw = sessionStorage.getItem('selectedPlan') || localStorage.getItem('selectedPlan');
+          if (raw) {
+            const parsed = JSON.parse(raw);
+            const id = parsed?.planId;
+            if (id && ['trial', 'essential', 'pro', 'premium'].includes(id)) {
+              checkoutPlanFromSelected = id;
+            }
+          }
+        } catch (_) {}
+
+        console.log('✅ [DASHBOARD] Cleared selectedPlan after successful checkout');
+        try {
+          sessionStorage.removeItem('selectedPlan');
+          localStorage.removeItem('selectedPlan');
+        } catch (_) {}
+
+        billingStatusData = await fetchBillingStatus('after checkout');
+        applyBillingData(billingStatusData, 'after successful checkout');
+        
+        // Phase 1.1: Aggressive polling for plan update after payment
+        // Fix Issue 2: Check if plan has already been updated before starting polling
+        // This prevents unnecessary polling on subsequent page loads with ?paid=1
+        const currentPlanAfterPayment = billingStatusData?.plan || localStorage.getItem('user-plan') || 'free';
+        const hasAlreadyProcessedPayment = sessionStorage.getItem('payment-processed') === 'true';
+        
+        // Only start polling if:
+        // 1. Plan is still 'free' or 'trial' (hasn't been updated yet), OR
+        // 2. We haven't already processed this payment
+        const shouldStartPolling = (currentPlanAfterPayment === 'free' || currentPlanAfterPayment === 'trial') && !hasAlreadyProcessedPayment;
+        
+        if (shouldStartPolling) {
+          // Store initial plan before any updates
+          const initialPlanAfterPayment = currentPlanAfterPayment;
+          // Optimistic: if checkout intent exists, surface it immediately for nav/badges
+          if (checkoutPlanFromSelected) {
+            try {
+              localStorage.setItem('user-plan', checkoutPlanFromSelected);
+              localStorage.setItem('dev-plan', checkoutPlanFromSelected);
+              window.dispatchEvent(new CustomEvent('planChanged', { detail: { newPlan: checkoutPlanFromSelected } }));
+              if (window.JobHackAINavigation?.setAuthState) {
+                window.JobHackAINavigation.setAuthState(true, checkoutPlanFromSelected);
+              }
+              if (window.JobHackAINavigation?.scheduleUpdateNavigation) {
+                window.JobHackAINavigation.scheduleUpdateNavigation(true);
+              }
+            } catch (_) {}
+          }
+          // Flag welcome popup to show inline "setting up" copy instead of floating pill
+          window.__jhPlanSettingUp = true;
+
+          // OPTION 1: Schedule welcome popup BEFORE polling/redirect so it shows on first dashboard visit.
+          // Otherwise the poll can redirect before we ever reach the later showWelcomePopup call.
+          // When webhook hasn't processed yet, billing says free/trial; use checkout intent (selectedPlan)
+          // so Essential/Pro/Premium purchasers see correct welcome content instead of free/trial messaging.
+          const displayPlanForPopup = (initialPlanAfterPayment === 'free' || initialPlanAfterPayment === 'trial') && checkoutPlanFromSelected
+            ? checkoutPlanFromSelected
+            : initialPlanAfterPayment;
+          let paid1UserName = 'there';
+          try {
+            const u = window.FirebaseAuthManager?.getCurrentUser?.();
+            if (u?.displayName) {
+              const parts = String(u.displayName).trim().split(/\s+/);
+              paid1UserName = parts[0] || 'there';
+            }
+          } catch (_) {}
+          welcomePopupScheduledInPaid1Block = true;
+          setTimeout(() => {
+            if (typeof window.showWelcomePopup === 'function') {
+              window.showWelcomePopup(displayPlanForPopup, paid1UserName);
+            }
+          }, 800);
+          
+          // Poll for plan update
+          let retries = 0;
+          const maxRetries = 18; // ~30s at 1.7s cadence
+          const pollIntervalMs = 1700;
+          
+          const pollForPlanUpdate = async () => {
+            retries++;
+            
+            const firebaseToken = await getFirebaseIdToken();
+            if (!firebaseToken) {
+              // Authentication issue - check if we should stop polling
+              if (retries >= maxRetries) {
+                console.warn('⚠️ Plan update timeout - authentication failed');
+                // Mark as processed to prevent infinite polling on refresh
+                sessionStorage.setItem('payment-processed', 'true');
+                // Clean up URL parameter
+                const url = new URL(window.location.href);
+                if (url.searchParams.has('paid')) {
+                  url.searchParams.delete('paid');
+                  window.history.replaceState({}, '', url.toString());
+                }
+                return;
+              }
+              // Retry after delay even if auth fails (might be temporary)
+              setTimeout(pollForPlanUpdate, pollIntervalMs);
+              return;
+            }
+            
+            try {
+              const planResponse = await fetch('/api/plan/me', {
+                headers: { 'Authorization': `Bearer ${firebaseToken}` }
+              });
+              
+              if (planResponse.ok) {
+                const planData = await planResponse.json();
+                const newPlan = planData.plan || 'free';
+                
+                // Check if plan changed from initial state and is not free
+                if (newPlan !== initialPlanAfterPayment && newPlan !== 'free') {
+                  // Plan updated! Mark as processed and reload without ?paid=1
+                  console.log('✅ Plan updated after payment, reloading...');
+                  sessionStorage.setItem('payment-processed', 'true');
+                  setTimeout(() => {
+                    // Fix Issue 2: Remove ?paid=1 from URL to prevent re-triggering on reload
+                    const url = new URL(window.location.href);
+                    url.searchParams.delete('paid');
+                    window.location.href = url.toString();
+                  }, 500);
+                  return;
+                }
+              }
+            } catch (error) {
+              console.warn('⚠️ Plan poll error:', error);
+            }
+            
+            // Check if we should continue polling
+            if (retries < maxRetries) {
+              setTimeout(pollForPlanUpdate, pollIntervalMs); // Faster cadence
+            } else {
+              console.warn('⚠️ Plan update timeout - will refresh on next poll');
+              // Mark as processed even on timeout to prevent infinite polling
+              sessionStorage.setItem('payment-processed', 'true');
+              // Clean up URL parameter to prevent restarting polling in new sessions
+              const url = new URL(window.location.href);
+              if (url.searchParams.has('paid')) {
+                url.searchParams.delete('paid');
+                window.history.replaceState({}, '', url.toString());
+              }
+            }
+          };
+          
+          // Start polling after initial billing status fetch (faster start: 0.8s)
+          setTimeout(pollForPlanUpdate, 800);
+        } else {
+          // Plan already updated or payment already processed - clean up URL
+          if (hasAlreadyProcessedPayment || (currentPlanAfterPayment !== 'free' && currentPlanAfterPayment !== 'trial')) {
+            const url = new URL(window.location.href);
+            if (url.searchParams.has('paid')) {
+              url.searchParams.delete('paid');
+              // Use replace instead of assign to avoid adding to history
+              window.history.replaceState({}, '', url.toString());
+            }
+          }
+        }
+      }
+      
+      // Force plan fetch from D1 when pending or on normal dashboard load (fallback)
+      if (authState.userPlan === 'pending') {
+        console.log('🔄 Forcing plan refresh from D1 (pending plan)');
+        if (window.JobHackAINavigation?.fetchPlanFromAPI) {
+          try {
+            const freshPlan = await window.JobHackAINavigation.fetchPlanFromAPI();
+            if (freshPlan) {
+              console.log('✅ Fetched fresh plan from D1:', freshPlan);
+              localStorage.setItem('user-plan', freshPlan);
+              // Force navigation update
+              if (window.JobHackAINavigation?.setAuthState) {
+                window.JobHackAINavigation.setAuthState(true, freshPlan);
+              }
+            }
+          } catch (e) {
+            console.warn('⚠️ Could not fetch plan from KV:', e);
+          }
+        }
+      }
+      
+      // Also sync from billing-status on every dashboard load to ensure accuracy
+      if (!billingStatusData) {
+        billingStatusData = await fetchBillingStatus('on load');
+        applyBillingData(billingStatusData, 'on load');
+      }
+      // Fallback to KV if billing-status fails is handled below when needed
+      
+      // Wait for navigation system to be ready
+      let currentPlan = 'free';
+      if (window.JobHackAINavigation && typeof window.JobHackAINavigation.getEffectivePlan === 'function') {
+        currentPlan = window.JobHackAINavigation.getEffectivePlan();
+        console.log('✅ Got plan from navigation:', currentPlan);
+      } else {
+        // Fallback: try localStorage directly
+        currentPlan = localStorage.getItem('user-plan') || 'free';
+        console.log('⚠️ Navigation not ready, using localStorage plan:', currentPlan);
+      }
+      
+      // Set flag if user upgraded from free to trial/paid plan
+      // Only set flag if previous-plan actually exists (not defaulting to 'free')
+      // This prevents direct paid signups from being incorrectly marked as former free users
+      const previousPlan = localStorage.getItem('previous-plan');
+      
+      // Fix Issue 1: Capture previousPlan before it's updated, store in sessionStorage for renderDashboard
+      // This ensures trial→paid carry-over message can be displayed correctly
+      if (previousPlan && previousPlan !== currentPlan) {
+        sessionStorage.setItem('previous-plan-before-update', previousPlan);
+      }
+      
+      if (previousPlan === 'free' && (currentPlan === 'trial' || currentPlan === 'essential' || currentPlan === 'pro' || currentPlan === 'premium')) {
+        localStorage.setItem('was-free-user', 'true');
+        // CRITICAL: Store flag indicating user had free ATS score at upgrade time
+        // This ensures modal only shows if they had a score BEFORE upgrading
+        const hadFreeATSScore = localStorage.getItem('lastATSScore') || sessionStorage.getItem('currentAtsScore');
+        if (hadFreeATSScore) {
+          localStorage.setItem('had-free-ats-score-at-upgrade', 'true');
+          console.log('✅ Marked user as former free user with ATS score (upgraded to', currentPlan + ')');
+        } else {
+          console.log('✅ Marked user as former free user without ATS score (upgraded to', currentPlan + ')');
+        }
+      }
+      // Update previous plan for next check (only if it changed)
+      if (previousPlan !== currentPlan) {
+        localStorage.setItem('previous-plan', currentPlan);
+      }
+
+      // If coming from Stripe with ?paid=1 but KV says 'free', force sync
+      // Reuse urlParams from line 705
+      if (urlParams.get('paid') === '1' && currentPlan === 'free') {
+        console.log('🔄 KV mismatch detected, forcing Stripe sync...');
+        try {
+          // Get Firebase ID token for authentication
+          const firebaseToken = await getFirebaseIdToken();
+          if (firebaseToken) {
+            const syncResponse = await fetch('/api/sync-stripe-plan', {
+              method: 'POST',
+              headers: { 
+                'Authorization': `Bearer ${firebaseToken}`,
+                'Content-Type': 'application/json'
+              }
+            });
+            
+            if (syncResponse.ok) {
+              const syncData = await syncResponse.json();
+              if (syncData.plan && syncData.plan !== 'free') {
+                console.log('✅ Sync successful, updating plan:', syncData.plan);
+                currentPlan = syncData.plan;
+                localStorage.setItem('user-plan', currentPlan);
+                if (syncData.trialEndsAt) {
+                  localStorage.setItem('trial-ends-at', syncData.trialEndsAt);
+                  console.log('✅ Updated trial end date:', syncData.trialEndsAt);
+                }
+                
+                // Force navigation update with new plan
+                if (window.JobHackAINavigation?.setAuthState) {
+                  window.JobHackAINavigation.setAuthState(true, currentPlan);
+                }
+              } else {
+                console.log('⚠️ Sync returned free plan, keeping current');
+              }
+            } else {
+              console.warn('⚠️ Sync failed:', syncResponse.status);
+            }
+          } else {
+            console.warn('⚠️ Could not get Firebase token for sync');
+          }
+        } catch (syncError) {
+          console.warn('⚠️ Sync error:', syncError);
+        }
+      }
+
+      console.log('📊 Dashboard Debug:', {
+        'user-plan': localStorage.getItem('user-plan'),
+        'trial-ends-at': localStorage.getItem('trial-ends-at'),
+        'user-authenticated': localStorage.getItem('user-authenticated'),
+        'currentPlan': currentPlan
+      });
       
       // Create user object from authentication data
+      let authUserName = 'User';
+      let authUserFirstName = '';
+      let authUserLastName = '';
+      let authUserEmail = 'user@example.com';
+      let authUserUid = null;
+      try {
+        const u = window.FirebaseAuthManager?.getCurrentUser?.();
+        if (u) {
+          authUserEmail = u.email || authUserEmail;
+          authUserUid = u.uid || null;
+          const dn = u.displayName || '';
+          if (dn) {
+            authUserName = dn;
+            // Parse firstName and lastName from displayName
+            const nameParts = dn.trim().split(/\s+/);
+            if (nameParts.length > 0) {
+              authUserFirstName = nameParts[0];
+              authUserLastName = nameParts.slice(1).join(' ') || '';
+            }
+          }
+        }
+      } catch (_) {}
+      
+      // Fetch trial data from D1 via /api/plan/me (source of truth)
+      let trialEndsAtFromAPI = null;
+      try {
+        const firebaseToken = await getFirebaseIdToken();
+        if (firebaseToken) {
+          const planResponse = await fetch('/api/plan/me', {
+            headers: { 'Authorization': `Bearer ${firebaseToken}` }
+          });
+          
+          if (planResponse.ok) {
+            const planData = await planResponse.json();
+            if (planData.trialEndsAt) {
+              trialEndsAtFromAPI = planData.trialEndsAt;
+              localStorage.setItem('trial-ends-at', planData.trialEndsAt);
+              console.log('✅ Fetched trial end date from D1:', planData.trialEndsAt);
+            }
+          }
+        }
+      } catch (error) {
+        console.warn('⚠️ Failed to fetch trial data from API:', error);
+      }
+      
+      // Use API data, fallback to localStorage, never create fake dates
       const user = {
-        name: "User", // This would come from the auth system
-        email: "user@example.com", // This would come from the auth system
+        name: authUserName,
+        firstName: authUserFirstName,
+        lastName: authUserLastName,
+        email: authUserEmail,
+        uid: authUserUid,
         plan: currentPlan,
-        trialEndsAt: "2024-06-10T00:00:00Z",
+        trialEndsAt: trialEndsAtFromAPI || localStorage.getItem('trial-ends-at') || null,
         hasUsedFreeTrial: true,
         hasUsedFreeATS: true
       };
       
+      // Log trial countdown debug info
+      console.log('📊 Trial Countdown Debug:', {
+        plan: user.plan,
+        trialEndsAt: user.trialEndsAt,
+        daysLeft: user.trialEndsAt ? daysLeft(user.trialEndsAt) : null,
+        source: trialEndsAtFromAPI ? 'API (D1)' : localStorage.getItem('trial-ends-at') ? 'localStorage' : 'none'
+      });
+      
+      // If API fetch failed and user is on trial, show warning but don't break dashboard
+      if (!trialEndsAtFromAPI && user.plan === 'trial') {
+        console.warn('⚠️ Could not fetch trial end date from D1. Using cached value if available.');
+      }
+      
       // Continue with existing dashboard logic
       renderDashboard(user);
+
+      // Show welcome popup for first-time dashboard visitors (skip if already shown in ?paid=1 block)
+      if (!welcomePopupScheduledInPaid1Block) {
+        setTimeout(() => {
+          if (typeof window.showWelcomePopup === 'function') {
+            window.showWelcomePopup(user.plan, user.firstName || user.name);
+          }
+        }, 800);
+      }
+
+      // Add periodic refresh for plan changes (for all users)
+      // This ensures plan upgrades/downgrades are detected automatically
+      const planState = { 
+        currentPlan: user.plan,
+        trialEndsAt: user.trialEndsAt || null 
+      };
+      
+      const refreshPlanData = async () => {
+        try {
+          const firebaseToken = await getFirebaseIdToken();
+          if (!firebaseToken) return;
+          
+          const planResponse = await fetch('/api/plan/me', {
+            headers: { 'Authorization': `Bearer ${firebaseToken}` }
+          });
+          
+          if (planResponse.ok) {
+            const planData = await planResponse.json();
+            const newPlan = planData.plan || 'free';
+            
+            // Check if plan changed
+            if (newPlan !== planState.currentPlan) {
+              const previousPlan = planState.currentPlan;
+              console.log(`🔄 Plan changed from ${previousPlan} to ${newPlan}`);
+
+              // If trial expired (previously trial -> now non-trial), prefer full reload
+              if (previousPlan === 'trial' && newPlan !== 'trial') {
+                console.log('🔁 Detected trial -> non-trial transition via plan poll; performing full reload to ensure clean state');
+                // Update localStorage and navigation first
+                localStorage.setItem('user-plan', newPlan);
+                localStorage.setItem('dev-plan', newPlan);
+                if (Object.prototype.hasOwnProperty.call(planData, 'trialEndsAt')) {
+                  if (planData.trialEndsAt) {
+                    localStorage.setItem('trial-ends-at', planData.trialEndsAt);
+                    planState.trialEndsAt = planData.trialEndsAt;
+                  } else {
+                    localStorage.removeItem('trial-ends-at');
+                    planState.trialEndsAt = null;
+                  }
+                }
+                if (window.JobHackAINavigation?.setAuthState) {
+                  window.JobHackAINavigation.setAuthState(true, newPlan);
+                }
+                planState.currentPlan = newPlan;
+                window.location.reload();
+                return;
+              }
+
+              // Update localStorage
+              localStorage.setItem('user-plan', newPlan);
+              localStorage.setItem('dev-plan', newPlan);
+
+              // Update navigation state
+              if (window.JobHackAINavigation?.setAuthState) {
+                window.JobHackAINavigation.setAuthState(true, newPlan);
+              }
+
+              // Update plan state
+              planState.currentPlan = newPlan;
+
+              // Update trial end date if available (allow null to clear)
+              if (Object.prototype.hasOwnProperty.call(planData, 'trialEndsAt')) {
+                planState.trialEndsAt = planData.trialEndsAt;
+                if (planData.trialEndsAt) {
+                  localStorage.setItem('trial-ends-at', planData.trialEndsAt);
+                } else {
+                  localStorage.removeItem('trial-ends-at');
+                }
+              }
+
+              // Re-render dashboard with updated plan (use canonical planState)
+              const updatedUser = {
+                ...user,
+                plan: planState.currentPlan,
+                trialEndsAt: Object.prototype.hasOwnProperty.call(planData, 'trialEndsAt') ? planData.trialEndsAt : planState.trialEndsAt
+              };
+              renderDashboard(updatedUser);
+
+              console.log(`✅ Dashboard updated to ${newPlan} plan`);
+              return;
+            }
+            
+            // Update trial end date if changed (even if plan didn't change). Allow clearing.
+            if (Object.prototype.hasOwnProperty.call(planData, 'trialEndsAt') && planData.trialEndsAt !== planState.trialEndsAt) {
+              planState.trialEndsAt = planData.trialEndsAt;
+              if (planData.trialEndsAt) {
+                localStorage.setItem('trial-ends-at', planData.trialEndsAt);
+              } else {
+                localStorage.removeItem('trial-ends-at');
+              }
+              const updatedUser = { 
+                ...user, 
+                plan: planState.currentPlan,
+                trialEndsAt: planData.trialEndsAt 
+              };
+              renderDashboard(updatedUser);
+              console.log('✅ Refreshed trial end date:', planData.trialEndsAt);
+            }
+          }
+        } catch (error) {
+          console.warn('⚠️ Failed to refresh plan data:', error);
+        }
+      };
+      
+      // CRITICAL FIX: Expose refreshPlanData on window for upgradePlan callback
+      // This ensures the UI updates immediately after a successful plan upgrade
+      window.refreshPlanData = refreshPlanData;
+      
+      // Refresh every 2 minutes (120000 ms) - frequent enough to catch upgrades quickly
+      // but not so frequent as to cause server load
+      setInterval(refreshPlanData, 120000);
+      
+      // Also refresh when page becomes visible (user returns to tab)
+      document.addEventListener('visibilitychange', () => {
+        if (!document.hidden) {
+          refreshPlanData();
+        }
+      });
+      
+      // Add periodic refresh for trial expiration detection (always run for trial users)
+      // This ensures trial expiration is detected even when trialEndsAt is initially null
+      if (user.plan === 'trial') {
+        // For trial users, reuse planState.trialEndsAt as canonical trial date to avoid duplication
+        // Initialize planState.trialEndsAt if not set
+        if (planState.trialEndsAt === undefined || planState.trialEndsAt === null) {
+          planState.trialEndsAt = user.trialEndsAt || null;
+        }
+        
+        // Refresh trial data every hour
+        const refreshTrialData = async () => {
+          try {
+            const firebaseToken = await getFirebaseIdToken();
+            if (!firebaseToken) return;
+            
+            const planResponse = await fetch('/api/plan/me', {
+              headers: { 'Authorization': `Bearer ${firebaseToken}` }
+            });
+            
+            if (planResponse.ok) {
+              const planData = await planResponse.json();
+              
+              // Check if plan changed (trial expired) - CRITICAL: always check this
+              if (planData.plan !== 'trial' && planState.currentPlan === 'trial') {
+                console.log('🔄 Trial expired (detected by trial refresh), plan changed to:', planData.plan);
+                // Reload page to show updated plan
+                window.location.reload();
+                return;
+              }
+
+              // Update trial end date if changed (compare against canonical planState.trialEndsAt).
+              // Allow clearing of trialEndsAt when backend returns null.
+              if (Object.prototype.hasOwnProperty.call(planData, 'trialEndsAt') && planData.trialEndsAt !== planState.trialEndsAt) {
+                if (planData.trialEndsAt) {
+                  localStorage.setItem('trial-ends-at', planData.trialEndsAt);
+                } else {
+                  localStorage.removeItem('trial-ends-at');
+                }
+                // Update canonical state for next comparison
+                planState.trialEndsAt = planData.trialEndsAt;
+                // Re-render dashboard with updated date and canonical plan
+                const updatedUser = { ...user, plan: planState.currentPlan, trialEndsAt: planData.trialEndsAt };
+                renderDashboard(updatedUser);
+                console.log('✅ Refreshed trial end date:', planData.trialEndsAt);
+              } else if (planData.trialEndsAt) {
+                // Just update localStorage to keep it fresh (date hasn't changed)
+                localStorage.setItem('trial-ends-at', planData.trialEndsAt);
+                // Also update canonical state to keep it in sync
+                planState.trialEndsAt = planData.trialEndsAt;
+                // If we didn't have a date before, now we do - re-render to show countdown
+                if (!user.trialEndsAt) {
+                  const updatedUser = { ...user, plan: planState.currentPlan, trialEndsAt: planData.trialEndsAt };
+                  renderDashboard(updatedUser);
+                  console.log('✅ Trial end date now available:', planData.trialEndsAt);
+                }
+              }
+            }
+          } catch (error) {
+            console.warn('⚠️ Failed to refresh trial data:', error);
+          }
+        };
+        
+        // Refresh every hour
+        setInterval(refreshTrialData, 3600000); // 1 hour = 3,600,000 ms
+        
+        // Note: visibilitychange handling is centralized to refreshPlanData above
+        // (refreshPlanData also updates trialEnd dates and handles trial->non-trial transitions),
+        // so we avoid registering a second visibility listener to prevent duplicate API calls.
+      }
     });
 
     // --- USER DATA INJECTION (replace with your data source, e.g. from Google Sheets or Wix Data) ---
@@ -617,9 +1568,9 @@
     const features = [
       {
         key: "ats",
-        title: "ATS Resume Score",
-        desc: "Receive an overall ATS compliance score for your resume, highlighting key areas to improve.",
-        action: "Upload PDF",
+        title: "Your First ATS Resume",
+        desc: "Keep the score from your first ATS run saved as a reference point while you continue improving.",
+        action: "Upload Resume",
         included: true
       },
       {
@@ -679,16 +1630,382 @@
       const diff = Math.ceil((end - now) / (1000 * 60 * 60 * 24));
       return diff > 0 ? diff : 0;
     }
-    // Example ATS score (replace with real value from backend or Google Sheets)
-    const atsScore = {
-      percent: 78, // 0-100
-      value: 78,
+
+    // Fetch subscription status for warning banners
+    async function fetchSubscriptionStatus() {
+      try {
+        const user = window.FirebaseAuthManager?.getCurrentUser?.();
+        if (!user) return null;
+        
+        const idToken = await user.getIdToken();
+        const res = await fetch('/api/plan/me', {
+          headers: { Authorization: `Bearer ${idToken}` }
+        });
+        
+        if (!res.ok) return null;
+        return await res.json();
+      } catch (e) {
+        console.warn('Failed to fetch subscription status:', e);
+        return null;
+      }
+    }
+    // ATS score - initialized as null, will be populated from state persistence
+    let atsScore = {
+      percent: null, // Will be set from state persistence
+      value: null,
       max: 100,
-      summary: "Your resume meets many ATS criteria and is likely to be noticed."
+      summary: null
     };
-    function renderDashboard(user) {
+    
+    // Trust-first: show a warning toast (once per short window) when extraction quality is low.
+    // Uses existing JobHackAIToast (design system-consistent), and auto-dismisses after 8 seconds.
+    let _dashboardLowExtractionWarnShownAt = 0;
+
+    function maybeWarnLowExtractionQuality(extractionQuality) {
+      if (!window.JobHackAIToast || !extractionQuality || typeof extractionQuality !== 'object') return false;
+      const confidence = typeof extractionQuality.confidence === 'number' ? extractionQuality.confidence : 1.0;
+      const tokenCount = typeof extractionQuality.tokenCount === 'number' ? extractionQuality.tokenCount : 0;
+      const status = extractionQuality.extractionStatus || 'ok';
+      // Keep frontend warning logic aligned with backend quality gating:
+      // backend treats "high confidence" as: status === 'ok' AND confidence >= 0.65 AND tokenCount >= 80
+      const isLow = status !== 'ok' || confidence < 0.65 || tokenCount < 80;
+      if (!isLow) return false;
+
+      // Avoid accidental duplicate toasts from overlapping async flows.
+      const now = Date.now();
+      if (now - _dashboardLowExtractionWarnShownAt < 1500) return true;
+      _dashboardLowExtractionWarnShownAt = now;
+
+      // Build message conditionally based on status and token count
+      let msg;
+      if (status !== 'ok') {
+        msg = 'We may not have read your resume perfectly. Some structure checks are less certain.';
+      } else if (tokenCount > 0 && tokenCount < 80) {
+        msg = 'We didn\'t get enough readable text from your resume to be fully confident. Some structure checks are less certain.';
+      } else {
+        msg = 'We may not have read your resume perfectly. Some structure checks are less certain.';
+      }
+
+      window.JobHackAIToast.warning(msg, 8000);
+      return true;
+    }
+    
+    function deriveAtsSummary(score, extractionQuality, providedSummary) {
+      if (providedSummary && providedSummary.trim()) {
+        return providedSummary;
+      }
+
+      const hasExtractionQuality = extractionQuality && typeof extractionQuality === 'object';
+      const confidence = hasExtractionQuality && typeof extractionQuality.confidence === 'number' ? extractionQuality.confidence : 1.0;
+      const tokenCount = hasExtractionQuality && typeof extractionQuality.tokenCount === 'number' ? extractionQuality.tokenCount : 0;
+      const status = hasExtractionQuality ? (extractionQuality.extractionStatus || 'ok') : 'ok';
+      const isHighQuality = hasExtractionQuality && status === 'ok' && confidence >= 0.65 && tokenCount >= 80;
+
+      if (isHighQuality) {
+        if (score > 85) {
+          return 'Excellent! Your resume is highly ATS compatible.';
+        }
+        if (score > 70) {
+          return 'Your resume meets many ATS criteria and is likely to be noticed.';
+        }
+        return 'Your resume needs improvement for better ATS results.';
+      }
+
+      if (hasExtractionQuality) {
+        if (status !== 'ok' || confidence < 0.65 || tokenCount === 0 || (tokenCount > 0 && tokenCount < 80)) {
+          return 'We may not have read your resume perfectly. Some structure checks are less certain.';
+        }
+      }
+
+      if (score > 85) {
+        return 'Excellent! Your resume is highly ATS compatible.';
+      }
+      if (score > 70) {
+        return 'Your resume meets many ATS criteria and is likely to be noticed.';
+      }
+
+      return 'Your resume needs improvement for better ATS results.';
+    }
+
+    // Load ATS score from D1 persistence BEFORE rendering
+// Load ATS score from D1 persistence BEFORE rendering
+    async function loadAtsScoreFromStorage() {
+      // First attempt: canonical persisted score from D1
+      try {
+        const user = window.FirebaseAuthManager?.getCurrentUser?.();
+        if (user) {
+          const idToken = await user.getIdToken();
+          const response = await fetch('/api/ats-score-persist', {
+            method: 'GET',
+            headers: { 'Authorization': `Bearer ${idToken}` }
+          });
+
+          if (response.ok) {
+            const payload = await response.json();
+            if (payload && payload.success && payload.data) {
+              const resumeData = payload.data;
+              const rawScore = typeof resumeData.score === 'number' ? resumeData.score : parseFloat(resumeData.score);
+              if (!Number.isNaN(rawScore)) {
+                const scoreValue = Math.max(0, Math.min(100, Math.round(rawScore)));
+                const extractionQuality = resumeData.extractionQuality;
+                if (extractionQuality) maybeWarnLowExtractionQuality(extractionQuality);
+
+                atsScore.value = scoreValue;
+                atsScore.percent = scoreValue;
+                atsScore.summary = deriveAtsSummary(scoreValue, extractionQuality, resumeData.feedback);
+                atsScore.jobTitle = resumeData.jobTitle || null;
+                atsScore.breakdown = resumeData.breakdown || null;
+                // Capture timestamp from D1 payload (ms since epoch)
+                atsScore.timestamp = resumeData.timestamp || resumeData.createdAt || null;
+
+                // Cache D1 result for fallback
+                if (window.JobHackAIStatePersistence) {
+                  try {
+                    window.JobHackAIStatePersistence.saveATSScore({
+                      score: scoreValue,
+                      breakdown: atsScore.breakdown,
+                      resumeId: resumeData.resumeId || '',
+                      jobTitle: atsScore.jobTitle,
+                      extractionQuality: extractionQuality
+                    });
+                  } catch (e) {
+                    console.warn('[DASHBOARD] Failed to save D1 ATS score to cache:', e);
+                  }
+                }
+
+                atsScore.atsPersisted = true;
+                atsScore.d1Payload = resumeData;
+                return atsScore;
+              }
+            }
+          } else {
+            console.warn('[DASHBOARD] ats-score-persist response not ok:', response.status);
+          }
+        }
+      } catch (error) {
+        console.warn('[DASHBOARD] Failed to load ATS score from D1:', error);
+      }
+
+      // Fallback: load from local state persistence / localStorage
+      try {
+        let lastScore = null;
+        let lastSummary = null;
+        let lastJobTitle = null;
+        let lastBreakdown = null;
+
+        if (window.JobHackAIStatePersistence) {
+          const cachedScore = window.JobHackAIStatePersistence.loadATSScore();
+          if (cachedScore && cachedScore.score !== null && cachedScore.score !== undefined) {
+            lastScore = String(cachedScore.score);
+            lastJobTitle = cachedScore.jobTitle || null;
+            lastBreakdown = cachedScore.breakdown || null;
+
+            if (cachedScore.extractionQuality) {
+              maybeWarnLowExtractionQuality(cachedScore.extractionQuality);
+              const extractionQuality = cachedScore.extractionQuality;
+              const confidence = typeof extractionQuality.confidence === 'number' ? extractionQuality.confidence : 1.0;
+              const tokenCount = typeof extractionQuality.tokenCount === 'number' ? extractionQuality.tokenCount : 0;
+              const status = extractionQuality.extractionStatus || 'ok';
+              const isHighQuality = status === 'ok' && confidence >= 0.65 && tokenCount >= 80;
+
+              if (isHighQuality) {
+                if (cachedScore.score > 85) lastSummary = 'Excellent! Your resume is highly ATS compatible.';
+                else if (cachedScore.score > 70) lastSummary = 'Your resume meets many ATS criteria and is likely to be noticed.';
+                else lastSummary = 'Your resume needs improvement for better ATS results.';
+              } else {
+                lastSummary = 'We may not have detected all sections in your resume. Consider checking formatting.';
+              }
+            } else {
+              if (cachedScore.score > 85) lastSummary = 'Excellent! Your resume is highly ATS compatible.';
+              else if (cachedScore.score > 70) lastSummary = 'Your resume meets many ATS criteria and is likely to be noticed.';
+              else lastSummary = 'Your resume needs improvement for better ATS results.';
+            }
+          }
+        }
+
+        if (!lastScore) {
+          lastScore = sessionStorage.getItem('currentAtsScore') || localStorage.getItem('lastATSScore');
+          lastSummary = lastSummary || localStorage.getItem('lastATSSummary');
+          const breakdownStr = sessionStorage.getItem('currentAtsBreakdown') || localStorage.getItem('lastATSBreakdown');
+          if (breakdownStr) {
+            try {
+              lastBreakdown = JSON.parse(breakdownStr);
+            } catch (e) {
+              console.warn('[DASHBOARD] Failed to parse breakdown:', e);
+            }
+          }
+        }
+
+        atsScore.value = lastScore ? parseInt(lastScore, 10) : null;
+        atsScore.percent = lastScore ? parseInt(lastScore, 10) : null;
+        atsScore.summary = lastSummary || 'Your resume was analyzed.';
+        atsScore.jobTitle = lastJobTitle || null;
+        atsScore.breakdown = lastBreakdown || null;
+        // When loading from cache fallback, treat as persisted to keep UI consistent
+        if (atsScore.percent !== null && atsScore.percent !== undefined) {
+          atsScore.atsPersisted = true;
+        }
+      } catch (e) {
+        console.warn('[DASHBOARD] Error loading cached ATS score:', e);
+      }
+
+      return atsScore;
+    }
+
+    function escapeHtmlText(value) {
+      if (!value) return '';
+      return value
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#39;');
+    }
+
+    // Simple relative time formatter (accepts ms timestamp or date-string)
+    function timeAgo(dateInput) {
+      if (!dateInput) return '—';
+      let ts = null;
+      if (typeof dateInput === 'number' && Number.isFinite(dateInput)) ts = dateInput;
+      else if (typeof dateInput === 'string' && dateInput.trim()) {
+        const normalized = dateInput.replace(' ', 'T');
+        const d = new Date(normalized);
+        if (!Number.isNaN(d.getTime())) ts = d.getTime();
+      }
+      if (!ts) return '—';
+      const diff = Date.now() - ts;
+      if (diff < 30 * 1000) return 'just now';
+      const s = Math.floor(diff / 1000);
+      if (s < 60) return `${s}s ago`;
+      const m = Math.floor(s / 60);
+      if (m < 60) return `${m}m ago`;
+      const h = Math.floor(m / 60);
+      if (h < 24) return `${h}h ago`;
+      const d = Math.floor(h / 24);
+      if (d < 30) return `${d}d ago`;
+      const mo = Math.floor(d / 30);
+      if (mo < 12) return `${mo}mo ago`;
+      const y = Math.floor(mo / 12);
+      return `${y}y ago`;
+    }
+
+    async function loadFirstAtsSnapshot() {
+      const user = window.FirebaseAuthManager?.getCurrentUser?.();
+      if (!user) {
+        return null;
+      }
+
+      try {
+        const idToken = await user.getIdToken();
+        const response = await fetch('/api/ats-score-persist?first=true', {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${idToken}`
+          }
+        });
+
+        if (response.ok) {
+          const snapshotData = await response.json();
+          const persisted = snapshotData?.data;
+          if (snapshotData?.success && persisted) {
+            const scoreCandidate = typeof persisted.score === 'number'
+              ? persisted.score
+              : (typeof persisted.score === 'string' ? parseFloat(persisted.score) : NaN);
+            if (!Number.isNaN(scoreCandidate)) {
+              const scoreValue = Math.max(0, Math.min(100, Math.round(scoreCandidate)));
+              return {
+                score: scoreValue,
+                role: persisted.jobTitle || persisted.role || null,
+                createdAt: persisted.timestamp
+                  ? new Date(Number(persisted.timestamp)).toISOString()
+                  : (persisted.createdAt || null),
+                sessionId: persisted.resumeId || persisted.sessionId || null,
+                summary: persisted.summary || null
+              };
+            } else {
+              console.warn('[DASHBOARD] Persisted first snapshot missing valid score, falling back to history.');
+            }
+          }
+        }
+      } catch (error) {
+        console.warn('[DASHBOARD] Failed to load persisted first ATS snapshot:', error);
+      }
+
+      // Fallback to history-based approximation if persistence is unavailable
+      try {
+        const idToken = await user.getIdToken();
+        const response = await fetch('/api/resume-feedback/history', {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${idToken}`
+          }
+        });
+
+        if (!response.ok) {
+          console.warn('[DASHBOARD] resume-feedback history response not ok:', response.status);
+          return null;
+        }
+
+        const historyData = await response.json();
+        const entries = Array.isArray(historyData.items) ? historyData.items : [];
+        const scoredEntries = entries
+          .filter(entry => typeof entry.atsScore === 'number' && entry.createdAt)
+          .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+
+        const firstEntry = scoredEntries[0];
+        if (!firstEntry) {
+          return null;
+        }
+
+        return {
+          score: Math.max(0, Math.min(100, Math.round(firstEntry.atsScore))),
+          role: firstEntry.role || firstEntry.title || null,
+          createdAt: firstEntry.createdAt,
+          sessionId: firstEntry.sessionId,
+          summary: firstEntry.summary || null
+        };
+      } catch (error) {
+        console.warn('[DASHBOARD] Failed to load first ATS snapshot:', error);
+        return null;
+      }
+    }
+
+    function buildFirstAtsMilestoneHtml(snapshot) {
+      if (snapshot) {
+        return `
+        <div class="first-ats-milestone">
+          <span class="first-ats-score-value">${snapshot.score}%</span>
+          <span class="first-ats-score-meta">
+            Saved snapshot from your first resume score.
+            <span class="jh-tooltip-trigger first-ats-tooltip" tabindex="0" aria-label="First ATS resume info">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+                <circle cx="12" cy="12" r="10"></circle>
+                <line x1="12" y1="8" x2="12" y2="8"></line>
+                <line x1="12" y1="12" x2="12" y2="16"></line>
+              </svg>
+              <span class="jh-tooltip-text">This score reflects the first resume you submitted through Resume Feedback or the free lifetime run.</span>
+            </span>
+          </span>
+          <span class="first-ats-score-role">First run · <span class="first-ats-time-ago">—</span></span>
+        </div>`;
+      }
+
+      return `
+        <div class="first-ats-milestone first-ats-welcome">
+          Your first resume score from Resume Feedback or your free ATS run will live here.
+        </div>`;
+    }
+    
+    async function renderDashboard(user) {
+      // Load ATS score BEFORE rendering (now async)
+      await loadAtsScoreFromStorage();
       const root = document.getElementById('dashboard-root');
       const unlocked = featureMatrix[user.plan] || [];
+      const firstAtsSnapshot = await loadFirstAtsSnapshot();
+      const firstAtsMilestoneHtml = buildFirstAtsMilestoneHtml(firstAtsSnapshot);
+      
+      // Fetch subscription status for warning banners
+      const subStatus = await fetchSubscriptionStatus();
       // ATS Donut SVG (green ring, black text)
       function atsDonut(percent) {
         const radius = 23;
@@ -699,7 +2016,7 @@
           <div class="ats-donut" aria-label="ATS Score">
             <svg viewBox="0 0 54 54">
               <circle cx="27" cy="27" r="${radius}" stroke="#E5E7EB" stroke-width="${stroke}" fill="none"/>
-              <circle cx="27" cy="27" r="${radius}" stroke="#00E676" stroke-width="${stroke}" fill="none" stroke-dasharray="${norm}" stroke-dashoffset="${norm - progress}" stroke-linecap="round"/>
+              <circle cx="27" cy="27" r="${radius}" stroke="#007A30" stroke-width="${stroke}" fill="none" stroke-dasharray="${norm}" stroke-dashoffset="${norm - progress}" stroke-linecap="round"/>
             </svg>
             <span class="ats-score-text">${percent}%</span>
           </div>
@@ -720,36 +2037,174 @@
             return '';
         }
       }
+      
+      // Build "Unlock Deeper Insights" HTML if needed
+      let unlockInsightsHTML = '';
+      if (atsScore.percent !== null && atsScore.percent !== undefined) {
+        try {
+          const hasRoleFeedback = window.JobHackAIStatePersistence ? (() => {
+            const cached = window.JobHackAIStatePersistence.loadATSScore(null);
+            return cached && cached.roleSpecificFeedback && Array.isArray(cached.roleSpecificFeedback) && cached.roleSpecificFeedback.length > 0;
+          })() : false;
+          
+          // Show "Unlock Deeper Insights" if:
+          // 1. User is on free plan (only free users see this banner)
+          // 2. ATS score exists but no role feedback
+          // This banner should NOT show if the user already has role feedback or is on a paid plan
+          const shouldShow = user.plan === 'free' && !hasRoleFeedback && atsScore.percent !== null;
+          
+          if (shouldShow) {
+            unlockInsightsHTML = '<div style="margin-top:1rem;padding:1rem;background:rgba(5,150,105,0.08);border:1px solid rgba(5,150,105,0.2);border-radius:8px;"><div style="display:flex;align-items:flex-start;gap:0.75rem;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0;margin-top:0.125rem;color:#007A30;"><path d="M12 2L2 7l10 5 10-5-10-5z"></path><path d="M2 17l10 5 10-5"></path><path d="M2 12l10 5 10-5"></path></svg><div style="flex:1;"><div style="font-weight:600;color:#232B36;margin-bottom:0.25rem;font-size:0.95rem;">Unlock Deeper Insights</div><div style="color:#6B7280;margin-bottom:0.75rem;line-height:1.4;font-size:0.9rem;">We\'ve scored this resume against ATS rules. Get detailed feedback and role-specific suggestions.</div><a href="resume-feedback-pro.html" class="btn-primary" style="display:inline-block;padding:0.5rem 1rem;font-size:0.9rem;text-decoration:none;white-space:nowrap;">Get Detailed Feedback</a></div></div></div>';
+          }
+        } catch (e) {
+          // If state persistence not available, don't show the box
+        }
+      }
+      
       let banner = `<div class="dashboard-banner">
-        <a href="#" class="settings-link" aria-label="Account Settings">
-          <svg width="20" height="20" fill="none" stroke="#6B7280" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06A1.65 1.65 0 0015 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 008.6 15a1.65 1.65 0 00-1.82-.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.6 8.6a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 008.6 4.6a1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0015 4.6a1.65 1.65 0 001.82.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 8.6a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06A1.65 1.65 0 0015 15a1.65 1.65 0 001.82.33z"/></svg>
-        </a>
         <div class="welcome-row">
-          <h2>Welcome back, ${user.name || 'User'}!</h2>
-          ${user.plan === 'trial' || user.plan === 'essential' || user.plan === 'pro' || user.plan === 'premium' ? `<div class="plan-transition-message" style="background:#E6F7FF;color:#1976D2;padding:0.7em 1em;border-radius:8px;margin-bottom:0.7em;font-size:1.01rem;">Your previous ATS resume score has been carried over from your free account. You now have access to more features and unlimited scoring!</div>` : ''}
-          ${user.plan === 'trial' ? `<div class="trial-countdown">You have ${daysLeft(user.trialEndsAt)} day${daysLeft(user.trialEndsAt) !== 1 ? 's' : ''} left in your trial!</div>` : ''}
+          <h2>${user.firstName && user.lastName ? `Hi, ${escapeHtmlText(user.firstName)} ${escapeHtmlText(user.lastName)}` : user.firstName ? `Hi, ${escapeHtmlText(user.firstName)}` : user.name ? `Hi, ${escapeHtmlText(user.name)}` : 'Hi, User'}</h2>
+          ${user.plan === 'trial' && user.trialEndsAt ? `<div class="trial-countdown">You have ${daysLeft(user.trialEndsAt)} day${daysLeft(user.trialEndsAt) !== 1 ? 's' : ''} left in your trial!</div>` : ''}
+          ${subStatus && subStatus.cancelAt ? `
+            <div style="background:#FEF3C7;border-left:4px solid #F59E0B;color:#92400E;padding:0.8rem 1rem;border-radius:8px;margin:0.5rem 0;font-size:0.98rem;">
+              ⚠️ <strong>Your subscription will be canceled on ${new Date(subStatus.cancelAt).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}.</strong> You'll have access until then.
+              <a href="#" onclick="openBillingPortal(event)" style="color:#92400E;text-decoration:underline;margin-left:0.5rem;">Manage subscription</a>
+            </div>
+          ` : ''}
+          ${subStatus && subStatus.scheduledPlanChange ? `
+            <div style="background:#DBEAFE;border-left:4px solid #3B82F6;color:#1E40AF;padding:0.8rem 1rem;border-radius:8px;margin:0.5rem 0;font-size:0.98rem;">
+              ℹ️ <strong>Your plan will change to ${subStatus.scheduledPlanChange.newPlan.charAt(0).toUpperCase() + subStatus.scheduledPlanChange.newPlan.slice(1)} on ${new Date(subStatus.scheduledPlanChange.effectiveDate).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}.</strong>
+              <a href="#" onclick="openBillingPortal(event)" style="color:#1E40AF;text-decoration:underline;margin-left:0.5rem;">View details</a>
+            </div>
+          ` : ''}
+          ${subStatus && subStatus.currentPeriodEnd && user.plan !== 'free' && !subStatus.cancelAt && !subStatus.scheduledPlanChange ? `
+            <div style="color:#6B7280;font-size:0.92rem;margin:0.3rem 0;">
+              Renews on ${new Date(subStatus.currentPeriodEnd).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}
+            </div>
+          ` : ''}
           <div class="user-email">${user.email}</div>
-        </div>
-        <div class="ats-score-row">
-          ${atsDonut(atsScore.percent)}
-          <div class="ats-score-details">
-            <span class="ats-score-label">${atsScore.value} / ${atsScore.max}</span>
-            <span class="ats-score-summary">${atsScore.summary}</span>
+          <div style="color:#6B7280;font-size:0.875rem;margin-top:0.5rem;line-height:1.4;">
+            Your command center — see your ATS score, access all tools, and track your progress.
           </div>
         </div>
+        <div class="ats-score-row">
+          ${atsScore.percent !== null && atsScore.percent !== undefined ? `
+            ${atsDonut(atsScore.percent)}
+            <div class="ats-score-details">
+              <span class="ats-score-label">Last Resume Feedback <span class="jh-tooltip-trigger" tabindex="0" aria-label="What is ATS Score?" style="display:inline-flex;align-items:center;vertical-align:middle;cursor:default;margin-left:0.25rem;">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false" style="color:#6B7280;">
+                    <circle cx="12" cy="12" r="10"/>
+                    <line x1="12" y1="8" x2="12" y2="8"/>
+                    <line x1="12" y1="12" x2="12" y2="16"/>
+                  </svg>
+                  <span class="jh-tooltip-text">ATS (Applicant Tracking System) Score measures how well your resume matches job requirements. Higher scores increase your chances of passing automated screening systems used by most employers.</span>
+                </span></span>
+              <span class="ats-score-summary">${atsScore.summary}</span>
+            </div>
+          ` : `
+            <div class="ats-score-details">
+              <span class="ats-score-label" style="color:var(--color-text-muted);">—</span>
+              <span class="ats-score-summary" style="color:var(--color-text-muted);font-style:italic;">Upload your resume above to generate your ATS Score and detailed feedback.</span>
+            </div>
+          `}
+        </div>
+        ${unlockInsightsHTML}
         <div class="status-action-row">
-          <span class="user-plan-badge ${user.plan}">${planIcon(user.plan)}${user.plan.charAt(0).toUpperCase() + user.plan.slice(1)}</span>
+          <span class="user-plan-badge ${user.plan}">${planIcon(user.plan)}${user.plan === 'trial' && user.trialEndsAt 
+  ? `Trial (${daysLeft(user.trialEndsAt)} days left)` 
+  : user.plan === 'trial' && !user.trialEndsAt
+  ? 'Trial' // Show "Trial" without days if date not available
+  : user.plan.charAt(0).toUpperCase() + user.plan.slice(1)}</span>
           ${(user.plan === 'cancelled') ? `<a href="pricing-a.html" class="upgrade-btn">Reactivate</a>` : ''}
         </div>
       </div>`;
-      // Always load last ATS score/result from localStorage if present
-      let lastScore = localStorage.getItem('lastATSScore');
-      let lastSummary = localStorage.getItem('lastATSSummary');
-      if (lastScore && lastSummary) {
-        atsScore.value = parseInt(lastScore, 10);
-        atsScore.percent = parseInt(lastScore, 10);
-        atsScore.summary = lastSummary;
+      
+      // Phase 2.3: Show carry-over messages for upgrades
+      // Fix Issue 1: Use sessionStorage value captured before localStorage update
+      const previousPlanBeforeUpdate = sessionStorage.getItem('previous-plan-before-update');
+      const wasFreeUser = localStorage.getItem('was-free-user') === 'true';
+      const hadFreeATSScoreAtUpgrade = localStorage.getItem('had-free-ats-score-at-upgrade') === 'true';
+      
+      // Show carry-over message after free → trial/paid upgrade
+      if (wasFreeUser && hadFreeATSScoreAtUpgrade && atsScore.percent !== null && 
+          (user.plan === 'trial' || user.plan === 'essential' || user.plan === 'pro' || user.plan === 'premium')) {
+        const hasSeenCarriedOverMessage = localStorage.getItem('hasSeenCarriedOverAtsMessage') === 'true';
+        if (!hasSeenCarriedOverMessage) {
+          const carriedOverHTML = `
+            <div style="background:#E0F2FE;border-left:3px solid #007BFF;padding:0.75rem 1rem;border-radius:8px;margin-top:1rem;font-size:0.875rem;color:#1E40AF;">
+              <strong>Carried Over ATS Score</strong> — Your previous ATS resume score has been carried over from your free account.
+            </div>
+          `;
+          const bannerContainer = document.querySelector('.dashboard-banner');
+          if (bannerContainer) {
+            const atsRow = bannerContainer.querySelector('.ats-score-row');
+            if (atsRow && atsRow.nextSibling) {
+              atsRow.insertAdjacentHTML('afterend', carriedOverHTML);
+            } else {
+              bannerContainer.insertAdjacentHTML('beforeend', carriedOverHTML);
+            }
+            localStorage.setItem('hasSeenCarriedOverAtsMessage', 'true');
+          }
+        }
       }
+      
+      // Show carry-over message after trial → paid upgrade
+      // Fix Issue 1: Use previousPlanBeforeUpdate instead of localStorage value
+      // Fix Issue 2: Use explicit positive check to exclude 'cancelled' plan
+      if (previousPlanBeforeUpdate === 'trial' && 
+          (user.plan === 'essential' || user.plan === 'pro' || user.plan === 'premium')) {
+        const hasSeenTrialCarriedOverMessage = localStorage.getItem('hasSeenTrialCarriedOverMessage') === 'true';
+        if (!hasSeenTrialCarriedOverMessage) {
+          const trialCarriedOverHTML = `
+            <div style="background:#F0FDF4;border-left:3px solid #007A30;padding:0.75rem 1rem;border-radius:8px;margin-top:1rem;font-size:0.875rem;color:#166534;">
+              <strong>Trial History Preserved</strong> — Your trial history (ATS scores and feedback) has been preserved. Continue where you left off!
+            </div>
+          `;
+          const bannerContainer = document.querySelector('.dashboard-banner');
+          if (bannerContainer) {
+            const existingMessage = bannerContainer.querySelector('[style*="background:#F0FDF4"]');
+            if (!existingMessage) {
+              const atsRow = bannerContainer.querySelector('.ats-score-row');
+              if (atsRow && atsRow.nextSibling) {
+                atsRow.insertAdjacentHTML('afterend', trialCarriedOverHTML);
+              } else {
+                bannerContainer.insertAdjacentHTML('beforeend', trialCarriedOverHTML);
+              }
+              localStorage.setItem('hasSeenTrialCarriedOverMessage', 'true');
+            }
+          }
+        }
+      }
+      
+      // Show one-time "Carried Over ATS Score" message for migrated users (legacy)
+      // Check if user has legacy score and hasn't seen the message yet
+      const hasLegacyScore = localStorage.getItem('lastATSScore') || sessionStorage.getItem('currentAtsScore');
+      const hasSeenCarriedOverMessage = localStorage.getItem('hasSeenCarriedOverAtsMessage') === 'true';
+      
+      if (hasLegacyScore && !hasSeenCarriedOverMessage && atsScore.percent !== null && !wasFreeUser) {
+        // Show one-time message (only if not already shown via upgrade message above)
+        const carriedOverBanner = document.createElement('div');
+        carriedOverBanner.style.cssText = `
+          background: #EFF6FF;
+          border-left: 4px solid #3B82F6;
+          color: #1E40AF;
+          padding: 0.8rem 1rem;
+          border-radius: 8px;
+          margin: 1rem auto;
+          max-width: 540px;
+          font-size: 0.98rem;
+        `;
+        carriedOverBanner.innerHTML = `
+          ℹ️ <strong>Carried Over ATS Score</strong> — Your previous ATS score has been loaded. Upload a new resume to get an updated score.
+        `;
+        const bannerContainer = document.querySelector('.dashboard-banner');
+        if (bannerContainer && bannerContainer.parentNode) {
+          bannerContainer.parentNode.insertBefore(carriedOverBanner, bannerContainer.nextSibling);
+        }
+        // Mark as seen
+        localStorage.setItem('hasSeenCarriedOverAtsMessage', 'true');
+      }
+      
       // Features
       let featuresHtml = '<div class="dashboard-features">';
       // Always render ATS Scoring first
@@ -758,131 +2213,500 @@
       const orderedFeatures = [atsFeature, ...otherFeatures];
       for (const feature of orderedFeatures) {
         const isUnlocked = unlocked.includes(feature.key);
-        featuresHtml += `<div class="feature-card${isUnlocked ? '' : ' locked'}">`;
+        featuresHtml += `<div class="feature-card${isUnlocked ? '' : ' locked'}" data-feature-key="${feature.key}">`;
         featuresHtml += `<div class="feature-title">${feature.title}</div>`;
         featuresHtml += `<div class="feature-desc">${feature.desc}</div>`;
+        if (feature.key === 'ats') {
+          featuresHtml += firstAtsMilestoneHtml;
+        }
         featuresHtml += `<div class="feature-action">`;
         if (isUnlocked && feature.key === 'ats') {
-          // ATS Scoring: real upload
-          featuresHtml += `<input type=\"file\" id=\"ats-upload-input\" accept=\"application/pdf\" style=\"display:none;\" />`;
-          featuresHtml += `<button class=\"btn-primary\" id=\"ats-upload-btn\">${feature.action}</button>`;
-          let usageText = '';
-          let tooltip = '';
-          if (user.plan === 'free') {
-            usageText = '1 free ATS resume score per month.';
-            tooltip = `<span class="jh-tooltip-trigger" tabindex="0" aria-label="More info" style="margin-left:0.4em;vertical-align:middle;">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false" style="vertical-align:middle"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="8"/><line x1="12" y1="12" x2="12" y2="16"/></svg>
-              <span class="jh-tooltip-text">Upgrade for unlimited ATS scoring and detailed feedback.</span>
-            </span>`;
-          } else if (user.plan === 'trial') {
-            usageText = 'Unlimited ATS resume scoring during your trial.';
-            tooltip = `<span class="jh-tooltip-trigger" tabindex="0" aria-label="More info" style="margin-left:0.4em;vertical-align:middle;">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false" style="vertical-align:middle"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="8"/><line x1="12" y1="12" x2="12" y2="16"/></svg>
-              <span class="jh-tooltip-text">You have unlimited ATS resume scoring during your trial.</span>
-            </span>`;
+          // --- PATCH: Conditionally render upload button only if FREE and no first-time resume exists ---
+          // Show upload only when we have no persisted ATS score and no firstAtsSnapshot.
+          // This avoids showing the button when history API fails but a cached/persisted score exists.
+          if (user.plan === 'free' && !(firstAtsSnapshot || atsScore.atsPersisted || (atsScore.percent !== null && atsScore.percent !== undefined))) {
+            featuresHtml += `<input type=\"file\" id=\"ats-upload-input\" accept=\".pdf,.docx,.txt\" title=\"Upload your resume in PDF, DOCX, or TXT format\" style=\"display:none;\" />`;
+            featuresHtml += `<button class=\"btn-primary\" id=\"ats-upload-btn\">${feature.action}</button>`;
           }
-          featuresHtml += `<div class="usage-indicator">${usageText}${tooltip}</div>`;
+          featuresHtml += `<div class=\"usage-indicator\" data-feature=\"atsScans\" data-plan=\"${user.plan}\"></div>`;
         } else if (isUnlocked && feature.key === 'feedback') {
-          // Resume Feedback: link to feedback page
+          // Resume Feedback: link to feedback page (unlocked for trial, essential, pro, premium)
           featuresHtml += `<a href=\"resume-feedback-pro.html\" class=\"btn-primary\">Get Detailed Feedback</a>`;
-          let usageText = '';
-          let tooltip = '';
-          if (user.plan === 'free') {
-            usageText = 'Upgrade to Essential or Pro to unlock detailed feedback.';
-            tooltip = `<span class="jh-tooltip-trigger" tabindex="0" aria-label="More info" style="margin-left:0.4em;vertical-align:middle;">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false" style="vertical-align:middle"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="8"/><line x1="12" y1="12" x2="12" y2="16"/></svg>
-              <span class="jh-tooltip-text">Upgrade to Pro for unlimited feedback.</span>
-            </span>`;
-          } else if (user.plan === 'trial') {
-            usageText = '3 feedbacks remaining in your trial.';
-            tooltip = `<span class="jh-tooltip-trigger" tabindex="0" aria-label="More info" style="margin-left:0.4em;vertical-align:middle;">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false" style="vertical-align:middle"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="8"/><line x1="12" y1="12" x2="12" y2="16"/></svg>
-              <span class="jh-tooltip-text">You can get up to 3 detailed feedbacks during your trial. Upgrade to Pro for unlimited feedback.</span>
-            </span>`;
-          } else if (user.plan === 'essential') {
-            // For demo, assume 3 left (replace with dynamic count if available)
-            usageText = '3 resume feedbacks left this month.';
-            tooltip = `<span class="jh-tooltip-trigger" tabindex="0" aria-label="More info" style="margin-left:0.4em;vertical-align:middle;">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false" style="vertical-align:middle"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="8"/><line x1="12" y1="12" x2="12" y2="16"/></svg>
-              <span class="jh-tooltip-text">Upgrade to Pro for unlimited feedback.</span>
-            </span>`;
-          }
-          featuresHtml += `<div class="usage-indicator">${usageText}${tooltip}</div>`;
+          featuresHtml += `<div class="usage-indicator" data-feature="resumeFeedback" data-plan="${user.plan}"></div>`;
         } else if (isUnlocked && feature.key === 'interview') {
-          // Interview Questions: link to interview questions page
+          // Interview Questions: link to interview questions page (unlocked for trial, essential, pro, premium)
           featuresHtml += `<a href=\"interview-questions.html\" class=\"btn-primary\">${feature.action}</a>`;
-          let usageText = '';
-          let tooltip = '';
-          if (user.plan === 'free') {
-            usageText = 'Upgrade to Essential or Pro to unlock interview questions.';
-            tooltip = `<span class="jh-tooltip-trigger" tabindex="0" aria-label="More info" style="margin-left:0.4em;vertical-align:middle;">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false" style="vertical-align:middle"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="8"/><line x1="12" y1="12" x2="12" y2="16"/></svg>
-              <span class="jh-tooltip-text">Practice as much as you want during your trial.</span>
-            </span>`;
-          } else if (user.plan === 'trial') {
-            usageText = 'Unlimited interview questions during your trial.';
-            tooltip = `<span class="jh-tooltip-trigger" tabindex="0" aria-label="More info" style="margin-left:0.4em;vertical-align:middle;">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false" style="vertical-align:middle"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="8"/><line x1="12" y1="12" x2="12" y2="16"/></svg>
-              <span class="jh-tooltip-text">Practice as much as you want during your trial.</span>
-            </span>`;
-          }
-          featuresHtml += `<div class="usage-indicator">${usageText}${tooltip}</div>`;
+          featuresHtml += `<div class="usage-indicator" data-feature="interviewQuestions" data-plan="${user.plan}"></div>`;
         } else if (isUnlocked && feature.key === 'rewriting') {
           // Resume Rewriting: link for Pro and Premium
           featuresHtml += `<a href="resume-feedback-pro.html#rewrite" class="btn-primary">Start Rewriting</a>`;
-          if (user.plan === 'pro') {
-            featuresHtml += `<div class="usage-indicator">Unlimited with your Pro plan. <span class="jh-tooltip-trigger" tabindex="0" aria-label="More info" style="margin-left:0.4em;vertical-align:middle;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false" style="vertical-align:middle"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="8"/><line x1="12" y1="12" x2="12" y2="16"/></svg><span class="jh-tooltip-text">Unlimited with your Pro plan.</span></span></div>`;
+          if (user.plan === 'pro' || user.plan === 'premium') {
+            featuresHtml += `<div class="usage-indicator" data-feature="resumeRewrite" data-plan="${user.plan}"></div>`;
           }
         } else if (isUnlocked && feature.key === 'coverLetter') {
           // Cover Letter Generator: link for Pro and Premium
           featuresHtml += `<a href="cover-letter-generator.html" class="btn-primary">Generate Cover Letter</a>`;
-          if (user.plan === 'pro') {
-            featuresHtml += `<div class="usage-indicator">Unlimited with your Pro plan. <span class="jh-tooltip-trigger" tabindex="0" aria-label="More info" style="margin-left:0.4em;vertical-align:middle;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false" style="vertical-align:middle"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="8"/><line x1="12" y1="12" x2="12" y2="16"/></svg><span class="jh-tooltip-text">Unlimited with your Pro plan.</span></span></div>`;
+          if (user.plan === 'pro' || user.plan === 'premium') {
+            featuresHtml += `<div class="usage-indicator" data-feature="coverLetters" data-plan="${user.plan}"></div>`;
           }
         } else if (isUnlocked && feature.key === 'mockInterview') {
           // Mock Interviews: link for Pro and Premium
           featuresHtml += `<a href="mock-interview.html" class="btn-primary">Start Mock Interview</a>`;
-          if (user.plan === 'pro') {
-            featuresHtml += `<div class="usage-indicator">20 mock interviews left this month. <span class="jh-tooltip-trigger" tabindex="0" aria-label="More info" style="margin-left:0.4em;vertical-align:middle;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false" style="vertical-align:middle"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="8"/><line x1="12" y1="12" x2="12" y2="16"/></svg><span class="jh-tooltip-text">Upgrade to Premium for unlimited mock interviews.</span></span></div>`;
+          if (user.plan === 'pro' || user.plan === 'premium') {
+            featuresHtml += `<div class="usage-indicator" data-feature="mockInterviews" data-plan="${user.plan}"></div>`;
           }
         } else if (isUnlocked && feature.key === 'linkedin') {
           // LinkedIn Optimizer: link for Premium
           featuresHtml += `<a href=\"linkedin-optimizer.html\" class=\"btn-primary\">Optimize LinkedIn</a>`;
+          if (user.plan === 'premium') {
+            featuresHtml += `<div class="usage-indicator" data-feature="linkedInOptimizer" data-plan="${user.plan}"></div>`;
+          }
         } else if (isUnlocked && feature.key === 'priorityReview') {
           // Priority Review: icon and text for Premium
-          featuresHtml += `<div style=\"display:flex;align-items:center;gap:0.6rem;margin:0.7rem 0 0.2rem 0;\"><svg width=\"22\" height=\"22\" fill=\"none\" stroke=\"#00E676\" stroke-width=\"2\" viewBox=\"0 0 24 24\"><circle cx=\"12\" cy=\"12\" r=\"10\"/><path d=\"M12 8v4l2.5 2.5\"/></svg><span style=\"font-weight:600;color:#00C853;\">All your AI-generated content will get priority review.</span></div>`;
+          featuresHtml += `<div class="usage-indicator" data-feature="priorityReview" data-plan="${user.plan}"></div>`;
         } else {
-          featuresHtml += `<button class=\"btn-locked\"><svg width=\"18\" height=\"18\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"#fff\" stroke-width=\"2\"><rect x=\"3\" y=\"11\" width=\"18\" height=\"8\" rx=\"2\"/><path d=\"M7 11V7a5 5 0 0110 0v4\"/></svg> ${feature.action}</button>`;
+          featuresHtml += `<button class=\"btn-locked\" data-feature-key=\"${feature.key}\"><svg width=\"18\" height=\"18\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"#fff\" stroke-width=\"2\"><rect x=\"3\" y=\"11\" width=\"18\" height=\"8\" rx=\"2\"/><path d=\"M7 11V7a5 5 0 0110 0v4\"/></svg> ${feature.action}</button>`;
         }
         featuresHtml += `</div>`;
-        if (isUnlocked && (user.plan === 'trial' || user.plan === 'essential' || user.plan === 'pro' || user.plan === 'premium')) {
-          featuresHtml += `<div class="included-badge"><svg width="16" height="16" fill="#00C853" viewBox="0 0 24 24"><path d="M20.285 6.709a1 1 0 00-1.414-1.418l-9.192 9.192-4.242-4.242a1 1 0 00-1.414 1.414l4.949 4.95a1 1 0 001.414 0l9.899-9.896z"/></svg> Included in ${user.plan === 'trial' ? 'Trial' : user.plan.charAt(0).toUpperCase() + user.plan.slice(1)}</div>`;
-        }
         featuresHtml += `</div>`;
       }
       featuresHtml += '</div>';
       root.innerHTML = banner + featuresHtml;
+      
+      // Render usage indicators using shared component
+      (async function renderUsageIndicators() {
+        try {
+          const token = localStorage.getItem('firebase-id-token');
+          if (!token) {
+            console.warn('[DASHBOARD] No auth token available for usage fetch');
+            return;
+          }
+
+          const usageResponse = await fetch('/api/usage', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`
+            }
+          });
+
+          if (!usageResponse.ok) {
+            console.warn('[DASHBOARD] Failed to fetch usage data');
+            return;
+          }
+
+          const usageData = await usageResponse.json();
+          
+          if (usageData.success && usageData.usage && window.renderUsageIndicator) {
+            // Find all usage indicator containers and render components
+            const indicators = root.querySelectorAll('.usage-indicator[data-feature]');
+            indicators.forEach(container => {
+              const feature = container.getAttribute('data-feature');
+              const plan = container.getAttribute('data-plan') || usageData.plan;
+              
+              if (usageData.usage[feature]) {
+                window.renderUsageIndicator({
+                  feature: feature,
+                  usage: usageData.usage[feature],
+                  plan: plan,
+                  container: container
+                });
+              }
+            });
+          }
+        } catch (error) {
+          console.error('[DASHBOARD] Error loading usage indicators:', error);
+        }
+      })();
+      
+      // Update ATS score "age" display if we have a timestamp
+      try {
+        const ageEl = document.getElementById('ats-score-age');
+        const ts = atsScore.timestamp || (atsScore.d1Payload && (atsScore.d1Payload.timestamp || atsScore.d1Payload.createdAt));
+        if (ageEl && ts) {
+          ageEl.textContent = timeAgo(ts);
+        }
+      } catch (e) {
+        // ignore
+      }
+      
+      // Update first ATS card timestamp if we have a snapshot
+      try {
+        const firstAtsTimeEl = document.querySelector('.first-ats-time-ago');
+        if (firstAtsTimeEl && firstAtsSnapshot && firstAtsSnapshot.createdAt) {
+          firstAtsTimeEl.textContent = timeAgo(firstAtsSnapshot.createdAt);
+        }
+      } catch (e) {
+        // ignore
+      }
+
+      // --- Upgrade Pop-up Logic ---
+      function showUpgradePopup() {
+        // Check if user upgraded from free to trial/subscription
+        const hasUpgradedPlan = user.plan === 'trial' || user.plan === 'essential' || user.plan === 'pro' || user.plan === 'premium';
+        if (!hasUpgradedPlan) {
+          return;
+        }
+
+        // CRITICAL: Banner should ONLY show if user uploaded a resume for free ATS BEFORE upgrading
+        const wasFreeUser = localStorage.getItem('was-free-user') === 'true';
+
+        // Try to get user UID from Firebase Auth Manager to check credit usage (legacy support)
+        const currentUser = window.FirebaseAuthManager?.getCurrentUser?.();
+        const creditKey = currentUser?.uid ? `creditsByUid:${currentUser.uid}` : null;
+        let hasUsedFreeCredit = false;
+        let hadFreeAccountWithCredit = false;
+
+        if (creditKey) {
+          const creditsData = localStorage.getItem(creditKey);
+          if (creditsData) {
+            try {
+              const credits = JSON.parse(creditsData);
+              // User has used free credit if it's 0 (they had it and used it)
+              hasUsedFreeCredit = credits.ats_free_lifetime === 0;
+              // If creditsData exists, user had a free account (credit was initialized)
+              hadFreeAccountWithCredit = true;
+            } catch (e) {
+              // Ignore parse errors
+            }
+          }
+        }
+
+        // Check legacy free usage data
+        const freeUsageDataRaw = localStorage.getItem('free-ats-usage');
+        let hasUsedLegacyFreeATS = false;
+        if (freeUsageDataRaw) {
+          try {
+            const usageData = JSON.parse(freeUsageDataRaw);
+            hasUsedLegacyFreeATS = usageData?.used === true;
+          } catch (e) {
+            // If data is malformed, assume used to avoid missing prior usage
+            hasUsedLegacyFreeATS = true;
+          }
+        }
+
+        // Determine if user had a free account
+        const wasFreeAccount = wasFreeUser || !!freeUsageDataRaw || hadFreeAccountWithCredit;
+
+        // Check resume/ATS usage signals to align with other dashboard variants
+        const savedATS = window.JobHackAIStatePersistence?.loadATSScore?.();
+        const hasATSScoreHistory = !!(savedATS && (savedATS.score || savedATS.summary));
+        const hasUsedFreeATS = localStorage.getItem('hasUsedFreeATS') === 'true';
+        const hasUploadedResume = localStorage.getItem('lastUploadedResume') || localStorage.getItem('hasUploadedResume') === 'true';
+        const hadResumeUpload = hasATSScoreHistory || hasUsedFreeATS || hasUsedLegacyFreeATS || hasUploadedResume || hasUsedFreeCredit;
+
+        if (!wasFreeAccount) {
+          console.log('ℹ️ [UPGRADE-BANNER] Not showing banner:', {
+            wasFreeAccount,
+            hadResumeUpload
+          });
+          return;
+        }
+
+        window.JobHackAIUpgradePopup?.showUpgradePopup({
+          user,
+          wasFreeAccount,
+          hadResumeUpload
+        });
+      }
+
+      // Show popup after a short delay to ensure page is rendered
+      setTimeout(() => {
+        showUpgradePopup();
+      }, 500);
+      
+      // --- Free Account Upgrade CTA Pop-up Logic ---
+      function showFreeAccountUpgradePopup() {
+        // CRITICAL: Only show upgrade popup for free tier users
+        // Check plan from multiple sources to ensure accuracy
+        const currentPlan = localStorage.getItem('user-plan') || 'free';
+        const hasUnlimitedAccess = currentPlan === 'trial' || currentPlan === 'essential' || currentPlan === 'pro' || currentPlan === 'premium';
+        
+        // If user is on a paid plan, do NOT show upgrade popup
+        if (hasUnlimitedAccess) {
+          console.log('✅ [DASHBOARD] Skipping upgrade popup - user is on paid plan:', currentPlan);
+          return;
+        }
+        
+        // Double-check with navigation system if available
+        if (window.JobHackAINavigation) {
+          const navPlan = window.JobHackAINavigation.getEffectivePlan?.();
+          if (navPlan && (navPlan === 'trial' || navPlan === 'essential' || navPlan === 'pro' || navPlan === 'premium')) {
+            console.log('✅ [DASHBOARD] Skipping upgrade popup - navigation system confirms paid plan:', navPlan);
+            return;
+          }
+        }
+        
+        // Create and show popup
+        const popupHTML = `
+          <div class="upgrade-popup-overlay" id="free-account-upgrade-popup-overlay">
+            <div class="upgrade-popup-modal">
+              <button class="close-btn" id="free-account-upgrade-popup-close" aria-label="Close">×</button>
+              <h2>Upgrade to Continue</h2>
+              <div class="popup-message">
+                You've used your 1 free lifetime ATS resume score. Upgrade to unlock unlimited scoring and access more features!
+              </div>
+              <div class="popup-content">
+                <p style="margin-bottom: 1rem; font-weight: 600; color: #232B36;">With a subscription, you'll get:</p>
+                <ul style="list-style: none; padding: 0; margin: 0 0 1.5rem 0;">
+                  <li style="padding: 0.5rem 0; display: flex; align-items: center; gap: 0.75rem;">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#007A30" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M20 6L9 17l-5-5"/>
+                    </svg>
+                    <span>Unlimited ATS resume scoring</span>
+                  </li>
+                  <li style="padding: 0.5rem 0; display: flex; align-items: center; gap: 0.75rem;">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#007A30" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M20 6L9 17l-5-5"/>
+                    </svg>
+                    <span>Detailed resume feedback</span>
+                  </li>
+                  <li style="padding: 0.5rem 0; display: flex; align-items: center; gap: 0.75rem;">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#007A30" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M20 6L9 17l-5-5"/>
+                    </svg>
+                    <span>Interview question generator</span>
+                  </li>
+                  <li style="padding: 0.5rem 0; display: flex; align-items: center; gap: 0.75rem;">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#007A30" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M20 6L9 17l-5-5"/>
+                    </svg>
+                    <span>Priority support</span>
+                  </li>
+                </ul>
+              </div>
+              <button class="popup-ok-btn" id="free-account-upgrade-popup-cta" style="margin-bottom: 0.5rem;">Start Free Trial</button>
+              <button class="popup-cancel-btn" id="free-account-upgrade-popup-cancel" style="background: transparent; color: #6B7280; border: 1px solid #D1D5DB; margin-top: 0;">Maybe Later</button>
+              <div style="margin-top: 0.75rem; text-align: center;">
+                <a href="pricing-a.html" style="color: #007BFF; text-decoration: none; font-size: 0.875rem;">Compare Plans</a>
+              </div>
+            </div>
+          </div>
+        `;
+        
+        document.body.insertAdjacentHTML('beforeend', popupHTML);
+        const overlay = document.getElementById('free-account-upgrade-popup-overlay');
+        const closeBtn = document.getElementById('free-account-upgrade-popup-close');
+        const ctaBtn = document.getElementById('free-account-upgrade-popup-cta');
+        const cancelBtn = document.getElementById('free-account-upgrade-popup-cancel');
+        
+        // Escape key handler - stored so it can be removed later
+        const escapeKeyHandler = function(e) {
+          if (e.key === 'Escape' && overlay.classList.contains('show')) {
+            closePopup();
+          }
+        };
+        
+        function closePopup() {
+          overlay.classList.remove('show');
+          // Remove Escape key listener to prevent memory leak
+          document.removeEventListener('keydown', escapeKeyHandler);
+          setTimeout(() => {
+            overlay.remove();
+          }, 300);
+        }
+        
+        // Show popup with fade-in animation
+        setTimeout(() => {
+          overlay.classList.add('show');
+        }, 100);
+        
+        // CTA button - use stripe-checkout for trial (creates new subscription with trial period)
+        ctaBtn.addEventListener('click', async () => {
+          const user = window.FirebaseAuthManager?.getCurrentUser?.();
+          if (!user) {
+            window.location.href = 'login.html';
+            return;
+          }
+
+          try {
+            // Show loading state
+            ctaBtn.disabled = true;
+            ctaBtn.textContent = 'Starting trial...';
+
+            // Trial plans must use stripe-checkout to create new subscription with trial period
+            const idToken = await user.getIdToken();
+            const res = await fetch('/api/stripe-checkout', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${idToken}`
+              },
+              body: JSON.stringify({ plan: 'trial' })
+            });
+
+            const data = await res.json();
+            if (data?.ok && data?.url) {
+              window.location.href = data.url;
+              return;
+            }
+            throw new Error(data?.error || data?.code || 'Checkout failed');
+          } catch (error) {
+            console.error('Trial activation error:', error);
+            // Restore button state
+            ctaBtn.disabled = false;
+            ctaBtn.textContent = 'Start Free Trial';
+            // Fallback to pricing page only if activation fails
+            window.location.href = 'pricing-a.html';
+          }
+        });
+        
+        // Close handlers
+        closeBtn.addEventListener('click', closePopup);
+        cancelBtn.addEventListener('click', closePopup);
+        overlay.addEventListener('click', function(e) {
+          if (e.target === overlay) {
+            closePopup();
+          }
+        });
+        
+        // Close on Escape key
+        document.addEventListener('keydown', escapeKeyHandler);
+      }
+      
       // --- ATS Upload Button Logic ---
       const atsUploadBtn = document.getElementById('ats-upload-btn');
       const atsUploadInput = document.getElementById('ats-upload-input');
       if (atsUploadBtn && atsUploadInput) {
-        atsUploadBtn.addEventListener('click', () => atsUploadInput.click());
-        atsUploadInput.addEventListener('change', function(e) {
-          const file = e.target.files[0];
-          if (!file) return;
-          // Store last uploaded resume in localStorage for use on Resume Feedback page
-          const reader = new FileReader();
-          reader.onload = function(evt) {
-            // Store as base64 string (for demo; in production, use backend or secure storage)
-            localStorage.setItem('lastUploadedResume', evt.target.result);
-            // Optionally, store file name
-            localStorage.setItem('lastUploadedResumeName', file.name);
-          };
-          reader.readAsDataURL(file);
-          // Simulate ATS scoring and update donut/summary
-          const score = Math.floor(Math.random() * 31) + 60; // 60-90%
-          const summary = score > 85 ? 'Excellent! Your resume is highly ATS compatible.' : score > 70 ? 'Your resume meets many ATS criteria and is likely to be noticed.' : 'Your resume needs improvement for better ATS results.';
-          // Update donut
+        atsUploadBtn.addEventListener('click', async function() {
+          const user = window.FirebaseAuthManager?.getCurrentUser?.();
+          if (!user) {
+            alert('Please log in to use ATS scoring');
+            return;
+          }
+          
+          // CRITICAL: Check plan from billing-status first (most reliable for trial/paid users)
+          // This ensures trial/paid users are correctly identified even if KV sync hasn't completed
+          const idToken = await user.getIdToken();
+          let plan = localStorage.getItem('user-plan') || 'free';
+          
+          // Always check billing-status for trial/paid users (it has better fallback logic)
+          try {
+            const billingRes = await fetch('/api/billing-status', {
+              headers: { Authorization: `Bearer ${idToken}` }
+            });
+            if (billingRes.ok) {
+              const billingData = await billingRes.json();
+              if (billingData.ok && billingData.plan && billingData.plan !== 'free') {
+                plan = billingData.plan;
+                localStorage.setItem('user-plan', billingData.plan);
+                console.log('✅ [ATS-UPLOAD] Plan from billing-status:', plan);
+              }
+            }
+          } catch (billingError) {
+            console.warn('⚠️ [ATS-UPLOAD] billing-status check failed, using fallback:', billingError);
+          }
+          
+          // Fallback to plan/me if billing-status didn't work
+          if (plan === 'free') {
+            try {
+              const planRes = await fetch('/api/plan/me', {
+                headers: { Authorization: `Bearer ${idToken}` }
+              });
+              if (planRes.ok) {
+                const planData = await planRes.json();
+                if (planData.plan && planData.plan !== 'free') {
+                  plan = planData.plan;
+                  localStorage.setItem('user-plan', plan);
+                  console.log('✅ [ATS-UPLOAD] Plan from plan/me:', plan);
+                }
+              }
+            } catch (planError) {
+              console.warn('⚠️ [ATS-UPLOAD] plan/me check failed:', planError);
+            }
+          }
+          
+          // Trial and subscription plans have unlimited ATS scoring - skip credit check
+          const hasUnlimitedAccess = plan === 'trial' || plan === 'essential' || plan === 'pro' || plan === 'premium';
+          
+          // Only check credits for free users - do NOT show alert for trial/paid users
+          if (!hasUnlimitedAccess && plan === 'free') {
+            const creditKey = `creditsByUid:${user.uid}`;
+            const creditsData = localStorage.getItem(creditKey);
+            let hasCredit = false;
+            
+            if (creditsData) {
+              try {
+                const credits = JSON.parse(creditsData);
+                hasCredit = credits.ats_free_lifetime > 0;
+              } catch (e) {
+                // Ignore parse errors, default to allowing (new user)
+                console.warn('Failed to parse credits data:', e);
+                hasCredit = true;
+              }
+            } else {
+              // No credits data means user hasn't used it yet - they have 1 free credit
+              hasCredit = true;
+            }
+            
+            if (!hasCredit) {
+              // Show CTA pop-up instead of alert
+              showFreeAccountUpgradePopup();
+              return;
+            }
+          }
+          
+          // Trigger file input - ensure it works on mobile
+          // Mobile browsers require direct user interaction, so we ensure the click is properly handled
+          // The input should be positioned over the button for mobile compatibility
+          try {
+            // For mobile: ensure input is accessible and positioned correctly
+            const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+            
+            if (isMobile) {
+              // On mobile, position the input over the button area
+              const buttonRect = atsUploadBtn.getBoundingClientRect();
+              atsUploadInput.style.position = 'fixed';
+              atsUploadInput.style.top = buttonRect.top + 'px';
+              atsUploadInput.style.left = buttonRect.left + 'px';
+              atsUploadInput.style.width = buttonRect.width + 'px';
+              atsUploadInput.style.height = buttonRect.height + 'px';
+              atsUploadInput.style.opacity = '0';
+              atsUploadInput.style.zIndex = '9999';
+              atsUploadInput.style.pointerEvents = 'auto';
+              atsUploadInput.style.display = 'block';
+              
+              // Trigger click immediately while user gesture is active
+              atsUploadInput.focus();
+              atsUploadInput.click();
+              
+              // Reset after a short delay
+              setTimeout(() => {
+                atsUploadInput.style.position = '';
+                atsUploadInput.style.top = '';
+                atsUploadInput.style.left = '';
+                atsUploadInput.style.width = '';
+                atsUploadInput.style.height = '';
+                atsUploadInput.style.zIndex = '';
+                atsUploadInput.style.display = 'none';
+              }, 200);
+            } else {
+              // Desktop: simple click
+              atsUploadInput.click();
+            }
+          } catch (error) {
+            console.error('Error triggering file input:', error);
+            // Fallback: try direct click
+            atsUploadInput.click();
+          }
+        });
+        
+        // --- SHARED STATE MANAGEMENT HELPERS ---
+        function clearAtsState() {
+          // Clear old localStorage keys (to avoid stale 78% issues)
+          localStorage.removeItem('lastATSScore');
+          localStorage.removeItem('lastATSSummary');
+          localStorage.removeItem('lastUploadedResume');
+          localStorage.removeItem('lastUploadedResumeName');
+          
+          // Clear shared cross-page state
+          sessionStorage.removeItem('currentResumeId');
+          sessionStorage.removeItem('currentResumeText');
+          sessionStorage.removeItem('currentAtsScore');
+          sessionStorage.removeItem('currentAtsBreakdown');
+        }
+
+        function updateAtsGauge(score) {
           const donut = document.querySelector('.ats-donut');
           if (donut) {
             const radius = 23;
@@ -896,30 +2720,738 @@
             const text = donut.querySelector('.ats-score-text');
             if (text) text.textContent = score + '%';
           }
-          // Update score label and summary
-          const scoreLabel = document.querySelector('.ats-score-label');
-          if (scoreLabel) scoreLabel.textContent = score + ' / 100';
+          // Update label and secondary score display
+          const scoreDetails = document.querySelector('.ats-score-details');
+          const scoreLabel = scoreDetails?.querySelector('.ats-score-label');
+          if (scoreLabel && scoreLabel.textContent === '—') {
+            // Update label from "—" to "Latest Resume Feedback" when score is computed
+            scoreLabel.textContent = 'Latest Resume Feedback';
+            scoreLabel.style.color = '';
+          }
+          // Create or update secondary score display
+          let scoreSecondary = document.querySelector('.ats-score-secondary');
+          if (!scoreSecondary && scoreDetails) {
+            // Create element if it doesn't exist (e.g., when user uploads first resume)
+            scoreSecondary = document.createElement('span');
+            scoreSecondary.className = 'ats-score-secondary';
+            if (scoreLabel && scoreLabel.nextSibling) {
+              scoreDetails.insertBefore(scoreSecondary, scoreLabel.nextSibling);
+            } else {
+              scoreDetails.appendChild(scoreSecondary);
+            }
+          }
+          if (scoreSecondary) {
+            scoreSecondary.textContent = score + '% Application Tracking System Score';
+          }
+        }
+
+        function resetAtsGauge() {
+          updateAtsGauge(0);
           const scoreSummary = document.querySelector('.ats-score-summary');
-          if (scoreSummary) scoreSummary.textContent = summary;
+          if (scoreSummary) scoreSummary.textContent = '';
+        }
+
+        function showErrorBanner(message) {
+          // Remove any existing error banner
+          const existingBanner = document.querySelector('.ats-error-banner');
+          if (existingBanner) existingBanner.remove();
+          
+          const errorBanner = document.createElement('div');
+          errorBanner.className = 'ats-error-banner';
+          errorBanner.style.cssText = 'background:#FEE2E2;border-left:4px solid #EF4444;color:#991B1B;padding:0.75rem 1rem;border-radius:8px;margin:0.75rem 0;font-size:0.9rem;';
+          errorBanner.textContent = message || 'Upload failed. Please upload a PDF, DOCX, or TXT resume.';
+          
+          const atsCard = document.querySelector('.feature-card:has(#ats-upload-btn)');
+          if (atsCard) {
+            atsCard.insertBefore(errorBanner, atsCard.firstChild);
+            // Auto-remove after 8 seconds
+            setTimeout(() => errorBanner.remove(), 8000);
+          }
+        }
+
+        function showLoadingState() {
+          const uploadBtn = document.getElementById('ats-upload-btn');
+          if (uploadBtn) {
+            uploadBtn.disabled = true;
+            uploadBtn.textContent = 'Uploading...';
+          }
+        }
+
+        function hideLoadingState() {
+          const uploadBtn = document.getElementById('ats-upload-btn');
+          if (uploadBtn) {
+            uploadBtn.disabled = false;
+            uploadBtn.textContent = 'Upload Resume';
+          }
+        }
+
+        atsUploadInput.addEventListener('change', async function(e) {
+          if (atsUploadInput._jhUploadInProgress) {
+            console.warn('[DASHBOARD] Upload already in progress, ignoring duplicate change event.');
+            return;
+          }
+          atsUploadInput._jhUploadInProgress = true;
+          try {
+          const file = e.target.files[0];
+          if (!file) return;
+
+          // Clear any previous errors
+          const existingBanner = document.querySelector('.ats-error-banner');
+          if (existingBanner) existingBanner.remove();
+
+          // Validate file type
+          const allowed = ['pdf', 'docx', 'txt'];
+          const ext = file.name.split('.').pop().toLowerCase();
+          if (!allowed.includes(ext)) {
+            showErrorBanner('Invalid file type. Please upload PDF, DOCX, or TXT.');
+            e.target.value = ''; // Reset file input
+            return;
+          }
+
+          // Validate file size (2 MB = 2 * 1024 * 1024 bytes)
+          const maxSize = 2 * 1024 * 1024; // 2 MB
+          if (file.size > maxSize) {
+            showErrorBanner('File size exceeds 2 MB limit. Please upload a smaller file.');
+            e.target.value = ''; // Reset file input
+            return;
+          }
+
+          // Show loading state
+          showLoadingState();
+
+          // Check free account usage limits - skip for trial/subscription users
+          const currentUser = window.FirebaseAuthManager?.getCurrentUser?.();
+          let userPlan = localStorage.getItem('user-plan') || 'free';
+          
+          // CRITICAL: Always check billing-status first (most reliable for trial/paid users)
+          // This ensures trial/paid users are correctly identified even if KV sync hasn't completed
+          if (currentUser) {
+            try {
+              const idToken = await currentUser.getIdToken();
+              
+              // Check billing-status first (has better fallback logic)
+              const billingRes = await fetch('/api/billing-status', {
+                headers: { Authorization: `Bearer ${idToken}` }
+              });
+              if (billingRes.ok) {
+                const billingData = await billingRes.json();
+                if (billingData.ok && billingData.plan && billingData.plan !== 'free') {
+                  userPlan = billingData.plan;
+                  localStorage.setItem('user-plan', billingData.plan);
+                  console.log('✅ [ATS-UPLOAD] Plan from billing-status:', billingData.plan);
+                }
+              }
+              
+              // Fallback to plan/me if billing-status didn't work or returned free
+              if (userPlan === 'free') {
+                const planRes = await fetch('/api/plan/me', {
+                  headers: { Authorization: `Bearer ${idToken}` }
+                });
+                if (planRes.ok) {
+                  const planData = await planRes.json();
+                  if (planData.plan && planData.plan !== 'free') {
+                    userPlan = planData.plan;
+                    localStorage.setItem('user-plan', planData.plan);
+                    console.log('✅ [ATS-UPLOAD] Plan from plan/me:', planData.plan);
+                  }
+                }
+              }
+            } catch (error) {
+              console.warn('⚠️ [ATS-UPLOAD] Error fetching plan:', error);
+            }
+          }
+          
+          const hasUnlimitedAccess = userPlan === 'trial' || userPlan === 'essential' || userPlan === 'pro' || userPlan === 'premium';
+          
+          // Early return for trial/paid users - they have unlimited access
+          if (hasUnlimitedAccess) {
+            console.log('✅ Trial/paid user detected, allowing unlimited resume uploads. Plan:', userPlan);
+            // Continue to upload processing below
+          } else if (userPlan === 'free') {
+            // Only check free account limits for free users
+            // Check lifetime credit first
+            const currentUser = window.FirebaseAuthManager?.getCurrentUser?.();
+            let hasCredit = false;
+            if (currentUser && currentUser.uid) {
+              const creditKey = `creditsByUid:${currentUser.uid}`;
+              const creditsData = localStorage.getItem(creditKey);
+              if (creditsData) {
+                try {
+                  const credits = JSON.parse(creditsData);
+                  hasCredit = credits.ats_free_lifetime > 0;
+                } catch (e) {
+                  // Ignore parse errors, default to allowing (new user or corrupted data)
+                  console.warn('Failed to parse credits data:', e);
+                  hasCredit = true;
+                }
+              } else {
+                // No credits data means user hasn't used it yet
+                hasCredit = true;
+              }
+            }
+            
+            // Also check freeAccountManager as fallback
+            if (!hasCredit && window.freeAccountManager) {
+              const usageCheck = window.freeAccountManager.canUseATSScoring();
+              hasCredit = usageCheck.allowed;
+            }
+            
+            if (!hasCredit) {
+              // Show CTA pop-up instead of alert
+              showFreeAccountUpgradePopup();
+              // Reset file input
+              e.target.value = '';
+              // Hide loading state before returning (fixes stuck "Uploading..." button)
+              hideLoadingState();
+              return;
+            }
+            
+            // CRITICAL: Consume credit immediately after check passes to prevent multiple uploads
+            // This prevents race conditions where multiple uploads could pass the check
+            if (currentUser && currentUser.uid) {
+              const creditKey = `creditsByUid:${currentUser.uid}`;
+              const creditsData = localStorage.getItem(creditKey);
+              let credits = { ats_free_lifetime: 1 }; // Default for new users
+              
+              if (creditsData) {
+                try {
+                  credits = JSON.parse(creditsData);
+                } catch (e) {
+                  console.warn('Failed to parse credits data before consumption:', e);
+                  credits = { ats_free_lifetime: 1 }; // Default to available on parse error
+                }
+              }
+              
+              // Consume credit immediately (before upload)
+              credits.ats_free_lifetime = 0;
+              localStorage.setItem(creditKey, JSON.stringify(credits));
+              console.log('✅ Free ATS credit consumed in localStorage (before upload)');
+            }
+          }
+
+          // Real API integration: Upload resume and get ATS score
+          try {
+            const currentUser = window.FirebaseAuthManager?.getCurrentUser?.();
+            if (!currentUser) {
+              throw new Error('Please log in to use ATS scoring');
+            }
+
+            const idToken = await currentUser.getIdToken();
+            
+            // Step 1: Upload resume
+            const formData = new FormData();
+            formData.append('file', file);
+            
+            const uploadResponse = await fetch('/api/resume-upload', {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${idToken}`
+              },
+              body: formData
+            });
+
+            // Check if response is ok before parsing JSON
+            // Non-ok responses (500, 502, etc.) might return HTML error pages, not JSON
+            if (!uploadResponse.ok) {
+              // Restore credit if upload failed (for free accounts)
+              if (!hasUnlimitedAccess && userPlan === 'free' && currentUser && currentUser.uid) {
+                const creditKey = `creditsByUid:${currentUser.uid}`;
+                const creditsData = localStorage.getItem(creditKey);
+                let credits = { ats_free_lifetime: 1 }; // Default for new users
+                
+                if (creditsData) {
+                  try {
+                    credits = JSON.parse(creditsData);
+                  } catch (e) {
+                    console.warn('[DASHBOARD] Failed to parse credits data during restoration:', e);
+                    credits = { ats_free_lifetime: 1 }; // Default on parse error
+                  }
+                }
+                
+                // Restore only the ats_free_lifetime credit, preserving other credit types
+                credits.ats_free_lifetime = 1;
+                localStorage.setItem(creditKey, JSON.stringify(credits));
+                console.log('✅ Free ATS credit restored due to upload failure');
+              }
+              
+              let errorMessage = 'Upload failed. Please try again.';
+              try {
+                // Try to parse error response as JSON first
+                const errorData = await uploadResponse.json();
+                errorMessage = errorData.error || errorData.message || errorMessage;
+              } catch (parseError) {
+                // If parsing fails, it's likely an HTML error page - use status text
+                errorMessage = `Upload failed (${uploadResponse.status}): ${uploadResponse.statusText || 'Server error'}`;
+              }
+              clearAtsState();
+              resetAtsGauge();
+              showErrorBanner(errorMessage);
+              hideLoadingState();
+              e.target.value = ''; // Reset file input
+              return;
+            }
+
+            const uploadData = await uploadResponse.json();
+
+            // Handle extraction failures (success: false but HTTP 200)
+            if (!uploadData.success) {
+              // Restore credit if upload failed (for free accounts)
+              if (!hasUnlimitedAccess && userPlan === 'free' && currentUser && currentUser.uid) {
+                const creditKey = `creditsByUid:${currentUser.uid}`;
+                const creditsData = localStorage.getItem(creditKey);
+                let credits = { ats_free_lifetime: 1 }; // Default for new users
+                
+                if (creditsData) {
+                  try {
+                    credits = JSON.parse(creditsData);
+                  } catch (e) {
+                    console.warn('[DASHBOARD] Failed to parse credits data during restoration:', e);
+                    credits = { ats_free_lifetime: 1 }; // Default on parse error
+                  }
+                }
+                
+                // Restore only the ats_free_lifetime credit, preserving other credit types
+                credits.ats_free_lifetime = 1;
+                localStorage.setItem(creditKey, JSON.stringify(credits));
+                console.log('✅ Free ATS credit restored due to extraction failure');
+              }
+              
+              clearAtsState();
+              resetAtsGauge();
+              // Show user-friendly error messages
+              const errorMsg = uploadData.error === 'invalid-text' 
+                ? 'We couldn\'t read your resume. Please upload a text-based PDF, DOCX, or TXT file.'
+                : uploadData.message || 'Upload failed. Please upload a text-based PDF, DOCX, or TXT resume.';
+              showErrorBanner(errorMsg);
+              hideLoadingState();
+              e.target.value = ''; // Reset file input
+              return;
+            }
+
+            // Step 2: Store resume data in sessionStorage for cross-page sync
+            // Store both resumeId and resumeText (resumeText needed for direct scoring without KV)
+            sessionStorage.setItem('currentResumeId', uploadData.resumeId);
+            if (uploadData.resumeText) {
+              sessionStorage.setItem('currentResumeText', uploadData.resumeText);
+            }
+
+            // Step 3: Get ATS score
+            const uploadBtn = document.getElementById('ats-upload-btn');
+            if (uploadBtn) uploadBtn.textContent = 'Scoring...';
+
+            // Dashboard uploads do not provide a default role
+            const jobTitle = null;
+            
+            const scoreResponse = await fetch('/api/ats-score', {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${idToken}`,
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify({
+                resumeId: uploadData.resumeId,
+                resumeText: uploadData.resumeText, // Pass text directly to bypass KV requirement
+                jobTitle: jobTitle
+              })
+            });
+
+            if (!scoreResponse.ok) {
+              // Restore credit if scoring failed (for free accounts)
+              if (!hasUnlimitedAccess && userPlan === 'free' && currentUser && currentUser.uid) {
+                const creditKey = `creditsByUid:${currentUser.uid}`;
+                const creditsData = localStorage.getItem(creditKey);
+                let credits = { ats_free_lifetime: 1 }; // Default for new users
+                
+                if (creditsData) {
+                  try {
+                    credits = JSON.parse(creditsData);
+                  } catch (e) {
+                    console.warn('[DASHBOARD] Failed to parse credits data during restoration:', e);
+                    credits = { ats_free_lifetime: 1 }; // Default on parse error
+                  }
+                }
+                
+                // Restore only the ats_free_lifetime credit, preserving other credit types
+                credits.ats_free_lifetime = 1;
+                localStorage.setItem(creditKey, JSON.stringify(credits));
+                console.log('✅ Free ATS credit restored due to scoring failure');
+              }
+              
+              let errorMessage = 'Something went wrong scoring your resume. Please try again in a few minutes.';
+              try {
+                const errorData = await scoreResponse.json();
+                // Map error codes to user-friendly messages
+                if (errorData.error === 'invalid-text') {
+                  errorMessage = 'We couldn\'t read your resume. Please upload a text-based PDF, DOCX, or TXT file.';
+                } else if (errorData.error === 'scoring-failed' || errorData.error === 'invalid-result') {
+                  errorMessage = 'Something went wrong scoring your resume. Please try again in a few minutes.';
+                } else {
+                  errorMessage = errorData.message || errorData.error || errorMessage;
+                }
+              } catch (parseError) {
+                // If parsing fails, use default message
+              }
+              clearAtsState();
+              resetAtsGauge();
+              showErrorBanner(errorMessage);
+              hideLoadingState();
+              e.target.value = ''; // Reset file input
+              return;
+            }
+
+            const scoreData = await scoreResponse.json();
+            
+            if (!scoreData.success) {
+              // Restore credit if scoring failed (for free accounts)
+              if (!hasUnlimitedAccess && userPlan === 'free' && currentUser && currentUser.uid) {
+                const creditKey = `creditsByUid:${currentUser.uid}`;
+                const creditsData = localStorage.getItem(creditKey);
+                let credits = { ats_free_lifetime: 1 }; // Default for new users
+                
+                if (creditsData) {
+                  try {
+                    credits = JSON.parse(creditsData);
+                  } catch (e) {
+                    console.warn('[DASHBOARD] Failed to parse credits data during restoration:', e);
+                    credits = { ats_free_lifetime: 1 }; // Default on parse error
+                  }
+                }
+                
+                // Restore only the ats_free_lifetime credit, preserving other credit types
+                credits.ats_free_lifetime = 1;
+                localStorage.setItem(creditKey, JSON.stringify(credits));
+                console.log('✅ Free ATS credit restored due to scoring failure');
+              }
+              
+              // Map error codes to user-friendly messages
+              let errorMessage = 'Something went wrong scoring your resume. Please try again in a few minutes.';
+              if (scoreData.error === 'invalid-text') {
+                errorMessage = 'We couldn\'t read your resume. Please upload a text-based PDF, DOCX, or TXT file.';
+              } else if (scoreData.error === 'scoring-failed' || scoreData.error === 'invalid-result') {
+                errorMessage = 'Something went wrong scoring your resume. Please try again in a few minutes.';
+              } else {
+                errorMessage = scoreData.message || scoreData.error || errorMessage;
+              }
+              clearAtsState();
+              resetAtsGauge();
+              showErrorBanner(errorMessage);
+              hideLoadingState();
+              e.target.value = ''; // Reset file input
+              return;
+            }
+
+            // Step 4: Update UI with real score
+            const score = scoreData.score || 0;
+            const breakdown = scoreData.breakdown || {};
+            const extractionQuality = scoreData.extractionQuality;
+            
+            // Check and warn if low quality
+            if (extractionQuality) {
+              maybeWarnLowExtractionQuality(extractionQuality);
+            }
+            
+            // Generate summary based on extractionQuality (consistent with maybeWarnLowExtractionQuality logic)
+            const confidence = typeof extractionQuality?.confidence === 'number' ? extractionQuality.confidence : 1.0;
+            const tokenCount = typeof extractionQuality?.tokenCount === 'number' ? extractionQuality.tokenCount : 0;
+            const status = extractionQuality?.extractionStatus || 'ok';
+            const isHighQuality = extractionQuality && status === 'ok' && confidence >= 0.65 && tokenCount >= 80;
+            
+            let summary;
+            if (isHighQuality) {
+              // Use confident language
+              summary = score > 85 ? 'Excellent! Your resume is highly ATS compatible.' : 
+                       score > 70 ? 'Your resume meets many ATS criteria and is likely to be noticed.' : 
+                       'Your resume needs improvement for better ATS results.';
+            } else {
+              // Use softer language when quality is low
+              summary = scoreData.feedback || 
+                       'We may not have detected all sections in your resume. Consider checking formatting.';
+            }
+
+            // Update gauge
+            updateAtsGauge(score);
+            const scoreSummary = document.querySelector('.ats-score-summary');
+            if (scoreSummary) {
+              scoreSummary.textContent = summary;
+              // Clear animation first to ensure it triggers on repeat runs
+              scoreSummary.style.animation = 'none';
+              scoreSummary.style.animationDelay = '';
+              // Force reflow to reset animation state
+              void scoreSummary.offsetWidth;
+              // Trigger fade-in animation
+              scoreSummary.style.opacity = '0';
+              scoreSummary.style.animation = 'feedback-fade-in var(--transition-slow) forwards';
+              scoreSummary.style.animationDelay = '0.2s';
+            }
+
+            // Store in sessionStorage for cross-page sync
+            sessionStorage.setItem('currentAtsScore', score.toString());
+            sessionStorage.setItem('currentAtsBreakdown', JSON.stringify(breakdown));
+
+            localStorage.setItem('hasUploadedResume', 'true');
+            
+            // Persist to state persistence utility (handles cache expiration and user-scoped keys)
+            // NOTE: Removed unscoped localStorage writes (lastATSScore, lastATSSummary) to prevent cross-user data leakage
+            // All ATS score data is now stored via user-scoped keys in JobHackAIStatePersistence
+            if (window.JobHackAIStatePersistence) {
+              window.JobHackAIStatePersistence.saveATSScore({
+                score,
+                breakdown,
+                resumeId: uploadData.resumeId,
+                jobTitle: jobTitle,
+                extractionQuality: scoreData.extractionQuality
+              });
+            }
+
+            // Step 5: Create first resume snapshot in D1 (for "Your First ATS Resume" tile)
+            try {
+              const persistResponse = await fetch('/api/ats-score-persist', {
+                method: 'POST',
+                headers: {
+                  'Authorization': `Bearer ${idToken}`,
+                  'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                  resumeId: uploadData.resumeId,
+                  score: score,
+                  breakdown: breakdown,
+                  summary: summary,
+                  jobTitle: jobTitle,
+                  extractionQuality: extractionQuality
+                })
+              });
+
+              if (persistResponse.ok) {
+                const persistData = await persistResponse.json();
+                console.log('[DASHBOARD] Snapshot creation response:', persistData);
+
+                // Step 6: Poll to verify snapshot was created (for free users, we need to confirm before reload)
+                if (!hasUnlimitedAccess && userPlan === 'free') {
+                  let snapshotConfirmed = false;
+                  let attempts = 0;
+                  const maxAttempts = 5;
+
+                  while (attempts < maxAttempts && !snapshotConfirmed) {
+                    attempts++;
+                    await new Promise(r => setTimeout(r, 1000)); // Wait 1 second between attempts
+
+                    try {
+                      const snapshotCheck = await fetch('/api/ats-score-persist?first=true', {
+                        headers: { Authorization: `Bearer ${idToken}` }
+                      });
+
+                      if (snapshotCheck.ok) {
+                        const snapshotData = await snapshotCheck.json();
+                        if (snapshotData.success && snapshotData.data && snapshotData.data.score != null) {
+                          // Validate snapshot matches this upload
+                          // Prefer resumeId matching (definitive identifier) when available
+                          // Only fall back to score matching if resumeId is missing from snapshot
+                          let snapshotMatches = false;
+                          if (snapshotData.data.resumeId && uploadData.resumeId) {
+                            // Both have resumeId - require exact match
+                            snapshotMatches = snapshotData.data.resumeId === uploadData.resumeId;
+                          } else if (snapshotData.data.resumeId || uploadData.resumeId) {
+                            // One has resumeId but other doesn't - can't definitively match, skip
+                            snapshotMatches = false;
+                          } else {
+                            // Neither has resumeId - fall back to score matching (less reliable)
+                            snapshotMatches = snapshotData.data.score === score;
+                          }
+                          
+                          if (snapshotMatches) {
+                            console.log(`[DASHBOARD] ✅ Snapshot confirmed on attempt ${attempts}`, {
+                              resumeIdMatch: snapshotData.data.resumeId === uploadData.resumeId,
+                              scoreMatch: snapshotData.data.score === score
+                            });
+                            snapshotConfirmed = true;
+                            break;
+                          }
+                        }
+                      }
+                    } catch (pollError) {
+                      console.warn('[DASHBOARD] Snapshot polling error:', pollError);
+                    }
+                  }
+
+                  // If snapshot confirmed (or max attempts reached), hide button and reload for free users
+                  if (snapshotConfirmed || attempts >= maxAttempts) {
+                    const uploadBtn = document.getElementById('ats-upload-btn');
+                    const uploadInput = document.getElementById('ats-upload-input');
+                    if (uploadBtn) uploadBtn.style.display = 'none';
+                    if (uploadInput) uploadInput.style.display = 'none';
+                    
+                    // Reload page to show updated dashboard with first resume tile
+                    window.location.reload();
+                    return; // Exit early since we're reloading
+                  }
+                }
+              } else {
+                console.warn('[DASHBOARD] Failed to create snapshot (non-fatal):', persistResponse.status);
+              }
+            } catch (snapshotError) {
+              console.warn('[DASHBOARD] Snapshot creation error (non-fatal):', snapshotError);
+              // Continue - snapshot creation failure shouldn't block the upload flow
+            }
+
+            // Update UI message for free accounts (credit already consumed before upload)
+            if (!hasUnlimitedAccess && userPlan === 'free') {
+              // Update UI message to reflect credit has been used
+              const usageDiv = document.querySelector('.feature-card:has(#ats-upload-btn) .usage-indicator');
+              if (usageDiv) {
+                usageDiv.innerHTML = 'Free ATS score used. Upgrade to trial or paid plan for unlimited scoring. <span class="jh-tooltip-trigger" tabindex="0" aria-label="More info" style="margin-left:0.4em;vertical-align:middle;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false" style="vertical-align:middle"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="8"/><line x1="12" y1="12" x2="12" y2="16"/></svg><span class="jh-tooltip-text">Upgrade to unlock unlimited ATS scoring and access more features.</span></span>';
+              }
+            }
+
+            // Reset file input and hide loading state
+            e.target.value = '';
+            hideLoadingState();
+
+          } catch (error) {
+            console.error('[ATS-UPLOAD] Error:', error);
+            clearAtsState();
+            resetAtsGauge();
+            // Show user-friendly error messages - never show KV binding errors
+            let errorMessage = 'Something went wrong scoring your resume. Please try again in a few minutes.';
+            if (error.message) {
+              // Filter out technical errors that shouldn't be shown to users
+              if (error.message.includes('KV binding') || error.message.includes('Storage service unavailable')) {
+                errorMessage = 'Something went wrong scoring your resume. Please try again in a few minutes.';
+              } else if (error.message.includes('invalid-text') || error.message.includes('couldn\'t read')) {
+                errorMessage = 'We couldn\'t read your resume. Please upload a text-based PDF, DOCX, or TXT file.';
+              } else {
+                errorMessage = error.message;
+              }
+            }
+            showErrorBanner(errorMessage);
+            hideLoadingState();
+            e.target.value = ''; // Reset file input
+          }
+          } finally {
+            try { atsUploadInput._jhUploadInProgress = false; } catch (_) {}
+          }
         });
       }
       // NOTE: Resume Feedback page should read the last uploaded resume from localStorage (key: 'lastUploadedResume') if present.
-    }
-  </script>
-  <!-- Load navigation system -->
-  <script src="js/navigation.js"></script>
-  <script>
-    if (window.JobHackAINavigation && typeof window.JobHackAINavigation.initializeNavigation === 'function') {
-      window.JobHackAINavigation.initializeNavigation();
-    } else {
-      window.addEventListener('DOMContentLoaded', function() {
-        if (window.JobHackAINavigation && typeof window.JobHackAINavigation.initializeNavigation === 'function') {
-          window.JobHackAINavigation.initializeNavigation();
+      
+      // --- UPGRADE BUTTON HANDLERS ---
+      // Map features to minimum required plan (aligned with navigation.js PLANS config)
+      function getMinPlanForFeature(featureKey) {
+        const featureToPlanMap = {
+          'feedback': 'essential',    // Essential+ features (trial, essential, pro, premium)
+          'interview': 'essential',   // Essential+ features (trial, essential, pro, premium)
+          'rewriting': 'pro',        // Pro+ features
+          'coverLetter': 'pro',       // Pro+ features
+          'mockInterview': 'pro',     // Pro+ features
+          'linkedin': 'premium',      // Premium only
+          'priorityReview': 'premium' // Premium only
+        };
+        return featureToPlanMap[featureKey] || 'essential';
+      }
+
+      // Handle upgrade button clicks
+      async function handleUpgradeClick(featureKey, buttonEl) {
+        const targetPlan = getMinPlanForFeature(featureKey);
+        console.log(`🔄 [DASHBOARD] User clicked upgrade for ${featureKey}, targeting plan: ${targetPlan}`);
+
+        if (typeof window.upgradePlan === 'function') {
+          await window.upgradePlan(targetPlan, {
+            source: 'dashboard',
+            returnUrl: window.location.href,
+            button: buttonEl || null
+          });
+          return;
+        }
+
+        // Fallback to pricing if upgrade helper is unavailable.
+        window.location.href = `pricing-a.html?plan=${targetPlan}`;
+      }
+
+      // Attach click handlers to all locked upgrade buttons
+      const lockedButtons = document.querySelectorAll('.btn-locked[data-feature-key]');
+      lockedButtons.forEach(button => {
+        const featureKey = button.getAttribute('data-feature-key');
+        if (featureKey) {
+          button.addEventListener('click', (e) => {
+            e.preventDefault();
+            handleUpgradeClick(featureKey, button);
+          });
         }
       });
+      console.log(`✅ [DASHBOARD] Attached ${lockedButtons.length} upgrade button handlers`);
+    }
+
+    // Billing portal helper function
+    async function openBillingPortal(event) {
+      event.preventDefault();
+      
+      try {
+        const user = window.FirebaseAuthManager?.getCurrentUser?.();
+        if (!user) {
+          alert('Please log in to manage your subscription');
+          return;
+        }
+        
+        const idToken = await user.getIdToken();
+        const res = await fetch('/api/billing-portal', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${idToken}`,
+            'Content-Type': 'application/json'
+          }
+        });
+        
+        const data = await res.json();
+        
+        if (data.ok && data.url) {
+          window.location.href = data.url;
+        } else {
+          alert('Unable to open billing portal: ' + (data.error || 'Unknown error'));
+        }
+      } catch (e) {
+        console.error('Billing portal error:', e);
+        alert('Failed to open billing portal. Please try again.');
+      }
     }
   </script>
+  <!-- Load Firebase auth for token retrieval -->
+  <script type="module" src="js/firebase-auth.js?v=20260125-1"></script>
+  <!-- Load navigation system -->
+  <script src="js/navigation.js?v=20251011-1"></script>
+  <script src="js/stripe-integration.js"></script>
+  <script>
+    // DO NOT call initializeNavigation synchronously on dashboard
+    // Wait for DOMContentLoaded so Firebase auth module has time to load
+    window.addEventListener('DOMContentLoaded', async function() {
+      // Wait for FirebaseAuthManager to be available (it's a module script)
+      let waitCount = 0;
+      while (!window.FirebaseAuthManager && waitCount < 50) {
+        await new Promise(resolve => setTimeout(resolve, 100)); // Wait up to 5 seconds
+        waitCount++;
+      }
+      
+      if (window.JobHackAINavigation && typeof window.JobHackAINavigation.initializeNavigation === 'function') {
+        window.JobHackAINavigation.initializeNavigation();
+      }
+    });
+  </script>
+  <script src="js/welcome-popup.js" type="module"></script>
   <script src="js/main.js" type="module"></script>
   <script src="js/analytics.js" type="module"></script>
+  <script type="module">
+    import authManager from './js/firebase-auth.js?v=20260125-1';
+
+    (async () => {
+      console.log('📋 dashboard guard v3 running');
+      
+      // Require verified email before allowing dashboard access
+      const isVerified = await authManager.requireVerifiedEmail();
+      if (!isVerified) {
+        console.log('🚫 User not verified or not authenticated — redirecting');
+        return;
+      }
+      
+      console.log('✅ Verified user accessing dashboard');
+    })();
+  </script>
 </body>
 </html> 
