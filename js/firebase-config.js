@@ -38,7 +38,11 @@ const configProd = {
   projectId: "jobhackai-prod-510a4",
   storageBucket: "jobhackai-prod-510a4.firebasestorage.app",
   messagingSenderId: "580141511991",
-  appId: "1:580141511991:web:986f9745b72f1e81d816b2"
+  appId: "1:580141511991:web:986f9745b72f1e81d816b2",
+  // TODO: Add measurementId from Firebase Console > Project Settings > General > Your apps
+  // Without this, Firebase Analytics will not initialize for production users.
+  // Get it from: https://console.firebase.google.com/project/jobhackai-prod-510a4/settings/general
+  measurementId: "" // e.g., "G-XXXXXXXXXX"
 };
 
 function selectFirebaseConfig() {

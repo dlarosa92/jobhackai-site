@@ -1,11 +1,20 @@
 -- Run this on jobhackai-prod-db to match dev/QA schema.
--- 1) Add missing column to resume_sessions
--- 2) Create missing tables (order respects FKs)
+-- 1) Add missing columns to resume_sessions (rule_based_scores_json, ats_ready)
+-- 2) Backfill ats_ready for existing sessions with ATS data
+-- 3) Create missing tables (order respects FKs)
+-- 4) Create indexes for query performance
+--
+-- Note: SQLite doesn't support "ADD COLUMN IF NOT EXISTS". If a column already
+-- exists, that ALTER TABLE will error. Run statements individually if needed.
 
--- Step 1: Add ats_ready to resume_sessions
+-- Step 1a: Add rule_based_scores_json to resume_sessions (from migration 004)
+-- Note: This may error if the column already exists. If so, skip to Step 1b.
+ALTER TABLE resume_sessions ADD COLUMN rule_based_scores_json TEXT;
+
+-- Step 1b: Add ats_ready to resume_sessions (from migration 011)
 ALTER TABLE resume_sessions ADD COLUMN ats_ready INTEGER NOT NULL DEFAULT 0;
 
--- Backfill: set ats_ready = 1 where ATS data already exists
+-- Step 1c: Backfill ats_ready = 1 where ATS data already exists
 UPDATE resume_sessions
 SET ats_ready = 1
 WHERE rule_based_scores_json IS NOT NULL OR ats_score IS NOT NULL;
