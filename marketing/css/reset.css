@@ -1,36 +1,27 @@
-/* Minimal reset for marketing pages */
+/* CSS RESET */
 *, *::before, *::after {
-  box-sizing: border-box;
-}
-
-html, body {
-  margin: 0;
-  padding: 0;
-}
-
-body {
-  line-height: 1.5;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-}
-
-img, svg {
-  display: block;
-  max-width: 100%;
-}
-
-button, input, textarea, select {
-  font: inherit;
-}
-
-a {
-  color: inherit;
-  text-decoration: none;
-}
-
-ul, ol {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+  }
+  
+  html {
+    font-family: var(--font-family-base);
+    background: var(--color-bg-light);
+    color: var(--color-text-main);
+    line-height: 1.6;
+  }
+  
+  body {
+    min-height: 100vh;
+    background: var(--color-bg-light);
+  }
+  
+  a {
+    color: inherit;
+    text-decoration: none;
+  }
+  
+  button, input, textarea {
+    font-family: inherit;
+  }
