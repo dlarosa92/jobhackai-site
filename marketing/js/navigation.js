@@ -371,7 +371,11 @@ function patchNav(plan) {
     if (cta) {
       if (plan === 'visitor') {
         try { cta.textContent = 'Start Free Trial'; } catch(_) {}
-        if (cta.tagName === 'A') try { cta.href = '/login.html?plan=trial'; } catch(_) {}
+        if (cta.tagName === 'A') {
+          try {
+            cta.href = NAVIGATION_CONFIG.visitor?.cta?.href || '/login.html?plan=trial';
+          } catch (_) {}
+        }
         cta.classList.remove('plan-premium');
         cta.classList.add('plan-visitor');
       } else {
@@ -1147,7 +1151,7 @@ const NAVIGATION_CONFIG = {
   visitor: {
     navItems: [
       { text: 'Home', href: 'https://jobhackai.io/' },
-      { text: 'Blog', href: 'https://jobhackai.io/#blog' },
+      { text: 'Blog', href: 'https://jobhackai.io/pages/blog' },
       { text: 'Features', href: 'https://jobhackai.io/pages/features' },
       { text: 'Pricing', href: 'https://app.jobhackai.io/pricing-a' },
       { text: 'Login', href: 'https://app.jobhackai.io/login' }
