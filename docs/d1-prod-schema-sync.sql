@@ -5,8 +5,13 @@
 -- Step 1: Add ats_ready to resume_sessions
 ALTER TABLE resume_sessions ADD COLUMN ats_ready INTEGER NOT NULL DEFAULT 0;
 
+-- Backfill: set ats_ready = 1 where ATS data already exists
+UPDATE resume_sessions
+SET ats_ready = 1
+WHERE rule_based_scores_json IS NOT NULL OR ats_score IS NOT NULL;
+
 -- Step 2: Create missing tables
-CREATE TABLE cover_letter_history (
+CREATE TABLE IF NOT EXISTS cover_letter_history (
   id TEXT PRIMARY KEY,
   user_id TEXT NOT NULL,
   created_at INTEGER NOT NULL,
@@ -23,7 +28,7 @@ CREATE TABLE cover_letter_history (
   is_deleted INTEGER NOT NULL DEFAULT 0
 );
 
-CREATE TABLE feature_daily_usage (
+CREATE TABLE IF NOT EXISTS feature_daily_usage (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   user_id INTEGER NOT NULL,
   feature TEXT NOT NULL,
@@ -35,7 +40,7 @@ CREATE TABLE feature_daily_usage (
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 
-CREATE TABLE first_resume_snapshots (
+CREATE TABLE IF NOT EXISTS first_resume_snapshots (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   user_id INTEGER NOT NULL,
   resume_session_id INTEGER NOT NULL,
@@ -45,7 +50,7 @@ CREATE TABLE first_resume_snapshots (
   FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 
-CREATE TABLE interview_question_sets (
+CREATE TABLE IF NOT EXISTS interview_question_sets (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   user_id INTEGER NOT NULL,
   role TEXT NOT NULL,
@@ -58,7 +63,7 @@ CREATE TABLE interview_question_sets (
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 
-CREATE TABLE linkedin_runs (
+CREATE TABLE IF NOT EXISTS linkedin_runs (
   id TEXT PRIMARY KEY,
   user_id TEXT NOT NULL,
   created_at INTEGER NOT NULL,
@@ -76,3 +81,28 @@ CREATE TABLE linkedin_runs (
   error_message TEXT,
   is_pinned INTEGER NOT NULL DEFAULT 0
 );
+
+-- Step 3: Create indexes for query performance
+-- cover_letter_history indexes
+CREATE INDEX IF NOT EXISTS idx_cover_letter_user_created
+  ON cover_letter_history(user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_cover_letter_user_hash
+  ON cover_letter_history(user_id, input_hash);
+
+-- feature_daily_usage indexes
+CREATE INDEX IF NOT EXISTS idx_feature_daily_usage_user_id ON feature_daily_usage(user_id);
+CREATE INDEX IF NOT EXISTS idx_feature_daily_usage_feature ON feature_daily_usage(feature);
+CREATE INDEX IF NOT EXISTS idx_feature_daily_usage_date ON feature_daily_usage(usage_date);
+CREATE INDEX IF NOT EXISTS idx_feature_daily_usage_user_feature_date ON feature_daily_usage(user_id, feature, usage_date);
+
+-- first_resume_snapshots indexes
+CREATE UNIQUE INDEX IF NOT EXISTS idx_first_snapshot_user_id ON first_resume_snapshots(user_id);
+
+-- interview_question_sets indexes
+CREATE INDEX IF NOT EXISTS idx_interview_question_sets_user_id ON interview_question_sets(user_id);
+CREATE INDEX IF NOT EXISTS idx_interview_question_sets_created_at ON interview_question_sets(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_interview_question_sets_role ON interview_question_sets(role);
+
+-- linkedin_runs indexes
+CREATE INDEX IF NOT EXISTS idx_linkedin_runs_user_created ON linkedin_runs(user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_linkedin_runs_user_hash ON linkedin_runs(user_id, input_hash);
