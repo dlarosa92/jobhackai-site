@@ -2859,7 +2859,7 @@ function applyNavForUser(user) {
   
   if (!user) {
     renderMarketingNav(desktopNav, mobileNav);
-    if (logo) logo.onclick = () => (window.location.href = "/index.html");
+    if (logo) logo.onclick = () => (window.location.href = "https://jobhackai.io/");
     return;
   }
   

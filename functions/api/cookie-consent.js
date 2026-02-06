@@ -4,6 +4,7 @@ import { upsertCookieConsent, getCookieConsent } from '../_lib/db.js';
 
 function corsHeaders(origin, env) {
   const fallbackOrigins = [
+    'https://jobhackai.io',
     'https://dev.jobhackai.io',
     'https://qa.jobhackai.io',
     'https://app.jobhackai.io',
