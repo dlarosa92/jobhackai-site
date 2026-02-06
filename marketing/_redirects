@@ -3,11 +3,11 @@
 /pricing   /pages/pricing.html  200
 
 # Redirect /pages/ URLs to clean URLs
+# NOTE: Do NOT add /pages/*.html → /clean-url 301 rules here!
+# They cause redirect loops with the 200 rewrites above because
+# Cloudflare Pages' pretty URL feature (308) + our 301 = infinite loop.
 /pages/index.html   /  301
-/pages/blog.html    /blog  301
 /pages/blog         /blog  301
-/pages/features.html  /features  301
 /pages/features     /features  301
-/pages/pricing.html /pricing  301
 /pages/pricing      /pricing  301
 /pages/             /  301
