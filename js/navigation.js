@@ -2,7 +2,7 @@
   var coreSrc = '/marketing/js/navigation-core.js?v=20260206-1';
 
   if (typeof document !== 'undefined' && document.readyState === 'loading') {
-    document.write('<script src="' + coreSrc + '"><\\/script>');
+    document.write('<script src="' + coreSrc + '"><\/script>');
     return;
   }
 
