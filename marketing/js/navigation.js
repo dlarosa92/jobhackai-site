@@ -236,6 +236,21 @@ function scheduleUpdateNavigation(force, skipPendingCheck = false) {
   }
 }
 
+function getAppBaseUrl() {
+  try {
+    const hostname = (window.location && window.location.hostname ? window.location.hostname : '').toLowerCase();
+    if (hostname === 'dev.jobhackai.io') return 'https://dev.jobhackai.io';
+    if (hostname === 'qa.jobhackai.io') return 'https://qa.jobhackai.io';
+  } catch (_) {}
+  return 'https://app.jobhackai.io';
+}
+
+const APP_BASE_URL = getAppBaseUrl();
+const IS_DEV_OR_QA_HOST = APP_BASE_URL === 'https://dev.jobhackai.io' || APP_BASE_URL === 'https://qa.jobhackai.io';
+const VISITOR_HOME_HREF = IS_DEV_OR_QA_HOST ? 'index.html' : 'https://jobhackai.io/';
+const VISITOR_BLOG_HREF = IS_DEV_OR_QA_HOST ? 'index.html#blog' : 'https://jobhackai.io/blog';
+const VISITOR_FEATURES_HREF = IS_DEV_OR_QA_HOST ? 'features.html' : 'https://jobhackai.io/features';
+
 // --- ROBUSTNESS GLOBALS ---
 // Ensure robustness globals are available for smoke tests and agent interface
 window.siteHealth = window.siteHealth || {
@@ -373,7 +388,7 @@ function patchNav(plan) {
         try { cta.textContent = 'Start Free Trial'; } catch(_) {}
         if (cta.tagName === 'A') {
           try {
-            cta.href = NAVIGATION_CONFIG.visitor?.cta?.href || '/login.html?plan=trial';
+            cta.href = NAVIGATION_CONFIG.visitor?.cta?.href || `${APP_BASE_URL}/login?plan=trial`;
           } catch (_) {}
         }
         cta.classList.remove('plan-premium');
@@ -1150,13 +1165,13 @@ const NAVIGATION_CONFIG = {
   // Logged-out / Visitor
   visitor: {
     navItems: [
-      { text: 'Home', href: 'https://jobhackai.io/' },
-      { text: 'Blog', href: 'https://jobhackai.io/pages/blog' },
-      { text: 'Features', href: 'https://jobhackai.io/pages/features' },
-      { text: 'Pricing', href: 'https://app.jobhackai.io/pricing-a' },
-      { text: 'Login', href: 'https://app.jobhackai.io/login' }
+      { text: 'Home', href: VISITOR_HOME_HREF },
+      { text: 'Blog', href: VISITOR_BLOG_HREF },
+      { text: 'Features', href: VISITOR_FEATURES_HREF },
+      { text: 'Pricing', href: `${APP_BASE_URL}/pricing-a` },
+      { text: 'Login', href: `${APP_BASE_URL}/login` }
     ],
-    cta: { text: 'Start Free Trial', href: 'https://app.jobhackai.io/login?plan=trial', isCTA: true, planId: 'trial' }
+    cta: { text: 'Start Free Trial', href: `${APP_BASE_URL}/login?plan=trial`, isCTA: true, planId: 'trial' }
   },
   // Free Account (no plan)
   free: {
