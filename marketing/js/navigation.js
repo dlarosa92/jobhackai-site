@@ -236,16 +236,7 @@ function scheduleUpdateNavigation(force, skipPendingCheck = false) {
   }
 }
 
-function getAppBaseUrl() {
-  try {
-    const hostname = (window.location && window.location.hostname ? window.location.hostname : '').toLowerCase();
-    if (hostname === 'dev.jobhackai.io') return 'https://dev.jobhackai.io';
-    if (hostname === 'qa.jobhackai.io') return 'https://qa.jobhackai.io';
-  } catch (_) {}
-  return 'https://app.jobhackai.io';
-}
-
-const APP_BASE_URL = getAppBaseUrl();
+const APP_BASE_URL = window.getAppBaseUrl();
 const IS_DEV_OR_QA_HOST = APP_BASE_URL === 'https://dev.jobhackai.io' || APP_BASE_URL === 'https://qa.jobhackai.io';
 const VISITOR_HOME_HREF = IS_DEV_OR_QA_HOST ? 'index.html' : 'https://jobhackai.io/';
 const VISITOR_BLOG_HREF = IS_DEV_OR_QA_HOST ? 'index.html#blog' : 'https://jobhackai.io/blog';

@@ -49,6 +49,8 @@
     loadAllComponents();
   }
 
+  window.getAppBaseUrl = getAppBaseUrl;
+
   window.JobHackAIComponents = window.JobHackAIComponents || {};
   window.JobHackAIComponents.loadAll = loadAllComponents;
   window.JobHackAIComponents.applyEnvironmentAwareFooterLinks = applyEnvironmentAwareFooterLinks;
