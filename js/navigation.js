@@ -371,7 +371,7 @@ function patchNav(plan) {
     if (cta) {
       if (plan === 'visitor') {
         try { cta.textContent = 'Start Free Trial'; } catch(_) {}
-        if (cta.tagName === 'A') try { cta.href = '/login.html?plan=trial'; } catch(_) {}
+        if (cta.tagName === 'A') try { cta.href = 'https://app.jobhackai.io/login?plan=trial'; } catch(_) {}
         cta.classList.remove('plan-premium');
         cta.classList.add('plan-visitor');
       } else {
@@ -1152,7 +1152,7 @@ const NAVIGATION_CONFIG = {
       { text: 'Pricing', href: 'https://app.jobhackai.io/pricing-a' },
       { text: 'Login', href: 'https://app.jobhackai.io/login' }
     ],
-    cta: { text: 'Start Free Trial', href: '/login.html?plan=trial', isCTA: true, planId: 'trial' }
+    cta: { text: 'Start Free Trial', href: 'https://app.jobhackai.io/login?plan=trial', isCTA: true, planId: 'trial' }
   },
   // Free Account (no plan)
   free: {
