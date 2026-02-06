@@ -12,6 +12,14 @@
   const GA_MEASUREMENT_ID = 'G-X48E90B00S'; // From console data
   const GA_SCRIPT_URL = `https://www.googletagmanager.com/gtag/js?l=dataLayer&id=${GA_MEASUREMENT_ID}`;
 
+  // Domain-aware API routing: marketing site (jobhackai.io) routes API calls
+  // to app.jobhackai.io so consent persists in D1 across both domains.
+  const hostname = (window.location.hostname || '').toLowerCase();
+  const isAppDomain = hostname.startsWith('app.') || hostname.startsWith('dev.') || hostname.startsWith('qa.') || hostname === 'localhost';
+  const API_BASE = isAppDomain ? '' : 'https://app.jobhackai.io';
+  // Cookie domain: use .jobhackai.io so the client_id cookie is shared across subdomains
+  const COOKIE_DOMAIN = hostname.endsWith('jobhackai.io') ? '; Domain=.jobhackai.io' : '';
+
   // Module-level variables for banner and GA loading guard
   let bannerElement = null;
   let gaLoadingPrevented = false;
@@ -46,7 +54,7 @@
         headers['Authorization'] = `Bearer ${authToken}`;
       }
 
-      const response = await fetch('/api/cookie-consent', {
+      const response = await fetch(API_BASE + '/api/cookie-consent', {
         method: 'GET',
         headers,
         credentials: 'include'
@@ -106,7 +114,7 @@
     const secureFlag = isSecure ? 'Secure; ' : '';
     const expires = new Date();
     expires.setFullYear(expires.getFullYear() + 1);
-    document.cookie = `${CLIENT_ID_COOKIE}=${clientId}; ${secureFlag}SameSite=Lax; Max-Age=31536000; Path=/`;
+    document.cookie = `${CLIENT_ID_COOKIE}=${clientId}; ${secureFlag}SameSite=Lax; Max-Age=31536000; Path=/${COOKIE_DOMAIN}`;
 
     return clientId;
   }
@@ -132,7 +140,7 @@
         headers['Authorization'] = `Bearer ${authToken}`;
       }
 
-      const response = await fetch('/api/cookie-consent', {
+      const response = await fetch(API_BASE + '/api/cookie-consent', {
         method: 'POST',
         headers,
         credentials: 'include', // Include cookies for client_id
@@ -253,7 +261,7 @@
     bannerElement.setAttribute('aria-label', 'Cookie preferences');
     bannerElement.innerHTML = `
       <div class="jha-cookie-inner">
-        <p>We use cookies to improve your experience. <a href="/cookies.html">Learn more</a></p>
+        <p>We use cookies to improve your experience. <a href="${API_BASE}/cookies.html">Learn more</a></p>
         <div class="jha-cookie-actions">
           <button id="jha-accept-all" class="jha-btn-accept">Accept Analytics</button>
           <button id="jha-reject-all" class="jha-btn-reject">Reject Analytics</button>
