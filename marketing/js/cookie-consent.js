@@ -253,7 +253,7 @@
     bannerElement.setAttribute('aria-label', 'Cookie preferences');
     bannerElement.innerHTML = `
       <div class="jha-cookie-inner">
-        <p>We use cookies to improve your experience. <a href="/cookies.html">Learn more</a></p>
+        <p>We use cookies to improve your experience. <a href="https://app.jobhackai.io/cookies">Learn more</a></p>
         <div class="jha-cookie-actions">
           <button id="jha-accept-all" class="jha-btn-accept">Accept Analytics</button>
           <button id="jha-reject-all" class="jha-btn-reject">Reject Analytics</button>
