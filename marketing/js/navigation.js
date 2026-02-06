@@ -1151,7 +1151,7 @@ const NAVIGATION_CONFIG = {
   visitor: {
     navItems: [
       { text: 'Home', href: 'https://jobhackai.io/' },
-      { text: 'Blog', href: 'https://jobhackai.io/pages/blog' },
+      { text: 'Blog', href: 'https://jobhackai.io/blog' },
       { text: 'Features', href: 'https://jobhackai.io/pages/features' },
       { text: 'Pricing', href: 'https://app.jobhackai.io/pricing-a' },
       { text: 'Login', href: 'https://app.jobhackai.io/login' }

@@ -1146,11 +1146,11 @@ const NAVIGATION_CONFIG = {
   // Logged-out / Visitor
   visitor: {
     navItems: [
-      { text: 'Home', href: 'index.html' },
-      { text: 'Blog', href: 'index.html#blog' },
-      { text: 'Features', href: 'features.html' },
-      { text: 'Pricing', href: '/pricing-a' },
-      { text: 'Login', href: 'login.html' }
+      { text: 'Home', href: 'https://jobhackai.io/' },
+      { text: 'Blog', href: 'https://jobhackai.io/blog' },
+      { text: 'Features', href: 'https://jobhackai.io/pages/features' },
+      { text: 'Pricing', href: 'https://app.jobhackai.io/pricing-a' },
+      { text: 'Login', href: 'https://app.jobhackai.io/login' }
     ],
     cta: { text: 'Start Free Trial', href: '/login.html?plan=trial', isCTA: true, planId: 'trial' }
   },
