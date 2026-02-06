@@ -246,6 +246,10 @@ function getAppBaseUrl() {
 }
 
 const APP_BASE_URL = getAppBaseUrl();
+const IS_DEV_OR_QA_HOST = APP_BASE_URL === 'https://dev.jobhackai.io' || APP_BASE_URL === 'https://qa.jobhackai.io';
+const VISITOR_HOME_HREF = IS_DEV_OR_QA_HOST ? 'index.html' : 'https://jobhackai.io/';
+const VISITOR_BLOG_HREF = IS_DEV_OR_QA_HOST ? 'index.html#blog' : 'https://jobhackai.io/blog';
+const VISITOR_FEATURES_HREF = IS_DEV_OR_QA_HOST ? 'features.html' : 'https://jobhackai.io/features';
 
 // --- ROBUSTNESS GLOBALS ---
 // Ensure robustness globals are available for smoke tests and agent interface
@@ -1161,9 +1165,9 @@ const NAVIGATION_CONFIG = {
   // Logged-out / Visitor
   visitor: {
     navItems: [
-      { text: 'Home', href: 'https://jobhackai.io/' },
-      { text: 'Blog', href: 'https://jobhackai.io/blog' },
-      { text: 'Features', href: 'https://jobhackai.io/features' },
+      { text: 'Home', href: VISITOR_HOME_HREF },
+      { text: 'Blog', href: VISITOR_BLOG_HREF },
+      { text: 'Features', href: VISITOR_FEATURES_HREF },
       { text: 'Pricing', href: `${APP_BASE_URL}/pricing-a` },
       { text: 'Login', href: `${APP_BASE_URL}/login` }
     ],
