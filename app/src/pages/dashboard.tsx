@@ -928,7 +928,7 @@ export default function Dashboard() {
           </a>
           <div className="nav-group">
             <nav className="nav-links" role="navigation">
-              <a href="/">Home</a>
+              <a href="https://jobhackai.io/">Home</a>
               <div className="nav-dropdown">
                 <a href="#" className="nav-dropdown-toggle">
                   Resume Tools
@@ -970,7 +970,7 @@ export default function Dashboard() {
         </div>
       </header>
       <nav className="mobile-nav" id="mobileNav">
-        <a href="/">Home</a>
+        <a href="https://jobhackai.io/">Home</a>
         <a href="/resume-feedback-pro">ATS Resume Score</a>
         <a href="/resume-feedback-pro">Resume Feedback</a>
         <a href="/rewriting">Resume Rewriting</a>
@@ -1165,7 +1165,7 @@ export default function Dashboard() {
             <p>© 2026 JobHackAI. All rights reserved.</p>
           </div>
           <div className="footer-links">
-            <a href="/">Home</a>
+            <a href="https://jobhackai.io/">Home</a>
             <a href="/support">Support</a>
             <a href="/privacy">Privacy</a>
           </div>

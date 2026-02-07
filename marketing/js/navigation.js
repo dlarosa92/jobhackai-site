@@ -1168,15 +1168,15 @@ const NAVIGATION_CONFIG = {
   // Free Account (no plan)
   free: {
     navItems: [
-      { text: 'Home', href: 'index.html' },
-      { text: 'Dashboard', href: 'dashboard.html' },
+      { text: 'Home', href: VISITOR_HOME_HREF },
+      { text: 'Dashboard', href: APP_BASE_URL + '/dashboard.html' },
       { text: 'Blog', href: VISITOR_BLOG_HREF },
-      { text: 'Resume Feedback', href: 'resume-feedback-pro.html', locked: true },
-      { text: 'Interview Questions', href: 'interview-questions.html', locked: true }
+      { text: 'Resume Feedback', href: APP_BASE_URL + '/resume-feedback-pro.html', locked: true },
+      { text: 'Interview Questions', href: APP_BASE_URL + '/interview-questions.html', locked: true }
     ],
     userNav: {
       menuItems: [
-        { text: 'Account', href: 'account-setting.html' },
+        { text: 'Account', href: APP_BASE_URL + '/account-setting.html' },
         { text: 'Logout', href: '#', action: 'logout' }
       ]
     }
@@ -1184,15 +1184,15 @@ const NAVIGATION_CONFIG = {
   // 3-Day Trial
   trial: {
     navItems: [
-      { text: 'Home', href: 'index.html' },
-      { text: 'Dashboard', href: 'dashboard.html' },
+      { text: 'Home', href: VISITOR_HOME_HREF },
+      { text: 'Dashboard', href: APP_BASE_URL + '/dashboard.html' },
       { text: 'Blog', href: VISITOR_BLOG_HREF },
-      { text: 'Resume Feedback', href: 'resume-feedback-pro.html' },
-      { text: 'Interview Questions', href: 'interview-questions.html' }
+      { text: 'Resume Feedback', href: APP_BASE_URL + '/resume-feedback-pro.html' },
+      { text: 'Interview Questions', href: APP_BASE_URL + '/interview-questions.html' }
     ],
     userNav: {
       menuItems: [
-        { text: 'Account', href: 'account-setting.html' },
+        { text: 'Account', href: APP_BASE_URL + '/account-setting.html' },
         { text: 'Logout', href: '#', action: 'logout' }
       ]
     }
@@ -1200,15 +1200,15 @@ const NAVIGATION_CONFIG = {
   // Basic $29
   essential: {
     navItems: [
-      { text: 'Home', href: 'index.html' },
-      { text: 'Dashboard', href: 'dashboard.html' },
+      { text: 'Home', href: VISITOR_HOME_HREF },
+      { text: 'Dashboard', href: APP_BASE_URL + '/dashboard.html' },
       { text: 'Blog', href: VISITOR_BLOG_HREF },
-      { text: 'Resume Feedback', href: 'resume-feedback-pro.html' },
-      { text: 'Interview Questions', href: 'interview-questions.html' }
+      { text: 'Resume Feedback', href: APP_BASE_URL + '/resume-feedback-pro.html' },
+      { text: 'Interview Questions', href: APP_BASE_URL + '/interview-questions.html' }
     ],
     userNav: {
       menuItems: [
-        { text: 'Account', href: 'account-setting.html' },
+        { text: 'Account', href: APP_BASE_URL + '/account-setting.html' },
         { text: 'Logout', href: '#', action: 'logout' }
       ]
     }
@@ -1216,29 +1216,29 @@ const NAVIGATION_CONFIG = {
   // Pro $59
   pro: {
     navItems: [
-      { text: 'Home', href: 'index.html' },
-      { text: 'Dashboard', href: 'dashboard.html' },
+      { text: 'Home', href: VISITOR_HOME_HREF },
+      { text: 'Dashboard', href: APP_BASE_URL + '/dashboard.html' },
       { text: 'Blog', href: VISITOR_BLOG_HREF },
       { 
         text: 'Resume Tools',
         isDropdown: true,
         items: [
-          { text: 'Resume Feedback', href: 'resume-feedback-pro.html' },
-          { text: 'Cover Letter', href: 'cover-letter-generator.html' },
+          { text: 'Resume Feedback', href: APP_BASE_URL + '/resume-feedback-pro.html' },
+          { text: 'Cover Letter', href: APP_BASE_URL + '/cover-letter-generator.html' },
         ]
       },
       { 
         text: 'Interview Prep',
         isDropdown: true,
         items: [
-          { text: 'Interview Questions', href: 'interview-questions.html' },
-          { text: 'Mock Interviews', href: 'mock-interview.html' },
+          { text: 'Interview Questions', href: APP_BASE_URL + '/interview-questions.html' },
+          { text: 'Mock Interviews', href: APP_BASE_URL + '/mock-interview.html' },
         ]
       }
     ],
     userNav: {
       menuItems: [
-        { text: 'Account', href: 'account-setting.html' },
+        { text: 'Account', href: APP_BASE_URL + '/account-setting.html' },
         { text: 'Logout', href: '#', action: 'logout' }
       ]
     }
@@ -1246,30 +1246,30 @@ const NAVIGATION_CONFIG = {
   // Premium $99
   premium: {
     navItems: [
-      { text: 'Home', href: 'index.html' },
-      { text: 'Dashboard', href: 'dashboard.html' },
+      { text: 'Home', href: VISITOR_HOME_HREF },
+      { text: 'Dashboard', href: APP_BASE_URL + '/dashboard.html' },
       { text: 'Blog', href: VISITOR_BLOG_HREF },
       { 
         text: 'Resume Tools',
         isDropdown: true,
         items: [
-          { text: 'Resume Feedback', href: 'resume-feedback-pro.html' },
-          { text: 'Cover Letter', href: 'cover-letter-generator.html' },
+          { text: 'Resume Feedback', href: APP_BASE_URL + '/resume-feedback-pro.html' },
+          { text: 'Cover Letter', href: APP_BASE_URL + '/cover-letter-generator.html' },
         ]
       },
       { 
         text: 'Interview Prep',
         isDropdown: true,
         items: [
-          { text: 'Interview Questions', href: 'interview-questions.html' },
-          { text: 'Mock Interviews', href: 'mock-interview.html' },
+          { text: 'Interview Questions', href: APP_BASE_URL + '/interview-questions.html' },
+          { text: 'Mock Interviews', href: APP_BASE_URL + '/mock-interview.html' },
         ]
       },
-      { text: 'LinkedIn Optimizer', href: 'linkedin-optimizer.html' }
+      { text: 'LinkedIn Optimizer', href: APP_BASE_URL + '/linkedin-optimizer.html' }
     ],
     userNav: {
       menuItems: [
-        { text: 'Account', href: 'account-setting.html' },
+        { text: 'Account', href: APP_BASE_URL + '/account-setting.html' },
         { text: 'Logout', href: '#', action: 'logout' }
       ]
     }
@@ -2827,7 +2827,7 @@ function renderMarketingNav(desktop, mobile) {
     <a href="${VISITOR_BLOG_HREF}">Blog</a>
     <a href="${VISITOR_FEATURES_HREF}">Features</a>
     <a href="${VISITOR_PRICING_HREF}">Pricing</a>
-    <a class="btn-link" href="/login.html">Login</a>
+    <a class="btn-link" href="${APP_BASE_URL}/login">Login</a>
   `;
   if (mobile) mobile.innerHTML = desktop.innerHTML;
 }
@@ -2843,11 +2843,11 @@ function renderUnverifiedNav(desktop, mobile) {
 function renderVerifiedNav(desktop, mobile) {
   if (!desktop) return;
   desktop.innerHTML = `
-    <a href="/dashboard.html">Dashboard</a>
+    <a href="${APP_BASE_URL}/dashboard.html">Dashboard</a>
     <a href="${VISITOR_BLOG_HREF}">Blog</a>
-    <a href="/interview-questions.html">Interview Questions</a>
-    <a href="/pricing.html">Pricing</a>
-    <a href="/account-setting.html" class="nav-account-link">Account</a>
+    <a href="${APP_BASE_URL}/interview-questions.html">Interview Questions</a>
+    <a href="${APP_BASE_URL}/pricing-a">Pricing</a>
+    <a href="${APP_BASE_URL}/account-setting.html" class="nav-account-link">Account</a>
   `;
   if (mobile) mobile.innerHTML = desktop.innerHTML;
 }
