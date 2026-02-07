@@ -919,7 +919,7 @@ export default function Dashboard() {
       {/* JobHackAI HEADER (canonical) */}
       <header className="site-header">
         <div className="container">
-          <a href="/" className="nav-logo" aria-label="Go to homepage">
+          <a href="https://jobhackai.io/" className="nav-logo" aria-label="Go to homepage">
             <svg width="24" height="24" fill="none" stroke="#1F2937" strokeWidth="2" xmlns="http://www.w3.org/2000/svg">
               <rect x="3" y="7" width="18" height="13" rx="2"/>
               <path d="M8 7V5a2 2 0 012-2h4a2 2 0 012 2v2"/>
@@ -955,7 +955,7 @@ export default function Dashboard() {
                 </div>
               </div>
               <a href="/pricing">Pricing</a>
-              <a href="/blog">Blog</a>
+              <a href="https://jobhackai.io/blog">Blog</a>
               <a href="/login">Login</a>
               <a href="/pricing" className="cta-button">Start Free Trial</a>
             </nav>
@@ -977,7 +977,7 @@ export default function Dashboard() {
         <a href="/interview">Interview Questions</a>
         <a href="/mockInterview">Mock Interview Practice</a>
         <a href="/pricing">Pricing</a>
-        <a href="/blog">Blog</a>
+        <a href="https://jobhackai.io/blog">Blog</a>
         <a href="/login">Login</a>
         <a href="/pricing" className="cta-button">Start Free Trial</a>
       </nav>

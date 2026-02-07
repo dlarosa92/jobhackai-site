@@ -241,6 +241,7 @@ const IS_DEV_OR_QA_HOST = APP_BASE_URL === 'https://dev.jobhackai.io' || APP_BAS
 const VISITOR_HOME_HREF = IS_DEV_OR_QA_HOST ? 'index.html' : 'https://jobhackai.io/';
 const VISITOR_BLOG_HREF = IS_DEV_OR_QA_HOST ? 'index.html#blog' : 'https://jobhackai.io/blog';
 const VISITOR_FEATURES_HREF = IS_DEV_OR_QA_HOST ? 'features.html' : 'https://jobhackai.io/features';
+const VISITOR_PRICING_HREF = `${APP_BASE_URL}/pricing-a`;
 
 // --- ROBUSTNESS GLOBALS ---
 // Ensure robustness globals are available for smoke tests and agent interface
@@ -1169,7 +1170,7 @@ const NAVIGATION_CONFIG = {
     navItems: [
       { text: 'Home', href: 'index.html' },
       { text: 'Dashboard', href: 'dashboard.html' },
-      { text: 'Blog', href: 'index.html#blog' },
+      { text: 'Blog', href: VISITOR_BLOG_HREF },
       { text: 'Resume Feedback', href: 'resume-feedback-pro.html', locked: true },
       { text: 'Interview Questions', href: 'interview-questions.html', locked: true }
     ],
@@ -1185,7 +1186,7 @@ const NAVIGATION_CONFIG = {
     navItems: [
       { text: 'Home', href: 'index.html' },
       { text: 'Dashboard', href: 'dashboard.html' },
-      { text: 'Blog', href: 'index.html#blog' },
+      { text: 'Blog', href: VISITOR_BLOG_HREF },
       { text: 'Resume Feedback', href: 'resume-feedback-pro.html' },
       { text: 'Interview Questions', href: 'interview-questions.html' }
     ],
@@ -1201,7 +1202,7 @@ const NAVIGATION_CONFIG = {
     navItems: [
       { text: 'Home', href: 'index.html' },
       { text: 'Dashboard', href: 'dashboard.html' },
-      { text: 'Blog', href: 'index.html#blog' },
+      { text: 'Blog', href: VISITOR_BLOG_HREF },
       { text: 'Resume Feedback', href: 'resume-feedback-pro.html' },
       { text: 'Interview Questions', href: 'interview-questions.html' }
     ],
@@ -1217,7 +1218,7 @@ const NAVIGATION_CONFIG = {
     navItems: [
       { text: 'Home', href: 'index.html' },
       { text: 'Dashboard', href: 'dashboard.html' },
-      { text: 'Blog', href: 'index.html#blog' },
+      { text: 'Blog', href: VISITOR_BLOG_HREF },
       { 
         text: 'Resume Tools',
         isDropdown: true,
@@ -1247,7 +1248,7 @@ const NAVIGATION_CONFIG = {
     navItems: [
       { text: 'Home', href: 'index.html' },
       { text: 'Dashboard', href: 'dashboard.html' },
-      { text: 'Blog', href: 'index.html#blog' },
+      { text: 'Blog', href: VISITOR_BLOG_HREF },
       { 
         text: 'Resume Tools',
         isDropdown: true,
@@ -2822,10 +2823,10 @@ window.navDebug = {
 function renderMarketingNav(desktop, mobile) {
   if (!desktop) return;
   desktop.innerHTML = `
-    <a href="/index.html">Home</a>
-    <a href="/blog.html">Blog</a>
-    <a href="/features.html">Features</a>
-    <a href="/pricing.html">Pricing</a>
+    <a href="${VISITOR_HOME_HREF}">Home</a>
+    <a href="${VISITOR_BLOG_HREF}">Blog</a>
+    <a href="${VISITOR_FEATURES_HREF}">Features</a>
+    <a href="${VISITOR_PRICING_HREF}">Pricing</a>
     <a class="btn-link" href="/login.html">Login</a>
   `;
   if (mobile) mobile.innerHTML = desktop.innerHTML;
@@ -2843,6 +2844,7 @@ function renderVerifiedNav(desktop, mobile) {
   if (!desktop) return;
   desktop.innerHTML = `
     <a href="/dashboard.html">Dashboard</a>
+    <a href="${VISITOR_BLOG_HREF}">Blog</a>
     <a href="/interview-questions.html">Interview Questions</a>
     <a href="/pricing.html">Pricing</a>
     <a href="/account-setting.html" class="nav-account-link">Account</a>
@@ -2865,12 +2867,12 @@ function applyNavForUser(user) {
   
   if (!user.emailVerified) {
     renderUnverifiedNav(desktopNav, mobileNav);
-    if (logo) logo.onclick = () => (window.location.href = "/verify-email.html?email=" + encodeURIComponent(user.email || ""));
+    if (logo) logo.onclick = () => (window.location.href = "https://jobhackai.io/");
     return;
   }
   
   renderVerifiedNav(desktopNav, mobileNav);
-  if (logo) logo.onclick = () => (window.location.href = "/dashboard.html");
+  if (logo) logo.onclick = () => (window.location.href = "https://jobhackai.io/");
 }
 
 // Initialize navigation when Firebase auth is ready
