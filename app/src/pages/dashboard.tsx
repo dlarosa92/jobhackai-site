@@ -25,6 +25,13 @@ export default function Dashboard() {
     createdAt: string | null;
   } | null>(null);
   const [firstRunLoading, setFirstRunLoading] = useState(true);
+  const [logoHref, setLogoHref] = useState<string | null>(null);
+
+  useEffect(() => {
+    const hostname = (window.location.hostname || '').toLowerCase();
+    const isDevOrQaHost = hostname === 'dev.jobhackai.io' || hostname === 'qa.jobhackai.io';
+    setLogoHref(isDevOrQaHost ? '/' : 'https://jobhackai.io/');
+  }, []);
 
   // Feature matrix based on plan
   const featureMatrix = {
@@ -919,7 +926,14 @@ export default function Dashboard() {
       {/* JobHackAI HEADER (canonical) */}
       <header className="site-header">
         <div className="container">
-          <a href="https://jobhackai.io/" className="nav-logo" aria-label="Go to homepage">
+          <a
+            href={logoHref || '#'}
+            className="nav-logo"
+            aria-label="Go to homepage"
+            onClick={(event) => {
+              if (!logoHref) event.preventDefault();
+            }}
+          >
             <svg width="24" height="24" fill="none" stroke="#1F2937" strokeWidth="2" xmlns="http://www.w3.org/2000/svg">
               <rect x="3" y="7" width="18" height="13" rx="2"/>
               <path d="M8 7V5a2 2 0 012-2h4a2 2 0 012 2v2"/>

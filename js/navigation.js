@@ -251,6 +251,7 @@ const VISITOR_HOME_HREF = IS_DEV_OR_QA_HOST ? 'index.html' : 'https://jobhackai.
 const VISITOR_BLOG_HREF = IS_DEV_OR_QA_HOST ? 'index.html#blog' : 'https://jobhackai.io/blog';
 const VISITOR_FEATURES_HREF = IS_DEV_OR_QA_HOST ? 'features.html' : 'https://jobhackai.io/features';
 const VISITOR_PRICING_HREF = `${APP_BASE_URL}/pricing-a`;
+const VISITOR_LOGO_HREF = IS_DEV_OR_QA_HOST ? '/' : 'https://jobhackai.io/';
 
 // --- ROBUSTNESS GLOBALS ---
 // Ensure robustness globals are available for smoke tests and agent interface
@@ -2864,24 +2865,41 @@ function renderVerifiedNav(desktop, mobile) {
 function applyNavForUser(user) {
   const desktopNav = document.querySelector("nav.nav-links");
   const mobileNav = document.querySelector(".mobile-nav");
-  const logo = document.querySelector(".site-logo, .nav-logo, header .logo, a.nav-logo");
+  const logo = document.querySelector(".site-logo, .nav-logo, .verify-page-logo, header .logo, a.nav-logo");
+
+  const applyLogoTarget = (logoElement) => {
+    if (!logoElement) return;
+    const targetHref = VISITOR_LOGO_HREF;
+    try {
+      const anchor = logoElement.tagName && logoElement.tagName.toLowerCase() === 'a'
+        ? logoElement
+        : (typeof logoElement.closest === 'function' ? logoElement.closest('a') : null);
+      if (anchor) anchor.setAttribute('href', targetHref);
+    } catch (_) {}
+
+    logoElement.onclick = (event) => {
+      // Preserve modified-click behavior (open in new tab/window).
+      if (event && (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button === 1)) {
+        return;
+      }
+      window.location.href = targetHref;
+    };
+  };
   
+  applyLogoTarget(logo);
   if (!desktopNav) return;
   
   if (!user) {
     renderMarketingNav(desktopNav, mobileNav);
-    if (logo) logo.onclick = () => (window.location.href = "https://jobhackai.io/");
     return;
   }
   
   if (!user.emailVerified) {
     renderUnverifiedNav(desktopNav, mobileNav);
-    if (logo) logo.onclick = () => (window.location.href = "https://jobhackai.io/");
     return;
   }
   
   renderVerifiedNav(desktopNav, mobileNav);
-  if (logo) logo.onclick = () => (window.location.href = "https://jobhackai.io/");
 }
 
 // Initialize navigation when Firebase auth is ready

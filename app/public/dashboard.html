@@ -592,6 +592,26 @@
       </button>
     </div>
   </header>
+  <script>
+    (function() {
+      const hostname = (window.location.hostname || '').toLowerCase();
+      const isDevOrQaHost = hostname === 'dev.jobhackai.io' || hostname === 'qa.jobhackai.io';
+      const logoHref = isDevOrQaHost ? '/' : 'https://jobhackai.io/';
+      const logo = document.querySelector('.nav-logo, .verify-page-logo');
+      if (!logo) return;
+      try {
+        if (logo.tagName && logo.tagName.toLowerCase() === 'a') {
+          logo.setAttribute('href', logoHref);
+        }
+      } catch (_) {}
+      logo.onclick = function(event) {
+        if (event && (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button === 1)) {
+          return;
+        }
+        window.location.href = logoHref;
+      };
+    })();
+  </script>
   <nav class="mobile-nav" id="mobileNav">
     <!-- Mobile navigation will be dynamically populated by navigation.js -->
   </nav>
