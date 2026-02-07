@@ -968,10 +968,10 @@ export default function Dashboard() {
                   <a href="/mockInterview">Mock Interview Practice</a>
                 </div>
               </div>
-              <a href="/pricing">Pricing</a>
+              <a href="/pricing-a">Pricing</a>
               <a href="https://jobhackai.io/blog">Blog</a>
               <a href="/login">Login</a>
-              <a href="/pricing" className="cta-button">Start Free Trial</a>
+              <a href="/login?plan=trial" className="cta-button">Start Free Trial</a>
             </nav>
           </div>
           <button className="mobile-toggle" aria-label="Open navigation menu" aria-expanded="false" aria-controls="mobileNav">
@@ -990,10 +990,10 @@ export default function Dashboard() {
         <a href="/rewriting">Resume Rewriting</a>
         <a href="/interview">Interview Questions</a>
         <a href="/mockInterview">Mock Interview Practice</a>
-        <a href="/pricing">Pricing</a>
+        <a href="/pricing-a">Pricing</a>
         <a href="https://jobhackai.io/blog">Blog</a>
         <a href="/login">Login</a>
-        <a href="/pricing" className="cta-button">Start Free Trial</a>
+        <a href="/login?plan=trial" className="cta-button">Start Free Trial</a>
       </nav>
 
       <main>
