@@ -253,6 +253,29 @@ const VISITOR_FEATURES_HREF = IS_DEV_OR_QA_HOST ? 'features.html' : 'https://job
 const VISITOR_PRICING_HREF = `${APP_BASE_URL}/pricing-a`;
 const VISITOR_LOGO_HREF = IS_DEV_OR_QA_HOST ? '/' : 'https://jobhackai.io/';
 
+// Cross-domain cookie helpers — only read on prod to prevent dev/qa bleed
+function hasCrossDomainAuthCookie() {
+  try {
+    if (IS_DEV_OR_QA_HOST) return false;
+    return document.cookie.indexOf('jhai_auth=1') !== -1;
+  } catch (_) { return false; }
+}
+
+function parseCrossDomainCookies() {
+  try {
+    if (IS_DEV_OR_QA_HOST) return null;
+    const cookies = document.cookie.split(';').reduce((acc, c) => {
+      const parts = c.trim().split('=');
+      if (parts.length >= 2) acc[parts[0]] = parts.slice(1).join('=');
+      return acc;
+    }, {});
+    if (cookies.jhai_auth === '1') {
+      return { plan: decodeURIComponent(cookies.jhai_plan || 'free') };
+    }
+  } catch (_) {}
+  return null;
+}
+
 // --- ROBUSTNESS GLOBALS ---
 // Ensure robustness globals are available for smoke tests and agent interface
 window.siteHealth = window.siteHealth || {
@@ -543,7 +566,10 @@ function confidentlyAuthenticatedForNav() {
       }
     } catch (_) {}
 
-    // 4) Otherwise, defer decision - Firebase may still be restoring session
+    // 4) Cross-domain cookie fallback (for marketing site where Firebase has no local state)
+    if (hasCrossDomainAuthCookie()) return true;
+
+    // 5) Otherwise, defer decision - Firebase may still be restoring session
     return null;
   } catch (_) {
     return null;
@@ -770,7 +796,18 @@ function getAuthState() {
       console.error('[AUTH] getAuthState: localStorage access error:', storageError.message);
     }
   }
-  
+
+  // Cross-domain cookie fallback (for marketing site where Firebase has no local state)
+  let cookiePlan = null;
+  if (!isAuthenticatedFromFirebase && !fallbackAuth) {
+    const cookieData = parseCrossDomainCookies();
+    if (cookieData) {
+      fallbackAuth = true;
+      cookiePlan = cookieData.plan;
+      console.log('[AUTH] getAuthState: Using cross-domain cookie fallback, plan:', cookiePlan);
+    }
+  }
+
   const actualAuth = isAuthenticatedFromFirebase || fallbackAuth;
   
   // EDGE CASE FIX: If Firebase is initialized and says logged out, trust Firebase
@@ -808,6 +845,11 @@ function getAuthState() {
         // Fall through to return unauthenticated
       }
       // If fallback didn't return, Firebase says logged out and localStorage doesn't have valid auth
+      // Check cross-domain cookie before returning unauthenticated
+      if (cookiePlan || hasCrossDomainAuthCookie()) {
+        const cp = cookiePlan || 'free';
+        return { isAuthenticated: true, userPlan: cp, devPlan: cp };
+      }
       // Don't clear localStorage yet - wait for firebase-auth-ready to fire
       return {
         isAuthenticated: false,
@@ -815,10 +857,15 @@ function getAuthState() {
         devPlan: null
       };
     }
-    
+
     // Only clear localStorage if firebase-auth-ready has fired AND Firebase says logged out
     // CRITICAL FIX: Check firebaseAuthReadyFired (or global fallback) before clearing to prevent premature clearing
     if (isRealAuthReady()) {
+      // Check cross-domain cookie: if user is authenticated on app subdomain, trust the cookie
+      if (cookiePlan || hasCrossDomainAuthCookie()) {
+        const cp = cookiePlan || 'free';
+        return { isAuthenticated: true, userPlan: cp, devPlan: cp };
+      }
       try {
         const storedAuth = localStorage.getItem('user-authenticated');
         if (storedAuth === 'true') {
@@ -852,6 +899,8 @@ function getAuthState() {
       const allowedPlans = ['free', 'trial', 'essential', 'pro', 'premium', 'visitor', 'pending'];
       if (storedPlan && allowedPlans.includes(storedPlan)) {
         userPlan = storedPlan;
+      } else if (cookiePlan && allowedPlans.includes(cookiePlan)) {
+        userPlan = cookiePlan;
       } else if (storedPlan) {
         console.warn('[AUTH] getAuthState: Invalid plan in localStorage:', storedPlan);
         userPlan = 'free'; // Default to free
@@ -1441,10 +1490,10 @@ function getEffectivePlan() {
   // Otherwise use their actual plan
   let effectivePlan = authState.userPlan || 'free';
   
-  // Map 'pending' to 'free' for feature access
+  // Map 'pending' to 'trial' so in-flight trial signups get trial UX immediately
   if (effectivePlan === 'pending') {
-    effectivePlan = 'free';
-    navLog('info', 'getEffectivePlan: Mapping pending to free for feature access');
+    effectivePlan = 'trial';
+    navLog('info', 'getEffectivePlan: Mapping pending to trial for navigation/feature access');
   }
   
   navLog('info', 'getEffectivePlan: Using user plan', effectivePlan);
