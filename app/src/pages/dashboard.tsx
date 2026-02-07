@@ -919,7 +919,7 @@ export default function Dashboard() {
       {/* JobHackAI HEADER (canonical) */}
       <header className="site-header">
         <div className="container">
-          <a href="/" className="nav-logo" aria-label="Go to homepage">
+          <a href="https://jobhackai.io/" className="nav-logo" aria-label="Go to homepage">
             <svg width="24" height="24" fill="none" stroke="#1F2937" strokeWidth="2" xmlns="http://www.w3.org/2000/svg">
               <rect x="3" y="7" width="18" height="13" rx="2"/>
               <path d="M8 7V5a2 2 0 012-2h4a2 2 0 012 2v2"/>
@@ -928,7 +928,7 @@ export default function Dashboard() {
           </a>
           <div className="nav-group">
             <nav className="nav-links" role="navigation">
-              <a href="/">Home</a>
+              <a href="https://jobhackai.io/">Home</a>
               <div className="nav-dropdown">
                 <a href="#" className="nav-dropdown-toggle">
                   Resume Tools
@@ -955,7 +955,7 @@ export default function Dashboard() {
                 </div>
               </div>
               <a href="/pricing">Pricing</a>
-              <a href="/blog">Blog</a>
+              <a href="https://jobhackai.io/blog">Blog</a>
               <a href="/login">Login</a>
               <a href="/pricing" className="cta-button">Start Free Trial</a>
             </nav>
@@ -970,14 +970,14 @@ export default function Dashboard() {
         </div>
       </header>
       <nav className="mobile-nav" id="mobileNav">
-        <a href="/">Home</a>
+        <a href="https://jobhackai.io/">Home</a>
         <a href="/resume-feedback-pro">ATS Resume Score</a>
         <a href="/resume-feedback-pro">Resume Feedback</a>
         <a href="/rewriting">Resume Rewriting</a>
         <a href="/interview">Interview Questions</a>
         <a href="/mockInterview">Mock Interview Practice</a>
         <a href="/pricing">Pricing</a>
-        <a href="/blog">Blog</a>
+        <a href="https://jobhackai.io/blog">Blog</a>
         <a href="/login">Login</a>
         <a href="/pricing" className="cta-button">Start Free Trial</a>
       </nav>
@@ -1165,7 +1165,7 @@ export default function Dashboard() {
             <p>© 2026 JobHackAI. All rights reserved.</p>
           </div>
           <div className="footer-links">
-            <a href="/">Home</a>
+            <a href="https://jobhackai.io/">Home</a>
             <a href="/support">Support</a>
             <a href="/privacy">Privacy</a>
           </div>
