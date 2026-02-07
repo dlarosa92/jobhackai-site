@@ -1,13 +1,4 @@
-/blog   /pages/blog.html  200
-/features   /pages/features.html  200
-/pricing   /pages/pricing.html  200
-
-/index.html   /  301
-/blog.html    /blog  301
-/features.html  /features  301
-/pricing.html /pricing  301
-
-# Redirect /pages/ URLs to clean URLs
+# Redirect legacy /pages/ URLs to clean URLs
 /pages/index.html   /  301
 /pages/blog.html    /blog  301
 /pages/blog         /blog  301
@@ -16,3 +7,9 @@
 /pages/pricing.html /pricing  301
 /pages/pricing      /pricing  301
 /pages/             /  301
+
+# Redirect .html extensions to clean URLs
+/index.html   /  301
+/blog.html    /blog  301
+/features.html  /features  301
+/pricing.html /pricing  301
