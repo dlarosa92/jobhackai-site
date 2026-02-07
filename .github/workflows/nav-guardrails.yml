@@ -1,0 +1,35 @@
+name: Navigation Guardrails
+
+on:
+  push:
+    branches: [main, dev0, develop]
+    paths:
+      - "dashboard.html"
+      - "js/navigation.js"
+      - "js/logo-link-env.js"
+      - "marketing/js/navigation.js"
+      - "marketing/js/logo-link-env.js"
+      - "scripts/check-nav-guardrails.sh"
+      - ".github/workflows/nav-guardrails.yml"
+      - "app/public/dashboard.html"
+  pull_request:
+    branches: [main, dev0, develop]
+    paths:
+      - "dashboard.html"
+      - "js/navigation.js"
+      - "js/logo-link-env.js"
+      - "marketing/js/navigation.js"
+      - "marketing/js/logo-link-env.js"
+      - "scripts/check-nav-guardrails.sh"
+      - ".github/workflows/nav-guardrails.yml"
+      - "app/public/dashboard.html"
+
+jobs:
+  nav-guardrails:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate navigation/auth guardrails
+        run: bash scripts/check-nav-guardrails.sh
