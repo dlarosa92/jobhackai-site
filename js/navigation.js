@@ -251,7 +251,7 @@ const VISITOR_HOME_HREF = IS_DEV_OR_QA_HOST ? 'index.html' : 'https://jobhackai.
 const VISITOR_BLOG_HREF = IS_DEV_OR_QA_HOST ? 'index.html#blog' : 'https://jobhackai.io/blog';
 const VISITOR_FEATURES_HREF = IS_DEV_OR_QA_HOST ? 'features.html' : 'https://jobhackai.io/features';
 const VISITOR_PRICING_HREF = `${APP_BASE_URL}/pricing-a`;
-const VISITOR_LOGO_HREF = IS_DEV_OR_QA_HOST ? (APP_BASE_URL + '/') : 'https://jobhackai.io/';
+const VISITOR_LOGO_HREF = IS_DEV_OR_QA_HOST ? '/' : 'https://jobhackai.io/';
 
 // --- ROBUSTNESS GLOBALS ---
 // Ensure robustness globals are available for smoke tests and agent interface
