@@ -46,7 +46,7 @@ function selectFirebaseConfig() {
   if (typeof window === "undefined") return configDev;
   const h = window.location.hostname;
   if (h === "qa.jobhackai.io") return configDev;
-  if (h === "app.jobhackai.io") return configProd;
+  if (h === "app.jobhackai.io" || h === "jobhackai.io" || h === "www.jobhackai.io") return configProd;
   return configDev; // dev.jobhackai.io, localhost, etc.
 }
 

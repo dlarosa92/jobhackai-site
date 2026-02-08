@@ -244,6 +244,164 @@ const VISITOR_FEATURES_HREF = IS_DEV_OR_QA_HOST ? 'features.html' : 'https://job
 const VISITOR_PRICING_HREF = `${APP_BASE_URL}/pricing-a`;
 const VISITOR_LOGO_HREF = IS_DEV_OR_QA_HOST ? '/' : 'https://jobhackai.io/';
 
+// Cross-domain cookie helpers — only read on the MARKETING site (not the app subdomain).
+// On app.jobhackai.io Firebase is the source of truth; trusting a 30-day cookie there
+// would override Firebase's authoritative "no user" after session revocation / account disable.
+function isMarketingHostForCookieFallback() {
+  try {
+    if (IS_DEV_OR_QA_HOST) return false;
+    const h = (window.location.hostname || '').toLowerCase();
+    // Only activate on marketing hosts, NOT on app.jobhackai.io
+    return h === 'jobhackai.io' || h === 'www.jobhackai.io';
+  } catch (_) { return false; }
+}
+
+function hasCrossDomainAuthCookie() {
+  try {
+    if (!isMarketingHostForCookieFallback()) return false;
+    return document.cookie.indexOf('jhai_auth=1') !== -1;
+  } catch (_) { return false; }
+}
+
+function parseCrossDomainCookies() {
+  try {
+    if (!isMarketingHostForCookieFallback()) return null;
+    const cookies = document.cookie.split(';').reduce((acc, c) => {
+      const parts = c.trim().split('=');
+      if (parts.length >= 2) acc[parts[0]] = parts.slice(1).join('=');
+      return acc;
+    }, {});
+    if (cookies.jhai_auth === '1') {
+      return { plan: decodeURIComponent(cookies.jhai_plan || 'free') };
+    }
+  } catch (_) {}
+  return null;
+}
+
+// URL auth-handoff fallback — used when cross-domain cookies are unavailable.
+// Flow: app.jobhackai.io appends a short-lived hint to marketing links, and
+// marketing pages persist it in sessionStorage for the current tab/session.
+const PROD_APP_HOST = 'app.jobhackai.io';
+const PROD_MARKETING_HOSTS = ['jobhackai.io', 'www.jobhackai.io'];
+const AUTH_HANDOFF_QUERY_AUTH = 'jhai_auth';
+const AUTH_HANDOFF_QUERY_PLAN = 'jhai_plan';
+const AUTH_HANDOFF_QUERY_TS = 'jhai_ts';
+const AUTH_HANDOFF_SESSION_KEY = 'jhai_auth_handoff';
+const AUTH_HANDOFF_MAX_AGE_MS = 10 * 60 * 1000;
+const AUTH_HANDOFF_ALLOWED_PLANS = ['free', 'trial', 'essential', 'pro', 'premium', 'pending'];
+
+function getHostnameSafe() {
+  try { return (window.location.hostname || '').toLowerCase(); } catch (_) { return ''; }
+}
+
+function isProdMarketingHostName(hostname) {
+  return PROD_MARKETING_HOSTS.includes((hostname || '').toLowerCase());
+}
+
+function isProdMarketingHost() {
+  return isProdMarketingHostName(getHostnameSafe());
+}
+
+function isProdAppHost() {
+  return getHostnameSafe() === PROD_APP_HOST;
+}
+
+function normalizeHandoffPlan(plan) {
+  const normalized = (plan || '').toString().toLowerCase();
+  if (!normalized) return null;
+  if (AUTH_HANDOFF_ALLOWED_PLANS.includes(normalized)) return normalized;
+  return null;
+}
+
+function stripAuthHandoffQueryParams() {
+  try {
+    const url = new URL(window.location.href);
+    const hasHint = url.searchParams.has(AUTH_HANDOFF_QUERY_AUTH)
+      || url.searchParams.has(AUTH_HANDOFF_QUERY_PLAN)
+      || url.searchParams.has(AUTH_HANDOFF_QUERY_TS);
+    if (!hasHint) return;
+    url.searchParams.delete(AUTH_HANDOFF_QUERY_AUTH);
+    url.searchParams.delete(AUTH_HANDOFF_QUERY_PLAN);
+    url.searchParams.delete(AUTH_HANDOFF_QUERY_TS);
+    const next = `${url.pathname}${url.search}${url.hash}`;
+    window.history.replaceState({}, '', next);
+  } catch (_) {}
+}
+
+function persistUrlAuthHandoffIfPresent() {
+  if (!isProdMarketingHost()) return null;
+  try {
+    const params = new URLSearchParams(window.location.search || '');
+    if (params.get(AUTH_HANDOFF_QUERY_AUTH) !== '1') return null;
+    const now = Date.now();
+    const ts = Number(params.get(AUTH_HANDOFF_QUERY_TS) || '0');
+    const plan = normalizeHandoffPlan(params.get(AUTH_HANDOFF_QUERY_PLAN) || 'free');
+    const isFresh = Number.isFinite(ts) && ts > 0 && (now - ts) >= 0 && (now - ts) <= AUTH_HANDOFF_MAX_AGE_MS;
+    stripAuthHandoffQueryParams();
+    if (!isFresh || !plan) {
+      try { sessionStorage.removeItem(AUTH_HANDOFF_SESSION_KEY); } catch (_) {}
+      return null;
+    }
+    const payload = { plan, ts: now };
+    try { sessionStorage.setItem(AUTH_HANDOFF_SESSION_KEY, JSON.stringify(payload)); } catch (_) {}
+    return payload;
+  } catch (_) {
+    return null;
+  }
+}
+
+function getStoredUrlAuthHandoff() {
+  if (!isProdMarketingHost()) return null;
+  try {
+    const raw = sessionStorage.getItem(AUTH_HANDOFF_SESSION_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    const plan = normalizeHandoffPlan(parsed?.plan);
+    const ts = Number(parsed?.ts || '0');
+    const now = Date.now();
+    const isFresh = Number.isFinite(ts) && ts > 0 && (now - ts) >= 0 && (now - ts) <= AUTH_HANDOFF_MAX_AGE_MS;
+    if (!plan || !isFresh) {
+      sessionStorage.removeItem(AUTH_HANDOFF_SESSION_KEY);
+      return null;
+    }
+    return { plan, ts };
+  } catch (_) {
+    try { sessionStorage.removeItem(AUTH_HANDOFF_SESSION_KEY); } catch (_) {}
+    return null;
+  }
+}
+
+function getUrlAuthHandoff() {
+  return persistUrlAuthHandoffIfPresent() || getStoredUrlAuthHandoff();
+}
+
+function hasUrlAuthHandoff() {
+  return !!getUrlAuthHandoff();
+}
+
+function clearUrlAuthHandoff() {
+  try { sessionStorage.removeItem(AUTH_HANDOFF_SESSION_KEY); } catch (_) {}
+}
+
+function buildAuthHandoffHref(href, isAuthenticated, plan) {
+  if (!isAuthenticated || !isProdAppHost()) return href;
+  try {
+    const url = new URL(href, window.location.origin);
+    if (!isProdMarketingHostName(url.hostname)) return href;
+    if (url.protocol !== 'https:' && url.protocol !== 'http:') return href;
+    const normalizedPlan = normalizeHandoffPlan(plan) || 'free';
+    url.searchParams.set(AUTH_HANDOFF_QUERY_AUTH, '1');
+    url.searchParams.set(AUTH_HANDOFF_QUERY_PLAN, normalizedPlan);
+    url.searchParams.set(AUTH_HANDOFF_QUERY_TS, String(Date.now()));
+    return url.toString();
+  } catch (_) {
+    return href;
+  }
+}
+
+// Consume auth handoff from URL as early as possible on marketing pages.
+persistUrlAuthHandoffIfPresent();
+
 // --- ROBUSTNESS GLOBALS ---
 // Ensure robustness globals are available for smoke tests and agent interface
 window.siteHealth = window.siteHealth || {
@@ -534,7 +692,13 @@ function confidentlyAuthenticatedForNav() {
       }
     } catch (_) {}
 
-    // 4) Otherwise, defer decision - Firebase may still be restoring session
+    // 4) Cross-domain cookie fallback (for marketing site where Firebase has no local state)
+    if (hasCrossDomainAuthCookie()) return true;
+
+    // 5) Non-cookie URL handoff fallback (for browsers blocking cross-domain cookies)
+    if (hasUrlAuthHandoff()) return true;
+
+    // 6) Otherwise, defer decision - Firebase may still be restoring session
     return null;
   } catch (_) {
     return null;
@@ -761,7 +925,28 @@ function getAuthState() {
       console.error('[AUTH] getAuthState: localStorage access error:', storageError.message);
     }
   }
-  
+
+  // Cross-domain cookie fallback (for marketing site where Firebase has no local state)
+  let cookiePlan = null;
+  if (!isAuthenticatedFromFirebase && !fallbackAuth) {
+    const cookieData = parseCrossDomainCookies();
+    if (cookieData) {
+      fallbackAuth = true;
+      cookiePlan = cookieData.plan;
+      console.log('[AUTH] getAuthState: Using cross-domain cookie fallback, plan:', cookiePlan);
+    }
+  }
+
+  // Non-cookie URL handoff fallback (for browsers blocking cross-domain cookies)
+  if (!isAuthenticatedFromFirebase && !fallbackAuth) {
+    const handoffData = getUrlAuthHandoff();
+    if (handoffData) {
+      fallbackAuth = true;
+      cookiePlan = handoffData.plan;
+      console.log('[AUTH] getAuthState: Using URL auth handoff fallback, plan:', cookiePlan);
+    }
+  }
+
   const actualAuth = isAuthenticatedFromFirebase || fallbackAuth;
   
   // EDGE CASE FIX: If Firebase is initialized and says logged out, trust Firebase
@@ -799,6 +984,11 @@ function getAuthState() {
         // Fall through to return unauthenticated
       }
       // If fallback didn't return, Firebase says logged out and localStorage doesn't have valid auth
+      // Check cross-domain cookie before returning unauthenticated
+      if (cookiePlan || hasCrossDomainAuthCookie() || hasUrlAuthHandoff()) {
+        const cp = cookiePlan || 'free';
+        return { isAuthenticated: true, userPlan: cp, devPlan: cp };
+      }
       // Don't clear localStorage yet - wait for firebase-auth-ready to fire
       return {
         isAuthenticated: false,
@@ -806,10 +996,15 @@ function getAuthState() {
         devPlan: null
       };
     }
-    
+
     // Only clear localStorage if firebase-auth-ready has fired AND Firebase says logged out
     // CRITICAL FIX: Check firebaseAuthReadyFired (or global fallback) before clearing to prevent premature clearing
     if (isRealAuthReady()) {
+      // Check cross-domain cookie: if user is authenticated on app subdomain, trust the cookie
+      if (cookiePlan || hasCrossDomainAuthCookie() || hasUrlAuthHandoff()) {
+        const cp = cookiePlan || 'free';
+        return { isAuthenticated: true, userPlan: cp, devPlan: cp };
+      }
       try {
         const storedAuth = localStorage.getItem('user-authenticated');
         if (storedAuth === 'true') {
@@ -843,6 +1038,8 @@ function getAuthState() {
       const allowedPlans = ['free', 'trial', 'essential', 'pro', 'premium', 'visitor', 'pending'];
       if (storedPlan && allowedPlans.includes(storedPlan)) {
         userPlan = storedPlan;
+      } else if (cookiePlan && allowedPlans.includes(cookiePlan)) {
+        userPlan = cookiePlan;
       } else if (storedPlan) {
         console.warn('[AUTH] getAuthState: Invalid plan in localStorage:', storedPlan);
         userPlan = 'free'; // Default to free
@@ -890,6 +1087,9 @@ function setAuthState(isAuthenticated, plan = null) {
   
   try {
     localStorage.setItem('user-authenticated', isAuthenticated ? 'true' : 'false');
+    if (!isAuthenticated) {
+      clearUrlAuthHandoff();
+    }
     if (plan) {
       const oldPlan = localStorage.getItem('user-plan') || localStorage.getItem('dev-plan');
       // Only update and dispatch if the plan actually changed
@@ -1005,6 +1205,7 @@ async function logout(e) {
     // Clear session-scoped data IMMEDIATELY
     try { 
       sessionStorage.removeItem('selectedPlan');
+      clearUrlAuthHandoff();
       // Fix: Clear plan state sync sessionStorage keys to prevent cross-user contamination
       sessionStorage.removeItem('previous-plan-before-update');
       sessionStorage.removeItem('payment-processed');
@@ -1038,8 +1239,8 @@ async function logout(e) {
       console.warn('[LOGOUT] Failed to clear logout-intent:', sessionError.message);
     }
     
-    console.log('[LOGOUT] Redirecting to /login.html');
-    location.replace('/login.html');
+    console.log('[LOGOUT] Redirecting to https://app.jobhackai.io/login');
+    location.replace('https://app.jobhackai.io/login');
   } finally {
     // EDGE CASE FIX: Reset flag after a delay in case redirect fails
     setTimeout(() => {
@@ -1432,10 +1633,10 @@ function getEffectivePlan() {
   // Otherwise use their actual plan
   let effectivePlan = authState.userPlan || 'free';
   
-  // Map 'pending' to 'free' for feature access
+  // Map 'pending' to 'trial' so in-flight trial signups get trial UX immediately
   if (effectivePlan === 'pending') {
-    effectivePlan = 'free';
-    navLog('info', 'getEffectivePlan: Mapping pending to free for feature access');
+    effectivePlan = 'trial';
+    navLog('info', 'getEffectivePlan: Mapping pending to trial for navigation/feature access');
   }
   
   navLog('info', 'getEffectivePlan: Using user plan', effectivePlan);
@@ -1719,6 +1920,10 @@ function updateNavigation() {
     // Also normalize any explicit index.html hash when on home
     if (onHome && href.startsWith('index.html#')) {
       finalHref = '#' + href.split('#')[1];
+    }
+
+    if (isAuthView) {
+      finalHref = buildAuthHandoffHref(finalHref, true, currentPlan);
     }
 
     linkElement.href = finalHref;
@@ -2843,9 +3048,11 @@ function renderUnverifiedNav(desktop, mobile) {
 
 function renderVerifiedNav(desktop, mobile) {
   if (!desktop) return;
+  const handoffPlan = normalizeHandoffPlan(localStorage.getItem('user-plan') || localStorage.getItem('dev-plan') || 'free') || 'free';
+  const blogHref = buildAuthHandoffHref(VISITOR_BLOG_HREF, true, handoffPlan);
   desktop.innerHTML = `
     <a href="${APP_BASE_URL}/dashboard.html">Dashboard</a>
-    <a href="${VISITOR_BLOG_HREF}">Blog</a>
+    <a href="${blogHref}">Blog</a>
     <a href="${APP_BASE_URL}/interview-questions.html">Interview Questions</a>
     <a href="${APP_BASE_URL}/pricing-a">Pricing</a>
     <a href="${APP_BASE_URL}/account-setting.html" class="nav-account-link">Account</a>
@@ -2860,7 +3067,8 @@ function applyNavForUser(user) {
 
   const applyLogoTarget = (logoElement) => {
     if (!logoElement) return;
-    const targetHref = VISITOR_LOGO_HREF;
+    const handoffPlan = normalizeHandoffPlan(localStorage.getItem('user-plan') || localStorage.getItem('dev-plan') || 'free') || 'free';
+    const targetHref = buildAuthHandoffHref(VISITOR_LOGO_HREF, !!user, handoffPlan);
     try {
       const anchor = logoElement.tagName && logoElement.tagName.toLowerCase() === 'a'
         ? logoElement

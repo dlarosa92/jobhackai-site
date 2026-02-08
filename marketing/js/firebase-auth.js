@@ -46,6 +46,37 @@ const auth = getAuth(app);
 // Single authoritative auth-ready sentinel shared by consumers
 const AUTH_PENDING = Object.freeze({ _authPending: true });
 
+// --- CROSS-SUBDOMAIN AUTH COOKIES ---
+// Set on .jobhackai.io so the marketing site can detect authenticated users.
+// Restricted to prod hosts only to prevent dev/qa cookie bleed.
+const PROD_COOKIE_HOSTS = ['app.jobhackai.io', 'jobhackai.io', 'www.jobhackai.io'];
+
+function isProdHost() {
+  try { return PROD_COOKIE_HOSTS.includes(window.location.hostname || ''); } catch (_) { return false; }
+}
+
+function setAuthCookies(displayName, plan) {
+  try {
+    if (!isProdHost()) return;
+    const domain = '.jobhackai.io';
+    const maxAge = 60 * 60 * 24 * 30; // 30 days
+    const secure = '; Secure';
+    document.cookie = `jhai_auth=1; domain=${domain}; path=/; max-age=${maxAge}; SameSite=Lax${secure}`;
+    document.cookie = `jhai_name=${encodeURIComponent(displayName || '')}; domain=${domain}; path=/; max-age=${maxAge}; SameSite=Lax${secure}`;
+    document.cookie = `jhai_plan=${encodeURIComponent(plan || 'free')}; domain=${domain}; path=/; max-age=${maxAge}; SameSite=Lax${secure}`;
+  } catch (e) { /* best-effort */ }
+}
+
+function clearAuthCookies() {
+  try {
+    if (!isProdHost()) return;
+    const domain = '.jobhackai.io';
+    document.cookie = `jhai_auth=; domain=${domain}; path=/; max-age=0`;
+    document.cookie = `jhai_name=; domain=${domain}; path=/; max-age=0`;
+    document.cookie = `jhai_plan=; domain=${domain}; path=/; max-age=0`;
+  } catch (e) { /* best-effort */ }
+}
+
 // --- DIRECT PLAN FETCH FROM D1 VIA API (navigation-independent) ---
 async function fetchPlanFromAPI() {
   try {
@@ -671,7 +702,10 @@ class AuthManager {
         if (window.JobHackAINavigation) {
           window.JobHackAINavigation.setAuthState(true, actualPlan);
         }
-        
+
+        // Set cross-subdomain auth cookies for marketing site nav
+        setAuthCookies(user.displayName, actualPlan);
+
         // Notify listeners
         this.notifyAuthStateChange(user, userRecord);
       } else if (effectiveUser) {
@@ -747,12 +781,14 @@ class AuthManager {
             if (window.JobHackAINavigation) {
               window.JobHackAINavigation.setAuthState(true, actualPlan);
             }
+            setAuthCookies(firestoreData.displayName, actualPlan);
             this.notifyAuthStateChange(effectiveUser, null);
           } catch (e) {
             console.warn('Could not initialize LinkedIn user:', e);
             if (window.JobHackAINavigation) {
               window.JobHackAINavigation.setAuthState(true, 'free');
             }
+            setAuthCookies('', 'free');
             this.notifyAuthStateChange(effectiveUser, null);
           }
         } else {
@@ -763,12 +799,14 @@ class AuthManager {
             if (window.JobHackAINavigation) {
               window.JobHackAINavigation.setAuthState(true, actualPlan);
             }
+            setAuthCookies('', actualPlan);
             this.notifyAuthStateChange(effectiveUser, null);
           } catch (e) {
             console.warn('Could not fetch plan for LinkedIn user:', e);
             if (window.JobHackAINavigation) {
               window.JobHackAINavigation.setAuthState(true, 'free');
             }
+            setAuthCookies('', 'free');
             this.notifyAuthStateChange(effectiveUser, null);
           }
         }
@@ -961,6 +999,7 @@ class AuthManager {
       if (user.displayName) {
         localStorage.setItem('user-name', user.displayName);
       }
+      setAuthCookies(user.displayName, actualPlan);
       // Update navigation state with correct plan
       if (window.JobHackAINavigation) {
         window.JobHackAINavigation.setAuthState(true, actualPlan);
@@ -1059,6 +1098,7 @@ class AuthManager {
       if (user.displayName) {
         localStorage.setItem('user-name', user.displayName);
       }
+      setAuthCookies(user.displayName, actualPlan);
       if (window.JobHackAINavigation) {
         window.JobHackAINavigation.setAuthState(true, actualPlan);
       }
@@ -1256,6 +1296,7 @@ class AuthManager {
             // Persist auth state immediately
             try {
               localStorage.setItem('user-authenticated', 'true');
+              setAuthCookies(userData.firstName + ' ' + userData.lastName, actualPlan);
               if (window.JobHackAINavigation) {
                 window.JobHackAINavigation.setAuthState(true, actualPlan);
               }
@@ -1367,9 +1408,12 @@ class AuthManager {
    * Sign out
    */
   async signOut() {
+    // Clear cross-domain cookies immediately (before async signOut) so marketing nav
+    // reverts to visitor state even if Firebase sign-out throws a network error.
+    clearAuthCookies();
     try {
       await signOut(auth);
-      
+
       // Clear local storage
       localStorage.removeItem('auth-user');
       localStorage.removeItem('user-plan');

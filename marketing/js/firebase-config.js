@@ -31,11 +31,22 @@ const configQA = {
   appId: "1:556272888843:web:bd77898b14234c55eaab0e"
 };
 
+// Production Firebase project: jobhackai-prod-510a4
+const configProd = {
+  apiKey: "AIzaSyB8YGpNFIhg_YBPiinNKZYcFHItlrsLFXA",
+  authDomain: "jobhackai-prod-510a4.firebaseapp.com",
+  projectId: "jobhackai-prod-510a4",
+  storageBucket: "jobhackai-prod-510a4.firebasestorage.app",
+  messagingSenderId: "580141511991",
+  appId: "1:580141511991:web:986f9745b72f1e81d816b2",
+  measurementId: "G-SQYSWPFM5X"
+};
+
 function selectFirebaseConfig() {
   if (typeof window === "undefined") return configDev;
   const h = window.location.hostname;
   if (h === "qa.jobhackai.io") return configDev;
-  if (h === "app.jobhackai.io") return configDev; // TODO: swap for configProd when ready
+  if (h === "app.jobhackai.io" || h === "jobhackai.io" || h === "www.jobhackai.io") return configProd;
   return configDev; // dev.jobhackai.io, localhost, etc.
 }
 
