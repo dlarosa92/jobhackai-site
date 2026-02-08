@@ -1096,9 +1096,10 @@ function setAuthState(isAuthenticated, plan = null) {
   
   try {
     localStorage.setItem('user-authenticated', isAuthenticated ? 'true' : 'false');
-    if (!isAuthenticated) {
-      clearUrlAuthHandoff();
-    }
+    // NOTE: Do NOT call clearUrlAuthHandoff() here. On the marketing site, Firebase has
+    // no local session and fires onAuthStateChanged(null) which calls setAuthState(false).
+    // Clearing the URL handoff here would undo the auth hint set by app.jobhackai.io.
+    // URL handoff is only cleared on explicit logout in logout().
     if (plan) {
       const oldPlan = localStorage.getItem('user-plan') || localStorage.getItem('dev-plan');
       // Only update and dispatch if the plan actually changed
@@ -3035,8 +3036,32 @@ window.navDebug = {
 };
 
 // Navigation gating functions (Phase 2)
+
+// Remove any .nav-actions element left by renderVerifiedNav so it doesn't
+// persist when switching to visitor/unverified nav.
+function _clearNavActions(desktop) {
+  const navGroup = desktop.closest('.nav-group') || desktop.parentElement;
+  if (navGroup) {
+    const old = navGroup.querySelector('.nav-actions');
+    if (old) old.remove();
+  }
+}
+
+// Register close-on-outside-click exactly once (idempotent via flag).
+let _verifiedNavDocClickRegistered = false;
+function _ensureDocClickHandler() {
+  if (_verifiedNavDocClickRegistered) return;
+  _verifiedNavDocClickRegistered = true;
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('.nav-dropdown') && !e.target.closest('.nav-user-menu')) {
+      document.querySelectorAll('.nav-dropdown.open, .nav-user-menu.open').forEach(d => d.classList.remove('open'));
+    }
+  });
+}
+
 function renderMarketingNav(desktop, mobile) {
   if (!desktop) return;
+  _clearNavActions(desktop);
   desktop.innerHTML = `
     <a href="${VISITOR_HOME_HREF}">Home</a>
     <a href="${VISITOR_BLOG_HREF}">Blog</a>
@@ -3049,24 +3074,136 @@ function renderMarketingNav(desktop, mobile) {
 
 function renderUnverifiedNav(desktop, mobile) {
   if (!desktop) return;
+  _clearNavActions(desktop);
   desktop.innerHTML = `
     <span class="nav-status">Verify your email to unlock your account</span>
   `;
   if (mobile) mobile.innerHTML = desktop.innerHTML;
 }
 
+// Build nav item DOM nodes for a single container from NAVIGATION_CONFIG.
+// Called once per target (desktop, mobile) so each gets its own event listeners.
+function _buildVerifiedNavItems(container, navConfig, wrapHref) {
+  container.innerHTML = '';
+  navConfig.navItems.forEach((item) => {
+    if (item.isCTA) return;
+
+    if (item.isDropdown) {
+      const dropdownContainer = document.createElement('div');
+      dropdownContainer.className = 'nav-dropdown';
+
+      const toggle = document.createElement('a');
+      toggle.href = '#';
+      toggle.className = 'nav-dropdown-toggle';
+      toggle.innerHTML = `${item.text} <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="dropdown-arrow"><path d="m6 9 6 6 6-6"/></svg>`;
+
+      const menu = document.createElement('div');
+      menu.className = 'nav-dropdown-menu';
+
+      item.items.forEach((sub) => {
+        const link = document.createElement('a');
+        if (sub.locked === true) {
+          link.href = '#';
+          link.setAttribute('aria-disabled', 'true');
+          link.classList.add('locked-link');
+          link.title = 'Upgrade your plan to unlock this feature.';
+          link.addEventListener('click', (e) => { e.preventDefault(); showUpgradeModal('essential'); });
+        } else {
+          link.href = wrapHref(sub.href);
+        }
+        link.textContent = sub.text;
+        menu.appendChild(link);
+      });
+
+      dropdownContainer.appendChild(toggle);
+      dropdownContainer.appendChild(menu);
+      container.appendChild(dropdownContainer);
+
+      toggle.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        document.querySelectorAll('.nav-dropdown.open').forEach(d => { if (d !== dropdownContainer) d.classList.remove('open'); });
+        dropdownContainer.classList.toggle('open');
+      });
+    } else {
+      const link = document.createElement('a');
+      if (item.locked === true) {
+        link.href = '#';
+        link.setAttribute('aria-disabled', 'true');
+        link.classList.add('locked-link');
+        link.title = 'Upgrade your plan to unlock this feature.';
+        link.addEventListener('click', (e) => { e.preventDefault(); showUpgradeModal('essential'); });
+      } else {
+        link.href = wrapHref(item.href);
+      }
+      link.textContent = item.text;
+      container.appendChild(link);
+    }
+  });
+}
+
 function renderVerifiedNav(desktop, mobile) {
   if (!desktop) return;
-  const handoffPlan = normalizeHandoffPlan(localStorage.getItem('user-plan') || localStorage.getItem('dev-plan') || 'free') || 'free';
-  const blogHref = buildAuthHandoffHref(VISITOR_BLOG_HREF, true, handoffPlan);
-  desktop.innerHTML = `
-    <a href="${APP_BASE_URL}/dashboard.html">Dashboard</a>
-    <a href="${blogHref}">Blog</a>
-    <a href="${APP_BASE_URL}/interview-questions.html">Interview Questions</a>
-    <a href="${APP_BASE_URL}/pricing-a">Pricing</a>
-    <a href="${APP_BASE_URL}/account-setting.html" class="nav-account-link">Account</a>
-  `;
-  if (mobile) mobile.innerHTML = desktop.innerHTML;
+  const currentPlan = getEffectivePlan();
+  const navConfig = NAVIGATION_CONFIG[currentPlan] || NAVIGATION_CONFIG.free;
+  const planForHandoff = normalizeHandoffPlan(localStorage.getItem('user-plan') || localStorage.getItem('dev-plan') || 'free') || 'free';
+
+  const wrapHref = (href) => buildAuthHandoffHref(href, true, planForHandoff);
+
+  // Remove stale nav-actions from previous render before rebuilding
+  _clearNavActions(desktop);
+
+  // Build nav items for desktop and mobile independently (each gets its own listeners)
+  _buildVerifiedNavItems(desktop, navConfig, wrapHref);
+  if (mobile) _buildVerifiedNavItems(mobile, navConfig, wrapHref);
+
+  // Build user menu (Account + Logout) matching app's nav-user-menu
+  if (navConfig.userNav) {
+    const navGroup = desktop.closest('.nav-group') || desktop.parentElement;
+    const navActions = document.createElement('div');
+    navActions.className = 'nav-actions';
+
+    const userMenu = document.createElement('div');
+    userMenu.className = 'nav-user-menu';
+
+    const userToggle = document.createElement('button');
+    userToggle.className = 'nav-user-toggle';
+    userToggle.innerHTML = `
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+        <circle cx="12" cy="7" r="4"/>
+      </svg>
+    `;
+
+    const userDropdown = document.createElement('div');
+    userDropdown.className = 'nav-user-dropdown';
+
+    navConfig.userNav.menuItems.forEach((menuItem) => {
+      const menuLink = document.createElement('a');
+      if (menuItem.action === 'logout') {
+        menuLink.href = '#';
+        menuLink.addEventListener('click', (e) => { e.preventDefault(); logout(); });
+      } else {
+        menuLink.href = wrapHref(menuItem.href);
+      }
+      menuLink.textContent = menuItem.text;
+      userDropdown.appendChild(menuLink);
+    });
+
+    userMenu.appendChild(userToggle);
+    userMenu.appendChild(userDropdown);
+    navActions.appendChild(userMenu);
+    if (navGroup) navGroup.appendChild(navActions);
+
+    userToggle.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      userMenu.classList.toggle('open');
+    });
+  }
+
+  // Close dropdowns on outside click (registered once)
+  _ensureDocClickHandler();
 }
 
 function applyNavForUser(user) {
