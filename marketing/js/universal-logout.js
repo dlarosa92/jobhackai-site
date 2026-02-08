@@ -9,8 +9,8 @@
         return window.logout();
       }
     } catch (_) {}
-    // Fallback: navigate to marketing home (no login.html on marketing domain)
-    try { location.replace('/'); } catch (_) {}
+    // Fallback: redirect to app login (no login.html on marketing domain)
+    try { location.replace('https://app.jobhackai.io/login'); } catch (_) {}
   }
 
   // Delegate clicks to any logout-looking control
@@ -19,7 +19,7 @@
     if (!a) return;
     e.preventDefault();
     Promise.resolve(callRobustSignOut()).catch(function(){
-      try { location.replace('/'); } catch (_) {}
+      try { location.replace('https://app.jobhackai.io/login'); } catch (_) {}
     });
   }, true);
 
@@ -28,7 +28,7 @@
     var ch = new BroadcastChannel('auth');
     ch.onmessage = function (e) {
       if (e && (e.type === 'logout' || (e.data && e.data.type === 'logout'))) {
-        location.replace('/');
+        location.replace('https://app.jobhackai.io/login');
       }
     };
   } catch (_) {}

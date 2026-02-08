@@ -1239,8 +1239,8 @@ async function logout(e) {
       console.warn('[LOGOUT] Failed to clear logout-intent:', sessionError.message);
     }
     
-    console.log('[LOGOUT] Redirecting to /login.html');
-    location.replace('/login.html');
+    console.log('[LOGOUT] Redirecting to https://app.jobhackai.io/login');
+    location.replace('https://app.jobhackai.io/login');
   } finally {
     // EDGE CASE FIX: Reset flag after a delay in case redirect fails
     setTimeout(() => {
