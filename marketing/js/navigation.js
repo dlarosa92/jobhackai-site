@@ -1087,9 +1087,10 @@ function setAuthState(isAuthenticated, plan = null) {
   
   try {
     localStorage.setItem('user-authenticated', isAuthenticated ? 'true' : 'false');
-    if (!isAuthenticated) {
-      clearUrlAuthHandoff();
-    }
+    // NOTE: Do NOT call clearUrlAuthHandoff() here. On the marketing site, Firebase has
+    // no local session and fires onAuthStateChanged(null) which calls setAuthState(false).
+    // Clearing the URL handoff here would undo the auth hint set by app.jobhackai.io.
+    // URL handoff is only cleared on explicit logout in logout().
     if (plan) {
       const oldPlan = localStorage.getItem('user-plan') || localStorage.getItem('dev-plan');
       // Only update and dispatch if the plan actually changed
@@ -3048,15 +3049,127 @@ function renderUnverifiedNav(desktop, mobile) {
 
 function renderVerifiedNav(desktop, mobile) {
   if (!desktop) return;
-  const handoffPlan = normalizeHandoffPlan(localStorage.getItem('user-plan') || localStorage.getItem('dev-plan') || 'free') || 'free';
-  const blogHref = buildAuthHandoffHref(VISITOR_BLOG_HREF, true, handoffPlan);
-  desktop.innerHTML = `
-    <a href="${APP_BASE_URL}/dashboard.html">Dashboard</a>
-    <a href="${blogHref}">Blog</a>
-    <a href="${APP_BASE_URL}/interview-questions.html">Interview Questions</a>
-    <a href="${APP_BASE_URL}/pricing-a">Pricing</a>
-    <a href="${APP_BASE_URL}/account-setting.html" class="nav-account-link">Account</a>
-  `;
+  const currentPlan = getEffectivePlan();
+  const navConfig = NAVIGATION_CONFIG[currentPlan] || NAVIGATION_CONFIG.free;
+  const planForHandoff = normalizeHandoffPlan(localStorage.getItem('user-plan') || localStorage.getItem('dev-plan') || 'free') || 'free';
+
+  const wrapHref = (href) => buildAuthHandoffHref(href, true, planForHandoff);
+
+  // Build nav items from NAVIGATION_CONFIG (mirrors updateNavigation rendering)
+  desktop.innerHTML = '';
+  navConfig.navItems.forEach((item) => {
+    if (item.isCTA) return;
+
+    if (item.isDropdown) {
+      const container = document.createElement('div');
+      container.className = 'nav-dropdown';
+
+      const toggle = document.createElement('a');
+      toggle.href = '#';
+      toggle.className = 'nav-dropdown-toggle';
+      toggle.innerHTML = `${item.text} <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="dropdown-arrow"><path d="m6 9 6 6 6-6"/></svg>`;
+
+      const menu = document.createElement('div');
+      menu.className = 'nav-dropdown-menu';
+
+      item.items.forEach((sub) => {
+        const link = document.createElement('a');
+        if (sub.locked === true) {
+          link.href = '#';
+          link.setAttribute('aria-disabled', 'true');
+          link.classList.add('locked-link');
+          link.title = 'Upgrade your plan to unlock this feature.';
+          link.addEventListener('click', (e) => { e.preventDefault(); showUpgradeModal('essential'); });
+        } else {
+          link.href = wrapHref(sub.href);
+        }
+        link.textContent = sub.text;
+        menu.appendChild(link);
+      });
+
+      container.appendChild(toggle);
+      container.appendChild(menu);
+      desktop.appendChild(container);
+
+      toggle.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        document.querySelectorAll('.nav-dropdown.open').forEach(d => { if (d !== container) d.classList.remove('open'); });
+        container.classList.toggle('open');
+      });
+    } else {
+      const link = document.createElement('a');
+      if (item.locked === true) {
+        link.href = '#';
+        link.setAttribute('aria-disabled', 'true');
+        link.classList.add('locked-link');
+        link.title = 'Upgrade your plan to unlock this feature.';
+        link.addEventListener('click', (e) => { e.preventDefault(); showUpgradeModal('essential'); });
+      } else {
+        link.href = wrapHref(item.href);
+      }
+      link.textContent = item.text;
+      desktop.appendChild(link);
+    }
+  });
+
+  // Build user menu (Account + Logout) matching app's nav-user-menu
+  if (navConfig.userNav) {
+    const userMenu = document.createElement('div');
+    userMenu.className = 'nav-user-menu';
+
+    const userToggle = document.createElement('button');
+    userToggle.className = 'nav-user-toggle';
+    userToggle.innerHTML = `
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+        <circle cx="12" cy="7" r="4"/>
+      </svg>
+    `;
+
+    const userDropdown = document.createElement('div');
+    userDropdown.className = 'nav-user-dropdown';
+
+    navConfig.userNav.menuItems.forEach((menuItem) => {
+      const menuLink = document.createElement('a');
+      if (menuItem.action === 'logout') {
+        menuLink.href = '#';
+        menuLink.addEventListener('click', (e) => { e.preventDefault(); logout(); });
+      } else {
+        menuLink.href = wrapHref(menuItem.href);
+      }
+      menuLink.textContent = menuItem.text;
+      userDropdown.appendChild(menuLink);
+    });
+
+    userMenu.appendChild(userToggle);
+    userMenu.appendChild(userDropdown);
+
+    // Append user menu to nav-actions (create if needed), matching app structure
+    const navGroup = desktop.closest('.nav-group') || desktop.parentElement;
+    let navActions = navGroup ? navGroup.querySelector('.nav-actions') : null;
+    if (!navActions) {
+      navActions = document.createElement('div');
+      navActions.className = 'nav-actions';
+      if (navGroup) navGroup.appendChild(navActions);
+    }
+    navActions.appendChild(userMenu);
+
+    userToggle.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      userMenu.classList.toggle('open');
+    });
+  }
+
+  // Close dropdowns on outside click
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('.nav-dropdown') && !e.target.closest('.nav-user-menu')) {
+      document.querySelectorAll('.nav-dropdown.open, .nav-user-menu.open').forEach(d => d.classList.remove('open'));
+    }
+  });
+
+  // Replicate to mobile nav
   if (mobile) mobile.innerHTML = desktop.innerHTML;
 }
 
