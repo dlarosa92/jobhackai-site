@@ -3036,8 +3036,32 @@ window.navDebug = {
 };
 
 // Navigation gating functions (Phase 2)
+
+// Remove any .nav-actions element left by renderVerifiedNav so it doesn't
+// persist when switching to visitor/unverified nav.
+function _clearNavActions(desktop) {
+  const navGroup = desktop.closest('.nav-group') || desktop.parentElement;
+  if (navGroup) {
+    const old = navGroup.querySelector('.nav-actions');
+    if (old) old.remove();
+  }
+}
+
+// Register close-on-outside-click exactly once (idempotent via flag).
+let _verifiedNavDocClickRegistered = false;
+function _ensureDocClickHandler() {
+  if (_verifiedNavDocClickRegistered) return;
+  _verifiedNavDocClickRegistered = true;
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('.nav-dropdown') && !e.target.closest('.nav-user-menu')) {
+      document.querySelectorAll('.nav-dropdown.open, .nav-user-menu.open').forEach(d => d.classList.remove('open'));
+    }
+  });
+}
+
 function renderMarketingNav(desktop, mobile) {
   if (!desktop) return;
+  _clearNavActions(desktop);
   desktop.innerHTML = `
     <a href="${VISITOR_HOME_HREF}">Home</a>
     <a href="${VISITOR_BLOG_HREF}">Blog</a>
@@ -3050,28 +3074,23 @@ function renderMarketingNav(desktop, mobile) {
 
 function renderUnverifiedNav(desktop, mobile) {
   if (!desktop) return;
+  _clearNavActions(desktop);
   desktop.innerHTML = `
     <span class="nav-status">Verify your email to unlock your account</span>
   `;
   if (mobile) mobile.innerHTML = desktop.innerHTML;
 }
 
-function renderVerifiedNav(desktop, mobile) {
-  if (!desktop) return;
-  const currentPlan = getEffectivePlan();
-  const navConfig = NAVIGATION_CONFIG[currentPlan] || NAVIGATION_CONFIG.free;
-  const planForHandoff = normalizeHandoffPlan(localStorage.getItem('user-plan') || localStorage.getItem('dev-plan') || 'free') || 'free';
-
-  const wrapHref = (href) => buildAuthHandoffHref(href, true, planForHandoff);
-
-  // Build nav items from NAVIGATION_CONFIG (mirrors updateNavigation rendering)
-  desktop.innerHTML = '';
+// Build nav item DOM nodes for a single container from NAVIGATION_CONFIG.
+// Called once per target (desktop, mobile) so each gets its own event listeners.
+function _buildVerifiedNavItems(container, navConfig, wrapHref) {
+  container.innerHTML = '';
   navConfig.navItems.forEach((item) => {
     if (item.isCTA) return;
 
     if (item.isDropdown) {
-      const container = document.createElement('div');
-      container.className = 'nav-dropdown';
+      const dropdownContainer = document.createElement('div');
+      dropdownContainer.className = 'nav-dropdown';
 
       const toggle = document.createElement('a');
       toggle.href = '#';
@@ -3096,15 +3115,15 @@ function renderVerifiedNav(desktop, mobile) {
         menu.appendChild(link);
       });
 
-      container.appendChild(toggle);
-      container.appendChild(menu);
-      desktop.appendChild(container);
+      dropdownContainer.appendChild(toggle);
+      dropdownContainer.appendChild(menu);
+      container.appendChild(dropdownContainer);
 
       toggle.addEventListener('click', (e) => {
         e.preventDefault();
         e.stopPropagation();
-        document.querySelectorAll('.nav-dropdown.open').forEach(d => { if (d !== container) d.classList.remove('open'); });
-        container.classList.toggle('open');
+        document.querySelectorAll('.nav-dropdown.open').forEach(d => { if (d !== dropdownContainer) d.classList.remove('open'); });
+        dropdownContainer.classList.toggle('open');
       });
     } else {
       const link = document.createElement('a');
@@ -3118,12 +3137,32 @@ function renderVerifiedNav(desktop, mobile) {
         link.href = wrapHref(item.href);
       }
       link.textContent = item.text;
-      desktop.appendChild(link);
+      container.appendChild(link);
     }
   });
+}
+
+function renderVerifiedNav(desktop, mobile) {
+  if (!desktop) return;
+  const currentPlan = getEffectivePlan();
+  const navConfig = NAVIGATION_CONFIG[currentPlan] || NAVIGATION_CONFIG.free;
+  const planForHandoff = normalizeHandoffPlan(localStorage.getItem('user-plan') || localStorage.getItem('dev-plan') || 'free') || 'free';
+
+  const wrapHref = (href) => buildAuthHandoffHref(href, true, planForHandoff);
+
+  // Remove stale nav-actions from previous render before rebuilding
+  _clearNavActions(desktop);
+
+  // Build nav items for desktop and mobile independently (each gets its own listeners)
+  _buildVerifiedNavItems(desktop, navConfig, wrapHref);
+  if (mobile) _buildVerifiedNavItems(mobile, navConfig, wrapHref);
 
   // Build user menu (Account + Logout) matching app's nav-user-menu
   if (navConfig.userNav) {
+    const navGroup = desktop.closest('.nav-group') || desktop.parentElement;
+    const navActions = document.createElement('div');
+    navActions.className = 'nav-actions';
+
     const userMenu = document.createElement('div');
     userMenu.className = 'nav-user-menu';
 
@@ -3153,16 +3192,8 @@ function renderVerifiedNav(desktop, mobile) {
 
     userMenu.appendChild(userToggle);
     userMenu.appendChild(userDropdown);
-
-    // Append user menu to nav-actions (create if needed), matching app structure
-    const navGroup = desktop.closest('.nav-group') || desktop.parentElement;
-    let navActions = navGroup ? navGroup.querySelector('.nav-actions') : null;
-    if (!navActions) {
-      navActions = document.createElement('div');
-      navActions.className = 'nav-actions';
-      if (navGroup) navGroup.appendChild(navActions);
-    }
     navActions.appendChild(userMenu);
+    if (navGroup) navGroup.appendChild(navActions);
 
     userToggle.addEventListener('click', (e) => {
       e.preventDefault();
@@ -3171,15 +3202,8 @@ function renderVerifiedNav(desktop, mobile) {
     });
   }
 
-  // Close dropdowns on outside click
-  document.addEventListener('click', (e) => {
-    if (!e.target.closest('.nav-dropdown') && !e.target.closest('.nav-user-menu')) {
-      document.querySelectorAll('.nav-dropdown.open, .nav-user-menu.open').forEach(d => d.classList.remove('open'));
-    }
-  });
-
-  // Replicate to mobile nav
-  if (mobile) mobile.innerHTML = desktop.innerHTML;
+  // Close dropdowns on outside click (registered once)
+  _ensureDocClickHandler();
 }
 
 function applyNavForUser(user) {
