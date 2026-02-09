@@ -1789,7 +1789,7 @@ function showUpgradeModal(targetPlan = 'premium') {
       window.upgradePlan(targetPlan, { source: 'nav-upgrade', returnUrl: window.location.href });
       return;
     }
-    window.location.href = `/pricing-a?plan=${encodeURIComponent(targetPlan)}`;
+    window.location.href = `${APP_BASE_URL}/pricing-a?plan=${encodeURIComponent(targetPlan)}`;
   });
   // Close on background click
   modal.addEventListener('click', (e) => {
@@ -3225,11 +3225,13 @@ function applyNavForUser(user) {
   const desktopNav = document.querySelector("nav.nav-links");
   const mobileNav = document.querySelector(".mobile-nav");
   const logo = document.querySelector(".site-logo, .nav-logo, .verify-page-logo, header .logo, a.nav-logo");
+  const authState = getAuthState();
+  const effectiveAuthenticated = !!user || authState.isAuthenticated === true;
 
   const applyLogoTarget = (logoElement) => {
     if (!logoElement) return;
     const handoffPlan = normalizeHandoffPlan(localStorage.getItem('user-plan') || localStorage.getItem('dev-plan') || 'free') || 'free';
-    const targetHref = buildAuthHandoffHref(VISITOR_LOGO_HREF, !!user, handoffPlan);
+    const targetHref = buildAuthHandoffHref(VISITOR_LOGO_HREF, effectiveAuthenticated, handoffPlan);
     try {
       const anchor = logoElement.tagName && logoElement.tagName.toLowerCase() === 'a'
         ? logoElement
@@ -3250,7 +3252,13 @@ function applyNavForUser(user) {
   if (!desktopNav) return;
   
   if (!user) {
-    renderMarketingNav(desktopNav, mobileNav);
+    // On marketing, Firebase user may be null while cookie/handoff still indicates
+    // authenticated state. Render verified nav immediately to avoid visitor flash.
+    if (effectiveAuthenticated) {
+      renderVerifiedNav(desktopNav, mobileNav);
+    } else {
+      renderMarketingNav(desktopNav, mobileNav);
+    }
     return;
   }
   
