@@ -5,9 +5,13 @@ const fs = require('fs');
 // Require credentials from environment variables - no hardcoded fallbacks
 const TEST_EMAIL = process.env.TEST_EMAIL;
 const TEST_PASSWORD = process.env.TEST_PASSWORD;
-const BASE_URL = process.env.TEST_ENV === 'qa' 
-  ? 'https://qa.jobhackai.io'
-  : 'https://dev.jobhackai.io';
+const ENVIRONMENT_URLS = {
+  dev: 'https://dev.jobhackai.io',
+  qa: 'https://qa.jobhackai.io',
+  prod: 'https://app.jobhackai.io',
+};
+const TEST_ENV = process.env.TEST_ENV || 'dev';
+const BASE_URL = ENVIRONMENT_URLS[TEST_ENV] || ENVIRONMENT_URLS.dev;
 
 async function globalSetup() {
   // Fail early if credentials are not provided

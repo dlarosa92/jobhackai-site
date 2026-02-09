@@ -11,7 +11,7 @@ name: E2E Tests
 
 on:
   pull_request:
-    branches: [dev0, develop]
+    branches: [dev0, develop, main]
 
 jobs:
   e2e-tests:
@@ -47,7 +47,7 @@ jobs:
         working-directory: app
         env:
           CI: true
-          TEST_ENV: ${{ github.base_ref == 'dev0' && 'dev' || 'qa' }}
+          TEST_ENV: ${{ github.base_ref == 'dev0' && 'dev' || github.base_ref == 'main' && 'prod' || 'qa' }}
           TEST_EMAIL: ${{ secrets.TEST_EMAIL }}
           TEST_PASSWORD: ${{ secrets.TEST_PASSWORD }}
         run: npx playwright test --config tests/playwright.config.js
@@ -61,4 +61,3 @@ jobs:
             app/test-results/
             app/playwright-report/
           retention-days: 7
-

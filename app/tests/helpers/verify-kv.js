@@ -135,9 +135,13 @@ if (require.main === module) {
   const args = process.argv.slice(2);
   const email = args[0] || process.env.TEST_EMAIL;
   const password = args[1] || process.env.TEST_PASSWORD;
-  const baseURL = args[2] || (process.env.TEST_ENV === 'qa' 
-    ? 'https://qa.jobhackai.io' 
-    : 'https://dev.jobhackai.io');
+  const envUrls = {
+    dev: 'https://dev.jobhackai.io',
+    qa: 'https://qa.jobhackai.io',
+    prod: 'https://app.jobhackai.io',
+  };
+  const testEnv = process.env.TEST_ENV || 'dev';
+  const baseURL = args[2] || envUrls[testEnv] || envUrls.dev;
   
   if (!email || !password) {
     console.error('Usage: node verify-kv.js [email] [password] [base-url]');
@@ -156,4 +160,3 @@ if (require.main === module) {
 }
 
 module.exports = { verifyKV };
-

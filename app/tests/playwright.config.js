@@ -4,6 +4,7 @@ const path = require('path');
 const ENVIRONMENTS = {
   dev: 'https://dev.jobhackai.io',
   qa: 'https://qa.jobhackai.io',
+  prod: 'https://app.jobhackai.io',
 };
 
 const ENV = process.env.TEST_ENV || 'dev';
@@ -43,4 +44,3 @@ module.exports = defineConfig({
   ],
   globalSetup: require.resolve('./fixtures/global-setup.js'),
 });
-
