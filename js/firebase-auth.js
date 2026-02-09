@@ -55,15 +55,17 @@ function isProdHost() {
   try { return PROD_COOKIE_HOSTS.includes(window.location.hostname || ''); } catch (_) { return false; }
 }
 
-function setAuthCookies(displayName, plan) {
+function setAuthCookies(plan, isVerified = true) {
   try {
     if (!isProdHost()) return;
     const domain = '.jobhackai.io';
     const maxAge = 60 * 60 * 24 * 30; // 30 days
     const secure = '; Secure';
-    document.cookie = `jhai_auth=1; domain=${domain}; path=/; max-age=${maxAge}; SameSite=Lax${secure}`;
-    document.cookie = `jhai_name=${encodeURIComponent(displayName || '')}; domain=${domain}; path=/; max-age=${maxAge}; SameSite=Lax${secure}`;
+    const authValue = isVerified ? '1' : '0';
+    document.cookie = `jhai_auth=${authValue}; domain=${domain}; path=/; max-age=${maxAge}; SameSite=Lax${secure}`;
     document.cookie = `jhai_plan=${encodeURIComponent(plan || 'free')}; domain=${domain}; path=/; max-age=${maxAge}; SameSite=Lax${secure}`;
+    // Clear legacy PII cookie if it exists from older builds.
+    document.cookie = `jhai_name=; domain=${domain}; path=/; max-age=0`;
   } catch (e) { /* best-effort */ }
 }
 
@@ -708,7 +710,7 @@ class AuthManager {
         }
 
         // Set cross-subdomain auth cookies for marketing site nav
-        setAuthCookies(user.displayName, actualPlan);
+        setAuthCookies(actualPlan, user.emailVerified === true);
 
         // Notify listeners
         this.notifyAuthStateChange(user, userRecord);
@@ -785,14 +787,14 @@ class AuthManager {
             if (window.JobHackAINavigation) {
               window.JobHackAINavigation.setAuthState(true, actualPlan);
             }
-            setAuthCookies(firestoreData.displayName, actualPlan);
+            setAuthCookies(actualPlan);
             this.notifyAuthStateChange(effectiveUser, null);
           } catch (e) {
             console.warn('Could not initialize LinkedIn user:', e);
             if (window.JobHackAINavigation) {
               window.JobHackAINavigation.setAuthState(true, 'free');
             }
-            setAuthCookies('', 'free');
+            setAuthCookies('free');
             this.notifyAuthStateChange(effectiveUser, null);
           }
         } else {
@@ -803,14 +805,14 @@ class AuthManager {
             if (window.JobHackAINavigation) {
               window.JobHackAINavigation.setAuthState(true, actualPlan);
             }
-            setAuthCookies('', actualPlan);
+            setAuthCookies(actualPlan);
             this.notifyAuthStateChange(effectiveUser, null);
           } catch (e) {
             console.warn('Could not fetch plan for LinkedIn user:', e);
             if (window.JobHackAINavigation) {
               window.JobHackAINavigation.setAuthState(true, 'free');
             }
-            setAuthCookies('', 'free');
+            setAuthCookies('free');
             this.notifyAuthStateChange(effectiveUser, null);
           }
         }
@@ -1003,7 +1005,7 @@ class AuthManager {
       if (user.displayName) {
         localStorage.setItem('user-name', user.displayName);
       }
-      setAuthCookies(user.displayName, actualPlan);
+      setAuthCookies(actualPlan, user.emailVerified === true);
       // Update navigation state with correct plan
       if (window.JobHackAINavigation) {
         window.JobHackAINavigation.setAuthState(true, actualPlan);
@@ -1102,7 +1104,7 @@ class AuthManager {
       if (user.displayName) {
         localStorage.setItem('user-name', user.displayName);
       }
-      setAuthCookies(user.displayName, actualPlan);
+      setAuthCookies(actualPlan, user.emailVerified === true);
       if (window.JobHackAINavigation) {
         window.JobHackAINavigation.setAuthState(true, actualPlan);
       }
@@ -1300,7 +1302,7 @@ class AuthManager {
             // Persist auth state immediately
             try {
               localStorage.setItem('user-authenticated', 'true');
-              setAuthCookies(userData.firstName + ' ' + userData.lastName, actualPlan);
+              setAuthCookies(actualPlan);
               if (window.JobHackAINavigation) {
                 window.JobHackAINavigation.setAuthState(true, actualPlan);
               }
