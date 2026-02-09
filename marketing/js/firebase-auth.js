@@ -256,6 +256,10 @@ class AuthManager {
     try {
       const cleared = [];
       localStorage.setItem('user-authenticated', 'false');
+      // NOTE: Do NOT call clearAuthCookies() here. On the marketing site, Firebase has no
+      // local session and fires onAuthStateChanged(null) which calls this method. Clearing
+      // the cross-domain cookie here would undo the auth hint set by app.jobhackai.io.
+      // Cookies are only cleared on explicit logout in signOutUser().
       cleared.push('user-authenticated');
       
       ['user-email', 'auth-user', 'user-plan', 'dev-plan', 'user-name'].forEach((key) => {
