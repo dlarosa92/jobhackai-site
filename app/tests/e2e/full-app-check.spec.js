@@ -583,7 +583,7 @@ test.describe('Full App Check', () => {
     await Promise.all([
       page.waitForResponse((response) => response.url().includes('/api/interview-questions/generate') && response.ok()),
       page.waitForResponse((response) => response.url().includes('/api/interview-questions/save-set') && response.ok()),
-      generateButton.dispatchEvent('click'),
+      generateButton.click(),
     ]);
 
     await expect(page.locator('#iq-questions .iq-question-card').first()).toBeVisible({ timeout: 15000 });
@@ -640,6 +640,15 @@ test.describe('Full App Check', () => {
     await seniorityDropdown.locator('.jh-dropdown__button').click();
     await seniorityDropdown.locator('.jh-dropdown__option[data-value="mid"]').click();
     await expect.poll(async () => page.locator('#cl-seniority').evaluate((el) => el.value)).toBe('mid');
+    await page.keyboard.press('Escape');
+    await page.locator('body').click({ position: { x: 10, y: 10 } });
+    await page.locator('#cl-role').blur();
+    await page.waitForFunction(() => {
+      const dropdown = document.querySelector('#cl-role + .role-selector-dropdown');
+      if (!dropdown) return true;
+      const style = window.getComputedStyle(dropdown);
+      return style.display === 'none' || style.visibility === 'hidden';
+    }, null, { timeout: 5000 });
     await page.fill('#cl-job-description', 'Build scalable APIs and improve platform reliability.');
     await page.fill('#cl-resume-text', '8+ years building backend systems and leading delivery in production environments.');
     await page.locator('#cl-generate').scrollIntoViewIfNeeded();
@@ -655,7 +664,7 @@ test.describe('Full App Check', () => {
 
     await Promise.all([
       page.waitForResponse((response) => response.url().includes('/api/cover-letter/generate') && response.ok()),
-      page.locator('#cl-generate').dispatchEvent('click'),
+      page.locator('#cl-generate').click(),
     ]);
 
     await expect(page.locator('#cl-preview')).toHaveValue(/Dear Hiring Manager/, { timeout: 15000 });
