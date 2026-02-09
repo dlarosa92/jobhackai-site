@@ -1,0 +1,69 @@
+---
+description: Cross-domain auth code shared between app and marketing sites
+globs:
+  - js/navigation.js
+  - js/firebase-auth.js
+  - marketing/js/navigation.js
+  - marketing/js/firebase-auth.js
+---
+
+# Shared Auth Code: App <-> Marketing Sync Requirement
+
+## Critical: These file pairs are near-identical copies
+
+| App (app.jobhackai.io) | Marketing (jobhackai.io) |
+|-------------------------|--------------------------|
+| `js/navigation.js` | `marketing/js/navigation.js` |
+| `js/firebase-auth.js` | `marketing/js/firebase-auth.js` |
+
+These files are ~99.5% identical (~5,000 lines total). They are deployed to
+separate Cloudflare Pages projects (different domains) with no shared build
+step, so the duplication is currently a structural necessity.
+
+## When editing ANY of these files:
+
+1. **Always apply the same change to BOTH copies** (app and marketing).
+2. The only intentional differences are listed below. Do NOT introduce new
+   differences without documenting them in this rule.
+3. After editing one copy, diff the pair to verify sync:
+   ```bash
+   diff js/navigation.js marketing/js/navigation.js
+   diff js/firebase-auth.js marketing/js/firebase-auth.js
+   ```
+
+## Intentional differences (navigation.js)
+
+1. **`getAppBaseUrl()` sourcing** (~line 239):
+   - App: defines `getAppBaseUrl()` inline as a local function.
+   - Marketing: calls `window.getAppBaseUrl()` (provided by `marketing/js/component-loader.js`).
+2. **Logout redirect target** (inside `logout()` function):
+   - App: `location.replace('/login.html')`
+   - Marketing: `location.replace('https://app.jobhackai.io/login')`
+
+## Intentional differences (firebase-auth.js)
+
+None. These files should be identical. (The app copy currently has 4 extra
+comment lines in `_clearStaleAuthStorage` that should also exist in the
+marketing copy.)
+
+## What the shared code does
+
+- **Cookie helpers** (`setAuthCookies`, `clearAuthCookies`, `isProdHost`) in
+  firebase-auth.js: write `.jobhackai.io` domain cookies so the marketing site
+  detects logged-in users.
+- **Cookie readers** (`isMarketingHostForCookieFallback`, `hasCrossDomainAuthCookie`,
+  `parseCrossDomainCookies`) in navigation.js: read those cookies on the marketing domain.
+- **URL auth-handoff** (`buildAuthHandoffHref`, `persistUrlAuthHandoffIfPresent`,
+  `getUrlAuthHandoff`, `getStoredUrlAuthHandoff`, `normalizeHandoffPlan`, etc.)
+  in navigation.js: fallback for browsers blocking third-party cookies.
+  The app appends `?jhai_auth=1&jhai_plan=...&jhai_ts=...` to marketing links.
+- **Phase 2 nav rendering** (`_buildVerifiedNavItems`, `_buildUserMenu`,
+  `renderVerifiedNav`) in navigation.js: builds the authenticated nav bar DOM
+  with plan-gated links and user menus.
+
+## Why not a shared module?
+
+The app (app.jobhackai.io) and marketing site (jobhackai.io) are separate
+Cloudflare Pages deployments with no shared build pipeline. The marketing site
+serves raw static files with no bundler. Until a build step or CDN-based shared
+module is introduced, both copies must be maintained manually in sync.
