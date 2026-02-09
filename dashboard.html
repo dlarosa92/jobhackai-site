@@ -20,7 +20,7 @@
   <link rel="stylesheet" href="css/footer.css">
   <script src="js/components/usage-indicator.js"></script>
   <script type="module">
-    import authManager, { AUTH_PENDING } from './js/firebase-auth.js?v=20260125-1';
+    import authManager, { AUTH_PENDING } from './js/firebase-auth.js?v=20260207-2';
     document.documentElement.classList.add('auth-pending');
     const ensurePendingIndicator = () => {
       let el = document.getElementById('auth-pending-indicator');
@@ -791,7 +791,7 @@
     </div>
   </footer>
   <script src="js/free-account-manager.js"></script>
-  <script src="js/universal-logout.js?v=20251007-2"></script>
+  <script src="js/universal-logout.js?v=20260208-1"></script>
   <!-- Inactivity tracker - auto-logout after 30 minutes of inactivity -->
   <script src="js/inactivity-tracker.js?v=20250115-1"></script>
   
@@ -3414,9 +3414,9 @@
     }
   </script>
   <!-- Load Firebase auth for token retrieval -->
-  <script type="module" src="js/firebase-auth.js?v=20260125-1"></script>
+  <script type="module" src="js/firebase-auth.js?v=20260207-2"></script>
   <!-- Load navigation system -->
-  <script src="js/navigation.js?v=20251011-1"></script>
+  <script src="js/navigation.js?v=20260208-1"></script>
   <script src="js/stripe-integration.js"></script>
   <script>
     // DO NOT call initializeNavigation synchronously on dashboard
@@ -3438,7 +3438,7 @@
   <script src="js/main.js" type="module"></script>
   <script src="js/analytics.js" type="module"></script>
   <script type="module">
-    import authManager from './js/firebase-auth.js?v=20260125-1';
+    import authManager from './js/firebase-auth.js?v=20260207-2';
 
     (async () => {
       console.log('📋 dashboard guard v3 running');

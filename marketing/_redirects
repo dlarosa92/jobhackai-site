@@ -4,12 +4,13 @@
 /pages/blog         /blog  301
 /pages/features.html  /features  301
 /pages/features     /features  301
-/pages/pricing.html /pricing  301
-/pages/pricing      /pricing  301
+/pages/pricing.html https://app.jobhackai.io/pricing-a  301
+/pages/pricing      https://app.jobhackai.io/pricing-a  301
 /pages/             /  301
 
 # Redirect .html extensions to clean URLs
 /index.html   /  301
 /blog.html    /blog  301
 /features.html  /features  301
-/pricing.html /pricing  301
+/pricing.html https://app.jobhackai.io/pricing-a  301
+/pricing      https://app.jobhackai.io/pricing-a  301

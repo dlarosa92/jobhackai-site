@@ -574,8 +574,8 @@
   </footer>
   <!-- Removed duplicate checkAuthentication - now handled by firebase-auth-ready event -->
   <!-- Load navigation system -->
-  <script src="js/navigation.js?v=20251007-2"></script>
-  <script src="js/universal-logout.js?v=20251007-2"></script>
+  <script src="js/navigation.js?v=20260208-1"></script>
+  <script src="js/universal-logout.js?v=20260208-1"></script>
   <script src="js/stripe-integration.js"></script>
   <!-- Inactivity tracker - auto-logout after 30 minutes of inactivity -->
   <script src="js/inactivity-tracker.js?v=20250115-1"></script>
@@ -632,7 +632,7 @@
   </script>
   
   <!-- Account Settings Functionality -->
-  <script type="module" src="js/firebase-auth.js?v=20260124-1"></script>
+  <script type="module" src="js/firebase-auth.js?v=20260207-2"></script>
   <script type="module" src="js/firestore-profiles.js"></script>
   <script>
     // --- BILLING PORTAL FUNCTION ---
@@ -1017,7 +1017,7 @@
       
       if (confirm(`Send password reset email to ${user.email}?`)) {
         try {
-          const authManager = (await import('./js/firebase-auth.js?v=20260124-1')).default;
+          const authManager = (await import('./js/firebase-auth.js?v=20260207-2')).default;
           const result = await authManager.resetPassword(user.email);
           if (result.success) {
             alert(`Password reset email sent to ${user.email}. Please check your inbox.`);
