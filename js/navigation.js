@@ -3142,6 +3142,50 @@ function _buildVerifiedNavItems(container, navConfig, wrapHref) {
   });
 }
 
+// Build a user menu (Account + Logout) with its own event listeners.
+// Returns the .nav-user-menu element, or null if no userNav config.
+function _buildUserMenu(navConfig, wrapHref) {
+  if (!navConfig.userNav) return null;
+
+  const userMenu = document.createElement('div');
+  userMenu.className = 'nav-user-menu';
+
+  const userToggle = document.createElement('button');
+  userToggle.className = 'nav-user-toggle';
+  userToggle.innerHTML = `
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+      <circle cx="12" cy="7" r="4"/>
+    </svg>
+  `;
+
+  const userDropdown = document.createElement('div');
+  userDropdown.className = 'nav-user-dropdown';
+
+  navConfig.userNav.menuItems.forEach((menuItem) => {
+    const menuLink = document.createElement('a');
+    if (menuItem.action === 'logout') {
+      menuLink.href = '#';
+      menuLink.addEventListener('click', (e) => { e.preventDefault(); logout(); });
+    } else {
+      menuLink.href = wrapHref(menuItem.href);
+    }
+    menuLink.textContent = menuItem.text;
+    userDropdown.appendChild(menuLink);
+  });
+
+  userMenu.appendChild(userToggle);
+  userMenu.appendChild(userDropdown);
+
+  userToggle.addEventListener('click', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    userMenu.classList.toggle('open');
+  });
+
+  return userMenu;
+}
+
 function renderVerifiedNav(desktop, mobile) {
   if (!desktop) return;
   const currentPlan = getEffectivePlan();
@@ -3157,49 +3201,20 @@ function renderVerifiedNav(desktop, mobile) {
   _buildVerifiedNavItems(desktop, navConfig, wrapHref);
   if (mobile) _buildVerifiedNavItems(mobile, navConfig, wrapHref);
 
-  // Build user menu (Account + Logout) matching app's nav-user-menu
-  if (navConfig.userNav) {
+  // Build user menu for desktop (appended to nav-actions in nav-group)
+  const desktopUserMenu = _buildUserMenu(navConfig, wrapHref);
+  if (desktopUserMenu) {
     const navGroup = desktop.closest('.nav-group') || desktop.parentElement;
     const navActions = document.createElement('div');
     navActions.className = 'nav-actions';
-
-    const userMenu = document.createElement('div');
-    userMenu.className = 'nav-user-menu';
-
-    const userToggle = document.createElement('button');
-    userToggle.className = 'nav-user-toggle';
-    userToggle.innerHTML = `
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
-        <circle cx="12" cy="7" r="4"/>
-      </svg>
-    `;
-
-    const userDropdown = document.createElement('div');
-    userDropdown.className = 'nav-user-dropdown';
-
-    navConfig.userNav.menuItems.forEach((menuItem) => {
-      const menuLink = document.createElement('a');
-      if (menuItem.action === 'logout') {
-        menuLink.href = '#';
-        menuLink.addEventListener('click', (e) => { e.preventDefault(); logout(); });
-      } else {
-        menuLink.href = wrapHref(menuItem.href);
-      }
-      menuLink.textContent = menuItem.text;
-      userDropdown.appendChild(menuLink);
-    });
-
-    userMenu.appendChild(userToggle);
-    userMenu.appendChild(userDropdown);
-    navActions.appendChild(userMenu);
+    navActions.appendChild(desktopUserMenu);
     if (navGroup) navGroup.appendChild(navActions);
+  }
 
-    userToggle.addEventListener('click', (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      userMenu.classList.toggle('open');
-    });
+  // Build user menu for mobile (appended directly inside mobile nav)
+  if (mobile) {
+    const mobileUserMenu = _buildUserMenu(navConfig, wrapHref);
+    if (mobileUserMenu) mobile.appendChild(mobileUserMenu);
   }
 
   // Close dropdowns on outside click (registered once)
