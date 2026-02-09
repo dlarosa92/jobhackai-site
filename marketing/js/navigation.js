@@ -385,6 +385,16 @@ function clearUrlAuthHandoff() {
 
 function buildAuthHandoffHref(href, isAuthenticated, plan) {
   if (!isAuthenticated || !isProdAppHost()) return href;
+  // Never propagate authenticated handoff from app -> marketing for unverified
+  // Firebase email/password users.
+  try {
+    if (window.FirebaseAuthManager && typeof window.FirebaseAuthManager.getCurrentUser === 'function') {
+      const currentUser = window.FirebaseAuthManager.getCurrentUser();
+      if (currentUser && typeof currentUser.emailVerified === 'boolean' && !currentUser.emailVerified) {
+        return href;
+      }
+    }
+  } catch (_) {}
   try {
     const url = new URL(href, window.location.origin);
     if (!isProdMarketingHostName(url.hostname)) return href;
