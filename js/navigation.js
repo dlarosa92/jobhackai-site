@@ -1045,10 +1045,13 @@ function getAuthState() {
       // Validate plan values are in allowed list
       // SECURITY FIX: Include 'pending' as legitimate plan state for trial users waiting for webhook confirmation
       const allowedPlans = ['free', 'trial', 'essential', 'pro', 'premium', 'visitor', 'pending'];
-      if (storedPlan && allowedPlans.includes(storedPlan)) {
-        userPlan = storedPlan;
-      } else if (cookiePlan && allowedPlans.includes(cookiePlan)) {
+      // Prefer cookie/URL-handoff plan when present. On marketing hosts this is the
+      // authoritative cross-domain signal during early hydration, while localStorage
+      // may still contain stale defaults like "free" or "visitor".
+      if (cookiePlan && allowedPlans.includes(cookiePlan)) {
         userPlan = cookiePlan;
+      } else if (storedPlan && allowedPlans.includes(storedPlan)) {
+        userPlan = storedPlan;
       } else if (storedPlan) {
         console.warn('[AUTH] getAuthState: Invalid plan in localStorage:', storedPlan);
         userPlan = 'free'; // Default to free
