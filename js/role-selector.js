@@ -2,6 +2,47 @@
 // Supports auto-complete, custom roles, and telemetry
 // Loads roles from /api/roles endpoint (canonical 200-role list)
 
+const ROLE_SELECTOR_INSTANCES = new Set();
+let roleSelectorDocumentListenersBound = false;
+
+function forEachRoleSelectorInstance(callback) {
+  ROLE_SELECTOR_INSTANCES.forEach((instance) => {
+    if (!instance || instance.isDestroyed || !instance.input || !instance.input.isConnected) {
+      ROLE_SELECTOR_INSTANCES.delete(instance);
+      instance?.destroy?.();
+      return;
+    }
+    callback(instance);
+  });
+}
+
+function handleRoleSelectorDocumentPointerDown(event) {
+  forEachRoleSelectorInstance((instance) => {
+    instance.handleDocumentPointerDown(event);
+  });
+}
+
+function handleRoleSelectorDocumentKeyDown(event) {
+  forEachRoleSelectorInstance((instance) => {
+    instance.handleDocumentKeyDown(event);
+  });
+}
+
+function bindRoleSelectorDocumentListeners() {
+  if (roleSelectorDocumentListenersBound) return;
+  document.addEventListener('pointerdown', handleRoleSelectorDocumentPointerDown, true);
+  document.addEventListener('keydown', handleRoleSelectorDocumentKeyDown);
+  roleSelectorDocumentListenersBound = true;
+}
+
+function unbindRoleSelectorDocumentListenersIfUnused() {
+  if (!roleSelectorDocumentListenersBound) return;
+  if (ROLE_SELECTOR_INSTANCES.size > 0) return;
+  document.removeEventListener('pointerdown', handleRoleSelectorDocumentPointerDown, true);
+  document.removeEventListener('keydown', handleRoleSelectorDocumentKeyDown);
+  roleSelectorDocumentListenersBound = false;
+}
+
 /**
  * Role Selector Component
  * Loads roles from /api/roles endpoint with fallback to pre-seeded list
@@ -19,19 +60,34 @@ export class RoleSelector {
     this.roles = [];
     this.recentSelections = this.loadRecentSelections();
     this.dropdown = null;
+    this.blurHideTimeout = null;
+    this.isDestroyed = false;
     this.handleDocumentPointerDown = this.handleDocumentPointerDown.bind(this);
     this.handleDocumentKeyDown = this.handleDocumentKeyDown.bind(this);
+    this.handleInputEvent = this.handleInputEvent.bind(this);
+    this.handleFocusEvent = this.handleFocusEvent.bind(this);
+    this.handleBlurEvent = this.handleBlurEvent.bind(this);
+    this.handleInputKeyDown = this.handleInputKeyDown.bind(this);
+
+    const existingInstance = this.input?.__jobHackAIRoleSelectorInstance;
+    if (existingInstance && existingInstance !== this && typeof existingInstance.destroy === 'function') {
+      existingInstance.destroy();
+    }
+    if (this.input) this.input.__jobHackAIRoleSelectorInstance = this;
     this.init();
   }
 
   async init() {
+    if (this.isDestroyed) return;
     this.createDropdown();
     await this.loadRoles();
+    if (this.isDestroyed) return;
     this.setupListeners();
     this.showHint();
   }
 
   createDropdown() {
+    if (!this.input || !this.input.parentNode) return;
     this.dropdown = document.createElement('div');
     this.dropdown.className = 'role-selector-dropdown';
     this.dropdown.style.cssText = `
@@ -110,39 +166,52 @@ export class RoleSelector {
   }
 
   setupListeners() {
-    this.input.addEventListener('input', (e) => {
-      this.handleInput(e.target.value);
-    });
+    if (this.isDestroyed || !this.input) return;
+    this.input.addEventListener('input', this.handleInputEvent);
+    this.input.addEventListener('focus', this.handleFocusEvent);
+    this.input.addEventListener('blur', this.handleBlurEvent);
+    this.input.addEventListener('keydown', this.handleInputKeyDown);
 
-    this.input.addEventListener('focus', () => {
-      if (this.input.value.length >= this.options.minChars) {
-        this.handleInput(this.input.value);
-      }
-    });
+    ROLE_SELECTOR_INSTANCES.add(this);
+    bindRoleSelectorDocumentListeners();
+  }
 
-    this.input.addEventListener('blur', () => {
-      setTimeout(() => {
-        this.hideDropdown();
-      }, 200);
-    });
+  handleInputEvent(event) {
+    this.handleInput(event?.target?.value || '');
+  }
 
-    this.input.addEventListener('keydown', (e) => {
-      if (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'Enter') {
-        e.preventDefault();
-        this.handleKeyboard(e.key);
-        return;
-      }
-      if (e.key === 'Escape') {
-        this.hideDropdown();
-      }
-    });
+  handleFocusEvent() {
+    if (this.isDestroyed || !this.input) return;
+    if (this.input.value.length >= this.options.minChars) {
+      this.handleInput(this.input.value);
+    }
+  }
 
-    // Close suggestions before other UI clicks to avoid intercepting pointer events.
-    document.addEventListener('pointerdown', this.handleDocumentPointerDown, true);
-    document.addEventListener('keydown', this.handleDocumentKeyDown);
+  handleBlurEvent() {
+    if (this.isDestroyed) return;
+    if (this.blurHideTimeout) {
+      clearTimeout(this.blurHideTimeout);
+    }
+    this.blurHideTimeout = setTimeout(() => {
+      this.hideDropdown();
+      this.blurHideTimeout = null;
+    }, 200);
+  }
+
+  handleInputKeyDown(event) {
+    if (this.isDestroyed) return;
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp' || event.key === 'Enter') {
+      event.preventDefault();
+      this.handleKeyboard(event.key);
+      return;
+    }
+    if (event.key === 'Escape') {
+      this.hideDropdown();
+    }
   }
 
   handleDocumentPointerDown(event) {
+    if (this.isDestroyed) return;
     const target = event && event.target;
     if (!target) return;
     if (target === this.input) return;
@@ -151,12 +220,14 @@ export class RoleSelector {
   }
 
   handleDocumentKeyDown(event) {
+    if (this.isDestroyed) return;
     if (event && event.key === 'Escape') {
       this.hideDropdown();
     }
   }
 
   handleInput(value) {
+    if (this.isDestroyed) return;
     const query = value.toLowerCase().trim();
 
     if (query.length < this.options.minChars) {
@@ -176,6 +247,7 @@ export class RoleSelector {
   }
 
   showDropdown(matches, rawQuery) {
+    if (this.isDestroyed || !this.dropdown) return;
     const query = rawQuery.trim();
     this.dropdown.innerHTML = '';
     this.dropdown.style.display = 'block';
@@ -276,6 +348,7 @@ export class RoleSelector {
   }
 
   selectRole(roleName) {
+    if (this.isDestroyed || !this.input) return;
     this.input.value = roleName;
     this.hideDropdown();
     this.saveRecentSelection(roleName);
@@ -336,6 +409,7 @@ export class RoleSelector {
   }
 
   handleKeyboard(key) {
+    if (this.isDestroyed || !this.dropdown) return;
     const options = this.dropdown.querySelectorAll('.role-option');
     if (options.length === 0) return;
 
@@ -345,9 +419,38 @@ export class RoleSelector {
   }
 
   showHint() {
+    if (!this.input || this.isDestroyed) return;
     if (!this.input.placeholder) {
       this.input.placeholder = 'Start typing your target role (e.g., Product Manager, Data Engineer)';
     }
+  }
+
+  destroy() {
+    if (this.isDestroyed) return;
+    this.isDestroyed = true;
+
+    if (this.blurHideTimeout) {
+      clearTimeout(this.blurHideTimeout);
+      this.blurHideTimeout = null;
+    }
+
+    this.input?.removeEventListener('input', this.handleInputEvent);
+    this.input?.removeEventListener('focus', this.handleFocusEvent);
+    this.input?.removeEventListener('blur', this.handleBlurEvent);
+    this.input?.removeEventListener('keydown', this.handleInputKeyDown);
+
+    if (this.input && this.input.__jobHackAIRoleSelectorInstance === this) {
+      delete this.input.__jobHackAIRoleSelectorInstance;
+    }
+
+    ROLE_SELECTOR_INSTANCES.delete(this);
+    unbindRoleSelectorDocumentListenersIfUnused();
+
+    this.hideDropdown();
+    if (this.dropdown && this.dropdown.parentNode) {
+      this.dropdown.parentNode.removeChild(this.dropdown);
+    }
+    this.dropdown = null;
   }
 }
 

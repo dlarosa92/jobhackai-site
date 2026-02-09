@@ -332,6 +332,14 @@ function readFormInputs() {
   };
 }
 
+function setSelectValueAndSync(selectEl, value) {
+  if (!selectEl) return;
+  selectEl.value = value;
+  try {
+    window.JobHackAIDropdowns?.syncSelect?.(selectEl);
+  } catch (_) {}
+}
+
 function restoreFromItem(item) {
   if (!item) return;
   if (els.role) els.role.value = item.role || '';
@@ -339,9 +347,9 @@ function restoreFromItem(item) {
   // Normalize seniority to lowercase to match dropdown values (handles old capitalized values)
   if (els.seniority) {
     const seniority = String(item.seniority || '').trim().toLowerCase();
-    els.seniority.value = seniority;
+    setSelectValueAndSync(els.seniority, seniority);
   }
-  if (els.tone) els.tone.value = item.tone || 'Confident + Professional';
+  setSelectValueAndSync(els.tone, item.tone || 'Confident + Professional');
   if (els.jobDescription) els.jobDescription.value = item.jobDescription || '';
   if (els.resumeText) els.resumeText.value = item.resumeText || '';
   if (els.preview) els.preview.value = item.coverLetterText || '';
@@ -351,8 +359,8 @@ function restoreFromItem(item) {
 function clearForm() {
   if (els.role) els.role.value = '';
   if (els.company) els.company.value = '';
-  if (els.seniority) els.seniority.value = '';
-  if (els.tone) els.tone.value = 'Confident + Professional';
+  setSelectValueAndSync(els.seniority, '');
+  setSelectValueAndSync(els.tone, 'Confident + Professional');
   if (els.jobDescription) els.jobDescription.value = '';
   if (els.resumeText) els.resumeText.value = '';
   if (els.preview) els.preview.value = '';

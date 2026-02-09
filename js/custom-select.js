@@ -121,6 +121,16 @@
     select.classList.add('jh-select-native');
     select.tabIndex = -1;
 
+    // Preserve any existing own descriptors so destroy() can fully restore element behavior.
+    const hadOwnValueDescriptor = Object.prototype.hasOwnProperty.call(select, 'value');
+    const ownValueDescriptor = hadOwnValueDescriptor ? Object.getOwnPropertyDescriptor(select, 'value') : null;
+    const hadOwnSelectedIndexDescriptor = Object.prototype.hasOwnProperty.call(select, 'selectedIndex');
+    const ownSelectedIndexDescriptor = hadOwnSelectedIndexDescriptor ? Object.getOwnPropertyDescriptor(select, 'selectedIndex') : null;
+
+    const proto = Object.getPrototypeOf(select);
+    const nativeValueDescriptor = Object.getOwnPropertyDescriptor(proto, 'value');
+    const nativeSelectedIndexDescriptor = Object.getOwnPropertyDescriptor(proto, 'selectedIndex');
+
     function syncSelected() {
       const selectedValue = select.value;
       const selected = getSelectedOption(select);
@@ -130,6 +140,55 @@
         const isSelected = el.dataset.value === selectedValue;
         el.setAttribute('aria-selected', String(isSelected));
       });
+    }
+
+    function installProgrammaticSync() {
+      // Keep custom UI in sync when code mutates <select> programmatically via value/selectedIndex.
+      if (nativeValueDescriptor?.get && nativeValueDescriptor?.set) {
+        Object.defineProperty(select, 'value', {
+          configurable: true,
+          enumerable: nativeValueDescriptor.enumerable,
+          get() {
+            return nativeValueDescriptor.get.call(this);
+          },
+          set(nextValue) {
+            const before = nativeValueDescriptor.get.call(this);
+            nativeValueDescriptor.set.call(this, nextValue);
+            const after = nativeValueDescriptor.get.call(this);
+            if (before !== after) syncSelected();
+          }
+        });
+      }
+
+      if (nativeSelectedIndexDescriptor?.get && nativeSelectedIndexDescriptor?.set) {
+        Object.defineProperty(select, 'selectedIndex', {
+          configurable: true,
+          enumerable: nativeSelectedIndexDescriptor.enumerable,
+          get() {
+            return nativeSelectedIndexDescriptor.get.call(this);
+          },
+          set(nextIndex) {
+            const before = nativeSelectedIndexDescriptor.get.call(this);
+            nativeSelectedIndexDescriptor.set.call(this, nextIndex);
+            const after = nativeSelectedIndexDescriptor.get.call(this);
+            if (before !== after) syncSelected();
+          }
+        });
+      }
+    }
+
+    function restoreProgrammaticSync() {
+      if (hadOwnValueDescriptor && ownValueDescriptor) {
+        Object.defineProperty(select, 'value', ownValueDescriptor);
+      } else {
+        delete select.value;
+      }
+
+      if (hadOwnSelectedIndexDescriptor && ownSelectedIndexDescriptor) {
+        Object.defineProperty(select, 'selectedIndex', ownSelectedIndexDescriptor);
+      } else {
+        delete select.selectedIndex;
+      }
     }
 
     function renderOptions() {
@@ -292,17 +351,20 @@
 
     // Initial render
     renderOptions();
+    installProgrammaticSync();
 
     const instance = {
       select,
       wrapper,
       button,
       menu,
+      sync: syncSelected,
       refresh: renderOptions,
       destroy: () => {
         mo.disconnect();
         select.removeEventListener('change', onSelectChange);
         select.removeEventListener('input', onSelectChange);
+        restoreProgrammaticSync();
         close();
         // unwrap: move select back
         const p = wrapper.parentNode;
@@ -323,13 +385,21 @@
     selects.forEach(enhanceSelect);
   }
 
+  function syncSelect(select) {
+    const instance = ENHANCED.get(select);
+    if (!instance) return false;
+    instance.sync();
+    return true;
+  }
+
   // Global event: click outside closes
   document.addEventListener('click', () => closeAll(null));
 
   // Expose for pages that add selects dynamically
   window.JobHackAIDropdowns = {
     enhanceAll,
-    enhanceSelect
+    enhanceSelect,
+    syncSelect
   };
 
   // Auto-enhance when DOM is ready
