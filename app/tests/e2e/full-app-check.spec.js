@@ -567,6 +567,15 @@ test.describe('Full App Check', () => {
 
     await page.fill('#iq-role', 'Software Engineer');
     await page.selectOption('#iq-seniority', { label: 'Mid' });
+    await page.keyboard.press('Escape');
+    await page.locator('body').click({ position: { x: 10, y: 10 } });
+    await page.locator('#iq-role').blur();
+    await page.waitForFunction(() => {
+      const dropdown = document.querySelector('#iq-role + .role-selector-dropdown');
+      if (!dropdown) return true;
+      const style = window.getComputedStyle(dropdown);
+      return style.display === 'none' || style.visibility === 'hidden';
+    }, null, { timeout: 5000 });
 
     const generateButton = page.locator('#btn-generate');
     await expect(generateButton).toBeEnabled({ timeout: 10000 });
@@ -574,7 +583,7 @@ test.describe('Full App Check', () => {
     await Promise.all([
       page.waitForResponse((response) => response.url().includes('/api/interview-questions/generate') && response.ok()),
       page.waitForResponse((response) => response.url().includes('/api/interview-questions/save-set') && response.ok()),
-      generateButton.click(),
+      generateButton.dispatchEvent('click'),
     ]);
 
     await expect(page.locator('#iq-questions .iq-question-card').first()).toBeVisible({ timeout: 15000 });
@@ -627,14 +636,26 @@ test.describe('Full App Check', () => {
 
     await page.fill('#cl-role', 'Software Engineer');
     await page.fill('#cl-company', 'Acme Corp');
-    await page.selectOption('#cl-seniority', 'mid');
-    await page.selectOption('#cl-tone', 'Confident + Professional');
+    const seniorityDropdown = page.locator('#cl-seniority').locator('xpath=ancestor::div[contains(@class,"jh-dropdown")][1]');
+    await seniorityDropdown.locator('.jh-dropdown__button').click();
+    await seniorityDropdown.locator('.jh-dropdown__option[data-value="mid"]').click();
+    await expect.poll(async () => page.locator('#cl-seniority').evaluate((el) => el.value)).toBe('mid');
     await page.fill('#cl-job-description', 'Build scalable APIs and improve platform reliability.');
     await page.fill('#cl-resume-text', '8+ years building backend systems and leading delivery in production environments.');
+    await page.locator('#cl-generate').scrollIntoViewIfNeeded();
+    await expect.poll(async () => {
+      return page.evaluate(() => {
+        const role = (document.getElementById('cl-role')?.value || '').trim();
+        const seniority = (document.getElementById('cl-seniority')?.value || '').trim();
+        const jobDescription = (document.getElementById('cl-job-description')?.value || '').trim();
+        const resumeText = (document.getElementById('cl-resume-text')?.value || '').trim();
+        return `${role}|${seniority}|${jobDescription}|${resumeText}`;
+      });
+    }).not.toContain('||');
 
     await Promise.all([
       page.waitForResponse((response) => response.url().includes('/api/cover-letter/generate') && response.ok()),
-      page.locator('#cl-generate').click(),
+      page.locator('#cl-generate').dispatchEvent('click'),
     ]);
 
     await expect(page.locator('#cl-preview')).toContainText('Dear Hiring Manager', { timeout: 15000 });

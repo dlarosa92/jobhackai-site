@@ -19,6 +19,8 @@ export class RoleSelector {
     this.roles = [];
     this.recentSelections = this.loadRecentSelections();
     this.dropdown = null;
+    this.handleDocumentPointerDown = this.handleDocumentPointerDown.bind(this);
+    this.handleDocumentKeyDown = this.handleDocumentKeyDown.bind(this);
     this.init();
   }
 
@@ -128,8 +130,30 @@ export class RoleSelector {
       if (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'Enter') {
         e.preventDefault();
         this.handleKeyboard(e.key);
+        return;
+      }
+      if (e.key === 'Escape') {
+        this.hideDropdown();
       }
     });
+
+    // Close suggestions before other UI clicks to avoid intercepting pointer events.
+    document.addEventListener('pointerdown', this.handleDocumentPointerDown, true);
+    document.addEventListener('keydown', this.handleDocumentKeyDown);
+  }
+
+  handleDocumentPointerDown(event) {
+    const target = event && event.target;
+    if (!target) return;
+    if (target === this.input) return;
+    if (this.dropdown && this.dropdown.contains(target)) return;
+    this.hideDropdown();
+  }
+
+  handleDocumentKeyDown(event) {
+    if (event && event.key === 'Escape') {
+      this.hideDropdown();
+    }
   }
 
   handleInput(value) {

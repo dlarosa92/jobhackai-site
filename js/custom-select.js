@@ -132,32 +132,6 @@
       });
     }
 
-    // Override the value property to sync visual display when set programmatically
-    // Store the original descriptor to restore it later
-    const originalValueDescriptor = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(select), 'value') ||
-                                    Object.getOwnPropertyDescriptor(select, 'value');
-    let _value = select.value;
-    Object.defineProperty(select, 'value', {
-      get() {
-        return _value;
-      },
-      set(newValue) {
-        const oldValue = _value;
-        _value = newValue;
-        // Update the native select's actual selectedIndex so the native select reflects the change
-        const option = Array.from(select.options).find(opt => opt.value === newValue);
-        if (option) {
-          select.selectedIndex = Array.from(select.options).indexOf(option);
-        } else if (newValue === '') {
-          // Handle empty value case
-          select.selectedIndex = -1;
-        }
-        if (oldValue !== newValue) {
-          syncSelected();
-        }
-      }
-    });
-
     function renderOptions() {
       // Clear menu
       menu.innerHTML = '';
@@ -308,6 +282,7 @@
       syncSelected();
     };
     select.addEventListener('change', onSelectChange);
+    select.addEventListener('input', onSelectChange);
 
     // Observe option list changes (dynamic dropdowns)
     const mo = new MutationObserver(() => {
@@ -327,12 +302,7 @@
       destroy: () => {
         mo.disconnect();
         select.removeEventListener('change', onSelectChange);
-        // Restore the original value property
-        if (originalValueDescriptor) {
-          Object.defineProperty(select, 'value', originalValueDescriptor);
-        } else {
-          delete select.value; // Fallback if no original descriptor
-        }
+        select.removeEventListener('input', onSelectChange);
         close();
         // unwrap: move select back
         const p = wrapper.parentNode;
