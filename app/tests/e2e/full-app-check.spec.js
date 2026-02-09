@@ -658,7 +658,7 @@ test.describe('Full App Check', () => {
       page.locator('#cl-generate').dispatchEvent('click'),
     ]);
 
-    await expect(page.locator('#cl-preview')).toContainText('Dear Hiring Manager', { timeout: 15000 });
+    await expect(page.locator('#cl-preview')).toHaveValue(/Dear Hiring Manager/, { timeout: 15000 });
     await expect(page.locator('#cl-history-list .cl-history-item').first()).toBeVisible({ timeout: 15000 });
     await expect(page.locator('#cl-download')).toBeVisible();
   });
