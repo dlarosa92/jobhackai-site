@@ -566,7 +566,7 @@ test.describe('Full App Check', () => {
     await waitForAuthReady(page, 15000);
 
     await page.fill('#iq-role', 'Software Engineer');
-    await page.selectOption('#iq-seniority', 'mid');
+    await page.selectOption('#iq-seniority', { label: 'Mid' });
 
     const generateButton = page.locator('#btn-generate');
     await expect(generateButton).toBeEnabled({ timeout: 10000 });
