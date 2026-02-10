@@ -21,14 +21,93 @@ document.addEventListener('DOMContentLoaded', async () => {
   const resendBtn = document.getElementById('resendVerifyBtn');
   const alreadyVerifiedLink = document.getElementById('alreadyVerifiedLink');
   const statusEl = document.getElementById('verifyStatus');
+  const IS_PROD_APP_HOST = (window.location.hostname || '').toLowerCase() === 'app.jobhackai.io';
+  const RESEND_COOLDOWN_KEY = 'jh_verify_email_resend_cooldown_until';
+  const PROD_INITIAL_RESEND_COOLDOWN_MS = 30 * 1000;
+  const PROD_RESEND_COOLDOWN_MS = 60 * 1000;
+  const PROD_RATE_LIMIT_COOLDOWN_MS = 5 * 60 * 1000;
+  const defaultResendLabel = ((resendBtn?.textContent || 'Resend link').trim() || 'Resend link');
   const ROUTE_LOCK_KEY = 'jh_email_verification_route_lock';
   const ROUTE_LOCK_TTL_MS = 2 * 60 * 1000;
   let routingInProgress = false;
+  let resendCooldownTimer = null;
 
   function setStatus(msg, isError = false) {
     if (!statusEl) return;
     statusEl.textContent = msg;
     statusEl.style.color = isError ? '#DC2626' : '#6B7280';
+  }
+
+  function setResendButton(disabled, label = defaultResendLabel) {
+    if (!resendBtn) return;
+    resendBtn.disabled = !!disabled;
+    resendBtn.textContent = label;
+    resendBtn.style.opacity = disabled ? '0.75' : '1';
+    resendBtn.style.cursor = disabled ? 'not-allowed' : 'pointer';
+  }
+
+  function getStoredResendCooldownUntil() {
+    try {
+      const raw = localStorage.getItem(RESEND_COOLDOWN_KEY);
+      if (!raw) return 0;
+      const parsed = Number(raw);
+      return Number.isFinite(parsed) ? parsed : 0;
+    } catch (_) {
+      return 0;
+    }
+  }
+
+  function storeResendCooldownUntil(untilMs) {
+    try {
+      localStorage.setItem(RESEND_COOLDOWN_KEY, String(untilMs));
+    } catch (_) {}
+  }
+
+  function clearStoredResendCooldown() {
+    try {
+      localStorage.removeItem(RESEND_COOLDOWN_KEY);
+    } catch (_) {}
+  }
+
+  function applyResendCooldown(untilMs) {
+    if (!resendBtn) return;
+
+    if (resendCooldownTimer) {
+      clearInterval(resendCooldownTimer);
+      resendCooldownTimer = null;
+    }
+
+    if (!IS_PROD_APP_HOST) {
+      clearStoredResendCooldown();
+      setResendButton(false);
+      return;
+    }
+
+    const cooldownUntil = Number.isFinite(Number(untilMs)) ? Number(untilMs) : 0;
+    if (!cooldownUntil || cooldownUntil <= Date.now()) {
+      clearStoredResendCooldown();
+      setResendButton(false);
+      return;
+    }
+
+    storeResendCooldownUntil(cooldownUntil);
+
+    const updateCountdown = () => {
+      const secondsRemaining = Math.ceil((cooldownUntil - Date.now()) / 1000);
+      if (secondsRemaining <= 0) {
+        clearStoredResendCooldown();
+        setResendButton(false);
+        if (resendCooldownTimer) {
+          clearInterval(resendCooldownTimer);
+          resendCooldownTimer = null;
+        }
+        return;
+      }
+      setResendButton(true, `Resend link in ${secondsRemaining}s`);
+    };
+
+    updateCountdown();
+    resendCooldownTimer = setInterval(updateCountdown, 1000);
   }
 
   function acquireRouteLock(origin) {
@@ -124,11 +203,61 @@ document.addEventListener('DOMContentLoaded', async () => {
     handleVerifiedSignal('initial');
   }
 
+  if (IS_PROD_APP_HOST) {
+    const existingCooldown = getStoredResendCooldownUntil();
+    if (existingCooldown > Date.now()) {
+      applyResendCooldown(existingCooldown);
+    } else {
+      applyResendCooldown(Date.now() + PROD_INITIAL_RESEND_COOLDOWN_MS);
+    }
+
+    if (!statusEl?.textContent?.trim()) {
+      setStatus('Check spam/promotions first. You can resend after the timer.', false);
+    }
+  } else {
+    setResendButton(false);
+  }
+
+  window.addEventListener('beforeunload', () => {
+    if (resendCooldownTimer) {
+      clearInterval(resendCooldownTimer);
+      resendCooldownTimer = null;
+    }
+  });
+
   resendBtn?.addEventListener('click', async () => {
+    if (!resendBtn) return;
+
+    if (IS_PROD_APP_HOST) {
+      const cooldownUntil = getStoredResendCooldownUntil();
+      if (cooldownUntil > Date.now()) {
+        applyResendCooldown(cooldownUntil);
+        setStatus('Please wait before requesting another verification email.', true);
+        return;
+      }
+    }
+
+    setResendButton(true, 'Sending...');
+
     const res = await authManager.sendVerificationEmail();
     if (res.success) {
       setStatus('Verification email sent. Check your inbox (and spam).');
+      if (IS_PROD_APP_HOST) {
+        applyResendCooldown(Date.now() + PROD_RESEND_COOLDOWN_MS);
+      } else {
+        setResendButton(false);
+      }
     } else {
+      const errorText = (res.error || '').toLowerCase();
+      const isRateLimited = errorText.includes('too many') || errorText.includes('try again later');
+
+      if (IS_PROD_APP_HOST && isRateLimited) {
+        applyResendCooldown(Date.now() + PROD_RATE_LIMIT_COOLDOWN_MS);
+        setStatus('Too many resend attempts. Please wait a few minutes and check spam before trying again.', true);
+        return;
+      }
+
+      setResendButton(false);
       setStatus(res.error || 'Could not send verification email.', true);
     }
   });

@@ -99,6 +99,7 @@ test.describe('Authentication', () => {
   });
 
   test('should sign up and reach verify-email with working resend flow', async ({ browser, baseURL }) => {
+    test.skip((process.env.TEST_ENV || '').toLowerCase() === 'prod', 'Disabled in prod: this test creates real accounts.');
     test.setTimeout(90000);
     const context = await browser.newContext({
       baseURL,
