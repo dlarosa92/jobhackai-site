@@ -701,13 +701,13 @@ document.addEventListener('DOMContentLoaded', async function() {
       const result = await authManager.signUp(email, password, firstName, lastName);
       
       if (result.success) {
-        const newUser = authManager.getCurrentUser();
-        if (newUser && authManager.isEmailPasswordUser(newUser) && newUser.emailVerified === false) {
-          window.location.href = 'verify-email.html';
-          return;
-        }
-        const plan = selectedPlan || 'free';
-        await handlePostAuthRedirect(plan);
+        const newUser = result.user || authManager.getCurrentUser();
+        const emailForVerify = newUser?.email || email;
+        const verifyUrl = emailForVerify
+          ? `verify-email.html?email=${encodeURIComponent(emailForVerify)}`
+          : 'verify-email.html';
+        window.location.href = verifyUrl;
+        return;
       } else {
         // Show error
         showError(signupError, result.error);

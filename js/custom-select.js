@@ -121,6 +121,16 @@
     select.classList.add('jh-select-native');
     select.tabIndex = -1;
 
+    // Preserve any existing own descriptors so destroy() can fully restore element behavior.
+    const hadOwnValueDescriptor = Object.prototype.hasOwnProperty.call(select, 'value');
+    const ownValueDescriptor = hadOwnValueDescriptor ? Object.getOwnPropertyDescriptor(select, 'value') : null;
+    const hadOwnSelectedIndexDescriptor = Object.prototype.hasOwnProperty.call(select, 'selectedIndex');
+    const ownSelectedIndexDescriptor = hadOwnSelectedIndexDescriptor ? Object.getOwnPropertyDescriptor(select, 'selectedIndex') : null;
+
+    const proto = Object.getPrototypeOf(select);
+    const nativeValueDescriptor = Object.getOwnPropertyDescriptor(proto, 'value');
+    const nativeSelectedIndexDescriptor = Object.getOwnPropertyDescriptor(proto, 'selectedIndex');
+
     function syncSelected() {
       const selectedValue = select.value;
       const selected = getSelectedOption(select);
@@ -132,31 +142,54 @@
       });
     }
 
-    // Override the value property to sync visual display when set programmatically
-    // Store the original descriptor to restore it later
-    const originalValueDescriptor = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(select), 'value') ||
-                                    Object.getOwnPropertyDescriptor(select, 'value');
-    let _value = select.value;
-    Object.defineProperty(select, 'value', {
-      get() {
-        return _value;
-      },
-      set(newValue) {
-        const oldValue = _value;
-        _value = newValue;
-        // Update the native select's actual selectedIndex so the native select reflects the change
-        const option = Array.from(select.options).find(opt => opt.value === newValue);
-        if (option) {
-          select.selectedIndex = Array.from(select.options).indexOf(option);
-        } else if (newValue === '') {
-          // Handle empty value case
-          select.selectedIndex = -1;
-        }
-        if (oldValue !== newValue) {
-          syncSelected();
-        }
+    function installProgrammaticSync() {
+      // Keep custom UI in sync when code mutates <select> programmatically via value/selectedIndex.
+      if (nativeValueDescriptor?.get && nativeValueDescriptor?.set) {
+        Object.defineProperty(select, 'value', {
+          configurable: true,
+          enumerable: nativeValueDescriptor.enumerable,
+          get() {
+            return nativeValueDescriptor.get.call(this);
+          },
+          set(nextValue) {
+            const before = nativeValueDescriptor.get.call(this);
+            nativeValueDescriptor.set.call(this, nextValue);
+            const after = nativeValueDescriptor.get.call(this);
+            if (before !== after) syncSelected();
+          }
+        });
       }
-    });
+
+      if (nativeSelectedIndexDescriptor?.get && nativeSelectedIndexDescriptor?.set) {
+        Object.defineProperty(select, 'selectedIndex', {
+          configurable: true,
+          enumerable: nativeSelectedIndexDescriptor.enumerable,
+          get() {
+            return nativeSelectedIndexDescriptor.get.call(this);
+          },
+          set(nextIndex) {
+            const before = nativeSelectedIndexDescriptor.get.call(this);
+            nativeSelectedIndexDescriptor.set.call(this, nextIndex);
+            const after = nativeSelectedIndexDescriptor.get.call(this);
+            if (before !== after) syncSelected();
+          }
+        });
+      }
+    }
+
+    function restoreProgrammaticSync() {
+      if (hadOwnValueDescriptor && ownValueDescriptor) {
+        Object.defineProperty(select, 'value', ownValueDescriptor);
+      } else {
+        delete select.value;
+      }
+
+      if (hadOwnSelectedIndexDescriptor && ownSelectedIndexDescriptor) {
+        Object.defineProperty(select, 'selectedIndex', ownSelectedIndexDescriptor);
+      } else {
+        delete select.selectedIndex;
+      }
+    }
 
     function renderOptions() {
       // Clear menu
@@ -308,6 +341,7 @@
       syncSelected();
     };
     select.addEventListener('change', onSelectChange);
+    select.addEventListener('input', onSelectChange);
 
     // Observe option list changes (dynamic dropdowns)
     const mo = new MutationObserver(() => {
@@ -317,22 +351,20 @@
 
     // Initial render
     renderOptions();
+    installProgrammaticSync();
 
     const instance = {
       select,
       wrapper,
       button,
       menu,
+      sync: syncSelected,
       refresh: renderOptions,
       destroy: () => {
         mo.disconnect();
         select.removeEventListener('change', onSelectChange);
-        // Restore the original value property
-        if (originalValueDescriptor) {
-          Object.defineProperty(select, 'value', originalValueDescriptor);
-        } else {
-          delete select.value; // Fallback if no original descriptor
-        }
+        select.removeEventListener('input', onSelectChange);
+        restoreProgrammaticSync();
         close();
         // unwrap: move select back
         const p = wrapper.parentNode;
@@ -353,13 +385,21 @@
     selects.forEach(enhanceSelect);
   }
 
+  function syncSelect(select) {
+    const instance = ENHANCED.get(select);
+    if (!instance) return false;
+    instance.sync();
+    return true;
+  }
+
   // Global event: click outside closes
   document.addEventListener('click', () => closeAll(null));
 
   // Expose for pages that add selects dynamically
   window.JobHackAIDropdowns = {
     enhanceAll,
-    enhanceSelect
+    enhanceSelect,
+    syncSelect
   };
 
   // Auto-enhance when DOM is ready

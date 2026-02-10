@@ -11,7 +11,7 @@ name: E2E Tests
 
 on:
   pull_request:
-    branches: [dev0, develop]
+    branches: [dev0, develop, main]
 
 jobs:
   e2e-tests:
@@ -36,14 +36,38 @@ jobs:
         run: npx playwright install --with-deps chromium
       
       - name: Validate secrets are set
+        env:
+          BASE_REF: ${{ github.base_ref }}
+          TEST_EMAIL_DEFAULT: ${{ secrets.TEST_EMAIL }}
+          TEST_PASSWORD_DEFAULT: ${{ secrets.TEST_PASSWORD }}
+          TEST_EMAIL_PROD: ${{ secrets.TEST_EMAIL_PROD }}
+          TEST_PASSWORD_PROD: ${{ secrets.TEST_PASSWORD_PROD }}
         run: |
-          if [ -z "${{ secrets.TEST_EMAIL }}" ] || [ -z "${{ secrets.TEST_PASSWORD }}" ]; then
+          if [ "$BASE_REF" = "main" ]; then
+            EMAIL="${TEST_EMAIL_PROD:-$TEST_EMAIL_DEFAULT}"
+            PASSWORD="${TEST_PASSWORD_PROD:-$TEST_PASSWORD_DEFAULT}"
+          else
+            EMAIL="$TEST_EMAIL_DEFAULT"
+            PASSWORD="$TEST_PASSWORD_DEFAULT"
+          fi
+          if [ -z "$EMAIL" ] || [ -z "$PASSWORD" ]; then
             echo "::error::TEST_EMAIL and TEST_PASSWORD secrets must be configured in GitHub repository settings"
             echo "Go to: Settings → Secrets and variables → Actions → New repository secret"
             exit 1
           fi
       
-      - name: Run E2E tests
+      - name: Run E2E tests (prod smoke only)
+        if: github.base_ref == 'main'
+        working-directory: app
+        env:
+          CI: true
+          TEST_ENV: prod
+          TEST_EMAIL: ${{ secrets.TEST_EMAIL_PROD || secrets.TEST_EMAIL }}
+          TEST_PASSWORD: ${{ secrets.TEST_PASSWORD_PROD || secrets.TEST_PASSWORD }}
+        run: npm run test:e2e:full-app-check:prod
+
+      - name: Run E2E tests (dev/qa full suite)
+        if: github.base_ref != 'main'
         working-directory: app
         env:
           CI: true
@@ -61,4 +85,3 @@ jobs:
             app/test-results/
             app/playwright-report/
           retention-days: 7
-

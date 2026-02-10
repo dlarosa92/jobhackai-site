@@ -108,6 +108,33 @@ async function fetchPlanFromAPI() {
   }
 }
 
+async function runWithTimeout(label, task, timeoutMs = 8000) {
+  let timeoutId = null;
+  try {
+    await Promise.race([
+      Promise.resolve().then(task),
+      new Promise((_, reject) => {
+        timeoutId = setTimeout(() => {
+          reject(new Error(`${label} timed out after ${timeoutMs}ms`));
+        }, timeoutMs);
+      })
+    ]);
+    return true;
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
+  }
+}
+
+async function runNonCriticalTask(label, task, timeoutMs = 8000) {
+  try {
+    await runWithTimeout(label, task, timeoutMs);
+    return true;
+  } catch (error) {
+    console.warn(`[AUTH] ${label} skipped:`, error);
+    return false;
+  }
+}
+
 // Set persistence once; fallback to in-memory if browser persistence fails (e.g., IndexedDB blocked)
 (async () => {
   try {
@@ -869,18 +896,16 @@ class AuthManager {
 
       // Update profile with name
       if (firstName || lastName) {
-        await updateProfile(user, {
+        await runNonCriticalTask('Display name update', () => updateProfile(user, {
           displayName: `${firstName} ${lastName}`.trim()
-        });
+        }), 6000);
       }
 
       // Send email verification for password-based signups
-      try {
+      await runNonCriticalTask('Verification email send', async () => {
         await sendEmailVerification(user);
         console.log('📧 Verification email sent to', user.email);
-      } catch (e) {
-        console.warn('Could not send verification email:', e);
-      }
+      }, 10000);
 
       // Create user record in local database
       const selectedPlan = this.getSelectedPlan();
@@ -911,11 +936,8 @@ class AuthManager {
         pendingPlan: selectedPlan === 'trial' ? 'trial' : null // Track what they selected
       };
 
-      try {
-        await UserProfileManager.createProfile(user.uid, firestoreData);
-      } catch (err) {
-        console.warn('Could not create Firestore profile (will retry on next login):', err);
-      }
+      await runNonCriticalTask('Firestore profile create', () =>
+        UserProfileManager.createProfile(user.uid, firestoreData), 8000);
 
       // Ensure navigation/auth state is in sync immediately to prevent race conditions
       if (window.JobHackAINavigation) {
