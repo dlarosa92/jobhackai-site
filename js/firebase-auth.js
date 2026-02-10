@@ -50,6 +50,14 @@ const AUTH_PENDING = Object.freeze({ _authPending: true });
 // Set on .jobhackai.io so the marketing site can detect authenticated users.
 // Restricted to prod hosts only to prevent dev/qa cookie bleed.
 const PROD_COOKIE_HOSTS = ['app.jobhackai.io', 'jobhackai.io', 'www.jobhackai.io'];
+const VERIFICATION_ACTION_PATH = '/auth/action';
+const PROD_APP_ORIGIN = 'https://app.jobhackai.io';
+const ACTION_SETTINGS_RECOVERABLE_CODES = new Set([
+  'auth/invalid-continue-uri',
+  'auth/missing-continue-uri',
+  'auth/unauthorized-continue-uri',
+  'auth/invalid-dynamic-link-domain'
+]);
 
 function isProdHost() {
   try { return PROD_COOKIE_HOSTS.includes(window.location.hostname || ''); } catch (_) { return false; }
@@ -133,6 +141,42 @@ async function runNonCriticalTask(label, task, timeoutMs = 8000) {
     console.warn(`[AUTH] ${label} skipped:`, error);
     return false;
   }
+}
+
+function getVerificationActionCodeSettings() {
+  const fallbackUrl = `${PROD_APP_ORIGIN}${VERIFICATION_ACTION_PATH}`;
+  if (typeof window === 'undefined' || !window.location) {
+    return { url: fallbackUrl, handleCodeInApp: true };
+  }
+
+  const { origin, protocol, hostname } = window.location;
+  const isHttpOrigin = protocol === 'https:' || protocol === 'http:';
+  const isKnownHost = [
+    'app.jobhackai.io',
+    'jobhackai.io',
+    'www.jobhackai.io',
+    'qa.jobhackai.io',
+    'dev.jobhackai.io',
+    'localhost',
+    '127.0.0.1'
+  ].includes((hostname || '').toLowerCase());
+  const actionUrl = (isHttpOrigin && isKnownHost)
+    ? `${origin}${VERIFICATION_ACTION_PATH}`
+    : fallbackUrl;
+
+  return {
+    url: actionUrl,
+    handleCodeInApp: true
+  };
+}
+
+function isRecoverableActionSettingsError(error) {
+  const code = String(error?.code || '').toLowerCase();
+  const message = String(error?.message || '').toLowerCase();
+  return ACTION_SETTINGS_RECOVERABLE_CODES.has(code)
+    || message.includes('continue uri')
+    || message.includes('continue url')
+    || message.includes('unauthorized domain');
 }
 
 // Set persistence once; fallback to in-memory if browser persistence fails (e.g., IndexedDB blocked)
@@ -902,10 +946,12 @@ class AuthManager {
       }
 
       // Send email verification for password-based signups
-      await runNonCriticalTask('Verification email send', async () => {
-        await sendEmailVerification(user);
-        console.log('📧 Verification email sent to', user.email);
+      const verificationEmailSent = await runNonCriticalTask('Verification email send', async () => {
+        await this._sendVerificationEmail(user, 'signup');
       }, 10000);
+      if (!verificationEmailSent) {
+        console.warn('[AUTH] Verification email did not send automatically during signup.');
+      }
 
       // Create user record in local database
       const selectedPlan = this.getSelectedPlan();
@@ -947,7 +993,7 @@ class AuthManager {
           console.warn('setAuthState failed during signUp:', e);
         }
       }
-      return { success: true, user };
+      return { success: true, user, verificationEmailSent };
     } catch (error) {
       console.error('Sign up error:', error);
       return { success: false, error: this.getErrorMessage(error) };
@@ -1489,6 +1535,27 @@ class AuthManager {
     }
   }
 
+  async _sendVerificationEmail(user, source = 'manual') {
+    if (!user) {
+      throw new Error('Missing authenticated user for verification email send.');
+    }
+
+    const actionCodeSettings = getVerificationActionCodeSettings();
+    try {
+      await sendEmailVerification(user, actionCodeSettings);
+      console.log(`📧 Verification email send request accepted (${source}) with action settings.`);
+      return;
+    } catch (error) {
+      if (!isRecoverableActionSettingsError(error)) {
+        throw error;
+      }
+      console.warn('[AUTH] actionCodeSettings rejected for verification email, retrying without action settings:', error?.code || error);
+    }
+
+    await sendEmailVerification(user);
+    console.log(`📧 Verification email send request accepted (${source}) without action settings fallback.`);
+  }
+
   /**
    * Get selected plan from URL or sessionStorage
    */
@@ -1524,7 +1591,12 @@ class AuthManager {
       'auth/user-not-found': 'No account found with this email. Please sign up.',
       'auth/wrong-password': 'Incorrect password. Please try again.',
       'auth/too-many-requests': 'Too many failed attempts. Please try again later.',
+      'auth/quota-exceeded': 'Verification email limit reached. Please try again later.',
       'auth/network-request-failed': 'Network error. Please check your connection.',
+      'auth/invalid-continue-uri': 'Verification link configuration is invalid. Please contact support.',
+      'auth/missing-continue-uri': 'Verification link configuration is incomplete. Please contact support.',
+      'auth/unauthorized-continue-uri': 'Verification link domain is not authorized. Please contact support.',
+      'auth/invalid-dynamic-link-domain': 'Verification link domain is invalid. Please contact support.',
       'auth/popup-blocked': 'Popup was blocked. Please allow popups for this site.',
       'auth/account-exists-with-different-credential': 'An account already exists with this email using a different sign-in method.',
     };
@@ -1625,11 +1697,25 @@ class AuthManager {
       if (!user) {
         return { success: false, error: 'No authenticated user.' };
       }
-      await sendEmailVerification(user);
+      if (typeof user.reload === 'function') {
+        try {
+          await user.reload();
+        } catch (reloadErr) {
+          console.warn('sendVerificationEmail reload warning:', reloadErr);
+        }
+      }
+      if (user.emailVerified) {
+        return { success: true, alreadyVerified: true };
+      }
+      await this._sendVerificationEmail(user, 'resend');
       return { success: true };
     } catch (err) {
       console.warn('sendVerificationEmail error:', err);
-      return { success: false, error: this.getErrorMessage(err) || 'Could not send verification email.' };
+      return {
+        success: false,
+        errorCode: err?.code || null,
+        error: this.getErrorMessage(err) || 'Could not send verification email.'
+      };
     }
   }
 

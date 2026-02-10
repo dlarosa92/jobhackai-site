@@ -703,10 +703,16 @@ document.addEventListener('DOMContentLoaded', async function() {
       if (result.success) {
         const newUser = result.user || authManager.getCurrentUser();
         const emailForVerify = newUser?.email || email;
-        const verifyUrl = emailForVerify
-          ? `verify-email.html?email=${encodeURIComponent(emailForVerify)}`
-          : 'verify-email.html';
-        window.location.href = verifyUrl;
+        const verifyUrl = new URL('verify-email.html', window.location.href);
+        if (emailForVerify) {
+          verifyUrl.searchParams.set('email', emailForVerify);
+        }
+        if (result.verificationEmailSent === false) {
+          verifyUrl.searchParams.set('sent', '0');
+        } else if (result.verificationEmailSent === true) {
+          verifyUrl.searchParams.set('sent', '1');
+        }
+        window.location.href = `${verifyUrl.pathname}${verifyUrl.search}`;
         return;
       } else {
         // Show error

@@ -128,8 +128,44 @@ export async function onRequest(context) {
       }
     }
     
-    // Step 3: Only if both KV and D1 miss, fallback to Stripe email search (last resort)
     let matchedCustomer = null;
+
+    // Step 2.5: Validate stored customer still exists in Stripe.
+    // If stale, clear cached IDs so fallback can recover in the same request.
+    if (customerId) {
+      try {
+        const customerCheckRes = await stripe(env, `/customers/${customerId}`);
+        if (!customerCheckRes.ok) {
+          const customerCheckText = await customerCheckRes.text().catch(() => '');
+          const customerCheckLower = String(customerCheckText || '').toLowerCase();
+          if (customerCheckLower.includes('no such customer')) {
+            console.log('🟡 [CHECKOUT] Stored customer missing in Stripe. Clearing stale customer ID.', {
+              uid,
+              customerId
+            });
+            customerId = null;
+            matchedCustomer = null;
+            try {
+              await env.JOBHACKAI_KV?.delete(kvCusKey(uid));
+              await env.JOBHACKAI_KV?.delete(kvEmailKey(uid));
+            } catch (_) {}
+            try {
+              await updateUserPlan(env, uid, { stripeCustomerId: null });
+            } catch (_) {}
+          } else {
+            console.log('🟡 [CHECKOUT] Customer validation failed but keeping ID', {
+              uid,
+              customerId,
+              status: customerCheckRes.status
+            });
+          }
+        }
+      } catch (customerCheckError) {
+        console.log('🟡 [CHECKOUT] Customer validation exception (non-fatal)', customerCheckError?.message || customerCheckError);
+      }
+    }
+
+    // Step 3: Only if both KV and D1 miss (or stale IDs are cleared), fallback to Stripe email search.
     if (!customerId && email) {
       try {
         const searchRes = await stripe(env, `/customers?email=${encodeURIComponent(email)}&limit=100`);
@@ -205,7 +241,7 @@ export async function onRequest(context) {
         const c = await res.json();
         if (!c || !c.id) {
           console.log('🔴 [CHECKOUT] Invalid customer response', c);
-          return json({ ok: false, error: 'Invalid response from Stripe' }, 502, origin, env);
+          return json({ ok: false, error: 'Invalid response from Stripe' }, 500, origin, env);
         }
         
         customerId = c.id;
@@ -338,7 +374,7 @@ export async function onRequest(context) {
       const s = await sessionRes.json();
       if (!s || !s.url) {
         console.log('🔴 [CHECKOUT] Invalid session response', s);
-        return json({ ok: false, error: 'Invalid response from Stripe' }, 502, origin, env);
+        return json({ ok: false, error: 'Invalid response from Stripe' }, 500, origin, env);
       }
       
       console.log('✅ [CHECKOUT] Session created', { id: s.id, url: s.url });
