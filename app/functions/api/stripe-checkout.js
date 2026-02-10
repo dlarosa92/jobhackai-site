@@ -135,30 +135,38 @@ export async function onRequest(context) {
     if (customerId) {
       try {
         const customerCheckRes = await stripe(env, `/customers/${customerId}`);
-        if (!customerCheckRes.ok) {
-          const customerCheckText = await customerCheckRes.text().catch(() => '');
-          const customerCheckLower = String(customerCheckText || '').toLowerCase();
-          if (customerCheckLower.includes('no such customer')) {
-            console.log('🟡 [CHECKOUT] Stored customer missing in Stripe. Clearing stale customer ID.', {
-              uid,
-              customerId
-            });
-            customerId = null;
-            matchedCustomer = null;
-            try {
-              await env.JOBHACKAI_KV?.delete(kvCusKey(uid));
-              await env.JOBHACKAI_KV?.delete(kvEmailKey(uid));
-            } catch (_) {}
-            try {
-              await updateUserPlan(env, uid, { stripeCustomerId: null });
-            } catch (_) {}
-          } else {
-            console.log('🟡 [CHECKOUT] Customer validation failed but keeping ID', {
-              uid,
-              customerId,
-              status: customerCheckRes.status
-            });
-          }
+        const customerCheckText = await customerCheckRes.text().catch(() => '');
+        let customerCheckData = {};
+        try {
+          customerCheckData = customerCheckText ? JSON.parse(customerCheckText) : {};
+        } catch (_) {}
+        const customerCheckMessage = String(
+          customerCheckData?.error?.message || customerCheckText || ''
+        ).toLowerCase();
+        const isDeletedCustomer = customerCheckData?.deleted === true;
+        const isMissingCustomer = customerCheckMessage.includes('no such customer');
+
+        if (isDeletedCustomer || isMissingCustomer) {
+          console.log('🟡 [CHECKOUT] Stored customer is stale in Stripe. Clearing stale customer ID.', {
+            uid,
+            customerId,
+            reason: isDeletedCustomer ? 'deleted' : 'missing'
+          });
+          customerId = null;
+          matchedCustomer = null;
+          try {
+            await env.JOBHACKAI_KV?.delete(kvCusKey(uid));
+            await env.JOBHACKAI_KV?.delete(kvEmailKey(uid));
+          } catch (_) {}
+          try {
+            await updateUserPlan(env, uid, { stripeCustomerId: null });
+          } catch (_) {}
+        } else if (!customerCheckRes.ok) {
+          console.log('🟡 [CHECKOUT] Customer validation failed but keeping ID', {
+            uid,
+            customerId,
+            status: customerCheckRes.status
+          });
         }
       } catch (customerCheckError) {
         console.log('🟡 [CHECKOUT] Customer validation exception (non-fatal)', customerCheckError?.message || customerCheckError);
@@ -170,7 +178,9 @@ export async function onRequest(context) {
       try {
         const searchRes = await stripe(env, `/customers?email=${encodeURIComponent(email)}&limit=100`);
         const searchData = await searchRes.json();
-        const customers = searchRes.ok ? (searchData?.data || []) : [];
+        const customers = searchRes.ok
+          ? (searchData?.data || []).filter((c) => c && c.deleted !== true)
+          : [];
         if (customers.length > 0) {
           const uidMatches = customers.filter((c) => c?.metadata?.firebaseUid === uid);
           const candidates = uidMatches.length > 0 ? uidMatches : customers;
