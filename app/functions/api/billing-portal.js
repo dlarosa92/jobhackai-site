@@ -45,8 +45,10 @@ export async function onRequest(context) {
         if (userPlan?.stripeCustomerId) {
           customerId = userPlan.stripeCustomerId;
           console.log('✅ [BILLING-PORTAL] Found customer ID in D1:', customerId);
-          // Cache it in KV for next time
-          await cacheCustomerId(env, uid, customerId);
+          // Backfill KV cache only — D1 already has the value so
+          // calling cacheCustomerId() here would trigger a redundant
+          // updateUserPlan() round-trip that bumps updated_at/plan_updated_at.
+          try { await env.JOBHACKAI_KV?.put(kvCusKey(uid), customerId); } catch (_) {}
         }
       } catch (d1Error) {
         console.warn('⚠️ [BILLING-PORTAL] D1 lookup failed (non-fatal):', d1Error?.message || d1Error);
