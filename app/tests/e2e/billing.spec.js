@@ -349,33 +349,9 @@ test.describe('Stripe Billing', () => {
     // Navigate to a page first to ensure scripts are loaded
     await page.goto('/dashboard', { waitUntil: 'domcontentloaded' });
     
-    // Wait for Firebase auth to be ready
-    await page.waitForFunction(() => {
-      return window.FirebaseAuthManager !== undefined && 
-             typeof window.FirebaseAuthManager.getCurrentUser === 'function';
-    }, { timeout: 10000 });
-    
-    // Wait for auth state to be ready
-    await page.waitForFunction(() => {
-      const user = window.FirebaseAuthManager?.getCurrentUser?.();
-      return user !== null && user !== undefined;
-    }, { timeout: 10000 }).catch(() => {
-      return page.waitForFunction(() => {
-        return localStorage.getItem('user-authenticated') === 'true' || 
-               window.FirebaseAuthManager?.getCurrentUser?.() !== null;
-      }, { timeout: 5000 });
-    });
-    
-    // Get auth token for API call
-    const token = await page.evaluate(async () => {
-      await new Promise(resolve => setTimeout(resolve, 500));
-      const user = window.FirebaseAuthManager?.getCurrentUser?.();
-      if (user) {
-        return await user.getIdToken();
-      }
-      return null;
-    });
-    
+    // Reuse the shared auth helper for a robust token fetch.
+    // This avoids page.evaluate() flakiness when navigation occurs during auth initialization.
+    const token = await getAuthToken(page);
     expect(token).not.toBeNull();
     
     // Check current plan status

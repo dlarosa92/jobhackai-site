@@ -339,7 +339,6 @@ async function resolveCustomerId(env, uid, email) {
         customerId = null;
         try {
           await env.JOBHACKAI_KV?.delete(kvCusKey(uid));
-          await env.JOBHACKAI_KV?.delete(kvEmailKey(uid));
         } catch (_) {}
         try {
           await updateUserPlan(env, uid, { stripeCustomerId: null });
@@ -421,7 +420,6 @@ async function resolveCustomerId(env, uid, email) {
 
   if (customerId) {
     await env.JOBHACKAI_KV?.put(kvCusKey(uid), customerId);
-    await env.JOBHACKAI_KV?.put(kvEmailKey(uid), email);
     try {
       await updateUserPlan(env, uid, { stripeCustomerId: customerId });
     } catch (e) {
@@ -520,7 +518,6 @@ function json(body, status, origin, env) {
 }
 
 const kvCusKey = (uid) => `cusByUid:${uid}`;
-const kvEmailKey = (uid) => `emailByUid:${uid}`;
 
 async function cancelOtherSubscriptions(env, subs, keepSubId) {
   const toCancel = (subs || []).filter((sub) =>

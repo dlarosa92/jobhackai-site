@@ -46,7 +46,7 @@ export async function onRequest(context) {
           customerId = userPlan.stripeCustomerId;
           console.log('✅ [BILLING-PORTAL] Found customer ID in D1:', customerId);
           // Cache it in KV for next time
-          await cacheCustomerId(env, uid, email, customerId);
+          await cacheCustomerId(env, uid, customerId);
         }
       } catch (d1Error) {
         console.warn('⚠️ [BILLING-PORTAL] D1 lookup failed (non-fatal):', d1Error?.message || d1Error);
@@ -91,7 +91,7 @@ export async function onRequest(context) {
                 customerId,
                 matchedUid: candidate?.metadata?.firebaseUid || null
               });
-              await cacheCustomerId(env, uid, email, customerId);
+              await cacheCustomerId(env, uid, customerId);
               break;
             }
           }
@@ -207,13 +207,10 @@ async function validateStripeCustomer(env, customerId) {
   }
 }
 
-async function cacheCustomerId(env, uid, email, customerId) {
+async function cacheCustomerId(env, uid, customerId) {
   if (!customerId) return;
   try {
     await env.JOBHACKAI_KV?.put(kvCusKey(uid), customerId);
-    if (email) {
-      await env.JOBHACKAI_KV?.put(kvEmailKey(uid), email);
-    }
   } catch (_) {}
 
   try {
@@ -224,7 +221,6 @@ async function cacheCustomerId(env, uid, email, customerId) {
 async function clearCustomerReferences(env, uid) {
   try {
     await env.JOBHACKAI_KV?.delete(kvCusKey(uid));
-    await env.JOBHACKAI_KV?.delete(kvEmailKey(uid));
   } catch (_) {}
 
   try {
@@ -259,5 +255,3 @@ function json(body, status, origin, env) {
 }
 
 const kvCusKey = (uid) => `cusByUid:${uid}`;
-const kvEmailKey = (uid) => `emailByUid:${uid}`;
-

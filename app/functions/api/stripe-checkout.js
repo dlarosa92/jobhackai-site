@@ -156,7 +156,6 @@ export async function onRequest(context) {
           matchedCustomer = null;
           try {
             await env.JOBHACKAI_KV?.delete(kvCusKey(uid));
-            await env.JOBHACKAI_KV?.delete(kvEmailKey(uid));
           } catch (_) {}
           try {
             await updateUserPlan(env, uid, { stripeCustomerId: null });
@@ -260,7 +259,6 @@ export async function onRequest(context) {
         // Try to cache customer ID (non-blocking)
         try {
           await env.JOBHACKAI_KV?.put(kvCusKey(uid), customerId);
-          await env.JOBHACKAI_KV?.put(kvEmailKey(uid), email);
         } catch (kvWriteError) {
           console.log('🟡 [CHECKOUT] KV write error (non-fatal)', kvWriteError?.message || kvWriteError);
           // Continue - customer was created successfully
@@ -277,7 +275,6 @@ export async function onRequest(context) {
     if (customerId) {
       try {
         await env.JOBHACKAI_KV?.put(kvCusKey(uid), customerId);
-        await env.JOBHACKAI_KV?.put(kvEmailKey(uid), email);
       } catch (_) {}
       try {
         await updateUserPlan(env, uid, { stripeCustomerId: customerId });
@@ -480,7 +477,6 @@ function corsHeaders(origin, env) {
 }
 function json(body, status, origin, env) { return new Response(JSON.stringify(body), { status, headers: corsHeaders(origin, env) }); }
 const kvCusKey = (uid) => `cusByUid:${uid}`;
-const kvEmailKey = (uid) => `emailByUid:${uid}`;
 
 // Build a robust Idempotency-Key from stable parameters, so retries succeed
 // and parameter changes (e.g., URLs, price, customer, trial period, payment_method_collection) generate a new key
