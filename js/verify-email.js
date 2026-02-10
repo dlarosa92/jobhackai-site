@@ -224,7 +224,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       } else if (signupAutoSendSucceeded) {
         setStatus('Verification email sent. Check your inbox (and spam).', false);
       } else {
-        setStatus('Check spam/promotions first. You can resend after the timer.', false);
+        setStatus('Check spam/promotions first. If you still do not see it, click "Resend link".', false);
       }
     }
   } else {
