@@ -107,11 +107,6 @@ test.describe('Authentication', () => {
     try {
       const page = await context.newPage();
 
-      await page.addInitScript(() => {
-        localStorage.clear();
-        sessionStorage.clear();
-      });
-
       const signupEmail = generateUniqueSignupEmail();
       const signupPassword = process.env.SIGNUP_TEST_PASSWORD || process.env.TEST_PASSWORD || 'Password1234';
 
