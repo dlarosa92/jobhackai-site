@@ -85,17 +85,38 @@ export async function cacheCustomerId(env, uid, customerId) {
 }
 
 /**
- * Helper function to make Stripe API requests
+ * Helper function to make Stripe API requests.
+ * Uses a 15-second timeout to avoid hanging requests causing upstream 5xx.
  * @param {Object} env - Environment variables
  * @param {string} path - Stripe API path (e.g., '/customers')
  * @param {Object} init - Fetch options
  * @returns {Promise<Response>} Fetch response
  */
-export function stripe(env, path, init) {
+export function stripe(env, path, init = {}) {
   const url = `https://api.stripe.com/v1${path}`;
   const headers = new Headers(init?.headers || {});
   headers.set('Authorization', `Bearer ${env.STRIPE_SECRET_KEY}`);
-  return fetch(url, { ...init, headers });
+
+  let signal = init?.signal;
+  let timeoutId = null;
+  try {
+    if (!signal && typeof AbortController !== 'undefined') {
+      const controller = new AbortController();
+      timeoutId = setTimeout(() => controller.abort(), 15000);
+      signal = controller.signal;
+    }
+  } catch (e) {
+    console.log('🟡 [BILLING] AbortController not available, continuing without timeout');
+  }
+
+  const fetchOptions = { ...init, headers };
+  if (signal) fetchOptions.signal = signal;
+
+  const fetchPromise = fetch(url, fetchOptions);
+  if (timeoutId) {
+    fetchPromise.finally(() => { if (timeoutId) clearTimeout(timeoutId); });
+  }
+  return fetchPromise;
 }
 
 /**
