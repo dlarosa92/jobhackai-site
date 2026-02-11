@@ -409,8 +409,10 @@ async function handleEmailVerification() {
 
     // The code may have already been consumed server-side (or in another tab) — check if the user
     // is actually verified. When checkActionCode succeeds, we verify the oobCode belonged to this
-    // user before trusting emailVerified. When checkActionCode fails (consumed codes throw), we
-    // fall back to reload+verify so the consumed-code recovery path remains reachable.
+    // user before trusting emailVerified. When checkActionCode fails with auth/invalid-action-code
+    // (already consumed), we fall back to reload+verify so the consumed-code recovery path remains
+    // reachable. We must NOT treat auth/expired-action-code as recoverable — expired/invalid links
+    // must fail even if the user is already verified.
     const RELOAD_TIMEOUT_MS = 10000;
     let actuallyVerified = false;
     try {
@@ -418,11 +420,19 @@ async function handleEmailVerification() {
       if (!user) {
         // No current user — cannot have verified via this link
       } else {
-        const info = await checkActionCode(auth, oobCode).catch(() => null);
+        let info = null;
+        let checkErrorCode = null;
+        try {
+          info = await checkActionCode(auth, oobCode);
+        } catch (e) {
+          checkErrorCode = e?.code || null;
+        }
         const codeEmail = info?.data?.email?.toLowerCase?.() || '';
         const userEmail = (user.email || '').toLowerCase();
         const codeMatchesUser = codeEmail && codeEmail === userEmail;
-        const codeUncheckable = !codeEmail; // checkActionCode failed (e.g. already consumed)
+        // Only treat as "code uncheckable" when it failed due to already-consumed (invalid-action-code).
+        // Expired or other invalid codes must not bypass the email match check.
+        const codeUncheckable = !codeEmail && checkErrorCode === 'auth/invalid-action-code';
         if (codeMatchesUser || codeUncheckable) {
           let reloadSucceeded = false;
           let timeoutId = null;

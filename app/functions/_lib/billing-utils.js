@@ -68,18 +68,6 @@ export async function clearCustomerReferences(env, uid) {
 }
 
 /**
- * Clear only the KV cache for a customer ID. Use when KV is stale but D1 may have
- * a newer valid stripeCustomerId (e.g. after customer recreation or migration).
- * @param {Object} env - Environment variables
- * @param {string} uid - Firebase UID
- */
-export async function clearKvOnly(env, uid) {
-  try {
-    await env.JOBHACKAI_KV?.delete(kvCusKey(uid));
-  } catch (_) {}
-}
-
-/**
  * Cache customer ID in KV and D1.
  * @param {Object} env - Environment variables
  * @param {string} uid - Firebase UID
