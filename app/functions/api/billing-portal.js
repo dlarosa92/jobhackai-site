@@ -4,7 +4,6 @@ import {
   stripe,
   validateStripeCustomer,
   clearCustomerReferences,
-  clearKvOnly,
   cacheCustomerId,
   kvCusKey
 } from '../_lib/billing-utils.js';
@@ -97,7 +96,6 @@ export async function onRequest(context) {
           await clearCustomerReferences(env, uid);
           customerId = null;
         } else {
-          await clearKvOnly(env, uid);
           try { await env.JOBHACKAI_KV?.put(kvCusKey(uid), customerId); } catch (_) {}
         }
       }

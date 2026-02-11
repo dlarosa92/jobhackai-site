@@ -425,14 +425,18 @@ async function handleEmailVerification() {
         const codeUncheckable = !codeEmail; // checkActionCode failed (e.g. already consumed)
         if (codeMatchesUser || codeUncheckable) {
           let reloadSucceeded = false;
+          let timeoutId = null;
           try {
             await Promise.race([
               user.reload().then(() => { reloadSucceeded = true; }),
-              new Promise((_, reject) =>
-                setTimeout(() => reject(new Error('reload_timeout')), RELOAD_TIMEOUT_MS)
-              )
+              new Promise((_, reject) => {
+                timeoutId = setTimeout(() => reject(new Error('reload_timeout')), RELOAD_TIMEOUT_MS);
+              })
             ]);
           } catch (_) {}
+          finally {
+            if (timeoutId) clearTimeout(timeoutId);
+          }
           if (reloadSucceeded && user.emailVerified) {
             actuallyVerified = true;
           }
