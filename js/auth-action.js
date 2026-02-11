@@ -7,6 +7,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/12.1.0/firebas
 import { 
   getAuth, 
   applyActionCode, 
+  checkActionCode,
   verifyPasswordResetCode, 
   confirmPasswordReset 
 } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-auth.js";
@@ -406,14 +407,32 @@ async function handleEmailVerification() {
   } catch (error) {
     console.error('Email verification failed:', error);
 
-    // The code may have already been consumed server-side — check if the user is actually verified
+    // The code may have already been consumed server-side — check if the user is actually verified.
+    // Only trust emailVerified when the failed oobCode belonged to the current user (prevents
+    // treating an expired/unrelated link as success when logged in as a different verified user).
+    const RELOAD_TIMEOUT_MS = 10000;
     let actuallyVerified = false;
     try {
       const user = auth.currentUser;
-      if (user) {
-        await user.reload();
-        if (user.emailVerified) {
-          actuallyVerified = true;
+      if (!user) {
+        // No current user — cannot have verified via this link
+      } else {
+        const info = await checkActionCode(auth, oobCode).catch(() => null);
+        const codeEmail = info?.data?.email?.toLowerCase?.() || '';
+        const userEmail = (user.email || '').toLowerCase();
+        if (codeEmail && codeEmail === userEmail) {
+          let reloadSucceeded = false;
+          try {
+            await Promise.race([
+              user.reload().then(() => { reloadSucceeded = true; }),
+              new Promise((_, reject) =>
+                setTimeout(() => reject(new Error('reload_timeout')), RELOAD_TIMEOUT_MS)
+              )
+            ]);
+          } catch (_) {}
+          if (reloadSucceeded && user.emailVerified) {
+            actuallyVerified = true;
+          }
         }
       }
     } catch (_) {}

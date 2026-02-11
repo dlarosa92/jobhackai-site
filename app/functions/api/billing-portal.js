@@ -4,6 +4,7 @@ import {
   stripe,
   validateStripeCustomer,
   clearCustomerReferences,
+  clearKvOnly,
   cacheCustomerId,
   kvCusKey
 } from '../_lib/billing-utils.js';
@@ -43,7 +44,8 @@ export async function onRequest(context) {
 
     // Step 1: Try KV (cache)
     let customerId = await env.JOBHACKAI_KV?.get(kvCusKey(uid));
-    
+    let customerIdSource = customerId ? 'kv' : null;
+
     // Step 2: If KV miss, try D1 (authoritative)
     if (!customerId) {
       console.log('🟡 [BILLING-PORTAL] No customer found in KV for uid', uid);
@@ -51,6 +53,7 @@ export async function onRequest(context) {
         const userPlan = await getUserPlanData(env, uid);
         if (userPlan?.stripeCustomerId) {
           customerId = userPlan.stripeCustomerId;
+          customerIdSource = 'd1';
           console.log('✅ [BILLING-PORTAL] Found customer ID in D1:', customerId);
           // Backfill KV cache only — D1 already has the value so
           // calling cacheCustomerId() here would trigger a redundant
@@ -63,16 +66,40 @@ export async function onRequest(context) {
     }
 
     // Validate stored customer to avoid stale/deleted IDs causing Stripe failures.
+    // When only KV was stale, D1 may have a newer valid id—check before clearing D1.
     if (customerId) {
       const validation = await validateStripeCustomer(env, customerId);
       if (!validation.valid) {
-        console.log('🟡 [BILLING-PORTAL] Stored customer is stale, clearing cache', {
+        console.log('🟡 [BILLING-PORTAL] Stored customer is stale', {
           uid,
           customerId,
           reason: validation.reason
         });
-        await clearCustomerReferences(env, uid);
-        customerId = null;
+        // If we got customerId from KV, D1 may have a newer valid id—check before clearing D1.
+        let d1HasDifferentValidId = false;
+        if (customerIdSource === 'kv') {
+          try {
+            const userPlan = await getUserPlanData(env, uid);
+            const d1CustomerId = userPlan?.stripeCustomerId;
+            if (d1CustomerId && d1CustomerId !== customerId) {
+              const d1Validation = await validateStripeCustomer(env, d1CustomerId);
+              if (d1Validation.valid) {
+                d1HasDifferentValidId = true;
+                customerId = d1CustomerId;
+                console.log('✅ [BILLING-PORTAL] D1 has valid customer; KV was stale', { uid, customerId });
+              }
+            }
+          } catch (e) {
+            console.warn('⚠️ [BILLING-PORTAL] D1 re-check failed (non-fatal):', e?.message || e);
+          }
+        }
+        if (!d1HasDifferentValidId) {
+          await clearCustomerReferences(env, uid);
+          customerId = null;
+        } else {
+          await clearKvOnly(env, uid);
+          try { await env.JOBHACKAI_KV?.put(kvCusKey(uid), customerId); } catch (_) {}
+        }
       }
     }
     
