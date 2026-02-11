@@ -1,20 +1,122 @@
 /**
  * Shared billing utility functions
- * Consolidates duplicate functions from upgrade-plan.js, stripe-checkout.js, and billing-status.js
+ * Consolidates duplicate functions from upgrade-plan.js, stripe-checkout.js, billing-portal.js, and billing-status.js
  */
 
+import { updateUserPlan } from './db.js';
+
 /**
- * Helper function to make Stripe API requests
+ * KV key for storing customer ID by Firebase UID
+ * @param {string} uid - Firebase UID
+ * @returns {string} KV key
+ */
+export function kvCusKey(uid) {
+  return `cusByUid:${uid}`;
+}
+
+/**
+ * Validate that a Stripe customer ID exists and is not deleted.
+ * Single source of truth for customer validation used by stripe-checkout, upgrade-plan, and billing-portal.
+ * @param {Object} env - Environment variables
+ * @param {string} customerId - Stripe customer ID
+ * @returns {Promise<{valid: boolean, reason?: string}>} Validation result
+ */
+export async function validateStripeCustomer(env, customerId) {
+  if (!customerId) {
+    return { valid: false, reason: 'missing' };
+  }
+
+  try {
+    const res = await stripe(env, `/customers/${customerId}`);
+    const raw = await res.text().catch(() => '');
+    let data = {};
+    try {
+      data = raw ? JSON.parse(raw) : {};
+    } catch (_) {}
+
+    const message = String(data?.error?.message || raw || '').toLowerCase();
+    const isDeleted = data?.deleted === true;
+    const isMissing = message.includes('no such customer');
+
+    if (isDeleted || isMissing) {
+      return { valid: false, reason: isDeleted ? 'deleted' : 'missing', status: res.status };
+    }
+
+    if (!res.ok) {
+      return { valid: true, reason: 'non_fatal_check_failure', status: res.status };
+    }
+
+    return { valid: true, reason: 'ok', status: res.status };
+  } catch (error) {
+    return { valid: true, reason: 'validation_exception', error: error?.message || String(error) };
+  }
+}
+
+/**
+ * Clear stale customer references from KV and D1.
+ * @param {Object} env - Environment variables
+ * @param {string} uid - Firebase UID
+ */
+export async function clearCustomerReferences(env, uid) {
+  try {
+    await env.JOBHACKAI_KV?.delete(kvCusKey(uid));
+  } catch (_) {}
+
+  try {
+    await updateUserPlan(env, uid, { stripeCustomerId: null });
+  } catch (_) {}
+}
+
+/**
+ * Cache customer ID in KV and D1.
+ * @param {Object} env - Environment variables
+ * @param {string} uid - Firebase UID
+ * @param {string} customerId - Stripe customer ID
+ */
+export async function cacheCustomerId(env, uid, customerId) {
+  if (!customerId) return;
+  try {
+    await env.JOBHACKAI_KV?.put(kvCusKey(uid), customerId);
+  } catch (_) {}
+
+  try {
+    await updateUserPlan(env, uid, { stripeCustomerId: customerId });
+  } catch (_) {}
+}
+
+/**
+ * Helper function to make Stripe API requests.
+ * Uses a 15-second timeout to avoid hanging requests causing upstream 5xx.
  * @param {Object} env - Environment variables
  * @param {string} path - Stripe API path (e.g., '/customers')
  * @param {Object} init - Fetch options
  * @returns {Promise<Response>} Fetch response
  */
-export function stripe(env, path, init) {
+export function stripe(env, path, init = {}) {
   const url = `https://api.stripe.com/v1${path}`;
   const headers = new Headers(init?.headers || {});
   headers.set('Authorization', `Bearer ${env.STRIPE_SECRET_KEY}`);
-  return fetch(url, { ...init, headers });
+
+  let signal = init?.signal;
+  let timeoutId = null;
+  try {
+    if (!signal && typeof AbortController !== 'undefined') {
+      const controller = new AbortController();
+      timeoutId = setTimeout(() => controller.abort(), 15000);
+      signal = controller.signal;
+    }
+  } catch (e) {
+    console.log('🟡 [BILLING] AbortController not available, continuing without timeout');
+  }
+
+  const fetchOptions = { ...init, headers };
+  if (signal) fetchOptions.signal = signal;
+
+  const fetchPromise = fetch(url, fetchOptions);
+  if (timeoutId) {
+    return fetchPromise.finally(() => { if (timeoutId) clearTimeout(timeoutId); });
+  }
+  return fetchPromise;
 }
 
 /**

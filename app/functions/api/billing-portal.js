@@ -1,5 +1,12 @@
 import { getBearer, verifyFirebaseIdToken } from '../_lib/firebase-auth.js';
-import { getUserPlanData, updateUserPlan } from '../_lib/db.js';
+import { getUserPlanData } from '../_lib/db.js';
+import {
+  stripe,
+  validateStripeCustomer,
+  clearCustomerReferences,
+  cacheCustomerId,
+  kvCusKey
+} from '../_lib/billing-utils.js';
 
 /**
  * POST /api/billing-portal
@@ -178,66 +185,6 @@ async function createPortalSession(customerId, uid, origin, env) {
   return json({ ok: true, url: p.url }, 200, origin, env);
 }
 
-async function validateStripeCustomer(env, customerId) {
-  if (!customerId) {
-    return { valid: false, reason: 'missing' };
-  }
-
-  try {
-    const res = await stripe(env, `/customers/${customerId}`);
-    const raw = await res.text().catch(() => '');
-    let data = {};
-    try {
-      data = raw ? JSON.parse(raw) : {};
-    } catch (_) {}
-
-    const message = String(data?.error?.message || raw || '').toLowerCase();
-    const isDeleted = data?.deleted === true;
-    const isMissing = message.includes('no such customer');
-
-    if (isDeleted || isMissing) {
-      return { valid: false, reason: isDeleted ? 'deleted' : 'missing', status: res.status };
-    }
-
-    if (!res.ok) {
-      return { valid: true, reason: 'non_fatal_check_failure', status: res.status };
-    }
-
-    return { valid: true, reason: 'ok', status: res.status };
-  } catch (error) {
-    return { valid: true, reason: 'validation_exception', error: error?.message || String(error) };
-  }
-}
-
-async function cacheCustomerId(env, uid, customerId) {
-  if (!customerId) return;
-  try {
-    await env.JOBHACKAI_KV?.put(kvCusKey(uid), customerId);
-  } catch (_) {}
-
-  try {
-    await updateUserPlan(env, uid, { stripeCustomerId: customerId });
-  } catch (_) {}
-}
-
-async function clearCustomerReferences(env, uid) {
-  try {
-    await env.JOBHACKAI_KV?.delete(kvCusKey(uid));
-  } catch (_) {}
-
-  try {
-    await updateUserPlan(env, uid, { stripeCustomerId: null });
-  } catch (_) {}
-}
-
-// Helper function to call Stripe API
-function stripe(env, path, init) {
-  const url = `https://api.stripe.com/v1${path}`;
-  const headers = new Headers(init?.headers || {});
-  headers.set('Authorization', `Bearer ${env.STRIPE_SECRET_KEY}`);
-  return fetch(url, { ...init, headers });
-}
-
 function corsHeaders(origin, env) {
   const fallbackOrigins = ['https://dev.jobhackai.io', 'https://qa.jobhackai.io'];
   const configured = (env && env.FRONTEND_URL) ? env.FRONTEND_URL : null;
@@ -255,5 +202,3 @@ function corsHeaders(origin, env) {
 function json(body, status, origin, env) {
   return new Response(JSON.stringify(body), { status, headers: corsHeaders(origin, env) });
 }
-
-const kvCusKey = (uid) => `cusByUid:${uid}`;

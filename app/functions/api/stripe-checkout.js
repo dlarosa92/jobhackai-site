@@ -1,10 +1,15 @@
 import { getBearer, verifyFirebaseIdToken } from '../_lib/firebase-auth.js';
-import { isTrialEligible, getUserPlanData, updateUserPlan } from '../_lib/db.js';
+import { isTrialEligible, getUserPlanData } from '../_lib/db.js';
 import {
+  stripe,
   planToPrice,
   priceIdToPlan,
   getPlanFromSubscription,
-  listSubscriptions
+  listSubscriptions,
+  validateStripeCustomer,
+  clearCustomerReferences,
+  cacheCustomerId,
+  kvCusKey
 } from '../_lib/billing-utils.js';
 export async function onRequest(context) {
   const { request, env } = context;
@@ -133,42 +138,16 @@ export async function onRequest(context) {
     // Step 2.5: Validate stored customer still exists in Stripe.
     // If stale, clear cached IDs so fallback can recover in the same request.
     if (customerId) {
-      try {
-        const customerCheckRes = await stripe(env, `/customers/${customerId}`);
-        const customerCheckText = await customerCheckRes.text().catch(() => '');
-        let customerCheckData = {};
-        try {
-          customerCheckData = customerCheckText ? JSON.parse(customerCheckText) : {};
-        } catch (_) {}
-        const customerCheckMessage = String(
-          customerCheckData?.error?.message || customerCheckText || ''
-        ).toLowerCase();
-        const isDeletedCustomer = customerCheckData?.deleted === true;
-        const isMissingCustomer = customerCheckMessage.includes('no such customer');
-
-        if (isDeletedCustomer || isMissingCustomer) {
-          console.log('🟡 [CHECKOUT] Stored customer is stale in Stripe. Clearing stale customer ID.', {
-            uid,
-            customerId,
-            reason: isDeletedCustomer ? 'deleted' : 'missing'
-          });
-          customerId = null;
-          matchedCustomer = null;
-          try {
-            await env.JOBHACKAI_KV?.delete(kvCusKey(uid));
-          } catch (_) {}
-          try {
-            await updateUserPlan(env, uid, { stripeCustomerId: null });
-          } catch (_) {}
-        } else if (!customerCheckRes.ok) {
-          console.log('🟡 [CHECKOUT] Customer validation failed but keeping ID', {
-            uid,
-            customerId,
-            status: customerCheckRes.status
-          });
-        }
-      } catch (customerCheckError) {
-        console.log('🟡 [CHECKOUT] Customer validation exception (non-fatal)', customerCheckError?.message || customerCheckError);
+      const validation = await validateStripeCustomer(env, customerId);
+      if (!validation.valid) {
+        console.log('🟡 [CHECKOUT] Stored customer is stale in Stripe. Clearing stale customer ID.', {
+          uid,
+          customerId,
+          reason: validation.reason
+        });
+        await clearCustomerReferences(env, uid);
+        customerId = null;
+        matchedCustomer = null;
       }
     }
 
@@ -273,12 +252,7 @@ export async function onRequest(context) {
     }
 
     if (customerId) {
-      try {
-        await env.JOBHACKAI_KV?.put(kvCusKey(uid), customerId);
-      } catch (_) {}
-      try {
-        await updateUserPlan(env, uid, { stripeCustomerId: customerId });
-      } catch (_) {}
+      await cacheCustomerId(env, uid, customerId);
 
       if (matchedCustomer && !matchedCustomer?.metadata?.firebaseUid) {
         try {
@@ -414,45 +388,6 @@ export async function onRequest(context) {
   }
 }
 
-function stripe(env, path, init) {
-  const url = `https://api.stripe.com/v1${path}`;
-  const headers = new Headers(init?.headers || {});
-  headers.set('Authorization', `Bearer ${env.STRIPE_SECRET_KEY}`);
-  
-  // Add a timeout to avoid hanging requests causing upstream 5xx
-  // Use AbortController for better compatibility with Cloudflare Workers runtime
-  let signal = init?.signal; // Preserve any existing signal
-  let timeoutId = null;
-  
-  try {
-    // Only create timeout signal if no signal already exists
-    if (!signal && typeof AbortController !== 'undefined') {
-      const controller = new AbortController();
-      timeoutId = setTimeout(() => controller.abort(), 15000);
-      signal = controller.signal;
-    }
-  } catch (e) {
-    // If AbortController is not available, continue without timeout
-    console.log('🟡 [CHECKOUT] AbortController not available, continuing without timeout');
-  }
-  
-  const fetchOptions = { ...init, headers };
-  // Only add signal if it's defined, to avoid overriding any signal from init
-  if (signal) {
-    fetchOptions.signal = signal;
-  }
-  
-  const fetchPromise = fetch(url, fetchOptions);
-  
-  // Clean up timeout if fetch completes before timeout
-  if (timeoutId) {
-    fetchPromise.finally(() => {
-      if (timeoutId) clearTimeout(timeoutId);
-    });
-  }
-  
-  return fetchPromise;
-}
 function stripeFormHeaders(env) {
   return { Authorization: `Bearer ${env.STRIPE_SECRET_KEY}`, 'Content-Type': 'application/x-www-form-urlencoded' };
 }
@@ -476,7 +411,6 @@ function corsHeaders(origin, env) {
   };
 }
 function json(body, status, origin, env) { return new Response(JSON.stringify(body), { status, headers: corsHeaders(origin, env) }); }
-const kvCusKey = (uid) => `cusByUid:${uid}`;
 
 // Build a robust Idempotency-Key from stable parameters, so retries succeed
 // and parameter changes (e.g., URLs, price, customer, trial period, payment_method_collection) generate a new key
