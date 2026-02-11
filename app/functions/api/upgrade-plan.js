@@ -8,7 +8,10 @@ import {
   statusRank,
   getPlanFromSubscription,
   pickBestSubscription,
-  listSubscriptions
+  listSubscriptions,
+  validateStripeCustomer,
+  clearCustomerReferences,
+  kvCusKey
 } from '../_lib/billing-utils.js';
 
 /**
@@ -317,41 +320,15 @@ async function resolveCustomerId(env, uid, email) {
 
   // Validate stored customer to avoid stale IDs causing checkout failures.
   if (customerId) {
-    try {
-      const customerCheckRes = await stripe(env, `/customers/${customerId}`);
-      const customerCheckText = await customerCheckRes.text().catch(() => '');
-      let customerCheckData = {};
-      try {
-        customerCheckData = customerCheckText ? JSON.parse(customerCheckText) : {};
-      } catch (_) {}
-      const customerCheckMessage = String(
-        customerCheckData?.error?.message || customerCheckText || ''
-      ).toLowerCase();
-      const isDeletedCustomer = customerCheckData?.deleted === true;
-      const isMissingCustomer = customerCheckMessage.includes('no such customer');
-
-      if (isDeletedCustomer || isMissingCustomer) {
-        console.log('[BILLING-UPGRADE] Stored customer is stale in Stripe. Clearing stale customer ID.', {
-          uid,
-          customerId,
-          reason: isDeletedCustomer ? 'deleted' : 'missing'
-        });
-        customerId = null;
-        try {
-          await env.JOBHACKAI_KV?.delete(kvCusKey(uid));
-        } catch (_) {}
-        try {
-          await updateUserPlan(env, uid, { stripeCustomerId: null });
-        } catch (_) {}
-      } else if (!customerCheckRes.ok) {
-        console.log('[BILLING-UPGRADE] Customer validation failed but keeping ID', {
-          uid,
-          customerId,
-          status: customerCheckRes.status
-        });
-      }
-    } catch (e) {
-      console.log('[BILLING-UPGRADE] Customer validation exception (non-fatal)', e?.message || e);
+    const validation = await validateStripeCustomer(env, customerId);
+    if (!validation.valid) {
+      console.log('[BILLING-UPGRADE] Stored customer is stale in Stripe. Clearing stale customer ID.', {
+        uid,
+        customerId,
+        reason: validation.reason
+      });
+      await clearCustomerReferences(env, uid);
+      customerId = null;
     }
   }
 
@@ -516,8 +493,6 @@ function json(body, status, origin, env) {
     headers: corsHeaders(origin, env)
   });
 }
-
-const kvCusKey = (uid) => `cusByUid:${uid}`;
 
 async function cancelOtherSubscriptions(env, subs, keepSubId) {
   const toCancel = (subs || []).filter((sub) =>

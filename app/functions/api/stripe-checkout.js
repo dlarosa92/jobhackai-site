@@ -4,7 +4,10 @@ import {
   planToPrice,
   priceIdToPlan,
   getPlanFromSubscription,
-  listSubscriptions
+  listSubscriptions,
+  validateStripeCustomer,
+  clearCustomerReferences,
+  kvCusKey
 } from '../_lib/billing-utils.js';
 export async function onRequest(context) {
   const { request, env } = context;
@@ -133,42 +136,16 @@ export async function onRequest(context) {
     // Step 2.5: Validate stored customer still exists in Stripe.
     // If stale, clear cached IDs so fallback can recover in the same request.
     if (customerId) {
-      try {
-        const customerCheckRes = await stripe(env, `/customers/${customerId}`);
-        const customerCheckText = await customerCheckRes.text().catch(() => '');
-        let customerCheckData = {};
-        try {
-          customerCheckData = customerCheckText ? JSON.parse(customerCheckText) : {};
-        } catch (_) {}
-        const customerCheckMessage = String(
-          customerCheckData?.error?.message || customerCheckText || ''
-        ).toLowerCase();
-        const isDeletedCustomer = customerCheckData?.deleted === true;
-        const isMissingCustomer = customerCheckMessage.includes('no such customer');
-
-        if (isDeletedCustomer || isMissingCustomer) {
-          console.log('🟡 [CHECKOUT] Stored customer is stale in Stripe. Clearing stale customer ID.', {
-            uid,
-            customerId,
-            reason: isDeletedCustomer ? 'deleted' : 'missing'
-          });
-          customerId = null;
-          matchedCustomer = null;
-          try {
-            await env.JOBHACKAI_KV?.delete(kvCusKey(uid));
-          } catch (_) {}
-          try {
-            await updateUserPlan(env, uid, { stripeCustomerId: null });
-          } catch (_) {}
-        } else if (!customerCheckRes.ok) {
-          console.log('🟡 [CHECKOUT] Customer validation failed but keeping ID', {
-            uid,
-            customerId,
-            status: customerCheckRes.status
-          });
-        }
-      } catch (customerCheckError) {
-        console.log('🟡 [CHECKOUT] Customer validation exception (non-fatal)', customerCheckError?.message || customerCheckError);
+      const validation = await validateStripeCustomer(env, customerId);
+      if (!validation.valid) {
+        console.log('🟡 [CHECKOUT] Stored customer is stale in Stripe. Clearing stale customer ID.', {
+          uid,
+          customerId,
+          reason: validation.reason
+        });
+        await clearCustomerReferences(env, uid);
+        customerId = null;
+        matchedCustomer = null;
       }
     }
 
@@ -476,7 +453,6 @@ function corsHeaders(origin, env) {
   };
 }
 function json(body, status, origin, env) { return new Response(JSON.stringify(body), { status, headers: corsHeaders(origin, env) }); }
-const kvCusKey = (uid) => `cusByUid:${uid}`;
 
 // Build a robust Idempotency-Key from stable parameters, so retries succeed
 // and parameter changes (e.g., URLs, price, customer, trial period, payment_method_collection) generate a new key

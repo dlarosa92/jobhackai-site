@@ -416,6 +416,7 @@ async function handleEmailVerification() {
 
     if (actuallyVerified) {
       // Verification succeeded despite the error — continue the normal success flow
+      // Use same opener-tab handoff logic as success path to avoid double routing
       console.log('Email already verified despite applyActionCode error, continuing success flow');
       try { sessionStorage.setItem('emailJustVerified', '1'); } catch (_) {}
       try { localStorage.setItem('emailJustVerified', String(Date.now())); } catch (_) {}
@@ -430,7 +431,8 @@ async function handleEmailVerification() {
 
       const storedSelection = getSelectedPlanFromStorage();
       const plan = storedSelection || 'free';
-      if (planRequiresPayment(plan)) {
+      const requiresPayment = planRequiresPayment(plan);
+      if (requiresPayment) {
         status.textContent = "Your email has been verified. Redirecting to complete your subscription...";
         if (actionButtons) actionButtons.style.display = 'none';
       } else {
@@ -441,6 +443,30 @@ async function handleEmailVerification() {
           goToDashboardBtn.style.display = 'block';
           goToDashboardBtn.disabled = false;
         }
+      }
+
+      const hasOpener = canHandoffToOpener();
+      if (hasOpener) {
+        notifyOpenerOfVerification();
+        status.textContent = "Email verified. Please continue in your original tab.";
+        if (actionButtons) actionButtons.style.display = 'none';
+        setTimeout(() => {
+          try { window.close(); } catch (_) {}
+        }, 600);
+        // Fallback: if opener doesn't take over, continue routing here
+        setTimeout(() => {
+          try {
+            const raw = localStorage.getItem(ROUTE_LOCK_KEY);
+            const lock = raw ? JSON.parse(raw) : null;
+            const lockActive = !!(lock?.ts && Date.now() - lock.ts < ROUTE_LOCK_TTL_MS);
+            if (!lockActive) {
+              routeAfterVerification();
+            }
+          } catch (_) {
+            routeAfterVerification();
+          }
+        }, 1500);
+        return;
       }
 
       setTimeout(() => { routeAfterVerification(); }, 1200);
