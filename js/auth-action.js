@@ -407,9 +407,10 @@ async function handleEmailVerification() {
   } catch (error) {
     console.error('Email verification failed:', error);
 
-    // The code may have already been consumed server-side — check if the user is actually verified.
-    // Only trust emailVerified when the failed oobCode belonged to the current user (prevents
-    // treating an expired/unrelated link as success when logged in as a different verified user).
+    // The code may have already been consumed server-side (or in another tab) — check if the user
+    // is actually verified. When checkActionCode succeeds, we verify the oobCode belonged to this
+    // user before trusting emailVerified. When checkActionCode fails (consumed codes throw), we
+    // fall back to reload+verify so the consumed-code recovery path remains reachable.
     const RELOAD_TIMEOUT_MS = 10000;
     let actuallyVerified = false;
     try {
@@ -420,7 +421,9 @@ async function handleEmailVerification() {
         const info = await checkActionCode(auth, oobCode).catch(() => null);
         const codeEmail = info?.data?.email?.toLowerCase?.() || '';
         const userEmail = (user.email || '').toLowerCase();
-        if (codeEmail && codeEmail === userEmail) {
+        const codeMatchesUser = codeEmail && codeEmail === userEmail;
+        const codeUncheckable = !codeEmail; // checkActionCode failed (e.g. already consumed)
+        if (codeMatchesUser || codeUncheckable) {
           let reloadSucceeded = false;
           try {
             await Promise.race([
