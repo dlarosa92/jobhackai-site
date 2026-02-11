@@ -1699,9 +1699,9 @@ class AuthManager {
       }
       if (typeof user.reload === 'function') {
         try {
-          await user.reload();
+          await runWithTimeout('user.reload', () => user.reload(), 3000);
         } catch (reloadErr) {
-          console.warn('sendVerificationEmail reload warning:', reloadErr);
+          console.warn('sendVerificationEmail reload skipped (slow or failed):', reloadErr?.message || reloadErr);
         }
       }
       if (user.emailVerified) {

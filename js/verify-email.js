@@ -259,7 +259,17 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     setResendButton(true, 'Sending...');
 
-    const res = await authManager.sendVerificationEmail();
+    let res;
+    try {
+      res = await Promise.race([
+        authManager.sendVerificationEmail(),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 12000))
+      ]);
+    } catch (e) {
+      setResendButton(false);
+      setStatus('Could not send verification email. Please try again.', true);
+      return;
+    }
     if (res.success) {
       if (res.alreadyVerified) {
         setStatus('Your email is already verified. Click "I’ve already verified, continue".', false);
