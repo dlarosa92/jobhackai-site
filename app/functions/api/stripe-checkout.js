@@ -1,5 +1,5 @@
 import { getBearer, verifyFirebaseIdToken } from '../_lib/firebase-auth.js';
-import { isTrialEligible, getUserPlanData, updateUserPlan } from '../_lib/db.js';
+import { isTrialEligible, getUserPlanData } from '../_lib/db.js';
 import {
   planToPrice,
   priceIdToPlan,
@@ -7,6 +7,7 @@ import {
   listSubscriptions,
   validateStripeCustomer,
   clearCustomerReferences,
+  cacheCustomerId,
   kvCusKey
 } from '../_lib/billing-utils.js';
 export async function onRequest(context) {
@@ -250,12 +251,7 @@ export async function onRequest(context) {
     }
 
     if (customerId) {
-      try {
-        await env.JOBHACKAI_KV?.put(kvCusKey(uid), customerId);
-      } catch (_) {}
-      try {
-        await updateUserPlan(env, uid, { stripeCustomerId: customerId });
-      } catch (_) {}
+      await cacheCustomerId(env, uid, customerId);
 
       if (matchedCustomer && !matchedCustomer?.metadata?.firebaseUid) {
         try {

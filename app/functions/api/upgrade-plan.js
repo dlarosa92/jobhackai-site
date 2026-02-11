@@ -11,6 +11,7 @@ import {
   listSubscriptions,
   validateStripeCustomer,
   clearCustomerReferences,
+  cacheCustomerId,
   kvCusKey
 } from '../_lib/billing-utils.js';
 
@@ -396,12 +397,7 @@ async function resolveCustomerId(env, uid, email) {
   }
 
   if (customerId) {
-    await env.JOBHACKAI_KV?.put(kvCusKey(uid), customerId);
-    try {
-      await updateUserPlan(env, uid, { stripeCustomerId: customerId });
-    } catch (e) {
-      console.log('[BILLING-UPGRADE] D1 customer update failed', e?.message || e);
-    }
+    await cacheCustomerId(env, uid, customerId);
 
     if (matchedCustomer && !matchedCustomer?.metadata?.firebaseUid) {
       try {
