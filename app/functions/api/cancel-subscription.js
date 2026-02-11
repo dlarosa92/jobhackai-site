@@ -1,6 +1,6 @@
 import { getBearer, verifyFirebaseIdToken } from '../_lib/firebase-auth.js';
 import { getUserPlanData } from '../_lib/db.js';
-import { stripe, listSubscriptions, getPlanFromSubscription } from '../_lib/billing-utils.js';
+import { stripe, listSubscriptions, getPlanFromSubscription, invalidateBillingCaches } from '../_lib/billing-utils.js';
 
 export async function onRequest(context) {
   const { request, env } = context;
@@ -113,17 +113,6 @@ async function resolveCustomerId(env, uid, email) {
   }
 
   return customerId;
-}
-
-async function invalidateBillingCaches(env, uid) {
-  if (!env.JOBHACKAI_KV) return;
-  const keys = [
-    `planByUid:${uid}`,
-    `billingStatus:${uid}`,
-    `trialUsedByUid:${uid}`,
-    `trialEndByUid:${uid}`
-  ];
-  await Promise.all(keys.map((key) => env.JOBHACKAI_KV.delete(key).catch(() => null)));
 }
 
 function stripeFormHeaders(env) {

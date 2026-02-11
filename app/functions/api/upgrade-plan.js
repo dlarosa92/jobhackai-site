@@ -12,7 +12,8 @@ import {
   validateStripeCustomer,
   clearCustomerReferences,
   cacheCustomerId,
-  kvCusKey
+  kvCusKey,
+  invalidateBillingCaches
 } from '../_lib/billing-utils.js';
 
 /**
@@ -451,17 +452,6 @@ async function makeUpgradeIdemKey(uid, seed) {
   } catch (_) {
     return `${uid}:${seed}:${Date.now()}`;
   }
-}
-
-async function invalidateBillingCaches(env, uid) {
-  if (!env.JOBHACKAI_KV) return;
-  const keys = [
-    `planByUid:${uid}`,
-    `billingStatus:${uid}`,
-    `trialUsedByUid:${uid}`,
-    `trialEndByUid:${uid}`
-  ];
-  await Promise.all(keys.map((key) => env.JOBHACKAI_KV.delete(key).catch(() => null)));
 }
 
 function safeReturnUrl(returnUrl, env) {

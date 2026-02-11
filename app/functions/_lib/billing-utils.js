@@ -53,18 +53,33 @@ export async function validateStripeCustomer(env, customerId) {
 }
 
 /**
- * Billing KV cache keys that must be cleared when customer references are reset.
- * Ensures no stale paid/active state is served after stale-customer recovery.
+ * Billing KV cache keys that must be cleared when customer references are reset
+ * or when subscription state changes (upgrade, cancel, etc.).
+ * Single source of truth for the key list used by clearCustomerReferences,
+ * invalidateBillingCaches, upgrade-plan, and cancel-subscription.
  * @param {string} uid - Firebase UID
  * @returns {string[]} KV keys to delete
  */
-function billingCacheKeysForUid(uid) {
+export function billingCacheKeysForUid(uid) {
   return [
     `planByUid:${uid}`,
     `billingStatus:${uid}`,
     `trialUsedByUid:${uid}`,
     `trialEndByUid:${uid}`
   ];
+}
+
+/**
+ * Invalidate all billing-related KV caches for a user.
+ * Call after subscription changes (upgrade, cancel, etc.) so other endpoints
+ * do not serve stale plan/status until cache expiry.
+ * @param {Object} env - Environment variables
+ * @param {string} uid - Firebase UID
+ */
+export async function invalidateBillingCaches(env, uid) {
+  if (!env.JOBHACKAI_KV) return;
+  const keys = billingCacheKeysForUid(uid);
+  await Promise.all(keys.map((key) => env.JOBHACKAI_KV.delete(key).catch(() => null)));
 }
 
 /**
