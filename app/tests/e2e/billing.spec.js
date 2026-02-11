@@ -35,10 +35,9 @@ test.describe('Stripe Billing', () => {
     if (!data?.ok) {
       const reason = data?.error || data?.code || `status_${response.status()}`;
       const lowerReason = String(reason).toLowerCase();
+      // Skip only for expected business/account states, NOT server failures (500/502)
       const knownEnvironmentState = response.status() === 400
         || response.status() === 409
-        || response.status() === 500
-        || response.status() === 502
         || lowerReason.includes('no such customer')
         || lowerReason.includes('already subscribed')
         || lowerReason.includes('trial already used');

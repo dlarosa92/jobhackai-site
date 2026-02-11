@@ -261,16 +261,33 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     let res;
     let timeoutId = null;
+    let timedOut = false;
     try {
       res = await Promise.race([
-        authManager.sendVerificationEmail(),
+        authManager.sendVerificationEmail().then((r) => {
+          if (timedOut) return null; // Ignore late result - prevents UI flip after timeout
+          return r;
+        }),
         new Promise((_, reject) => {
-          timeoutId = setTimeout(() => reject(new Error('timeout')), 12000);
+          timeoutId = setTimeout(() => {
+            timedOut = true;
+            reject(new Error('timeout'));
+          }, 12000);
         })
       ]);
     } catch (e) {
-      setResendButton(false);
-      setStatus('Could not send verification email. Please try again.', true);
+      if (timedOut) {
+        setStatus('Request timed out. Please wait before trying again.', true);
+        // Apply cooldown so user cannot trigger another send while original may still complete
+        if (IS_PROD_APP_HOST) {
+          applyResendCooldown(Date.now() + PROD_RESEND_COOLDOWN_MS);
+        } else {
+          setResendButton(false);
+        }
+      } else {
+        setResendButton(false);
+        setStatus('Could not send verification email. Please try again.', true);
+      }
       return;
     } finally {
       if (timeoutId) clearTimeout(timeoutId);
