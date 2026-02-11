@@ -114,7 +114,7 @@ export function stripe(env, path, init = {}) {
 
   const fetchPromise = fetch(url, fetchOptions);
   if (timeoutId) {
-    fetchPromise.finally(() => { if (timeoutId) clearTimeout(timeoutId); });
+    return fetchPromise.finally(() => { if (timeoutId) clearTimeout(timeoutId); });
   }
   return fetchPromise;
 }
