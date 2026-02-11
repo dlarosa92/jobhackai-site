@@ -3,6 +3,7 @@ import { getUserPlanData } from '../_lib/db.js';
 import {
   stripe,
   validateStripeCustomer,
+  resolveStaleCustomerFromKV,
   clearCustomerReferences,
   cacheCustomerId,
   kvCusKey
@@ -67,40 +68,10 @@ export async function onRequest(context) {
     // Validate stored customer to avoid stale/deleted IDs causing Stripe failures.
     // When only KV was stale, D1 may have a newer valid id—check before clearing D1.
     if (customerId) {
-      const validation = await validateStripeCustomer(env, customerId);
-      if (!validation.valid) {
-        console.log('🟡 [BILLING-PORTAL] Stored customer is stale', {
-          uid,
-          customerId,
-          reason: validation.reason
-        });
-        // If we got customerId from KV, D1 may have a newer valid id—check before clearing D1.
-        let d1HasDifferentValidId = false;
-        if (customerIdSource === 'kv') {
-          try {
-            const userPlan = await getUserPlanData(env, uid);
-            const d1CustomerId = userPlan?.stripeCustomerId;
-            if (d1CustomerId && d1CustomerId !== customerId) {
-              const d1Validation = await validateStripeCustomer(env, d1CustomerId);
-              if (d1Validation.valid) {
-                d1HasDifferentValidId = true;
-                customerId = d1CustomerId;
-                console.log('✅ [BILLING-PORTAL] D1 has valid customer; KV was stale', { uid, customerId });
-              }
-            }
-          } catch (e) {
-            console.warn('⚠️ [BILLING-PORTAL] D1 re-check failed (non-fatal):', e?.message || e);
-          }
-        }
-        if (!d1HasDifferentValidId) {
-          await clearCustomerReferences(env, uid);
-          customerId = null;
-        } else {
-          try { await env.JOBHACKAI_KV?.put(kvCusKey(uid), customerId); } catch (_) {}
-        }
-      }
+      const resolved = await resolveStaleCustomerFromKV(env, uid, customerId, customerIdSource, '🟡 [BILLING-PORTAL]');
+      customerId = resolved.customerId;
     }
-    
+
     // Step 3: Only if both KV and D1 miss, fallback to Stripe email search (last resort)
     if (!customerId) {
       console.log('🟡 [BILLING-PORTAL] No customer in KV or D1, trying Stripe email search (last resort)');

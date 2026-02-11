@@ -3,7 +3,7 @@
  * Consolidates duplicate functions from upgrade-plan.js, stripe-checkout.js, billing-portal.js, and billing-status.js
  */
 
-import { updateUserPlan } from './db.js';
+import { updateUserPlan, getUserPlanData } from './db.js';
 
 /**
  * KV key for storing customer ID by Firebase UID
@@ -102,6 +102,62 @@ export async function clearCustomerReferences(env, uid) {
   try {
     await updateUserPlan(env, uid, { stripeCustomerId: null });
   } catch (_) {}
+}
+
+/**
+ * When stored customerId fails Stripe validation and came from KV, re-checks D1 for a valid ID.
+ * D1 may have a newer valid customer—check before clearing references. Single source of truth
+ * for this pattern used by stripe-checkout, upgrade-plan, and billing-portal.
+ * @param {Object} env - Environment variables
+ * @param {string} uid - Firebase UID
+ * @param {string|null} customerId - Current stored customer ID (may be stale)
+ * @param {string|null} customerIdSource - 'kv' | 'd1' | null
+ * @param {string} [logPrefix='[BILLING]'] - Log prefix for context (e.g. '[CHECKOUT]', '[BILLING-PORTAL]')
+ * @returns {Promise<{customerId: string|null}>} Resolved customerId (null if cleared or invalid)
+ */
+export async function resolveStaleCustomerFromKV(env, uid, customerId, customerIdSource, logPrefix = '[BILLING]') {
+  if (!customerId) {
+    return { customerId };
+  }
+
+  const validation = await validateStripeCustomer(env, customerId);
+  if (validation.valid) {
+    return { customerId };
+  }
+
+  console.log(`${logPrefix} Stored customer is stale in Stripe.`, {
+    uid,
+    customerId,
+    reason: validation.reason
+  });
+
+  let d1HasDifferentValidId = false;
+  if (customerIdSource === 'kv') {
+    try {
+      const userPlan = await getUserPlanData(env, uid);
+      const d1CustomerId = userPlan?.stripeCustomerId;
+      if (d1CustomerId && d1CustomerId !== customerId) {
+        const d1Validation = await validateStripeCustomer(env, d1CustomerId);
+        if (d1Validation.valid) {
+          d1HasDifferentValidId = true;
+          customerId = d1CustomerId;
+          console.log(`${logPrefix} D1 has valid customer; KV was stale`, { uid, customerId });
+        }
+      }
+    } catch (e) {
+      console.warn(`${logPrefix} D1 re-check failed (non-fatal):`, e?.message || e);
+    }
+  }
+
+  if (!d1HasDifferentValidId) {
+    await clearCustomerReferences(env, uid);
+    return { customerId: null };
+  }
+
+  try {
+    await env.JOBHACKAI_KV?.put(kvCusKey(uid), customerId);
+  } catch (_) {}
+  return { customerId };
 }
 
 /**

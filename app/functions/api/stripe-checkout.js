@@ -6,7 +6,7 @@ import {
   priceIdToPlan,
   getPlanFromSubscription,
   listSubscriptions,
-  validateStripeCustomer,
+  resolveStaleCustomerFromKV,
   clearCustomerReferences,
   cacheCustomerId,
   kvCusKey
@@ -141,38 +141,9 @@ export async function onRequest(context) {
     // Step 2.5: Validate stored customer still exists in Stripe.
     // When customerId comes from KV, D1 may have a newer valid id—check before clearing D1.
     if (customerId) {
-      const validation = await validateStripeCustomer(env, customerId);
-      if (!validation.valid) {
-        console.log('🟡 [CHECKOUT] Stored customer is stale in Stripe.', {
-          uid,
-          customerId,
-          reason: validation.reason
-        });
-        let d1HasDifferentValidId = false;
-        if (customerIdSource === 'kv') {
-          try {
-            const userPlan = await getUserPlanData(env, uid);
-            const d1CustomerId = userPlan?.stripeCustomerId;
-            if (d1CustomerId && d1CustomerId !== customerId) {
-              const d1Validation = await validateStripeCustomer(env, d1CustomerId);
-              if (d1Validation.valid) {
-                d1HasDifferentValidId = true;
-                customerId = d1CustomerId;
-                console.log('✅ [CHECKOUT] D1 has valid customer; KV was stale', { uid, customerId });
-              }
-            }
-          } catch (e) {
-            console.warn('⚠️ [CHECKOUT] D1 re-check failed (non-fatal):', e?.message || e);
-          }
-        }
-        if (!d1HasDifferentValidId) {
-          await clearCustomerReferences(env, uid);
-          customerId = null;
-          matchedCustomer = null;
-        } else {
-          try { await env.JOBHACKAI_KV?.put(kvCusKey(uid), customerId); } catch (_) {}
-        }
-      }
+      const resolved = await resolveStaleCustomerFromKV(env, uid, customerId, customerIdSource, '🟡 [CHECKOUT]');
+      customerId = resolved.customerId;
+      if (!customerId) matchedCustomer = null;
     }
 
     // Step 3: Only if both KV and D1 miss (or stale IDs are cleared), fallback to Stripe email search.
