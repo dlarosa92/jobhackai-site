@@ -105,7 +105,7 @@ export async function onRequest(context) {
       
       if (!customerId) {
         console.log('🔴 [BILLING-PORTAL] No valid customer exists - user needs to subscribe first');
-        return json({ ok: false, error: 'No customer for user. Please subscribe first.' }, 400, origin, env);
+        return json({ ok: false, error: 'No customer for user. Please subscribe first.' }, 404, origin, env);
       }
     }
 
