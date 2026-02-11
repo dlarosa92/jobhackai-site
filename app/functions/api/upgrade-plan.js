@@ -10,7 +10,6 @@ import {
   pickBestSubscription,
   listSubscriptions,
   resolveStaleCustomerFromKV,
-  clearCustomerReferences,
   cacheCustomerId,
   kvCusKey,
   invalidateBillingCaches

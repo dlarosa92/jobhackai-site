@@ -7,7 +7,6 @@ import {
   getPlanFromSubscription,
   listSubscriptions,
   resolveStaleCustomerFromKV,
-  clearCustomerReferences,
   cacheCustomerId,
   kvCusKey
 } from '../_lib/billing-utils.js';
