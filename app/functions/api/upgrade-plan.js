@@ -111,13 +111,15 @@ export async function onRequest(context) {
         const errText = await sessionRes.text();
         let errData = {};
         try { errData = JSON.parse(errText); } catch (_) {}
+        const stripeMessage = errData?.error?.message || errText || 'stripe_checkout_error';
+        const responseStatus = sessionRes.status >= 400 && sessionRes.status < 500 ? 400 : 500;
         console.log('[BILLING-UPGRADE] Checkout session failed', {
           uid,
           targetPlan,
           status: sessionRes.status,
-          error: errData?.error?.message || errText
+          error: stripeMessage
         });
-        return json({ ok: false, code: 'CHECKOUT_FAILED' }, 502, origin, env);
+        return json({ ok: false, code: 'CHECKOUT_FAILED', error: stripeMessage }, responseStatus, origin, env);
       }
 
       const session = await sessionRes.json();
@@ -138,7 +140,7 @@ export async function onRequest(context) {
       });
       const scheduleResult = await scheduleDowngrade(env, bestSub, targetPlan, source);
       if (!scheduleResult.ok) {
-        return json({ ok: false, code: scheduleResult.code || 'DOWNGRADE_SCHEDULE_FAILED' }, 502, origin, env);
+        return json({ ok: false, code: scheduleResult.code || 'DOWNGRADE_SCHEDULE_FAILED' }, 500, origin, env);
       }
       return json({
         ok: true,
@@ -203,13 +205,15 @@ export async function onRequest(context) {
       const errText = await updateRes.text();
       let errData = {};
       try { errData = JSON.parse(errText); } catch (_) {}
+      const stripeMessage = errData?.error?.message || errText || 'stripe_update_error';
+      const responseStatus = updateRes.status >= 400 && updateRes.status < 500 ? 400 : 500;
       console.log('[BILLING-UPGRADE] Subscription update failed', {
         uid,
         subId: bestSub.id,
         status: updateRes.status,
-        error: errData?.error?.message || errText
+        error: stripeMessage
       });
-      return json({ ok: false, code: 'UPDATE_FAILED' }, 502, origin, env);
+      return json({ ok: false, code: 'UPDATE_FAILED', error: stripeMessage }, responseStatus, origin, env);
     }
 
     const updatedSub = await updateRes.json();
@@ -311,11 +315,53 @@ async function resolveCustomerId(env, uid, email) {
     }
   }
 
+  // Validate stored customer to avoid stale IDs causing checkout failures.
+  if (customerId) {
+    try {
+      const customerCheckRes = await stripe(env, `/customers/${customerId}`);
+      const customerCheckText = await customerCheckRes.text().catch(() => '');
+      let customerCheckData = {};
+      try {
+        customerCheckData = customerCheckText ? JSON.parse(customerCheckText) : {};
+      } catch (_) {}
+      const customerCheckMessage = String(
+        customerCheckData?.error?.message || customerCheckText || ''
+      ).toLowerCase();
+      const isDeletedCustomer = customerCheckData?.deleted === true;
+      const isMissingCustomer = customerCheckMessage.includes('no such customer');
+
+      if (isDeletedCustomer || isMissingCustomer) {
+        console.log('[BILLING-UPGRADE] Stored customer is stale in Stripe. Clearing stale customer ID.', {
+          uid,
+          customerId,
+          reason: isDeletedCustomer ? 'deleted' : 'missing'
+        });
+        customerId = null;
+        try {
+          await env.JOBHACKAI_KV?.delete(kvCusKey(uid));
+        } catch (_) {}
+        try {
+          await updateUserPlan(env, uid, { stripeCustomerId: null });
+        } catch (_) {}
+      } else if (!customerCheckRes.ok) {
+        console.log('[BILLING-UPGRADE] Customer validation failed but keeping ID', {
+          uid,
+          customerId,
+          status: customerCheckRes.status
+        });
+      }
+    } catch (e) {
+      console.log('[BILLING-UPGRADE] Customer validation exception (non-fatal)', e?.message || e);
+    }
+  }
+
   if (!customerId && email) {
     try {
       const searchRes = await stripe(env, `/customers?email=${encodeURIComponent(email)}&limit=100`);
       const searchData = await searchRes.json();
-      const customers = searchRes.ok ? (searchData?.data || []) : [];
+      const customers = searchRes.ok
+        ? (searchData?.data || []).filter((c) => c && c.deleted !== true)
+        : [];
       if (customers.length > 0) {
         const uidMatches = customers.filter((c) => c?.metadata?.firebaseUid === uid);
         const candidates = uidMatches.length > 0 ? uidMatches : customers;
@@ -374,7 +420,6 @@ async function resolveCustomerId(env, uid, email) {
 
   if (customerId) {
     await env.JOBHACKAI_KV?.put(kvCusKey(uid), customerId);
-    await env.JOBHACKAI_KV?.put(kvEmailKey(uid), email);
     try {
       await updateUserPlan(env, uid, { stripeCustomerId: customerId });
     } catch (e) {
@@ -473,7 +518,6 @@ function json(body, status, origin, env) {
 }
 
 const kvCusKey = (uid) => `cusByUid:${uid}`;
-const kvEmailKey = (uid) => `emailByUid:${uid}`;
 
 async function cancelOtherSubscriptions(env, subs, keepSubId) {
   const toCancel = (subs || []).filter((sub) =>

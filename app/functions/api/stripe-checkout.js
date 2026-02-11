@@ -128,13 +128,58 @@ export async function onRequest(context) {
       }
     }
     
-    // Step 3: Only if both KV and D1 miss, fallback to Stripe email search (last resort)
     let matchedCustomer = null;
+
+    // Step 2.5: Validate stored customer still exists in Stripe.
+    // If stale, clear cached IDs so fallback can recover in the same request.
+    if (customerId) {
+      try {
+        const customerCheckRes = await stripe(env, `/customers/${customerId}`);
+        const customerCheckText = await customerCheckRes.text().catch(() => '');
+        let customerCheckData = {};
+        try {
+          customerCheckData = customerCheckText ? JSON.parse(customerCheckText) : {};
+        } catch (_) {}
+        const customerCheckMessage = String(
+          customerCheckData?.error?.message || customerCheckText || ''
+        ).toLowerCase();
+        const isDeletedCustomer = customerCheckData?.deleted === true;
+        const isMissingCustomer = customerCheckMessage.includes('no such customer');
+
+        if (isDeletedCustomer || isMissingCustomer) {
+          console.log('🟡 [CHECKOUT] Stored customer is stale in Stripe. Clearing stale customer ID.', {
+            uid,
+            customerId,
+            reason: isDeletedCustomer ? 'deleted' : 'missing'
+          });
+          customerId = null;
+          matchedCustomer = null;
+          try {
+            await env.JOBHACKAI_KV?.delete(kvCusKey(uid));
+          } catch (_) {}
+          try {
+            await updateUserPlan(env, uid, { stripeCustomerId: null });
+          } catch (_) {}
+        } else if (!customerCheckRes.ok) {
+          console.log('🟡 [CHECKOUT] Customer validation failed but keeping ID', {
+            uid,
+            customerId,
+            status: customerCheckRes.status
+          });
+        }
+      } catch (customerCheckError) {
+        console.log('🟡 [CHECKOUT] Customer validation exception (non-fatal)', customerCheckError?.message || customerCheckError);
+      }
+    }
+
+    // Step 3: Only if both KV and D1 miss (or stale IDs are cleared), fallback to Stripe email search.
     if (!customerId && email) {
       try {
         const searchRes = await stripe(env, `/customers?email=${encodeURIComponent(email)}&limit=100`);
         const searchData = await searchRes.json();
-        const customers = searchRes.ok ? (searchData?.data || []) : [];
+        const customers = searchRes.ok
+          ? (searchData?.data || []).filter((c) => c && c.deleted !== true)
+          : [];
         if (customers.length > 0) {
           const uidMatches = customers.filter((c) => c?.metadata?.firebaseUid === uid);
           const candidates = uidMatches.length > 0 ? uidMatches : customers;
@@ -205,7 +250,7 @@ export async function onRequest(context) {
         const c = await res.json();
         if (!c || !c.id) {
           console.log('🔴 [CHECKOUT] Invalid customer response', c);
-          return json({ ok: false, error: 'Invalid response from Stripe' }, 502, origin, env);
+          return json({ ok: false, error: 'Invalid response from Stripe' }, 500, origin, env);
         }
         
         customerId = c.id;
@@ -214,7 +259,6 @@ export async function onRequest(context) {
         // Try to cache customer ID (non-blocking)
         try {
           await env.JOBHACKAI_KV?.put(kvCusKey(uid), customerId);
-          await env.JOBHACKAI_KV?.put(kvEmailKey(uid), email);
         } catch (kvWriteError) {
           console.log('🟡 [CHECKOUT] KV write error (non-fatal)', kvWriteError?.message || kvWriteError);
           // Continue - customer was created successfully
@@ -231,7 +275,6 @@ export async function onRequest(context) {
     if (customerId) {
       try {
         await env.JOBHACKAI_KV?.put(kvCusKey(uid), customerId);
-        await env.JOBHACKAI_KV?.put(kvEmailKey(uid), email);
       } catch (_) {}
       try {
         await updateUserPlan(env, uid, { stripeCustomerId: customerId });
@@ -338,7 +381,7 @@ export async function onRequest(context) {
       const s = await sessionRes.json();
       if (!s || !s.url) {
         console.log('🔴 [CHECKOUT] Invalid session response', s);
-        return json({ ok: false, error: 'Invalid response from Stripe' }, 502, origin, env);
+        return json({ ok: false, error: 'Invalid response from Stripe' }, 500, origin, env);
       }
       
       console.log('✅ [CHECKOUT] Session created', { id: s.id, url: s.url });
@@ -434,7 +477,6 @@ function corsHeaders(origin, env) {
 }
 function json(body, status, origin, env) { return new Response(JSON.stringify(body), { status, headers: corsHeaders(origin, env) }); }
 const kvCusKey = (uid) => `cusByUid:${uid}`;
-const kvEmailKey = (uid) => `emailByUid:${uid}`;
 
 // Build a robust Idempotency-Key from stable parameters, so retries succeed
 // and parameter changes (e.g., URLs, price, customer, trial period, payment_method_collection) generate a new key

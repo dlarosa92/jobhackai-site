@@ -22,6 +22,10 @@ document.addEventListener('DOMContentLoaded', async () => {
   const alreadyVerifiedLink = document.getElementById('alreadyVerifiedLink');
   const statusEl = document.getElementById('verifyStatus');
   const IS_PROD_APP_HOST = (window.location.hostname || '').toLowerCase() === 'app.jobhackai.io';
+  const urlParams = new URLSearchParams(window.location.search);
+  const signupAutoSendState = (urlParams.get('sent') || '').trim();
+  const signupAutoSendSucceeded = signupAutoSendState === '1';
+  const signupAutoSendFailed = signupAutoSendState === '0';
   const RESEND_COOLDOWN_KEY = 'jh_verify_email_resend_cooldown_until';
   const PROD_INITIAL_RESEND_COOLDOWN_MS = 30 * 1000;
   const PROD_RESEND_COOLDOWN_MS = 60 * 1000;
@@ -207,15 +211,31 @@ document.addEventListener('DOMContentLoaded', async () => {
     const existingCooldown = getStoredResendCooldownUntil();
     if (existingCooldown > Date.now()) {
       applyResendCooldown(existingCooldown);
-    } else {
+    } else if (signupAutoSendSucceeded) {
       applyResendCooldown(Date.now() + PROD_INITIAL_RESEND_COOLDOWN_MS);
+    } else {
+      clearStoredResendCooldown();
+      setResendButton(false);
     }
 
     if (!statusEl?.textContent?.trim()) {
-      setStatus('Check spam/promotions first. You can resend after the timer.', false);
+      if (signupAutoSendFailed) {
+        setStatus('We could not send the verification email automatically. Click "Resend link" to try now.', true);
+      } else if (signupAutoSendSucceeded) {
+        setStatus('Verification email sent. Check your inbox (and spam).', false);
+      } else {
+        setStatus('Check spam/promotions first. If you still do not see it, click "Resend link".', false);
+      }
     }
   } else {
     setResendButton(false);
+    if (!statusEl?.textContent?.trim()) {
+      if (signupAutoSendFailed) {
+        setStatus('Automatic send failed. Click "Resend link" to send the verification email.', true);
+      } else if (signupAutoSendSucceeded) {
+        setStatus('Verification email sent. Check your inbox (and spam).', false);
+      }
+    }
   }
 
   window.addEventListener('beforeunload', () => {
@@ -239,8 +259,23 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     setResendButton(true, 'Sending...');
 
-    const res = await authManager.sendVerificationEmail();
+    let res;
+    try {
+      res = await Promise.race([
+        authManager.sendVerificationEmail(),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 12000))
+      ]);
+    } catch (e) {
+      setResendButton(false);
+      setStatus('Could not send verification email. Please try again.', true);
+      return;
+    }
     if (res.success) {
+      if (res.alreadyVerified) {
+        setStatus('Your email is already verified. Click "I’ve already verified, continue".', false);
+        setResendButton(false);
+        return;
+      }
       setStatus('Verification email sent. Check your inbox (and spam).');
       if (IS_PROD_APP_HOST) {
         applyResendCooldown(Date.now() + PROD_RESEND_COOLDOWN_MS);
@@ -248,8 +283,13 @@ document.addEventListener('DOMContentLoaded', async () => {
         setResendButton(false);
       }
     } else {
+      const errorCode = (res.errorCode || '').toLowerCase();
       const errorText = (res.error || '').toLowerCase();
-      const isRateLimited = errorText.includes('too many') || errorText.includes('try again later');
+      const isRateLimited = errorCode === 'auth/too-many-requests'
+        || errorCode === 'auth/quota-exceeded'
+        || errorText.includes('too many')
+        || errorText.includes('try again later')
+        || errorText.includes('limit reached');
 
       if (IS_PROD_APP_HOST && isRateLimited) {
         applyResendCooldown(Date.now() + PROD_RATE_LIMIT_COOLDOWN_MS);
