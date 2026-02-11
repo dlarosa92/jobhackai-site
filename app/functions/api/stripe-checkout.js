@@ -107,8 +107,10 @@ export async function onRequest(context) {
 
     // Step 1: Try KV (cache)
     let customerId = null;
+    let customerIdSource = null;
     try {
       customerId = await env.JOBHACKAI_KV?.get(kvCusKey(uid));
+      if (customerId) customerIdSource = 'kv';
     } catch (kvError) {
       console.log('🟡 [CHECKOUT] KV read error (non-fatal)', kvError?.message || kvError);
     }
@@ -120,6 +122,7 @@ export async function onRequest(context) {
         const userPlan = await getUserPlanData(env, uid);
         if (userPlan?.stripeCustomerId) {
           customerId = userPlan.stripeCustomerId;
+          customerIdSource = 'd1';
           console.log('✅ [CHECKOUT] Found customer ID in D1:', customerId);
           // Cache it in KV for next time
           try {
@@ -136,18 +139,39 @@ export async function onRequest(context) {
     let matchedCustomer = null;
 
     // Step 2.5: Validate stored customer still exists in Stripe.
-    // If stale, clear cached IDs so fallback can recover in the same request.
+    // When customerId comes from KV, D1 may have a newer valid id—check before clearing D1.
     if (customerId) {
       const validation = await validateStripeCustomer(env, customerId);
       if (!validation.valid) {
-        console.log('🟡 [CHECKOUT] Stored customer is stale in Stripe. Clearing stale customer ID.', {
+        console.log('🟡 [CHECKOUT] Stored customer is stale in Stripe.', {
           uid,
           customerId,
           reason: validation.reason
         });
-        await clearCustomerReferences(env, uid);
-        customerId = null;
-        matchedCustomer = null;
+        let d1HasDifferentValidId = false;
+        if (customerIdSource === 'kv') {
+          try {
+            const userPlan = await getUserPlanData(env, uid);
+            const d1CustomerId = userPlan?.stripeCustomerId;
+            if (d1CustomerId && d1CustomerId !== customerId) {
+              const d1Validation = await validateStripeCustomer(env, d1CustomerId);
+              if (d1Validation.valid) {
+                d1HasDifferentValidId = true;
+                customerId = d1CustomerId;
+                console.log('✅ [CHECKOUT] D1 has valid customer; KV was stale', { uid, customerId });
+              }
+            }
+          } catch (e) {
+            console.warn('⚠️ [CHECKOUT] D1 re-check failed (non-fatal):', e?.message || e);
+          }
+        }
+        if (!d1HasDifferentValidId) {
+          await clearCustomerReferences(env, uid);
+          customerId = null;
+          matchedCustomer = null;
+        } else {
+          try { await env.JOBHACKAI_KV?.put(kvCusKey(uid), customerId); } catch (_) {}
+        }
       }
     }
 
