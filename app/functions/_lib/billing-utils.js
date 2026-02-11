@@ -53,13 +53,35 @@ export async function validateStripeCustomer(env, customerId) {
 }
 
 /**
+ * Billing KV cache keys that must be cleared when customer references are reset.
+ * Ensures no stale paid/active state is served after stale-customer recovery.
+ * @param {string} uid - Firebase UID
+ * @returns {string[]} KV keys to delete
+ */
+function billingCacheKeysForUid(uid) {
+  return [
+    `planByUid:${uid}`,
+    `billingStatus:${uid}`,
+    `trialUsedByUid:${uid}`,
+    `trialEndByUid:${uid}`
+  ];
+}
+
+/**
  * Clear stale customer references from KV and D1.
+ * Also clears related billing caches (planByUid, billingStatus, etc.) so other
+ * endpoints do not serve stale paid/active state until cache expiry.
  * @param {Object} env - Environment variables
  * @param {string} uid - Firebase UID
  */
 export async function clearCustomerReferences(env, uid) {
   try {
     await env.JOBHACKAI_KV?.delete(kvCusKey(uid));
+  } catch (_) {}
+
+  try {
+    const billingKeys = billingCacheKeysForUid(uid);
+    await Promise.all(billingKeys.map((key) => env.JOBHACKAI_KV?.delete(key).catch(() => null)));
   } catch (_) {}
 
   try {

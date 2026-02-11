@@ -299,10 +299,12 @@ function normalizePlan(plan) {
 
 async function resolveCustomerId(env, uid, email) {
   let customerId = null;
+  let customerIdSource = null;
   let matchedCustomer = null;
 
   try {
     customerId = await env.JOBHACKAI_KV?.get(kvCusKey(uid));
+    if (customerId) customerIdSource = 'kv';
   } catch (e) {
     console.log('[BILLING-UPGRADE] KV read error', e?.message || e);
   }
@@ -312,6 +314,7 @@ async function resolveCustomerId(env, uid, email) {
       const userPlan = await getUserPlanData(env, uid);
       if (userPlan?.stripeCustomerId) {
         customerId = userPlan.stripeCustomerId;
+        customerIdSource = 'd1';
         await env.JOBHACKAI_KV?.put(kvCusKey(uid), customerId);
       }
     } catch (e) {
@@ -320,16 +323,38 @@ async function resolveCustomerId(env, uid, email) {
   }
 
   // Validate stored customer to avoid stale IDs causing checkout failures.
+  // When customerId comes from KV, D1 may have a newer valid id—check before clearing D1.
   if (customerId) {
     const validation = await validateStripeCustomer(env, customerId);
     if (!validation.valid) {
-      console.log('[BILLING-UPGRADE] Stored customer is stale in Stripe. Clearing stale customer ID.', {
+      console.log('[BILLING-UPGRADE] Stored customer is stale in Stripe.', {
         uid,
         customerId,
         reason: validation.reason
       });
-      await clearCustomerReferences(env, uid);
-      customerId = null;
+      let d1HasDifferentValidId = false;
+      if (customerIdSource === 'kv') {
+        try {
+          const userPlan = await getUserPlanData(env, uid);
+          const d1CustomerId = userPlan?.stripeCustomerId;
+          if (d1CustomerId && d1CustomerId !== customerId) {
+            const d1Validation = await validateStripeCustomer(env, d1CustomerId);
+            if (d1Validation.valid) {
+              d1HasDifferentValidId = true;
+              customerId = d1CustomerId;
+              console.log('[BILLING-UPGRADE] D1 has valid customer; KV was stale', { uid, customerId });
+            }
+          }
+        } catch (e) {
+          console.warn('[BILLING-UPGRADE] D1 re-check failed (non-fatal):', e?.message || e);
+        }
+      }
+      if (!d1HasDifferentValidId) {
+        await clearCustomerReferences(env, uid);
+        customerId = null;
+      } else {
+        try { await env.JOBHACKAI_KV?.put(kvCusKey(uid), customerId); } catch (_) {}
+      }
     }
   }
 
