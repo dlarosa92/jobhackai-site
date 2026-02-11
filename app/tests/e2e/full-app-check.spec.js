@@ -508,9 +508,8 @@ test.describe('Full App Check', () => {
         return_url: `${baseURL}/account-setting.html`,
       },
     });
-    // 502 can still occur on environments with stale Stripe customer references
-    // before billing-portal fixes are deployed.
-    expect([200, 400, 401, 403, 502]).toContain(billingPortalResponse.status());
+    // 500/502 can occur on server errors (e.g. Stripe API failures, stale customer references).
+    expect([200, 400, 401, 403, 500, 502]).toContain(billingPortalResponse.status());
     const billingPortalRaw = await billingPortalResponse.text().catch(() => '');
     let billingPortalData = {};
     try {

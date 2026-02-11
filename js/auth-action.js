@@ -7,6 +7,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/12.1.0/firebas
 import { 
   getAuth, 
   applyActionCode, 
+  checkActionCode,
   verifyPasswordResetCode, 
   confirmPasswordReset 
 } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-auth.js";
@@ -406,14 +407,49 @@ async function handleEmailVerification() {
   } catch (error) {
     console.error('Email verification failed:', error);
 
-    // The code may have already been consumed server-side — check if the user is actually verified
+    // The code may have already been consumed server-side (or in another tab) — check if the user
+    // is actually verified. When checkActionCode succeeds, we verify the oobCode belonged to this
+    // user before trusting emailVerified. When checkActionCode fails with auth/invalid-action-code
+    // (already consumed), we fall back to reload+verify so the consumed-code recovery path remains
+    // reachable. We must NOT treat auth/expired-action-code as recoverable — expired/invalid links
+    // must fail even if the user is already verified.
+    const RELOAD_TIMEOUT_MS = 10000;
     let actuallyVerified = false;
     try {
       const user = auth.currentUser;
-      if (user) {
-        await user.reload();
-        if (user.emailVerified) {
-          actuallyVerified = true;
+      if (!user) {
+        // No current user — cannot have verified via this link
+      } else {
+        let info = null;
+        let checkErrorCode = null;
+        try {
+          info = await checkActionCode(auth, oobCode);
+        } catch (e) {
+          checkErrorCode = e?.code || null;
+        }
+        const codeEmail = info?.data?.email?.toLowerCase?.() || '';
+        const userEmail = (user.email || '').toLowerCase();
+        const codeMatchesUser = codeEmail && codeEmail === userEmail;
+        // Only treat as "code uncheckable" when it failed due to already-consumed (invalid-action-code).
+        // Expired or other invalid codes must not bypass the email match check.
+        const codeUncheckable = !codeEmail && checkErrorCode === 'auth/invalid-action-code';
+        if (codeMatchesUser || codeUncheckable) {
+          let reloadSucceeded = false;
+          let timeoutId = null;
+          try {
+            await Promise.race([
+              user.reload().then(() => { reloadSucceeded = true; }),
+              new Promise((_, reject) => {
+                timeoutId = setTimeout(() => reject(new Error('reload_timeout')), RELOAD_TIMEOUT_MS);
+              })
+            ]);
+          } catch (_) {}
+          finally {
+            if (timeoutId) clearTimeout(timeoutId);
+          }
+          if (reloadSucceeded && user.emailVerified) {
+            actuallyVerified = true;
+          }
         }
       }
     } catch (_) {}

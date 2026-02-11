@@ -260,15 +260,20 @@ document.addEventListener('DOMContentLoaded', async () => {
     setResendButton(true, 'Sending...');
 
     let res;
+    let timeoutId = null;
     try {
       res = await Promise.race([
         authManager.sendVerificationEmail(),
-        new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 12000))
+        new Promise((_, reject) => {
+          timeoutId = setTimeout(() => reject(new Error('timeout')), 12000);
+        })
       ]);
     } catch (e) {
       setResendButton(false);
       setStatus('Could not send verification email. Please try again.', true);
       return;
+    } finally {
+      if (timeoutId) clearTimeout(timeoutId);
     }
     if (res.success) {
       if (res.alreadyVerified) {
