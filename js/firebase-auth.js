@@ -146,7 +146,7 @@ async function runNonCriticalTask(label, task, timeoutMs = 8000) {
 function getVerificationActionCodeSettings() {
   const fallbackUrl = `${PROD_APP_ORIGIN}${VERIFICATION_ACTION_PATH}`;
   if (typeof window === 'undefined' || !window.location) {
-    return { url: fallbackUrl, handleCodeInApp: true };
+    return { url: fallbackUrl };
   }
 
   const { origin, protocol, hostname } = window.location;
@@ -165,8 +165,7 @@ function getVerificationActionCodeSettings() {
     : fallbackUrl;
 
   return {
-    url: actionUrl,
-    handleCodeInApp: true
+    url: actionUrl
   };
 }
 

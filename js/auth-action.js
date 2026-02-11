@@ -401,10 +401,56 @@ async function handleEmailVerification() {
     
   } catch (error) {
     console.error('Email verification failed:', error);
+
+    // The code may have already been consumed server-side — check if the user is actually verified
+    let actuallyVerified = false;
+    try {
+      const user = auth.currentUser;
+      if (user) {
+        await user.reload();
+        if (user.emailVerified) {
+          actuallyVerified = true;
+        }
+      }
+    } catch (_) {}
+
+    if (actuallyVerified) {
+      // Verification succeeded despite the error — continue the normal success flow
+      console.log('Email already verified despite applyActionCode error, continuing success flow');
+      try { sessionStorage.setItem('emailJustVerified', '1'); } catch (_) {}
+      try { localStorage.setItem('emailJustVerified', String(Date.now())); } catch (_) {}
+      try {
+        const ch = new BroadcastChannel('auth');
+        ch.postMessage({ type: 'email-verified' });
+        ch.close();
+      } catch (_) {}
+
+      showSuccess("✅ Email verified successfully!");
+      pageTitle.textContent = "Email Verified";
+
+      const storedSelection = getSelectedPlanFromStorage();
+      const plan = storedSelection || 'free';
+      if (planRequiresPayment(plan)) {
+        status.textContent = "Your email has been verified. Redirecting to complete your subscription...";
+        if (actionButtons) actionButtons.style.display = 'none';
+      } else {
+        status.textContent = "Your email has been verified. You can now access your dashboard.";
+        if (actionButtons) actionButtons.style.display = 'block';
+        if (goToLoginBtn) goToLoginBtn.style.display = 'none';
+        if (goToDashboardBtn) {
+          goToDashboardBtn.style.display = 'block';
+          goToDashboardBtn.disabled = false;
+        }
+      }
+
+      setTimeout(() => { routeAfterVerification(); }, 1200);
+      return;
+    }
+
     showError(`❌ Verification failed: ${error.message || 'Invalid or expired verification link.'}`);
     pageTitle.textContent = "Verification Failed";
     status.textContent = "We couldn't verify your email. The link may be invalid or expired.";
-    
+
     // Show action buttons
     actionButtons.style.display = 'block';
     goToLoginBtn.style.display = 'block';
@@ -547,7 +593,10 @@ async function initialize() {
   
   // Setup action buttons
   goToLoginBtn.addEventListener('click', () => {
-    window.location.href = '/login.html';
+    // Preserve plan selection so the user can retry verification without losing their plan
+    const selectedPlan = getSelectedPlanFromStorage();
+    const loginUrl = selectedPlan ? `/login.html?plan=${encodeURIComponent(selectedPlan)}` : '/login.html';
+    window.location.href = loginUrl;
   });
   
   goToDashboardBtn.addEventListener('click', (e) => {
