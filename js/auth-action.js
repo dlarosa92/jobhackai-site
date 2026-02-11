@@ -205,6 +205,34 @@ function notifyOpenerOfVerification() {
   try { window.opener.focus(); } catch (_) {}
 }
 
+/**
+ * If opener tab exists, hand off routing to it and close this tab.
+ * Fallback: if opener doesn't take over within timeout, route here.
+ * @returns {boolean} true if handoff was initiated (caller should return), false if no opener
+ */
+function tryHandoffToOpenerThenRoute() {
+  if (!canHandoffToOpener()) return false;
+  notifyOpenerOfVerification();
+  status.textContent = "Email verified. Please continue in your original tab.";
+  if (actionButtons) actionButtons.style.display = 'none';
+  setTimeout(() => {
+    try { window.close(); } catch (_) {}
+  }, 600);
+  setTimeout(() => {
+    try {
+      const raw = localStorage.getItem(ROUTE_LOCK_KEY);
+      const lock = raw ? JSON.parse(raw) : null;
+      const lockActive = !!(lock?.ts && Date.now() - lock.ts < ROUTE_LOCK_TTL_MS);
+      if (!lockActive) {
+        routeAfterVerification();
+      }
+    } catch (_) {
+      routeAfterVerification();
+    }
+  }, 1500);
+  return true;
+}
+
 // Route user after email verification based on plan selection
 async function routeAfterVerification() {
   if (!acquireRouteLock('auth-action')) {
@@ -358,31 +386,7 @@ async function handleEmailVerification() {
       }
     }
     
-    const hasOpener = canHandoffToOpener();
-
-    if (hasOpener) {
-      // Prefer routing in the original tab to avoid double-tab flows
-      notifyOpenerOfVerification();
-      status.textContent = "Email verified. Please continue in your original tab.";
-      if (actionButtons) actionButtons.style.display = 'none';
-      setTimeout(() => {
-        try { window.close(); } catch (_) {}
-      }, 600);
-      // Fallback: if opener doesn't take over, continue routing here
-      setTimeout(() => {
-        try {
-          const raw = localStorage.getItem(ROUTE_LOCK_KEY);
-          const lock = raw ? JSON.parse(raw) : null;
-          const lockActive = !!(lock?.ts && Date.now() - lock.ts < ROUTE_LOCK_TTL_MS);
-          if (!lockActive) {
-            routeAfterVerification();
-          }
-        } catch (_) {
-          routeAfterVerification();
-        }
-      }, 1500);
-      return;
-    }
+    if (tryHandoffToOpenerThenRoute()) return;
 
     // Show action buttons (but we'll redirect automatically) for free plans only
     if (!requiresPayment) {
@@ -445,29 +449,7 @@ async function handleEmailVerification() {
         }
       }
 
-      const hasOpener = canHandoffToOpener();
-      if (hasOpener) {
-        notifyOpenerOfVerification();
-        status.textContent = "Email verified. Please continue in your original tab.";
-        if (actionButtons) actionButtons.style.display = 'none';
-        setTimeout(() => {
-          try { window.close(); } catch (_) {}
-        }, 600);
-        // Fallback: if opener doesn't take over, continue routing here
-        setTimeout(() => {
-          try {
-            const raw = localStorage.getItem(ROUTE_LOCK_KEY);
-            const lock = raw ? JSON.parse(raw) : null;
-            const lockActive = !!(lock?.ts && Date.now() - lock.ts < ROUTE_LOCK_TTL_MS);
-            if (!lockActive) {
-              routeAfterVerification();
-            }
-          } catch (_) {
-            routeAfterVerification();
-          }
-        }, 1500);
-        return;
-      }
+      if (tryHandoffToOpenerThenRoute()) return;
 
       setTimeout(() => { routeAfterVerification(); }, 1200);
       return;
