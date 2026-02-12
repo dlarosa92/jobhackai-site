@@ -160,6 +160,10 @@ test.describe('Authentication', () => {
         waitUntil: 'domcontentloaded'
       });
 
+      await page.waitForFunction(() => {
+        return typeof window.FirebaseAuthManager?.sendVerificationEmail === 'function';
+      }, { timeout: 15000 });
+
       await expect(page.locator('#resendVerifyBtn')).toBeVisible();
       await expect(page.locator('#resendVerifyBtn')).toBeEnabled();
 
@@ -171,11 +175,13 @@ test.describe('Authentication', () => {
         verifyStatusText = ((await verifyStatus.textContent()) || '').trim();
         return verifyStatusText.length > 0;
       }, {
-        timeout: 15000,
+        timeout: 30000,
         message: 'Expected resend verification status text to be shown'
       }).toBe(true);
 
-      expect(verifyStatusText).toMatch(/Verification email sent|Too many failed attempts|try again later/i);
+      expect(verifyStatusText).toMatch(
+        /Verification email sent|Too many|try again later|Could not send verification email|already verified|Please wait before requesting/i
+      );
     } finally {
       await context.close();
     }

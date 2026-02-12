@@ -7,6 +7,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/12.1.0/firebas
 import { 
   getAuth, 
   applyActionCode, 
+  checkActionCode,
   verifyPasswordResetCode, 
   confirmPasswordReset 
 } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-auth.js";
@@ -205,6 +206,34 @@ function notifyOpenerOfVerification() {
   try { window.opener.focus(); } catch (_) {}
 }
 
+/**
+ * If opener tab exists, hand off routing to it and close this tab.
+ * Fallback: if opener doesn't take over within timeout, route here.
+ * @returns {boolean} true if handoff was initiated (caller should return), false if no opener
+ */
+function tryHandoffToOpenerThenRoute() {
+  if (!canHandoffToOpener()) return false;
+  notifyOpenerOfVerification();
+  status.textContent = "Email verified. Please continue in your original tab.";
+  if (actionButtons) actionButtons.style.display = 'none';
+  setTimeout(() => {
+    try { window.close(); } catch (_) {}
+  }, 600);
+  setTimeout(() => {
+    try {
+      const raw = localStorage.getItem(ROUTE_LOCK_KEY);
+      const lock = raw ? JSON.parse(raw) : null;
+      const lockActive = !!(lock?.ts && Date.now() - lock.ts < ROUTE_LOCK_TTL_MS);
+      if (!lockActive) {
+        routeAfterVerification();
+      }
+    } catch (_) {
+      routeAfterVerification();
+    }
+  }, 1500);
+  return true;
+}
+
 // Route user after email verification based on plan selection
 async function routeAfterVerification() {
   if (!acquireRouteLock('auth-action')) {
@@ -358,31 +387,7 @@ async function handleEmailVerification() {
       }
     }
     
-    const hasOpener = canHandoffToOpener();
-
-    if (hasOpener) {
-      // Prefer routing in the original tab to avoid double-tab flows
-      notifyOpenerOfVerification();
-      status.textContent = "Email verified. Please continue in your original tab.";
-      if (actionButtons) actionButtons.style.display = 'none';
-      setTimeout(() => {
-        try { window.close(); } catch (_) {}
-      }, 600);
-      // Fallback: if opener doesn't take over, continue routing here
-      setTimeout(() => {
-        try {
-          const raw = localStorage.getItem(ROUTE_LOCK_KEY);
-          const lock = raw ? JSON.parse(raw) : null;
-          const lockActive = !!(lock?.ts && Date.now() - lock.ts < ROUTE_LOCK_TTL_MS);
-          if (!lockActive) {
-            routeAfterVerification();
-          }
-        } catch (_) {
-          routeAfterVerification();
-        }
-      }, 1500);
-      return;
-    }
+    if (tryHandoffToOpenerThenRoute()) return;
 
     // Show action buttons (but we'll redirect automatically) for free plans only
     if (!requiresPayment) {
@@ -401,10 +406,95 @@ async function handleEmailVerification() {
     
   } catch (error) {
     console.error('Email verification failed:', error);
+
+    // The code may have already been consumed server-side (or in another tab) — check if the user
+    // is actually verified. When checkActionCode succeeds, we verify the oobCode belonged to this
+    // user before trusting emailVerified. When checkActionCode fails with auth/invalid-action-code
+    // (already consumed), we fall back to reload+verify so the consumed-code recovery path remains
+    // reachable. We must NOT treat auth/expired-action-code as recoverable — expired/invalid links
+    // must fail even if the user is already verified.
+    const RELOAD_TIMEOUT_MS = 10000;
+    let actuallyVerified = false;
+    try {
+      const user = auth.currentUser;
+      if (!user) {
+        // No current user — cannot have verified via this link
+      } else {
+        let info = null;
+        let checkErrorCode = null;
+        try {
+          info = await checkActionCode(auth, oobCode);
+        } catch (e) {
+          checkErrorCode = e?.code || null;
+        }
+        const codeEmail = info?.data?.email?.toLowerCase?.() || '';
+        const userEmail = (user.email || '').toLowerCase();
+        const codeMatchesUser = codeEmail && codeEmail === userEmail;
+        // Only treat as "code uncheckable" when it failed due to already-consumed (invalid-action-code).
+        // Expired or other invalid codes must not bypass the email match check.
+        const codeUncheckable = !codeEmail && checkErrorCode === 'auth/invalid-action-code';
+        if (codeMatchesUser || codeUncheckable) {
+          let reloadSucceeded = false;
+          let timeoutId = null;
+          try {
+            await Promise.race([
+              user.reload().then(() => { reloadSucceeded = true; }),
+              new Promise((_, reject) => {
+                timeoutId = setTimeout(() => reject(new Error('reload_timeout')), RELOAD_TIMEOUT_MS);
+              })
+            ]);
+          } catch (_) {}
+          finally {
+            if (timeoutId) clearTimeout(timeoutId);
+          }
+          if (reloadSucceeded && user.emailVerified) {
+            actuallyVerified = true;
+          }
+        }
+      }
+    } catch (_) {}
+
+    if (actuallyVerified) {
+      // Verification succeeded despite the error — continue the normal success flow
+      // Use same opener-tab handoff logic as success path to avoid double routing
+      console.log('Email already verified despite applyActionCode error, continuing success flow');
+      try { sessionStorage.setItem('emailJustVerified', '1'); } catch (_) {}
+      try { localStorage.setItem('emailJustVerified', String(Date.now())); } catch (_) {}
+      try {
+        const ch = new BroadcastChannel('auth');
+        ch.postMessage({ type: 'email-verified' });
+        ch.close();
+      } catch (_) {}
+
+      showSuccess("✅ Email verified successfully!");
+      pageTitle.textContent = "Email Verified";
+
+      const storedSelection = getSelectedPlanFromStorage();
+      const plan = storedSelection || 'free';
+      const requiresPayment = planRequiresPayment(plan);
+      if (requiresPayment) {
+        status.textContent = "Your email has been verified. Redirecting to complete your subscription...";
+        if (actionButtons) actionButtons.style.display = 'none';
+      } else {
+        status.textContent = "Your email has been verified. You can now access your dashboard.";
+        if (actionButtons) actionButtons.style.display = 'block';
+        if (goToLoginBtn) goToLoginBtn.style.display = 'none';
+        if (goToDashboardBtn) {
+          goToDashboardBtn.style.display = 'block';
+          goToDashboardBtn.disabled = false;
+        }
+      }
+
+      if (tryHandoffToOpenerThenRoute()) return;
+
+      setTimeout(() => { routeAfterVerification(); }, 1200);
+      return;
+    }
+
     showError(`❌ Verification failed: ${error.message || 'Invalid or expired verification link.'}`);
     pageTitle.textContent = "Verification Failed";
     status.textContent = "We couldn't verify your email. The link may be invalid or expired.";
-    
+
     // Show action buttons
     actionButtons.style.display = 'block';
     goToLoginBtn.style.display = 'block';
@@ -547,7 +637,10 @@ async function initialize() {
   
   // Setup action buttons
   goToLoginBtn.addEventListener('click', () => {
-    window.location.href = '/login.html';
+    // Preserve plan selection so the user can retry verification without losing their plan
+    const selectedPlan = getSelectedPlanFromStorage();
+    const loginUrl = selectedPlan ? `/login.html?plan=${encodeURIComponent(selectedPlan)}` : '/login.html';
+    window.location.href = loginUrl;
   });
   
   goToDashboardBtn.addEventListener('click', (e) => {

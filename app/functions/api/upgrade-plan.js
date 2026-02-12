@@ -8,7 +8,11 @@ import {
   statusRank,
   getPlanFromSubscription,
   pickBestSubscription,
-  listSubscriptions
+  listSubscriptions,
+  resolveStaleCustomerFromKV,
+  cacheCustomerId,
+  kvCusKey,
+  invalidateBillingCaches
 } from '../_lib/billing-utils.js';
 
 /**
@@ -111,13 +115,15 @@ export async function onRequest(context) {
         const errText = await sessionRes.text();
         let errData = {};
         try { errData = JSON.parse(errText); } catch (_) {}
+        const stripeMessage = errData?.error?.message || errText || 'stripe_checkout_error';
+        const responseStatus = sessionRes.status >= 400 && sessionRes.status < 500 ? 400 : 500;
         console.log('[BILLING-UPGRADE] Checkout session failed', {
           uid,
           targetPlan,
           status: sessionRes.status,
-          error: errData?.error?.message || errText
+          error: stripeMessage
         });
-        return json({ ok: false, code: 'CHECKOUT_FAILED' }, 502, origin, env);
+        return json({ ok: false, code: 'CHECKOUT_FAILED', error: stripeMessage }, responseStatus, origin, env);
       }
 
       const session = await sessionRes.json();
@@ -138,7 +144,7 @@ export async function onRequest(context) {
       });
       const scheduleResult = await scheduleDowngrade(env, bestSub, targetPlan, source);
       if (!scheduleResult.ok) {
-        return json({ ok: false, code: scheduleResult.code || 'DOWNGRADE_SCHEDULE_FAILED' }, 502, origin, env);
+        return json({ ok: false, code: scheduleResult.code || 'DOWNGRADE_SCHEDULE_FAILED' }, 500, origin, env);
       }
       return json({
         ok: true,
@@ -203,13 +209,15 @@ export async function onRequest(context) {
       const errText = await updateRes.text();
       let errData = {};
       try { errData = JSON.parse(errText); } catch (_) {}
+      const stripeMessage = errData?.error?.message || errText || 'stripe_update_error';
+      const responseStatus = updateRes.status >= 400 && updateRes.status < 500 ? 400 : 500;
       console.log('[BILLING-UPGRADE] Subscription update failed', {
         uid,
         subId: bestSub.id,
         status: updateRes.status,
-        error: errData?.error?.message || errText
+        error: stripeMessage
       });
-      return json({ ok: false, code: 'UPDATE_FAILED' }, 502, origin, env);
+      return json({ ok: false, code: 'UPDATE_FAILED', error: stripeMessage }, responseStatus, origin, env);
     }
 
     const updatedSub = await updateRes.json();
@@ -291,10 +299,12 @@ function normalizePlan(plan) {
 
 async function resolveCustomerId(env, uid, email) {
   let customerId = null;
+  let customerIdSource = null;
   let matchedCustomer = null;
 
   try {
     customerId = await env.JOBHACKAI_KV?.get(kvCusKey(uid));
+    if (customerId) customerIdSource = 'kv';
   } catch (e) {
     console.log('[BILLING-UPGRADE] KV read error', e?.message || e);
   }
@@ -304,6 +314,7 @@ async function resolveCustomerId(env, uid, email) {
       const userPlan = await getUserPlanData(env, uid);
       if (userPlan?.stripeCustomerId) {
         customerId = userPlan.stripeCustomerId;
+        customerIdSource = 'd1';
         await env.JOBHACKAI_KV?.put(kvCusKey(uid), customerId);
       }
     } catch (e) {
@@ -311,11 +322,20 @@ async function resolveCustomerId(env, uid, email) {
     }
   }
 
+  // Validate stored customer to avoid stale IDs causing checkout failures.
+  // When customerId comes from KV, D1 may have a newer valid id—check before clearing D1.
+  if (customerId) {
+    const resolved = await resolveStaleCustomerFromKV(env, uid, customerId, customerIdSource, '[BILLING-UPGRADE]');
+    customerId = resolved.customerId;
+  }
+
   if (!customerId && email) {
     try {
       const searchRes = await stripe(env, `/customers?email=${encodeURIComponent(email)}&limit=100`);
       const searchData = await searchRes.json();
-      const customers = searchRes.ok ? (searchData?.data || []) : [];
+      const customers = searchRes.ok
+        ? (searchData?.data || []).filter((c) => c && c.deleted !== true)
+        : [];
       if (customers.length > 0) {
         const uidMatches = customers.filter((c) => c?.metadata?.firebaseUid === uid);
         const candidates = uidMatches.length > 0 ? uidMatches : customers;
@@ -373,13 +393,7 @@ async function resolveCustomerId(env, uid, email) {
   }
 
   if (customerId) {
-    await env.JOBHACKAI_KV?.put(kvCusKey(uid), customerId);
-    await env.JOBHACKAI_KV?.put(kvEmailKey(uid), email);
-    try {
-      await updateUserPlan(env, uid, { stripeCustomerId: customerId });
-    } catch (e) {
-      console.log('[BILLING-UPGRADE] D1 customer update failed', e?.message || e);
-    }
+    await cacheCustomerId(env, uid, customerId);
 
     if (matchedCustomer && !matchedCustomer?.metadata?.firebaseUid) {
       try {
@@ -408,17 +422,6 @@ async function makeUpgradeIdemKey(uid, seed) {
   } catch (_) {
     return `${uid}:${seed}:${Date.now()}`;
   }
-}
-
-async function invalidateBillingCaches(env, uid) {
-  if (!env.JOBHACKAI_KV) return;
-  const keys = [
-    `planByUid:${uid}`,
-    `billingStatus:${uid}`,
-    `trialUsedByUid:${uid}`,
-    `trialEndByUid:${uid}`
-  ];
-  await Promise.all(keys.map((key) => env.JOBHACKAI_KV.delete(key).catch(() => null)));
 }
 
 function safeReturnUrl(returnUrl, env) {
@@ -471,9 +474,6 @@ function json(body, status, origin, env) {
     headers: corsHeaders(origin, env)
   });
 }
-
-const kvCusKey = (uid) => `cusByUid:${uid}`;
-const kvEmailKey = (uid) => `emailByUid:${uid}`;
 
 async function cancelOtherSubscriptions(env, subs, keepSubId) {
   const toCancel = (subs || []).filter((sub) =>

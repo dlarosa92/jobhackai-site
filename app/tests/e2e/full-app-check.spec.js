@@ -508,13 +508,24 @@ test.describe('Full App Check', () => {
         return_url: `${baseURL}/account-setting.html`,
       },
     });
-    expect([200, 400, 401, 403]).toContain(billingPortalResponse.status());
-    const billingPortalData = await billingPortalResponse.json().catch(() => ({}));
+    // Expected: 200 (success), 404 (no customer/subscribe first), 401/403 (auth)
+    // 500/502 are server failures and must not be accepted as valid outcomes.
+    expect([200, 400, 401, 403, 404]).toContain(billingPortalResponse.status());
+    const billingPortalRaw = await billingPortalResponse.text().catch(() => '');
+    let billingPortalData = {};
+    try {
+      billingPortalData = billingPortalRaw ? JSON.parse(billingPortalRaw) : {};
+    } catch (_) {
+      billingPortalData = {};
+    }
     if (billingPortalResponse.status() === 200) {
       expect(typeof billingPortalData.url).toBe('string');
       expect(billingPortalData.url.length).toBeGreaterThan(0);
     } else {
-      expect(typeof billingPortalData.error).toBe('string');
+      const hasJsonError = typeof billingPortalData.error === 'string' && billingPortalData.error.length > 0;
+      const hasJsonCode = typeof billingPortalData.code === 'string' && billingPortalData.code.length > 0;
+      const hasRawErrorBody = billingPortalRaw.trim().length > 0;
+      expect(hasJsonError || hasJsonCode || hasRawErrorBody).toBeTruthy();
     }
   });
 

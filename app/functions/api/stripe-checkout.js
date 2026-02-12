@@ -1,10 +1,14 @@
 import { getBearer, verifyFirebaseIdToken } from '../_lib/firebase-auth.js';
-import { isTrialEligible, getUserPlanData, updateUserPlan } from '../_lib/db.js';
+import { isTrialEligible, getUserPlanData } from '../_lib/db.js';
 import {
+  stripe,
   planToPrice,
   priceIdToPlan,
   getPlanFromSubscription,
-  listSubscriptions
+  listSubscriptions,
+  resolveStaleCustomerFromKV,
+  cacheCustomerId,
+  kvCusKey
 } from '../_lib/billing-utils.js';
 export async function onRequest(context) {
   const { request, env } = context;
@@ -102,8 +106,10 @@ export async function onRequest(context) {
 
     // Step 1: Try KV (cache)
     let customerId = null;
+    let customerIdSource = null;
     try {
       customerId = await env.JOBHACKAI_KV?.get(kvCusKey(uid));
+      if (customerId) customerIdSource = 'kv';
     } catch (kvError) {
       console.log('🟡 [CHECKOUT] KV read error (non-fatal)', kvError?.message || kvError);
     }
@@ -115,6 +121,7 @@ export async function onRequest(context) {
         const userPlan = await getUserPlanData(env, uid);
         if (userPlan?.stripeCustomerId) {
           customerId = userPlan.stripeCustomerId;
+          customerIdSource = 'd1';
           console.log('✅ [CHECKOUT] Found customer ID in D1:', customerId);
           // Cache it in KV for next time
           try {
@@ -128,13 +135,24 @@ export async function onRequest(context) {
       }
     }
     
-    // Step 3: Only if both KV and D1 miss, fallback to Stripe email search (last resort)
     let matchedCustomer = null;
+
+    // Step 2.5: Validate stored customer still exists in Stripe.
+    // When customerId comes from KV, D1 may have a newer valid id—check before clearing D1.
+    if (customerId) {
+      const resolved = await resolveStaleCustomerFromKV(env, uid, customerId, customerIdSource, '🟡 [CHECKOUT]');
+      customerId = resolved.customerId;
+      if (!customerId) matchedCustomer = null;
+    }
+
+    // Step 3: Only if both KV and D1 miss (or stale IDs are cleared), fallback to Stripe email search.
     if (!customerId && email) {
       try {
         const searchRes = await stripe(env, `/customers?email=${encodeURIComponent(email)}&limit=100`);
         const searchData = await searchRes.json();
-        const customers = searchRes.ok ? (searchData?.data || []) : [];
+        const customers = searchRes.ok
+          ? (searchData?.data || []).filter((c) => c && c.deleted !== true)
+          : [];
         if (customers.length > 0) {
           const uidMatches = customers.filter((c) => c?.metadata?.firebaseUid === uid);
           const candidates = uidMatches.length > 0 ? uidMatches : customers;
@@ -205,7 +223,7 @@ export async function onRequest(context) {
         const c = await res.json();
         if (!c || !c.id) {
           console.log('🔴 [CHECKOUT] Invalid customer response', c);
-          return json({ ok: false, error: 'Invalid response from Stripe' }, 502, origin, env);
+          return json({ ok: false, error: 'Invalid response from Stripe' }, 500, origin, env);
         }
         
         customerId = c.id;
@@ -214,7 +232,6 @@ export async function onRequest(context) {
         // Try to cache customer ID (non-blocking)
         try {
           await env.JOBHACKAI_KV?.put(kvCusKey(uid), customerId);
-          await env.JOBHACKAI_KV?.put(kvEmailKey(uid), email);
         } catch (kvWriteError) {
           console.log('🟡 [CHECKOUT] KV write error (non-fatal)', kvWriteError?.message || kvWriteError);
           // Continue - customer was created successfully
@@ -229,13 +246,7 @@ export async function onRequest(context) {
     }
 
     if (customerId) {
-      try {
-        await env.JOBHACKAI_KV?.put(kvCusKey(uid), customerId);
-        await env.JOBHACKAI_KV?.put(kvEmailKey(uid), email);
-      } catch (_) {}
-      try {
-        await updateUserPlan(env, uid, { stripeCustomerId: customerId });
-      } catch (_) {}
+      await cacheCustomerId(env, uid, customerId);
 
       if (matchedCustomer && !matchedCustomer?.metadata?.firebaseUid) {
         try {
@@ -338,7 +349,7 @@ export async function onRequest(context) {
       const s = await sessionRes.json();
       if (!s || !s.url) {
         console.log('🔴 [CHECKOUT] Invalid session response', s);
-        return json({ ok: false, error: 'Invalid response from Stripe' }, 502, origin, env);
+        return json({ ok: false, error: 'Invalid response from Stripe' }, 500, origin, env);
       }
       
       console.log('✅ [CHECKOUT] Session created', { id: s.id, url: s.url });
@@ -371,45 +382,6 @@ export async function onRequest(context) {
   }
 }
 
-function stripe(env, path, init) {
-  const url = `https://api.stripe.com/v1${path}`;
-  const headers = new Headers(init?.headers || {});
-  headers.set('Authorization', `Bearer ${env.STRIPE_SECRET_KEY}`);
-  
-  // Add a timeout to avoid hanging requests causing upstream 5xx
-  // Use AbortController for better compatibility with Cloudflare Workers runtime
-  let signal = init?.signal; // Preserve any existing signal
-  let timeoutId = null;
-  
-  try {
-    // Only create timeout signal if no signal already exists
-    if (!signal && typeof AbortController !== 'undefined') {
-      const controller = new AbortController();
-      timeoutId = setTimeout(() => controller.abort(), 15000);
-      signal = controller.signal;
-    }
-  } catch (e) {
-    // If AbortController is not available, continue without timeout
-    console.log('🟡 [CHECKOUT] AbortController not available, continuing without timeout');
-  }
-  
-  const fetchOptions = { ...init, headers };
-  // Only add signal if it's defined, to avoid overriding any signal from init
-  if (signal) {
-    fetchOptions.signal = signal;
-  }
-  
-  const fetchPromise = fetch(url, fetchOptions);
-  
-  // Clean up timeout if fetch completes before timeout
-  if (timeoutId) {
-    fetchPromise.finally(() => {
-      if (timeoutId) clearTimeout(timeoutId);
-    });
-  }
-  
-  return fetchPromise;
-}
 function stripeFormHeaders(env) {
   return { Authorization: `Bearer ${env.STRIPE_SECRET_KEY}`, 'Content-Type': 'application/x-www-form-urlencoded' };
 }
@@ -433,8 +405,6 @@ function corsHeaders(origin, env) {
   };
 }
 function json(body, status, origin, env) { return new Response(JSON.stringify(body), { status, headers: corsHeaders(origin, env) }); }
-const kvCusKey = (uid) => `cusByUid:${uid}`;
-const kvEmailKey = (uid) => `emailByUid:${uid}`;
 
 // Build a robust Idempotency-Key from stable parameters, so retries succeed
 // and parameter changes (e.g., URLs, price, customer, trial period, payment_method_collection) generate a new key

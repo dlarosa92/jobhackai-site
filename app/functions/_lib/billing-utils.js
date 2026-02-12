@@ -1,20 +1,215 @@
 /**
  * Shared billing utility functions
- * Consolidates duplicate functions from upgrade-plan.js, stripe-checkout.js, and billing-status.js
+ * Consolidates duplicate functions from upgrade-plan.js, stripe-checkout.js, billing-portal.js, and billing-status.js
  */
 
+import { updateUserPlan, getUserPlanData } from './db.js';
+
 /**
- * Helper function to make Stripe API requests
+ * KV key for storing customer ID by Firebase UID
+ * @param {string} uid - Firebase UID
+ * @returns {string} KV key
+ */
+export function kvCusKey(uid) {
+  return `cusByUid:${uid}`;
+}
+
+/**
+ * Validate that a Stripe customer ID exists and is not deleted.
+ * Single source of truth for customer validation used by stripe-checkout, upgrade-plan, and billing-portal.
+ * @param {Object} env - Environment variables
+ * @param {string} customerId - Stripe customer ID
+ * @returns {Promise<{valid: boolean, reason?: string}>} Validation result
+ */
+export async function validateStripeCustomer(env, customerId) {
+  if (!customerId) {
+    return { valid: false, reason: 'missing' };
+  }
+
+  try {
+    const res = await stripe(env, `/customers/${customerId}`);
+    const raw = await res.text().catch(() => '');
+    let data = {};
+    try {
+      data = raw ? JSON.parse(raw) : {};
+    } catch (_) {}
+
+    const message = String(data?.error?.message || raw || '').toLowerCase();
+    const isDeleted = data?.deleted === true;
+    const isMissing = message.includes('no such customer');
+
+    if (isDeleted || isMissing) {
+      return { valid: false, reason: isDeleted ? 'deleted' : 'missing', status: res.status };
+    }
+
+    if (!res.ok) {
+      return { valid: true, reason: 'non_fatal_check_failure', status: res.status };
+    }
+
+    return { valid: true, reason: 'ok', status: res.status };
+  } catch (error) {
+    return { valid: true, reason: 'validation_exception', error: error?.message || String(error) };
+  }
+}
+
+/**
+ * Billing KV cache keys that must be cleared when customer references are reset
+ * or when subscription state changes (upgrade, cancel, etc.).
+ * Single source of truth for the key list used by clearCustomerReferences,
+ * invalidateBillingCaches, upgrade-plan, and cancel-subscription.
+ * @param {string} uid - Firebase UID
+ * @returns {string[]} KV keys to delete
+ */
+export function billingCacheKeysForUid(uid) {
+  return [
+    `planByUid:${uid}`,
+    `billingStatus:${uid}`,
+    `trialUsedByUid:${uid}`,
+    `trialEndByUid:${uid}`
+  ];
+}
+
+/**
+ * Invalidate all billing-related KV caches for a user.
+ * Call after subscription changes (upgrade, cancel, etc.) so other endpoints
+ * do not serve stale plan/status until cache expiry.
+ * @param {Object} env - Environment variables
+ * @param {string} uid - Firebase UID
+ */
+export async function invalidateBillingCaches(env, uid) {
+  if (!env.JOBHACKAI_KV) return;
+  const keys = billingCacheKeysForUid(uid);
+  await Promise.all(keys.map((key) => env.JOBHACKAI_KV.delete(key).catch(() => null)));
+}
+
+/**
+ * Clear stale customer references from KV and D1.
+ * Also clears related billing caches (planByUid, billingStatus, etc.) so other
+ * endpoints do not serve stale paid/active state until cache expiry.
+ * @param {Object} env - Environment variables
+ * @param {string} uid - Firebase UID
+ */
+export async function clearCustomerReferences(env, uid) {
+  try {
+    await env.JOBHACKAI_KV?.delete(kvCusKey(uid));
+  } catch (_) {}
+
+  try {
+    const billingKeys = billingCacheKeysForUid(uid);
+    await Promise.all(billingKeys.map((key) => env.JOBHACKAI_KV?.delete(key).catch(() => null)));
+  } catch (_) {}
+
+  try {
+    await updateUserPlan(env, uid, { stripeCustomerId: null });
+  } catch (_) {}
+}
+
+/**
+ * When stored customerId fails Stripe validation and came from KV, re-checks D1 for a valid ID.
+ * D1 may have a newer valid customer—check before clearing references. Single source of truth
+ * for this pattern used by stripe-checkout, upgrade-plan, and billing-portal.
+ * @param {Object} env - Environment variables
+ * @param {string} uid - Firebase UID
+ * @param {string|null} customerId - Current stored customer ID (may be stale)
+ * @param {string|null} customerIdSource - 'kv' | 'd1' | null
+ * @param {string} [logPrefix='[BILLING]'] - Log prefix for context (e.g. '[CHECKOUT]', '[BILLING-PORTAL]')
+ * @returns {Promise<{customerId: string|null}>} Resolved customerId (null if cleared or invalid)
+ */
+export async function resolveStaleCustomerFromKV(env, uid, customerId, customerIdSource, logPrefix = '[BILLING]') {
+  if (!customerId) {
+    return { customerId };
+  }
+
+  const validation = await validateStripeCustomer(env, customerId);
+  if (validation.valid) {
+    return { customerId };
+  }
+
+  console.log(`${logPrefix} Stored customer is stale in Stripe.`, {
+    uid,
+    customerId,
+    reason: validation.reason
+  });
+
+  let d1HasDifferentValidId = false;
+  if (customerIdSource === 'kv') {
+    try {
+      const userPlan = await getUserPlanData(env, uid);
+      const d1CustomerId = userPlan?.stripeCustomerId;
+      if (d1CustomerId && d1CustomerId !== customerId) {
+        const d1Validation = await validateStripeCustomer(env, d1CustomerId);
+        if (d1Validation.valid) {
+          d1HasDifferentValidId = true;
+          customerId = d1CustomerId;
+          console.log(`${logPrefix} D1 has valid customer; KV was stale`, { uid, customerId });
+        }
+      }
+    } catch (e) {
+      console.warn(`${logPrefix} D1 re-check failed (non-fatal):`, e?.message || e);
+    }
+  }
+
+  if (!d1HasDifferentValidId) {
+    await clearCustomerReferences(env, uid);
+    return { customerId: null };
+  }
+
+  try {
+    await env.JOBHACKAI_KV?.put(kvCusKey(uid), customerId);
+  } catch (_) {}
+  return { customerId };
+}
+
+/**
+ * Cache customer ID in KV and D1.
+ * @param {Object} env - Environment variables
+ * @param {string} uid - Firebase UID
+ * @param {string} customerId - Stripe customer ID
+ */
+export async function cacheCustomerId(env, uid, customerId) {
+  if (!customerId) return;
+  try {
+    await env.JOBHACKAI_KV?.put(kvCusKey(uid), customerId);
+  } catch (_) {}
+
+  try {
+    await updateUserPlan(env, uid, { stripeCustomerId: customerId });
+  } catch (_) {}
+}
+
+/**
+ * Helper function to make Stripe API requests.
+ * Uses a 15-second timeout to avoid hanging requests causing upstream 5xx.
  * @param {Object} env - Environment variables
  * @param {string} path - Stripe API path (e.g., '/customers')
  * @param {Object} init - Fetch options
  * @returns {Promise<Response>} Fetch response
  */
-export function stripe(env, path, init) {
+export function stripe(env, path, init = {}) {
   const url = `https://api.stripe.com/v1${path}`;
   const headers = new Headers(init?.headers || {});
   headers.set('Authorization', `Bearer ${env.STRIPE_SECRET_KEY}`);
-  return fetch(url, { ...init, headers });
+
+  let signal = init?.signal;
+  let timeoutId = null;
+  try {
+    if (!signal && typeof AbortController !== 'undefined') {
+      const controller = new AbortController();
+      timeoutId = setTimeout(() => controller.abort(), 15000);
+      signal = controller.signal;
+    }
+  } catch (e) {
+    console.log('🟡 [BILLING] AbortController not available, continuing without timeout');
+  }
+
+  const fetchOptions = { ...init, headers };
+  if (signal) fetchOptions.signal = signal;
+
+  const fetchPromise = fetch(url, fetchOptions);
+  if (timeoutId) {
+    return fetchPromise.finally(() => { if (timeoutId) clearTimeout(timeoutId); });
+  }
+  return fetchPromise;
 }
 
 /**

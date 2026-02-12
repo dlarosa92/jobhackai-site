@@ -1,5 +1,13 @@
 import { getBearer, verifyFirebaseIdToken } from '../_lib/firebase-auth.js';
 import { getUserPlanData } from '../_lib/db.js';
+import {
+  stripe,
+  validateStripeCustomer,
+  resolveStaleCustomerFromKV,
+  clearCustomerReferences,
+  cacheCustomerId,
+  kvCusKey
+} from '../_lib/billing-utils.js';
 
 /**
  * POST /api/billing-portal
@@ -36,7 +44,8 @@ export async function onRequest(context) {
 
     // Step 1: Try KV (cache)
     let customerId = await env.JOBHACKAI_KV?.get(kvCusKey(uid));
-    
+    let customerIdSource = customerId ? 'kv' : null;
+
     // Step 2: If KV miss, try D1 (authoritative)
     if (!customerId) {
       console.log('🟡 [BILLING-PORTAL] No customer found in KV for uid', uid);
@@ -44,35 +53,60 @@ export async function onRequest(context) {
         const userPlan = await getUserPlanData(env, uid);
         if (userPlan?.stripeCustomerId) {
           customerId = userPlan.stripeCustomerId;
+          customerIdSource = 'd1';
           console.log('✅ [BILLING-PORTAL] Found customer ID in D1:', customerId);
-          // Cache it in KV for next time
-          await env.JOBHACKAI_KV?.put(kvCusKey(uid), customerId);
+          // Backfill KV cache only — D1 already has the value so
+          // calling cacheCustomerId() here would trigger a redundant
+          // updateUserPlan() round-trip that bumps updated_at/plan_updated_at.
+          try { await env.JOBHACKAI_KV?.put(kvCusKey(uid), customerId); } catch (_) {}
         }
       } catch (d1Error) {
         console.warn('⚠️ [BILLING-PORTAL] D1 lookup failed (non-fatal):', d1Error?.message || d1Error);
       }
     }
-    
+
+    // Validate stored customer to avoid stale/deleted IDs causing Stripe failures.
+    // When only KV was stale, D1 may have a newer valid id—check before clearing D1.
+    if (customerId) {
+      const resolved = await resolveStaleCustomerFromKV(env, uid, customerId, customerIdSource, '🟡 [BILLING-PORTAL]');
+      customerId = resolved.customerId;
+    }
+
     // Step 3: Only if both KV and D1 miss, fallback to Stripe email search (last resort)
     if (!customerId) {
       console.log('🟡 [BILLING-PORTAL] No customer in KV or D1, trying Stripe email search (last resort)');
       // Try to find by email in Stripe as last-resort fallback
       if (email) {
-        const searchRes = await stripe(env, `/customers?email=${encodeURIComponent(email)}&limit=1`);
+        const searchRes = await stripe(env, `/customers?email=${encodeURIComponent(email)}&limit=100`);
         const searchData = await searchRes.json();
-        
-        if (searchRes.ok && searchData.data && searchData.data.length > 0) {
-          const foundCustomerId = searchData.data[0].id;
-          console.log('🟡 [BILLING-PORTAL] Found customer by email (last resort)', foundCustomerId);
-          // Cache it for next time
-          await env.JOBHACKAI_KV?.put(kvCusKey(uid), foundCustomerId);
-          // Use the found customer ID
-          return await createPortalSession(foundCustomerId, uid, origin, env);
+
+        if (searchRes.ok && searchData?.data?.length > 0) {
+          const liveCustomers = searchData.data.filter((c) => c && c.deleted !== true);
+          const uidMatches = liveCustomers.filter((c) => c?.metadata?.firebaseUid === uid);
+          const candidates = (uidMatches.length > 0 ? uidMatches : liveCustomers)
+            .sort((a, b) => (b?.created || 0) - (a?.created || 0));
+
+          for (const candidate of candidates) {
+            if (!candidate?.id) continue;
+            const candidateValidation = await validateStripeCustomer(env, candidate.id);
+            if (candidateValidation.valid) {
+              customerId = candidate.id;
+              console.log('🟡 [BILLING-PORTAL] Found valid customer by email fallback', {
+                uid,
+                customerId,
+                matchedUid: candidate?.metadata?.firebaseUid || null
+              });
+              await cacheCustomerId(env, uid, customerId);
+              break;
+            }
+          }
         }
       }
       
-      console.log('🔴 [BILLING-PORTAL] No customer exists - user needs to subscribe first');
-      return json({ ok: false, error: 'No customer for user. Please subscribe first.' }, 404, origin, env);
+      if (!customerId) {
+        console.log('🔴 [BILLING-PORTAL] No valid customer exists - user needs to subscribe first');
+        return json({ ok: false, error: 'No customer for user. Please subscribe first.' }, 404, origin, env);
+      }
     }
 
     console.log('🔵 [BILLING-PORTAL] Creating portal session for customer', customerId);
@@ -110,28 +144,41 @@ async function createPortalSession(customerId, uid, origin, env) {
     body: portalParams
   });
 
-  const p = await res.json();
+  const raw = await res.text().catch(() => '');
+  let p = {};
+  try {
+    p = raw ? JSON.parse(raw) : {};
+  } catch (_) {
+    p = {};
+  }
   
   if (!res.ok) {
+    const stripeMessage = p?.error?.message || raw || 'portal_error';
+    const stripeMessageLower = String(stripeMessage).toLowerCase();
+
     console.log('🔴 [BILLING-PORTAL] Stripe API error', {
       uid,
       customerId,
       status: res.status,
       error: p?.error
     });
-    return json({ ok: false, error: p?.error?.message || 'portal_error' }, 502, origin, env);
+
+    if (stripeMessageLower.includes('no such customer')) {
+      await clearCustomerReferences(env, uid);
+      return json({ ok: false, error: stripeMessage, code: 'CUSTOMER_NOT_FOUND' }, 400, origin, env);
+    }
+
+    const responseStatus = res.status >= 400 && res.status < 500 ? 400 : 500;
+    return json({ ok: false, error: stripeMessage }, responseStatus, origin, env);
+  }
+
+  if (!p?.url) {
+    console.log('🔴 [BILLING-PORTAL] Invalid response payload', { uid, customerId });
+    return json({ ok: false, error: 'Invalid response from Stripe' }, 500, origin, env);
   }
 
   console.log('✅ [BILLING-PORTAL] Portal session created', { uid, customerId, url: p.url });
   return json({ ok: true, url: p.url }, 200, origin, env);
-}
-
-// Helper function to call Stripe API
-function stripe(env, path, init) {
-  const url = `https://api.stripe.com/v1${path}`;
-  const headers = new Headers(init?.headers || {});
-  headers.set('Authorization', `Bearer ${env.STRIPE_SECRET_KEY}`);
-  return fetch(url, { ...init, headers });
 }
 
 function corsHeaders(origin, env) {
@@ -151,7 +198,3 @@ function corsHeaders(origin, env) {
 function json(body, status, origin, env) {
   return new Response(JSON.stringify(body), { status, headers: corsHeaders(origin, env) });
 }
-
-const kvCusKey = (uid) => `cusByUid:${uid}`;
-
-

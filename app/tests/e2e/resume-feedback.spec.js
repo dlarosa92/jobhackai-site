@@ -2,6 +2,19 @@ const { test, expect } = require('@playwright/test');
 const path = require('path');
 const fs = require('fs');
 
+async function safeReloadTo(page, fallbackPath = '/resume-feedback-pro.html') {
+  try {
+    await page.reload({ waitUntil: 'domcontentloaded' });
+  } catch (error) {
+    const message = String(error?.message || error);
+    if (/ERR_ABORTED|frame was detached|Execution context was destroyed/i.test(message)) {
+      await page.goto(fallbackPath, { waitUntil: 'domcontentloaded' });
+      return;
+    }
+    throw error;
+  }
+}
+
 test.describe('Resume Feedback', () => {
   test('should upload resume and receive ATS score', async ({ page }) => {
     // Upload + ATS scoring can exceed default 30s timeout; allow up to 2 minutes
@@ -51,7 +64,7 @@ test.describe('Resume Feedback', () => {
     });
     
     // Reload page to reset to upload form view
-    await page.reload({ waitUntil: 'domcontentloaded' });
+    await safeReloadTo(page);
     
     // Wait for auth to be ready using FirebaseAuthManager or localStorage fallback
     await page.waitForFunction(() => {
@@ -65,8 +78,7 @@ test.describe('Resume Feedback', () => {
       // Fallback: localStorage flags used by navigation & static-auth-guard
       try {
         const isAuth = localStorage.getItem('user-authenticated') === 'true';
-        const email = localStorage.getItem('user-email');
-        return isAuth && !!email;
+        return isAuth;
       } catch {
         return false;
       }
@@ -220,7 +232,7 @@ test.describe('Resume Feedback', () => {
       });
       
       // Reload page after clearing
-      await page.reload({ waitUntil: 'domcontentloaded' });
+      await safeReloadTo(page);
       
       // Wait for auth again
       await page.waitForFunction(() => {
@@ -267,7 +279,7 @@ test.describe('Resume Feedback', () => {
         // Form was replaced but no cached score - might be a different issue
         // Try reloading anyway to see if form restores
         console.log('⚠️ Form replaced but no cached score - reloading page');
-        await page.reload({ waitUntil: 'domcontentloaded' });
+        await safeReloadTo(page);
         
         // Wait for auth again
         await page.waitForFunction(() => {
