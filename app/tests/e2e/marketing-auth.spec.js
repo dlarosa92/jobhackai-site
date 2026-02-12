@@ -1,5 +1,4 @@
 const { test, expect } = require('@playwright/test');
-const { waitForAuthReady, getAuthToken } = require('../helpers/auth-helpers');
 
 const MARKETING_BASE = process.env.MARKETING_BASE_URL || 'https://jobhackai.io';
 const AUTH_HANDOFF_SESSION_KEY = 'jhai_auth_handoff';
@@ -40,24 +39,16 @@ test.describe('Marketing Site Auth Handoff', () => {
         break;
       }
     }
-
-    const visitorCtaLoc = page.locator('a:has-text("Start Free Trial"), a:has-text("Log in"), .btn-primary');
-    const visitorCtaCount = await visitorCtaLoc.count();
-    let hasVisitorCta = false;
-    for (let i = 0; i < visitorCtaCount; i++) {
-      if (await visitorCtaLoc.nth(i).isVisible().catch(() => false)) {
-        hasVisitorCta = true;
-        break;
-      }
-    }
-    expect(hasAuthNav || hasVisitorCta).toBeTruthy();
+    expect(hasAuthNav).toBeTruthy();
 
     await page.evaluate((key) => {
       sessionStorage.removeItem(key);
     }, AUTH_HANDOFF_SESSION_KEY);
 
     await page.evaluate((domain) => {
-      document.cookie = `jhai_auth=0; domain=${domain}; path=/; max-age=86400; SameSite=Lax`;
+      const opts = 'path=/; max-age=86400; SameSite=Lax';
+      document.cookie = `jhai_auth=logged_out; domain=${domain}; ${opts}`;
+      document.cookie = `jhai_auth=logged_out; ${opts}`;
     }, cookieDomainForUrl(MARKETING_BASE));
 
     await page.goto(MARKETING_BASE + '/', { waitUntil: 'domcontentloaded' });
