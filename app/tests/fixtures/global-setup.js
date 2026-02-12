@@ -2,6 +2,25 @@ const { chromium } = require('@playwright/test');
 const path = require('path');
 const fs = require('fs');
 
+// Load .env.test.local and .env from app/ so TEST_EMAIL/TEST_PASSWORD are available without exporting
+const appDir = path.join(__dirname, '../..');
+function loadEnvFile(filePath) {
+  try {
+    const content = fs.readFileSync(filePath, 'utf8');
+    for (const line of content.split('\n')) {
+      const match = line.match(/^\s*([^#=]+)=(.*)$/);
+      if (match) {
+        const key = match[1].trim();
+        let val = match[2].trim();
+        if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) val = val.slice(1, -1);
+        process.env[key] = val;
+      }
+    }
+  } catch (_) {}
+}
+loadEnvFile(path.join(appDir, '.env.test.local'));
+loadEnvFile(path.join(appDir, '.env'));
+
 // Require credentials from environment variables - no hardcoded fallbacks
 const TEST_EMAIL = process.env.TEST_EMAIL;
 const TEST_PASSWORD = process.env.TEST_PASSWORD;
