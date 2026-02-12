@@ -36,7 +36,8 @@ test.describe('Real API Smoke', () => {
     });
     expect([200, 401, 403]).toContain(response.status());
     const raw = await response.text();
-    if (raw.length > 0 && response.status() === 200) {
+    if (response.status() === 200) {
+      expect(raw.length).toBeGreaterThan(0);
       try {
         const data = JSON.parse(raw);
         expect(typeof data).toBe('object');

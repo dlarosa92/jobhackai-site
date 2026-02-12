@@ -20,13 +20,11 @@ test.describe('Error Handling', () => {
 
     await page.goto('/dashboard');
     await page.waitForLoadState('domcontentloaded');
-    await page.waitForTimeout(5000);
+    await waitForAuthReady(page, 15000);
 
     const url = page.url();
-    expect(url).toMatch(/\/dashboard|\/login|\/verify-email/);
-    if (url.match(/\/dashboard/)) {
-      expect(planMeRouteHit).toBe(true);
-    }
+    expect(url).toMatch(/\/dashboard/);
+    expect(planMeRouteHit).toBe(true);
 
     const criticalErrors = pageErrors.filter((m) =>
       /uncaught|Unhandled|Cannot read|undefined is not/i.test(m)

@@ -37,7 +37,7 @@ test.describe('Marketing Site Auth Handoff', () => {
     await page.goto(MARKETING_BASE + '/', { waitUntil: 'domcontentloaded' });
     await page.waitForTimeout(2000);
 
-    const authNavLoc = page.locator('.user-plan-badge, .nav-actions .nav-user-menu');
+    const authNavLoc = page.locator('.user-plan-badge, .nav-actions .nav-user-menu, a[href*="dashboard"], .nav-dropdown, .nav-user-toggle');
     const authCount = await authNavLoc.count();
     let hasStaleAuthNav = false;
     for (let i = 0; i < authCount; i++) {
