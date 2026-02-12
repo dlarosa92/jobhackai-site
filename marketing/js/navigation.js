@@ -263,6 +263,13 @@ function hasCrossDomainAuthCookie() {
   } catch (_) { return false; }
 }
 
+function hasCrossDomainLogoutCookie() {
+  try {
+    if (!isMarketingHostForCookieFallback()) return false;
+    return document.cookie.indexOf('jhai_auth=0') !== -1;
+  } catch (_) { return false; }
+}
+
 function parseCrossDomainCookies() {
   try {
     if (!isMarketingHostForCookieFallback()) return null;
@@ -287,7 +294,7 @@ const AUTH_HANDOFF_QUERY_AUTH = 'jhai_auth';
 const AUTH_HANDOFF_QUERY_PLAN = 'jhai_plan';
 const AUTH_HANDOFF_QUERY_TS = 'jhai_ts';
 const AUTH_HANDOFF_SESSION_KEY = 'jhai_auth_handoff';
-const AUTH_HANDOFF_MAX_AGE_MS = 10 * 60 * 1000;
+const AUTH_HANDOFF_MAX_AGE_MS = 5 * 60 * 1000;
 const AUTH_HANDOFF_ALLOWED_PLANS = ['free', 'trial', 'essential', 'pro', 'premium', 'pending'];
 
 function getHostnameSafe() {
@@ -332,7 +339,18 @@ function persistUrlAuthHandoffIfPresent() {
   if (!isProdMarketingHost()) return null;
   try {
     const params = new URLSearchParams(window.location.search || '');
-    if (params.get(AUTH_HANDOFF_QUERY_AUTH) !== '1') return null;
+    if (params.get(AUTH_HANDOFF_QUERY_AUTH) !== '1') {
+      // Option D: If user came from app without handoff params, app didn't vouch for auth.
+      // Clear any stale handoff from a previous visit (e.g. user logged out on app).
+      try {
+        const ref = (document.referrer || '').toLowerCase();
+        if (ref && ref.includes(PROD_APP_HOST)) {
+          sessionStorage.removeItem(AUTH_HANDOFF_SESSION_KEY);
+          console.log('[AUTH] Cleared stale URL handoff (referrer from app without params)');
+        }
+      } catch (_) {}
+      return null;
+    }
     const now = Date.now();
     const ts = Number(params.get(AUTH_HANDOFF_QUERY_TS) || '0');
     const plan = normalizeHandoffPlan(params.get(AUTH_HANDOFF_QUERY_PLAN) || 'free');
@@ -342,7 +360,7 @@ function persistUrlAuthHandoffIfPresent() {
       try { sessionStorage.removeItem(AUTH_HANDOFF_SESSION_KEY); } catch (_) {}
       return null;
     }
-    const payload = { plan, ts: now };
+    const payload = { plan, ts: ts };  // preserve original app timestamp so TTL counts from link click
     try { sessionStorage.setItem(AUTH_HANDOFF_SESSION_KEY, JSON.stringify(payload)); } catch (_) {}
     return payload;
   } catch (_) {
@@ -995,6 +1013,8 @@ function getAuthState() {
       }
       // If fallback didn't return, Firebase says logged out and localStorage doesn't have valid auth
       // Check cross-domain cookie before returning unauthenticated
+      // Option E: If logout cookie is present, distrust and clear stale URL handoff
+      if (hasCrossDomainLogoutCookie()) { clearUrlAuthHandoff(); }
       if (cookiePlan || hasCrossDomainAuthCookie() || hasUrlAuthHandoff()) {
         const cp = cookiePlan || 'free';
         return { isAuthenticated: true, userPlan: cp, devPlan: cp };
@@ -1011,6 +1031,8 @@ function getAuthState() {
     // CRITICAL FIX: Check firebaseAuthReadyFired (or global fallback) before clearing to prevent premature clearing
     if (isRealAuthReady()) {
       // Check cross-domain cookie: if user is authenticated on app subdomain, trust the cookie
+      // Option E: If logout cookie is present, distrust and clear stale URL handoff
+      if (hasCrossDomainLogoutCookie()) { clearUrlAuthHandoff(); }
       if (cookiePlan || hasCrossDomainAuthCookie() || hasUrlAuthHandoff()) {
         const cp = cookiePlan || 'free';
         return { isAuthenticated: true, userPlan: cp, devPlan: cp };
