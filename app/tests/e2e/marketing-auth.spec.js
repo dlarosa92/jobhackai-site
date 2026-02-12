@@ -12,9 +12,9 @@ function cookieDomainForUrl(url) {
 }
 
 test.describe('Marketing Site Auth Handoff', () => {
-  test('marketing site shows visitor nav after logout (handoff cleared)', async ({ page, baseURL }) => {
+  test('marketing site shows visitor nav after logout (handoff cleared)', async ({ page }) => {
     test.setTimeout(45000);
-    test.skip(!baseURL || !baseURL.includes('jobhackai.io'), 'Requires jobhackai.io app URL');
+    test.skip(!MARKETING_BASE.includes('jobhackai.io'), 'Requires jobhackai.io marketing URL');
 
     const ts = Date.now();
     const handoffUrl = `${MARKETING_BASE}/?jhai_auth=1&jhai_plan=premium&jhai_ts=${ts}`;
