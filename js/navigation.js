@@ -275,7 +275,8 @@ function hasCrossDomainAuthCookie() {
 function hasCrossDomainLogoutCookie() {
   try {
     if (!isMarketingHostForCookieFallback()) return false;
-    return document.cookie.indexOf('jhai_auth=0') !== -1;
+    // Only treat explicit logout signal; jhai_auth=0 denotes unverified-but-authenticated users.
+    return document.cookie.indexOf('jhai_auth=logged_out') !== -1;
   } catch (_) { return false; }
 }
 
