@@ -81,7 +81,12 @@ function clearAuthCookies() {
   try {
     if (!isProdHost()) return;
     const domain = '.jobhackai.io';
-    document.cookie = `jhai_auth=; domain=${domain}; path=/; max-age=0`;
+    const maxAge = 60 * 60 * 24 * 30; // 30 days
+    const secure = '; Secure';
+    // Set jhai_auth=logged_out as explicit logout signal (distinct from jhai_auth=0
+    // which denotes unverified-but-authenticated users). Marketing site reads this
+    // to distrust stale URL auth handoffs.
+    document.cookie = `jhai_auth=logged_out; domain=${domain}; path=/; max-age=${maxAge}; SameSite=Lax${secure}`;
     document.cookie = `jhai_name=; domain=${domain}; path=/; max-age=0`;
     document.cookie = `jhai_plan=; domain=${domain}; path=/; max-age=0`;
   } catch (e) { /* best-effort */ }
