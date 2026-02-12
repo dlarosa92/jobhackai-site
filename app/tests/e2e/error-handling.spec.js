@@ -5,7 +5,9 @@ test.describe('Error Handling', () => {
   test('page handles API 500 gracefully', async ({ page }) => {
     test.setTimeout(30000);
 
+    let planMeRouteHit = false;
     await page.route('**/api/plan/me**', async (route) => {
+      planMeRouteHit = true;
       await route.fulfill({
         status: 500,
         contentType: 'application/json',
@@ -19,6 +21,9 @@ test.describe('Error Handling', () => {
     await page.goto('/dashboard');
     await page.waitForLoadState('domcontentloaded');
     await page.waitForTimeout(5000);
+
+    expect(planMeRouteHit).toBe(true);
+    expect(page.url()).toMatch(/\/dashboard|\/login|\/verify-email/);
 
     const criticalErrors = pageErrors.filter((m) =>
       /uncaught|Unhandled|Cannot read|undefined is not/i.test(m)

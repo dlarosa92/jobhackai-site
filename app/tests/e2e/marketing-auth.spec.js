@@ -30,8 +30,24 @@ test.describe('Marketing Site Auth Handoff', () => {
     await page.goto(MARKETING_BASE + '/', { waitUntil: 'domcontentloaded' });
     await page.waitForTimeout(2000);
 
-    const hasStaleAuthNav = await page.locator('.user-plan-badge, .nav-actions .nav-user-menu').first().isVisible().catch(() => false);
-    const hasVisitorNav = await page.locator('a:has-text("Start Free Trial"), a:has-text("Log in")').first().isVisible().catch(() => false);
+    const authNavLoc = page.locator('.user-plan-badge, .nav-actions .nav-user-menu');
+    const authCount = await authNavLoc.count();
+    let hasStaleAuthNav = false;
+    for (let i = 0; i < authCount; i++) {
+      if (await authNavLoc.nth(i).isVisible().catch(() => false)) {
+        hasStaleAuthNav = true;
+        break;
+      }
+    }
+    const visitorNavLoc = page.locator('a:has-text("Start Free Trial"), a:has-text("Log in")');
+    const visitorCount = await visitorNavLoc.count();
+    let hasVisitorNav = false;
+    for (let i = 0; i < visitorCount; i++) {
+      if (await visitorNavLoc.nth(i).isVisible().catch(() => false)) {
+        hasVisitorNav = true;
+        break;
+      }
+    }
     expect(hasStaleAuthNav).toBeFalsy();
     expect(hasVisitorNav).toBeTruthy();
   });

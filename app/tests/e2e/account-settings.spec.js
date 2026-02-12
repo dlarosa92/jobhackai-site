@@ -33,12 +33,10 @@ test.describe('Account Settings', () => {
       },
     });
 
-    expect([200, 400, 401, 403, 404]).toContain(response.status());
-    if (response.status() === 200) {
-      const data = await response.json();
-      expect(typeof data.url).toBe('string');
-      expect(data.url).toContain('billing.stripe.com');
-    }
+    expect(response.status()).toBe(200);
+    const data = await response.json();
+    expect(typeof data.url).toBe('string');
+    expect(data.url).toContain('billing.stripe.com');
   });
 
   test('logout from account settings works', async ({ page }) => {
