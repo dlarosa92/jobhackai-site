@@ -4,6 +4,13 @@ const { waitForAuthReady, getAuthToken } = require('../helpers/auth-helpers');
 const MARKETING_BASE = process.env.MARKETING_BASE_URL || 'https://jobhackai.io';
 const AUTH_HANDOFF_SESSION_KEY = 'jhai_auth_handoff';
 
+function cookieDomainForUrl(url) {
+  const host = new URL(url).hostname;
+  if (host === 'localhost' || host.startsWith('127.')) return host;
+  const parts = host.split('.');
+  return parts.length >= 2 ? '.' + parts.slice(-2).join('.') : host;
+}
+
 test.describe('Marketing Site Auth Handoff', () => {
   test('marketing site shows visitor nav after logout (handoff cleared)', async ({ page, baseURL }) => {
     test.setTimeout(45000);
@@ -23,9 +30,9 @@ test.describe('Marketing Site Auth Handoff', () => {
       sessionStorage.removeItem(key);
     }, AUTH_HANDOFF_SESSION_KEY);
 
-    await page.evaluate(() => {
-      document.cookie = 'jhai_auth=0; domain=.jobhackai.io; path=/; max-age=86400; SameSite=Lax';
-    });
+    await page.evaluate((domain) => {
+      document.cookie = `jhai_auth=0; domain=${domain}; path=/; max-age=86400; SameSite=Lax`;
+    }, cookieDomainForUrl(MARKETING_BASE));
 
     await page.goto(MARKETING_BASE + '/', { waitUntil: 'domcontentloaded' });
     await page.waitForTimeout(2000);

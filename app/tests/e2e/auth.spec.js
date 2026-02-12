@@ -210,7 +210,7 @@ test.describe('Authentication', () => {
     const newPage = await page.context().newPage();
     try {
       await newPage.goto('/dashboard', { waitUntil: 'domcontentloaded' });
-      await newPage.waitForTimeout(2000);
+      await newPage.waitForURL(/\/login|\/verify-email/, { timeout: 20000 });
       const url = newPage.url();
       expect(url).toMatch(/\/login|\/verify-email/);
       const authNavLoc = newPage.locator('.nav-actions .user-plan-badge, .nav-user-menu');
