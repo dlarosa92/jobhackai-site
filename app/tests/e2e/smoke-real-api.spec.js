@@ -40,7 +40,7 @@ test.describe('Real API Smoke', () => {
       expect(raw.length).toBeGreaterThan(0);
       try {
         const data = JSON.parse(raw);
-        expect(typeof data).toBe('object');
+        expect(data !== null && typeof data === 'object').toBeTruthy();
       } catch {
         throw new Error(`Expected JSON body for 200 response, got: ${raw.slice(0, 200)}`);
       }

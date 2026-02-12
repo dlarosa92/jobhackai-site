@@ -22,6 +22,12 @@ test.describe('Error Handling', () => {
     await page.waitForLoadState('domcontentloaded');
     await waitForAuthReady(page, 15000);
 
+    // Wait for the dashboard to trigger the /api/plan/me request before asserting
+    await page.waitForRequest(
+      (req) => req.url().includes('/api/plan/me'),
+      { timeout: 10000 }
+    ).catch(() => {});
+
     const url = page.url();
     expect(url).toMatch(/\/dashboard/);
     expect(planMeRouteHit).toBe(true);
