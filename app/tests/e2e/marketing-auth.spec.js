@@ -4,6 +4,15 @@ const { waitForAuthReady, getAuthToken } = require('../helpers/auth-helpers');
 const MARKETING_BASE = process.env.MARKETING_BASE_URL || 'https://jobhackai.io';
 const AUTH_HANDOFF_SESSION_KEY = 'jhai_auth_handoff';
 
+function isJobhackaiMarketingHost(url) {
+  try {
+    const host = new URL(url).hostname || '';
+    return host === 'jobhackai.io' || host.endsWith('.jobhackai.io');
+  } catch {
+    return false;
+  }
+}
+
 function cookieDomainForUrl(url) {
   const host = new URL(url).hostname;
   if (host === 'localhost' || host.startsWith('127.')) return host;
@@ -14,7 +23,7 @@ function cookieDomainForUrl(url) {
 test.describe('Marketing Site Auth Handoff', () => {
   test('marketing site shows visitor nav after logout (handoff cleared)', async ({ page }) => {
     test.setTimeout(45000);
-    test.skip(!MARKETING_BASE.includes('jobhackai.io'), 'Requires jobhackai.io marketing URL');
+    test.skip(!isJobhackaiMarketingHost(MARKETING_BASE), 'Requires jobhackai.io marketing URL');
 
     const ts = Date.now();
     const handoffUrl = `${MARKETING_BASE}/?jhai_auth=1&jhai_plan=premium&jhai_ts=${ts}`;
@@ -22,8 +31,25 @@ test.describe('Marketing Site Auth Handoff', () => {
     await page.goto(handoffUrl, { waitUntil: 'domcontentloaded' });
     await page.waitForTimeout(3000);
 
-    const hasAuthNav = await page.locator('.nav-actions, .user-plan-badge, a[href*="dashboard"]').first().isVisible().catch(() => false);
-    const hasVisitorCta = await page.locator('a:has-text("Start Free Trial"), a:has-text("Log in"), .btn-primary').first().isVisible().catch(() => false);
+    const authNavLoc = page.locator('.nav-actions, .user-plan-badge, a[href*="dashboard"]');
+    const authNavCount = await authNavLoc.count();
+    let hasAuthNav = false;
+    for (let i = 0; i < authNavCount; i++) {
+      if (await authNavLoc.nth(i).isVisible().catch(() => false)) {
+        hasAuthNav = true;
+        break;
+      }
+    }
+
+    const visitorCtaLoc = page.locator('a:has-text("Start Free Trial"), a:has-text("Log in"), .btn-primary');
+    const visitorCtaCount = await visitorCtaLoc.count();
+    let hasVisitorCta = false;
+    for (let i = 0; i < visitorCtaCount; i++) {
+      if (await visitorCtaLoc.nth(i).isVisible().catch(() => false)) {
+        hasVisitorCta = true;
+        break;
+      }
+    }
     expect(hasAuthNav || hasVisitorCta).toBeTruthy();
 
     await page.evaluate((key) => {
@@ -37,11 +63,11 @@ test.describe('Marketing Site Auth Handoff', () => {
     await page.goto(MARKETING_BASE + '/', { waitUntil: 'domcontentloaded' });
     await page.waitForTimeout(2000);
 
-    const authNavLoc = page.locator('.user-plan-badge, .nav-actions .nav-user-menu, a[href*="dashboard"], .nav-dropdown, .nav-user-toggle');
-    const authCount = await authNavLoc.count();
+    const staleAuthNavLoc = page.locator('.user-plan-badge, .nav-actions .nav-user-menu, a[href*="dashboard"], .nav-dropdown, .nav-user-toggle');
+    const authCount = await staleAuthNavLoc.count();
     let hasStaleAuthNav = false;
     for (let i = 0; i < authCount; i++) {
-      if (await authNavLoc.nth(i).isVisible().catch(() => false)) {
+      if (await staleAuthNavLoc.nth(i).isVisible().catch(() => false)) {
         hasStaleAuthNav = true;
         break;
       }
