@@ -1023,7 +1023,10 @@ function getAuthState() {
       // If fallback didn't return, Firebase says logged out and localStorage doesn't have valid auth
       // Check cross-domain cookie before returning unauthenticated
       // Option E: If logout cookie is present, distrust and clear stale URL handoff
-      if (hasCrossDomainLogoutCookie()) { clearUrlAuthHandoff(); }
+      if (hasCrossDomainLogoutCookie()) {
+        clearUrlAuthHandoff();
+        cookiePlan = null; // Invalidate stale handoff-derived plan (cookiePlan was from getUrlAuthHandoff)
+      }
       if (cookiePlan || hasCrossDomainAuthCookie() || hasUrlAuthHandoff()) {
         const cp = cookiePlan || 'free';
         return { isAuthenticated: true, userPlan: cp, devPlan: cp };
@@ -1041,7 +1044,10 @@ function getAuthState() {
     if (isRealAuthReady()) {
       // Check cross-domain cookie: if user is authenticated on app subdomain, trust the cookie
       // Option E: If logout cookie is present, distrust and clear stale URL handoff
-      if (hasCrossDomainLogoutCookie()) { clearUrlAuthHandoff(); }
+      if (hasCrossDomainLogoutCookie()) {
+        clearUrlAuthHandoff();
+        cookiePlan = null; // Invalidate stale handoff-derived plan (cookiePlan was from getUrlAuthHandoff)
+      }
       if (cookiePlan || hasCrossDomainAuthCookie() || hasUrlAuthHandoff()) {
         const cp = cookiePlan || 'free';
         return { isAuthenticated: true, userPlan: cp, devPlan: cp };
