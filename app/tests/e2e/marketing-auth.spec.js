@@ -30,7 +30,7 @@ test.describe('Marketing Site Auth Handoff', () => {
     await page.goto(handoffUrl, { waitUntil: 'domcontentloaded' });
     await page.waitForTimeout(3000);
 
-    const authNavLoc = page.locator('.nav-actions, .user-plan-badge, a[href*="dashboard"]');
+    const authNavLoc = page.locator('.user-plan-badge, .nav-user-menu, a[href*="dashboard"]');
     const authNavCount = await authNavLoc.count();
     let hasAuthNav = false;
     for (let i = 0; i < authNavCount; i++) {
@@ -47,8 +47,8 @@ test.describe('Marketing Site Auth Handoff', () => {
 
     await page.evaluate((domain) => {
       const opts = 'path=/; max-age=86400; SameSite=Lax';
-      document.cookie = `jhai_auth=logged_out; domain=${domain}; ${opts}`;
-      document.cookie = `jhai_auth=logged_out; ${opts}`;
+      document.cookie = `jhai_auth=0; domain=${domain}; ${opts}`;
+      document.cookie = `jhai_auth=0; ${opts}`;
     }, cookieDomainForUrl(MARKETING_BASE));
 
     await page.goto(MARKETING_BASE + '/', { waitUntil: 'domcontentloaded' });
