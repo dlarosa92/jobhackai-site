@@ -266,9 +266,10 @@ function hasCrossDomainAuthCookie() {
 function hasCrossDomainLogoutCookie() {
   try {
     if (!isMarketingHostForCookieFallback()) return false;
-    // Treat jhai_auth=0 (logout-negative) or jhai_auth=logged_out as explicit logout signals.
+    // Only jhai_auth=logged_out is an explicit logout signal. jhai_auth=0 denotes
+    // authenticated-but-unverified users (see firebase-auth.js setAuthCookies).
     const cookie = document.cookie || '';
-    return cookie.indexOf('jhai_auth=0') !== -1 || cookie.indexOf('jhai_auth=logged_out') !== -1;
+    return cookie.indexOf('jhai_auth=logged_out') !== -1;
   } catch (_) { return false; }
 }
 

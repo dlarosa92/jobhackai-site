@@ -47,8 +47,8 @@ test.describe('Marketing Site Auth Handoff', () => {
 
     await page.evaluate((domain) => {
       const opts = 'path=/; max-age=86400; SameSite=Lax';
-      document.cookie = `jhai_auth=0; domain=${domain}; ${opts}`;
-      document.cookie = `jhai_auth=0; ${opts}`;
+      document.cookie = `jhai_auth=logged_out; domain=${domain}; ${opts}`;
+      document.cookie = `jhai_auth=logged_out; ${opts}`;
     }, cookieDomainForUrl(MARKETING_BASE));
 
     await page.goto(MARKETING_BASE + '/', { waitUntil: 'domcontentloaded' });
