@@ -1,5 +1,5 @@
 const { test, expect } = require('@playwright/test');
-const { submitForm } = require('../helpers/auth-helpers');
+const { submitForm, waitForAuthReady } = require('../helpers/auth-helpers');
 
 function generateUniqueSignupEmail() {
   const fallbackBase = 'jobhackai.e2e@gmail.com';
@@ -186,4 +186,76 @@ test.describe('Authentication', () => {
       await context.close();
     }
   });
+
+  test('logout clears auth state and shows visitor nav', async ({ page, baseURL }) => {
+    test.setTimeout(30000);
+    await page.goto('/account-setting.html');
+    await page.waitForLoadState('domcontentloaded');
+    await waitForAuthReady(page, 15000);
+
+    const logoutBtn = page.locator('[data-action="logout"]');
+    await expect(logoutBtn).toBeVisible({ timeout: 5000 });
+
+    await Promise.all([
+      page.waitForURL(/\/login/, { timeout: 15000 }),
+      logoutBtn.click(),
+    ]);
+
+    await expect(page).toHaveURL(/\/login/);
+
+    const newPage = await page.context().newPage();
+    try {
+      await newPage.goto('/dashboard', { waitUntil: 'domcontentloaded' });
+      await newPage.waitForTimeout(2000);
+      const url = newPage.url();
+      expect(url).toMatch(/\/login|\/verify-email/);
+      const hasAuthNav = await newPage.locator('.nav-actions .user-plan-badge, .nav-user-menu').first().isVisible().catch(() => false);
+      expect(hasAuthNav).toBeFalsy();
+    } finally {
+      await newPage.close();
+    }
+  });
+
+  test('should protect resume-feedback from unauthenticated access', async ({ browser, baseURL }) => {
+    const context = await browser.newContext({
+      baseURL,
+      storageState: undefined,
+    });
+    const page = await context.newPage();
+    await page.addInitScript(() => {
+      localStorage.clear();
+      sessionStorage.clear();
+    });
+    await page.goto('/resume-feedback-pro.html', { waitUntil: 'domcontentloaded' });
+    try {
+      await page.waitForURL(/\/login|\/verify-email/, { timeout: 20000 });
+    } catch (e) {
+      const currentURL = page.url();
+      throw new Error(`Auth guard did not redirect from resume-feedback. Current URL: ${currentURL}`);
+    }
+    expect(page.url()).toMatch(/\/login|\/verify-email/);
+    await context.close();
+  });
+
+  test('should protect account-setting from unauthenticated access', async ({ browser, baseURL }) => {
+    const context = await browser.newContext({
+      baseURL,
+      storageState: undefined,
+    });
+    const page = await context.newPage();
+    await page.addInitScript(() => {
+      localStorage.clear();
+      sessionStorage.clear();
+    });
+    await page.goto('/account-setting.html', { waitUntil: 'domcontentloaded' });
+    try {
+      await page.waitForURL(/\/login|\/verify-email/, { timeout: 20000 });
+    } catch (e) {
+      const currentURL = page.url();
+      throw new Error(`Auth guard did not redirect from account-setting. Current URL: ${currentURL}`);
+    }
+    expect(page.url()).toMatch(/\/login|\/verify-email/);
+    await context.close();
+  });
+
 });
