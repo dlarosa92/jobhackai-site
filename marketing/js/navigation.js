@@ -320,6 +320,8 @@ function normalizeHandoffPlan(plan) {
   return null;
 }
 
+let _handoffPersistedThisLoad = false;
+
 function stripAuthHandoffQueryParams() {
   try {
     const url = new URL(window.location.href);
@@ -342,13 +344,17 @@ function persistUrlAuthHandoffIfPresent() {
     if (params.get(AUTH_HANDOFF_QUERY_AUTH) !== '1') {
       // Option D: If user came from app without handoff params, app didn't vouch for auth.
       // Clear any stale handoff from a previous visit (e.g. user logged out on app).
-      try {
-        const ref = (document.referrer || '').toLowerCase();
-        if (ref && ref.includes(PROD_APP_HOST)) {
-          sessionStorage.removeItem(AUTH_HANDOFF_SESSION_KEY);
-          console.log('[AUTH] Cleared stale URL handoff (referrer from app without params)');
-        }
-      } catch (_) {}
+      // CRITICAL: Skip when we already persisted this page load—params are gone because we
+      // stripped them, but referrer still shows app; clearing would destroy valid handoff.
+      if (!_handoffPersistedThisLoad) {
+        try {
+          const ref = (document.referrer || '').toLowerCase();
+          if (ref && ref.includes(PROD_APP_HOST)) {
+            sessionStorage.removeItem(AUTH_HANDOFF_SESSION_KEY);
+            console.log('[AUTH] Cleared stale URL handoff (referrer from app without params)');
+          }
+        } catch (_) {}
+      }
       return null;
     }
     const now = Date.now();
@@ -362,6 +368,7 @@ function persistUrlAuthHandoffIfPresent() {
     }
     const payload = { plan, ts: ts };  // preserve original app timestamp so TTL counts from link click
     try { sessionStorage.setItem(AUTH_HANDOFF_SESSION_KEY, JSON.stringify(payload)); } catch (_) {}
+    _handoffPersistedThisLoad = true;
     return payload;
   } catch (_) {
     return null;
